@@ -21,8 +21,9 @@ import {
   X,
   Zap,
 } from "lucide-react";
-import { SplineScene } from "@/components/ui/splite";
 import { Spotlight } from "@/components/ui/spotlight";
+
+const HERO_VIDEO = "https://pub-9f5b2802265a4ee2b52bc4e080f3941e.r2.dev/fundo%20connectyhub.mp4";
 
 /* ── DESIGN TOKEN ─────────────────────────────────── */
 const G = "#00ff88"; // primary green
@@ -259,16 +260,6 @@ export default function Home() {
   const [toastLeaving, setToastLeaving] = React.useState(false);
   const toastIndexRef = React.useRef(0);
   const toastTimerRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
-  const [isDesktop, setIsDesktop] = React.useState<boolean | null>(null);
-
-  React.useEffect(() => {
-    const mq = window.matchMedia("(min-width: 1024px)");
-    setIsDesktop(mq.matches);
-    const handler = (e: MediaQueryListEvent) => setIsDesktop(e.matches);
-    mq.addEventListener("change", handler);
-    return () => mq.removeEventListener("change", handler);
-  }, []);
-
   // Toast FOMO
   React.useEffect(() => {
     const showToast = () => {
@@ -299,32 +290,23 @@ export default function Home() {
       <section className="relative w-full overflow-hidden">
         <Spotlight className="-top-60 right-0 md:right-32" fill={G} />
 
-        {/* Mobile: robô como elemento de fundo deslocado para a direita */}
+        {/* Mobile: vídeo como fundo da hero */}
         <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden lg:hidden">
-          {/* Robô: abaixo do headline, deslocado à direita, parcialmente cortado */}
-          <div
-            className="absolute"
-            style={{
-              top: "53px",
-              right: "-22%",
-              width: "125vw",
-              bottom: 0,
-              opacity: 0.65,
-            }}
-          >
-            {isDesktop === false && (
-              <SplineScene
-                scene="https://prod.spline.design/kZDDjO5HuC9GJUM2/scene.splinecode"
-                className="h-full w-full"
-              />
-            )}
-          </div>
+          <video
+            autoPlay
+            muted
+            loop
+            playsInline
+            className="absolute inset-0 h-full w-full object-cover"
+            style={{ opacity: 0.70 }}
+            src={HERO_VIDEO}
+          />
           {/* Gradiente: escurece topo para legibilidade do texto */}
           <div
             className="absolute inset-0"
             style={{
               background:
-                "linear-gradient(to bottom, rgba(10,10,10,0.95) 0%, rgba(10,10,10,0.65) 32%, rgba(10,10,10,0.10) 55%, transparent 70%)",
+                "linear-gradient(to bottom, rgba(10,10,10,0.92) 0%, rgba(10,10,10,0.60) 35%, rgba(10,10,10,0.10) 58%, transparent 72%)",
             }}
           />
         </div>
@@ -395,23 +377,18 @@ export default function Home() {
             </div>
           </motion.div>
 
-          {/* Right: robot — desktop only, only mounts when confirmed desktop */}
+          {/* Right: vídeo — desktop only */}
           <div className="relative hidden h-screen lg:order-2 lg:block">
-            <div
-              className="absolute inset-0"
-              style={{ touchAction: "none" }}
-            >
-              <div className="absolute inset-x-[-22%] bottom-[-8%] top-[-4%]">
-                {isDesktop === true && (
-                  <SplineScene
-                    scene="https://prod.spline.design/kZDDjO5HuC9GJUM2/scene.splinecode"
-                    className="h-full w-full"
-                  />
-                )}
-              </div>
-            </div>
+            <video
+              autoPlay
+              muted
+              loop
+              playsInline
+              className="absolute inset-0 h-full w-full object-contain"
+              src={HERO_VIDEO}
+            />
             <p
-              className="absolute bottom-8 right-6 font-mono text-[11px] opacity-50"
+              className="absolute bottom-8 right-6 z-10 font-mono text-[11px] opacity-50"
               style={{ color: G }}
             >
               Este é o seu clone. Desperto.
