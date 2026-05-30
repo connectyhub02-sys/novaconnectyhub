@@ -276,8 +276,8 @@ export default function Home() {
           {/* Container do Spline: inicia em 8% da altura e extrapola 24% para cada lado
               para que o robô apareça menor/mais distante, como na referência */}
           <div
-            className="absolute bottom-0 top-[8%]"
-            style={{ left: "-42%", right: "-42%", touchAction: "none" }}
+            className="absolute bottom-0 top-[12%]"
+            style={{ left: "-30%", right: "-30%", touchAction: "none" }}
           >
             {isDesktop === false && (
               <SplineScene
