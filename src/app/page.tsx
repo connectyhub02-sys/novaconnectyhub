@@ -277,7 +277,7 @@ export default function Home() {
               para que o robô apareça menor/mais distante, como na referência */}
           <div
             className="absolute bottom-0 top-[12%]"
-            style={{ left: "-95%", right: "-95%" }}
+            style={{ left: "-145%", right: "-145%" }}
           >
             {isDesktop === false && (
               <SplineScene
