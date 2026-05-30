@@ -212,6 +212,15 @@ export function SplineScene({ scene, className }: SplineSceneProps) {
     return () => cancelAnimationFrame(frameId);
   }, [loaded]);
 
+  // Disable pointer events on the canvas so real mouse/touch falls through to
+  // the page (scroll works on mobile). dispatchEvent() in the choreography loop
+  // bypasses pointer-events and still drives the robot normally.
+  useEffect(() => {
+    if (!loaded || !containerRef.current) return;
+    const canvas = containerRef.current.querySelector<HTMLCanvasElement>("canvas");
+    if (canvas) canvas.style.pointerEvents = "none";
+  }, [loaded]);
+
   if (blocked || sceneState === "static") {
     return <SplineFallback className={className} />;
   }
@@ -233,10 +242,6 @@ export function SplineScene({ scene, className }: SplineSceneProps) {
           />
         )}
       </SplineBoundary>
-      {/* Transparent overlay — blocks real mouse/touch from reaching Spline.
-          Our autonomous loop uses dispatchEvent() directly on the canvas,
-          which bypasses this overlay and drives the robot as planned. */}
-      {loaded && <div className="absolute inset-0 z-[11]" />}
     </div>
   );
 }
