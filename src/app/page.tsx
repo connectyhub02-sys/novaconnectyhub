@@ -23,8 +23,8 @@ import {
 } from "lucide-react";
 import { Spotlight } from "@/components/ui/spotlight";
 
-const HERO_VIDEO_WEBM = "https://pub-9f5b2802265a4ee2b52bc4e080f3941e.r2.dev/fundo%20connectyhub-Picsart-BackgroundRemover.webm";
 const HERO_VIDEO_MP4  = "https://pub-9f5b2802265a4ee2b52bc4e080f3941e.r2.dev/fundo%20connectyhub.mp4";
+const HERO_VIDEO_WEBM = "https://pub-9f5b2802265a4ee2b52bc4e080f3941e.r2.dev/fundo%20connectyhub-Picsart-BackgroundRemover.webm";
 
 /* ── DESIGN TOKEN ─────────────────────────────────── */
 const G = "#00ff88"; // primary green
@@ -301,8 +301,8 @@ export default function Home() {
             className="absolute inset-0 h-full w-full object-contain"
             style={{ opacity: 0.85 }}
           >
-            <source src={HERO_VIDEO_WEBM} type="video/webm" />
             <source src={HERO_VIDEO_MP4}  type="video/mp4" />
+            <source src={HERO_VIDEO_WEBM} type="video/webm" />
           </video>
           {/* Gradiente: escurece topo para legibilidade do texto */}
           <div
@@ -398,8 +398,8 @@ export default function Home() {
                 <div className="hud-glow-top" />
                 <div className="hud-glow-br" />
                 <video autoPlay muted loop playsInline>
-                  <source src={HERO_VIDEO_WEBM} type="video/webm" />
                   <source src={HERO_VIDEO_MP4}  type="video/mp4" />
+                  <source src={HERO_VIDEO_WEBM} type="video/webm" />
                 </video>
               </div>
 
