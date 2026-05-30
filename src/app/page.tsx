@@ -271,18 +271,25 @@ export default function Home() {
       <section className="relative w-full overflow-hidden">
         <Spotlight className="-top-60 right-0 md:right-32" fill={G} />
 
-        {/* Mobile: robô preenche tela inteira como fundo — only mounts when confirmed mobile */}
-        <div className="absolute inset-0 lg:hidden" style={{ touchAction: "none" }}>
-          {isDesktop === false && (
-            <SplineScene
-              scene="https://prod.spline.design/kZDDjO5HuC9GJUM2/scene.splinecode"
-              className="h-full w-full"
-            />
-          )}
+        {/* Mobile: robô como fundo — começa na metade da tela, zoom-out via margens negativas */}
+        <div className="absolute inset-0 lg:hidden">
+          {/* Container do Spline: inicia em 30% da altura e extrapola 22% para cada lado
+              para que o robô apareça menor/mais distante, como na referência */}
+          <div
+            className="absolute bottom-0 top-[30%]"
+            style={{ left: "-22%", right: "-22%", touchAction: "none" }}
+          >
+            {isDesktop === false && (
+              <SplineScene
+                scene="https://prod.spline.design/kZDDjO5HuC9GJUM2/scene.splinecode"
+                className="h-full w-full"
+              />
+            )}
+          </div>
           {/* ConnectyHub label no peito do robô */}
           <div
             className="pointer-events-none absolute z-10"
-            style={{ top: "54%", left: "50%", transform: "translate(-50%, -50%)" }}
+            style={{ top: "63%", left: "50%", transform: "translate(-50%, -50%)" }}
           >
             <span
               className="display-type text-[8px] font-bold tracking-widest opacity-80"
@@ -291,8 +298,14 @@ export default function Home() {
               ConnectyHub
             </span>
           </div>
-          {/* Gradiente: escuro no topo para legibilidade do texto, transparente no centro/baixo */}
-          <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-[#0a0a0a]/90 via-[#0a0a0a]/40 to-transparent" />
+          {/* Gradiente: forte no topo (texto legível), desaparece na metade inferior */}
+          <div
+            className="pointer-events-none absolute inset-0"
+            style={{
+              background:
+                "linear-gradient(to bottom, rgba(10,10,10,0.92) 0%, rgba(10,10,10,0.60) 30%, rgba(10,10,10,0.15) 52%, transparent 70%)",
+            }}
+          />
         </div>
 
         {/* Content grid */}
