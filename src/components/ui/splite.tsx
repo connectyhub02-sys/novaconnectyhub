@@ -139,8 +139,8 @@ export function SplineScene({ scene, className }: SplineSceneProps) {
     let frameId: number;
     let phaseIndex = 0;
     let phaseStart = -1;
-    let prevX = CHOREOGRAPHY[0].x;
-    let prevY = CHOREOGRAPHY[0].y;
+    let prevX: number = CHOREOGRAPHY[0].x;
+    let prevY: number = CHOREOGRAPHY[0].y;
     let inEase = true;
     let lastDispatch = 0;
     const DISPATCH_INTERVAL = 1000 / 24; // cap Spline events at 24 fps
