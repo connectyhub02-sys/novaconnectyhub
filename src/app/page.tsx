@@ -123,6 +123,7 @@ const plans = [
     name: "Starter",
     price: "R$ 97",
     description: "Para começar hoje.",
+    tagline: "Ideal para começar com 1 WhatsApp",
     included: [
       "1 WhatsApp conectado",
       "1 clone ativo",
@@ -136,6 +137,7 @@ const plans = [
     name: "Profissional",
     price: "R$ 297",
     description: "Para quem já vende.",
+    tagline: "Ideal para negócios que recebem leads todos os dias",
     popular: true,
     included: [
       "3 WhatsApps conectados",
@@ -152,6 +154,7 @@ const plans = [
     name: "Elite",
     price: "R$ 497",
     description: "Para escalar sem limites.",
+    tagline: "Ideal para operação com múltiplos atendimentos e escala",
     premium: true as const,
     included: [
       "5 WhatsApps conectados",
@@ -203,6 +206,31 @@ const TOAST_EVENTS = [
   { name: "Roberto A.", action: "clone fechou negócio de", value: "R$ 1.290" },
   { name: "Mariana C.", action: "lead convertido em", value: "R$ 397" },
   { name: "Lucas T.", action: "venda via áudio de", value: "R$ 249" },
+];
+
+const steps = [
+  {
+    n: "01",
+    title: "Conecte seu WhatsApp",
+    text: "Escaneie o QR code e conecte seu número em menos de 2 minutos. Sem instalar nada, sem técnico.",
+  },
+  {
+    n: "02",
+    title: "Treine seu clone",
+    text: "Escreva como você vende, objeta e fecha. O clone absorve o seu jeito de comunicar e o tom do seu negócio.",
+  },
+  {
+    n: "03",
+    title: "Ele vende enquanto você vive",
+    text: "O clone atende, responde objeções e conduz o cliente até a compra — 24h por dia, sem você na conversa.",
+  },
+];
+
+const forWhom = [
+  { emoji: "💬", text: "Empresas que recebem leads pelo WhatsApp todos os dias" },
+  { emoji: "⚡", text: "Quem perde vendas por demora no primeiro atendimento" },
+  { emoji: "🌙", text: "Quem quer atendimento 24/7 sem contratar mais pessoas" },
+  { emoji: "🤝", text: "Quem quer automatizar sem parecer um bot genérico" },
 ];
 
 /* ── FRAMER VARIANTS ──────────────────────────────── */
@@ -328,14 +356,17 @@ export default function Home() {
               <span style={{ color: "#00ff88", fontStyle: "italic" }}>sem parecer bot</span>.
             </motion.p>
 
-            <motion.div variants={fadeUp} className="mt-7 flex max-w-[280px] flex-col gap-3 sm:max-w-none sm:flex-row">
+            <motion.div variants={fadeUp} className="mt-7 flex max-w-[320px] flex-col gap-3 sm:max-w-none sm:flex-row">
               <a className="cta-primary" href="https://painel.connectyhub.com.br/signup">
-                Ativar meu clone <ArrowRight size={16} />
+                Criar meu clone no WhatsApp <ArrowRight size={16} />
               </a>
-              <a className="cta-secondary" href="#diferencial">
+              <a className="cta-secondary" href="#como-funciona">
                 Ver como funciona
               </a>
             </motion.div>
+            <motion.p variants={fadeUp} className="mt-3 font-mono text-[11px] text-zinc-500">
+              Teste grátis por 7 dias · Sem cartão · Não precisa saber programar.
+            </motion.p>
 
             <motion.div variants={fadeUp} className="capability-strip mt-5">
               {capabilities.map((c) => (
@@ -418,6 +449,46 @@ export default function Home() {
         </div>
       </PageSection>
 
+      {/* ── 2.5. COMO FUNCIONA ───────────────────────── */}
+      <PageSection id="como-funciona" bg="#0a0a0a">
+        <GreenPill>{"// Como funciona"}</GreenPill>
+        <h2 className="section-heading mt-4">
+          Do WhatsApp ao clone vendendo<br className="hidden sm:block" /> em 3 passos.
+        </h2>
+        <div className="mt-10 grid gap-5 sm:grid-cols-3">
+          {steps.map((s, i) => (
+            <motion.div
+              key={s.n}
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-60px" }}
+              transition={{ duration: 0.5, delay: i * 0.12 }}
+              className="relative rounded-2xl border border-white/[0.07] bg-white/[0.02] p-6"
+            >
+              <span
+                className="font-mono text-5xl font-black leading-none"
+                style={{ color: `${G}25` }}
+              >
+                {s.n}
+              </span>
+              <h3 className="mt-4 text-base font-bold text-white">{s.title}</h3>
+              <p className="mt-2 text-sm leading-relaxed text-zinc-400">{s.text}</p>
+            </motion.div>
+          ))}
+        </div>
+        <div className="mt-10 flex flex-col items-center gap-2">
+          <a
+            className="cta-primary w-full max-w-sm justify-center sm:w-auto"
+            href="https://painel.connectyhub.com.br/signup"
+          >
+            Ativar teste grátis <ArrowRight size={16} />
+          </a>
+          <p className="font-mono text-[11px] text-zinc-600">
+            7 dias grátis · Sem cartão · Cancele quando quiser
+          </p>
+        </div>
+      </PageSection>
+
       {/* ── 3. DEMO COMPARATIVO ──────────────────────── */}
       <PageSection bg="#0a0a0a">
         <GreenPill>{"// Demo comparativo"}</GreenPill>
@@ -431,8 +502,23 @@ export default function Home() {
       <PageSection bg="#0d0d0d">
         <GreenPill>{"// Para quem é"}</GreenPill>
         <h2 className="section-heading mt-4">
-          Feito para quem vende todos os dias.
+          Se você vende pelo WhatsApp,<br className="hidden sm:block" /> isso foi feito para você.
         </h2>
+        <div className="mt-8 grid gap-3 sm:grid-cols-2">
+          {forWhom.map((item, i) => (
+            <motion.div
+              key={i}
+              initial={{ opacity: 0, x: -10 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.4, delay: i * 0.08 }}
+              className="flex items-start gap-4 rounded-xl border border-white/[0.06] bg-white/[0.02] p-4"
+            >
+              <span className="text-2xl leading-none">{item.emoji}</span>
+              <p className="text-sm leading-relaxed text-zinc-300">{item.text}</p>
+            </motion.div>
+          ))}
+        </div>
         <div className="mt-10 grid gap-5 sm:grid-cols-3">
           {profiles.map((p, i) => (
             <motion.div
@@ -568,11 +654,14 @@ export default function Home() {
               <h3>{plan.name}</h3>
               <strong>{plan.price}<small>/mês</small></strong>
               <p className="mt-3 font-mono text-xs text-zinc-500">{plan.description}</p>
+              {"tagline" in plan && plan.tagline && (
+                <p className="mt-1 text-xs italic" style={{ color: `${G}99` }}>{plan.tagline}</p>
+              )}
               <ul>
                 {plan.included.map((item) => <li key={item}>{item}</li>)}
                 {plan.locked.map((item) => <li key={item} className="plan-locked">{item}</li>)}
               </ul>
-              <a href="https://painel.connectyhub.com.br/signup">Começar agora</a>
+              <a href="https://painel.connectyhub.com.br/signup">Ativar teste grátis</a>
             </div>
           ))}
         </div>
@@ -607,15 +696,18 @@ export default function Home() {
             <span style={{ color: G }}>Clone-se</span> agora.
           </h2>
           <p className="mt-5 text-base text-zinc-400 sm:text-lg">
-            Seu clone pode estar ativo ainda hoje.
+            Seu clone pode estar ativo ainda hoje — atendendo, negociando e fechando no WhatsApp.
           </p>
-          <div className="mt-8 flex justify-center">
+          <div className="mt-8 flex flex-col items-center gap-3">
             <a
               className="cta-primary !text-base !px-8 !min-h-[54px]"
               href="https://painel.connectyhub.com.br/signup"
             >
-              Ativar meu clone <Sparkles size={18} />
+              Testar grátis por 7 dias <Sparkles size={18} />
             </a>
+            <p className="font-mono text-[11px] text-zinc-600">
+              Sem cartão · Sem fidelidade · Cancele quando quiser
+            </p>
           </div>
         </motion.div>
       </section>
@@ -717,7 +809,7 @@ function PageSection({
   return (
     <section
       id={id}
-      className="border-t border-white/5 px-6 py-14 md:px-12 md:py-20 lg:px-16"
+      className="border-t border-white/5 px-6 py-16 md:px-12 md:py-24 lg:px-16"
       style={{ background: bg }}
     >
       <motion.div
@@ -818,7 +910,7 @@ function ChatDemo() {
 
       {/* Vídeo — texto + vídeo lado a lado */}
       <div className="mt-12 w-full">
-        <GreenPill>{"// Veja o clone em ação."}</GreenPill>
+        <GreenPill>{"// Veja ao vivo"}</GreenPill>
         <div
           className="mt-6 flex flex-col md:flex-row md:items-center"
           style={{ gap: "48px" }}
@@ -826,10 +918,13 @@ function ChatDemo() {
           {/* Texto */}
           <div style={{ flex: "0 0 35%" }}>
             <h3 className="section-heading">
-              Assista ao clone digital atendendo no WhatsApp.
+              Assista ao clone atendendo de verdade no WhatsApp.
             </h3>
-            <p className="mt-5 text-sm leading-7 text-zinc-400">
-              Veja na prática como o agente de IA conversa, responde objeções e fecha — sem parecer bot.
+            <p className="mt-4 text-sm leading-7 text-zinc-400">
+              Em 2 minutos você entende por que leads que antes sumiam estão sendo convertidos — e como o clone faz isso sem você precisar estar online.
+            </p>
+            <p className="mt-3 text-sm font-semibold" style={{ color: G }}>
+              → Clone respondendo, negociando e fechando em tempo real.
             </p>
           </div>
           {/* Vídeo */}
