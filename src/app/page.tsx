@@ -271,13 +271,18 @@ export default function Home() {
       <section className="relative w-full overflow-hidden">
         <Spotlight className="-top-60 right-0 md:right-32" fill={G} />
 
-        {/* Mobile: robô como fundo — começa na metade da tela, zoom-out via margens negativas */}
-        <div className="absolute inset-0 lg:hidden">
-          {/* Container do Spline: inicia em 8% da altura e extrapola 24% para cada lado
-              para que o robô apareça menor/mais distante, como na referência */}
+        {/* Mobile: robô como elemento de fundo deslocado para a direita */}
+        <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden lg:hidden">
+          {/* Robô: abaixo do headline, deslocado à direita, parcialmente cortado */}
           <div
-            className="absolute bottom-0 top-[12%]"
-            style={{ left: "-145%", right: "-145%" }}
+            className="absolute"
+            style={{
+              top: "280px",
+              right: "-22%",
+              width: "125vw",
+              bottom: 0,
+              opacity: 0.65,
+            }}
           >
             {isDesktop === false && (
               <SplineScene
@@ -286,24 +291,12 @@ export default function Home() {
               />
             )}
           </div>
-          {/* ConnectyHub label no peito do robô */}
+          {/* Gradiente: escurece topo para legibilidade do texto */}
           <div
-            className="pointer-events-none absolute z-10"
-            style={{ top: "63%", left: "50%", transform: "translate(-50%, -50%)" }}
-          >
-            <span
-              className="display-type text-[8px] font-bold tracking-widest opacity-80"
-              style={{ color: "#ffffff", textShadow: "0 0 10px rgba(255,255,255,0.4)" }}
-            >
-              ConnectyHub
-            </span>
-          </div>
-          {/* Gradiente: forte no topo (texto legível), desaparece na metade inferior */}
-          <div
-            className="pointer-events-none absolute inset-0"
+            className="absolute inset-0"
             style={{
               background:
-                "linear-gradient(to bottom, rgba(10,10,10,0.92) 0%, rgba(10,10,10,0.70) 38%, rgba(10,10,10,0.22) 58%, transparent 75%)",
+                "linear-gradient(to bottom, rgba(10,10,10,0.95) 0%, rgba(10,10,10,0.65) 32%, rgba(10,10,10,0.10) 55%, transparent 70%)",
             }}
           />
         </div>
