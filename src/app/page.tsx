@@ -273,11 +273,11 @@ export default function Home() {
 
         {/* Mobile: robô como fundo — começa na metade da tela, zoom-out via margens negativas */}
         <div className="absolute inset-0 lg:hidden">
-          {/* Container do Spline: inicia em 30% da altura e extrapola 22% para cada lado
+          {/* Container do Spline: inicia em 8% da altura e extrapola 24% para cada lado
               para que o robô apareça menor/mais distante, como na referência */}
           <div
-            className="absolute bottom-0 top-[30%]"
-            style={{ left: "-22%", right: "-22%", touchAction: "none" }}
+            className="absolute bottom-0 top-[8%]"
+            style={{ left: "-24%", right: "-24%", touchAction: "none" }}
           >
             {isDesktop === false && (
               <SplineScene
@@ -303,7 +303,7 @@ export default function Home() {
             className="pointer-events-none absolute inset-0"
             style={{
               background:
-                "linear-gradient(to bottom, rgba(10,10,10,0.92) 0%, rgba(10,10,10,0.60) 30%, rgba(10,10,10,0.15) 52%, transparent 70%)",
+                "linear-gradient(to bottom, rgba(10,10,10,0.92) 0%, rgba(10,10,10,0.70) 38%, rgba(10,10,10,0.22) 58%, transparent 75%)",
             }}
           />
         </div>
