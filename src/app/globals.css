@@ -1946,7 +1946,7 @@ html {
   .metric-card span   { font-size: 10px; }
 }
 
-/* ── CHAT SWIPE (mobile horizontal scroll) ─────────── */
+/* ── CHAT — lado a lado em todos os tamanhos ─────────── */
 .chat-swipe-inner {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1954,28 +1954,37 @@ html {
 }
 
 @media (max-width: 767px) {
-  .chat-swipe-outer {
-    overflow-x: auto;
-    scroll-snap-type: x mandatory;
-    scrollbar-width: none;
-    /* Bleed to section edges for full-width feel */
-    margin-left: -24px;
-    margin-right: -24px;
-    padding-left: 24px;
-    padding-right: 24px;
-    padding-bottom: 6px;
-  }
-  .chat-swipe-outer::-webkit-scrollbar { display: none; }
-
   .chat-swipe-inner {
-    display: flex;
-    gap: 12px;
-    /* Ensure last card doesn't clip */
-    padding-right: 24px;
+    gap: 8px;
   }
 
-  .chat-swipe-inner > * {
-    flex: 0 0 85%;
-    scroll-snap-align: start;
+  .chat-messages {
+    padding: 10px;
+    min-height: 180px;
+    gap: 8px;
+  }
+
+  .chat-header {
+    padding: 10px 12px;
+  }
+
+  .chat-bubble-bot,
+  .chat-bubble-clone {
+    padding: 7px 9px;
+    max-width: 96%;
+  }
+
+  .chat-bubble-bot p,
+  .chat-bubble-clone p {
+    font-size: 11px;
+    line-height: 1.5;
+  }
+
+  .chat-time {
+    font-size: 9px;
+  }
+
+  .chat-label {
+    font-size: 10px;
   }
 }

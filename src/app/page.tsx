@@ -791,24 +791,9 @@ function ChatColumn({
 }
 
 function ChatDemo() {
-  const scrollRef = React.useRef<HTMLDivElement>(null);
-  const [page, setPage] = React.useState(0);
-
-  const handleScroll = () => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const pct = el.scrollLeft / (el.scrollWidth - el.clientWidth || 1);
-    setPage(pct > 0.45 ? 1 : 0);
-  };
-
   return (
     <>
-      {/* Columns — grid on desktop, horizontal swipe on mobile */}
-      <div
-        ref={scrollRef}
-        onScroll={handleScroll}
-        className="chat-swipe-outer mt-10"
-      >
+      <div className="chat-swipe-outer mt-10">
         <div className="chat-swipe-inner">
           <ChatColumn
             label="Como um bot responde"
@@ -825,20 +810,6 @@ function ChatDemo() {
         </div>
       </div>
 
-      {/* Mobile page indicator */}
-      <div className="mt-3 flex items-center justify-center gap-2 md:hidden">
-        <span
-          className="h-1.5 rounded-full transition-all duration-300"
-          style={{ width: page === 0 ? "20px" : "6px", background: page === 0 ? "#00ff88" : "#3f3f46" }}
-        />
-        <span
-          className="h-1.5 rounded-full transition-all duration-300"
-          style={{ width: page === 1 ? "20px" : "6px", background: page === 1 ? "#00ff88" : "#3f3f46" }}
-        />
-        <span className="ml-2 font-mono text-[10px] text-zinc-500">
-          {page + 1}/2 — deslize para comparar
-        </span>
-      </div>
 
       {/* Vídeo — texto + vídeo lado a lado */}
       <div className="mt-12 w-full">
