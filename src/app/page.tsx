@@ -271,20 +271,18 @@ export default function Home() {
       <section className="relative w-full overflow-hidden">
         <Spotlight className="-top-60 right-0 md:right-32" fill={G} />
 
-        {/* Mobile: robot at top (45vh) — only mounts when confirmed mobile */}
-        <div className="relative block h-[45vh] w-full overflow-hidden lg:hidden">
-          <div className="absolute inset-x-0 bottom-0" style={{ top: "10%", touchAction: "none" }}>
-            {isDesktop === false && (
-              <SplineScene
-                scene="https://prod.spline.design/kZDDjO5HuC9GJUM2/scene.splinecode"
-                className="h-full w-full"
-              />
-            )}
-          </div>
-          {/* ConnectyHub label no peito do robô — mobile */}
+        {/* Mobile: robô preenche tela inteira como fundo — only mounts when confirmed mobile */}
+        <div className="absolute inset-0 lg:hidden" style={{ touchAction: "none" }}>
+          {isDesktop === false && (
+            <SplineScene
+              scene="https://prod.spline.design/kZDDjO5HuC9GJUM2/scene.splinecode"
+              className="h-full w-full"
+            />
+          )}
+          {/* ConnectyHub label no peito do robô */}
           <div
             className="pointer-events-none absolute z-10"
-            style={{ top: "52%", left: "50%", transform: "translate(-50%, -50%)" }}
+            style={{ top: "54%", left: "50%", transform: "translate(-50%, -50%)" }}
           >
             <span
               className="display-type text-[8px] font-bold tracking-widest opacity-80"
@@ -293,18 +291,19 @@ export default function Home() {
               ConnectyHub
             </span>
           </div>
-          <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-[#0a0a0a] to-transparent" />
+          {/* Gradiente: escuro no topo para legibilidade do texto, transparente no centro/baixo */}
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-[#0a0a0a]/90 via-[#0a0a0a]/40 to-transparent" />
         </div>
 
         {/* Content grid */}
         <div className="mx-auto max-w-[1760px] px-6 md:px-10 lg:grid lg:min-h-screen lg:grid-cols-[minmax(480px,0.82fr)_minmax(600px,1.18fr)] lg:items-center lg:px-14 2xl:px-20">
 
-          {/* Left: copy */}
+          {/* Left: copy — no mobile fica sobre o robô de fundo */}
           <motion.div
             variants={stagger}
             initial="hidden"
             animate="visible"
-            className="relative z-10 py-10 lg:order-1 lg:py-0"
+            className="relative z-10 flex min-h-[100svh] flex-col justify-start pt-24 pb-16 lg:order-1 lg:min-h-0 lg:justify-normal lg:py-0"
           >
             <motion.div variants={fadeUp}>
               <GreenPill>:: Clone digital no WhatsApp ::</GreenPill>
