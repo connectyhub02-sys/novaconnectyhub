@@ -23,7 +23,8 @@ import {
 } from "lucide-react";
 import { Spotlight } from "@/components/ui/spotlight";
 
-const HERO_VIDEO = "https://pub-9f5b2802265a4ee2b52bc4e080f3941e.r2.dev/fundo%20connectyhub.mp4";
+const HERO_VIDEO_WEBM = "https://pub-9f5b2802265a4ee2b52bc4e080f3941e.r2.dev/fundo%20connectyhub-Picsart-BackgroundRemover.webm";
+const HERO_VIDEO_MP4  = "https://pub-9f5b2802265a4ee2b52bc4e080f3941e.r2.dev/fundo%20connectyhub.mp4";
 
 /* ── DESIGN TOKEN ─────────────────────────────────── */
 const G = "#00ff88"; // primary green
@@ -297,10 +298,12 @@ export default function Home() {
             muted
             loop
             playsInline
-            className="absolute inset-0 h-full w-full object-cover"
-            style={{ opacity: 0.70 }}
-            src={HERO_VIDEO}
-          />
+            className="absolute inset-0 h-full w-full object-contain"
+            style={{ opacity: 0.85 }}
+          >
+            <source src={HERO_VIDEO_WEBM} type="video/webm" />
+            <source src={HERO_VIDEO_MP4}  type="video/mp4" />
+          </video>
           {/* Gradiente: escurece topo para legibilidade do texto */}
           <div
             className="absolute inset-0"
@@ -385,8 +388,10 @@ export default function Home() {
               loop
               playsInline
               className="absolute inset-0 h-full w-full object-contain"
-              src={HERO_VIDEO}
-            />
+            >
+              <source src={HERO_VIDEO_WEBM} type="video/webm" />
+              <source src={HERO_VIDEO_MP4}  type="video/mp4" />
+            </video>
             <p
               className="absolute bottom-8 right-6 z-10 font-mono text-[11px] opacity-50"
               style={{ color: G }}
