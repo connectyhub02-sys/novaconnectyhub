@@ -373,7 +373,7 @@ export default function Home() {
                 <CloneScannerCard />
               </div>
 
-              {/* Frame do vídeo com bordas HUD */}
+              {/* Frame do vídeo com bordas HUD — tudo dentro para evitar overflow */}
               <div className="clone-video-frame">
                 <div className="hud-grid" />
                 <div className="hud-scanlines" />
@@ -387,21 +387,19 @@ export default function Home() {
                   <source src={HERO_VIDEO_MP4}  type="video/mp4" />
                   <source src={HERO_VIDEO_WEBM} type="video/webm" />
                 </video>
-              </div>
-
-              {/* Barra de status abaixo do frame */}
-              <div className="hud-status-bar">
-                <span className="hud-dot" />
-                <span className="hud-dot hud-dot-dim" />
-                <span className="hud-dot hud-dot-dim" />
-                <span className="hud-label">CLONE.NEURAL.ACTIVE</span>
-              </div>
-
-              {/* Traços decorativos à direita */}
-              <div className="hud-side-lines">
-                <div className="hud-side-line" style={{ width: "20px" }} />
-                <div className="hud-side-line" style={{ width: "13px", opacity: 0.55 }} />
-                <div className="hud-side-line" style={{ width: "17px", opacity: 0.35 }} />
+                {/* Barra de status dentro do frame */}
+                <div className="hud-status-bar">
+                  <span className="hud-dot" />
+                  <span className="hud-dot hud-dot-dim" />
+                  <span className="hud-dot hud-dot-dim" />
+                  <span className="hud-label">CLONE.NEURAL.ACTIVE</span>
+                </div>
+                {/* Traços decorativos dentro do frame, lado direito */}
+                <div className="hud-side-lines">
+                  <div className="hud-side-line" style={{ width: "20px" }} />
+                  <div className="hud-side-line" style={{ width: "13px", opacity: 0.55 }} />
+                  <div className="hud-side-line" style={{ width: "17px", opacity: 0.35 }} />
+                </div>
               </div>
             </div>
           </div>
