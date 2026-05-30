@@ -6,9 +6,7 @@ import {
   useEffect,
   useRef,
   useState,
-  type CSSProperties,
 } from "react";
-import { createPortal } from "react-dom";
 import { Bot } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -17,7 +15,7 @@ const Spline = dynamic(() => import("@splinetool/react-spline"), {
   loading: () => null,
 });
 
-type SceneState = "checking" | "waiting" | "enabled" | "static";
+type SceneState = "waiting" | "enabled" | "static";
 
 type IdleWindow = Window &
   typeof globalThis & {
@@ -41,10 +39,34 @@ interface SplineSceneProps {
   className?: string;
 }
 
+// Awakening choreography — robot discovers it's alive.
+// x, y are canvas fractions (0 = left/top, 1 = right/bottom).
+// ease = transition duration ms, hold = pause duration ms.
+const CHOREOGRAPHY = [
+  { x: 0.50, y: 0.48, ease: 1200, hold: 2000 }, // center — consciousness arrives
+  { x: 0.38, y: 0.72, ease: 1800, hold: 3000 }, // left hand — discovers it
+  { x: 0.62, y: 0.72, ease: 1600, hold: 3200 }, // right hand — discovers it
+  { x: 0.44, y: 0.70, ease:  900, hold: 1000 }, // between hands (left)
+  { x: 0.56, y: 0.70, ease:  800, hold: 1000 }, // between hands (right)
+  { x: 0.50, y: 0.69, ease:  600, hold:  700 }, // center between hands
+  { x: 0.10, y: 0.44, ease: 2200, hold: 2500 }, // look left — explores environment
+  { x: 0.90, y: 0.44, ease: 2600, hold: 2500 }, // look right — explores environment
+  { x: 0.50, y: 0.22, ease: 1200, hold: 1000 }, // look up briefly
+  { x: 0.50, y: 0.48, ease: 1000, hold:  500 }, // return to center
+  { x: 0.40, y: 0.72, ease: 1400, hold: 2000 }, // back to left hand
+  { x: 0.52, y: 0.70, ease: 1400, hold: 3500 }, // wonder at hands — longest pause
+] as const;
+
+function easeInOut(t: number): number {
+  return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+}
+
 export function SplineScene({ scene, className }: SplineSceneProps) {
   const [sceneState, setSceneState] = useState<SceneState>("waiting");
   const [blocked, setBlocked] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const labelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handleWebglError = (event: ErrorEvent) => {
@@ -81,10 +103,7 @@ export function SplineScene({ scene, className }: SplineSceneProps) {
     let timeoutId: number | undefined;
 
     const enableScene = () => {
-      if (finished) {
-        return;
-      }
-
+      if (finished) return;
       finished = true;
       setSceneState("enabled");
     };
@@ -108,16 +127,90 @@ export function SplineScene({ scene, className }: SplineSceneProps) {
     return () => {
       finished = true;
       window.cancelAnimationFrame(frameId);
-
-      if (timeoutId !== undefined) {
-        window.clearTimeout(timeoutId);
-      }
-
-      if (idleId !== undefined && win.cancelIdleCallback) {
-        win.cancelIdleCallback(idleId);
-      }
+      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+      if (idleId !== undefined && win.cancelIdleCallback) win.cancelIdleCallback(idleId);
     };
   }, []);
+
+  // Autonomous awakening choreography — drives robot and chest label together.
+  useEffect(() => {
+    if (!loaded) return;
+
+    let frameId: number;
+    let phaseIndex = 0;
+    let phaseStart = -1;
+    let prevX = CHOREOGRAPHY[0].x;
+    let prevY = CHOREOGRAPHY[0].y;
+    let inEase = true;
+    let lastDispatch = 0;
+    const DISPATCH_INTERVAL = 1000 / 24; // cap Spline events at 24 fps
+
+    const animate = (now: number) => {
+      if (phaseStart < 0) phaseStart = now;
+
+      const phase = CHOREOGRAPHY[phaseIndex];
+      const elapsed = now - phaseStart;
+      let cx: number;
+      let cy: number;
+
+      if (inEase) {
+        const t = Math.min(elapsed / phase.ease, 1);
+        const e = easeInOut(t);
+        cx = prevX + (phase.x - prevX) * e;
+        cy = prevY + (phase.y - prevY) * e;
+
+        if (t >= 1) {
+          inEase = false;
+          phaseStart = now;
+        }
+      } else {
+        // Subtle micro-oscillation during hold — breathing / wonder feeling
+        const s = elapsed * 0.001;
+        cx = phase.x + Math.sin(s * 1.1) * 0.012;
+        cy = phase.y + Math.sin(s * 0.8 + 1.3) * 0.008;
+
+        if (elapsed >= phase.hold) {
+          prevX = phase.x;
+          prevY = phase.y;
+          phaseIndex = (phaseIndex + 1) % CHOREOGRAPHY.length;
+          phaseStart = now;
+          inEase = true;
+        }
+      }
+
+      // Drive chest label
+      const label = labelRef.current;
+      if (label) {
+        const lx = (cx - 0.5) * 18;
+        const ly = (cy - 0.5) * 10;
+        label.style.setProperty("--label-x", `${lx}px`);
+        label.style.setProperty("--label-y", `${ly}px`);
+        label.style.setProperty("--label-rotate", `${lx * -0.18}deg`);
+      }
+
+      // Dispatch synthetic pointer event to Spline canvas at 24 fps
+      if (now - lastDispatch >= DISPATCH_INTERVAL) {
+        const canvas = containerRef.current?.querySelector<HTMLCanvasElement>("canvas");
+        if (canvas) {
+          const rect = canvas.getBoundingClientRect();
+          canvas.dispatchEvent(
+            new PointerEvent("pointermove", {
+              clientX: rect.left + rect.width * cx,
+              clientY: rect.top + rect.height * cy,
+              bubbles: true,
+              cancelable: false,
+            }),
+          );
+        }
+        lastDispatch = now;
+      }
+
+      frameId = requestAnimationFrame(animate);
+    };
+
+    frameId = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(frameId);
+  }, [loaded]);
 
   if (blocked || sceneState === "static") {
     return <SplineFallback className={className} />;
@@ -126,9 +219,8 @@ export function SplineScene({ scene, className }: SplineSceneProps) {
   const shouldLoadScene = sceneState === "enabled";
 
   return (
-    <div className={cn("relative h-full w-full", className)}>
-      <ReactiveGreenLight enabled={shouldLoadScene && loaded} />
-      <RobotChestLabel active={loaded} />
+    <div className={cn("relative h-full w-full", className)} ref={containerRef}>
+      <RobotChestLabel active={loaded} labelRef={labelRef} />
       {!loaded && (
         <SplineFallback className="pointer-events-none absolute inset-0" loading />
       )}
@@ -141,159 +233,36 @@ export function SplineScene({ scene, className }: SplineSceneProps) {
           />
         )}
       </SplineBoundary>
+      {/* Transparent overlay — blocks real mouse/touch from reaching Spline.
+          Our autonomous loop uses dispatchEvent() directly on the canvas,
+          which bypasses this overlay and drives the robot as planned. */}
+      {loaded && <div className="absolute inset-0 z-[11]" />}
     </div>
   );
 }
 
-function RobotChestLabel({ active }: { active: boolean }) {
-  const labelRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!active || !window.matchMedia("(min-width: 1024px) and (pointer: fine)").matches) {
-      return;
-    }
-
-    let frame = 0;
-    let nextX = window.innerWidth / 2;
-    let nextY = window.innerHeight / 2;
-
-    const updateLabel = () => {
-      frame = 0;
-      const label = labelRef.current;
-
-      if (!label) {
-        return;
-      }
-
-      const x = (nextX / window.innerWidth - 0.5) * 18;
-      const y = (nextY / window.innerHeight - 0.5) * 10;
-      const rotate = x * -0.18;
-
-      label.style.setProperty("--label-x", `${x}px`);
-      label.style.setProperty("--label-y", `${y}px`);
-      label.style.setProperty("--label-rotate", `${rotate}deg`);
-    };
-
-    const handlePointerMove = (event: PointerEvent) => {
-      nextX = event.clientX;
-      nextY = event.clientY;
-
-      if (!frame) {
-        frame = window.requestAnimationFrame(updateLabel);
-      }
-    };
-
-    window.addEventListener("pointermove", handlePointerMove, { passive: true });
-
-    return () => {
-      window.removeEventListener("pointermove", handlePointerMove);
-
-      if (frame) {
-        window.cancelAnimationFrame(frame);
-      }
-    };
-  }, [active]);
-
+function RobotChestLabel({
+  active,
+  labelRef,
+}: {
+  active: boolean;
+  labelRef: React.RefObject<HTMLDivElement>;
+}) {
   return (
     <div
+      ref={labelRef}
       className={cn(
         "robot-chest-label display-type pointer-events-none absolute left-[49%] top-[48.5%] z-20 hidden select-none lg:block",
         active && "is-loaded",
       )}
-      ref={labelRef}
     >
       Connecty<span className="robot-chest-accent">Hub</span>
     </div>
   );
 }
 
-function ReactiveGreenLight({ enabled }: { enabled: boolean }) {
-  const lightRef = useRef<HTMLDivElement>(null);
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    if (!enabled) {
-      return;
-    }
-
-    const animationFrame = window.requestAnimationFrame(() => {
-      setMounted(true);
-    });
-
-    return () => {
-      window.cancelAnimationFrame(animationFrame);
-    };
-  }, [enabled]);
-
-  useEffect(() => {
-    if (
-      !enabled ||
-      !mounted ||
-      !window.matchMedia("(min-width: 1024px) and (pointer: fine)").matches
-    ) {
-      return;
-    }
-
-    let frame = 0;
-    let nextX = window.innerWidth * 0.58;
-    let nextY = window.innerHeight * 0.45;
-
-    const updateLight = () => {
-      frame = 0;
-      const light = lightRef.current;
-
-      if (!light) {
-        return;
-      }
-
-      light.style.setProperty("--light-x", `${nextX}px`);
-      light.style.setProperty("--light-y", `${nextY}px`);
-      light.style.setProperty("--light-opacity", "0.74");
-    };
-
-    const handlePointerMove = (event: PointerEvent) => {
-      nextX = event.clientX;
-      nextY = event.clientY;
-
-      if (!frame) {
-        frame = window.requestAnimationFrame(updateLight);
-      }
-    };
-
-    window.addEventListener("pointermove", handlePointerMove, { passive: true });
-
-    return () => {
-      window.removeEventListener("pointermove", handlePointerMove);
-
-      if (frame) {
-        window.cancelAnimationFrame(frame);
-      }
-    };
-  }, [enabled, mounted]);
-
-  if (!enabled || !mounted || typeof document === "undefined") {
-    return null;
-  }
-
-  return createPortal(
-    <div
-      className="reactive-green-light pointer-events-none hidden lg:block"
-      ref={lightRef}
-      style={{
-        "--light-x": "58%",
-        "--light-y": "45%",
-        "--light-opacity": "0.34",
-      } as CSSProperties}
-    />,
-    document.body,
-  );
-}
-
 function canUseWebgl() {
-  if (typeof document === "undefined") {
-    return false;
-  }
-
+  if (typeof document === "undefined") return false;
   const canvas = document.createElement("canvas");
   return Boolean(
     canvas.getContext("webgl2") ||
@@ -303,20 +272,18 @@ function canUseWebgl() {
 }
 
 function shouldUseStaticScene() {
-  const navigatorWithHints = navigator as NavigatorWithHints;
-  const connection = navigatorWithHints.connection;
+  const nav = navigator as NavigatorWithHints;
+  const connection = nav.connection;
   const effectiveType = connection?.effectiveType;
-  const lowMemory =
-    typeof navigatorWithHints.deviceMemory === "number" &&
-    navigatorWithHints.deviceMemory <= 4;
+  const veryLowMemory =
+    typeof nav.deviceMemory === "number" && nav.deviceMemory <= 2;
 
   return (
     window.matchMedia("(prefers-reduced-motion: reduce)").matches ||
-    !window.matchMedia("(min-width: 1024px) and (pointer: fine)").matches ||
     connection?.saveData === true ||
     effectiveType === "slow-2g" ||
     effectiveType === "2g" ||
-    lowMemory
+    veryLowMemory
   );
 }
 

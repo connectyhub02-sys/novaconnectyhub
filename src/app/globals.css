@@ -43,25 +43,6 @@ html {
   text-wrap: balance;
 }
 
-.reactive-green-light {
-  position: fixed;
-  inset: 0;
-  z-index: 1;
-  opacity: var(--light-opacity);
-  background:
-    radial-gradient(
-      circle 260px at var(--light-x) var(--light-y),
-      rgb(10 255 10 / 48%),
-      rgb(10 255 10 / 26%) 26%,
-      rgb(0 243 255 / 12%) 48%,
-      transparent 72%
-    );
-  contain: strict;
-  filter: blur(8px) saturate(1.25);
-  mix-blend-mode: screen;
-  transition: opacity 180ms ease;
-  will-change: background, opacity;
-}
 
 .robot-chest-label {
   --label-x: 0px;
@@ -574,9 +555,7 @@ html {
     transition-duration: 0.01ms !important;
   }
 
-  .reactive-green-light {
-    display: none;
-  }
+
 }
 
 /* ── CYBERNETIC CLONING SCANNER & WAVEFORM ────────── */

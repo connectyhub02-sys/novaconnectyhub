@@ -231,12 +231,14 @@ export default function Home() {
   const [toastLeaving, setToastLeaving] = React.useState(false);
   const toastIndexRef = React.useRef(0);
   const toastTimerRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
-  const [showHint, setShowHint] = React.useState(true);
+  const [isDesktop, setIsDesktop] = React.useState<boolean | null>(null);
 
-  // Mobile hint auto-dismiss
   React.useEffect(() => {
-    const t = setTimeout(() => setShowHint(false), 3000);
-    return () => clearTimeout(t);
+    const mq = window.matchMedia("(min-width: 1024px)");
+    setIsDesktop(mq.matches);
+    const handler = (e: MediaQueryListEvent) => setIsDesktop(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
   }, []);
 
   // Toast FOMO
@@ -269,15 +271,17 @@ export default function Home() {
       <section className="relative w-full overflow-hidden">
         <Spotlight className="-top-60 right-0 md:right-32" fill={G} />
 
-        {/* Mobile: robot at top (45vh) */}
+        {/* Mobile: robot at top (45vh) — only mounts when confirmed mobile */}
         <div className="relative block h-[45vh] w-full overflow-hidden lg:hidden">
           <div className="absolute inset-x-0 bottom-0" style={{ top: "10%", touchAction: "none" }}>
-            <SplineScene
-              scene="https://prod.spline.design/kZDDjO5HuC9GJUM2/scene.splinecode"
-              className="h-full w-full"
-            />
+            {isDesktop === false && (
+              <SplineScene
+                scene="https://prod.spline.design/kZDDjO5HuC9GJUM2/scene.splinecode"
+                className="h-full w-full"
+              />
+            )}
           </div>
-          {/* Logo overlay at robot chest — visible if Spline doesn't show it on mobile */}
+          {/* ConnectyHub label no peito do robô — mobile */}
           <div
             className="pointer-events-none absolute z-10"
             style={{ top: "52%", left: "50%", transform: "translate(-50%, -50%)" }}
@@ -290,29 +294,6 @@ export default function Home() {
             </span>
           </div>
           <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-[#0a0a0a] to-transparent" />
-          <AnimatePresence>
-            {showHint && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.4 }}
-                className="pointer-events-none absolute bottom-6 left-1/2 flex -translate-x-1/2 items-center gap-2"
-                onTouchStart={() => setShowHint(false)}
-              >
-                <motion.span
-                  animate={{ y: [0, -4, 0] }}
-                  transition={{ repeat: Infinity, duration: 1.2 }}
-                  className="text-base"
-                >
-                  👆
-                </motion.span>
-                <span className="font-mono text-xs" style={{ color: `${G}99` }}>
-                  Arraste para interagir
-                </span>
-              </motion.div>
-            )}
-          </AnimatePresence>
         </div>
 
         {/* Content grid */}
@@ -378,24 +359,26 @@ export default function Home() {
             </div>
           </motion.div>
 
-          {/* Right: robot — desktop only */}
+          {/* Right: robot — desktop only, only mounts when confirmed desktop */}
           <div className="relative hidden h-screen lg:order-2 lg:block">
             <div
               className="absolute inset-0"
               style={{ touchAction: "none" }}
             >
               <div className="absolute inset-x-[-22%] bottom-[-8%] top-[-4%]">
-                <SplineScene
-                  scene="https://prod.spline.design/kZDDjO5HuC9GJUM2/scene.splinecode"
-                  className="h-full w-full"
-                />
+                {isDesktop === true && (
+                  <SplineScene
+                    scene="https://prod.spline.design/kZDDjO5HuC9GJUM2/scene.splinecode"
+                    className="h-full w-full"
+                  />
+                )}
               </div>
             </div>
             <p
               className="absolute bottom-8 right-6 font-mono text-[11px] opacity-50"
               style={{ color: G }}
             >
-              Este é o seu clone. Mova o mouse.
+              Este é o seu clone. Desperto.
             </p>
             <div className="absolute left-0 top-1/2 z-20 -translate-y-1/2">
               <CloneScannerCard />
