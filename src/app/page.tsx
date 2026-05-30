@@ -277,7 +277,7 @@ export default function Home() {
           <div
             className="absolute"
             style={{
-              top: "156px",
+              top: "109px",
               right: "-22%",
               width: "125vw",
               bottom: 0,
