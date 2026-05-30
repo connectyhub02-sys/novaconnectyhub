@@ -380,27 +380,56 @@ export default function Home() {
             </div>
           </motion.div>
 
-          {/* Right: vídeo — desktop only */}
+          {/* Right: vídeo com moldura HUD — desktop only */}
           <div className="relative hidden h-screen lg:order-2 lg:block">
-            <video
-              autoPlay
-              muted
-              loop
-              playsInline
-              className="absolute inset-0 h-full w-full object-contain"
-            >
-              <source src={HERO_VIDEO_WEBM} type="video/webm" />
-              <source src={HERO_VIDEO_MP4}  type="video/mp4" />
-            </video>
-            <p
-              className="absolute bottom-8 right-6 z-10 font-mono text-[11px] opacity-50"
-              style={{ color: G }}
-            >
-              Este é o seu clone. Desperto.
-            </p>
-            <div className="absolute left-0 top-1/2 z-20 -translate-y-1/2">
+
+            {/* HUD shell — moldura futurista */}
+            <div className="hero-video-shell">
+              {/* Cantos estilo HUD */}
+              <div className="hud-corner hud-corner-tl" />
+              <div className="hud-corner hud-corner-tr" />
+              <div className="hud-corner hud-corner-bl" />
+              <div className="hud-corner hud-corner-br" />
+
+              {/* Frame principal com bordas e glow */}
+              <div className="hero-video-frame">
+                <div className="hud-grid" />
+                <div className="hud-scanlines" />
+                <div className="hud-glow-top" />
+                <div className="hud-glow-br" />
+                <video autoPlay muted loop playsInline>
+                  <source src={HERO_VIDEO_WEBM} type="video/webm" />
+                  <source src={HERO_VIDEO_MP4}  type="video/mp4" />
+                </video>
+              </div>
+
+              {/* Barra de status inferior */}
+              <div className="hud-status-bar">
+                <span className="hud-dot" />
+                <span className="hud-dot hud-dot-dim" />
+                <span className="hud-dot hud-dot-dim" />
+                <span className="hud-label">CLONE.NEURAL.ACTIVE</span>
+              </div>
+
+              {/* Traços decorativos laterais direitos */}
+              <div className="hud-side-lines">
+                <div className="hud-side-line" style={{ width: "20px" }} />
+                <div className="hud-side-line" style={{ width: "13px", opacity: 0.55 }} />
+                <div className="hud-side-line" style={{ width: "17px", opacity: 0.35 }} />
+              </div>
+            </div>
+
+            {/* Card "VOCÊ (DIGITAL)" sobreposto à esquerda da moldura */}
+            <div className="absolute left-0 top-1/2 z-30 -translate-y-1/2">
               <CloneScannerCard />
             </div>
+
+            <p
+              className="absolute bottom-2 right-6 z-10 font-mono text-[10px] opacity-35"
+              style={{ color: G }}
+            >
+              CLONE.DESPERTO
+            </p>
           </div>
         </div>
       </section>

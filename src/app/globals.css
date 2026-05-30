@@ -1988,3 +1988,183 @@ html {
     font-size: 10px;
   }
 }
+
+/* ── HERO VIDEO HUD FRAME ──────────────────────────── */
+.hero-video-shell {
+  position: absolute;
+  inset: 6% 2% 8% 0;
+  z-index: 10;
+}
+
+.hero-video-frame {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 18px;
+  border: 1px solid rgba(0, 255, 136, 0.28);
+  box-shadow:
+    0 0 0 1px rgba(0, 255, 136, 0.07),
+    0 0 45px rgba(0, 255, 136, 0.13),
+    0 0 90px rgba(0, 255, 136, 0.06),
+    inset 0 0 60px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+  background: rgba(4, 4, 4, 0.45);
+}
+
+.hero-video-frame video {
+  position: relative;
+  z-index: 4;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: brightness(0.96) contrast(1.04);
+}
+
+/* Grid overlay */
+.hud-grid {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(0, 255, 136, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 255, 136, 0.025) 1px, transparent 1px);
+  background-size: 52px 52px;
+}
+
+/* Scanlines */
+.hud-scanlines {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 3px,
+    rgba(0, 0, 0, 0.03) 3px,
+    rgba(0, 0, 0, 0.03) 4px
+  );
+}
+
+/* Top green glow */
+.hud-glow-top {
+  position: absolute;
+  top: 0;
+  left: 10%;
+  right: 10%;
+  height: 150px;
+  z-index: 3;
+  pointer-events: none;
+  background: radial-gradient(ellipse 80% 100% at 50% 0%, rgba(0, 255, 136, 0.18), transparent 72%);
+}
+
+/* Bottom-right cyan glow */
+.hud-glow-br {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 240px;
+  height: 200px;
+  z-index: 3;
+  pointer-events: none;
+  background: radial-gradient(circle at 100% 100%, rgba(0, 243, 255, 0.11), transparent 65%);
+}
+
+/* HUD corners — L-shaped brackets */
+.hud-corner {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  z-index: 20;
+  pointer-events: none;
+}
+
+.hud-corner-tl {
+  top: -1px;
+  left: -1px;
+  border-top: 2px solid #00ff88;
+  border-left: 2px solid #00ff88;
+  border-radius: 5px 0 0 0;
+  box-shadow: -2px -2px 10px rgba(0, 255, 136, 0.45);
+}
+
+.hud-corner-tr {
+  top: -1px;
+  right: -1px;
+  border-top: 2px solid #00ff88;
+  border-right: 2px solid #00ff88;
+  border-radius: 0 5px 0 0;
+  box-shadow: 2px -2px 10px rgba(0, 255, 136, 0.45);
+}
+
+.hud-corner-bl {
+  bottom: -1px;
+  left: -1px;
+  border-bottom: 2px solid #00ff88;
+  border-left: 2px solid #00ff88;
+  border-radius: 0 0 0 5px;
+  box-shadow: -2px 2px 10px rgba(0, 255, 136, 0.45);
+}
+
+.hud-corner-br {
+  bottom: -1px;
+  right: -1px;
+  border-bottom: 2px solid rgba(0, 243, 255, 0.85);
+  border-right: 2px solid rgba(0, 243, 255, 0.85);
+  border-radius: 0 0 5px 0;
+  box-shadow: 2px 2px 10px rgba(0, 243, 255, 0.38);
+}
+
+/* Status bar — bottom of frame */
+.hud-status-bar {
+  position: absolute;
+  bottom: -26px;
+  left: 2px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+  z-index: 20;
+}
+
+.hud-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #00ff88;
+  box-shadow: 0 0 6px #00ff88;
+  animation: ping-green 1.5s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+.hud-dot-dim {
+  background: rgba(0, 255, 136, 0.28);
+  box-shadow: none;
+  animation: none;
+}
+
+.hud-label {
+  font-family: var(--font-geist-mono);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(0, 255, 136, 0.48);
+}
+
+/* Right side decorative dashes */
+.hud-side-lines {
+  position: absolute;
+  top: 32%;
+  right: -20px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  pointer-events: none;
+  z-index: 15;
+}
+
+.hud-side-line {
+  height: 1px;
+  background: rgba(0, 255, 136, 0.38);
+}
