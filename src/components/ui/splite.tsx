@@ -246,7 +246,7 @@ function RobotChestLabel({
   labelRef,
 }: {
   active: boolean;
-  labelRef: React.RefObject<HTMLDivElement>;
+  labelRef: React.RefObject<HTMLDivElement | null>;
 }) {
   return (
     <div
