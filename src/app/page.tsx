@@ -288,41 +288,17 @@ export default function Home() {
       <Header />
 
       {/* ── 1. HERO ──────────────────────────────────── */}
-      <section className="relative w-full overflow-hidden">
+      <section className="relative w-full overflow-x-hidden">
         <Spotlight className="-top-60 right-0 md:right-32" fill={G} />
 
-        {/* Mobile: vídeo como fundo da hero */}
-        <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden lg:hidden">
-          <video
-            autoPlay
-            muted
-            loop
-            playsInline
-            className="absolute inset-0 h-full w-full object-contain"
-            style={{ opacity: 0.85 }}
-          >
-            <source src={HERO_VIDEO_MP4}  type="video/mp4" />
-            <source src={HERO_VIDEO_WEBM} type="video/webm" />
-          </video>
-          {/* Gradiente: escurece topo para legibilidade do texto */}
-          <div
-            className="absolute inset-0"
-            style={{
-              background:
-                "linear-gradient(to bottom, rgba(10,10,10,0.92) 0%, rgba(10,10,10,0.60) 35%, rgba(10,10,10,0.10) 58%, transparent 72%)",
-            }}
-          />
-        </div>
+        <div className="mx-auto max-w-[1760px] px-6 md:px-10 lg:grid lg:min-h-screen lg:grid-cols-[minmax(460px,0.82fr)_minmax(560px,1.18fr)] lg:items-center lg:gap-8 lg:px-14 2xl:px-20">
 
-        {/* Content grid */}
-        <div className="mx-auto max-w-[1760px] px-6 md:px-10 lg:grid lg:min-h-screen lg:grid-cols-[minmax(480px,0.82fr)_minmax(600px,1.18fr)] lg:items-center lg:px-14 2xl:px-20">
-
-          {/* Left: copy — no mobile fica sobre o robô de fundo */}
+          {/* ── Coluna esquerda: copy ── */}
           <motion.div
             variants={stagger}
             initial="hidden"
             animate="visible"
-            className="relative z-10 flex min-h-[100svh] flex-col justify-start pt-24 pb-16 lg:order-1 lg:min-h-0 lg:justify-normal lg:py-0"
+            className="relative z-10 pt-28 pb-10 lg:order-1 lg:py-0"
           >
             <motion.div variants={fadeUp}>
               <GreenPill>:: Clone digital no WhatsApp ::</GreenPill>
@@ -362,7 +338,6 @@ export default function Home() {
               ))}
             </motion.div>
 
-            {/* Social proof inline metrics */}
             <motion.div
               variants={fadeUp}
               className="mt-7 flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-white/[0.06] pt-5 font-mono text-[11px] text-zinc-500"
@@ -373,37 +348,34 @@ export default function Home() {
               <span className="text-white/10">·</span>
               <span>2.108 clones ativos</span>
             </motion.div>
-
-            {/* Mobile clone card */}
-            <div className="mt-8 block w-full max-w-xs lg:hidden">
-              <CloneScannerCard />
-            </div>
           </motion.div>
 
-          {/* Right: vídeo com moldura HUD — desktop only */}
-          <div className="relative hidden h-screen lg:order-2 lg:block">
+          {/* ── Coluna direita: painel futurista com vídeo ── */}
+          <div className="lg:order-2 lg:flex lg:items-center lg:justify-center py-8 lg:py-0">
+            <div className="hero-visual">
 
-            {/* HUD shell — moldura futurista */}
-            <div className="hero-video-shell">
-              {/* Cantos estilo HUD */}
-              <div className="hud-corner hud-corner-tl" />
-              <div className="hud-corner hud-corner-tr" />
-              <div className="hud-corner hud-corner-bl" />
-              <div className="hud-corner hud-corner-br" />
+              {/* Card VOCÊ (DIGITAL) — sobreposto à esquerda no desktop */}
+              <div className="hero-digital-card">
+                <CloneScannerCard />
+              </div>
 
-              {/* Frame principal com bordas e glow */}
-              <div className="hero-video-frame">
+              {/* Frame do vídeo com bordas HUD */}
+              <div className="clone-video-frame">
                 <div className="hud-grid" />
                 <div className="hud-scanlines" />
                 <div className="hud-glow-top" />
                 <div className="hud-glow-br" />
+                <span className="hud-corner hud-corner-tl" />
+                <span className="hud-corner hud-corner-tr" />
+                <span className="hud-corner hud-corner-bl" />
+                <span className="hud-corner hud-corner-br" />
                 <video autoPlay muted loop playsInline>
                   <source src={HERO_VIDEO_MP4}  type="video/mp4" />
                   <source src={HERO_VIDEO_WEBM} type="video/webm" />
                 </video>
               </div>
 
-              {/* Barra de status inferior */}
+              {/* Barra de status abaixo do frame */}
               <div className="hud-status-bar">
                 <span className="hud-dot" />
                 <span className="hud-dot hud-dot-dim" />
@@ -411,26 +383,15 @@ export default function Home() {
                 <span className="hud-label">CLONE.NEURAL.ACTIVE</span>
               </div>
 
-              {/* Traços decorativos laterais direitos */}
+              {/* Traços decorativos à direita */}
               <div className="hud-side-lines">
                 <div className="hud-side-line" style={{ width: "20px" }} />
                 <div className="hud-side-line" style={{ width: "13px", opacity: 0.55 }} />
                 <div className="hud-side-line" style={{ width: "17px", opacity: 0.35 }} />
               </div>
             </div>
-
-            {/* Card "VOCÊ (DIGITAL)" sobreposto à esquerda da moldura */}
-            <div className="absolute left-0 top-1/2 z-30 -translate-y-1/2">
-              <CloneScannerCard />
-            </div>
-
-            <p
-              className="absolute bottom-2 right-6 z-10 font-mono text-[10px] opacity-35"
-              style={{ color: G }}
-            >
-              CLONE.DESPERTO
-            </p>
           </div>
+
         </div>
       </section>
 
