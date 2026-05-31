@@ -2171,9 +2171,9 @@ html {
   .hero-layout {
     display: grid;
     min-height: 100svh;
-    grid-template-columns: minmax(420px, 0.43fr) minmax(0, 0.57fr);
+    grid-template-columns: minmax(420px, 0.4fr) minmax(0, 0.6fr);
     align-items: center;
-    gap: 24px;
+    gap: 12px;
     padding: 96px 56px 64px;
   }
 
@@ -2196,41 +2196,22 @@ html {
   .hero-visual-shell {
     display: flex;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-end;
     min-width: 0;
     width: 100%;
   }
 
   .hero-visual {
     width: 100%;
-    max-width: 980px;
+    max-width: 1080px;
   }
 
   .hero-visual::before {
-    content: "";
-    position: absolute;
-    top: -22px;
-    right: -18px;
-    bottom: -22px;
-    left: -18px;
-    z-index: 0;
-    border: 1px solid rgba(0, 255, 136, 0.09);
-    border-radius: 24px;
-    background:
-      linear-gradient(135deg, rgba(0, 255, 136, 0.075), transparent 26%),
-      linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.01));
-    box-shadow: inset 0 0 44px rgba(0, 255, 136, 0.035);
-    pointer-events: none;
+    display: none;
   }
 
   .hero-digital-card {
-    display: block;
-    position: absolute;
-    top: 50%;
-    z-index: 30;
-    left: -72px;
-    transform: translateY(-50%) scale(0.78);
-    transform-origin: left center;
+    display: none;
   }
 
   .hero-digital-card .clone-scanner-card {
@@ -2272,57 +2253,88 @@ html {
 
   .clone-video-frame {
     z-index: 1;
-    clip-path: polygon(9% 0, 96% 0, 100% 9%, 100% 88%, 94% 100%, 4% 100%, 0 91%, 0 15%);
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    clip-path: none;
+    overflow: hidden;
+    transform: translateX(5%) scale(1.34);
+    transform-origin: center right;
+    -webkit-mask-image: radial-gradient(ellipse 68% 96% at 64% 55%, #000 0 60%, rgba(0, 0, 0, 0.72) 72%, transparent 92%);
+    mask-image: radial-gradient(ellipse 68% 96% at 64% 55%, #000 0 60%, rgba(0, 0, 0, 0.72) 72%, transparent 92%);
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+  }
+
+  .clone-video-frame::before,
+  .clone-video-frame::after,
+  .clone-video-frame .hud-grid,
+  .clone-video-frame .hud-scanlines,
+  .clone-video-frame .hud-glow-top,
+  .clone-video-frame .hud-glow-br,
+  .clone-video-frame .hud-corner,
+  .clone-video-frame .hud-status-bar,
+  .clone-video-frame .hud-side-lines {
+    display: none;
+  }
+
+  .clone-video-frame video {
+    inset: 50% auto auto 50%;
+    width: 126%;
+    height: 126%;
+    object-fit: cover;
+    object-position: 50% 42%;
+    border-radius: 0;
+    transform: translate(-50%, -47%);
+    filter: brightness(1.1) contrast(1.05) saturate(0.96);
   }
 }
 
 @media (min-width: 1280px) {
   .hero-layout {
-    gap: 28px;
+    gap: 16px;
     padding-right: 72px;
     padding-left: 72px;
   }
 
-  .hero-digital-card {
-    left: -74px;
-    transform: translateY(-50%) scale(0.82);
+  .hero-visual {
+    max-width: 1160px;
+  }
+
+  .clone-video-frame {
+    transform: translateX(8%) scale(1.36);
   }
 }
 
 @media (min-width: 1536px) {
   .hero-layout {
     max-width: 1840px;
-    grid-template-columns: minmax(0, 0.4fr) minmax(0, 0.6fr);
-    gap: 32px;
-    padding-right: 40px;
+    grid-template-columns: minmax(0, 0.36fr) minmax(0, 0.64fr);
+    gap: 20px;
+    padding-right: 24px;
     padding-left: 120px;
   }
 
   .hero-visual {
-    max-width: 1040px;
+    max-width: 1240px;
   }
 
-  .hero-digital-card {
-    left: -82px;
-    transform: translateY(-50%) scale(0.92);
+  .clone-video-frame {
+    transform: translateX(5%) scale(1.34);
   }
 }
 
 @media (min-width: 1024px) and (max-width: 1150px) {
   .hero-layout {
-    grid-template-columns: minmax(390px, 0.44fr) minmax(0, 0.56fr);
-    gap: 20px;
+    grid-template-columns: minmax(390px, 0.42fr) minmax(0, 0.58fr);
+    gap: 12px;
     padding-right: 42px;
     padding-left: 42px;
   }
 
-  .hero-digital-card {
-    left: -58px;
-    transform: translateY(-50%) scale(0.62);
-  }
-
-  .hero-digital-card .clone-scanner-card {
-    width: 244px;
+  .clone-video-frame {
+    transform: translateX(4%) scale(1.16);
   }
 }
 

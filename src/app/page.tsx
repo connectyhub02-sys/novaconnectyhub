@@ -23,8 +23,7 @@ import {
 } from "lucide-react";
 import { Spotlight } from "@/components/ui/spotlight";
 
-const HERO_VIDEO_MP4  = "https://pub-9f5b2802265a4ee2b52bc4e080f3941e.r2.dev/fundo%20connectyhub.mp4";
-const HERO_VIDEO_WEBM = "https://pub-9f5b2802265a4ee2b52bc4e080f3941e.r2.dev/fundo%20connectyhub-Picsart-BackgroundRemover.webm";
+const HERO_VIDEO_MP4 = "https://pub-9f5b2802265a4ee2b52bc4e080f3941e.r2.dev/avatar%20connectyhub.mp4";
 
 /* ── DESIGN TOKEN ─────────────────────────────────── */
 const G = "#00ff88"; // primary green
@@ -297,8 +296,7 @@ export default function Home() {
             className="absolute inset-0 h-full w-full object-cover"
             style={{ opacity: 0.65 }}
           >
-            <source src={HERO_VIDEO_MP4}  type="video/mp4" />
-            <source src={HERO_VIDEO_WEBM} type="video/webm" />
+            <source src={HERO_VIDEO_MP4} type="video/mp4" />
           </video>
           <div className="absolute inset-0" style={{
             background: "linear-gradient(to bottom, rgba(10,10,10,0.90) 0%, rgba(10,10,10,0.55) 42%, rgba(10,10,10,0.15) 64%, transparent 80%)"
@@ -324,11 +322,12 @@ export default function Home() {
             </motion.h1>
 
             <motion.p variants={fadeUp} className="hero-subcopy mt-5 max-w-lg leading-relaxed" style={{ fontSize: "1.125rem", color: "#e5e5e5" }}>
-              O ConnectyHub cria um clone do seu melhor vendedor — que responde,
-              negocia e fecha no{" "}
+              Crie um{" "}
+              <span style={{ color: "#00ff88", fontWeight: 800 }}>CLONE</span>{" "}
+              do seu melhor vendedor — que responde, negocia e fecha no{" "}
               <span style={{ color: "#00ff88", fontWeight: 600 }}>WhatsApp</span>{" "}
               24h,{" "}
-              <span style={{ color: "#00ff88", fontStyle: "italic" }}>sem parecer bot</span>.
+              <span style={{ fontStyle: "italic" }}>sem parecer Robô</span>.
             </motion.p>
 
             <motion.div variants={fadeUp} className="hero-ctas mt-7 flex max-w-[320px] flex-col gap-3 sm:max-w-none sm:flex-row">
@@ -384,8 +383,7 @@ export default function Home() {
                 <span className="hud-corner hud-corner-bl" />
                 <span className="hud-corner hud-corner-br" />
                 <video autoPlay muted loop playsInline>
-                  <source src={HERO_VIDEO_MP4}  type="video/mp4" />
-                  <source src={HERO_VIDEO_WEBM} type="video/webm" />
+                  <source src={HERO_VIDEO_MP4} type="video/mp4" />
                 </video>
                 {/* Barra de status dentro do frame */}
                 <div className="hud-status-bar">
