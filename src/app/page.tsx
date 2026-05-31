@@ -9,6 +9,7 @@ import {
   ChevronDown,
   GraduationCap,
   Layers,
+  Languages,
   MessageCircle,
   MessageSquare,
   Mic,
@@ -36,6 +37,7 @@ const capabilities = [
   { icon: Video, label: "Vídeo" },
   { icon: MessageCircle, label: "WhatsApp 24/7" },
   { icon: Sparkles, label: "Teste de Turing" },
+  { icon: Languages, label: "55 idiomas" },
 ];
 
 const differentials = [
@@ -207,6 +209,10 @@ const faqs: [string, string][] = [
     "Sim. A proposta do clone é conversar como uma pessoa no WhatsApp: texto curto, áudio, imagem, vídeo, histórico e contexto entrando na mesma conversa.",
   ],
   [
+    "O clone atende em outros idiomas?",
+    "Sim. O ConnectyHub pode atender leads em 55 idiomas, identificando o idioma da conversa e mantendo o contexto comercial para venda, agenda ou suporte.",
+  ],
+  [
     "Posso vender qualquer coisa pelo WhatsApp?",
     "Você pode vender produtos e serviços permitidos no WhatsApp. O uso precisa respeitar as políticas comerciais do WhatsApp/Meta e as regras do seu mercado.",
   ],
@@ -253,6 +259,36 @@ const forWhom = [
   { emoji: "⚡", text: "Quem perde lead porque demora para responder" },
   { emoji: "🌙", text: "Quem quer vender 24h sem contratar mais atendentes" },
   { emoji: "🤝", text: "Quem precisa de IA com conversa humana, não bot genérico" },
+];
+
+const languageHighlights = [
+  {
+    title: "Responde no idioma do lead",
+    text: "O clone identifica o idioma da conversa e mantém o atendimento natural sem trocar de canal.",
+  },
+  {
+    title: "Vende fora do Brasil",
+    text: "Atenda clientes de outros países pelo WhatsApp sem contratar uma equipe multilíngue.",
+  },
+  {
+    title: "Mantém contexto comercial",
+    text: "Texto, áudio, objeções, orçamento e follow-up seguem adaptados para cada mercado.",
+  },
+];
+
+const languageSamples = [
+  "Português",
+  "English",
+  "Español",
+  "Français",
+  "Deutsch",
+  "Italiano",
+  "Japanese",
+  "Arabic",
+  "Mandarin",
+  "Hindi",
+  "Korean",
+  "Dutch",
 ];
 
 const turingChatEvents = [
@@ -382,7 +418,7 @@ export default function Home() {
               {capabilities.map((c) => (
                 <div
                   key={c.label}
-                  className={`capability-pill ${c.label.includes("Turing") ? "capability-pill-highlight" : ""}`}
+                  className={`capability-pill ${c.label.includes("Turing") || c.label.includes("55") ? "capability-pill-highlight" : ""}`}
                 >
                   <c.icon size={10} />
                   {c.label}
@@ -399,6 +435,8 @@ export default function Home() {
               <span>98% taxa de resposta</span>
               <span className="text-white/10">·</span>
               <span>2.108 clones ativos</span>
+              <span className="text-white/10">·</span>
+              <span>55 idiomas</span>
             </motion.div>
           </motion.div>
 
@@ -506,7 +544,48 @@ export default function Home() {
         </div>
       </PageSection>
 
-      {/* ── 2.5. COMO FUNCIONA ───────────────────────── */}
+      {/* ── 2.5. IDIOMAS ───────────────────────── */}
+      <PageSection id="idiomas" bg="#0a0a0a">
+        <div className="language-section-grid">
+          <div>
+            <GreenPill>{"// 55 idiomas"}</GreenPill>
+            <h2 className="section-heading mt-4">
+              Venda e atenda leads em 55 idiomas pelo WhatsApp.
+            </h2>
+            <p className="mt-5 max-w-2xl text-sm leading-7 text-zinc-400 sm:text-base">
+              Seu clone conversa no idioma do cliente, mantém o contexto da venda e conduz o lead
+              até agenda, orçamento ou pagamento sem depender de página de vendas.
+            </p>
+            <div className="language-proof-grid mt-8">
+              {languageHighlights.map((item) => (
+                <div key={item.title} className="language-proof-card">
+                  <Check size={15} />
+                  <h3>{item.title}</h3>
+                  <p>{item.text}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="language-orbit-panel" aria-label="Atendimento em 55 idiomas">
+            <div className="language-orbit-grid" />
+            <div className="language-orbit-glow" />
+            <span className="language-number">55</span>
+            <span className="language-label">idiomas ativos</span>
+            <div className="language-chip-cloud">
+              {languageSamples.map((language) => (
+                <span key={language} className="language-chip">{language}</span>
+              ))}
+            </div>
+            <p>
+              Do primeiro contato ao fechamento, o clone responde no idioma do lead com ritmo de WhatsApp,
+              mensagens curtas e contexto comercial.
+            </p>
+          </div>
+        </div>
+      </PageSection>
+
+      {/* ── 3. COMO FUNCIONA ───────────────────────── */}
       <PageSection id="como-funciona" bg="#0a0a0a">
         <GreenPill>{"// Como funciona"}</GreenPill>
         <h2 className="section-heading mt-4">
