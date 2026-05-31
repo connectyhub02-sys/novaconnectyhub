@@ -1576,11 +1576,46 @@ html {
 /* ── HERO HEADLINE ─────────────────────────────────── */
 .hero-headline {
   font-family: var(--font-audiowide), sans-serif;
-  font-size: clamp(34px, 5.2vw, 80px);
+  font-size: 34px;
   font-weight: 900;
   line-height: 1.08;
-  letter-spacing: -1px;
+  letter-spacing: 0;
   color: #ffffff;
+}
+
+@media (min-width: 768px) {
+  .hero-headline {
+    font-size: 42px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .hero-headline {
+    max-width: 460px;
+    font-size: 52px;
+    line-height: 1.03;
+  }
+}
+
+@media (min-width: 1280px) {
+  .hero-headline {
+    max-width: 570px;
+    font-size: 60px;
+  }
+}
+
+@media (min-width: 1536px) {
+  .hero-headline {
+    max-width: 660px;
+    font-size: 74px;
+  }
+}
+
+@media (min-width: 1760px) {
+  .hero-headline {
+    max-width: 680px;
+    font-size: 80px;
+  }
 }
 
 /* ── SECTION HEADING ───────────────────────────────── */
@@ -1991,10 +2026,57 @@ html {
 
 /* ── HERO VIDEO HUD FRAME ──────────────────────────── */
 
+.connecty-hero {
+  isolation: isolate;
+  background:
+    linear-gradient(180deg, rgba(10, 10, 10, 0.98) 0%, #0a0a0a 100%);
+}
+
+.connecty-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(0, 255, 136, 0.025), transparent 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent 22%, transparent 78%, rgba(0, 0, 0, 0.35));
+  opacity: 0;
+}
+
+.hero-mobile-clone-bg video {
+  object-position: 50% 50%;
+}
+
+.hero-layout {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+}
+
+.hero-copy {
+  max-width: 640px;
+}
+
+.hero-subcopy {
+  text-wrap: pretty;
+}
+
+.hero-visual-shell {
+  display: none;
+}
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  .hero-copy {
+    max-width: 700px;
+  }
+}
+
 /* Container externo — em mobile é block, em desktop é relative */
 .hero-visual {
   position: relative;
   width: 100%;
+  min-width: 0;
 }
 
 /* Card VOCÊ (DIGITAL) — escondido no mobile, sobreposto no desktop */
@@ -2006,16 +2088,45 @@ html {
 .clone-video-frame {
   position: relative;
   width: 100%;
-  aspect-ratio: 4 / 3;
-  border-radius: 14px;
-  border: 1px solid rgba(0, 255, 136, 0.30);
+  aspect-ratio: 16 / 9;
+  border-radius: 20px;
+  border: 1px solid rgba(0, 255, 136, 0.46);
   box-shadow:
-    0 0 0 1px rgba(0, 255, 136, 0.07),
-    0 0 40px rgba(0, 255, 136, 0.14),
-    0 0 80px rgba(0, 255, 136, 0.07),
-    inset 0 0 50px rgba(0, 0, 0, 0.60);
+    0 0 0 1px rgba(0, 255, 136, 0.08),
+    0 22px 70px rgba(0, 0, 0, 0.62),
+    0 0 42px rgba(0, 255, 136, 0.18),
+    0 0 110px rgba(0, 255, 136, 0.08),
+    inset 0 0 56px rgba(0, 0, 0, 0.68);
   overflow: hidden;
-  background: #050505;
+  background:
+    linear-gradient(135deg, rgba(0, 255, 136, 0.08), transparent 24%),
+    #020403;
+  isolation: isolate;
+}
+
+.clone-video-frame::before,
+.clone-video-frame::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.clone-video-frame::before {
+  z-index: 8;
+  background:
+    radial-gradient(ellipse 76% 80% at 72% 58%, rgba(0, 255, 136, 0.03), transparent 66%),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.18) 0%, rgba(0, 0, 0, 0.01) 45%, rgba(0, 0, 0, 0.10) 100%),
+    linear-gradient(180deg, rgba(0, 0, 0, 0.08), transparent 38%, rgba(0, 0, 0, 0.16));
+}
+
+.clone-video-frame::after {
+  z-index: 9;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 255, 136, 0.08),
+    inset 0 0 28px rgba(0, 255, 136, 0.06);
 }
 
 /* Vídeo preenche 100% do frame */
@@ -2025,8 +2136,9 @@ html {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  z-index: 4;
-  filter: brightness(0.97) contrast(1.04);
+  border-radius: inherit;
+  z-index: 1;
+  filter: brightness(1.18) contrast(1.02) saturate(0.94);
 }
 
 /* Status bar e side-lines ficam DENTRO do frame (sem overflow) */
@@ -2034,63 +2146,230 @@ html {
   position: absolute;
   bottom: 14px;
   left: 16px;
-  z-index: 10;
+  z-index: 24;
 }
 
 .clone-video-frame .hud-side-lines {
   position: absolute;
   top: 30%;
   right: 16px;
-  z-index: 10;
+  z-index: 24;
 }
 
 /* Desktop: card sobreposto na lateral esquerda do frame */
 @media (min-width: 1024px) {
-  .hero-visual {
-    max-width: 760px;
+  .connecty-hero {
+    min-height: 100svh;
+    background:
+      linear-gradient(90deg, #0a0a0a 0%, #080a08 52%, #050806 100%);
+  }
+
+  .connecty-hero::before {
+    opacity: 1;
+  }
+
+  .hero-layout {
+    display: grid;
+    min-height: 100svh;
+    grid-template-columns: minmax(420px, 0.43fr) minmax(0, 0.57fr);
+    align-items: center;
+    gap: 24px;
+    padding: 96px 56px 64px;
+  }
+
+  .hero-copy {
+    min-height: 0;
+    max-width: 590px;
+    justify-content: center;
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+
+  .hero-subcopy {
+    max-width: 590px;
+  }
+
+  .hero-ctas {
+    margin-top: 32px;
+  }
+
+  .hero-visual-shell {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
     width: 100%;
+  }
+
+  .hero-visual {
+    width: 100%;
+    max-width: 980px;
+  }
+
+  .hero-visual::before {
+    content: "";
+    position: absolute;
+    top: -22px;
+    right: -18px;
+    bottom: -22px;
+    left: -18px;
+    z-index: 0;
+    border: 1px solid rgba(0, 255, 136, 0.09);
+    border-radius: 24px;
+    background:
+      linear-gradient(135deg, rgba(0, 255, 136, 0.075), transparent 26%),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.01));
+    box-shadow: inset 0 0 44px rgba(0, 255, 136, 0.035);
+    pointer-events: none;
   }
 
   .hero-digital-card {
     display: block;
     position: absolute;
-    left: 0;
     top: 50%;
-    transform: translateY(-50%);
     z-index: 30;
+    left: -72px;
+    transform: translateY(-50%) scale(0.78);
+    transform-origin: left center;
+  }
+
+  .hero-digital-card .clone-scanner-card {
+    width: 252px;
+    padding: 24px 18px;
+    border-radius: 16px;
+    border-color: rgba(0, 255, 136, 0.42);
+    clip-path: polygon(0 0, 100% 0, 100% 90%, 90% 100%, 0 100%);
+    background:
+      linear-gradient(180deg, rgba(5, 10, 8, 0.82), rgba(0, 18, 10, 0.74)),
+      rgba(4, 8, 6, 0.72);
+    box-shadow:
+      0 18px 55px rgba(0, 0, 0, 0.64),
+      0 0 34px rgba(0, 255, 136, 0.18),
+      inset 0 0 24px rgba(0, 255, 136, 0.06);
+    backdrop-filter: blur(18px);
+  }
+
+  .hero-digital-card .clone-scanner-card::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background-image:
+      linear-gradient(rgba(0, 255, 136, 0.035) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0, 255, 136, 0.028) 1px, transparent 1px);
+    background-size: 28px 28px;
+  }
+
+  .hero-digital-card .clone-scanner-card > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  .hero-digital-card .clone-scanner-line {
+    z-index: 3;
   }
 
   .clone-video-frame {
-    margin-left: 76px;
-    aspect-ratio: 4 / 3;
+    z-index: 1;
+    clip-path: polygon(9% 0, 96% 0, 100% 9%, 100% 88%, 94% 100%, 4% 100%, 0 91%, 0 15%);
   }
 }
 
+@media (min-width: 1280px) {
+  .hero-layout {
+    gap: 28px;
+    padding-right: 72px;
+    padding-left: 72px;
+  }
+
+  .hero-digital-card {
+    left: -74px;
+    transform: translateY(-50%) scale(0.82);
+  }
+}
+
+@media (min-width: 1536px) {
+  .hero-layout {
+    max-width: 1840px;
+    grid-template-columns: minmax(0, 0.4fr) minmax(0, 0.6fr);
+    gap: 32px;
+    padding-right: 40px;
+    padding-left: 120px;
+  }
+
+  .hero-visual {
+    max-width: 1040px;
+  }
+
+  .hero-digital-card {
+    left: -82px;
+    transform: translateY(-50%) scale(0.92);
+  }
+}
+
+@media (min-width: 1024px) and (max-width: 1150px) {
+  .hero-layout {
+    grid-template-columns: minmax(390px, 0.44fr) minmax(0, 0.56fr);
+    gap: 20px;
+    padding-right: 42px;
+    padding-left: 42px;
+  }
+
+  .hero-digital-card {
+    left: -58px;
+    transform: translateY(-50%) scale(0.62);
+  }
+
+  .hero-digital-card .clone-scanner-card {
+    width: 244px;
+  }
+}
+
+@media (min-width: 1024px) and (max-height: 760px) {
+  .hero-layout {
+    padding-top: 86px;
+    padding-bottom: 40px;
+  }
+
+  .hero-digital-card {
+    left: -64px;
+    transform: translateY(-50%) scale(0.62);
+  }
+}
+
+@media (min-width: 1280px) and (max-height: 820px) {
+  .hero-digital-card {
+    transform: translateY(-50%) scale(0.74);
+  }
+}
 /* Grid overlay */
 .hud-grid {
   position: absolute;
   inset: 0;
-  z-index: 1;
+  z-index: 4;
   pointer-events: none;
   background-image:
-    linear-gradient(rgba(0, 255, 136, 0.025) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0, 255, 136, 0.025) 1px, transparent 1px);
-  background-size: 52px 52px;
+    linear-gradient(rgba(0, 255, 136, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 255, 136, 0.035) 1px, transparent 1px);
+  background-size: 44px 44px;
+  opacity: 0.58;
 }
 
 /* Scanlines */
 .hud-scanlines {
   position: absolute;
   inset: 0;
-  z-index: 2;
+  z-index: 5;
   pointer-events: none;
   background: repeating-linear-gradient(
     0deg,
     transparent,
     transparent 3px,
-    rgba(0, 0, 0, 0.03) 3px,
-    rgba(0, 0, 0, 0.03) 4px
+    rgba(0, 0, 0, 0.075) 3px,
+    rgba(0, 0, 0, 0.075) 4px
   );
+  opacity: 0.48;
 }
 
 /* Top green glow */
@@ -2099,10 +2378,10 @@ html {
   top: 0;
   left: 10%;
   right: 10%;
-  height: 150px;
-  z-index: 3;
+  height: 130px;
+  z-index: 10;
   pointer-events: none;
-  background: radial-gradient(ellipse 80% 100% at 50% 0%, rgba(0, 255, 136, 0.18), transparent 72%);
+  background: radial-gradient(ellipse 80% 100% at 50% 0%, rgba(0, 255, 136, 0.16), transparent 72%);
 }
 
 /* Bottom-right cyan glow */
@@ -2112,7 +2391,7 @@ html {
   right: 0;
   width: 240px;
   height: 200px;
-  z-index: 3;
+  z-index: 10;
   pointer-events: none;
   background: radial-gradient(circle at 100% 100%, rgba(0, 243, 255, 0.11), transparent 65%);
 }
@@ -2120,9 +2399,9 @@ html {
 /* HUD corners — L-shaped brackets */
 .hud-corner {
   position: absolute;
-  width: 22px;
-  height: 22px;
-  z-index: 20;
+  width: 30px;
+  height: 30px;
+  z-index: 26;
   pointer-events: none;
 }
 
@@ -2208,6 +2487,33 @@ html {
   gap: 5px;
   pointer-events: none;
   z-index: 15;
+}
+
+.hud-side-lines::before {
+  content: "";
+  width: 1px;
+  height: 130px;
+  margin: 0 2px 9px auto;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(0, 255, 136, 0.72) 0 3px,
+    transparent 3px 9px
+  );
+  box-shadow: 0 0 14px rgba(0, 255, 136, 0.34);
+}
+
+.hud-side-lines::after {
+  content: "";
+  width: 7px;
+  height: 76px;
+  margin: 12px 0 0 auto;
+  border-radius: 999px;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(0, 255, 136, 0.85) 0 2px,
+    transparent 2px 5px
+  );
+  filter: drop-shadow(0 0 8px rgba(0, 255, 136, 0.44));
 }
 
 .hud-side-line {

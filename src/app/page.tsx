@@ -288,11 +288,11 @@ export default function Home() {
       <Header />
 
       {/* ── 1. HERO ──────────────────────────────────── */}
-      <section className="relative w-full overflow-x-hidden">
+      <section className="connecty-hero relative w-full overflow-hidden">
         <Spotlight className="-top-60 right-0 md:right-32" fill={G} />
 
         {/* Mobile: vídeo como fundo atrás do texto */}
-        <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden lg:hidden">
+        <div className="hero-mobile-clone-bg pointer-events-none absolute inset-0 z-0 overflow-hidden lg:hidden">
           <video autoPlay muted loop playsInline
             className="absolute inset-0 h-full w-full object-cover"
             style={{ opacity: 0.65 }}
@@ -305,14 +305,14 @@ export default function Home() {
           }} />
         </div>
 
-        <div className="mx-auto max-w-[1760px] px-6 md:px-10 lg:grid lg:min-h-screen lg:grid-cols-[minmax(460px,0.82fr)_minmax(560px,1.18fr)] lg:items-center lg:gap-8 lg:px-14 2xl:px-20">
+        <div className="hero-layout mx-auto max-w-[1760px] px-6 md:px-10">
 
           {/* ── Coluna esquerda: copy ── */}
           <motion.div
             variants={stagger}
             initial="hidden"
             animate="visible"
-            className="relative z-10 flex min-h-[100svh] flex-col justify-start pt-28 pb-10 lg:order-1 lg:min-h-0 lg:py-0"
+            className="hero-copy relative z-10 flex min-h-[100svh] flex-col justify-start pt-28 pb-10"
           >
             <motion.div variants={fadeUp}>
               <GreenPill>:: Clone digital no WhatsApp ::</GreenPill>
@@ -323,7 +323,7 @@ export default function Home() {
               <span style={{ color: G }}>Escala como máquina.</span>
             </motion.h1>
 
-            <motion.p variants={fadeUp} className="mt-5 max-w-lg leading-relaxed" style={{ fontSize: "1.125rem", color: "#e5e5e5" }}>
+            <motion.p variants={fadeUp} className="hero-subcopy mt-5 max-w-lg leading-relaxed" style={{ fontSize: "1.125rem", color: "#e5e5e5" }}>
               O ConnectyHub cria um clone do seu melhor vendedor — que responde,
               negocia e fecha no{" "}
               <span style={{ color: "#00ff88", fontWeight: 600 }}>WhatsApp</span>{" "}
@@ -331,7 +331,7 @@ export default function Home() {
               <span style={{ color: "#00ff88", fontStyle: "italic" }}>sem parecer bot</span>.
             </motion.p>
 
-            <motion.div variants={fadeUp} className="mt-7 flex max-w-[320px] flex-col gap-3 sm:max-w-none sm:flex-row">
+            <motion.div variants={fadeUp} className="hero-ctas mt-7 flex max-w-[320px] flex-col gap-3 sm:max-w-none sm:flex-row">
               <a className="cta-primary" href="https://painel.connectyhub.com.br/signup">
                 Criar meu clone no WhatsApp <ArrowRight size={16} />
               </a>
@@ -365,7 +365,7 @@ export default function Home() {
           </motion.div>
 
           {/* ── Coluna direita: painel futurista com vídeo — desktop only ── */}
-          <div className="hidden lg:order-2 lg:flex lg:items-center lg:justify-center lg:py-0">
+          <div className="hero-visual-shell">
             <div className="hero-visual">
 
               {/* Card VOCÊ (DIGITAL) — sobreposto à esquerda no desktop */}
