@@ -5,7 +5,7 @@
   --foreground: #f5f5f5;
   --card: #0a0a12;
   --card-foreground: #f5f5f5;
-  --muted-foreground: #a1a1aa;
+  --muted-foreground: #c7ced8;
   --cyber-green: #00ff88;
   --cyber-cyan: #00f3ff;
   --cyber-purple: #bc13fe;
@@ -1674,6 +1674,72 @@ html {
   background: rgba(255, 255, 255, 0.05);
 }
 
+.hero-trial-offer {
+  display: flex;
+  width: fit-content;
+  max-width: 100%;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid rgba(0, 255, 136, 0.28);
+  border-radius: 12px;
+  background:
+    linear-gradient(90deg, rgba(0, 255, 136, 0.105), rgba(0, 255, 136, 0.025)),
+    rgba(0, 0, 0, 0.34);
+  padding: 10px 12px;
+  box-shadow:
+    0 0 24px rgba(0, 255, 136, 0.08),
+    inset 0 0 20px rgba(0, 255, 136, 0.035);
+  color: #f8fafc;
+}
+
+.hero-trial-offer svg {
+  flex: none;
+  color: #00ff88;
+  filter: drop-shadow(0 0 8px rgba(0, 255, 136, 0.5));
+}
+
+.hero-trial-offer div {
+  min-width: 0;
+}
+
+.hero-trial-offer strong,
+.hero-trial-offer span,
+.hero-trial-offer em {
+  display: block;
+}
+
+.hero-trial-offer strong {
+  color: #00ff88;
+  font-family: var(--font-geist-mono);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  line-height: 1.25;
+  text-transform: uppercase;
+  text-shadow: 0 0 16px rgba(0, 255, 136, 0.24);
+}
+
+.hero-trial-offer span {
+  margin-top: 2px;
+  color: #f1f5f9;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.hero-trial-offer em {
+  border-left: 1px solid rgba(0, 255, 136, 0.2);
+  padding-left: 10px;
+  color: #dfffee;
+  font-family: var(--font-geist-mono);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 800;
+  line-height: 1.2;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
 /* ── DIFFERENTIAL CARDS ────────────────────────────── */
 .diff-card {
   border: 1px solid rgba(255, 255, 255, 0.07);
@@ -1712,7 +1778,7 @@ html {
 
 .diff-card p {
   font-size: 14px;
-  color: #71717a;
+  color: #c5ccd6;
   line-height: 1.72;
 }
 
@@ -1747,7 +1813,7 @@ html {
 .chat-label {
   font-size: 12px;
   font-weight: 600;
-  color: #71717a;
+  color: #b9c2ce;
 }
 
 .chat-messages {
@@ -1768,7 +1834,7 @@ html {
 .chat-bubble-bot {
   background: rgba(255, 255, 255, 0.05);
   border-radius: 4px 12px 12px 12px;
-  color: #a1a1aa;
+  color: #d4dae3;
   align-self: flex-start;
 }
 
@@ -1826,7 +1892,7 @@ html {
 
 .profile-pain {
   font-size: 13px;
-  color: #71717a;
+  color: #c5ccd6;
   line-height: 1.65;
   margin-bottom: 12px;
 }
@@ -1906,7 +1972,7 @@ html {
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  color: #71717a;
+  color: #c0c7d2;
 }
 
 /* ── FAQ ACCORDION ─────────────────────────────────── */
@@ -1945,7 +2011,7 @@ html {
 .faq-new-answer {
   padding: 0 20px 18px;
   font-size: 13px;
-  color: #a1a1aa;
+  color: #c5ccd6;
   line-height: 1.78;
 }
 
@@ -2125,7 +2191,7 @@ html {
 
 .language-proof-card p {
   margin-top: 9px;
-  color: #a1a1aa;
+  color: #c5ccd6;
   font-size: 13px;
   line-height: 1.65;
 }
@@ -2251,7 +2317,7 @@ html {
 .language-orbit-panel p {
   max-width: 440px;
   margin-top: 26px;
-  color: #a1a1aa;
+  color: #c5ccd6;
   font-size: 14px;
   line-height: 1.75;
 }
@@ -2502,7 +2568,61 @@ html {
   overflow: hidden;
 }
 
+.setup-step-number {
+  display: block;
+  color: #00ff88;
+  text-shadow: 0 0 28px rgba(0, 255, 136, 0.30);
+}
+
 @media (max-width: 640px) {
+  main .text-zinc-300 {
+    color: #f1f5f9;
+  }
+
+  main .text-zinc-400 {
+    color: #dce3ec;
+  }
+
+  main .text-zinc-500 {
+    color: #c3ccd8;
+  }
+
+  .diff-card p,
+  .profile-pain,
+  .language-proof-card p,
+  .language-orbit-panel p,
+  .faq-new-answer,
+  .chat-bubble-bot,
+  .metric-card span {
+    color: #e1e7ef;
+  }
+
+  .hero-copy .font-mono {
+    text-shadow: 0 1px 12px rgba(0, 0, 0, 0.72);
+  }
+
+  .hero-trial-offer {
+    width: 100%;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 12px;
+  }
+
+  .hero-trial-offer div {
+    flex: 1 1 calc(100% - 28px);
+  }
+
+  .hero-trial-offer span {
+    font-size: 12.5px;
+  }
+
+  .hero-trial-offer em {
+    border-left: 0;
+    border-top: 1px solid rgba(0, 255, 136, 0.16);
+    padding: 8px 10px 0 0;
+  }
+
   .hero-ctas .cta-secondary,
   .capability-strip {
     display: none;

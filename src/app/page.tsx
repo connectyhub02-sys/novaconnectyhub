@@ -49,7 +49,7 @@ const differentials = [
   {
     icon: Layers,
     title: "Nada de textão",
-    text: "O clone responde em partes, com pausas e ritmo de WhatsApp. Parece conversa, não bloco de atendimento.",
+    text: "Seu clone responde em partes, com pausas e ritmo de WhatsApp. Parece conversa, não bloco de atendimento.",
   },
   {
     icon: Mic,
@@ -59,17 +59,17 @@ const differentials = [
   {
     icon: Video,
     title: "Entende mídia",
-    text: "Foto, vídeo, print, áudio e texto entram no mesmo contexto para o clone continuar a venda.",
+    text: "Foto, vídeo, print, áudio e texto entram no mesmo contexto para seu clone continuar a venda.",
   },
   {
     icon: TrendingUp,
     title: "Contorna objeções",
-    text: "Quando o lead trava, o clone pergunta melhor, argumenta e conduz para agenda, pagamento ou próximo passo.",
+    text: "Quando o lead trava, seu clone pergunta melhor, argumenta e conduz para agenda, pagamento ou próximo passo.",
   },
   {
     icon: Zap,
     title: "Atende 24h",
-    text: "Enquanto você vive, dorme ou grava conteúdo, o clone mantém o WhatsApp respondendo e vendendo.",
+    text: "Enquanto você vive, dorme ou grava conteúdo, seu clone mantém o WhatsApp respondendo e vendendo.",
   },
 ];
 
@@ -107,7 +107,7 @@ const profiles = [
   {
     icon: Briefcase,
     title: "Prestador de serviço",
-    pain: "Clínica, salão, consultório, academia: o clone responde, agenda e confirma sem mensagem perdida.",
+    pain: "Clínica, salão, consultório, academia: seu clone responde, agenda e confirma sem mensagem perdida.",
     result: "Agenda cheia sem tocar no celular",
   },
   {
@@ -198,18 +198,18 @@ const faqs: [string, string][] = [
   ],
   [
     "Preciso saber programar para configurar?",
-    "Não. Você conecta o WhatsApp, explica seu negócio em linguagem natural e treina o clone como treinaria uma pessoa nova da equipe.",
+    "Não. Você conecta o WhatsApp, explica seu negócio em linguagem natural e treina seu clone como treinaria uma pessoa nova da equipe.",
   ],
   [
     "Funciona para o meu nicho?",
-    "Se você vende, agenda ou atende pelo WhatsApp, o clone pode ajudar. Ele funciona para infoprodutores, prestadores de serviço, e-commerce, clínicas, consultorias e operações locais.",
+    "Se você vende, agenda ou atende pelo WhatsApp, seu clone pode ajudar. Ele funciona para infoprodutores, prestadores de serviço, e-commerce, clínicas, consultorias e operações locais.",
   ],
   [
     "Ele entende áudio, imagem e vídeo?",
-    "Sim. A proposta do clone é conversar como uma pessoa no WhatsApp: texto curto, áudio, imagem, vídeo, histórico e contexto entrando na mesma conversa.",
+    "Sim. A proposta do seu clone é conversar como uma pessoa no WhatsApp: texto curto, áudio, imagem, vídeo, histórico e contexto entrando na mesma conversa.",
   ],
   [
-    "O clone atende em outros idiomas?",
+    "Seu clone atende em outros idiomas?",
     "Sim. O ConnectyHub pode atender leads em 55 idiomas, identificando o idioma da conversa e mantendo o contexto comercial para venda, agenda ou suporte.",
   ],
   [
@@ -218,20 +218,20 @@ const faqs: [string, string][] = [
   ],
   [
     "Quanto tempo leva para ativar?",
-    "A maioria dos negócios consegue configurar, testar e colocar o clone para atender em menos de 24h.",
+    "A maioria dos negócios consegue configurar, testar e colocar seu clone para atender em menos de 24h.",
   ],
   [
     "Qual a diferença para outros chatbots?",
-    "Chatbots seguem fluxo. O clone entende contexto, responde em partes, usa rapport, contorna objeções e conduz para venda, agenda ou pagamento.",
+    "Chatbots seguem fluxo. Seu clone entende contexto, responde em partes, usa rapport, contorna objeções e conduz para venda, agenda ou pagamento.",
   ],
 ];
 
 const TOAST_EVENTS = [
   { name: "Carlos M.", action: "recuperou carrinho de", value: "R$ 412" },
   { name: "Fernanda L.", action: "fechou venda de", value: "R$ 297" },
-  { name: "Diego S.", action: "clone ativou e vendeu", value: "R$ 189" },
+  { name: "Diego S.", action: "Seu clone ativou e vendeu", value: "R$ 189" },
   { name: "Ana P.", action: "recebeu pix de", value: "R$ 547" },
-  { name: "Roberto A.", action: "clone fechou negócio de", value: "R$ 1.290" },
+  { name: "Roberto A.", action: "Seu clone fechou negócio de", value: "R$ 1.290" },
   { name: "Mariana C.", action: "lead convertido em", value: "R$ 397" },
   { name: "Lucas T.", action: "venda via áudio de", value: "R$ 249" },
 ];
@@ -250,7 +250,7 @@ const steps = [
   {
     n: "03",
     title: "Ative e acompanhe",
-    text: "O clone começa a atender. Você acompanha tudo e pode assumir qualquer conversa quando quiser.",
+    text: "Seu clone começa a atender. Você acompanha tudo e pode assumir qualquer conversa quando quiser.",
   },
 ];
 
@@ -264,7 +264,7 @@ const forWhom = [
 const languageHighlights = [
   {
     title: "Responde no idioma do lead",
-    text: "O clone identifica o idioma da conversa e mantém o atendimento natural sem trocar de canal.",
+    text: "Seu clone identifica o idioma da conversa e mantém o atendimento natural sem trocar de canal.",
   },
   {
     title: "Vende fora do Brasil",
@@ -293,16 +293,16 @@ const languageSamples = [
 
 const turingChatEvents = [
   { kind: "lead", text: "Oi, vi seu anúncio. Isso serve para clínica?", time: "10:42" },
-  { kind: "typing", text: "clone digitando..." },
+  { kind: "typing", text: "Seu clone digitando..." },
   { kind: "clone", text: "Serve sim, Mariana.", time: "10:42" },
   { kind: "clone", text: "Você quer melhorar o agendamento ou responder dúvidas antes da consulta?", time: "10:42" },
   { kind: "lead-audio", duration: "0:08", time: "10:43" },
-  { kind: "recording", text: "clone gravando áudio..." },
+  { kind: "recording", text: "Seu clone gravando áudio..." },
   { kind: "clone-audio", duration: "0:12", time: "10:43" },
   { kind: "clone", text: "Entendi. Hoje vocês perdem lead porque a pessoa pergunta preço e some, certo?", time: "10:44" },
   { kind: "lead-media", label: "print enviado", text: "Esse tipo de conversa acontece direto.", time: "10:44" },
-  { kind: "typing", text: "clone analisando imagem..." },
-  { kind: "clone", text: "Vi aqui. O clone responderia em partes, tiraria a objeção e já ofereceria um horário.", time: "10:45" },
+  { kind: "typing", text: "Seu clone analisando imagem..." },
+  { kind: "clone", text: "Vi aqui. Seu clone responderia em partes, tiraria a objeção e já ofereceria um horário.", time: "10:45" },
   { kind: "clone", text: "Quer testar com uma conversa real da sua clínica?", time: "10:45" },
 ];
 
@@ -394,8 +394,8 @@ export default function Home() {
             </motion.h1>
 
             <motion.p variants={fadeUp} className="hero-subcopy mt-5 max-w-lg leading-relaxed" style={{ fontSize: "1.125rem", color: "#e5e5e5" }}>
-              Crie um{" "}
-              <span style={{ color: "#00ff88", fontWeight: 800 }}>CLONE</span>{" "}
+              Crie o{" "}
+              <span style={{ color: "#00ff88", fontWeight: 800 }}>Seu clone</span>{" "}
               de vendas no{" "}
               <span style={{ color: "#00ff88", fontWeight: 600 }}>WhatsApp</span>{" "}
               que atende, negocia e fecha 24h com conversa natural{" "}
@@ -410,9 +410,15 @@ export default function Home() {
                 Ver o teste na prática
               </a>
             </motion.div>
-            <motion.p variants={fadeUp} className="mt-3 font-mono text-[11px] text-zinc-500">
-              Teste grátis por 7 dias · Sem cartão · Não precisa saber programar.
-            </motion.p>
+            <motion.div variants={fadeUp} className="hero-trial-offer mt-4">
+              <Check size={15} />
+              <div>
+                <strong>Teste grátis por 7 dias</strong>
+                <span>Veja seu clone atendendo antes de pagar.</span>
+              </div>
+              <em>Sem cartão</em>
+              <em>Sem programar</em>
+            </motion.div>
 
             <motion.div variants={fadeUp} className="capability-strip mt-5">
               {capabilities.map((c) => (
@@ -428,14 +434,14 @@ export default function Home() {
 
             <motion.div
               variants={fadeUp}
-              className="mt-7 flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-white/[0.06] pt-5 font-mono text-[11px] text-zinc-500"
+              className="mt-7 flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-white/[0.06] pt-5 font-mono text-[11px] text-zinc-300"
             >
               <span>+14.382 conversas</span>
-              <span className="text-white/10">·</span>
+              <span className="text-white/25">·</span>
               <span>98% taxa de resposta</span>
-              <span className="text-white/10">·</span>
+              <span className="text-white/25">·</span>
               <span>2.108 clones ativos</span>
-              <span className="text-white/10">·</span>
+              <span className="text-white/25">·</span>
               <span>55 idiomas</span>
             </motion.div>
           </motion.div>
@@ -467,7 +473,7 @@ export default function Home() {
                   <span className="hud-dot" />
                   <span className="hud-dot hud-dot-dim" />
                   <span className="hud-dot hud-dot-dim" />
-                  <span className="hud-label">CLONE.NEURAL.ACTIVE</span>
+                  <span className="hud-label">SEU.CLONE.ACTIVE</span>
                 </div>
                 {/* Traços decorativos dentro do frame, lado direito */}
                 <div className="hud-side-lines">
@@ -490,8 +496,8 @@ export default function Home() {
             <h2 className="section-heading mt-4">
               Veja o Teste de Turing acontecendo no WhatsApp.
             </h2>
-            <p className="mt-5 max-w-2xl text-sm leading-7 text-zinc-400 sm:text-base">
-              Texto, áudio, imagem, vídeo, objeções e fechamento. O clone conversa em partes,
+            <p className="mt-5 max-w-2xl text-sm leading-7 text-zinc-300 sm:text-base">
+              Texto, áudio, imagem, vídeo, objeções e fechamento. Seu clone conversa em partes,
               entende o contexto e mantém o cliente na conversa.
             </p>
             <div className="turing-proof-list mt-8">
@@ -516,11 +522,11 @@ export default function Home() {
 
       {/* ── 2. DIFERENCIAL CENTRAL ───────────────────── */}
       <PageSection id="diferencial" bg="#0d0d0d">
-        <GreenPill>{"// Não é bot. É clone."}</GreenPill>
+        <GreenPill>{"// Não é bot. É seu clone."}</GreenPill>
         <h2 className="section-heading mt-4">
           O cliente pode saber que existe IA. Ele continua porque está sendo bem atendido.
         </h2>
-        <p className="mt-5 max-w-3xl text-sm leading-7 text-zinc-400 sm:text-base">
+        <p className="mt-5 max-w-3xl text-sm leading-7 text-zinc-300 sm:text-base">
           A diferença não é esconder tecnologia. É entregar uma conversa tão útil, rápida e humana
           que o lead não sente vontade de abandonar o WhatsApp.
         </p>
@@ -552,7 +558,7 @@ export default function Home() {
             <h2 className="section-heading mt-4">
               Venda e atenda leads em 55 idiomas pelo WhatsApp.
             </h2>
-            <p className="mt-5 max-w-2xl text-sm leading-7 text-zinc-400 sm:text-base">
+            <p className="mt-5 max-w-2xl text-sm leading-7 text-zinc-300 sm:text-base">
               Seu clone conversa no idioma do cliente, mantém o contexto da venda e conduz o lead
               até agenda, orçamento ou pagamento sem depender de página de vendas.
             </p>
@@ -578,7 +584,7 @@ export default function Home() {
               ))}
             </div>
             <p>
-              Do primeiro contato ao fechamento, o clone responde no idioma do lead com ritmo de WhatsApp,
+              Do primeiro contato ao fechamento, seu clone responde no idioma do lead com ritmo de WhatsApp,
               mensagens curtas e contexto comercial.
             </p>
           </div>
@@ -589,7 +595,7 @@ export default function Home() {
       <PageSection id="como-funciona" bg="#0a0a0a">
         <GreenPill>{"// Como funciona"}</GreenPill>
         <h2 className="section-heading mt-4">
-          Do WhatsApp ao clone atendendo<br className="hidden sm:block" /> em menos de 24h.
+          Do WhatsApp ao seu clone atendendo<br className="hidden sm:block" /> em menos de 24h.
         </h2>
         <div className="setup-timeline mt-10 grid gap-5 sm:grid-cols-3">
           {steps.map((s, i) => (
@@ -601,14 +607,11 @@ export default function Home() {
               transition={{ duration: 0.5, delay: i * 0.12 }}
               className="setup-step-card relative rounded-2xl border border-white/[0.07] bg-white/[0.02] p-6"
             >
-              <span
-                className="font-mono text-5xl font-black leading-none"
-                style={{ color: `${G}25` }}
-              >
+              <span className="setup-step-number font-mono text-5xl font-black leading-none">
                 {s.n}
               </span>
               <h3 className="mt-4 text-base font-bold text-white">{s.title}</h3>
-              <p className="mt-2 text-sm leading-relaxed text-zinc-400">{s.text}</p>
+              <p className="mt-2 text-sm leading-relaxed text-zinc-300">{s.text}</p>
             </motion.div>
           ))}
         </div>
@@ -619,7 +622,7 @@ export default function Home() {
           >
             Quero meu clone agora <ArrowRight size={16} />
           </a>
-          <p className="font-mono text-[11px] text-zinc-600">
+          <p className="font-mono text-[11px] text-zinc-400">
             7 dias grátis · Sem cartão · Cancele quando quiser
           </p>
         </div>
@@ -629,7 +632,7 @@ export default function Home() {
       <PageSection bg="#0a0a0a">
         <GreenPill>{"// Demo comparativo"}</GreenPill>
         <h2 className="section-heading mt-4">
-          Bot comum vs Clone ConnectyHub.
+          Bot comum vs Seu clone.
         </h2>
         <ChatDemo />
       </PageSection>
@@ -695,7 +698,7 @@ export default function Home() {
             </div>
           </div>
           <div className="after-col">
-            <span className="col-label col-label-green">Clone ConnectyHub</span>
+            <span className="col-label col-label-green">Seu clone</span>
             <div className="space-y-3 mt-4">
               {afterItems.map((item) => (
                 <div key={item} className="compare-row">
@@ -720,7 +723,7 @@ export default function Home() {
             <h2 className="section-heading">
               O mercado mudou. A atenção do seu cliente está no WhatsApp.
             </h2>
-            <p className="mt-5 text-sm leading-7 text-zinc-400">
+            <p className="mt-5 text-sm leading-7 text-zinc-300">
               Entenda por que quem não estiver lá vai perder para quem estiver.
             </p>
           </div>
@@ -746,9 +749,9 @@ export default function Home() {
       <PageSection bg="#111111">
         <GreenPill>{"// Prova social"}</GreenPill>
         <h2 className="section-heading mt-4">
-          Quem já ativou o clone.
+          Quem já ativou seu clone.
         </h2>
-        <p className="mt-5 max-w-2xl text-sm leading-7 text-zinc-400">
+        <p className="mt-5 max-w-2xl text-sm leading-7 text-zinc-300">
           Conversas reais. Atendimento natural. Clientes permanecendo no WhatsApp.
         </p>
         <div className="mt-10 grid grid-cols-3 gap-3">
@@ -792,7 +795,7 @@ export default function Home() {
               )}
               <h3>{plan.name}</h3>
               <strong>{plan.price}<small>/mês</small></strong>
-              <p className="mt-3 font-mono text-xs text-zinc-500">{plan.description}</p>
+              <p className="mt-3 font-mono text-xs text-zinc-400">{plan.description}</p>
               {"tagline" in plan && plan.tagline && (
                 <p className="mt-1 text-xs italic" style={{ color: `${G}99` }}>{plan.tagline}</p>
               )}
@@ -804,7 +807,7 @@ export default function Home() {
             </div>
           ))}
         </div>
-        <p className="mt-6 text-center font-mono text-xs text-zinc-600">
+        <p className="mt-6 text-center font-mono text-xs text-zinc-400">
           Cancele quando quiser. Sem fidelidade. Sem contrato.
         </p>
       </PageSection>
@@ -813,7 +816,7 @@ export default function Home() {
       <PageSection bg="#0d0d0d">
         <GreenPill>{"// FAQ"}</GreenPill>
         <h2 className="section-heading mt-4">
-          Perguntas antes de ativar o clone.
+          Perguntas antes de ativar seu clone.
         </h2>
         <div className="mx-auto mt-10 max-w-3xl space-y-2">
           {faqs.map(([q, a]) => (
@@ -834,7 +837,7 @@ export default function Home() {
           <h2 className="display-type text-[52px] leading-[1.02] text-white sm:text-[72px] lg:text-[96px]">
             <span style={{ color: G }}>Clone-se</span> agora.
           </h2>
-          <p className="mt-5 text-base text-zinc-400 sm:text-lg">
+          <p className="mt-5 text-base text-zinc-300 sm:text-lg">
             Seu clone pode estar atendendo ainda hoje. Sem programação. Sem página de vendas. 100% no WhatsApp.
           </p>
           <div className="mt-8 flex flex-col items-center gap-3">
@@ -844,7 +847,7 @@ export default function Home() {
             >
               Ativar meu clone <Sparkles size={18} />
             </a>
-            <p className="font-mono text-[11px] text-zinc-600">
+            <p className="font-mono text-[11px] text-zinc-400">
               Sem cartão · Sem fidelidade · Cancele quando quiser
             </p>
           </div>
@@ -857,11 +860,11 @@ export default function Home() {
           <div className="display-type text-sm font-bold tracking-widest text-white">
             CONNECTY<span style={{ color: G }}>HUB</span>
           </div>
-          <div className="flex gap-6 font-mono text-xs text-zinc-600">
-            <a href="#" className="transition-colors hover:text-zinc-400">Termos de uso</a>
-            <a href="#" className="transition-colors hover:text-zinc-400">Privacidade</a>
+          <div className="flex gap-6 font-mono text-xs text-zinc-400">
+            <a href="#" className="transition-colors hover:text-zinc-300">Termos de uso</a>
+            <a href="#" className="transition-colors hover:text-zinc-300">Privacidade</a>
           </div>
-          <p className="font-mono text-[11px] text-zinc-700">
+          <p className="font-mono text-[11px] text-zinc-500">
             &copy; {new Date().getFullYear()} ConnectyHub
           </p>
         </div>
@@ -920,7 +923,7 @@ function Header() {
         >
           Connecty<span style={{ color: G }}>Hub</span>
         </a>
-        <nav className="hidden items-center gap-8 font-mono text-xs text-zinc-400 md:flex">
+        <nav className="hidden items-center gap-8 font-mono text-xs text-zinc-300 md:flex">
           <a href="#teste-turing" className="transition-colors hover:text-white">[ Teste de Turing ]</a>
           <a href="#como-funciona" className="transition-colors hover:text-white">[ Como funciona ]</a>
           <a href="#planos" className="transition-colors hover:text-white">[ Planos ]</a>
@@ -1013,7 +1016,7 @@ function TuringWhatsAppDemo() {
           <Sparkles size={17} />
         </div>
         <div>
-          <strong>Clone ConnectyHub</strong>
+          <strong>Seu clone</strong>
           <span>online agora</span>
         </div>
         <div className="wa-header-dot" />
@@ -1172,13 +1175,13 @@ function ChatDemo() {
           {/* Texto */}
           <div style={{ flex: "0 0 35%" }}>
             <h3 className="section-heading">
-              Assista ao clone atendendo de verdade no WhatsApp.
+              Assista ao seu clone atendendo de verdade no WhatsApp.
             </h3>
-            <p className="mt-4 text-sm leading-7 text-zinc-400">
-              Em 2 minutos você entende por que leads que antes sumiam estão sendo convertidos — e como o clone faz isso sem você precisar estar online.
+            <p className="mt-4 text-sm leading-7 text-zinc-300">
+              Em 2 minutos você entende por que leads que antes sumiam estão sendo convertidos — e como seu clone faz isso sem você precisar estar online.
             </p>
             <p className="mt-3 text-sm font-semibold" style={{ color: G }}>
-              → Clone respondendo, negociando e fechando em tempo real.
+              → Seu clone respondendo, negociando e fechando em tempo real.
             </p>
           </div>
           {/* Vídeo */}
@@ -1190,7 +1193,7 @@ function ChatDemo() {
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                   allowFullScreen
                   loading="lazy"
-                  title="Veja o clone digital em ação no WhatsApp"
+                  title="Veja seu clone digital em ação no WhatsApp"
                   style={{ width: "100%", aspectRatio: "16/9", borderRadius: "12px" }}
                 />
               </div>
@@ -1216,7 +1219,7 @@ function FaqItem({ question, answer }: { question: string; answer: string }) {
         <motion.div
           animate={{ rotate: open ? 180 : 0 }}
           transition={{ duration: 0.25 }}
-          className="flex-shrink-0 text-zinc-500"
+          className="flex-shrink-0 text-zinc-400"
         >
           <ChevronDown size={16} />
         </motion.div>
@@ -1255,7 +1258,7 @@ function CloneScannerCard({ className }: { className?: string }) {
         VOCÊ <span className="text-[#00ff88]">(DIGITAL)</span>
       </h4>
       <p className="mt-0.5 font-mono text-[9px] text-[#00ff88]/60">
-        ID: CLONE_#001 — REDE NEURAL v2.4
+        ID: SEU_CLONE_#001 — REDE NEURAL v2.4
       </p>
       <div className="mt-4 w-full space-y-1.5 px-3">
         {[
