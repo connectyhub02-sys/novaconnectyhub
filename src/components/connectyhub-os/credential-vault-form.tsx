@@ -410,6 +410,7 @@ export function CredentialVaultForm({ integrations }: { integrations: VaultInteg
           const isSaving = savingIntegrationId === integration.id;
           const message  = messages[integration.id];
           const connectionTest = connectionTests[integration.id] ?? { status: "idle" as const };
+          const fieldGridClass = getFieldGridClass(integration.fields.length);
 
           return (
             <form key={integration.id} onSubmit={(e) => void handleSave(e, integration)}>
@@ -525,7 +526,7 @@ export function CredentialVaultForm({ integrations }: { integrations: VaultInteg
                 )}
 
                 {/* Fields grid */}
-                <div className="grid gap-3 p-5 xl:grid-cols-2">
+                <div className={fieldGridClass}>
                   {integration.fields.map((field) => {
                     const saved    = findSavedCredential(savedCredentialByField, integration.id, field);
                     const fieldKey = credKey(integration.id, field.env);
@@ -908,6 +909,18 @@ function getSavedDisplay(saved: StoredCredential) {
 
 function isTestableIntegration(integrationId: string) {
   return Boolean(integrationId);
+}
+
+function getFieldGridClass(fieldCount: number) {
+  if (fieldCount <= 1) {
+    return "grid gap-3 p-5";
+  }
+
+  if (fieldCount === 2) {
+    return "grid gap-3 p-5 lg:grid-cols-2";
+  }
+
+  return "grid gap-3 p-5 md:grid-cols-2 xl:grid-cols-3";
 }
 
 function getIntegrationTestEndpoint(integrationId: string) {
