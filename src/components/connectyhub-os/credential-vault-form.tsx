@@ -61,6 +61,7 @@ type ConnectionTest = {
   httpStatus?: number;
   instanceCount?: number | null;
   model?: string;
+  details?: string[];
 };
 type GeminiApiModel = {
   id: string;
@@ -336,6 +337,7 @@ export function CredentialVaultForm({ integrations }: { integrations: VaultInteg
       httpStatus?: number;
       instanceCount?: number | null;
       model?: string;
+      details?: string[];
       error?: string;
     };
 
@@ -348,6 +350,7 @@ export function CredentialVaultForm({ integrations }: { integrations: VaultInteg
         httpStatus: data.httpStatus,
         instanceCount: data.instanceCount,
         model: data.model,
+        details: data.details,
       },
     }));
   }
@@ -425,27 +428,25 @@ export function CredentialVaultForm({ integrations }: { integrations: VaultInteg
                         {integration.name}
                       </span>
                       <ConnectionBadge savedCount={savedCount} total={integration.fields.length} />
-                      {isTestableIntegration(integration.id) && <ConnectionTestBadge test={connectionTest} />}
+                      <ConnectionTestBadge test={connectionTest} />
                     </div>
                     {integration.description && (
                       <p className="mt-0.5 text-[12px] text-slate-500">{integration.description}</p>
                     )}
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    {isTestableIntegration(integration.id) && (
-                      <button
-                        type="button"
-                        onClick={() => void handleTestConnection(integration.id)}
-                        disabled={connectionTest.status === "testing"}
-                        className="flex h-8 items-center gap-1.5 rounded-xl px-3.5 font-mono text-[10px] uppercase tracking-wide transition disabled:opacity-60"
-                        style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)", color: "var(--ch-muted)" }}
-                      >
-                        {connectionTest.status === "testing"
-                          ? <Loader2 className="h-3 w-3 animate-spin" />
-                          : <Wifi className="h-3 w-3" />}
-                        Testar conexao
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => void handleTestConnection(integration.id)}
+                      disabled={connectionTest.status === "testing"}
+                      className="flex h-8 items-center gap-1.5 rounded-xl px-3.5 font-mono text-[10px] uppercase tracking-wide transition disabled:opacity-60"
+                      style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)", color: "var(--ch-muted)" }}
+                    >
+                      {connectionTest.status === "testing"
+                        ? <Loader2 className="h-3 w-3 animate-spin" />
+                        : <Wifi className="h-3 w-3" />}
+                      Testar conexao
+                    </button>
                     <button
                       type="submit"
                       disabled={isSaving}
@@ -671,7 +672,7 @@ export function CredentialVaultForm({ integrations }: { integrations: VaultInteg
                   })}
                 </div>
 
-                {isTestableIntegration(integration.id) && connectionTest.status !== "idle" && (
+                {connectionTest.status !== "idle" && (
                   <div
                     className="mx-5 mb-5 flex items-start gap-3 rounded-xl px-4 py-3"
                     style={connectionTest.status === "online"
@@ -692,6 +693,11 @@ export function CredentialVaultForm({ integrations }: { integrations: VaultInteg
                         {typeof connectionTest.instanceCount === "number" ? ` Instancias encontradas: ${connectionTest.instanceCount}.` : ""}
                         {connectionTest.model ? ` Modelo validado: ${connectionTest.model}.` : ""}
                       </p>
+                      {connectionTest.details && connectionTest.details.length > 0 && (
+                        <p className="mt-1 text-[11px] leading-4 text-slate-500">
+                          {connectionTest.details.join(" ")}
+                        </p>
+                      )}
                     </div>
                   </div>
                 )}
@@ -901,24 +907,24 @@ function getSavedDisplay(saved: StoredCredential) {
 }
 
 function isTestableIntegration(integrationId: string) {
-  return integrationId === "uazapi" || integrationId === "gemini";
+  return Boolean(integrationId);
 }
 
 function getIntegrationTestEndpoint(integrationId: string) {
-  if (integrationId === "uazapi") {
-    return "/api/admin/integrations/uazapi/test";
-  }
-
-  if (integrationId === "gemini") {
-    return "/api/admin/integrations/gemini/test";
-  }
-
-  return null;
+  return `/api/admin/integrations/${encodeURIComponent(integrationId)}/test`;
 }
 
 function getConnectionTestTitle(integrationId: string, status: ConnectionTest["status"]) {
   const names: Record<string, string> = {
+    elevenlabs: "ElevenLabs",
     gemini: "Gemini",
+    "google-ads": "Google Ads",
+    inngest: "Inngest",
+    meta: "Meta",
+    payments: "Stripe",
+    push: "VAPID",
+    r2: "Cloudflare R2",
+    supabase: "Supabase",
     uazapi: "Uazapi",
   };
   const name = names[integrationId] ?? "Integracao";
