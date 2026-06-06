@@ -21,6 +21,7 @@ import {
   X,
   Zap,
 } from "lucide-react";
+import { ConnectyLogo } from "@/components/brand/connecty-logo";
 import { Spotlight } from "@/components/ui/spotlight";
 
 const HERO_VIDEO_MP4 = "https://pub-9f5b2802265a4ee2b52bc4e080f3941e.r2.dev/avatar%20connectyhub.mp4";
@@ -403,7 +404,7 @@ export default function Home() {
             </motion.p>
 
             <motion.div variants={fadeUp} className="hero-ctas mt-7 flex max-w-[320px] flex-col gap-3 sm:max-w-none sm:flex-row">
-              <a className="cta-primary" href="https://painel.connectyhub.com.br/signup">
+              <a className="cta-primary" href="/iniciar">
                 Ativar meu clone agora <ArrowRight size={16} />
               </a>
               <a className="cta-secondary" href="#teste-turing">
@@ -618,7 +619,7 @@ export default function Home() {
         <div className="mt-10 flex flex-col items-center gap-2">
           <a
             className="cta-primary w-full max-w-sm justify-center sm:w-auto"
-            href="https://painel.connectyhub.com.br/signup"
+            href="/iniciar"
           >
             Quero meu clone agora <ArrowRight size={16} />
           </a>
@@ -803,7 +804,7 @@ export default function Home() {
                 {plan.included.map((item) => <li key={item}>{item}</li>)}
                 {plan.locked.map((item) => <li key={item} className="plan-locked">{item}</li>)}
               </ul>
-              <a href="https://painel.connectyhub.com.br/signup">Ativar teste grátis</a>
+              <a href="/iniciar">Ativar teste grátis</a>
             </div>
           ))}
         </div>
@@ -843,7 +844,7 @@ export default function Home() {
           <div className="mt-8 flex flex-col items-center gap-3">
             <a
               className="cta-primary !text-base !px-8 !min-h-[54px]"
-              href="https://painel.connectyhub.com.br/signup"
+              href="/iniciar"
             >
               Ativar meu clone <Sparkles size={18} />
             </a>
@@ -857,9 +858,7 @@ export default function Home() {
       {/* ── 10. FOOTER ───────────────────────────────── */}
       <footer className="border-t border-white/[0.05] bg-[#0a0a0a] px-6 py-10 pb-24 md:px-12 lg:px-16">
         <div className="mx-auto flex max-w-[1760px] flex-col items-center gap-4 sm:flex-row sm:justify-between">
-          <div className="display-type text-sm font-bold tracking-widest text-white">
-            CONNECTY<span style={{ color: G }}>HUB</span>
-          </div>
+          <ConnectyLogo className="h-5 w-[160px]" tone="white" type="full" />
           <div className="flex gap-6 font-mono text-xs text-zinc-400">
             <a href="#" className="transition-colors hover:text-zinc-300">Termos de uso</a>
             <a href="#" className="transition-colors hover:text-zinc-300">Privacidade</a>
@@ -917,11 +916,11 @@ function Header() {
     <header className="fixed left-0 right-0 top-0 z-50 border-b border-white/[0.05] bg-black/60 px-6 py-4 backdrop-blur-md md:px-12 lg:px-16">
       <div className="mx-auto flex max-w-[1760px] items-center justify-between">
         <a
-          className="display-type rounded-full border px-4 py-1.5 text-xs text-white transition-colors"
+          className="inline-flex rounded-full border px-4 py-2 transition-colors"
           style={{ borderColor: `${G}50` }}
           href="#"
         >
-          Connecty<span style={{ color: G }}>Hub</span>
+          <ConnectyLogo className="h-4 w-[132px]" tone="white" type="full" />
         </a>
         <nav className="hidden items-center gap-8 font-mono text-xs text-zinc-300 md:flex">
           <a href="#teste-turing" className="transition-colors hover:text-white">[ Teste de Turing ]</a>
@@ -931,7 +930,7 @@ function Header() {
         <a
           className="rounded-full px-4 py-2 text-xs font-bold text-black transition-all hover:opacity-90"
           style={{ background: G }}
-          href="https://painel.connectyhub.com.br/signup"
+          href="/iniciar"
         >
           Teste grátis
         </a>

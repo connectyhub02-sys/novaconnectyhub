@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Audiowide, Geist, Geist_Mono } from "next/font/google";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -31,6 +32,10 @@ export const metadata: Metadata = {
     "recuperacao de carrinho",
     "connectyhub",
   ],
+  icons: {
+    icon: [{ url: "/brand/connectyhub-mark-blue.png", type: "image/png" }],
+    apple: [{ url: "/brand/connectyhub-mark-blue.png", type: "image/png" }],
+  },
 };
 
 export default function RootLayout({
@@ -41,7 +46,8 @@ export default function RootLayout({
   return (
     <html
       lang="pt-BR"
-      className={`${geistSans.variable} ${geistMono.variable} ${audiowide.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${audiowide.variable} dark h-full antialiased`}
+      data-scroll-behavior="smooth"
     >
       <head>
         <link rel="dns-prefetch" href="https://prod.spline.design" />
@@ -50,7 +56,9 @@ export default function RootLayout({
         <link rel="preconnect" href="https://www.youtube.com" crossOrigin="anonymous" />
         <link rel="dns-prefetch" href="https://painel.connectyhub.com.br" />
       </head>
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <TooltipProvider>{children}</TooltipProvider>
+      </body>
     </html>
   );
 }
