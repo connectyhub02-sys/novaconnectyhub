@@ -54,6 +54,25 @@ type AgentRow = {
   metadata: JsonRecord | null;
 };
 
+type KnowledgeMemoryRow = {
+  id: string;
+  title: string;
+  content: string;
+  tags: string[];
+  metadata: JsonRecord | null;
+  created_at: string | null;
+};
+
+export type ClientKnowledgeFile = {
+  id: string;
+  title: string;
+  fileName: string;
+  contentType: string | null;
+  size: number | null;
+  storageUrl: string | null;
+  createdAt: string | null;
+};
+
 export type ClientWhatsappState = {
   instance: {
     id: string;
@@ -87,6 +106,9 @@ export type ClientWhatsappState = {
   };
   behavior: WhatsappBehaviorConfig;
   audio: WhatsappAudioVoiceState;
+  knowledge: {
+    files: ClientKnowledgeFile[];
+  };
   capability: {
     canConnect: boolean;
     schemaReady: boolean;
@@ -106,7 +128,7 @@ export type ClientWhatsappActionResult = {
 
 const whatsappAgentCode = "agente-whatsapp-sistema";
 const whatsappGlobalAgentCode = "agente-whatsapp-global";
-const maxPromptLength = 24000;
+const maxPromptLength = 8000;
 const agentSelectColumns = "id, prompt, persona_name, name, avatar_url, avatar_alt, updated_at, metadata";
 
 export async function getClientWhatsappState(input: {
@@ -115,16 +137,17 @@ export async function getClientWhatsappState(input: {
   client?: SupabaseClient;
 }): Promise<ClientWhatsappState> {
   const client = input.client ?? createServiceClient();
-  const [instance, agent, globalAgent] = await Promise.all([
+  const [instance, agent, globalAgent, knowledgeFiles] = await Promise.all([
     getWorkspaceInstance(client, input.organization.id),
     getWorkspaceWhatsappAgent(client, input.organization.id),
     getOrCreateWorkspaceGlobalAgent(client, input.organization, input.userId),
+    listWorkspaceKnowledge(client, input.organization.id),
   ]);
 
   const behavior = getBehaviorConfig(globalAgent, instance);
   const audio = await listWhatsappAudioVoices({ organizationId: input.organization.id, client });
 
-  return buildState(instance, agent, globalAgent, behavior, audio);
+  return buildState(instance, agent, globalAgent, behavior, audio, knowledgeFiles);
 }
 
 export async function connectClientWhatsapp(input: {
@@ -219,10 +242,6 @@ export async function connectClientWhatsapp(input: {
       },
     })
     .eq("id", instance.id);
-
-  if (profileImageUrl) {
-    await syncWorkspaceAgentAvatar(client, input.organization.id, profileImageUrl, displayName ?? phoneNumber ?? input.organization.name);
-  }
 
   const state = await getClientWhatsappState({ organization: input.organization, userId: input.userId, client });
   revalidatePath("/dashboard/whatsapp");
@@ -319,10 +338,6 @@ export async function refreshClientWhatsappStatus(input: {
       },
     })
     .eq("id", instance.id);
-
-  if (profileImageUrl) {
-    await syncWorkspaceAgentAvatar(client, input.organization.id, profileImageUrl, displayName ?? phoneNumber ?? input.organization.name);
-  }
 
   const state = await getClientWhatsappState({ organization: input.organization, userId: input.userId, client });
   revalidatePath("/dashboard/whatsapp");
@@ -906,6 +921,38 @@ async function getOrCreateWorkspaceGlobalAgent(client: SupabaseClient, organizat
   return data;
 }
 
+async function listWorkspaceKnowledge(client: SupabaseClient, organizationId: string): Promise<ClientKnowledgeFile[]> {
+  const { data, error } = await client
+    .from("intelligence_memory")
+    .select("id, title, content, tags, metadata, created_at")
+    .eq("scope", "organization")
+    .eq("organization_id", organizationId)
+    .contains("tags", ["knowledge_base"])
+    .order("created_at", { ascending: false })
+    .limit(20);
+
+  if (error) {
+    throw new Error(`Nao foi possivel carregar arquivos da empresa: ${error.message}`);
+  }
+
+  return ((data ?? []) as KnowledgeMemoryRow[]).map(mapKnowledgeFile);
+}
+
+function mapKnowledgeFile(row: KnowledgeMemoryRow): ClientKnowledgeFile {
+  const metadata = readRecord(row.metadata) ?? {};
+  const size = typeof metadata.size === "number" ? metadata.size : null;
+
+  return {
+    id: row.id,
+    title: row.title,
+    fileName: typeof metadata.file_name === "string" ? metadata.file_name : row.title,
+    contentType: typeof metadata.content_type === "string" ? metadata.content_type : null,
+    size,
+    storageUrl: typeof metadata.storage_url === "string" ? metadata.storage_url : null,
+    createdAt: row.created_at,
+  };
+}
+
 async function getNextPromptVersion(client: SupabaseClient, agentId: string) {
   const { data } = await client
     .from("agent_prompt_versions")
@@ -1072,11 +1119,11 @@ function buildState(
   globalAgent: AgentRow,
   behavior: WhatsappBehaviorConfig,
   audio: WhatsappAudioVoiceState,
+  knowledgeFiles: ClientKnowledgeFile[],
 ): ClientWhatsappState {
   const agentPrompt = agent?.prompt?.trim() || defaultWhatsappAgentPrompt;
   const globalPrompt = globalAgent.prompt?.trim() || defaultWhatsappGlobalPrompt;
   const profileImageUrl = readProfileImageUrl(instance);
-  const profileImageAlt = profileImageUrl ? `Foto do WhatsApp ${instance?.display_name ?? instance?.phone_number ?? ""}`.trim() : null;
 
   return {
     instance: instance
@@ -1099,8 +1146,8 @@ function buildState(
       ? {
           id: agent.id,
           name: agent.persona_name?.trim() || agent.name,
-          avatarUrl: agent.avatar_url ?? profileImageUrl,
-          avatarAlt: agent.avatar_alt ?? profileImageAlt,
+          avatarUrl: agent.avatar_url,
+          avatarAlt: agent.avatar_alt,
           prompt: agentPrompt,
           promptPreview: preview(agentPrompt),
           updatedAt: agent.updated_at,
@@ -1115,6 +1162,9 @@ function buildState(
     },
     behavior,
     audio,
+    knowledge: {
+      files: knowledgeFiles,
+    },
     capability: {
       canConnect: true,
       schemaReady: true,
@@ -1132,22 +1182,6 @@ function getBehaviorConfig(globalAgent: AgentRow, instance: WhatsappInstanceRow 
 
 function readRecord(value: unknown): JsonRecord | null {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as JsonRecord) : null;
-}
-
-async function syncWorkspaceAgentAvatar(client: SupabaseClient, organizationId: string, profileImageUrl: string, label: string) {
-  const agent = await getWorkspaceWhatsappAgent(client, organizationId).catch(() => null);
-
-  if (!agent || agent.avatar_url === profileImageUrl) {
-    return;
-  }
-
-  await client
-    .from("agent_registry")
-    .update({
-      avatar_url: profileImageUrl,
-      avatar_alt: `Foto do WhatsApp de ${label}`,
-    })
-    .eq("id", agent.id);
 }
 
 function decryptInstanceToken(instance: WhatsappInstanceRow) {

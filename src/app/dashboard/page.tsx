@@ -28,6 +28,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   return (
     <ClientDashboard
       isPlatformAdmin={profile?.isPlatformAdmin ?? false}
+      userAvatarUrl={profile?.avatarUrl ?? null}
       userLabel={profile?.email ?? undefined}
       workspaceName={organization?.name ?? profile?.companyName ?? "Workspace"}
     />

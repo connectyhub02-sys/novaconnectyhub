@@ -71,10 +71,12 @@ const leadsChartData = [
 
 export function ClientDashboard({
   isPlatformAdmin = false,
+  userAvatarUrl = null,
   workspaceName = "Minha empresa",
   userLabel = "workspace_cliente",
 }: {
   isPlatformAdmin?: boolean;
+  userAvatarUrl?: string | null;
   workspaceName?: string;
   userLabel?: string;
 }) {
@@ -82,6 +84,7 @@ export function ClientDashboard({
     <ConnectyShell
       mode="client"
       isPlatformAdmin={isPlatformAdmin}
+      userAvatarUrl={userAvatarUrl}
       userLabel={userLabel}
       workspaceName={workspaceName}
     >

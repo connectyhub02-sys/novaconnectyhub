@@ -18,6 +18,7 @@ export default async function CompanyPage() {
       activeHref="/dashboard/empresa"
       isPlatformAdmin={profile?.isPlatformAdmin ?? false}
       mode="client"
+      userAvatarUrl={profile?.avatarUrl ?? null}
       userLabel={profile?.email ?? undefined}
       workspaceName={organization?.name ?? profile?.companyName ?? "Workspace"}
     >

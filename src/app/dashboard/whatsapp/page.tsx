@@ -18,6 +18,7 @@ export default async function WhatsAppPage() {
       activeHref="/dashboard/whatsapp"
       isPlatformAdmin={profile?.isPlatformAdmin ?? false}
       mode="client"
+      userAvatarUrl={profile?.avatarUrl ?? null}
       userLabel={profile?.email ?? undefined}
       workspaceName={organization?.name ?? profile?.companyName ?? "Workspace"}
     >

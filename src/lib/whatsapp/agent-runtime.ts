@@ -67,6 +67,14 @@ type ConversationMessageRow = {
   occurred_at: string;
 };
 
+type KnowledgeMemoryRow = {
+  id: string;
+  title: string;
+  content: string;
+  metadata: JsonRecord | null;
+  created_at: string | null;
+};
+
 type GeminiCredentials = {
   apiKey: string;
   model: string;
@@ -266,6 +274,7 @@ export async function processWhatsappAgentRun(input: {
       globalAgent,
       behavior,
       lead,
+      knowledge: context.knowledge,
       messages: context.messages,
       userText,
     });
@@ -317,7 +326,7 @@ async function loadRunContext(client: SupabaseClient, runId: string) {
     throw new Error("Execucao WhatsApp sem conversa ou instancia.");
   }
 
-  const [organization, instance, agent, globalAgent, lead, conversation, messages, credentials, geminiCredentials] = await Promise.all([
+  const [organization, instance, agent, globalAgent, lead, conversation, messages, credentials, geminiCredentials, knowledge] = await Promise.all([
     loadOrganization(client, run.organization_id),
     loadInstance(client, whatsappInstanceId),
     loadRuntimeAgent(client, run.agent_id, run.organization_id),
@@ -327,6 +336,7 @@ async function loadRunContext(client: SupabaseClient, runId: string) {
     loadConversationMessages(client, conversationId),
     loadUazapiCredentials(client),
     loadGeminiCredentials(client),
+    loadOrganizationKnowledge(client, run.organization_id),
   ]);
 
   if (!organization || !instance || !agent) {
@@ -351,6 +361,7 @@ async function loadRunContext(client: SupabaseClient, runId: string) {
     messages,
     credentials,
     geminiCredentials,
+    knowledge,
     behavior,
     providerChatId: asString(metadata?.providerChatId),
     providerMessageId: asString(metadata?.providerMessageId),
@@ -488,6 +499,24 @@ async function loadConversationMessages(client: SupabaseClient, conversationId: 
   return ((data ?? []) as ConversationMessageRow[]).reverse();
 }
 
+async function loadOrganizationKnowledge(client: SupabaseClient, organizationId: string) {
+  const { data, error } = await client
+    .from("intelligence_memory")
+    .select("id, title, content, metadata, created_at")
+    .eq("scope", "organization")
+    .eq("organization_id", organizationId)
+    .contains("tags", ["knowledge_base"])
+    .order("importance", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(6);
+
+  if (error) {
+    throw new Error(`Nao foi possivel carregar conhecimento da empresa: ${error.message}`);
+  }
+
+  return (data ?? []) as KnowledgeMemoryRow[];
+}
+
 async function loadGeminiCredentials(client: SupabaseClient): Promise<GeminiCredentials> {
   const values = new Map<string, string>();
   const { data, error } = await client
@@ -533,6 +562,7 @@ async function generateAgentResponse(input: {
   globalAgent: AgentRow | null;
   behavior: WhatsappBehaviorConfig;
   lead: LeadRow | null;
+  knowledge: KnowledgeMemoryRow[];
   messages: ConversationMessageRow[];
   userText: string;
 }) {
@@ -576,17 +606,22 @@ function buildSystemInstruction(input: {
   globalAgent: AgentRow | null;
   behavior: WhatsappBehaviorConfig;
   lead: LeadRow | null;
+  knowledge: KnowledgeMemoryRow[];
 }) {
+  const agentPrompt = renderPromptVariables(input.agent.prompt?.trim() || defaultWhatsappAgentPrompt, input);
+  const globalPrompt = renderPromptVariables(input.globalAgent?.prompt?.trim() || defaultWhatsappGlobalPrompt, input);
+
   return [
-    input.globalAgent?.prompt?.trim() || defaultWhatsappGlobalPrompt,
+    globalPrompt,
     "",
     "PROMPT DO AGENTE DA EMPRESA:",
-    input.agent.prompt?.trim() || defaultWhatsappAgentPrompt,
+    agentPrompt,
     "",
     "CONTEXTO DA EMPRESA:",
     `- Empresa: ${input.organization.name}`,
     `- Agente: ${input.agent.persona_name?.trim() || input.agent.name}`,
     input.lead?.display_name ? `- Nome do lead: ${input.lead.display_name}` : "- Nome do lead: desconhecido",
+    ...buildKnowledgeLines(input.knowledge),
     "",
     "COMPORTAMENTO CONFIGURADO:",
     `- Modo de resposta: ${input.behavior.responseMode}.`,
@@ -607,6 +642,50 @@ function buildSystemInstruction(input: {
     "- Se faltar contexto, pergunte antes de prometer algo.",
     "- Se o lead pedir humano, confirme de forma breve que o atendimento humano sera acionado.",
   ].join("\n");
+}
+
+function renderPromptVariables(prompt: string, input: {
+  organization: OrganizationRow;
+  agent: AgentRow;
+  lead: LeadRow | null;
+}) {
+  const leadName = input.lead?.display_name?.trim() || "lead";
+  const agentName = input.agent.persona_name?.trim() || input.agent.name;
+  const replacements = new Map([
+    ["{{lead_name}}", leadName],
+    ["{{nome_do_lead}}", leadName],
+    ["{{empresa}}", input.organization.name],
+    ["{{nome_da_empresa}}", input.organization.name],
+    ["{{agente}}", agentName],
+    ["{{nome_do_agente}}", agentName],
+  ]);
+
+  let rendered = prompt;
+
+  for (const [token, value] of replacements) {
+    rendered = rendered.replaceAll(token, value);
+  }
+
+  return rendered;
+}
+
+function buildKnowledgeLines(knowledge: KnowledgeMemoryRow[]) {
+  if (knowledge.length === 0) {
+    return [];
+  }
+
+  return [
+    "",
+    "BASE DE CONHECIMENTO DA EMPRESA:",
+    ...knowledge.map((item) => {
+      const metadata = readRecord(item.metadata);
+      const extracted = metadata?.extracted_text === true;
+      const content = item.content.replace(/\s+/g, " ").trim();
+      const previewText = content.length > 900 ? `${content.slice(0, 900)}...` : content;
+
+      return `- ${item.title}${extracted ? "" : " (arquivo anexado)"}: ${previewText}`;
+    }),
+  ];
 }
 
 function buildGeminiContents(messages: ConversationMessageRow[], fallbackUserText: string) {

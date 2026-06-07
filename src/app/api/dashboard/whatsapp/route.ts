@@ -243,6 +243,9 @@ function buildUnavailableState(): DashboardWhatsappState {
     },
     behavior: defaultWhatsappBehaviorConfig,
     audio: buildUnavailableAudioState(),
+    knowledge: {
+      files: [],
+    },
     capability: {
       canConnect: false,
       schemaReady: false,

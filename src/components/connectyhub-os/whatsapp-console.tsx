@@ -99,11 +99,24 @@ type WhatsappState = {
     voices: AudioVoiceOption[];
     errorMessage: string | null;
   };
+  knowledge: {
+    files: KnowledgeFile[];
+  };
   capability: {
     canConnect: boolean;
     schemaReady: boolean;
     message: string | null;
   };
+};
+
+type KnowledgeFile = {
+  id: string;
+  title: string;
+  fileName: string;
+  contentType: string | null;
+  size: number | null;
+  storageUrl: string | null;
+  createdAt: string | null;
 };
 
 type AudioVoiceOption = {
@@ -150,6 +163,25 @@ type VoiceCloneResponse = {
   error?: string;
 };
 
+const agentPromptMaxLength = 8000;
+const promptTags = [
+  {
+    token: "{{lead_name}}",
+    label: "Nome do lead",
+    description: "Usa o nome salvo do lead quando estiver disponivel.",
+  },
+  {
+    token: "{{empresa}}",
+    label: "Empresa",
+    description: "Usa o nome da empresa cadastrada no painel.",
+  },
+  {
+    token: "{{agente}}",
+    label: "Agente",
+    description: "Usa o nome do agente configurado nesta tela.",
+  },
+];
+
 export function WhatsAppConsole() {
   const [state, setState] = useState<WhatsappState | null>(null);
   const [loading, setLoading] = useState(true);
@@ -162,6 +194,10 @@ export function WhatsAppConsole() {
   const [showAgentForm, setShowAgentForm] = useState(false);
   const [agentName, setAgentName] = useState("");
   const [creatingAgent, setCreatingAgent] = useState(false);
+  const [promptProductUrl, setPromptProductUrl] = useState("");
+  const [promptNotes, setPromptNotes] = useState("");
+  const [generatingPrompt, setGeneratingPrompt] = useState(false);
+  const [knowledgeUploading, setKnowledgeUploading] = useState(false);
   const isAwaitingQrScan = Boolean(qrCode) || state?.instance?.status === "qr_pending";
   const isConnected = state?.instance?.status === "connected";
 
@@ -293,6 +329,7 @@ export function WhatsAppConsole() {
   }, [applyWhatsappState, isConnected, running, selectedCompanyId]);
 
   const promptChanged = state?.agent ? promptDraft.trim() !== state.agent.prompt.trim() : false;
+  const promptTooLong = promptDraft.length > agentPromptMaxLength;
   const behaviorChanged = state ? !isBehaviorEqual(behaviorDraft, state.behavior) : false;
   const settingsChanged = promptChanged || behaviorChanged;
   const companies = state?.companies ?? [];
@@ -305,9 +342,21 @@ export function WhatsAppConsole() {
     : needsAgent
       ? "Escolha uma empresa cadastrada e crie o agente que vai atender os leads."
       : "Conecte o numero da empresa, ajuste o prompt e escolha como o agente deve atender no WhatsApp.";
+  const promptHelper = `${promptDraft.length.toLocaleString("pt-BR")} / ${agentPromptMaxLength.toLocaleString("pt-BR")} caracteres`;
 
   function updateBehavior<K extends keyof WhatsappBehaviorConfig>(key: K, value: WhatsappBehaviorConfig[K]) {
     setBehaviorDraft((current) => normalizeWhatsappBehaviorConfig({ ...current, [key]: value }));
+  }
+
+  function updatePromptDraft(value: string) {
+    setPromptDraft(value.slice(0, agentPromptMaxLength));
+  }
+
+  function insertPromptTag(token: string) {
+    setPromptDraft((current) => {
+      const separator = current.trim().length > 0 && !current.endsWith(" ") && !current.endsWith("\n") ? " " : "";
+      return `${current}${separator}${token}`.slice(0, agentPromptMaxLength);
+    });
   }
 
   function selectAudioVoice(voice: AudioVoiceOption) {
@@ -390,6 +439,72 @@ export function WhatsAppConsole() {
     }
   }
 
+  async function generatePromptWithAI() {
+    if (!selectedCompanyId) {
+      setNotice({ tone: "warning", message: "Escolha uma empresa antes de gerar o prompt." });
+      return;
+    }
+
+    setGeneratingPrompt(true);
+    setNotice(null);
+
+    try {
+      const response = await fetch("/api/dashboard/whatsapp/prompt-assistant", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyId: selectedCompanyId,
+          productUrl: promptProductUrl,
+          notes: promptNotes,
+        }),
+      });
+      const data = (await response.json().catch(() => null)) as { prompt?: string; error?: string } | null;
+
+      if (!response.ok || !data?.prompt) {
+        throw new Error(data?.error ?? "Nao foi possivel gerar o prompt com IA.");
+      }
+
+      updatePromptDraft(data.prompt);
+      setNotice({ tone: "success", message: "Prompt gerado com IA. Revise e salve as alteracoes." });
+    } catch (error) {
+      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao gerar prompt." });
+    } finally {
+      setGeneratingPrompt(false);
+    }
+  }
+
+  async function uploadKnowledgeFile(file: File | null) {
+    if (!file || !selectedCompanyId) {
+      return;
+    }
+
+    const formData = new FormData();
+    formData.set("companyId", selectedCompanyId);
+    formData.set("file", file);
+    setKnowledgeUploading(true);
+    setNotice(null);
+
+    try {
+      const response = await fetch("/api/dashboard/knowledge", {
+        method: "POST",
+        body: formData,
+      });
+      const data = (await response.json().catch(() => null)) as { error?: string } | null;
+
+      if (!response.ok) {
+        throw new Error(data?.error ?? "Nao foi possivel anexar o arquivo.");
+      }
+
+      const nextState = await fetchWhatsappState(selectedCompanyId);
+      applyWhatsappState(nextState, { preserveDrafts: true });
+      setNotice({ tone: "success", message: "Arquivo adicionado a inteligencia do agente." });
+    } catch (error) {
+      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao anexar arquivo." });
+    } finally {
+      setKnowledgeUploading(false);
+    }
+  }
+
   async function createWhatsappAgent() {
     if (!selectedCompanyId) {
       setNotice({ tone: "warning", message: "Escolha uma empresa antes de criar o agente." });
@@ -465,14 +580,28 @@ export function WhatsAppConsole() {
           {state?.agent ? (
             <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_320px]">
               <div className="grid gap-4">
-                <AgentIdentityCard agent={state.agent} instance={state.instance} />
+                <AgentIdentityCard agent={state.agent} company={selectedCompany} instance={state.instance} />
 
                 <PromptBox
                   label="Prompt do agente"
                   description="Define o tom, limites, perguntas e forma de atendimento do agente neste WhatsApp. Nao e template fixo de mensagem."
                   value={promptDraft}
-                  onChange={setPromptDraft}
-                  helper={`${promptDraft.length.toLocaleString("pt-BR")} caracteres`}
+                  maxLength={agentPromptMaxLength}
+                  onChange={updatePromptDraft}
+                  helper={promptHelper}
+                />
+
+                <PromptToolsPanel
+                  files={state.knowledge.files}
+                  generatingPrompt={generatingPrompt}
+                  knowledgeUploading={knowledgeUploading}
+                  notes={promptNotes}
+                  productUrl={promptProductUrl}
+                  onGenerate={generatePromptWithAI}
+                  onInsertTag={insertPromptTag}
+                  onNotesChange={setPromptNotes}
+                  onProductUrlChange={setPromptProductUrl}
+                  onUploadFile={uploadKnowledgeFile}
                 />
 
                 <div className="flex flex-wrap gap-2">
@@ -487,7 +616,7 @@ export function WhatsAppConsole() {
                     icon={Wand2}
                     label="Salvar alteracoes"
                     description="Salva prompt e comportamento deste agente para a empresa selecionada."
-                    disabled={!state?.capability.schemaReady || !state.agent || !settingsChanged}
+                    disabled={!state?.capability.schemaReady || !state.agent || !settingsChanged || promptTooLong}
                     loading={running === "save_settings"}
                     onClick={saveAgentSettings}
                   />
@@ -857,26 +986,24 @@ function AgentCreationGate({
 
 function AgentIdentityCard({
   agent,
+  company,
   instance,
 }: {
   agent: NonNullable<WhatsappState["agent"]>;
+  company: ClientCompany | null;
   instance: WhatsappState["instance"];
 }) {
-  const avatarUrl = agent.avatarUrl ?? instance?.profileImageUrl ?? null;
-  const avatarAlt = agent.avatarAlt ?? `Foto de ${agent.name}`;
-  const whatsappLabel = instance?.displayName ?? formatPhone(instance?.phoneNumber);
+  const phoneLabel = formatPhone(instance?.phoneNumber);
 
   return (
     <div
-      className="grid gap-3 rounded-xl border p-3 sm:grid-cols-[auto_1fr]"
+      className="grid gap-2 rounded-xl border p-3 sm:grid-cols-2 xl:grid-cols-4"
       style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}
     >
-      <WhatsappAvatar alt={avatarAlt} fallback={agent.name} imageUrl={avatarUrl} size="lg" />
-      <div className="grid gap-2 sm:grid-cols-3">
-        <InfoTile label="Agente" value={agent.name} />
-        <InfoTile label="WhatsApp" value={whatsappLabel} />
-        <InfoTile label="Ultima edicao" value={formatDate(agent.updatedAt)} />
-      </div>
+      <InfoTile label="Agente" value={agent.name} />
+      <InfoTile label="Empresa" value={company?.name ?? "Empresa nao informada"} />
+      <InfoTile label="Numero do WhatsApp" value={phoneLabel} />
+      <InfoTile label="Ultima edicao" value={formatDate(agent.updatedAt)} />
     </div>
   );
 }
@@ -939,12 +1066,14 @@ function PromptBox({
   description,
   value,
   helper,
+  maxLength,
   onChange,
 }: {
   label: string;
   description?: string;
   value: string;
   helper: string;
+  maxLength: number;
   onChange: (value: string) => void;
 }) {
   return (
@@ -955,12 +1084,140 @@ function PromptBox({
       </span>
       <textarea
         value={value}
+        maxLength={maxLength}
         onChange={(event) => onChange(event.target.value)}
         className="min-h-[430px] w-full resize-y rounded-xl border px-4 py-3 font-mono text-[12px] leading-5 outline-none"
         placeholder="Defina o comportamento do agente."
       />
       <span className="mt-2 block font-mono text-[10px] uppercase tracking-widest text-slate-500">{helper}</span>
     </label>
+  );
+}
+
+function PromptToolsPanel({
+  files,
+  generatingPrompt,
+  knowledgeUploading,
+  notes,
+  productUrl,
+  onGenerate,
+  onInsertTag,
+  onNotesChange,
+  onProductUrlChange,
+  onUploadFile,
+}: {
+  files: KnowledgeFile[];
+  generatingPrompt: boolean;
+  knowledgeUploading: boolean;
+  notes: string;
+  productUrl: string;
+  onGenerate: () => void;
+  onInsertTag: (token: string) => void;
+  onNotesChange: (value: string) => void;
+  onProductUrlChange: (value: string) => void;
+  onUploadFile: (file: File | null) => void;
+}) {
+  return (
+    <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(280px,0.7fr)]">
+      <div className="rounded-xl border p-3" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
+            Tags do prompt
+            <InfoHint text="Clique para inserir variaveis que o agente substitui no atendimento, como nome do lead e empresa." />
+          </p>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {promptTags.map((tag) => (
+            <button
+              key={tag.token}
+              type="button"
+              className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-left text-[11px] font-semibold text-cyan-100 transition hover:bg-cyan-400/10"
+              style={{ borderColor: "var(--ch-border)" }}
+              title={tag.description}
+              onClick={() => onInsertTag(tag.token)}
+            >
+              <span className="font-mono text-[10px] text-cyan-300">{tag.token}</span>
+              <span className="text-slate-400">{tag.label}</span>
+            </button>
+          ))}
+        </div>
+
+        <div className="mt-4 grid gap-2 md:grid-cols-[minmax(0,1fr)_auto]">
+          <label className="block">
+            <span className="mb-2 flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
+              Link do produto
+              <InfoHint text="A IA le a pagina publica informada e usa os detalhes para montar um prompt inicial." />
+            </span>
+            <div className="relative">
+              <Link2 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-cyan-300" />
+              <input
+                value={productUrl}
+                onChange={(event) => onProductUrlChange(event.target.value)}
+                className="h-11 w-full rounded-lg border bg-transparent pl-10 pr-3 text-[12px] outline-none"
+                placeholder="https://site.com/produto"
+                style={{ borderColor: "var(--ch-border)" }}
+              />
+            </div>
+          </label>
+          <ActionButton
+            icon={Wand2}
+            label="Criar prompt com IA"
+            description="Gera um prompt inicial usando o link e as notas informadas."
+            disabled={!productUrl.trim() && !notes.trim()}
+            loading={generatingPrompt}
+            onClick={onGenerate}
+          />
+        </div>
+        <textarea
+          value={notes}
+          onChange={(event) => onNotesChange(event.target.value.slice(0, 1200))}
+          className="mt-3 min-h-20 w-full resize-y rounded-lg border bg-transparent px-3 py-2 text-[12px] leading-5 outline-none"
+          placeholder="Notas do produto, regras de atendimento, publico ou detalhes importantes."
+          style={{ borderColor: "var(--ch-border)" }}
+        />
+      </div>
+
+      <div className="rounded-xl border p-3" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
+            Arquivos da empresa
+            <InfoHint text="Arquivos adicionam contexto ao agente sem deixar o prompt grande demais." />
+          </p>
+          <label className="inline-flex min-h-9 cursor-pointer items-center justify-center gap-2 rounded-lg border border-cyan-400/25 bg-cyan-400/10 px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-200 transition hover:bg-cyan-400/15">
+            {knowledgeUploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
+            Anexar
+            <input
+              accept=".txt,.md,.csv,.json,.pdf,.doc,.docx,application/pdf,text/plain,text/markdown,text/csv,application/json"
+              className="hidden"
+              type="file"
+              onChange={(event) => {
+                const file = event.currentTarget.files?.[0] ?? null;
+                event.currentTarget.value = "";
+                onUploadFile(file);
+              }}
+            />
+          </label>
+        </div>
+        <div className="mt-3 grid max-h-44 gap-2 overflow-y-auto pr-1">
+          {files.length > 0 ? (
+            files.map((file) => (
+              <div key={file.id} className="rounded-lg border px-3 py-2" style={{ background: "var(--ch-surface)", borderColor: "var(--ch-border)" }}>
+                <p className="truncate text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>
+                  {file.title}
+                </p>
+                <p className="mt-1 font-mono text-[9px] uppercase tracking-wide text-slate-500">
+                  {formatBytes(file.size)} / {formatDate(file.createdAt)}
+                </p>
+              </div>
+            ))
+          ) : (
+            <div className="rounded-lg border px-3 py-6 text-center text-[12px] text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
+              Nenhum arquivo anexado.
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1523,7 +1780,8 @@ function formatVoiceDetails(voice: AudioVoiceOption) {
   return [voice.category, voice.language, voice.accent, voice.gender, voice.useCase].filter(Boolean).join(" / ") || "ElevenLabs";
 }
 
-function formatBytes(bytes: number) {
+function formatBytes(bytes: number | null | undefined) {
+  if (!bytes || bytes <= 0) return "tamanho pendente";
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
@@ -1580,13 +1838,9 @@ function CompactConnectionCard({
             {meta.title}
           </p>
         </div>
-        {profileImageUrl ? (
-          <WhatsappAvatar alt={`Foto do WhatsApp ${whatsappLabel}`} fallback={whatsappLabel} imageUrl={profileImageUrl} />
-        ) : (
-          <div className={cn("grid h-9 w-9 shrink-0 place-items-center rounded-xl", meta.bg, meta.text)}>
-            <Icon className="h-4 w-4" />
-          </div>
-        )}
+        <div className={cn("grid h-9 w-9 shrink-0 place-items-center rounded-xl", meta.bg, meta.text)}>
+          <Icon className="h-4 w-4" />
+        </div>
       </div>
 
       <div

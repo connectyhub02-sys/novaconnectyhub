@@ -11,6 +11,7 @@ export type CurrentProfile = {
   fullName: string | null;
   phone: string | null;
   companyName: string | null;
+  avatarUrl: string | null;
   isPlatformAdmin: boolean;
 };
 
@@ -158,6 +159,7 @@ async function getOrCreateProfile(user: User): Promise<CurrentProfile> {
         fullName: null,
         phone: null,
         companyName: null,
+        avatarUrl: readAvatarUrl(user),
         isPlatformAdmin: false,
       };
 }
@@ -193,8 +195,24 @@ function mapProfile(row: ProfileRow, user: User): CurrentProfile {
     fullName: row.full_name,
     phone: row.phone,
     companyName: row.company_name,
+    avatarUrl: readAvatarUrl(user),
     isPlatformAdmin: Boolean(row.is_platform_admin),
   };
+}
+
+function readAvatarUrl(user: User) {
+  const metadata = user.user_metadata ?? {};
+  const value = typeof metadata.avatar_url === "string"
+    ? metadata.avatar_url
+    : typeof metadata.picture === "string"
+      ? metadata.picture
+      : null;
+
+  if (!value || !/^https?:\/\//i.test(value)) {
+    return null;
+  }
+
+  return value;
 }
 
 async function createWorkspaceDataClient() {

@@ -42,7 +42,7 @@ type DeleteAgentRow = {
 };
 
 const maxAgentNameLength = 80;
-const maxPromptLength = 24000;
+const maxPromptLength = 8000;
 
 export async function getClientAgentsWorkspace(userId: string, client: SupabaseClient = createServiceClient()) {
   const companies = await listClientCompanies(userId, client);

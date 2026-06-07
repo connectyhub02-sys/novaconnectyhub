@@ -1,6 +1,8 @@
 "use client";
 
+import { useState, type ChangeEvent } from "react";
 import type { CSSProperties, ReactNode } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
@@ -10,6 +12,7 @@ import {
   Bot,
   BrainCircuit,
   Building2,
+  Camera,
   ChevronDown,
   CircleDollarSign,
   Coins,
@@ -18,6 +21,7 @@ import {
   Globe2,
   Link2,
   LogOut,
+  Loader2,
   Megaphone,
   MessageCircle,
   MessageSquare,
@@ -130,6 +134,7 @@ export function ConnectyShell({
   workspaceName,
   userLabel,
   activeHref,
+  userAvatarUrl,
 }: {
   mode: "admin" | "client";
   children: ReactNode;
@@ -137,6 +142,7 @@ export function ConnectyShell({
   workspaceName?: string;
   userLabel?: string;
   activeHref?: string;
+  userAvatarUrl?: string | null;
 }) {
   const pathname  = usePathname();
   const active    = activeHref ?? pathname ?? "/";
@@ -150,6 +156,41 @@ export function ConnectyShell({
   const canSwitch = mode === "admin" || isPlatformAdmin;
   const pageLabel = resolveLabel(sections, active, mode);
   const logoTone  = "white";
+  const [avatarUrl, setAvatarUrl] = useState(userAvatarUrl ?? null);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const [avatarError, setAvatarError] = useState<string | null>(null);
+
+  async function handleAvatarUpload(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0] ?? null;
+    event.currentTarget.value = "";
+
+    if (!file) {
+      return;
+    }
+
+    const formData = new FormData();
+    formData.set("avatar", file);
+    setAvatarUploading(true);
+    setAvatarError(null);
+
+    try {
+      const response = await fetch("/api/account/avatar", {
+        method: "POST",
+        body: formData,
+      });
+      const data = (await response.json().catch(() => null)) as { avatarUrl?: string; error?: string } | null;
+
+      if (!response.ok || !data?.avatarUrl) {
+        throw new Error(data?.error ?? "Nao foi possivel trocar a foto.");
+      }
+
+      setAvatarUrl(data.avatarUrl);
+    } catch (error) {
+      setAvatarError(error instanceof Error ? error.message : "Erro ao trocar foto.");
+    } finally {
+      setAvatarUploading(false);
+    }
+  }
 
   const shellTheme = {
     background: "radial-gradient(circle at 16% 0%, rgba(45,212,191,0.16), transparent 30rem), radial-gradient(circle at 90% 8%, rgba(139,92,246,0.12), transparent 26rem), var(--ch-bg)",
@@ -248,14 +289,10 @@ export function ConnectyShell({
                 onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
               >
                 <div
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[11px] font-bold"
+                  className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg text-[11px] font-bold"
                   style={{ background: `rgba(var(--ch-accent-rgb),0.15)`, color: "var(--ch-accent)" }}
                 >
-                  {mode === "admin" ? (
-                    <ConnectyLogo className="h-6 w-6" tone={logoTone} type="mark" />
-                  ) : (
-                    name.slice(0, 2).toUpperCase()
-                  )}
+                  <AccountAvatar avatarUrl={avatarUrl} logoTone={logoTone} mode={mode} name={name} />
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>{name}</div>
@@ -271,6 +308,18 @@ export function ConnectyShell({
             >
               <DropdownMenuLabel className="text-xs" style={{ color: "var(--ch-muted)" }}>Conta</DropdownMenuLabel>
               <DropdownMenuSeparator style={{ background: "var(--ch-border)" }} />
+              {mode === "client" && (
+                <DropdownMenuItem asChild className="cursor-pointer text-xs" style={{ color: "var(--ch-text)" }}>
+                  <label className="flex w-full items-center">
+                    {avatarUploading ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <Camera className="mr-2 h-3.5 w-3.5" />}
+                    Trocar foto
+                    <input accept="image/jpeg,image/png,image/webp" className="hidden" type="file" onChange={handleAvatarUpload} />
+                  </label>
+                </DropdownMenuItem>
+              )}
+              {avatarError ? (
+                <DropdownMenuLabel className="text-[11px] font-normal leading-4 text-rose-300">{avatarError}</DropdownMenuLabel>
+              ) : null}
               {canSwitch && (
                 <DropdownMenuItem asChild className="cursor-pointer text-xs" style={{ color: "var(--ch-text)" }}>
                   <Link href={switchTo}>{switchLbl}</Link>
@@ -370,17 +419,13 @@ export function ConnectyShell({
             {/* Avatar */}
             <DropdownMenu>
               <DropdownMenuTrigger
-                className="flex h-8 w-8 items-center justify-center rounded-full text-[11px] font-bold outline-none"
+                className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full text-[11px] font-bold outline-none"
                 style={{
                   background: `rgba(var(--ch-accent-rgb),0.15)`,
                   color:      "var(--ch-accent)",
                 }}
               >
-                {mode === "admin" ? (
-                  <ConnectyLogo className="h-5 w-5" tone={logoTone} type="mark" />
-                ) : (
-                  name.slice(0, 2).toUpperCase()
-                )}
+                <AccountAvatar avatarUrl={avatarUrl} logoTone={logoTone} mode={mode} name={name} />
               </DropdownMenuTrigger>
               <DropdownMenuContent
                 align="end"
@@ -392,6 +437,18 @@ export function ConnectyShell({
                   <div className="font-normal" style={{ color: "var(--ch-muted)" }}>{role}</div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator style={{ background: "var(--ch-border)" }} />
+                {mode === "client" && (
+                  <DropdownMenuItem asChild className="text-xs hover:bg-white/8 cursor-pointer">
+                    <label className="flex w-full items-center">
+                      {avatarUploading ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <Camera className="mr-2 h-3.5 w-3.5" />}
+                      Trocar foto
+                      <input accept="image/jpeg,image/png,image/webp" className="hidden" type="file" onChange={handleAvatarUpload} />
+                    </label>
+                  </DropdownMenuItem>
+                )}
+                {avatarError ? (
+                  <DropdownMenuLabel className="text-[11px] font-normal leading-4 text-rose-300">{avatarError}</DropdownMenuLabel>
+                ) : null}
                 {canSwitch && (
                   <DropdownMenuItem asChild className="text-xs hover:bg-white/8 cursor-pointer">
                     <Link href={switchTo}>{switchLbl}</Link>
@@ -447,6 +504,32 @@ export function ConnectyShell({
 }
 
 // ─── SidebarLink ─────────────────────────────────────────────────────────────
+
+function AccountAvatar({
+  avatarUrl,
+  logoTone,
+  mode,
+  name,
+}: {
+  avatarUrl: string | null;
+  logoTone: "white";
+  mode: "admin" | "client";
+  name: string;
+}) {
+  if (mode === "admin") {
+    return <ConnectyLogo className="h-5 w-5" tone={logoTone} type="mark" />;
+  }
+
+  if (avatarUrl) {
+    return (
+      <span className="relative block h-full w-full">
+        <Image alt={`Foto de ${name}`} className="object-cover" fill sizes="32px" src={avatarUrl} unoptimized />
+      </span>
+    );
+  }
+
+  return <>{name.slice(0, 2).toUpperCase()}</>;
+}
 
 function SidebarLink({
   item,

@@ -18,6 +18,7 @@ export default async function AgentsPage() {
       activeHref="/dashboard/agentes"
       isPlatformAdmin={profile?.isPlatformAdmin ?? false}
       mode="client"
+      userAvatarUrl={profile?.avatarUrl ?? null}
       userLabel={profile?.email ?? undefined}
       workspaceName={organization?.name ?? profile?.companyName ?? "Workspace"}
     >
