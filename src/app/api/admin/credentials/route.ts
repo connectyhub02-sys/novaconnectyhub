@@ -36,7 +36,8 @@ export async function GET() {
 
   const credentials = (data ?? []).map((credential) => {
     const displayValue = getDisplayValue(credential.kind, credential.encrypted_value, credential.value_preview);
-    const { encrypted_value: _encryptedValue, ...safeCredential } = credential;
+    const { encrypted_value: encryptedValue, ...safeCredential } = credential;
+    void encryptedValue;
 
     return {
       ...safeCredential,

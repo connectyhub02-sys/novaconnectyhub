@@ -8,6 +8,7 @@ import {
   BarChart3,
   Bell,
   Bot,
+  BrainCircuit,
   Building2,
   ChevronDown,
   CircleDollarSign,
@@ -70,7 +71,10 @@ const adminSections: NavSection[] = [
       { label: "Dashboard",   href: "/admin",              icon: BarChart3 },
       { label: "Clientes",    href: "/admin/clientes",     icon: Users,        badge: "142" },
       { label: "Planos",      href: "/admin/planos",       icon: Coins },
+      { label: "Instancias",  href: "/admin/instancias",   icon: MessageCircle },
       { label: "Agentes",     href: "/admin/agentes",      icon: Bot },
+      { label: "Inteligencia",href: "/admin/inteligencia", icon: BrainCircuit },
+      { label: "Conteudo",    href: "/admin/conteudo",     icon: Globe2 },
       { label: "Setores",     href: "/admin/setores",      icon: GitBranch },
       { label: "CEO IA",      href: "/admin/ceo",          icon: Wand2 },
       { label: "Aprovações",  href: "/admin/aprovacoes",   icon: ShieldCheck,  badge: "17", badgeTone: "amber" },
@@ -137,39 +141,63 @@ export function ConnectyShell({
   const pathname  = usePathname();
   const active    = activeHref ?? pathname ?? "/";
   const sections  = mode === "admin" ? adminSections : clientSections;
-  const accent: "blue" | "cyan" = mode === "admin" ? "blue" : "cyan";
+  const accent     = "#2dd4bf";
+  const accentRgb  = "45,212,191";
   const name      = mode === "admin" ? "ConnectyHub" : (workspaceName ?? "Minha empresa");
   const role      = mode === "admin" ? "Platform Admin" : (userLabel ?? "workspace");
   const switchTo  = mode === "admin" ? "/dashboard" : "/admin";
   const switchLbl = mode === "admin" ? "Client OS" : "Admin OS";
   const canSwitch = mode === "admin" || isPlatformAdmin;
   const pageLabel = resolveLabel(sections, active, mode);
+  const logoTone  = "white";
+
+  const shellTheme = {
+    background: "radial-gradient(circle at 16% 0%, rgba(45,212,191,0.16), transparent 30rem), radial-gradient(circle at 90% 8%, rgba(139,92,246,0.12), transparent 26rem), var(--ch-bg)",
+    colorScheme: "dark",
+    "--ch-bg":         "#080a0f",
+    "--ch-surface":    "#11151d",
+    "--ch-surface-2":  "#171c26",
+    "--ch-surface-3":  "#1d2430",
+    "--ch-border":     "rgba(212,221,235,0.18)",
+    "--ch-brand-blue": "#01004c",
+    "--ch-accent":     accent,
+    "--ch-accent-rgb": accentRgb,
+    "--ch-text":       "#f7fbff",
+    "--ch-text-rgb":   "247,251,255",
+    "--ch-muted":      "#b9c6d8",
+    "--ch-subtle":     "#8fa1b8",
+    "--ch-hover":      "rgba(45,212,191,0.11)",
+    "--ch-dropdown-bg":"#11151d",
+    "--background":    "#080a0f",
+    "--foreground":    "#f7fbff",
+    "--card":          "#11151d",
+    "--card-foreground":"#f7fbff",
+    "--popover":       "#11151d",
+    "--popover-foreground":"#f7fbff",
+    "--primary":       accent,
+    "--primary-foreground":"#061015",
+    "--secondary":     "#171c26",
+    "--secondary-foreground":"#f7fbff",
+    "--muted":         "#171c26",
+    "--muted-foreground":"#b9c6d8",
+    "--accent":        "#1d2430",
+    "--accent-foreground":"#f7fbff",
+    "--border":        "rgba(212,221,235,0.18)",
+    "--input":         "rgba(212,221,235,0.22)",
+    "--ring":          "rgba(45,212,191,0.46)",
+  } as CSSProperties;
 
   return (
     <div
-      className="flex min-h-svh"
-      style={{
-        background:  "var(--ch-bg)",
-        colorScheme: "light",
-        "--ch-bg":         "#f1f5f9",
-        "--ch-surface":    "#ffffff",
-        "--ch-surface-2":  "#f8fafc",
-        "--ch-border":     "rgba(15,23,42,0.09)",
-        "--ch-brand-blue": "#01004c",
-        "--ch-accent":     mode === "admin" ? "#01004c" : "#06b6d4",
-        "--ch-accent-rgb": mode === "admin" ? "1,0,76" : "6,182,212",
-        "--ch-text":       "#0f172a",
-        "--ch-text-rgb":   "15,23,42",
-        "--ch-muted":      "#64748b",
-        "--ch-hover":      "rgba(15,23,42,0.05)",
-        "--ch-dropdown-bg":"#ffffff",
-      } as CSSProperties}
+      className="connecty-shell flex min-h-svh"
+      data-connecty-mode={mode}
+      style={shellTheme}
     >
       {/* ── Sidebar ── */}
       <aside
         className="sticky top-0 hidden h-svh w-[240px] shrink-0 flex-col lg:flex"
         style={{
-          background:  "var(--ch-surface)",
+          background:  "linear-gradient(180deg, rgba(17,21,29,0.98), rgba(10,13,19,0.98))",
           borderRight: "1px solid var(--ch-border)",
         }}
       >
@@ -179,7 +207,7 @@ export function ConnectyShell({
           style={{ borderBottom: "1px solid var(--ch-border)" }}
         >
           <Link href="/" className="min-w-0 flex-1">
-            <ConnectyLogo className="h-[22px] w-[170px]" tone="blue" type="full" />
+            <ConnectyLogo className="h-[22px] w-[170px]" tone={logoTone} type="full" />
             <div className="font-mono text-[9px] uppercase tracking-widest" style={{ color: "var(--ch-accent)" }}>
               {mode === "admin" ? "Admin OS" : "Client OS"}
             </div>
@@ -202,7 +230,7 @@ export function ConnectyShell({
               </div>
               <div className="space-y-0.5">
                 {section.items.map((item) => (
-                  <SidebarLink key={item.href} item={item} isActive={isActive(item.href, active)} accent={accent} />
+                  <SidebarLink key={item.href} item={item} isActive={isActive(item.href, active)} />
                 ))}
               </div>
             </div>
@@ -224,7 +252,7 @@ export function ConnectyShell({
                   style={{ background: `rgba(var(--ch-accent-rgb),0.15)`, color: "var(--ch-accent)" }}
                 >
                   {mode === "admin" ? (
-                    <ConnectyLogo className="h-6 w-6" tone="blue" type="mark" />
+                    <ConnectyLogo className="h-6 w-6" tone={logoTone} type="mark" />
                   ) : (
                     name.slice(0, 2).toUpperCase()
                   )}
@@ -273,7 +301,7 @@ export function ConnectyShell({
           <Link href="/" className="flex items-center gap-2 lg:hidden">
             <div className="flex h-7 w-7 items-center justify-center rounded-lg"
               style={{ background: `rgba(var(--ch-accent-rgb),0.15)` }}>
-              <ConnectyLogo className="h-5 w-5" tone="blue" type="mark" />
+              <ConnectyLogo className="h-5 w-5" tone={logoTone} type="mark" />
             </div>
           </Link>
 
@@ -309,7 +337,7 @@ export function ConnectyShell({
               onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
               style={{ border: "1px solid var(--ch-border)" }}
             >
-              <Bell className="h-4 w-4 text-slate-400" />
+              <Bell className="h-4 w-4" style={{ color: "var(--ch-muted)" }} />
               <span
                 className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full"
                 style={{ background: "var(--ch-accent)", boxShadow: `0 0 6px var(--ch-accent)` }}
@@ -349,7 +377,7 @@ export function ConnectyShell({
                 }}
               >
                 {mode === "admin" ? (
-                  <ConnectyLogo className="h-5 w-5" tone="blue" type="mark" />
+                  <ConnectyLogo className="h-5 w-5" tone={logoTone} type="mark" />
                 ) : (
                   name.slice(0, 2).toUpperCase()
                 )}
@@ -361,7 +389,7 @@ export function ConnectyShell({
               >
                 <DropdownMenuLabel className="text-xs">
                   <div style={{ color: "var(--ch-text)" }}>{name}</div>
-                  <div className="font-normal text-slate-500">{role}</div>
+                  <div className="font-normal" style={{ color: "var(--ch-muted)" }}>{role}</div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator style={{ background: "var(--ch-border)" }} />
                 {canSwitch && (
@@ -423,11 +451,9 @@ export function ConnectyShell({
 function SidebarLink({
   item,
   isActive: active,
-  accent,
 }: {
   item: NavItem;
   isActive: boolean;
-  accent: "blue" | "cyan";
 }) {
   const Icon = item.icon;
   return (
@@ -436,9 +462,10 @@ function SidebarLink({
       aria-current={active ? "page" : undefined}
       className="group flex h-9 items-center gap-2.5 rounded-xl px-3 text-[12.5px] transition-all"
       style={active ? {
-        background: `rgba(var(--ch-accent-rgb),0.12)`,
-        border:     `1px solid rgba(var(--ch-accent-rgb),0.2)`,
-        color:      "var(--ch-accent)",
+        background: `rgba(var(--ch-accent-rgb),0.17)`,
+        border:     `1px solid rgba(var(--ch-accent-rgb),0.38)`,
+        color:      "var(--ch-text)",
+        boxShadow:  "0 10px 28px rgba(var(--ch-accent-rgb),0.12)",
       } : {
         background: "transparent",
         border:     "1px solid transparent",

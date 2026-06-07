@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { ensureStarterOrganization, getCurrentWorkspace } from "@/lib/supabase/profile";
+import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createClient } from "@/lib/supabase/server";
 
 export async function GET(request: NextRequest) {
@@ -10,7 +10,6 @@ export async function GET(request: NextRequest) {
   if (code) {
     const supabase = await createClient();
     await supabase.auth.exchangeCodeForSession(code);
-    await ensureStarterOrganization();
   }
 
   const workspace = await getCurrentWorkspace();

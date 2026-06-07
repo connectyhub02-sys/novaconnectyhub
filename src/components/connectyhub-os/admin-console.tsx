@@ -1,6 +1,5 @@
 import {
   Activity,
-  BrainCircuit,
   Check,
   CircleDollarSign,
   Coins,
@@ -20,7 +19,6 @@ import {
   internalAgents,
   maintenanceItems,
   platformHealth,
-  sectors,
 } from "@/lib/connectyhub-os-data";
 import { AreaChartPanel, BarChartPanel } from "./charts";
 import {
@@ -34,7 +32,6 @@ import {
   NeonBadge,
   PageHeader,
   Panel,
-  ProgressBar,
   StatusBadge,
   StatusBar,
   TelemetryFeed,

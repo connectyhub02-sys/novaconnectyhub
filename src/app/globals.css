@@ -93,6 +93,90 @@ body {
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
 }
 
+.connecty-shell {
+  color: var(--ch-text);
+}
+
+[data-connecty-mode] {
+  scrollbar-color: rgba(var(--ch-accent-rgb), 0.45) var(--ch-surface);
+}
+
+[data-connecty-mode] ::selection {
+  background: rgba(var(--ch-accent-rgb), 0.32);
+  color: var(--ch-text);
+}
+
+[data-connecty-mode] .text-slate-400,
+[data-connecty-mode] .text-slate-500,
+[data-connecty-mode] .text-muted-foreground {
+  color: var(--ch-muted) !important;
+}
+
+[data-connecty-mode] .text-slate-600,
+[data-connecty-mode] .text-slate-700,
+[data-connecty-mode] .text-foreground {
+  color: var(--ch-text) !important;
+}
+
+[data-connecty-mode] .text-amber-700 {
+  color: #fcd34d !important;
+}
+
+[data-connecty-mode] .text-violet-700 {
+  color: #c4b5fd !important;
+}
+
+[data-connecty-mode] .text-cyan-700,
+[data-connecty-mode] .text-sky-700 {
+  color: #67e8f9 !important;
+}
+
+[data-connecty-mode] .text-emerald-700 {
+  color: #6ee7b7 !important;
+}
+
+[data-connecty-mode] .text-rose-700 {
+  color: #fda4af !important;
+}
+
+[data-connecty-mode] .bg-white {
+  background-color: var(--ch-surface-2) !important;
+}
+
+[data-connecty-mode] .bg-slate-100 {
+  background-color: rgba(148, 163, 184, 0.14) !important;
+}
+
+[data-connecty-mode] .bg-emerald-50 {
+  background-color: rgba(16, 185, 129, 0.12) !important;
+}
+
+[data-connecty-mode] .bg-sky-50 {
+  background-color: rgba(14, 165, 233, 0.12) !important;
+}
+
+[data-connecty-mode] .border-slate-300 {
+  border-color: var(--ch-border) !important;
+}
+
+[data-connecty-mode] .border-border {
+  border-color: var(--ch-border) !important;
+}
+
+[data-connecty-mode] input,
+[data-connecty-mode] select,
+[data-connecty-mode] textarea {
+  background-color: var(--ch-surface-2);
+  color: var(--ch-text);
+  border-color: var(--ch-border);
+}
+
+[data-connecty-mode] input::placeholder,
+[data-connecty-mode] textarea::placeholder {
+  color: var(--ch-subtle);
+  opacity: 1;
+}
+
 html {
   scroll-behavior: smooth;
 }

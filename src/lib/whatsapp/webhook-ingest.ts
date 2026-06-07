@@ -1,0 +1,837 @@
+import "server-only";
+
+import { createHash } from "node:crypto";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { inngest } from "@/lib/inngest/client";
+import { createServiceClient } from "@/lib/supabase/service";
+
+type JsonRecord = Record<string, unknown>;
+
+type WhatsappInstanceRow = {
+  id: string;
+  organization_id: string;
+};
+
+type LeadRow = {
+  id: string;
+};
+
+type ConversationRow = {
+  id: string;
+};
+
+type AgentRow = {
+  id: string;
+};
+
+type WebhookEventRow = {
+  id: string;
+};
+
+export type UazapiWebhookIngestResult = {
+  eventId: string | null;
+  eventType: string;
+  duplicate: boolean;
+  organizationId: string | null;
+  whatsappInstanceId: string | null;
+  leadId: string | null;
+  conversationId: string | null;
+  messageId: string | null;
+  agentRunId: string | null;
+  status: "received" | "processed" | "unmapped" | "duplicate" | "error";
+  error?: string;
+};
+
+export async function ingestUazapiWebhook(input: {
+  payload: unknown;
+  eventType: string;
+  requestUrl: string;
+  headers: Headers;
+  client?: SupabaseClient;
+}): Promise<UazapiWebhookIngestResult> {
+  const client = input.client ?? createServiceClient();
+  const payload = normalizePayload(input.payload);
+  const eventType = input.eventType || extractEventType(payload) || "unknown";
+  const providerInstanceId = extractProviderInstanceId(payload, input.requestUrl);
+  const message = extractMessageSnapshot(payload);
+  const instance = providerInstanceId ? await findWhatsappInstance(client, providerInstanceId) : null;
+  const payloadHash = hashPayload(payload);
+  const eventResult = await insertWebhookEvent(client, {
+    eventType,
+    payload,
+    payloadHash,
+    headers: sanitizeHeaders(input.headers),
+    providerInstanceId,
+    whatsappInstanceId: instance?.id ?? null,
+    organizationId: instance?.organization_id ?? null,
+    providerMessageId: message.providerMessageId,
+    providerChatId: message.providerChatId,
+  });
+
+  if (eventResult.duplicate) {
+    return {
+      eventId: eventResult.eventId,
+      eventType,
+      duplicate: true,
+      organizationId: instance?.organization_id ?? null,
+      whatsappInstanceId: instance?.id ?? null,
+      leadId: null,
+      conversationId: null,
+      messageId: null,
+      agentRunId: null,
+      status: "duplicate",
+    };
+  }
+
+  const baseResult: UazapiWebhookIngestResult = {
+    eventId: eventResult.eventId,
+    eventType,
+    duplicate: false,
+    organizationId: instance?.organization_id ?? null,
+    whatsappInstanceId: instance?.id ?? null,
+    leadId: null,
+    conversationId: null,
+    messageId: null,
+    agentRunId: null,
+    status: "received",
+  };
+
+  if (!instance?.organization_id) {
+    await markWebhookEvent(client, eventResult.eventId, "unmapped", "Instancia nao mapeada para organizacao.");
+    return {
+      ...baseResult,
+      status: "unmapped",
+      error: "Instancia nao mapeada para organizacao.",
+    };
+  }
+
+  if (!message.providerChatId && !message.phoneNumber && !message.providerMessageId) {
+    await markWebhookEvent(client, eventResult.eventId, "processed");
+    return {
+      ...baseResult,
+      status: "processed",
+    };
+  }
+
+  try {
+    const lead = message.phoneNumber
+      ? await ensureLead(client, {
+          organizationId: instance.organization_id,
+          phoneNumber: message.phoneNumber,
+          displayName: message.displayName,
+          lastEventSummary: message.textContent,
+          lastMessageAt: message.occurredAt,
+        })
+      : null;
+    const conversation = await ensureConversation(client, {
+      organizationId: instance.organization_id,
+      leadId: lead?.id ?? null,
+      whatsappInstanceId: instance.id,
+      providerChatId: message.providerChatId ?? message.phoneNumber ?? message.providerMessageId,
+      lastMessagePreview: message.textContent,
+      lastMessageAt: message.occurredAt,
+    });
+    const savedMessage = await insertConversationMessage(client, {
+      organizationId: instance.organization_id,
+      conversationId: conversation.id,
+      leadId: lead?.id ?? null,
+      whatsappInstanceId: instance.id,
+      message,
+      payload,
+    });
+    const agentRun = message.direction === "inbound"
+      ? await enqueueWhatsappAgentRun(client, {
+          organizationId: instance.organization_id,
+          leadId: lead?.id ?? null,
+          conversationId: conversation.id,
+          whatsappInstanceId: instance.id,
+          webhookEventId: eventResult.eventId,
+          providerMessageId: message.providerMessageId,
+          providerChatId: message.providerChatId,
+          phoneNumber: message.phoneNumber,
+          messageType: message.messageType,
+          textContent: message.textContent,
+          eventType,
+        })
+      : null;
+
+    if (agentRun?.id) {
+      await inngest.send({
+        name: "connectyhub/whatsapp.message.received",
+        data: {
+          runId: agentRun.id,
+          organizationId: instance.organization_id,
+          conversationId: conversation.id,
+          whatsappInstanceId: instance.id,
+        },
+      }).catch(async (error: unknown) => {
+        await client
+          .from("agent_runs")
+          .update({
+            metadata: {
+              ...(agentRun.metadata ?? {}),
+              inngest_dispatch_error: error instanceof Error ? error.message : "Falha ao disparar Inngest.",
+              inngest_dispatch_failed_at: new Date().toISOString(),
+            },
+          })
+          .eq("id", agentRun.id);
+      });
+    }
+
+    await client
+      .from("whatsapp_instances")
+      .update({
+        last_message_at: message.occurredAt,
+        last_heartbeat_at: new Date().toISOString(),
+      })
+      .eq("id", instance.id);
+
+    await createIntelligenceEvent(client, {
+      organizationId: instance.organization_id,
+      leadId: lead?.id ?? null,
+      conversationId: conversation.id,
+      webhookEventId: eventResult.eventId,
+      agentRunId: agentRun?.id ?? null,
+      title: message.direction === "inbound" ? "Mensagem recebida no WhatsApp" : "Mensagem registrada no WhatsApp",
+      summary: message.textContent,
+      eventType,
+    });
+
+    await markWebhookEvent(client, eventResult.eventId, "processed");
+
+    return {
+      ...baseResult,
+      leadId: lead?.id ?? null,
+      conversationId: conversation.id,
+      messageId: savedMessage.id,
+      agentRunId: agentRun?.id ?? null,
+      status: "processed",
+    };
+  } catch (error) {
+    const messageText = error instanceof Error ? error.message : "Erro desconhecido ao processar webhook.";
+    await markWebhookEvent(client, eventResult.eventId, "error", messageText);
+
+    return {
+      ...baseResult,
+      status: "error",
+      error: messageText,
+    };
+  }
+}
+
+async function findWhatsappInstance(client: SupabaseClient, providerInstanceId: string) {
+  const { data } = await client
+    .from("whatsapp_instances")
+    .select("id, organization_id")
+    .eq("provider", "uazapi")
+    .eq("provider_instance_id", providerInstanceId)
+    .maybeSingle<WhatsappInstanceRow>();
+
+  if (data) {
+    return data;
+  }
+
+  const { data: byProviderName } = await client
+    .from("whatsapp_instances")
+    .select("id, organization_id")
+    .eq("provider", "uazapi")
+    .contains("metadata", { provider_name: providerInstanceId })
+    .maybeSingle<WhatsappInstanceRow>();
+
+  return byProviderName ?? null;
+}
+
+async function insertWebhookEvent(
+  client: SupabaseClient,
+  input: {
+    eventType: string;
+    payload: JsonRecord;
+    payloadHash: string;
+    headers: JsonRecord;
+    providerInstanceId: string | null;
+    whatsappInstanceId: string | null;
+    organizationId: string | null;
+    providerMessageId: string | null;
+    providerChatId: string | null;
+  },
+) {
+  const { data, error } = await client
+    .from("whatsapp_webhook_events")
+    .insert({
+      provider: "uazapi",
+      event_type: input.eventType,
+      provider_instance_id: input.providerInstanceId,
+      whatsapp_instance_id: input.whatsappInstanceId,
+      organization_id: input.organizationId,
+      provider_message_id: input.providerMessageId,
+      provider_chat_id: input.providerChatId,
+      payload_hash: input.payloadHash,
+      payload: input.payload,
+      headers: input.headers,
+      metadata: {
+        ingested_by: "connectyhub-webhook",
+      },
+    })
+    .select("id")
+    .single<WebhookEventRow>();
+
+  if (!error) {
+    return { eventId: data.id, duplicate: false };
+  }
+
+  if (error.code === "23505") {
+    const { data: existing } = await client
+      .from("whatsapp_webhook_events")
+      .select("id")
+      .eq("provider", "uazapi")
+      .eq("payload_hash", input.payloadHash)
+      .maybeSingle<WebhookEventRow>();
+
+    return { eventId: existing?.id ?? null, duplicate: true };
+  }
+
+  throw new Error(`Nao foi possivel registrar webhook Uazapi: ${error.message}`);
+}
+
+async function markWebhookEvent(client: SupabaseClient, eventId: string | null, status: string, errorMessage?: string) {
+  if (!eventId) {
+    return;
+  }
+
+  await client
+    .from("whatsapp_webhook_events")
+    .update({
+      processing_status: status,
+      processed_at: new Date().toISOString(),
+      error_message: errorMessage ?? null,
+    })
+    .eq("id", eventId);
+}
+
+async function ensureLead(
+  client: SupabaseClient,
+  input: {
+    organizationId: string;
+    phoneNumber: string;
+    displayName: string | null;
+    lastEventSummary: string | null;
+    lastMessageAt: string;
+  },
+) {
+  const { data: existing } = await client
+    .from("leads")
+    .select("id")
+    .eq("organization_id", input.organizationId)
+    .eq("channel", "whatsapp")
+    .eq("phone_number", input.phoneNumber)
+    .maybeSingle<LeadRow>();
+
+  if (existing) {
+    const { data, error } = await client
+      .from("leads")
+      .update({
+        display_name: input.displayName,
+        status: "active",
+        last_event_summary: input.lastEventSummary,
+        last_message_at: input.lastMessageAt,
+        metadata: {
+          last_source: "uazapi_webhook",
+        },
+      })
+      .eq("id", existing.id)
+      .select("id")
+      .single<LeadRow>();
+
+    if (error) {
+      throw new Error(`Nao foi possivel atualizar lead: ${error.message}`);
+    }
+
+    return data;
+  }
+
+  const { data, error } = await client
+    .from("leads")
+    .insert({
+      organization_id: input.organizationId,
+      channel: "whatsapp",
+      phone_number: input.phoneNumber,
+      display_name: input.displayName,
+      status: "active",
+      source: "uazapi_webhook",
+      last_event_summary: input.lastEventSummary,
+      last_message_at: input.lastMessageAt,
+      metadata: {
+        created_from: "uazapi_webhook",
+      },
+    })
+    .select("id")
+    .single<LeadRow>();
+
+  if (error) {
+    throw new Error(`Nao foi possivel criar lead: ${error.message}`);
+  }
+
+  return data;
+}
+
+async function ensureConversation(
+  client: SupabaseClient,
+  input: {
+    organizationId: string;
+    leadId: string | null;
+    whatsappInstanceId: string;
+    providerChatId: string | null;
+    lastMessagePreview: string | null;
+    lastMessageAt: string;
+  },
+) {
+  const { data: existing } = input.providerChatId
+    ? await client
+        .from("conversations")
+        .select("id")
+        .eq("organization_id", input.organizationId)
+        .eq("provider", "uazapi")
+        .eq("provider_chat_id", input.providerChatId)
+        .maybeSingle<ConversationRow>()
+    : { data: null };
+
+  if (existing) {
+    const { data, error } = await client
+      .from("conversations")
+      .update({
+        lead_id: input.leadId,
+        whatsapp_instance_id: input.whatsappInstanceId,
+        status: "open",
+        last_message_preview: input.lastMessagePreview,
+        last_message_at: input.lastMessageAt,
+      })
+      .eq("id", existing.id)
+      .select("id")
+      .single<ConversationRow>();
+
+    if (error) {
+      throw new Error(`Nao foi possivel atualizar conversa: ${error.message}`);
+    }
+
+    return data;
+  }
+
+  const { data, error } = await client
+    .from("conversations")
+    .insert({
+      organization_id: input.organizationId,
+      lead_id: input.leadId,
+      whatsapp_instance_id: input.whatsappInstanceId,
+      channel: "whatsapp",
+      provider: "uazapi",
+      provider_chat_id: input.providerChatId,
+      status: "open",
+      last_message_preview: input.lastMessagePreview,
+      last_message_at: input.lastMessageAt,
+      metadata: {
+        created_from: "uazapi_webhook",
+      },
+    })
+    .select("id")
+    .single<ConversationRow>();
+
+  if (error) {
+    throw new Error(`Nao foi possivel criar conversa: ${error.message}`);
+  }
+
+  return data;
+}
+
+async function insertConversationMessage(
+  client: SupabaseClient,
+  input: {
+    organizationId: string;
+    conversationId: string;
+    leadId: string | null;
+    whatsappInstanceId: string;
+    message: MessageSnapshot;
+    payload: JsonRecord;
+  },
+) {
+  const insertPayload = {
+    organization_id: input.organizationId,
+    conversation_id: input.conversationId,
+    lead_id: input.leadId,
+    whatsapp_instance_id: input.whatsappInstanceId,
+    provider: "uazapi",
+    provider_message_id: input.message.providerMessageId,
+    provider_chat_id: input.message.providerChatId,
+    direction: input.message.direction,
+    message_type: input.message.messageType,
+    text_content: input.message.textContent,
+    payload: input.payload,
+    occurred_at: input.message.occurredAt,
+  };
+  const { data, error } = await client
+    .from("conversation_messages")
+    .insert(insertPayload)
+    .select("id")
+    .single<{ id: string }>();
+
+  if (!error) {
+    return data;
+  }
+
+  if (error.code === "23505" && input.message.providerMessageId) {
+    const { data: existing } = await client
+      .from("conversation_messages")
+      .select("id")
+      .eq("provider", "uazapi")
+      .eq("provider_message_id", input.message.providerMessageId)
+      .maybeSingle<{ id: string }>();
+
+    if (existing) {
+      return existing;
+    }
+  }
+
+  throw new Error(`Nao foi possivel registrar mensagem: ${error.message}`);
+}
+
+async function enqueueWhatsappAgentRun(
+  client: SupabaseClient,
+  input: {
+    organizationId: string;
+    leadId: string | null;
+    conversationId: string;
+    whatsappInstanceId: string;
+    webhookEventId: string | null;
+    providerMessageId: string | null;
+    providerChatId: string | null;
+    phoneNumber: string | null;
+    messageType: string | null;
+    textContent: string | null;
+    eventType: string;
+  },
+) {
+  const { data: agent } = await client
+    .from("agent_registry")
+    .select("id")
+    .eq("scope", "organization")
+    .eq("organization_id", input.organizationId)
+    .contains("metadata", { client_created: true, agent_kind: "whatsapp" })
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<AgentRow>();
+
+  if (!agent?.id) {
+    return null;
+  }
+
+  const { data, error } = await client
+    .from("agent_runs")
+    .insert({
+      agent_id: agent.id,
+      organization_id: input.organizationId,
+      run_status: "queued",
+      trigger_source: "connectyhub/whatsapp.message.received",
+      input_summary: preview(input.textContent, 240) ?? "Mensagem WhatsApp recebida.",
+      metadata: {
+        leadId: input.leadId,
+        conversationId: input.conversationId,
+        whatsappInstanceId: input.whatsappInstanceId,
+        webhookEventId: input.webhookEventId,
+        providerMessageId: input.providerMessageId,
+        providerChatId: input.providerChatId,
+        phoneNumber: input.phoneNumber,
+        messageType: input.messageType,
+        providerEventType: input.eventType,
+      },
+    })
+    .select("id, metadata")
+    .single<{ id: string; metadata: JsonRecord | null }>();
+
+  if (error) {
+    throw new Error(`Nao foi possivel enfileirar agente WhatsApp: ${error.message}`);
+  }
+
+  return data;
+}
+
+async function createIntelligenceEvent(
+  client: SupabaseClient,
+  input: {
+    organizationId: string;
+    leadId: string | null;
+    conversationId: string;
+    webhookEventId: string | null;
+    agentRunId: string | null;
+    title: string;
+    summary: string | null;
+    eventType: string;
+  },
+) {
+  await client.from("intelligence_events").insert({
+    scope: "organization",
+    organization_id: input.organizationId,
+    source_type: "whatsapp",
+    source_id: input.conversationId,
+    event_type: input.eventType,
+    title: input.title,
+    summary: preview(input.summary, 500),
+    confidence: 0.75,
+    tags: ["whatsapp", "uazapi", "lead"],
+    payload: {
+      leadId: input.leadId,
+      conversationId: input.conversationId,
+      webhookEventId: input.webhookEventId,
+      agentRunId: input.agentRunId,
+    },
+  });
+}
+
+type MessageSnapshot = {
+  providerMessageId: string | null;
+  providerChatId: string | null;
+  phoneNumber: string | null;
+  displayName: string | null;
+  direction: "inbound" | "outbound" | "system" | "unknown";
+  messageType: string | null;
+  textContent: string | null;
+  occurredAt: string;
+};
+
+function extractMessageSnapshot(payload: JsonRecord): MessageSnapshot {
+  const messageRecord = findMessageRecord(payload) ?? payload;
+  const providerChatId = findString(messageRecord, ["chatid", "chatId", "chat_id", "remoteJid", "jid", "from", "to"])
+    ?? findNestedString(messageRecord, ["remoteJid", "participant"]);
+  const textContent =
+    findString(messageRecord, ["text", "body", "caption", "content", "messageText"])
+    ?? findNestedString(messageRecord, ["conversation", "text", "caption"]);
+  const providerMessageId =
+    findString(messageRecord, ["messageId", "message_id", "messageid", "id"])
+    ?? findNestedString(messageRecord, ["id", "messageId"]);
+  const fromMe = findBoolean(messageRecord, ["fromMe", "from_me", "wasSentByApi", "sentByApi"]);
+  const messageType = findString(messageRecord, ["type", "messageType", "kind"]) ?? "text";
+  const occurredAt = parseOccurredAt(findUnknown(messageRecord, ["timestamp", "messageTimestamp", "date", "created", "createdAt"]));
+
+  return {
+    providerMessageId,
+    providerChatId,
+    phoneNumber: normalizePhone(providerChatId),
+    displayName: findString(messageRecord, ["pushName", "senderName", "name", "notifyName", "profileName"]),
+    direction: typeof fromMe === "boolean" ? (fromMe ? "outbound" : "inbound") : "unknown",
+    messageType,
+    textContent,
+    occurredAt,
+  };
+}
+
+function findMessageRecord(payload: JsonRecord) {
+  const directCandidates = [
+    payload.message,
+    payload.msg,
+    payload.data,
+    payload.result,
+    Array.isArray(payload.messages) ? payload.messages[0] : null,
+  ];
+
+  for (const candidate of directCandidates) {
+    if (isRecord(candidate)) {
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
+function extractProviderInstanceId(payload: JsonRecord, requestUrl: string) {
+  const direct =
+    findString(payload, ["instanceId", "instance_id", "instanceid", "instanceName", "instance_name", "instance", "session", "serverId"])
+    ?? findNestedString(payload, ["instanceId", "instance_id", "id"]);
+
+  if (direct) {
+    return direct;
+  }
+
+  try {
+    const url = new URL(requestUrl);
+
+    return url.searchParams.get("instanceId") ?? url.searchParams.get("instance_id") ?? url.searchParams.get("instance") ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function extractEventType(payload: JsonRecord) {
+  return findString(payload, ["event", "type", "eventType", "EventType"]) ?? "unknown";
+}
+
+function normalizePayload(payload: unknown): JsonRecord {
+  return isRecord(payload) ? payload : { value: payload };
+}
+
+function hashPayload(payload: JsonRecord) {
+  return createHash("sha256").update(stableJson(payload)).digest("hex");
+}
+
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map(stableJson).join(",")}]`;
+  }
+
+  if (isRecord(value)) {
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${stableJson(value[key])}`)
+      .join(",")}}`;
+  }
+
+  return JSON.stringify(value);
+}
+
+function sanitizeHeaders(headers: Headers): JsonRecord {
+  const safe: JsonRecord = {};
+
+  headers.forEach((value, key) => {
+    const normalized = key.toLowerCase();
+
+    if (
+      normalized.includes("secret") ||
+      normalized.includes("token") ||
+      normalized.includes("authorization") ||
+      normalized.includes("cookie")
+    ) {
+      safe[key] = "__redacted__";
+      return;
+    }
+
+    if (["user-agent", "x-forwarded-for", "x-vercel-ip-country", "x-uazapi-event"].includes(normalized)) {
+      safe[key] = value.slice(0, 240);
+    }
+  });
+
+  return safe;
+}
+
+function findString(record: JsonRecord, keys: string[]) {
+  for (const key of keys) {
+    const value = record[key];
+
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return String(value);
+    }
+  }
+
+  return null;
+}
+
+function findNestedString(value: unknown, keys: string[], depth = 0): string | null {
+  if (depth > 4) {
+    return null;
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = findNestedString(item, keys, depth + 1);
+
+      if (found) {
+        return found;
+      }
+    }
+
+    return null;
+  }
+
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const direct = findString(value, keys);
+
+  if (direct) {
+    return direct;
+  }
+
+  for (const nested of Object.values(value)) {
+    const found = findNestedString(nested, keys, depth + 1);
+
+    if (found) {
+      return found;
+    }
+  }
+
+  return null;
+}
+
+function findBoolean(record: JsonRecord, keys: string[]) {
+  for (const key of keys) {
+    const value = record[key];
+
+    if (typeof value === "boolean") {
+      return value;
+    }
+
+    if (typeof value === "string") {
+      if (value.toLowerCase() === "true") return true;
+      if (value.toLowerCase() === "false") return false;
+    }
+  }
+
+  return null;
+}
+
+function findUnknown(record: JsonRecord, keys: string[]) {
+  for (const key of keys) {
+    if (record[key] !== undefined && record[key] !== null) {
+      return record[key];
+    }
+  }
+
+  return null;
+}
+
+function parseOccurredAt(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return new Date(value < 10_000_000_000 ? value * 1000 : value).toISOString();
+  }
+
+  if (typeof value === "string" && value.trim()) {
+    const numeric = Number(value);
+
+    if (Number.isFinite(numeric)) {
+      return new Date(numeric < 10_000_000_000 ? numeric * 1000 : numeric).toISOString();
+    }
+
+    const parsed = new Date(value);
+
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed.toISOString();
+    }
+  }
+
+  return new Date().toISOString();
+}
+
+function normalizePhone(value: string | null) {
+  if (!value) {
+    return null;
+  }
+
+  const digits = value.replace(/\D/g, "");
+
+  return digits.length >= 8 ? digits : null;
+}
+
+function preview(value: string | null | undefined, maxLength: number) {
+  const cleaned = value?.replace(/\s+/g, " ").trim() ?? "";
+
+  if (!cleaned) {
+    return null;
+  }
+
+  return cleaned.length > maxLength ? `${cleaned.slice(0, maxLength - 3)}...` : cleaned;
+}
+
+function isRecord(value: unknown): value is JsonRecord {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}

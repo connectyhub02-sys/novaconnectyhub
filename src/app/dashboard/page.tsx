@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { ClientDashboard } from "@/components/connectyhub-os/client-dashboard";
-import { ensureStarterOrganization, getCurrentWorkspace } from "@/lib/supabase/profile";
+import { getCurrentWorkspace } from "@/lib/supabase/profile";
 
 export const metadata: Metadata = {
   title: "Dashboard | ConnectyHub",
@@ -22,14 +22,14 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     redirect("/admin");
   }
 
-  const organization = await ensureStarterOrganization();
   const profile = workspace?.profile;
+  const organization = workspace?.organization;
 
   return (
     <ClientDashboard
       isPlatformAdmin={profile?.isPlatformAdmin ?? false}
       userLabel={profile?.email ?? undefined}
-      workspaceName={organization?.name ?? profile?.companyName ?? "Minha empresa"}
+      workspaceName={organization?.name ?? profile?.companyName ?? "Workspace"}
     />
   );
 }

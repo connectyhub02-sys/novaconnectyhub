@@ -3,6 +3,7 @@ import "server-only";
 import type { User } from "@supabase/supabase-js";
 import { isSupabaseAuthConfigured } from "./env";
 import { createClient } from "./server";
+import { createServiceClient } from "./service";
 
 export type CurrentProfile = {
   id: string;
@@ -88,7 +89,7 @@ export async function ensureStarterOrganization() {
     return workspace.organization;
   }
 
-  const supabase = await createClient();
+  const supabase = await createWorkspaceDataClient();
   const name = workspace.profile.companyName || workspace.profile.fullName || workspace.profile.email || "Minha empresa";
   const slug = slugify(name);
 
@@ -125,7 +126,7 @@ export async function ensureStarterOrganization() {
 }
 
 async function getOrCreateProfile(user: User): Promise<CurrentProfile> {
-  const supabase = await createClient();
+  const supabase = await createWorkspaceDataClient();
   const { data } = await supabase
     .from("profiles")
     .select("id, email, full_name, phone, company_name, is_platform_admin")
@@ -162,7 +163,7 @@ async function getOrCreateProfile(user: User): Promise<CurrentProfile> {
 }
 
 async function getPrimaryOrganization(userId: string): Promise<CurrentOrganization | null> {
-  const supabase = await createClient();
+  const supabase = await createWorkspaceDataClient();
   const { data } = await supabase
     .from("organization_members")
     .select("role, organizations(id, name, slug, plan_code, status)")
@@ -194,6 +195,14 @@ function mapProfile(row: ProfileRow, user: User): CurrentProfile {
     companyName: row.company_name,
     isPlatformAdmin: Boolean(row.is_platform_admin),
   };
+}
+
+async function createWorkspaceDataClient() {
+  try {
+    return createServiceClient();
+  } catch {
+    return createClient();
+  }
 }
 
 function slugify(value: string) {

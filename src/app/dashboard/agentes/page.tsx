@@ -1,27 +1,27 @@
 import type { Metadata } from "next";
+import { ClientAgentsConsole } from "@/components/connectyhub-os/client-agents-console";
 import { ConnectyShell } from "@/components/connectyhub-os/connecty-shell";
-import { WhatsAppConsole } from "@/components/connectyhub-os/whatsapp-console";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 
 export const metadata: Metadata = {
-  title: "WhatsApp | ConnectyHub",
-  description: "Console de integração Uazapi para conectar WhatsApp, enviar mensagens e configurar webhooks.",
+  title: "Agentes | ConnectyHub",
+  description: "Cadastro de agentes de WhatsApp vinculados as empresas do cliente.",
 };
 
-export default async function WhatsAppPage() {
+export default async function AgentsPage() {
   const workspace = await getCurrentWorkspace();
   const profile = workspace?.profile;
   const organization = workspace?.organization;
 
   return (
     <ConnectyShell
-      activeHref="/dashboard/whatsapp"
+      activeHref="/dashboard/agentes"
       isPlatformAdmin={profile?.isPlatformAdmin ?? false}
       mode="client"
       userLabel={profile?.email ?? undefined}
       workspaceName={organization?.name ?? profile?.companyName ?? "Workspace"}
     >
-      <WhatsAppConsole />
+      <ClientAgentsConsole />
     </ConnectyShell>
   );
 }

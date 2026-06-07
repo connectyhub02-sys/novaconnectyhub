@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { ingestUazapiWebhook } from "@/lib/whatsapp/webhook-ingest";
 
 export const dynamic = "force-dynamic";
 
@@ -25,11 +26,20 @@ export async function POST(request: NextRequest) {
   }
 
   const event = extractWebhookEvent(payload, request);
+  const ingest = await ingestUazapiWebhook({
+    payload,
+    eventType: event,
+    requestUrl: request.url,
+    headers: request.headers,
+  });
 
   console.info(
     "[uazapi:webhook]",
     JSON.stringify({
       event,
+      ingestStatus: ingest.status,
+      organizationId: ingest.organizationId,
+      conversationId: ingest.conversationId,
       receivedAt: new Date().toISOString(),
       payloadPreview: previewPayload(payload),
     }),
@@ -38,6 +48,7 @@ export async function POST(request: NextRequest) {
   return Response.json({
     ok: true,
     event,
+    ingest,
     receivedAt: new Date().toISOString(),
   });
 }

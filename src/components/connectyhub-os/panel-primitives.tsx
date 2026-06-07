@@ -40,8 +40,8 @@ export function PageHeader({
   eyebrow?: string; title: string; description?: string; actions?: ReactNode;
 }) {
   return (
-    <div className="mb-6 flex items-start justify-between gap-4">
-      <div>
+    <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+      <div className="min-w-0">
         {eyebrow && (
           <p className="mb-1 font-mono text-[10px] uppercase tracking-[0.2em] text-slate-500">{eyebrow}</p>
         )}
@@ -50,7 +50,11 @@ export function PageHeader({
           <p className="mt-1 text-[13px] text-slate-500">{description}</p>
         )}
       </div>
-      {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
+      {actions && (
+        <div className="flex w-full shrink-0 items-center gap-2 overflow-x-auto pb-1 sm:w-auto sm:justify-end sm:overflow-visible sm:pb-0">
+          {actions}
+        </div>
+      )}
     </div>
   );
 }
@@ -281,7 +285,6 @@ export function StatusBar({ items }: { items: { label: string; status: StatusTon
       {items.map((item) => {
         const s    = statusMap[item.status];
         const t    = toneMap[s.tone];
-        const Icon = s.icon;
         return (
           <div key={item.label} className="flex items-center gap-2">
             <div className={cn("h-2 w-2 rounded-full", t.dot)} style={{ boxShadow: `0 0 6px ${t.fill}` }} />
