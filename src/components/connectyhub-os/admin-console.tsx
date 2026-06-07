@@ -1,16 +1,21 @@
 import {
   Activity,
+  Bell,
   Check,
   CircleDollarSign,
   Coins,
   DatabaseZap,
+  Globe2,
   KeyRound,
   LockKeyhole,
+  MapPin,
+  MousePointerClick,
   ServerCog,
   ShieldCheck,
   Users,
   Wrench,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import {
   adminMetrics,
   approvals,
@@ -39,6 +44,7 @@ import {
 } from "./panel-primitives";
 import { ConnectyShell } from "./connecty-shell";
 import { cn } from "@/lib/utils";
+import type { AdminMarketingOverview, AdminMarketingBucket } from "@/lib/tracking/admin-marketing";
 
 const metricIcons = [CircleDollarSign, Coins, Users, ShieldCheck];
 
@@ -62,7 +68,13 @@ const clientsBarData = [
   { label: "Dom", value: 6 },
 ];
 
-export function AdminConsole({ userLabel = "CEO_HUMAN_ADM" }: { userLabel?: string }) {
+export function AdminConsole({
+  userLabel = "CEO_HUMAN_ADM",
+  marketing,
+}: {
+  userLabel?: string;
+  marketing?: AdminMarketingOverview;
+}) {
   return (
     <ConnectyShell mode="admin" isPlatformAdmin userLabel={userLabel}>
 
@@ -92,6 +104,8 @@ export function AdminConsole({ userLabel = "CEO_HUMAN_ADM" }: { userLabel?: stri
 
       {/* Status bar */}
       <StatusBar items={platformHealth.map((h) => ({ label: h.name, status: h.status }))} />
+
+      {marketing && <AdminMarketingPanel marketing={marketing} />}
 
       {/* Top row: Hero metric + bar chart + leads bar */}
       <div className="mb-4 grid gap-4 lg:grid-cols-3">
@@ -393,4 +407,155 @@ export function AdminConsole({ userLabel = "CEO_HUMAN_ADM" }: { userLabel?: stri
 
     </ConnectyShell>
   );
+}
+
+function AdminMarketingPanel({ marketing }: { marketing: AdminMarketingOverview }) {
+  return (
+    <Panel
+      title="Marketing e rastreamento"
+      eyebrow="plataforma / clientes / leads"
+      action={
+        <div className="flex items-center gap-2">
+          <NeonBadge tone={marketing.warnings.length ? "amber" : "green"}>
+            {marketing.warnings.length ? "Aguardando dados" : "Ao vivo"}
+          </NeonBadge>
+        </div>
+      }
+      className="mb-4"
+    >
+      <div className="grid gap-4 xl:grid-cols-[1.2fr_0.9fr]">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+          <MarketingStat icon={Globe2} label="Visitantes ConnectyHub" value={marketing.platformVisitors} tone="cyan" />
+          <MarketingStat icon={Users} label="Usuarios no painel" value={marketing.dashboardUsers} tone="green" />
+          <MarketingStat icon={Activity} label="Eventos coletados" value={marketing.totalEvents} tone="zinc" />
+          <MarketingStat icon={MousePointerClick} label="Cliques rastreados" value={marketing.trackedLinkClicks} tone="cyan" />
+          <MarketingStat icon={MapPin} label="GPS autorizado" value={marketing.gpsGranted} tone="green" />
+          <MarketingStat icon={Bell} label="Push autorizado" value={marketing.pushGranted} tone="amber" />
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <MarketingBucketList title="Top paginas" items={marketing.topPages} />
+          <MarketingBucketList title="Dispositivos" items={marketing.topDevices} />
+          <MarketingBucketList title="Navegadores" items={marketing.topBrowsers} />
+          <MarketingBucketList title="Paises" items={marketing.topCountries} />
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-4 xl:grid-cols-[1fr_320px]">
+        <div
+          className="rounded-xl p-3"
+          style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
+        >
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">Eventos recentes</p>
+            <span className="font-mono text-[9px] uppercase tracking-wide text-slate-600">
+              {formatNumber(marketing.clientLeadEvents)} eventos dos clientes
+            </span>
+          </div>
+          <div className="divide-y divide-white/5">
+            {marketing.recentEvents.length ? marketing.recentEvents.map((event) => {
+              const tone = toneClass(event.tone);
+              return (
+                <div key={event.id} className="flex items-start justify-between gap-3 py-2.5 first:pt-0 last:pb-0">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className={cn("h-2 w-2 shrink-0 rounded-full", tone.dot)} />
+                      <p className="truncate text-[12px] font-medium text-white">{event.title}</p>
+                    </div>
+                    <p className="mt-1 truncate text-[11px] text-slate-500">{event.detail}</p>
+                  </div>
+                  <span className="shrink-0 font-mono text-[9px] text-slate-600">
+                    {formatShortDate(event.occurredAt)}
+                  </span>
+                </div>
+              );
+            }) : (
+              <p className="py-4 text-[12px] text-slate-500">Nenhum evento de marketing registrado ainda.</p>
+            )}
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <KpiStat label="Eventos clientes" value={formatNumber(marketing.clientLeadEvents)} tone="cyan" />
+          <KpiStat label="Push conhecido" value={formatNumber(marketing.pushKnown)} tone="amber" />
+          <KpiStat label="GPS negado" value={formatNumber(marketing.gpsDenied)} tone="rose" />
+          {marketing.warnings.map((warning) => (
+            <div
+              key={warning}
+              className="rounded-xl p-3 text-[11px] leading-4 text-amber-300"
+              style={{ background: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.22)" }}
+            >
+              {warning}
+            </div>
+          ))}
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
+function MarketingStat({
+  icon: Icon,
+  label,
+  value,
+  tone,
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: number;
+  tone: "green" | "cyan" | "amber" | "rose" | "zinc";
+}) {
+  const colors = toneClass(tone);
+  return (
+    <div
+      className="rounded-xl p-3"
+      style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
+    >
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <p className="font-mono text-[9px] uppercase tracking-wide text-slate-500">{label}</p>
+        <div className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-lg", colors.bg)}>
+          <Icon className={cn("h-3.5 w-3.5", colors.text)} />
+        </div>
+      </div>
+      <p className={cn("font-mono text-[22px] font-bold leading-none", colors.text)}>{formatNumber(value)}</p>
+    </div>
+  );
+}
+
+function MarketingBucketList({ title, items }: { title: string; items: AdminMarketingBucket[] }) {
+  return (
+    <div
+      className="rounded-xl p-3"
+      style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
+    >
+      <p className="mb-2 font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">{title}</p>
+      <div className="space-y-2">
+        {items.length ? items.map((item) => (
+          <div key={item.label} className="flex items-center justify-between gap-3">
+            <span className="truncate text-[11px] text-slate-400">{item.label}</span>
+            <span className="shrink-0 font-mono text-[11px] text-white">{formatNumber(item.value)}</span>
+          </div>
+        )) : (
+          <span className="text-[11px] text-slate-600">Sem dados.</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function formatNumber(value: number) {
+  return new Intl.NumberFormat("pt-BR").format(value);
+}
+
+function formatShortDate(value: string | null) {
+  if (!value) {
+    return "--";
+  }
+
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
 }

@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { Audiowide, Geist, Geist_Mono } from "next/font/google";
+import { ConnectyTracker } from "@/components/tracking/connecty-tracker";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import "./globals.css";
 
@@ -57,7 +59,12 @@ export default function RootLayout({
         <link rel="dns-prefetch" href="https://painel.connectyhub.com.br" />
       </head>
       <body className="min-h-full flex flex-col">
-        <TooltipProvider>{children}</TooltipProvider>
+        <TooltipProvider>
+          <Suspense fallback={null}>
+            <ConnectyTracker />
+          </Suspense>
+          {children}
+        </TooltipProvider>
       </body>
     </html>
   );

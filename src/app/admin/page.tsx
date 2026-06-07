@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { AccessDenied } from "@/components/connectyhub-os/access-denied";
 import { AdminConsole } from "@/components/connectyhub-os/admin-console";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
+import { getAdminMarketingOverview } from "@/lib/tracking/admin-marketing";
 
 export const metadata: Metadata = {
   title: "Admin OS | ConnectyHub",
@@ -15,5 +16,7 @@ export default async function AdminPage() {
     return <AccessDenied />;
   }
 
-  return <AdminConsole userLabel={workspace.profile.email ?? "CEO_HUMAN_ADM"} />;
+  const marketing = await getAdminMarketingOverview();
+
+  return <AdminConsole userLabel={workspace.profile.email ?? "CEO_HUMAN_ADM"} marketing={marketing} />;
 }
