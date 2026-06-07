@@ -1625,7 +1625,7 @@ function CompactConnectionCard({
       </div>
 
       <div className="mt-3 grid gap-2">
-        <InfoTile label="Status" value={meta.label} />
+        <StatusInfoTile connected={status === "connected"} />
         <InfoTile label="Numero" value={formatPhone(instance?.phoneNumber)} />
         <InfoTile label="Leitura" value={formatDate(instance?.lastSyncedAt)} />
       </div>
@@ -1662,6 +1662,29 @@ function CompactConnectionCard({
           />
         </div>
       </div>
+    </div>
+  );
+}
+
+function StatusInfoTile({ connected }: { connected: boolean }) {
+  return (
+    <div className="min-w-0 rounded-lg px-3 py-2" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}>
+      <p className="font-mono text-[9px] uppercase tracking-wide text-slate-500">Status</p>
+      <p
+        className={cn(
+          "mt-1 inline-flex items-center gap-2 break-words text-[12px] font-semibold leading-4",
+          connected ? "text-emerald-300" : "text-rose-300",
+        )}
+      >
+        <span
+          aria-hidden
+          className={cn(
+            "h-2.5 w-2.5 shrink-0 rounded-full shadow-[0_0_12px_currentColor]",
+            connected ? "bg-emerald-400" : "bg-rose-400",
+          )}
+        />
+        {connected ? "conectado" : "nao conectado"}
+      </p>
     </div>
   );
 }
