@@ -595,9 +595,27 @@ async function createProviderInstance(
     },
   };
 
-  const { data, error } = await client
+  const { data: existing, error: existingError } = await client
     .from("whatsapp_instances")
-    .upsert(payload, { onConflict: "provider,provider_instance_id" })
+    .select("id")
+    .eq("provider", "uazapi")
+    .eq("provider_instance_id", providerInstanceId)
+    .maybeSingle<{ id: string }>();
+
+  if (existingError) {
+    throw new Error(`Nao foi possivel verificar a instancia WhatsApp: ${existingError.message}`);
+  }
+
+  const query = existing
+    ? client
+        .from("whatsapp_instances")
+        .update(payload)
+        .eq("id", existing.id)
+    : client
+        .from("whatsapp_instances")
+        .insert(payload);
+
+  const { data, error } = await query
     .select("id, organization_id, owner_user_id, provider, provider_instance_id, phone_number, display_name, status, qr_status, instance_token_preview, instance_token_encrypted, webhook_url, webhook_configured_at, last_synced_at, last_heartbeat_at, last_message_at, connected_at, disconnected_at, metadata, updated_at")
     .single<WhatsappInstanceRow>();
 
