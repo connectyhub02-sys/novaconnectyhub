@@ -135,23 +135,55 @@ export async function connectClientWhatsapp(input: {
   const client = input.client ?? createServiceClient();
   const credentials = await loadUazapiCredentials(client);
   const existing = await getWorkspaceInstance(client, input.organization.id);
-  const instance = existing?.instance_token_encrypted
+  let instance = existing?.instance_token_encrypted
     ? existing
     : await createProviderInstance(client, credentials, input.organization, input.userId);
-  const token = decryptInstanceToken(instance);
+  let token = decryptInstanceToken(instance);
 
   if (!token) {
     throw new Error("A instancia existe, mas o token seguro nao esta disponivel. Sincronize ou recrie a conexao.");
   }
 
-  const connectResult = await callUazapi(credentials, "/instance/connect", {
+  let connectResult = await callUazapi(credentials, "/instance/connect", {
     method: "POST",
     token,
     body: {
       browser: "auto",
       systemName: "ConnectyHub",
     },
+    tolerateError: true,
   });
+
+  if (!connectResult.ok && isInvalidInstanceTokenResponse(connectResult)) {
+    await markWorkspaceInstanceDisconnected(client, instance, {
+      action: "connect_invalid_token",
+      clearToken: true,
+      providerData: connectResult.data,
+      reason: "invalid_instance_token",
+    });
+
+    instance = await createProviderInstance(client, credentials, input.organization, input.userId);
+    token = decryptInstanceToken(instance);
+
+    if (!token) {
+      throw new Error("A nova instancia foi criada, mas o token seguro nao esta disponivel.");
+    }
+
+    connectResult = await callUazapi(credentials, "/instance/connect", {
+      method: "POST",
+      token,
+      body: {
+        browser: "auto",
+        systemName: "ConnectyHub",
+      },
+      tolerateError: true,
+    });
+  }
+
+  if (!connectResult.ok) {
+    throw new Error(readProviderError(connectResult.data) ?? `Uazapi respondeu status ${connectResult.status}.`);
+  }
+
   const status = normalizeWhatsappStatus(findString(connectResult.data, ["status", "state", "connectionStatus"]) ?? "qr_pending");
   const qrCode = normalizeQrCode(findString(connectResult.data, ["qrcode", "qrCode", "qr", "base64"]));
   const phoneNumber = normalizePhone(findString(connectResult.data, ["owner", "phone", "number", "phone_number"]) ?? instance.phone_number);
@@ -220,7 +252,34 @@ export async function refreshClientWhatsappStatus(input: {
     throw new Error("Conexao sem token seguro. Conecte o WhatsApp novamente.");
   }
 
-  const result = await callUazapi(credentials, "/instance/status", { method: "GET", token });
+  const result = await callUazapi(credentials, "/instance/status", { method: "GET", token, tolerateError: true });
+
+  if (!result.ok) {
+    if (isInvalidInstanceTokenResponse(result)) {
+      await markWorkspaceInstanceDisconnected(client, instance, {
+        action: "refresh_invalid_token",
+        clearToken: true,
+        providerData: result.data,
+        reason: "invalid_instance_token",
+      });
+
+      const state = await getClientWhatsappState({ organization: input.organization, userId: input.userId, client });
+      revalidatePath("/dashboard/whatsapp");
+
+      return {
+        state,
+        notice: {
+          tone: "warning",
+          message: "WhatsApp desconectado no celular. Gere um novo QR Code para reconectar.",
+        },
+        qrCode: null,
+        pairCode: null,
+      };
+    }
+
+    throw new Error(readProviderError(result.data) ?? `Uazapi respondeu status ${result.status}.`);
+  }
+
   const status = normalizeWhatsappStatus(findString(result.data, ["status", "state", "connectionStatus"]));
   const phoneNumber = normalizePhone(findString(result.data, ["owner", "phone", "number", "phone_number"]) ?? instance.phone_number);
   const profileData = status === "connected" ? await getConnectedProfileData(credentials, token) : null;
@@ -290,29 +349,49 @@ export async function disconnectClientWhatsapp(input: {
   const token = decryptInstanceToken(instance);
 
   if (!token) {
-    throw new Error("Conexao sem token seguro. Nao foi possivel desconectar no provedor.");
+    await markWorkspaceInstanceDisconnected(client, instance, {
+      action: "disconnect_missing_token",
+      clearToken: true,
+      reason: "missing_local_token",
+    });
+
+    const state = await getClientWhatsappState({ organization: input.organization, userId: input.userId, client });
+    revalidatePath("/dashboard/whatsapp");
+
+    return {
+      state,
+      notice: { tone: "warning", message: "WhatsApp marcado como desconectado. Gere um novo QR Code para reconectar." },
+      qrCode: null,
+      pairCode: null,
+    };
   }
 
-  await callUazapi(credentials, "/instance/disconnect", { method: "POST", token });
-  await client
-    .from("whatsapp_instances")
-    .update({
-      status: "disconnected",
-      disconnected_at: new Date().toISOString(),
-      last_synced_at: new Date().toISOString(),
-      metadata: {
-        ...(instance.metadata ?? {}),
-        last_client_action: "disconnect",
-      },
-    })
-    .eq("id", instance.id);
+  const result = await callUazapi(credentials, "/instance/disconnect", { method: "POST", token, tolerateError: true });
+
+  if (!result.ok && !isInvalidInstanceTokenResponse(result)) {
+    throw new Error(readProviderError(result.data) ?? `Uazapi respondeu status ${result.status}.`);
+  }
+
+  const tokenInvalid = !result.ok && isInvalidInstanceTokenResponse(result);
+
+  await markWorkspaceInstanceDisconnected(client, instance, {
+    action: tokenInvalid ? "disconnect_invalid_token" : "disconnect",
+    clearToken: tokenInvalid,
+    providerData: result.data,
+    reason: tokenInvalid ? "invalid_instance_token" : "manual_disconnect",
+  });
 
   const state = await getClientWhatsappState({ organization: input.organization, userId: input.userId, client });
   revalidatePath("/dashboard/whatsapp");
 
   return {
     state,
-    notice: { tone: "warning", message: "WhatsApp desconectado." },
+    notice: {
+      tone: "warning",
+      message: tokenInvalid
+        ? "A sessao ja estava desconectada no provedor. Gere um novo QR Code para reconectar."
+        : "WhatsApp desconectado.",
+    },
     qrCode: null,
     pairCode: null,
   };
@@ -659,6 +738,54 @@ async function requireWorkspaceInstance(client: SupabaseClient, organizationId: 
   }
 
   return instance;
+}
+
+async function markWorkspaceInstanceDisconnected(
+  client: SupabaseClient,
+  instance: WhatsappInstanceRow,
+  input: {
+    action: string;
+    clearToken?: boolean;
+    providerData?: unknown;
+    reason: string;
+  },
+) {
+  const now = new Date().toISOString();
+  const metadata: JsonRecord = {
+    ...(instance.metadata ?? {}),
+    connection_loss_reason: input.reason,
+    connection_loss_synced_at: now,
+    last_client_action: input.action,
+    ...(input.providerData !== undefined ? { last_disconnect_response: sanitizeProviderData(input.providerData) } : {}),
+    ...(input.clearToken
+      ? {
+          token_invalidated_at: now,
+          token_status: "invalid",
+        }
+      : {}),
+  };
+
+  const { error } = await client
+    .from("whatsapp_instances")
+    .update({
+      status: "disconnected",
+      qr_status: null,
+      disconnected_at: now,
+      last_heartbeat_at: now,
+      last_synced_at: now,
+      ...(input.clearToken
+        ? {
+            instance_token_encrypted: null,
+            instance_token_preview: null,
+          }
+        : {}),
+      metadata,
+    })
+    .eq("id", instance.id);
+
+  if (error) {
+    throw new Error(`Nao foi possivel atualizar a conexao WhatsApp: ${error.message}`);
+  }
 }
 
 async function getWorkspaceWhatsappAgent(client: SupabaseClient, organizationId: string): Promise<AgentRow | null> {
@@ -1050,11 +1177,11 @@ function buildProviderInstanceName(organization: CurrentOrganization) {
 function normalizeWhatsappStatus(value: string | null | undefined): WhatsappStatus {
   const status = value?.toLowerCase() ?? "";
 
+  if (["disconnected", "not_connected", "notconnected", "not connected", "not_logged", "not logged", "close", "logout", "offline"].some((item) => status.includes(item))) return "disconnected";
   if (["connected", "open", "online", "logged", "ready"].some((item) => status.includes(item))) return "connected";
   if (["qr", "pair", "scan"].some((item) => status.includes(item))) return "qr_pending";
   if (["blocked", "ban"].some((item) => status.includes(item))) return "blocked";
   if (["error", "fail"].some((item) => status.includes(item))) return "error";
-  if (["disconnected", "close", "logout", "offline"].some((item) => status.includes(item))) return "disconnected";
 
   return "draft";
 }
@@ -1194,7 +1321,20 @@ function sanitizeProviderData(value: unknown): unknown {
   );
 }
 
+function isInvalidInstanceTokenResponse(result: { status: number; data: unknown }) {
+  const message = readProviderError(result.data)?.toLowerCase() ?? "";
+
+  return (
+    (message.includes("token") && (message.includes("invalid") || message.includes("invalido") || message.includes("inválido"))) ||
+    ([401, 403].includes(result.status) && message.includes("token"))
+  );
+}
+
 function readProviderError(value: unknown) {
+  if (typeof value === "string") {
+    return value.trim() || null;
+  }
+
   return findString(value, ["error", "message", "detail"]);
 }
 

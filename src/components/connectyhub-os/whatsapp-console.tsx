@@ -163,14 +163,18 @@ export function WhatsAppConsole() {
   const [agentName, setAgentName] = useState("");
   const [creatingAgent, setCreatingAgent] = useState(false);
   const isAwaitingQrScan = Boolean(qrCode) || state?.instance?.status === "qr_pending";
+  const isConnected = state?.instance?.status === "connected";
 
-  const applyWhatsappState = useCallback((nextState: WhatsappState) => {
+  const applyWhatsappState = useCallback((nextState: WhatsappState, options?: { preserveDrafts?: boolean }) => {
     const nextCompanyId = nextState.selectedCompanyId ?? nextState.companies[0]?.id ?? "";
 
     setState(nextState);
     setSelectedCompanyId(nextCompanyId);
-    setPromptDraft(nextState.agent?.prompt ?? "");
-    setBehaviorDraft(normalizeWhatsappBehaviorConfig(nextState.behavior));
+
+    if (!options?.preserveDrafts) {
+      setPromptDraft(nextState.agent?.prompt ?? "");
+      setBehaviorDraft(normalizeWhatsappBehaviorConfig(nextState.behavior));
+    }
   }, []);
 
   useEffect(() => {
@@ -222,7 +226,7 @@ export function WhatsAppConsole() {
         const data = (await response.json().catch(() => null)) as ActionResponse | null;
 
         if (!cancelled && response.ok && data?.state) {
-          applyWhatsappState(data.state);
+          applyWhatsappState(data.state, { preserveDrafts: true });
 
           if (data.state.instance?.status === "connected") {
             setQrCode(null);
@@ -248,6 +252,45 @@ export function WhatsAppConsole() {
       }
     };
   }, [applyWhatsappState, isAwaitingQrScan, running, selectedCompanyId]);
+
+  useEffect(() => {
+    if (!selectedCompanyId || !isConnected || running === "disconnect") {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function pollConnectedStatus() {
+      try {
+        const response = await fetch("/api/dashboard/whatsapp", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "refresh_status", companyId: selectedCompanyId }),
+        });
+        const data = (await response.json().catch(() => null)) as ActionResponse | null;
+
+        if (!cancelled && response.ok && data?.state) {
+          applyWhatsappState(data.state, { preserveDrafts: true });
+
+          if (data.state.instance?.status !== "connected") {
+            setQrCode(null);
+            setNotice(data.notice ?? { tone: "warning", message: "WhatsApp desconectado. Gere um novo QR Code para reconectar." });
+          }
+        }
+      } catch {
+        // A checagem automatica nao deve atrapalhar o uso da tela; o botao Status segue manual.
+      }
+    }
+
+    const timeoutId = setTimeout(pollConnectedStatus, 4000);
+    const intervalId = setInterval(pollConnectedStatus, 15000);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timeoutId);
+      clearInterval(intervalId);
+    };
+  }, [applyWhatsappState, isConnected, running, selectedCompanyId]);
 
   const promptChanged = state?.agent ? promptDraft.trim() !== state.agent.prompt.trim() : false;
   const behaviorChanged = state ? !isBehaviorEqual(behaviorDraft, state.behavior) : false;
@@ -308,7 +351,7 @@ export function WhatsAppConsole() {
         throw new Error(data?.error ?? "Nao foi possivel executar a acao.");
       }
 
-      applyWhatsappState(data.state);
+      applyWhatsappState(data.state, { preserveDrafts: true });
       setQrCode(data.state.instance?.status === "connected" ? null : data.qrCode ?? null);
       setNotice(data.notice ?? { tone: "success", message: "Acao concluida." });
     } catch (error) {
