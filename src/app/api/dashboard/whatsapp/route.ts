@@ -246,6 +246,7 @@ function buildUnavailableState(): DashboardWhatsappState {
     knowledge: {
       files: [],
     },
+    linkButtons: [],
     capability: {
       canConnect: false,
       schemaReady: false,

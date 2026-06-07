@@ -102,6 +102,7 @@ type WhatsappState = {
   knowledge: {
     files: KnowledgeFile[];
   };
+  linkButtons: TrackedLinkButton[];
   capability: {
     canConnect: boolean;
     schemaReady: boolean;
@@ -116,6 +117,16 @@ type KnowledgeFile = {
   contentType: string | null;
   size: number | null;
   storageUrl: string | null;
+  createdAt: string | null;
+};
+
+type TrackedLinkButton = {
+  id: string;
+  label: string;
+  url: string;
+  tag: string;
+  trackingUrl: string;
+  clicks: number;
   createdAt: string | null;
 };
 
@@ -196,8 +207,11 @@ export function WhatsAppConsole() {
   const [creatingAgent, setCreatingAgent] = useState(false);
   const [promptProductUrl, setPromptProductUrl] = useState("");
   const [promptNotes, setPromptNotes] = useState("");
+  const [linkButtonLabel, setLinkButtonLabel] = useState("");
+  const [linkButtonUrl, setLinkButtonUrl] = useState("");
   const [generatingPrompt, setGeneratingPrompt] = useState(false);
   const [knowledgeUploading, setKnowledgeUploading] = useState(false);
+  const [creatingLinkButton, setCreatingLinkButton] = useState(false);
   const isAwaitingQrScan = Boolean(qrCode) || state?.instance?.status === "qr_pending";
   const isConnected = state?.instance?.status === "connected";
 
@@ -505,6 +519,43 @@ export function WhatsAppConsole() {
     }
   }
 
+  async function createTrackedLinkButton() {
+    if (!selectedCompanyId) {
+      setNotice({ tone: "warning", message: "Escolha uma empresa antes de criar o link." });
+      return;
+    }
+
+    setCreatingLinkButton(true);
+    setNotice(null);
+
+    try {
+      const response = await fetch("/api/dashboard/whatsapp/links", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyId: selectedCompanyId,
+          label: linkButtonLabel,
+          url: linkButtonUrl,
+        }),
+      });
+      const data = (await response.json().catch(() => null)) as { linkButton?: TrackedLinkButton; error?: string } | null;
+
+      if (!response.ok || !data?.linkButton) {
+        throw new Error(data?.error ?? "Nao foi possivel criar o link rastreado.");
+      }
+
+      const nextState = await fetchWhatsappState(selectedCompanyId);
+      applyWhatsappState(nextState, { preserveDrafts: true });
+      setLinkButtonLabel("");
+      setLinkButtonUrl("");
+      setNotice({ tone: "success", message: `Link criado. Use a tag ${data.linkButton.tag} no prompt quando quiser enviar esse botao.` });
+    } catch (error) {
+      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao criar link rastreado." });
+    } finally {
+      setCreatingLinkButton(false);
+    }
+  }
+
   async function createWhatsappAgent() {
     if (!selectedCompanyId) {
       setNotice({ tone: "warning", message: "Escolha uma empresa antes de criar o agente." });
@@ -580,7 +631,7 @@ export function WhatsAppConsole() {
           {state?.agent ? (
             <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_320px]">
               <div className="grid gap-4">
-                <AgentIdentityCard agent={state.agent} company={selectedCompany} instance={state.instance} />
+                <AgentIdentityCard agent={state.agent} company={selectedCompany} />
 
                 <PromptBox
                   label="Prompt do agente"
@@ -595,10 +646,17 @@ export function WhatsAppConsole() {
                   files={state.knowledge.files}
                   generatingPrompt={generatingPrompt}
                   knowledgeUploading={knowledgeUploading}
+                  linkButtons={state.linkButtons}
+                  linkButtonLabel={linkButtonLabel}
+                  linkButtonUrl={linkButtonUrl}
+                  creatingLinkButton={creatingLinkButton}
                   notes={promptNotes}
                   productUrl={promptProductUrl}
+                  onCreateLinkButton={createTrackedLinkButton}
                   onGenerate={generatePromptWithAI}
                   onInsertTag={insertPromptTag}
+                  onLinkButtonLabelChange={setLinkButtonLabel}
+                  onLinkButtonUrlChange={setLinkButtonUrl}
                   onNotesChange={setPromptNotes}
                   onProductUrlChange={setPromptProductUrl}
                   onUploadFile={uploadKnowledgeFile}
@@ -987,13 +1045,11 @@ function AgentCreationGate({
 function AgentIdentityCard({
   agent,
   company,
-  instance,
 }: {
   agent: NonNullable<WhatsappState["agent"]>;
   company: ClientCompany | null;
-  instance: WhatsappState["instance"];
 }) {
-  const phoneLabel = formatPhone(instance?.phoneNumber);
+  const companyStatus = company ? `${company.planCode} / ${company.status}` : "Plano nao informado";
 
   return (
     <div
@@ -1002,7 +1058,7 @@ function AgentIdentityCard({
     >
       <InfoTile label="Agente" value={agent.name} />
       <InfoTile label="Empresa" value={company?.name ?? "Empresa nao informada"} />
-      <InfoTile label="Numero do WhatsApp" value={phoneLabel} />
+      <InfoTile label="Plano" value={companyStatus} />
       <InfoTile label="Ultima edicao" value={formatDate(agent.updatedAt)} />
     </div>
   );
@@ -1017,9 +1073,9 @@ function WhatsappAvatar({
   alt: string;
   fallback: string;
   imageUrl: string | null;
-  size?: "md" | "lg";
+  size?: "md" | "lg" | "xl";
 }) {
-  const dimension = size === "lg" ? "h-14 w-14" : "h-10 w-10";
+  const dimension = size === "xl" ? "h-20 w-20" : size === "lg" ? "h-14 w-14" : "h-10 w-10";
 
   return (
     <div
@@ -1032,7 +1088,7 @@ function WhatsappAvatar({
           alt={alt}
           className="object-cover"
           fill
-          sizes={size === "lg" ? "56px" : "40px"}
+          sizes={size === "xl" ? "80px" : size === "lg" ? "56px" : "40px"}
           src={imageUrl}
           unoptimized
         />
@@ -1098,10 +1154,17 @@ function PromptToolsPanel({
   files,
   generatingPrompt,
   knowledgeUploading,
+  linkButtons,
+  linkButtonLabel,
+  linkButtonUrl,
+  creatingLinkButton,
   notes,
   productUrl,
+  onCreateLinkButton,
   onGenerate,
   onInsertTag,
+  onLinkButtonLabelChange,
+  onLinkButtonUrlChange,
   onNotesChange,
   onProductUrlChange,
   onUploadFile,
@@ -1109,10 +1172,17 @@ function PromptToolsPanel({
   files: KnowledgeFile[];
   generatingPrompt: boolean;
   knowledgeUploading: boolean;
+  linkButtons: TrackedLinkButton[];
+  linkButtonLabel: string;
+  linkButtonUrl: string;
+  creatingLinkButton: boolean;
   notes: string;
   productUrl: string;
+  onCreateLinkButton: () => void;
   onGenerate: () => void;
   onInsertTag: (token: string) => void;
+  onLinkButtonLabelChange: (value: string) => void;
+  onLinkButtonUrlChange: (value: string) => void;
   onNotesChange: (value: string) => void;
   onProductUrlChange: (value: string) => void;
   onUploadFile: (file: File | null) => void;
@@ -1213,6 +1283,84 @@ function PromptToolsPanel({
           ) : (
             <div className="rounded-lg border px-3 py-6 text-center text-[12px] text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
               Nenhum arquivo anexado.
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="rounded-xl border p-3 xl:col-span-2" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
+            Botoes de link
+            <InfoHint text="Crie links rastreados para produtos, catalogos ou paginas. Cada link gera uma tag para usar no prompt do agente." />
+          </p>
+        </div>
+
+        <div className="mt-3 grid gap-2 md:grid-cols-[minmax(160px,0.45fr)_minmax(220px,1fr)_auto]">
+          <label className="block">
+            <span className="mb-2 flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
+              Nome do botao
+              <InfoHint text="Nome curto que o usuario entende, como Roupas infantil, Catalogo ou Oferta do dia." />
+            </span>
+            <input
+              value={linkButtonLabel}
+              onChange={(event) => onLinkButtonLabelChange(event.target.value.slice(0, 48))}
+              className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+              placeholder="Roupas infantil"
+              style={{ borderColor: "var(--ch-border)" }}
+            />
+          </label>
+          <label className="block">
+            <span className="mb-2 flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
+              URL de destino
+              <InfoHint text="O lead recebe um link rastreado. O destino real recebe UTM para separar cliques do agente WhatsApp." />
+            </span>
+            <div className="relative">
+              <Link2 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-cyan-300" />
+              <input
+                value={linkButtonUrl}
+                onChange={(event) => onLinkButtonUrlChange(event.target.value.slice(0, 500))}
+                className="h-11 w-full rounded-lg border bg-transparent pl-10 pr-3 text-[12px] outline-none"
+                placeholder="https://site.com/produto"
+                style={{ borderColor: "var(--ch-border)" }}
+              />
+            </div>
+          </label>
+          <ActionButton
+            icon={Plus}
+            label="Criar link"
+            description="Salva o link rastreado e cria uma tag para inserir no prompt."
+            disabled={!linkButtonLabel.trim() || !linkButtonUrl.trim()}
+            loading={creatingLinkButton}
+            onClick={onCreateLinkButton}
+          />
+        </div>
+
+        <div className="mt-3 grid gap-2">
+          {linkButtons.length > 0 ? (
+            linkButtons.map((link) => (
+              <div key={link.id} className="grid gap-2 rounded-lg border px-3 py-2 md:grid-cols-[minmax(0,1fr)_auto]" style={{ background: "var(--ch-surface)", borderColor: "var(--ch-border)" }}>
+                <div className="min-w-0">
+                  <p className="truncate text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>{link.label}</p>
+                  <p className="mt-1 truncate font-mono text-[9px] uppercase tracking-wide text-slate-500">
+                    {link.clicks.toLocaleString("pt-BR")} cliques / {formatDate(link.createdAt)}
+                  </p>
+                  <p className="mt-1 truncate text-[11px] text-slate-500">{link.url}</p>
+                </div>
+                <button
+                  type="button"
+                  className="inline-flex min-h-9 items-center justify-center rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-200 transition hover:bg-cyan-400/10"
+                  style={{ borderColor: "var(--ch-border)" }}
+                  title="Inserir tag deste link no prompt"
+                  onClick={() => onInsertTag(link.tag)}
+                >
+                  {link.tag}
+                </button>
+              </div>
+            ))
+          ) : (
+            <div className="rounded-lg border px-3 py-5 text-center text-[12px] text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
+              Nenhum link rastreado criado.
             </div>
           )}
         </div>
@@ -1857,14 +2005,8 @@ function CompactConnectionCard({
             width={144}
           />
         ) : profileImageUrl ? (
-          <div>
-            <WhatsappAvatar alt={`Foto do WhatsApp ${whatsappLabel}`} fallback={whatsappLabel} imageUrl={profileImageUrl} size="lg" />
-            <p className="mt-3 text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>
-              {whatsappLabel}
-            </p>
-            <p className="mt-1 text-[11px] leading-4 text-slate-500">
-              Foto sincronizada do WhatsApp
-            </p>
+          <div className="grid place-items-center">
+            <WhatsappAvatar alt={`Foto do WhatsApp ${whatsappLabel}`} fallback={whatsappLabel} imageUrl={profileImageUrl} size="xl" />
           </div>
         ) : (
           <div>

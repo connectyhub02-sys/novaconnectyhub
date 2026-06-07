@@ -7,6 +7,7 @@ import { listWhatsappAudioVoices, type WhatsappAudioVoiceState } from "@/lib/ele
 import { decryptCredentialValue, encryptCredentialValue, previewCredentialValue } from "@/lib/security/credentials-crypto";
 import type { CurrentOrganization } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
+import { buildTrackedLinkUrl } from "@/lib/tracking/tracked-links";
 import {
   defaultWhatsappAgentPrompt,
   defaultWhatsappBehaviorConfig,
@@ -73,6 +74,16 @@ export type ClientKnowledgeFile = {
   createdAt: string | null;
 };
 
+export type ClientTrackedLinkButton = {
+  id: string;
+  label: string;
+  url: string;
+  tag: string;
+  trackingUrl: string;
+  clicks: number;
+  createdAt: string | null;
+};
+
 export type ClientWhatsappState = {
   instance: {
     id: string;
@@ -109,6 +120,7 @@ export type ClientWhatsappState = {
   knowledge: {
     files: ClientKnowledgeFile[];
   };
+  linkButtons: ClientTrackedLinkButton[];
   capability: {
     canConnect: boolean;
     schemaReady: boolean;
@@ -137,17 +149,18 @@ export async function getClientWhatsappState(input: {
   client?: SupabaseClient;
 }): Promise<ClientWhatsappState> {
   const client = input.client ?? createServiceClient();
-  const [instance, agent, globalAgent, knowledgeFiles] = await Promise.all([
+  const [instance, agent, globalAgent, knowledgeFiles, linkButtons] = await Promise.all([
     getWorkspaceInstance(client, input.organization.id),
     getWorkspaceWhatsappAgent(client, input.organization.id),
     getOrCreateWorkspaceGlobalAgent(client, input.organization, input.userId),
     listWorkspaceKnowledge(client, input.organization.id),
+    listWorkspaceLinkButtons(client, input.organization.id),
   ]);
 
   const behavior = getBehaviorConfig(globalAgent, instance);
   const audio = await listWhatsappAudioVoices({ organizationId: input.organization.id, client });
 
-  return buildState(instance, agent, globalAgent, behavior, audio, knowledgeFiles);
+  return buildState(instance, agent, globalAgent, behavior, audio, knowledgeFiles, linkButtons);
 }
 
 export async function connectClientWhatsapp(input: {
@@ -938,6 +951,23 @@ async function listWorkspaceKnowledge(client: SupabaseClient, organizationId: st
   return ((data ?? []) as KnowledgeMemoryRow[]).map(mapKnowledgeFile);
 }
 
+async function listWorkspaceLinkButtons(client: SupabaseClient, organizationId: string): Promise<ClientTrackedLinkButton[]> {
+  const { data, error } = await client
+    .from("intelligence_memory")
+    .select("id, title, content, tags, metadata, created_at")
+    .eq("scope", "organization")
+    .eq("organization_id", organizationId)
+    .contains("tags", ["tracked_link_button"])
+    .order("created_at", { ascending: false })
+    .limit(40);
+
+  if (error) {
+    throw new Error(`Nao foi possivel carregar links rastreados: ${error.message}`);
+  }
+
+  return ((data ?? []) as KnowledgeMemoryRow[]).map(mapTrackedLinkButton);
+}
+
 function mapKnowledgeFile(row: KnowledgeMemoryRow): ClientKnowledgeFile {
   const metadata = readRecord(row.metadata) ?? {};
   const size = typeof metadata.size === "number" ? metadata.size : null;
@@ -949,6 +979,25 @@ function mapKnowledgeFile(row: KnowledgeMemoryRow): ClientKnowledgeFile {
     contentType: typeof metadata.content_type === "string" ? metadata.content_type : null,
     size,
     storageUrl: typeof metadata.storage_url === "string" ? metadata.storage_url : null,
+    createdAt: row.created_at,
+  };
+}
+
+function mapTrackedLinkButton(row: KnowledgeMemoryRow): ClientTrackedLinkButton {
+  const metadata = readRecord(row.metadata) ?? {};
+  const label = readString(metadata.label) ?? row.title;
+  const url = readString(metadata.url) ?? row.content;
+  const tag = readString(metadata.tag) ?? `{{link_${row.id.slice(0, 8)}}}`;
+  const trackingUrl = readString(metadata.tracking_url) ?? buildTrackedLinkUrl(row.id);
+  const clicks = readNumber(metadata.click_count) ?? 0;
+
+  return {
+    id: row.id,
+    label,
+    url,
+    tag,
+    trackingUrl,
+    clicks,
     createdAt: row.created_at,
   };
 }
@@ -1120,6 +1169,7 @@ function buildState(
   behavior: WhatsappBehaviorConfig,
   audio: WhatsappAudioVoiceState,
   knowledgeFiles: ClientKnowledgeFile[],
+  linkButtons: ClientTrackedLinkButton[],
 ): ClientWhatsappState {
   const agentPrompt = agent?.prompt?.trim() || defaultWhatsappAgentPrompt;
   const globalPrompt = globalAgent.prompt?.trim() || defaultWhatsappGlobalPrompt;
@@ -1165,6 +1215,7 @@ function buildState(
     knowledge: {
       files: knowledgeFiles,
     },
+    linkButtons,
     capability: {
       canConnect: true,
       schemaReady: true,
@@ -1182,6 +1233,14 @@ function getBehaviorConfig(globalAgent: AgentRow, instance: WhatsappInstanceRow 
 
 function readRecord(value: unknown): JsonRecord | null {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as JsonRecord) : null;
+}
+
+function readString(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function readNumber(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 function decryptInstanceToken(instance: WhatsappInstanceRow) {
