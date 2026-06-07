@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import {
@@ -162,6 +162,16 @@ export function WhatsAppConsole() {
   const [showAgentForm, setShowAgentForm] = useState(false);
   const [agentName, setAgentName] = useState("");
   const [creatingAgent, setCreatingAgent] = useState(false);
+  const isAwaitingQrScan = Boolean(qrCode) || state?.instance?.status === "qr_pending";
+
+  const applyWhatsappState = useCallback((nextState: WhatsappState) => {
+    const nextCompanyId = nextState.selectedCompanyId ?? nextState.companies[0]?.id ?? "";
+
+    setState(nextState);
+    setSelectedCompanyId(nextCompanyId);
+    setPromptDraft(nextState.agent?.prompt ?? "");
+    setBehaviorDraft(normalizeWhatsappBehaviorConfig(nextState.behavior));
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -189,7 +199,55 @@ export function WhatsAppConsole() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [applyWhatsappState]);
+
+  useEffect(() => {
+    if (!selectedCompanyId || !isAwaitingQrScan || running === "disconnect") {
+      return;
+    }
+
+    let cancelled = false;
+    let attempts = 0;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+    async function pollStatus() {
+      attempts += 1;
+
+      try {
+        const response = await fetch("/api/dashboard/whatsapp", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "refresh_status", companyId: selectedCompanyId }),
+        });
+        const data = (await response.json().catch(() => null)) as ActionResponse | null;
+
+        if (!cancelled && response.ok && data?.state) {
+          applyWhatsappState(data.state);
+
+          if (data.state.instance?.status === "connected") {
+            setQrCode(null);
+            setNotice({ tone: "success", message: "WhatsApp conectado. Foto e status sincronizados." });
+            return;
+          }
+        }
+      } catch {
+        // Mantem o polling silencioso; o botao Status continua disponivel para acao manual.
+      }
+
+      if (!cancelled && attempts < 60) {
+        timeoutId = setTimeout(pollStatus, attempts < 10 ? 3000 : 6000);
+      }
+    }
+
+    timeoutId = setTimeout(pollStatus, 2500);
+
+    return () => {
+      cancelled = true;
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    };
+  }, [applyWhatsappState, isAwaitingQrScan, running, selectedCompanyId]);
 
   const promptChanged = state?.agent ? promptDraft.trim() !== state.agent.prompt.trim() : false;
   const behaviorChanged = state ? !isBehaviorEqual(behaviorDraft, state.behavior) : false;
@@ -204,15 +262,6 @@ export function WhatsAppConsole() {
     : needsAgent
       ? "Escolha uma empresa cadastrada e crie o agente que vai atender os leads."
       : "Conecte o numero da empresa, ajuste o prompt e escolha como o agente deve atender no WhatsApp.";
-
-  function applyWhatsappState(nextState: WhatsappState) {
-    const nextCompanyId = nextState.selectedCompanyId ?? nextState.companies[0]?.id ?? "";
-
-    setState(nextState);
-    setSelectedCompanyId(nextCompanyId);
-    setPromptDraft(nextState.agent?.prompt ?? "");
-    setBehaviorDraft(normalizeWhatsappBehaviorConfig(nextState.behavior));
-  }
 
   function updateBehavior<K extends keyof WhatsappBehaviorConfig>(key: K, value: WhatsappBehaviorConfig[K]) {
     setBehaviorDraft((current) => normalizeWhatsappBehaviorConfig({ ...current, [key]: value }));
@@ -260,7 +309,7 @@ export function WhatsAppConsole() {
       }
 
       applyWhatsappState(data.state);
-      setQrCode(data.qrCode ?? null);
+      setQrCode(data.state.instance?.status === "connected" ? null : data.qrCode ?? null);
       setNotice(data.notice ?? { tone: "success", message: "Acao concluida." });
     } catch (error) {
       setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro inesperado no WhatsApp." });
@@ -1471,6 +1520,7 @@ function CompactConnectionCard({
   const Icon = meta.icon;
   const profileImageUrl = instance?.profileImageUrl ?? null;
   const whatsappLabel = instance?.displayName ?? formatPhone(instance?.phoneNumber);
+  const visibleQrCode = status === "connected" ? null : qrCode;
 
   return (
     <div
@@ -1500,12 +1550,12 @@ function CompactConnectionCard({
         className="mt-4 grid min-h-[170px] place-items-center rounded-xl p-3 text-center"
         style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}
       >
-        {qrCode ? (
+        {visibleQrCode ? (
           <Image
             alt="QR Code para conectar o WhatsApp"
             className="rounded-lg border bg-white p-2"
             height={144}
-            src={qrCode}
+            src={visibleQrCode}
             unoptimized
             width={144}
           />
@@ -1538,7 +1588,7 @@ function CompactConnectionCard({
       </div>
 
       <p className="mt-3 text-[12px] leading-5 text-slate-500">
-        {qrCode ? "Escaneie o QR Code pelo WhatsApp para concluir." : meta.description}
+        {visibleQrCode ? "Escaneie o QR Code pelo WhatsApp para concluir." : meta.description}
       </p>
 
       <div className="mt-4 grid gap-2">

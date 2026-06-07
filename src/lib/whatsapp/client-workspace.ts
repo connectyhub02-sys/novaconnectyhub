@@ -154,10 +154,11 @@ export async function connectClientWhatsapp(input: {
   });
   const status = normalizeWhatsappStatus(findString(connectResult.data, ["status", "state", "connectionStatus"]) ?? "qr_pending");
   const qrCode = normalizeQrCode(findString(connectResult.data, ["qrcode", "qrCode", "qr", "base64"]));
-  const profileData = status === "connected" ? await getConnectedProfileData(credentials, token) : null;
   const phoneNumber = normalizePhone(findString(connectResult.data, ["owner", "phone", "number", "phone_number"]) ?? instance.phone_number);
+  const profileData = status === "connected" ? await getConnectedProfileData(credentials, token) : null;
+  const avatarData = status === "connected" && phoneNumber ? await getConnectedAvatarData(credentials, token, phoneNumber) : null;
   const displayName = findString(connectResult.data, ["profileName", "displayName", "name"]) ?? findString(profileData, ["profileName", "displayName", "businessName", "name"]) ?? instance.display_name;
-  const profileImageUrl = extractProfileImageUrl(connectResult.data) ?? extractProfileImageUrl(profileData) ?? readProfileImageUrl(instance);
+  const profileImageUrl = extractProfileImageUrl(connectResult.data) ?? extractProfileImageUrl(profileData) ?? extractProfileImageUrl(avatarData) ?? readProfileImageUrl(instance);
   const now = new Date().toISOString();
   const connectedAt = status === "connected" ? now : instance.connected_at;
   const webhookResult = await configureClientWebhook(credentials, token);
@@ -182,6 +183,7 @@ export async function connectClientWhatsapp(input: {
         last_client_action: "connect",
         last_connect_response: sanitizeProviderData(connectResult.data),
         ...(profileData ? { last_profile_response: sanitizeProviderData(profileData) } : {}),
+        ...(avatarData ? { last_avatar_response: sanitizeProviderData(avatarData) } : {}),
       },
     })
     .eq("id", instance.id);
@@ -220,10 +222,11 @@ export async function refreshClientWhatsappStatus(input: {
 
   const result = await callUazapi(credentials, "/instance/status", { method: "GET", token });
   const status = normalizeWhatsappStatus(findString(result.data, ["status", "state", "connectionStatus"]));
-  const profileData = status === "connected" ? await getConnectedProfileData(credentials, token) : null;
   const phoneNumber = normalizePhone(findString(result.data, ["owner", "phone", "number", "phone_number"]) ?? instance.phone_number);
+  const profileData = status === "connected" ? await getConnectedProfileData(credentials, token) : null;
+  const avatarData = status === "connected" && phoneNumber ? await getConnectedAvatarData(credentials, token, phoneNumber) : null;
   const displayName = findString(result.data, ["profileName", "displayName", "name"]) ?? findString(profileData, ["profileName", "displayName", "businessName", "name"]) ?? instance.display_name;
-  const profileImageUrl = extractProfileImageUrl(result.data) ?? extractProfileImageUrl(profileData) ?? readProfileImageUrl(instance);
+  const profileImageUrl = extractProfileImageUrl(result.data) ?? extractProfileImageUrl(profileData) ?? extractProfileImageUrl(avatarData) ?? readProfileImageUrl(instance);
   const now = new Date().toISOString();
   const webhookResult = status === "connected"
     ? await configureClientWebhook(credentials, token)
@@ -253,6 +256,7 @@ export async function refreshClientWhatsappStatus(input: {
         last_client_action: "refresh_status",
         last_status_response: sanitizeProviderData(result.data),
         ...(profileData ? { last_profile_response: sanitizeProviderData(profileData) } : {}),
+        ...(avatarData ? { last_avatar_response: sanitizeProviderData(avatarData) } : {}),
       },
     })
     .eq("id", instance.id);
@@ -815,13 +819,75 @@ async function configureClientWebhook(credentials: UazapiCredentials, token: str
 }
 
 async function getConnectedProfileData(credentials: UazapiCredentials, token: string) {
-  const result = await callUazapi(credentials, "/business/get/profile", {
+  const attempts: Array<{ path: string; method: "GET" | "POST" }> = [
+    { path: "/business/get/profile", method: "POST" },
+    { path: "/instance/profile", method: "GET" },
+    { path: "/profile", method: "GET" },
+  ];
+  let firstOkData: unknown = null;
+
+  for (const attempt of attempts) {
+    const result = await callUazapi(credentials, attempt.path, {
+      method: attempt.method,
+      token,
+      tolerateError: true,
+    });
+
+    if (!result.ok) {
+      continue;
+    }
+
+    firstOkData ??= result.data;
+
+    if (
+      extractProfileImageUrl(result.data) ||
+      findString(result.data, ["profileName", "displayName", "businessName", "name"])
+    ) {
+      return {
+        source: attempt.path,
+        data: result.data,
+      };
+    }
+  }
+
+  return firstOkData ? { source: "profile_fallback", data: firstOkData } : null;
+}
+
+async function getConnectedAvatarData(credentials: UazapiCredentials, token: string, phoneNumber: string) {
+  const chatDetails = await callUazapi(credentials, "/chat/details", {
     method: "POST",
     token,
+    body: {
+      number: phoneNumber,
+      preview: true,
+    },
     tolerateError: true,
   });
 
-  return result.ok ? result.data : null;
+  if (chatDetails.ok && extractProfileImageUrl(chatDetails.data)) {
+    return {
+      source: "chat_details",
+      data: chatDetails.data,
+    };
+  }
+
+  const contactAvatar = await callUazapi(credentials, "/contact/avatar", {
+    method: "POST",
+    token,
+    body: {
+      number: phoneNumber,
+    },
+    tolerateError: true,
+  });
+
+  if (contactAvatar.ok && extractProfileImageUrl(contactAvatar.data)) {
+    return {
+      source: "contact_avatar",
+      data: contactAvatar.data,
+    };
+  }
+
+  return null;
 }
 
 async function callUazapi(
@@ -1006,6 +1072,7 @@ function readProfileImageUrl(instance: WhatsappInstanceRow | null) {
     extractProfileImageUrl(metadata?.last_profile_response) ??
     extractProfileImageUrl(metadata?.last_status_response) ??
     extractProfileImageUrl(metadata?.last_connect_response) ??
+    extractProfileImageUrl(metadata?.last_avatar_response) ??
     extractProfileImageUrl(metadata?.create_response)
   );
 }
@@ -1030,6 +1097,8 @@ function extractProfileImageUrl(value: unknown) {
       "profileImage",
       "profilePicture",
       "profilePic",
+      "profilePicThumbObj",
+      "imagePreview",
       "picture",
       "photo",
       "image",
