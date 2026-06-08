@@ -1,7 +1,10 @@
 import { NextRequest } from "next/server";
+import { after } from "next/server";
 import { ingestUazapiWebhook } from "@/lib/whatsapp/webhook-ingest";
+import { processWhatsappAgentRun } from "@/lib/whatsapp/agent-runtime";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 export async function GET() {
   return Response.json({
@@ -32,6 +35,10 @@ export async function POST(request: NextRequest) {
     requestUrl: request.url,
     headers: request.headers,
   });
+
+  if (ingest.agentRunId) {
+    scheduleWhatsappAgentFallback(ingest.agentRunId);
+  }
 
   console.info(
     "[uazapi:webhook]",
@@ -85,4 +92,23 @@ function extractWebhookEvent(payload: unknown, request: NextRequest) {
 function previewPayload(payload: unknown) {
   const text = JSON.stringify(payload);
   return text.length > 1200 ? `${text.slice(0, 1200)}...` : text;
+}
+
+function scheduleWhatsappAgentFallback(runId: string) {
+  after(async () => {
+    await sleep(8_000);
+    await processWhatsappAgentRun({ runId }).catch((error: unknown) => {
+      console.error(
+        "[uazapi:webhook:fallback]",
+        JSON.stringify({
+          runId,
+          error: error instanceof Error ? error.message : "Falha desconhecida no fallback do agente WhatsApp.",
+        }),
+      );
+    });
+  });
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }

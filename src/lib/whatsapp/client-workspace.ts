@@ -1044,8 +1044,8 @@ async function configureClientWebhook(credentials: UazapiCredentials, token: str
       events: ["messages", "messages_update", "connection", "history"],
       excludeMessages: ["wasSentByApi"],
       enabled: true,
-      addUrlEvents: true,
-      addUrlTypesMessages: true,
+      addUrlEvents: false,
+      addUrlTypesMessages: false,
     },
     tolerateError: true,
   });
