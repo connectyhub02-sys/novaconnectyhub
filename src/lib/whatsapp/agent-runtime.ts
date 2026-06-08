@@ -297,6 +297,10 @@ export async function processWhatsappAgentRun(input: {
       return await completeRun(client, run.id, "Lead pediu atendimento humano.", { sent: true, reason: "lead_requested_human" });
     }
 
+    if (behavior.markAsRead || behavior.alwaysOnline) {
+      await ensureWhatsappPresencePrivacy(context.credentials, token, behavior);
+    }
+
     if (behavior.markAsRead) {
       await markConversationRead(context.credentials, token, phone, context.providerChatId, context.providerMessageId);
     }
@@ -318,6 +322,13 @@ export async function processWhatsappAgentRun(input: {
       messages: context.messages,
       userText,
     });
+    await prepareAgentPresenceBeforeSend({
+      credentials: context.credentials,
+      token,
+      phone,
+      context,
+      text: aiText,
+    });
     const outbound = await sendAgentResponse({
       client,
       context,
@@ -328,6 +339,14 @@ export async function processWhatsappAgentRun(input: {
 
     for (const message of outbound) {
       await saveOutboundMessage(client, context, message);
+    }
+
+    if (behavior.markAsRead) {
+      await markConversationRead(context.credentials, token, phone, context.providerChatId, context.providerMessageId);
+    }
+
+    if (behavior.alwaysOnline) {
+      await setPresenceAvailable(context.credentials, token);
     }
 
     return await completeRun(client, run.id, preview(aiText, 500), {
@@ -1359,56 +1378,73 @@ async function sendAgentResponse(input: {
   text: string;
 }) {
   const { context } = input;
-  const inboundType = context.messageType.toLowerCase();
   const latestInbound = findLatestInbound(context.messages);
-  const visualMediaKind = detectInboundMediaKind(latestInbound);
-  const shouldSendAudio = context.behavior.responseMode === "audio"
-    || (context.behavior.responseMode === "mirror" && (inboundType.includes("audio") || isAudioMessage(latestInbound)));
-  const shouldSendSingleAudio = shouldSendAudio && !visualMediaKind;
-  const chunks = context.behavior.splitMessages && !shouldSendSingleAudio ? splitMessage(input.text) : [input.text];
+  const shouldSendAudio = shouldSendAudioResponse(context, latestInbound);
+  const chunks = context.behavior.splitMessages ? splitMessage(input.text) : [input.text];
   const outbound: OutboundMessage[] = [];
 
-  if (shouldSendSingleAudio) {
-    const generatedAudio = await generateElevenLabsAudio({
-      organizationId: context.organization.id,
-      userId: null,
-      text: input.text,
-      voiceId: context.behavior.audioVoiceId || null,
-      voicePublicOwnerId: context.behavior.audioVoicePublicOwnerId || null,
-      voiceName: context.behavior.audioVoiceName || null,
-      modelId: context.behavior.audioModelId || null,
-      source: "whatsapp_agent",
-      metadata: {
-        agentRunId: context.run.id,
-        conversationId: context.conversationId,
-        whatsappInstanceId: context.instance.id,
-      },
-      client: input.client,
-    });
-    const providerResponse = await callUazapi(context.credentials, "/send/media", {
-      method: "POST",
-      token: input.token,
-      body: {
-        number: input.phone,
-        type: "ptt",
-        file: generatedAudio.audioUrl,
-        track_source: "connectyhub",
-        track_id: `agent_audio_${context.run.id}`,
-      },
-    });
+  if (shouldSendAudio) {
+    for (let index = 0; index < chunks.length; index++) {
+      const text = chunks[index];
 
-    outbound.push({
-      text: input.text,
-      mode: "audio",
-      providerResponse,
-      generatedAudio,
-    });
+      if (index > 0) {
+        const delayMs = resolveAudioChunkDelayMs(text);
+        await setChatPresence(context.credentials, input.token, input.phone, "recording", delayMs + 15000);
+        await sleep(delayMs);
+      } else {
+        await setChatPresence(context.credentials, input.token, input.phone, "recording", 60000);
+      }
+
+      const generatedAudio = await generateElevenLabsAudio({
+        organizationId: context.organization.id,
+        userId: null,
+        text,
+        voiceId: context.behavior.audioVoiceId || null,
+        voicePublicOwnerId: context.behavior.audioVoicePublicOwnerId || null,
+        voiceName: context.behavior.audioVoiceName || null,
+        modelId: context.behavior.audioModelId || null,
+        source: "whatsapp_agent",
+        metadata: {
+          agentRunId: context.run.id,
+          conversationId: context.conversationId,
+          whatsappInstanceId: context.instance.id,
+          audioChunkIndex: index + 1,
+          audioChunksTotal: chunks.length,
+        },
+        client: input.client,
+      });
+      const providerResponse = await callUazapi(context.credentials, "/send/media", {
+        method: "POST",
+        token: input.token,
+        body: {
+          number: input.phone,
+          type: "ptt",
+          file: generatedAudio.audioUrl,
+          track_source: "connectyhub",
+          track_id: `agent_audio_${context.run.id}_${index + 1}`,
+        },
+      });
+
+      outbound.push({
+        text,
+        mode: "audio",
+        providerResponse,
+        generatedAudio,
+      });
+    }
 
     return outbound;
   }
 
   for (let index = 0; index < chunks.length; index++) {
     const text = chunks[index];
+
+    if (index > 0) {
+      const delayMs = resolveChunkDelayMs(text);
+      await setChatPresence(context.credentials, input.token, input.phone, "composing", delayMs + 6000);
+      await sleep(delayMs);
+    }
+
     const providerResponse = await sendWhatsappText({
       credentials: context.credentials,
       token: input.token,
@@ -1425,6 +1461,57 @@ async function sendAgentResponse(input: {
   }
 
   return outbound;
+}
+
+async function prepareAgentPresenceBeforeSend(input: {
+  credentials: UazapiCredentials;
+  token: string;
+  phone: string;
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
+  text: string;
+}) {
+  const latestInbound = findLatestInbound(input.context.messages);
+  const shouldSendAudio = shouldSendAudioResponse(input.context, latestInbound);
+  const presence = shouldSendAudio ? "recording" : "composing";
+  const delayMs = resolvePreSendPresenceDelayMs(input.context.behavior, input.text, shouldSendAudio);
+  const presenceHoldMs = shouldSendAudio ? 60000 : Math.min(delayMs + 10000, 300000);
+
+  await setChatPresence(input.credentials, input.token, input.phone, presence, presenceHoldMs);
+  await sleep(delayMs);
+}
+
+function shouldSendAudioResponse(
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+  latestInbound: ConversationMessageRow | null,
+) {
+  const inboundType = context.messageType.toLowerCase();
+  const visualMediaKind = detectInboundMediaKind(latestInbound);
+  const shouldSendAudio = context.behavior.responseMode === "audio"
+    || (context.behavior.responseMode === "mirror" && (inboundType.includes("audio") || isAudioMessage(latestInbound)));
+
+  return shouldSendAudio && !visualMediaKind;
+}
+
+function resolvePreSendPresenceDelayMs(behavior: WhatsappBehaviorConfig, text: string, audio: boolean) {
+  if (!behavior.smartTiming) {
+    return 1200;
+  }
+
+  const textLengthDelay = audio ? text.length * 14 : text.length * 20;
+  const minimum = audio ? 2500 : 1800;
+  const maximum = audio ? 9000 : 8000;
+  const base = Math.min(Math.max(textLengthDelay, minimum), maximum);
+  const jitter = Math.round(Math.random() * 700);
+
+  return Math.round(base + jitter);
+}
+
+function resolveChunkDelayMs(text: string) {
+  return Math.min(Math.max(1600 + text.length * 16, 1800), 3600);
+}
+
+function resolveAudioChunkDelayMs(text: string) {
+  return Math.min(Math.max(2200 + text.length * 12, 2500), 6500);
 }
 
 async function sendWhatsappText(input: {
@@ -1785,30 +1872,92 @@ async function shouldBlockInternalInstance(client: SupabaseClient, behavior: Wha
 }
 
 async function markConversationRead(credentials: UazapiCredentials, token: string, phone: string, providerChatId: string | null, providerMessageId: string | null) {
-  await callUazapi(credentials, "/chat/read", {
+  const normalizedPhone = normalizePhone(phone) ?? phone;
+  const chatAddress = providerChatId?.trim() || (normalizedPhone.includes("@") ? normalizedPhone : `${normalizedPhone}@s.whatsapp.net`);
+  const chatRead = await callUazapi(credentials, "/chat/read", {
     method: "POST",
     token,
     body: {
-      number: phone,
-      chatid: providerChatId ?? undefined,
+      number: chatAddress,
+      read: true,
     },
     tolerateError: true,
   });
 
-  if (providerMessageId) {
-    await callUazapi(credentials, "/message/markread", {
+  if (!chatRead.ok && providerChatId) {
+    await callUazapi(credentials, "/chat/read", {
       method: "POST",
       token,
       body: {
-        number: phone,
-        chatid: providerChatId ?? undefined,
-        messageId: providerMessageId,
-        messageid: providerMessageId,
-        id: providerMessageId,
+        number: normalizedPhone,
+        chatid: providerChatId,
+        read: true,
       },
       tolerateError: true,
     });
   }
+
+  if (providerMessageId) {
+    const messageRead = await callUazapi(credentials, "/message/markread", {
+      method: "POST",
+      token,
+      body: { id: [providerMessageId] },
+      tolerateError: true,
+    });
+
+    if (!messageRead.ok) {
+      await callUazapi(credentials, "/message/markread", {
+        method: "POST",
+        token,
+        body: {
+          number: normalizedPhone,
+          chatid: providerChatId ?? undefined,
+          messageId: providerMessageId,
+          messageid: providerMessageId,
+          id: providerMessageId,
+        },
+        tolerateError: true,
+      });
+    }
+  }
+}
+
+async function ensureWhatsappPresencePrivacy(credentials: UazapiCredentials, token: string, behavior: WhatsappBehaviorConfig) {
+  await callUazapi(credentials, "/instance/privacy", {
+    method: "POST",
+    token,
+    body: {
+      groupadd: "contacts",
+      last: behavior.alwaysOnline ? "all" : "contacts",
+      status: "contacts",
+      profile: "all",
+      readreceipts: behavior.markAsRead ? "all" : "none",
+      online: behavior.alwaysOnline ? "all" : "match_last_seen",
+    },
+    tolerateError: true,
+  });
+}
+
+async function setChatPresence(
+  credentials: UazapiCredentials,
+  token: string,
+  phone: string,
+  presence: "composing" | "recording" | "paused",
+  delayMs?: number,
+) {
+  const number = normalizePhone(phone) ?? phone;
+  const delay = delayMs == null ? undefined : Math.min(Math.max(Math.round(delayMs), 1000), 300000);
+
+  await callUazapi(credentials, "/message/presence", {
+    method: "POST",
+    token,
+    body: {
+      number,
+      presence,
+      ...(delay ? { delay } : {}),
+    },
+    tolerateError: true,
+  });
 }
 
 async function setPresenceAvailable(credentials: UazapiCredentials, token: string) {
@@ -1818,6 +1967,10 @@ async function setPresenceAvailable(credentials: UazapiCredentials, token: strin
     body: { presence: "available" },
     tolerateError: true,
   });
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function callUazapi(
