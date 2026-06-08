@@ -651,7 +651,7 @@ function extractMessageSnapshot(payload: JsonRecord): MessageSnapshot {
     findString(messageRecord, ["messageId", "message_id", "messageid", "id"])
     ?? findNestedString(messageRecord, ["id", "messageId"]);
   const fromMe = findBoolean(messageRecord, ["fromMe", "from_me", "wasSentByApi", "sentByApi"]);
-  const messageType = findString(messageRecord, ["type", "messageType", "kind"]) ?? "text";
+  const messageType = resolveMessageType(messageRecord);
   const occurredAt = parseOccurredAt(findUnknown(messageRecord, ["timestamp", "messageTimestamp", "date", "created", "createdAt"]));
 
   return {
@@ -664,6 +664,39 @@ function extractMessageSnapshot(payload: JsonRecord): MessageSnapshot {
     textContent,
     occurredAt,
   };
+}
+
+function resolveMessageType(messageRecord: JsonRecord) {
+  return findString(messageRecord, ["messageType", "mediaType", "kind"])
+    ?? inferMessageTypeFromContent(messageRecord)
+    ?? findString(messageRecord, ["type"])
+    ?? "text";
+}
+
+function inferMessageTypeFromContent(messageRecord: JsonRecord) {
+  const content = isRecord(messageRecord.content) ? messageRecord.content : null;
+  const mimeType = [
+    findString(messageRecord, ["mimetype", "mimeType"]),
+    content ? findString(content, ["mimetype", "mimeType"]) : null,
+  ].filter(Boolean).join(" ").toLowerCase();
+
+  if (findBoolean(content ?? {}, ["PTT", "ptt"]) || mimeType.includes("audio")) {
+    return "AudioMessage";
+  }
+
+  if (mimeType.includes("image")) {
+    return "ImageMessage";
+  }
+
+  if (mimeType.includes("video")) {
+    return "VideoMessage";
+  }
+
+  if (mimeType.includes("pdf") || mimeType.includes("document") || mimeType.includes("application/")) {
+    return "DocumentMessage";
+  }
+
+  return null;
 }
 
 function findMessageRecord(payload: JsonRecord) {

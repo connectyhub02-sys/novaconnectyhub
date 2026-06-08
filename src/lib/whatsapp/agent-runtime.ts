@@ -72,6 +72,8 @@ type OrganizationRow = {
 
 type ConversationMessageRow = {
   id: string;
+  provider_message_id: string | null;
+  provider_chat_id: string | null;
   direction: "inbound" | "outbound" | "system" | "unknown";
   message_type: string | null;
   text_content: string | null;
@@ -226,7 +228,13 @@ export async function processWhatsappAgentRun(input: {
     }
 
     const latestInbound = findLatestInbound(context.messages);
-    const userText = buildUserText(latestInbound, run.input_summary);
+    const userText = await resolveInboundUserText({
+      client,
+      context,
+      token,
+      latestInbound,
+      fallback: run.input_summary,
+    });
     const behaviorSignals = detectBehaviorSignals({
       behavior,
       userText,
@@ -535,7 +543,7 @@ async function loadConversationMetadata(client: SupabaseClient, conversationId: 
 async function loadConversationMessages(client: SupabaseClient, conversationId: string) {
   const { data, error } = await client
     .from("conversation_messages")
-    .select("id, direction, message_type, text_content, payload, occurred_at")
+    .select("id, provider_message_id, provider_chat_id, direction, message_type, text_content, payload, occurred_at")
     .eq("conversation_id", conversationId)
     .order("occurred_at", { ascending: false })
     .limit(24);
@@ -762,6 +770,8 @@ function buildSystemInstruction(input: {
     "- Se faltar contexto, pergunte antes de prometer algo.",
     "- Se o lead pedir humano, confirme de forma breve que o atendimento humano sera acionado.",
     "- Se usar um link rastreado, inclua a URL completa ou a tag exatamente como aparece na lista de links.",
+    "- Quando aparecer 'Nota interna', use apenas como contexto operacional e nunca repita essa frase para o lead.",
+    "- Se um audio chegar sem transcricao, nao diga que recebeu midia ou arquivo. Diga de forma natural que nao conseguiu entender o audio e peca para o lead resumir em texto.",
   ].join("\n");
 }
 
@@ -1093,9 +1103,126 @@ function buildMessageText(message: ConversationMessageRow) {
     return text;
   }
 
-  const type = message.message_type?.trim() || "mensagem";
+  if (isAudioMessage(message)) {
+    return "Nota interna: o lead enviou um audio sem transcricao disponivel; nao ha texto falado confiavel nessa mensagem.";
+  }
 
-  return `[${type} recebido sem texto transcrito]`;
+  const type = describeMessageType(message);
+
+  return `Nota interna: o lead enviou ${type} sem texto legivel nessa mensagem.`;
+}
+
+async function resolveInboundUserText(input: {
+  client: SupabaseClient;
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
+  token: string;
+  latestInbound: ConversationMessageRow | null;
+  fallback: string | null;
+}) {
+  const { latestInbound } = input;
+
+  if (!latestInbound) {
+    return input.fallback?.trim() || "";
+  }
+
+  const text = latestInbound.text_content?.trim();
+
+  if (text) {
+    return text;
+  }
+
+  if (input.context.behavior.audioTranscription && isAudioMessage(latestInbound)) {
+    const transcript = await transcribeAndPersistInboundAudio(input).catch(async (error: unknown) => {
+      await persistAudioTranscriptionFailure(input.client, input.context, latestInbound, error);
+      return null;
+    });
+
+    if (transcript) {
+      return transcript;
+    }
+  }
+
+  return buildMessageText(latestInbound);
+}
+
+async function transcribeAndPersistInboundAudio(input: {
+  client: SupabaseClient;
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
+  token: string;
+  latestInbound: ConversationMessageRow | null;
+  fallback: string | null;
+}) {
+  if (!input.latestInbound) {
+    return null;
+  }
+
+  const downloaded = await downloadInboundAudio({
+    credentials: input.context.credentials,
+    token: input.token,
+    message: input.latestInbound,
+    providerChatId: input.context.providerChatId,
+  });
+  const geminiTranscription = downloaded.transcript
+    ? null
+    : await transcribeDownloadedAudioWithGemini({
+        credentials: input.context.geminiCredentials,
+        model: input.context.agent.model_id || input.context.geminiCredentials.model,
+        fileUrl: downloaded.fileUrl,
+        mimeType: downloaded.mimeType,
+      });
+  const text = downloaded.transcript ?? geminiTranscription?.text ?? "";
+  const transcript = normalizeTranscriptText(text);
+
+  if (!transcript) {
+    return null;
+  }
+
+  const now = new Date().toISOString();
+  const mediaTranscription = {
+    provider: downloaded.transcript ? "uazapi" : "gemini",
+    model: downloaded.transcript ? null : normalizeGeminiModel(input.context.agent.model_id || input.context.geminiCredentials.model),
+    mime_type: downloaded.mimeType,
+    byte_length: downloaded.byteLength ?? geminiTranscription?.byteLength ?? null,
+    transcribed_at: now,
+  };
+  const payload = {
+    ...(input.latestInbound.payload ?? {}),
+    media_transcription: mediaTranscription,
+  };
+  await input.client
+    .from("conversation_messages")
+    .update({
+      text_content: transcript,
+      payload,
+    })
+    .eq("id", input.latestInbound.id);
+
+  input.latestInbound.text_content = transcript;
+  input.latestInbound.payload = payload;
+
+  await input.client.from("intelligence_events").insert({
+    scope: "organization",
+    organization_id: input.context.organization.id,
+    source_type: "whatsapp",
+    source_id: input.context.conversationId,
+    producer_agent_id: input.context.agent.id,
+    event_type: "whatsapp.media.audio_transcribed",
+    title: "Audio transcrito no WhatsApp",
+    summary: preview(transcript, 500),
+    confidence: 0.82,
+    visibility: "organization",
+    tags: ["whatsapp", "media", "audio", "transcription"],
+    payload: {
+      agentRunId: input.context.run.id,
+      conversationId: input.context.conversationId,
+      leadId: input.context.lead?.id ?? null,
+      messageId: input.latestInbound.id,
+      providerMessageId: input.latestInbound.provider_message_id,
+      ...mediaTranscription,
+    },
+  });
+
+  return transcript;
 }
 
 async function sendAgentResponse(input: {
@@ -1107,7 +1234,9 @@ async function sendAgentResponse(input: {
 }) {
   const { context } = input;
   const inboundType = context.messageType.toLowerCase();
-  const shouldSendAudio = context.behavior.responseMode === "audio" || (context.behavior.responseMode === "mirror" && inboundType.includes("audio"));
+  const latestInbound = findLatestInbound(context.messages);
+  const shouldSendAudio = context.behavior.responseMode === "audio"
+    || (context.behavior.responseMode === "mirror" && (inboundType.includes("audio") || isAudioMessage(latestInbound)));
   const chunks = context.behavior.splitMessages && !shouldSendAudio ? splitMessage(input.text) : [input.text];
   const outbound: OutboundMessage[] = [];
 
@@ -1316,7 +1445,7 @@ function detectBehaviorSignals(input: {
     }
   }
 
-  if (messageType.includes("audio") && behavior.audioTranscription) {
+  if (isAudioMessage(latestInbound) && behavior.audioTranscription) {
     signals.push({
       type: "whatsapp.media.audio_received",
       title: "Audio recebido no WhatsApp",
@@ -1597,6 +1726,182 @@ async function callUazapi(
   };
 }
 
+async function downloadInboundAudio(input: {
+  credentials: UazapiCredentials;
+  token: string;
+  message: ConversationMessageRow;
+  providerChatId: string | null;
+}) {
+  const bodies = buildUazapiDownloadBodies(input.message, input.providerChatId);
+  let lastError = "sem detalhe do provedor";
+
+  for (const body of bodies) {
+    const response = await callUazapi(input.credentials, "/message/download", {
+      method: "POST",
+      token: input.token,
+      body,
+      tolerateError: true,
+    });
+
+    if (response.ok) {
+      const transcript = normalizeTranscriptText(extractProviderTranscript(response.data));
+      const fileUrl = extractProviderDownloadUrl(response.data);
+      const mimeType = extractMimeType(response.data) ?? extractMessageMimeType(input.message) ?? "audio/mpeg";
+
+      if (!transcript && !fileUrl) {
+        throw new Error("Uazapi baixou a midia, mas nao retornou link nem transcricao.");
+      }
+
+      return {
+        transcript: transcript || null,
+        fileUrl,
+        mimeType,
+        byteLength: null as number | null,
+      };
+    }
+
+    lastError = readProviderError(response.data) ?? `status ${response.status}`;
+  }
+
+  throw new Error(`Nao foi possivel baixar audio para transcricao: ${lastError}.`);
+}
+
+function buildUazapiDownloadBodies(message: ConversationMessageRow, providerChatId: string | null): JsonRecord[] {
+  const providerMessage = readProviderMessageRecord(message);
+  const ids = uniqueStrings([
+    message.provider_message_id,
+    asString(providerMessage?.messageid),
+    asString(providerMessage?.messageId),
+    asString(providerMessage?.id),
+  ]);
+  const chatid = message.provider_chat_id ?? providerChatId;
+  const bodies: JsonRecord[] = [];
+
+  for (const id of ids) {
+    bodies.push({ id, transcribe: true, return_link: true });
+
+    if (chatid) {
+      bodies.push({ id, messageid: id, messageId: id, chatid, transcribe: true, return_link: true });
+    }
+  }
+
+  return dedupeJsonRecords(bodies);
+}
+
+async function transcribeDownloadedAudioWithGemini(input: {
+  credentials: GeminiCredentials;
+  model: string;
+  fileUrl: string | null;
+  mimeType: string;
+}) {
+  if (!input.fileUrl) {
+    return { text: "", byteLength: null };
+  }
+
+  const audio = await fetchDownloadedAudio(input.fileUrl, input.mimeType);
+  const url = new URL(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(normalizeGeminiModel(input.model))}:generateContent`);
+  url.searchParams.set("key", input.credentials.apiKey);
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [
+        {
+          role: "user",
+          parts: [
+            {
+              text: "Transcreva o audio em portugues do Brasil. Retorne somente o texto falado, sem comentarios. Se nao houver fala compreensivel, retorne vazio.",
+            },
+            {
+              inlineData: {
+                mimeType: audio.mimeType,
+                data: audio.base64,
+              },
+            },
+          ],
+        },
+      ],
+      generationConfig: {
+        temperature: 0,
+        topP: 0.8,
+        maxOutputTokens: 900,
+      },
+    }),
+    cache: "no-store",
+  });
+  const data = await readProviderResponse(response);
+
+  if (!response.ok) {
+    throw new Error(readProviderError(data) ?? `Gemini nao transcreveu o audio. Status ${response.status}.`);
+  }
+
+  return {
+    text: extractGeminiText(data),
+    byteLength: audio.byteLength,
+  };
+}
+
+async function fetchDownloadedAudio(fileUrl: string, fallbackMimeType: string) {
+  const url = new URL(fileUrl);
+
+  if (!["http:", "https:"].includes(url.protocol)) {
+    throw new Error("Link de audio invalido para transcricao.");
+  }
+
+  const response = await fetch(url.toString(), { cache: "no-store" });
+
+  if (!response.ok) {
+    throw new Error(`Nao foi possivel baixar arquivo de audio. Status ${response.status}.`);
+  }
+
+  const buffer = Buffer.from(await response.arrayBuffer());
+
+  if (buffer.byteLength > 18_000_000) {
+    throw new Error("Audio grande demais para transcricao automatica.");
+  }
+
+  return {
+    base64: buffer.toString("base64"),
+    byteLength: buffer.byteLength,
+    mimeType: response.headers.get("content-type")?.split(";")[0]?.trim() || fallbackMimeType || "audio/mpeg",
+  };
+}
+
+async function persistAudioTranscriptionFailure(
+  client: SupabaseClient,
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+  message: ConversationMessageRow,
+  error: unknown,
+) {
+  const summary = error instanceof Error ? error.message : "Falha desconhecida ao transcrever audio.";
+
+  try {
+    await client.from("intelligence_events").insert({
+      scope: "organization",
+      organization_id: context.organization.id,
+      source_type: "whatsapp",
+      source_id: context.conversationId,
+      producer_agent_id: context.agent.id,
+      event_type: "whatsapp.media.audio_transcription_failed",
+      title: "Falha ao transcrever audio",
+      summary: preview(summary, 500),
+      confidence: 0.45,
+      visibility: "organization",
+      tags: ["whatsapp", "media", "audio", "transcription", "error"],
+      payload: {
+        agentRunId: context.run.id,
+        conversationId: context.conversationId,
+        leadId: context.lead?.id ?? null,
+        messageId: message.id,
+        providerMessageId: message.provider_message_id,
+      },
+    });
+  } catch {
+    return;
+  }
+}
+
 function isWithinSchedule(behavior: WhatsappBehaviorConfig) {
   if (!behavior.aiScheduleEnabled || behavior.alwaysOnline) {
     return true;
@@ -1632,6 +1937,132 @@ function parseHourMinute(value: string) {
 function getNowMinutes(timeZone: string) {
   const now = new Date(new Date().toLocaleString("en-US", { timeZone: timeZone || "America/Sao_Paulo" }));
   return now.getHours() * 60 + now.getMinutes();
+}
+
+function readProviderMessageRecord(message: ConversationMessageRow) {
+  const payload = readRecord(message.payload);
+
+  if (!payload) {
+    return null;
+  }
+
+  return readRecord(payload.message)
+    ?? readRecord(payload.msg)
+    ?? readRecord(payload.data)
+    ?? readRecord(payload.result)
+    ?? payload;
+}
+
+function isAudioMessage(message: ConversationMessageRow | null) {
+  if (!message) {
+    return false;
+  }
+
+  const providerMessage = readProviderMessageRecord(message);
+  const content = readRecord(providerMessage?.content);
+  const signature = normalizeSearch([
+    message.message_type,
+    asString(providerMessage?.messageType),
+    asString(providerMessage?.mediaType),
+    asString(providerMessage?.type),
+    asString(providerMessage?.kind),
+    asString(providerMessage?.mimetype),
+    asString(providerMessage?.mimeType),
+    asString(content?.mimetype),
+    asString(content?.mimeType),
+    providerMessage?.PTT === true || content?.PTT === true ? "ptt" : "",
+  ].filter(Boolean).join(" "));
+
+  return signature.includes("audio") || signature.includes("opus") || signature.includes("ptt");
+}
+
+function describeMessageType(message: ConversationMessageRow) {
+  const providerMessage = readProviderMessageRecord(message);
+  const content = readRecord(providerMessage?.content);
+  const signature = normalizeSearch([
+    message.message_type,
+    asString(providerMessage?.messageType),
+    asString(providerMessage?.mediaType),
+    asString(providerMessage?.type),
+    asString(providerMessage?.mimetype),
+    asString(content?.mimetype),
+  ].filter(Boolean).join(" "));
+
+  if (signature.includes("image") || signature.includes("photo")) return "uma imagem";
+  if (signature.includes("video")) return "um video";
+  if (signature.includes("document") || signature.includes("file") || signature.includes("pdf")) return "um documento";
+  if (signature.includes("location")) return "uma localizacao";
+
+  return "um arquivo";
+}
+
+function extractProviderTranscript(value: unknown) {
+  return findString(value, [
+    "transcription",
+    "transcript",
+    "transcribedText",
+    "transcribed_text",
+    "speechText",
+    "speech_text",
+    "audioText",
+    "audio_text",
+  ]);
+}
+
+function extractProviderDownloadUrl(value: unknown) {
+  return findString(value, ["fileURL", "fileUrl", "downloadUrl", "download_url", "url", "link"]);
+}
+
+function extractMimeType(value: unknown) {
+  return findString(value, ["mimetype", "mimeType", "contentType", "content_type"]);
+}
+
+function extractMessageMimeType(message: ConversationMessageRow) {
+  const providerMessage = readProviderMessageRecord(message);
+  const content = readRecord(providerMessage?.content);
+
+  return asString(providerMessage?.mimetype)
+    ?? asString(providerMessage?.mimeType)
+    ?? asString(content?.mimetype)
+    ?? asString(content?.mimeType);
+}
+
+function normalizeTranscriptText(value: string | null | undefined) {
+  const text = value
+    ?.replace(/\r/g, "")
+    .replace(/^transcricao\s*:\s*/i, "")
+    .replace(/^["']+|["']+$/g, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim() ?? "";
+  const normalized = normalizeSearch(text);
+
+  if (!normalized || normalized === "vazio" || normalized.includes("sem fala compreensivel") || normalized.includes("nao ha fala")) {
+    return "";
+  }
+
+  return text.slice(0, 4000);
+}
+
+function uniqueStrings(values: Array<string | null | undefined>) {
+  return Array.from(new Set(values.map((value) => value?.trim()).filter((value): value is string => Boolean(value))));
+}
+
+function dedupeJsonRecords(values: JsonRecord[]) {
+  const seen = new Set<string>();
+  const deduped: JsonRecord[] = [];
+
+  for (const value of values) {
+    const key = JSON.stringify(value);
+
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    deduped.push(value);
+  }
+
+  return deduped;
 }
 
 function isBotLoopRisk(messages: ConversationMessageRow[]) {
@@ -1705,10 +2136,6 @@ function findLatestInbound(messages: ConversationMessageRow[]) {
   }
 
   return null;
-}
-
-function buildUserText(message: ConversationMessageRow | null, fallback: string | null) {
-  return message ? buildMessageText(message) : fallback?.trim() || "";
 }
 
 function readHumanPauseUntil(metadata: JsonRecord | null) {
