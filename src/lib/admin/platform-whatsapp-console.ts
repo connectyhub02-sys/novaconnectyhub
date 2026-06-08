@@ -3,6 +3,10 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
 import { listWhatsappAudioVoices, type WhatsappAudioVoiceState } from "@/lib/elevenlabs/voices";
+import {
+  leadQualificationConfigKey,
+  normalizeLeadQualificationConfig,
+} from "@/lib/leads/qualification";
 import { decryptCredentialValue, encryptCredentialValue, previewCredentialValue } from "@/lib/security/credentials-crypto";
 import {
   defaultWhatsappAgentPrompt,
@@ -161,6 +165,7 @@ export async function updatePlatformWhatsappConsoleSettings(input: {
   userId: string;
   agentPrompt?: string;
   behavior?: unknown;
+  qualificationConfig?: unknown;
   voiceOrganizationId?: string | null;
   client?: SupabaseClient;
 }) {
@@ -188,12 +193,16 @@ export async function updatePlatformWhatsappConsoleSettings(input: {
 
   const currentBehavior = getBehaviorConfig(agent, instance);
   const nextBehavior = normalizeWhatsappBehaviorConfig(input.behavior ?? currentBehavior);
+  const nextQualificationConfig = input.qualificationConfig !== undefined
+    ? normalizeLeadQualificationConfig(input.qualificationConfig)
+    : normalizeLeadQualificationConfig(readRecord(agent.metadata)?.[leadQualificationConfigKey]);
   const now = new Date().toISOString();
   const nextPrompt = hasAgentPrompt ? agentPrompt! : agent.prompt?.trim() || defaultWhatsappAgentPrompt;
   const nextVersion = hasAgentPrompt ? await getNextPromptVersion(client, agent.id) : null;
   const metadata = {
     ...(agent.metadata ?? {}),
     whatsapp_behavior_config: nextBehavior,
+    [leadQualificationConfigKey]: nextQualificationConfig,
     prompt_control: {
       last_updated_at: now,
       last_updated_by: input.userId,
@@ -602,6 +611,7 @@ function buildState(
           avatarAlt: agent.avatar_alt,
           prompt: agentPrompt,
           promptPreview: preview(agentPrompt),
+          qualification: normalizeLeadQualificationConfig(readRecord(agent.metadata)?.[leadQualificationConfigKey]),
           updatedAt: agent.updated_at,
         }
       : null,

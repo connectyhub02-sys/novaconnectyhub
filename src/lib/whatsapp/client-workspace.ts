@@ -4,6 +4,11 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
 import { generateElevenLabsAudio } from "@/lib/elevenlabs/tts";
 import { listWhatsappAudioVoices, type WhatsappAudioVoiceState } from "@/lib/elevenlabs/voices";
+import {
+  leadQualificationConfigKey,
+  normalizeLeadQualificationConfig,
+  type LeadQualificationConfig,
+} from "@/lib/leads/qualification";
 import { decryptCredentialValue, encryptCredentialValue, previewCredentialValue } from "@/lib/security/credentials-crypto";
 import type { CurrentOrganization } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
@@ -106,6 +111,7 @@ export type ClientWhatsappState = {
     avatarAlt: string | null;
     prompt: string;
     promptPreview: string;
+    qualification: LeadQualificationConfig;
     updatedAt: string | null;
   } | null;
   globalAgent: {
@@ -532,6 +538,7 @@ export async function updateClientWhatsappPrompt(input: {
   agentPrompt?: string;
   globalPrompt?: string;
   behavior?: unknown;
+  qualificationConfig?: unknown;
   client?: SupabaseClient;
 }): Promise<ClientWhatsappState> {
   const agentPrompt = (input.agentPrompt ?? input.prompt)?.trim();
@@ -562,22 +569,28 @@ export async function updateClientWhatsappPrompt(input: {
     getWorkspaceInstance(client, input.organization.id),
   ]);
   const nextBehavior = normalizeWhatsappBehaviorConfig(input.behavior ?? getBehaviorConfig(globalAgent, instance));
+  const hasQualificationConfig = input.qualificationConfig !== undefined;
+  const nextQualificationConfig = hasQualificationConfig
+    ? normalizeLeadQualificationConfig(input.qualificationConfig)
+    : getLeadQualificationConfig(agent);
   const now = new Date().toISOString();
 
-  if (hasAgentPrompt) {
-    const nextVersion = await getNextPromptVersion(client, agent.id);
+  if (hasAgentPrompt || hasQualificationConfig) {
+    const promptToSave = hasAgentPrompt ? agentPrompt : agent.prompt?.trim() || defaultWhatsappAgentPrompt;
+    const nextVersion = hasAgentPrompt ? await getNextPromptVersion(client, agent.id) : null;
     const { error } = await client
       .from("agent_registry")
       .update({
-        prompt: agentPrompt,
+        prompt: promptToSave,
         status: "needs_review",
         metadata: {
           ...(agent.metadata ?? {}),
+          [leadQualificationConfigKey]: nextQualificationConfig,
           prompt_control: {
             last_updated_at: now,
             last_updated_by: input.userId,
             previous_length: agent.prompt?.length ?? 0,
-            current_length: agentPrompt.length,
+            current_length: promptToSave.length,
             source: "client_dashboard",
           },
         },
@@ -588,13 +601,15 @@ export async function updateClientWhatsappPrompt(input: {
       throw new Error(`Nao foi possivel salvar o prompt: ${error.message}`);
     }
 
-    await client.from("agent_prompt_versions").insert({
-      agent_id: agent.id,
-      version_number: nextVersion,
-      prompt: agentPrompt,
-      change_note: "Atualizado no painel do cliente",
-      created_by: input.userId,
-    });
+    if (nextVersion) {
+      await client.from("agent_prompt_versions").insert({
+        agent_id: agent.id,
+        version_number: nextVersion,
+        prompt: promptToSave,
+        change_note: "Atualizado no painel do cliente",
+        created_by: input.userId,
+      });
+    }
   }
 
   if (hasGlobalPrompt || input.behavior !== undefined) {
@@ -1200,6 +1215,7 @@ function buildState(
           avatarAlt: agent.avatar_alt,
           prompt: agentPrompt,
           promptPreview: preview(agentPrompt),
+          qualification: getLeadQualificationConfig(agent),
           updatedAt: agent.updated_at,
         }
       : null,
@@ -1229,6 +1245,10 @@ function getBehaviorConfig(globalAgent: AgentRow, instance: WhatsappInstanceRow 
   const instanceConfig = readRecord(instance?.metadata)?.behavior_config;
 
   return normalizeWhatsappBehaviorConfig(instanceConfig ?? globalConfig);
+}
+
+function getLeadQualificationConfig(agent: AgentRow | null) {
+  return normalizeLeadQualificationConfig(readRecord(agent?.metadata)?.[leadQualificationConfigKey]);
 }
 
 function readRecord(value: unknown): JsonRecord | null {

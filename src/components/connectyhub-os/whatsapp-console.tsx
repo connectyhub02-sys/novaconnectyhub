@@ -43,6 +43,13 @@ import {
   type WhatsappRapportMode,
   type WhatsappResponseMode,
 } from "@/lib/whatsapp/agent-behavior";
+import {
+  defaultLeadQualificationConfig,
+  isLeadQualificationConfigEqual,
+  normalizeLeadQualificationConfig,
+  type LeadQualificationConfig,
+  type LeadQualificationQuestion,
+} from "@/lib/leads/qualification";
 import { cn } from "@/lib/utils";
 
 type WhatsappStatus = "draft" | "qr_pending" | "connected" | "disconnected" | "blocked" | "error" | "archived";
@@ -81,6 +88,7 @@ type WhatsappState = {
     avatarAlt: string | null;
     prompt: string;
     promptPreview: string;
+    qualification?: LeadQualificationConfig;
     updatedAt: string | null;
   } | null;
   globalAgent: {
@@ -300,6 +308,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [promptDraft, setPromptDraft] = useState("");
   const [behaviorDraft, setBehaviorDraft] = useState<WhatsappBehaviorConfig>(defaultWhatsappBehaviorConfig);
+  const [qualificationDraft, setQualificationDraft] = useState<LeadQualificationConfig>(defaultLeadQualificationConfig);
   const [selectedCompanyId, setSelectedCompanyId] = useState("");
   const [showAgentForm, setShowAgentForm] = useState(false);
   const [agentName, setAgentName] = useState("");
@@ -343,6 +352,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
     if (!options?.preserveDrafts) {
       setPromptDraft(nextState.agent?.prompt ?? "");
       setBehaviorDraft(normalizeWhatsappBehaviorConfig(nextState.behavior));
+      setQualificationDraft(normalizeLeadQualificationConfig(nextState.agent?.qualification));
     }
   }, []);
 
@@ -464,7 +474,10 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
   const promptChanged = state?.agent ? promptDraft.trim() !== state.agent.prompt.trim() : false;
   const promptTooLong = promptDraft.length > agentPromptMaxLength;
   const behaviorChanged = state ? !isBehaviorEqual(behaviorDraft, state.behavior) : false;
-  const settingsChanged = promptChanged || behaviorChanged;
+  const qualificationChanged = state?.agent
+    ? !isLeadQualificationConfigEqual(qualificationDraft, normalizeLeadQualificationConfig(state.agent.qualification))
+    : false;
+  const settingsChanged = promptChanged || behaviorChanged || qualificationChanged;
   const companies = state?.companies ?? [];
   const selectedCompany = companies.find((company) => company.id === selectedCompanyId) ?? companies[0] ?? null;
   const needsCompany = !loading && companies.length === 0;
@@ -483,6 +496,49 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
 
   function updatePromptDraft(value: string) {
     setPromptDraft(value.slice(0, agentPromptMaxLength));
+  }
+
+  function updateQualificationDraft(value: Partial<LeadQualificationConfig>) {
+    setQualificationDraft((current) => normalizeLeadQualificationConfig({ ...current, ...value }));
+  }
+
+  function updateQualificationQuestion(id: string, value: Partial<LeadQualificationQuestion>) {
+    setQualificationDraft((current) =>
+      normalizeLeadQualificationConfig({
+        ...current,
+        questions: current.questions.map((question) => question.id === id ? { ...question, ...value } : question),
+      }),
+    );
+  }
+
+  function addQualificationQuestion() {
+    const nextIndex = qualificationDraft.questions.length + 1;
+
+    setQualificationDraft((current) =>
+      normalizeLeadQualificationConfig({
+        ...current,
+        questions: [
+          ...current.questions,
+          {
+            id: `custom_${Date.now().toString(36)}`,
+            label: `Pergunta ${nextIndex}`,
+            question: "Qual informacao precisamos confirmar para saber se este lead esta pronto para comprar?",
+            crmField: `campo_${nextIndex}`,
+            weight: 10,
+            required: false,
+          },
+        ],
+      }),
+    );
+  }
+
+  function removeQualificationQuestion(id: string) {
+    setQualificationDraft((current) =>
+      normalizeLeadQualificationConfig({
+        ...current,
+        questions: current.questions.filter((question) => question.id !== id),
+      }),
+    );
   }
 
   function insertPromptTag(token: string) {
@@ -555,6 +611,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
           [variant.entityIdKey]: selectedCompanyId,
           agentPrompt: promptDraft,
           behavior: behaviorDraft,
+          qualificationConfig: qualificationDraft,
         }),
       });
       const data = (await response.json().catch(() => null)) as (WhatsappState & { error?: string }) | null;
@@ -819,6 +876,45 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
             <NoAgentState />
           )}
         </Panel>
+
+      {state?.agent ? (
+      <div className="mt-5">
+        <Panel
+          title="Qualificacao do lead"
+          eyebrow="crm / perguntas / score"
+          action={<NeonBadge tone={qualificationChanged ? "amber" : "green"}>{qualificationChanged ? "alterado" : "salvo"}</NeonBadge>}
+        >
+          <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_320px]">
+            <LeadQualificationEditor
+              config={qualificationDraft}
+              entityLabel={variant.entityPromptLabel}
+              onAddQuestion={addQualificationQuestion}
+              onChange={updateQualificationDraft}
+              onQuestionChange={updateQualificationQuestion}
+              onRemoveQuestion={removeQualificationQuestion}
+            />
+            <LeadQualificationSummary config={qualificationDraft} changed={qualificationChanged} />
+            <div className="flex flex-wrap gap-2 2xl:col-start-2">
+              <SecondaryAction
+                icon={RefreshCcw}
+                label="Restaurar salvo"
+                description="Desfaz alteracoes ainda nao salvas nas perguntas e pesos de qualificacao."
+                disabled={!state || !settingsChanged}
+                onClick={() => state && applyWhatsappState(state)}
+              />
+              <ActionButton
+                icon={Wand2}
+                label="Salvar qualificacao"
+                description="Grava as perguntas, pesos e limites que o agente usa para qualificar o lead no CRM."
+                disabled={!state?.capability.schemaReady || !settingsChanged}
+                loading={running === "save_settings"}
+                onClick={saveAgentSettings}
+              />
+            </div>
+          </div>
+        </Panel>
+      </div>
+      ) : null}
 
       {state?.agent ? (
       <div className="mt-5">
@@ -2001,6 +2097,212 @@ function TextField({
         className="h-10 w-full rounded-lg border px-3 font-mono text-[12px] outline-none"
       />
     </label>
+  );
+}
+
+function LeadQualificationEditor({
+  config,
+  entityLabel,
+  onAddQuestion,
+  onChange,
+  onQuestionChange,
+  onRemoveQuestion,
+}: {
+  config: LeadQualificationConfig;
+  entityLabel: string;
+  onAddQuestion: () => void;
+  onChange: (value: Partial<LeadQualificationConfig>) => void;
+  onQuestionChange: (id: string, value: Partial<LeadQualificationQuestion>) => void;
+  onRemoveQuestion: (id: string) => void;
+}) {
+  const normalized = normalizeLeadQualificationConfig(config);
+
+  return (
+    <div className="grid gap-3">
+      <BehaviorSection
+        title="Playbook comercial"
+        description={`Define como o agente qualifica leads do produto ou servico deste ${entityLabel.toLowerCase()}.`}
+        defaultOpen
+      >
+        <div className="grid gap-3">
+          <ToggleTile
+            icon={ShieldCheck}
+            label="Qualificacao ativa"
+            description="Quando ligado, o agente usa estas perguntas para qualificar o lead e alimentar o CRM."
+            checked={normalized.enabled}
+            onChange={() => onChange({ enabled: !normalized.enabled })}
+          />
+          <div className="grid gap-3 lg:grid-cols-2">
+            <label className="block">
+              <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Produto ou oferta</span>
+              <input
+                className="h-10 w-full rounded-lg border px-3 text-[12px] outline-none"
+                value={normalized.productName}
+                onChange={(event) => onChange({ productName: event.target.value })}
+                placeholder="Ex: Mentoria, imovel, software, procedimento, curso"
+              />
+            </label>
+            <div className="grid gap-2 sm:grid-cols-3">
+              <NumberField label="Qualificado" description="Score minimo para virar lead qualificado." value={normalized.qualifyThreshold} min={20} max={100} onChange={(value) => onChange({ qualifyThreshold: value })} />
+              <NumberField label="VIP" description="Score minimo para prioridade maxima." value={normalized.vipThreshold} min={30} max={100} onChange={(value) => onChange({ vipThreshold: value })} />
+              <NumberField label="Perguntas" description="Quantidade maxima de perguntas de qualificacao na conversa." value={normalized.maxQuestionsPerConversation} min={1} max={16} onChange={(value) => onChange({ maxQuestionsPerConversation: value })} />
+            </div>
+          </div>
+          <label className="block">
+            <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Objetivo comercial</span>
+            <textarea
+              className="min-h-20 w-full resize-y rounded-lg border px-3 py-2 text-[12px] leading-5 outline-none"
+              value={normalized.commercialObjective}
+              onChange={(event) => onChange({ commercialObjective: event.target.value })}
+              placeholder="Explique o que faz um lead estar pronto para comprar."
+            />
+          </label>
+          <ToggleTile
+            icon={MessageSquare}
+            label="Uma pergunta por vez"
+            description="Mantem a conversa natural e evita parecer formulario."
+            checked={normalized.askOneQuestionAtATime}
+            onChange={() => onChange({ askOneQuestionAtATime: !normalized.askOneQuestionAtATime })}
+          />
+        </div>
+      </BehaviorSection>
+
+      <BehaviorSection
+        title="Perguntas do CRM"
+        description="Cada pergunta vira um campo no arquivo do lead e soma pontos quando for respondida."
+        defaultOpen
+      >
+        <div className="grid gap-3">
+          {normalized.questions.map((question, index) => (
+            <div
+              key={question.id}
+              className="rounded-lg border p-3"
+              style={{ background: "var(--ch-surface)", borderColor: "var(--ch-border)" }}
+            >
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <p className="font-mono text-[9px] uppercase tracking-widest text-cyan-300">Pergunta {index + 1}</p>
+                <button
+                  type="button"
+                  className="inline-flex h-8 items-center gap-1.5 rounded-md border border-rose-400/25 bg-rose-400/10 px-2 font-mono text-[9px] font-semibold uppercase tracking-wide text-rose-200 transition hover:bg-rose-400/15"
+                  onClick={() => onRemoveQuestion(question.id)}
+                >
+                  <X className="h-3.5 w-3.5" />
+                  Excluir
+                </button>
+              </div>
+              <div className="grid gap-3 xl:grid-cols-[0.75fr_1.4fr_0.7fr_110px_110px]">
+                <label className="block">
+                  <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Rotulo</span>
+                  <input
+                    className="h-10 w-full rounded-lg border px-3 text-[12px] outline-none"
+                    value={question.label}
+                    onChange={(event) => onQuestionChange(question.id, { label: event.target.value })}
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Pergunta ao lead</span>
+                  <input
+                    className="h-10 w-full rounded-lg border px-3 text-[12px] outline-none"
+                    value={question.question}
+                    onChange={(event) => onQuestionChange(question.id, { question: event.target.value })}
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Campo CRM</span>
+                  <input
+                    className="h-10 w-full rounded-lg border px-3 font-mono text-[12px] outline-none"
+                    value={question.crmField}
+                    onChange={(event) => onQuestionChange(question.id, { crmField: event.target.value })}
+                  />
+                </label>
+                <NumberField label="Peso" description="Pontos somados quando o campo for respondido." value={question.weight} min={0} max={40} onChange={(value) => onQuestionChange(question.id, { weight: value })} />
+                <ToggleTile
+                  icon={CheckCircle2}
+                  label="Obrigatoria"
+                  description="Campo importante para considerar o lead bem qualificado."
+                  checked={question.required}
+                  onChange={() => onQuestionChange(question.id, { required: !question.required })}
+                />
+              </div>
+            </div>
+          ))}
+
+          <button
+            type="button"
+            className="inline-flex min-h-10 w-fit items-center justify-center gap-2 rounded-lg border border-cyan-400/25 bg-cyan-400/10 px-4 font-mono text-[10px] font-bold uppercase tracking-wide text-cyan-200 transition hover:bg-cyan-400/15"
+            onClick={onAddQuestion}
+          >
+            <Plus className="h-4 w-4" />
+            Nova pergunta
+          </button>
+        </div>
+      </BehaviorSection>
+
+      <div className="grid gap-3 xl:grid-cols-2">
+        <LeadQualificationListEditor
+          label="Sinais de baixa qualificacao"
+          description="Use uma linha por sinal que reduz prioridade do lead."
+          values={normalized.disqualifiers}
+          onChange={(disqualifiers) => onChange({ disqualifiers })}
+        />
+        <LeadQualificationListEditor
+          label="Regras de proximo passo"
+          description="Use uma linha por situacao que pede proposta, demo ou humano."
+          values={normalized.handoffRules}
+          onChange={(handoffRules) => onChange({ handoffRules })}
+        />
+      </div>
+    </div>
+  );
+}
+
+function LeadQualificationListEditor({
+  label,
+  description,
+  values,
+  onChange,
+}: {
+  label: string;
+  description: string;
+  values: string[];
+  onChange: (values: string[]) => void;
+}) {
+  return (
+    <label className="block rounded-xl border p-4" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
+      <span className="mb-1.5 flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
+        {label}
+        <InfoHint text={description} />
+      </span>
+      <textarea
+        className="min-h-28 w-full resize-y rounded-lg border px-3 py-2 text-[12px] leading-5 outline-none"
+        value={values.join("\n")}
+        onChange={(event) => onChange(event.target.value.split("\n").map((item) => item.trim()).filter(Boolean))}
+      />
+    </label>
+  );
+}
+
+function LeadQualificationSummary({ config, changed }: { config: LeadQualificationConfig; changed: boolean }) {
+  const normalized = normalizeLeadQualificationConfig(config);
+  const totalWeight = normalized.questions.reduce((total, question) => total + question.weight, 0);
+  const required = normalized.questions.filter((question) => question.required).length;
+
+  return (
+    <div className="rounded-xl border p-4" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
+      <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Resumo</p>
+      <div className="mt-4 space-y-3">
+        <PromptCheck label={normalized.enabled ? "Qualificacao ativa" : "Qualificacao pausada"} active={normalized.enabled} />
+        <PromptCheck label={`${normalized.questions.length} perguntas configuradas`} active={normalized.questions.length >= 4} />
+        <PromptCheck label={`${required} obrigatorias`} active={required >= 2} />
+        <PromptCheck label={`${totalWeight} pontos totais`} active={totalWeight >= normalized.qualifyThreshold} />
+      </div>
+      <div className="mt-4 grid gap-2">
+        <InfoTile label="Produto" value={normalized.productName || "Produto do cliente"} />
+        <InfoTile label="Qualificado" value={`${normalized.qualifyThreshold}+ pontos`} />
+        <InfoTile label="VIP" value={`${normalized.vipThreshold}+ pontos`} />
+        <InfoTile label="Alteracoes" value={changed ? "Pendentes" : "Salvo"} />
+      </div>
+    </div>
   );
 }
 

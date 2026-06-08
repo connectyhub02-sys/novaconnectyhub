@@ -79,6 +79,9 @@ export function LeadCrmConsole({ mode, workspace }: LeadCrmConsoleProps) {
         lead.agentName,
         lead.source,
         lead.technical.location,
+        lead.qualification.mainPain,
+        lead.qualification.nextBestAction,
+        lead.qualification.fields.map((field) => field.value).join(" "),
       ]
         .filter(Boolean)
         .join(" ")
@@ -590,14 +593,38 @@ function InfoPanel({ title, text }: { title: string; text: string }) {
 function QualificationGrid({ lead }: { lead: ClientLeadRecord }) {
   const items = [
     { label: "Interesse", value: lead.qualification.purpose ?? "Nao informado", icon: Target },
+    { label: "Dor", value: lead.qualification.mainPain ?? "Nao informado", icon: MessageCircle },
     { label: "Investimento", value: lead.qualification.budget ?? "Nao informado", icon: Activity },
     { label: "Prazo", value: lead.qualification.timeframe ?? "Nao informado", icon: CalendarClock },
+    { label: "Decisor", value: lead.qualification.decisionAuthority ?? "Nao informado", icon: Building2 },
     { label: "Objecoes", value: lead.qualification.objections ?? "Nao informado", icon: MessageCircle },
   ];
+  const temperature = getTemperatureMeta(lead.qualification.temperature);
 
   return (
     <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-      <p className="font-mono text-[9px] uppercase tracking-widest text-cyan-300">Panorama de qualificacao</p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="font-mono text-[9px] uppercase tracking-widest text-cyan-300">Panorama de qualificacao</p>
+        <span className={cn("rounded-lg border px-2 py-1 font-mono text-[9px] font-bold uppercase tracking-wide", temperature.className)}>
+          {temperature.label}
+        </span>
+      </div>
+      <div className="mt-3 grid gap-2 md:grid-cols-3">
+        <div className="rounded-xl border border-white/10 bg-slate-950/30 p-3">
+          <div className="flex items-center gap-2 font-mono text-[9px] uppercase tracking-wide text-slate-500">
+            <Activity className="h-3.5 w-3.5 text-cyan-300" />
+            Score
+          </div>
+          <p className="mt-2 text-[12px] font-semibold text-white">{lead.score}/100</p>
+        </div>
+        <div className="rounded-xl border border-white/10 bg-slate-950/30 p-3 md:col-span-2">
+          <div className="flex items-center gap-2 font-mono text-[9px] uppercase tracking-wide text-slate-500">
+            <Target className="h-3.5 w-3.5 text-cyan-300" />
+            Proxima acao
+          </div>
+          <p className="mt-2 text-[12px] font-semibold leading-5 text-white">{lead.qualification.nextBestAction ?? "Continuar qualificando o lead."}</p>
+        </div>
+      </div>
       <div className="mt-3 grid grid-cols-2 gap-2">
         {items.map((item) => {
           const Icon = item.icon;
@@ -613,8 +640,77 @@ function QualificationGrid({ lead }: { lead: ClientLeadRecord }) {
           );
         })}
       </div>
+
+      {lead.qualification.nextBestQuestion ? (
+        <div className="mt-2 rounded-xl border border-cyan-400/20 bg-cyan-400/10 p-3">
+          <div className="flex items-center gap-2 font-mono text-[9px] uppercase tracking-wide text-cyan-200">
+            <MessageCircle className="h-3.5 w-3.5" />
+            Proxima pergunta sugerida
+          </div>
+          <p className="mt-2 text-[12px] font-semibold leading-5 text-cyan-50">{lead.qualification.nextBestQuestion}</p>
+        </div>
+      ) : null}
+
+      {lead.qualification.nextStepAcceptance ? (
+        <div className="mt-2 rounded-xl border border-white/10 bg-slate-950/30 p-3">
+          <div className="flex items-center gap-2 font-mono text-[9px] uppercase tracking-wide text-slate-500">
+            <ExternalLink className="h-3.5 w-3.5 text-cyan-300" />
+            Aceite do proximo passo
+          </div>
+          <p className="mt-2 text-[12px] font-semibold leading-5 text-white">{lead.qualification.nextStepAcceptance}</p>
+        </div>
+      ) : null}
+
+      {lead.qualification.fields.length ? (
+        <div className="mt-3 rounded-xl border border-white/10 bg-slate-950/30 p-3">
+          <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Campos personalizados capturados</p>
+          <div className="mt-3 grid gap-2 md:grid-cols-2">
+            {lead.qualification.fields.map((field) => (
+              <div key={field.key} className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2">
+                <p className="font-mono text-[9px] uppercase tracking-wide text-slate-500">{field.label}</p>
+                <p className="mt-1 text-[12px] font-semibold leading-5 text-white">{field.value}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      <div className="mt-3 grid gap-2 md:grid-cols-3">
+        <InfoMini label="Respondidas" value={String(lead.qualification.answeredQuestionIds.length)} />
+        <InfoMini label="Pendentes" value={String(lead.qualification.missingQuestionIds.length)} />
+        <InfoMini label="Atualizacao" value={formatDateTime(lead.qualification.updatedAt)} />
+      </div>
     </div>
   );
+}
+
+function InfoMini({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-slate-950/30 px-3 py-2">
+      <p className="font-mono text-[9px] uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="mt-1 truncate text-[12px] font-semibold text-white">{value}</p>
+    </div>
+  );
+}
+
+function getTemperatureMeta(value: ClientLeadRecord["qualification"]["temperature"]) {
+  if (value === "vip") {
+    return { label: "VIP", className: "border-emerald-300/30 bg-emerald-300/10 text-emerald-200" };
+  }
+
+  if (value === "hot") {
+    return { label: "Quente", className: "border-emerald-400/25 bg-emerald-400/10 text-emerald-300" };
+  }
+
+  if (value === "warm") {
+    return { label: "Morno", className: "border-amber-400/25 bg-amber-400/10 text-amber-300" };
+  }
+
+  if (value === "cold") {
+    return { label: "Frio", className: "border-slate-400/20 bg-slate-400/10 text-slate-300" };
+  }
+
+  return { label: "Sem temperatura", className: "border-slate-400/20 bg-slate-400/10 text-slate-400" };
 }
 
 function LeadTechnicalFile({ lead }: { lead: ClientLeadRecord }) {
@@ -739,6 +835,7 @@ function LeadSideFile({ lead, onDetails }: { lead: ClientLeadRecord; onDetails: 
   return (
     <aside className="space-y-3">
       <InfoPanel title="Resumo" text={lead.summary} />
+      <LeadQualificationSnapshot lead={lead} />
       <LeadTechnicalFile lead={lead} />
       <button
         className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-cyan-300 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-950 transition hover:bg-cyan-200"
@@ -749,6 +846,28 @@ function LeadSideFile({ lead, onDetails }: { lead: ClientLeadRecord; onDetails: 
         <ExternalLink className="h-3.5 w-3.5" />
       </button>
     </aside>
+  );
+}
+
+function LeadQualificationSnapshot({ lead }: { lead: ClientLeadRecord }) {
+  const temperature = getTemperatureMeta(lead.qualification.temperature);
+
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+      <div className="flex items-center justify-between gap-3">
+        <p className="font-mono text-[9px] uppercase tracking-widest text-cyan-300">Qualificacao</p>
+        <span className={cn("rounded-lg border px-2 py-1 font-mono text-[9px] font-bold uppercase tracking-wide", temperature.className)}>
+          {temperature.label}
+        </span>
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <InfoMini label="Score" value={`${lead.score}/100`} />
+        <InfoMini label="Status" value={statusMeta[lead.status].label} />
+      </div>
+      <p className="mt-3 text-[12px] font-semibold leading-5 text-white">
+        {lead.qualification.nextBestAction ?? "Continuar qualificando o lead."}
+      </p>
+    </div>
   );
 }
 

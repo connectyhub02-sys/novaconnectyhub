@@ -21,6 +21,7 @@ type ActionBody = {
   prompt?: unknown;
   agentPrompt?: unknown;
   behavior?: unknown;
+  qualificationConfig?: unknown;
 };
 
 export async function GET(request: NextRequest) {
@@ -122,6 +123,7 @@ export async function PATCH(request: NextRequest) {
           ? body.prompt
           : undefined,
       behavior: body?.behavior,
+      qualificationConfig: body?.qualificationConfig,
       client: createServiceClient(),
     });
 

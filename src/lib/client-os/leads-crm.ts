@@ -116,6 +116,21 @@ export type ClientLeadRecord = {
     budget: string | null;
     timeframe: string | null;
     objections: string | null;
+    mainPain: string | null;
+    volumeOrContext: string | null;
+    decisionAuthority: string | null;
+    nextStepAcceptance: string | null;
+    temperature: "cold" | "warm" | "hot" | "vip" | null;
+    nextBestQuestion: string | null;
+    nextBestAction: string | null;
+    answeredQuestionIds: string[];
+    missingQuestionIds: string[];
+    updatedAt: string | null;
+    fields: Array<{
+      key: string;
+      label: string;
+      value: string;
+    }>;
   };
   technical: {
     origin: string;
@@ -295,11 +310,24 @@ function mapLeadRecord(input: {
   const name = readString(input.lead.display_name) ?? readString(metadata.name) ?? readString(metadata.lead_name) ?? fallbackLeadName(input.lead.phone_number);
   const email = readString(metadata.email) ?? readString(metadata.lead_email);
   const source = readString(input.lead.source) ?? readString(metadata.source) ?? input.lead.channel ?? "whatsapp";
+  const qualificationMetadata = readRecord(metadata.qualification) ?? {};
+  const leadQualification = readRecord(metadata.lead_qualification) ?? {};
   const qualification = {
-    purpose: readString(metadata.purpose) ?? readString(metadata.finality) ?? readString(metadata.finalidade) ?? readString(metadata.lead_purpose),
-    budget: readString(metadata.budget) ?? readString(metadata.investment) ?? readString(metadata.investimento) ?? readString(metadata.lead_budget),
-    timeframe: readString(metadata.timeframe) ?? readString(metadata.deadline) ?? readString(metadata.prazo) ?? readString(metadata.lead_timeframe),
-    objections: readString(metadata.objections) ?? readString(metadata.objection) ?? readString(metadata.objecoes),
+    purpose: readString(qualificationMetadata.purpose) ?? readString(metadata.purpose) ?? readString(metadata.finality) ?? readString(metadata.finalidade) ?? readString(metadata.lead_purpose),
+    budget: readString(qualificationMetadata.budget) ?? readString(metadata.budget) ?? readString(metadata.investment) ?? readString(metadata.investimento) ?? readString(metadata.lead_budget),
+    timeframe: readString(qualificationMetadata.timeframe) ?? readString(metadata.timeframe) ?? readString(metadata.deadline) ?? readString(metadata.prazo) ?? readString(metadata.lead_timeframe),
+    objections: readString(qualificationMetadata.objections) ?? readString(metadata.objections) ?? readString(metadata.objection) ?? readString(metadata.objecoes),
+    mainPain: readString(qualificationMetadata.main_pain) ?? readString(metadata.main_pain),
+    volumeOrContext: readString(qualificationMetadata.volume_or_context) ?? readString(metadata.volume_or_context),
+    decisionAuthority: readString(qualificationMetadata.decision_authority) ?? readString(metadata.decision_authority),
+    nextStepAcceptance: readString(qualificationMetadata.next_step_acceptance) ?? readString(metadata.next_step_acceptance),
+    temperature: normalizeTemperature(readString(leadQualification.temperature) ?? readString(metadata.lead_temperature)),
+    nextBestQuestion: readString(leadQualification.next_best_question),
+    nextBestAction: readString(leadQualification.next_best_action),
+    answeredQuestionIds: readStringList(leadQualification.answered_question_ids),
+    missingQuestionIds: readStringList(leadQualification.missing_question_ids),
+    updatedAt: readString(leadQualification.updated_at) ?? readString(metadata.last_qualification_updated_at),
+    fields: mapQualificationFields(qualificationMetadata),
   };
   const device = readString(metadata.device_type) ?? readString(metadata.device) ?? readString(eventMetadata.device_type);
   const browser = readString(metadata.browser) ?? readString(eventMetadata.browser);
@@ -496,6 +524,52 @@ function normalizeLeadStatus(value: string): ClientLeadStatus {
   }
 
   return "new";
+}
+
+function normalizeTemperature(value: string | null): ClientLeadRecord["qualification"]["temperature"] {
+  if (value === "cold" || value === "warm" || value === "hot" || value === "vip") {
+    return value;
+  }
+
+  return null;
+}
+
+function readStringList(value: unknown) {
+  return Array.isArray(value)
+    ? value.map(readString).filter((item): item is string => Boolean(item))
+    : [];
+}
+
+function mapQualificationFields(value: JsonRecord) {
+  const hiddenKeys = new Set([
+    "purpose",
+    "budget",
+    "investment",
+    "timeframe",
+    "urgency",
+    "objections",
+    "objection",
+    "main_pain",
+    "volume_or_context",
+    "decision_authority",
+    "next_step_acceptance",
+  ]);
+
+  return Object.entries(value)
+    .map(([key, item]) => ({
+      key,
+      label: formatFieldLabel(key),
+      value: readString(item),
+    }))
+    .filter((item): item is { key: string; label: string; value: string } => Boolean(item.value) && !hiddenKeys.has(item.key))
+    .slice(0, 20);
+}
+
+function formatFieldLabel(value: string) {
+  return value
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase())
+    .slice(0, 80);
 }
 
 function clampScore(value: number | null) {

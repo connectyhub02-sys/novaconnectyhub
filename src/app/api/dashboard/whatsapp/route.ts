@@ -124,6 +124,7 @@ export async function PATCH(request: NextRequest) {
     agentPrompt?: unknown;
     globalPrompt?: unknown;
     behavior?: unknown;
+    qualificationConfig?: unknown;
   }>(request);
   const context = await requireWorkspaceContext(asString(body?.companyId), false);
 
@@ -149,6 +150,7 @@ export async function PATCH(request: NextRequest) {
       agentPrompt,
       globalPrompt,
       behavior: body?.behavior,
+      qualificationConfig: body?.qualificationConfig,
     });
 
     return NextResponse.json(attachWorkspace(context, state));

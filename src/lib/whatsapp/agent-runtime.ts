@@ -2,6 +2,15 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { generateElevenLabsAudio } from "@/lib/elevenlabs/tts";
+import {
+  buildLeadQualificationAnalysisPrompt,
+  buildLeadQualificationInstruction,
+  leadQualificationConfigKey,
+  normalizeLeadQualificationAnalysis,
+  normalizeLeadQualificationConfig,
+  type LeadQualificationConfig,
+  type LeadQualificationAnalysis,
+} from "@/lib/leads/qualification";
 import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
 import { createServiceClient } from "@/lib/supabase/service";
 import { buildTrackedLinkUrl } from "@/lib/tracking/tracked-links";
@@ -49,6 +58,8 @@ type LeadRow = {
   id: string;
   phone_number: string | null;
   display_name: string | null;
+  status: string;
+  score: number | null;
   metadata: JsonRecord | null;
 };
 
@@ -226,6 +237,12 @@ export async function processWhatsappAgentRun(input: {
       await persistBehaviorSignals(client, context, behaviorSignals);
     }
 
+    if (context.qualification.enabled && lead?.id) {
+      await analyzeAndPersistLeadQualification(client, context).catch(async (error: unknown) => {
+        await persistQualificationError(client, context, error);
+      });
+    }
+
     if (behavior.botLoopProtection && isBotLoopRisk(context.messages)) {
       await pauseConversationForHuman(client, context.conversationId, behavior, "bot_loop_protection");
       return await completeRun(client, run.id, "Protecao contra loop acionada.", { skipped: true, reason: "bot_loop_protection" });
@@ -284,6 +301,7 @@ export async function processWhatsappAgentRun(input: {
       agent,
       globalAgent,
       behavior,
+      qualification: context.qualification,
       lead,
       knowledge: context.knowledge,
       linkButtons: context.linkButtons,
@@ -388,6 +406,7 @@ async function loadRunContext(client: SupabaseClient, runId: string) {
     knowledge,
     linkButtons,
     behavior,
+    qualification: normalizeLeadQualificationConfig(readRecord(agent.metadata)?.[leadQualificationConfigKey]),
     providerChatId: asString(metadata?.providerChatId),
     providerMessageId: asString(metadata?.providerMessageId),
     messageType: asString(metadata?.messageType) ?? "text",
@@ -496,7 +515,7 @@ async function loadGlobalAgent(client: SupabaseClient, organizationId: string) {
 async function loadLead(client: SupabaseClient, leadId: string) {
   const { data } = await client
     .from("leads")
-    .select("id, phone_number, display_name, metadata")
+    .select("id, phone_number, display_name, status, score, metadata")
     .eq("id", leadId)
     .maybeSingle<LeadRow>();
 
@@ -656,6 +675,7 @@ async function generateAgentResponse(input: {
   agent: AgentRow;
   globalAgent: AgentRow | null;
   behavior: WhatsappBehaviorConfig;
+  qualification: LeadQualificationConfig;
   lead: LeadRow | null;
   knowledge: KnowledgeMemoryRow[];
   linkButtons: RuntimeLinkButton[];
@@ -701,6 +721,7 @@ function buildSystemInstruction(input: {
   agent: AgentRow;
   globalAgent: AgentRow | null;
   behavior: WhatsappBehaviorConfig;
+  qualification: LeadQualificationConfig;
   lead: LeadRow | null;
   knowledge: KnowledgeMemoryRow[];
   linkButtons: RuntimeLinkButton[];
@@ -732,6 +753,7 @@ function buildSystemInstruction(input: {
     `- Detectar localizacao: ${input.behavior.detectLocation ? "sim" : "nao"}.`,
     `- Detectar opt-out: ${input.behavior.detectOptOut ? "sim" : "nao"}.`,
     `- Analisar links: ${input.behavior.analyzeLinks ? "sim" : "nao"}.`,
+    ...buildLeadQualificationInstruction(input.qualification),
     "",
     "REGRAS DE SAIDA:",
     "- Responda em portugues do Brasil.",
@@ -741,6 +763,201 @@ function buildSystemInstruction(input: {
     "- Se o lead pedir humano, confirme de forma breve que o atendimento humano sera acionado.",
     "- Se usar um link rastreado, inclua a URL completa ou a tag exatamente como aparece na lista de links.",
   ].join("\n");
+}
+
+async function analyzeAndPersistLeadQualification(
+  client: SupabaseClient,
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+) {
+  if (!context.lead?.id || !context.qualification.enabled) {
+    return null;
+  }
+
+  const prompt = buildLeadQualificationAnalysisPrompt({
+    config: context.qualification,
+    organizationName: context.organization.name,
+    leadName: context.lead.display_name,
+    conversationText: buildConversationText(context.messages),
+    leadMetadata: context.lead.metadata,
+  });
+  const url = new URL(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(context.agent.model_id || context.geminiCredentials.model)}:generateContent`);
+  url.searchParams.set("key", context.geminiCredentials.apiKey);
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [
+        {
+          role: "user",
+          parts: [{ text: prompt }],
+        },
+      ],
+      generationConfig: {
+        temperature: 0.1,
+        topP: 0.8,
+        maxOutputTokens: 1100,
+        responseMimeType: "application/json",
+      },
+    }),
+    cache: "no-store",
+  });
+  const data = await readProviderResponse(response);
+
+  if (!response.ok) {
+    throw new Error(readProviderError(data) ?? `Gemini respondeu status ${response.status}.`);
+  }
+
+  const analysis = normalizeLeadQualificationAnalysis(parseJsonObject(extractGeminiText(data)), context.qualification);
+  await persistLeadQualification(client, context, analysis);
+
+  return analysis;
+}
+
+async function persistLeadQualification(
+  client: SupabaseClient,
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+  analysis: LeadQualificationAnalysis,
+) {
+  if (!context.lead?.id) {
+    return;
+  }
+
+  const now = new Date().toISOString();
+  const currentMetadata = context.lead.metadata ?? {};
+  const currentQualification = readRecord(currentMetadata.qualification) ?? {};
+  const nextQualification = {
+    ...currentQualification,
+    ...analysis.fields,
+  };
+  const metadata = {
+    ...currentMetadata,
+    qualification: nextQualification,
+    lead_qualification: {
+      score: analysis.score,
+      temperature: analysis.temperature,
+      status: analysis.status,
+      answered_question_ids: analysis.answeredQuestionIds,
+      missing_question_ids: analysis.missingQuestionIds,
+      next_best_question: analysis.nextBestQuestion,
+      next_best_action: analysis.nextBestAction,
+      summary: analysis.summary,
+      updated_at: now,
+      source: "whatsapp_qualification_agent",
+    },
+    qualification_score: analysis.score,
+    lead_temperature: analysis.temperature,
+    ai_summary: analysis.summary,
+    purpose: analysis.fields.purpose ?? currentMetadata.purpose,
+    budget: analysis.fields.budget ?? analysis.fields.investment ?? currentMetadata.budget,
+    timeframe: analysis.fields.timeframe ?? analysis.fields.urgency ?? currentMetadata.timeframe,
+    objections: analysis.fields.objections ?? analysis.fields.objection ?? currentMetadata.objections,
+    last_qualification_updated_at: now,
+  };
+
+  await client
+    .from("leads")
+    .update({
+      score: analysis.score,
+      status: analysis.status,
+      last_event_summary: preview(analysis.summary, 240),
+      metadata,
+    })
+    .eq("id", context.lead.id);
+
+  await client.from("intelligence_events").insert({
+    scope: "organization",
+    organization_id: context.organization.id,
+    source_type: "whatsapp",
+    source_id: context.conversationId,
+    producer_agent_id: context.agent.id,
+    event_type: "lead.qualification.updated",
+    title: `Lead ${formatTemperatureLabel(analysis.temperature)} no CRM`,
+    summary: preview(analysis.summary, 500),
+    confidence: 0.86,
+    visibility: "organization",
+    tags: ["whatsapp", "crm", "lead_qualification", analysis.temperature],
+    payload: {
+      leadId: context.lead.id,
+      conversationId: context.conversationId,
+      agentRunId: context.run.id,
+      score: analysis.score,
+      status: analysis.status,
+      temperature: analysis.temperature,
+      answeredQuestionIds: analysis.answeredQuestionIds,
+      missingQuestionIds: analysis.missingQuestionIds,
+      nextBestQuestion: analysis.nextBestQuestion,
+      nextBestAction: analysis.nextBestAction,
+      fields: analysis.fields,
+    },
+  });
+}
+
+async function persistQualificationError(
+  client: SupabaseClient,
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+  error: unknown,
+) {
+  await client.from("intelligence_events").insert({
+    scope: "organization",
+    organization_id: context.organization.id,
+    source_type: "whatsapp",
+    source_id: context.conversationId,
+    producer_agent_id: context.agent.id,
+    event_type: "lead.qualification.error",
+    title: "Falha ao qualificar lead",
+    summary: error instanceof Error ? preview(error.message, 500) : "Erro desconhecido ao qualificar lead.",
+    confidence: 0.4,
+    visibility: "organization",
+    tags: ["whatsapp", "crm", "lead_qualification", "error"],
+    payload: {
+      leadId: context.lead?.id ?? null,
+      conversationId: context.conversationId,
+      agentRunId: context.run.id,
+    },
+  });
+}
+
+function buildConversationText(messages: ConversationMessageRow[]) {
+  return messages
+    .slice(-24)
+    .map((message) => {
+      const speaker = message.direction === "inbound" ? "Lead" : message.direction === "outbound" ? "Agente" : "Sistema";
+      return `${speaker}: ${buildMessageText(message)}`;
+    })
+    .join("\n")
+    .slice(-8000);
+}
+
+function parseJsonObject(value: string) {
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return {};
+  }
+
+  try {
+    return JSON.parse(trimmed) as unknown;
+  } catch {
+    const match = trimmed.match(/\{[\s\S]*\}/);
+
+    if (!match) {
+      return {};
+    }
+
+    try {
+      return JSON.parse(match[0]) as unknown;
+    } catch {
+      return {};
+    }
+  }
+}
+
+function formatTemperatureLabel(value: LeadQualificationAnalysis["temperature"]) {
+  if (value === "vip") return "VIP";
+  if (value === "hot") return "quente";
+  if (value === "warm") return "morno";
+  return "frio";
 }
 
 function renderPromptVariables(prompt: string, input: {
