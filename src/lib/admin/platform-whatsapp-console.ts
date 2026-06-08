@@ -978,6 +978,7 @@ async function configurePlatformWebhook(credentials: UazapiCredentials, token: s
         : credentials.webhookUrl,
       events: ["messages", "messages_update", "connection", "history"],
       excludeMessages: ["wasSentByApi"],
+      enabled: true,
       addUrlEvents: true,
       addUrlTypesMessages: true,
     },
