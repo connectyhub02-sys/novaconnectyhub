@@ -111,6 +111,9 @@ type OutboundMessage = {
   mode: "text" | "audio";
   providerResponse: unknown;
   generatedAudio?: Awaited<ReturnType<typeof generateElevenLabsAudio>>;
+  chunkIndex?: number;
+  chunksTotal?: number;
+  persisted?: boolean;
 };
 
 type BehaviorSignal = {
@@ -309,7 +312,8 @@ export async function processWhatsappAgentRun(input: {
       await setPresenceAvailable(context.credentials, token);
     }
 
-    const aiText = await generateAgentResponse({
+    const cachedAiText = readCachedRunResponseText(context.run.metadata);
+    const aiText = cachedAiText ?? await generateAgentResponse({
       credentials: context.geminiCredentials,
       organization,
       agent,
@@ -322,6 +326,11 @@ export async function processWhatsappAgentRun(input: {
       messages: context.messages,
       userText,
     });
+
+    if (!cachedAiText) {
+      await cacheRunResponseText(client, run.id, aiText);
+    }
+
     await prepareAgentPresenceBeforeSend({
       credentials: context.credentials,
       token,
@@ -338,7 +347,9 @@ export async function processWhatsappAgentRun(input: {
     });
 
     for (const message of outbound) {
-      await saveOutboundMessage(client, context, message);
+      if (!message.persisted) {
+        await saveOutboundMessage(client, context, message);
+      }
     }
 
     if (behavior.markAsRead) {
@@ -1381,11 +1392,26 @@ async function sendAgentResponse(input: {
   const latestInbound = findLatestInbound(context.messages);
   const shouldSendAudio = shouldSendAudioResponse(context, latestInbound);
   const chunks = context.behavior.splitMessages ? splitMessage(input.text) : [input.text];
+  const persistedChunks = await loadPersistedOutboundChunks(input.client, context.run.id, shouldSendAudio ? "audio" : "text");
   const outbound: OutboundMessage[] = [];
 
   if (shouldSendAudio) {
     for (let index = 0; index < chunks.length; index++) {
       const text = chunks[index];
+      const chunkIndex = index + 1;
+      const chunksTotal = chunks.length;
+
+      if (persistedChunks.has(chunkIndex)) {
+        outbound.push({
+          text,
+          mode: "audio",
+          providerResponse: { skipped: true, reason: "chunk_already_persisted", chunkIndex },
+          chunkIndex,
+          chunksTotal,
+          persisted: true,
+        });
+        continue;
+      }
 
       if (index > 0) {
         const delayMs = resolveAudioChunkDelayMs(text);
@@ -1408,8 +1434,8 @@ async function sendAgentResponse(input: {
           agentRunId: context.run.id,
           conversationId: context.conversationId,
           whatsappInstanceId: context.instance.id,
-          audioChunkIndex: index + 1,
-          audioChunksTotal: chunks.length,
+          audioChunkIndex: chunkIndex,
+          audioChunksTotal: chunksTotal,
         },
         client: input.client,
       });
@@ -1421,16 +1447,22 @@ async function sendAgentResponse(input: {
           type: "ptt",
           file: generatedAudio.audioUrl,
           track_source: "connectyhub",
-          track_id: `agent_audio_${context.run.id}_${index + 1}`,
+          track_id: `agent_audio_${context.run.id}_${chunkIndex}`,
         },
       });
 
-      outbound.push({
+      const message: OutboundMessage = {
         text,
         mode: "audio",
         providerResponse,
         generatedAudio,
-      });
+        chunkIndex,
+        chunksTotal,
+      };
+
+      await saveOutboundMessage(input.client, context, message);
+      persistedChunks.add(chunkIndex);
+      outbound.push({ ...message, persisted: true });
     }
 
     return outbound;
@@ -1438,6 +1470,20 @@ async function sendAgentResponse(input: {
 
   for (let index = 0; index < chunks.length; index++) {
     const text = chunks[index];
+    const chunkIndex = index + 1;
+    const chunksTotal = chunks.length;
+
+    if (persistedChunks.has(chunkIndex)) {
+      outbound.push({
+        text,
+        mode: "text",
+        providerResponse: { skipped: true, reason: "chunk_already_persisted", chunkIndex },
+        chunkIndex,
+        chunksTotal,
+        persisted: true,
+      });
+      continue;
+    }
 
     if (index > 0) {
       const delayMs = resolveChunkDelayMs(text);
@@ -1450,17 +1496,44 @@ async function sendAgentResponse(input: {
       token: input.token,
       phone: input.phone,
       text,
-      trackId: `agent_text_${context.run.id}_${index + 1}`,
+      trackId: `agent_text_${context.run.id}_${chunkIndex}`,
     });
 
-    outbound.push({
+    const message: OutboundMessage = {
       text,
       mode: "text",
       providerResponse,
-    });
+      chunkIndex,
+      chunksTotal,
+    };
+
+    await saveOutboundMessage(input.client, context, message);
+    persistedChunks.add(chunkIndex);
+    outbound.push({ ...message, persisted: true });
   }
 
   return outbound;
+}
+
+async function loadPersistedOutboundChunks(client: SupabaseClient, runId: string, mode: "text" | "audio") {
+  const { data } = await client
+    .from("conversation_messages")
+    .select("payload")
+    .eq("direction", "outbound")
+    .eq("payload->>agent_run_id", runId)
+    .eq("payload->>delivery_mode", mode);
+  const chunks = new Set<number>();
+
+  for (const row of (data ?? []) as Array<{ payload: JsonRecord | null }>) {
+    const payload = readRecord(row.payload);
+    const chunkIndex = readPositiveInteger(payload?.chunk_index);
+
+    if (chunkIndex) {
+      chunks.add(chunkIndex);
+    }
+  }
+
+  return chunks;
 }
 
 async function prepareAgentPresenceBeforeSend(input: {
@@ -1546,6 +1619,8 @@ async function saveOutboundMessage(
     generated_audio_media_id: message.generatedAudio?.mediaId ?? null,
     generated_audio_object_key: message.generatedAudio?.objectKey ?? null,
     agent_run_id: context.run.id,
+    chunk_index: message.chunkIndex ?? null,
+    chunks_total: message.chunksTotal ?? null,
   };
 
   await client.from("conversation_messages").insert({
@@ -1828,6 +1903,31 @@ async function completeRun(client: SupabaseClient, runId: string, outputSummary:
     .eq("id", runId);
 
   return { status: "completed", ...metadata };
+}
+
+function readCachedRunResponseText(metadata: JsonRecord | null) {
+  const text = asString(readRecord(metadata)?.runtime_response_text);
+  return text && text.length > 0 ? text : null;
+}
+
+async function cacheRunResponseText(client: SupabaseClient, runId: string, text: string) {
+  const { data } = await client
+    .from("agent_runs")
+    .select("metadata")
+    .eq("id", runId)
+    .maybeSingle<{ metadata: JsonRecord | null }>();
+  const currentMetadata = readRecord(data?.metadata);
+
+  await client
+    .from("agent_runs")
+    .update({
+      metadata: {
+        ...(currentMetadata ?? {}),
+        runtime_response_text: text.slice(0, 8000),
+        runtime_response_cached_at: new Date().toISOString(),
+      },
+    })
+    .eq("id", runId);
 }
 
 async function pauseConversationForHuman(client: SupabaseClient, conversationId: string, behavior: WhatsappBehaviorConfig, reason: string) {
@@ -2879,6 +2979,12 @@ function readRecord(value: unknown): JsonRecord | null {
 
 function asString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function readPositiveInteger(value: unknown) {
+  const number = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+
+  return Number.isInteger(number) && number > 0 ? number : null;
 }
 
 function preview(value: string, maxLength: number) {
