@@ -1,0 +1,150 @@
+import { NextResponse, type NextRequest } from "next/server";
+import {
+  connectPlatformWhatsappConsole,
+  createPlatformWhatsappConsoleAgent,
+  disconnectPlatformWhatsappConsole,
+  getPlatformWhatsappConsoleState,
+  refreshPlatformWhatsappConsoleStatus,
+  updatePlatformWhatsappConsoleSettings,
+} from "@/lib/admin/platform-whatsapp-console";
+import { requirePlatformAdmin } from "@/lib/supabase/admin-auth";
+import { createServiceClient } from "@/lib/supabase/service";
+
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
+type ActionBody = {
+  action?: unknown;
+  sectorId?: unknown;
+  name?: unknown;
+  roleTitle?: unknown;
+  prompt?: unknown;
+  agentPrompt?: unknown;
+  behavior?: unknown;
+};
+
+export async function GET(request: NextRequest) {
+  const auth = await requirePlatformAdmin();
+
+  if (auth instanceof NextResponse) {
+    return auth;
+  }
+
+  try {
+    const state = await getPlatformWhatsappConsoleState({
+      sectorId: asString(request.nextUrl.searchParams.get("sectorId")),
+      userId: auth.userId,
+      client: createServiceClient(),
+    });
+
+    return NextResponse.json(state);
+  } catch (error) {
+    return NextResponse.json(formatError(error), { status: 500 });
+  }
+}
+
+export async function POST(request: NextRequest) {
+  const auth = await requirePlatformAdmin();
+
+  if (auth instanceof NextResponse) {
+    return auth;
+  }
+
+  const body = await readJson<ActionBody>(request);
+  const action = typeof body?.action === "string" ? body.action : "";
+
+  try {
+    if (action === "create_agent") {
+      const state = await createPlatformWhatsappConsoleAgent({
+        sectorId: asString(body?.sectorId) ?? "",
+        name: asString(body?.name) ?? "",
+        roleTitle: asString(body?.roleTitle) ?? undefined,
+        prompt: asString(body?.prompt) ?? undefined,
+        userId: auth.userId,
+        client: createServiceClient(),
+      });
+
+      return NextResponse.json({ state, notice: { tone: "success", message: "Agente criado. Agora configure prompt, arquivos, links e comportamento." } }, { status: 201 });
+    }
+
+    if (action === "connect") {
+      const result = await connectPlatformWhatsappConsole({
+        sectorId: asString(body?.sectorId) ?? "",
+        userId: auth.userId,
+        client: createServiceClient(),
+      });
+
+      return NextResponse.json(result);
+    }
+
+    if (action === "refresh_status") {
+      const result = await refreshPlatformWhatsappConsoleStatus({
+        sectorId: asString(body?.sectorId) ?? "",
+        userId: auth.userId,
+        client: createServiceClient(),
+      });
+
+      return NextResponse.json(result);
+    }
+
+    if (action === "disconnect") {
+      const result = await disconnectPlatformWhatsappConsole({
+        sectorId: asString(body?.sectorId) ?? "",
+        userId: auth.userId,
+        client: createServiceClient(),
+      });
+
+      return NextResponse.json(result);
+    }
+
+    return NextResponse.json({ error: "Acao invalida." }, { status: 422 });
+  } catch (error) {
+    return NextResponse.json(formatError(error), { status: 400 });
+  }
+}
+
+export async function PATCH(request: NextRequest) {
+  const auth = await requirePlatformAdmin();
+
+  if (auth instanceof NextResponse) {
+    return auth;
+  }
+
+  const body = await readJson<ActionBody>(request);
+
+  try {
+    const state = await updatePlatformWhatsappConsoleSettings({
+      sectorId: asString(body?.sectorId) ?? "",
+      userId: auth.userId,
+      agentPrompt: typeof body?.agentPrompt === "string"
+        ? body.agentPrompt
+        : typeof body?.prompt === "string"
+          ? body.prompt
+          : undefined,
+      behavior: body?.behavior,
+      client: createServiceClient(),
+    });
+
+    return NextResponse.json(state);
+  } catch (error) {
+    return NextResponse.json(formatError(error), { status: 400 });
+  }
+}
+
+async function readJson<T>(request: NextRequest): Promise<T | null> {
+  try {
+    return (await request.json()) as T;
+  } catch {
+    return null;
+  }
+}
+
+function asString(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function formatError(error: unknown) {
+  return {
+    error: error instanceof Error ? error.message : "Erro inesperado no WhatsApp interno.",
+  };
+}

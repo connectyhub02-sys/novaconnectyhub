@@ -52,7 +52,7 @@ const viewMeta: Record<
     href: "/admin/agentes",
     eyebrow: "Admin OS / Empresa autonoma",
     title: "Agentes internos da ConnectyHub",
-    description: "Setores, funcionarios IA, prompts, autonomia, ferramentas e eventos Inngest responsaveis pela operacao.",
+    description: "Operarios IA da plataforma. Eles analisam, auditam e coordenam o sistema, mas nao atendem leads diretamente.",
   },
   intelligence: {
     href: "/admin/inteligencia",
@@ -61,7 +61,7 @@ const viewMeta: Record<
     description: "Dados coletados por agentes internos e externos para orientar atendimento, marketing, conteudo e financeiro.",
   },
   instances: {
-    href: "/admin/instancias",
+    href: "/admin/clientes/whatsapp",
     eyebrow: "Admin OS / Controle dos clientes",
     title: "Instancias WhatsApp conectadas",
     description: "Todos os numeros conectados pelos usuarios aparecem aqui para monitoramento, auditoria e suporte.",
@@ -134,9 +134,9 @@ function AutonomousKpis({ overview }: { overview: AutonomousAdminOverview }) {
     <div className="mb-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
       <SignalCard
         icon={Bot}
-        label="Funcionarios IA"
-        value={String(overview.summary.totalAgents)}
-        detail={`${overview.summary.onlineAgents} online / ${overview.summary.approvalAgents} com aprovacao`}
+        label="Operarios IA"
+        value={String(overview.summary.systemAgents)}
+        detail={`${overview.summary.whatsappAgents} atendentes fora da operacao interna`}
         tone="cyan"
       />
       <SignalCard
@@ -165,7 +165,8 @@ function AutonomousKpis({ overview }: { overview: AutonomousAdminOverview }) {
 }
 
 function AgentsView({ overview }: { overview: AutonomousAdminOverview }) {
-  const groups = groupAgentsBySector(overview.agents);
+  const systemAgents = overview.agents.filter((agent) => agent.agentType === "system_operator");
+  const groups = groupAgentsBySector(systemAgents);
 
   return (
     <div className="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_360px]">
@@ -180,7 +181,7 @@ function AgentsView({ overview }: { overview: AutonomousAdminOverview }) {
           <EmptyState
             icon={Bot}
             title="Nenhum agente registrado"
-            text="Depois da migration 0006, os primeiros agentes internos da ConnectyHub aparecem aqui."
+            text="Agentes internos aparecem aqui. WhatsApp dos clientes fica em Clientes / WhatsApp."
           />
         )}
       </Panel>
@@ -354,8 +355,20 @@ function InstancesView({ overview }: { overview: AutonomousAdminOverview }) {
 }
 
 function ContentView({ overview }: { overview: AutonomousAdminOverview }) {
+  const growthSectors = [
+    "conteudo",
+    "noticias",
+    "inteligencia_externa",
+    "radar_mercado",
+    "inteligencia_competitiva",
+    "seo_organico",
+    "aeo_respostas",
+    "geo_ago",
+  ];
   const contentAgents = overview.agents.filter((agent) =>
-    ["conteudo", "noticias", "inteligencia_externa"].includes(agent.sectorCode),
+    growthSectors.includes(agent.sectorCode)
+      || agent.metadata.growth_engine === true
+      || agent.metadata.seo_aeo_geo === true,
   );
 
   return (
@@ -376,7 +389,7 @@ function ContentView({ overview }: { overview: AutonomousAdminOverview }) {
         )}
       </Panel>
 
-      <Panel title="Agentes de conteudo" eyebrow="responsaveis">
+      <Panel title="Agentes de crescimento" eyebrow="seo / aeo / geo">
         {contentAgents.length > 0 ? (
           <div className="space-y-3">
             {contentAgents.map((agent) => (
@@ -386,8 +399,8 @@ function ContentView({ overview }: { overview: AutonomousAdminOverview }) {
         ) : (
           <EmptyState
             icon={Sparkles}
-            title="Sem agentes de conteudo"
-            text="Depois da migration, os agentes de blog, noticias e pesquisa aparecem aqui."
+            title="Sem agentes de crescimento"
+            text="Depois da migration, os agentes de pesquisa, noticias, blog, radar, SEO, AEO e GEO aparecem aqui."
           />
         )}
       </Panel>
@@ -500,6 +513,11 @@ function AgentMini({ agent }: { agent: AdminAgent }) {
             <p className="text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>{agent.personaName}</p>
             <p className="text-[11px] text-slate-500">{agent.name}</p>
             <p className="mt-1 text-[12px] text-slate-500">{agent.profileBio ?? agent.description}</p>
+            {(agent.scheduleRrule || agent.inngestEventName) && (
+              <p className="mt-2 font-mono text-[9px] uppercase tracking-wider text-slate-500">
+                {formatSchedule(agent.scheduleRrule)} / {agent.inngestEventName ?? "sem evento"}
+              </p>
+            )}
           </div>
         </div>
         <StatusBadge status={agentStatusTone(agent.status)} label={agent.status} />
@@ -775,4 +793,17 @@ function formatDate(value: string | null | undefined) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(date);
+}
+
+function formatSchedule(value: string | null | undefined) {
+  if (!value) {
+    return "sem cron";
+  }
+
+  return value
+    .replace("FREQ=", "")
+    .replace("BYDAY=", "dias=")
+    .replace("BYHOUR=", "hora=")
+    .replace("BYMINUTE=", "min=")
+    .toLowerCase();
 }

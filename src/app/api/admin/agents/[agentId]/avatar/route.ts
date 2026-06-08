@@ -138,6 +138,7 @@ export async function POST(
 
   revalidatePath("/admin/agentes");
   revalidatePath("/admin/conteudo");
+  revalidatePath("/admin/whatsapp/atendimento");
 
   return NextResponse.json({
     avatarUrl,

@@ -237,6 +237,10 @@ const TOAST_EVENTS = [
   { name: "Lucas T.", action: "venda via áudio de", value: "R$ 249" },
 ];
 
+const toastFirstDelayMs = 14_000;
+const toastIntervalMs = 10_000;
+const toastVisibleMs = 2_800;
+
 const steps = [
   {
     n: "01",
@@ -343,12 +347,12 @@ export default function Home() {
       setTimeout(() => {
         setToastLeaving(true);
         setTimeout(() => setToast(null), 400);
-      }, 4_200);
+      }, toastVisibleMs);
     };
     const first = setTimeout(() => {
       showToast();
-      toastTimerRef.current = setInterval(showToast, 11_000);
-    }, 6_000);
+      toastTimerRef.current = setInterval(showToast, toastIntervalMs);
+    }, toastFirstDelayMs);
     return () => {
       clearTimeout(first);
       if (toastTimerRef.current) clearInterval(toastTimerRef.current);

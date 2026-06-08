@@ -5,6 +5,7 @@ import {
   processWhatsappAgentRun,
 } from "@/lib/whatsapp/agent-runtime";
 import { syncUazapiInstances } from "@/lib/whatsapp/uazapi-sync";
+import { runGrowthAgentMission, type GrowthAgentCode } from "@/lib/growth/growth-agent-runner";
 
 export const connectyhubDailyAdminReport = inngest.createFunction(
   {
@@ -116,10 +117,97 @@ export const connectyhubWhatsappAgentSweep = inngest.createFunction(
   },
 );
 
+const growthAgentSchedules: Array<{
+  id: string;
+  name: string;
+  eventName: string;
+  cron: string;
+  agentCode: GrowthAgentCode;
+}> = [
+  {
+    id: "connectyhub-growth-research-agent",
+    name: "ConnectyHub Growth Research Agent",
+    eventName: "connectyhub/growth.research.scheduled",
+    cron: "30 8 * * *",
+    agentCode: "agente-pesquisa-web",
+  },
+  {
+    id: "connectyhub-growth-market-radar-agent",
+    name: "ConnectyHub Market Radar Agent",
+    eventName: "connectyhub/growth.market-radar.scheduled",
+    cron: "15 9 * * *",
+    agentCode: "agente-radar-mercado",
+  },
+  {
+    id: "connectyhub-growth-news-agent",
+    name: "ConnectyHub News Agent",
+    eventName: "connectyhub/growth.news.scheduled",
+    cron: "0 7,13,18 * * *",
+    agentCode: "agente-noticias",
+  },
+  {
+    id: "connectyhub-growth-blog-agent",
+    name: "ConnectyHub Blog Agent",
+    eventName: "connectyhub/growth.blog.scheduled",
+    cron: "0 10 * * 1,3,5",
+    agentCode: "agente-blog",
+  },
+  {
+    id: "connectyhub-growth-competitive-intel-agent",
+    name: "ConnectyHub Competitive Intelligence Agent",
+    eventName: "connectyhub/growth.competitive-intel.scheduled",
+    cron: "30 11 * * 1,3,5",
+    agentCode: "agente-inteligencia-competitiva",
+  },
+  {
+    id: "connectyhub-growth-seo-agent",
+    name: "ConnectyHub SEO Agent",
+    eventName: "connectyhub/growth.seo.scheduled",
+    cron: "45 9 * * 2,4",
+    agentCode: "agente-seo-organico",
+  },
+  {
+    id: "connectyhub-growth-aeo-agent",
+    name: "ConnectyHub AEO Agent",
+    eventName: "connectyhub/growth.aeo.scheduled",
+    cron: "15 12 * * 2,4",
+    agentCode: "agente-aeo-respostas",
+  },
+  {
+    id: "connectyhub-growth-geo-ago-agent",
+    name: "ConnectyHub GEO AGO Agent",
+    eventName: "connectyhub/growth.geo-ago.scheduled",
+    cron: "0 14 * * 5",
+    agentCode: "agente-geo-ago",
+  },
+];
+
+export const connectyhubGrowthAgentFunctions = growthAgentSchedules.map((config) =>
+  inngest.createFunction(
+    {
+      id: config.id,
+      name: config.name,
+      retries: 1,
+      triggers: [
+        { event: config.eventName },
+        { cron: config.cron },
+      ],
+    },
+    async ({ event, step }) =>
+      step.run("run-growth-agent-mission", () =>
+        runGrowthAgentMission({
+          agentCode: config.agentCode,
+          triggerSource: event.name,
+        }),
+      ),
+  ),
+);
+
 export const functions = [
   connectyhubDailyAdminReport,
   connectyhubAdminPing,
   connectyhubWhatsappSync,
   connectyhubWhatsappAgentResponse,
   connectyhubWhatsappAgentSweep,
+  ...connectyhubGrowthAgentFunctions,
 ];

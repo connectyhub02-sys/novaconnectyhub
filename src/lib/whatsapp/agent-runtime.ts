@@ -338,7 +338,7 @@ async function loadRunContext(client: SupabaseClient, runId: string) {
     throw new Error("Execucao WhatsApp sem conversa ou instancia.");
   }
 
-  const [organization, instance, agent, globalAgent, lead, conversation, messages, credentials, geminiCredentials, knowledge, linkButtons] = await Promise.all([
+  const [organization, instance, agent, globalAgent, lead, conversation, messages, credentials, geminiCredentials] = await Promise.all([
     loadOrganization(client, run.organization_id),
     loadInstance(client, whatsappInstanceId),
     loadRuntimeAgent(client, run.agent_id, run.organization_id),
@@ -348,16 +348,27 @@ async function loadRunContext(client: SupabaseClient, runId: string) {
     loadConversationMessages(client, conversationId),
     loadUazapiCredentials(client),
     loadGeminiCredentials(client),
-    loadOrganizationKnowledge(client, run.organization_id),
-    loadOrganizationLinkButtons(client, run.organization_id),
   ]);
 
   if (!organization || !instance || !agent) {
     throw new Error("Organizacao, instancia ou agente WhatsApp nao encontrado.");
   }
 
+  const instanceMetadata = readRecord(instance.metadata);
+  const sectorId = asString(instanceMetadata?.sector_id) ?? asString(readRecord(agent.metadata)?.sector_id);
+  const isPlatformWhatsapp = instanceMetadata?.admin_whatsapp === true && Boolean(sectorId);
+  const [knowledge, linkButtons] = isPlatformWhatsapp && sectorId
+    ? await Promise.all([
+        loadPlatformSectorKnowledge(client, sectorId),
+        loadPlatformSectorLinkButtons(client, sectorId),
+      ])
+    : await Promise.all([
+        loadOrganizationKnowledge(client, run.organization_id),
+        loadOrganizationLinkButtons(client, run.organization_id),
+      ]);
+
   const behavior = normalizeWhatsappBehaviorConfig(
-    readRecord(instance.metadata)?.behavior_config ??
+    instanceMetadata?.behavior_config ??
       readRecord(globalAgent?.metadata)?.whatsapp_behavior_config ??
       readRecord(agent.metadata)?.whatsapp_behavior_config,
   );
@@ -447,8 +458,12 @@ async function loadInstance(client: SupabaseClient, instanceId: string) {
 async function loadRuntimeAgent(client: SupabaseClient, agentId: string, organizationId: string) {
   const select = "id, organization_id, name, persona_name, prompt, model_id, metadata";
   const { data: byRun } = await client.from("agent_registry").select(select).eq("id", agentId).maybeSingle<AgentRow>();
+  const byRunMetadata = readRecord(byRun?.metadata);
 
-  if (byRun?.organization_id === organizationId) {
+  if (
+    byRun?.organization_id === organizationId ||
+    (byRun?.organization_id === null && byRunMetadata?.admin_whatsapp === true && byRunMetadata?.agent_kind === "whatsapp")
+  ) {
     return byRun;
   }
 
@@ -543,6 +558,43 @@ async function loadOrganizationLinkButtons(client: SupabaseClient, organizationI
 
   if (error) {
     throw new Error(`Nao foi possivel carregar links rastreados: ${error.message}`);
+  }
+
+  return ((data ?? []) as LinkButtonMemoryRow[]).map(mapRuntimeLinkButton);
+}
+
+async function loadPlatformSectorKnowledge(client: SupabaseClient, sectorId: string) {
+  const { data, error } = await client
+    .from("intelligence_memory")
+    .select("id, title, content, metadata, created_at")
+    .eq("scope", "platform")
+    .is("organization_id", null)
+    .eq("memory_type", "knowledge_file")
+    .contains("metadata", { admin_whatsapp: true, sector_id: sectorId })
+    .order("importance", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(6);
+
+  if (error) {
+    throw new Error(`Nao foi possivel carregar conhecimento do setor: ${error.message}`);
+  }
+
+  return (data ?? []) as KnowledgeMemoryRow[];
+}
+
+async function loadPlatformSectorLinkButtons(client: SupabaseClient, sectorId: string): Promise<RuntimeLinkButton[]> {
+  const { data, error } = await client
+    .from("intelligence_memory")
+    .select("id, title, content, metadata, created_at")
+    .eq("scope", "platform")
+    .is("organization_id", null)
+    .eq("memory_type", "tracked_link_button")
+    .contains("metadata", { admin_whatsapp: true, sector_id: sectorId })
+    .order("created_at", { ascending: false })
+    .limit(40);
+
+  if (error) {
+    throw new Error(`Nao foi possivel carregar links rastreados do setor: ${error.message}`);
   }
 
   return ((data ?? []) as LinkButtonMemoryRow[]).map(mapRuntimeLinkButton);

@@ -2,6 +2,8 @@ import "server-only";
 
 import { createClient } from "@/lib/supabase/server";
 
+type JsonRecord = Record<string, unknown>;
+
 export type AgentStatus = "draft" | "online" | "paused" | "needs_review" | "archived";
 export type AgentRunStatus = "queued" | "running" | "completed" | "failed" | "needs_approval" | "cancelled";
 export type WhatsappInstanceStatus =
@@ -26,6 +28,8 @@ export type AdminAgent = {
   id: string;
   scope: "platform" | "organization";
   organizationId: string | null;
+  agentType: "system_operator" | "whatsapp_attendant";
+  leadFacing: boolean;
   sectorCode: string;
   sectorName: string;
   agentCode: string;
@@ -49,6 +53,7 @@ export type AdminAgent = {
   inngestEventName: string | null;
   memoryAccessLevel: string;
   monthlyBudgetCredits: number | null;
+  metadata: JsonRecord;
   updatedAt: string | null;
 };
 
@@ -139,6 +144,8 @@ export type AutonomousAdminOverview = {
   warnings: string[];
   summary: {
     totalAgents: number;
+    systemAgents: number;
+    whatsappAgents: number;
     onlineAgents: number;
     approvalAgents: number;
     intelligenceMemories: number;
@@ -183,6 +190,7 @@ type AgentRow = {
   inngest_event_name: string | null;
   memory_access_level: string | null;
   monthly_budget_credits: number | string | null;
+  metadata: JsonRecord | null;
   updated_at: string | null;
 };
 
@@ -293,7 +301,7 @@ export async function getAutonomousAdminOverview(): Promise<AutonomousAdminOverv
     supabase
       .from("agent_registry")
       .select(
-        "id, scope, organization_id, sector_code, sector_name, agent_code, name, persona_name, avatar_url, avatar_alt, profile_bio, role_title, description, prompt, llm_provider, model_id, status, autonomy_level, requires_human_approval, tools, triggers, schedule_rrule, inngest_event_name, memory_access_level, monthly_budget_credits, updated_at",
+        "id, scope, organization_id, sector_code, sector_name, agent_code, name, persona_name, avatar_url, avatar_alt, profile_bio, role_title, description, prompt, llm_provider, model_id, status, autonomy_level, requires_human_approval, tools, triggers, schedule_rrule, inngest_event_name, memory_access_level, monthly_budget_credits, metadata, updated_at",
       )
       .order("sector_name", { ascending: true })
       .order("name", { ascending: true })
@@ -364,6 +372,8 @@ export async function getAutonomousAdminOverview(): Promise<AutonomousAdminOverv
     warnings: [],
     summary: {
       totalAgents: agents.length,
+      systemAgents: agents.filter((agent) => agent.agentType === "system_operator").length,
+      whatsappAgents: agents.filter((agent) => agent.agentType === "whatsapp_attendant").length,
       onlineAgents: agents.filter((agent) => agent.status === "online").length,
       approvalAgents: agents.filter((agent) => agent.requiresHumanApproval || agent.status === "needs_review").length,
       intelligenceMemories: intelligenceMemory.length,
@@ -384,10 +394,15 @@ export async function getAutonomousAdminOverview(): Promise<AutonomousAdminOverv
 }
 
 function mapAgent(row: AgentRow): AdminAgent {
+  const metadata = readRecord(row.metadata) ?? {};
+  const agentType = inferAgentType(row, metadata);
+
   return {
     id: row.id,
     scope: row.scope,
     organizationId: row.organization_id,
+    agentType,
+    leadFacing: agentType === "whatsapp_attendant" && !readBoolean(metadata.controls_all_whatsapp_agents),
     sectorCode: row.sector_code,
     sectorName: row.sector_name,
     agentCode: row.agent_code,
@@ -411,6 +426,7 @@ function mapAgent(row: AgentRow): AdminAgent {
     inngestEventName: row.inngest_event_name,
     memoryAccessLevel: row.memory_access_level ?? "sector",
     monthlyBudgetCredits: toNullableNumber(row.monthly_budget_credits),
+    metadata,
     updatedAt: row.updated_at,
   };
 }
@@ -511,8 +527,61 @@ function mapPlanEntitlement(row: PlanEntitlementRow): PlanEntitlement {
   };
 }
 
+function inferAgentType(row: AgentRow, metadata: JsonRecord): AdminAgent["agentType"] {
+  const explicitType = readString(metadata.agent_type);
+  const explicitKind = readString(metadata.agent_kind);
+
+  if (explicitType === "whatsapp_attendant" || explicitKind === "whatsapp") {
+    return "whatsapp_attendant";
+  }
+
+  if (explicitType === "system_operator") {
+    return "system_operator";
+  }
+
+  const tools = toStringArray(row.tools).map((item) => item.toLowerCase());
+  const triggers = toStringArray(row.triggers).map((item) => item.toLowerCase());
+  const code = row.agent_code.toLowerCase();
+  const name = row.name.toLowerCase();
+  const role = row.role_title.toLowerCase();
+
+  if (
+    readBoolean(metadata.controls_all_whatsapp_agents) ||
+    code.includes("agente-whatsapp") ||
+    name.includes("whatsapp") ||
+    role.includes("whatsapp") ||
+    triggers.some((trigger) => trigger.includes("connectyhub/whatsapp.")) ||
+    (tools.includes("whatsapp") && readBoolean(metadata.client_operational))
+  ) {
+    return "whatsapp_attendant";
+  }
+
+  return "system_operator";
+}
+
 function getRelatedOrganization(organization: RelatedOrganization) {
   return Array.isArray(organization) ? organization[0] ?? null : organization;
+}
+
+function readRecord(value: unknown): JsonRecord | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as JsonRecord) : null;
+}
+
+function readString(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function readBoolean(value: unknown) {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    if (value.toLowerCase() === "true") return true;
+    if (value.toLowerCase() === "false") return false;
+  }
+
+  return false;
 }
 
 function toStringArray(value: string[] | null | undefined) {
@@ -543,6 +612,8 @@ const fallbackOverview: AutonomousAdminOverview = {
   warnings: [],
   summary: {
     totalAgents: 0,
+    systemAgents: 0,
+    whatsappAgents: 0,
     onlineAgents: 0,
     approvalAgents: 0,
     intelligenceMemories: 0,

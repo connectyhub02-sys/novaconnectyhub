@@ -87,6 +87,8 @@ export async function PATCH(
   revalidatePath("/admin/conteudo");
   revalidatePath("/admin/inteligencia");
   revalidatePath("/admin/instancias");
+  revalidatePath("/admin/clientes/whatsapp");
+  revalidatePath("/admin/whatsapp/atendimento");
 
   return NextResponse.json({
     prompt: parsed.prompt,

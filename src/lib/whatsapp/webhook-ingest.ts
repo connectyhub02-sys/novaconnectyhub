@@ -10,6 +10,7 @@ type JsonRecord = Record<string, unknown>;
 type WhatsappInstanceRow = {
   id: string;
   organization_id: string;
+  metadata: JsonRecord | null;
 };
 
 type LeadRow = {
@@ -222,7 +223,7 @@ export async function ingestUazapiWebhook(input: {
 async function findWhatsappInstance(client: SupabaseClient, providerInstanceId: string) {
   const { data } = await client
     .from("whatsapp_instances")
-    .select("id, organization_id")
+    .select("id, organization_id, metadata")
     .eq("provider", "uazapi")
     .eq("provider_instance_id", providerInstanceId)
     .maybeSingle<WhatsappInstanceRow>();
@@ -233,7 +234,7 @@ async function findWhatsappInstance(client: SupabaseClient, providerInstanceId: 
 
   const { data: byProviderName } = await client
     .from("whatsapp_instances")
-    .select("id, organization_id")
+    .select("id, organization_id, metadata")
     .eq("provider", "uazapi")
     .contains("metadata", { provider_name: providerInstanceId })
     .maybeSingle<WhatsappInstanceRow>();
@@ -509,15 +510,12 @@ async function enqueueWhatsappAgentRun(
     eventType: string;
   },
 ) {
-  const { data: agent } = await client
-    .from("agent_registry")
-    .select("id")
-    .eq("scope", "organization")
-    .eq("organization_id", input.organizationId)
-    .contains("metadata", { client_created: true, agent_kind: "whatsapp" })
-    .order("updated_at", { ascending: false })
-    .limit(1)
-    .maybeSingle<AgentRow>();
+  const instanceMetadata = await loadWhatsappInstanceMetadata(client, input.whatsappInstanceId);
+  const sectorId = asString(instanceMetadata?.sector_id);
+  const isPlatformWhatsapp = instanceMetadata?.admin_whatsapp === true && Boolean(sectorId);
+  const agent = isPlatformWhatsapp && sectorId
+    ? await findPlatformSectorWhatsappAgent(client, sectorId)
+    : await findOrganizationWhatsappAgent(client, input.organizationId);
 
   if (!agent?.id) {
     return null;
@@ -541,6 +539,14 @@ async function enqueueWhatsappAgentRun(
         phoneNumber: input.phoneNumber,
         messageType: input.messageType,
         providerEventType: input.eventType,
+        ...(isPlatformWhatsapp
+          ? {
+              platformWhatsapp: true,
+              sectorId,
+              sectorCode: asString(instanceMetadata?.sector_code),
+              sectorName: asString(instanceMetadata?.sector_name),
+            }
+          : {}),
       },
     })
     .select("id, metadata")
@@ -551,6 +557,44 @@ async function enqueueWhatsappAgentRun(
   }
 
   return data;
+}
+
+async function loadWhatsappInstanceMetadata(client: SupabaseClient, whatsappInstanceId: string) {
+  const { data } = await client
+    .from("whatsapp_instances")
+    .select("metadata")
+    .eq("id", whatsappInstanceId)
+    .maybeSingle<{ metadata: JsonRecord | null }>();
+
+  return isRecord(data?.metadata) ? data.metadata : null;
+}
+
+async function findPlatformSectorWhatsappAgent(client: SupabaseClient, sectorId: string) {
+  const { data } = await client
+    .from("agent_registry")
+    .select("id")
+    .eq("scope", "platform")
+    .is("organization_id", null)
+    .contains("metadata", { admin_whatsapp: true, agent_kind: "whatsapp", sector_id: sectorId })
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<AgentRow>();
+
+  return data ?? null;
+}
+
+async function findOrganizationWhatsappAgent(client: SupabaseClient, organizationId: string) {
+  const { data } = await client
+    .from("agent_registry")
+    .select("id")
+    .eq("scope", "organization")
+    .eq("organization_id", organizationId)
+    .contains("metadata", { client_created: true, agent_kind: "whatsapp" })
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<AgentRow>();
+
+  return data ?? null;
 }
 
 async function createIntelligenceEvent(
@@ -830,6 +874,10 @@ function preview(value: string | null | undefined, maxLength: number) {
   }
 
   return cleaned.length > maxLength ? `${cleaned.slice(0, maxLength - 3)}...` : cleaned;
+}
+
+function asString(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 function isRecord(value: unknown): value is JsonRecord {

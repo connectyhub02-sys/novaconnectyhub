@@ -10,17 +10,23 @@ type JsonRecord = Record<string, unknown>;
 
 type TrackingBody = {
   visitor_cookie_id?: unknown;
+  session_cookie_id?: unknown;
   organization_id?: unknown;
   scope?: unknown;
   event_type?: unknown;
   referrer?: unknown;
   search_params?: unknown;
+  first_touch?: unknown;
+  last_touch?: unknown;
+  attribution?: unknown;
+  consent?: unknown;
   metadata?: unknown;
 };
 
 export async function POST(request: NextRequest) {
   const body = await readBody(request);
   const visitorId = readString(body.visitor_cookie_id) ?? randomUUID();
+  const sessionId = readString(body.session_cookie_id);
   const eventType = normalizeEventType(readString(body.event_type) ?? "page_view");
   const requestedOrganizationId = readUuid(readString(body.organization_id));
   const requestedScope = readString(body.scope);
@@ -36,11 +42,20 @@ export async function POST(request: NextRequest) {
   const pagePath = readString(metadata.page_path);
   const title = buildEventTitle(eventType, pagePath, sourceType);
   const summary = buildEventSummary(eventType, metadata, tracking);
-  const tags = buildTags({ eventType, scope, authUserId: authUser?.id ?? null });
+  const firstTouch = readRecord(body.first_touch) ?? readRecord(metadata.first_touch);
+  const lastTouch = readRecord(body.last_touch) ?? readRecord(metadata.last_touch);
+  const attribution = readRecord(body.attribution) ?? readRecord(metadata.attribution);
+  const consent = readString(body.consent) ?? readString(metadata.consent);
+  const tags = buildTags({ eventType, scope, authUserId: authUser?.id ?? null, sessionId });
   const payload = {
     visitor_cookie_id: visitorId,
+    session_cookie_id: sessionId,
     referrer: readString(body.referrer),
     search_params: readString(body.search_params),
+    first_touch: firstTouch,
+    last_touch: lastTouch,
+    attribution,
+    tracking_consent: consent,
     ...tracking,
     ...metadata,
     user_id: authUser?.id ?? null,
@@ -201,7 +216,7 @@ function buildEventSummary(eventType: string, metadata: JsonRecord, tracking: Re
   return `${eventType}${location ? ` de ${location}` : ""}.`;
 }
 
-function buildTags(input: { eventType: string; scope: "platform" | "organization"; authUserId: string | null }) {
+function buildTags(input: { eventType: string; scope: "platform" | "organization"; authUserId: string | null; sessionId: string | null }) {
   const tags = ["connecty_tracking", input.scope === "organization" ? "client_marketing" : "platform_marketing"];
 
   if (input.authUserId) {
@@ -213,7 +228,10 @@ function buildTags(input: { eventType: string; scope: "platform" | "organization
   if (input.eventType.includes("gps")) tags.push("gps_tracking");
   if (input.eventType.includes("push")) tags.push("push_tracking");
   if (input.eventType.includes("scroll")) tags.push("behavior_tracking");
+  if (input.eventType.includes("click")) tags.push("click_tracking");
+  if (input.eventType.includes("form") || input.eventType.includes("signup") || input.eventType.includes("cadastro")) tags.push("conversion_tracking");
   if (input.eventType.includes("dashboard")) tags.push("dashboard_usage");
+  if (input.sessionId) tags.push("session_tracking");
 
   return tags;
 }

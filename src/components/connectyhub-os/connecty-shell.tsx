@@ -73,15 +73,21 @@ const adminSections: NavSection[] = [
     label: "Operação",
     items: [
       { label: "Dashboard",   href: "/admin",              icon: BarChart3 },
-      { label: "Clientes",    href: "/admin/clientes",     icon: Users,        badge: "142" },
-      { label: "Planos",      href: "/admin/planos",       icon: Coins },
-      { label: "Instancias",  href: "/admin/instancias",   icon: MessageCircle },
       { label: "Agentes",     href: "/admin/agentes",      icon: Bot },
+      { label: "WhatsApp Interno", href: "/admin/whatsapp/atendimento", icon: MessageCircle },
       { label: "Inteligencia",href: "/admin/inteligencia", icon: BrainCircuit },
       { label: "Conteudo",    href: "/admin/conteudo",     icon: Globe2 },
       { label: "Setores",     href: "/admin/setores",      icon: GitBranch },
       { label: "CEO IA",      href: "/admin/ceo",          icon: Wand2 },
       { label: "Aprovações",  href: "/admin/aprovacoes",   icon: ShieldCheck,  badge: "17", badgeTone: "amber" },
+    ],
+  },
+  {
+    label: "Clientes",
+    items: [
+      { label: "Clientes",          href: "/admin/clientes",          icon: Users,        badge: "142" },
+      { label: "Planos",            href: "/admin/planos",            icon: Coins },
+      { label: "WhatsApp Clientes", href: "/admin/clientes/whatsapp", icon: MessageCircle },
     ],
   },
   {

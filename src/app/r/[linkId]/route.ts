@@ -47,6 +47,7 @@ export async function GET(
     content: slug,
   });
   const tracking = extractTrackingData(request);
+  const cookieTracking = extractCookieTracking(request);
   const currentClicks = readNumber(metadata.click_count) ?? 0;
 
   await Promise.all([
@@ -67,6 +68,7 @@ export async function GET(
         final_url: finalUrl,
         lead_id: leadId,
         lead_phone: leadPhone,
+        ...cookieTracking,
         query: Object.fromEntries(request.nextUrl.searchParams.entries()),
         ...tracking,
       },
@@ -84,6 +86,45 @@ export async function GET(
   ]);
 
   return NextResponse.redirect(finalUrl);
+}
+
+function extractCookieTracking(request: NextRequest) {
+  return {
+    visitor_cookie_id: readCookieValue(request, "connecty_visitor_id"),
+    session_cookie_id: readCookieValue(request, "connecty_session_id"),
+    first_touch: readJsonCookie(request, "connecty_first_touch"),
+    last_touch: readJsonCookie(request, "connecty_last_touch"),
+    attribution: readJsonCookie(request, "connecty_utm"),
+  };
+}
+
+function readCookieValue(request: NextRequest, name: string) {
+  const value = request.cookies.get(name)?.value;
+
+  if (!value) {
+    return null;
+  }
+
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function readJsonCookie(request: NextRequest, name: string): JsonRecord | null {
+  const value = readCookieValue(request, name);
+
+  if (!value) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+    return readRecord(parsed);
+  } catch {
+    return null;
+  }
 }
 
 function extractTrackingData(request: NextRequest) {

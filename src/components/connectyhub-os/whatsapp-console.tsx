@@ -162,6 +162,45 @@ type Notice = {
   message: string;
 };
 
+type WhatsappConsoleVariant = {
+  entityIdKey: "companyId" | "sectorId";
+  entitySingular: string;
+  entityPlural: string;
+  entityPromptToken: string;
+  entityPromptLabel: string;
+  entityPromptDescription: string;
+  sectionEyebrow: string;
+  missingEntityTitle: string;
+  missingEntityDescription: string;
+  missingEntityHref: string;
+  missingEntityAction: string;
+  agentGateEyebrow: string;
+  agentGateTitle: string;
+  agentGateDescription: string;
+  agentGateSelectedLabel: string;
+  agentGateSelectLabel: string;
+  agentGateSideDescription: string;
+  agentRoleTitle: string;
+  noAgentPrompt: string;
+  headerDescriptions: {
+    missingEntity: string;
+    needsAgent: string;
+    ready: string;
+  };
+  endpoints: {
+    state: string;
+    action: string;
+    createAgent: string;
+    knowledge: string;
+    links: string;
+    promptAssistant: string;
+    voices: string;
+  };
+  connectionEnabled: boolean;
+  connectionDisabledReason?: string;
+  voiceCloneEnabled: boolean;
+};
+
 type VoiceCloneResponse = {
   audio?: WhatsappState["audio"];
   voice?: {
@@ -175,25 +214,85 @@ type VoiceCloneResponse = {
 };
 
 const agentPromptMaxLength = 8000;
-const promptTags = [
-  {
-    token: "{{lead_name}}",
-    label: "Nome do lead",
-    description: "Usa o nome salvo do lead quando estiver disponivel.",
-  },
-  {
-    token: "{{empresa}}",
-    label: "Empresa",
-    description: "Usa o nome da empresa cadastrada no painel.",
-  },
-  {
-    token: "{{agente}}",
-    label: "Agente",
-    description: "Usa o nome do agente configurado nesta tela.",
-  },
-];
 
-export function WhatsAppConsole() {
+const clientWhatsappConsoleVariant = {
+  entityIdKey: "companyId",
+  entitySingular: "empresa",
+  entityPlural: "empresas",
+  entityPromptToken: "{{empresa}}",
+  entityPromptLabel: "Empresa",
+  entityPromptDescription: "Usa o nome da empresa cadastrada no painel.",
+  sectionEyebrow: "WhatsApp / Agente comercial",
+  missingEntityTitle: "Cadastre uma empresa primeiro",
+  missingEntityDescription: "O agente precisa estar vinculado a uma empresa para atender os leads certos.",
+  missingEntityHref: "/dashboard/empresa",
+  missingEntityAction: "Cadastrar empresa",
+  agentGateEyebrow: "empresa / agente",
+  agentGateTitle: "Nenhum agente criado",
+  agentGateDescription: "Escolha qual empresa este agente vai atender antes de liberar conexao, prompt e comportamento.",
+  agentGateSelectedLabel: "Empresa selecionada",
+  agentGateSelectLabel: "Empresa",
+  agentGateSideDescription: "Depois que o agente for criado, esta tela abre os controles de WhatsApp.",
+  agentRoleTitle: "Agente de WhatsApp",
+  noAgentPrompt: "Crie o agente para liberar prompt, conexao e comportamento.",
+  headerDescriptions: {
+    missingEntity: "Cadastre uma empresa antes de configurar WhatsApp e agentes.",
+    needsAgent: "Escolha uma empresa cadastrada e crie o agente que vai atender os leads.",
+    ready: "Conecte o numero da empresa, ajuste o prompt e escolha como o agente deve atender no WhatsApp.",
+  },
+  endpoints: {
+    state: "/api/dashboard/whatsapp",
+    action: "/api/dashboard/whatsapp",
+    createAgent: "/api/dashboard/agents",
+    knowledge: "/api/dashboard/knowledge",
+    links: "/api/dashboard/whatsapp/links",
+    promptAssistant: "/api/dashboard/whatsapp/prompt-assistant",
+    voices: "/api/dashboard/voices",
+  },
+  connectionEnabled: true,
+  voiceCloneEnabled: true,
+} satisfies WhatsappConsoleVariant;
+
+export const adminWhatsappConsoleVariant = {
+  entityIdKey: "sectorId",
+  entitySingular: "setor",
+  entityPlural: "setores",
+  entityPromptToken: "{{setor}}",
+  entityPromptLabel: "Setor",
+  entityPromptDescription: "Usa o nome do setor interno cadastrado no Admin OS.",
+  sectionEyebrow: "Admin OS / WhatsApp interno",
+  missingEntityTitle: "Cadastre um setor primeiro",
+  missingEntityDescription: "O agente interno da ConnectyHub precisa estar vinculado a um setor, do mesmo jeito que o agente do cliente fica vinculado a uma empresa.",
+  missingEntityHref: "/admin/setores",
+  missingEntityAction: "Cadastrar setor",
+  agentGateEyebrow: "setor / agente",
+  agentGateTitle: "Nenhum agente interno criado",
+  agentGateDescription: "Escolha qual setor da ConnectyHub este agente vai atender antes de liberar prompt, arquivos, links, voz e comportamento.",
+  agentGateSelectedLabel: "Setor selecionado",
+  agentGateSelectLabel: "Setor",
+  agentGateSideDescription: "Depois que o agente for criado, esta tela abre os mesmos controles do WhatsApp do painel do usuario.",
+  agentRoleTitle: "Agente WhatsApp da ConnectyHub",
+  noAgentPrompt: "Crie o agente do setor para liberar prompt, arquivos, links, voz e comportamento.",
+  headerDescriptions: {
+    missingEntity: "Cadastre um setor antes de configurar os agentes WhatsApp internos.",
+    needsAgent: "Escolha um setor cadastrado e crie o agente que vai atender os leads da ConnectyHub.",
+    ready: "Ajuste prompt, arquivos, links, voz e comportamento do agente WhatsApp interno por setor.",
+  },
+  endpoints: {
+    state: "/api/admin/whatsapp/internal",
+    action: "/api/admin/whatsapp/internal",
+    createAgent: "/api/admin/whatsapp/internal",
+    knowledge: "/api/admin/whatsapp/internal/knowledge",
+    links: "/api/admin/whatsapp/internal/links",
+    promptAssistant: "/api/admin/whatsapp/internal/prompt-assistant",
+    voices: "/api/admin/whatsapp/internal/voices",
+  },
+  connectionEnabled: true,
+  connectionDisabledReason: "Crie o agente do setor antes de conectar o WhatsApp interno.",
+  voiceCloneEnabled: false,
+} satisfies WhatsappConsoleVariant;
+
+export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { variant?: WhatsappConsoleVariant }) {
   const [state, setState] = useState<WhatsappState | null>(null);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState<string | null>(null);
@@ -214,6 +313,26 @@ export function WhatsAppConsole() {
   const [creatingLinkButton, setCreatingLinkButton] = useState(false);
   const isAwaitingQrScan = Boolean(qrCode) || state?.instance?.status === "qr_pending";
   const isConnected = state?.instance?.status === "connected";
+  const promptTags = useMemo(
+    () => [
+      {
+        token: "{{lead_name}}",
+        label: "Nome do lead",
+        description: "Usa o nome salvo do lead quando estiver disponivel.",
+      },
+      {
+        token: variant.entityPromptToken,
+        label: variant.entityPromptLabel,
+        description: variant.entityPromptDescription,
+      },
+      {
+        token: "{{agente}}",
+        label: "Agente",
+        description: "Usa o nome do agente configurado nesta tela.",
+      },
+    ],
+    [variant.entityPromptDescription, variant.entityPromptLabel, variant.entityPromptToken],
+  );
 
   const applyWhatsappState = useCallback((nextState: WhatsappState, options?: { preserveDrafts?: boolean }) => {
     const nextCompanyId = nextState.selectedCompanyId ?? nextState.companies[0]?.id ?? "";
@@ -232,7 +351,7 @@ export function WhatsAppConsole() {
 
     async function load() {
       setLoading(true);
-      const nextState = await fetchWhatsappState();
+      const nextState = await fetchWhatsappState(variant);
 
       if (!cancelled) {
         applyWhatsappState(nextState);
@@ -253,7 +372,7 @@ export function WhatsAppConsole() {
     return () => {
       cancelled = true;
     };
-  }, [applyWhatsappState]);
+  }, [applyWhatsappState, variant]);
 
   useEffect(() => {
     if (!selectedCompanyId || !isAwaitingQrScan || running === "disconnect") {
@@ -268,10 +387,10 @@ export function WhatsAppConsole() {
       attempts += 1;
 
       try {
-        const response = await fetch("/api/dashboard/whatsapp", {
+        const response = await fetch(variant.endpoints.action, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "refresh_status", companyId: selectedCompanyId }),
+          body: JSON.stringify({ action: "refresh_status", [variant.entityIdKey]: selectedCompanyId }),
         });
         const data = (await response.json().catch(() => null)) as ActionResponse | null;
 
@@ -301,7 +420,7 @@ export function WhatsAppConsole() {
         clearTimeout(timeoutId);
       }
     };
-  }, [applyWhatsappState, isAwaitingQrScan, running, selectedCompanyId]);
+  }, [applyWhatsappState, isAwaitingQrScan, running, selectedCompanyId, variant]);
 
   useEffect(() => {
     if (!selectedCompanyId || !isConnected || running === "disconnect") {
@@ -312,10 +431,10 @@ export function WhatsAppConsole() {
 
     async function pollConnectedStatus() {
       try {
-        const response = await fetch("/api/dashboard/whatsapp", {
+        const response = await fetch(variant.endpoints.action, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "refresh_status", companyId: selectedCompanyId }),
+          body: JSON.stringify({ action: "refresh_status", [variant.entityIdKey]: selectedCompanyId }),
         });
         const data = (await response.json().catch(() => null)) as ActionResponse | null;
 
@@ -340,7 +459,7 @@ export function WhatsAppConsole() {
       clearTimeout(timeoutId);
       clearInterval(intervalId);
     };
-  }, [applyWhatsappState, isConnected, running, selectedCompanyId]);
+  }, [applyWhatsappState, isConnected, running, selectedCompanyId, variant]);
 
   const promptChanged = state?.agent ? promptDraft.trim() !== state.agent.prompt.trim() : false;
   const promptTooLong = promptDraft.length > agentPromptMaxLength;
@@ -352,10 +471,10 @@ export function WhatsAppConsole() {
   const needsAgent = !loading && companies.length > 0 && !state?.agent;
   const headerTitle = loading || needsCompany ? "WhatsApp" : needsAgent ? "Criar agente WhatsApp" : "Conexao, prompt e comportamento";
   const headerDescription = loading || needsCompany
-    ? "Cadastre uma empresa antes de configurar WhatsApp e agentes."
+    ? variant.headerDescriptions.missingEntity
     : needsAgent
-      ? "Escolha uma empresa cadastrada e crie o agente que vai atender os leads."
-      : "Conecte o numero da empresa, ajuste o prompt e escolha como o agente deve atender no WhatsApp.";
+      ? variant.headerDescriptions.needsAgent
+      : variant.headerDescriptions.ready;
   const promptHelper = `${promptDraft.length.toLocaleString("pt-BR")} / ${agentPromptMaxLength.toLocaleString("pt-BR")} caracteres`;
 
   function updateBehavior<K extends keyof WhatsappBehaviorConfig>(key: K, value: WhatsappBehaviorConfig[K]) {
@@ -403,10 +522,10 @@ export function WhatsAppConsole() {
     setNotice(null);
 
     try {
-      const response = await fetch("/api/dashboard/whatsapp", {
+      const response = await fetch(variant.endpoints.action, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, companyId: selectedCompanyId, ...payload }),
+        body: JSON.stringify({ action, [variant.entityIdKey]: selectedCompanyId, ...payload }),
       });
       const data = (await response.json().catch(() => null)) as ActionResponse | null;
 
@@ -429,11 +548,11 @@ export function WhatsAppConsole() {
     setNotice(null);
 
     try {
-      const response = await fetch("/api/dashboard/whatsapp", {
+      const response = await fetch(variant.endpoints.action, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          companyId: selectedCompanyId,
+          [variant.entityIdKey]: selectedCompanyId,
           agentPrompt: promptDraft,
           behavior: behaviorDraft,
         }),
@@ -455,7 +574,7 @@ export function WhatsAppConsole() {
 
   async function generatePromptWithAI() {
     if (!selectedCompanyId) {
-      setNotice({ tone: "warning", message: "Escolha uma empresa antes de gerar o prompt." });
+      setNotice({ tone: "warning", message: `Escolha um ${variant.entitySingular} antes de gerar o prompt.` });
       return;
     }
 
@@ -463,11 +582,11 @@ export function WhatsAppConsole() {
     setNotice(null);
 
     try {
-      const response = await fetch("/api/dashboard/whatsapp/prompt-assistant", {
+      const response = await fetch(variant.endpoints.promptAssistant, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          companyId: selectedCompanyId,
+          [variant.entityIdKey]: selectedCompanyId,
           productUrl: promptProductUrl,
           notes: promptNotes,
         }),
@@ -493,13 +612,13 @@ export function WhatsAppConsole() {
     }
 
     const formData = new FormData();
-    formData.set("companyId", selectedCompanyId);
+    formData.set(variant.entityIdKey, selectedCompanyId);
     formData.set("file", file);
     setKnowledgeUploading(true);
     setNotice(null);
 
     try {
-      const response = await fetch("/api/dashboard/knowledge", {
+      const response = await fetch(variant.endpoints.knowledge, {
         method: "POST",
         body: formData,
       });
@@ -509,7 +628,7 @@ export function WhatsAppConsole() {
         throw new Error(data?.error ?? "Nao foi possivel anexar o arquivo.");
       }
 
-      const nextState = await fetchWhatsappState(selectedCompanyId);
+      const nextState = await fetchWhatsappState(variant, selectedCompanyId);
       applyWhatsappState(nextState, { preserveDrafts: true });
       setNotice({ tone: "success", message: "Arquivo adicionado a inteligencia do agente." });
     } catch (error) {
@@ -521,7 +640,7 @@ export function WhatsAppConsole() {
 
   async function createTrackedLinkButton() {
     if (!selectedCompanyId) {
-      setNotice({ tone: "warning", message: "Escolha uma empresa antes de criar o link." });
+      setNotice({ tone: "warning", message: `Escolha um ${variant.entitySingular} antes de criar o link.` });
       return;
     }
 
@@ -529,11 +648,11 @@ export function WhatsAppConsole() {
     setNotice(null);
 
     try {
-      const response = await fetch("/api/dashboard/whatsapp/links", {
+      const response = await fetch(variant.endpoints.links, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          companyId: selectedCompanyId,
+          [variant.entityIdKey]: selectedCompanyId,
           label: linkButtonLabel,
           url: linkButtonUrl,
         }),
@@ -544,7 +663,7 @@ export function WhatsAppConsole() {
         throw new Error(data?.error ?? "Nao foi possivel criar o link rastreado.");
       }
 
-      const nextState = await fetchWhatsappState(selectedCompanyId);
+      const nextState = await fetchWhatsappState(variant, selectedCompanyId);
       applyWhatsappState(nextState, { preserveDrafts: true });
       setLinkButtonLabel("");
       setLinkButtonUrl("");
@@ -558,7 +677,7 @@ export function WhatsAppConsole() {
 
   async function createWhatsappAgent() {
     if (!selectedCompanyId) {
-      setNotice({ tone: "warning", message: "Escolha uma empresa antes de criar o agente." });
+      setNotice({ tone: "warning", message: `Escolha um ${variant.entitySingular} antes de criar o agente.` });
       return;
     }
 
@@ -566,13 +685,14 @@ export function WhatsAppConsole() {
     setNotice(null);
 
     try {
-      const response = await fetch("/api/dashboard/agents", {
+      const response = await fetch(variant.endpoints.createAgent, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          companyId: selectedCompanyId,
+          action: "create_agent",
+          [variant.entityIdKey]: selectedCompanyId,
           name: agentName.trim() || "Agente WhatsApp",
-          roleTitle: "Agente de WhatsApp",
+          roleTitle: variant.agentRoleTitle,
         }),
       });
       const data = (await response.json().catch(() => null)) as { error?: string } | null;
@@ -581,7 +701,7 @@ export function WhatsAppConsole() {
         throw new Error(data?.error ?? "Nao foi possivel criar o agente.");
       }
 
-      const nextState = await fetchWhatsappState(selectedCompanyId);
+      const nextState = await fetchWhatsappState(variant, selectedCompanyId);
       applyWhatsappState(nextState);
       setAgentName("");
       setShowAgentForm(false);
@@ -596,7 +716,7 @@ export function WhatsAppConsole() {
   return (
     <>
       <SectionHeader
-        eyebrow="WhatsApp / Agente comercial"
+        eyebrow={variant.sectionEyebrow}
         title={headerTitle}
         description={headerDescription}
       />
@@ -606,7 +726,7 @@ export function WhatsAppConsole() {
       {loading ? (
         <LoadingState />
       ) : companies.length === 0 ? (
-        <CompanyRequiredState />
+        <CompanyRequiredState variant={variant} />
       ) : !state?.agent ? (
         <AgentCreationGate
           agentName={agentName}
@@ -620,6 +740,7 @@ export function WhatsAppConsole() {
           onCreate={createWhatsappAgent}
           onSelectCompany={setSelectedCompanyId}
           onStart={() => setShowAgentForm(true)}
+          variant={variant}
         />
       ) : (
       <>
@@ -631,7 +752,7 @@ export function WhatsAppConsole() {
           {state?.agent ? (
             <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_320px]">
               <div className="grid gap-4">
-                <AgentIdentityCard agent={state.agent} company={selectedCompany} />
+                <AgentIdentityCard agent={state.agent} company={selectedCompany} entityLabel={variant.entityPromptLabel} />
 
                 <PromptBox
                   label="Prompt do agente"
@@ -660,6 +781,8 @@ export function WhatsAppConsole() {
                   onNotesChange={setPromptNotes}
                   onProductUrlChange={setPromptProductUrl}
                   onUploadFile={uploadKnowledgeFile}
+                  promptTags={promptTags}
+                  entitySingular={variant.entitySingular}
                 />
 
                 <div className="flex flex-wrap gap-2">
@@ -673,7 +796,7 @@ export function WhatsAppConsole() {
                   <ActionButton
                     icon={Wand2}
                     label="Salvar alteracoes"
-                    description="Salva prompt e comportamento deste agente para a empresa selecionada."
+                    description={`Salva prompt e comportamento deste agente para o ${variant.entitySingular} selecionado.`}
                     disabled={!state?.capability.schemaReady || !state.agent || !settingsChanged || promptTooLong}
                     loading={running === "save_settings"}
                     onClick={saveAgentSettings}
@@ -688,6 +811,8 @@ export function WhatsAppConsole() {
                 onConnect={() => runAction("connect")}
                 onDisconnect={() => runAction("disconnect")}
                 onRefresh={() => runAction("refresh_status")}
+                enabled={variant.connectionEnabled && state.capability.canConnect}
+                disabledReason={state.capability.message ?? variant.connectionDisabledReason}
               />
             </div>
           ) : (
@@ -719,6 +844,9 @@ export function WhatsAppConsole() {
                   companyId={selectedCompanyId}
                   defaultVoiceId={state.audio.defaultVoiceId}
                   errorMessage={state.audio.errorMessage}
+                  entityIdKey={variant.entityIdKey}
+                  endpoint={variant.endpoints.voices}
+                  cloneEnabled={variant.voiceCloneEnabled}
                   voices={state.audio.voices}
                   onCloned={applyClonedVoice}
                   onSelect={selectAudioVoice}
@@ -769,7 +897,7 @@ export function WhatsAppConsole() {
                   <ToggleTile icon={ShieldCheck} label="Opt-out" description="Detecta quando o lead pede para parar contato ou sair da lista." checked={behaviorDraft.detectOptOut} onChange={() => updateBehavior("detectOptOut", !behaviorDraft.detectOptOut)} />
                   <ToggleTile icon={Link2} label="Links do lead" description="Analisa links enviados pelo lead e guarda contexto util para atendimento." checked={behaviorDraft.analyzeLinks} onChange={() => updateBehavior("analyzeLinks", !behaviorDraft.analyzeLinks)} />
                   <ToggleTile icon={MessageCircle} label="Resposta citada" description="Usa a mensagem citada no WhatsApp para entender melhor a resposta do lead." checked={behaviorDraft.quotedReplyContext} onChange={() => updateBehavior("quotedReplyContext", !behaviorDraft.quotedReplyContext)} />
-                  <ToggleTile icon={FileText} label="Salvar midia" description="Salva arquivos relevantes recebidos para historico, CRM e memoria da empresa." checked={behaviorDraft.leadFileStorage} onChange={() => updateBehavior("leadFileStorage", !behaviorDraft.leadFileStorage)} />
+                  <ToggleTile icon={FileText} label="Salvar midia" description={`Salva arquivos relevantes recebidos para historico, CRM e memoria do ${variant.entitySingular}.`} checked={behaviorDraft.leadFileStorage} onChange={() => updateBehavior("leadFileStorage", !behaviorDraft.leadFileStorage)} />
                 </div>
               </BehaviorSection>
 
@@ -849,13 +977,13 @@ export function WhatsAppConsole() {
   );
 }
 
-async function fetchWhatsappState(companyId?: string) {
-  const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : "";
+async function fetchWhatsappState(variant: WhatsappConsoleVariant, entityId?: string) {
+  const query = entityId ? `?${variant.entityIdKey}=${encodeURIComponent(entityId)}` : "";
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15000);
 
   try {
-    const response = await fetch(`/api/dashboard/whatsapp${query}`, { cache: "no-store", signal: controller.signal });
+    const response = await fetch(`${variant.endpoints.state}${query}`, { cache: "no-store", signal: controller.signal });
     const data = (await response.json().catch(() => null)) as (WhatsappState & { error?: string }) | null;
 
     if (!response.ok || !data) {
@@ -902,24 +1030,24 @@ function LoadingState() {
   );
 }
 
-function CompanyRequiredState() {
+function CompanyRequiredState({ variant }: { variant: WhatsappConsoleVariant }) {
   return (
-    <Panel title="Nenhuma empresa cadastrada" eyebrow="primeiro passo">
+    <Panel title={`Nenhum ${variant.entitySingular} cadastrado`} eyebrow="primeiro passo">
       <div className="grid min-h-[280px] place-items-center text-center">
         <div className="max-w-sm">
           <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-cyan-400/10 text-cyan-300">
             <Building2 className="h-7 w-7" />
           </div>
-          <h2 className="mt-4 text-[16px] font-semibold" style={{ color: "var(--ch-text)" }}>Cadastre sua empresa</h2>
+          <h2 className="mt-4 text-[16px] font-semibold" style={{ color: "var(--ch-text)" }}>{variant.missingEntityTitle}</h2>
           <p className="mt-2 text-[13px] leading-6 text-slate-500">
-            O WhatsApp fica bloqueado ate existir uma empresa cadastrada no painel.
+            {variant.missingEntityDescription}
           </p>
           <Link
             className="mt-5 inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-cyan-300 px-4 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-950 transition hover:bg-cyan-200"
-            href="/dashboard/empresa"
+            href={variant.missingEntityHref}
           >
             <Plus className="h-4 w-4" />
-            Nova empresa
+            {variant.missingEntityAction}
           </Link>
         </div>
       </div>
@@ -939,6 +1067,7 @@ function AgentCreationGate({
   onCreate,
   onSelectCompany,
   onStart,
+  variant,
 }: {
   agentName: string;
   companies: ClientCompany[];
@@ -951,11 +1080,12 @@ function AgentCreationGate({
   onCreate: () => void;
   onSelectCompany: (value: string) => void;
   onStart: () => void;
+  variant: WhatsappConsoleVariant;
 }) {
   return (
     <Panel
       title="Criar agente WhatsApp"
-      eyebrow="empresa / agente"
+      eyebrow={variant.agentGateEyebrow}
       action={<NeonBadge tone="cyan">novo fluxo</NeonBadge>}
     >
       <div className="grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(360px,0.7fr)]">
@@ -968,16 +1098,16 @@ function AgentCreationGate({
               <Bot className="h-6 w-6" />
             </div>
             <div>
-              <h2 className="text-[16px] font-semibold" style={{ color: "var(--ch-text)" }}>Nenhum agente criado</h2>
+              <h2 className="text-[16px] font-semibold" style={{ color: "var(--ch-text)" }}>{variant.agentGateTitle}</h2>
               <p className="mt-2 text-[13px] leading-6 text-slate-500">
-                Escolha qual empresa este agente vai atender antes de liberar conexao, prompt e comportamento.
+                {variant.agentGateDescription}
               </p>
             </div>
           </div>
 
           {selectedCompany ? (
             <div className="mt-5 max-w-md">
-              <InfoTile label="Empresa selecionada" value={selectedCompany.name} />
+              <InfoTile label={variant.agentGateSelectedLabel} value={selectedCompany.name} />
             </div>
           ) : null}
 
@@ -995,7 +1125,7 @@ function AgentCreationGate({
           >
             <div className="grid gap-3">
               <label className="block">
-                <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Empresa</span>
+                <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">{variant.agentGateSelectLabel}</span>
                 <select
                   className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
                   value={selectedCompanyId}
@@ -1032,7 +1162,7 @@ function AgentCreationGate({
             <div className="max-w-xs">
               <Building2 className="mx-auto h-7 w-7 text-cyan-300" />
               <p className="mt-3 text-[13px] leading-6 text-slate-500">
-                Depois que o agente for criado, esta tela abre os controles de WhatsApp.
+                {variant.agentGateSideDescription}
               </p>
             </div>
           </div>
@@ -1045,9 +1175,11 @@ function AgentCreationGate({
 function AgentIdentityCard({
   agent,
   company,
+  entityLabel = "Empresa",
 }: {
   agent: NonNullable<WhatsappState["agent"]>;
   company: ClientCompany | null;
+  entityLabel?: string;
 }) {
   const companyStatus = company ? `${company.planCode} / ${company.status}` : "Plano nao informado";
 
@@ -1057,7 +1189,7 @@ function AgentIdentityCard({
       style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}
     >
       <InfoTile label="Agente" value={agent.name} />
-      <InfoTile label="Empresa" value={company?.name ?? "Empresa nao informada"} />
+      <InfoTile label={entityLabel} value={company?.name ?? `${entityLabel} nao informado`} />
       <InfoTile label="Plano" value={companyStatus} />
       <InfoTile label="Ultima edicao" value={formatDate(agent.updatedAt)} />
     </div>
@@ -1168,6 +1300,8 @@ function PromptToolsPanel({
   onNotesChange,
   onProductUrlChange,
   onUploadFile,
+  promptTags,
+  entitySingular,
 }: {
   files: KnowledgeFile[];
   generatingPrompt: boolean;
@@ -1186,6 +1320,8 @@ function PromptToolsPanel({
   onNotesChange: (value: string) => void;
   onProductUrlChange: (value: string) => void;
   onUploadFile: (file: File | null) => void;
+  promptTags: Array<{ token: string; label: string; description: string }>;
+  entitySingular: string;
 }) {
   return (
     <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(280px,0.7fr)]">
@@ -1193,7 +1329,7 @@ function PromptToolsPanel({
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
             Tags do prompt
-            <InfoHint text="Clique para inserir variaveis que o agente substitui no atendimento, como nome do lead e empresa." />
+            <InfoHint text={`Clique para inserir variaveis que o agente substitui no atendimento, como nome do lead e ${entitySingular}.`} />
           </p>
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
@@ -1250,7 +1386,7 @@ function PromptToolsPanel({
       <div className="rounded-xl border p-3" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
-            Arquivos da empresa
+            Arquivos do {entitySingular}
             <InfoHint text="Arquivos adicionam contexto ao agente sem deixar o prompt grande demais." />
           </p>
           <label className="inline-flex min-h-9 cursor-pointer items-center justify-center gap-2 rounded-lg border border-cyan-400/25 bg-cyan-400/10 px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-200 transition hover:bg-cyan-400/15">
@@ -1378,7 +1514,7 @@ function NoAgentState() {
         </div>
         <h2 className="mt-4 text-[16px] font-semibold" style={{ color: "var(--ch-text)" }}>Nenhum agente cadastrado</h2>
         <p className="mt-2 text-[13px] leading-6 text-slate-500">
-          Crie um agente e escolha a empresa que ele vai atender.
+          Crie um agente e escolha o atendimento que ele vai assumir.
         </p>
         <Link
           className="mt-5 inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-cyan-300 px-4 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-950 transition hover:bg-cyan-200"
@@ -1496,7 +1632,10 @@ function VoiceSelector({
   behavior,
   companyId,
   defaultVoiceId,
+  endpoint,
   errorMessage,
+  entityIdKey,
+  cloneEnabled,
   voices,
   onCloned,
   onSelect,
@@ -1504,7 +1643,10 @@ function VoiceSelector({
   behavior: WhatsappBehaviorConfig;
   companyId: string;
   defaultVoiceId: string | null;
+  endpoint: string;
   errorMessage: string | null;
+  entityIdKey: "companyId" | "sectorId";
+  cloneEnabled: boolean;
   voices: AudioVoiceOption[];
   onCloned: (audio: WhatsappState["audio"], voiceId: string, notice?: Notice) => void;
   onSelect: (voice: AudioVoiceOption) => void;
@@ -1554,7 +1696,7 @@ function VoiceSelector({
 
     try {
       const payload = new FormData();
-      payload.set("companyId", companyId);
+      payload.set(entityIdKey, companyId);
       payload.set("name", cloneName);
       payload.set("consentAccepted", String(cloneConsent));
       payload.set("removeBackgroundNoise", String(removeNoise));
@@ -1563,7 +1705,7 @@ function VoiceSelector({
         payload.append("files", file);
       }
 
-      const response = await fetch("/api/dashboard/voices", {
+      const response = await fetch(endpoint, {
         method: "POST",
         body: payload,
       });
@@ -1612,6 +1754,7 @@ function VoiceSelector({
         </div>
       ) : null}
 
+      {cloneEnabled ? (
       <div className="mt-3 rounded-lg border" style={{ borderColor: "var(--ch-border)" }}>
         <button
           type="button"
@@ -1728,6 +1871,7 @@ function VoiceSelector({
           </div>
         ) : null}
       </div>
+      ) : null}
 
       {voices.length > 0 ? (
         <>
@@ -1953,6 +2097,8 @@ function CompactConnectionCard({
   instance,
   qrCode,
   running,
+  enabled,
+  disabledReason,
   onConnect,
   onDisconnect,
   onRefresh,
@@ -1960,6 +2106,8 @@ function CompactConnectionCard({
   instance: WhatsappState["instance"];
   qrCode: string | null;
   running: string | null;
+  enabled: boolean;
+  disabledReason?: string;
   onConnect: () => void;
   onDisconnect: () => void;
   onRefresh: () => void;
@@ -1980,7 +2128,7 @@ function CompactConnectionCard({
         <div className="min-w-0">
           <p className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">
             Conexao WhatsApp
-            <InfoHint text="Gera o QR Code para conectar o numero da empresa e mostra o status atual da instancia." />
+            <InfoHint text={enabled ? "Gera o QR Code para conectar o numero e mostra o status atual da instancia." : disabledReason ?? "Conexao indisponivel neste ambiente."} />
           </p>
           <p className="mt-1 text-[14px] font-semibold" style={{ color: "var(--ch-text)" }}>
             {meta.title}
@@ -1995,7 +2143,16 @@ function CompactConnectionCard({
         className="mt-4 grid min-h-[170px] place-items-center rounded-xl p-3 text-center"
         style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}
       >
-        {visibleQrCode ? (
+        {!enabled ? (
+          <div>
+            <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-amber-500/10 text-amber-200">
+              <PlugZap className="h-6 w-6" />
+            </div>
+            <p className="mt-2 text-[11px] leading-4 text-slate-500">
+              Instancia dedicada pendente
+            </p>
+          </div>
+        ) : visibleQrCode ? (
           <Image
             alt="QR Code para conectar o WhatsApp"
             className="rounded-lg border bg-white p-2"
@@ -2027,7 +2184,7 @@ function CompactConnectionCard({
       </div>
 
       <p className="mt-3 text-[12px] leading-5 text-slate-500">
-        {visibleQrCode ? "Escaneie o QR Code pelo WhatsApp para concluir." : meta.description}
+        {!enabled ? disabledReason : visibleQrCode ? "Escaneie o QR Code pelo WhatsApp para concluir." : meta.description}
       </p>
 
       <div className="mt-4 grid gap-2">
@@ -2035,6 +2192,7 @@ function CompactConnectionCard({
           icon={QrCode}
           label={instance ? "Gerar novo QR" : "Gerar QR"}
           description="Abre um QR Code para conectar ou reconectar o numero pelo WhatsApp."
+          disabled={!enabled}
           loading={running === "connect"}
           onClick={onConnect}
         />
@@ -2043,15 +2201,15 @@ function CompactConnectionCard({
             icon={RefreshCcw}
             label="Status"
             description="Consulta a Uazapi e atualiza conexao, numero, leitura e foto do WhatsApp."
-            disabled={!instance}
+            disabled={!enabled || !instance}
             loading={running === "refresh_status"}
             onClick={onRefresh}
           />
           <SecondaryAction
             icon={Power}
             label="Desconectar"
-            description="Encerra a sessao atual do WhatsApp conectado a esta empresa."
-            disabled={!instance}
+            description="Encerra a sessao atual do WhatsApp conectado."
+            disabled={!enabled || !instance}
             loading={running === "disconnect"}
             tone="danger"
             onClick={onDisconnect}
@@ -2206,7 +2364,7 @@ function getStatusMeta(status: WhatsappStatus): {
     icon: PlugZap,
     label: "nao conectado",
     title: "Nenhum WhatsApp ativo",
-    description: "Inicie a conexao para parear o numero desta empresa.",
+    description: "Inicie a conexao para parear o numero.",
     bg: "bg-cyan-400/10",
     text: "text-cyan-300",
   };
