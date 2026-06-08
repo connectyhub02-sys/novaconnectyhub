@@ -2,6 +2,11 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServiceClient } from "@/lib/supabase/service";
+import {
+  readLeadProfileImageUrl,
+  syncLeadAvatarFromUazapi,
+  type LeadAvatarSyncInstance,
+} from "@/lib/whatsapp/lead-avatar-sync";
 import { listClientCompanies, type ClientCompany } from "./companies";
 
 type JsonRecord = Record<string, unknown>;
@@ -77,13 +82,39 @@ type AgentRow = {
   metadata: JsonRecord | null;
 };
 
+type OrganizationRow = {
+  id: string;
+  name: string;
+  slug: string | null;
+  plan_code: string;
+  status: string;
+  created_at: string | null;
+};
+
+type WhatsappInstanceAvatarRow = LeadAvatarSyncInstance & {
+  id: string;
+  instance_token_encrypted: string | null;
+  metadata: JsonRecord | null;
+};
+
 export type ClientLeadStatus = "new" | "active" | "qualified" | "won" | "lost" | "archived";
+
+export type ClientLeadMessageAuthor = "lead" | "ai" | "human" | "system" | "unknown";
 
 export type ClientLeadMessage = {
   id: string;
   direction: "inbound" | "outbound" | "system" | "unknown";
+  author: ClientLeadMessageAuthor;
+  authorLabel: string;
+  authorSource: string;
+  agentRunId: string | null;
+  agentId: string | null;
+  provider: string;
+  providerMessageId: string | null;
+  providerChatId: string | null;
   type: string;
   text: string;
+  mediaUrl: string | null;
   occurredAt: string | null;
 };
 
@@ -96,6 +127,20 @@ export type ClientLeadActivity = {
   tone: "cyan" | "green" | "amber" | "rose" | "zinc";
 };
 
+export type ClientLeadConversationFile = {
+  id: string;
+  channel: string;
+  provider: string;
+  providerChatId: string | null;
+  status: string | null;
+  preview: string | null;
+  messageCount: number;
+  messages: ClientLeadMessage[];
+  createdAt: string | null;
+  updatedAt: string | null;
+  lastMessageAt: string | null;
+};
+
 export type ClientLeadRecord = {
   id: string;
   companyId: string;
@@ -103,6 +148,7 @@ export type ClientLeadRecord = {
   companyPlan: string;
   agentName: string | null;
   agentAvatarUrl: string | null;
+  avatarUrl: string | null;
   name: string;
   phone: string | null;
   email: string | null;
@@ -148,6 +194,17 @@ export type ClientLeadRecord = {
     messageCount: number;
     messages: ClientLeadMessage[];
   };
+  leadFile: {
+    conversationCount: number;
+    messageCount: number;
+    trackingEventCount: number;
+    intelligenceEventCount: number;
+    firstSeenAt: string | null;
+    lastSeenAt: string | null;
+    conversations: ClientLeadConversationFile[];
+    trackingEvents: ClientLeadActivity[];
+    intelligenceEvents: ClientLeadActivity[];
+  };
   activities: ClientLeadActivity[];
   createdAt: string | null;
   updatedAt: string | null;
@@ -173,113 +230,42 @@ export async function getClientLeadCrmWorkspace(input: {
 }): Promise<ClientLeadCrmWorkspace> {
   const client = input.client ?? createServiceClient();
   const companies = await listClientCompanies(input.userId, client);
-  const companyIds = companies.map((company) => company.id);
-
-  if (!companyIds.length) {
-    return buildEmptyWorkspace(companies);
-  }
-
-  const { data: leadsData, error: leadsError } = await client
-    .from("leads")
-    .select("id, organization_id, channel, phone_number, display_name, status, score, source, last_event_summary, last_message_at, metadata, created_at, updated_at")
-    .in("organization_id", companyIds)
-    .order("updated_at", { ascending: false })
-    .limit(160);
-
-  if (leadsError) {
-    throw new Error(`Nao foi possivel carregar os leads: ${leadsError.message}`);
-  }
-
-  const leadRows = (leadsData ?? []) as LeadRow[];
-  const leadIds = leadRows.map((lead) => lead.id);
-
-  const [conversationsResult, agentsResult, eventsResult] = await Promise.all([
-    leadIds.length
-      ? client
-          .from("conversations")
-          .select("id, organization_id, lead_id, whatsapp_instance_id, channel, provider, provider_chat_id, status, last_message_preview, last_message_at, metadata, created_at, updated_at")
-          .in("lead_id", leadIds)
-          .order("updated_at", { ascending: false })
-          .limit(240)
-      : Promise.resolve({ data: [], error: null }),
-    client
-      .from("agent_registry")
-      .select("id, organization_id, name, persona_name, avatar_url, metadata")
-      .eq("scope", "organization")
-      .in("organization_id", companyIds)
-      .contains("metadata", { client_created: true, agent_kind: "whatsapp" })
-      .order("updated_at", { ascending: false })
-      .limit(120),
-    client
-      .from("intelligence_events")
-      .select("id, organization_id, source_type, source_id, event_type, title, summary, tags, payload, occurred_at")
-      .in("organization_id", companyIds)
-      .order("occurred_at", { ascending: false })
-      .limit(500),
-  ]);
-
-  if (conversationsResult.error) {
-    throw new Error(`Nao foi possivel carregar conversas: ${conversationsResult.error.message}`);
-  }
-
-  if (agentsResult.error) {
-    throw new Error(`Nao foi possivel carregar agentes: ${agentsResult.error.message}`);
-  }
-
-  if (eventsResult.error) {
-    throw new Error(`Nao foi possivel carregar eventos dos leads: ${eventsResult.error.message}`);
-  }
-
-  const conversationRows = (conversationsResult.data ?? []) as ConversationRow[];
-  const conversationIds = conversationRows.map((conversation) => conversation.id);
-  const messagesResult = conversationIds.length
-    ? await client
-        .from("conversation_messages")
-        .select("id, organization_id, conversation_id, lead_id, whatsapp_instance_id, provider, provider_message_id, provider_chat_id, direction, message_type, text_content, payload, occurred_at, created_at")
-        .in("conversation_id", conversationIds)
-        .order("occurred_at", { ascending: true })
-        .limit(1200)
-    : { data: [], error: null };
-
-  if (messagesResult.error) {
-    throw new Error(`Nao foi possivel carregar mensagens: ${messagesResult.error.message}`);
-  }
-
-  const companyById = new Map(companies.map((company) => [company.id, company]));
-  const agentByOrgId = new Map<string, AgentRow>();
-
-  for (const agent of (agentsResult.data ?? []) as AgentRow[]) {
-    if (agent.organization_id && !agentByOrgId.has(agent.organization_id)) {
-      agentByOrgId.set(agent.organization_id, agent);
-    }
-  }
-
-  const conversationsByLead = groupBy(conversationRows, (conversation) => conversation.lead_id ?? "none");
-  const messagesByConversation = groupBy((messagesResult.data ?? []) as MessageRow[], (message) => message.conversation_id ?? "none");
-  const eventRows = (eventsResult.data ?? []) as IntelligenceEventRow[];
-  const leads = leadRows.map((lead) => {
-    const company = companyById.get(lead.organization_id);
-    const conversations = conversationsByLead.get(lead.id) ?? [];
-    const activeConversation = pickActiveConversation(conversations);
-    const messages = activeConversation ? messagesByConversation.get(activeConversation.id) ?? [] : [];
-    const events = matchLeadEvents(lead, conversations, eventRows);
-    const agent = agentByOrgId.get(lead.organization_id) ?? null;
-
-    return mapLeadRecord({
-      lead,
-      company,
-      agent,
-      conversation: activeConversation,
-      messages,
-      events,
-    });
-  });
-
-  return {
+  return getLeadCrmWorkspaceForCompanies({
+    client,
     companies,
-    leads,
-    stats: buildStats(leads),
-  };
+  });
+}
+
+export async function getAdminLeadCrmWorkspace(input: {
+  client?: SupabaseClient;
+  limit?: number;
+} = {}): Promise<ClientLeadCrmWorkspace> {
+  const client = input.client ?? createServiceClient();
+  const { data, error } = await client
+    .from("organizations")
+    .select("id, name, slug, plan_code, status, created_at")
+    .order("created_at", { ascending: false })
+    .limit(500);
+
+  if (error) {
+    throw new Error(`Nao foi possivel carregar as organizacoes: ${error.message}`);
+  }
+
+  const companies = ((data ?? []) as OrganizationRow[]).map((organization) => ({
+    id: organization.id,
+    name: organization.name,
+    slug: organization.slug,
+    planCode: organization.plan_code,
+    status: organization.status,
+    role: "platform_admin",
+    createdAt: organization.created_at,
+  } satisfies ClientCompany));
+
+  return getLeadCrmWorkspaceForCompanies({
+    client,
+    companies,
+    leadLimit: input.limit ?? 300,
+  });
 }
 
 function buildEmptyWorkspace(companies: ClientCompany[]): ClientLeadCrmWorkspace {
@@ -297,16 +283,216 @@ function buildEmptyWorkspace(companies: ClientCompany[]): ClientLeadCrmWorkspace
   };
 }
 
+async function getLeadCrmWorkspaceForCompanies(input: {
+  client: SupabaseClient;
+  companies: ClientCompany[];
+  leadLimit?: number;
+}): Promise<ClientLeadCrmWorkspace> {
+  const companyIds = input.companies.map((company) => company.id);
+
+  if (!companyIds.length) {
+    return buildEmptyWorkspace(input.companies);
+  }
+
+  const { data: leadsData, error: leadsError } = await input.client
+    .from("leads")
+    .select("id, organization_id, channel, phone_number, display_name, status, score, source, last_event_summary, last_message_at, metadata, created_at, updated_at")
+    .in("organization_id", companyIds)
+    .order("updated_at", { ascending: false })
+    .limit(input.leadLimit ?? 160);
+
+  if (leadsError) {
+    throw new Error(`Nao foi possivel carregar os leads: ${leadsError.message}`);
+  }
+
+  const leadRows = (leadsData ?? []) as LeadRow[];
+  const leadIds = leadRows.map((lead) => lead.id);
+
+  const [conversationsResult, agentsResult, eventsResult] = await Promise.all([
+    leadIds.length
+      ? input.client
+          .from("conversations")
+          .select("id, organization_id, lead_id, whatsapp_instance_id, channel, provider, provider_chat_id, status, last_message_preview, last_message_at, metadata, created_at, updated_at")
+          .in("lead_id", leadIds)
+          .order("updated_at", { ascending: false })
+          .limit(Math.max(240, (input.leadLimit ?? 160) * 2))
+      : Promise.resolve({ data: [], error: null }),
+    input.client
+      .from("agent_registry")
+      .select("id, organization_id, name, persona_name, avatar_url, metadata")
+      .eq("scope", "organization")
+      .in("organization_id", companyIds)
+      .contains("metadata", { client_created: true, agent_kind: "whatsapp" })
+      .order("updated_at", { ascending: false })
+      .limit(240),
+    input.client
+      .from("intelligence_events")
+      .select("id, organization_id, source_type, source_id, event_type, title, summary, tags, payload, occurred_at")
+      .in("organization_id", companyIds)
+      .order("occurred_at", { ascending: false })
+      .limit(1200),
+  ]);
+
+  if (conversationsResult.error) {
+    throw new Error(`Nao foi possivel carregar conversas: ${conversationsResult.error.message}`);
+  }
+
+  if (agentsResult.error) {
+    throw new Error(`Nao foi possivel carregar agentes: ${agentsResult.error.message}`);
+  }
+
+  if (eventsResult.error) {
+    throw new Error(`Nao foi possivel carregar eventos dos leads: ${eventsResult.error.message}`);
+  }
+
+  const conversationRows = (conversationsResult.data ?? []) as ConversationRow[];
+  const conversationIds = conversationRows.map((conversation) => conversation.id);
+  const messagesResult = conversationIds.length
+    ? await input.client
+        .from("conversation_messages")
+        .select("id, organization_id, conversation_id, lead_id, whatsapp_instance_id, provider, provider_message_id, provider_chat_id, direction, message_type, text_content, payload, occurred_at, created_at")
+        .in("conversation_id", conversationIds)
+        .order("occurred_at", { ascending: true })
+        .limit(Math.max(1200, conversationIds.length * 30))
+    : { data: [], error: null };
+
+  if (messagesResult.error) {
+    throw new Error(`Nao foi possivel carregar mensagens: ${messagesResult.error.message}`);
+  }
+
+  const companyById = new Map(input.companies.map((company) => [company.id, company]));
+  const agentByOrgId = new Map<string, AgentRow>();
+  const syncedAvatarMetadata = await syncMissingLeadAvatarsForCrm({
+    client: input.client,
+    leads: leadRows,
+    conversations: conversationRows,
+  });
+  const hydratedLeadRows = leadRows.map((lead) => {
+    const metadata = syncedAvatarMetadata.get(lead.id);
+
+    return metadata ? { ...lead, metadata } : lead;
+  });
+
+  for (const agent of (agentsResult.data ?? []) as AgentRow[]) {
+    if (agent.organization_id && !agentByOrgId.has(agent.organization_id)) {
+      agentByOrgId.set(agent.organization_id, agent);
+    }
+  }
+
+  const conversationsByLead = groupBy(conversationRows, (conversation) => conversation.lead_id ?? "none");
+  const messagesByConversation = groupBy((messagesResult.data ?? []) as MessageRow[], (message) => message.conversation_id ?? "none");
+  const eventRows = (eventsResult.data ?? []) as IntelligenceEventRow[];
+  const leads = hydratedLeadRows.map((lead) => {
+    const company = companyById.get(lead.organization_id);
+    const conversations = conversationsByLead.get(lead.id) ?? [];
+    const events = matchLeadEvents(lead, conversations, eventRows);
+    const agent = agentByOrgId.get(lead.organization_id) ?? null;
+
+    return mapLeadRecord({
+      lead,
+      company,
+      agent,
+      conversations,
+      messagesByConversation,
+      events,
+    });
+  });
+
+  return {
+    companies: input.companies,
+    leads,
+    stats: buildStats(leads),
+  };
+}
+
+async function syncMissingLeadAvatarsForCrm(input: {
+  client: SupabaseClient;
+  leads: LeadRow[];
+  conversations: ConversationRow[];
+}) {
+  const updatedMetadata = new Map<string, JsonRecord>();
+  const conversationsByLead = groupBy(input.conversations, (conversation) => conversation.lead_id ?? "none");
+  const candidates = input.leads
+    .filter((lead) => {
+      if (!lead.phone_number || readLeadProfileImageUrl(lead.metadata)) {
+        return false;
+      }
+
+      return (conversationsByLead.get(lead.id) ?? []).some((conversation) => Boolean(conversation.whatsapp_instance_id));
+    })
+    .slice(0, 6);
+
+  if (!candidates.length) {
+    return updatedMetadata;
+  }
+
+  const instanceIds = Array.from(
+    new Set(
+      candidates.flatMap((lead) =>
+        (conversationsByLead.get(lead.id) ?? [])
+          .map((conversation) => conversation.whatsapp_instance_id)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ),
+  );
+
+  if (!instanceIds.length) {
+    return updatedMetadata;
+  }
+
+  const { data, error } = await input.client
+    .from("whatsapp_instances")
+    .select("id, instance_token_encrypted, metadata")
+    .in("id", instanceIds);
+
+  if (error) {
+    return updatedMetadata;
+  }
+
+  const instanceById = new Map(
+    ((data ?? []) as WhatsappInstanceAvatarRow[]).map((instance) => [instance.id, instance]),
+  );
+
+  for (const lead of candidates) {
+    const conversation = (conversationsByLead.get(lead.id) ?? [])
+      .find((item) => item.whatsapp_instance_id && instanceById.has(item.whatsapp_instance_id));
+    const instance = conversation?.whatsapp_instance_id ? instanceById.get(conversation.whatsapp_instance_id) ?? null : null;
+
+    if (!instance?.instance_token_encrypted) {
+      continue;
+    }
+
+    const metadata = await syncLeadAvatarFromUazapi({
+      client: input.client,
+      leadId: lead.id,
+      phoneNumber: lead.phone_number,
+      providerChatId: conversation?.provider_chat_id ?? null,
+      instance,
+      existingMetadata: readRecord(lead.metadata),
+    }).catch(() => null);
+
+    if (metadata) {
+      updatedMetadata.set(lead.id, metadata);
+    }
+  }
+
+  return updatedMetadata;
+}
+
 function mapLeadRecord(input: {
   lead: LeadRow;
   company?: ClientCompany;
   agent: AgentRow | null;
-  conversation?: ConversationRow;
-  messages: MessageRow[];
+  conversations: ConversationRow[];
+  messagesByConversation: Map<string, MessageRow[]>;
   events: IntelligenceEventRow[];
 }): ClientLeadRecord {
   const metadata = readRecord(input.lead.metadata) ?? {};
   const eventMetadata = mergeEventPayloads(input.events);
+  const activeConversation = pickActiveConversation(input.conversations);
+  const avatarUrl = readLeadProfileImageUrl(metadata)
+    ?? readLeadProfileImageUrl(eventMetadata)
+    ?? readLeadProfileImageUrl(input.conversations.map((conversation) => conversation.metadata));
   const name = readString(input.lead.display_name) ?? readString(metadata.name) ?? readString(metadata.lead_name) ?? fallbackLeadName(input.lead.phone_number);
   const email = readString(metadata.email) ?? readString(metadata.lead_email);
   const source = readString(input.lead.source) ?? readString(metadata.source) ?? input.lead.channel ?? "whatsapp";
@@ -342,10 +528,25 @@ function mapLeadRecord(input: {
   const summary = readString(metadata.ai_summary)
     ?? readString(metadata.summary)
     ?? input.lead.last_event_summary
-    ?? input.conversation?.last_message_preview
+    ?? activeConversation?.last_message_preview
     ?? "Ainda sem resumo automatico.";
-  const messages = input.messages.map(mapMessage);
-  const activities = buildActivities(input.lead, input.conversation, input.events);
+  const conversationFiles = buildConversationFiles(input.conversations, input.messagesByConversation);
+  const activeConversationFile = activeConversation
+    ? conversationFiles.find((conversation) => conversation.id === activeConversation.id) ?? null
+    : conversationFiles[0] ?? null;
+  const messages = activeConversationFile?.messages ?? [];
+  const activities = buildActivities(input.lead, input.conversations, input.events);
+  const trackingEvents = activities.filter(isTrackingActivity);
+  const intelligenceEvents = activities.filter((activity) => !isTrackingActivity(activity));
+  const messageDates = conversationFiles.flatMap((conversation) => conversation.messages.map((message) => message.occurredAt));
+  const fileDates = [
+    input.lead.created_at,
+    input.lead.updated_at,
+    input.lead.last_message_at,
+    ...input.conversations.flatMap((conversation) => [conversation.created_at, conversation.updated_at, conversation.last_message_at]),
+    ...input.events.map((event) => event.occurred_at),
+    ...messageDates,
+  ];
   const companyName = input.company?.name ?? "Empresa sem nome";
 
   return {
@@ -355,6 +556,7 @@ function mapLeadRecord(input: {
     companyPlan: input.company ? `${input.company.planCode} / ${input.company.status}` : "sem plano",
     agentName: readString(input.agent?.persona_name) ?? input.agent?.name ?? null,
     agentAvatarUrl: input.agent?.avatar_url ?? null,
+    avatarUrl,
     name,
     phone: input.lead.phone_number,
     email,
@@ -374,32 +576,142 @@ function mapLeadRecord(input: {
       lastClick: latestClick?.occurred_at ?? null,
     },
     conversation: {
-      id: input.conversation?.id ?? null,
-      status: input.conversation?.status ?? null,
-      preview: input.conversation?.last_message_preview ?? null,
+      id: activeConversationFile?.id ?? null,
+      status: activeConversationFile?.status ?? null,
+      preview: activeConversationFile?.preview ?? null,
       messageCount: messages.length,
       messages,
+    },
+    leadFile: {
+      conversationCount: conversationFiles.length,
+      messageCount: conversationFiles.reduce((total, conversation) => total + conversation.messageCount, 0),
+      trackingEventCount: trackingEvents.length,
+      intelligenceEventCount: intelligenceEvents.length,
+      firstSeenAt: pickDate(fileDates, "asc"),
+      lastSeenAt: pickDate(fileDates, "desc"),
+      conversations: conversationFiles,
+      trackingEvents,
+      intelligenceEvents,
     },
     activities,
     createdAt: input.lead.created_at,
     updatedAt: input.lead.updated_at,
-    lastMessageAt: input.lead.last_message_at ?? input.conversation?.last_message_at ?? null,
+    lastMessageAt: input.lead.last_message_at ?? activeConversationFile?.lastMessageAt ?? null,
   };
 }
 
 function mapMessage(row: MessageRow): ClientLeadMessage {
+  const payload = readRecord(row.payload) ?? {};
+  const author = resolveMessageAuthor(row, payload);
+  const mediaUrl = readString(payload.media_url)
+    ?? readString(payload.mediaUrl)
+    ?? readString(payload.file_url)
+    ?? readString(payload.url);
+
   return {
     id: row.id,
     direction: row.direction,
+    author: author.type,
+    authorLabel: author.label,
+    authorSource: author.source,
+    agentRunId: readString(payload.agent_run_id),
+    agentId: readString(payload.agent_id),
+    provider: row.provider,
+    providerMessageId: row.provider_message_id,
+    providerChatId: row.provider_chat_id,
     type: row.message_type ?? "text",
-    text: readString(row.text_content) ?? readString(readRecord(row.payload)?.text) ?? readString(readRecord(row.payload)?.body) ?? "Mensagem sem texto.",
+    text: readString(row.text_content)
+      ?? readString(payload.text)
+      ?? readString(payload.body)
+      ?? readString(payload.caption)
+      ?? (mediaUrl ? `Midia registrada: ${row.message_type ?? "arquivo"}` : "Mensagem sem texto."),
+    mediaUrl,
     occurredAt: row.occurred_at ?? row.created_at,
   };
 }
 
+function resolveMessageAuthor(row: MessageRow, payload: JsonRecord): {
+  type: ClientLeadMessageAuthor;
+  label: string;
+  source: string;
+} {
+  const nestedAuthor = readRecord(payload.message_author);
+  const rawType = readString(payload.author_type) ?? readString(nestedAuthor?.type);
+  const type = normalizeMessageAuthor(rawType);
+  const label = readString(payload.author_label) ?? readString(nestedAuthor?.label);
+  const source = readString(payload.author_source) ?? readString(nestedAuthor?.source);
+
+  if (type) {
+    return {
+      type,
+      label: label ?? defaultMessageAuthorLabel(type),
+      source: source ?? "payload",
+    };
+  }
+
+  if (readString(payload.agent_run_id) || readString(payload.agent_id) || source === "agent_runtime") {
+    return { type: "ai", label: label ?? "Agente IA", source: source ?? "agent_runtime" };
+  }
+
+  if (row.direction === "inbound") {
+    return { type: "lead", label: "Lead", source: "direction_inbound" };
+  }
+
+  if (row.direction === "outbound") {
+    return { type: "human", label: "Humano", source: "direction_outbound" };
+  }
+
+  if (row.direction === "system") {
+    return { type: "system", label: "Sistema", source: "direction_system" };
+  }
+
+  return { type: "unknown", label: "Desconhecido", source: "direction_unknown" };
+}
+
+function normalizeMessageAuthor(value: string | null): ClientLeadMessageAuthor | null {
+  if (value === "lead" || value === "ai" || value === "human" || value === "system" || value === "unknown") {
+    return value;
+  }
+
+  return null;
+}
+
+function defaultMessageAuthorLabel(type: ClientLeadMessageAuthor) {
+  if (type === "lead") return "Lead";
+  if (type === "ai") return "Agente IA";
+  if (type === "human") return "Humano";
+  if (type === "system") return "Sistema";
+  return "Desconhecido";
+}
+
+function buildConversationFiles(
+  conversations: ConversationRow[],
+  messagesByConversation: Map<string, MessageRow[]>,
+): ClientLeadConversationFile[] {
+  return conversations
+    .map((conversation) => {
+      const messages = (messagesByConversation.get(conversation.id) ?? []).map(mapMessage);
+
+      return {
+        id: conversation.id,
+        channel: conversation.channel,
+        provider: conversation.provider,
+        providerChatId: conversation.provider_chat_id,
+        status: conversation.status,
+        preview: conversation.last_message_preview,
+        messageCount: messages.length,
+        messages,
+        createdAt: conversation.created_at,
+        updatedAt: conversation.updated_at,
+        lastMessageAt: conversation.last_message_at ?? conversation.updated_at,
+      };
+    })
+    .sort((a, b) => compareDateDesc(a.lastMessageAt ?? a.updatedAt, b.lastMessageAt ?? b.updatedAt));
+}
+
 function buildActivities(
   lead: LeadRow,
-  conversation: ConversationRow | undefined,
+  conversations: ConversationRow[],
   events: IntelligenceEventRow[],
 ): ClientLeadActivity[] {
   const activities: ClientLeadActivity[] = [];
@@ -415,7 +727,7 @@ function buildActivities(
     });
   }
 
-  if (conversation?.created_at) {
+  for (const conversation of conversations) {
     activities.push({
       id: `${conversation.id}-conversation`,
       title: "Conversa aberta",
@@ -440,6 +752,26 @@ function buildActivities(
   return activities.sort((a, b) => compareDateDesc(a.occurredAt, b.occurredAt));
 }
 
+function isTrackingActivity(activity: ClientLeadActivity) {
+  const value = `${activity.type} ${activity.title} ${activity.summary}`.toLowerCase();
+
+  return [
+    "track",
+    "tracked",
+    "click",
+    "cookie",
+    "push",
+    "gps",
+    "location",
+    "localizacao",
+    "visitor",
+    "session",
+    "utm",
+    "page",
+    "lead_tracking",
+  ].some((needle) => value.includes(needle));
+}
+
 function getActivityTone(event: IntelligenceEventRow): ClientLeadActivity["tone"] {
   if (event.event_type.includes("clicked")) return "amber";
   if (event.event_type.includes("responded") || event.event_type.includes("message")) return "green";
@@ -453,9 +785,11 @@ function matchLeadEvents(
   conversations: ConversationRow[],
   events: IntelligenceEventRow[],
 ) {
+  const metadata = readRecord(lead.metadata) ?? {};
   const normalizedLeadPhone = normalizePhone(lead.phone_number);
   const conversationIds = new Set(conversations.map((conversation) => conversation.id));
   const chatIds = new Set(conversations.map((conversation) => conversation.provider_chat_id).filter(Boolean));
+  const leadTrackingIds = collectTrackingIds(metadata);
 
   return events.filter((event) => {
     if (event.organization_id !== lead.organization_id) {
@@ -470,13 +804,65 @@ function matchLeadEvents(
     const payloadLeadId = readString(payload.lead_id) ?? readString(payload.leadId);
     const payloadLeadPhone = normalizePhone(readString(payload.lead_phone) ?? readString(payload.phone_number) ?? readString(payload.phone));
     const payloadChatId = readString(payload.provider_chat_id) ?? readString(payload.chat_id);
+    const eventTrackingIds = collectTrackingIds({
+      ...payload,
+      visitor_id: event.source_id,
+    });
 
     return (
       payloadLeadId === lead.id ||
       Boolean(normalizedLeadPhone && payloadLeadPhone === normalizedLeadPhone) ||
-      Boolean(payloadChatId && chatIds.has(payloadChatId))
+      Boolean(payloadChatId && chatIds.has(payloadChatId)) ||
+      intersectsSet(leadTrackingIds, eventTrackingIds)
     );
   });
+}
+
+function collectTrackingIds(record: JsonRecord, depth = 0): Set<string> {
+  const ids = new Set<string>();
+  const allowedKeys = new Set([
+    "anonymous_id",
+    "anon_id",
+    "connecty_visitor_id",
+    "session_cookie_id",
+    "session_id",
+    "user_id",
+    "visitor_cookie_id",
+    "visitor_id",
+  ]);
+
+  if (depth > 3) {
+    return ids;
+  }
+
+  for (const [key, value] of Object.entries(record)) {
+    const normalizedKey = key.toLowerCase();
+    const stringValue = readString(value);
+
+    if (allowedKeys.has(normalizedKey) && stringValue) {
+      ids.add(stringValue);
+    }
+
+    const nested = readRecord(value);
+
+    if (nested) {
+      for (const id of collectTrackingIds(nested, depth + 1)) {
+        ids.add(id);
+      }
+    }
+  }
+
+  return ids;
+}
+
+function intersectsSet(a: Set<string>, b: Set<string>) {
+  for (const item of a) {
+    if (b.has(item)) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 function mergeEventPayloads(events: IntelligenceEventRow[]) {
@@ -500,7 +886,7 @@ function buildStats(leads: ClientLeadRecord[]): ClientLeadCrmWorkspace["stats"] 
 }
 
 function pickActiveConversation(conversations: ConversationRow[]) {
-  return conversations.sort((a, b) => compareDateDesc(a.last_message_at ?? a.updated_at, b.last_message_at ?? b.updated_at))[0];
+  return [...conversations].sort((a, b) => compareDateDesc(a.last_message_at ?? a.updated_at, b.last_message_at ?? b.updated_at))[0];
 }
 
 function groupBy<T>(items: T[], keyFn: (item: T) => string) {
@@ -516,6 +902,19 @@ function groupBy<T>(items: T[], keyFn: (item: T) => string) {
 
 function compareDateDesc(a: string | null | undefined, b: string | null | undefined) {
   return new Date(b ?? 0).getTime() - new Date(a ?? 0).getTime();
+}
+
+function pickDate(values: Array<string | null | undefined>, direction: "asc" | "desc") {
+  const dates = values.filter((value): value is string => Boolean(value));
+
+  if (!dates.length) {
+    return null;
+  }
+
+  return dates.sort((a, b) => {
+    const diff = new Date(a).getTime() - new Date(b).getTime();
+    return direction === "asc" ? diff : -diff;
+  })[0];
 }
 
 function normalizeLeadStatus(value: string): ClientLeadStatus {

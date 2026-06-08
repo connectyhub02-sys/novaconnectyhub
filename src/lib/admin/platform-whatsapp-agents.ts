@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { defaultLeadQualificationConfig, leadQualificationConfigKey } from "@/lib/leads/qualification";
 import { defaultWhatsappBehaviorConfig } from "@/lib/whatsapp/agent-behavior";
 import { createServiceClient } from "@/lib/supabase/service";
 
@@ -185,6 +186,7 @@ export async function createPlatformWhatsappAgent(input: {
         sector_code: sector.sectorCode,
         sector_name: sector.name,
         whatsapp_behavior_config: defaultWhatsappBehaviorConfig,
+        [leadQualificationConfigKey]: defaultLeadQualificationConfig,
       },
     })
     .select("id, sector_code, sector_name, agent_code, name, persona_name, role_title, description, prompt, status, autonomy_level, metadata, updated_at, created_at")

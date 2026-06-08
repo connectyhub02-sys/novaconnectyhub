@@ -86,6 +86,7 @@ const adminSections: NavSection[] = [
     label: "Clientes",
     items: [
       { label: "Clientes",          href: "/admin/clientes",          icon: Users,        badge: "142" },
+      { label: "CRM Leads",         href: "/admin/leads",             icon: UserCheck },
       { label: "Planos",            href: "/admin/planos",            icon: Coins },
       { label: "WhatsApp Clientes", href: "/admin/clientes/whatsapp", icon: MessageCircle },
     ],

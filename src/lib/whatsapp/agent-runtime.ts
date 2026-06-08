@@ -1615,12 +1615,25 @@ async function saveOutboundMessage(
   message: OutboundMessage,
 ) {
   const providerMessageId = findString(message.providerResponse, ["messageId", "message_id", "id"]);
+  const agentLabel = context.agent.persona_name?.trim() || context.agent.name || "Agente IA";
   const payload = {
     provider_response: sanitizeProviderData(message.providerResponse),
     delivery_mode: message.mode,
     generated_audio_media_id: message.generatedAudio?.mediaId ?? null,
     generated_audio_object_key: message.generatedAudio?.objectKey ?? null,
     agent_run_id: context.run.id,
+    agent_id: context.agent.id,
+    agent_name: agentLabel,
+    author_type: "ai",
+    author_label: agentLabel,
+    author_source: "agent_runtime",
+    message_author: {
+      type: "ai",
+      label: agentLabel,
+      source: "agent_runtime",
+      agent_id: context.agent.id,
+      agent_run_id: context.run.id,
+    },
     chunk_index: message.chunkIndex ?? null,
     chunks_total: message.chunksTotal ?? null,
   };

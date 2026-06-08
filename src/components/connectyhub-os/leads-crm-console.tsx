@@ -27,6 +27,7 @@ import { KpiStat, NeonBadge, PageHeader, Panel, ProgressBar } from "@/components
 import { cn } from "@/lib/utils";
 import type {
   ClientLeadActivity,
+  ClientLeadConversationFile,
   ClientLeadCrmWorkspace,
   ClientLeadMessage,
   ClientLeadRecord,
@@ -208,38 +209,63 @@ function LeadsView({
     >
       <LeadFilters search={search} setSearch={setSearch} setStatus={setStatus} status={status} />
       <div className="mt-4 overflow-x-auto">
-        <div className="min-w-[980px]">
-          <div className="grid grid-cols-[1.2fr_150px_1fr_130px_130px_130px_110px] gap-3 border-b border-white/10 px-3 pb-3 font-mono text-[9px] uppercase tracking-widest text-slate-500">
-            <span>Lead</span>
-            <span>Telefone</span>
-            <span>Empresa / agente</span>
-            <span>Status</span>
-            <span>Origem</span>
-            <span>Ultimo contato</span>
+        <div className="min-w-[1320px]">
+          <div className="grid grid-cols-[1.2fr_150px_170px_150px_130px_170px_140px_130px_110px] gap-3 border-b border-white/10 px-3 pb-3 font-mono text-[9px] uppercase tracking-widest text-slate-500">
+            <span>Nome</span>
+            <span>Contato</span>
+            <span>Perfil / persona</span>
+            <span>Atendimento</span>
+            <span>Estagio</span>
+            <span>Origem / local</span>
+            <span>Dispositivo</span>
+            <span>IP / data</span>
             <span className="text-right">Acoes</span>
           </div>
           <div className="divide-y divide-white/10">
-            {filteredLeads.map((lead) => (
-              <button
-                key={lead.id}
-                className="grid w-full grid-cols-[1.2fr_150px_1fr_130px_130px_130px_110px] items-center gap-3 px-3 py-4 text-left transition hover:bg-cyan-500/5"
-                onClick={() => setDetailsLeadId(lead.id)}
-                type="button"
-              >
-                <LeadIdentity lead={lead} />
-                <LeadField icon={Phone} value={lead.phone ?? "Sem telefone"} />
-                <div className="min-w-0">
-                  <p className="truncate text-[12px] font-semibold text-white">{lead.companyName}</p>
-                  <p className="mt-1 truncate font-mono text-[9px] uppercase tracking-wide text-slate-500">{lead.agentName ?? "Sem agente"}</p>
-                </div>
-                <StatusPill status={lead.status} />
-                <span className="truncate text-[12px] text-slate-300">{lead.source}</span>
-                <span className="text-[12px] text-slate-400">{formatDate(lead.lastMessageAt ?? lead.updatedAt)}</span>
-                <span className="justify-self-end rounded-lg border border-cyan-400/25 bg-cyan-400/10 px-3 py-2 font-mono text-[9px] font-bold uppercase tracking-wide text-cyan-300">
-                  Detalhes
-                </span>
-              </button>
-            ))}
+            {filteredLeads.map((lead) => {
+              const temperature = getTemperatureMeta(lead.qualification.temperature);
+
+              return (
+                <button
+                  key={lead.id}
+                  className="grid w-full grid-cols-[1.2fr_150px_170px_150px_130px_170px_140px_130px_110px] items-center gap-3 px-3 py-4 text-left transition hover:bg-cyan-500/5"
+                  onClick={() => setDetailsLeadId(lead.id)}
+                  type="button"
+                >
+                  <LeadIdentity lead={lead} />
+                  <div className="min-w-0 text-[12px] text-slate-300">
+                    <p className="truncate">{lead.phone ?? "Sem telefone"}</p>
+                    {lead.email ? <p className="mt-1 truncate text-slate-500">{lead.email}</p> : null}
+                  </div>
+                  <div className="min-w-0">
+                    <span className={cn("inline-flex rounded-lg border px-2 py-1 font-mono text-[9px] font-bold uppercase tracking-wide", temperature.className)}>
+                      {temperature.label}
+                    </span>
+                    <p className="mt-1 truncate text-[11px] text-slate-400">Score {lead.score}/100</p>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="truncate text-[12px] font-semibold text-white">{lead.agentName ?? "Sem agente"}</p>
+                    <p className="mt-1 truncate font-mono text-[9px] uppercase tracking-wide text-slate-500">{lead.companyName}</p>
+                  </div>
+                  <StatusPill status={lead.status} />
+                  <div className="min-w-0 text-[12px] text-slate-300">
+                    <p className="truncate">{lead.source}</p>
+                    <p className="mt-1 truncate text-slate-500">{lead.technical.location ?? "Local desconhecido"}</p>
+                  </div>
+                  <div className="min-w-0 text-[12px] text-slate-300">
+                    <p className="truncate">{lead.technical.device ?? "Nao identificado"}</p>
+                    <p className="mt-1 truncate text-slate-500">{[lead.technical.os, lead.technical.browser].filter(Boolean).join(" / ") || "-"}</p>
+                  </div>
+                  <div className="min-w-0 text-[12px] text-slate-300">
+                    <p className="truncate font-mono text-[11px] text-slate-400">{lead.technical.ipAddress ?? "-"}</p>
+                    <p className="mt-1 text-slate-500">{formatDate(lead.lastMessageAt ?? lead.updatedAt)}</p>
+                  </div>
+                  <span className="justify-self-end rounded-lg border border-cyan-400/25 bg-cyan-400/10 px-3 py-2 font-mono text-[9px] font-bold uppercase tracking-wide text-cyan-300">
+                    Ver arquivo
+                  </span>
+                </button>
+              );
+            })}
           </div>
           {!filteredLeads.length ? <EmptyState title="Nenhum lead encontrado" detail="Quando o WhatsApp receber mensagens, os leads aparecem aqui." /> : null}
         </div>
@@ -403,18 +429,31 @@ function ConversationsView({
 }
 
 function LeadDetailsModal({ lead, onClose }: { lead: ClientLeadRecord; onClose: () => void }) {
+  const preferredConversationId = lead.conversation.id ?? lead.leadFile.conversations[0]?.id ?? null;
+  const [conversationSelection, setConversationSelection] = useState<{ leadId: string; conversationId: string | null }>({
+    leadId: lead.id,
+    conversationId: preferredConversationId,
+  });
+  const selectedConversationId = conversationSelection.leadId === lead.id
+    ? conversationSelection.conversationId
+    : preferredConversationId;
+  const selectedConversation = lead.leadFile.conversations.find((conversation) => conversation.id === selectedConversationId)
+    ?? lead.leadFile.conversations[0]
+    ?? null;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 p-4 backdrop-blur-sm">
-      <div className="flex max-h-[92svh] w-full max-w-[1180px] flex-col overflow-hidden rounded-2xl border border-white/15 bg-[#11151d] shadow-2xl">
+      <div className="flex max-h-[92svh] w-full max-w-[1280px] flex-col overflow-hidden rounded-2xl border border-white/15 bg-[#11151d] shadow-2xl">
         <div className="flex items-center justify-between gap-4 border-b border-white/10 px-5 py-4">
           <div className="flex min-w-0 items-center gap-3">
             <LeadAvatar lead={lead} size="lg" />
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <h2 className="truncate text-[18px] font-bold text-white">{lead.name}</h2>
+                <h2 className="truncate text-[18px] font-bold text-white">Arquivo inteligente do lead</h2>
                 <StatusPill status={lead.status} />
               </div>
               <div className="mt-1 flex flex-wrap gap-3 text-[12px] text-slate-400">
+                <span className="font-semibold text-white">{lead.name}</span>
                 <span className="inline-flex items-center gap-1.5">
                   <Phone className="h-3.5 w-3.5" />
                   {lead.phone ?? "Sem telefone"}
@@ -438,21 +477,38 @@ function LeadDetailsModal({ lead, onClose }: { lead: ClientLeadRecord; onClose: 
           </button>
         </div>
 
-        <div className="grid min-h-0 flex-1 overflow-hidden lg:grid-cols-[360px_minmax(0,1fr)]">
-          <aside className="min-h-0 overflow-y-auto border-r border-white/10 p-4">
-            <div className="space-y-4">
+        <div className="grid min-h-0 flex-1 overflow-hidden lg:grid-cols-[370px_minmax(0,1fr)]">
+          <aside className="min-h-0 overflow-y-auto border-r border-white/10 bg-slate-950/25 p-4">
+            <div className="space-y-3">
               <InfoPanel title="Resumo inteligente" text={lead.summary} />
               <QualificationGrid lead={lead} />
               <LeadTechnicalFile lead={lead} />
+              <TrackingArchive events={lead.leadFile.trackingEvents} />
+              <LeadFileSnapshot lead={lead} />
               <ActivityTimeline activities={lead.activities} />
+              <OpenWhatsAppButton phone={lead.phone} />
             </div>
           </aside>
           <main className="min-h-0 overflow-hidden p-4">
-            <div className="flex h-full min-h-[640px] flex-col rounded-2xl border border-white/10 bg-slate-950/35">
-              <ConversationHeader lead={lead} />
-              <div className="min-h-0 flex-1 overflow-y-auto border-t border-white/10 p-4">
-                <ChatMessages messages={lead.conversation.messages} />
+            <div className="flex h-full min-h-[640px] flex-col overflow-hidden rounded-2xl border border-white/10 bg-slate-950/70">
+              <ConversationHeader lead={lead} conversation={selectedConversation} />
+              <div
+                className="min-h-0 flex-1 overflow-y-auto border-t border-white/10 p-5"
+                style={{
+                  backgroundColor: "#0b1117",
+                  backgroundImage:
+                    "radial-gradient(circle at 12px 12px, rgba(148,163,184,0.1) 1px, transparent 1.5px), radial-gradient(circle at 2px 2px, rgba(34,211,238,0.06) 1px, transparent 1.5px)",
+                  backgroundPosition: "0 0, 14px 14px",
+                  backgroundSize: "28px 28px",
+                }}
+              >
+                <ChatMessages messages={selectedConversation?.messages ?? []} />
               </div>
+              <ConversationSelector
+                conversations={lead.leadFile.conversations}
+                onSelect={(conversationId) => setConversationSelection({ leadId: lead.id, conversationId })}
+                selectedId={selectedConversation?.id ?? null}
+              />
             </div>
           </main>
         </div>
@@ -512,7 +568,7 @@ function LeadIdentity({ lead }: { lead: ClientLeadRecord }) {
       <div className="min-w-0">
         <p className="truncate text-[13px] font-semibold text-white">{lead.name}</p>
         <p className="mt-1 truncate font-mono text-[9px] uppercase tracking-wide text-slate-500">
-          {lead.channel} / {lead.conversation.messageCount} mensagens
+          {lead.channel} / {lead.leadFile.messageCount} mensagens
         </p>
       </div>
     </div>
@@ -522,10 +578,10 @@ function LeadIdentity({ lead }: { lead: ClientLeadRecord }) {
 function LeadAvatar({ lead, size = "md" }: { lead: ClientLeadRecord; size?: "md" | "lg" }) {
   const dimensions = size === "lg" ? "h-12 w-12" : "h-10 w-10";
 
-  if (lead.agentAvatarUrl) {
+  if (lead.avatarUrl) {
     return (
       <span className={cn("relative block shrink-0 overflow-hidden rounded-xl border border-cyan-400/35 bg-cyan-500/10", dimensions)}>
-        <Image alt={`Foto de ${lead.agentName ?? lead.name}`} className="object-cover" fill sizes={size === "lg" ? "48px" : "40px"} src={lead.agentAvatarUrl} unoptimized />
+        <Image alt={`Foto do lead ${lead.name}`} className="object-cover" fill sizes={size === "lg" ? "48px" : "40px"} src={lead.avatarUrl} unoptimized />
       </span>
     );
   }
@@ -533,15 +589,6 @@ function LeadAvatar({ lead, size = "md" }: { lead: ClientLeadRecord; size?: "md"
   return (
     <span className={cn("flex shrink-0 items-center justify-center rounded-xl border border-cyan-400/25 bg-cyan-500/10 font-mono font-bold text-cyan-300", dimensions)}>
       {lead.name.slice(0, 1).toUpperCase()}
-    </span>
-  );
-}
-
-function LeadField({ icon: Icon, value }: { icon: typeof Phone; value: string }) {
-  return (
-    <span className="flex min-w-0 items-center gap-2 text-[12px] text-slate-300">
-      <Icon className="h-3.5 w-3.5 shrink-0 text-cyan-300" />
-      <span className="truncate">{value}</span>
     </span>
   );
 }
@@ -587,6 +634,122 @@ function InfoPanel({ title, text }: { title: string; text: string }) {
       <p className="font-mono text-[9px] uppercase tracking-widest text-cyan-300">{title}</p>
       <p className="mt-3 text-[12px] leading-5 text-slate-200">{text}</p>
     </div>
+  );
+}
+
+function LeadFileSnapshot({ lead }: { lead: ClientLeadRecord }) {
+  return (
+    <div className="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-4">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="font-mono text-[9px] uppercase tracking-widest text-cyan-200">Dossie do lead</p>
+          <p className="mt-1 text-[13px] font-semibold text-white">CRM, conversas e rastreamento</p>
+        </div>
+        <Archive className="h-5 w-5 text-cyan-200" />
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <InfoMini label="Conversas" value={String(lead.leadFile.conversationCount)} />
+        <InfoMini label="Mensagens" value={String(lead.leadFile.messageCount)} />
+        <InfoMini label="Rastreamentos" value={String(lead.leadFile.trackingEventCount)} />
+        <InfoMini label="Eventos IA" value={String(lead.leadFile.intelligenceEventCount)} />
+        <InfoMini label="Primeira aparicao" value={formatDateTime(lead.leadFile.firstSeenAt)} />
+        <InfoMini label="Ultimo sinal" value={formatDateTime(lead.leadFile.lastSeenAt)} />
+      </div>
+    </div>
+  );
+}
+
+function ConversationSelector({
+  conversations,
+  onSelect,
+  selectedId,
+}: {
+  conversations: ClientLeadConversationFile[];
+  onSelect: (id: string) => void;
+  selectedId: string | null;
+}) {
+  const selectedConversation = conversations.find((conversation) => conversation.id === selectedId) ?? null;
+
+  return (
+    <div className="border-t border-white/10 bg-slate-900/80 p-3">
+      <div className="flex items-center gap-3 rounded-full border border-white/10 bg-slate-950/60 px-4 py-2">
+        <MessageCircle className="h-4 w-4 shrink-0 text-cyan-300" />
+        {conversations.length > 1 ? (
+          <select
+            className="min-w-0 flex-1 appearance-none bg-transparent text-[13px] text-slate-200 outline-none"
+            onChange={(event) => onSelect(event.target.value)}
+            value={selectedId ?? ""}
+          >
+            {conversations.map((conversation) => (
+              <option key={conversation.id} className="bg-slate-950 text-white" value={conversation.id}>
+                {formatConversationLabel(conversation)}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <span className="min-w-0 flex-1 truncate text-[13px] text-slate-300">
+            {selectedConversation ? formatConversationLabel(selectedConversation) : "Historico geral"}
+          </span>
+        )}
+        <span className="shrink-0 font-mono text-[9px] uppercase tracking-wide text-slate-500">
+          {selectedConversation?.messageCount ?? 0} mensagens
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function formatConversationLabel(conversation: ClientLeadConversationFile) {
+  return [
+    conversation.provider || conversation.channel || "Historico geral",
+    conversation.status ? `status ${conversation.status}` : null,
+    conversation.lastMessageAt ? formatDateTime(conversation.lastMessageAt) : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+function TrackingArchive({ events }: { events: ClientLeadActivity[] }) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+      <div className="flex items-center justify-between gap-3">
+        <p className="font-mono text-[9px] uppercase tracking-widest text-amber-300">Atividade no site</p>
+        <NeonBadge tone="amber">{events.length}</NeonBadge>
+      </div>
+      <div className="mt-3 space-y-2">
+        {events.slice(0, 10).map((event) => (
+          <div key={event.id} className="rounded-xl border border-white/10 bg-slate-950/30 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <p className="truncate text-[12px] font-semibold text-white">{event.title}</p>
+              <span className="shrink-0 font-mono text-[9px] text-slate-500">{formatDateTime(event.occurredAt)}</span>
+            </div>
+            <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-slate-400">{event.summary}</p>
+          </div>
+        ))}
+        {!events.length ? <p className="text-[12px] text-slate-500">Sem eventos de cookies, push, GPS, cliques ou navegacao ainda.</p> : null}
+      </div>
+    </div>
+  );
+}
+
+function OpenWhatsAppButton({ phone }: { phone: string | null }) {
+  const normalizedPhone = phone?.replace(/\D/g, "") ?? "";
+
+  return (
+    <a
+      className={cn(
+        "inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl px-3 font-mono text-[10px] font-bold uppercase tracking-wide transition",
+        normalizedPhone
+          ? "bg-emerald-300 text-slate-950 hover:bg-emerald-200"
+          : "pointer-events-none border border-white/10 bg-white/[0.03] text-slate-500",
+      )}
+      href={normalizedPhone ? `https://wa.me/${normalizedPhone}` : "#"}
+      rel="noreferrer"
+      target="_blank"
+    >
+      <MessageCircle className="h-3.5 w-3.5" />
+      Abrir no WhatsApp
+    </a>
   );
 }
 
@@ -768,9 +931,17 @@ function ActivityTimeline({ activities }: { activities: ClientLeadActivity[] }) 
   );
 }
 
-function ConversationHeader({ lead }: { lead: ClientLeadRecord }) {
+function ConversationHeader({
+  conversation,
+  lead,
+}: {
+  conversation?: ClientLeadConversationFile | null;
+  lead: ClientLeadRecord;
+}) {
+  const messageCount = conversation?.messageCount ?? lead.conversation.messageCount;
+
   return (
-    <div className="flex items-center justify-between gap-3 p-4">
+    <div className="flex items-center justify-between gap-3 bg-slate-900/90 p-4">
       <div className="flex min-w-0 items-center gap-3">
         <LeadAvatar lead={lead} />
         <div className="min-w-0">
@@ -778,7 +949,10 @@ function ConversationHeader({ lead }: { lead: ClientLeadRecord }) {
           <p className="truncate text-[11px] text-slate-400">{lead.phone ?? lead.companyName}</p>
         </div>
       </div>
-      <NeonBadge tone="cyan">{lead.conversation.messageCount} mensagens</NeonBadge>
+      <div className="flex flex-wrap justify-end gap-2">
+        {conversation ? <NeonBadge tone="zinc">{conversation.status ?? "sem status"}</NeonBadge> : null}
+        <NeonBadge tone="cyan">{messageCount} mensagens</NeonBadge>
+      </div>
     </div>
   );
 }
@@ -791,26 +965,44 @@ function ChatMessages({ messages }: { messages: ClientLeadMessage[] }) {
   return (
     <div className="space-y-3">
       {messages.map((message) => {
-        const isLead = message.direction === "inbound";
-        const isSystem = message.direction === "system" || message.direction === "unknown";
+        const isLead = message.author === "lead" || message.direction === "inbound";
+        const isAi = message.author === "ai";
+        const isHuman = message.author === "human";
+        const isSystem = message.author === "system" || message.author === "unknown" || message.direction === "system" || message.direction === "unknown";
+        const label = message.authorLabel || (isLead ? "Lead" : isHuman ? "Humano" : isAi ? "Agente IA" : "Sistema");
 
         return (
           <div key={message.id} className={cn("flex", isLead ? "justify-end" : "justify-start")}>
             <div
               className={cn(
-                "max-w-[78%] rounded-2xl border px-4 py-3 text-[13px] leading-5",
-                isLead && "border-emerald-400/20 bg-emerald-400/12 text-emerald-50",
-                !isLead && !isSystem && "border-white/10 bg-white/[0.05] text-slate-100",
+                "max-w-[72%] rounded-xl border px-4 py-3 text-[13px] leading-5 shadow-lg shadow-black/15",
+                isLead && "border-emerald-300/25 bg-emerald-300/15 text-emerald-50",
+                isAi && !isLead && "border-cyan-300/20 bg-slate-900/95 text-slate-100",
+                isHuman && !isLead && "border-sky-300/25 bg-sky-300/10 text-sky-50",
+                !isLead && !isAi && !isHuman && !isSystem && "border-white/10 bg-slate-900/95 text-slate-100",
                 isSystem && "border-amber-400/20 bg-amber-400/10 text-amber-100",
               )}
             >
               <div className="mb-2 flex items-center justify-between gap-3">
                 <span className="font-mono text-[9px] uppercase tracking-wide opacity-75">
-                  {isLead ? "Lead" : isSystem ? "Sistema" : "Agente IA"}
+                  {label}
                 </span>
-                <span className="font-mono text-[9px] opacity-60">{formatTime(message.occurredAt)}</span>
+                <span className="font-mono text-[9px] opacity-60">
+                  {message.type !== "text" ? `${message.type} · ` : null}
+                  {formatTime(message.occurredAt)}
+                </span>
               </div>
               <p className="whitespace-pre-wrap">{message.text}</p>
+              {message.mediaUrl ? (
+                <a
+                  className="mt-3 inline-flex rounded-lg border border-cyan-400/25 bg-cyan-400/10 px-2.5 py-1 font-mono text-[9px] font-bold uppercase tracking-wide text-cyan-200 transition hover:bg-cyan-400/15"
+                  href={message.mediaUrl}
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  Abrir midia salva
+                </a>
+              ) : null}
             </div>
           </div>
         );

@@ -4,17 +4,24 @@ import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { inngest } from "@/lib/inngest/client";
 import { createServiceClient } from "@/lib/supabase/service";
+import {
+  mergeLeadProfileImageMetadata,
+  readLeadProfileImageUrl,
+  syncLeadAvatarFromUazapi,
+} from "./lead-avatar-sync";
 
 type JsonRecord = Record<string, unknown>;
 
 type WhatsappInstanceRow = {
   id: string;
   organization_id: string;
+  instance_token_encrypted: string | null;
   metadata: JsonRecord | null;
 };
 
 type LeadRow = {
   id: string;
+  metadata: JsonRecord | null;
 };
 
 type ConversationRow = {
@@ -122,8 +129,25 @@ export async function ingestUazapiWebhook(input: {
           displayName: message.displayName,
           lastEventSummary: message.textContent,
           lastMessageAt: message.occurredAt,
+          profileImageUrl: message.profileImageUrl,
+          providerChatId: message.providerChatId,
+          providerMessageId: message.providerMessageId,
         })
       : null;
+    if (
+      lead &&
+      message.direction === "inbound" &&
+      !readLeadProfileImageUrl(lead.metadata)
+    ) {
+      await syncLeadAvatarFromUazapi({
+        client,
+        leadId: lead.id,
+        phoneNumber: message.phoneNumber,
+        providerChatId: message.providerChatId,
+        instance,
+        existingMetadata: lead.metadata,
+      });
+    }
     const conversation = await ensureConversation(client, {
       organizationId: instance.organization_id,
       leadId: lead?.id ?? null,
@@ -140,6 +164,9 @@ export async function ingestUazapiWebhook(input: {
       message,
       payload,
     });
+    if (isHumanAuthoredWhatsappMessage(message, payload)) {
+      await markConversationHandledByHuman(client, conversation.id, message);
+    }
     const agentRun = message.direction === "inbound"
       ? await enqueueWhatsappAgentRun(client, {
           organizationId: instance.organization_id,
@@ -193,7 +220,11 @@ export async function ingestUazapiWebhook(input: {
       conversationId: conversation.id,
       webhookEventId: eventResult.eventId,
       agentRunId: agentRun?.id ?? null,
-      title: message.direction === "inbound" ? "Mensagem recebida no WhatsApp" : "Mensagem registrada no WhatsApp",
+      title: message.direction === "inbound"
+        ? "Mensagem recebida no WhatsApp"
+        : isHumanAuthoredWhatsappMessage(message, payload)
+          ? "Humano respondeu pelo WhatsApp conectado"
+          : "Mensagem registrada no WhatsApp",
       summary: message.textContent,
       eventType,
     });
@@ -223,7 +254,7 @@ export async function ingestUazapiWebhook(input: {
 async function findWhatsappInstance(client: SupabaseClient, providerInstanceId: string) {
   const { data } = await client
     .from("whatsapp_instances")
-    .select("id, organization_id, metadata")
+    .select("id, organization_id, instance_token_encrypted, metadata")
     .eq("provider", "uazapi")
     .eq("provider_instance_id", providerInstanceId)
     .maybeSingle<WhatsappInstanceRow>();
@@ -234,7 +265,7 @@ async function findWhatsappInstance(client: SupabaseClient, providerInstanceId: 
 
   const { data: byProviderName } = await client
     .from("whatsapp_instances")
-    .select("id, organization_id, metadata")
+    .select("id, organization_id, instance_token_encrypted, metadata")
     .eq("provider", "uazapi")
     .contains("metadata", { provider_name: providerInstanceId })
     .maybeSingle<WhatsappInstanceRow>();
@@ -317,30 +348,44 @@ async function ensureLead(
     displayName: string | null;
     lastEventSummary: string | null;
     lastMessageAt: string;
+    profileImageUrl: string | null;
+    providerChatId: string | null;
+    providerMessageId: string | null;
   },
 ) {
   const { data: existing } = await client
     .from("leads")
-    .select("id")
+    .select("id, metadata")
     .eq("organization_id", input.organizationId)
     .eq("channel", "whatsapp")
     .eq("phone_number", input.phoneNumber)
     .maybeSingle<LeadRow>();
 
   if (existing) {
+    const metadata = buildLeadMetadata(readRecord(existing.metadata), {
+      createdFrom: null,
+      displayName: input.displayName,
+      lastSource: "uazapi_webhook",
+      profileImageUrl: input.profileImageUrl,
+      providerChatId: input.providerChatId,
+      providerMessageId: input.providerMessageId,
+    });
+    const updatePayload: JsonRecord = {
+      status: "active",
+      last_event_summary: input.lastEventSummary,
+      last_message_at: input.lastMessageAt,
+      metadata,
+    };
+
+    if (input.displayName) {
+      updatePayload.display_name = input.displayName;
+    }
+
     const { data, error } = await client
       .from("leads")
-      .update({
-        display_name: input.displayName,
-        status: "active",
-        last_event_summary: input.lastEventSummary,
-        last_message_at: input.lastMessageAt,
-        metadata: {
-          last_source: "uazapi_webhook",
-        },
-      })
+      .update(updatePayload)
       .eq("id", existing.id)
-      .select("id")
+      .select("id, metadata")
       .single<LeadRow>();
 
     if (error) {
@@ -361,11 +406,16 @@ async function ensureLead(
       source: "uazapi_webhook",
       last_event_summary: input.lastEventSummary,
       last_message_at: input.lastMessageAt,
-      metadata: {
-        created_from: "uazapi_webhook",
-      },
+      metadata: buildLeadMetadata(null, {
+        createdFrom: "uazapi_webhook",
+        displayName: input.displayName,
+        lastSource: "uazapi_webhook",
+        profileImageUrl: input.profileImageUrl,
+        providerChatId: input.providerChatId,
+        providerMessageId: input.providerMessageId,
+      }),
     })
-    .select("id")
+    .select("id, metadata")
     .single<LeadRow>();
 
   if (error) {
@@ -454,6 +504,7 @@ async function insertConversationMessage(
     payload: JsonRecord;
   },
 ) {
+  const messagePayload = buildConversationMessagePayload(input.payload, input.message);
   const insertPayload = {
     organization_id: input.organizationId,
     conversation_id: input.conversationId,
@@ -465,7 +516,7 @@ async function insertConversationMessage(
     direction: input.message.direction,
     message_type: input.message.messageType,
     text_content: input.message.textContent,
-    payload: input.payload,
+    payload: messagePayload,
     occurred_at: input.message.occurredAt,
   };
   const { data, error } = await client
@@ -492,6 +543,35 @@ async function insertConversationMessage(
   }
 
   throw new Error(`Nao foi possivel registrar mensagem: ${error.message}`);
+}
+
+async function markConversationHandledByHuman(client: SupabaseClient, conversationId: string, message: MessageSnapshot) {
+  const pausedUntil = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+  const { data } = await client
+    .from("conversations")
+    .select("metadata")
+    .eq("id", conversationId)
+    .maybeSingle<{ metadata: JsonRecord | null }>();
+  const metadata = readRecord(data?.metadata);
+  const currentHuman = readRecord(metadata?.human_intervention);
+
+  await client
+    .from("conversations")
+    .update({
+      metadata: {
+        ...(metadata ?? {}),
+        human_intervention: {
+          ...(currentHuman ?? {}),
+          active: true,
+          reason: "human_outbound_from_connected_whatsapp",
+          source: "connected_whatsapp",
+          last_human_message_at: message.occurredAt,
+          paused_until: pausedUntil,
+          updated_at: new Date().toISOString(),
+        },
+      },
+    })
+    .eq("id", conversationId);
 }
 
 async function enqueueWhatsappAgentRun(
@@ -634,6 +714,9 @@ type MessageSnapshot = {
   providerChatId: string | null;
   phoneNumber: string | null;
   displayName: string | null;
+  profileImageUrl: string | null;
+  fromMe: boolean | null;
+  sentByApi: boolean | null;
   direction: "inbound" | "outbound" | "system" | "unknown";
   messageType: string | null;
   textContent: string | null;
@@ -650,7 +733,11 @@ function extractMessageSnapshot(payload: JsonRecord): MessageSnapshot {
   const providerMessageId =
     findString(messageRecord, ["messageId", "message_id", "messageid", "id"])
     ?? findNestedString(messageRecord, ["id", "messageId"]);
-  const fromMe = findBoolean(messageRecord, ["fromMe", "from_me", "wasSentByApi", "sentByApi"]);
+  const fromMe = findBoolean(messageRecord, ["fromMe", "from_me"])
+    ?? findNestedBoolean(messageRecord, ["fromMe", "from_me"]);
+  const sentByApi = findBoolean(messageRecord, ["wasSentByApi", "sentByApi", "sent_by_api", "fromApi"])
+    ?? findNestedBoolean(messageRecord, ["wasSentByApi", "sentByApi", "sent_by_api", "fromApi"]);
+  const outbound = typeof fromMe === "boolean" ? fromMe : sentByApi === true ? true : null;
   const messageType = resolveMessageType(messageRecord);
   const occurredAt = parseOccurredAt(findUnknown(messageRecord, ["timestamp", "messageTimestamp", "date", "created", "createdAt"]));
 
@@ -659,11 +746,99 @@ function extractMessageSnapshot(payload: JsonRecord): MessageSnapshot {
     providerChatId,
     phoneNumber: normalizePhone(providerChatId),
     displayName: findString(messageRecord, ["pushName", "senderName", "name", "notifyName", "profileName"]),
-    direction: typeof fromMe === "boolean" ? (fromMe ? "outbound" : "inbound") : "unknown",
+    profileImageUrl: readLeadProfileImageUrl(messageRecord) ?? readLeadProfileImageUrl(payload),
+    fromMe,
+    sentByApi,
+    direction: typeof outbound === "boolean" ? (outbound ? "outbound" : "inbound") : "unknown",
     messageType,
     textContent,
     occurredAt,
   };
+}
+
+type MessageAuthorType = "lead" | "ai" | "human" | "system" | "unknown";
+
+function buildConversationMessagePayload(payload: JsonRecord, message: MessageSnapshot) {
+  const author = resolveWebhookMessageAuthor(message, payload);
+
+  return {
+    ...payload,
+    author_type: author.type,
+    author_label: author.label,
+    author_source: author.source,
+    message_author: {
+      ...author,
+      from_me: message.fromMe,
+      sent_by_api: message.sentByApi,
+    },
+  };
+}
+
+function resolveWebhookMessageAuthor(message: MessageSnapshot, payload: JsonRecord): {
+  type: MessageAuthorType;
+  label: string;
+  source: string;
+} {
+  if (message.direction === "inbound") {
+    return { type: "lead", label: "Lead", source: "whatsapp_lead" };
+  }
+
+  if (message.direction === "outbound") {
+    if (isApiAuthoredWhatsappMessage(message, payload)) {
+      return { type: "ai", label: "Agente IA", source: "uazapi_api_echo" };
+    }
+
+    return { type: "human", label: "Humano", source: "connected_whatsapp" };
+  }
+
+  if (message.direction === "system") {
+    return { type: "system", label: "Sistema", source: "webhook_system" };
+  }
+
+  return { type: "unknown", label: "Desconhecido", source: "webhook_unknown" };
+}
+
+function isHumanAuthoredWhatsappMessage(message: MessageSnapshot, payload: JsonRecord) {
+  return message.direction === "outbound" && !isApiAuthoredWhatsappMessage(message, payload);
+}
+
+function isApiAuthoredWhatsappMessage(message: MessageSnapshot, payload: JsonRecord) {
+  if (message.sentByApi === true) {
+    return true;
+  }
+
+  const trackSource = findNestedString(payload, ["track_source", "trackSource"]);
+
+  return Boolean(trackSource?.toLowerCase().includes("connectyhub"));
+}
+
+function buildLeadMetadata(
+  baseMetadata: JsonRecord | null,
+  input: {
+    createdFrom: string | null;
+    displayName: string | null;
+    lastSource: string;
+    profileImageUrl: string | null;
+    providerChatId: string | null;
+    providerMessageId: string | null;
+  },
+) {
+  const metadata: JsonRecord = {
+    ...(baseMetadata ?? {}),
+    last_source: input.lastSource,
+    ...(input.createdFrom ? { created_from: input.createdFrom } : {}),
+    ...(input.displayName ? { last_display_name: input.displayName } : {}),
+    ...(input.providerChatId ? { last_provider_chat_id: input.providerChatId } : {}),
+    ...(input.providerMessageId ? { last_provider_message_id: input.providerMessageId } : {}),
+  };
+
+  return input.profileImageUrl
+    ? mergeLeadProfileImageMetadata(metadata, {
+        profileImageUrl: input.profileImageUrl,
+        source: "webhook_payload",
+        providerChatId: input.providerChatId,
+      })
+    : metadata;
 }
 
 function resolveMessageType(messageRecord: JsonRecord) {
@@ -857,6 +1032,44 @@ function findBoolean(record: JsonRecord, keys: string[]) {
   return null;
 }
 
+function findNestedBoolean(value: unknown, keys: string[], depth = 0): boolean | null {
+  if (depth > 4) {
+    return null;
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = findNestedBoolean(item, keys, depth + 1);
+
+      if (typeof found === "boolean") {
+        return found;
+      }
+    }
+
+    return null;
+  }
+
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const direct = findBoolean(value, keys);
+
+  if (typeof direct === "boolean") {
+    return direct;
+  }
+
+  for (const nested of Object.values(value)) {
+    const found = findNestedBoolean(nested, keys, depth + 1);
+
+    if (typeof found === "boolean") {
+      return found;
+    }
+  }
+
+  return null;
+}
+
 function findUnknown(record: JsonRecord, keys: string[]) {
   for (const key of keys) {
     if (record[key] !== undefined && record[key] !== null) {
@@ -911,6 +1124,10 @@ function preview(value: string | null | undefined, maxLength: number) {
 
 function asString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function readRecord(value: unknown): JsonRecord | null {
+  return isRecord(value) ? value : null;
 }
 
 function isRecord(value: unknown): value is JsonRecord {
