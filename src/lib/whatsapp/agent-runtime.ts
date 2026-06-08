@@ -281,7 +281,9 @@ export async function processWhatsappAgentRun(input: {
       return await completeRun(client, run.id, "Lead pediu opt-out.", { sent: true, reason: "lead_opt_out" });
     }
 
-    if (behavior.humanIntervention && behavior.detectHumanRequest && isHumanRequest(userText)) {
+    const humanRequestText = getLeadAuthoredHumanRequestText(latestInbound, userText);
+
+    if (behavior.humanIntervention && behavior.detectHumanRequest && isHumanRequest(humanRequestText)) {
       const handoffText = "Certo, vou deixar registrado para um humano assumir o atendimento por aqui.";
       const sent = await sendWhatsappText({
         credentials: context.credentials,
@@ -2786,7 +2788,45 @@ function isBotLoopRisk(messages: ConversationMessageRow[]) {
 }
 
 function isHumanRequest(value: string) {
-  return /\b(humano|atendente|pessoa|vendedor|consultor|suporte|falar com alguem|me liga|ligacao)\b/.test(normalizeSearch(value));
+  const normalized = normalizeSearch(value);
+
+  if (!normalized) {
+    return false;
+  }
+
+  return [
+    /\b(falar|fala|conversar|conversa|chama|chamar|aciona|acionar|quero|preciso|pode|passa|passar|coloca|colocar)\b.{0,50}\b(humano|atendente|vendedor|consultor|suporte|alguem|pessoa real|pessoa de verdade)\b/,
+    /\b(humano|atendente|vendedor|consultor|suporte|pessoa real|pessoa de verdade)\b.{0,50}\b(falar|conversar|chamar|acionar|atender|retornar|ligar)\b/,
+    /\b(falar com alguem|me liga|me ligue|liga pra mim|ligacao|telefone de alguem|atendimento humano)\b/,
+  ].some((pattern) => pattern.test(normalized));
+}
+
+function getLeadAuthoredHumanRequestText(message: ConversationMessageRow | null, resolvedUserText: string) {
+  if (!message) {
+    return resolvedUserText;
+  }
+
+  const mediaKind = detectInboundMediaKind(message);
+
+  if (mediaKind) {
+    return extractMessageCaption(message) ?? "";
+  }
+
+  return stripInternalWhatsappContext(resolvedUserText);
+}
+
+function stripInternalWhatsappContext(value: string) {
+  return value
+    .split("\n")
+    .filter((line) => {
+      const normalized = normalizeSearch(line);
+      return !normalized.startsWith("analise automatica de ")
+        && !normalized.startsWith("orientacao interna")
+        && !normalized.startsWith("midia recebida")
+        && !normalized.startsWith("nota interna");
+    })
+    .join("\n")
+    .trim();
 }
 
 function isOptOutRequest(normalized: string) {
