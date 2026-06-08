@@ -99,6 +99,8 @@ type RuntimeLinkButton = {
   trackingUrl: string;
 };
 
+type InboundMediaKind = "image" | "video" | "document";
+
 type GeminiCredentials = {
   apiKey: string;
   model: string;
@@ -761,6 +763,10 @@ function buildSystemInstruction(input: {
     `- Detectar localizacao: ${input.behavior.detectLocation ? "sim" : "nao"}.`,
     `- Detectar opt-out: ${input.behavior.detectOptOut ? "sim" : "nao"}.`,
     `- Analisar links: ${input.behavior.analyzeLinks ? "sim" : "nao"}.`,
+    `- Transcrever audio: ${input.behavior.audioTranscription ? "sim" : "nao"}.`,
+    `- Analisar imagens: ${input.behavior.mediaImage ? "sim" : "nao"}.`,
+    `- Analisar documentos: ${input.behavior.mediaDocument ? "sim" : "nao"}.`,
+    `- Analisar videos: ${input.behavior.mediaVideo ? "sim" : "nao"}.`,
     ...buildLeadQualificationInstruction(input.qualification),
     "",
     "REGRAS DE SAIDA:",
@@ -772,6 +778,8 @@ function buildSystemInstruction(input: {
     "- Se usar um link rastreado, inclua a URL completa ou a tag exatamente como aparece na lista de links.",
     "- Quando aparecer 'Nota interna', use apenas como contexto operacional e nunca repita essa frase para o lead.",
     "- Se um audio chegar sem transcricao, nao diga que recebeu midia ou arquivo. Diga de forma natural que nao conseguiu entender o audio e peca para o lead resumir em texto.",
+    "- Se uma imagem, video ou documento tiver analise automatica, use essa analise como contexto real antes de responder.",
+    "- Se a analise de uma midia estiver desativada ou falhar, nao finja que viu o conteudo. Peca uma descricao curta ou reenvio legivel.",
   ].join("\n");
 }
 
@@ -1142,7 +1150,46 @@ async function resolveInboundUserText(input: {
     }
   }
 
-  return buildMessageText(latestInbound);
+  const mediaKind = detectInboundMediaKind(latestInbound);
+
+  if (mediaKind) {
+    if (isMediaAnalysisEnabled(input.context.behavior, mediaKind)) {
+      const analysis = await analyzeAndPersistInboundMedia({
+        client: input.client,
+        context: input.context,
+        token: input.token,
+        latestInbound,
+        kind: mediaKind,
+      }).catch(async (error: unknown) => {
+        await persistMediaAnalysisFailure(input.client, input.context, latestInbound, mediaKind, error);
+        return null;
+      });
+
+      if (analysis) {
+        const mediaUserText = buildMediaUserText({
+          message: latestInbound,
+          kind: mediaKind,
+          analysis,
+          disabled: false,
+        });
+        latestInbound.text_content = mediaUserText;
+        return mediaUserText;
+      }
+    }
+
+    const mediaUserText = buildMediaUserText({
+      message: latestInbound,
+      kind: mediaKind,
+      analysis: "",
+      disabled: !isMediaAnalysisEnabled(input.context.behavior, mediaKind),
+    });
+    latestInbound.text_content = mediaUserText;
+    return mediaUserText;
+  }
+
+  const fallbackText = buildMessageText(latestInbound);
+  latestInbound.text_content = fallbackText;
+  return fallbackText;
 }
 
 async function transcribeAndPersistInboundAudio(input: {
@@ -1225,6 +1272,85 @@ async function transcribeAndPersistInboundAudio(input: {
   return transcript;
 }
 
+async function analyzeAndPersistInboundMedia(input: {
+  client: SupabaseClient;
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
+  token: string;
+  latestInbound: ConversationMessageRow;
+  kind: InboundMediaKind;
+}) {
+  const downloaded = await downloadInboundMedia({
+    credentials: input.context.credentials,
+    token: input.token,
+    message: input.latestInbound,
+    providerChatId: input.context.providerChatId,
+    kind: input.kind,
+  });
+  const analyzed = await analyzeDownloadedMediaWithGemini({
+    credentials: input.context.geminiCredentials,
+    model: input.context.agent.model_id || input.context.geminiCredentials.model,
+    fileUrl: downloaded.fileUrl,
+    mimeType: downloaded.mimeType,
+    kind: input.kind,
+    caption: extractMessageCaption(input.latestInbound),
+  });
+  const analysis = normalizeMediaAnalysisText(analyzed.text);
+
+  if (!analysis) {
+    return null;
+  }
+
+  const now = new Date().toISOString();
+  const mediaAnalysis = {
+    provider: "gemini",
+    model: normalizeGeminiModel(input.context.agent.model_id || input.context.geminiCredentials.model),
+    kind: input.kind,
+    mime_type: analyzed.mimeType,
+    byte_length: analyzed.byteLength,
+    analyzed_at: now,
+  };
+  const storedText = buildStoredMediaAnalysisText(input.kind, analysis);
+  const payload = {
+    ...(input.latestInbound.payload ?? {}),
+    media_analysis: mediaAnalysis,
+  };
+
+  await input.client
+    .from("conversation_messages")
+    .update({
+      text_content: storedText,
+      payload,
+    })
+    .eq("id", input.latestInbound.id);
+
+  input.latestInbound.text_content = storedText;
+  input.latestInbound.payload = payload;
+
+  await input.client.from("intelligence_events").insert({
+    scope: "organization",
+    organization_id: input.context.organization.id,
+    source_type: "whatsapp",
+    source_id: input.context.conversationId,
+    producer_agent_id: input.context.agent.id,
+    event_type: `whatsapp.media.${input.kind}_analyzed`,
+    title: `${formatMediaKind(input.kind)} analisado no WhatsApp`,
+    summary: preview(analysis, 500),
+    confidence: 0.8,
+    visibility: "organization",
+    tags: ["whatsapp", "media", input.kind, "analysis"],
+    payload: {
+      agentRunId: input.context.run.id,
+      conversationId: input.context.conversationId,
+      leadId: input.context.lead?.id ?? null,
+      messageId: input.latestInbound.id,
+      providerMessageId: input.latestInbound.provider_message_id,
+      ...mediaAnalysis,
+    },
+  });
+
+  return analysis;
+}
+
 async function sendAgentResponse(input: {
   client: SupabaseClient;
   context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
@@ -1235,12 +1361,14 @@ async function sendAgentResponse(input: {
   const { context } = input;
   const inboundType = context.messageType.toLowerCase();
   const latestInbound = findLatestInbound(context.messages);
+  const visualMediaKind = detectInboundMediaKind(latestInbound);
   const shouldSendAudio = context.behavior.responseMode === "audio"
     || (context.behavior.responseMode === "mirror" && (inboundType.includes("audio") || isAudioMessage(latestInbound)));
-  const chunks = context.behavior.splitMessages && !shouldSendAudio ? splitMessage(input.text) : [input.text];
+  const shouldSendSingleAudio = shouldSendAudio && !visualMediaKind;
+  const chunks = context.behavior.splitMessages && !shouldSendSingleAudio ? splitMessage(input.text) : [input.text];
   const outbound: OutboundMessage[] = [];
 
-  if (shouldSendAudio) {
+  if (shouldSendSingleAudio) {
     const generatedAudio = await generateElevenLabsAudio({
       organizationId: context.organization.id,
       userId: null,
@@ -1392,6 +1520,7 @@ function detectBehaviorSignals(input: {
   const normalized = normalizeSearch(userText);
   const messageType = latestInbound?.message_type?.toLowerCase() ?? "";
   const payload = readRecord(latestInbound?.payload);
+  const mediaKind = detectInboundMediaKind(latestInbound);
   const signals: BehaviorSignal[] = [];
 
   if (behavior.detectOptOut && isOptOutRequest(normalized)) {
@@ -1454,7 +1583,7 @@ function detectBehaviorSignals(input: {
     });
   }
 
-  if ((messageType.includes("image") || messageType.includes("photo")) && behavior.mediaImage) {
+  if (mediaKind === "image" && behavior.mediaImage) {
     signals.push({
       type: "whatsapp.media.image_received",
       title: "Imagem recebida no WhatsApp",
@@ -1463,7 +1592,7 @@ function detectBehaviorSignals(input: {
     });
   }
 
-  if ((messageType.includes("document") || messageType.includes("file")) && behavior.mediaDocument) {
+  if (mediaKind === "document" && behavior.mediaDocument) {
     signals.push({
       type: "whatsapp.media.document_received",
       title: "Documento recebido no WhatsApp",
@@ -1472,7 +1601,7 @@ function detectBehaviorSignals(input: {
     });
   }
 
-  if (messageType.includes("video") && behavior.mediaVideo) {
+  if (mediaKind === "video" && behavior.mediaVideo) {
     signals.push({
       type: "whatsapp.media.video_received",
       title: "Video recebido no WhatsApp",
@@ -1766,6 +1895,48 @@ async function downloadInboundAudio(input: {
   throw new Error(`Nao foi possivel baixar audio para transcricao: ${lastError}.`);
 }
 
+async function downloadInboundMedia(input: {
+  credentials: UazapiCredentials;
+  token: string;
+  message: ConversationMessageRow;
+  providerChatId: string | null;
+  kind: InboundMediaKind;
+}) {
+  const bodies = buildUazapiDownloadBodies(input.message, input.providerChatId);
+  let lastError = "sem detalhe do provedor";
+
+  for (const body of bodies) {
+    const response = await callUazapi(input.credentials, "/message/download", {
+      method: "POST",
+      token: input.token,
+      body: {
+        ...body,
+        transcribe: false,
+        return_link: true,
+      },
+      tolerateError: true,
+    });
+
+    if (response.ok) {
+      const fileUrl = extractProviderDownloadUrl(response.data);
+      const mimeType = extractMimeType(response.data) ?? extractMessageMimeType(input.message) ?? defaultMimeTypeForKind(input.kind);
+
+      if (!fileUrl) {
+        throw new Error("Uazapi baixou a midia, mas nao retornou link publico.");
+      }
+
+      return {
+        fileUrl,
+        mimeType,
+      };
+    }
+
+    lastError = readProviderError(response.data) ?? `status ${response.status}`;
+  }
+
+  throw new Error(`Nao foi possivel baixar ${formatMediaKind(input.kind).toLowerCase()} para analise: ${lastError}.`);
+}
+
 function buildUazapiDownloadBodies(message: ConversationMessageRow, providerChatId: string | null): JsonRecord[] {
   const providerMessage = readProviderMessageRecord(message);
   const ids = uniqueStrings([
@@ -1786,6 +1957,59 @@ function buildUazapiDownloadBodies(message: ConversationMessageRow, providerChat
   }
 
   return dedupeJsonRecords(bodies);
+}
+
+async function analyzeDownloadedMediaWithGemini(input: {
+  credentials: GeminiCredentials;
+  model: string;
+  fileUrl: string;
+  mimeType: string;
+  kind: InboundMediaKind;
+  caption: string | null;
+}) {
+  const media = await fetchDownloadedMedia(input.fileUrl, input.mimeType, input.kind);
+  const url = new URL(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(normalizeGeminiModel(input.model))}:generateContent`);
+  url.searchParams.set("key", input.credentials.apiKey);
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [
+        {
+          role: "user",
+          parts: [
+            {
+              text: buildMediaAnalysisPrompt(input.kind, input.caption),
+            },
+            {
+              inlineData: {
+                mimeType: media.mimeType,
+                data: media.base64,
+              },
+            },
+          ],
+        },
+      ],
+      generationConfig: {
+        temperature: 0.15,
+        topP: 0.8,
+        maxOutputTokens: input.kind === "video" ? 1400 : 900,
+      },
+    }),
+    cache: "no-store",
+  });
+  const data = await readProviderResponse(response);
+
+  if (!response.ok) {
+    throw new Error(readProviderError(data) ?? `Gemini nao analisou ${formatMediaKind(input.kind).toLowerCase()}. Status ${response.status}.`);
+  }
+
+  return {
+    text: extractGeminiText(data),
+    byteLength: media.byteLength,
+    mimeType: media.mimeType,
+  };
 }
 
 async function transcribeDownloadedAudioWithGemini(input: {
@@ -1868,6 +2092,37 @@ async function fetchDownloadedAudio(fileUrl: string, fallbackMimeType: string) {
   };
 }
 
+async function fetchDownloadedMedia(fileUrl: string, fallbackMimeType: string, kind: InboundMediaKind) {
+  const url = new URL(fileUrl);
+
+  if (!["http:", "https:"].includes(url.protocol)) {
+    throw new Error("Link de midia invalido para analise.");
+  }
+
+  const response = await fetch(url.toString(), { cache: "no-store" });
+
+  if (!response.ok) {
+    throw new Error(`Nao foi possivel baixar midia. Status ${response.status}.`);
+  }
+
+  const buffer = Buffer.from(await response.arrayBuffer());
+  const maxBytes = kind === "video" ? 20_000_000 : 12_000_000;
+
+  if (buffer.byteLength > maxBytes) {
+    throw new Error(`${formatMediaKind(kind)} grande demais para analise automatica.`);
+  }
+
+  if (buffer.byteLength < 64) {
+    throw new Error(`${formatMediaKind(kind)} sem bytes suficientes para analise.`);
+  }
+
+  return {
+    base64: buffer.toString("base64"),
+    byteLength: buffer.byteLength,
+    mimeType: normalizeDownloadedMimeType(response.headers.get("content-type"), fallbackMimeType, kind),
+  };
+}
+
 async function persistAudioTranscriptionFailure(
   client: SupabaseClient,
   context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
@@ -1889,6 +2144,41 @@ async function persistAudioTranscriptionFailure(
       confidence: 0.45,
       visibility: "organization",
       tags: ["whatsapp", "media", "audio", "transcription", "error"],
+      payload: {
+        agentRunId: context.run.id,
+        conversationId: context.conversationId,
+        leadId: context.lead?.id ?? null,
+        messageId: message.id,
+        providerMessageId: message.provider_message_id,
+      },
+    });
+  } catch {
+    return;
+  }
+}
+
+async function persistMediaAnalysisFailure(
+  client: SupabaseClient,
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+  message: ConversationMessageRow,
+  kind: InboundMediaKind,
+  error: unknown,
+) {
+  const summary = error instanceof Error ? error.message : `Falha desconhecida ao analisar ${formatMediaKind(kind).toLowerCase()}.`;
+
+  try {
+    await client.from("intelligence_events").insert({
+      scope: "organization",
+      organization_id: context.organization.id,
+      source_type: "whatsapp",
+      source_id: context.conversationId,
+      producer_agent_id: context.agent.id,
+      event_type: `whatsapp.media.${kind}_analysis_failed`,
+      title: `Falha ao analisar ${formatMediaKind(kind).toLowerCase()}`,
+      summary: preview(summary, 500),
+      confidence: 0.45,
+      visibility: "organization",
+      tags: ["whatsapp", "media", kind, "analysis", "error"],
       payload: {
         agentRunId: context.run.id,
         conversationId: context.conversationId,
@@ -1953,6 +2243,93 @@ function readProviderMessageRecord(message: ConversationMessageRow) {
     ?? payload;
 }
 
+function detectInboundMediaKind(message: ConversationMessageRow | null): InboundMediaKind | null {
+  if (!message || isAudioMessage(message)) {
+    return null;
+  }
+
+  const providerMessage = readProviderMessageRecord(message);
+  const content = readRecord(providerMessage?.content);
+  const signature = normalizeSearch([
+    message.message_type,
+    asString(providerMessage?.messageType),
+    asString(providerMessage?.mediaType),
+    asString(providerMessage?.type),
+    asString(providerMessage?.kind),
+    asString(providerMessage?.mimetype),
+    asString(providerMessage?.mimeType),
+    asString(content?.mimetype),
+    asString(content?.mimeType),
+  ].filter(Boolean).join(" "));
+
+  if (signature.includes("image") || signature.includes("photo") || signature.includes("jpeg") || signature.includes("png") || signature.includes("webp")) {
+    return "image";
+  }
+
+  if (signature.includes("video") || signature.includes("mp4") || signature.includes("quicktime")) {
+    return "video";
+  }
+
+  if (signature.includes("document") || signature.includes("file") || signature.includes("pdf") || signature.includes("application")) {
+    return "document";
+  }
+
+  return null;
+}
+
+function isMediaAnalysisEnabled(behavior: WhatsappBehaviorConfig, kind: InboundMediaKind) {
+  if (kind === "image") return behavior.mediaImage;
+  if (kind === "video") return behavior.mediaVideo;
+  return behavior.mediaDocument;
+}
+
+function buildMediaUserText(input: {
+  message: ConversationMessageRow;
+  kind: InboundMediaKind;
+  analysis: string;
+  disabled: boolean;
+}) {
+  const caption = extractMessageCaption(input.message);
+  const base = caption || `O lead enviou ${formatMediaKind(input.kind).toLowerCase()}.`;
+
+  if (input.analysis) {
+    return [
+      base,
+      "",
+      `[ANALISE AUTOMATICA DE ${formatMediaKind(input.kind).toUpperCase()}]`,
+      input.analysis,
+      "",
+      "[ORIENTACAO INTERNA]",
+      input.kind === "video"
+        ? "Use a analise visual do video como fonte principal. Nao responda apenas que recebeu o video."
+        : "Use a analise da midia como contexto real. Nao diga apenas que recebeu o arquivo.",
+      "Responda uma unica vez, de forma curta, e avance a conversa com no maximo uma pergunta.",
+    ].join("\n");
+  }
+
+  if (input.disabled) {
+    return [
+      base,
+      "",
+      `[MIDIA RECEBIDA - ANALISE DE ${formatMediaKind(input.kind).toUpperCase()} DESATIVADA]`,
+      "Nao ha analise visual disponivel porque esse tipo de midia esta desativado no comportamento do agente.",
+      "Nao finja que viu o conteudo. Peca uma descricao curta se precisar entender a midia.",
+    ].join("\n");
+  }
+
+  return [
+    base,
+    "",
+    `[MIDIA RECEBIDA - SEM ANALISE CONFIAVEL]`,
+    `O lead enviou ${formatMediaKind(input.kind).toLowerCase()}, mas a analise automatica nao ficou disponivel nesta execucao.`,
+    "Nao chute o conteudo. Peca uma descricao curta ou reenvio legivel.",
+  ].join("\n");
+}
+
+function buildStoredMediaAnalysisText(kind: InboundMediaKind, analysis: string) {
+  return `Analise automatica de ${formatMediaKind(kind).toLowerCase()}: ${analysis}`;
+}
+
 function isAudioMessage(message: ConversationMessageRow | null) {
   if (!message) {
     return false;
@@ -1977,23 +2354,74 @@ function isAudioMessage(message: ConversationMessageRow | null) {
 }
 
 function describeMessageType(message: ConversationMessageRow) {
+  const kind = detectInboundMediaKind(message);
+
+  if (kind) return formatMediaKind(kind).toLowerCase();
+
   const providerMessage = readProviderMessageRecord(message);
-  const content = readRecord(providerMessage?.content);
   const signature = normalizeSearch([
     message.message_type,
     asString(providerMessage?.messageType),
     asString(providerMessage?.mediaType),
     asString(providerMessage?.type),
-    asString(providerMessage?.mimetype),
-    asString(content?.mimetype),
   ].filter(Boolean).join(" "));
 
-  if (signature.includes("image") || signature.includes("photo")) return "uma imagem";
-  if (signature.includes("video")) return "um video";
-  if (signature.includes("document") || signature.includes("file") || signature.includes("pdf")) return "um documento";
   if (signature.includes("location")) return "uma localizacao";
 
   return "um arquivo";
+}
+
+function extractMessageCaption(message: ConversationMessageRow) {
+  const providerMessage = readProviderMessageRecord(message);
+  const content = readRecord(providerMessage?.content);
+
+  return asString(providerMessage?.caption)
+    ?? asString(providerMessage?.text)
+    ?? asString(providerMessage?.body)
+    ?? asString(content?.caption)
+    ?? null;
+}
+
+function formatMediaKind(kind: InboundMediaKind) {
+  if (kind === "image") return "Imagem";
+  if (kind === "video") return "Video";
+  return "Documento";
+}
+
+function defaultMimeTypeForKind(kind: InboundMediaKind) {
+  if (kind === "image") return "image/jpeg";
+  if (kind === "video") return "video/mp4";
+  return "application/pdf";
+}
+
+function normalizeDownloadedMimeType(contentType: string | null, fallbackMimeType: string, kind: InboundMediaKind) {
+  const type = contentType?.split(";")[0]?.trim() || fallbackMimeType || defaultMimeTypeForKind(kind);
+
+  if (type === "application/octet-stream") {
+    return defaultMimeTypeForKind(kind);
+  }
+
+  return type;
+}
+
+function buildMediaAnalysisPrompt(kind: InboundMediaKind, caption: string | null) {
+  const base = [
+    `Analise esta ${formatMediaKind(kind).toLowerCase()} recebida em uma conversa comercial de WhatsApp da ConnectyHub.`,
+    "Retorne apenas uma analise objetiva em portugues do Brasil, sem markdown pesado.",
+    "Descreva elementos visuais relevantes, textos visiveis, contexto provavel e o que isso indica sobre a intencao do lead.",
+    "Nao invente detalhes que nao aparecem no arquivo.",
+    caption ? `Legenda/mensagem do lead: ${caption}` : "",
+  ].filter(Boolean);
+
+  if (kind === "image") {
+    base.push("Se a imagem mostrar tela, site, produto, print ou ambiente, identifique isso claramente.");
+  } else if (kind === "video") {
+    base.push("Se for video, descreva o que aparece ao longo dos quadros, telas, movimentos, textos e qualquer sinal util para responder o lead.");
+  } else {
+    base.push("Se for documento, extraia os pontos legiveis e diga se algo nao puder ser lido com seguranca.");
+  }
+
+  return base.join("\n");
 }
 
 function extractProviderTranscript(value: unknown) {
@@ -2041,6 +2469,21 @@ function normalizeTranscriptText(value: string | null | undefined) {
   }
 
   return text.slice(0, 4000);
+}
+
+function normalizeMediaAnalysisText(value: string | null | undefined) {
+  const text = value
+    ?.replace(/\r/g, "")
+    .replace(/^analise\s*:\s*/i, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim() ?? "";
+  const normalized = normalizeSearch(text);
+
+  if (!normalized || normalized.includes("nao posso analisar") || normalized.includes("sem conteudo visual")) {
+    return "";
+  }
+
+  return text.slice(0, 5000);
 }
 
 function uniqueStrings(values: Array<string | null | undefined>) {
