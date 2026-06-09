@@ -144,6 +144,83 @@ export async function POST(request: NextRequest) {
   }
 }
 
+export async function DELETE(request: NextRequest) {
+  const workspace = await getCurrentWorkspace();
+
+  if (!workspace) {
+    return NextResponse.json({ error: "Sessao obrigatoria." }, { status: 401 });
+  }
+
+  const body = await readJson<{
+    companyId?: unknown;
+    linkButtonId?: unknown;
+  }>(request);
+
+  const companyId = typeof body?.companyId === "string" ? body.companyId.trim() : "";
+  const linkButtonId = typeof body?.linkButtonId === "string" ? body.linkButtonId.trim() : "";
+
+  if (!companyId) {
+    return NextResponse.json({ error: "Escolha uma empresa antes de excluir o link." }, { status: 422 });
+  }
+
+  if (!linkButtonId) {
+    return NextResponse.json({ error: "Informe o link rastreado para excluir." }, { status: 422 });
+  }
+
+  try {
+    const client = createServiceClient();
+    const company = await requireClientCompanyAccess({
+      userId: workspace.user.id,
+      companyId,
+      client,
+    });
+
+    const { data: deleted, error } = await client
+      .from("intelligence_memory")
+      .delete()
+      .eq("id", linkButtonId)
+      .eq("scope", "organization")
+      .eq("organization_id", company.id)
+      .eq("memory_type", "tracked_link_button")
+      .select("id, title, content, metadata, created_at")
+      .maybeSingle<LinkMemoryRow>();
+
+    if (error) {
+      return NextResponse.json({ error: `Nao foi possivel excluir o link: ${error.message}` }, { status: 500 });
+    }
+
+    if (!deleted) {
+      return NextResponse.json({ error: "Link rastreado nao encontrado para esta empresa." }, { status: 404 });
+    }
+
+    const metadata = readRecord(deleted.metadata) ?? {};
+    await client.from("intelligence_events").insert({
+      scope: "organization",
+      organization_id: company.id,
+      source_type: "tracked_link_button",
+      source_id: deleted.id,
+      event_type: "tracked_link.deleted",
+      title: `Link rastreado excluido: ${deleted.title}`,
+      summary: `Tag ${readString(metadata.tag) ?? deleted.id} removida do agente WhatsApp.`,
+      confidence: 1,
+      visibility: "organization",
+      tags: ["tracked_link_button", "whatsapp_agent", "lead_tracking"],
+      payload: {
+        label: readString(metadata.label) ?? deleted.title,
+        url: readString(metadata.url) ?? deleted.content,
+        tag: readString(metadata.tag),
+        deleted_by: workspace.user.id,
+      },
+    });
+
+    revalidatePath("/dashboard/whatsapp");
+
+    return NextResponse.json({ deletedLinkButtonId: deleted.id });
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Erro ao excluir link rastreado." }, { status: 500 });
+  }
+}
+
 async function readJson<T>(request: NextRequest): Promise<T | null> {
   try {
     return (await request.json()) as T;
@@ -164,4 +241,8 @@ function normalizeLabel(value: string) {
 
 function readRecord(value: unknown): JsonRecord | null {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as JsonRecord) : null;
+}
+
+function readString(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }

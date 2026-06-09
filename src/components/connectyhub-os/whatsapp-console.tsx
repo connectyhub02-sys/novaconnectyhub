@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import {
@@ -8,6 +8,7 @@ import {
   Building2,
   CheckCircle2,
   CircleHelp,
+  Copy,
   Clock3,
   Eye,
   FileText,
@@ -27,6 +28,7 @@ import {
   Smartphone,
   SplitSquareVertical,
   Timer,
+  Trash2,
   type LucideIcon,
   UserRound,
   Video,
@@ -320,6 +322,10 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
   const [generatingPrompt, setGeneratingPrompt] = useState(false);
   const [knowledgeUploading, setKnowledgeUploading] = useState(false);
   const [creatingLinkButton, setCreatingLinkButton] = useState(false);
+  const [deletingLinkButtonId, setDeletingLinkButtonId] = useState<string | null>(null);
+  const promptTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const promptSelectionRef = useRef({ start: 0, end: 0 });
+  const pendingPromptCaretRef = useRef<number | null>(null);
   const isAwaitingQrScan = Boolean(qrCode) || state?.instance?.status === "qr_pending";
   const isConnected = state?.instance?.status === "connected";
   const promptTags = useMemo(
@@ -350,7 +356,10 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
     setSelectedCompanyId(nextCompanyId);
 
     if (!options?.preserveDrafts) {
-      setPromptDraft(nextState.agent?.prompt ?? "");
+      const nextPrompt = nextState.agent?.prompt ?? "";
+
+      setPromptDraft(nextPrompt);
+      promptSelectionRef.current = { start: nextPrompt.length, end: nextPrompt.length };
       setBehaviorDraft(normalizeWhatsappBehaviorConfig(nextState.behavior));
       setQualificationDraft(normalizeLeadQualificationConfig(nextState.agent?.qualification));
     }
@@ -490,6 +499,30 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
       : variant.headerDescriptions.ready;
   const promptHelper = `${promptDraft.length.toLocaleString("pt-BR")} / ${agentPromptMaxLength.toLocaleString("pt-BR")} caracteres`;
 
+  useEffect(() => {
+    const position = pendingPromptCaretRef.current;
+
+    if (position === null) {
+      return;
+    }
+
+    pendingPromptCaretRef.current = null;
+
+    const textarea = promptTextareaRef.current;
+
+    if (!textarea) {
+      return;
+    }
+
+    textarea.focus();
+    textarea.setSelectionRange(position, position);
+    promptSelectionRef.current = { start: position, end: position };
+  }, [promptDraft]);
+
+  const rememberPromptSelection = useCallback((start: number, end: number) => {
+    promptSelectionRef.current = { start, end };
+  }, []);
+
   function updateBehavior<K extends keyof WhatsappBehaviorConfig>(key: K, value: WhatsappBehaviorConfig[K]) {
     setBehaviorDraft((current) => normalizeWhatsappBehaviorConfig({ ...current, [key]: value }));
   }
@@ -543,8 +576,23 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
 
   function insertPromptTag(token: string) {
     setPromptDraft((current) => {
-      const separator = current.trim().length > 0 && !current.endsWith(" ") && !current.endsWith("\n") ? " " : "";
-      return `${current}${separator}${token}`.slice(0, agentPromptMaxLength);
+      const textarea = promptTextareaRef.current;
+      const fallbackSelection = promptSelectionRef.current;
+      const rawStart = textarea?.selectionStart ?? fallbackSelection.start;
+      const rawEnd = textarea?.selectionEnd ?? fallbackSelection.end;
+      const start = Math.max(0, Math.min(rawStart, current.length));
+      const end = Math.max(start, Math.min(rawEnd, current.length));
+      const before = current.slice(0, start);
+      const after = current.slice(end);
+      const leadingSpace = before.length > 0 && !/\s$/.test(before) ? " " : "";
+      const trailingSpace = after.length > 0 && !/^\s/.test(after) ? " " : "";
+      const insertion = `${leadingSpace}${token}${trailingSpace}`;
+      const next = `${before}${insertion}${after}`.slice(0, agentPromptMaxLength);
+      const nextCaret = Math.min(before.length + leadingSpace.length + token.length, next.length);
+
+      pendingPromptCaretRef.current = nextCaret;
+
+      return next;
     });
   }
 
@@ -732,6 +780,57 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
     }
   }
 
+  async function copyTrackedLinkButtonTag(link: TrackedLinkButton) {
+    try {
+      await navigator.clipboard.writeText(link.tag);
+      setNotice({ tone: "success", message: `Tag copiada: ${link.tag}` });
+    } catch {
+      setNotice({ tone: "error", message: "Nao foi possivel copiar a tag. Selecione a tag e copie manualmente." });
+    }
+  }
+
+  async function deleteTrackedLinkButton(link: TrackedLinkButton) {
+    if (!selectedCompanyId) {
+      setNotice({ tone: "warning", message: `Escolha um ${variant.entitySingular} antes de excluir o link.` });
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Excluir o link "${link.label}"?\n\nSe a tag ${link.tag} estiver no prompt, remova ela antes de salvar o agente.`,
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setDeletingLinkButtonId(link.id);
+    setNotice(null);
+
+    try {
+      const response = await fetch(variant.endpoints.links, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          [variant.entityIdKey]: selectedCompanyId,
+          linkButtonId: link.id,
+        }),
+      });
+      const data = (await response.json().catch(() => null)) as { deletedLinkButtonId?: string; error?: string } | null;
+
+      if (!response.ok || data?.deletedLinkButtonId !== link.id) {
+        throw new Error(data?.error ?? "Nao foi possivel excluir o link rastreado.");
+      }
+
+      const nextState = await fetchWhatsappState(variant, selectedCompanyId);
+      applyWhatsappState(nextState, { preserveDrafts: true });
+      setNotice({ tone: "success", message: `Link "${link.label}" excluido.` });
+    } catch (error) {
+      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao excluir link rastreado." });
+    } finally {
+      setDeletingLinkButtonId(null);
+    }
+  }
+
   async function createWhatsappAgent() {
     if (!selectedCompanyId) {
       setNotice({ tone: "warning", message: `Escolha um ${variant.entitySingular} antes de criar o agente.` });
@@ -817,27 +916,29 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
                   value={promptDraft}
                   maxLength={agentPromptMaxLength}
                   onChange={updatePromptDraft}
+                  onSelectionChange={rememberPromptSelection}
+                  textareaRef={promptTextareaRef}
                   helper={promptHelper}
                 />
 
                 <PromptToolsPanel
-                  files={state.knowledge.files}
                   generatingPrompt={generatingPrompt}
-                  knowledgeUploading={knowledgeUploading}
                   linkButtons={state.linkButtons}
                   linkButtonLabel={linkButtonLabel}
                   linkButtonUrl={linkButtonUrl}
                   creatingLinkButton={creatingLinkButton}
+                  deletingLinkButtonId={deletingLinkButtonId}
                   notes={promptNotes}
                   productUrl={promptProductUrl}
+                  onCopyLinkButtonTag={copyTrackedLinkButtonTag}
                   onCreateLinkButton={createTrackedLinkButton}
+                  onDeleteLinkButton={deleteTrackedLinkButton}
                   onGenerate={generatePromptWithAI}
                   onInsertTag={insertPromptTag}
                   onLinkButtonLabelChange={setLinkButtonLabel}
                   onLinkButtonUrlChange={setLinkButtonUrl}
                   onNotesChange={setPromptNotes}
                   onProductUrlChange={setPromptProductUrl}
-                  onUploadFile={uploadKnowledgeFile}
                   promptTags={promptTags}
                   entitySingular={variant.entitySingular}
                 />
@@ -861,16 +962,24 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
                 </div>
               </div>
 
-              <CompactConnectionCard
-                instance={state.instance}
-                qrCode={qrCode}
-                running={running}
-                onConnect={() => runAction("connect")}
-                onDisconnect={() => runAction("disconnect")}
-                onRefresh={() => runAction("refresh_status")}
-                enabled={variant.connectionEnabled && state.capability.canConnect}
-                disabledReason={state.capability.message ?? variant.connectionDisabledReason}
-              />
+              <div className="grid content-start gap-4">
+                <CompactConnectionCard
+                  instance={state.instance}
+                  qrCode={qrCode}
+                  running={running}
+                  onConnect={() => runAction("connect")}
+                  onDisconnect={() => runAction("disconnect")}
+                  onRefresh={() => runAction("refresh_status")}
+                  enabled={variant.connectionEnabled && state.capability.canConnect}
+                  disabledReason={state.capability.message ?? variant.connectionDisabledReason}
+                />
+                <KnowledgeFilesPanel
+                  files={state.knowledge.files}
+                  knowledgeUploading={knowledgeUploading}
+                  onUploadFile={uploadKnowledgeFile}
+                  entitySingular={variant.entitySingular}
+                />
+              </div>
             </div>
           ) : (
             <NoAgentState />
@@ -1352,6 +1461,8 @@ function PromptBox({
   helper,
   maxLength,
   onChange,
+  onSelectionChange,
+  textareaRef,
 }: {
   label: string;
   description?: string;
@@ -1359,7 +1470,13 @@ function PromptBox({
   helper: string;
   maxLength: number;
   onChange: (value: string) => void;
+  onSelectionChange: (start: number, end: number) => void;
+  textareaRef: RefObject<HTMLTextAreaElement | null>;
 }) {
+  function recordSelection(textarea: HTMLTextAreaElement) {
+    onSelectionChange(textarea.selectionStart, textarea.selectionEnd);
+  }
+
   return (
     <label className="block">
       <span className="mb-2 flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
@@ -1367,9 +1484,16 @@ function PromptBox({
         {description ? <InfoHint text={description} /> : null}
       </span>
       <textarea
+        ref={textareaRef}
         value={value}
         maxLength={maxLength}
-        onChange={(event) => onChange(event.target.value)}
+        onChange={(event) => {
+          onChange(event.target.value);
+          recordSelection(event.currentTarget);
+        }}
+        onKeyUp={(event) => recordSelection(event.currentTarget)}
+        onMouseUp={(event) => recordSelection(event.currentTarget)}
+        onSelect={(event) => recordSelection(event.currentTarget)}
         className="min-h-[430px] w-full resize-y rounded-xl border px-4 py-3 font-mono text-[12px] leading-5 outline-none"
         placeholder="Defina o comportamento do agente."
       />
@@ -1379,53 +1503,53 @@ function PromptBox({
 }
 
 function PromptToolsPanel({
-  files,
   generatingPrompt,
-  knowledgeUploading,
   linkButtons,
   linkButtonLabel,
   linkButtonUrl,
   creatingLinkButton,
+  deletingLinkButtonId,
   notes,
   productUrl,
+  onCopyLinkButtonTag,
   onCreateLinkButton,
+  onDeleteLinkButton,
   onGenerate,
   onInsertTag,
   onLinkButtonLabelChange,
   onLinkButtonUrlChange,
   onNotesChange,
   onProductUrlChange,
-  onUploadFile,
   promptTags,
   entitySingular,
 }: {
-  files: KnowledgeFile[];
   generatingPrompt: boolean;
-  knowledgeUploading: boolean;
   linkButtons: TrackedLinkButton[];
   linkButtonLabel: string;
   linkButtonUrl: string;
   creatingLinkButton: boolean;
+  deletingLinkButtonId: string | null;
   notes: string;
   productUrl: string;
+  onCopyLinkButtonTag: (link: TrackedLinkButton) => void;
   onCreateLinkButton: () => void;
+  onDeleteLinkButton: (link: TrackedLinkButton) => void;
   onGenerate: () => void;
   onInsertTag: (token: string) => void;
   onLinkButtonLabelChange: (value: string) => void;
   onLinkButtonUrlChange: (value: string) => void;
   onNotesChange: (value: string) => void;
   onProductUrlChange: (value: string) => void;
-  onUploadFile: (file: File | null) => void;
   promptTags: Array<{ token: string; label: string; description: string }>;
   entitySingular: string;
 }) {
   return (
-    <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(280px,0.7fr)]">
+    <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(280px,0.62fr)]">
       <div className="rounded-xl border p-3" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
             Tags do prompt
-            <InfoHint text={`Clique para inserir variaveis que o agente substitui no atendimento, como nome do lead e ${entitySingular}.`} />
+            <InfoHint text={`Clique para inserir variaveis e links rastreados do ${entitySingular} no ponto atual do cursor no prompt.`} />
           </p>
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
@@ -1442,8 +1566,43 @@ function PromptToolsPanel({
               <span className="text-slate-400">{tag.label}</span>
             </button>
           ))}
+          {linkButtons.map((link) => (
+            <div
+              key={link.id}
+              className="inline-flex max-w-full items-center gap-1 rounded-lg border px-2 py-1.5"
+              style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface)" }}
+            >
+              <button
+                type="button"
+                className="inline-flex min-h-7 min-w-0 items-center gap-2 rounded-md px-1.5 text-left text-[11px] font-semibold text-cyan-100 transition hover:bg-cyan-400/10"
+                title={`${link.label} / ${link.clicks.toLocaleString("pt-BR")} cliques / ${link.url}`}
+                onClick={() => onInsertTag(link.tag)}
+              >
+                <span className="max-w-[180px] truncate font-mono text-[10px] text-cyan-300">{link.tag}</span>
+                <span className="max-w-[92px] truncate text-slate-400">{link.label}</span>
+              </button>
+              <button
+                type="button"
+                className="grid h-7 w-7 place-items-center rounded-md text-cyan-200 transition hover:bg-cyan-400/10 disabled:cursor-not-allowed disabled:opacity-45"
+                title="Copiar tag"
+                aria-label={`Copiar tag ${link.tag}`}
+                onClick={() => onCopyLinkButtonTag(link)}
+              >
+                <Copy className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                className="grid h-7 w-7 place-items-center rounded-md text-red-200 transition hover:bg-red-400/10 disabled:cursor-not-allowed disabled:opacity-45"
+                title="Excluir link"
+                aria-label={`Excluir link ${link.label}`}
+                disabled={deletingLinkButtonId === link.id}
+                onClick={() => onDeleteLinkButton(link)}
+              >
+                {deletingLinkButtonId === link.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+              </button>
+            </div>
+          ))}
         </div>
-
         <div className="mt-4 grid gap-2 md:grid-cols-[minmax(0,1fr)_auto]">
           <label className="block">
             <span className="mb-2 flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
@@ -1482,53 +1641,12 @@ function PromptToolsPanel({
       <div className="rounded-xl border p-3" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
-            Arquivos do {entitySingular}
-            <InfoHint text="Arquivos adicionam contexto ao agente sem deixar o prompt grande demais." />
-          </p>
-          <label className="inline-flex min-h-9 cursor-pointer items-center justify-center gap-2 rounded-lg border border-cyan-400/25 bg-cyan-400/10 px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-200 transition hover:bg-cyan-400/15">
-            {knowledgeUploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
-            Anexar
-            <input
-              accept=".txt,.md,.csv,.json,.pdf,.doc,.docx,application/pdf,text/plain,text/markdown,text/csv,application/json"
-              className="hidden"
-              type="file"
-              onChange={(event) => {
-                const file = event.currentTarget.files?.[0] ?? null;
-                event.currentTarget.value = "";
-                onUploadFile(file);
-              }}
-            />
-          </label>
-        </div>
-        <div className="mt-3 grid max-h-44 gap-2 overflow-y-auto pr-1">
-          {files.length > 0 ? (
-            files.map((file) => (
-              <div key={file.id} className="rounded-lg border px-3 py-2" style={{ background: "var(--ch-surface)", borderColor: "var(--ch-border)" }}>
-                <p className="truncate text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>
-                  {file.title}
-                </p>
-                <p className="mt-1 font-mono text-[9px] uppercase tracking-wide text-slate-500">
-                  {formatBytes(file.size)} / {formatDate(file.createdAt)}
-                </p>
-              </div>
-            ))
-          ) : (
-            <div className="rounded-lg border px-3 py-6 text-center text-[12px] text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
-              Nenhum arquivo anexado.
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="rounded-xl border p-3 xl:col-span-2" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
-            Botoes de link
-            <InfoHint text="Crie links rastreados para produtos, catalogos ou paginas. Cada link gera uma tag para usar no prompt do agente." />
+            Criar botao de link
+            <InfoHint text="Salva um link rastreado e cria uma tag para inserir no prompt junto com as tags padrao." />
           </p>
         </div>
 
-        <div className="mt-3 grid gap-2 md:grid-cols-[minmax(160px,0.45fr)_minmax(220px,1fr)_auto]">
+        <div className="mt-3 grid gap-3">
           <label className="block">
             <span className="mb-2 flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
               Nome do botao
@@ -1567,35 +1685,61 @@ function PromptToolsPanel({
             onClick={onCreateLinkButton}
           />
         </div>
+      </div>
+    </div>
+  );
+}
 
-        <div className="mt-3 grid gap-2">
-          {linkButtons.length > 0 ? (
-            linkButtons.map((link) => (
-              <div key={link.id} className="grid gap-2 rounded-lg border px-3 py-2 md:grid-cols-[minmax(0,1fr)_auto]" style={{ background: "var(--ch-surface)", borderColor: "var(--ch-border)" }}>
-                <div className="min-w-0">
-                  <p className="truncate text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>{link.label}</p>
-                  <p className="mt-1 truncate font-mono text-[9px] uppercase tracking-wide text-slate-500">
-                    {link.clicks.toLocaleString("pt-BR")} cliques / {formatDate(link.createdAt)}
-                  </p>
-                  <p className="mt-1 truncate text-[11px] text-slate-500">{link.url}</p>
-                </div>
-                <button
-                  type="button"
-                  className="inline-flex min-h-9 items-center justify-center rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-200 transition hover:bg-cyan-400/10"
-                  style={{ borderColor: "var(--ch-border)" }}
-                  title="Inserir tag deste link no prompt"
-                  onClick={() => onInsertTag(link.tag)}
-                >
-                  {link.tag}
-                </button>
-              </div>
-            ))
-          ) : (
-            <div className="rounded-lg border px-3 py-5 text-center text-[12px] text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
-              Nenhum link rastreado criado.
+function KnowledgeFilesPanel({
+  files,
+  knowledgeUploading,
+  onUploadFile,
+  entitySingular,
+}: {
+  files: KnowledgeFile[];
+  knowledgeUploading: boolean;
+  onUploadFile: (file: File | null) => void;
+  entitySingular: string;
+}) {
+  return (
+    <div className="rounded-xl border p-3" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
+          Arquivos do {entitySingular}
+          <InfoHint text="Arquivos adicionam contexto ao agente sem deixar o prompt grande demais." />
+        </p>
+        <label className="inline-flex min-h-9 cursor-pointer items-center justify-center gap-2 rounded-lg border border-cyan-400/25 bg-cyan-400/10 px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-200 transition hover:bg-cyan-400/15">
+          {knowledgeUploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
+          Anexar
+          <input
+            accept=".txt,.md,.csv,.json,.pdf,.doc,.docx,application/pdf,text/plain,text/markdown,text/csv,application/json"
+            className="hidden"
+            type="file"
+            onChange={(event) => {
+              const file = event.currentTarget.files?.[0] ?? null;
+              event.currentTarget.value = "";
+              onUploadFile(file);
+            }}
+          />
+        </label>
+      </div>
+      <div className="mt-3 grid max-h-64 gap-2 overflow-y-auto pr-1">
+        {files.length > 0 ? (
+          files.map((file) => (
+            <div key={file.id} className="rounded-lg border px-3 py-2" style={{ background: "var(--ch-surface)", borderColor: "var(--ch-border)" }}>
+              <p className="truncate text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>
+                {file.title}
+              </p>
+              <p className="mt-1 font-mono text-[9px] uppercase tracking-wide text-slate-500">
+                {formatBytes(file.size)} / {formatDate(file.createdAt)}
+              </p>
             </div>
-          )}
-        </div>
+          ))
+        ) : (
+          <div className="rounded-lg border px-3 py-6 text-center text-[12px] text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
+            Nenhum arquivo anexado.
+          </div>
+        )}
       </div>
     </div>
   );
