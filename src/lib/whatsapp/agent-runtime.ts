@@ -167,6 +167,9 @@ export async function processQueuedWhatsappAgentRuns(input: {
   client?: SupabaseClient;
 } = {}) {
   const client = input.client ?? createServiceClient();
+
+  const expired = await expireZombieRuns(client);
+
   const { data, error } = await client
     .from("agent_runs")
     .select("id")
@@ -187,7 +190,45 @@ export async function processQueuedWhatsappAgentRuns(input: {
 
   return {
     processed: results.length,
+    expired,
     results,
+  };
+}
+
+const ZOMBIE_TIMEOUT_MS = 5 * 60 * 1000;
+const QUEUED_EXPIRY_MS = 60 * 60 * 1000;
+
+async function expireZombieRuns(client: SupabaseClient) {
+  const now = new Date().toISOString();
+  const zombieCutoff = new Date(Date.now() - ZOMBIE_TIMEOUT_MS).toISOString();
+  const queuedCutoff = new Date(Date.now() - QUEUED_EXPIRY_MS).toISOString();
+
+  const [zombies, expired] = await Promise.all([
+    client
+      .from("agent_runs")
+      .update({
+        run_status: "failed",
+        error_message: "Timeout: run travado por mais de 5 minutos.",
+        finished_at: now,
+      })
+      .eq("run_status", "running")
+      .lt("created_at", zombieCutoff)
+      .select("id"),
+    client
+      .from("agent_runs")
+      .update({
+        run_status: "failed",
+        error_message: "Timeout: run na fila por mais de 1 hora sem processamento.",
+        finished_at: now,
+      })
+      .eq("run_status", "queued")
+      .lt("created_at", queuedCutoff)
+      .select("id"),
+  ]);
+
+  return {
+    zombies: (zombies.data ?? []).length,
+    expiredQueued: (expired.data ?? []).length,
   };
 }
 
