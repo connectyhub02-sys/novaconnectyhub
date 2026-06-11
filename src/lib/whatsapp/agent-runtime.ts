@@ -18,6 +18,7 @@ import {
   type GeminiCredentials,
 } from "@/lib/gemini/credentials";
 import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
+import { loadR2Config, putR2Object } from "@/lib/storage/r2";
 import { createServiceClient } from "@/lib/supabase/service";
 import { buildTrackedLinkUrl } from "@/lib/tracking/tracked-links";
 import {
@@ -236,13 +237,21 @@ export async function processWhatsappAgentRun(input: {
     }
 
     const latestInbound = findLatestInbound(context.messages);
-    const userText = await resolveInboundUserText({
+    let userText = await resolveInboundUserText({
       client,
       context,
       token,
       latestInbound,
       fallback: run.input_summary,
     });
+
+    if (behavior.quotedReplyContext && latestInbound) {
+      const quotedContext = extractQuotedMessageContext(latestInbound);
+      if (quotedContext) {
+        userText = `[Respondendo a mensagem: "${quotedContext}"]\n${userText}`;
+      }
+    }
+
     const behaviorSignals = detectBehaviorSignals({
       behavior,
       userText,
@@ -251,6 +260,10 @@ export async function processWhatsappAgentRun(input: {
 
     if (behaviorSignals.length > 0) {
       await persistBehaviorSignals(client, context, behaviorSignals);
+    }
+
+    if (behavior.leadFileStorage && lead?.id && latestInbound) {
+      await persistLeadMediaFile({ client, context, token, latestInbound }).catch(() => {});
     }
 
     if (context.qualification.enabled && lead?.id) {
@@ -310,6 +323,9 @@ export async function processWhatsappAgentRun(input: {
     }
 
     if (behavior.markAsRead) {
+      if (behavior.readReceiptDelay) {
+        await sleep(randomBetween(behavior.readReceiptMinSeconds * 1000, behavior.readReceiptMaxSeconds * 1000));
+      }
       await markConversationRead(context.credentials, token, phone, context.providerChatId, context.providerMessageId);
     }
 
@@ -334,6 +350,17 @@ export async function processWhatsappAgentRun(input: {
 
     if (!cachedAiText) {
       await cacheRunResponseText(client, run.id, aiText);
+    }
+
+    if (latestInbound?.provider_message_id) {
+      await sendEmojiReaction({
+        credentials: context.credentials,
+        token,
+        phone,
+        messageId: latestInbound.provider_message_id,
+        behavior,
+        userText,
+      });
     }
 
     await prepareAgentPresenceBeforeSend({
@@ -767,6 +794,7 @@ function buildSystemInstruction(input: {
     `- Analisar documentos: ${input.behavior.mediaDocument ? "sim" : "nao"}.`,
     `- Analisar videos: ${input.behavior.mediaVideo ? "sim" : "nao"}.`,
     ...buildLeadQualificationInstruction(input.qualification),
+    ...buildHumanizedLanguageInstruction(input.behavior),
     "",
     "REGRAS DE SAIDA:",
     "- Responda em portugues do Brasil.",
@@ -780,6 +808,25 @@ function buildSystemInstruction(input: {
     "- Se uma imagem, video ou documento tiver analise automatica, use essa analise como contexto real antes de responder.",
     "- Se a analise de uma midia estiver desativada ou falhar, nao finja que viu o conteudo. Peca uma descricao curta ou reenvio legivel.",
   ].join("\n");
+}
+
+function buildHumanizedLanguageInstruction(behavior: WhatsappBehaviorConfig): string[] {
+  if (!behavior.humanizedLanguage) return [];
+  return [
+    "",
+    "LINGUAGEM HUMANIZADA (OBRIGATORIO):",
+    "- Escreva como brasileiro real no WhatsApp, NUNCA como assistente virtual ou chatbot.",
+    "- Use abreviacoes naturais quando fizer sentido: vc, tb, pq, blz, msg, qnd, oq, cmg, dps, td.",
+    "- Use emoji com moderacao natural: 😊 👍 🤔 😅 (1-2 por mensagem, as vezes nenhum).",
+    "- Mensagens CURTAS: maximo 2-3 linhas por balao. Quebre em mensagens separadas se precisar.",
+    "- Expressoes naturais: 'olha', 'tipo assim', 'entendi', 'ah sim', 'hmm', 'bom', 'pois e'.",
+    "- NUNCA use listas com bullets, markdown, negrito, italico, numeracao ou formatacao de bot.",
+    "- NUNCA use frases de chatbot: 'Como posso ajuda-lo?', 'Fico a disposicao', 'Estou aqui para ajudar'.",
+    "- Comece frases com minuscula as vezes. Nao use ponto final em toda frase.",
+    "- Varie entre respostas curtas ('blz', 'entendi', 'show') e explicacoes naturais.",
+    "- Quando nao souber, diga naturalmente: 'hmm deixa eu ver', 'nao tenho certeza agora', 'vou confirmar'.",
+    "- Nunca seja perfeito demais. Humanos hesitam, abreviam e sao informais.",
+  ];
 }
 
 async function analyzeAndPersistLeadQualification(
@@ -1103,6 +1150,56 @@ function buildGeminiContents(messages: ConversationMessageRow[], fallbackUserTex
   return contents;
 }
 
+function extractQuotedMessageContext(message: ConversationMessageRow): string | null {
+  const payload = readRecord(message.payload);
+  if (!payload) return null;
+
+  const quotedText =
+    findNestedQuotedText(payload, "quotedMsg") ??
+    findNestedQuotedText(payload, "quotedMessage") ??
+    findNestedQuotedText(payload, "contextInfo");
+
+  if (!quotedText) return null;
+  const trimmed = quotedText.trim();
+  return trimmed.length > 0 ? trimmed.slice(0, 500) : null;
+}
+
+function findNestedQuotedText(payload: Record<string, unknown>, rootKey: string): string | null {
+  for (const [key, value] of Object.entries(payload)) {
+    if (key.toLowerCase() === rootKey.toLowerCase() && isRecord(value)) {
+      const text =
+        asString(value.text) ??
+        asString(value.body) ??
+        asString(value.caption) ??
+        asString(value.conversation) ??
+        asString(value.content);
+      if (text) return text;
+
+      for (const inner of Object.values(value)) {
+        if (isRecord(inner)) {
+          const innerText =
+            asString(inner.text) ??
+            asString(inner.body) ??
+            asString(inner.caption) ??
+            asString(inner.conversation);
+          if (innerText) return innerText;
+        }
+      }
+      return null;
+    }
+
+    if (isRecord(value)) {
+      const found = findNestedQuotedText(value as Record<string, unknown>, rootKey);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
 function buildMessageText(message: ConversationMessageRow) {
   const text = message.text_content?.trim();
 
@@ -1383,7 +1480,7 @@ async function sendAgentResponse(input: {
       }
 
       if (index > 0) {
-        const delayMs = resolveAudioChunkDelayMs(text);
+        const delayMs = resolveAudioChunkDelayMs(text, context.behavior);
         await setChatPresence(context.credentials, input.token, input.phone, "recording", delayMs + 15000);
         await sleep(delayMs);
       } else {
@@ -1455,7 +1552,7 @@ async function sendAgentResponse(input: {
     }
 
     if (index > 0) {
-      const delayMs = resolveChunkDelayMs(text);
+      const delayMs = resolveChunkDelayMs(text, context.behavior);
       await setChatPresence(context.credentials, input.token, input.phone, "composing", delayMs + 6000);
       await sleep(delayMs);
     }
@@ -1518,8 +1615,22 @@ async function prepareAgentPresenceBeforeSend(input: {
   const delayMs = resolvePreSendPresenceDelayMs(input.context.behavior, input.text, shouldSendAudio);
   const presenceHoldMs = shouldSendAudio ? 60000 : Math.min(delayMs + 10000, 300000);
 
-  await setChatPresence(input.credentials, input.token, input.phone, presence, presenceHoldMs);
-  await sleep(delayMs);
+  if (input.context.behavior.composingPause && delayMs > 3000) {
+    const firstPhase = Math.round(delayMs * 0.4);
+    const pauseMs = randomBetween(800, 2500);
+    await setChatPresence(input.credentials, input.token, input.phone, presence, firstPhase + 6000);
+    await sleep(firstPhase);
+    await setChatPresence(input.credentials, input.token, input.phone, "paused", pauseMs + 2000);
+    await sleep(pauseMs);
+    const remaining = delayMs - firstPhase - pauseMs;
+    if (remaining > 0) {
+      await setChatPresence(input.credentials, input.token, input.phone, presence, remaining + 6000);
+      await sleep(remaining);
+    }
+  } else {
+    await setChatPresence(input.credentials, input.token, input.phone, presence, presenceHoldMs);
+    await sleep(delayMs);
+  }
 }
 
 function shouldSendAudioResponse(
@@ -1530,6 +1641,12 @@ function shouldSendAudioResponse(
   const visualMediaKind = detectInboundMediaKind(latestInbound);
   const shouldSendAudio = context.behavior.responseMode === "audio"
     || (context.behavior.responseMode === "mirror" && (inboundType.includes("audio") || isAudioMessage(latestInbound)));
+
+  if (!shouldSendAudio && context.behavior.spontaneousAudio && context.behavior.audioVoiceId) {
+    if (Math.random() * 100 < context.behavior.spontaneousAudioProbability) {
+      return !visualMediaKind;
+    }
+  }
 
   return shouldSendAudio && !visualMediaKind;
 }
@@ -1545,15 +1662,23 @@ function resolvePreSendPresenceDelayMs(behavior: WhatsappBehaviorConfig, text: s
   const base = Math.min(Math.max(textLengthDelay, minimum), maximum);
   const jitter = Math.round(Math.random() * 700);
 
-  return Math.round(base + jitter);
+  return applyJitter(Math.round(base + jitter), behavior);
 }
 
-function resolveChunkDelayMs(text: string) {
-  return Math.min(Math.max(1600 + text.length * 16, 1800), 3600);
+function resolveChunkDelayMs(text: string, behavior: WhatsappBehaviorConfig) {
+  const base = Math.min(Math.max(1600 + text.length * 16, 1800), 3600);
+  return applyJitter(base, behavior);
 }
 
-function resolveAudioChunkDelayMs(text: string) {
-  return Math.min(Math.max(2200 + text.length * 12, 2500), 6500);
+function resolveAudioChunkDelayMs(text: string, behavior: WhatsappBehaviorConfig) {
+  const base = Math.min(Math.max(2200 + text.length * 12, 2500), 6500);
+  return applyJitter(base, behavior);
+}
+
+function applyJitter(ms: number, behavior: WhatsappBehaviorConfig): number {
+  if (!behavior.timingJitter) return ms;
+  const factor = 0.7 + Math.random() * 0.6;
+  return Math.round(ms * factor);
 }
 
 async function sendWhatsappText(input: {
@@ -2051,6 +2176,47 @@ async function setPresenceAvailable(credentials: UazapiCredentials, token: strin
   });
 }
 
+async function sendEmojiReaction(input: {
+  credentials: UazapiCredentials;
+  token: string;
+  phone: string;
+  messageId: string;
+  behavior: WhatsappBehaviorConfig;
+  userText: string;
+}) {
+  if (!input.behavior.emojiReactions) return;
+  if (Math.random() * 100 >= input.behavior.reactionProbability) return;
+
+  const emoji = pickContextualEmoji(input.userText);
+
+  await callUazapi(input.credentials, "/message/react", {
+    method: "POST",
+    token: input.token,
+    body: {
+      number: input.phone,
+      messageId: input.messageId,
+      reaction: emoji,
+    },
+    tolerateError: true,
+  });
+}
+
+function pickContextualEmoji(text: string): string {
+  const n = text.toLowerCase();
+  if (/obrigad|valeu|vlw|agradec/.test(n)) return "❤️";
+  if (/kkk|haha|rsrs|😂|🤣|engracad/.test(n)) return "😂";
+  if (/bom dia|boa tarde|boa noite|^oi\b|^ola\b|^eai\b|^fala\b/.test(n)) return "👋";
+  if (/top|show|otimo|perfeito|massa|dahora|legal|excelente|incrivel/.test(n)) return "🔥";
+  if (/triste|ruim|problema|dificil|complicad|pena/.test(n)) return "😔";
+  if (/\?|duvida|como|quando|onde|qual|quanto/.test(n)) return "🤔";
+  const defaults = ["👍", "✅", "😊", "🙌", "💪"];
+  return defaults[Math.floor(Math.random() * defaults.length)];
+}
+
+function randomBetween(min: number, max: number) {
+  return Math.round(min + Math.random() * (max - min));
+}
+
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -2390,6 +2556,66 @@ async function persistAudioTranscriptionFailure(
   } catch {
     return;
   }
+}
+
+async function persistLeadMediaFile(input: {
+  client: SupabaseClient;
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
+  token: string;
+  latestInbound: ConversationMessageRow;
+}) {
+  const mediaKind = detectInboundMediaKind(input.latestInbound);
+  if (!mediaKind || !input.context.lead?.id) return;
+
+  const r2Result = await loadR2Config(input.client);
+  if (!r2Result.ok) return;
+
+  const downloaded = await downloadInboundMedia({
+    credentials: input.context.credentials,
+    token: input.token,
+    message: input.latestInbound,
+    providerChatId: input.context.providerChatId,
+    kind: mediaKind,
+  });
+
+  const response = await fetch(downloaded.fileUrl, { cache: "no-store" });
+  if (!response.ok) return;
+
+  const buffer = new Uint8Array(await response.arrayBuffer());
+  const ext = mimeToExtension(downloaded.mimeType);
+  const objectKey = `leads/${input.context.lead.id}/${Date.now()}_${input.latestInbound.id.slice(0, 8)}.${ext}`;
+
+  const upload = await putR2Object(r2Result.config, objectKey, buffer, downloaded.mimeType);
+  if (!upload.ok) return;
+
+  await input.client.from("lead_files").insert({
+    organization_id: input.context.organization.id,
+    lead_id: input.context.lead.id,
+    conversation_id: input.context.conversationId,
+    message_id: input.latestInbound.id,
+    file_type: mediaKind,
+    mime_type: downloaded.mimeType,
+    object_key: objectKey,
+    public_url: upload.publicUrl,
+    byte_size: buffer.byteLength,
+    metadata: {
+      agent_run_id: input.context.run.id,
+      provider_message_id: input.latestInbound.provider_message_id,
+    },
+  });
+}
+
+function mimeToExtension(mimeType: string): string {
+  const map: Record<string, string> = {
+    "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif",
+    "video/mp4": "mp4", "video/3gpp": "3gp", "video/quicktime": "mov",
+    "audio/mpeg": "mp3", "audio/ogg": "ogg", "audio/mp4": "m4a",
+    "application/pdf": "pdf",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
+    "text/plain": "txt",
+  };
+  return map[mimeType] ?? "bin";
 }
 
 async function persistMediaAnalysisFailure(

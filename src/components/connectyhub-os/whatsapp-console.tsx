@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type
 import Image from "next/image";
 import Link from "next/link";
 import {
+  AudioLines,
   Bot,
   Building2,
   CheckCircle2,
@@ -12,6 +13,7 @@ import {
   Clock3,
   Eye,
   FileText,
+  Fingerprint,
   Globe2,
   ImageIcon,
   Link2,
@@ -19,13 +21,17 @@ import {
   MessageCircle,
   MessageSquare,
   Mic,
+  Pause,
+  PenLine,
   PlugZap,
   Power,
   Plus,
   QrCode,
   RefreshCcw,
   ShieldCheck,
+  Shuffle,
   Smartphone,
+  Smile,
   SplitSquareVertical,
   Timer,
   Trash2,
@@ -1083,6 +1089,23 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
                   />
                 </BehaviorSection>
               </div>
+
+              <BehaviorSection title="Simulacao humana" description="Comportamentos que fazem o agente parecer uma pessoa real no WhatsApp." defaultOpen>
+                <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                  <ToggleTile icon={PenLine} label="Linguagem humanizada" description="Instrui a IA a usar abreviacoes, emoji e tom informal de brasileiro no WhatsApp." checked={behaviorDraft.humanizedLanguage} onChange={() => updateBehavior("humanizedLanguage", !behaviorDraft.humanizedLanguage)} />
+                  <ToggleTile icon={Smile} label="Reacoes emoji" description="Reage a mensagens do lead com emoji contextual antes de responder." checked={behaviorDraft.emojiReactions} onChange={() => updateBehavior("emojiReactions", !behaviorDraft.emojiReactions)} />
+                  <ToggleTile icon={Shuffle} label="Variacao de timing" description="Adiciona aleatoriedade de ±30% em todos os tempos de resposta." checked={behaviorDraft.timingJitter} onChange={() => updateBehavior("timingJitter", !behaviorDraft.timingJitter)} />
+                  <ToggleTile icon={Pause} label="Pausa ao digitar" description="Simula o padrao humano de digitar, parar e voltar a digitar." checked={behaviorDraft.composingPause} onChange={() => updateBehavior("composingPause", !behaviorDraft.composingPause)} />
+                  <ToggleTile icon={Eye} label="Delay ao visualizar" description="Atrasa a marcacao de lido para simular que o agente nao esta sempre olhando o celular." checked={behaviorDraft.readReceiptDelay} onChange={() => updateBehavior("readReceiptDelay", !behaviorDraft.readReceiptDelay)} />
+                  <ToggleTile icon={AudioLines} label="Audio espontaneo" description="Envia audio ocasionalmente mesmo quando o lead manda texto, como humano faria." checked={behaviorDraft.spontaneousAudio} onChange={() => updateBehavior("spontaneousAudio", !behaviorDraft.spontaneousAudio)} />
+                </div>
+                <div className="mt-2 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                  <NumberField label="Chance reacao %" description="Probabilidade de reagir a cada mensagem com emoji." value={behaviorDraft.reactionProbability} min={0} max={100} onChange={(value) => updateBehavior("reactionProbability", value)} />
+                  <NumberField label="Leitura min (s)" description="Segundos minimos antes de marcar como lido." value={behaviorDraft.readReceiptMinSeconds} min={1} max={30} onChange={(value) => updateBehavior("readReceiptMinSeconds", value)} />
+                  <NumberField label="Leitura max (s)" description="Segundos maximos antes de marcar como lido." value={behaviorDraft.readReceiptMaxSeconds} min={2} max={60} onChange={(value) => updateBehavior("readReceiptMaxSeconds", value)} />
+                  <NumberField label="Chance audio %" description="Probabilidade de responder com audio espontaneo em vez de texto." value={behaviorDraft.spontaneousAudioProbability} min={0} max={100} onChange={(value) => updateBehavior("spontaneousAudioProbability", value)} />
+                </div>
+              </BehaviorSection>
 
               <BehaviorSection title="Seguranca e testes" description="Protecoes para evitar atendimento indevido, loops e conflitos com humanos." defaultOpen>
                 <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
@@ -2521,6 +2544,15 @@ function BehaviorSummary({
 
   const activeMedia = [behavior.audioTranscription, behavior.mediaImage, behavior.mediaDocument, behavior.mediaVideo].filter(Boolean).length;
 
+  const activeHuman = [
+    behavior.humanizedLanguage,
+    behavior.emojiReactions,
+    behavior.timingJitter,
+    behavior.composingPause,
+    behavior.readReceiptDelay,
+    behavior.spontaneousAudio,
+  ].filter(Boolean).length;
+
   return (
     <div className="rounded-xl border p-4" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
       <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Resumo</p>
@@ -2528,6 +2560,7 @@ function BehaviorSummary({
         <PromptCheck label="Agente ativo" active={behavior.agentEnabled} />
         <PromptCheck label={`${activeScenarios}/8 cenarios ativos`} active={activeScenarios >= 4} />
         <PromptCheck label={`${activeMedia}/4 midias ativas`} active={activeMedia >= 2} />
+        <PromptCheck label={`${activeHuman}/6 simulacao humana`} active={activeHuman >= 3} />
         <PromptCheck label="Intervencao humana" active={behavior.humanIntervention} />
         <PromptCheck label="Temporizacao inteligente" active={behavior.smartTiming} />
       </div>

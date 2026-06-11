@@ -25,6 +25,16 @@ export type WhatsappBehaviorConfig = {
   analyzeLinks: boolean;
   quotedReplyContext: boolean;
   leadFileStorage: boolean;
+  emojiReactions: boolean;
+  reactionProbability: number;
+  timingJitter: boolean;
+  composingPause: boolean;
+  humanizedLanguage: boolean;
+  readReceiptDelay: boolean;
+  readReceiptMinSeconds: number;
+  readReceiptMaxSeconds: number;
+  spontaneousAudio: boolean;
+  spontaneousAudioProbability: number;
   mediaImage: boolean;
   mediaDocument: boolean;
   mediaVideo: boolean;
@@ -96,6 +106,16 @@ export const defaultWhatsappBehaviorConfig: WhatsappBehaviorConfig = {
   analyzeLinks: true,
   quotedReplyContext: true,
   leadFileStorage: true,
+  emojiReactions: true,
+  reactionProbability: 40,
+  timingJitter: true,
+  composingPause: true,
+  humanizedLanguage: true,
+  readReceiptDelay: true,
+  readReceiptMinSeconds: 3,
+  readReceiptMaxSeconds: 12,
+  spontaneousAudio: false,
+  spontaneousAudioProbability: 15,
   mediaImage: true,
   mediaDocument: true,
   mediaVideo: false,
@@ -164,6 +184,12 @@ export function normalizeWhatsappBehaviorConfig(value: unknown): WhatsappBehavio
     merged.mediaVideo = false;
     merged.smartTiming = false;
     merged.aiScheduleEnabled = false;
+    merged.emojiReactions = false;
+    merged.timingJitter = false;
+    merged.composingPause = false;
+    merged.humanizedLanguage = false;
+    merged.readReceiptDelay = false;
+    merged.spontaneousAudio = false;
   }
 
   return merged;
@@ -188,6 +214,10 @@ function readNumber(value: unknown, fallback: number, key: keyof WhatsappBehavio
   if (key === "humanInterventionMinutes") return clamp(Math.round(safe), 5, 1440);
   if (key === "timingButtonDelaySeconds") return clamp(Math.round(safe), 0, 20);
   if (key === "debounceSeconds") return clamp(Math.round(safe), 5, 120);
+  if (key === "reactionProbability") return clamp(Math.round(safe), 0, 100);
+  if (key === "spontaneousAudioProbability") return clamp(Math.round(safe), 0, 100);
+  if (key === "readReceiptMinSeconds") return clamp(Math.round(safe), 1, 30);
+  if (key === "readReceiptMaxSeconds") return clamp(Math.round(safe), 2, 60);
 
   return clamp(Math.round(safe), 2, 180);
 }
