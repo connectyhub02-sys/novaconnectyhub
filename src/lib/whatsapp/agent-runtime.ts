@@ -31,6 +31,14 @@ import { loadUazapiCredentials, type UazapiCredentials } from "./uazapi-credenti
 
 type JsonRecord = Record<string, unknown>;
 
+const geminiSafetySettings = [
+  { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+  { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+  { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+  { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" },
+  { category: "HARM_CATEGORY_CIVIC_INTEGRITY", threshold: "BLOCK_NONE" },
+];
+
 type AgentRunRow = {
   id: string;
   agent_id: string;
@@ -736,6 +744,7 @@ async function generateAgentResponse(input: {
         topP: 0.9,
         maxOutputTokens: 700,
       },
+      safetySettings: geminiSafetySettings,
     }),
     cache: "no-store",
   });
@@ -748,7 +757,10 @@ async function generateAgentResponse(input: {
   const text = extractGeminiText(data);
 
   if (!text) {
-    throw new Error("Gemini nao retornou uma resposta para o lead.");
+    const blockReason = extractGeminiBlockReason(data);
+    throw new Error(blockReason
+      ? `Gemini bloqueou a resposta: ${blockReason}.`
+      : "Gemini nao retornou uma resposta para o lead.");
   }
 
   return normalizeAssistantText(renderLinkButtonTags(text, input.linkButtons, input));
@@ -906,6 +918,7 @@ async function analyzeAndPersistLeadQualification(
         maxOutputTokens: 1100,
         responseMimeType: "application/json",
       },
+      safetySettings: geminiSafetySettings,
     }),
     cache: "no-store",
   });
@@ -2521,6 +2534,7 @@ async function analyzeDownloadedMediaWithGemini(input: {
         topP: 0.8,
         maxOutputTokens: input.kind === "video" ? 1400 : 900,
       },
+      safetySettings: geminiSafetySettings,
     }),
     cache: "no-store",
   });
@@ -2576,6 +2590,7 @@ async function transcribeDownloadedAudioWithGemini(input: {
         topP: 0.8,
         maxOutputTokens: 900,
       },
+      safetySettings: geminiSafetySettings,
     }),
     cache: "no-store",
   });
@@ -3275,6 +3290,31 @@ function extractGeminiText(value: unknown) {
     .filter((text): text is string => typeof text === "string" && text.trim().length > 0)
     .join("\n")
     .trim();
+}
+
+function extractGeminiBlockReason(value: unknown): string | null {
+  const root = readRecord(value);
+  if (!root) return null;
+
+  const promptFeedback = readRecord(root.promptFeedback);
+  if (promptFeedback) {
+    const reason = promptFeedback.blockReason;
+    if (typeof reason === "string") return `promptFeedback.blockReason=${reason}`;
+  }
+
+  const candidates = root.candidates;
+  if (Array.isArray(candidates)) {
+    for (const candidate of candidates) {
+      const c = readRecord(candidate);
+      if (!c) continue;
+      const finishReason = c.finishReason;
+      if (typeof finishReason === "string" && finishReason !== "STOP") {
+        return `finishReason=${finishReason}`;
+      }
+    }
+  }
+
+  return null;
 }
 
 async function readProviderResponse(response: Response) {
