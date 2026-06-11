@@ -14,6 +14,7 @@ import {
   Eye,
   FileText,
   Fingerprint,
+  Forward,
   Globe2,
   ImageIcon,
   Link2,
@@ -23,6 +24,7 @@ import {
   Mic,
   Pause,
   PenLine,
+  PenOff,
   PlugZap,
   Power,
   Plus,
@@ -33,6 +35,8 @@ import {
   Smartphone,
   Smile,
   SplitSquareVertical,
+  Sticker,
+  Sun,
   Timer,
   Trash2,
   type LucideIcon,
@@ -1098,12 +1102,18 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
                   <ToggleTile icon={Pause} label="Pausa ao digitar" description="Simula o padrao humano de digitar, parar e voltar a digitar." checked={behaviorDraft.composingPause} onChange={() => updateBehavior("composingPause", !behaviorDraft.composingPause)} />
                   <ToggleTile icon={Eye} label="Delay ao visualizar" description="Atrasa a marcacao de lido para simular que o agente nao esta sempre olhando o celular." checked={behaviorDraft.readReceiptDelay} onChange={() => updateBehavior("readReceiptDelay", !behaviorDraft.readReceiptDelay)} />
                   <ToggleTile icon={AudioLines} label="Audio espontaneo" description="Envia audio ocasionalmente mesmo quando o lead manda texto, como humano faria." checked={behaviorDraft.spontaneousAudio} onChange={() => updateBehavior("spontaneousAudio", !behaviorDraft.spontaneousAudio)} />
+                  <ToggleTile icon={PenOff} label="Typos intencionais" description="A IA simula erros de digitacao e autocorrecoes naturais como um humano real." checked={behaviorDraft.intentionalTypos} onChange={() => updateBehavior("intentionalTypos", !behaviorDraft.intentionalTypos)} />
+                  <ToggleTile icon={Sun} label="Ritmo circadiano" description="Responde mais rapido de dia e mais devagar a noite, como padrao humano." checked={behaviorDraft.circadianTiming} onChange={() => updateBehavior("circadianTiming", !behaviorDraft.circadianTiming)} />
+                  <ToggleTile icon={Mic} label="Preenchimento vocal" description="Adiciona hesitacoes naturais nos audios: 'hmm', 'entao', pausas de pensamento." checked={behaviorDraft.naturalAudioFillers} onChange={() => updateBehavior("naturalAudioFillers", !behaviorDraft.naturalAudioFillers)} />
+                  <ToggleTile icon={Sticker} label="Figurinhas" description="Envia stickers contextuais ocasionalmente para simular comportamento natural do WhatsApp." checked={behaviorDraft.sendStickers} onChange={() => updateBehavior("sendStickers", !behaviorDraft.sendStickers)} />
+                  <ToggleTile icon={Forward} label="Midia proativa" description="Permite que o agente envie imagens, catalogos ou midias relevantes de forma espontanea." checked={behaviorDraft.proactiveMedia} onChange={() => updateBehavior("proactiveMedia", !behaviorDraft.proactiveMedia)} />
                 </div>
                 <div className="mt-2 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
                   <NumberField label="Chance reacao %" description="Probabilidade de reagir a cada mensagem com emoji." value={behaviorDraft.reactionProbability} min={0} max={100} onChange={(value) => updateBehavior("reactionProbability", value)} />
                   <NumberField label="Leitura min (s)" description="Segundos minimos antes de marcar como lido." value={behaviorDraft.readReceiptMinSeconds} min={1} max={30} onChange={(value) => updateBehavior("readReceiptMinSeconds", value)} />
                   <NumberField label="Leitura max (s)" description="Segundos maximos antes de marcar como lido." value={behaviorDraft.readReceiptMaxSeconds} min={2} max={60} onChange={(value) => updateBehavior("readReceiptMaxSeconds", value)} />
                   <NumberField label="Chance audio %" description="Probabilidade de responder com audio espontaneo em vez de texto." value={behaviorDraft.spontaneousAudioProbability} min={0} max={100} onChange={(value) => updateBehavior("spontaneousAudioProbability", value)} />
+                  <NumberField label="Chance figurinha %" description="Probabilidade de enviar sticker apos responder." value={behaviorDraft.stickerProbability} min={0} max={100} onChange={(value) => updateBehavior("stickerProbability", value)} />
                 </div>
               </BehaviorSection>
 
@@ -2551,6 +2561,11 @@ function BehaviorSummary({
     behavior.composingPause,
     behavior.readReceiptDelay,
     behavior.spontaneousAudio,
+    behavior.intentionalTypos,
+    behavior.circadianTiming,
+    behavior.naturalAudioFillers,
+    behavior.sendStickers,
+    behavior.proactiveMedia,
   ].filter(Boolean).length;
 
   return (
@@ -2560,7 +2575,7 @@ function BehaviorSummary({
         <PromptCheck label="Agente ativo" active={behavior.agentEnabled} />
         <PromptCheck label={`${activeScenarios}/8 cenarios ativos`} active={activeScenarios >= 4} />
         <PromptCheck label={`${activeMedia}/4 midias ativas`} active={activeMedia >= 2} />
-        <PromptCheck label={`${activeHuman}/6 simulacao humana`} active={activeHuman >= 3} />
+        <PromptCheck label={`${activeHuman}/11 simulacao humana`} active={activeHuman >= 5} />
         <PromptCheck label="Intervencao humana" active={behavior.humanIntervention} />
         <PromptCheck label="Temporizacao inteligente" active={behavior.smartTiming} />
       </div>

@@ -35,6 +35,12 @@ export type WhatsappBehaviorConfig = {
   readReceiptMaxSeconds: number;
   spontaneousAudio: boolean;
   spontaneousAudioProbability: number;
+  intentionalTypos: boolean;
+  circadianTiming: boolean;
+  naturalAudioFillers: boolean;
+  sendStickers: boolean;
+  stickerProbability: number;
+  proactiveMedia: boolean;
   mediaImage: boolean;
   mediaDocument: boolean;
   mediaVideo: boolean;
@@ -116,6 +122,12 @@ export const defaultWhatsappBehaviorConfig: WhatsappBehaviorConfig = {
   readReceiptMaxSeconds: 12,
   spontaneousAudio: false,
   spontaneousAudioProbability: 15,
+  intentionalTypos: false,
+  circadianTiming: true,
+  naturalAudioFillers: true,
+  sendStickers: false,
+  stickerProbability: 20,
+  proactiveMedia: false,
   mediaImage: true,
   mediaDocument: true,
   mediaVideo: false,
@@ -190,6 +202,11 @@ export function normalizeWhatsappBehaviorConfig(value: unknown): WhatsappBehavio
     merged.humanizedLanguage = false;
     merged.readReceiptDelay = false;
     merged.spontaneousAudio = false;
+    merged.intentionalTypos = false;
+    merged.circadianTiming = false;
+    merged.naturalAudioFillers = false;
+    merged.sendStickers = false;
+    merged.proactiveMedia = false;
   }
 
   return merged;
@@ -218,6 +235,7 @@ function readNumber(value: unknown, fallback: number, key: keyof WhatsappBehavio
   if (key === "spontaneousAudioProbability") return clamp(Math.round(safe), 0, 100);
   if (key === "readReceiptMinSeconds") return clamp(Math.round(safe), 1, 30);
   if (key === "readReceiptMaxSeconds") return clamp(Math.round(safe), 2, 60);
+  if (key === "stickerProbability") return clamp(Math.round(safe), 0, 100);
 
   return clamp(Math.round(safe), 2, 180);
 }

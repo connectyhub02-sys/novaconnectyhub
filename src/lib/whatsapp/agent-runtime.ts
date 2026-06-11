@@ -384,6 +384,8 @@ export async function processWhatsappAgentRun(input: {
       }
     }
 
+    await sendContextualSticker(context.credentials, token, phone, aiText, behavior).catch(() => {});
+
     if (behavior.markAsRead) {
       await markConversationRead(context.credentials, token, phone, context.providerChatId, context.providerMessageId);
     }
@@ -795,6 +797,9 @@ function buildSystemInstruction(input: {
     `- Analisar videos: ${input.behavior.mediaVideo ? "sim" : "nao"}.`,
     ...buildLeadQualificationInstruction(input.qualification),
     ...buildHumanizedLanguageInstruction(input.behavior),
+    ...buildIntentionalTyposInstruction(input.behavior),
+    ...buildNaturalAudioFillersInstruction(input.behavior),
+    ...buildProactiveMediaInstruction(input.behavior),
     "",
     "REGRAS DE SAIDA:",
     "- Responda em portugues do Brasil.",
@@ -826,6 +831,44 @@ function buildHumanizedLanguageInstruction(behavior: WhatsappBehaviorConfig): st
     "- Varie entre respostas curtas ('blz', 'entendi', 'show') e explicacoes naturais.",
     "- Quando nao souber, diga naturalmente: 'hmm deixa eu ver', 'nao tenho certeza agora', 'vou confirmar'.",
     "- Nunca seja perfeito demais. Humanos hesitam, abreviam e sao informais.",
+  ];
+}
+
+function buildIntentionalTyposInstruction(behavior: WhatsappBehaviorConfig): string[] {
+  if (!behavior.intentionalTypos) return [];
+  return [
+    "",
+    "TYPOS E AUTOCORRECOES:",
+    "- De vez em quando (1 a cada 4-5 mensagens), cometa um erro de digitacao LEVE e corrija na sequencia.",
+    "- Exemplos: 'vcoê' -> 'voce*', 'amnanh' -> 'amanha*', 'porisso' -> 'por isso*'.",
+    "- Use asterisco para correcoes, como humano faz no WhatsApp: 'amnanh\\n*amanha'.",
+    "- NAO exagere. Erros devem parecer naturais, nao forcados. Maximo 1 por conversa longa.",
+    "- Nunca erre numeros, precos, enderecos ou dados criticos do lead.",
+  ];
+}
+
+function buildNaturalAudioFillersInstruction(behavior: WhatsappBehaviorConfig): string[] {
+  if (!behavior.naturalAudioFillers) return [];
+  return [
+    "",
+    "PREENCHIMENTO VOCAL (para respostas em audio):",
+    "- Quando a resposta sera convertida em audio, inclua hesitacoes naturais no texto.",
+    "- Use: 'entao...', 'olha...', 'hmm', 'e...', 'bom...', 'tipo assim' no inicio de frases.",
+    "- Adicione pausas com '...' em momentos de reflexao.",
+    "- Nao use em TODAS as frases, apenas em 2-3 por resposta para soar natural.",
+    "- Isso faz o TTS gerar audio com ritmo mais humano e menos robotico.",
+  ];
+}
+
+function buildProactiveMediaInstruction(behavior: WhatsappBehaviorConfig): string[] {
+  if (!behavior.proactiveMedia) return [];
+  return [
+    "",
+    "MIDIA PROATIVA:",
+    "- Quando o contexto permitir, sugira enviar fotos, catalogos ou materiais relevantes.",
+    "- Use expressoes naturais: 'quer que eu mande uma foto?', 'tenho um catalogo aqui, mando pra vc?'.",
+    "- Nunca invente midias que nao existem. So sugira quando houver material real no contexto.",
+    "- A sugestao deve ser natural e nao forcada. Nao ofereca midia em toda mensagem.",
   ];
 }
 
@@ -1662,23 +1705,40 @@ function resolvePreSendPresenceDelayMs(behavior: WhatsappBehaviorConfig, text: s
   const base = Math.min(Math.max(textLengthDelay, minimum), maximum);
   const jitter = Math.round(Math.random() * 700);
 
-  return applyJitter(Math.round(base + jitter), behavior);
+  return applyCircadianFactor(applyJitter(Math.round(base + jitter), behavior), behavior);
 }
 
 function resolveChunkDelayMs(text: string, behavior: WhatsappBehaviorConfig) {
   const base = Math.min(Math.max(1600 + text.length * 16, 1800), 3600);
-  return applyJitter(base, behavior);
+  return applyCircadianFactor(applyJitter(base, behavior), behavior);
 }
 
 function resolveAudioChunkDelayMs(text: string, behavior: WhatsappBehaviorConfig) {
   const base = Math.min(Math.max(2200 + text.length * 12, 2500), 6500);
-  return applyJitter(base, behavior);
+  return applyCircadianFactor(applyJitter(base, behavior), behavior);
 }
 
 function applyJitter(ms: number, behavior: WhatsappBehaviorConfig): number {
   if (!behavior.timingJitter) return ms;
   const factor = 0.7 + Math.random() * 0.6;
   return Math.round(ms * factor);
+}
+
+function applyCircadianFactor(ms: number, behavior: WhatsappBehaviorConfig): number {
+  if (!behavior.circadianTiming) return ms;
+  const tz = behavior.aiScheduleTimezone || "America/Sao_Paulo";
+  let hour: number;
+  try {
+    hour = parseInt(new Intl.DateTimeFormat("en-US", { hour: "numeric", hour12: false, timeZone: tz }).format(new Date()), 10);
+  } catch {
+    hour = new Date().getHours();
+  }
+  if (hour >= 9 && hour < 12) return Math.round(ms * 0.8);
+  if (hour >= 12 && hour < 14) return Math.round(ms * 0.9);
+  if (hour >= 14 && hour < 18) return Math.round(ms * 0.85);
+  if (hour >= 18 && hour < 21) return Math.round(ms * 1.1);
+  if (hour >= 21 || hour < 7) return Math.round(ms * 1.5);
+  return ms;
 }
 
 async function sendWhatsappText(input: {
@@ -2211,6 +2271,70 @@ function pickContextualEmoji(text: string): string {
   if (/\?|duvida|como|quando|onde|qual|quanto/.test(n)) return "🤔";
   const defaults = ["👍", "✅", "😊", "🙌", "💪"];
   return defaults[Math.floor(Math.random() * defaults.length)];
+}
+
+async function sendContextualSticker(
+  credentials: UazapiCredentials,
+  token: string,
+  phone: string,
+  responseText: string,
+  behavior: WhatsappBehaviorConfig,
+) {
+  if (!behavior.sendStickers) return;
+  if (Math.random() * 100 >= behavior.stickerProbability) return;
+
+  const stickerUrl = pickContextualStickerUrl(responseText);
+  if (!stickerUrl) return;
+
+  await sleep(randomBetween(800, 2200));
+
+  await callUazapi(credentials, "/send/media", {
+    method: "POST",
+    token,
+    body: {
+      number: phone,
+      type: "sticker",
+      file: stickerUrl,
+    },
+    tolerateError: true,
+  });
+}
+
+const stickerMap: Record<string, string[]> = {
+  greeting: [
+    "https://raw.githubusercontent.com/nicehash/stickers/main/whatsapp/hi.webp",
+    "https://raw.githubusercontent.com/nicehash/stickers/main/whatsapp/wave.webp",
+  ],
+  thanks: [
+    "https://raw.githubusercontent.com/nicehash/stickers/main/whatsapp/heart.webp",
+    "https://raw.githubusercontent.com/nicehash/stickers/main/whatsapp/thanks.webp",
+  ],
+  ok: [
+    "https://raw.githubusercontent.com/nicehash/stickers/main/whatsapp/thumbsup.webp",
+    "https://raw.githubusercontent.com/nicehash/stickers/main/whatsapp/ok.webp",
+  ],
+  laugh: [
+    "https://raw.githubusercontent.com/nicehash/stickers/main/whatsapp/laugh.webp",
+    "https://raw.githubusercontent.com/nicehash/stickers/main/whatsapp/lol.webp",
+  ],
+  thinking: [
+    "https://raw.githubusercontent.com/nicehash/stickers/main/whatsapp/think.webp",
+    "https://raw.githubusercontent.com/nicehash/stickers/main/whatsapp/hmm.webp",
+  ],
+};
+
+function pickContextualStickerUrl(text: string): string | null {
+  const n = text.toLowerCase();
+  let category: string;
+  if (/bom dia|boa tarde|boa noite|^oi\b|^ola\b|tudo bem/.test(n)) category = "greeting";
+  else if (/obrigad|agradec|valeu|de nada/.test(n)) category = "thanks";
+  else if (/pronto|certo|beleza|pode deixar|combinado|fechado/.test(n)) category = "ok";
+  else if (/kkk|haha|rsrs|😂|🤣/.test(n)) category = "laugh";
+  else if (/vou verificar|deixa eu ver|momento|analisar|aguard/.test(n)) category = "thinking";
+  else return null;
+
+  const urls = stickerMap[category];
+  return urls[Math.floor(Math.random() * urls.length)];
 }
 
 function randomBetween(min: number, max: number) {
