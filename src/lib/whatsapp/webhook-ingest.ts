@@ -312,14 +312,28 @@ async function insertWebhookEvent(
   }
 
   if (error.code === "23505") {
-    const { data: existing } = await client
+    const existing = input.providerMessageId
+      ? await client
+          .from("whatsapp_webhook_events")
+          .select("id")
+          .eq("provider", "uazapi")
+          .eq("provider_message_id", input.providerMessageId)
+          .maybeSingle<WebhookEventRow>()
+          .then((result) => result.data)
+      : null;
+
+    if (existing) {
+      return { eventId: existing.id, duplicate: true };
+    }
+
+    const { data: byHash } = await client
       .from("whatsapp_webhook_events")
       .select("id")
       .eq("provider", "uazapi")
       .eq("payload_hash", input.payloadHash)
       .maybeSingle<WebhookEventRow>();
 
-    return { eventId: existing?.id ?? null, duplicate: true };
+    return { eventId: byHash?.id ?? null, duplicate: true };
   }
 
   throw new Error(`Nao foi possivel registrar webhook Uazapi: ${error.message}`);

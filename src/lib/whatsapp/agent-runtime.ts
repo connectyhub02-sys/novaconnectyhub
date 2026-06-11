@@ -11,6 +11,12 @@ import {
   type LeadQualificationConfig,
   type LeadQualificationAnalysis,
 } from "@/lib/leads/qualification";
+import {
+  loadGeminiCredentials,
+  normalizeGeminiModel,
+  defaultGeminiModel,
+  type GeminiCredentials,
+} from "@/lib/gemini/credentials";
 import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
 import { createServiceClient } from "@/lib/supabase/service";
 import { buildTrackedLinkUrl } from "@/lib/tracking/tracked-links";
@@ -101,11 +107,6 @@ type RuntimeLinkButton = {
 
 type InboundMediaKind = "image" | "video" | "document";
 
-type GeminiCredentials = {
-  apiKey: string;
-  model: string;
-};
-
 type OutboundMessage = {
   text: string;
   mode: "text" | "audio";
@@ -124,8 +125,6 @@ type BehaviorSignal = {
   payload?: JsonRecord;
 };
 
-const defaultGeminiModel = "gemini-2.5-flash";
-const geminiCredentialNames = ["GEMINI_API_KEY", "GOOGLE_GENERATIVE_AI_API_KEY", "GOOGLE_AI_API_KEY", "GEMINI_DEFAULT_MODEL"];
 
 export async function getWhatsappAgentRunDelaySeconds(input: {
   runId: string;
@@ -209,6 +208,10 @@ export async function processWhatsappAgentRun(input: {
 
     if (!isWithinSchedule(behavior)) {
       return await completeRun(client, run.id, "Fora da janela de atendimento da IA.", { skipped: true, reason: "outside_ai_schedule" });
+    }
+
+    if (await isOrgRateLimited(client, run.organization_id!)) {
+      return await completeRun(client, run.id, "Limite de execucoes por minuto atingido.", { skipped: true, reason: "org_rate_limited" });
     }
 
     const token = decryptInstanceToken(instance);
@@ -673,43 +676,7 @@ function mapRuntimeLinkButton(row: LinkButtonMemoryRow): RuntimeLinkButton {
   };
 }
 
-async function loadGeminiCredentials(client: SupabaseClient): Promise<GeminiCredentials> {
-  const values = new Map<string, string>();
-  const { data, error } = await client
-    .from("integration_credentials")
-    .select("env_name, encrypted_value, value_preview")
-    .eq("scope", "platform")
-    .eq("integration_id", "gemini")
-    .is("organization_id", null)
-    .in("env_name", geminiCredentialNames)
-    .order("updated_at", { ascending: false });
-
-  if (error) {
-    throw new Error(`Nao foi possivel carregar credenciais Gemini: ${error.message}`);
-  }
-
-  for (const credential of (data ?? []) as Array<{ env_name: string; encrypted_value: string; value_preview: string }>) {
-    if (!values.has(credential.env_name)) {
-      values.set(credential.env_name, decryptCredential(credential));
-    }
-  }
-
-  for (const name of geminiCredentialNames) {
-    const value = process.env[name];
-    if (value && !values.has(name)) values.set(name, value);
-  }
-
-  const apiKey = values.get("GEMINI_API_KEY") ?? values.get("GOOGLE_GENERATIVE_AI_API_KEY") ?? values.get("GOOGLE_AI_API_KEY") ?? "";
-
-  if (!apiKey.trim()) {
-    throw new Error("Gemini nao configurado para o atendimento WhatsApp.");
-  }
-
-  return {
-    apiKey: apiKey.trim(),
-    model: normalizeGeminiModel(values.get("GEMINI_DEFAULT_MODEL") ?? defaultGeminiModel),
-  };
-}
+// loadGeminiCredentials imported from @/lib/gemini/credentials
 
 async function generateAgentResponse(input: {
   credentials: GeminiCredentials;
@@ -2776,6 +2743,24 @@ function dedupeJsonRecords(values: JsonRecord[]) {
   return deduped;
 }
 
+const ORG_RATE_LIMIT_PER_MINUTE = 30;
+
+async function isOrgRateLimited(client: SupabaseClient, organizationId: string) {
+  const oneMinuteAgo = new Date(Date.now() - 60_000).toISOString();
+  const { count, error } = await client
+    .from("agent_runs")
+    .select("id", { count: "exact", head: true })
+    .eq("organization_id", organizationId)
+    .eq("run_status", "running")
+    .gte("started_at", oneMinuteAgo);
+
+  if (error) {
+    return false;
+  }
+
+  return (count ?? 0) >= ORG_RATE_LIMIT_PER_MINUTE;
+}
+
 function isBotLoopRisk(messages: ConversationMessageRow[]) {
   const recent = messages.slice(-12).map((message) => ({
     direction: message.direction,
@@ -3022,9 +3007,7 @@ function decryptCredential(credential: { encrypted_value: string; value_preview:
   }
 }
 
-function normalizeGeminiModel(value: string) {
-  return value.trim().replace(/^models\//, "") || defaultGeminiModel;
-}
+// normalizeGeminiModel imported from @/lib/gemini/credentials
 
 function readRecord(value: unknown): JsonRecord | null {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as JsonRecord) : null;

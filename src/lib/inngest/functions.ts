@@ -74,7 +74,7 @@ export const connectyhubWhatsappAgentResponse = inngest.createFunction(
   {
     id: "connectyhub-whatsapp-agent-response",
     name: "ConnectyHub WhatsApp Agent Response",
-    retries: 2,
+    retries: 4,
     triggers: [{ event: "connectyhub/whatsapp.message.received" }],
   },
   async ({ event, step }) => {

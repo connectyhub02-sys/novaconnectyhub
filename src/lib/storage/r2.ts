@@ -150,10 +150,10 @@ export async function putR2Object(config: R2Config, objectKey: string, body: Uin
   });
 
   if (!response.ok) {
-    const text = await response.text().catch(() => "");
+    await response.text().catch(() => "");
     return {
       ok: false as const,
-      error: `R2 respondeu status ${response.status}. ${text.slice(0, 180)}`.trim(),
+      error: `Falha ao enviar arquivo para o storage (status ${response.status}).`,
     };
   }
 

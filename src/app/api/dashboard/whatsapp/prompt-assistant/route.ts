@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireClientCompanyAccess } from "@/lib/client-os/companies";
-import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
+import { loadGeminiCredentials, type GeminiCredentials } from "@/lib/gemini/credentials";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
 
@@ -13,13 +13,6 @@ type PromptAssistantBody = {
   notes?: unknown;
 };
 
-type GeminiCredentials = {
-  apiKey: string;
-  model: string;
-};
-
-const defaultGeminiModel = "gemini-2.5-flash";
-const geminiCredentialNames = ["GEMINI_API_KEY", "GOOGLE_GENERATIVE_AI_API_KEY", "GOOGLE_AI_API_KEY", "GEMINI_DEFAULT_MODEL"];
 const maxPageChars = 12000;
 const maxNotesChars = 1200;
 
@@ -50,7 +43,7 @@ export async function POST(request: NextRequest) {
       companyId,
       client,
     });
-    const credentials = await loadGeminiCredentials(client);
+    const credentials = await loadGeminiCredentials(client) as GeminiCredentials;
     const pageContext = productUrl ? await fetchPageContext(productUrl) : "";
     const prompt = await generatePrompt({
       credentials,
@@ -64,50 +57,6 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Erro ao gerar prompt." }, { status: 500 });
   }
-}
-
-async function loadGeminiCredentials(client = createServiceClient()): Promise<GeminiCredentials> {
-  const values = new Map<string, string>();
-  const { data, error } = await client
-    .from("integration_credentials")
-    .select("env_name, encrypted_value, value_preview")
-    .eq("scope", "platform")
-    .eq("integration_id", "gemini")
-    .is("organization_id", null)
-    .in("env_name", geminiCredentialNames)
-    .order("updated_at", { ascending: false });
-
-  if (error) {
-    throw new Error(`Nao foi possivel carregar credenciais Gemini: ${error.message}`);
-  }
-
-  for (const credential of (data ?? []) as Array<{ env_name: string; encrypted_value: string; value_preview: string }>) {
-    if (values.has(credential.env_name)) {
-      continue;
-    }
-
-    try {
-      values.set(credential.env_name, decryptCredentialValue(credential.encrypted_value));
-    } catch {
-      values.set(credential.env_name, credential.value_preview);
-    }
-  }
-
-  for (const name of geminiCredentialNames) {
-    const value = process.env[name];
-    if (value && !values.has(name)) values.set(name, value);
-  }
-
-  const apiKey = values.get("GEMINI_API_KEY") ?? values.get("GOOGLE_GENERATIVE_AI_API_KEY") ?? values.get("GOOGLE_AI_API_KEY") ?? "";
-
-  if (!apiKey.trim()) {
-    throw new Error("Gemini nao configurado para gerar prompt.");
-  }
-
-  return {
-    apiKey: apiKey.trim(),
-    model: normalizeGeminiModel(values.get("GEMINI_DEFAULT_MODEL") ?? defaultGeminiModel),
-  };
 }
 
 async function fetchPageContext(productUrl: string) {
@@ -235,10 +184,6 @@ function readGeminiError(value: unknown) {
   const error = readRecord(readRecord(value)?.error);
   const message = error?.message;
   return typeof message === "string" ? message : null;
-}
-
-function normalizeGeminiModel(value: string) {
-  return value.trim().replace(/^models\//, "") || defaultGeminiModel;
 }
 
 function normalizeUrl(value: string) {
