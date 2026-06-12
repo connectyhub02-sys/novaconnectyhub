@@ -71,9 +71,10 @@ export async function listWhatsappAudioVoices(input: {
     };
   }
 
-  const [remoteVoices, customerVoices] = await Promise.all([
+  const [remoteVoices, customerVoices, previewIndex] = await Promise.all([
     withTimeout(listRemoteVoices(credentials.apiKey), remoteVoiceTimeoutMs, remoteVoiceTimeoutFallback),
     listCustomerVoices(client, input.organizationId),
+    listClonedVoicePreviews(client),
   ]);
   const voices = new Map<string, WhatsappAudioVoiceOption>();
 
@@ -86,7 +87,7 @@ export async function listWhatsappAudioVoices(input: {
       voiceId: voice.voiceId,
       name: voice.name?.trim() || "Voz ConnectyHub",
       source: voice.voiceId === credentials.defaultVoiceId ? "platform" : "elevenlabs",
-      previewUrl: normalizeUrl(voice.previewUrl),
+      previewUrl: normalizeUrl(voice.previewUrl) ?? previewIndex.get(voice.voiceId) ?? null,
       category: voice.category ?? null,
       status: null,
       publicOwnerId: null,
@@ -249,6 +250,28 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, fallback: 
       clearTimeout(timeout);
     }
   }
+}
+
+async function listClonedVoicePreviews(client: SupabaseClient) {
+  const { data } = await client
+    .from("customer_voices")
+    .select("provider_voice_id, metadata")
+    .eq("provider", "elevenlabs")
+    .not("provider_voice_id", "is", null)
+    .not("metadata", "is", null);
+
+  const index = new Map<string, string>();
+
+  for (const row of (data ?? []) as { provider_voice_id: string | null; metadata: Record<string, unknown> | null }[]) {
+    const voiceId = row.provider_voice_id?.trim();
+    const preview = typeof row.metadata?.preview_url === "string" ? normalizeUrl(row.metadata.preview_url) : null;
+
+    if (voiceId && preview) {
+      index.set(voiceId, preview);
+    }
+  }
+
+  return index;
 }
 
 async function listCustomerVoices(client: SupabaseClient, organizationId: string) {

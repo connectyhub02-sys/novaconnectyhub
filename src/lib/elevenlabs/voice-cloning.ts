@@ -218,18 +218,35 @@ function isAllowedAudioFile(filename: string, contentType: string) {
 
 const previewText = "Oi, essa e a minha voz clonada. Estou pronta pra atender no WhatsApp!";
 
+const previewDelayMs = 5000;
+const previewMaxRetries = 2;
+
 async function generateVoicePreview(
   client: SupabaseClient,
   elevenLabs: ElevenLabsClient,
   credentials: ElevenLabsCredentials,
   input: { voiceId: string; voiceRecordId: string | null; organizationId: string },
 ) {
-  const audioStream = await elevenLabs.textToSpeech.convert(input.voiceId, {
-    text: previewText,
-    modelId: credentials.defaultModelId,
-    outputFormat: credentials.outputFormat,
-    voiceSettings: { stability: 0.48, similarityBoost: 0.78, style: 0.22, useSpeakerBoost: true },
-  });
+  await new Promise((resolve) => setTimeout(resolve, previewDelayMs));
+
+  let audioStream: ReadableStream<Uint8Array> | null = null;
+
+  for (let attempt = 0; attempt <= previewMaxRetries; attempt++) {
+    try {
+      audioStream = await elevenLabs.textToSpeech.convert(input.voiceId, {
+        text: previewText,
+        modelId: credentials.defaultModelId,
+        outputFormat: credentials.outputFormat,
+        voiceSettings: { stability: 0.48, similarityBoost: 0.78, style: 0.22, useSpeakerBoost: true },
+      });
+      break;
+    } catch {
+      if (attempt === previewMaxRetries) return;
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+    }
+  }
+
+  if (!audioStream) return;
 
   const chunks: Uint8Array[] = [];
   const reader = audioStream.getReader();
