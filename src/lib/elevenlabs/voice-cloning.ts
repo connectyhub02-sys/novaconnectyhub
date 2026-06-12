@@ -29,26 +29,24 @@ export async function deleteCustomerVoiceClone(input: {
 }) {
   const client = input.client ?? createServiceClient();
   const credentials = await loadElevenLabsCredentials(client);
+  const elevenLabs = new ElevenLabsClient({ apiKey: credentials.apiKey });
+
+  await elevenLabs.voices.delete(input.voiceId).catch(() => {});
 
   const { data: voice } = await client
     .from("customer_voices")
-    .select("id, provider_voice_id, status")
+    .select("id")
     .eq("organization_id", input.organizationId)
     .eq("provider_voice_id", input.voiceId)
     .eq("provider", "elevenlabs")
-    .maybeSingle<{ id: string; provider_voice_id: string; status: string }>();
+    .maybeSingle<{ id: string }>();
 
-  if (!voice) {
-    throw new Error("Voz nao encontrada ou ja foi removida.");
+  if (voice) {
+    await client
+      .from("customer_voices")
+      .update({ status: "deleted" })
+      .eq("id", voice.id);
   }
-
-  const elevenLabs = new ElevenLabsClient({ apiKey: credentials.apiKey });
-  await elevenLabs.voices.delete(voice.provider_voice_id).catch(() => {});
-
-  await client
-    .from("customer_voices")
-    .update({ status: "deleted" })
-    .eq("id", voice.id);
 }
 
 const maxVoiceNameLength = 80;

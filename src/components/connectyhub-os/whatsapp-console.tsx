@@ -2238,7 +2238,7 @@ function VoiceSelector({
                     <span className={cn("rounded-md px-2 py-1 font-mono text-[8px] uppercase tracking-widest", active ? "bg-cyan-300/15 text-cyan-200" : "bg-slate-800/80 text-slate-400")}>
                       {formatVoiceSource(voice)}
                     </span>
-                    {voice.source === "customer" ? (
+                    {(voice.source === "customer" || (voice.category === "cloned" && !voice.isDefault)) ? (
                       confirmDeleteId === voice.voiceId ? (
                         <span className="flex items-center gap-1" onClick={(event) => event.stopPropagation()}>
                           <button
