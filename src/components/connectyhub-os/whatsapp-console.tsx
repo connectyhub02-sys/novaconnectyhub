@@ -2023,6 +2023,19 @@ function VoiceSelector({
         </NeonBadge>
       </div>
 
+      {selectedVoice?.source === "customer" ? (
+        <div className={cn(
+          "mt-3 rounded-lg border px-3 py-2 text-[12px] leading-5",
+          selectedVoice.status === "verification_required"
+            ? "border-amber-300/20 bg-amber-300/10 text-amber-100"
+            : "border-emerald-300/20 bg-emerald-300/10 text-emerald-100",
+        )}>
+          {selectedVoice.status === "verification_required"
+            ? `Sua voz "${selectedVoice.name}" foi clonada mas esta pendente de verificacao. Enquanto isso, o agente usara a voz padrao.`
+            : `Sua voz "${selectedVoice.name}" esta clonada e ativa. O agente vai usar esta voz nas respostas em audio.`}
+        </div>
+      ) : null}
+
       {errorMessage ? (
         <div className="mt-3 rounded-lg border border-amber-300/20 bg-amber-300/10 px-3 py-2 text-[12px] leading-5 text-amber-100">
           {errorMessage}
@@ -2184,8 +2197,20 @@ function VoiceSelector({
                       </span>
                     </span>
                   </span>
-                  <span className={cn("rounded-md px-2 py-1 font-mono text-[8px] uppercase tracking-widest", active ? "bg-cyan-300/15 text-cyan-200" : "bg-slate-800/80 text-slate-400")}>
-                    {formatVoiceSource(voice)}
+                  <span className="flex items-center gap-1.5">
+                    {voice.source === "customer" ? (
+                      <span className={cn(
+                        "rounded-md px-2 py-1 font-mono text-[8px] uppercase tracking-widest",
+                        voice.status === "verification_required"
+                          ? "bg-amber-300/15 text-amber-200"
+                          : "bg-emerald-300/15 text-emerald-200",
+                      )}>
+                        {voice.status === "verification_required" ? "pendente" : "pronta"}
+                      </span>
+                    ) : null}
+                    <span className={cn("rounded-md px-2 py-1 font-mono text-[8px] uppercase tracking-widest", active ? "bg-cyan-300/15 text-cyan-200" : "bg-slate-800/80 text-slate-400")}>
+                      {formatVoiceSource(voice)}
+                    </span>
                   </span>
                 </button>
               );
