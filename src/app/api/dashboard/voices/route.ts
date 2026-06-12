@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { createCustomerVoiceClone } from "@/lib/elevenlabs/voice-cloning";
+import { createCustomerVoiceClone, deleteCustomerVoiceClone } from "@/lib/elevenlabs/voice-cloning";
 import { listWhatsappAudioVoices } from "@/lib/elevenlabs/voices";
 import { requireClientCompanyAccess } from "@/lib/client-os/companies";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
@@ -63,6 +63,38 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     return NextResponse.json(formatError(error), { status: resolveErrorStatus(error) });
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  const workspace = await getCurrentWorkspace();
+
+  if (!workspace) {
+    return NextResponse.json({ error: "Sessao obrigatoria." }, { status: 401 });
+  }
+
+  const body = await request.json().catch(() => null) as { companyId?: string; voiceId?: string } | null;
+  const companyId = body?.companyId?.trim();
+  const voiceId = body?.voiceId?.trim();
+
+  if (!companyId || !voiceId) {
+    return NextResponse.json({ error: "Informe a empresa e a voz para excluir." }, { status: 422 });
+  }
+
+  try {
+    const organization = await requireClientCompanyAccess({
+      userId: workspace.user.id,
+      companyId,
+    });
+    await deleteCustomerVoiceClone({ organizationId: organization.id, voiceId });
+    const audio = await listWhatsappAudioVoices({ organizationId: organization.id });
+
+    return NextResponse.json({
+      audio,
+      notice: { tone: "success", message: "Voz excluida." },
+    });
+  } catch (error) {
+    return NextResponse.json(formatError(error), { status: 500 });
   }
 }
 

@@ -22,6 +22,35 @@ export type CustomerVoiceClone = {
   requiresVerification: boolean;
 };
 
+export async function deleteCustomerVoiceClone(input: {
+  organizationId: string;
+  voiceId: string;
+  client?: SupabaseClient;
+}) {
+  const client = input.client ?? createServiceClient();
+  const credentials = await loadElevenLabsCredentials(client);
+
+  const { data: voice } = await client
+    .from("customer_voices")
+    .select("id, provider_voice_id, status")
+    .eq("organization_id", input.organizationId)
+    .eq("provider_voice_id", input.voiceId)
+    .eq("provider", "elevenlabs")
+    .maybeSingle<{ id: string; provider_voice_id: string; status: string }>();
+
+  if (!voice) {
+    throw new Error("Voz nao encontrada ou ja foi removida.");
+  }
+
+  const elevenLabs = new ElevenLabsClient({ apiKey: credentials.apiKey });
+  await elevenLabs.voices.delete(voice.provider_voice_id).catch(() => {});
+
+  await client
+    .from("customer_voices")
+    .update({ status: "deleted" })
+    .eq("id", voice.id);
+}
+
 const maxVoiceNameLength = 80;
 const maxCloneFiles = 5;
 const maxCloneFileBytes = 25 * 1024 * 1024;

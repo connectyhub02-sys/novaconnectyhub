@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { createCustomerVoiceClone } from "@/lib/elevenlabs/voice-cloning";
+import { createCustomerVoiceClone, deleteCustomerVoiceClone } from "@/lib/elevenlabs/voice-cloning";
 import { listWhatsappAudioVoices } from "@/lib/elevenlabs/voices";
 import { requirePlatformAdmin } from "@/lib/supabase/admin-auth";
 import { requirePlatformWhatsappSector } from "@/lib/admin/platform-whatsapp-console";
@@ -65,6 +65,37 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     return NextResponse.json(formatError(error), { status: resolveErrorStatus(error) });
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  const auth = await requirePlatformAdmin();
+
+  if (auth instanceof NextResponse) {
+    return auth;
+  }
+
+  const body = await request.json().catch(() => null) as { sectorId?: string; voiceId?: string } | null;
+  const sectorId = body?.sectorId?.trim();
+  const voiceId = body?.voiceId?.trim();
+
+  if (!sectorId || !voiceId) {
+    return NextResponse.json({ error: "Informe o setor e a voz para excluir." }, { status: 422 });
+  }
+
+  try {
+    const client = createServiceClient();
+    const sector = await requirePlatformWhatsappSector(client, sectorId);
+    const organizationId = await resolveOrganizationId(client, sector.id);
+    await deleteCustomerVoiceClone({ organizationId, voiceId, client });
+    const audio = await listWhatsappAudioVoices({ organizationId: organizationId || fallbackVoiceOrganizationId, client });
+
+    return NextResponse.json({
+      audio,
+      notice: { tone: "success", message: "Voz excluida." },
+    });
+  } catch (error) {
+    return NextResponse.json(formatError(error), { status: 500 });
   }
 }
 

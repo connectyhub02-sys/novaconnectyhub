@@ -1934,6 +1934,8 @@ function VoiceSelector({
   const [removeNoise, setRemoveNoise] = useState(true);
   const [cloneSaving, setCloneSaving] = useState(false);
   const [cloneError, setCloneError] = useState<string | null>(null);
+  const [deletingVoiceId, setDeletingVoiceId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const selectedVoiceId = behavior.audioVoiceId || defaultVoiceId || "";
   const selectedVoice = voices.find((voice) => voice.voiceId === selectedVoiceId) ?? voices[0] ?? null;
   const canClone = Boolean(companyId && cloneName.trim() && cloneFiles.length > 0 && cloneConsent && !cloneSaving);
@@ -2000,6 +2002,31 @@ function VoiceSelector({
       setCloneError(error instanceof Error ? error.message : "Erro inesperado ao clonar voz.");
     } finally {
       setCloneSaving(false);
+    }
+  }
+
+  async function deleteVoice(voiceId: string) {
+    setDeletingVoiceId(voiceId);
+
+    try {
+      const response = await fetch(endpoint, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [entityIdKey]: companyId, voiceId }),
+      });
+      const data = (await response.json().catch(() => null)) as { audio?: WhatsappState["audio"]; notice?: Notice; error?: string } | null;
+
+      if (!response.ok || !data?.audio) {
+        throw new Error(data?.error ?? "Nao foi possivel excluir a voz.");
+      }
+
+      const resetVoiceId = voiceId === selectedVoiceId ? (defaultVoiceId ?? "") : selectedVoiceId;
+      onCloned(data.audio, resetVoiceId, data.notice);
+    } catch (error) {
+      setCloneError(error instanceof Error ? error.message : "Erro ao excluir voz.");
+    } finally {
+      setDeletingVoiceId(null);
+      setConfirmDeleteId(null);
     }
   }
 
@@ -2211,6 +2238,36 @@ function VoiceSelector({
                     <span className={cn("rounded-md px-2 py-1 font-mono text-[8px] uppercase tracking-widest", active ? "bg-cyan-300/15 text-cyan-200" : "bg-slate-800/80 text-slate-400")}>
                       {formatVoiceSource(voice)}
                     </span>
+                    {voice.source === "customer" ? (
+                      confirmDeleteId === voice.voiceId ? (
+                        <span className="flex items-center gap-1" onClick={(event) => event.stopPropagation()}>
+                          <button
+                            type="button"
+                            className="rounded-md bg-rose-500/20 px-2 py-1 font-mono text-[8px] uppercase tracking-widest text-rose-300 hover:bg-rose-500/30 disabled:opacity-50"
+                            disabled={deletingVoiceId === voice.voiceId}
+                            onClick={(event) => { event.stopPropagation(); deleteVoice(voice.voiceId); }}
+                          >
+                            {deletingVoiceId === voice.voiceId ? <Loader2 className="inline h-3 w-3 animate-spin" /> : "sim"}
+                          </button>
+                          <button
+                            type="button"
+                            className="rounded-md bg-slate-800/80 px-2 py-1 font-mono text-[8px] uppercase tracking-widest text-slate-400 hover:bg-slate-700/80"
+                            onClick={(event) => { event.stopPropagation(); setConfirmDeleteId(null); }}
+                          >
+                            nao
+                          </button>
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          className="rounded-md p-1 text-slate-500 hover:bg-rose-500/15 hover:text-rose-300"
+                          title="Excluir voz"
+                          onClick={(event) => { event.stopPropagation(); setConfirmDeleteId(voice.voiceId); }}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )
+                    ) : null}
                   </span>
                 </button>
               );
