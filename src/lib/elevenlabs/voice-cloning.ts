@@ -1,9 +1,11 @@
 import "server-only";
 
+import { randomUUID } from "node:crypto";
 import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServiceClient } from "@/lib/supabase/service";
-import { loadElevenLabsCredentials } from "./credentials";
+import { loadR2Config, putR2Object } from "@/lib/storage/r2";
+import { loadElevenLabsCredentials, type ElevenLabsCredentials } from "./credentials";
 
 type CloneVoiceFile = {
   file: File;
@@ -96,6 +98,12 @@ export async function createCustomerVoiceClone(input: {
     throw new Error(`Voz criada, mas nao foi possivel salvar no ConnectyHub: ${error.message}`);
   }
 
+  generateVoicePreview(client, elevenLabs, credentials, {
+    voiceId: response.voiceId,
+    voiceRecordId: data?.id ?? null,
+    organizationId: input.organizationId,
+  }).catch(() => {});
+
   return {
     id: data?.id ?? null,
     voiceId: response.voiceId,
@@ -179,4 +187,61 @@ function inferContentType(filename: string) {
 function isAllowedAudioFile(filename: string, contentType: string) {
   const extension = filename.split(".").pop()?.toLowerCase() ?? "";
   return contentType.startsWith("audio/") || allowedAudioExtensions.has(extension);
+}
+
+const previewText = "Oi, essa e a minha voz clonada. Estou pronta pra atender no WhatsApp!";
+
+async function generateVoicePreview(
+  client: SupabaseClient,
+  elevenLabs: ElevenLabsClient,
+  credentials: ElevenLabsCredentials,
+  input: { voiceId: string; voiceRecordId: string | null; organizationId: string },
+) {
+  const audioStream = await elevenLabs.textToSpeech.convert(input.voiceId, {
+    text: previewText,
+    modelId: credentials.defaultModelId,
+    outputFormat: credentials.outputFormat,
+    voiceSettings: { stability: 0.48, similarityBoost: 0.78, style: 0.22, useSpeakerBoost: true },
+  });
+
+  const chunks: Uint8Array[] = [];
+  const reader = audioStream.getReader();
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (value) chunks.push(value);
+  }
+  const totalLength = chunks.reduce((sum, c) => sum + c.byteLength, 0);
+  const bytes = new Uint8Array(totalLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+
+  const r2Config = await loadR2Config(client);
+  if (!r2Config.ok) return;
+
+  const objectKey = `voice-previews/${input.organizationId}/${input.voiceId}-${randomUUID()}.mp3`;
+  const upload = await putR2Object(r2Config.config, objectKey, bytes, "audio/mpeg");
+  if (!upload.ok) return;
+
+  if (input.voiceRecordId) {
+    const { data } = await client
+      .from("customer_voices")
+      .select("metadata")
+      .eq("id", input.voiceRecordId)
+      .maybeSingle<{ metadata: Record<string, unknown> | null }>();
+
+    await client
+      .from("customer_voices")
+      .update({
+        metadata: {
+          ...(data?.metadata ?? {}),
+          preview_url: upload.publicUrl,
+          preview_generated_at: new Date().toISOString(),
+        },
+      })
+      .eq("id", input.voiceRecordId);
+  }
 }

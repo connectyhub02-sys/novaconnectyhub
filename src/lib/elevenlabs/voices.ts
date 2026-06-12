@@ -36,6 +36,7 @@ type CustomerVoiceRow = {
   status: string | null;
   consent_status: string | null;
   default_for_agents: boolean | null;
+  metadata: Record<string, unknown> | null;
 };
 
 const remoteVoiceTimeoutMs = 6500;
@@ -128,11 +129,12 @@ export async function listWhatsappAudioVoices(input: {
     }
 
     const existing = voices.get(voiceId);
+    const metadataPreview = typeof voice.metadata?.preview_url === "string" ? normalizeUrl(voice.metadata.preview_url) : null;
     voices.set(voiceId, {
       voiceId,
       name: voice.name.trim() || existing?.name || "Voz do cliente",
       source: "customer",
-      previewUrl: existing?.previewUrl ?? null,
+      previewUrl: existing?.previewUrl ?? metadataPreview ?? null,
       category: existing?.category ?? null,
       status: voice.status ?? existing?.status ?? null,
       publicOwnerId: existing?.publicOwnerId ?? null,
@@ -252,7 +254,7 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, fallback: 
 async function listCustomerVoices(client: SupabaseClient, organizationId: string) {
   const { data, error } = await client
     .from("customer_voices")
-    .select("provider_voice_id, name, status, consent_status, default_for_agents")
+    .select("provider_voice_id, name, status, consent_status, default_for_agents, metadata")
     .eq("organization_id", organizationId)
     .eq("provider", "elevenlabs")
     .not("provider_voice_id", "is", null)
