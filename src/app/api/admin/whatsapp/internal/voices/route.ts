@@ -1,19 +1,21 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createCustomerVoiceClone } from "@/lib/elevenlabs/voice-cloning";
 import { listWhatsappAudioVoices } from "@/lib/elevenlabs/voices";
-import { requireClientCompanyAccess } from "@/lib/client-os/companies";
-import { getCurrentWorkspace } from "@/lib/supabase/profile";
+import { requirePlatformAdmin } from "@/lib/supabase/admin-auth";
+import { requirePlatformWhatsappSector } from "@/lib/admin/platform-whatsapp-console";
+import { createServiceClient } from "@/lib/supabase/service";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const consentText = "Confirmo que tenho direito e consentimento para clonar esta voz na ConnectyHub.";
+const fallbackVoiceOrganizationId = "00000000-0000-4000-8000-000000000000";
 
 export async function POST(request: NextRequest) {
-  const workspace = await getCurrentWorkspace();
+  const auth = await requirePlatformAdmin();
 
-  if (!workspace) {
-    return NextResponse.json({ error: "Sessao obrigatoria." }, { status: 401 });
+  if (auth instanceof NextResponse) {
+    return auth;
   }
 
   const formData = await request.formData().catch(() => null);
@@ -22,14 +24,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Envie os dados da voz em multipart/form-data." }, { status: 400 });
   }
 
-  const companyId = asString(formData.get("companyId"));
+  const sectorId = asString(formData.get("sectorId"));
   const name = asString(formData.get("name"));
   const consentAccepted = asBoolean(formData.get("consentAccepted"));
   const removeBackgroundNoise = asBoolean(formData.get("removeBackgroundNoise"));
   const files = formData.getAll("files").filter(isFormFile);
 
-  if (!companyId) {
-    return NextResponse.json({ error: "Escolha uma empresa antes de clonar a voz." }, { status: 422 });
+  if (!sectorId) {
+    return NextResponse.json({ error: "Escolha um setor antes de clonar a voz." }, { status: 422 });
   }
 
   if (!consentAccepted) {
@@ -37,19 +39,19 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const organization = await requireClientCompanyAccess({
-      userId: workspace.user.id,
-      companyId,
-    });
+    const client = createServiceClient();
+    const sector = await requirePlatformWhatsappSector(client, sectorId);
+    const organizationId = await resolveOrganizationId(client, sector.id);
     const voice = await createCustomerVoiceClone({
-      organizationId: organization.id,
-      userId: workspace.user.id,
+      organizationId,
+      userId: auth.userId,
       name: name ?? "",
       files,
       consentText,
       removeBackgroundNoise,
+      client,
     });
-    const audio = await listWhatsappAudioVoices({ organizationId: organization.id });
+    const audio = await listWhatsappAudioVoices({ organizationId: organizationId || fallbackVoiceOrganizationId, client });
 
     return NextResponse.json({
       voice,
@@ -64,6 +66,34 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     return NextResponse.json(formatError(error), { status: resolveErrorStatus(error) });
   }
+}
+
+async function resolveOrganizationId(client: ReturnType<typeof createServiceClient>, sectorId: string) {
+  const { data } = await client
+    .from("whatsapp_instances")
+    .select("organization_id")
+    .eq("provider", "uazapi")
+    .contains("metadata", { admin_whatsapp: true, sector_id: sectorId })
+    .neq("status", "archived")
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<{ organization_id: string }>();
+
+  if (data?.organization_id) {
+    return data.organization_id;
+  }
+
+  const { data: org } = await client
+    .from("organizations")
+    .select("id")
+    .eq("slug", "connectyhub-platform-whatsapp")
+    .maybeSingle<{ id: string }>();
+
+  if (!org?.id) {
+    throw new Error("Conecte o WhatsApp do setor antes de clonar a voz.");
+  }
+
+  return org.id;
 }
 
 function asString(value: FormDataEntryValue | null) {

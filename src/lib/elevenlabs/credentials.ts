@@ -47,7 +47,7 @@ export async function loadElevenLabsCredentials(client: SupabaseClient = createS
     .order("updated_at", { ascending: false });
 
   if (error) {
-    throw new Error(`Nao foi possivel carregar as credenciais ElevenLabs: ${error.message}`);
+    throw new Error(`Nao foi possivel carregar as credenciais de voz: ${error.message}`);
   }
 
   for (const credential of (data ?? []) as CredentialRow[]) {
@@ -73,7 +73,7 @@ export async function loadElevenLabsCredentials(client: SupabaseClient = createS
   const apiKey = values.get("ELEVENLABS_API_KEY")?.trim() ?? "";
 
   if (!apiKey) {
-    throw new Error("Configure ELEVENLABS_API_KEY na sala de manutencao antes de gerar audio.");
+    throw new Error("Configure a chave de voz na sala de manutencao antes de gerar audio.");
   }
 
   const outputFormat = normalizeOutputFormat(values.get("ELEVENLABS_OUTPUT_FORMAT"));

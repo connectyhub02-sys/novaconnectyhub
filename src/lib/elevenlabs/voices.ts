@@ -45,7 +45,7 @@ const libraryVoicePageLimit = 1;
 const remoteVoiceTimeoutFallback = {
   voices: [] as ElevenLabs.Voice[],
   libraryVoices: [] as ElevenLabs.LibraryVoiceResponse[],
-  errorMessage: "A biblioteca de vozes do ElevenLabs demorou para responder. O painel abriu com as vozes salvas e a voz padrao.",
+  errorMessage: "A biblioteca de vozes demorou para responder. O painel abriu com as vozes salvas e a voz padrao.",
 };
 
 export async function listWhatsappAudioVoices(input: {
@@ -55,7 +55,7 @@ export async function listWhatsappAudioVoices(input: {
   const client = input.client ?? createServiceClient();
   const credentials = await loadElevenLabsCredentials(client).catch((error: unknown) => {
     return {
-      errorMessage: error instanceof Error ? error.message : "ElevenLabs nao configurado.",
+      errorMessage: error instanceof Error ? error.message : "Servico de voz nao configurado.",
     };
   });
 
@@ -83,7 +83,7 @@ export async function listWhatsappAudioVoices(input: {
 
     voices.set(voice.voiceId, {
       voiceId: voice.voiceId,
-      name: voice.name?.trim() || "Voz ElevenLabs",
+      name: voice.name?.trim() || "Voz ConnectyHub",
       source: voice.voiceId === credentials.defaultVoiceId ? "platform" : "elevenlabs",
       previewUrl: normalizeUrl(voice.previewUrl),
       category: voice.category ?? null,
@@ -105,7 +105,7 @@ export async function listWhatsappAudioVoices(input: {
 
     voices.set(voice.voiceId, {
       voiceId: voice.voiceId,
-      name: voice.name?.trim() || "Voz ElevenLabs",
+      name: voice.name?.trim() || "Voz ConnectyHub",
       source: "library",
       previewUrl: normalizeUrl(voice.previewUrl),
       category: voice.category ?? null,
@@ -220,14 +220,14 @@ async function listRemoteVoices(apiKey: string) {
       voices,
       libraryVoices,
       errorMessage: accountHasMore || libraryHasMore
-        ? "Mostrando uma selecao inicial de vozes ElevenLabs para manter o painel rapido."
+        ? "Mostrando uma selecao inicial de vozes para manter o painel rapido."
         : null,
     };
   } catch (error) {
     return {
       voices: [],
       libraryVoices: [],
-      errorMessage: error instanceof Error ? error.message : "Nao foi possivel carregar as vozes ElevenLabs.",
+      errorMessage: error instanceof Error ? error.message : "Nao foi possivel carregar as vozes.",
     };
   }
 }

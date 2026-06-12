@@ -192,7 +192,7 @@ async function ensureSharedVoiceAvailable(
 
   try {
     await elevenLabs.voices.share(publicOwnerId, input.voiceId, {
-      newName: input.name?.trim() || "Voz ElevenLabs",
+      newName: input.name?.trim() || "Voz ConnectyHub",
       bookmarked: true,
     });
   } catch {

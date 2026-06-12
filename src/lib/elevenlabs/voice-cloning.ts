@@ -93,7 +93,7 @@ export async function createCustomerVoiceClone(input: {
 
   if (error) {
     await elevenLabs.voices.delete(response.voiceId).catch(() => null);
-    throw new Error(`Voz criada na ElevenLabs, mas nao foi possivel salvar no ConnectyHub: ${error.message}`);
+    throw new Error(`Voz criada, mas nao foi possivel salvar no ConnectyHub: ${error.message}`);
   }
 
   return {

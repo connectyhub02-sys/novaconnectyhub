@@ -310,7 +310,7 @@ export const adminWhatsappConsoleVariant = {
   },
   connectionEnabled: true,
   connectionDisabledReason: "Crie o agente do setor antes de conectar o WhatsApp interno.",
-  voiceCloneEnabled: false,
+  voiceCloneEnabled: true,
 } satisfies WhatsappConsoleVariant;
 
 export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { variant?: WhatsappConsoleVariant }) {
@@ -1054,7 +1054,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
                 </div>
               </BehaviorSection>
 
-              <BehaviorSection title="Voz do agente" description="Escolhe a voz ElevenLabs usada quando o agente responder em audio.">
+              <BehaviorSection title="Voz do agente" description="Escolhe a voz usada quando o agente responder em audio.">
                 <VoiceSelector
                   behavior={behaviorDraft}
                   companyId={selectedCompanyId}
@@ -2041,9 +2041,9 @@ function VoiceSelector({
             <span>
               <span className="flex items-center gap-1.5 text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>
                 Clonar minha voz
-                <InfoHint text="Cria uma voz propria na ElevenLabs usando audios enviados pelo usuario com consentimento." />
+                <InfoHint text="Cria uma voz propria usando audios enviados pelo usuario com consentimento." />
               </span>
-              <span className="block text-[11px] text-slate-500">Instant Voice Clone com consentimento do usuario.</span>
+              <span className="block text-[11px] text-slate-500">Clonagem de voz com consentimento do usuario.</span>
             </span>
           </span>
           <span className="font-mono text-[9px] uppercase tracking-widest text-cyan-200">{cloneOpen ? "fechar" : "abrir"}</span>
@@ -2207,7 +2207,7 @@ function VoiceSelector({
         </>
       ) : (
         <div className="mt-3 rounded-lg border border-amber-300/20 bg-amber-300/10 px-3 py-2 text-[12px] leading-5 text-amber-100">
-          {errorMessage ?? "Nenhuma voz ElevenLabs disponivel."}
+          {errorMessage ?? "Nenhuma voz disponivel."}
         </div>
       )}
     </div>
@@ -2615,7 +2615,7 @@ function formatVoiceSource(voice: AudioVoiceOption) {
 }
 
 function formatVoiceDetails(voice: AudioVoiceOption) {
-  return [voice.category, voice.language, voice.accent, voice.gender, voice.useCase].filter(Boolean).join(" / ") || "ElevenLabs";
+  return [voice.category, voice.language, voice.accent, voice.gender, voice.useCase].filter(Boolean).join(" / ") || "voz padrao";
 }
 
 function formatBytes(bytes: number | null | undefined) {
