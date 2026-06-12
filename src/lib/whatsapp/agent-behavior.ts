@@ -41,6 +41,7 @@ export type WhatsappBehaviorConfig = {
   sendStickers: boolean;
   stickerProbability: number;
   proactiveMedia: boolean;
+  agentLearning: boolean;
   mediaImage: boolean;
   mediaDocument: boolean;
   mediaVideo: boolean;
@@ -172,6 +173,7 @@ export const defaultWhatsappBehaviorConfig: WhatsappBehaviorConfig = {
   sendStickers: false,
   stickerProbability: 20,
   proactiveMedia: false,
+  agentLearning: true,
   mediaImage: true,
   mediaDocument: true,
   mediaVideo: false,
@@ -251,6 +253,7 @@ export function normalizeWhatsappBehaviorConfig(value: unknown): WhatsappBehavio
     merged.naturalAudioFillers = false;
     merged.sendStickers = false;
     merged.proactiveMedia = false;
+    merged.agentLearning = false;
   }
 
   return merged;

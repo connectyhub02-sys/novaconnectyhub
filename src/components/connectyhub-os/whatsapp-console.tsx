@@ -16,6 +16,7 @@ import {
   Fingerprint,
   Forward,
   Globe2,
+  GraduationCap,
   ImageIcon,
   Link2,
   Loader2,
@@ -1107,6 +1108,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
                   <ToggleTile icon={Mic} label="Preenchimento vocal" description="Adiciona hesitacoes naturais nos audios: 'hmm', 'entao', pausas de pensamento." checked={behaviorDraft.naturalAudioFillers} onChange={() => updateBehavior("naturalAudioFillers", !behaviorDraft.naturalAudioFillers)} />
                   <ToggleTile icon={Sticker} label="Figurinhas" description="Envia stickers contextuais ocasionalmente para simular comportamento natural do WhatsApp." checked={behaviorDraft.sendStickers} onChange={() => updateBehavior("sendStickers", !behaviorDraft.sendStickers)} />
                   <ToggleTile icon={Forward} label="Midia proativa" description="Permite que o agente envie imagens, catalogos ou midias relevantes de forma espontanea." checked={behaviorDraft.proactiveMedia} onChange={() => updateBehavior("proactiveMedia", !behaviorDraft.proactiveMedia)} />
+                  <ToggleTile icon={GraduationCap} label="Aprendizado continuo" description="O agente aprende com cada atendimento e cita experiencias reais anonimizadas de outros clientes." checked={behaviorDraft.agentLearning} onChange={() => updateBehavior("agentLearning", !behaviorDraft.agentLearning)} />
                 </div>
                 <div className="mt-2 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
                   <NumberField label="Chance reacao %" description="Probabilidade de reagir a cada mensagem com emoji." value={behaviorDraft.reactionProbability} min={0} max={100} onChange={(value) => updateBehavior("reactionProbability", value)} />
@@ -2566,6 +2568,7 @@ function BehaviorSummary({
     behavior.naturalAudioFillers,
     behavior.sendStickers,
     behavior.proactiveMedia,
+    behavior.agentLearning,
   ].filter(Boolean).length;
 
   return (
@@ -2575,7 +2578,7 @@ function BehaviorSummary({
         <PromptCheck label="Agente ativo" active={behavior.agentEnabled} />
         <PromptCheck label={`${activeScenarios}/8 cenarios ativos`} active={activeScenarios >= 4} />
         <PromptCheck label={`${activeMedia}/4 midias ativas`} active={activeMedia >= 2} />
-        <PromptCheck label={`${activeHuman}/11 simulacao humana`} active={activeHuman >= 5} />
+        <PromptCheck label={`${activeHuman}/12 simulacao humana`} active={activeHuman >= 5} />
         <PromptCheck label="Intervencao humana" active={behavior.humanIntervention} />
         <PromptCheck label="Temporizacao inteligente" active={behavior.smartTiming} />
       </div>

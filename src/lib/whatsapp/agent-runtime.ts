@@ -393,6 +393,7 @@ export async function processWhatsappAgentRun(input: {
       lead,
       knowledge: context.knowledge,
       linkButtons: context.linkButtons,
+      learnings: context.learnings,
       messages: context.messages,
       userText,
     });
@@ -442,6 +443,8 @@ export async function processWhatsappAgentRun(input: {
     if (behavior.alwaysOnline) {
       await setPresenceAvailable(context.credentials, token);
     }
+
+    extractConversationLearning(client, context).catch(() => {});
 
     return await completeRun(client, run.id, preview(aiText, 500), {
       sent: true,
@@ -514,6 +517,10 @@ async function loadRunContext(client: SupabaseClient, runId: string) {
       readRecord(agent.metadata)?.whatsapp_behavior_config,
   );
 
+  const learnings = behavior.agentLearning
+    ? await loadAgentLearnings(client, run.organization_id, isPlatformWhatsapp)
+    : [];
+
   return {
     run,
     organization,
@@ -528,6 +535,7 @@ async function loadRunContext(client: SupabaseClient, runId: string) {
     geminiCredentials,
     knowledge,
     linkButtons,
+    learnings,
     behavior,
     qualification: normalizeLeadQualificationConfig(readRecord(agent.metadata)?.[leadQualificationConfigKey]),
     providerChatId: asString(metadata?.providerChatId),
@@ -742,6 +750,26 @@ async function loadPlatformSectorLinkButtons(client: SupabaseClient, sectorId: s
   return ((data ?? []) as LinkButtonMemoryRow[]).map(mapRuntimeLinkButton);
 }
 
+async function loadAgentLearnings(client: SupabaseClient, organizationId: string, isPlatform: boolean) {
+  const query = client
+    .from("intelligence_memory")
+    .select("id, title, content, metadata, created_at")
+    .eq("memory_type", "social_proof")
+    .contains("tags", ["agent_learning"])
+    .order("created_at", { ascending: false })
+    .limit(8);
+
+  if (isPlatform) {
+    query.eq("scope", "platform").is("organization_id", null);
+  } else {
+    query.eq("scope", "organization").eq("organization_id", organizationId);
+  }
+
+  const { data, error } = await query;
+  if (error) return [];
+  return (data ?? []) as KnowledgeMemoryRow[];
+}
+
 function mapRuntimeLinkButton(row: LinkButtonMemoryRow): RuntimeLinkButton {
   const metadata = readRecord(row.metadata) ?? {};
 
@@ -766,6 +794,7 @@ async function generateAgentResponse(input: {
   lead: LeadRow | null;
   knowledge: KnowledgeMemoryRow[];
   linkButtons: RuntimeLinkButton[];
+  learnings: KnowledgeMemoryRow[];
   messages: ConversationMessageRow[];
   userText: string;
 }) {
@@ -816,6 +845,7 @@ function buildSystemInstruction(input: {
   lead: LeadRow | null;
   knowledge: KnowledgeMemoryRow[];
   linkButtons: RuntimeLinkButton[];
+  learnings: KnowledgeMemoryRow[];
 }) {
   const agentPrompt = renderPromptVariables(input.agent.prompt?.trim() || defaultWhatsappAgentPrompt, input);
   const globalPrompt = renderPromptVariables(input.globalAgent?.prompt?.trim() || defaultWhatsappGlobalPrompt, input);
@@ -853,6 +883,7 @@ function buildSystemInstruction(input: {
     ...buildIntentionalTyposInstruction(input.behavior),
     ...buildNaturalAudioFillersInstruction(input.behavior),
     ...buildProactiveMediaInstruction(input.behavior),
+    ...buildSocialProofInstruction(input.learnings),
     "",
     "REGRAS TECNICAS DE SAIDA:",
     "- Responda sempre em portugues do Brasil.",
@@ -929,6 +960,21 @@ function buildProactiveMediaInstruction(behavior: WhatsappBehaviorConfig): strin
     "- Nunca invente midias que nao existem no contexto. So sugira quando houver material real.",
     "- Maximo 1 sugestao de midia por conversa, a nao ser que o lead peca mais.",
   ];
+}
+
+function buildSocialProofInstruction(learnings: KnowledgeMemoryRow[]): string[] {
+  if (learnings.length === 0) return [];
+  const lines: string[] = [
+    "",
+    "EXPERIENCIAS RECENTES COM CLIENTES:",
+    "Voce tem experiencias reais de conversas anteriores. Use como prova social quando fizer sentido — nunca force.",
+    "Cite de forma natural: 'inclusive tava falando com um cliente agora pouco que teve a mesma duvida', 'um pessoal que fechou semana passada me falou que...'.",
+    "NUNCA revele nomes, telefones ou dados identificaveis. Use 'um cliente', 'um pessoal', 'uma empresa aqui'.",
+  ];
+  for (const learning of learnings) {
+    lines.push(`- ${learning.content}`);
+  }
+  return lines;
 }
 
 async function analyzeAndPersistLeadQualification(
@@ -2130,6 +2176,70 @@ async function completeRun(client: SupabaseClient, runId: string, outputSummary:
     .eq("id", runId);
 
   return { status: "completed", ...metadata };
+}
+
+async function extractConversationLearning(
+  client: SupabaseClient,
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+) {
+  if (!context.behavior.agentLearning || context.messages.length < 4) return;
+
+  const conversationText = buildConversationText(context.messages);
+  if (conversationText.length < 200) return;
+
+  const isPlatform = readRecord(context.instance.metadata)?.admin_whatsapp === true;
+
+  const prompt = [
+    "Analise esta conversa de WhatsApp entre um agente comercial e um lead.",
+    "Extraia NO MAXIMO 1 aprendizado util e anonimizado que o agente pode citar em futuras conversas como prova social.",
+    "",
+    "O aprendizado deve ser:",
+    "- Anonimo: sem nomes, telefones, empresas ou dados identificaveis.",
+    "- Util: algo que gere confianca em outros leads (resultado positivo, duvida comum resolvida, caso de sucesso).",
+    "- Natural: algo que o agente possa citar como 'tava falando com um cliente que...'.",
+    "",
+    "Se a conversa nao tiver nada relevante para aprender, responda apenas: NENHUM",
+    "",
+    "Se tiver, responda APENAS com o aprendizado em uma unica frase curta (maximo 150 caracteres), sem aspas, sem prefixo.",
+    "",
+    "CONVERSA:",
+    conversationText,
+  ].join("\n");
+
+  const url = new URL(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(context.agent.model_id || context.geminiCredentials.model)}:generateContent`);
+  url.searchParams.set("key", context.geminiCredentials.apiKey);
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: { temperature: 0.3, maxOutputTokens: 200 },
+      safetySettings: geminiSafetySettings,
+    }),
+    cache: "no-store",
+  });
+
+  if (!response.ok) return;
+
+  const data = await readProviderResponse(response);
+  const text = extractGeminiText(data)?.trim();
+  if (!text || text.toUpperCase().includes("NENHUM") || text.length > 200) return;
+
+  await client.from("intelligence_memory").insert({
+    scope: isPlatform ? "platform" : "organization",
+    organization_id: isPlatform ? null : context.run.organization_id,
+    memory_type: "social_proof",
+    title: `Aprendizado: ${text.slice(0, 60)}`,
+    content: text,
+    importance: 0.6,
+    tags: ["agent_learning", "whatsapp"],
+    created_by_agent_id: context.agent.id,
+    metadata: {
+      source_conversation_id: context.conversationId,
+      extracted_at: new Date().toISOString(),
+    },
+  });
 }
 
 function readCachedRunResponseText(metadata: JsonRecord | null) {
