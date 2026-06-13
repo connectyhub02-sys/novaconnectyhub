@@ -655,8 +655,8 @@ async function enqueueWhatsappAgentRun(
     return null;
   }
 
-  const debounceSeconds = Math.max(behavior.debounceSeconds, 5);
-  const debounceCutoff = new Date(Date.now() - debounceSeconds * 1000).toISOString();
+  const messageGroupingSeconds = Math.max(behavior.timingTextBurstSeconds, 5);
+  const groupingCutoff = new Date(Date.now() - messageGroupingSeconds * 1000).toISOString();
   const { data: recentRun } = await client
     .from("agent_runs")
     .select("id")
@@ -664,7 +664,7 @@ async function enqueueWhatsappAgentRun(
     .eq("trigger_source", "connectyhub/whatsapp.message.received")
     .in("run_status", ["queued", "running"])
     .contains("metadata", { conversationId: input.conversationId })
-    .gte("created_at", debounceCutoff)
+    .gte("created_at", groupingCutoff)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle<{ id: string }>();
@@ -688,6 +688,7 @@ async function enqueueWhatsappAgentRun(
           providerEventType: input.eventType,
           debounced: true,
           debounced_at: new Date().toISOString(),
+          messageGroupingSeconds,
           ...(isPlatformWhatsapp
             ? {
                 platformWhatsapp: true,
@@ -724,6 +725,7 @@ async function enqueueWhatsappAgentRun(
         phoneNumber: input.phoneNumber,
         messageType: input.messageType,
         providerEventType: input.eventType,
+        messageGroupingSeconds,
         ...(isPlatformWhatsapp
           ? {
               platformWhatsapp: true,

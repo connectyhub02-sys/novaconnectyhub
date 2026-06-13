@@ -157,20 +157,7 @@ export async function getWhatsappAgentRunDelaySeconds(input: {
     return 0;
   }
 
-  const behavior = context.behavior;
-
-  if (!behavior.smartTiming) {
-    return 0;
-  }
-
-  const type = context.messageType.toLowerCase();
-
-  if (type.includes("audio")) return behavior.timingAudioSeconds;
-  if (type.includes("video")) return behavior.timingVideoCaptionSeconds;
-  if (type.includes("document") || type.includes("file")) return behavior.timingDocumentCaptionSeconds;
-  if (type.includes("image") || type.includes("media")) return behavior.timingMediaCaptionSeconds;
-
-  return behavior.timingTextSeconds;
+  return resolveWhatsappAgentRunDelaySeconds(context);
 }
 
 export async function processQueuedWhatsappAgentRuns(input: {
@@ -593,6 +580,8 @@ async function loadRunBehaviorContext(client: SupabaseClient, runId: string) {
 
   const metadata = readRecord(run.metadata);
   const whatsappInstanceId = asString(metadata?.whatsappInstanceId);
+  const conversationId = asString(metadata?.conversationId);
+  const providerMessageId = asString(metadata?.providerMessageId);
 
   if (!whatsappInstanceId) {
     return null;
@@ -607,11 +596,158 @@ async function loadRunBehaviorContext(client: SupabaseClient, runId: string) {
     readRecord(instance?.metadata)?.behavior_config ??
       readRecord(globalAgent?.metadata)?.whatsapp_behavior_config,
   );
+  const recentInboundMessages = conversationId
+    ? await loadRecentInboundMessagesForDelay(client, conversationId)
+    : [];
+  const latestInbound = providerMessageId
+    ? recentInboundMessages.find((message) => message.provider_message_id === providerMessageId) ?? recentInboundMessages[0] ?? null
+    : recentInboundMessages[0] ?? null;
 
   return {
     behavior,
     messageType: asString(metadata?.messageType) ?? "text",
+    debounced: metadata?.debounced === true,
+    latestInbound,
+    recentInboundMessages,
   };
+}
+
+async function loadRecentInboundMessagesForDelay(client: SupabaseClient, conversationId: string) {
+  const { data, error } = await client
+    .from("conversation_messages")
+    .select("id, provider_message_id, provider_chat_id, direction, message_type, text_content, payload, occurred_at")
+    .eq("conversation_id", conversationId)
+    .eq("direction", "inbound")
+    .order("occurred_at", { ascending: false })
+    .limit(8);
+
+  if (error) {
+    throw new Error(`Nao foi possivel carregar mensagens recentes para temporizacao: ${error.message}`);
+  }
+
+  return (data ?? []) as ConversationMessageRow[];
+}
+
+function resolveWhatsappAgentRunDelaySeconds(context: {
+  behavior: WhatsappBehaviorConfig;
+  messageType: string;
+  debounced: boolean;
+  latestInbound: ConversationMessageRow | null;
+  recentInboundMessages: ConversationMessageRow[];
+}) {
+  const { behavior, latestInbound } = context;
+
+  if (!behavior.smartTiming) {
+    return 0;
+  }
+
+  const groupingSeconds = Math.max(behavior.timingTextBurstSeconds, 5);
+  const previousInbound = findPreviousInboundForDelay(context.recentInboundMessages, latestInbound, groupingSeconds);
+  const currentKind = resolveInboundDelayKind(latestInbound, context.messageType);
+  const previousKind = resolveInboundDelayKind(previousInbound, previousInbound?.message_type ?? null);
+  const hasRecentPrevious = Boolean(previousInbound);
+
+  if (currentKind === "button") {
+    return behavior.timingButtonDelaySeconds;
+  }
+
+  if (currentKind === "audio") {
+    return previousKind === "text" && hasRecentPrevious
+      ? behavior.timingAudioThenTextSeconds
+      : behavior.timingAudioSeconds;
+  }
+
+  if (currentKind === "text") {
+    if (previousKind === "audio" && hasRecentPrevious) return behavior.timingAudioThenTextSeconds;
+    if (previousKind === "image" && hasRecentPrevious) return behavior.timingMediaThenTextSeconds;
+    if (previousKind === "document" && hasRecentPrevious) return behavior.timingDocumentCaptionSeconds;
+    if (previousKind === "video" && hasRecentPrevious) return behavior.timingVideoCaptionSeconds;
+    if ((previousKind === "text" && hasRecentPrevious) || context.debounced) return behavior.timingTextBurstSeconds;
+    return behavior.timingTextSeconds;
+  }
+
+  if (currentKind === "image") {
+    if (hasDelayCaption(latestInbound)) return behavior.timingMediaCaptionSeconds;
+    if (previousKind === "text" && hasRecentPrevious) return behavior.timingMediaThenTextSeconds;
+    return behavior.timingMediaOnlySeconds;
+  }
+
+  if (currentKind === "video") {
+    if (hasDelayCaption(latestInbound) || (previousKind === "text" && hasRecentPrevious)) return behavior.timingVideoCaptionSeconds;
+    return behavior.timingVideoOnlySeconds;
+  }
+
+  if (currentKind === "document") {
+    if (hasDelayCaption(latestInbound) || (previousKind === "text" && hasRecentPrevious)) return behavior.timingDocumentCaptionSeconds;
+    return behavior.timingDocumentOnlySeconds;
+  }
+
+  return context.debounced ? behavior.timingTextBurstSeconds : behavior.timingTextSeconds;
+}
+
+function findPreviousInboundForDelay(messages: ConversationMessageRow[], current: ConversationMessageRow | null, windowSeconds: number) {
+  if (!current) {
+    return null;
+  }
+
+  const currentTime = new Date(current.occurred_at).getTime();
+
+  if (!Number.isFinite(currentTime)) {
+    return null;
+  }
+
+  return messages.find((message) => {
+    if (message.id === current.id) return false;
+    const messageTime = new Date(message.occurred_at).getTime();
+    return Number.isFinite(messageTime)
+      && messageTime <= currentTime
+      && currentTime - messageTime <= windowSeconds * 1000;
+  }) ?? null;
+}
+
+function resolveInboundDelayKind(message: ConversationMessageRow | null, fallbackType: string | null): InboundMediaKind | "audio" | "button" | "text" | "unknown" {
+  if (message && isAudioMessage(message)) {
+    return "audio";
+  }
+
+  const mediaKind = message ? detectInboundMediaKind(message) : null;
+
+  if (mediaKind) {
+    return mediaKind;
+  }
+
+  const providerMessage = message ? readProviderMessageRecord(message) : null;
+  const content = readRecord(providerMessage?.content);
+  const signature = normalizeSearch([
+    fallbackType,
+    message?.message_type,
+    asString(providerMessage?.messageType),
+    asString(providerMessage?.mediaType),
+    asString(providerMessage?.type),
+    asString(providerMessage?.kind),
+    asString(content?.type),
+  ].filter(Boolean).join(" "));
+
+  if (signature.includes("audio") || signature.includes("ptt") || signature.includes("opus")) return "audio";
+  if (signature.includes("button") || signature.includes("list") || signature.includes("interactive") || signature.includes("template")) return "button";
+  if (signature.includes("video")) return "video";
+  if (signature.includes("image") || signature.includes("photo") || signature.includes("media")) return "image";
+  if (signature.includes("document") || signature.includes("file") || signature.includes("pdf")) return "document";
+  if (signature.includes("text") || signature.includes("conversation") || signature.includes("chat")) return "text";
+
+  return hasDelayText(message) ? "text" : "unknown";
+}
+
+function hasDelayCaption(message: ConversationMessageRow | null) {
+  if (!message) {
+    return false;
+  }
+
+  return Boolean((extractMessageCaption(message) ?? message.text_content ?? "").trim());
+}
+
+function hasDelayText(message: ConversationMessageRow | null) {
+  return Boolean(message?.text_content?.trim());
 }
 
 async function loadOrganization(client: SupabaseClient, organizationId: string) {

@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { after } from "next/server";
 import { ingestUazapiWebhook } from "@/lib/whatsapp/webhook-ingest";
-import { processWhatsappAgentRun } from "@/lib/whatsapp/agent-runtime";
+import { getWhatsappAgentRunDelaySeconds, processWhatsappAgentRun } from "@/lib/whatsapp/agent-runtime";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -96,7 +96,8 @@ function previewPayload(payload: unknown) {
 
 function scheduleWhatsappAgentFallback(runId: string) {
   after(async () => {
-    await sleep(8_000);
+    const delaySeconds = await getWhatsappAgentRunDelaySeconds({ runId }).catch(() => 0);
+    await sleep(Math.max(delaySeconds * 1000, 8_000));
     await processWhatsappAgentRun({ runId }).catch((error: unknown) => {
       console.error(
         "[uazapi:webhook:fallback]",
