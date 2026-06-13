@@ -2,6 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
+import { generateElevenLabsAudio } from "@/lib/elevenlabs/tts";
 import { listWhatsappAudioVoices, type WhatsappAudioVoiceState } from "@/lib/elevenlabs/voices";
 import {
   leadQualificationConfigKey,
@@ -523,6 +524,112 @@ export async function disconnectPlatformWhatsappConsole(input: {
         ? "A sessao interna ja estava desconectada no provedor. Gere um novo QR Code para reconectar."
         : "WhatsApp interno desconectado.",
     },
+    qrCode: null,
+    pairCode: null,
+  };
+}
+
+export async function sendPlatformWhatsappConsoleTest(input: {
+  sectorId: string;
+  userId: string;
+  phone: string;
+  text: string;
+  client?: SupabaseClient;
+}): Promise<ClientWhatsappActionResult> {
+  const phone = normalizePhone(input.phone);
+  const text = input.text.trim();
+
+  if (!phone || phone.length < 10) {
+    throw new Error("Informe um numero com DDD para enviar o teste.");
+  }
+
+  if (!text) {
+    throw new Error("Escreva a mensagem de teste.");
+  }
+
+  const client = input.client ?? createServiceClient();
+  const credentials = await loadUazapiCredentials(client);
+  const sector = await requirePlatformWhatsappSector(client, input.sectorId);
+  const [agent, instance] = await Promise.all([
+    requireSectorWhatsappAgent(client, sector.id),
+    requireSectorWhatsappInstance(client, sector.id),
+  ]);
+  const behavior = getBehaviorConfig(agent, instance);
+  const token = decryptInstanceToken(instance);
+
+  if (!token) {
+    throw new Error("Conecte o WhatsApp interno antes de enviar mensagens.");
+  }
+
+  let deliveryMode: "text" | "audio" = "text";
+  let generatedAudio: Awaited<ReturnType<typeof generateElevenLabsAudio>> | null = null;
+
+  if (behavior.responseMode === "audio") {
+    deliveryMode = "audio";
+    generatedAudio = await generateElevenLabsAudio({
+      organizationId: instance.organization_id,
+      userId: input.userId,
+      text,
+      voiceId: behavior.audioVoiceId || null,
+      voicePublicOwnerId: behavior.audioVoicePublicOwnerId || null,
+      voiceName: behavior.audioVoiceName || null,
+      modelId: behavior.audioModelId || null,
+      source: "whatsapp_internal_test",
+      metadata: {
+        whatsappInstanceId: instance.id,
+        sectorId: sector.id,
+        sectorCode: sector.sector_code,
+        testPhone: phone,
+        audioVoiceName: behavior.audioVoiceName || null,
+      },
+      client,
+    });
+
+    await callUazapi(credentials, "/send/media", {
+      method: "POST",
+      token,
+      body: {
+        number: phone,
+        type: "ptt",
+        file: generatedAudio.audioUrl,
+        track_source: "connectyhub",
+        track_id: `platform_test_audio_${Date.now()}`,
+      },
+    });
+  } else {
+    await callUazapi(credentials, "/send/text", {
+      method: "POST",
+      token,
+      body: {
+        number: phone,
+        text,
+        linkPreview: true,
+        track_source: "connectyhub",
+        track_id: `platform_test_${Date.now()}`,
+      },
+    });
+  }
+
+  await client
+    .from("whatsapp_instances")
+    .update({
+      last_message_at: new Date().toISOString(),
+      metadata: {
+        ...(instance.metadata ?? {}),
+        last_platform_action: "send_test",
+        last_test_delivery_mode: deliveryMode,
+        last_test_audio_media_id: generatedAudio?.mediaId ?? null,
+        last_test_audio_object_key: generatedAudio?.objectKey ?? null,
+      },
+    })
+    .eq("id", instance.id);
+
+  revalidateWhatsappAdmin();
+  const state = await getPlatformWhatsappConsoleState({ sectorId: sector.id, userId: input.userId, client });
+
+  return {
+    state,
+    notice: { tone: "success", message: deliveryMode === "audio" ? "Audio de teste interno enviado." : "Mensagem de teste interna enviada." },
     qrCode: null,
     pairCode: null,
   };

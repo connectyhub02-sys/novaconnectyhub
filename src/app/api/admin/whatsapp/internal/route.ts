@@ -5,6 +5,7 @@ import {
   disconnectPlatformWhatsappConsole,
   getPlatformWhatsappConsoleState,
   refreshPlatformWhatsappConsoleStatus,
+  sendPlatformWhatsappConsoleTest,
   updatePlatformWhatsappConsoleSettings,
 } from "@/lib/admin/platform-whatsapp-console";
 import { requirePlatformAdmin } from "@/lib/supabase/admin-auth";
@@ -22,6 +23,8 @@ type ActionBody = {
   agentPrompt?: unknown;
   behavior?: unknown;
   qualificationConfig?: unknown;
+  phone?: unknown;
+  text?: unknown;
 };
 
 export async function GET(request: NextRequest) {
@@ -92,6 +95,18 @@ export async function POST(request: NextRequest) {
       const result = await disconnectPlatformWhatsappConsole({
         sectorId: asString(body?.sectorId) ?? "",
         userId: auth.userId,
+        client: createServiceClient(),
+      });
+
+      return NextResponse.json(result);
+    }
+
+    if (action === "send_test") {
+      const result = await sendPlatformWhatsappConsoleTest({
+        sectorId: asString(body?.sectorId) ?? "",
+        userId: auth.userId,
+        phone: typeof body?.phone === "string" ? body.phone : "",
+        text: typeof body?.text === "string" ? body.text : "",
         client: createServiceClient(),
       });
 
