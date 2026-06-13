@@ -1270,31 +1270,41 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
                 />
               </BehaviorSection>
 
-              <div className="grid gap-3 xl:grid-cols-2">
-                <BehaviorSection title="Modo de conversa" description="Define se o agente responde sempre por texto, sempre por audio ou acompanha o formato usado pelo lead.">
-                  <ModeSelector<WhatsappResponseMode>
-                    value={behaviorDraft.responseMode}
-                    options={[
-                      { value: "text", label: "Sempre texto", description: "Responde por texto", help: "Mesmo se o lead mandar audio, o agente responde em texto." },
-                      { value: "audio", label: "Sempre audio", description: "Prefere audio", help: "O agente gera audio com a voz selecionada sempre que possivel." },
-                      { value: "mirror", label: "Espelho", description: "Segue o lead", help: "Se o lead mandar audio, responde em audio; se mandar texto, responde em texto." },
-                    ]}
-                    onChange={(value) => updateBehavior("responseMode", value)}
-                  />
-                </BehaviorSection>
+              <BehaviorSection title="Conversa e rapport" description="Agrupa o modo de resposta e a adaptacao de linguagem. Ao abrir, os dois controles aparecem juntos.">
+                <div className="grid gap-3 xl:grid-cols-2">
+                  <div className="grid gap-2">
+                    <div>
+                      <h3 className="font-mono text-[9px] font-bold uppercase tracking-widest text-slate-100">Modo de conversa</h3>
+                      <p className="mt-1 text-[11px] leading-4 text-slate-400">Define se o agente responde por texto, audio ou segue o formato usado pelo lead.</p>
+                    </div>
+                    <ModeSelector<WhatsappResponseMode>
+                      value={behaviorDraft.responseMode}
+                      options={[
+                        { value: "text", label: "Sempre texto", description: "Responde por texto", help: "Mesmo se o lead mandar audio, o agente responde em texto." },
+                        { value: "audio", label: "Sempre audio", description: "Prefere audio", help: "O agente gera audio com a voz selecionada sempre que possivel." },
+                        { value: "mirror", label: "Espelho", description: "Segue o lead", help: "Se o lead mandar audio, responde em audio; se mandar texto, responde em texto." },
+                      ]}
+                      onChange={(value) => updateBehavior("responseMode", value)}
+                    />
+                  </div>
 
-                <BehaviorSection title="Rapport adaptativo" description="Controla quanto a IA adapta linguagem, formalidade e tom ao perfil do lead.">
-                  <ModeSelector<WhatsappRapportMode>
-                    value={behaviorDraft.adaptiveRapportMode}
-                    options={[
-                      { value: "off", label: "Desligado", description: "Usa o prompt", help: "Mantem exatamente o tom definido no prompt do agente." },
-                      { value: "soft", label: "Suave", description: "Adapta leve", help: "Ajusta pequenas escolhas de linguagem sem mudar o estilo principal." },
-                      { value: "strong", label: "Forte", description: "Adapta mais", help: "Adapta com mais forca a linguagem do lead quando fizer sentido." },
-                    ]}
-                    onChange={(value) => updateBehavior("adaptiveRapportMode", value)}
-                  />
-                </BehaviorSection>
-              </div>
+                  <div className="grid gap-2">
+                    <div>
+                      <h3 className="font-mono text-[9px] font-bold uppercase tracking-widest text-slate-100">Rapport adaptativo</h3>
+                      <p className="mt-1 text-[11px] leading-4 text-slate-400">Controla quanto o agente adapta linguagem, formalidade e tom ao perfil do lead.</p>
+                    </div>
+                    <ModeSelector<WhatsappRapportMode>
+                      value={behaviorDraft.adaptiveRapportMode}
+                      options={[
+                        { value: "off", label: "Desligado", description: "Usa o prompt", help: "Mantem exatamente o tom definido no prompt do agente." },
+                        { value: "soft", label: "Suave", description: "Adapta leve", help: "Ajusta pequenas escolhas de linguagem sem mudar o estilo principal." },
+                        { value: "strong", label: "Forte", description: "Adapta mais", help: "Adapta com mais forca a linguagem do lead quando fizer sentido." },
+                      ]}
+                      onChange={(value) => updateBehavior("adaptiveRapportMode", value)}
+                    />
+                  </div>
+                </div>
+              </BehaviorSection>
 
               <BehaviorSection title="Simulacao humana" description="Comportamentos que fazem o agente parecer uma pessoa real no WhatsApp.">
                 <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
