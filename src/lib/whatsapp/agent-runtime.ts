@@ -3315,22 +3315,33 @@ function isBotLoopRisk(messages: ConversationMessageRow[]) {
     return false;
   }
 
-  if (inbound.length >= 8 && outbound.length >= 3) {
-    return true;
-  }
-
   const counts = new Map<string, number>();
   for (const message of inbound) {
     counts.set(message.text, (counts.get(message.text) ?? 0) + 1);
   }
 
   const repeatedInbound = Array.from(counts.entries()).find(([, count]) => count >= 4)?.[0] ?? null;
-  if (repeatedInbound && outbound.length >= 2 && !isLowSignalLeadPing(repeatedInbound)) {
+  if (
+    repeatedInbound &&
+    outbound.length >= 2 &&
+    !isLowSignalLeadPing(repeatedInbound) &&
+    hasRepeatedOutboundText(outbound)
+  ) {
     return true;
   }
 
   const botPatterns = /\b(bot|chatbot|atendimento automatico|mensagem automatica|menu principal|digite \d|nao entendi)\b/;
   return outbound.length >= 2 && inbound.filter((message) => botPatterns.test(message.text)).length >= 2;
+}
+
+function hasRepeatedOutboundText(messages: Array<{ text: string }>) {
+  const counts = new Map<string, number>();
+
+  for (const message of messages) {
+    counts.set(message.text, (counts.get(message.text) ?? 0) + 1);
+  }
+
+  return Math.max(0, ...counts.values()) >= 2;
 }
 
 function isLowSignalLeadPing(value: string) {
