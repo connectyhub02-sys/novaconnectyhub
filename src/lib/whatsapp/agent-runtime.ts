@@ -245,11 +245,15 @@ export async function processWhatsappAgentRun(input: {
 
   const { run, instance, agent, globalAgent, behavior, lead, organization } = context;
 
-  if (run.run_status !== "queued" && run.run_status !== "running") {
+  if (run.run_status !== "queued") {
     return { status: "skipped", reason: `run_${run.run_status}` };
   }
 
-  await markRun(client, run.id, "running");
+  const claimed = await claimRun(client, run.id);
+
+  if (!claimed) {
+    return { status: "skipped", reason: "run_already_claimed" };
+  }
 
   try {
     if (!behavior.agentEnabled) {
@@ -812,7 +816,7 @@ async function generateAgentResponse(input: {
       generationConfig: {
         temperature: 0.55,
         topP: 0.9,
-        maxOutputTokens: 250,
+        maxOutputTokens: 150,
       },
       safetySettings: geminiSafetySettings,
     }),
@@ -1820,7 +1824,7 @@ function resolvePreSendPresenceDelayMs(behavior: WhatsappBehaviorConfig, text: s
 }
 
 function resolveChunkDelayMs(text: string, behavior: WhatsappBehaviorConfig) {
-  const base = Math.min(Math.max(1600 + text.length * 16, 1800), 3600);
+  const base = Math.min(Math.max(3000 + text.length * 25, 3500), 7000);
   return applyCircadianFactor(applyJitter(base, behavior), behavior);
 }
 
@@ -2143,6 +2147,18 @@ async function archiveLeadForOptOut(
       },
     })
     .eq("id", context.lead.id);
+}
+
+async function claimRun(client: SupabaseClient, runId: string): Promise<boolean> {
+  const { data } = await client
+    .from("agent_runs")
+    .update({ run_status: "running", started_at: new Date().toISOString() })
+    .eq("id", runId)
+    .eq("run_status", "queued")
+    .select("id")
+    .maybeSingle<{ id: string }>();
+
+  return Boolean(data);
 }
 
 async function markRun(client: SupabaseClient, runId: string, status: string, errorMessage?: string) {
@@ -3416,7 +3432,7 @@ function splitMessage(text: string) {
   const chunks: string[] = [];
 
   for (const paragraph of paragraphs.length ? paragraphs : [text]) {
-    if (paragraph.length <= 150) {
+    if (paragraph.length <= 200) {
       chunks.push(paragraph);
       continue;
     }
@@ -3425,7 +3441,7 @@ function splitMessage(text: string) {
     let current = "";
 
     for (const sentence of sentences) {
-      if ((current + " " + sentence).trim().length > 150 && current) {
+      if ((current + " " + sentence).trim().length > 200 && current) {
         chunks.push(current);
         current = sentence;
       } else {
@@ -3436,7 +3452,7 @@ function splitMessage(text: string) {
     if (current) chunks.push(current);
   }
 
-  return chunks.slice(0, 3);
+  return chunks.slice(0, 2);
 }
 
 function extractGeminiText(value: unknown) {
