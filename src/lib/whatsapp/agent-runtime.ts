@@ -14,7 +14,6 @@ import {
 import {
   loadGeminiCredentials,
   normalizeGeminiModel,
-  defaultGeminiModel,
   type GeminiCredentials,
 } from "@/lib/gemini/credentials";
 import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
@@ -3310,8 +3309,9 @@ function isBotLoopRisk(messages: ConversationMessageRow[]) {
     text: normalizeSearch(message.text_content ?? ""),
   }));
   const inbound = recent.filter((message) => message.direction === "inbound" && message.text);
+  const outbound = recent.filter((message) => message.direction === "outbound" && message.text);
 
-  if (inbound.length >= 8) {
+  if (inbound.length >= 8 && outbound.length >= 3) {
     return true;
   }
 
@@ -3581,14 +3581,6 @@ function decryptInstanceToken(instance: InstanceRow) {
     return decryptCredentialValue(instance.instance_token_encrypted);
   } catch {
     return null;
-  }
-}
-
-function decryptCredential(credential: { encrypted_value: string; value_preview: string }) {
-  try {
-    return decryptCredentialValue(credential.encrypted_value);
-  } catch {
-    return credential.value_preview;
   }
 }
 

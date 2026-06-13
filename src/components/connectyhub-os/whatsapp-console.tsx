@@ -13,7 +13,6 @@ import {
   Clock3,
   Eye,
   FileText,
-  Fingerprint,
   Forward,
   Globe2,
   GraduationCap,

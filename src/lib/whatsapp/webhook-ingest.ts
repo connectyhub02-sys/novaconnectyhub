@@ -36,6 +36,8 @@ type WebhookEventRow = {
   id: string;
 };
 
+const HUMAN_OUTBOUND_PAUSE_MS = 60 * 60 * 1000;
+
 export type UazapiWebhookIngestResult = {
   eventId: string | null;
   eventType: string;
@@ -569,7 +571,15 @@ async function insertConversationMessage(
 }
 
 async function markConversationHandledByHuman(client: SupabaseClient, conversationId: string, message: MessageSnapshot) {
-  const pausedUntil = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+  const occurredAtMs = new Date(message.occurredAt).getTime();
+  const nowMs = Date.now();
+
+  if (Number.isFinite(occurredAtMs) && nowMs - occurredAtMs > HUMAN_OUTBOUND_PAUSE_MS) {
+    return;
+  }
+
+  const pauseBaseMs = Number.isFinite(occurredAtMs) && occurredAtMs <= nowMs ? occurredAtMs : nowMs;
+  const pausedUntil = new Date(pauseBaseMs + HUMAN_OUTBOUND_PAUSE_MS).toISOString();
   const { data } = await client
     .from("conversations")
     .select("metadata")

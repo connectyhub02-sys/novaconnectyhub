@@ -12,6 +12,10 @@ type ExistingInstanceRow = {
   organization_id: string;
 };
 
+type ExistingInstanceWithMetadataRow = ExistingInstanceRow & {
+  metadata: JsonRecord | null;
+};
+
 type OrganizationLookup = {
   organizationId: string;
   ownerUserId: string | null;
@@ -184,6 +188,32 @@ async function syncOneInstance({
   const phoneNumber = normalizePhone(readString(providerInstance, ["owner", "phone", "number", "phone_number"]));
   const displayName = readString(providerInstance, ["profileName", "name", "systemName", "displayName"]);
   const tokenPayload = buildTokenPayload(token);
+  const { data: existing, error: lookupError } = await client
+    .from("whatsapp_instances")
+    .select("id, organization_id, metadata")
+    .eq("provider", "uazapi")
+    .eq("provider_instance_id", providerInstanceId)
+    .maybeSingle<ExistingInstanceWithMetadataRow>();
+
+  if (lookupError) {
+    return {
+      ok: false,
+      skipped: {
+        providerInstanceId,
+        name,
+        reason: lookupError.message,
+      },
+      error: lookupError.message,
+    };
+  }
+
+  const syncMetadata = {
+    sync_source: "uazapi",
+    sync_reason: organization.reason,
+    webhook_status: webhookResult.ok ? "configured" : "not_configured",
+    webhook_error: webhookResult.ok ? null : webhookResult.reason,
+    synced_at: checkedAt,
+  };
   const payload = {
     organization_id: organization.organizationId,
     owner_user_id: organization.ownerUserId,
@@ -198,34 +228,12 @@ async function syncOneInstance({
     last_synced_at: checkedAt,
     provider_payload: sanitizeProviderPayload(providerInstance),
     metadata: {
-      sync_source: "uazapi",
-      sync_reason: organization.reason,
-      webhook_status: webhookResult.ok ? "configured" : "not_configured",
-      webhook_error: webhookResult.ok ? null : webhookResult.reason,
-      synced_at: checkedAt,
+      ...(isRecord(existing?.metadata) ? existing.metadata : {}),
+      ...syncMetadata,
     },
     updated_at: checkedAt,
     ...tokenPayload,
   };
-
-  const { data: existing, error: lookupError } = await client
-    .from("whatsapp_instances")
-    .select("id, organization_id")
-    .eq("provider", "uazapi")
-    .eq("provider_instance_id", providerInstanceId)
-    .maybeSingle<ExistingInstanceRow>();
-
-  if (lookupError) {
-    return {
-      ok: false,
-      skipped: {
-        providerInstanceId,
-        name,
-        reason: lookupError.message,
-      },
-      error: lookupError.message,
-    };
-  }
 
   const saveResult = existing
     ? await client.from("whatsapp_instances").update(payload).eq("id", existing.id).select("id").single()

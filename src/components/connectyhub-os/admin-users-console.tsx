@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { ExternalLink, Loader2, Mail, Shield, User } from "lucide-react";
 import { NeonBadge, PageHeader, Panel } from "./panel-primitives";
 import { cn } from "@/lib/utils";
@@ -40,29 +40,38 @@ export function AdminUsersConsole() {
   const [copiedUserId, setCopiedUserId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
 
-  const loadUsers = useCallback(async () => {
-    setLoading(true);
-    setNotice(null);
-
-    try {
-      const response = await fetch("/api/admin/users", { cache: "no-store" });
-      const data = (await response.json().catch(() => null)) as { users?: PlatformUser[]; error?: string } | null;
-
-      if (!response.ok || !data) {
-        throw new Error(data?.error ?? "Nao foi possivel carregar os usuarios.");
-      }
-
-      setUsers(data.users ?? []);
-    } catch (error) {
-      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao carregar usuarios." });
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
   useEffect(() => {
-    loadUsers();
-  }, [loadUsers]);
+    let cancelled = false;
+
+    async function loadInitialUsers() {
+      try {
+        const response = await fetch("/api/admin/users", { cache: "no-store" });
+        const data = (await response.json().catch(() => null)) as { users?: PlatformUser[]; error?: string } | null;
+
+        if (!response.ok || !data) {
+          throw new Error(data?.error ?? "Nao foi possivel carregar os usuarios.");
+        }
+
+        if (!cancelled) {
+          setUsers(data.users ?? []);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao carregar usuarios." });
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    void loadInitialUsers();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function getAccessLink(userId: string): Promise<string | null> {
     const response = await fetch("/api/admin/users/access-link", {
