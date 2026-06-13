@@ -155,13 +155,17 @@ export async function getClientWhatsappState(input: {
   client?: SupabaseClient;
 }): Promise<ClientWhatsappState> {
   const client = input.client ?? createServiceClient();
-  const [instance, agent, globalAgent, knowledgeFiles, linkButtons] = await Promise.all([
+  const [rawInstance, agent, globalAgent, knowledgeFiles, linkButtons] = await Promise.all([
     getWorkspaceInstance(client, input.organization.id),
     getWorkspaceWhatsappAgent(client, input.organization.id),
     getOrCreateWorkspaceGlobalAgent(client, input.organization, input.userId),
     listWorkspaceKnowledge(client, input.organization.id),
     listWorkspaceLinkButtons(client, input.organization.id),
   ]);
+
+  const instance = rawInstance?.instance_token_encrypted && rawInstance.status !== "connected"
+    ? await syncClientInstanceStatus(client, rawInstance).catch(() => rawInstance)
+    : rawInstance;
 
   const behavior = getBehaviorConfig(globalAgent, instance);
   const audio = await listWhatsappAudioVoices({ organizationId: input.organization.id, client });
@@ -1442,6 +1446,50 @@ function readString(value: unknown) {
 
 function readNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+async function syncClientInstanceStatus(
+  client: SupabaseClient,
+  instance: WhatsappInstanceRow,
+): Promise<WhatsappInstanceRow> {
+  const token = decryptInstanceToken(instance);
+
+  if (!token) {
+    return instance;
+  }
+
+  const credentials = await loadUazapiCredentials(client);
+  const result = await callUazapi(credentials, "/instance/status", {
+    method: "GET",
+    token,
+    tolerateError: true,
+  });
+
+  if (!result.ok) {
+    return instance;
+  }
+
+  const status = normalizeWhatsappStatus(findString(result.data, ["status", "state", "connectionStatus"]));
+
+  if (status === instance.status) {
+    return instance;
+  }
+
+  const now = new Date().toISOString();
+  const update: Record<string, unknown> = {
+    status,
+    last_synced_at: now,
+    last_heartbeat_at: now,
+  };
+
+  if (status === "connected") {
+    update.connected_at = instance.connected_at ?? now;
+    update.disconnected_at = null;
+  }
+
+  await client.from("whatsapp_instances").update(update).eq("id", instance.id);
+
+  return { ...instance, ...update } as WhatsappInstanceRow;
 }
 
 function decryptInstanceToken(instance: WhatsappInstanceRow) {

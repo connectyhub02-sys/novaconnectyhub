@@ -209,10 +209,13 @@ export async function ingestUazapiWebhook(input: {
     await client
       .from("whatsapp_instances")
       .update({
+        status: "connected",
         last_message_at: message.occurredAt,
         last_heartbeat_at: new Date().toISOString(),
+        connected_at: new Date().toISOString(),
       })
-      .eq("id", instance.id);
+      .eq("id", instance.id)
+      .in("status", ["draft", "qr_pending", "disconnected", "connected"]);
 
     await createIntelligenceEvent(client, {
       organizationId: instance.organization_id,
