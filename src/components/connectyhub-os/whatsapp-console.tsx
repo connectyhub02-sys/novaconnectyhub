@@ -225,6 +225,8 @@ type Notice = {
   message: string;
 };
 
+type WhatsappConsoleTab = "connection" | "prompt" | "qualification" | "behavior" | "multichannel" | "files";
+
 type WhatsappConsoleVariant = {
   entityIdKey: "companyId" | "sectorId";
   entitySingular: string;
@@ -389,6 +391,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
   const [newsletterJid, setNewsletterJid] = useState("");
   const [newsletterText, setNewsletterText] = useState("");
   const [channelScheduledFor, setChannelScheduledFor] = useState("");
+  const [activeTab, setActiveTab] = useState<WhatsappConsoleTab>("connection");
   const promptTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const promptSelectionRef = useRef({ start: 0, end: 0 });
   const pendingPromptCaretRef = useRef<number | null>(null);
@@ -1061,13 +1064,79 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
         />
       ) : (
       <>
+        <WhatsappConsoleCommandBar
+          agent={state.agent}
+          behavior={behaviorDraft}
+          company={selectedCompany}
+          entityLabel={variant.entityPromptLabel}
+          instance={state.instance}
+          promptChanged={promptChanged}
+          qualificationChanged={qualificationChanged}
+          settingsChanged={settingsChanged}
+          behaviorChanged={behaviorChanged}
+          promptTooLong={promptTooLong}
+          saving={running === "save_settings"}
+          disabled={!state.capability.schemaReady || !settingsChanged || promptTooLong}
+          onSave={saveAgentSettings}
+        />
+
+        <WhatsappConsoleTabs activeTab={activeTab} onChange={setActiveTab} />
+
+        {activeTab === "connection" ? (
+        <Panel
+          title="Conexao e identidade"
+          eyebrow="numero / agente / status"
+          action={<NeonBadge tone={state.instance?.status === "connected" ? "green" : "amber"}>{state.instance?.status === "connected" ? "online" : "pendente"}</NeonBadge>}
+        >
+          <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_320px]">
+            <div className="grid content-start gap-4">
+              <AgentIdentityCard agent={state.agent} company={selectedCompany} entityLabel={variant.entityPromptLabel} />
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <InfoTile label="Conversa" value={formatResponseMode(behaviorDraft.responseMode)} />
+                <InfoTile label="Rapport" value={formatRapportMode(behaviorDraft.adaptiveRapportMode)} />
+                <InfoTile label="Grupos" value={behaviorDraft.allowGroupChats ? formatGroupReplyMode(behaviorDraft.groupReplyMode) : "Pausado"} />
+                <InfoTile label="Alteracoes" value={settingsChanged ? "Pendentes" : "Salvo"} />
+              </div>
+            </div>
+            <CompactConnectionCard
+              instance={state.instance}
+              qrCode={qrCode}
+              running={running}
+              onConnect={() => runAction("connect")}
+              onDisconnect={() => runAction("disconnect")}
+              onRefresh={() => runAction("refresh_status")}
+              enabled={variant.connectionEnabled && state.capability.canConnect}
+              disabledReason={state.capability.message ?? variant.connectionDisabledReason}
+            />
+          </div>
+        </Panel>
+        ) : null}
+
+        {activeTab === "files" ? (
+        <Panel
+          title="Arquivos"
+          eyebrow="base de conhecimento"
+          action={<NeonBadge tone={state.knowledge.files.length > 0 ? "green" : "amber"}>{state.knowledge.files.length.toLocaleString("pt-BR")} arquivos</NeonBadge>}
+        >
+          <div className="max-w-xl">
+            <KnowledgeFilesPanel
+              files={state.knowledge.files}
+              knowledgeUploading={knowledgeUploading}
+              onUploadFile={uploadKnowledgeFile}
+              entitySingular={variant.entitySingular}
+            />
+          </div>
+        </Panel>
+        ) : null}
+
+        {activeTab === "prompt" ? (
         <Panel
           title="Prompt do agente"
           eyebrow="atendimento / vendas"
           action={<NeonBadge tone={promptChanged ? "amber" : "green"}>{promptChanged ? "alterado" : "salvo"}</NeonBadge>}
         >
           {state?.agent ? (
-            <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_320px]">
+            <div className="grid gap-4">
               <div className="grid gap-4">
                 <AgentIdentityCard agent={state.agent} company={selectedCompany} entityLabel={variant.entityPromptLabel} />
 
@@ -1122,32 +1191,14 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
                   />
                 </div>
               </div>
-
-              <div className="grid content-start gap-4">
-                <CompactConnectionCard
-                  instance={state.instance}
-                  qrCode={qrCode}
-                  running={running}
-                  onConnect={() => runAction("connect")}
-                  onDisconnect={() => runAction("disconnect")}
-                  onRefresh={() => runAction("refresh_status")}
-                  enabled={variant.connectionEnabled && state.capability.canConnect}
-                  disabledReason={state.capability.message ?? variant.connectionDisabledReason}
-                />
-                <KnowledgeFilesPanel
-                  files={state.knowledge.files}
-                  knowledgeUploading={knowledgeUploading}
-                  onUploadFile={uploadKnowledgeFile}
-                  entitySingular={variant.entitySingular}
-                />
-              </div>
             </div>
           ) : (
             <NoAgentState />
           )}
         </Panel>
+        ) : null}
 
-      {state?.agent ? (
+      {state?.agent && activeTab === "qualification" ? (
       <div className="mt-5">
         <Panel
           title="Qualificacao do lead"
@@ -1186,7 +1237,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
       </div>
       ) : null}
 
-      {state?.agent ? (
+      {state?.agent && activeTab === "behavior" ? (
       <div className="mt-5">
         <Panel
           title="Comportamento do agente"
@@ -1220,7 +1271,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
               </BehaviorSection>
 
               <div className="grid gap-3 xl:grid-cols-2">
-                <BehaviorSection title="Modo de conversa" description="Define se o agente responde sempre por texto, sempre por audio ou acompanha o formato usado pelo lead." defaultOpen>
+                <BehaviorSection title="Modo de conversa" description="Define se o agente responde sempre por texto, sempre por audio ou acompanha o formato usado pelo lead.">
                   <ModeSelector<WhatsappResponseMode>
                     value={behaviorDraft.responseMode}
                     options={[
@@ -1232,7 +1283,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
                   />
                 </BehaviorSection>
 
-                <BehaviorSection title="Rapport adaptativo" description="Controla quanto a IA adapta linguagem, formalidade e tom ao perfil do lead." defaultOpen>
+                <BehaviorSection title="Rapport adaptativo" description="Controla quanto a IA adapta linguagem, formalidade e tom ao perfil do lead.">
                   <ModeSelector<WhatsappRapportMode>
                     value={behaviorDraft.adaptiveRapportMode}
                     options={[
@@ -1245,7 +1296,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
                 </BehaviorSection>
               </div>
 
-              <BehaviorSection title="Simulacao humana" description="Comportamentos que fazem o agente parecer uma pessoa real no WhatsApp." defaultOpen>
+              <BehaviorSection title="Simulacao humana" description="Comportamentos que fazem o agente parecer uma pessoa real no WhatsApp.">
                 <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
                   <ToggleTile icon={PenLine} label="Linguagem humanizada" description="Instrui a IA a usar abreviacoes, emoji e tom informal de brasileiro no WhatsApp." checked={behaviorDraft.humanizedLanguage} onChange={() => updateBehavior("humanizedLanguage", !behaviorDraft.humanizedLanguage)} />
                   <ToggleTile icon={Smile} label="Reacoes emoji" description="Reage a mensagens do lead com emoji contextual antes de responder." checked={behaviorDraft.emojiReactions} onChange={() => updateBehavior("emojiReactions", !behaviorDraft.emojiReactions)} />
@@ -1269,7 +1320,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
                 </div>
               </BehaviorSection>
 
-              <BehaviorSection title="Seguranca e testes" description="Protecoes para evitar atendimento indevido, loops e conflitos com humanos." defaultOpen>
+              <BehaviorSection title="Seguranca e testes" description="Protecoes para evitar atendimento indevido, loops e conflitos com humanos.">
                 <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
                   <ToggleTile icon={ShieldCheck} label="Intervencao humana" description="Pausa a IA quando um humano assume a conversa ou quando o lead pede atendimento humano." checked={behaviorDraft.humanIntervention} onChange={() => updateBehavior("humanIntervention", !behaviorDraft.humanIntervention)} />
                   <ToggleTile icon={Bot} label="Protecao bots/loops" description="Evita conversas infinitas quando outro bot ou automacao responder o agente." checked={behaviorDraft.botLoopProtection} onChange={() => updateBehavior("botLoopProtection", !behaviorDraft.botLoopProtection)} />
@@ -1390,7 +1441,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
       </div>
       ) : null}
 
-      {state?.agent ? (
+      {state?.agent && activeTab === "multichannel" ? (
       <div className="mt-5">
         <Panel
           title="Operacao multicanal"
@@ -1504,6 +1555,156 @@ function CompanyRequiredState({ variant }: { variant: WhatsappConsoleVariant }) 
         </div>
       </div>
     </Panel>
+  );
+}
+
+const whatsappConsoleTabs: Array<{
+  id: WhatsappConsoleTab;
+  label: string;
+  description: string;
+  icon: LucideIcon;
+}> = [
+  { id: "connection", label: "Conexao", description: "Numero e status", icon: Smartphone },
+  { id: "prompt", label: "Prompt", description: "Texto do agente", icon: PenLine },
+  { id: "qualification", label: "Qualificacao", description: "CRM e score", icon: CheckCircle2 },
+  { id: "behavior", label: "Comportamento", description: "Modos e timers", icon: Shuffle },
+  { id: "multichannel", label: "Multicanal", description: "Grupos e campanhas", icon: Forward },
+  { id: "files", label: "Arquivos", description: "Conhecimento", icon: FileText },
+];
+
+function WhatsappConsoleCommandBar({
+  agent,
+  behavior,
+  company,
+  entityLabel,
+  instance,
+  promptChanged,
+  qualificationChanged,
+  settingsChanged,
+  behaviorChanged,
+  promptTooLong,
+  saving,
+  disabled,
+  onSave,
+}: {
+  agent: NonNullable<WhatsappState["agent"]>;
+  behavior: WhatsappBehaviorConfig;
+  company: ClientCompany | null;
+  entityLabel: string;
+  instance: WhatsappState["instance"];
+  promptChanged: boolean;
+  qualificationChanged: boolean;
+  settingsChanged: boolean;
+  behaviorChanged: boolean;
+  promptTooLong: boolean;
+  saving: boolean;
+  disabled: boolean;
+  onSave: () => void;
+}) {
+  const statusMeta = getStatusMeta(instance?.status ?? "draft");
+  const changedAreas = [
+    promptChanged ? "Prompt" : null,
+    qualificationChanged ? "CRM" : null,
+    behaviorChanged ? "Comportamento" : null,
+  ].filter(Boolean);
+  const changeLabel = promptTooLong
+    ? "Prompt longo"
+    : changedAreas.length > 0
+      ? changedAreas.join(", ")
+      : "Salvo";
+
+  return (
+    <div
+      className="sticky top-3 z-20 mb-4 rounded-xl border px-3 py-3 shadow-2xl shadow-slate-950/20 backdrop-blur"
+      style={{ background: "color-mix(in srgb, var(--ch-surface) 92%, transparent)", borderColor: "var(--ch-border)" }}
+    >
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
+        <div className="grid min-w-0 gap-2 sm:grid-cols-2 lg:grid-cols-5">
+          <SummaryPill label="Agente" value={agent.name} />
+          <SummaryPill label={entityLabel} value={company?.name ?? `${entityLabel} nao informado`} />
+          <SummaryPill label="WhatsApp" value={statusMeta.label} tone={instance?.status === "connected" ? "green" : "amber"} />
+          <SummaryPill label="Conversa" value={formatResponseMode(behavior.responseMode)} />
+          <SummaryPill label="Alteracoes" value={changeLabel} tone={settingsChanged ? "amber" : "green"} />
+        </div>
+        <ActionButton
+          icon={Wand2}
+          label="Salvar tudo"
+          description="Salva as alteracoes feitas nas abas do WhatsApp."
+          disabled={disabled}
+          loading={saving}
+          onClick={onSave}
+        />
+      </div>
+    </div>
+  );
+}
+
+function WhatsappConsoleTabs({
+  activeTab,
+  onChange,
+}: {
+  activeTab: WhatsappConsoleTab;
+  onChange: (tab: WhatsappConsoleTab) => void;
+}) {
+  return (
+    <div
+      className="mb-4 overflow-x-auto rounded-xl border p-1"
+      role="tablist"
+      aria-label="Secoes do painel WhatsApp"
+      style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}
+    >
+      <div className="grid min-w-[760px] grid-cols-6 gap-1">
+        {whatsappConsoleTabs.map((tab) => {
+          const active = tab.id === activeTab;
+          const Icon = tab.icon;
+
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              className={cn(
+                "grid min-h-[58px] grid-cols-[18px_minmax(0,1fr)] items-center gap-2 rounded-lg px-3 text-left transition",
+                active ? "bg-cyan-300/15 text-cyan-100 ring-1 ring-cyan-300/30" : "text-slate-400 hover:bg-white/5 hover:text-slate-200",
+              )}
+              onClick={() => onChange(tab.id)}
+            >
+              <Icon className="h-4 w-4" />
+              <span className="min-w-0">
+                <span className="block truncate text-[12px] font-semibold leading-4">{tab.label}</span>
+                <span className="mt-0.5 block truncate font-mono text-[8px] uppercase tracking-widest opacity-70">{tab.description}</span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function SummaryPill({
+  label,
+  value,
+  tone = "default",
+}: {
+  label: string;
+  value: string;
+  tone?: "default" | "green" | "amber";
+}) {
+  return (
+    <div className="min-w-0 rounded-lg border px-3 py-2" style={{ background: "var(--ch-surface)", borderColor: "var(--ch-border)" }}>
+      <p className="truncate font-mono text-[8px] uppercase tracking-widest text-slate-500">{label}</p>
+      <p
+        className={cn(
+          "mt-1 truncate text-[12px] font-semibold leading-4",
+          tone === "green" ? "text-emerald-300" : tone === "amber" ? "text-amber-200" : "text-slate-100",
+        )}
+        title={value}
+      >
+        {value}
+      </p>
+    </div>
   );
 }
 
@@ -1741,7 +1942,7 @@ function PromptBox({
         onKeyUp={(event) => recordSelection(event.currentTarget)}
         onMouseUp={(event) => recordSelection(event.currentTarget)}
         onSelect={(event) => recordSelection(event.currentTarget)}
-        className="min-h-[430px] w-full resize-y rounded-xl border px-4 py-3 font-mono text-[12px] leading-5 outline-none"
+        className="min-h-[320px] w-full resize-y rounded-xl border px-4 py-3 font-mono text-[12px] leading-5 outline-none"
         placeholder="Defina o comportamento do agente."
       />
       <span className="mt-2 block font-mono text-[10px] uppercase tracking-widest text-slate-500">{helper}</span>
@@ -2643,7 +2844,6 @@ function LeadQualificationEditor({
       <BehaviorSection
         title="Perguntas do CRM"
         description="Cada pergunta vira um campo no arquivo do lead e soma pontos quando for respondida."
-        defaultOpen
       >
         <div className="grid gap-2">
           {normalized.questions.map((question, index) => (
