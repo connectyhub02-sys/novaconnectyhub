@@ -1664,16 +1664,19 @@ function WhatsappConsoleTabs({
               type="button"
               role="tab"
               aria-selected={active}
+              aria-current={active ? "page" : undefined}
               className={cn(
                 "grid min-h-[58px] grid-cols-[18px_minmax(0,1fr)] items-center gap-2 rounded-lg px-3 text-left transition",
-                active ? "bg-cyan-300/15 text-cyan-100 ring-1 ring-cyan-300/30" : "text-slate-400 hover:bg-white/5 hover:text-slate-200",
+                active
+                  ? "bg-cyan-300 text-slate-950 shadow-[0_0_22px_rgba(103,232,249,0.22)] ring-1 ring-cyan-100/70"
+                  : "text-slate-200 hover:bg-white/10 hover:text-white",
               )}
               onClick={() => onChange(tab.id)}
             >
-              <Icon className="h-4 w-4" />
+              <Icon className={cn("h-4 w-4", active ? "text-slate-950" : "text-slate-200")} />
               <span className="min-w-0">
-                <span className="block truncate text-[12px] font-semibold leading-4">{tab.label}</span>
-                <span className="mt-0.5 block truncate font-mono text-[8px] uppercase tracking-widest opacity-70">{tab.description}</span>
+                <span className={cn("block truncate text-[12px] font-semibold leading-4", active ? "text-slate-950" : "text-slate-100")}>{tab.label}</span>
+                <span className={cn("mt-0.5 block truncate font-mono text-[8px] uppercase tracking-widest", active ? "text-slate-800" : "text-slate-300")}>{tab.description}</span>
               </span>
             </button>
           );
