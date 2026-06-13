@@ -569,7 +569,7 @@ async function insertConversationMessage(
 }
 
 async function markConversationHandledByHuman(client: SupabaseClient, conversationId: string, message: MessageSnapshot) {
-  const pausedUntil = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+  const pausedUntil = new Date(Date.now() + 60 * 60 * 1000).toISOString();
   const { data } = await client
     .from("conversations")
     .select("metadata")
@@ -622,6 +622,56 @@ async function enqueueWhatsappAgentRun(
 
   if (!agent?.id) {
     return null;
+  }
+
+  const behaviorConfig = isRecord(instanceMetadata?.behavior_config) ? instanceMetadata.behavior_config : {};
+  const debounceSeconds = typeof behaviorConfig.debounceSeconds === "number" && Number.isFinite(behaviorConfig.debounceSeconds)
+    ? Math.max(behaviorConfig.debounceSeconds, 5)
+    : 15;
+  const debounceCutoff = new Date(Date.now() - debounceSeconds * 1000).toISOString();
+  const { data: recentRun } = await client
+    .from("agent_runs")
+    .select("id")
+    .eq("agent_id", agent.id)
+    .eq("trigger_source", "connectyhub/whatsapp.message.received")
+    .in("run_status", ["queued", "running"])
+    .contains("metadata", { conversationId: input.conversationId })
+    .gte("created_at", debounceCutoff)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<{ id: string }>();
+
+  if (recentRun) {
+    await client
+      .from("agent_runs")
+      .update({
+        input_summary: preview(input.textContent, 240) ?? "Mensagem WhatsApp recebida.",
+        metadata: {
+          leadId: input.leadId,
+          conversationId: input.conversationId,
+          whatsappInstanceId: input.whatsappInstanceId,
+          webhookEventId: input.webhookEventId,
+          providerMessageId: input.providerMessageId,
+          providerChatId: input.providerChatId,
+          phoneNumber: input.phoneNumber,
+          messageType: input.messageType,
+          providerEventType: input.eventType,
+          debounced: true,
+          debounced_at: new Date().toISOString(),
+          ...(isPlatformWhatsapp
+            ? {
+                platformWhatsapp: true,
+                sectorId,
+                sectorCode: asString(instanceMetadata?.sector_code),
+                sectorName: asString(instanceMetadata?.sector_name),
+              }
+            : {}),
+        },
+      })
+      .eq("id", recentRun.id)
+      .eq("run_status", "queued");
+
+    return { id: recentRun.id, metadata: null };
   }
 
   const { data, error } = await client
@@ -832,7 +882,23 @@ function isApiAuthoredWhatsappMessage(message: MessageSnapshot, payload: JsonRec
 
   const trackSource = findNestedString(payload, ["track_source", "trackSource"]);
 
-  return Boolean(trackSource?.toLowerCase().includes("connectyhub"));
+  if (trackSource?.toLowerCase().includes("connectyhub")) {
+    return true;
+  }
+
+  const trackId = findNestedString(payload, ["track_id", "trackId"]);
+
+  if (trackId && /^(agent_text_|agent_audio_|lead_opt_out_|human_handoff_)/.test(trackId)) {
+    return true;
+  }
+
+  const agentRunId = findNestedString(payload, ["agent_run_id", "agentRunId"]);
+
+  if (agentRunId) {
+    return true;
+  }
+
+  return false;
 }
 
 function buildLeadMetadata(
