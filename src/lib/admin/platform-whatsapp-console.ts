@@ -270,7 +270,9 @@ export async function connectPlatformWhatsappConsole(input: {
   const existing = await getSectorWhatsappInstance(client, sector.id);
   let instance = existing?.instance_token_encrypted
     ? existing
-    : await createPlatformProviderInstance(client, credentials, sector, input.userId, agent);
+    : existing?.provider_instance_id
+      ? await recoverProviderInstanceToken(client, credentials, existing) ?? await createPlatformProviderInstance(client, credentials, sector, input.userId, agent)
+      : await createPlatformProviderInstance(client, credentials, sector, input.userId, agent);
   let token = decryptInstanceToken(instance);
 
   if (!token) {
@@ -800,6 +802,68 @@ async function createPlatformProviderInstance(
 
   if (error || !data) {
     throw new Error(error?.message ?? "Nao foi possivel salvar a instancia WhatsApp interna.");
+  }
+
+  return data;
+}
+
+async function recoverProviderInstanceToken(
+  client: SupabaseClient,
+  credentials: UazapiCredentials,
+  instance: WhatsappInstanceRow,
+): Promise<WhatsappInstanceRow | null> {
+  const response = await callUazapi(credentials, "/instance/all", {
+    method: "GET",
+    admin: true,
+    tolerateError: true,
+  });
+
+  if (!response.ok || !response.data) {
+    return null;
+  }
+
+  const instances = Array.isArray(response.data)
+    ? response.data
+    : Array.isArray((response.data as Record<string, unknown>)?.instances)
+      ? (response.data as Record<string, unknown>).instances as unknown[]
+      : [];
+
+  const match = instances.find((item) => {
+    if (!item || typeof item !== "object") return false;
+    const record = item as Record<string, unknown>;
+    const id = record.id ?? record.instance_id ?? record.instanceId;
+    return typeof id === "string" && id === instance.provider_instance_id;
+  }) as Record<string, unknown> | undefined;
+
+  if (!match) {
+    return null;
+  }
+
+  const token = findString(match, ["token", "instanceToken", "instance_token"]);
+
+  if (!token) {
+    return null;
+  }
+
+  const now = new Date().toISOString();
+  const { data, error } = await client
+    .from("whatsapp_instances")
+    .update({
+      instance_token_preview: previewCredentialValue(token, "secret"),
+      instance_token_encrypted: encryptCredentialValue(token),
+      last_synced_at: now,
+      metadata: {
+        ...(instance.metadata ?? {}),
+        token_recovered_at: now,
+        token_recovery_source: "uazapi_admin_api",
+      },
+    })
+    .eq("id", instance.id)
+    .select(whatsappInstanceSelectColumns)
+    .single<WhatsappInstanceRow>();
+
+  if (error || !data) {
+    return null;
   }
 
   return data;

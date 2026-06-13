@@ -2740,6 +2740,7 @@ function CompactConnectionCard({
   onDisconnect: () => void;
   onRefresh: () => void;
 }) {
+  const [qrModalOpen, setQrModalOpen] = useState(false);
   const status = instance?.status ?? "draft";
   const meta = getStatusMeta(status);
   const Icon = meta.icon;
@@ -2781,14 +2782,16 @@ function CompactConnectionCard({
             </p>
           </div>
         ) : visibleQrCode ? (
-          <Image
-            alt="QR Code para conectar o WhatsApp"
-            className="rounded-lg border bg-white p-2"
-            height={144}
-            src={visibleQrCode}
-            unoptimized
-            width={144}
-          />
+          <button className="cursor-pointer border-0 bg-transparent p-0" onClick={() => setQrModalOpen(true)} title="Clique para ampliar" type="button">
+            <Image
+              alt="QR Code para conectar o WhatsApp"
+              className="rounded-lg border bg-white p-2 transition-transform hover:scale-105"
+              height={144}
+              src={visibleQrCode}
+              unoptimized
+              width={144}
+            />
+          </button>
         ) : profileImageUrl ? (
           <div className="grid place-items-center">
             <WhatsappAvatar alt={`Foto do WhatsApp ${whatsappLabel}`} fallback={whatsappLabel} imageUrl={profileImageUrl} size="xl" />
@@ -2844,6 +2847,44 @@ function CompactConnectionCard({
           />
         </div>
       </div>
+
+      {qrModalOpen && visibleQrCode && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+          onClick={() => setQrModalOpen(false)}
+          onKeyDown={(e) => e.key === "Escape" && setQrModalOpen(false)}
+          role="button"
+          tabIndex={0}
+        >
+          <div
+            className="relative rounded-2xl bg-white p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+          >
+            <button
+              className="absolute right-3 top-3 grid h-8 w-8 place-items-center rounded-full bg-slate-100 text-slate-500 transition-colors hover:bg-slate-200 hover:text-slate-700"
+              onClick={() => setQrModalOpen(false)}
+              type="button"
+            >
+              <X className="h-4 w-4" />
+            </button>
+            <p className="mb-3 text-center text-sm font-semibold text-slate-700">
+              Escaneie o QR Code pelo WhatsApp
+            </p>
+            <Image
+              alt="QR Code ampliado"
+              className="rounded-lg"
+              height={360}
+              src={visibleQrCode}
+              unoptimized
+              width={360}
+            />
+            <p className="mt-3 text-center text-xs text-slate-400">
+              Abra o WhatsApp &gt; Dispositivos conectados &gt; Conectar dispositivo
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

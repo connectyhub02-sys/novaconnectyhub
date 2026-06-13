@@ -179,7 +179,9 @@ export async function connectClientWhatsapp(input: {
   const existing = await getWorkspaceInstance(client, input.organization.id);
   let instance = existing?.instance_token_encrypted
     ? existing
-    : await createProviderInstance(client, credentials, input.organization, input.userId);
+    : existing?.provider_instance_id
+      ? await recoverProviderInstanceToken(client, credentials, existing) ?? await createProviderInstance(client, credentials, input.organization, input.userId)
+      : await createProviderInstance(client, credentials, input.organization, input.userId);
   let token = decryptInstanceToken(instance);
 
   if (!token) {
@@ -771,6 +773,57 @@ async function getWorkspaceInstance(client: SupabaseClient, organizationId: stri
   }
 
   return data ?? null;
+}
+
+async function recoverProviderInstanceToken(
+  client: SupabaseClient,
+  credentials: UazapiCredentials,
+  instance: WhatsappInstanceRow,
+): Promise<WhatsappInstanceRow | null> {
+  const response = await callUazapi(credentials, "/instance/all", {
+    method: "GET",
+    admin: true,
+    tolerateError: true,
+  });
+
+  if (!response.ok || !response.data) return null;
+
+  const list = Array.isArray(response.data)
+    ? response.data
+    : Array.isArray((response.data as Record<string, unknown>)?.instances)
+      ? (response.data as Record<string, unknown>).instances as unknown[]
+      : [];
+
+  const match = list.find((item) => {
+    if (!item || typeof item !== "object") return false;
+    const record = item as Record<string, unknown>;
+    const id = record.id ?? record.instance_id ?? record.instanceId;
+    return typeof id === "string" && id === instance.provider_instance_id;
+  }) as Record<string, unknown> | undefined;
+
+  if (!match) return null;
+
+  const token = findString(match, ["token", "instanceToken", "instance_token"]);
+  if (!token) return null;
+
+  const now = new Date().toISOString();
+  const { data, error } = await client
+    .from("whatsapp_instances")
+    .update({
+      instance_token_preview: previewCredentialValue(token, "secret"),
+      instance_token_encrypted: encryptCredentialValue(token),
+      last_synced_at: now,
+      metadata: {
+        ...(instance.metadata ?? {}),
+        token_recovered_at: now,
+        token_recovery_source: "uazapi_admin_api",
+      },
+    })
+    .eq("id", instance.id)
+    .select("id, organization_id, owner_user_id, provider, provider_instance_id, phone_number, display_name, status, qr_status, instance_token_preview, instance_token_encrypted, webhook_url, webhook_configured_at, last_synced_at, last_heartbeat_at, last_message_at, connected_at, disconnected_at, metadata, updated_at")
+    .single<WhatsappInstanceRow>();
+
+  return error ? null : data;
 }
 
 async function requireWorkspaceInstance(client: SupabaseClient, organizationId: string) {
