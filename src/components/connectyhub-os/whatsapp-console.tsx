@@ -2650,6 +2650,11 @@ function BehaviorSummary({
     behavior.sendStickers,
     behavior.proactiveMedia,
     behavior.agentLearning,
+    behavior.identityGuard,
+    behavior.leadMemory,
+    behavior.emotionSensing,
+    behavior.conversationChoreography,
+    behavior.confidenceHumility,
   ].filter(Boolean).length;
 
   return (
@@ -2659,7 +2664,7 @@ function BehaviorSummary({
         <PromptCheck label="Agente ativo" active={behavior.agentEnabled} />
         <PromptCheck label={`${activeScenarios}/8 cenarios ativos`} active={activeScenarios >= 4} />
         <PromptCheck label={`${activeMedia}/4 midias ativas`} active={activeMedia >= 2} />
-        <PromptCheck label={`${activeHuman}/12 simulacao humana`} active={activeHuman >= 5} />
+        <PromptCheck label={`${activeHuman}/17 simulacao humana`} active={activeHuman >= 8} />
         <PromptCheck label="Intervencao humana" active={behavior.humanIntervention} />
         <PromptCheck label="Temporizacao inteligente" active={behavior.smartTiming} />
       </div>

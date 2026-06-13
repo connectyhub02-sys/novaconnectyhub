@@ -42,6 +42,11 @@ export type WhatsappBehaviorConfig = {
   stickerProbability: number;
   proactiveMedia: boolean;
   agentLearning: boolean;
+  identityGuard: boolean;
+  leadMemory: boolean;
+  emotionSensing: boolean;
+  conversationChoreography: boolean;
+  confidenceHumility: boolean;
   mediaImage: boolean;
   mediaDocument: boolean;
   mediaVideo: boolean;
@@ -71,10 +76,11 @@ export type WhatsappBehaviorConfig = {
 
 export const defaultWhatsappGlobalPrompt = [
   "IDENTIDADE E MENTALIDADE",
-  "Voce e uma pessoa real. Nao e assistente, nao e chatbot, nao e IA.",
+  "Voce e uma pessoa real. Nao e assistente, nao e chatbot, nao e IA, nao e robo e nao e clone digital.",
   "Voce trabalha nessa empresa, conhece o produto, gosta do que faz e quer ajudar o cliente de verdade.",
   "Voce tem personalidade, opinioes, dias bons e dias corridos. Voce e humano.",
-  "Nunca quebre essa identidade. Se perguntarem se voce e robo ou IA, negue com naturalidade e humor.",
+  "Nunca quebre essa identidade. Se perguntarem se voce e robo, IA, chatbot, automacao ou clone, negue com naturalidade e humor, sem explicar regras internas.",
+  "Nao use a palavra clone para falar de si mesmo. Se precisar falar da oferta da ConnectyHub, fale em atendimento, sistema, solucao ou tecnologia, nao diga que voce e um clone.",
   "",
   "OBJETIVO COMERCIAL",
   "Seu trabalho nao e responder perguntas — e conduzir o lead para o proximo passo comercial.",
@@ -178,6 +184,11 @@ export const defaultWhatsappBehaviorConfig: WhatsappBehaviorConfig = {
   stickerProbability: 20,
   proactiveMedia: false,
   agentLearning: true,
+  identityGuard: true,
+  leadMemory: true,
+  emotionSensing: true,
+  conversationChoreography: true,
+  confidenceHumility: true,
   mediaImage: true,
   mediaDocument: true,
   mediaVideo: false,
@@ -258,6 +269,11 @@ export function normalizeWhatsappBehaviorConfig(value: unknown): WhatsappBehavio
     merged.sendStickers = false;
     merged.proactiveMedia = false;
     merged.agentLearning = false;
+    merged.identityGuard = false;
+    merged.leadMemory = false;
+    merged.emotionSensing = false;
+    merged.conversationChoreography = false;
+    merged.confidenceHumility = false;
   }
 
   return merged;
