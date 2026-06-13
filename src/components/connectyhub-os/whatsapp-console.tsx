@@ -2790,17 +2790,12 @@ function CompactConnectionCard({
             </p>
           </div>
         ) : visibleQrCode ? (
-          <button className="group cursor-pointer border-0 bg-transparent p-0" onClick={() => setQrModalOpen(true)} title="Clique para ampliar" type="button">
-            <Image
-              alt="QR Code para conectar o WhatsApp"
-              className="rounded-lg border bg-white p-2 transition-transform group-hover:scale-105"
-              height={144}
-              src={visibleQrCode}
-              unoptimized
-              width={144}
-            />
-            <p className="mt-1 text-[10px] text-cyan-400 opacity-70 group-hover:opacity-100">
-              Clique para ampliar
+          <button className="group cursor-pointer border-0 bg-transparent p-0" onClick={() => setQrModalOpen(true)} title="Clique para abrir o QR Code" type="button">
+            <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-emerald-500/10 text-emerald-400">
+              <QrCode className="h-6 w-6" />
+            </div>
+            <p className="mt-2 text-[11px] leading-4 text-emerald-400">
+              QR Code gerado — clique para exibir
             </p>
           </button>
         ) : profileImageUrl ? (
@@ -2885,10 +2880,10 @@ function CompactConnectionCard({
             <Image
               alt="QR Code ampliado"
               className="rounded-lg"
-              height={360}
+              height={400}
               src={visibleQrCode}
               unoptimized
-              width={360}
+              width={400}
             />
             <p className="mt-3 text-center text-xs text-slate-400">
               Abra o WhatsApp &gt; Dispositivos conectados &gt; Conectar dispositivo
