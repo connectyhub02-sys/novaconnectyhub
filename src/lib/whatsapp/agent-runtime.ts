@@ -322,6 +322,13 @@ export async function processWhatsappAgentRun(input: {
       }
     }
 
+    if (isGroupChat) {
+      const groupSkipReason = getGroupMessageSkipReason(context, latestInbound, userText);
+      if (groupSkipReason) {
+        return await completeRun(client, run.id, "Mensagem em grupo fora do modo de resposta configurado.", { skipped: true, reason: groupSkipReason });
+      }
+    }
+
     const behaviorSignals = detectBehaviorSignals({
       behavior,
       userText,
@@ -355,6 +362,7 @@ export async function processWhatsappAgentRun(input: {
         phone,
         text: optOutText,
         trackId: `lead_opt_out_${run.id}`,
+        replyId: latestInbound?.provider_message_id ?? undefined,
       });
       await pauseConversationForHuman(client, context.conversationId, behavior, "lead_opt_out");
       await archiveLeadForOptOut(client, context, userText);
@@ -377,6 +385,7 @@ export async function processWhatsappAgentRun(input: {
         phone,
         text: handoffText,
         trackId: `human_handoff_${run.id}`,
+        replyId: latestInbound?.provider_message_id ?? undefined,
       });
       await pauseConversationForHuman(client, context.conversationId, behavior, "lead_requested_human");
       await saveOutboundMessage(client, context, {
@@ -1784,6 +1793,7 @@ async function sendAgentResponse(input: {
           number: input.phone,
           type: "ptt",
           file: generatedAudio.audioUrl,
+          ...(latestInbound?.provider_message_id ? { replyid: latestInbound.provider_message_id } : {}),
           track_source: "connectyhub",
           track_id: `agent_audio_${context.run.id}_${chunkIndex}`,
         },
@@ -1835,6 +1845,7 @@ async function sendAgentResponse(input: {
       phone: input.phone,
       text,
       trackId: `agent_text_${context.run.id}_${chunkIndex}`,
+      replyId: latestInbound?.provider_message_id ?? undefined,
     });
 
     const message: OutboundMessage = {
@@ -1976,6 +1987,7 @@ async function sendWhatsappText(input: {
   phone: string;
   text: string;
   trackId: string;
+  replyId?: string;
 }) {
   return callUazapi(input.credentials, "/send/text", {
     method: "POST",
@@ -1984,6 +1996,9 @@ async function sendWhatsappText(input: {
       number: input.phone,
       text: input.text,
       linkPreview: true,
+      readchat: true,
+      readmessages: true,
+      ...(input.replyId ? { replyid: input.replyId } : {}),
       track_source: "connectyhub",
       track_id: input.trackId,
     },
@@ -3628,6 +3643,157 @@ function resolveChatAddress(context: NonNullable<Awaited<ReturnType<typeof loadR
 function isWhatsappGroupChatContext(context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>) {
   const metadata = readRecord(context.run.metadata);
   return metadata?.isGroupChat === true || isWhatsappGroupChatId(context.providerChatId);
+}
+
+function getGroupMessageSkipReason(
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+  latestInbound: ConversationMessageRow | null,
+  userText: string,
+) {
+  const mode = context.behavior.groupReplyMode;
+
+  if (mode === "all") {
+    return null;
+  }
+
+  if (mode === "mentions") {
+    return isGroupMentionForAgent(context, latestInbound, userText) ? null : "group_mention_required";
+  }
+
+  if (mode === "admins") {
+    return isGroupAdminMessage(latestInbound) ? null : "group_admin_required";
+  }
+
+  return null;
+}
+
+function isGroupMentionForAgent(
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+  message: ConversationMessageRow | null,
+  userText: string,
+) {
+  const providerMessage = message ? readProviderMessageRecord(message) : null;
+  const mentionStrings = collectMentionStrings(providerMessage);
+  const mentionDigits = mentionStrings.join(" ").replace(/\D/g, "");
+  const instanceDigits = normalizePhone(context.instance.phone_number);
+
+  if (instanceDigits && mentionDigits.includes(instanceDigits.slice(-8))) {
+    return true;
+  }
+
+  const haystack = normalizeSearch([userText, mentionStrings.join(" ")].filter(Boolean).join(" "));
+  if (!haystack) {
+    return false;
+  }
+
+  const names = uniqueStrings([
+    context.agent.persona_name,
+    context.agent.name,
+    context.instance.display_name,
+  ]).map(normalizeSearch).filter((name) => name.length >= 3);
+
+  if (names.some((name) => haystack.includes(name))) {
+    return true;
+  }
+
+  const firstNames = names
+    .map((name) => name.split(" ")[0])
+    .filter((name) => name.length >= 4);
+
+  return firstNames.some((name) => new RegExp(`\\b${escapeRegExp(name)}\\b`).test(haystack));
+}
+
+function isGroupAdminMessage(message: ConversationMessageRow | null) {
+  if (!message) {
+    return false;
+  }
+
+  const providerMessage = readProviderMessageRecord(message);
+  const adminSignal = findGroupAdminSignal(providerMessage);
+
+  if (typeof adminSignal === "boolean") return adminSignal;
+  if (typeof adminSignal === "number") return adminSignal === 1;
+  if (typeof adminSignal === "string") {
+    const normalized = normalizeSearch(adminSignal);
+    if (["true", "1", "yes", "owner", "admin", "superadmin", "super admin"].includes(normalized)) return true;
+    if (["false", "0", "no", "member", "participante"].includes(normalized)) return false;
+  }
+
+  return false;
+}
+
+function findGroupAdminSignal(value: unknown): unknown {
+  if (!value || typeof value !== "object") return null;
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = findGroupAdminSignal(item);
+      if (found !== null && found !== undefined) return found;
+    }
+    return null;
+  }
+
+  const adminKeys = new Set([
+    "isadmin",
+    "isgroupadmin",
+    "admin",
+    "participantadmin",
+    "senderadmin",
+    "fromadmin",
+    "isowner",
+    "owner",
+    "issuperadmin",
+    "superadmin",
+  ]);
+
+  for (const [key, item] of Object.entries(value as JsonRecord)) {
+    const normalizedKey = key.toLowerCase().replace(/[_-]/g, "");
+    if (adminKeys.has(normalizedKey)) {
+      return item;
+    }
+
+    const found = findGroupAdminSignal(item);
+    if (found !== null && found !== undefined) return found;
+  }
+
+  return null;
+}
+
+function collectMentionStrings(value: unknown, output: string[] = []) {
+  if (value === null || value === undefined) {
+    return output;
+  }
+
+  if (typeof value === "string" || typeof value === "number") {
+    output.push(String(value));
+    return output;
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      collectMentionStrings(item, output);
+    }
+    return output;
+  }
+
+  if (typeof value !== "object") {
+    return output;
+  }
+
+  for (const [key, item] of Object.entries(value as JsonRecord)) {
+    const normalizedKey = key.toLowerCase();
+    if (normalizedKey.includes("mention")) {
+      collectMentionStrings(item, output);
+    } else if (typeof item === "object" && item !== null) {
+      collectMentionStrings(item, output);
+    }
+  }
+
+  return output;
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function isWhatsappGroupChatId(value: string | null | undefined) {

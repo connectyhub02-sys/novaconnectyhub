@@ -4,6 +4,7 @@ import {
   processQueuedWhatsappAgentRuns,
   processWhatsappAgentRun,
 } from "@/lib/whatsapp/agent-runtime";
+import { processScheduledWhatsappOutbounds } from "@/lib/whatsapp/channel-operations";
 import { syncUazapiInstances } from "@/lib/whatsapp/uazapi-sync";
 import { runGrowthAgentMission, type GrowthAgentCode } from "@/lib/growth/growth-agent-runner";
 
@@ -117,6 +118,51 @@ export const connectyhubWhatsappAgentSweep = inngest.createFunction(
   },
 );
 
+export const connectyhubWhatsappOutboundDispatcher = inngest.createFunction(
+  {
+    id: "connectyhub-whatsapp-outbound-dispatcher",
+    name: "ConnectyHub WhatsApp Outbound Dispatcher",
+    retries: 3,
+    triggers: [{ event: "connectyhub/whatsapp.outbound.requested" }],
+  },
+  async ({ event, step }) => {
+    const data = event.data as { itemId?: string } | undefined;
+    const itemId = data?.itemId;
+
+    if (!itemId) {
+      return { status: "skipped", reason: "missing_item_id" };
+    }
+
+    const summary = await step.run("process-whatsapp-outbound-item", () =>
+      processScheduledWhatsappOutbounds({ itemId, limit: 1 }),
+    );
+
+    return {
+      status: "processed",
+      summary,
+    };
+  },
+);
+
+export const connectyhubWhatsappOutboundSweep = inngest.createFunction(
+  {
+    id: "connectyhub-whatsapp-outbound-sweep",
+    name: "ConnectyHub WhatsApp Outbound Sweep",
+    retries: 1,
+    triggers: [{ cron: "*/5 * * * *" }],
+  },
+  async ({ step }) => {
+    const summary = await step.run("process-scheduled-whatsapp-outbounds", () =>
+      processScheduledWhatsappOutbounds({ limit: 10 }),
+    );
+
+    return {
+      status: "swept",
+      summary,
+    };
+  },
+);
+
 const growthAgentSchedules: Array<{
   id: string;
   name: string;
@@ -209,5 +255,7 @@ export const functions = [
   connectyhubWhatsappSync,
   connectyhubWhatsappAgentResponse,
   connectyhubWhatsappAgentSweep,
+  connectyhubWhatsappOutboundDispatcher,
+  connectyhubWhatsappOutboundSweep,
   ...connectyhubGrowthAgentFunctions,
 ];

@@ -10,7 +10,7 @@ export async function GET() {
   return Response.json({
     ok: true,
     service: "connectyhub-uazapi-webhook",
-    accepts: ["connection", "history", "messages", "messages_update", "presence", "chats", "contacts"],
+    accepts: ["connection", "history", "messages", "messages_update", "presence", "chats", "contacts", "groups", "labels", "chat_labels", "newsletter_messages"],
     secretConfigured: Boolean(process.env.UAZAPI_WEBHOOK_SECRET),
   });
 }

@@ -1,5 +1,6 @@
 export type WhatsappResponseMode = "text" | "audio" | "mirror";
 export type WhatsappRapportMode = "off" | "soft" | "strong";
+export type WhatsappGroupReplyMode = "all" | "mentions" | "admins";
 
 export type WhatsappBehaviorConfig = {
   agentEnabled: boolean;
@@ -18,6 +19,16 @@ export type WhatsappBehaviorConfig = {
   botLoopProtection: boolean;
   allowInternalInstanceMessages: boolean;
   allowGroupChats: boolean;
+  groupReplyMode: WhatsappGroupReplyMode;
+  groupMentionAll: boolean;
+  interactiveMessages: boolean;
+  statusBroadcasts: boolean;
+  newsletterBroadcasts: boolean;
+  campaignBroadcasts: boolean;
+  whatsappMaxStatusRecipients: number;
+  whatsappCampaignBatchSize: number;
+  whatsappCampaignDelayMinSeconds: number;
+  whatsappCampaignDelayMaxSeconds: number;
   detectHumanRequest: boolean;
   detectRescheduleCancel: boolean;
   detectPropertyCapture: boolean;
@@ -161,6 +172,16 @@ export const defaultWhatsappBehaviorConfig: WhatsappBehaviorConfig = {
   botLoopProtection: true,
   allowInternalInstanceMessages: false,
   allowGroupChats: false,
+  groupReplyMode: "all",
+  groupMentionAll: false,
+  interactiveMessages: false,
+  statusBroadcasts: false,
+  newsletterBroadcasts: false,
+  campaignBroadcasts: false,
+  whatsappMaxStatusRecipients: 80,
+  whatsappCampaignBatchSize: 50,
+  whatsappCampaignDelayMinSeconds: 20,
+  whatsappCampaignDelayMaxSeconds: 60,
   detectHumanRequest: true,
   detectRescheduleCancel: true,
   detectPropertyCapture: true,
@@ -220,6 +241,7 @@ export const defaultWhatsappBehaviorConfig: WhatsappBehaviorConfig = {
 
 const responseModes = new Set<WhatsappResponseMode>(["text", "audio", "mirror"]);
 const rapportModes = new Set<WhatsappRapportMode>(["off", "soft", "strong"]);
+const groupReplyModes = new Set<WhatsappGroupReplyMode>(["all", "mentions", "admins"]);
 
 export function normalizeWhatsappBehaviorConfig(value: unknown): WhatsappBehaviorConfig {
   const input = isRecord(value) ? value : {};
@@ -237,6 +259,8 @@ export function normalizeWhatsappBehaviorConfig(value: unknown): WhatsappBehavio
       merged.responseMode = responseModes.has(next as WhatsappResponseMode) ? (next as WhatsappResponseMode) : merged.responseMode;
     } else if (key === "adaptiveRapportMode") {
       merged.adaptiveRapportMode = rapportModes.has(next as WhatsappRapportMode) ? (next as WhatsappRapportMode) : merged.adaptiveRapportMode;
+    } else if (key === "groupReplyMode") {
+      merged.groupReplyMode = groupReplyModes.has(next as WhatsappGroupReplyMode) ? (next as WhatsappGroupReplyMode) : merged.groupReplyMode;
     } else if (isOptionalStringKey(key)) {
       (merged[key] as string) = typeof next === "string" ? next.trim() : (current as string);
     } else if (typeof next === "string" && next.trim()) {
@@ -255,6 +279,11 @@ export function normalizeWhatsappBehaviorConfig(value: unknown): WhatsappBehavio
     merged.botLoopProtection = false;
     merged.allowInternalInstanceMessages = false;
     merged.allowGroupChats = false;
+    merged.groupMentionAll = false;
+    merged.interactiveMessages = false;
+    merged.statusBroadcasts = false;
+    merged.newsletterBroadcasts = false;
+    merged.campaignBroadcasts = false;
     merged.mediaImage = false;
     merged.mediaDocument = false;
     merged.mediaVideo = false;
@@ -279,6 +308,10 @@ export function normalizeWhatsappBehaviorConfig(value: unknown): WhatsappBehavio
     merged.confidenceHumility = false;
   }
 
+  if (merged.whatsappCampaignDelayMaxSeconds < merged.whatsappCampaignDelayMinSeconds) {
+    merged.whatsappCampaignDelayMaxSeconds = merged.whatsappCampaignDelayMinSeconds;
+  }
+
   return merged;
 }
 
@@ -299,6 +332,10 @@ function readNumber(value: unknown, fallback: number, key: keyof WhatsappBehavio
   if (key === "mediaBatchDocumentLimit") return clamp(Math.round(safe), 1, 8);
   if (key === "mediaBatchImageLimit") return clamp(Math.round(safe), 1, 20);
   if (key === "humanInterventionMinutes") return clamp(Math.round(safe), 5, 1440);
+  if (key === "whatsappMaxStatusRecipients") return clamp(Math.round(safe), 1, 500);
+  if (key === "whatsappCampaignBatchSize") return clamp(Math.round(safe), 1, 500);
+  if (key === "whatsappCampaignDelayMinSeconds") return clamp(Math.round(safe), 5, 600);
+  if (key === "whatsappCampaignDelayMaxSeconds") return clamp(Math.round(safe), 5, 900);
   if (key === "timingButtonDelaySeconds") return clamp(Math.round(safe), 0, 20);
   if (key === "debounceSeconds") return clamp(Math.round(safe), 5, 120);
   if (key === "reactionProbability") return clamp(Math.round(safe), 0, 100);

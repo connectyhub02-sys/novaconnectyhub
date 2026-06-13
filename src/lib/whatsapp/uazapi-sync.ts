@@ -379,7 +379,7 @@ async function configureInstanceWebhook(credentials: UazapiCredentials, token: s
     },
     body: JSON.stringify({
       url: buildProviderWebhookUrl(credentials, providerInstanceId),
-      events: ["messages", "messages_update", "connection", "history", "presence", "chats", "contacts"],
+      events: ["messages", "messages_update", "connection", "history", "presence", "chats", "contacts", "groups", "labels", "chat_labels", "newsletter_messages"],
       excludeMessages: ["wasSentByApi"],
       enabled: true,
       addUrlEvents: false,

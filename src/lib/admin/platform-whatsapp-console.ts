@@ -1280,7 +1280,7 @@ async function configurePlatformWebhook(credentials: UazapiCredentials, token: s
     token,
     body: {
       url: webhookUrl.toString(),
-      events: ["messages", "messages_update", "connection", "history"],
+      events: ["messages", "messages_update", "connection", "history", "presence", "chats", "contacts", "groups", "labels", "chat_labels", "newsletter_messages"],
       excludeMessages: ["wasSentByApi"],
       enabled: true,
       addUrlEvents: false,

@@ -52,6 +52,7 @@ import {
   defaultWhatsappBehaviorConfig,
   normalizeWhatsappBehaviorConfig,
   type WhatsappBehaviorConfig,
+  type WhatsappGroupReplyMode,
   type WhatsappRapportMode,
   type WhatsappResponseMode,
 } from "@/lib/whatsapp/agent-behavior";
@@ -177,6 +178,48 @@ type ActionResponse = {
   error?: string;
 };
 
+type WhatsappChannelOutboundItem = {
+  id: string;
+  operation: string;
+  status: string;
+  title: string;
+  summary: string | null;
+  scheduledFor: string | null;
+  publishedAt: string | null;
+  createdAt: string;
+  providerStatus: string | null;
+  error: string | null;
+};
+
+type WhatsappChannelOperationsState = {
+  instance: {
+    id: string;
+    status: string;
+    displayName: string | null;
+    phoneNumber: string | null;
+  };
+  behavior: {
+    groups: boolean;
+    groupReplyMode: WhatsappGroupReplyMode;
+    statusBroadcasts: boolean;
+    newsletterBroadcasts: boolean;
+    campaignBroadcasts: boolean;
+    interactiveMessages: boolean;
+    maxStatusRecipients: number;
+    campaignBatchSize: number;
+    campaignDelayMinSeconds: number;
+    campaignDelayMaxSeconds: number;
+  };
+  history: WhatsappChannelOutboundItem[];
+};
+
+type ChannelActionResponse = {
+  operations?: WhatsappChannelOperationsState | null;
+  result?: unknown;
+  notice?: Notice;
+  error?: string;
+};
+
 type Notice = {
   tone: "success" | "warning" | "error";
   message: string;
@@ -213,6 +256,7 @@ type WhatsappConsoleVariant = {
     createAgent: string;
     knowledge: string;
     links: string;
+    channels: string;
     promptAssistant: string;
     voices: string;
   };
@@ -266,6 +310,7 @@ const clientWhatsappConsoleVariant = {
     createAgent: "/api/dashboard/agents",
     knowledge: "/api/dashboard/knowledge",
     links: "/api/dashboard/whatsapp/links",
+    channels: "/api/dashboard/whatsapp/channels",
     promptAssistant: "/api/dashboard/whatsapp/prompt-assistant",
     voices: "/api/dashboard/voices",
   },
@@ -304,6 +349,7 @@ export const adminWhatsappConsoleVariant = {
     createAgent: "/api/admin/whatsapp/internal",
     knowledge: "/api/admin/whatsapp/internal/knowledge",
     links: "/api/admin/whatsapp/internal/links",
+    channels: "/api/admin/whatsapp/internal/channels",
     promptAssistant: "/api/admin/whatsapp/internal/prompt-assistant",
     voices: "/api/admin/whatsapp/internal/voices",
   },
@@ -333,6 +379,16 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
   const [knowledgeUploading, setKnowledgeUploading] = useState(false);
   const [creatingLinkButton, setCreatingLinkButton] = useState(false);
   const [deletingLinkButtonId, setDeletingLinkButtonId] = useState<string | null>(null);
+  const [channelOps, setChannelOps] = useState<WhatsappChannelOperationsState | null>(null);
+  const [channelAction, setChannelAction] = useState<string | null>(null);
+  const [statusText, setStatusText] = useState("");
+  const [statusMaxRecipients, setStatusMaxRecipients] = useState(defaultWhatsappBehaviorConfig.whatsappMaxStatusRecipients);
+  const [campaignTitle, setCampaignTitle] = useState("");
+  const [campaignNumbers, setCampaignNumbers] = useState("");
+  const [campaignText, setCampaignText] = useState("");
+  const [newsletterJid, setNewsletterJid] = useState("");
+  const [newsletterText, setNewsletterText] = useState("");
+  const [channelScheduledFor, setChannelScheduledFor] = useState("");
   const promptTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const promptSelectionRef = useRef({ start: 0, end: 0 });
   const pendingPromptCaretRef = useRef<number | null>(null);
@@ -364,13 +420,18 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
 
     setState(nextState);
     setSelectedCompanyId(nextCompanyId);
+    if (!nextState.agent || !nextState.instance) {
+      setChannelOps(null);
+    }
 
     if (!options?.preserveDrafts) {
       const nextPrompt = nextState.agent?.prompt ?? "";
 
       setPromptDraft(nextPrompt);
       promptSelectionRef.current = { start: nextPrompt.length, end: nextPrompt.length };
-      setBehaviorDraft(normalizeWhatsappBehaviorConfig(nextState.behavior));
+      const nextBehavior = normalizeWhatsappBehaviorConfig(nextState.behavior);
+      setBehaviorDraft(nextBehavior);
+      setStatusMaxRecipients(nextBehavior.whatsappMaxStatusRecipients);
       setQualificationDraft(normalizeLeadQualificationConfig(nextState.agent?.qualification));
     }
   }, []);
@@ -489,6 +550,57 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
       clearInterval(intervalId);
     };
   }, [applyWhatsappState, isConnected, running, selectedCompanyId, variant]);
+
+  const loadChannelOperations = useCallback(async (options?: { silent?: boolean }) => {
+    if (!selectedCompanyId) {
+      setChannelOps(null);
+      return;
+    }
+
+    if (!options?.silent) {
+      setChannelAction("load_channels");
+    }
+
+    try {
+      const query = `?${variant.entityIdKey}=${encodeURIComponent(selectedCompanyId)}`;
+      const response = await fetch(`${variant.endpoints.channels}${query}`, { cache: "no-store" });
+      const data = (await response.json().catch(() => null)) as ChannelActionResponse | null;
+
+      if (!response.ok || !data) {
+        throw new Error(data?.error ?? "Nao foi possivel carregar canais do WhatsApp.");
+      }
+
+      setChannelOps(data.operations ?? null);
+
+      if (!options?.silent && data.notice) {
+        setNotice(data.notice);
+      }
+    } catch (error) {
+      if (!options?.silent) {
+        setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao carregar canais do WhatsApp." });
+      }
+    } finally {
+      if (!options?.silent) {
+        setChannelAction(null);
+      }
+    }
+  }, [selectedCompanyId, variant]);
+
+  const channelAgentId = state?.agent?.id ?? "";
+  const channelInstanceId = state?.instance?.id ?? "";
+  const hasChannelContext = Boolean(selectedCompanyId && channelAgentId && channelInstanceId);
+
+  useEffect(() => {
+    if (!hasChannelContext) {
+      return;
+    }
+
+    const timeoutId = setTimeout(() => {
+      loadChannelOperations({ silent: true });
+    }, 0);
+
+    return () => clearTimeout(timeoutId);
+  }, [hasChannelContext, loadChannelOperations]);
 
   const promptChanged = state?.agent ? promptDraft.trim() !== state.agent.prompt.trim() : false;
   const promptTooLong = promptDraft.length > agentPromptMaxLength;
@@ -654,6 +766,45 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
       setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro inesperado no WhatsApp." });
     } finally {
       setRunning(null);
+    }
+  }
+
+  async function runChannelAction(action: string, payload: Record<string, unknown> = {}) {
+    if (!selectedCompanyId) {
+      setNotice({ tone: "warning", message: `Escolha um ${variant.entitySingular} antes de usar os canais.` });
+      return;
+    }
+
+    setChannelAction(action);
+    setNotice(null);
+
+    try {
+      const response = await fetch(variant.endpoints.channels, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, [variant.entityIdKey]: selectedCompanyId, ...payload }),
+      });
+      const data = (await response.json().catch(() => null)) as ChannelActionResponse | null;
+
+      if (!response.ok || !data) {
+        throw new Error(data?.error ?? "Nao foi possivel executar o recurso do WhatsApp.");
+      }
+
+      setChannelOps(data.operations ?? null);
+      setNotice(data.notice ?? { tone: "success", message: "Operacao do WhatsApp concluida." });
+
+      if (action === "send_status") {
+        setStatusText("");
+      } else if (action === "send_campaign") {
+        setCampaignText("");
+        setCampaignNumbers("");
+      } else if (action === "post_newsletter") {
+        setNewsletterText("");
+      }
+    } catch (error) {
+      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro inesperado no recurso do WhatsApp." });
+    } finally {
+      setChannelAction(null);
     }
   }
 
@@ -1128,6 +1279,33 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
                 </div>
               </BehaviorSection>
 
+              <BehaviorSection title="Grupos, status e canais" description="Libera recursos avancados do WhatsApp com controles separados para grupos, Status, newsletters e campanhas.">
+                <div className="grid gap-3">
+                  <ModeSelector<WhatsappGroupReplyMode>
+                    value={behaviorDraft.groupReplyMode}
+                    options={[
+                      { value: "all", label: "Todos", description: "Responde toda mensagem", help: "Quando Atender grupos estiver ligado, qualquer mensagem do grupo pode acionar o agente." },
+                      { value: "mentions", label: "Mencoes", description: "So quando citado", help: "O agente responde grupos apenas quando detectar mencao, nome do agente ou referencia direta." },
+                      { value: "admins", label: "Admins", description: "Somente admins", help: "Responde so quando o webhook trouxer sinal de administrador no grupo." },
+                    ]}
+                    onChange={(value) => updateBehavior("groupReplyMode", value)}
+                  />
+                  <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                    <ToggleTile icon={MessageCircle} label="Mencionar todos" description="Permite usar mencao geral em mensagens operacionais de grupo quando a Uazapi aceitar." checked={behaviorDraft.groupMentionAll} onChange={() => updateBehavior("groupMentionAll", !behaviorDraft.groupMentionAll)} />
+                    <ToggleTile icon={MessageSquare} label="Interativos" description="Libera uso de botoes/listas quando um fluxo operacional pedir esse formato." checked={behaviorDraft.interactiveMessages} onChange={() => updateBehavior("interactiveMessages", !behaviorDraft.interactiveMessages)} />
+                    <ToggleTile icon={Globe2} label="Status WhatsApp" description="Permite publicar stories/status pelo painel usando processamento Inngest." checked={behaviorDraft.statusBroadcasts} onChange={() => updateBehavior("statusBroadcasts", !behaviorDraft.statusBroadcasts)} />
+                    <ToggleTile icon={FileText} label="Canais" description="Permite postar em canais/newsletters do WhatsApp pelo painel." checked={behaviorDraft.newsletterBroadcasts} onChange={() => updateBehavior("newsletterBroadcasts", !behaviorDraft.newsletterBroadcasts)} />
+                    <ToggleTile icon={Forward} label="Campanhas" description="Permite criar disparos em lote via Uazapi Sender, sempre processados pelo Inngest." checked={behaviorDraft.campaignBroadcasts} onChange={() => updateBehavior("campaignBroadcasts", !behaviorDraft.campaignBroadcasts)} />
+                  </div>
+                  <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                    <NumberField label="Max status" description="Limite maximo de contatos usados em cada publicacao de Status." value={behaviorDraft.whatsappMaxStatusRecipients} min={1} max={500} onChange={(value) => updateBehavior("whatsappMaxStatusRecipients", value)} />
+                    <NumberField label="Lote campanha" description="Quantidade maxima de numeros aceitos por campanha simples." value={behaviorDraft.whatsappCampaignBatchSize} min={1} max={500} onChange={(value) => updateBehavior("whatsappCampaignBatchSize", value)} />
+                    <NumberField label="Delay min" description="Intervalo minimo entre mensagens da campanha." value={behaviorDraft.whatsappCampaignDelayMinSeconds} min={5} max={600} onChange={(value) => updateBehavior("whatsappCampaignDelayMinSeconds", value)} />
+                    <NumberField label="Delay max" description="Intervalo maximo entre mensagens da campanha." value={behaviorDraft.whatsappCampaignDelayMaxSeconds} min={5} max={900} onChange={(value) => updateBehavior("whatsappCampaignDelayMaxSeconds", value)} />
+                  </div>
+                </div>
+              </BehaviorSection>
+
               <BehaviorSection title="Cenarios especiais do lead" description="Eventos que a IA deve reconhecer para alimentar CRM, memoria e proximos passos.">
                 <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
                   <ToggleTile icon={UserRound} label="Pedido de humano" description="Identifica quando o lead pede vendedor, atendente ou suporte humano." checked={behaviorDraft.detectHumanRequest} onChange={() => updateBehavior("detectHumanRequest", !behaviorDraft.detectHumanRequest)} />
@@ -1208,6 +1386,40 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
               />
             </div>
           </div>
+        </Panel>
+      </div>
+      ) : null}
+
+      {state?.agent ? (
+      <div className="mt-5">
+        <Panel
+          title="Operacao multicanal"
+          eyebrow="grupos / status / canais / campanhas"
+          action={<NeonBadge tone={channelOps ? "green" : "amber"}>{channelOps ? "sincronizado" : "pendente"}</NeonBadge>}
+        >
+          <WhatsappChannelOperationsPanel
+            behavior={behaviorDraft}
+            channelAction={channelAction}
+            channelOps={channelOps}
+            campaignNumbers={campaignNumbers}
+            campaignText={campaignText}
+            campaignTitle={campaignTitle}
+            channelScheduledFor={channelScheduledFor}
+            newsletterJid={newsletterJid}
+            newsletterText={newsletterText}
+            statusMaxRecipients={statusMaxRecipients}
+            statusText={statusText}
+            onCampaignNumbersChange={setCampaignNumbers}
+            onCampaignTextChange={setCampaignText}
+            onCampaignTitleChange={setCampaignTitle}
+            onChannelScheduledForChange={setChannelScheduledFor}
+            onNewsletterJidChange={setNewsletterJid}
+            onNewsletterTextChange={setNewsletterText}
+            onRefresh={() => loadChannelOperations()}
+            onRunAction={runChannelAction}
+            onStatusMaxRecipientsChange={setStatusMaxRecipients}
+            onStatusTextChange={setStatusText}
+          />
         </Panel>
       </div>
       ) : null}
@@ -2679,6 +2891,263 @@ function BehaviorSummary({
   );
 }
 
+function WhatsappChannelOperationsPanel({
+  behavior,
+  channelAction,
+  channelOps,
+  campaignNumbers,
+  campaignText,
+  campaignTitle,
+  channelScheduledFor,
+  newsletterJid,
+  newsletterText,
+  statusMaxRecipients,
+  statusText,
+  onCampaignNumbersChange,
+  onCampaignTextChange,
+  onCampaignTitleChange,
+  onChannelScheduledForChange,
+  onNewsletterJidChange,
+  onNewsletterTextChange,
+  onRefresh,
+  onRunAction,
+  onStatusMaxRecipientsChange,
+  onStatusTextChange,
+}: {
+  behavior: WhatsappBehaviorConfig;
+  channelAction: string | null;
+  channelOps: WhatsappChannelOperationsState | null;
+  campaignNumbers: string;
+  campaignText: string;
+  campaignTitle: string;
+  channelScheduledFor: string;
+  newsletterJid: string;
+  newsletterText: string;
+  statusMaxRecipients: number;
+  statusText: string;
+  onCampaignNumbersChange: (value: string) => void;
+  onCampaignTextChange: (value: string) => void;
+  onCampaignTitleChange: (value: string) => void;
+  onChannelScheduledForChange: (value: string) => void;
+  onNewsletterJidChange: (value: string) => void;
+  onNewsletterTextChange: (value: string) => void;
+  onRefresh: () => void;
+  onRunAction: (action: string, payload?: Record<string, unknown>) => void;
+  onStatusMaxRecipientsChange: (value: number) => void;
+  onStatusTextChange: (value: string) => void;
+}) {
+  const scheduledFor = localDatetimeToIso(channelScheduledFor);
+  const statusEnabled = behavior.statusBroadcasts;
+  const campaignEnabled = behavior.campaignBroadcasts;
+  const newsletterEnabled = behavior.newsletterBroadcasts;
+  const statusReady = statusEnabled && statusText.trim().length > 0;
+  const campaignReady = campaignEnabled && campaignText.trim().length > 0 && campaignNumbers.trim().length > 0;
+  const newsletterReady = newsletterEnabled && newsletterText.trim().length > 0 && newsletterJid.trim().length > 0;
+
+  return (
+    <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_320px]">
+      <div className="grid gap-4">
+        <div className="grid gap-3 rounded-xl border p-3 md:grid-cols-2 xl:grid-cols-4" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
+          <InfoTile label="Grupos" value={behavior.allowGroupChats ? formatGroupReplyMode(behavior.groupReplyMode) : "Pausado"} />
+          <InfoTile label="Status" value={statusEnabled ? "Liberado" : "Bloqueado"} />
+          <InfoTile label="Canais" value={newsletterEnabled ? "Liberado" : "Bloqueado"} />
+          <InfoTile label="Campanhas" value={campaignEnabled ? `${behavior.whatsappCampaignBatchSize} por lote` : "Bloqueado"} />
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <SecondaryAction
+            icon={RefreshCcw}
+            label="Atualizar painel"
+            description="Recarrega historico local e configuracao operacional."
+            loading={channelAction === "load_channels"}
+            onClick={onRefresh}
+          />
+          <SecondaryAction
+            icon={MessageCircle}
+            label="Buscar grupos"
+            description="Consulta os grupos visiveis para esta instancia na Uazapi."
+            loading={channelAction === "refresh_groups"}
+            onClick={() => onRunAction("refresh_groups")}
+          />
+          <SecondaryAction
+            icon={FileText}
+            label="Buscar canais"
+            description="Consulta canais/newsletters ligados ao numero."
+            loading={channelAction === "refresh_newsletters"}
+            onClick={() => onRunAction("refresh_newsletters")}
+          />
+          <SecondaryAction
+            icon={ShieldCheck}
+            label="Limites"
+            description="Consulta limites de mensagens do WhatsApp pela Uazapi."
+            loading={channelAction === "message_limits"}
+            onClick={() => onRunAction("message_limits")}
+          />
+          <SecondaryAction
+            icon={Forward}
+            label="Pastas"
+            description="Consulta pastas do sender/campanhas da Uazapi."
+            loading={channelAction === "campaign_folders"}
+            onClick={() => onRunAction("campaign_folders")}
+          />
+        </div>
+
+        <label className="block rounded-xl border p-3" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
+          <span className="mb-1.5 flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
+            Agendar para
+            <InfoHint text="Opcional. Em branco, o envio entra na fila agora. Com data e hora, o Inngest processa quando chegar o horario." />
+          </span>
+          <input
+            className="h-10 w-full rounded-lg border px-3 font-mono text-[12px] outline-none"
+            type="datetime-local"
+            value={channelScheduledFor}
+            onChange={(event) => onChannelScheduledForChange(event.target.value)}
+          />
+        </label>
+
+        <div className="grid gap-4 xl:grid-cols-3">
+          <div className="rounded-xl border p-4" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
+            <p className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
+              Status WhatsApp
+              <InfoHint text="Publica texto no Status/Stories da instancia quando o controle Status WhatsApp estiver ligado." />
+            </p>
+            <textarea
+              className="mt-3 min-h-28 w-full resize-y rounded-lg border px-3 py-2 text-[12px] leading-5 outline-none"
+              value={statusText}
+              onChange={(event) => onStatusTextChange(event.target.value.slice(0, 700))}
+              placeholder="Texto curto para o status."
+            />
+            <div className="mt-3">
+              <NumberField
+                label="Destinatarios"
+                description="Maximo de contatos incluidos no status."
+                value={statusMaxRecipients}
+                min={1}
+                max={behavior.whatsappMaxStatusRecipients}
+                onChange={onStatusMaxRecipientsChange}
+              />
+            </div>
+            <div className="mt-3">
+              <ActionButton
+                icon={Globe2}
+                label="Publicar status"
+                description="Agenda o status para ser processado pelo Inngest."
+                disabled={!statusReady}
+                loading={channelAction === "send_status"}
+                onClick={() => onRunAction("send_status", {
+                  text: statusText,
+                  maxRecipients: statusMaxRecipients,
+                  scheduledFor,
+                })}
+              />
+            </div>
+          </div>
+
+          <div className="rounded-xl border p-4" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
+            <p className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
+              Campanha simples
+              <InfoHint text="Cria um disparo simples via Uazapi Sender. Use uma linha, virgula ou ponto e virgula por numero." />
+            </p>
+            <input
+              className="mt-3 h-10 w-full rounded-lg border px-3 text-[12px] outline-none"
+              value={campaignTitle}
+              onChange={(event) => onCampaignTitleChange(event.target.value.slice(0, 80))}
+              placeholder="Nome da campanha"
+            />
+            <textarea
+              className="mt-3 min-h-24 w-full resize-y rounded-lg border px-3 py-2 text-[12px] leading-5 outline-none"
+              value={campaignNumbers}
+              onChange={(event) => onCampaignNumbersChange(event.target.value.slice(0, 5000))}
+              placeholder="5599999999999&#10;5588888888888"
+            />
+            <textarea
+              className="mt-3 min-h-28 w-full resize-y rounded-lg border px-3 py-2 text-[12px] leading-5 outline-none"
+              value={campaignText}
+              onChange={(event) => onCampaignTextChange(event.target.value.slice(0, 1200))}
+              placeholder="Mensagem da campanha."
+            />
+            <div className="mt-3">
+              <ActionButton
+                icon={Forward}
+                label="Criar campanha"
+                description="Agenda a campanha no Inngest e envia para o Sender quando processada."
+                disabled={!campaignReady}
+                loading={channelAction === "send_campaign"}
+                onClick={() => onRunAction("send_campaign", {
+                  title: campaignTitle,
+                  numbers: campaignNumbers,
+                  text: campaignText,
+                  scheduledFor,
+                })}
+              />
+            </div>
+          </div>
+
+          <div className="rounded-xl border p-4" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
+            <p className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
+              Canal / newsletter
+              <InfoHint text="Posta texto em um canal/newsletter quando a instancia e a Uazapi permitirem esse recurso." />
+            </p>
+            <input
+              className="mt-3 h-10 w-full rounded-lg border px-3 font-mono text-[12px] outline-none"
+              value={newsletterJid}
+              onChange={(event) => onNewsletterJidChange(event.target.value.slice(0, 120))}
+              placeholder="123456789@newsletter"
+            />
+            <textarea
+              className="mt-3 min-h-40 w-full resize-y rounded-lg border px-3 py-2 text-[12px] leading-5 outline-none"
+              value={newsletterText}
+              onChange={(event) => onNewsletterTextChange(event.target.value.slice(0, 1200))}
+              placeholder="Texto para publicar no canal."
+            />
+            <div className="mt-3">
+              <ActionButton
+                icon={FileText}
+                label="Postar canal"
+                description="Agenda o post do canal para processamento via Inngest."
+                disabled={!newsletterReady}
+                loading={channelAction === "post_newsletter"}
+                onClick={() => onRunAction("post_newsletter", {
+                  jid: newsletterJid,
+                  text: newsletterText,
+                  scheduledFor,
+                })}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-xl border p-4" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
+        <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Historico multicanal</p>
+        <div className="mt-4 grid gap-2">
+          {channelOps?.history.length ? (
+            channelOps.history.map((item) => (
+              <div key={item.id} className="rounded-lg border px-3 py-2" style={{ background: "var(--ch-surface)", borderColor: "var(--ch-border)" }}>
+                <div className="flex items-start justify-between gap-2">
+                  <p className="min-w-0 truncate text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>{item.title}</p>
+                  <span className="shrink-0 rounded-md bg-slate-800/80 px-2 py-1 font-mono text-[8px] uppercase tracking-widest text-slate-300">{item.status}</span>
+                </div>
+                <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-slate-500">{item.summary ?? formatChannelOperation(item.operation)}</p>
+                <p className="mt-2 font-mono text-[9px] uppercase tracking-widest text-slate-500">
+                  {formatChannelOperation(item.operation)} / {formatDate(item.scheduledFor ?? item.createdAt)}
+                </p>
+                {item.error ? (
+                  <p className="mt-2 rounded-md border border-rose-400/20 bg-rose-400/10 px-2 py-1 text-[11px] leading-4 text-rose-100">{item.error}</p>
+                ) : null}
+              </div>
+            ))
+          ) : (
+            <div className="rounded-lg border px-3 py-6 text-center text-[12px] text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
+              Nenhum envio multicanal registrado ainda.
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PromptCheck({ label, active }: { label: string; active: boolean }) {
   return (
     <div className="flex items-center gap-2">
@@ -2725,6 +3194,25 @@ function formatRapportMode(value: WhatsappRapportMode) {
   if (value === "strong") return "Forte";
   if (value === "soft") return "Suave";
   return "Desligado";
+}
+
+function formatGroupReplyMode(value: WhatsappGroupReplyMode) {
+  if (value === "mentions") return "So mencoes";
+  if (value === "admins") return "So admins";
+  return "Todos";
+}
+
+function formatChannelOperation(value: string) {
+  if (value === "status") return "Status";
+  if (value === "campaign_simple") return "Campanha";
+  if (value === "newsletter_text") return "Canal";
+  return value || "WhatsApp";
+}
+
+function localDatetimeToIso(value: string) {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
 function CompactConnectionCard({
