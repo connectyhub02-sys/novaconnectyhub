@@ -9,6 +9,7 @@ import {
   readLeadProfileImageUrl,
   syncLeadAvatarFromUazapi,
 } from "./lead-avatar-sync";
+import { normalizeWhatsappBehaviorConfig } from "./agent-behavior";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -26,6 +27,7 @@ type LeadRow = {
 
 type ConversationRow = {
   id: string;
+  metadata: JsonRecord | null;
 };
 
 type AgentRow = {
@@ -124,7 +126,7 @@ export async function ingestUazapiWebhook(input: {
   }
 
   try {
-    const lead = message.phoneNumber
+    const lead = !message.isGroupChat && message.phoneNumber
       ? await ensureLead(client, {
           organizationId: instance.organization_id,
           phoneNumber: message.phoneNumber,
@@ -155,6 +157,7 @@ export async function ingestUazapiWebhook(input: {
       leadId: lead?.id ?? null,
       whatsappInstanceId: instance.id,
       providerChatId: message.providerChatId ?? message.phoneNumber ?? message.providerMessageId,
+      isGroupChat: message.isGroupChat,
       lastMessagePreview: message.textContent,
       lastMessageAt: message.occurredAt,
     });
@@ -178,6 +181,7 @@ export async function ingestUazapiWebhook(input: {
           webhookEventId: eventResult.eventId,
           providerMessageId: message.providerMessageId,
           providerChatId: message.providerChatId,
+          isGroupChat: message.isGroupChat,
           phoneNumber: message.phoneNumber,
           messageType: message.messageType,
           textContent: message.textContent,
@@ -457,6 +461,7 @@ async function ensureConversation(
     leadId: string | null;
     whatsappInstanceId: string;
     providerChatId: string | null;
+    isGroupChat: boolean;
     lastMessagePreview: string | null;
     lastMessageAt: string;
   },
@@ -464,7 +469,7 @@ async function ensureConversation(
   const { data: existing } = input.providerChatId
     ? await client
         .from("conversations")
-        .select("id")
+        .select("id, metadata")
         .eq("organization_id", input.organizationId)
         .eq("provider", "uazapi")
         .eq("provider_chat_id", input.providerChatId)
@@ -480,9 +485,14 @@ async function ensureConversation(
         status: "open",
         last_message_preview: input.lastMessagePreview,
         last_message_at: input.lastMessageAt,
+        metadata: {
+          ...(existing.metadata ?? {}),
+          is_group_chat: input.isGroupChat,
+          chat_kind: input.isGroupChat ? "group" : "direct",
+        },
       })
       .eq("id", existing.id)
-      .select("id")
+      .select("id, metadata")
       .single<ConversationRow>();
 
     if (error) {
@@ -506,9 +516,11 @@ async function ensureConversation(
       last_message_at: input.lastMessageAt,
       metadata: {
         created_from: "uazapi_webhook",
+        is_group_chat: input.isGroupChat,
+        chat_kind: input.isGroupChat ? "group" : "direct",
       },
     })
-    .select("id")
+    .select("id, metadata")
     .single<ConversationRow>();
 
   if (error) {
@@ -617,6 +629,7 @@ async function enqueueWhatsappAgentRun(
     webhookEventId: string | null;
     providerMessageId: string | null;
     providerChatId: string | null;
+    isGroupChat: boolean;
     phoneNumber: string | null;
     messageType: string | null;
     textContent: string | null;
@@ -635,9 +648,14 @@ async function enqueueWhatsappAgentRun(
   }
 
   const behaviorConfig = isRecord(instanceMetadata?.behavior_config) ? instanceMetadata.behavior_config : {};
-  const debounceSeconds = typeof behaviorConfig.debounceSeconds === "number" && Number.isFinite(behaviorConfig.debounceSeconds)
-    ? Math.max(behaviorConfig.debounceSeconds, 5)
-    : 15;
+  const behavior = normalizeWhatsappBehaviorConfig(behaviorConfig);
+  const isGroupChat = input.isGroupChat || isWhatsappGroupChatId(input.providerChatId);
+
+  if (isGroupChat && !behavior.allowGroupChats) {
+    return null;
+  }
+
+  const debounceSeconds = Math.max(behavior.debounceSeconds, 5);
   const debounceCutoff = new Date(Date.now() - debounceSeconds * 1000).toISOString();
   const { data: recentRun } = await client
     .from("agent_runs")
@@ -663,6 +681,8 @@ async function enqueueWhatsappAgentRun(
           webhookEventId: input.webhookEventId,
           providerMessageId: input.providerMessageId,
           providerChatId: input.providerChatId,
+          isGroupChat,
+          chatKind: isGroupChat ? "group" : "direct",
           phoneNumber: input.phoneNumber,
           messageType: input.messageType,
           providerEventType: input.eventType,
@@ -699,6 +719,8 @@ async function enqueueWhatsappAgentRun(
         webhookEventId: input.webhookEventId,
         providerMessageId: input.providerMessageId,
         providerChatId: input.providerChatId,
+        isGroupChat,
+        chatKind: isGroupChat ? "group" : "direct",
         phoneNumber: input.phoneNumber,
         messageType: input.messageType,
         providerEventType: input.eventType,
@@ -798,6 +820,7 @@ type MessageSnapshot = {
   phoneNumber: string | null;
   displayName: string | null;
   profileImageUrl: string | null;
+  isGroupChat: boolean;
   fromMe: boolean | null;
   sentByApi: boolean | null;
   direction: "inbound" | "outbound" | "system" | "unknown";
@@ -810,6 +833,10 @@ function extractMessageSnapshot(payload: JsonRecord): MessageSnapshot {
   const messageRecord = findMessageRecord(payload) ?? payload;
   const providerChatId = findString(messageRecord, ["chatid", "chatId", "chat_id", "remoteJid", "jid", "from", "to"])
     ?? findNestedString(messageRecord, ["remoteJid", "participant"]);
+  const isGroupChat = isWhatsappGroupChatId(providerChatId)
+    || findBoolean(messageRecord, ["isGroup", "is_group", "fromGroup", "from_group"])
+    || findNestedBoolean(messageRecord, ["isGroup", "is_group", "fromGroup", "from_group"])
+    || false;
   const textContent =
     findString(messageRecord, ["text", "body", "caption", "content", "messageText"])
     ?? findNestedString(messageRecord, ["conversation", "text", "caption"]);
@@ -827,9 +854,10 @@ function extractMessageSnapshot(payload: JsonRecord): MessageSnapshot {
   return {
     providerMessageId,
     providerChatId,
-    phoneNumber: normalizePhone(providerChatId),
+    phoneNumber: isGroupChat ? null : normalizePhone(providerChatId),
     displayName: findString(messageRecord, ["pushName", "senderName", "name", "notifyName", "profileName"]),
     profileImageUrl: readLeadProfileImageUrl(messageRecord) ?? readLeadProfileImageUrl(payload),
+    isGroupChat,
     fromMe,
     sentByApi,
     direction: typeof outbound === "boolean" ? (outbound ? "outbound" : "inbound") : "unknown",
@@ -854,6 +882,8 @@ function buildConversationMessagePayload(payload: JsonRecord, message: MessageSn
       from_me: message.fromMe,
       sent_by_api: message.sentByApi,
     },
+    is_group_chat: message.isGroupChat,
+    chat_kind: message.isGroupChat ? "group" : "direct",
   };
 }
 
@@ -1210,6 +1240,10 @@ function normalizePhone(value: string | null) {
   const digits = value.replace(/\D/g, "");
 
   return digits.length >= 8 ? digits : null;
+}
+
+function isWhatsappGroupChatId(value: string | null | undefined) {
+  return typeof value === "string" && /@g\.us(?:$|[^\w.-])/i.test(value.trim());
 }
 
 function preview(value: string | null | undefined, maxLength: number) {

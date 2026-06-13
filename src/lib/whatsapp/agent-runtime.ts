@@ -285,13 +285,19 @@ export async function processWhatsappAgentRun(input: {
       throw new Error("Instancia WhatsApp sem token seguro.");
     }
 
-    const phone = resolveLeadPhone(context);
+    const isGroupChat = isWhatsappGroupChatContext(context);
 
-    if (!phone) {
-      throw new Error("Nao foi possivel identificar o telefone do lead.");
+    if (isGroupChat && !behavior.allowGroupChats) {
+      return await completeRun(client, run.id, "Mensagem em grupo ignorada.", { skipped: true, reason: "group_chat_disabled" });
     }
 
-    if (await shouldBlockInternalInstance(client, behavior, instance.id, phone)) {
+    const phone = resolveChatAddress(context);
+
+    if (!phone) {
+      throw new Error("Nao foi possivel identificar o destino da conversa.");
+    }
+
+    if (!isGroupChat && await shouldBlockInternalInstance(client, behavior, instance.id, phone)) {
       return await completeRun(client, run.id, "Mensagem interna entre instancias ignorada.", { skipped: true, reason: "internal_instance" });
     }
 
@@ -2519,8 +2525,8 @@ async function shouldBlockInternalInstance(client: SupabaseClient, behavior: Wha
 }
 
 async function markConversationRead(credentials: UazapiCredentials, token: string, phone: string, providerChatId: string | null, providerMessageId: string | null) {
-  const normalizedPhone = normalizePhone(phone) ?? phone;
-  const chatAddress = providerChatId?.trim() || (normalizedPhone.includes("@") ? normalizedPhone : `${normalizedPhone}@s.whatsapp.net`);
+  const normalizedPhone = normalizeChatAddress(phone);
+  const chatAddress = providerChatId?.trim() || (isWhatsappGroupChatId(normalizedPhone) ? normalizedPhone : `${normalizedPhone}@s.whatsapp.net`);
   const chatRead = await callUazapi(credentials, "/chat/read", {
     method: "POST",
     token,
@@ -2592,7 +2598,7 @@ async function setChatPresence(
   presence: "composing" | "recording" | "paused",
   delayMs?: number,
 ) {
-  const number = normalizePhone(phone) ?? phone;
+  const number = normalizeChatAddress(phone);
   const delay = delayMs == null ? undefined : Math.min(Math.max(Math.round(delayMs), 1000), 300000);
 
   await callUazapi(credentials, "/message/presence", {
@@ -3611,8 +3617,21 @@ function extractLinks(value: string) {
     .slice(0, 8);
 }
 
-function resolveLeadPhone(context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>) {
+function resolveChatAddress(context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>) {
+  if (isWhatsappGroupChatContext(context)) {
+    return context.providerChatId?.trim() || null;
+  }
+
   return normalizePhone(context.phoneNumber ?? context.lead?.phone_number ?? context.providerChatId);
+}
+
+function isWhatsappGroupChatContext(context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>) {
+  const metadata = readRecord(context.run.metadata);
+  return metadata?.isGroupChat === true || isWhatsappGroupChatId(context.providerChatId);
+}
+
+function isWhatsappGroupChatId(value: string | null | undefined) {
+  return typeof value === "string" && /@g\.us(?:$|[^\w.-])/i.test(value.trim());
 }
 
 function findLatestInbound(messages: ConversationMessageRow[]) {
@@ -3883,6 +3902,12 @@ function normalizeSearch(value: string) {
 function normalizePhone(value: string | null | undefined) {
   const digits = value?.replace(/\D/g, "") ?? "";
   return digits || null;
+}
+
+function normalizeChatAddress(value: string | null | undefined) {
+  const trimmed = value?.trim() ?? "";
+  if (!trimmed) return "";
+  return isWhatsappGroupChatId(trimmed) ? trimmed : normalizePhone(trimmed) ?? trimmed;
 }
 
 function decryptInstanceToken(instance: InstanceRow) {

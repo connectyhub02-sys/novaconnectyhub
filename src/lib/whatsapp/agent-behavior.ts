@@ -17,6 +17,7 @@ export type WhatsappBehaviorConfig = {
   humanIntervention: boolean;
   botLoopProtection: boolean;
   allowInternalInstanceMessages: boolean;
+  allowGroupChats: boolean;
   detectHumanRequest: boolean;
   detectRescheduleCancel: boolean;
   detectPropertyCapture: boolean;
@@ -159,6 +160,7 @@ export const defaultWhatsappBehaviorConfig: WhatsappBehaviorConfig = {
   humanIntervention: true,
   botLoopProtection: true,
   allowInternalInstanceMessages: false,
+  allowGroupChats: false,
   detectHumanRequest: true,
   detectRescheduleCancel: true,
   detectPropertyCapture: true,
@@ -252,6 +254,7 @@ export function normalizeWhatsappBehaviorConfig(value: unknown): WhatsappBehavio
     merged.humanIntervention = false;
     merged.botLoopProtection = false;
     merged.allowInternalInstanceMessages = false;
+    merged.allowGroupChats = false;
     merged.mediaImage = false;
     merged.mediaDocument = false;
     merged.mediaVideo = false;
