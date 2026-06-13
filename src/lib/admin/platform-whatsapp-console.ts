@@ -325,7 +325,7 @@ export async function connectPlatformWhatsappConsole(input: {
   const displayName = findString(connectResult.data, ["profileName", "displayName", "name"]) ?? findString(profileData, ["profileName", "displayName", "businessName", "name"]) ?? instance.display_name;
   const profileImageUrl = extractProfileImageUrl(connectResult.data) ?? extractProfileImageUrl(profileData) ?? extractProfileImageUrl(avatarData) ?? readProfileImageUrl(instance);
   const now = new Date().toISOString();
-  const webhookResult = await configurePlatformWebhook(credentials, token);
+  const webhookResult = await configurePlatformWebhook(credentials, token, instance.provider_instance_id);
 
   await client
     .from("whatsapp_instances")
@@ -417,7 +417,7 @@ export async function refreshPlatformWhatsappConsoleStatus(input: {
   const displayName = findString(result.data, ["profileName", "displayName", "name"]) ?? findString(profileData, ["profileName", "displayName", "businessName", "name"]) ?? instance.display_name;
   const profileImageUrl = extractProfileImageUrl(result.data) ?? extractProfileImageUrl(profileData) ?? extractProfileImageUrl(avatarData) ?? readProfileImageUrl(instance);
   const now = new Date().toISOString();
-  const webhookResult = status === "connected" ? await configurePlatformWebhook(credentials, token) : null;
+  const webhookResult = status === "connected" ? await configurePlatformWebhook(credentials, token, instance.provider_instance_id) : null;
 
   await client
     .from("whatsapp_instances")
@@ -746,7 +746,7 @@ async function createPlatformProviderInstance(
     throw new Error("A Uazapi nao retornou id/token da instancia interna. Verifique as credenciais no Admin OS.");
   }
 
-  const webhookResult = await configurePlatformWebhook(credentials, token);
+  const webhookResult = await configurePlatformWebhook(credentials, token, providerInstanceId);
   const payload = {
     organization_id: organization.id,
     owner_user_id: userId,
@@ -964,18 +964,24 @@ async function getNextPromptVersion(client: SupabaseClient, agentId: string) {
   return (data?.version_number ?? 0) + 1;
 }
 
-async function configurePlatformWebhook(credentials: UazapiCredentials, token: string) {
+async function configurePlatformWebhook(credentials: UazapiCredentials, token: string, providerInstanceId?: string | null) {
   if (!credentials.webhookUrl) {
     return { ok: false as const, reason: "NEXT_PUBLIC_APP_URL nao configurada." };
+  }
+
+  const webhookUrl = new URL(credentials.webhookUrl);
+  if (credentials.webhookSecret) {
+    webhookUrl.searchParams.set("secret", credentials.webhookSecret);
+  }
+  if (providerInstanceId) {
+    webhookUrl.searchParams.set("instanceId", providerInstanceId);
   }
 
   const response = await callUazapi(credentials, "/webhook", {
     method: "POST",
     token,
     body: {
-      url: credentials.webhookSecret
-        ? `${credentials.webhookUrl}?secret=${encodeURIComponent(credentials.webhookSecret)}`
-        : credentials.webhookUrl,
+      url: webhookUrl.toString(),
       events: ["messages", "messages_update", "connection", "history"],
       excludeMessages: ["wasSentByApi"],
       enabled: true,

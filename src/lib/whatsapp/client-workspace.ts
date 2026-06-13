@@ -235,7 +235,7 @@ export async function connectClientWhatsapp(input: {
   const profileImageUrl = extractProfileImageUrl(connectResult.data) ?? extractProfileImageUrl(profileData) ?? extractProfileImageUrl(avatarData) ?? readProfileImageUrl(instance);
   const now = new Date().toISOString();
   const connectedAt = status === "connected" ? now : instance.connected_at;
-  const webhookResult = await configureClientWebhook(credentials, token);
+  const webhookResult = await configureClientWebhook(credentials, token, instance.provider_instance_id);
 
   await client
     .from("whatsapp_instances")
@@ -326,7 +326,7 @@ export async function refreshClientWhatsappStatus(input: {
   const profileImageUrl = extractProfileImageUrl(result.data) ?? extractProfileImageUrl(profileData) ?? extractProfileImageUrl(avatarData) ?? readProfileImageUrl(instance);
   const now = new Date().toISOString();
   const webhookResult = status === "connected"
-    ? await configureClientWebhook(credentials, token)
+    ? await configureClientWebhook(credentials, token, instance.provider_instance_id)
     : null;
 
   await client
@@ -693,7 +693,7 @@ async function createProviderInstance(
     throw new Error("A Uazapi nao retornou id/token da instancia. Tente novamente ou verifique as credenciais no Admin OS.");
   }
 
-  const webhookResult = await configureClientWebhook(credentials, token);
+  const webhookResult = await configureClientWebhook(credentials, token, providerInstanceId);
   const payload = {
     organization_id: organization.id,
     owner_user_id: userId,
@@ -1029,18 +1029,24 @@ async function getNextPromptVersion(client: SupabaseClient, agentId: string) {
   return Number(data?.version_number ?? 0) + 1;
 }
 
-async function configureClientWebhook(credentials: UazapiCredentials, token: string) {
+async function configureClientWebhook(credentials: UazapiCredentials, token: string, providerInstanceId?: string | null) {
   if (!credentials.webhookUrl) {
     return { ok: false as const, reason: "NEXT_PUBLIC_APP_URL nao configurada." };
+  }
+
+  const webhookUrl = new URL(credentials.webhookUrl);
+  if (credentials.webhookSecret) {
+    webhookUrl.searchParams.set("secret", credentials.webhookSecret);
+  }
+  if (providerInstanceId) {
+    webhookUrl.searchParams.set("instanceId", providerInstanceId);
   }
 
   const response = await callUazapi(credentials, "/webhook", {
     method: "POST",
     token,
     body: {
-      url: credentials.webhookSecret
-        ? `${credentials.webhookUrl}?secret=${encodeURIComponent(credentials.webhookSecret)}`
-        : credentials.webhookUrl,
+      url: webhookUrl.toString(),
       events: ["messages", "messages_update", "connection", "history"],
       excludeMessages: ["wasSentByApi"],
       enabled: true,
