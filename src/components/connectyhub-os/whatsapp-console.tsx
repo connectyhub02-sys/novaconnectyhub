@@ -2741,12 +2741,20 @@ function CompactConnectionCard({
   onRefresh: () => void;
 }) {
   const [qrModalOpen, setQrModalOpen] = useState(false);
+  const prevQrRef = useRef<string | null>(null);
   const status = instance?.status ?? "draft";
   const meta = getStatusMeta(status);
   const Icon = meta.icon;
   const profileImageUrl = instance?.profileImageUrl ?? null;
   const whatsappLabel = instance?.displayName ?? formatPhone(instance?.phoneNumber);
   const visibleQrCode = status === "connected" ? null : qrCode;
+
+  useEffect(() => {
+    if (visibleQrCode && visibleQrCode !== prevQrRef.current) {
+      setQrModalOpen(true);
+    }
+    prevQrRef.current = visibleQrCode;
+  }, [visibleQrCode]);
 
   return (
     <div
@@ -2782,15 +2790,18 @@ function CompactConnectionCard({
             </p>
           </div>
         ) : visibleQrCode ? (
-          <button className="cursor-pointer border-0 bg-transparent p-0" onClick={() => setQrModalOpen(true)} title="Clique para ampliar" type="button">
+          <button className="group cursor-pointer border-0 bg-transparent p-0" onClick={() => setQrModalOpen(true)} title="Clique para ampliar" type="button">
             <Image
               alt="QR Code para conectar o WhatsApp"
-              className="rounded-lg border bg-white p-2 transition-transform hover:scale-105"
+              className="rounded-lg border bg-white p-2 transition-transform group-hover:scale-105"
               height={144}
               src={visibleQrCode}
               unoptimized
               width={144}
             />
+            <p className="mt-1 text-[10px] text-cyan-400 opacity-70 group-hover:opacity-100">
+              Clique para ampliar
+            </p>
           </button>
         ) : profileImageUrl ? (
           <div className="grid place-items-center">

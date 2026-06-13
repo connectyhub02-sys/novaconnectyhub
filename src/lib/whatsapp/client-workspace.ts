@@ -677,6 +677,12 @@ async function createProviderInstance(
 ) {
   const now = new Date().toISOString();
   const name = buildProviderInstanceName(organization);
+
+  const existingInProvider = await findProviderInstanceByName(credentials, name);
+  if (existingInProvider) {
+    return await upsertRecoveredClientInstance(client, credentials, existingInProvider, organization, userId, now);
+  }
+
   const result = await callUazapi(credentials, "/instance/create", {
     method: "POST",
     admin: true,
@@ -773,6 +779,105 @@ async function getWorkspaceInstance(client: SupabaseClient, organizationId: stri
   }
 
   return data ?? null;
+}
+
+async function findProviderInstanceByName(
+  credentials: UazapiCredentials,
+  name: string,
+): Promise<Record<string, unknown> | null> {
+  const response = await callUazapi(credentials, "/instance/all", {
+    method: "GET",
+    admin: true,
+    tolerateError: true,
+  });
+
+  if (!response.ok || !response.data) return null;
+
+  const instances = Array.isArray(response.data)
+    ? response.data
+    : Array.isArray((response.data as Record<string, unknown>)?.instances)
+      ? (response.data as Record<string, unknown>).instances as unknown[]
+      : [];
+
+  const match = instances.find((item) => {
+    if (!item || typeof item !== "object") return false;
+    const record = item as Record<string, unknown>;
+    const itemName = record.name ?? record.instanceName ?? record.instance_name;
+    return typeof itemName === "string" && itemName === name;
+  }) as Record<string, unknown> | undefined;
+
+  return match ?? null;
+}
+
+async function upsertRecoveredClientInstance(
+  client: SupabaseClient,
+  credentials: UazapiCredentials,
+  providerData: Record<string, unknown>,
+  organization: CurrentOrganization,
+  userId: string,
+  now: string,
+): Promise<WhatsappInstanceRow> {
+  const providerInstanceId = findString(providerData, ["id", "instance_id", "instanceId", "instanceid"]);
+  const token = findString(providerData, ["token", "instanceToken", "instance_token"]);
+  const profileImageUrl = extractProfileImageUrl(providerData);
+
+  if (!providerInstanceId || !token) {
+    throw new Error("Instancia encontrada na Uazapi mas sem id/token valido.");
+  }
+
+  const webhookResult = await configureClientWebhook(credentials, token, providerInstanceId);
+  const payload = {
+    organization_id: organization.id,
+    owner_user_id: userId,
+    provider: "uazapi",
+    provider_instance_id: providerInstanceId,
+    phone_number: normalizePhone(findString(providerData, ["owner", "phone", "number", "phone_number"])),
+    display_name: findString(providerData, ["profileName", "displayName", "name"]) ?? organization.name,
+    status: "draft" as WhatsappStatus,
+    qr_status: null,
+    instance_token_preview: previewCredentialValue(token, "secret"),
+    instance_token_encrypted: encryptCredentialValue(token),
+    webhook_url: credentials.webhookUrl,
+    webhook_configured_at: webhookResult.ok ? now : null,
+    last_synced_at: now,
+    plan_code: organization.planCode,
+    created_by: userId,
+    metadata: {
+      created_from: "client_dashboard",
+      provider_name: findString(providerData, ["name", "instanceName", "instance_name"]),
+      behavior_config: defaultWhatsappBehaviorConfig,
+      ...(profileImageUrl ? { profile_image_url: profileImageUrl, profile_image_synced_at: now } : {}),
+      webhook_status: webhookResult.ok ? "configured" : "not_configured",
+      webhook_error: webhookResult.ok ? null : webhookResult.reason,
+      recovered_from_provider: true,
+      recovered_at: now,
+    },
+  };
+
+  const { data: existing, error: existingError } = await client
+    .from("whatsapp_instances")
+    .select("id")
+    .eq("provider", "uazapi")
+    .eq("provider_instance_id", providerInstanceId)
+    .maybeSingle<{ id: string }>();
+
+  if (existingError) {
+    throw new Error(`Nao foi possivel verificar a instancia WhatsApp: ${existingError.message}`);
+  }
+
+  const query = existing
+    ? client.from("whatsapp_instances").update(payload).eq("id", existing.id)
+    : client.from("whatsapp_instances").insert(payload);
+
+  const { data, error } = await query
+    .select("id, organization_id, owner_user_id, provider, provider_instance_id, phone_number, display_name, status, qr_status, instance_token_preview, instance_token_encrypted, webhook_url, webhook_configured_at, last_synced_at, last_heartbeat_at, last_message_at, connected_at, disconnected_at, metadata, updated_at")
+    .single<WhatsappInstanceRow>();
+
+  if (error || !data) {
+    throw new Error(error?.message ?? "Nao foi possivel salvar a instancia recuperada.");
+  }
+
+  return data;
 }
 
 async function recoverProviderInstanceToken(
