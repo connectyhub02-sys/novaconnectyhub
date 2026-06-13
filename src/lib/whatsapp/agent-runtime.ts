@@ -812,7 +812,7 @@ async function generateAgentResponse(input: {
       generationConfig: {
         temperature: 0.55,
         topP: 0.9,
-        maxOutputTokens: 700,
+        maxOutputTokens: 400,
       },
       safetySettings: geminiSafetySettings,
     }),
@@ -886,6 +886,7 @@ function buildSystemInstruction(input: {
     ...buildSocialProofInstruction(input.learnings),
     "",
     "REGRAS TECNICAS DE SAIDA:",
+    "- NUNCA escreva acoes entre parenteses, colchetes ou asteriscos: (risada), (risos), *sorriso*, [pausa], (tom serio). O texto pode virar audio e o TTS le essas palavras literalmente. Para expressar humor use 'haha', 'kkk', ou simplesmente escreva com tom leve.",
     "- Responda sempre em portugues do Brasil.",
     "- Se usar um link rastreado, inclua a URL ou tag exatamente como aparece na lista de links.",
     "- 'Nota interna' e contexto operacional — nunca repita essa expressao para o lead.",
@@ -943,6 +944,7 @@ function buildNaturalAudioFillersInstruction(behavior: WhatsappBehaviorConfig): 
     "- Varie o ritmo: frases curtas e diretas misturadas com explicacoes mais longas.",
     "- Tom emocional no texto: 'ah que legal!', 'poxa, entendo...', 'caramba, serio?'.",
     "- Use em 2-3 pontos por resposta, nao em toda frase. O excesso e tao ruim quanto a ausencia.",
+    "- PROIBIDO: NUNCA escreva acoes entre parenteses, colchetes ou asteriscos como (risada leve), (risos), *risada*, [sorriso], (suspiro), (pausa dramatica), (tom serio). O TTS le essas palavras em voz alta e estraga o audio. Se quiser expressar humor, use 'haha', 'kkk' ou simplesmente escreva com tom leve.",
   ];
 }
 
@@ -3411,7 +3413,7 @@ function splitMessage(text: string) {
   const chunks: string[] = [];
 
   for (const paragraph of paragraphs.length ? paragraphs : [text]) {
-    if (paragraph.length <= 900) {
+    if (paragraph.length <= 300) {
       chunks.push(paragraph);
       continue;
     }
@@ -3420,7 +3422,7 @@ function splitMessage(text: string) {
     let current = "";
 
     for (const sentence of sentences) {
-      if ((current + " " + sentence).trim().length > 900 && current) {
+      if ((current + " " + sentence).trim().length > 300 && current) {
         chunks.push(current);
         current = sentence;
       } else {
@@ -3431,7 +3433,7 @@ function splitMessage(text: string) {
     if (current) chunks.push(current);
   }
 
-  return chunks.slice(0, 4);
+  return chunks.slice(0, 3);
 }
 
 function extractGeminiText(value: unknown) {
@@ -3518,7 +3520,14 @@ function findValue(value: unknown, predicate: (key: string, value: unknown) => b
 }
 
 function normalizeAssistantText(value: string) {
-  return value.replace(/\r/g, "").replace(/\n{3,}/g, "\n\n").trim().slice(0, 4000);
+  return value
+    .replace(/\r/g, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/[(\[*](?:risada(?:\s+leve)?|risos?|sorriso|gargalhada|suspiro|pausa(?:\s+dramatica)?|tom\s+\w+|voz\s+\w+|rindo|sorrindo|sussurrando|gritando|pensando|respirando)[)\]*]/gi, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/^\s+$/gm, "")
+    .trim()
+    .slice(0, 4000);
 }
 
 function normalizeSearch(value: string) {
