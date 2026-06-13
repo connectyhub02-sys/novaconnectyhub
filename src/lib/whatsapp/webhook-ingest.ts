@@ -257,6 +257,9 @@ async function findWhatsappInstance(client: SupabaseClient, providerInstanceId: 
     .select("id, organization_id, instance_token_encrypted, metadata")
     .eq("provider", "uazapi")
     .eq("provider_instance_id", providerInstanceId)
+    .neq("status", "archived")
+    .order("updated_at", { ascending: false })
+    .limit(1)
     .maybeSingle<WhatsappInstanceRow>();
 
   if (data) {
@@ -268,6 +271,9 @@ async function findWhatsappInstance(client: SupabaseClient, providerInstanceId: 
     .select("id, organization_id, instance_token_encrypted, metadata")
     .eq("provider", "uazapi")
     .contains("metadata", { provider_name: providerInstanceId })
+    .neq("status", "archived")
+    .order("updated_at", { ascending: false })
+    .limit(1)
     .maybeSingle<WhatsappInstanceRow>();
 
   return byProviderName ?? null;
@@ -907,12 +913,6 @@ function findMessageRecord(payload: JsonRecord) {
 }
 
 function extractProviderInstanceId(payload: JsonRecord, requestUrl: string) {
-  const fromPayload = findString(payload, ["instanceId", "instance_id", "instanceid", "instanceName", "instance_name", "instance", "session", "serverId"]);
-
-  if (fromPayload) {
-    return fromPayload;
-  }
-
   try {
     const url = new URL(requestUrl);
     const fromUrl = url.searchParams.get("instanceId") ?? url.searchParams.get("instance_id") ?? url.searchParams.get("instance");
@@ -921,6 +921,12 @@ function extractProviderInstanceId(payload: JsonRecord, requestUrl: string) {
       return fromUrl;
     }
   } catch {}
+
+  const fromPayload = findString(payload, ["instanceId", "instance_id", "instanceid"]);
+
+  if (fromPayload) {
+    return fromPayload;
+  }
 
   return findNestedString(payload, ["instanceId", "instance_id"]);
 }

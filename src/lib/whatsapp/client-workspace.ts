@@ -757,6 +757,14 @@ async function createProviderInstance(
     throw new Error(error?.message ?? "Nao foi possivel salvar a instancia WhatsApp.");
   }
 
+  await client
+    .from("whatsapp_instances")
+    .update({ status: "archived", metadata: { archived_reason: "replaced_by_new_instance", replaced_by: data.id, archived_at: now } })
+    .eq("provider", "uazapi")
+    .eq("organization_id", organization.id)
+    .neq("id", data.id)
+    .neq("status", "archived");
+
   return data;
 }
 
@@ -876,6 +884,14 @@ async function upsertRecoveredClientInstance(
   if (error || !data) {
     throw new Error(error?.message ?? "Nao foi possivel salvar a instancia recuperada.");
   }
+
+  await client
+    .from("whatsapp_instances")
+    .update({ status: "archived", metadata: { archived_reason: "replaced_by_recovered_instance", replaced_by: data.id, archived_at: now } })
+    .eq("provider", "uazapi")
+    .eq("organization_id", organization.id)
+    .neq("id", data.id)
+    .neq("status", "archived");
 
   return data;
 }
