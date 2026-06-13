@@ -816,7 +816,7 @@ async function generateAgentResponse(input: {
       generationConfig: {
         temperature: 0.55,
         topP: 0.9,
-        maxOutputTokens: 150,
+        maxOutputTokens: 180,
       },
       safetySettings: geminiSafetySettings,
     }),
