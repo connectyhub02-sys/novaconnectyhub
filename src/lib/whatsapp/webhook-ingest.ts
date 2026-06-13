@@ -907,21 +907,22 @@ function findMessageRecord(payload: JsonRecord) {
 }
 
 function extractProviderInstanceId(payload: JsonRecord, requestUrl: string) {
-  const direct =
-    findString(payload, ["instanceId", "instance_id", "instanceid", "instanceName", "instance_name", "instance", "session", "serverId"])
-    ?? findNestedString(payload, ["instanceId", "instance_id", "id"]);
+  const fromPayload = findString(payload, ["instanceId", "instance_id", "instanceid", "instanceName", "instance_name", "instance", "session", "serverId"]);
 
-  if (direct) {
-    return direct;
+  if (fromPayload) {
+    return fromPayload;
   }
 
   try {
     const url = new URL(requestUrl);
+    const fromUrl = url.searchParams.get("instanceId") ?? url.searchParams.get("instance_id") ?? url.searchParams.get("instance");
 
-    return url.searchParams.get("instanceId") ?? url.searchParams.get("instance_id") ?? url.searchParams.get("instance") ?? null;
-  } catch {
-    return null;
-  }
+    if (fromUrl) {
+      return fromUrl;
+    }
+  } catch {}
+
+  return findNestedString(payload, ["instanceId", "instance_id"]);
 }
 
 function extractEventType(payload: JsonRecord) {
