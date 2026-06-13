@@ -812,7 +812,7 @@ async function generateAgentResponse(input: {
       generationConfig: {
         temperature: 0.55,
         topP: 0.9,
-        maxOutputTokens: 400,
+        maxOutputTokens: 250,
       },
       safetySettings: geminiSafetySettings,
     }),
@@ -886,7 +886,9 @@ function buildSystemInstruction(input: {
     ...buildSocialProofInstruction(input.learnings),
     "",
     "REGRAS TECNICAS DE SAIDA:",
-    "- NUNCA escreva acoes entre parenteses, colchetes ou asteriscos: (risada), (risos), *sorriso*, [pausa], (tom serio). O texto pode virar audio e o TTS le essas palavras literalmente. Para expressar humor use 'haha', 'kkk', ou simplesmente escreva com tom leve.",
+    "- NUNCA escreva acoes entre parenteses, colchetes ou asteriscos: (risada), (risos), *sorriso*, [pausa], (tom serio). O texto pode virar audio e o TTS le essas palavras literalmente.",
+    "- NUNCA escreva 'rs', 'rsrs', 'kk', 'kkk' no meio do texto quando a resposta pode virar audio. O TTS le 'rs' como palavra. Para expressar humor, escreva com tom leve ou use 'haha' somente no INICIO da frase isolado.",
+    "- SEMPRE coloque espaco apos ponto final, interrogacao e exclamacao. Exemplo correto: 'Entendi. Vou ver isso.' Exemplo errado: 'Entendi.Vou ver isso.'",
     "- Responda sempre em portugues do Brasil.",
     "- Se usar um link rastreado, inclua a URL ou tag exatamente como aparece na lista de links.",
     "- 'Nota interna' e contexto operacional — nunca repita essa expressao para o lead.",
@@ -944,7 +946,8 @@ function buildNaturalAudioFillersInstruction(behavior: WhatsappBehaviorConfig): 
     "- Varie o ritmo: frases curtas e diretas misturadas com explicacoes mais longas.",
     "- Tom emocional no texto: 'ah que legal!', 'poxa, entendo...', 'caramba, serio?'.",
     "- Use em 2-3 pontos por resposta, nao em toda frase. O excesso e tao ruim quanto a ausencia.",
-    "- PROIBIDO: NUNCA escreva acoes entre parenteses, colchetes ou asteriscos como (risada leve), (risos), *risada*, [sorriso], (suspiro), (pausa dramatica), (tom serio). O TTS le essas palavras em voz alta e estraga o audio. Se quiser expressar humor, use 'haha', 'kkk' ou simplesmente escreva com tom leve.",
+    "- PROIBIDO: NUNCA escreva acoes entre parenteses, colchetes ou asteriscos como (risada leve), (risos), *risada*, [sorriso], (suspiro), (pausa dramatica), (tom serio). O TTS le essas palavras em voz alta e estraga o audio.",
+    "- PROIBIDO em audio: 'rs', 'rsrs', 'kk', 'kkk'. O TTS le 'rs' como se fosse uma palavra. Para humor em audio, escreva com tom leve natural ou use 'haha' isolado no inicio.",
   ];
 }
 
@@ -1641,7 +1644,7 @@ async function sendAgentResponse(input: {
       const generatedAudio = await generateElevenLabsAudio({
         organizationId: context.organization.id,
         userId: null,
-        text,
+        text: sanitizeTextForTts(text),
         voiceId: context.behavior.audioVoiceId || null,
         voicePublicOwnerId: context.behavior.audioVoicePublicOwnerId || null,
         voiceName: context.behavior.audioVoiceName || null,
@@ -3413,7 +3416,7 @@ function splitMessage(text: string) {
   const chunks: string[] = [];
 
   for (const paragraph of paragraphs.length ? paragraphs : [text]) {
-    if (paragraph.length <= 300) {
+    if (paragraph.length <= 150) {
       chunks.push(paragraph);
       continue;
     }
@@ -3422,7 +3425,7 @@ function splitMessage(text: string) {
     let current = "";
 
     for (const sentence of sentences) {
-      if ((current + " " + sentence).trim().length > 300 && current) {
+      if ((current + " " + sentence).trim().length > 150 && current) {
         chunks.push(current);
         current = sentence;
       } else {
@@ -3524,10 +3527,20 @@ function normalizeAssistantText(value: string) {
     .replace(/\r/g, "")
     .replace(/\n{3,}/g, "\n\n")
     .replace(/[(\[*](?:risada(?:\s+leve)?|risos?|sorriso|gargalhada|suspiro|pausa(?:\s+dramatica)?|tom\s+\w+|voz\s+\w+|rindo|sorrindo|sussurrando|gritando|pensando|respirando)[)\]*]/gi, "")
+    .replace(/(?<=[.!?])(?=[A-ZÀ-ÖØ-Ý])/g, " ")
     .replace(/\n{3,}/g, "\n\n")
     .replace(/^\s+$/gm, "")
     .trim()
     .slice(0, 4000);
+}
+
+function sanitizeTextForTts(value: string) {
+  return value
+    .replace(/[(\[*](?:risada(?:\s+leve)?|risos?|sorriso|gargalhada|suspiro|pausa(?:\s+dramatica)?|tom\s+\w+|voz\s+\w+|rindo|sorrindo|sussurrando|gritando|pensando|respirando)[)\]*]/gi, "")
+    .replace(/(?<![a-zA-ZÀ-ÿ])(?:rs+|k{2,}|ha{2,}|he{2,}|hi{2,}|hu{2,}|kkkk*|hahaha*|hehehe*|rsrs+)(?![a-zA-ZÀ-ÿ])/gi, "")
+    .replace(/\.{2,}/g, ".")
+    .replace(/\s{2,}/g, " ")
+    .trim();
 }
 
 function normalizeSearch(value: string) {
