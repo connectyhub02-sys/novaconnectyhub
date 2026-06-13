@@ -2311,17 +2311,20 @@ function ModeSelector<T extends string>({
           <button
             key={option.value}
             type="button"
+            aria-pressed={active}
             onClick={() => onChange(option.value)}
             className={cn(
               "min-h-16 rounded-lg border px-3 py-2 text-left transition",
-              active ? "border-cyan-300/50 bg-cyan-400/10" : "border-slate-700/70 bg-slate-950/20 hover:border-cyan-300/35",
+              active
+                ? "border-cyan-100/80 bg-cyan-300 text-slate-950 shadow-[0_0_22px_rgba(103,232,249,0.22)] ring-1 ring-cyan-100/70"
+                : "border-slate-700/70 bg-slate-950/20 text-slate-100 hover:border-cyan-300/35 hover:bg-white/10 hover:text-white",
             )}
           >
-            <span className="flex items-center gap-1.5 text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>
+            <span className={cn("flex items-center gap-1.5 text-[12px] font-semibold", active ? "text-slate-950" : "text-slate-100")}>
               {option.label}
               {option.help ? <InfoHint text={option.help} /> : null}
             </span>
-            <span className="mt-1 block text-[11px] text-slate-500">{option.description}</span>
+            <span className={cn("mt-1 block text-[11px]", active ? "text-slate-800" : "text-slate-300")}>{option.description}</span>
           </button>
         );
       })}
