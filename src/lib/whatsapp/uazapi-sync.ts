@@ -178,7 +178,7 @@ async function syncOneInstance({
   const token = readString(providerInstance, ["token"]);
   const webhookResult =
     configureWebhook && credentials.webhookUrl && token
-      ? await configureInstanceWebhook(credentials, token)
+      ? await configureInstanceWebhook(credentials, token, providerInstanceId)
       : { ok: false as const, reason: "Webhook nao configurado por falta de URL ou token." };
   const status = normalizeWhatsappStatus(readString(providerInstance, ["status", "state", "connectionStatus"]));
   const phoneNumber = normalizePhone(readString(providerInstance, ["owner", "phone", "number", "phone_number"]));
@@ -357,7 +357,7 @@ async function findOrganizationByUser(client: SupabaseClient, userId: string) {
   return membership?.organizations ?? null;
 }
 
-async function configureInstanceWebhook(credentials: UazapiCredentials, token: string) {
+async function configureInstanceWebhook(credentials: UazapiCredentials, token: string, providerInstanceId: string) {
   if (!credentials.webhookUrl) {
     return { ok: false as const, reason: "NEXT_PUBLIC_APP_URL nao configurada." };
   }
@@ -370,7 +370,7 @@ async function configureInstanceWebhook(credentials: UazapiCredentials, token: s
       token,
     },
     body: JSON.stringify({
-      url: buildProviderWebhookUrl(credentials),
+      url: buildProviderWebhookUrl(credentials, providerInstanceId),
       events: ["messages", "messages_update", "connection", "history", "presence", "chats", "contacts"],
       excludeMessages: ["wasSentByApi"],
       enabled: true,
@@ -499,11 +499,15 @@ function sanitizeProviderPayload(value: unknown): unknown {
   );
 }
 
-function buildProviderWebhookUrl(credentials: UazapiCredentials) {
+function buildProviderWebhookUrl(credentials: UazapiCredentials, providerInstanceId?: string) {
   const url = new URL(credentials.webhookUrl ?? "");
 
   if (credentials.webhookSecret) {
     url.searchParams.set("secret", credentials.webhookSecret);
+  }
+
+  if (providerInstanceId) {
+    url.searchParams.set("instanceId", providerInstanceId);
   }
 
   return url.toString();
