@@ -3311,6 +3311,10 @@ function isBotLoopRisk(messages: ConversationMessageRow[]) {
   const inbound = recent.filter((message) => message.direction === "inbound" && message.text);
   const outbound = recent.filter((message) => message.direction === "outbound" && message.text);
 
+  if (inbound.length === 0 || outbound.length === 0) {
+    return false;
+  }
+
   if (inbound.length >= 8 && outbound.length >= 3) {
     return true;
   }
@@ -3320,12 +3324,17 @@ function isBotLoopRisk(messages: ConversationMessageRow[]) {
     counts.set(message.text, (counts.get(message.text) ?? 0) + 1);
   }
 
-  if (Math.max(0, ...counts.values()) >= 4) {
+  const repeatedInbound = Array.from(counts.entries()).find(([, count]) => count >= 4)?.[0] ?? null;
+  if (repeatedInbound && outbound.length >= 2 && !isLowSignalLeadPing(repeatedInbound)) {
     return true;
   }
 
   const botPatterns = /\b(bot|chatbot|atendimento automatico|mensagem automatica|menu principal|digite \d|nao entendi)\b/;
-  return inbound.filter((message) => botPatterns.test(message.text)).length >= 2;
+  return outbound.length >= 2 && inbound.filter((message) => botPatterns.test(message.text)).length >= 2;
+}
+
+function isLowSignalLeadPing(value: string) {
+  return /^(oi+|ola+|opa+|bom dia|boa tarde|boa noite|ei|hey|hello|alo|teste|ok|sim|nao|blz|beleza|hum|hmm)$/.test(value);
 }
 
 function isHumanRequest(value: string) {
