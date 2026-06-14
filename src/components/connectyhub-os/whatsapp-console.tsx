@@ -1758,9 +1758,10 @@ function WhatsappConsoleTabs({
               className={cn(
                 "grid min-h-[58px] grid-cols-[18px_minmax(0,1fr)] items-center gap-2 rounded-lg px-3 text-left transition",
                 active
-                  ? "bg-cyan-300 text-slate-950 shadow-[0_0_22px_rgba(103,232,249,0.22)] ring-1 ring-cyan-100/70"
+                  ? "text-slate-950 shadow-[0_0_24px_rgba(var(--ch-accent-rgb),0.18)] ring-1 ring-white/20"
                   : "text-slate-200 hover:bg-white/10 hover:text-white",
               )}
+              style={active ? { background: "linear-gradient(135deg, var(--ch-accent), #7dd3fc)" } : undefined}
               onClick={() => onChange(tab.id)}
             >
               <Icon className={cn("h-4 w-4", active ? "text-slate-950" : "text-slate-200")} />
@@ -2396,9 +2397,10 @@ function ModeSelector<T extends string>({
             className={cn(
               "min-h-16 rounded-lg border px-3 py-2 text-left transition",
               active
-                ? "border-cyan-100/80 bg-cyan-300 text-slate-950 shadow-[0_0_22px_rgba(103,232,249,0.22)] ring-1 ring-cyan-100/70"
+                ? "border-white/25 text-slate-950 shadow-[0_0_22px_rgba(var(--ch-accent-rgb),0.18)] ring-1 ring-white/20"
                 : "border-slate-700/70 bg-slate-950/20 text-slate-100 hover:border-cyan-300/35 hover:bg-white/10 hover:text-white",
             )}
+            style={active ? { background: "linear-gradient(135deg, var(--ch-accent), #7dd3fc)" } : undefined}
           >
             <span className={cn("flex items-center gap-1.5 text-[12px] font-semibold", active ? "text-slate-950" : "text-slate-100")}>
               {option.label}
@@ -3785,7 +3787,8 @@ function ActionButton({
       type="button"
       disabled={disabled || loading}
       onClick={onClick}
-      className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-cyan-300 px-4 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-50"
+      className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg px-4 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-950 shadow-[0_12px_30px_rgba(var(--ch-accent-rgb),0.16)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+      style={{ background: "linear-gradient(135deg, var(--ch-accent), #7dd3fc)" }}
     >
       {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Icon className="h-4 w-4" />}
       <span className="inline-flex items-center gap-1.5">
@@ -3820,7 +3823,7 @@ function SecondaryAction({
       onClick={onClick}
       className={cn(
         "inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide transition disabled:cursor-not-allowed disabled:opacity-50",
-        tone === "danger" ? "border-rose-400/25 bg-rose-400/10 text-rose-200 hover:bg-rose-400/15" : "border-cyan-400/25 bg-cyan-400/10 text-cyan-200 hover:bg-cyan-400/15",
+        tone === "danger" ? "border-rose-400/30 bg-rose-400/10 text-rose-200 hover:bg-rose-400/15" : "border-white/15 bg-white/[0.04] text-slate-100 hover:border-cyan-300/35 hover:bg-white/[0.08]",
       )}
     >
       {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Icon className="h-3.5 w-3.5" />}

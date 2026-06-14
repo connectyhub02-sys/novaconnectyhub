@@ -154,8 +154,8 @@ export function ConnectyShell({
   const pathname  = usePathname();
   const active    = activeHref ?? pathname ?? "/";
   const sections  = mode === "admin" ? adminSections : clientSections;
-  const accent     = "#2dd4bf";
-  const accentRgb  = "45,212,191";
+  const accent     = "#38e8d6";
+  const accentRgb  = "56,232,214";
   const name      = mode === "admin" ? "ConnectyHub" : (workspaceName ?? "Minha empresa");
   const role      = mode === "admin" ? "Platform Admin" : (userLabel ?? "workspace");
   const switchTo  = mode === "admin" ? "/dashboard" : "/admin";
@@ -200,39 +200,41 @@ export function ConnectyShell({
   }
 
   const shellTheme = {
-    background: "radial-gradient(circle at 16% 0%, rgba(45,212,191,0.16), transparent 30rem), radial-gradient(circle at 90% 8%, rgba(139,92,246,0.12), transparent 26rem), var(--ch-bg)",
+    background: "radial-gradient(circle at 14% 0%, rgba(56,232,214,0.10), transparent 34rem), radial-gradient(circle at 88% 6%, rgba(129,140,248,0.10), transparent 30rem), linear-gradient(180deg, var(--ch-bg), #05070b 72%)",
     colorScheme: "dark",
-    "--ch-bg":         "#080a0f",
-    "--ch-surface":    "#11151d",
-    "--ch-surface-2":  "#171c26",
-    "--ch-surface-3":  "#1d2430",
-    "--ch-border":     "rgba(212,221,235,0.18)",
+    "--ch-bg":         "#06080d",
+    "--ch-surface":    "#0f141d",
+    "--ch-surface-2":  "#151b26",
+    "--ch-surface-3":  "#1c2431",
+    "--ch-border":     "rgba(190,205,226,0.22)",
+    "--ch-border-soft":"rgba(190,205,226,0.14)",
+    "--ch-border-strong":"rgba(215,226,242,0.34)",
     "--ch-brand-blue": "#01004c",
     "--ch-accent":     accent,
     "--ch-accent-rgb": accentRgb,
-    "--ch-text":       "#f7fbff",
-    "--ch-text-rgb":   "247,251,255",
-    "--ch-muted":      "#b9c6d8",
-    "--ch-subtle":     "#8fa1b8",
-    "--ch-hover":      "rgba(45,212,191,0.11)",
-    "--ch-dropdown-bg":"#11151d",
-    "--background":    "#080a0f",
-    "--foreground":    "#f7fbff",
-    "--card":          "#11151d",
-    "--card-foreground":"#f7fbff",
-    "--popover":       "#11151d",
-    "--popover-foreground":"#f7fbff",
+    "--ch-text":       "#fbfdff",
+    "--ch-text-rgb":   "251,253,255",
+    "--ch-muted":      "#c5d0df",
+    "--ch-subtle":     "#94a6bb",
+    "--ch-hover":      "rgba(56,232,214,0.10)",
+    "--ch-dropdown-bg":"#111822",
+    "--background":    "#06080d",
+    "--foreground":    "#fbfdff",
+    "--card":          "#0f141d",
+    "--card-foreground":"#fbfdff",
+    "--popover":       "#111822",
+    "--popover-foreground":"#fbfdff",
     "--primary":       accent,
     "--primary-foreground":"#061015",
-    "--secondary":     "#171c26",
-    "--secondary-foreground":"#f7fbff",
-    "--muted":         "#171c26",
-    "--muted-foreground":"#b9c6d8",
-    "--accent":        "#1d2430",
-    "--accent-foreground":"#f7fbff",
-    "--border":        "rgba(212,221,235,0.18)",
-    "--input":         "rgba(212,221,235,0.22)",
-    "--ring":          "rgba(45,212,191,0.46)",
+    "--secondary":     "#151b26",
+    "--secondary-foreground":"#fbfdff",
+    "--muted":         "#151b26",
+    "--muted-foreground":"#c5d0df",
+    "--accent":        "#1c2431",
+    "--accent-foreground":"#fbfdff",
+    "--border":        "rgba(190,205,226,0.22)",
+    "--input":         "rgba(215,226,242,0.30)",
+    "--ring":          "rgba(56,232,214,0.48)",
   } as CSSProperties;
 
   return (
@@ -245,14 +247,14 @@ export function ConnectyShell({
       <aside
         className="sticky top-0 hidden h-svh w-[240px] shrink-0 flex-col lg:flex"
         style={{
-          background:  "linear-gradient(180deg, rgba(17,21,29,0.98), rgba(10,13,19,0.98))",
-          borderRight: "1px solid var(--ch-border)",
+          background:  "linear-gradient(180deg, rgba(8,11,16,0.99), rgba(6,8,12,0.99))",
+          borderRight: "1px solid var(--ch-border-strong)",
         }}
       >
         {/* Brand */}
         <div
           className="flex h-[60px] items-center gap-3 px-5"
-          style={{ borderBottom: "1px solid var(--ch-border)" }}
+          style={{ borderBottom: "1px solid var(--ch-border-strong)" }}
         >
           <Link href="/" className="min-w-0 flex-1">
             <ConnectyLogo className="h-[22px] w-[170px]" tone={logoTone} type="full" />
@@ -272,7 +274,7 @@ export function ConnectyShell({
             <div key={section.label}>
               <div
                 className="mb-2 px-2 font-mono text-[9px] uppercase tracking-[0.2em]"
-                style={{ color: "var(--ch-muted)" }}
+                style={{ color: "var(--ch-subtle)" }}
               >
                 {section.label}
               </div>
@@ -286,7 +288,7 @@ export function ConnectyShell({
         </nav>
 
         {/* Identity */}
-        <div className="p-3" style={{ borderTop: "1px solid var(--ch-border)" }}>
+        <div className="p-3" style={{ borderTop: "1px solid var(--ch-border-strong)" }}>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
@@ -348,9 +350,9 @@ export function ConnectyShell({
         <header
           className="sticky top-0 z-40 flex h-[60px] items-center gap-3 px-6"
           style={{
-            background:    "color-mix(in srgb, var(--ch-surface) 92%, transparent)",
+            background:    "color-mix(in srgb, var(--ch-bg) 76%, var(--ch-surface) 24%)",
             backdropFilter:"blur(16px)",
-            borderBottom:  "1px solid var(--ch-border)",
+            borderBottom:  "1px solid var(--ch-border-strong)",
           }}
         >
           {/* Mobile brand */}
@@ -379,8 +381,8 @@ export function ConnectyShell({
                 className="h-8 w-[220px] rounded-lg pl-9 pr-3 text-[12px] outline-none"
                 style={{
                   color:      "var(--ch-text)",
-                  background: "var(--ch-surface-2)",
-                  border:     "1px solid var(--ch-border)",
+                  background: "var(--ch-surface-3)",
+                  border:     "1px solid var(--ch-border-strong)",
                 }}
               />
             </div>
@@ -390,8 +392,8 @@ export function ConnectyShell({
               type="button"
               className="relative flex h-8 w-8 items-center justify-center rounded-lg transition"
               onMouseEnter={e => (e.currentTarget.style.background = "var(--ch-hover)")}
-              onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
-              style={{ border: "1px solid var(--ch-border)" }}
+              onMouseLeave={e => (e.currentTarget.style.background = "var(--ch-surface-2)")}
+              style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
             >
               <Bell className="h-4 w-4" style={{ color: "var(--ch-muted)" }} />
               <span
@@ -405,7 +407,7 @@ export function ConnectyShell({
               <Link
                 href={switchTo}
                 className="hidden h-8 items-center rounded-lg px-3 font-mono text-[10px] uppercase tracking-wide transition md:flex"
-                style={{ border: "1px solid var(--ch-border)", color: "var(--ch-muted)" }}
+                style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)", color: "var(--ch-muted)" }}
               >
                 {switchLbl}
               </Link>
@@ -415,8 +417,8 @@ export function ConnectyShell({
             <span
               className="hidden h-7 items-center rounded-lg px-3 font-mono text-[10px] uppercase tracking-wider md:flex"
               style={{
-                background: `rgba(var(--ch-accent-rgb),0.12)`,
-                border:     `1px solid rgba(var(--ch-accent-rgb),0.25)`,
+                background: `linear-gradient(135deg, rgba(var(--ch-accent-rgb),0.16), rgba(129,140,248,0.10))`,
+                border:     `1px solid rgba(var(--ch-accent-rgb),0.34)`,
                 color:      "var(--ch-accent)",
               }}
             >
@@ -472,7 +474,7 @@ export function ConnectyShell({
         {/* Mobile nav */}
         <div
           className="flex gap-1.5 overflow-x-auto px-4 py-2.5 lg:hidden"
-          style={{ background: "var(--ch-surface)", borderBottom: "1px solid var(--ch-border)" }}
+          style={{ background: "var(--ch-surface)", borderBottom: "1px solid var(--ch-border-strong)" }}
         >
           {sections.flatMap((s) => s.items).map((item) => {
             const Icon  = item.icon;
@@ -483,9 +485,9 @@ export function ConnectyShell({
                 href={item.href}
                 className="flex h-7 shrink-0 items-center gap-1.5 rounded-lg px-3 font-mono text-[10px] whitespace-nowrap transition"
                 style={activ ? {
-                  background: `rgba(var(--ch-accent-rgb),0.15)`,
-                  border:     `1px solid rgba(var(--ch-accent-rgb),0.25)`,
-                  color:      "var(--ch-accent)",
+                  background: `linear-gradient(135deg, rgba(var(--ch-accent-rgb),0.18), rgba(129,140,248,0.10))`,
+                  border:     `1px solid rgba(var(--ch-accent-rgb),0.40)`,
+                  color:      "var(--ch-text)",
                 } : {
                   background: "transparent",
                   border:     "1px solid var(--ch-border)",
@@ -550,18 +552,25 @@ function SidebarLink({
     <Link
       href={item.href}
       aria-current={active ? "page" : undefined}
-      className="group flex h-9 items-center gap-2.5 rounded-xl px-3 text-[12.5px] transition-all"
+      className="group relative flex h-9 items-center gap-2.5 rounded-xl px-3 text-[12.5px] transition-all"
       style={active ? {
-        background: `rgba(var(--ch-accent-rgb),0.17)`,
-        border:     `1px solid rgba(var(--ch-accent-rgb),0.38)`,
+        background: `linear-gradient(90deg, rgba(var(--ch-accent-rgb),0.22), rgba(129,140,248,0.10))`,
+        border:     `1px solid rgba(var(--ch-accent-rgb),0.48)`,
         color:      "var(--ch-text)",
-        boxShadow:  "0 10px 28px rgba(var(--ch-accent-rgb),0.12)",
+        boxShadow:  "0 10px 28px rgba(var(--ch-accent-rgb),0.14)",
       } : {
         background: "transparent",
         border:     "1px solid transparent",
         color:      "var(--ch-muted)",
       }}
     >
+      {active ? (
+        <span
+          aria-hidden="true"
+          className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full"
+          style={{ background: "var(--ch-accent)", boxShadow: "0 0 10px rgba(var(--ch-accent-rgb),0.75)" }}
+        />
+      ) : null}
       <Icon className={cn("h-4 w-4 shrink-0", active ? "" : "opacity-60 group-hover:opacity-100")} />
       <span className="flex-1 truncate font-medium">{item.label}</span>
       {item.badge && (

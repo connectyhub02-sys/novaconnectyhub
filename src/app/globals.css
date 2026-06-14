@@ -107,9 +107,16 @@ body {
 }
 
 [data-connecty-mode] .text-slate-400,
-[data-connecty-mode] .text-slate-500,
 [data-connecty-mode] .text-muted-foreground {
   color: var(--ch-muted) !important;
+}
+
+[data-connecty-mode] .text-slate-300 {
+  color: #dce6f3 !important;
+}
+
+[data-connecty-mode] .text-slate-500 {
+  color: var(--ch-subtle) !important;
 }
 
 [data-connecty-mode] .text-slate-600,
@@ -147,6 +154,10 @@ body {
   background-color: rgba(148, 163, 184, 0.14) !important;
 }
 
+[data-connecty-mode] .bg-slate-950\/20 {
+  background-color: rgba(5, 8, 13, 0.36) !important;
+}
+
 [data-connecty-mode] .bg-emerald-50 {
   background-color: rgba(16, 185, 129, 0.12) !important;
 }
@@ -159,6 +170,10 @@ body {
   border-color: var(--ch-border) !important;
 }
 
+[data-connecty-mode] .border-slate-700\/70 {
+  border-color: var(--ch-border) !important;
+}
+
 [data-connecty-mode] .border-border {
   border-color: var(--ch-border) !important;
 }
@@ -166,9 +181,16 @@ body {
 [data-connecty-mode] input,
 [data-connecty-mode] select,
 [data-connecty-mode] textarea {
-  background-color: var(--ch-surface-2);
+  background-color: var(--ch-surface-3);
   color: var(--ch-text);
   border-color: var(--ch-border);
+}
+
+[data-connecty-mode] input:focus,
+[data-connecty-mode] select:focus,
+[data-connecty-mode] textarea:focus {
+  border-color: rgba(var(--ch-accent-rgb), 0.58);
+  box-shadow: 0 0 0 1px rgba(var(--ch-accent-rgb), 0.18);
 }
 
 [data-connecty-mode] input::placeholder,
