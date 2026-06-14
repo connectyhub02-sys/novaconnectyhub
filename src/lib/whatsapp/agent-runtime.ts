@@ -331,12 +331,6 @@ export async function processWhatsappAgentRun(input: {
       await persistLeadMediaFile({ client, context, token, latestInbound }).catch(() => {});
     }
 
-    if (context.qualification.enabled && lead?.id) {
-      await analyzeAndPersistLeadQualification(client, context).catch(async (error: unknown) => {
-        await persistQualificationError(client, context, error);
-      });
-    }
-
     if (behavior.botLoopProtection && isBotLoopRisk(context.messages)) {
       await pauseConversationForHuman(client, context.conversationId, behavior, "bot_loop_protection");
       return await completeRun(client, run.id, "Protecao contra loop acionada.", { skipped: true, reason: "bot_loop_protection" });
@@ -367,24 +361,20 @@ export async function processWhatsappAgentRun(input: {
     const humanRequestText = getLeadAuthoredHumanRequestText(latestInbound, userText);
 
     if (behavior.humanIntervention && behavior.detectHumanRequest && isHumanRequest(humanRequestText)) {
-      const handoffText = "Certo, vou deixar registrado para um humano assumir o atendimento por aqui.";
-      const sent = await sendWhatsappText({
-        credentials: context.credentials,
+      return await handleLeadHumanHandoffRequest({
+        client,
+        context,
         token,
         phone,
-        text: handoffText,
-        trackId: `human_handoff_${run.id}`,
-        replyId: latestInbound?.provider_message_id ?? undefined,
-        mentions: resolveGroupMentions(context),
+        latestInbound,
+        requestText: humanRequestText,
       });
-      await pauseConversationForHuman(client, context.conversationId, behavior, "lead_requested_human");
-      await saveOutboundMessage(client, context, {
-        text: handoffText,
-        mode: "text",
-        providerResponse: sent,
-      });
+    }
 
-      return await completeRun(client, run.id, "Lead pediu atendimento humano.", { sent: true, reason: "lead_requested_human" });
+    if (context.qualification.enabled && lead?.id) {
+      await analyzeAndPersistLeadQualification(client, context).catch(async (error: unknown) => {
+        await persistQualificationError(client, context, error);
+      });
     }
 
     if (behavior.markAsRead || behavior.alwaysOnline) {
@@ -2839,6 +2829,153 @@ async function persistBehaviorSignals(
   );
 }
 
+async function handleLeadHumanHandoffRequest(input: {
+  client: SupabaseClient;
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
+  token: string;
+  phone: string;
+  latestInbound: ConversationMessageRow | null;
+  requestText: string;
+}) {
+  const { client, context, latestInbound, requestText } = input;
+  const requestedAt = new Date().toISOString();
+  const handoffText = buildHumanHandoffText();
+  const sent = await sendWhatsappText({
+    credentials: context.credentials,
+    token: input.token,
+    phone: input.phone,
+    text: handoffText,
+    trackId: `human_handoff_${context.run.id}`,
+    replyId: latestInbound?.provider_message_id ?? undefined,
+    mentions: resolveGroupMentions(context),
+  });
+
+  const pausedUntil = await pauseConversationForHuman(client, context.conversationId, context.behavior, "lead_requested_human", {
+    source: "lead_request",
+    status: "awaiting_human",
+    requested_at: requestedAt,
+    requested_text: preview(requestText, 700),
+    request_message_id: latestInbound?.id ?? null,
+    provider_message_id: latestInbound?.provider_message_id ?? null,
+    lead_id: context.lead?.id ?? null,
+    agent_run_id: context.run.id,
+  });
+
+  await saveOutboundMessage(client, context, {
+    text: handoffText,
+    mode: "text",
+    providerResponse: sent,
+  });
+
+  await persistLeadHumanHandoff(client, context, {
+    requestedAt,
+    pausedUntil,
+    requestText,
+    latestInbound,
+  });
+
+  await persistHumanHandoffEvent(client, context, {
+    requestedAt,
+    pausedUntil,
+    requestText,
+    latestInbound,
+  });
+
+  return await completeRun(client, context.run.id, "Lead pediu atendimento humano.", {
+    sent: true,
+    reason: "lead_requested_human",
+    pausedUntil,
+  });
+}
+
+function buildHumanHandoffText() {
+  return "claro, vou chamar alguem da equipe pra seguir com vc por aqui.";
+}
+
+async function persistLeadHumanHandoff(
+  client: SupabaseClient,
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+  input: {
+    requestedAt: string;
+    pausedUntil: string;
+    requestText: string;
+    latestInbound: ConversationMessageRow | null;
+  },
+) {
+  if (!context.lead?.id) {
+    return;
+  }
+
+  const currentMetadata = context.lead.metadata ?? {};
+  const currentHistory = Array.isArray(currentMetadata.human_handoff_history)
+    ? currentMetadata.human_handoff_history
+    : [];
+  const handoffSnapshot = {
+    active: true,
+    status: "awaiting_human",
+    reason: "lead_requested_human",
+    source: "lead_request",
+    requested_at: input.requestedAt,
+    paused_until: input.pausedUntil,
+    conversation_id: context.conversationId,
+    agent_run_id: context.run.id,
+    request_message_id: input.latestInbound?.id ?? null,
+    provider_message_id: input.latestInbound?.provider_message_id ?? null,
+    request_text: preview(input.requestText, 700),
+  };
+
+  await client
+    .from("leads")
+    .update({
+      last_event_summary: "Lead pediu atendimento humano no WhatsApp.",
+      last_message_at: input.requestedAt,
+      metadata: {
+        ...currentMetadata,
+        human_handoff: handoffSnapshot,
+        human_handoff_history: [
+          ...currentHistory.slice(-9),
+          handoffSnapshot,
+        ],
+      },
+    })
+    .eq("id", context.lead.id);
+}
+
+async function persistHumanHandoffEvent(
+  client: SupabaseClient,
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+  input: {
+    requestedAt: string;
+    pausedUntil: string;
+    requestText: string;
+    latestInbound: ConversationMessageRow | null;
+  },
+) {
+  await client.from("intelligence_events").insert({
+    scope: "organization",
+    organization_id: context.organization.id,
+    source_type: "whatsapp",
+    source_id: context.conversationId,
+    producer_agent_id: context.agent.id,
+    event_type: "whatsapp.handoff.requested",
+    title: "Lead pediu atendimento humano",
+    summary: preview(input.requestText || "Lead pediu para falar com alguem da equipe.", 500),
+    confidence: 0.96,
+    visibility: "organization",
+    tags: ["whatsapp", "handoff", "human", "lead"],
+    payload: {
+      leadId: context.lead?.id ?? null,
+      conversationId: context.conversationId,
+      agentRunId: context.run.id,
+      messageId: input.latestInbound?.id ?? null,
+      providerMessageId: input.latestInbound?.provider_message_id ?? null,
+      requestedAt: input.requestedAt,
+      pausedUntil: input.pausedUntil,
+      status: "awaiting_human",
+    },
+  });
+}
+
 async function archiveLeadForOptOut(
   client: SupabaseClient,
   context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
@@ -3084,7 +3221,14 @@ async function cacheRunResponseText(client: SupabaseClient, runId: string, text:
     .eq("id", runId);
 }
 
-async function pauseConversationForHuman(client: SupabaseClient, conversationId: string, behavior: WhatsappBehaviorConfig, reason: string) {
+async function pauseConversationForHuman(
+  client: SupabaseClient,
+  conversationId: string,
+  behavior: WhatsappBehaviorConfig,
+  reason: string,
+  details: JsonRecord = {},
+) {
+  const now = new Date().toISOString();
   const pausedUntil = new Date(Date.now() + behavior.humanInterventionMinutes * 60 * 1000).toISOString();
   const { data } = await client
     .from("conversations")
@@ -3092,6 +3236,7 @@ async function pauseConversationForHuman(client: SupabaseClient, conversationId:
     .eq("id", conversationId)
     .maybeSingle<{ metadata: JsonRecord | null }>();
   const metadata = readRecord(data?.metadata);
+  const currentHuman = readRecord(metadata?.human_intervention);
 
   await client
     .from("conversations")
@@ -3099,13 +3244,18 @@ async function pauseConversationForHuman(client: SupabaseClient, conversationId:
       metadata: {
         ...(metadata ?? {}),
         human_intervention: {
+          ...(currentHuman ?? {}),
+          ...details,
+          active: true,
           reason,
           paused_until: pausedUntil,
-          updated_at: new Date().toISOString(),
+          updated_at: now,
         },
       },
     })
     .eq("id", conversationId);
+
+  return pausedUntil;
 }
 
 async function shouldBlockInternalInstance(client: SupabaseClient, behavior: WhatsappBehaviorConfig, currentInstanceId: string, phone: string) {
