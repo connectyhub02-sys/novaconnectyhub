@@ -22,6 +22,7 @@ import {
   Link2,
   LogOut,
   Loader2,
+  Menu,
   Megaphone,
   MessageCircle,
   MessageSquare,
@@ -38,6 +39,7 @@ import {
   Wand2,
   Workflow,
   Wrench,
+  X,
   Zap,
 } from "lucide-react";
 import {
@@ -193,6 +195,7 @@ export function ConnectyShell({
   const [avatarUrl, setAvatarUrl] = useState(userAvatarUrl ?? null);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [avatarError, setAvatarError] = useState<string | null>(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   async function handleAvatarUpload(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0] ?? null;
@@ -411,6 +414,24 @@ export function ConnectyShell({
           </div>
 
           <div className="ml-auto flex items-center gap-2.5">
+            <button
+              type="button"
+              aria-controls="connecty-mobile-menu"
+              aria-expanded={mobileMenuOpen}
+              aria-label={mobileMenuOpen ? "Fechar menu" : "Abrir menu"}
+              className="flex h-8 w-8 items-center justify-center rounded-lg transition lg:hidden"
+              onClick={() => setMobileMenuOpen((current) => !current)}
+              onMouseEnter={e => (e.currentTarget.style.background = "var(--ch-hover)")}
+              onMouseLeave={e => (e.currentTarget.style.background = "var(--ch-surface-2)")}
+              style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
+            >
+              {mobileMenuOpen ? (
+                <X className="h-4 w-4" style={{ color: "var(--ch-text)" }} />
+              ) : (
+                <Menu className="h-4 w-4" style={{ color: "var(--ch-text)" }} />
+              )}
+            </button>
+
             {/* Search */}
             <div className="relative hidden lg:block">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2" style={{ color: "var(--ch-muted)" }} />
@@ -510,36 +531,68 @@ export function ConnectyShell({
           </div>
         </header>
 
-        {/* Mobile nav */}
-        <div
-          className="flex gap-1.5 overflow-x-auto px-3 py-2.5 sm:px-4 lg:hidden"
-          style={{ background: "var(--ch-surface)", borderBottom: "1px solid var(--ch-border-strong)" }}
-        >
-          {sections.flatMap((s) => s.items).map((item) => {
-            const Icon  = item.icon;
-            const activ = isActive(item.href, active);
-            const itemPalette = accentPalettes[item.tone ?? "slate"];
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className="flex h-7 shrink-0 items-center gap-1.5 rounded-lg px-3 font-mono text-[10px] whitespace-nowrap transition"
-                style={activ ? {
-                  background: "linear-gradient(135deg, rgba(var(--ch-accent-rgb),0.18), rgba(var(--ch-accent-2-rgb),0.10))",
-                  border:     `1px solid rgba(var(--ch-accent-rgb),0.40)`,
-                  color:      "var(--ch-text)",
-                } : {
-                  background: "transparent",
-                  border:     `1px solid rgba(${itemPalette.accentRgb},0.22)`,
-                  color:      "var(--ch-muted)",
-                }}
-              >
-                <Icon className="h-3 w-3" style={activ ? undefined : { color: itemPalette.accent }} />
-                {item.label}
-              </Link>
-            );
-          })}
-        </div>
+        {mobileMenuOpen ? (
+          <>
+            <button
+              type="button"
+              aria-label="Fechar menu"
+              className="fixed inset-0 z-30 bg-black/55 backdrop-blur-[2px] lg:hidden"
+              onClick={() => setMobileMenuOpen(false)}
+            />
+            <div
+              id="connecty-mobile-menu"
+              className="fixed left-3 right-3 top-[68px] z-50 max-h-[calc(100svh-84px)] overflow-y-auto rounded-2xl p-3 shadow-2xl lg:hidden"
+              style={{
+                background: "linear-gradient(180deg, rgba(var(--ch-accent-rgb),0.08), rgba(var(--ch-accent-2-rgb),0.035)), var(--ch-dropdown-bg)",
+                border: "1px solid var(--ch-border-strong)",
+                boxShadow: "0 24px 70px rgba(0,0,0,0.46)",
+              }}
+            >
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="truncate text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>
+                    Menu principal
+                  </div>
+                  <div className="font-mono text-[9px] uppercase tracking-[0.2em]" style={{ color: "var(--ch-muted)" }}>
+                    {mode === "admin" ? "Admin OS" : "Client OS"}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  aria-label="Fechar menu"
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition"
+                  onClick={() => setMobileMenuOpen(false)}
+                  style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
+                >
+                  <X className="h-4 w-4" style={{ color: "var(--ch-text)" }} />
+                </button>
+              </div>
+
+              <nav className="grid gap-4">
+                {sections.map((section) => (
+                  <div key={section.label}>
+                    <div
+                      className="mb-2 px-1 font-mono text-[9px] uppercase tracking-[0.2em]"
+                      style={{ color: "var(--ch-subtle)" }}
+                    >
+                      {section.label}
+                    </div>
+                    <div className="grid gap-1.5">
+                      {section.items.map((item) => (
+                        <MobileMenuLink
+                          key={item.href}
+                          item={item}
+                          isActive={isActive(item.href, active)}
+                          onClick={() => setMobileMenuOpen(false)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </nav>
+            </div>
+          </>
+        ) : null}
 
         {/* Content */}
         <main className="flex-1 overflow-auto">
@@ -635,6 +688,64 @@ function SidebarLink({
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function MobileMenuLink({
+  item,
+  isActive: active,
+  onClick,
+}: {
+  item: NavItem;
+  isActive: boolean;
+  onClick: () => void;
+}) {
+  const Icon = item.icon;
+  const itemPalette = accentPalettes[item.tone ?? "slate"];
+
+  return (
+    <Link
+      href={item.href}
+      aria-current={active ? "page" : undefined}
+      onClick={onClick}
+      className="grid min-h-11 grid-cols-[24px_minmax(0,1fr)_auto] items-center gap-2 rounded-xl px-3 py-2 text-[12.5px] transition-all"
+      style={active ? {
+        background: "linear-gradient(135deg, rgba(var(--ch-accent-rgb),0.26), rgba(var(--ch-accent-2-rgb),0.12))",
+        border:     `1px solid rgba(var(--ch-accent-rgb),0.54)`,
+        color:      "var(--ch-text)",
+        boxShadow:  "0 12px 32px rgba(var(--ch-accent-rgb),0.15)",
+      } : {
+        background: "linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.015)), var(--ch-surface-2)",
+        border:     `1px solid rgba(${itemPalette.accentRgb},0.22)`,
+        color:      "var(--ch-muted)",
+      }}
+    >
+      <span
+        className="flex h-6 w-6 items-center justify-center rounded-lg"
+        style={{
+          background: active ? `rgba(var(--ch-accent-rgb),0.18)` : `rgba(${itemPalette.accentRgb},0.12)`,
+          color: active ? "var(--ch-accent)" : itemPalette.accent,
+        }}
+      >
+        <Icon className="h-3.5 w-3.5" />
+      </span>
+      <span className="min-w-0 truncate font-semibold">{item.label}</span>
+      {item.badge ? (
+        <span
+          className="rounded-md px-1.5 py-0.5 font-mono text-[9px] leading-none"
+          style={
+            item.badgeTone === "amber" ? { background: "rgba(251,191,36,0.15)", color: "#fbbf24" } :
+            item.badgeTone === "rose"  ? { background: "rgba(251,113,133,0.15)", color: "#fb7185" } :
+            active ? { background: `rgba(var(--ch-accent-rgb),0.15)`, color: "var(--ch-accent)" } :
+                     { background: `rgba(${itemPalette.accentRgb},0.13)`, color: itemPalette.accent }
+          }
+        >
+          {item.badge}
+        </span>
+      ) : (
+        <span className="h-1.5 w-1.5 rounded-full" style={{ background: active ? "var(--ch-accent)" : `rgba(${itemPalette.accentRgb},0.55)` }} />
+      )}
+    </Link>
+  );
+}
 
 function isActive(href: string, current: string) {
   if (href === current) return true;
