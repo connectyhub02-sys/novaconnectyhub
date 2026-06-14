@@ -13,7 +13,9 @@ import {
   defaultWhatsappAgentPrompt,
   defaultWhatsappBehaviorConfig,
   defaultWhatsappGlobalPrompt,
+  mergeWhatsappHandoffNotificationSettings,
   normalizeWhatsappBehaviorConfig,
+  type WhatsappBehaviorConfig,
 } from "@/lib/whatsapp/agent-behavior";
 import {
   describeWhatsappHandoffNotificationResult,
@@ -651,7 +653,8 @@ export async function sendPlatformWhatsappHandoffNotificationTest(input: {
     requireSectorWhatsappAgent(client, sector.id),
     requireSectorWhatsappInstance(client, sector.id),
   ]);
-  const behavior = normalizeWhatsappBehaviorConfig(input.behavior ?? getBehaviorConfig(agent, instance));
+  const behaviorDraft = normalizeWhatsappBehaviorConfig(input.behavior ?? getBehaviorConfig(agent, instance));
+  const behavior = mergeWhatsappHandoffNotificationSettings(getBehaviorConfig(agent, instance), behaviorDraft);
   const token = decryptInstanceToken(instance);
 
   if (!token) {
@@ -688,11 +691,16 @@ export async function sendPlatformWhatsappHandoffNotificationTest(input: {
     throw new Error(resultMessage);
   }
 
+  await persistPlatformHandoffNotificationSettings(client, agent, behavior, input.userId, requestedAt);
+
   await client
     .from("whatsapp_instances")
     .update({
       metadata: {
         ...(instance.metadata ?? {}),
+        behavior_config: behavior,
+        behavior_updated_at: requestedAt,
+        behavior_updated_by: input.userId,
         last_platform_action: "send_handoff_test",
         last_handoff_test_sent_at: requestedAt,
         last_handoff_test_result: notificationResult,
@@ -709,6 +717,34 @@ export async function sendPlatformWhatsappHandoffNotificationTest(input: {
     qrCode: null,
     pairCode: null,
   };
+}
+
+async function persistPlatformHandoffNotificationSettings(
+  client: SupabaseClient,
+  agent: AgentRow,
+  behavior: WhatsappBehaviorConfig,
+  userId: string,
+  updatedAt: string,
+) {
+  const { error } = await client
+    .from("agent_registry")
+    .update({
+      metadata: {
+        ...(agent.metadata ?? {}),
+        whatsapp_behavior_config: behavior,
+        prompt_control: {
+          ...(readRecord(readRecord(agent.metadata)?.prompt_control) ?? {}),
+          last_updated_at: updatedAt,
+          last_updated_by: userId,
+          source: "admin_whatsapp_internal_handoff_test",
+        },
+      },
+    })
+    .eq("id", agent.id);
+
+  if (error) {
+    throw new Error(`Nao foi possivel salvar o aviso humano interno: ${error.message}`);
+  }
 }
 
 export async function requirePlatformWhatsappSector(client: SupabaseClient, sectorId: string) {

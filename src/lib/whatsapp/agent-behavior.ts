@@ -350,6 +350,20 @@ export function normalizeWhatsappBehaviorConfig(value: unknown): WhatsappBehavio
   return merged;
 }
 
+export function mergeWhatsappHandoffNotificationSettings(
+  base: WhatsappBehaviorConfig,
+  draft: WhatsappBehaviorConfig,
+): WhatsappBehaviorConfig {
+  return normalizeWhatsappBehaviorConfig({
+    ...base,
+    humanIntervention: draft.humanIntervention,
+    detectHumanRequest: draft.detectHumanRequest,
+    humanHandoffNotifications: draft.humanHandoffNotifications,
+    humanHandoffNotificationNumbers: draft.humanHandoffNotificationNumbers,
+    humanHandoffNotificationCooldownMinutes: draft.humanHandoffNotificationCooldownMinutes,
+  });
+}
+
 function readBoolean(value: unknown, fallback: boolean) {
   if (typeof value === "boolean") return value;
   if (typeof value === "string") {

@@ -17,6 +17,7 @@ import {
   defaultWhatsappAgentPrompt,
   defaultWhatsappBehaviorConfig,
   defaultWhatsappGlobalPrompt,
+  mergeWhatsappHandoffNotificationSettings,
   normalizeWhatsappBehaviorConfig,
   type WhatsappBehaviorConfig,
 } from "./agent-behavior";
@@ -550,7 +551,8 @@ export async function sendClientWhatsappHandoffNotificationTest(input: {
   const client = input.client ?? createServiceClient();
   const instance = await requireWorkspaceInstance(client, input.organization.id);
   const globalAgent = await getOrCreateWorkspaceGlobalAgent(client, input.organization, input.userId);
-  const behavior = normalizeWhatsappBehaviorConfig(input.behavior ?? getBehaviorConfig(globalAgent, instance));
+  const behaviorDraft = normalizeWhatsappBehaviorConfig(input.behavior ?? getBehaviorConfig(globalAgent, instance));
+  const behavior = mergeWhatsappHandoffNotificationSettings(getBehaviorConfig(globalAgent, instance), behaviorDraft);
   const token = decryptInstanceToken(instance);
 
   if (!token) {
@@ -586,11 +588,16 @@ export async function sendClientWhatsappHandoffNotificationTest(input: {
     throw new Error(resultMessage);
   }
 
+  await persistClientHandoffNotificationSettings(client, globalAgent, behavior, input.userId, requestedAt);
+
   await client
     .from("whatsapp_instances")
     .update({
       metadata: {
         ...(instance.metadata ?? {}),
+        behavior_config: behavior,
+        behavior_updated_at: requestedAt,
+        behavior_updated_by: input.userId,
         last_client_action: "send_handoff_test",
         last_handoff_test_sent_at: requestedAt,
         last_handoff_test_result: notificationResult,
@@ -606,6 +613,34 @@ export async function sendClientWhatsappHandoffNotificationTest(input: {
     qrCode: null,
     pairCode: null,
   };
+}
+
+async function persistClientHandoffNotificationSettings(
+  client: SupabaseClient,
+  globalAgent: AgentRow,
+  behavior: WhatsappBehaviorConfig,
+  userId: string,
+  updatedAt: string,
+) {
+  const { error: agentError } = await client
+    .from("agent_registry")
+    .update({
+      metadata: {
+        ...(globalAgent.metadata ?? {}),
+        whatsapp_behavior_config: behavior,
+        prompt_control: {
+          ...(readRecord(readRecord(globalAgent.metadata)?.prompt_control) ?? {}),
+          last_updated_at: updatedAt,
+          last_updated_by: userId,
+          source: "client_dashboard_handoff_test",
+        },
+      },
+    })
+    .eq("id", globalAgent.id);
+
+  if (agentError) {
+    throw new Error(`Nao foi possivel salvar o aviso humano: ${agentError.message}`);
+  }
 }
 
 export async function updateClientWhatsappPrompt(input: {

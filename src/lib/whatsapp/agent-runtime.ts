@@ -26,7 +26,12 @@ import {
   normalizeWhatsappBehaviorConfig,
   type WhatsappBehaviorConfig,
 } from "./agent-behavior";
-import { enqueueWhatsappHandoffNotification } from "./handoff-notifications";
+import {
+  enqueueWhatsappHandoffNotification,
+  processWhatsappHandoffNotification,
+  type WhatsappHandoffNotificationEventData,
+  type WhatsappHandoffNotificationResult,
+} from "./handoff-notifications";
 import { loadUazapiCredentials, type UazapiCredentials } from "./uazapi-credentials";
 
 type JsonRecord = Record<string, unknown>;
@@ -2882,7 +2887,7 @@ async function handleLeadHumanHandoffRequest(input: {
     latestInbound,
   });
 
-  await enqueueWhatsappHandoffNotification({
+  const notificationData: WhatsappHandoffNotificationEventData = {
     organizationId: context.organization.id,
     whatsappInstanceId: context.instance.id,
     conversationId: context.conversationId,
@@ -2895,14 +2900,66 @@ async function handleLeadHumanHandoffRequest(input: {
     requestedAt,
     pausedUntil,
     source: "lead_requested_human",
-  }).catch(async (error: unknown) => {
-    await persistHumanHandoffNotificationQueueFailure(client, context, error);
-  });
+  };
+  const notificationResult = await sendHumanHandoffNotificationNowOrQueue(client, context, notificationData);
 
   return await completeRun(client, context.run.id, "Lead pediu atendimento humano.", {
     sent: true,
     reason: "lead_requested_human",
     pausedUntil,
+    handoffNotification: notificationResult,
+  });
+}
+
+async function sendHumanHandoffNotificationNowOrQueue(
+  client: SupabaseClient,
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+  data: WhatsappHandoffNotificationEventData,
+): Promise<WhatsappHandoffNotificationResult | { status: "queued_fallback"; reason: string }> {
+  try {
+    const result = await processWhatsappHandoffNotification({ client, data });
+
+    if (result.status === "failed" && !result.reason) {
+      await enqueueWhatsappHandoffNotification(data).catch(async (error: unknown) => {
+        await persistHumanHandoffNotificationQueueFailure(client, context, error);
+      });
+      return { status: "queued_fallback", reason: "provider_send_failed" };
+    }
+
+    return result;
+  } catch (error) {
+    await enqueueWhatsappHandoffNotification(data).catch(async (queueError: unknown) => {
+      await persistHumanHandoffNotificationQueueFailure(client, context, queueError);
+    });
+    await persistHumanHandoffNotificationImmediateFailure(client, context, error);
+
+    return { status: "queued_fallback", reason: "immediate_send_failed" };
+  }
+}
+
+async function persistHumanHandoffNotificationImmediateFailure(
+  client: SupabaseClient,
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+  error: unknown,
+) {
+  await client.from("intelligence_events").insert({
+    scope: "organization",
+    organization_id: context.organization.id,
+    source_type: "whatsapp",
+    source_id: context.conversationId,
+    producer_agent_id: context.agent.id,
+    event_type: "whatsapp.handoff.notification.immediate_failed",
+    title: "Falha no envio imediato do aviso humano",
+    summary: error instanceof Error ? preview(error.message, 500) : "Erro desconhecido ao enviar aviso de atendimento humano imediatamente.",
+    confidence: 0.4,
+    visibility: "organization",
+    tags: ["whatsapp", "handoff", "notification", "error"],
+    payload: {
+      leadId: context.lead?.id ?? null,
+      conversationId: context.conversationId,
+      agentRunId: context.run.id,
+      whatsappInstanceId: context.instance.id,
+    },
   });
 }
 
