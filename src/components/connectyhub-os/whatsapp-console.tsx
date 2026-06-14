@@ -1706,7 +1706,11 @@ function WhatsappConsoleCommandBar({
   return (
     <div
       className="sticky top-3 z-20 mb-4 rounded-xl border px-3 py-3 shadow-2xl shadow-slate-950/20 backdrop-blur"
-      style={{ background: "color-mix(in srgb, var(--ch-surface) 92%, transparent)", borderColor: "var(--ch-border)" }}
+      style={{
+        background: "linear-gradient(180deg, rgba(var(--ch-accent-rgb),0.07), rgba(16,23,34,0.94))",
+        borderColor: "var(--ch-border-strong)",
+        boxShadow: "0 18px 45px rgba(0,0,0,0.24)",
+      }}
     >
       <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
         <div className="grid min-w-0 gap-2 sm:grid-cols-2 lg:grid-cols-5">
@@ -1741,7 +1745,7 @@ function WhatsappConsoleTabs({
       className="mb-4 overflow-x-auto rounded-xl border p-1"
       role="tablist"
       aria-label="Secoes do painel WhatsApp"
-      style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}
+      style={{ background: "var(--ch-panel)", borderColor: "var(--ch-border-strong)" }}
     >
       <div className="grid min-w-[760px] grid-cols-6 gap-1">
         {whatsappConsoleTabs.map((tab) => {
@@ -1761,7 +1765,7 @@ function WhatsappConsoleTabs({
                   ? "text-slate-950 shadow-[0_0_24px_rgba(var(--ch-accent-rgb),0.18)] ring-1 ring-white/20"
                   : "text-slate-200 hover:bg-white/10 hover:text-white",
               )}
-              style={active ? { background: "linear-gradient(135deg, var(--ch-accent), #7dd3fc)" } : undefined}
+              style={active ? { background: "linear-gradient(135deg, var(--ch-accent), var(--ch-accent-2))" } : undefined}
               onClick={() => onChange(tab.id)}
             >
               <Icon className={cn("h-4 w-4", active ? "text-slate-950" : "text-slate-200")} />
@@ -1787,7 +1791,7 @@ function SummaryPill({
   tone?: "default" | "green" | "amber";
 }) {
   return (
-    <div className="min-w-0 rounded-lg border px-3 py-2" style={{ background: "var(--ch-surface)", borderColor: "var(--ch-border)" }}>
+    <div className="min-w-0 rounded-lg border px-3 py-2" style={{ background: "var(--ch-panel-2)", borderColor: "var(--ch-border)" }}>
       <p className="truncate font-mono text-[8px] uppercase tracking-widest text-slate-500">{label}</p>
       <p
         className={cn(
@@ -1904,7 +1908,7 @@ function AgentCreationGate({
         ) : (
           <div
             className="grid min-h-[220px] place-items-center rounded-xl p-5 text-center"
-            style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
+            style={{ background: "var(--ch-panel-2)", border: "1px solid var(--ch-border)" }}
           >
             <div className="max-w-xs">
               <Building2 className="mx-auto h-7 w-7 text-cyan-300" />
@@ -1933,7 +1937,7 @@ function AgentIdentityCard({
   return (
     <div
       className="grid gap-2 rounded-xl border p-3 sm:grid-cols-2 xl:grid-cols-4"
-      style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}
+      style={{ background: "var(--ch-panel-2)", borderColor: "var(--ch-border-strong)" }}
     >
       <InfoTile label="Agente" value={agent.name} />
       <InfoTile label={entityLabel} value={company?.name ?? `${entityLabel} nao informado`} />
@@ -1988,7 +1992,7 @@ function InfoHint({ text }: { text: string }) {
       <CircleHelp className="h-3.5 w-3.5 text-current opacity-70 transition group-hover/help:opacity-100" />
       <span
         className="pointer-events-none absolute right-0 top-5 z-50 hidden w-64 max-w-[calc(100vw-3rem)] rounded-lg border px-3 py-2 text-left font-sans text-[11px] normal-case leading-5 tracking-normal text-slate-200 shadow-2xl group-hover/help:block"
-        style={{ background: "var(--ch-surface)", borderColor: "var(--ch-border)" }}
+        style={{ background: "var(--ch-dropdown-bg)", borderColor: "var(--ch-border-strong)" }}
       >
         {text}
       </span>
@@ -2325,7 +2329,7 @@ function BehaviorSection({
     <details
       className="group rounded-xl border"
       open={defaultOpen}
-      style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}
+      style={{ background: "var(--ch-panel)", borderColor: "var(--ch-border-strong)" }}
     >
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
         <span className="flex min-w-0 items-center gap-1.5 font-mono text-[10px] font-semibold uppercase tracking-widest" style={{ color: "var(--ch-text)" }}>
@@ -2360,7 +2364,10 @@ function ToggleTile({
       type="button"
       onClick={onChange}
       className="flex min-h-11 items-center justify-between gap-3 rounded-lg border px-3 text-left transition hover:border-cyan-300/35"
-      style={{ background: "var(--ch-surface)", borderColor: "var(--ch-border)" }}
+      style={{
+        background: checked ? "linear-gradient(135deg, rgba(var(--ch-accent-rgb),0.15), rgba(var(--ch-accent-2-rgb),0.07))" : "var(--ch-panel-2)",
+        borderColor: checked ? "rgba(var(--ch-accent-rgb),0.42)" : "var(--ch-border)",
+      }}
     >
       <span className="flex min-w-0 items-center gap-2">
         <Icon className={cn("h-4 w-4 shrink-0", checked ? "text-cyan-300" : "text-slate-500")} />
@@ -2400,7 +2407,7 @@ function ModeSelector<T extends string>({
                 ? "border-white/25 text-slate-950 shadow-[0_0_22px_rgba(var(--ch-accent-rgb),0.18)] ring-1 ring-white/20"
                 : "border-slate-700/70 bg-slate-950/20 text-slate-100 hover:border-cyan-300/35 hover:bg-white/10 hover:text-white",
             )}
-            style={active ? { background: "linear-gradient(135deg, var(--ch-accent), #7dd3fc)" } : undefined}
+            style={active ? { background: "linear-gradient(135deg, var(--ch-accent), var(--ch-accent-2))" } : undefined}
           >
             <span className={cn("flex items-center gap-1.5 text-[12px] font-semibold", active ? "text-slate-950" : "text-slate-100")}>
               {option.label}
@@ -3599,7 +3606,7 @@ function CompactConnectionCard({
   return (
     <div
       className="rounded-xl border p-4"
-      style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}
+      style={{ background: "var(--ch-panel)", borderColor: "var(--ch-border-strong)" }}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
@@ -3618,7 +3625,7 @@ function CompactConnectionCard({
 
       <div
         className="mt-4 grid min-h-[170px] place-items-center rounded-xl p-3 text-center"
-        style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}
+        style={{ background: "var(--ch-panel-2)", border: "1px solid var(--ch-border)" }}
       >
         {!enabled ? (
           <div>
@@ -3737,7 +3744,7 @@ function CompactConnectionCard({
 
 function StatusInfoTile({ connected }: { connected: boolean }) {
   return (
-    <div className="min-w-0 rounded-lg px-3 py-2" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}>
+    <div className="min-w-0 rounded-lg px-3 py-2" style={{ background: "var(--ch-panel-2)", border: "1px solid var(--ch-border)" }}>
       <p className="font-mono text-[9px] uppercase tracking-wide text-slate-500">Status</p>
       <p
         className={cn(
@@ -3760,7 +3767,7 @@ function StatusInfoTile({ connected }: { connected: boolean }) {
 
 function InfoTile({ label, value }: { label: string; value: string }) {
   return (
-    <div className="min-w-0 rounded-lg px-3 py-2" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}>
+    <div className="min-w-0 rounded-lg px-3 py-2" style={{ background: "var(--ch-panel-2)", border: "1px solid var(--ch-border)" }}>
       <p className="font-mono text-[9px] uppercase tracking-wide text-slate-500">{label}</p>
       <p className="mt-1 break-words text-[12px] font-semibold leading-4" style={{ color: "var(--ch-text)" }}>{value}</p>
     </div>
@@ -3788,7 +3795,7 @@ function ActionButton({
       disabled={disabled || loading}
       onClick={onClick}
       className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg px-4 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-950 shadow-[0_12px_30px_rgba(var(--ch-accent-rgb),0.16)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
-      style={{ background: "linear-gradient(135deg, var(--ch-accent), #7dd3fc)" }}
+      style={{ background: "linear-gradient(135deg, var(--ch-accent), var(--ch-accent-2))" }}
     >
       {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Icon className="h-4 w-4" />}
       <span className="inline-flex items-center gap-1.5">

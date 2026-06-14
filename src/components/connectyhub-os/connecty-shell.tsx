@@ -57,6 +57,7 @@ type NavItem = {
   label: string;
   href: string;
   icon: LucideIcon;
+  tone?: AccentTone;
   badge?: string;
   badgeTone?: "green" | "amber" | "rose";
 };
@@ -66,38 +67,59 @@ type NavSection = {
   items: NavItem[];
 };
 
+type AccentTone = "teal" | "emerald" | "sky" | "blue" | "violet" | "amber" | "rose" | "fuchsia" | "slate";
+
+type AccentPalette = {
+  accent: string;
+  accentRgb: string;
+  accent2: string;
+  accent2Rgb: string;
+};
+
+const accentPalettes: Record<AccentTone, AccentPalette> = {
+  teal: { accent: "#38e8d6", accentRgb: "56,232,214", accent2: "#7dd3fc", accent2Rgb: "125,211,252" },
+  emerald: { accent: "#34d399", accentRgb: "52,211,153", accent2: "#38e8d6", accent2Rgb: "56,232,214" },
+  sky: { accent: "#38bdf8", accentRgb: "56,189,248", accent2: "#818cf8", accent2Rgb: "129,140,248" },
+  blue: { accent: "#60a5fa", accentRgb: "96,165,250", accent2: "#38bdf8", accent2Rgb: "56,189,248" },
+  violet: { accent: "#a78bfa", accentRgb: "167,139,250", accent2: "#f0abfc", accent2Rgb: "240,171,252" },
+  amber: { accent: "#fbbf24", accentRgb: "251,191,36", accent2: "#fb923c", accent2Rgb: "251,146,60" },
+  rose: { accent: "#fb7185", accentRgb: "251,113,133", accent2: "#f472b6", accent2Rgb: "244,114,182" },
+  fuchsia: { accent: "#e879f9", accentRgb: "232,121,249", accent2: "#a78bfa", accent2Rgb: "167,139,250" },
+  slate: { accent: "#cbd5e1", accentRgb: "203,213,225", accent2: "#94a3b8", accent2Rgb: "148,163,184" },
+};
+
 // ─── Navigation ───────────────────────────────────────────────────────────────
 
 const adminSections: NavSection[] = [
   {
     label: "Operação",
     items: [
-      { label: "Dashboard",   href: "/admin",              icon: BarChart3 },
-      { label: "Agentes",     href: "/admin/agentes",      icon: Bot },
-      { label: "WhatsApp Interno", href: "/admin/whatsapp/atendimento", icon: MessageCircle },
-      { label: "Inteligencia",href: "/admin/inteligencia", icon: BrainCircuit },
-      { label: "Conteudo",    href: "/admin/conteudo",     icon: Globe2 },
-      { label: "Setores",     href: "/admin/setores",      icon: GitBranch },
-      { label: "CEO IA",      href: "/admin/ceo",          icon: Wand2 },
-      { label: "Aprovações",  href: "/admin/aprovacoes",   icon: ShieldCheck,  badge: "17", badgeTone: "amber" },
+      { label: "Dashboard",   href: "/admin",              icon: BarChart3, tone: "blue" },
+      { label: "Agentes",     href: "/admin/agentes",      icon: Bot, tone: "violet" },
+      { label: "WhatsApp Interno", href: "/admin/whatsapp/atendimento", icon: MessageCircle, tone: "emerald" },
+      { label: "Inteligencia",href: "/admin/inteligencia", icon: BrainCircuit, tone: "violet" },
+      { label: "Conteudo",    href: "/admin/conteudo",     icon: Globe2, tone: "sky" },
+      { label: "Setores",     href: "/admin/setores",      icon: GitBranch, tone: "teal" },
+      { label: "CEO IA",      href: "/admin/ceo",          icon: Wand2, tone: "fuchsia" },
+      { label: "Aprovações",  href: "/admin/aprovacoes",   icon: ShieldCheck, tone: "amber", badge: "17", badgeTone: "amber" },
     ],
   },
   {
     label: "Clientes",
     items: [
-      { label: "Clientes",          href: "/admin/clientes",          icon: Users,        badge: "142" },
-      { label: "CRM Leads",         href: "/admin/leads",             icon: UserCheck },
-      { label: "Planos",            href: "/admin/planos",            icon: Coins },
-      { label: "WhatsApp Clientes", href: "/admin/clientes/whatsapp", icon: MessageCircle },
+      { label: "Clientes",          href: "/admin/clientes",          icon: Users, tone: "sky", badge: "142" },
+      { label: "CRM Leads",         href: "/admin/leads",             icon: UserCheck, tone: "emerald" },
+      { label: "Planos",            href: "/admin/planos",            icon: Coins, tone: "amber" },
+      { label: "WhatsApp Clientes", href: "/admin/clientes/whatsapp", icon: MessageCircle, tone: "teal" },
     ],
   },
   {
     label: "Sistema",
     items: [
-      { label: "Manutenção",    href: "/admin/maintenance",  icon: Wrench,           badge: "!", badgeTone: "rose" },
-      { label: "Auditoria",     href: "/admin/auditoria",    icon: FileCode2 },
-      { label: "Financeiro",    href: "/admin/financeiro",   icon: CircleDollarSign },
-      { label: "Configurações", href: "/admin/configuracoes",icon: SlidersHorizontal },
+      { label: "Manutenção",    href: "/admin/maintenance",  icon: Wrench, tone: "rose", badge: "!", badgeTone: "rose" },
+      { label: "Auditoria",     href: "/admin/auditoria",    icon: FileCode2, tone: "slate" },
+      { label: "Financeiro",    href: "/admin/financeiro",   icon: CircleDollarSign, tone: "amber" },
+      { label: "Configurações", href: "/admin/configuracoes",icon: SlidersHorizontal, tone: "blue" },
     ],
   },
 ];
@@ -106,28 +128,28 @@ const clientSections: NavSection[] = [
   {
     label: "Vendas",
     items: [
-      { label: "Dashboard",    href: "/dashboard",                icon: BarChart3 },
-      { label: "Minha Empresa",href: "/dashboard/empresa",        icon: Building2 },
-      { label: "Leads",        href: "/dashboard/leads",          icon: UserCheck },
-      { label: "Conversas",    href: "/dashboard/conversas",      icon: MessageSquare },
-      { label: "WhatsApp",     href: "/dashboard/whatsapp",       icon: MessageCircle },
-      { label: "Instagram",    href: "/dashboard/instagram",      icon: Sparkles },
-      { label: "Agentes",      href: "/dashboard/agentes",        icon: Bot },
-      { label: "CRM / Funil",  href: "/dashboard/crm",            icon: Workflow },
+      { label: "Dashboard",    href: "/dashboard",                icon: BarChart3, tone: "blue" },
+      { label: "Minha Empresa",href: "/dashboard/empresa",        icon: Building2, tone: "sky" },
+      { label: "Leads",        href: "/dashboard/leads",          icon: UserCheck, tone: "emerald" },
+      { label: "Conversas",    href: "/dashboard/conversas",      icon: MessageSquare, tone: "teal" },
+      { label: "WhatsApp",     href: "/dashboard/whatsapp",       icon: MessageCircle, tone: "emerald" },
+      { label: "Instagram",    href: "/dashboard/instagram",      icon: Sparkles, tone: "fuchsia" },
+      { label: "Agentes",      href: "/dashboard/agentes",        icon: Bot, tone: "violet" },
+      { label: "CRM / Funil",  href: "/dashboard/crm",            icon: Workflow, tone: "amber" },
     ],
   },
   {
     label: "Crescimento",
     items: [
-      { label: "Links",           href: "/dashboard/links",            icon: Link2 },
-      { label: "Campanhas",       href: "/dashboard/campanhas",        icon: Megaphone },
-      { label: "Tráfego Pago",    href: "/dashboard/trafego-pago",     icon: TrendingUp },
-      { label: "Orgânico",        href: "/dashboard/trafego-organico", icon: Globe2 },
-      { label: "Automações",      href: "/dashboard/automacoes",       icon: Zap },
-      { label: "Produtos",        href: "/dashboard/produtos",         icon: ShoppingBag },
-      { label: "Relatórios",      href: "/dashboard/relatorios",       icon: BarChart3 },
-      { label: "Integrações",     href: "/dashboard/integracoes",      icon: PlugZap },
-      { label: "Configurações",   href: "/dashboard/configuracoes",    icon: Settings },
+      { label: "Links",           href: "/dashboard/links",            icon: Link2, tone: "sky" },
+      { label: "Campanhas",       href: "/dashboard/campanhas",        icon: Megaphone, tone: "fuchsia" },
+      { label: "Tráfego Pago",    href: "/dashboard/trafego-pago",     icon: TrendingUp, tone: "amber" },
+      { label: "Orgânico",        href: "/dashboard/trafego-organico", icon: Globe2, tone: "emerald" },
+      { label: "Automações",      href: "/dashboard/automacoes",       icon: Zap, tone: "violet" },
+      { label: "Produtos",        href: "/dashboard/produtos",         icon: ShoppingBag, tone: "amber" },
+      { label: "Relatórios",      href: "/dashboard/relatorios",       icon: BarChart3, tone: "blue" },
+      { label: "Integrações",     href: "/dashboard/integracoes",      icon: PlugZap, tone: "teal" },
+      { label: "Configurações",   href: "/dashboard/configuracoes",    icon: Settings, tone: "slate" },
     ],
   },
 ];
@@ -154,14 +176,19 @@ export function ConnectyShell({
   const pathname  = usePathname();
   const active    = activeHref ?? pathname ?? "/";
   const sections  = mode === "admin" ? adminSections : clientSections;
-  const accent     = "#38e8d6";
-  const accentRgb  = "56,232,214";
+  const activeItem = resolveActiveItem(sections, active);
+  const activeTone = activeItem?.tone ?? (mode === "admin" ? "teal" : "blue");
+  const activePalette = accentPalettes[activeTone];
+  const accent    = activePalette.accent;
+  const accentRgb = activePalette.accentRgb;
+  const accent2   = activePalette.accent2;
+  const accent2Rgb = activePalette.accent2Rgb;
   const name      = mode === "admin" ? "ConnectyHub" : (workspaceName ?? "Minha empresa");
   const role      = mode === "admin" ? "Platform Admin" : (userLabel ?? "workspace");
   const switchTo  = mode === "admin" ? "/dashboard" : "/admin";
   const switchLbl = mode === "admin" ? "Client OS" : "Admin OS";
   const canSwitch = mode === "admin" || isPlatformAdmin;
-  const pageLabel = resolveLabel(sections, active, mode);
+  const pageLabel = activeItem?.label ?? "Dashboard";
   const logoTone  = "white";
   const [avatarUrl, setAvatarUrl] = useState(userAvatarUrl ?? null);
   const [avatarUploading, setAvatarUploading] = useState(false);
@@ -200,46 +227,51 @@ export function ConnectyShell({
   }
 
   const shellTheme = {
-    background: "radial-gradient(circle at 14% 0%, rgba(56,232,214,0.10), transparent 34rem), radial-gradient(circle at 88% 6%, rgba(129,140,248,0.10), transparent 30rem), linear-gradient(180deg, var(--ch-bg), #05070b 72%)",
+    background: "radial-gradient(circle at 14% 0%, rgba(var(--ch-accent-rgb),0.15), transparent 36rem), radial-gradient(circle at 88% 6%, rgba(var(--ch-accent-2-rgb),0.12), transparent 32rem), linear-gradient(180deg, var(--ch-bg), #05070b 72%)",
     colorScheme: "dark",
-    "--ch-bg":         "#06080d",
-    "--ch-surface":    "#0f141d",
-    "--ch-surface-2":  "#151b26",
-    "--ch-surface-3":  "#1c2431",
-    "--ch-border":     "rgba(190,205,226,0.22)",
-    "--ch-border-soft":"rgba(190,205,226,0.14)",
-    "--ch-border-strong":"rgba(215,226,242,0.34)",
+    "--ch-bg":         "#05070b",
+    "--ch-surface":    "#101722",
+    "--ch-surface-2":  "#182232",
+    "--ch-surface-3":  "#223044",
+    "--ch-border":     "rgba(196,211,232,0.24)",
+    "--ch-border-soft":"rgba(196,211,232,0.15)",
+    "--ch-border-strong":"rgba(224,233,246,0.36)",
     "--ch-brand-blue": "#01004c",
     "--ch-accent":     accent,
     "--ch-accent-rgb": accentRgb,
+    "--ch-accent-2":   accent2,
+    "--ch-accent-2-rgb": accent2Rgb,
+    "--ch-panel":      "linear-gradient(180deg, rgba(var(--ch-accent-rgb),0.055), rgba(var(--ch-accent-2-rgb),0.020)), var(--ch-surface)",
+    "--ch-panel-2":    "linear-gradient(180deg, rgba(255,255,255,0.045), rgba(var(--ch-accent-rgb),0.020)), var(--ch-surface-2)",
     "--ch-text":       "#fbfdff",
     "--ch-text-rgb":   "251,253,255",
     "--ch-muted":      "#c5d0df",
     "--ch-subtle":     "#94a6bb",
-    "--ch-hover":      "rgba(56,232,214,0.10)",
-    "--ch-dropdown-bg":"#111822",
-    "--background":    "#06080d",
+    "--ch-hover":      "rgba(var(--ch-accent-rgb),0.12)",
+    "--ch-dropdown-bg":"#121a27",
+    "--background":    "#05070b",
     "--foreground":    "#fbfdff",
-    "--card":          "#0f141d",
+    "--card":          "#101722",
     "--card-foreground":"#fbfdff",
-    "--popover":       "#111822",
+    "--popover":       "#121a27",
     "--popover-foreground":"#fbfdff",
     "--primary":       accent,
     "--primary-foreground":"#061015",
-    "--secondary":     "#151b26",
+    "--secondary":     "#182232",
     "--secondary-foreground":"#fbfdff",
-    "--muted":         "#151b26",
+    "--muted":         "#182232",
     "--muted-foreground":"#c5d0df",
-    "--accent":        "#1c2431",
+    "--accent":        "#223044",
     "--accent-foreground":"#fbfdff",
-    "--border":        "rgba(190,205,226,0.22)",
-    "--input":         "rgba(215,226,242,0.30)",
-    "--ring":          "rgba(56,232,214,0.48)",
+    "--border":        "rgba(196,211,232,0.24)",
+    "--input":         "rgba(224,233,246,0.30)",
+    "--ring":          `rgba(${accentRgb},0.48)`,
   } as CSSProperties;
 
   return (
     <div
       className="connecty-shell flex min-h-svh"
+      data-connecty-accent={activeTone}
       data-connecty-mode={mode}
       style={shellTheme}
     >
@@ -417,7 +449,7 @@ export function ConnectyShell({
             <span
               className="hidden h-7 items-center rounded-lg px-3 font-mono text-[10px] uppercase tracking-wider md:flex"
               style={{
-                background: `linear-gradient(135deg, rgba(var(--ch-accent-rgb),0.16), rgba(129,140,248,0.10))`,
+                background: "linear-gradient(135deg, rgba(var(--ch-accent-rgb),0.16), rgba(var(--ch-accent-2-rgb),0.10))",
                 border:     `1px solid rgba(var(--ch-accent-rgb),0.34)`,
                 color:      "var(--ch-accent)",
               }}
@@ -479,22 +511,23 @@ export function ConnectyShell({
           {sections.flatMap((s) => s.items).map((item) => {
             const Icon  = item.icon;
             const activ = isActive(item.href, active);
+            const itemPalette = accentPalettes[item.tone ?? "slate"];
             return (
               <Link
                 key={item.href}
                 href={item.href}
                 className="flex h-7 shrink-0 items-center gap-1.5 rounded-lg px-3 font-mono text-[10px] whitespace-nowrap transition"
                 style={activ ? {
-                  background: `linear-gradient(135deg, rgba(var(--ch-accent-rgb),0.18), rgba(129,140,248,0.10))`,
+                  background: "linear-gradient(135deg, rgba(var(--ch-accent-rgb),0.18), rgba(var(--ch-accent-2-rgb),0.10))",
                   border:     `1px solid rgba(var(--ch-accent-rgb),0.40)`,
                   color:      "var(--ch-text)",
                 } : {
                   background: "transparent",
-                  border:     "1px solid var(--ch-border)",
+                  border:     `1px solid rgba(${itemPalette.accentRgb},0.22)`,
                   color:      "var(--ch-muted)",
                 }}
               >
-                <Icon className="h-3 w-3" />
+                <Icon className="h-3 w-3" style={activ ? undefined : { color: itemPalette.accent }} />
                 {item.label}
               </Link>
             );
@@ -548,13 +581,14 @@ function SidebarLink({
   isActive: boolean;
 }) {
   const Icon = item.icon;
+  const itemPalette = accentPalettes[item.tone ?? "slate"];
   return (
     <Link
       href={item.href}
       aria-current={active ? "page" : undefined}
       className="group relative flex h-9 items-center gap-2.5 rounded-xl px-3 text-[12.5px] transition-all"
       style={active ? {
-        background: `linear-gradient(90deg, rgba(var(--ch-accent-rgb),0.22), rgba(129,140,248,0.10))`,
+        background: "linear-gradient(90deg, rgba(var(--ch-accent-rgb),0.22), rgba(var(--ch-accent-2-rgb),0.10))",
         border:     `1px solid rgba(var(--ch-accent-rgb),0.48)`,
         color:      "var(--ch-text)",
         boxShadow:  "0 10px 28px rgba(var(--ch-accent-rgb),0.14)",
@@ -571,7 +605,10 @@ function SidebarLink({
           style={{ background: "var(--ch-accent)", boxShadow: "0 0 10px rgba(var(--ch-accent-rgb),0.75)" }}
         />
       ) : null}
-      <Icon className={cn("h-4 w-4 shrink-0", active ? "" : "opacity-60 group-hover:opacity-100")} />
+      <Icon
+        className={cn("h-4 w-4 shrink-0", active ? "" : "opacity-70 group-hover:opacity-100")}
+        style={active ? undefined : { color: itemPalette.accent }}
+      />
       <span className="flex-1 truncate font-medium">{item.label}</span>
       {item.badge && (
         <span
@@ -598,7 +635,6 @@ function isActive(href: string, current: string) {
   return false;
 }
 
-function resolveLabel(sections: NavSection[], active: string, mode: string) {
-  const item = sections.flatMap((s) => s.items).find((i) => isActive(i.href, active));
-  return item?.label ?? (mode === "admin" ? "Dashboard" : "Dashboard");
+function resolveActiveItem(sections: NavSection[], active: string) {
+  return sections.flatMap((s) => s.items).find((i) => isActive(i.href, active));
 }

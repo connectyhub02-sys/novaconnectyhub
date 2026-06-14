@@ -74,11 +74,18 @@ export function Panel({
     <div
       id={id}
       className={cn("rounded-2xl", className)}
-      style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}
+      style={{
+        background: "var(--ch-panel)",
+        border: "1px solid var(--ch-border-strong)",
+        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.045)",
+      }}
     >
       <div
         className="flex items-center justify-between gap-3 px-5 py-4"
-        style={{ borderBottom: "1px solid var(--ch-border)" }}
+        style={{
+          background: "linear-gradient(90deg, rgba(var(--ch-accent-rgb),0.08), transparent 70%)",
+          borderBottom: "1px solid var(--ch-border-strong)",
+        }}
       >
         <div>
           {eyebrow && (
@@ -108,7 +115,11 @@ export function MetricCard({
   return (
     <div
       className="rounded-2xl p-5"
-      style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}
+      style={{
+        background: "var(--ch-panel)",
+        border: "1px solid var(--ch-border-strong)",
+        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.045)",
+      }}
     >
       <div className="flex items-start justify-between gap-3">
         <p className="font-mono text-[10px] uppercase tracking-widest text-slate-500">{label}</p>
@@ -280,7 +291,10 @@ export function StatusBar({ items }: { items: { label: string; status: StatusTon
   return (
     <div
       className="mb-5 flex flex-wrap items-center gap-4 rounded-2xl px-5 py-3"
-      style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}
+      style={{
+        background: "var(--ch-panel)",
+        border: "1px solid var(--ch-border-strong)",
+      }}
     >
       {items.map((item) => {
         const s    = statusMap[item.status];
@@ -329,7 +343,7 @@ export function AgentCard({ name, role, status, accuracy, current, accent = "gre
   return (
     <div
       className="rounded-xl p-4"
-      style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
+      style={{ background: "var(--ch-panel-2)", border: "1px solid var(--ch-border)" }}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
@@ -360,7 +374,7 @@ export function KpiStat({ label, value, tone = "zinc" }: { label: string; value:
   return (
     <div
       className="rounded-xl px-3 py-2.5"
-      style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
+      style={{ background: "var(--ch-panel-2)", border: "1px solid var(--ch-border)" }}
     >
       <div className="font-mono text-[9px] uppercase tracking-widest text-slate-600">{label}</div>
       <div className={cn("mt-1 font-mono text-[16px] font-bold", t.text)}>{value}</div>

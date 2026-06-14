@@ -30,11 +30,18 @@ export function AreaChartPanel({
   return (
     <div
       className="rounded-2xl"
-      style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}
+      style={{
+        background: "var(--ch-panel)",
+        border: "1px solid var(--ch-border-strong)",
+        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.045)",
+      }}
     >
       <div
         className="flex flex-wrap items-center justify-between gap-3 px-5 py-4"
-        style={{ borderBottom: "1px solid var(--ch-border)" }}
+        style={{
+          background: "linear-gradient(90deg, rgba(var(--ch-accent-rgb),0.08), transparent 70%)",
+          borderBottom: "1px solid var(--ch-border-strong)",
+        }}
       >
         <div>
           {eyebrow && (
@@ -62,7 +69,7 @@ export function AreaChartPanel({
                     "rounded-lg px-2.5 py-1 font-mono text-[10px] transition",
                     i === 0 ? "text-white" : "text-slate-500 hover:text-slate-300",
                   )}
-                  style={i === 0 ? { background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" } : {}}
+                  style={i === 0 ? { background: "var(--ch-panel-2)", border: "1px solid var(--ch-border-strong)" } : {}}
                 >
                   {f}
                 </button>
@@ -87,7 +94,7 @@ export function AreaChartPanel({
             <XAxis dataKey="label" tick={{ fill: "#475569", fontSize: 10, fontFamily: "monospace" }} axisLine={false} tickLine={false} />
             <YAxis tick={{ fill: "#475569", fontSize: 10, fontFamily: "monospace" }} axisLine={false} tickLine={false} />
             <Tooltip
-              contentStyle={{ background: "#1a2540", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 10, fontSize: 11 }}
+              contentStyle={{ background: "var(--ch-dropdown-bg)", border: "1px solid var(--ch-border-strong)", borderRadius: 10, fontSize: 11 }}
               labelStyle={{ color: "#94a3b8" }}
               itemStyle={{ color }}
             />
@@ -111,11 +118,18 @@ export function BarChartPanel({
   return (
     <div
       className="rounded-2xl"
-      style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}
+      style={{
+        background: "var(--ch-panel)",
+        border: "1px solid var(--ch-border-strong)",
+        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.045)",
+      }}
     >
       <div
         className="flex flex-wrap items-center justify-between gap-3 px-5 py-4"
-        style={{ borderBottom: "1px solid var(--ch-border)" }}
+        style={{
+          background: "linear-gradient(90deg, rgba(var(--ch-accent-rgb),0.08), transparent 70%)",
+          borderBottom: "1px solid var(--ch-border-strong)",
+        }}
       >
         <div>
           {eyebrow && (
@@ -131,7 +145,7 @@ export function BarChartPanel({
                   key={f}
                   type="button"
                   className={cn("rounded-lg px-2.5 py-1 font-mono text-[10px] transition", i === 0 ? "text-white" : "text-slate-500")}
-                  style={i === 0 ? { background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" } : {}}
+                  style={i === 0 ? { background: "var(--ch-panel-2)", border: "1px solid var(--ch-border-strong)" } : {}}
                 >
                   {f}
                 </button>
@@ -148,7 +162,7 @@ export function BarChartPanel({
             <XAxis dataKey="label" tick={{ fill: "#475569", fontSize: 10, fontFamily: "monospace" }} axisLine={false} tickLine={false} />
             <YAxis tick={{ fill: "#475569", fontSize: 10, fontFamily: "monospace" }} axisLine={false} tickLine={false} />
             <Tooltip
-              contentStyle={{ background: "#1a2540", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 10, fontSize: 11 }}
+              contentStyle={{ background: "var(--ch-dropdown-bg)", border: "1px solid var(--ch-border-strong)", borderRadius: 10, fontSize: 11 }}
               labelStyle={{ color: "#94a3b8" }}
               itemStyle={{ color }}
               cursor={{ fill: "rgba(255,255,255,0.04)" }}
