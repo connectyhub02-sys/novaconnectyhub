@@ -7,6 +7,7 @@ import {
   disconnectClientWhatsapp,
   getClientWhatsappState,
   refreshClientWhatsappStatus,
+  sendClientWhatsappHandoffNotificationTest,
   sendClientWhatsappTest,
   updateClientWhatsappPrompt,
   type ClientWhatsappActionResult,
@@ -22,6 +23,7 @@ type ActionBody = {
   companyId?: unknown;
   phone?: unknown;
   text?: unknown;
+  behavior?: unknown;
 };
 
 type WorkspaceContext = {
@@ -106,6 +108,16 @@ export async function POST(request: NextRequest) {
         userId: context.userId,
         phone: typeof body?.phone === "string" ? body.phone : "",
         text: typeof body?.text === "string" ? body.text : "",
+      });
+
+      return NextResponse.json(attachWorkspaceToResult(context, result));
+    }
+
+    if (action === "send_handoff_test") {
+      const result = await sendClientWhatsappHandoffNotificationTest({
+        organization: context.organization,
+        userId: context.userId,
+        behavior: body?.behavior,
       });
 
       return NextResponse.json(attachWorkspaceToResult(context, result));

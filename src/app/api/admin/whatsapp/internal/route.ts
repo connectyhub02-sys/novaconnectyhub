@@ -5,6 +5,7 @@ import {
   disconnectPlatformWhatsappConsole,
   getPlatformWhatsappConsoleState,
   refreshPlatformWhatsappConsoleStatus,
+  sendPlatformWhatsappHandoffNotificationTest,
   sendPlatformWhatsappConsoleTest,
   updatePlatformWhatsappConsoleSettings,
 } from "@/lib/admin/platform-whatsapp-console";
@@ -107,6 +108,17 @@ export async function POST(request: NextRequest) {
         userId: auth.userId,
         phone: typeof body?.phone === "string" ? body.phone : "",
         text: typeof body?.text === "string" ? body.text : "",
+        client: createServiceClient(),
+      });
+
+      return NextResponse.json(result);
+    }
+
+    if (action === "send_handoff_test") {
+      const result = await sendPlatformWhatsappHandoffNotificationTest({
+        sectorId: asString(body?.sectorId) ?? "",
+        userId: auth.userId,
+        behavior: body?.behavior,
         client: createServiceClient(),
       });
 

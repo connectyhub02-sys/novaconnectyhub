@@ -15,6 +15,7 @@ import {
   defaultWhatsappGlobalPrompt,
   normalizeWhatsappBehaviorConfig,
 } from "@/lib/whatsapp/agent-behavior";
+import { enqueueWhatsappHandoffNotification } from "@/lib/whatsapp/handoff-notifications";
 import type { ClientKnowledgeFile, ClientTrackedLinkButton, ClientWhatsappActionResult, ClientWhatsappState } from "@/lib/whatsapp/client-workspace";
 import { loadUazapiCredentials, type UazapiCredentials } from "@/lib/whatsapp/uazapi-credentials";
 import { createServiceClient } from "@/lib/supabase/service";
@@ -630,6 +631,68 @@ export async function sendPlatformWhatsappConsoleTest(input: {
   return {
     state,
     notice: { tone: "success", message: deliveryMode === "audio" ? "Audio de teste interno enviado." : "Mensagem de teste interna enviada." },
+    qrCode: null,
+    pairCode: null,
+  };
+}
+
+export async function sendPlatformWhatsappHandoffNotificationTest(input: {
+  sectorId: string;
+  userId: string;
+  behavior?: unknown;
+  client?: SupabaseClient;
+}): Promise<ClientWhatsappActionResult> {
+  const client = input.client ?? createServiceClient();
+  const sector = await requirePlatformWhatsappSector(client, input.sectorId);
+  const [agent, instance] = await Promise.all([
+    requireSectorWhatsappAgent(client, sector.id),
+    requireSectorWhatsappInstance(client, sector.id),
+  ]);
+  const behavior = normalizeWhatsappBehaviorConfig(input.behavior ?? getBehaviorConfig(agent, instance));
+  const token = decryptInstanceToken(instance);
+
+  if (!token) {
+    throw new Error("Conecte o WhatsApp interno antes de testar o aviso humano.");
+  }
+
+  if (!behavior.humanHandoffNotifications) {
+    throw new Error("Ligue o controle Avisar humano no WhatsApp antes de testar.");
+  }
+
+  if (!behavior.humanHandoffNotificationNumbers.trim()) {
+    throw new Error("Informe pelo menos um numero responsavel para receber o aviso.");
+  }
+
+  await enqueueWhatsappHandoffNotification({
+    organizationId: instance.organization_id,
+    whatsappInstanceId: instance.id,
+    agentId: agent.id,
+    test: true,
+    notificationNumbers: behavior.humanHandoffNotificationNumbers,
+    notificationCooldownMinutes: behavior.humanHandoffNotificationCooldownMinutes,
+    requestedByUserId: input.userId,
+    requestText: "Teste de aviso de atendimento humano.",
+    requestedAt: new Date().toISOString(),
+    source: "admin_whatsapp_internal_test",
+  });
+
+  await client
+    .from("whatsapp_instances")
+    .update({
+      metadata: {
+        ...(instance.metadata ?? {}),
+        last_platform_action: "send_handoff_test",
+        last_handoff_test_queued_at: new Date().toISOString(),
+      },
+    })
+    .eq("id", instance.id);
+
+  revalidateWhatsappAdmin();
+  const state = await getPlatformWhatsappConsoleState({ sectorId: sector.id, userId: input.userId, client });
+
+  return {
+    state,
+    notice: { tone: "success", message: "Teste de aviso humano interno enfileirado. Confira o WhatsApp do responsavel." },
     qrCode: null,
     pairCode: null,
   };

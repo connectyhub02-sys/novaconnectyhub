@@ -5,6 +5,11 @@ import {
   processWhatsappAgentRun,
 } from "@/lib/whatsapp/agent-runtime";
 import { processScheduledWhatsappOutbounds } from "@/lib/whatsapp/channel-operations";
+import {
+  processWhatsappHandoffNotification,
+  type WhatsappHandoffNotificationEventData,
+  whatsappHandoffNotificationEventName,
+} from "@/lib/whatsapp/handoff-notifications";
 import { syncUazapiInstances } from "@/lib/whatsapp/uazapi-sync";
 import { runGrowthAgentMission, type GrowthAgentCode } from "@/lib/growth/growth-agent-runner";
 
@@ -163,6 +168,21 @@ export const connectyhubWhatsappOutboundSweep = inngest.createFunction(
   },
 );
 
+export const connectyhubWhatsappHandoffNotifier = inngest.createFunction(
+  {
+    id: "connectyhub-whatsapp-handoff-notifier",
+    name: "ConnectyHub WhatsApp Human Handoff Notifier",
+    retries: 3,
+    triggers: [{ event: whatsappHandoffNotificationEventName }],
+  },
+  async ({ event, step }) =>
+    step.run("send-whatsapp-handoff-notification", () =>
+      processWhatsappHandoffNotification({
+        data: event.data as WhatsappHandoffNotificationEventData,
+      }),
+    ),
+);
+
 const growthAgentSchedules: Array<{
   id: string;
   name: string;
@@ -257,5 +277,6 @@ export const functions = [
   connectyhubWhatsappAgentSweep,
   connectyhubWhatsappOutboundDispatcher,
   connectyhubWhatsappOutboundSweep,
+  connectyhubWhatsappHandoffNotifier,
   ...connectyhubGrowthAgentFunctions,
 ];

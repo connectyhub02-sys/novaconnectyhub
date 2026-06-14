@@ -16,6 +16,9 @@ export type WhatsappBehaviorConfig = {
   adaptiveRapportMode: WhatsappRapportMode;
   audioTranscription: boolean;
   humanIntervention: boolean;
+  humanHandoffNotifications: boolean;
+  humanHandoffNotificationNumbers: string;
+  humanHandoffNotificationCooldownMinutes: number;
   botLoopProtection: boolean;
   allowInternalInstanceMessages: boolean;
   allowGroupChats: boolean;
@@ -179,6 +182,9 @@ export const defaultWhatsappBehaviorConfig: WhatsappBehaviorConfig = {
   adaptiveRapportMode: "soft",
   audioTranscription: true,
   humanIntervention: true,
+  humanHandoffNotifications: false,
+  humanHandoffNotificationNumbers: "",
+  humanHandoffNotificationCooldownMinutes: 15,
   botLoopProtection: true,
   allowInternalInstanceMessages: false,
   allowGroupChats: false,
@@ -296,6 +302,8 @@ export function normalizeWhatsappBehaviorConfig(value: unknown): WhatsappBehavio
     merged.adaptiveRapportMode = "off";
     merged.audioTranscription = false;
     merged.humanIntervention = false;
+    merged.humanHandoffNotifications = false;
+    merged.humanHandoffNotificationNumbers = "";
     merged.botLoopProtection = false;
     merged.allowInternalInstanceMessages = false;
     merged.allowGroupChats = false;
@@ -359,6 +367,7 @@ function readNumber(value: unknown, fallback: number, key: keyof WhatsappBehavio
   if (key === "mediaBatchDocumentLimit") return clamp(Math.round(safe), 1, 8);
   if (key === "mediaBatchImageLimit") return clamp(Math.round(safe), 1, 20);
   if (key === "humanInterventionMinutes") return clamp(Math.round(safe), 5, 1440);
+  if (key === "humanHandoffNotificationCooldownMinutes") return clamp(Math.round(safe), 1, 1440);
   if (key === "whatsappMaxStatusRecipients") return clamp(Math.round(safe), 1, 500);
   if (key === "whatsappCampaignBatchSize") return clamp(Math.round(safe), 1, 500);
   if (key === "whatsappCampaignDelayMinSeconds") return clamp(Math.round(safe), 5, 600);
@@ -381,7 +390,12 @@ function clamp(value: number, min: number, max: number) {
 }
 
 function isOptionalStringKey(key: keyof WhatsappBehaviorConfig) {
-  return key === "audioVoiceId" || key === "audioVoiceName" || key === "audioVoiceSource" || key === "audioVoicePublicOwnerId" || key === "audioModelId";
+  return key === "audioVoiceId"
+    || key === "audioVoiceName"
+    || key === "audioVoiceSource"
+    || key === "audioVoicePublicOwnerId"
+    || key === "audioModelId"
+    || key === "humanHandoffNotificationNumbers";
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

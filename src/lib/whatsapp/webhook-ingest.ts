@@ -10,6 +10,7 @@ import {
   syncLeadAvatarFromUazapi,
 } from "./lead-avatar-sync";
 import { normalizeWhatsappBehaviorConfig } from "./agent-behavior";
+import { isWhatsappHandoffNotificationRecipient } from "./handoff-notifications";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -126,7 +127,11 @@ export async function ingestUazapiWebhook(input: {
   }
 
   try {
-    const lead = !message.isGroupChat && message.phoneNumber
+    const behavior = normalizeWhatsappBehaviorConfig(readRecord(instance.metadata)?.behavior_config);
+    const isHandoffNotificationReply = message.direction === "inbound"
+      && !message.isGroupChat
+      && isWhatsappHandoffNotificationRecipient(behavior, message.phoneNumber);
+    const lead = !isHandoffNotificationReply && !message.isGroupChat && message.phoneNumber
       ? await ensureLead(client, {
           organizationId: instance.organization_id,
           phoneNumber: message.phoneNumber,
@@ -652,6 +657,10 @@ async function enqueueWhatsappAgentRun(
   const isGroupChat = input.isGroupChat || isWhatsappGroupChatId(input.providerChatId);
 
   if (isGroupChat && !behavior.allowGroupChats) {
+    return null;
+  }
+
+  if (!isGroupChat && isWhatsappHandoffNotificationRecipient(behavior, input.phoneNumber)) {
     return null;
   }
 

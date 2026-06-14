@@ -26,6 +26,7 @@ import {
   normalizeWhatsappBehaviorConfig,
   type WhatsappBehaviorConfig,
 } from "./agent-behavior";
+import { enqueueWhatsappHandoffNotification } from "./handoff-notifications";
 import { loadUazapiCredentials, type UazapiCredentials } from "./uazapi-credentials";
 
 type JsonRecord = Record<string, unknown>;
@@ -2881,10 +2882,53 @@ async function handleLeadHumanHandoffRequest(input: {
     latestInbound,
   });
 
+  await enqueueWhatsappHandoffNotification({
+    organizationId: context.organization.id,
+    whatsappInstanceId: context.instance.id,
+    conversationId: context.conversationId,
+    leadId: context.lead?.id ?? null,
+    agentId: context.agent.id,
+    agentRunId: context.run.id,
+    leadName: context.lead?.display_name ?? null,
+    leadPhone: context.lead?.phone_number ?? null,
+    requestText,
+    requestedAt,
+    pausedUntil,
+    source: "lead_requested_human",
+  }).catch(async (error: unknown) => {
+    await persistHumanHandoffNotificationQueueFailure(client, context, error);
+  });
+
   return await completeRun(client, context.run.id, "Lead pediu atendimento humano.", {
     sent: true,
     reason: "lead_requested_human",
     pausedUntil,
+  });
+}
+
+async function persistHumanHandoffNotificationQueueFailure(
+  client: SupabaseClient,
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+  error: unknown,
+) {
+  await client.from("intelligence_events").insert({
+    scope: "organization",
+    organization_id: context.organization.id,
+    source_type: "whatsapp",
+    source_id: context.conversationId,
+    producer_agent_id: context.agent.id,
+    event_type: "whatsapp.handoff.notification.queue_failed",
+    title: "Falha ao enfileirar aviso humano",
+    summary: error instanceof Error ? preview(error.message, 500) : "Erro desconhecido ao enfileirar aviso de atendimento humano.",
+    confidence: 0.4,
+    visibility: "organization",
+    tags: ["whatsapp", "handoff", "notification", "error"],
+    payload: {
+      leadId: context.lead?.id ?? null,
+      conversationId: context.conversationId,
+      agentRunId: context.run.id,
+      whatsappInstanceId: context.instance.id,
+    },
   });
 }
 
