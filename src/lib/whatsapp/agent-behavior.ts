@@ -37,6 +37,13 @@ export type WhatsappBehaviorConfig = {
   analyzeLinks: boolean;
   quotedReplyContext: boolean;
   leadFileStorage: boolean;
+  mediaBurstGuard: boolean;
+  missingMediaCaptionGuard: boolean;
+  audioQualityGuard: boolean;
+  messageEditDeleteAwareness: boolean;
+  contactPollReactionHandling: boolean;
+  topicShiftDetection: boolean;
+  promptInjectionGuard: boolean;
   emojiReactions: boolean;
   reactionProbability: number;
   timingJitter: boolean;
@@ -190,6 +197,13 @@ export const defaultWhatsappBehaviorConfig: WhatsappBehaviorConfig = {
   analyzeLinks: true,
   quotedReplyContext: true,
   leadFileStorage: true,
+  mediaBurstGuard: true,
+  missingMediaCaptionGuard: true,
+  audioQualityGuard: true,
+  messageEditDeleteAwareness: true,
+  contactPollReactionHandling: true,
+  topicShiftDetection: true,
+  promptInjectionGuard: true,
   emojiReactions: true,
   reactionProbability: 40,
   timingJitter: true,
@@ -287,6 +301,13 @@ export function normalizeWhatsappBehaviorConfig(value: unknown): WhatsappBehavio
     merged.mediaImage = false;
     merged.mediaDocument = false;
     merged.mediaVideo = false;
+    merged.mediaBurstGuard = false;
+    merged.missingMediaCaptionGuard = false;
+    merged.audioQualityGuard = false;
+    merged.messageEditDeleteAwareness = false;
+    merged.contactPollReactionHandling = false;
+    merged.topicShiftDetection = false;
+    merged.promptInjectionGuard = false;
     merged.smartTiming = false;
     merged.aiScheduleEnabled = false;
     merged.emojiReactions = false;

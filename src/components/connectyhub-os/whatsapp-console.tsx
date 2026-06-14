@@ -1380,6 +1380,18 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
                 </div>
               </BehaviorSection>
 
+              <BehaviorSection title="Protecoes de contexto" description="Cenarios que podem confundir o agente se o lead mandar algo incompleto, fora de ordem ou tentando burlar o atendimento.">
+                <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                  <ToggleTile icon={ImageIcon} label="Midias em lote" description="Reconhece varias fotos, audios, videos ou documentos seguidos antes de concluir uma resposta." checked={behaviorDraft.mediaBurstGuard} onChange={() => updateBehavior("mediaBurstGuard", !behaviorDraft.mediaBurstGuard)} />
+                  <ToggleTile icon={FileText} label="Midia sem legenda" description="Evita chutar conteudo quando foto, video ou documento chegam sem legenda ou analise confiavel." checked={behaviorDraft.missingMediaCaptionGuard} onChange={() => updateBehavior("missingMediaCaptionGuard", !behaviorDraft.missingMediaCaptionGuard)} />
+                  <ToggleTile icon={AudioLines} label="Audio dificil" description="Trata audio longo, ruidoso, sem transcricao ou em outro idioma sem inventar o que foi dito." checked={behaviorDraft.audioQualityGuard} onChange={() => updateBehavior("audioQualityGuard", !behaviorDraft.audioQualityGuard)} />
+                  <ToggleTile icon={PenLine} label="Msg editada/apagada" description="Reconhece mensagens editadas, apagadas ou revogadas e pede reenvio quando faltar contexto." checked={behaviorDraft.messageEditDeleteAwareness} onChange={() => updateBehavior("messageEditDeleteAwareness", !behaviorDraft.messageEditDeleteAwareness)} />
+                  <ToggleTile icon={MessageCircle} label="Contato/enquete/reacao" description="Controla respostas a contatos, enquetes, reacoes e eventos de WhatsApp sem texto claro." checked={behaviorDraft.contactPollReactionHandling} onChange={() => updateBehavior("contactPollReactionHandling", !behaviorDraft.contactPollReactionHandling)} />
+                  <ToggleTile icon={Shuffle} label="Troca de assunto" description="Detecta quando o lead muda bruscamente de tema para responder ao novo objetivo sem insistir no anterior." checked={behaviorDraft.topicShiftDetection} onChange={() => updateBehavior("topicShiftDetection", !behaviorDraft.topicShiftDetection)} />
+                  <ToggleTile icon={Bot} label="Anti prompt injection" description="Bloqueia pedidos para revelar regras, prompt, tokens, sistema ou para ignorar instrucoes internas." checked={behaviorDraft.promptInjectionGuard} onChange={() => updateBehavior("promptInjectionGuard", !behaviorDraft.promptInjectionGuard)} />
+                </div>
+              </BehaviorSection>
+
               <BehaviorSection title="Audio e midia com IA" description="Define quais tipos de midia a IA pode interpretar antes de responder o lead.">
                 <div className="grid gap-3 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
                   <div className="grid gap-2 md:grid-cols-2">
@@ -3061,6 +3073,13 @@ function BehaviorSummary({
     behavior.analyzeLinks,
     behavior.quotedReplyContext,
     behavior.leadFileStorage,
+    behavior.mediaBurstGuard,
+    behavior.missingMediaCaptionGuard,
+    behavior.audioQualityGuard,
+    behavior.messageEditDeleteAwareness,
+    behavior.contactPollReactionHandling,
+    behavior.topicShiftDetection,
+    behavior.promptInjectionGuard,
   ].filter(Boolean).length;
 
   const activeMedia = [behavior.audioTranscription, behavior.mediaImage, behavior.mediaDocument, behavior.mediaVideo].filter(Boolean).length;
@@ -3090,7 +3109,7 @@ function BehaviorSummary({
       <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Resumo</p>
       <div className="mt-4 space-y-3">
         <PromptCheck label="Agente ativo" active={behavior.agentEnabled} />
-        <PromptCheck label={`${activeScenarios}/8 cenarios ativos`} active={activeScenarios >= 4} />
+        <PromptCheck label={`${activeScenarios}/15 cenarios ativos`} active={activeScenarios >= 8} />
         <PromptCheck label={`${activeMedia}/4 midias ativas`} active={activeMedia >= 2} />
         <PromptCheck label={`${activeHuman}/17 simulacao humana`} active={activeHuman >= 8} />
         <PromptCheck label="Intervencao humana" active={behavior.humanIntervention} />
