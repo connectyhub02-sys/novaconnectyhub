@@ -228,6 +228,24 @@ type Notice = {
   message: string;
 };
 
+type ControlTone = "cyan" | "emerald" | "sky" | "violet" | "amber" | "rose" | "fuchsia" | "slate";
+
+type ControlToneStyle = {
+  color: string;
+  rgb: string;
+};
+
+const controlToneStyles: Record<ControlTone, ControlToneStyle> = {
+  cyan: { color: "#38e8d6", rgb: "56,232,214" },
+  emerald: { color: "#34d399", rgb: "52,211,153" },
+  sky: { color: "#38bdf8", rgb: "56,189,248" },
+  violet: { color: "#a78bfa", rgb: "167,139,250" },
+  amber: { color: "#fbbf24", rgb: "251,191,36" },
+  rose: { color: "#fb7185", rgb: "251,113,133" },
+  fuchsia: { color: "#e879f9", rgb: "232,121,249" },
+  slate: { color: "#94a3b8", rgb: "148,163,184" },
+};
+
 type WhatsappConsoleTab = "connection" | "prompt" | "qualification" | "behavior" | "multichannel" | "files";
 
 type WhatsappConsoleVariant = {
@@ -2346,6 +2364,77 @@ function BehaviorSection({
   );
 }
 
+function normalizeControlText(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+function resolveControlTone(label: string, description?: string): ControlTone {
+  const text = normalizeControlText(`${label} ${description ?? ""}`);
+
+  if (/(humano|intervencao|opt-out|prompt injection|bots|loops|protecao|seguranca)/.test(text)) {
+    return "rose";
+  }
+
+  if (/(campanha|lote|delay|temporizacao|tempo|timing|cooldown|janela|reativar|circadiano|pausa|leitura|visualizar|min|max)/.test(text)) {
+    return "amber";
+  }
+
+  if (/(audio|voz|transcrever|microfone|figurinha|sticker|emoji|reacao|vocal|espontaneo)/.test(text)) {
+    return "fuchsia";
+  }
+
+  if (/(status|canal|newsletter|stories)/.test(text)) {
+    return "violet";
+  }
+
+  if (/(grupo|mencionar todos|interativos|todos)/.test(text)) {
+    return "emerald";
+  }
+
+  if (/(imagem|foto|video|documento|midia|arquivo|salvar)/.test(text)) {
+    return "sky";
+  }
+
+  if (/(link|localizacao|captacao|crm|qualificacao|pergunta|lead|vip)/.test(text)) {
+    return "emerald";
+  }
+
+  if (/(mensagem|texto|resposta|citado|conversa|dividir|lido)/.test(text)) {
+    return "cyan";
+  }
+
+  if (/(agente|ia|aprendizado)/.test(text)) {
+    return "violet";
+  }
+
+  return "slate";
+}
+
+function resolveNumberFieldMeta(label: string, description?: string): { icon: LucideIcon; tone: ControlTone } {
+  const text = normalizeControlText(`${label} ${description ?? ""}`);
+
+  if (/(audio|voz|transcricao|transcrever)/.test(text)) return { icon: AudioLines, tone: "fuchsia" };
+  if (/(foto|imagem)/.test(text)) return { icon: ImageIcon, tone: "sky" };
+  if (/(video)/.test(text)) return { icon: Video, tone: "sky" };
+  if (/(doc|documento)/.test(text)) return { icon: FileText, tone: "sky" };
+  if (/(status|destinatario)/.test(text)) return { icon: Globe2, tone: "violet" };
+  if (/(campanha|lote)/.test(text)) return { icon: Forward, tone: "amber" };
+  if (/(chance|reacao|emoji)/.test(text)) return { icon: Smile, tone: "fuchsia" };
+  if (/(figurinha|sticker)/.test(text)) return { icon: Sticker, tone: "fuchsia" };
+  if (/(qualificado|vip|score)/.test(text)) return { icon: ShieldCheck, tone: "emerald" };
+  if (/(pergunta)/.test(text)) return { icon: MessageSquare, tone: "emerald" };
+  if (/(humano|cooldown|reativar)/.test(text)) return { icon: Bell, tone: "rose" };
+  if (/(texto)/.test(text)) return { icon: MessageSquare, tone: "cyan" };
+  if (/(botao)/.test(text)) return { icon: Send, tone: "cyan" };
+  if (/(leitura|visualizar)/.test(text)) return { icon: Eye, tone: "amber" };
+  if (/(delay|tempo|timing|min|max|segundo|espera)/.test(text)) return { icon: Timer, tone: "amber" };
+
+  return { icon: Timer, tone: resolveControlTone(label, description) };
+}
+
 function ToggleTile({
   icon: Icon,
   label,
@@ -2359,22 +2448,41 @@ function ToggleTile({
   checked: boolean;
   onChange: () => void;
 }) {
+  const tone = controlToneStyles[resolveControlTone(label, description)];
+
   return (
     <button
       type="button"
       onClick={onChange}
-      className="flex min-h-11 items-center justify-between gap-3 rounded-lg border px-3 text-left transition hover:border-cyan-300/35"
+      className="flex min-h-11 items-center justify-between gap-3 rounded-lg border px-3 text-left transition hover:bg-white/10"
       style={{
-        background: checked ? "linear-gradient(135deg, rgba(var(--ch-accent-rgb),0.15), rgba(var(--ch-accent-2-rgb),0.07))" : "var(--ch-panel-2)",
-        borderColor: checked ? "rgba(var(--ch-accent-rgb),0.42)" : "var(--ch-border)",
+        background: checked ? `linear-gradient(135deg, rgba(${tone.rgb},0.17), rgba(${tone.rgb},0.07))` : "var(--ch-panel-2)",
+        borderColor: checked ? `rgba(${tone.rgb},0.48)` : `rgba(${tone.rgb},0.22)`,
       }}
     >
       <span className="flex min-w-0 items-center gap-2">
-        <Icon className={cn("h-4 w-4 shrink-0", checked ? "text-cyan-300" : "text-slate-500")} />
+        <span
+          className="grid h-7 w-7 shrink-0 place-items-center rounded-lg border transition"
+          style={{
+            background: `rgba(${tone.rgb},${checked ? 0.16 : 0.08})`,
+            borderColor: `rgba(${tone.rgb},${checked ? 0.34 : 0.18})`,
+            boxShadow: checked ? `0 0 18px rgba(${tone.rgb},0.20)` : "none",
+            color: tone.color,
+            opacity: checked ? 1 : 0.72,
+          }}
+        >
+          <Icon className="h-4 w-4" />
+        </span>
         <span className="min-w-0 text-[12px] font-semibold leading-4" style={{ color: "var(--ch-text)" }}>{label}</span>
         {description ? <InfoHint text={description} /> : null}
       </span>
-      <span className={cn("relative h-5 w-9 shrink-0 rounded-full transition", checked ? "bg-emerald-400" : "bg-slate-700")}>
+      <span
+        className="relative h-5 w-9 shrink-0 rounded-full transition"
+        style={{
+          background: checked ? tone.color : "rgb(51,65,85)",
+          boxShadow: checked ? `0 0 16px rgba(${tone.rgb},0.26)` : "none",
+        }}
+      >
         <span className={cn("absolute top-1 h-3 w-3 rounded-full bg-white transition", checked ? "left-5" : "left-1")} />
       </span>
     </button>
@@ -2830,24 +2938,55 @@ function NumberField({
   onChange: (value: number) => void;
 }) {
   const nextValue = (delta: number) => onChange(Math.min(max, Math.max(min, value + delta)));
+  const meta = resolveNumberFieldMeta(label, description);
+  const tone = controlToneStyles[meta.tone];
+  const FieldIcon = meta.icon;
 
   return (
-    <div className="rounded-lg border px-2 py-2" style={{ background: "var(--ch-surface)", borderColor: "var(--ch-border)" }}>
+    <div
+      className="rounded-lg border px-2 py-2"
+      style={{ background: "var(--ch-panel-2)", borderColor: `rgba(${tone.rgb},0.24)` }}
+    >
       <span className="flex items-center gap-1.5 text-[11px] font-semibold leading-4" style={{ color: "var(--ch-text)" }}>
-        {label}
+        <span
+          className="grid h-5 w-5 shrink-0 place-items-center rounded-md border"
+          style={{
+            background: `rgba(${tone.rgb},0.10)`,
+            borderColor: `rgba(${tone.rgb},0.24)`,
+            color: tone.color,
+          }}
+        >
+          <FieldIcon className="h-3.5 w-3.5" />
+        </span>
+        <span className="min-w-0 truncate">{label}</span>
         {description ? <InfoHint text={description} /> : null}
       </span>
       <div className="mt-2 grid grid-cols-[28px_1fr_28px] items-center gap-1">
-        <button type="button" className="h-7 rounded-md border text-slate-300" onClick={() => nextValue(-1)}>-</button>
+        <button
+          type="button"
+          className="h-7 rounded-md border transition hover:brightness-125"
+          style={{ background: `rgba(${tone.rgb},0.07)`, borderColor: `rgba(${tone.rgb},0.24)`, color: tone.color }}
+          onClick={() => nextValue(-1)}
+        >
+          -
+        </button>
         <input
           value={value}
           onChange={(event) => onChange(Number(event.target.value) || min)}
           className="h-7 rounded-md border bg-transparent px-2 text-center font-mono text-[12px] outline-none"
+          style={{ borderColor: `rgba(${tone.rgb},0.24)` }}
           type="number"
           min={min}
           max={max}
         />
-        <button type="button" className="h-7 rounded-md border text-slate-300" onClick={() => nextValue(1)}>+</button>
+        <button
+          type="button"
+          className="h-7 rounded-md border transition hover:brightness-125"
+          style={{ background: `rgba(${tone.rgb},0.07)`, borderColor: `rgba(${tone.rgb},0.24)`, color: tone.color }}
+          onClick={() => nextValue(1)}
+        >
+          +
+        </button>
       </div>
     </div>
   );
