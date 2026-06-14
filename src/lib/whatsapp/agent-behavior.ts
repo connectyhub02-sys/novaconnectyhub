@@ -1,10 +1,13 @@
 export type WhatsappResponseMode = "text" | "audio" | "mirror";
 export type WhatsappRapportMode = "off" | "soft" | "strong";
 export type WhatsappGroupReplyMode = "all" | "mentions" | "admins";
+export type WhatsappPresenceMode = "focused" | "natural" | "always";
+export type WhatsappQuoteReplyMode = "off" | "smart" | "always";
 
 export type WhatsappBehaviorConfig = {
   agentEnabled: boolean;
   alwaysOnline: boolean;
+  presenceMode: WhatsappPresenceMode;
   markAsRead: boolean;
   splitMessages: boolean;
   responseMode: WhatsappResponseMode;
@@ -40,6 +43,7 @@ export type WhatsappBehaviorConfig = {
   detectOptOut: boolean;
   analyzeLinks: boolean;
   quotedReplyContext: boolean;
+  quoteReplyMode: WhatsappQuoteReplyMode;
   leadFileStorage: boolean;
   mediaBurstGuard: boolean;
   missingMediaCaptionGuard: boolean;
@@ -172,6 +176,7 @@ export const defaultWhatsappAgentPrompt = [
 export const defaultWhatsappBehaviorConfig: WhatsappBehaviorConfig = {
   agentEnabled: true,
   alwaysOnline: false,
+  presenceMode: "natural",
   markAsRead: true,
   splitMessages: true,
   responseMode: "text",
@@ -207,6 +212,7 @@ export const defaultWhatsappBehaviorConfig: WhatsappBehaviorConfig = {
   detectOptOut: true,
   analyzeLinks: true,
   quotedReplyContext: true,
+  quoteReplyMode: "smart",
   leadFileStorage: true,
   mediaBurstGuard: true,
   missingMediaCaptionGuard: true,
@@ -270,6 +276,8 @@ export const defaultWhatsappBehaviorConfig: WhatsappBehaviorConfig = {
 const responseModes = new Set<WhatsappResponseMode>(["text", "audio", "mirror"]);
 const rapportModes = new Set<WhatsappRapportMode>(["off", "soft", "strong"]);
 const groupReplyModes = new Set<WhatsappGroupReplyMode>(["all", "mentions", "admins"]);
+const presenceModes = new Set<WhatsappPresenceMode>(["focused", "natural", "always"]);
+const quoteReplyModes = new Set<WhatsappQuoteReplyMode>(["off", "smart", "always"]);
 
 export function normalizeWhatsappBehaviorConfig(value: unknown): WhatsappBehaviorConfig {
   const input = isRecord(value) ? value : {};
@@ -289,6 +297,10 @@ export function normalizeWhatsappBehaviorConfig(value: unknown): WhatsappBehavio
       merged.adaptiveRapportMode = rapportModes.has(next as WhatsappRapportMode) ? (next as WhatsappRapportMode) : merged.adaptiveRapportMode;
     } else if (key === "groupReplyMode") {
       merged.groupReplyMode = groupReplyModes.has(next as WhatsappGroupReplyMode) ? (next as WhatsappGroupReplyMode) : merged.groupReplyMode;
+    } else if (key === "presenceMode") {
+      merged.presenceMode = presenceModes.has(next as WhatsappPresenceMode) ? (next as WhatsappPresenceMode) : merged.presenceMode;
+    } else if (key === "quoteReplyMode") {
+      merged.quoteReplyMode = quoteReplyModes.has(next as WhatsappQuoteReplyMode) ? (next as WhatsappQuoteReplyMode) : merged.quoteReplyMode;
     } else if (isOptionalStringKey(key)) {
       (merged[key] as string) = typeof next === "string" ? next.trim() : (current as string);
     } else if (typeof next === "string" && next.trim()) {
@@ -296,8 +308,19 @@ export function normalizeWhatsappBehaviorConfig(value: unknown): WhatsappBehavio
     }
   }
 
+  if (!("presenceMode" in input)) {
+    merged.presenceMode = readBoolean(input.alwaysOnline, false) ? "always" : merged.presenceMode;
+  }
+  merged.alwaysOnline = merged.presenceMode === "always";
+
+  if (!("quoteReplyMode" in input)) {
+    merged.quoteReplyMode = readBoolean(input.quotedReplyContext, true) ? "smart" : "off";
+  }
+  merged.quotedReplyContext = merged.quoteReplyMode !== "off";
+
   if (!merged.agentEnabled) {
     merged.alwaysOnline = false;
+    merged.presenceMode = "focused";
     merged.markAsRead = false;
     merged.splitMessages = false;
     merged.responseMode = "text";
@@ -325,6 +348,8 @@ export function normalizeWhatsappBehaviorConfig(value: unknown): WhatsappBehavio
     merged.contactPollReactionHandling = false;
     merged.topicShiftDetection = false;
     merged.promptInjectionGuard = false;
+    merged.quotedReplyContext = false;
+    merged.quoteReplyMode = "off";
     merged.smartTiming = false;
     merged.aiScheduleEnabled = false;
     merged.emojiReactions = false;

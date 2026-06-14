@@ -46,7 +46,6 @@ import {
   Video,
   Volume2,
   Wand2,
-  Wifi,
   X,
 } from "lucide-react";
 import { NeonBadge, Panel, SectionHeader } from "./panel-primitives";
@@ -55,6 +54,8 @@ import {
   normalizeWhatsappBehaviorConfig,
   type WhatsappBehaviorConfig,
   type WhatsappGroupReplyMode,
+  type WhatsappPresenceMode,
+  type WhatsappQuoteReplyMode,
   type WhatsappRapportMode,
   type WhatsappResponseMode,
 } from "@/lib/whatsapp/agent-behavior";
@@ -654,6 +655,14 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
     setBehaviorDraft((current) => normalizeWhatsappBehaviorConfig({ ...current, [key]: value }));
   }
 
+  function updatePresenceMode(value: WhatsappPresenceMode) {
+    setBehaviorDraft((current) => normalizeWhatsappBehaviorConfig({ ...current, presenceMode: value, alwaysOnline: value === "always" }));
+  }
+
+  function updateQuoteReplyMode(value: WhatsappQuoteReplyMode) {
+    setBehaviorDraft((current) => normalizeWhatsappBehaviorConfig({ ...current, quoteReplyMode: value, quotedReplyContext: value !== "off" }));
+  }
+
   function updatePromptDraft(value: string) {
     setPromptDraft(value.slice(0, agentPromptMaxLength));
   }
@@ -1249,11 +1258,27 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
           <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_320px]">
             <div className="grid gap-3">
               <BehaviorSection title="Base do agente" description="Controles principais que ligam ou pausam o atendimento automatico deste agente." defaultOpen>
-                <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-                  <ToggleTile icon={Power} label="Agente ativo" description="Quando ligado, o agente pode responder leads automaticamente neste WhatsApp." checked={behaviorDraft.agentEnabled} onChange={() => updateBehavior("agentEnabled", !behaviorDraft.agentEnabled)} />
-                  <ToggleTile icon={Wifi} label="Sempre online" description="Mantem o atendimento disponivel sem depender de horario comercial." checked={behaviorDraft.alwaysOnline} onChange={() => updateBehavior("alwaysOnline", !behaviorDraft.alwaysOnline)} />
-                  <ToggleTile icon={Eye} label="Marcar como lido" description="Marca mensagens como lidas depois que o sistema processa a conversa." checked={behaviorDraft.markAsRead} onChange={() => updateBehavior("markAsRead", !behaviorDraft.markAsRead)} />
-                  <ToggleTile icon={SplitSquareVertical} label="Dividir respostas" description="Quebra respostas longas em mensagens menores para parecer mais natural." checked={behaviorDraft.splitMessages} onChange={() => updateBehavior("splitMessages", !behaviorDraft.splitMessages)} />
+                <div className="grid gap-3">
+                  <div className="grid gap-2 md:grid-cols-3">
+                    <ToggleTile icon={Power} label="Agente ativo" description="Quando ligado, o agente pode responder leads automaticamente neste WhatsApp." checked={behaviorDraft.agentEnabled} onChange={() => updateBehavior("agentEnabled", !behaviorDraft.agentEnabled)} />
+                    <ToggleTile icon={Eye} label="Marcar como lido" description="Marca mensagens como lidas depois que o sistema processa a conversa." checked={behaviorDraft.markAsRead} onChange={() => updateBehavior("markAsRead", !behaviorDraft.markAsRead)} />
+                    <ToggleTile icon={SplitSquareVertical} label="Dividir respostas" description="Quebra respostas longas em mensagens menores para parecer mais natural." checked={behaviorDraft.splitMessages} onChange={() => updateBehavior("splitMessages", !behaviorDraft.splitMessages)} />
+                  </div>
+                  <div className="grid gap-2">
+                    <div>
+                      <h3 className="font-mono text-[9px] font-bold uppercase tracking-widest text-slate-100">Presenca WhatsApp</h3>
+                      <p className="mt-1 text-[11px] leading-4 text-slate-400">Define como o agente aparece online antes, durante e depois do atendimento.</p>
+                    </div>
+                    <ModeSelector<WhatsappPresenceMode>
+                      value={behaviorDraft.presenceMode}
+                      options={[
+                        { value: "focused", label: "So atendimento", description: "Online ao responder", help: "Aparece online apenas quando esta lendo, digitando, gravando ou enviando resposta." },
+                        { value: "natural", label: "Natural", description: "Aparece as vezes", help: "Meio-termo: aparece online em alguns momentos ao redor da conversa, sem ficar online o tempo todo." },
+                        { value: "always", label: "Sempre online", description: "Disponivel sempre", help: "Mantem presenca e disponibilidade como sempre online. Use quando quiser atendimento 24h sem janela." },
+                      ]}
+                      onChange={updatePresenceMode}
+                    />
+                  </div>
                 </div>
               </BehaviorSection>
 
@@ -1392,16 +1417,32 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
               </BehaviorSection>
 
               <BehaviorSection title="Cenarios especiais do lead" description="Eventos que a IA deve reconhecer para alimentar CRM, memoria e proximos passos.">
-                <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-                  <ToggleTile icon={UserRound} label="Pedido de humano" description="Identifica quando o lead pede vendedor, atendente ou suporte humano." checked={behaviorDraft.detectHumanRequest} onChange={() => updateBehavior("detectHumanRequest", !behaviorDraft.detectHumanRequest)} />
-                  <ToggleTile icon={Bot} label="IA pedido humano" description="Usa IA para entender pedidos indiretos ou contextuais de atendimento humano." checked={behaviorDraft.humanHandoffAiDetection} onChange={() => updateBehavior("humanHandoffAiDetection", !behaviorDraft.humanHandoffAiDetection)} />
-                  <ToggleTile icon={Clock3} label="Cancelar/remarcar" description="Reconhece pedidos de cancelamento, reagendamento ou mudanca de horario." checked={behaviorDraft.detectRescheduleCancel} onChange={() => updateBehavior("detectRescheduleCancel", !behaviorDraft.detectRescheduleCancel)} />
-                  <ToggleTile icon={MessageSquare} label="Captacao" description="Detecta quando o lead quer cadastrar, vender ou oferecer um imovel/produto." checked={behaviorDraft.detectPropertyCapture} onChange={() => updateBehavior("detectPropertyCapture", !behaviorDraft.detectPropertyCapture)} />
-                  <ToggleTile icon={Globe2} label="Localizacao" description="Registra localizacao enviada pelo lead para enriquecer atendimento e CRM." checked={behaviorDraft.detectLocation} onChange={() => updateBehavior("detectLocation", !behaviorDraft.detectLocation)} />
-                  <ToggleTile icon={ShieldCheck} label="Opt-out" description="Detecta quando o lead pede para parar contato ou sair da lista." checked={behaviorDraft.detectOptOut} onChange={() => updateBehavior("detectOptOut", !behaviorDraft.detectOptOut)} />
-                  <ToggleTile icon={Link2} label="Links do lead" description="Analisa links enviados pelo lead e guarda contexto util para atendimento." checked={behaviorDraft.analyzeLinks} onChange={() => updateBehavior("analyzeLinks", !behaviorDraft.analyzeLinks)} />
-                  <ToggleTile icon={MessageCircle} label="Resposta citada" description="Usa a mensagem citada no WhatsApp para entender melhor a resposta do lead." checked={behaviorDraft.quotedReplyContext} onChange={() => updateBehavior("quotedReplyContext", !behaviorDraft.quotedReplyContext)} />
-                  <ToggleTile icon={FileText} label="Salvar midia" description={`Salva arquivos relevantes recebidos para historico, CRM e memoria do ${variant.entitySingular}.`} checked={behaviorDraft.leadFileStorage} onChange={() => updateBehavior("leadFileStorage", !behaviorDraft.leadFileStorage)} />
+                <div className="grid gap-3">
+                  <div className="grid gap-2">
+                    <div>
+                      <h3 className="font-mono text-[9px] font-bold uppercase tracking-widest text-slate-100">Citar mensagens</h3>
+                      <p className="mt-1 text-[11px] leading-4 text-slate-400">Controla quando a resposta deve sair citando uma mensagem especifica do lead.</p>
+                    </div>
+                    <ModeSelector<WhatsappQuoteReplyMode>
+                      value={behaviorDraft.quoteReplyMode}
+                      options={[
+                        { value: "off", label: "Desligado", description: "Nao cita", help: "O agente responde sem usar citacao/reply do WhatsApp." },
+                        { value: "smart", label: "Inteligente", description: "So quando ajuda", help: "Cita apenas quando o lead enviou varias mensagens independentes, audios ou perguntas separadas." },
+                        { value: "always", label: "Sempre", description: "Cita tudo", help: "Comportamento antigo: toda resposta usa reply na ultima mensagem do lead." },
+                      ]}
+                      onChange={updateQuoteReplyMode}
+                    />
+                  </div>
+                  <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                    <ToggleTile icon={UserRound} label="Pedido de humano" description="Identifica quando o lead pede vendedor, atendente ou suporte humano." checked={behaviorDraft.detectHumanRequest} onChange={() => updateBehavior("detectHumanRequest", !behaviorDraft.detectHumanRequest)} />
+                    <ToggleTile icon={Bot} label="IA pedido humano" description="Usa IA para entender pedidos indiretos ou contextuais de atendimento humano." checked={behaviorDraft.humanHandoffAiDetection} onChange={() => updateBehavior("humanHandoffAiDetection", !behaviorDraft.humanHandoffAiDetection)} />
+                    <ToggleTile icon={Clock3} label="Cancelar/remarcar" description="Reconhece pedidos de cancelamento, reagendamento ou mudanca de horario." checked={behaviorDraft.detectRescheduleCancel} onChange={() => updateBehavior("detectRescheduleCancel", !behaviorDraft.detectRescheduleCancel)} />
+                    <ToggleTile icon={MessageSquare} label="Captacao" description="Detecta quando o lead quer cadastrar, vender ou oferecer um imovel/produto." checked={behaviorDraft.detectPropertyCapture} onChange={() => updateBehavior("detectPropertyCapture", !behaviorDraft.detectPropertyCapture)} />
+                    <ToggleTile icon={Globe2} label="Localizacao" description="Registra localizacao enviada pelo lead para enriquecer atendimento e CRM." checked={behaviorDraft.detectLocation} onChange={() => updateBehavior("detectLocation", !behaviorDraft.detectLocation)} />
+                    <ToggleTile icon={ShieldCheck} label="Opt-out" description="Detecta quando o lead pede para parar contato ou sair da lista." checked={behaviorDraft.detectOptOut} onChange={() => updateBehavior("detectOptOut", !behaviorDraft.detectOptOut)} />
+                    <ToggleTile icon={Link2} label="Links do lead" description="Analisa links enviados pelo lead e guarda contexto util para atendimento." checked={behaviorDraft.analyzeLinks} onChange={() => updateBehavior("analyzeLinks", !behaviorDraft.analyzeLinks)} />
+                    <ToggleTile icon={FileText} label="Salvar midia" description={`Salva arquivos relevantes recebidos para historico, CRM e memoria do ${variant.entitySingular}.`} checked={behaviorDraft.leadFileStorage} onChange={() => updateBehavior("leadFileStorage", !behaviorDraft.leadFileStorage)} />
+                  </div>
                 </div>
               </BehaviorSection>
 
@@ -3132,7 +3173,7 @@ function BehaviorSummary({
     behavior.detectLocation,
     behavior.detectOptOut,
     behavior.analyzeLinks,
-    behavior.quotedReplyContext,
+    behavior.quoteReplyMode !== "off",
     behavior.leadFileStorage,
     behavior.mediaBurstGuard,
     behavior.missingMediaCaptionGuard,
@@ -3180,6 +3221,7 @@ function BehaviorSummary({
       </div>
       <div className="mt-4 grid gap-2">
         <InfoTile label="Conversa" value={formatResponseMode(behavior.responseMode)} />
+        <InfoTile label="Presenca" value={formatPresenceMode(behavior.presenceMode)} />
         <InfoTile label="Rapport" value={formatRapportMode(behavior.adaptiveRapportMode)} />
         <InfoTile label="Alteracoes" value={promptChanged || behaviorChanged ? "Pendentes" : "Salvo"} />
       </div>
@@ -3457,6 +3499,12 @@ function formatResponseMode(value: WhatsappResponseMode) {
   if (value === "audio") return "Sempre audio";
   if (value === "mirror") return "Espelho";
   return "Sempre texto";
+}
+
+function formatPresenceMode(value: WhatsappPresenceMode) {
+  if (value === "always") return "Sempre online";
+  if (value === "focused") return "So atendimento";
+  return "Natural";
 }
 
 function formatVoiceSource(voice: AudioVoiceOption) {

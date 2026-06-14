@@ -395,7 +395,7 @@ export async function processWhatsappAgentRun(input: {
       });
     }
 
-    if (behavior.markAsRead || behavior.alwaysOnline) {
+    if (behavior.markAsRead || shouldExposeOnlinePresence(behavior)) {
       await ensureWhatsappPresencePrivacy(context.credentials, token, behavior);
     }
 
@@ -406,9 +406,7 @@ export async function processWhatsappAgentRun(input: {
       await markConversationRead(context.credentials, token, phone, context.providerChatId, context.providerMessageId);
     }
 
-    if (behavior.alwaysOnline) {
-      await setPresenceAvailable(context.credentials, token);
-    }
+    await maybeSetInstanceAvailable(context, token, "before");
 
     const cachedAiText = readCachedRunResponseText(context.run.metadata);
     const aiText = cachedAiText ?? await generateAgentResponse({
@@ -468,9 +466,7 @@ export async function processWhatsappAgentRun(input: {
       await markConversationRead(context.credentials, token, phone, context.providerChatId, context.providerMessageId);
     }
 
-    if (behavior.alwaysOnline) {
-      await setPresenceAvailable(context.credentials, token);
-    }
+    await maybeSetInstanceAvailable(context, token, "after");
 
     extractConversationLearning(client, context).catch(() => {});
     extractLeadMemory(client, context, userText).catch(() => {});
@@ -1061,6 +1057,8 @@ function buildSystemInstruction(input: {
     "",
     "COMPORTAMENTO CONFIGURADO:",
     `- Modo de resposta: ${input.behavior.responseMode}.`,
+    `- Presenca WhatsApp: ${input.behavior.presenceMode}.`,
+    `- Citar mensagens: ${input.behavior.quoteReplyMode}.`,
     `- Rapport adaptativo: ${input.behavior.adaptiveRapportMode}.`,
     `- Dividir respostas: ${input.behavior.splitMessages ? "sim" : "nao"}.`,
     `- Intervencao humana: ${input.behavior.humanIntervention ? "ativa" : "inativa"}.`,
@@ -2065,6 +2063,7 @@ async function sendAgentResponse(input: {
   const latestInbound = findLatestInbound(context.messages);
   const shouldSendAudio = shouldSendAudioResponse(context, latestInbound);
   const chunks = context.behavior.splitMessages ? splitMessage(input.text) : [input.text];
+  const replyTargets = await resolveOutboundReplyTargets(context, chunks).catch(() => []);
   const persistedChunks = await loadPersistedOutboundChunks(input.client, context.run.id, shouldSendAudio ? "audio" : "text");
   const outbound: OutboundMessage[] = [];
 
@@ -2119,7 +2118,7 @@ async function sendAgentResponse(input: {
           number: input.phone,
           type: "ptt",
           file: generatedAudio.audioUrl,
-          ...(latestInbound?.provider_message_id ? { replyid: latestInbound.provider_message_id } : {}),
+          ...(replyTargets[index]?.provider_message_id ? { replyid: replyTargets[index]?.provider_message_id } : {}),
           ...(resolveGroupMentions(context) ? { mentions: resolveGroupMentions(context) } : {}),
           track_source: "connectyhub",
           track_id: `agent_audio_${context.run.id}_${chunkIndex}`,
@@ -2167,6 +2166,7 @@ async function sendAgentResponse(input: {
     }
 
     const interactiveMenu = buildInteractiveLinkMenu(text, context);
+    const replyId = replyTargets[index]?.provider_message_id ?? undefined;
     const providerResponse = interactiveMenu
       ? await sendWhatsappInteractiveButtons({
           credentials: context.credentials,
@@ -2175,7 +2175,7 @@ async function sendAgentResponse(input: {
           text: interactiveMenu.text,
           choices: interactiveMenu.choices,
           trackId: `agent_menu_${context.run.id}_${chunkIndex}`,
-          replyId: latestInbound?.provider_message_id ?? undefined,
+          replyId,
           mentions: resolveGroupMentions(context),
         })
       : await sendWhatsappText({
@@ -2184,7 +2184,7 @@ async function sendAgentResponse(input: {
           phone: input.phone,
           text,
           trackId: `agent_text_${context.run.id}_${chunkIndex}`,
-          replyId: latestInbound?.provider_message_id ?? undefined,
+          replyId,
           mentions: resolveGroupMentions(context),
         });
 
@@ -2202,6 +2202,136 @@ async function sendAgentResponse(input: {
   }
 
   return outbound;
+}
+
+async function resolveOutboundReplyTargets(
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+  chunks: string[],
+): Promise<Array<ConversationMessageRow | null>> {
+  const latestInbound = findLatestInbound(context.messages);
+
+  if (!latestInbound?.provider_message_id || context.behavior.quoteReplyMode === "off") {
+    return chunks.map(() => null);
+  }
+
+  if (context.behavior.quoteReplyMode === "always") {
+    return chunks.map(() => latestInbound);
+  }
+
+  const candidates = getRecentInboundCluster(context.messages).filter((message) => message.provider_message_id);
+
+  if (candidates.length < 2) {
+    return chunks.map(() => null);
+  }
+
+  const aiTargets = await classifySmartReplyTargets({ context, candidates, chunks }).catch(() => null);
+
+  if (aiTargets) {
+    return aiTargets;
+  }
+
+  return inferSmartReplyTargets(candidates, chunks);
+}
+
+async function classifySmartReplyTargets(input: {
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
+  candidates: ConversationMessageRow[];
+  chunks: string[];
+}): Promise<Array<ConversationMessageRow | null> | null> {
+  const model = input.context.agent.model_id || input.context.geminiCredentials.model;
+  const url = new URL(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`);
+  url.searchParams.set("key", input.context.geminiCredentials.apiKey);
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      systemInstruction: {
+        parts: [{ text: buildSmartQuoteClassifierInstruction() }],
+      },
+      contents: [{
+        role: "user",
+        parts: [{
+          text: [
+            "Mensagens recentes do lead:",
+            ...input.candidates.map((message, index) => `${index + 1}. ${formatMessageForQuoteClassifier(message)}`),
+            "",
+            "Resposta que o agente vai enviar, separada por blocos:",
+            ...input.chunks.map((chunk, index) => `${index + 1}. ${preview(chunk, 500)}`),
+          ].join("\n"),
+        }],
+      }],
+      generationConfig: {
+        temperature: 0,
+        topP: 0.1,
+        maxOutputTokens: 180,
+        responseMimeType: "application/json",
+      },
+      safetySettings: geminiSafetySettings,
+    }),
+    cache: "no-store",
+  });
+  const data = await readProviderResponse(response);
+
+  if (!response.ok) {
+    throw new Error(readProviderError(data) ?? `Gemini respondeu status ${response.status}.`);
+  }
+
+  const record = readRecord(parseJsonObject(extractGeminiText(data)));
+  const shouldQuote = record?.quote === true || record?.should_quote === true;
+
+  if (!shouldQuote) {
+    return input.chunks.map(() => null);
+  }
+
+  const rawTargets = Array.isArray(record?.targets) ? record.targets : [];
+  const targets = input.chunks.map((_, index) => {
+    const raw = rawTargets[index];
+    const targetIndex = typeof raw === "number" ? raw : typeof raw === "string" ? Number(raw) : NaN;
+
+    if (!Number.isInteger(targetIndex) || targetIndex < 1 || targetIndex > input.candidates.length) {
+      return null;
+    }
+
+    return input.candidates[targetIndex - 1] ?? null;
+  });
+
+  return targets.some(Boolean) ? targets : input.chunks.map(() => null);
+}
+
+function buildSmartQuoteClassifierInstruction() {
+  return [
+    "Voce decide se uma resposta de WhatsApp deve citar mensagens especificas do lead.",
+    "Responda somente JSON valido no formato {\"quote\":boolean,\"targets\":[number|null],\"reason\":\"curto\"}.",
+    "Use quote=false quando o lead mandou uma unica mensagem ou quando varias mensagens formam uma unica ideia/pergunta continua.",
+    "Use quote=true quando mensagens recentes sao perguntas/assuntos independentes, ou audios/documentos separados que precisam resposta item a item.",
+    "targets deve ter o mesmo tamanho dos blocos da resposta. Use o numero da mensagem do lead que aquele bloco responde, ou null.",
+    "Nao cite por habito. Cite somente quando ajudar a conversa parecer mais clara e humana.",
+  ].join("\n");
+}
+
+function inferSmartReplyTargets(candidates: ConversationMessageRow[], chunks: string[]) {
+  const questionLike = candidates.filter((message) => isQuestionLikeMessage(buildMessageText(message)));
+  const mediaLike = candidates.filter((message) => detectInboundMediaKind(message));
+  const usefulTargets = questionLike.length >= 2 ? questionLike : mediaLike.length >= 2 && chunks.length >= mediaLike.length ? mediaLike : [];
+
+  if (usefulTargets.length < 2) {
+    return chunks.map(() => null);
+  }
+
+  return chunks.map((_, index) => usefulTargets[Math.min(index, usefulTargets.length - 1)] ?? null);
+}
+
+function formatMessageForQuoteClassifier(message: ConversationMessageRow) {
+  const mediaKind = detectInboundMediaKind(message);
+  const text = preview(buildMessageText(message), 500) || "(sem texto)";
+  return mediaKind ? `[${mediaKind}] ${text}` : text;
+}
+
+function isQuestionLikeMessage(text: string) {
+  const normalized = normalizeSearch(text);
+  return /\?/.test(text)
+    || /\b(qual|quais|quando|quanto|quantos|onde|como|porque|por que|pode|consegue|tem|existe|funciona|valor|preco|agenda|horario)\b/.test(normalized);
 }
 
 async function loadPersistedOutboundChunks(client: SupabaseClient, runId: string, mode: "text" | "audio") {
@@ -3453,16 +3583,18 @@ async function markConversationRead(credentials: UazapiCredentials, token: strin
 }
 
 async function ensureWhatsappPresencePrivacy(credentials: UazapiCredentials, token: string, behavior: WhatsappBehaviorConfig) {
+  const alwaysVisible = isAlwaysPresenceMode(behavior);
+
   await callUazapi(credentials, "/instance/privacy", {
     method: "POST",
     token,
     body: {
       groupadd: "contacts",
-      last: behavior.alwaysOnline ? "all" : "contacts",
+      last: alwaysVisible ? "all" : "contacts",
       status: "contacts",
       profile: "all",
       readreceipts: behavior.markAsRead ? "all" : "none",
-      online: behavior.alwaysOnline ? "all" : "match_last_seen",
+      online: alwaysVisible ? "all" : "match_last_seen",
     },
     tolerateError: true,
   });
@@ -3497,6 +3629,42 @@ async function setPresenceAvailable(credentials: UazapiCredentials, token: strin
     body: { presence: "available" },
     tolerateError: true,
   });
+}
+
+async function maybeSetInstanceAvailable(
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+  token: string,
+  phase: "before" | "after",
+) {
+  if (isAlwaysPresenceMode(context.behavior)) {
+    await setPresenceAvailable(context.credentials, token);
+    return;
+  }
+
+  if (!isNaturalPresenceMode(context.behavior)) {
+    return;
+  }
+
+  const recentInbound = getRecentInboundCluster(context.messages);
+  const hasMedia = recentInbound.some((message) => detectInboundMediaKind(message));
+  const baseChance = phase === "before" ? 0.28 : 0.42;
+  const chance = Math.min(baseChance + recentInbound.length * 0.06 + (hasMedia ? 0.12 : 0), 0.72);
+
+  if (Math.random() <= chance) {
+    await setPresenceAvailable(context.credentials, token);
+  }
+}
+
+function shouldExposeOnlinePresence(behavior: WhatsappBehaviorConfig) {
+  return isAlwaysPresenceMode(behavior) || isNaturalPresenceMode(behavior);
+}
+
+function isAlwaysPresenceMode(behavior: WhatsappBehaviorConfig) {
+  return behavior.presenceMode === "always" || behavior.alwaysOnline === true;
+}
+
+function isNaturalPresenceMode(behavior: WhatsappBehaviorConfig) {
+  return behavior.presenceMode === "natural" && !isAlwaysPresenceMode(behavior);
 }
 
 async function sendEmojiReaction(input: {
@@ -4043,7 +4211,7 @@ async function persistMediaAnalysisFailure(
 }
 
 function isWithinSchedule(behavior: WhatsappBehaviorConfig) {
-  if (!behavior.aiScheduleEnabled || behavior.alwaysOnline) {
+  if (!behavior.aiScheduleEnabled || isAlwaysPresenceMode(behavior)) {
     return true;
   }
 
@@ -4781,6 +4949,24 @@ function findLatestInbound(messages: ConversationMessageRow[]) {
   }
 
   return null;
+}
+
+function getRecentInboundCluster(messages: ConversationMessageRow[]) {
+  const cluster: ConversationMessageRow[] = [];
+
+  for (let index = messages.length - 1; index >= 0; index--) {
+    const message = messages[index];
+
+    if (message.direction === "outbound") {
+      break;
+    }
+
+    if (message.direction === "inbound") {
+      cluster.unshift(message);
+    }
+  }
+
+  return cluster;
 }
 
 function readHumanPauseUntil(metadata: JsonRecord | null) {
