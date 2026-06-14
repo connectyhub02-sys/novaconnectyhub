@@ -347,20 +347,31 @@ export function ConnectyShell({
             </DropdownMenuTrigger>
             <DropdownMenuContent
               align="end"
-              sideOffset={10}
-              className="z-[80] rounded-xl p-1.5 shadow-2xl"
+              sideOffset={14}
+              className="z-[9999] rounded-2xl p-2 shadow-2xl"
               style={{
-                background: "var(--ch-dropdown-bg)",
-                border: "1px solid var(--ch-border-strong)",
-                color: "var(--ch-text)",
-                width: "min(calc(100vw - 24px), 260px)",
+                background: "linear-gradient(180deg, #111b2a 0%, #07111d 100%)",
+                border: "1px solid rgba(224,233,246,0.46)",
+                boxShadow: "0 28px 90px rgba(0,0,0,0.72)",
+                color: "#fbfdff",
+                maxWidth: "340px",
+                minWidth: "280px",
+                width: "calc(100vw - 40px)",
               }}
             >
-              <DropdownMenuLabel className="px-2 py-1.5 text-xs" style={{ color: "var(--ch-muted)" }}>Conta</DropdownMenuLabel>
-              <DropdownMenuSeparator style={{ background: "var(--ch-border)" }} />
+              <DropdownMenuLabel
+                className="rounded-xl px-3 py-3 text-xs"
+                style={{ background: "rgba(255,255,255,0.055)", color: "#e7eef8" }}
+              >
+                Conta
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator className="my-2" style={{ background: "rgba(224,233,246,0.18)" }} />
               {mode === "client" && (
-                <DropdownMenuItem asChild className="cursor-pointer rounded-lg px-2.5 py-2 text-xs" style={{ color: "var(--ch-text)" }}>
-                  <label className="flex w-full items-center">
+                <DropdownMenuItem asChild className="cursor-pointer rounded-xl p-0 text-[13px]">
+                  <label
+                    className="flex h-11 w-full items-center rounded-xl px-3 font-semibold"
+                    style={{ background: "rgba(255,255,255,0.075)", color: "#fbfdff", border: "1px solid rgba(224,233,246,0.12)" }}
+                  >
                     {avatarUploading ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <Camera className="mr-2 h-3.5 w-3.5" />}
                     Trocar foto
                     <input accept="image/jpeg,image/png,image/webp" className="hidden" type="file" onChange={handleAvatarUpload} />
@@ -371,17 +382,26 @@ export function ConnectyShell({
                 <DropdownMenuLabel className="text-[11px] font-normal leading-4 text-rose-300">{avatarError}</DropdownMenuLabel>
               ) : null}
               {canSwitch && (
-                <DropdownMenuItem asChild className="cursor-pointer rounded-lg px-2.5 py-2 text-xs" style={{ color: "var(--ch-text)" }}>
-                  <Link href={switchTo}>{switchLbl}</Link>
+                <DropdownMenuItem asChild className="cursor-pointer rounded-xl p-0 text-[13px]">
+                  <Link
+                    href={switchTo}
+                    className="flex h-11 w-full items-center rounded-xl px-3 font-semibold"
+                    style={{ background: "rgba(255,255,255,0.075)", color: "#fbfdff", border: "1px solid rgba(224,233,246,0.12)" }}
+                  >
+                    {switchLbl}
+                  </Link>
                 </DropdownMenuItem>
               )}
               <DropdownMenuItem
                 asChild
                 variant="destructive"
-                className="cursor-pointer rounded-lg px-2.5 py-2 text-xs font-semibold"
-                style={{ background: "rgba(251,113,133,0.08)", color: "#fecdd3" }}
+                className="cursor-pointer rounded-xl p-0 text-[13px] font-bold"
               >
-                <a href="/auth/signout" className="flex w-full items-center">
+                <a
+                  href="/auth/signout"
+                  className="flex h-11 w-full items-center rounded-xl px-3"
+                  style={{ background: "rgba(251,113,133,0.18)", border: "1px solid rgba(251,113,133,0.34)", color: "#ffe4e6" }}
+                >
                   <LogOut className="mr-2 h-3.5 w-3.5" /> Sair
                 </a>
               </DropdownMenuItem>
@@ -509,23 +529,32 @@ export function ConnectyShell({
               </DropdownMenuTrigger>
               <DropdownMenuContent
                 align="end"
-                sideOffset={10}
-                className="z-[80] rounded-xl p-1.5 shadow-2xl"
+                sideOffset={14}
+                className="z-[9999] rounded-2xl p-2 shadow-2xl"
                 style={{
-                  background: "var(--ch-dropdown-bg)",
-                  border: "1px solid var(--ch-border-strong)",
-                  color: "var(--ch-text)",
-                  width: "min(calc(100vw - 24px), 260px)",
+                  background: "linear-gradient(180deg, #111b2a 0%, #07111d 100%)",
+                  border: "1px solid rgba(224,233,246,0.46)",
+                  boxShadow: "0 28px 90px rgba(0,0,0,0.72)",
+                  color: "#fbfdff",
+                  maxWidth: "340px",
+                  minWidth: "280px",
+                  width: "calc(100vw - 40px)",
                 }}
               >
-                <DropdownMenuLabel className="px-2 py-1.5 text-xs">
-                  <div style={{ color: "var(--ch-text)" }}>{name}</div>
-                  <div className="font-normal" style={{ color: "var(--ch-muted)" }}>{role}</div>
+                <DropdownMenuLabel
+                  className="rounded-xl px-3 py-3 text-xs"
+                  style={{ background: "rgba(255,255,255,0.055)" }}
+                >
+                  <div className="truncate text-[14px] font-bold leading-5" style={{ color: "#fbfdff" }}>{name}</div>
+                  <div className="truncate font-mono text-[10px] font-normal uppercase tracking-wide" style={{ color: "#cbd5e1" }}>{role}</div>
                 </DropdownMenuLabel>
-                <DropdownMenuSeparator style={{ background: "var(--ch-border)" }} />
+                <DropdownMenuSeparator className="my-2" style={{ background: "rgba(224,233,246,0.18)" }} />
                 {mode === "client" && (
-                  <DropdownMenuItem asChild className="cursor-pointer rounded-lg px-2.5 py-2 text-xs">
-                    <label className="flex w-full items-center">
+                  <DropdownMenuItem asChild className="cursor-pointer rounded-xl p-0 text-[13px]">
+                    <label
+                      className="flex h-11 w-full items-center rounded-xl px-3 font-semibold"
+                      style={{ background: "rgba(255,255,255,0.075)", color: "#fbfdff", border: "1px solid rgba(224,233,246,0.12)" }}
+                    >
                       {avatarUploading ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <Camera className="mr-2 h-3.5 w-3.5" />}
                       Trocar foto
                       <input accept="image/jpeg,image/png,image/webp" className="hidden" type="file" onChange={handleAvatarUpload} />
@@ -536,17 +565,28 @@ export function ConnectyShell({
                   <DropdownMenuLabel className="text-[11px] font-normal leading-4 text-rose-300">{avatarError}</DropdownMenuLabel>
                 ) : null}
                 {canSwitch && (
-                  <DropdownMenuItem asChild className="cursor-pointer rounded-lg px-2.5 py-2 text-xs">
-                    <Link href={switchTo}>{switchLbl}</Link>
+                  <DropdownMenuItem asChild className="cursor-pointer rounded-xl p-0 text-[13px]">
+                    <Link
+                      href={switchTo}
+                      className="flex h-11 w-full items-center rounded-xl px-3 font-semibold"
+                      style={{ background: "rgba(255,255,255,0.075)", color: "#fbfdff", border: "1px solid rgba(224,233,246,0.12)" }}
+                    >
+                      {switchLbl}
+                    </Link>
                   </DropdownMenuItem>
                 )}
                 <DropdownMenuItem
                   asChild
                   variant="destructive"
-                  className="cursor-pointer rounded-lg px-2.5 py-2 text-xs font-semibold"
-                  style={{ background: "rgba(251,113,133,0.08)", color: "#fecdd3" }}
+                  className="cursor-pointer rounded-xl p-0 text-[13px] font-bold"
                 >
-                  <a href="/auth/signout" className="flex w-full items-center"><LogOut className="mr-2 h-3.5 w-3.5" />Sair</a>
+                  <a
+                    href="/auth/signout"
+                    className="flex h-11 w-full items-center rounded-xl px-3"
+                    style={{ background: "rgba(251,113,133,0.18)", border: "1px solid rgba(251,113,133,0.34)", color: "#ffe4e6" }}
+                  >
+                    <LogOut className="mr-2 h-3.5 w-3.5" />Sair
+                  </a>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
