@@ -380,7 +380,7 @@ export function ConnectyShell({
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Topbar */}
         <header
-          className="sticky top-0 z-40 flex h-[60px] items-center gap-3 px-6"
+          className="sticky top-0 z-40 flex h-[60px] items-center gap-3 px-3 sm:px-4 lg:px-6"
           style={{
             background:    "color-mix(in srgb, var(--ch-bg) 76%, var(--ch-surface) 24%)",
             backdropFilter:"blur(16px)",
@@ -394,6 +394,13 @@ export function ConnectyShell({
               <ConnectyLogo className="h-5 w-5" tone={logoTone} type="mark" />
             </div>
           </Link>
+
+          <div className="min-w-0 lg:hidden">
+            <div className="truncate text-[13px] font-semibold leading-4" style={{ color: "var(--ch-text)" }}>{pageLabel}</div>
+            <div className="truncate font-mono text-[8px] uppercase tracking-widest" style={{ color: "var(--ch-muted)" }}>
+              {mode === "admin" ? "Admin OS" : "Client OS"}
+            </div>
+          </div>
 
           {/* Page title */}
           <div className="hidden lg:block">
@@ -505,7 +512,7 @@ export function ConnectyShell({
 
         {/* Mobile nav */}
         <div
-          className="flex gap-1.5 overflow-x-auto px-4 py-2.5 lg:hidden"
+          className="flex gap-1.5 overflow-x-auto px-3 py-2.5 sm:px-4 lg:hidden"
           style={{ background: "var(--ch-surface)", borderBottom: "1px solid var(--ch-border-strong)" }}
         >
           {sections.flatMap((s) => s.items).map((item) => {
@@ -536,7 +543,7 @@ export function ConnectyShell({
 
         {/* Content */}
         <main className="flex-1 overflow-auto">
-          <div className="mx-auto w-full max-w-[1680px] px-6 py-6 lg:px-8">
+          <div className="mx-auto w-full max-w-[1680px] px-3 py-4 sm:px-4 sm:py-5 lg:px-8 lg:py-6">
             {children}
           </div>
         </main>

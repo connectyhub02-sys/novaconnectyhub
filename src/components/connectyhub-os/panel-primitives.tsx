@@ -40,14 +40,14 @@ export function PageHeader({
   eyebrow?: string; title: string; description?: string; actions?: ReactNode;
 }) {
   return (
-    <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+    <div className="mb-4 flex flex-col gap-3 sm:mb-6 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
       <div className="min-w-0">
         {eyebrow && (
           <p className="mb-1 font-mono text-[10px] uppercase tracking-[0.2em] text-slate-500">{eyebrow}</p>
         )}
-        <h1 className="text-[22px] font-bold" style={{ color: "var(--ch-text)" }}>{title}</h1>
+        <h1 className="text-[19px] font-bold leading-tight sm:text-[22px]" style={{ color: "var(--ch-text)" }}>{title}</h1>
         {description && (
-          <p className="mt-1 text-[13px] text-slate-500">{description}</p>
+          <p className="mt-1 text-[12px] leading-5 text-slate-500 sm:text-[13px]">{description}</p>
         )}
       </div>
       {actions && (
@@ -81,7 +81,7 @@ export function Panel({
       }}
     >
       <div
-        className="flex items-center justify-between gap-3 px-5 py-4"
+        className="flex flex-col items-start justify-between gap-3 px-3 py-3 sm:flex-row sm:items-center sm:px-5 sm:py-4"
         style={{
           background: "linear-gradient(90deg, rgba(var(--ch-accent-rgb),0.08), transparent 70%)",
           borderBottom: "1px solid var(--ch-border-strong)",
@@ -93,9 +93,9 @@ export function Panel({
           )}
           <p className="text-[14px] font-semibold" style={{ color: "var(--ch-text)" }}>{title}</p>
         </div>
-        {action && <div className="shrink-0">{action}</div>}
+        {action && <div className="w-full shrink-0 sm:w-auto">{action}</div>}
       </div>
-      <div className="p-5">{children}</div>
+      <div className="p-3 sm:p-5">{children}</div>
     </div>
   );
 }
@@ -114,7 +114,7 @@ export function MetricCard({
 
   return (
     <div
-      className="rounded-2xl p-5"
+      className="rounded-2xl p-4 sm:p-5"
       style={{
         background: "var(--ch-panel)",
         border: "1px solid var(--ch-border-strong)",
@@ -158,7 +158,7 @@ export function HeroMetricCard({
 
   return (
     <div
-      className="relative overflow-hidden rounded-2xl p-5"
+      className="relative overflow-hidden rounded-2xl p-4 sm:p-5"
       style={{
         background: `linear-gradient(135deg, ${colorB} 0%, rgba(13,17,23,0.6) 100%)`,
         border:     `1px solid rgba(${accent === "cyan" ? "34,211,238" : "52,211,153"},0.3)`,
@@ -290,7 +290,7 @@ export function CommandButton({ children, tone = "cyan", onClick }: { children: 
 export function StatusBar({ items }: { items: { label: string; status: StatusTone }[] }) {
   return (
     <div
-      className="mb-5 flex flex-wrap items-center gap-4 rounded-2xl px-5 py-3"
+      className="mb-5 flex flex-wrap items-center gap-3 rounded-2xl px-3 py-3 sm:gap-4 sm:px-5"
       style={{
         background: "var(--ch-panel)",
         border: "1px solid var(--ch-border-strong)",

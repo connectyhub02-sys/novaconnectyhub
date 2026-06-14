@@ -1117,7 +1117,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
           eyebrow="numero / agente / status"
           action={<NeonBadge tone={state.instance?.status === "connected" ? "green" : "amber"}>{state.instance?.status === "connected" ? "online" : "pendente"}</NeonBadge>}
         >
-          <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="grid gap-3 sm:gap-4 2xl:grid-cols-[minmax(0,1fr)_320px]">
             <div className="grid content-start gap-4">
               <AgentIdentityCard agent={state.agent} company={selectedCompany} entityLabel={variant.entityPromptLabel} />
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -1234,7 +1234,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
           eyebrow="crm / perguntas / score"
           action={<NeonBadge tone={qualificationChanged ? "amber" : "green"}>{qualificationChanged ? "alterado" : "salvo"}</NeonBadge>}
         >
-          <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="grid gap-3 sm:gap-4 2xl:grid-cols-[minmax(0,1fr)_320px]">
             <LeadQualificationEditor
               config={qualificationDraft}
               entityLabel={variant.entityPromptLabel}
@@ -1273,7 +1273,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
           eyebrow="controles do atendimento"
           action={<NeonBadge tone={behaviorChanged ? "amber" : "green"}>{behaviorChanged ? "alterado" : "salvo"}</NeonBadge>}
         >
-          <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="grid gap-3 sm:gap-4 2xl:grid-cols-[minmax(0,1fr)_320px]">
             <div className="grid gap-3">
               <BehaviorSection title="Base do agente" description="Controles principais que ligam ou pausam o atendimento automatico deste agente.">
                 <div className="grid gap-3">
@@ -1723,15 +1723,15 @@ function WhatsappConsoleCommandBar({
 
   return (
     <div
-      className="sticky top-3 z-20 mb-4 rounded-xl border px-3 py-3 shadow-2xl shadow-slate-950/20 backdrop-blur"
+      className="sticky top-[72px] z-20 mb-3 rounded-xl border px-2.5 py-2.5 shadow-2xl shadow-slate-950/20 backdrop-blur sm:top-3 sm:mb-4 sm:px-3 sm:py-3"
       style={{
         background: "linear-gradient(180deg, rgba(var(--ch-accent-rgb),0.07), rgba(16,23,34,0.94))",
         borderColor: "var(--ch-border-strong)",
         boxShadow: "0 18px 45px rgba(0,0,0,0.24)",
       }}
     >
-      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
-        <div className="grid min-w-0 gap-2 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-2 sm:gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
+        <div className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
           <SummaryPill label="Agente" value={agent.name} />
           <SummaryPill label={entityLabel} value={company?.name ?? `${entityLabel} nao informado`} />
           <SummaryPill label="WhatsApp" value={statusMeta.label} tone={instance?.status === "connected" ? "green" : "amber"} />
@@ -1760,12 +1760,12 @@ function WhatsappConsoleTabs({
 }) {
   return (
     <div
-      className="mb-4 overflow-x-auto rounded-xl border p-1"
+      className="mb-3 overflow-visible rounded-xl border p-1 sm:mb-4"
       role="tablist"
       aria-label="Secoes do painel WhatsApp"
       style={{ background: "var(--ch-panel)", borderColor: "var(--ch-border-strong)" }}
     >
-      <div className="grid min-w-[760px] grid-cols-6 gap-1">
+      <div className="grid min-w-0 grid-cols-3 gap-1 sm:grid-cols-6">
         {whatsappConsoleTabs.map((tab) => {
           const active = tab.id === activeTab;
           const Icon = tab.icon;
@@ -1778,7 +1778,7 @@ function WhatsappConsoleTabs({
               aria-selected={active}
               aria-current={active ? "page" : undefined}
               className={cn(
-                "grid min-h-[58px] grid-cols-[18px_minmax(0,1fr)] items-center gap-2 rounded-lg px-3 text-left transition",
+                "grid min-h-[52px] grid-cols-[18px_minmax(0,1fr)] items-center gap-1.5 rounded-lg px-2 text-left transition sm:min-h-[58px] sm:gap-2 sm:px-3",
                 active
                   ? "text-slate-950 shadow-[0_0_24px_rgba(var(--ch-accent-rgb),0.18)] ring-1 ring-white/20"
                   : "text-slate-200 hover:bg-white/10 hover:text-white",
@@ -1789,7 +1789,7 @@ function WhatsappConsoleTabs({
               <Icon className={cn("h-4 w-4", active ? "text-slate-950" : "text-slate-200")} />
               <span className="min-w-0">
                 <span className={cn("block truncate text-[12px] font-semibold leading-4", active ? "text-slate-950" : "text-slate-100")}>{tab.label}</span>
-                <span className={cn("mt-0.5 block truncate font-mono text-[8px] uppercase tracking-widest", active ? "text-slate-800" : "text-slate-300")}>{tab.description}</span>
+                <span className={cn("mt-0.5 hidden truncate font-mono text-[8px] uppercase tracking-widest sm:block", active ? "text-slate-800" : "text-slate-300")}>{tab.description}</span>
               </span>
             </button>
           );
@@ -1857,9 +1857,9 @@ function AgentCreationGate({
       eyebrow={variant.agentGateEyebrow}
       action={<NeonBadge tone="cyan">novo fluxo</NeonBadge>}
     >
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(360px,0.7fr)]">
+      <div className="grid gap-3 sm:gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(320px,0.7fr)]">
         <div
-          className="rounded-xl p-5"
+          className="rounded-xl p-4 sm:p-5"
           style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
         >
           <div className="flex items-start gap-3">
@@ -1889,7 +1889,7 @@ function AgentCreationGate({
 
         {showForm ? (
           <div
-            className="rounded-xl p-5"
+            className="rounded-xl p-4 sm:p-5"
             style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
           >
             <div className="grid gap-3">
@@ -1925,7 +1925,7 @@ function AgentCreationGate({
           </div>
         ) : (
           <div
-            className="grid min-h-[220px] place-items-center rounded-xl p-5 text-center"
+            className="grid min-h-[180px] place-items-center rounded-xl p-4 text-center sm:min-h-[220px] sm:p-5"
             style={{ background: "var(--ch-panel-2)", border: "1px solid var(--ch-border)" }}
           >
             <div className="max-w-xs">
@@ -2058,7 +2058,7 @@ function PromptBox({
         onKeyUp={(event) => recordSelection(event.currentTarget)}
         onMouseUp={(event) => recordSelection(event.currentTarget)}
         onSelect={(event) => recordSelection(event.currentTarget)}
-        className="min-h-[320px] w-full resize-y rounded-xl border px-4 py-3 font-mono text-[12px] leading-5 outline-none"
+        className="min-h-[240px] w-full resize-y rounded-xl border px-3 py-3 font-mono text-[12px] leading-5 outline-none sm:min-h-[320px] sm:px-4"
         placeholder="Defina o comportamento do agente."
       />
       <span className="mt-2 block font-mono text-[10px] uppercase tracking-widest text-slate-500">{helper}</span>
@@ -2311,7 +2311,7 @@ function KnowledgeFilesPanel({
 
 function NoAgentState() {
   return (
-    <div className="grid min-h-[430px] place-items-center rounded-xl border p-6 text-center" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
+    <div className="grid min-h-[260px] place-items-center rounded-xl border p-4 text-center sm:min-h-[430px] sm:p-6" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
       <div className="max-w-sm">
         <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-cyan-400/10 text-cyan-300">
           <Bot className="h-7 w-7" />
@@ -2321,7 +2321,7 @@ function NoAgentState() {
           Crie um agente e escolha o atendimento que ele vai assumir.
         </p>
         <Link
-          className="mt-5 inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-cyan-300 px-4 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-950 transition hover:bg-cyan-200"
+          className="mt-5 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg bg-cyan-300 px-4 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-950 transition hover:bg-cyan-200 sm:w-auto"
           href="/dashboard/agentes"
         >
           <Wand2 className="h-4 w-4" />
@@ -2349,7 +2349,7 @@ function BehaviorSection({
       open={defaultOpen}
       style={{ background: "var(--ch-panel)", borderColor: "var(--ch-border-strong)" }}
     >
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-3 sm:px-4">
         <span className="flex min-w-0 items-center gap-1.5 font-mono text-[10px] font-semibold uppercase tracking-widest" style={{ color: "var(--ch-text)" }}>
           {title}
           {description ? <InfoHint text={description} /> : null}
@@ -2357,7 +2357,7 @@ function BehaviorSection({
         <span className="font-mono text-[10px] uppercase tracking-widest text-slate-500 group-open:hidden">abrir</span>
         <span className="hidden font-mono text-[10px] uppercase tracking-widest text-cyan-300 group-open:inline">fechar</span>
       </summary>
-      <div className="border-t px-4 py-4" style={{ borderColor: "var(--ch-border)" }}>
+      <div className="border-t px-3 py-3 sm:px-4 sm:py-4" style={{ borderColor: "var(--ch-border)" }}>
         {children}
       </div>
     </details>
@@ -2454,7 +2454,7 @@ function ToggleTile({
     <button
       type="button"
       onClick={onChange}
-      className="flex min-h-11 items-center justify-between gap-3 rounded-lg border px-3 text-left transition hover:bg-white/10"
+      className="flex min-h-12 items-center justify-between gap-2 rounded-lg border px-2.5 py-2 text-left transition hover:bg-white/10 sm:min-h-11 sm:gap-3 sm:px-3"
       style={{
         background: checked ? `linear-gradient(135deg, rgba(${tone.rgb},0.17), rgba(${tone.rgb},0.07))` : "var(--ch-panel-2)",
         borderColor: checked ? `rgba(${tone.rgb},0.48)` : `rgba(${tone.rgb},0.22)`,
@@ -2499,7 +2499,7 @@ function ModeSelector<T extends string>({
   onChange: (value: T) => void;
 }) {
   return (
-    <div className="grid gap-2 md:grid-cols-3">
+    <div className="grid gap-2 sm:grid-cols-3">
       {options.map((option) => {
         const active = option.value === value;
 
@@ -2510,7 +2510,7 @@ function ModeSelector<T extends string>({
             aria-pressed={active}
             onClick={() => onChange(option.value)}
             className={cn(
-              "min-h-16 rounded-lg border px-3 py-2 text-left transition",
+              "min-h-14 rounded-lg border px-3 py-2 text-left transition sm:min-h-16",
               active
                 ? "border-white/25 text-slate-950 shadow-[0_0_22px_rgba(var(--ch-accent-rgb),0.18)] ring-1 ring-white/20"
                 : "border-slate-700/70 bg-slate-950/20 text-slate-100 hover:border-cyan-300/35 hover:bg-white/10 hover:text-white",
@@ -2790,7 +2790,7 @@ function VoiceSelector({
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <button
                 type="button"
-                className="inline-flex h-10 items-center gap-2 rounded-lg bg-cyan-300 px-4 font-mono text-[10px] font-bold uppercase tracking-widest text-slate-950 disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-cyan-300 px-4 font-mono text-[10px] font-bold uppercase tracking-widest text-slate-950 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
                 disabled={!canClone}
                 onClick={submitVoiceClone}
               >
@@ -2799,7 +2799,7 @@ function VoiceSelector({
               </button>
               <button
                 type="button"
-                className="inline-flex h-10 items-center gap-2 rounded-lg border px-4 font-mono text-[10px] font-bold uppercase tracking-widest text-slate-400"
+                className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg border px-4 font-mono text-[10px] font-bold uppercase tracking-widest text-slate-400 sm:w-auto"
                 onClick={() => {
                   setCloneOpen(false);
                   setCloneError(null);
@@ -3431,8 +3431,8 @@ function WhatsappChannelOperationsPanel({
   const newsletterReady = newsletterEnabled && newsletterText.trim().length > 0 && newsletterJid.trim().length > 0;
 
   return (
-    <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_320px]">
-      <div className="grid gap-4">
+    <div className="grid gap-3 sm:gap-4 2xl:grid-cols-[minmax(0,1fr)_320px]">
+      <div className="grid gap-3 sm:gap-4">
         <div className="grid gap-3 rounded-xl border p-3 md:grid-cols-2 xl:grid-cols-4" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
           <InfoTile label="Grupos" value={behavior.allowGroupChats ? formatGroupReplyMode(behavior.groupReplyMode) : "Pausado"} />
           <InfoTile label="Status" value={statusEnabled ? "Liberado" : "Bloqueado"} />
@@ -3491,8 +3491,8 @@ function WhatsappChannelOperationsPanel({
           />
         </label>
 
-        <div className="grid gap-4 xl:grid-cols-3">
-          <div className="rounded-xl border p-4" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
+        <div className="grid gap-3 sm:gap-4 xl:grid-cols-3">
+          <div className="rounded-xl border p-3 sm:p-4" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
             <p className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
               Status WhatsApp
               <InfoHint text="Publica texto no Status/Stories da instancia quando o controle Status WhatsApp estiver ligado." />
@@ -3529,7 +3529,7 @@ function WhatsappChannelOperationsPanel({
             </div>
           </div>
 
-          <div className="rounded-xl border p-4" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
+          <div className="rounded-xl border p-3 sm:p-4" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
             <p className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
               Campanha simples
               <InfoHint text="Cria um disparo simples via Uazapi Sender. Use uma linha, virgula ou ponto e virgula por numero." />
@@ -3569,7 +3569,7 @@ function WhatsappChannelOperationsPanel({
             </div>
           </div>
 
-          <div className="rounded-xl border p-4" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
+          <div className="rounded-xl border p-3 sm:p-4" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
             <p className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
               Canal / newsletter
               <InfoHint text="Posta texto em um canal/newsletter quando a instancia e a Uazapi permitirem esse recurso." />
@@ -3604,7 +3604,7 @@ function WhatsappChannelOperationsPanel({
         </div>
       </div>
 
-      <div className="rounded-xl border p-4" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
+      <div className="rounded-xl border p-3 sm:p-4" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
         <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Historico multicanal</p>
         <div className="mt-4 grid gap-2">
           {channelOps?.history.length ? (
@@ -3933,7 +3933,7 @@ function ActionButton({
       type="button"
       disabled={disabled || loading}
       onClick={onClick}
-      className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg px-4 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-950 shadow-[0_12px_30px_rgba(var(--ch-accent-rgb),0.16)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+      className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg px-4 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-950 shadow-[0_12px_30px_rgba(var(--ch-accent-rgb),0.16)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
       style={{ background: "linear-gradient(135deg, var(--ch-accent), var(--ch-accent-2))" }}
     >
       {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Icon className="h-4 w-4" />}
@@ -3968,7 +3968,7 @@ function SecondaryAction({
       disabled={disabled || loading}
       onClick={onClick}
       className={cn(
-        "inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide transition disabled:cursor-not-allowed disabled:opacity-50",
+        "inline-flex min-h-9 w-full items-center justify-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide transition disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto",
         tone === "danger" ? "border-rose-400/30 bg-rose-400/10 text-rose-200 hover:bg-rose-400/15" : "border-white/15 bg-white/[0.04] text-slate-100 hover:border-cyan-300/35 hover:bg-white/[0.08]",
       )}
     >
