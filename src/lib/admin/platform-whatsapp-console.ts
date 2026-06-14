@@ -15,7 +15,10 @@ import {
   defaultWhatsappGlobalPrompt,
   normalizeWhatsappBehaviorConfig,
 } from "@/lib/whatsapp/agent-behavior";
-import { enqueueWhatsappHandoffNotification } from "@/lib/whatsapp/handoff-notifications";
+import {
+  describeWhatsappHandoffNotificationResult,
+  processWhatsappHandoffNotification,
+} from "@/lib/whatsapp/handoff-notifications";
 import type { ClientKnowledgeFile, ClientTrackedLinkButton, ClientWhatsappActionResult, ClientWhatsappState } from "@/lib/whatsapp/client-workspace";
 import { loadUazapiCredentials, type UazapiCredentials } from "@/lib/whatsapp/uazapi-credentials";
 import { createServiceClient } from "@/lib/supabase/service";
@@ -663,18 +666,27 @@ export async function sendPlatformWhatsappHandoffNotificationTest(input: {
     throw new Error("Informe pelo menos um numero responsavel para receber o aviso.");
   }
 
-  await enqueueWhatsappHandoffNotification({
-    organizationId: instance.organization_id,
-    whatsappInstanceId: instance.id,
-    agentId: agent.id,
-    test: true,
-    notificationNumbers: behavior.humanHandoffNotificationNumbers,
-    notificationCooldownMinutes: behavior.humanHandoffNotificationCooldownMinutes,
-    requestedByUserId: input.userId,
-    requestText: "Teste de aviso de atendimento humano.",
-    requestedAt: new Date().toISOString(),
-    source: "admin_whatsapp_internal_test",
+  const requestedAt = new Date().toISOString();
+  const notificationResult = await processWhatsappHandoffNotification({
+    client,
+    data: {
+      organizationId: instance.organization_id,
+      whatsappInstanceId: instance.id,
+      agentId: agent.id,
+      test: true,
+      notificationNumbers: behavior.humanHandoffNotificationNumbers,
+      notificationCooldownMinutes: behavior.humanHandoffNotificationCooldownMinutes,
+      requestedByUserId: input.userId,
+      requestText: "Teste de aviso de atendimento humano.",
+      requestedAt,
+      source: "admin_whatsapp_internal_test",
+    },
   });
+  const resultMessage = describeWhatsappHandoffNotificationResult(notificationResult);
+
+  if (notificationResult.status !== "sent") {
+    throw new Error(resultMessage);
+  }
 
   await client
     .from("whatsapp_instances")
@@ -682,7 +694,8 @@ export async function sendPlatformWhatsappHandoffNotificationTest(input: {
       metadata: {
         ...(instance.metadata ?? {}),
         last_platform_action: "send_handoff_test",
-        last_handoff_test_queued_at: new Date().toISOString(),
+        last_handoff_test_sent_at: requestedAt,
+        last_handoff_test_result: notificationResult,
       },
     })
     .eq("id", instance.id);
@@ -692,7 +705,7 @@ export async function sendPlatformWhatsappHandoffNotificationTest(input: {
 
   return {
     state,
-    notice: { tone: "success", message: "Teste de aviso humano interno enfileirado. Confira o WhatsApp do responsavel." },
+    notice: { tone: "success", message: resultMessage },
     qrCode: null,
     pairCode: null,
   };

@@ -51,6 +51,11 @@ export type WhatsappHandoffNotificationEventData = {
   source?: string | null;
 };
 
+export type WhatsappHandoffNotificationResult =
+  | { status: "sent"; sent: number; failed: number }
+  | { status: "failed"; reason?: string; sent?: number; failed?: number }
+  | { status: "skipped"; reason: string; availableAt?: string };
+
 export async function enqueueWhatsappHandoffNotification(data: WhatsappHandoffNotificationEventData) {
   await inngest.send({
     name: whatsappHandoffNotificationEventName,
@@ -61,7 +66,7 @@ export async function enqueueWhatsappHandoffNotification(data: WhatsappHandoffNo
 export async function processWhatsappHandoffNotification(input: {
   data: WhatsappHandoffNotificationEventData;
   client?: SupabaseClient;
-}) {
+}): Promise<WhatsappHandoffNotificationResult> {
   const client = input.client ?? createServiceClient();
   const eventData = input.data;
   const instance = await loadWhatsappInstance(client, eventData.whatsappInstanceId);
@@ -184,6 +189,34 @@ export async function processWhatsappHandoffNotification(input: {
     sent: sent.length,
     failed: failed.length,
   };
+}
+
+export function describeWhatsappHandoffNotificationResult(result: WhatsappHandoffNotificationResult) {
+  if (result.status === "sent") {
+    return `Aviso enviado para ${result.sent} numero(s) responsavel(is).`;
+  }
+
+  if (result.reason === "missing_recipients") {
+    return "Nenhum numero responsavel valido recebeu o aviso. Confira se o numero tem DDI/DDD e se nao e o mesmo numero conectado ao agente.";
+  }
+
+  if (result.reason === "missing_token") {
+    return "O WhatsApp precisa estar conectado antes de enviar o teste.";
+  }
+
+  if (result.reason === "disabled") {
+    return "O controle Avisar humano precisa estar ligado antes de enviar o teste.";
+  }
+
+  if (result.reason === "cooldown") {
+    return "O aviso esta em cooldown para evitar repeticao no mesmo atendimento.";
+  }
+
+  if (result.status === "failed") {
+    return "A Uazapi nao confirmou o envio do aviso humano. Verifique o numero responsavel e a conexao do WhatsApp.";
+  }
+
+  return "O aviso humano nao foi enviado.";
 }
 
 function resolveNotificationBehavior(instance: WhatsappInstanceRow, data: WhatsappHandoffNotificationEventData) {
