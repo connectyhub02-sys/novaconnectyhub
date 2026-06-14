@@ -347,13 +347,19 @@ export function ConnectyShell({
             </DropdownMenuTrigger>
             <DropdownMenuContent
               align="end"
-              className="w-52"
-              style={{ background: "var(--ch-dropdown-bg)", border: "1px solid var(--ch-border)", color: "var(--ch-text)" }}
+              sideOffset={10}
+              className="z-[80] rounded-xl p-1.5 shadow-2xl"
+              style={{
+                background: "var(--ch-dropdown-bg)",
+                border: "1px solid var(--ch-border-strong)",
+                color: "var(--ch-text)",
+                width: "min(calc(100vw - 24px), 260px)",
+              }}
             >
-              <DropdownMenuLabel className="text-xs" style={{ color: "var(--ch-muted)" }}>Conta</DropdownMenuLabel>
+              <DropdownMenuLabel className="px-2 py-1.5 text-xs" style={{ color: "var(--ch-muted)" }}>Conta</DropdownMenuLabel>
               <DropdownMenuSeparator style={{ background: "var(--ch-border)" }} />
               {mode === "client" && (
-                <DropdownMenuItem asChild className="cursor-pointer text-xs" style={{ color: "var(--ch-text)" }}>
+                <DropdownMenuItem asChild className="cursor-pointer rounded-lg px-2.5 py-2 text-xs" style={{ color: "var(--ch-text)" }}>
                   <label className="flex w-full items-center">
                     {avatarUploading ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <Camera className="mr-2 h-3.5 w-3.5" />}
                     Trocar foto
@@ -365,12 +371,17 @@ export function ConnectyShell({
                 <DropdownMenuLabel className="text-[11px] font-normal leading-4 text-rose-300">{avatarError}</DropdownMenuLabel>
               ) : null}
               {canSwitch && (
-                <DropdownMenuItem asChild className="cursor-pointer text-xs" style={{ color: "var(--ch-text)" }}>
+                <DropdownMenuItem asChild className="cursor-pointer rounded-lg px-2.5 py-2 text-xs" style={{ color: "var(--ch-text)" }}>
                   <Link href={switchTo}>{switchLbl}</Link>
                 </DropdownMenuItem>
               )}
-              <DropdownMenuItem asChild className="cursor-pointer text-xs text-rose-500">
-                <a href="/auth/signout">
+              <DropdownMenuItem
+                asChild
+                variant="destructive"
+                className="cursor-pointer rounded-lg px-2.5 py-2 text-xs font-semibold"
+                style={{ background: "rgba(251,113,133,0.08)", color: "#fecdd3" }}
+              >
+                <a href="/auth/signout" className="flex w-full items-center">
                   <LogOut className="mr-2 h-3.5 w-3.5" /> Sair
                 </a>
               </DropdownMenuItem>
@@ -498,16 +509,22 @@ export function ConnectyShell({
               </DropdownMenuTrigger>
               <DropdownMenuContent
                 align="end"
-                className="w-52"
-                style={{ background: "var(--ch-dropdown-bg)", border: "1px solid var(--ch-border)", color: "var(--ch-text)" }}
+                sideOffset={10}
+                className="z-[80] rounded-xl p-1.5 shadow-2xl"
+                style={{
+                  background: "var(--ch-dropdown-bg)",
+                  border: "1px solid var(--ch-border-strong)",
+                  color: "var(--ch-text)",
+                  width: "min(calc(100vw - 24px), 260px)",
+                }}
               >
-                <DropdownMenuLabel className="text-xs">
+                <DropdownMenuLabel className="px-2 py-1.5 text-xs">
                   <div style={{ color: "var(--ch-text)" }}>{name}</div>
                   <div className="font-normal" style={{ color: "var(--ch-muted)" }}>{role}</div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator style={{ background: "var(--ch-border)" }} />
                 {mode === "client" && (
-                  <DropdownMenuItem asChild className="text-xs hover:bg-white/8 cursor-pointer">
+                  <DropdownMenuItem asChild className="cursor-pointer rounded-lg px-2.5 py-2 text-xs">
                     <label className="flex w-full items-center">
                       {avatarUploading ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <Camera className="mr-2 h-3.5 w-3.5" />}
                       Trocar foto
@@ -519,12 +536,17 @@ export function ConnectyShell({
                   <DropdownMenuLabel className="text-[11px] font-normal leading-4 text-rose-300">{avatarError}</DropdownMenuLabel>
                 ) : null}
                 {canSwitch && (
-                  <DropdownMenuItem asChild className="text-xs hover:bg-white/8 cursor-pointer">
+                  <DropdownMenuItem asChild className="cursor-pointer rounded-lg px-2.5 py-2 text-xs">
                     <Link href={switchTo}>{switchLbl}</Link>
                   </DropdownMenuItem>
                 )}
-                <DropdownMenuItem asChild className="text-xs text-rose-400 hover:bg-white/8 cursor-pointer">
-                  <a href="/auth/signout"><LogOut className="mr-2 h-3.5 w-3.5" />Sair</a>
+                <DropdownMenuItem
+                  asChild
+                  variant="destructive"
+                  className="cursor-pointer rounded-lg px-2.5 py-2 text-xs font-semibold"
+                  style={{ background: "rgba(251,113,133,0.08)", color: "#fecdd3" }}
+                >
+                  <a href="/auth/signout" className="flex w-full items-center"><LogOut className="mr-2 h-3.5 w-3.5" />Sair</a>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
