@@ -85,6 +85,9 @@ export type WhatsappBehaviorConfig = {
   timingDocumentCaptionSeconds: number;
   timingDocumentOnlySeconds: number;
   timingButtonDelaySeconds: number;
+  timingMediaBurstSeconds: number;
+  timingContextEventSeconds: number;
+  timingAudioQualitySeconds: number;
   debounceSeconds: number;
   humanInterventionMinutes: number;
   aiScheduleEnabled: boolean;
@@ -245,6 +248,9 @@ export const defaultWhatsappBehaviorConfig: WhatsappBehaviorConfig = {
   timingDocumentCaptionSeconds: 14,
   timingDocumentOnlySeconds: 18,
   timingButtonDelaySeconds: 2,
+  timingMediaBurstSeconds: 18,
+  timingContextEventSeconds: 5,
+  timingAudioQualitySeconds: 18,
   debounceSeconds: 15,
   humanInterventionMinutes: 60,
   aiScheduleEnabled: false,
@@ -358,6 +364,8 @@ function readNumber(value: unknown, fallback: number, key: keyof WhatsappBehavio
   if (key === "whatsappCampaignDelayMinSeconds") return clamp(Math.round(safe), 5, 600);
   if (key === "whatsappCampaignDelayMaxSeconds") return clamp(Math.round(safe), 5, 900);
   if (key === "timingButtonDelaySeconds") return clamp(Math.round(safe), 0, 20);
+  if (key === "timingContextEventSeconds") return clamp(Math.round(safe), 2, 60);
+  if (key === "timingMediaBurstSeconds" || key === "timingAudioQualitySeconds") return clamp(Math.round(safe), 5, 180);
   if (key === "debounceSeconds") return clamp(Math.round(safe), 5, 120);
   if (key === "reactionProbability") return clamp(Math.round(safe), 0, 100);
   if (key === "spontaneousAudioProbability") return clamp(Math.round(safe), 0, 100);

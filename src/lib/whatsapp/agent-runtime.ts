@@ -648,6 +648,18 @@ function resolveWhatsappAgentRunDelaySeconds(context: {
   const previousKind = resolveInboundDelayKind(previousInbound, previousInbound?.message_type ?? null);
   const hasRecentPrevious = Boolean(previousInbound);
 
+  if (shouldUseContextEventDelay(behavior, latestInbound)) {
+    return behavior.timingContextEventSeconds;
+  }
+
+  if (behavior.audioQualityGuard && isAudioQualityRiskSignal(latestInbound, latestInbound?.text_content ?? "")) {
+    return behavior.timingAudioQualitySeconds;
+  }
+
+  if (behavior.mediaBurstGuard && detectSignalMediaKind(latestInbound) && countRecentInboundMedia(context.recentInboundMessages) >= 2) {
+    return behavior.timingMediaBurstSeconds;
+  }
+
   if (currentKind === "button") {
     return behavior.timingButtonDelaySeconds;
   }
@@ -2472,25 +2484,38 @@ function detectSignalMediaKind(message: ConversationMessageRow | null): InboundM
 }
 
 function countRecentInboundMedia(messages: ConversationMessageRow[]) {
-  const recentInbound = messages
+  const recentMedia = messages
     .filter((message) => message.direction === "inbound")
-    .slice(-8);
-  const latestMedia = [...recentInbound].reverse().find((message) => detectSignalMediaKind(message));
+    .filter((message) => detectSignalMediaKind(message))
+    .sort((left, right) => new Date(right.occurred_at).getTime() - new Date(left.occurred_at).getTime())
+    .slice(0, 8);
 
-  if (!latestMedia) {
+  if (recentMedia.length === 0) {
     return 0;
   }
 
-  const latestTime = new Date(latestMedia.occurred_at).getTime();
+  const latestTime = Math.max(...recentMedia.map((message) => new Date(message.occurred_at).getTime()).filter(Number.isFinite));
   const hasReliableTime = Number.isFinite(latestTime);
 
-  return recentInbound.filter((message) => {
-    if (!detectSignalMediaKind(message)) return false;
-    if (!hasReliableTime) return true;
+  if (!hasReliableTime) {
+    return recentMedia.length;
+  }
 
+  return recentMedia.filter((message) => {
     const messageTime = new Date(message.occurred_at).getTime();
-    return Number.isFinite(messageTime) && latestTime - messageTime <= 90_000;
+    return Number.isFinite(messageTime) && Math.abs(latestTime - messageTime) <= 90_000;
   }).length;
+}
+
+function shouldUseContextEventDelay(behavior: WhatsappBehaviorConfig, message: ConversationMessageRow | null) {
+  if (!message) {
+    return false;
+  }
+
+  const signature = buildMessageEventSignature(message);
+
+  return (behavior.messageEditDeleteAwareness && isMessageEditDeleteSignal(signature))
+    || (behavior.contactPollReactionHandling && isContactPollReactionSignal(signature));
 }
 
 function isAudioQualityRiskSignal(message: ConversationMessageRow | null, userText: string) {
