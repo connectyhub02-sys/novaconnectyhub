@@ -1257,7 +1257,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
         >
           <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_320px]">
             <div className="grid gap-3">
-              <BehaviorSection title="Base do agente" description="Controles principais que ligam ou pausam o atendimento automatico deste agente." defaultOpen>
+              <BehaviorSection title="Base do agente" description="Controles principais que ligam ou pausam o atendimento automatico deste agente.">
                 <div className="grid gap-3">
                   <div className="grid gap-2 md:grid-cols-3">
                     <ToggleTile icon={Power} label="Agente ativo" description="Quando ligado, o agente pode responder leads automaticamente neste WhatsApp." checked={behaviorDraft.agentEnabled} onChange={() => updateBehavior("agentEnabled", !behaviorDraft.agentEnabled)} />
@@ -1953,7 +1953,7 @@ function WhatsappAvatar({
   imageUrl: string | null;
   size?: "md" | "lg" | "xl";
 }) {
-  const dimension = size === "xl" ? "h-20 w-20" : size === "lg" ? "h-14 w-14" : "h-10 w-10";
+  const dimension = size === "xl" ? "h-28 w-28" : size === "lg" ? "h-14 w-14" : "h-10 w-10";
 
   return (
     <div
@@ -1966,7 +1966,7 @@ function WhatsappAvatar({
           alt={alt}
           className="object-cover"
           fill
-          sizes={size === "xl" ? "80px" : size === "lg" ? "56px" : "40px"}
+          sizes={size === "xl" ? "112px" : size === "lg" ? "56px" : "40px"}
           src={imageUrl}
           unoptimized
         />
