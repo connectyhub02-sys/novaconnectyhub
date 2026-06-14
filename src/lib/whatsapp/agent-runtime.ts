@@ -351,6 +351,7 @@ export async function processWhatsappAgentRun(input: {
         text: optOutText,
         trackId: `lead_opt_out_${run.id}`,
         replyId: latestInbound?.provider_message_id ?? undefined,
+        mentions: resolveGroupMentions(context),
       });
       await pauseConversationForHuman(client, context.conversationId, behavior, "lead_opt_out");
       await archiveLeadForOptOut(client, context, userText);
@@ -374,6 +375,7 @@ export async function processWhatsappAgentRun(input: {
         text: handoffText,
         trackId: `human_handoff_${run.id}`,
         replyId: latestInbound?.provider_message_id ?? undefined,
+        mentions: resolveGroupMentions(context),
       });
       await pauseConversationForHuman(client, context.conversationId, behavior, "lead_requested_human");
       await saveOutboundMessage(client, context, {
@@ -1060,6 +1062,8 @@ function buildSystemInstruction(input: {
     `- Detectar localizacao: ${input.behavior.detectLocation ? "sim" : "nao"}.`,
     `- Detectar opt-out: ${input.behavior.detectOptOut ? "sim" : "nao"}.`,
     `- Analisar links: ${input.behavior.analyzeLinks ? "sim" : "nao"}.`,
+    `- Mensagens interativas: ${input.behavior.interactiveMessages ? "sim" : "nao"}.`,
+    `- Mencionar todos em grupos: ${input.behavior.groupMentionAll ? "sim" : "nao"}.`,
     `- Proteger midias em lote: ${input.behavior.mediaBurstGuard ? "sim" : "nao"}.`,
     `- Proteger midia sem legenda: ${input.behavior.missingMediaCaptionGuard ? "sim" : "nao"}.`,
     `- Proteger audio dificil: ${input.behavior.audioQualityGuard ? "sim" : "nao"}.`,
@@ -1727,6 +1731,20 @@ async function resolveInboundUserText(input: {
 
   const mediaKind = detectInboundMediaKind(latestInbound);
 
+  if (mediaKind && input.context.behavior.mediaBurstGuard) {
+    const batchText = await buildMediaBatchUserText({
+      client: input.client,
+      context: input.context,
+      token: input.token,
+      latestInbound,
+    });
+
+    if (batchText) {
+      latestInbound.text_content = batchText;
+      return batchText;
+    }
+  }
+
   if (mediaKind) {
     if (isMediaAnalysisEnabled(input.context.behavior, mediaKind)) {
       const analysis = await analyzeAndPersistInboundMedia({
@@ -1765,6 +1783,107 @@ async function resolveInboundUserText(input: {
   const fallbackText = buildMessageText(latestInbound);
   latestInbound.text_content = fallbackText;
   return fallbackText;
+}
+
+async function buildMediaBatchUserText(input: {
+  client: SupabaseClient;
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
+  token: string;
+  latestInbound: ConversationMessageRow;
+}) {
+  const batch = selectRecentVisualMediaBatch(input.context, input.latestInbound);
+
+  if (batch.length <= 1) {
+    return null;
+  }
+
+  const lines: string[] = [];
+
+  for (const message of batch) {
+    const kind = detectInboundMediaKind(message);
+    if (!kind) continue;
+
+    const caption = extractMessageCaption(message);
+    const enabled = isMediaAnalysisEnabled(input.context.behavior, kind);
+    const analysis = enabled
+      ? await analyzeAndPersistInboundMedia({
+          client: input.client,
+          context: input.context,
+          token: input.token,
+          latestInbound: message,
+          kind,
+        }).catch(async (error: unknown) => {
+          await persistMediaAnalysisFailure(input.client, input.context, message, kind, error);
+          return null;
+        })
+      : null;
+
+    const prefix = `${formatMediaKind(kind)}${caption ? ` com legenda "${preview(caption, 140)}"` : " sem legenda"}`;
+    const summary = analysis
+      ? preview(analysis, 700)
+      : enabled
+        ? "Sem analise automatica confiavel nesta execucao."
+        : `Analise de ${formatMediaKind(kind).toLowerCase()} desativada no comportamento do agente.`;
+
+    lines.push(`- ${prefix}: ${summary}`);
+  }
+
+  if (lines.length <= 1) {
+    return null;
+  }
+
+  return [
+    "O lead enviou um lote de midias no WhatsApp.",
+    "",
+    "[LOTE DE MIDIAS RECEBIDO]",
+    ...lines,
+    "",
+    "[ORIENTACAO INTERNA]",
+    "Use as midias como um conjunto. Responda uma unica vez, de forma curta, sem chutar conteudo que nao esteja claro.",
+    "Se alguma midia estiver sem legenda ou sem analise confiavel, peca contexto de forma natural.",
+  ].join("\n");
+}
+
+function selectRecentVisualMediaBatch(
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+  latestInbound: ConversationMessageRow,
+) {
+  const latestKind = detectInboundMediaKind(latestInbound);
+  if (!latestKind) return [];
+
+  const latestTime = new Date(latestInbound.occurred_at).getTime();
+  if (!Number.isFinite(latestTime)) return [latestInbound];
+
+  const limits: Record<InboundMediaKind, number> = {
+    image: context.behavior.mediaBatchImageLimit,
+    video: context.behavior.mediaBatchVideoLimit,
+    document: context.behavior.mediaBatchDocumentLimit,
+  };
+  const used: Record<InboundMediaKind, number> = { image: 0, video: 0, document: 0 };
+  const candidates = context.messages
+    .filter((message) => message.direction === "inbound")
+    .filter((message) => !latestInbound.provider_chat_id || !message.provider_chat_id || message.provider_chat_id === latestInbound.provider_chat_id)
+    .filter((message) => {
+      const kind = detectInboundMediaKind(message);
+      if (!kind) return false;
+
+      const messageTime = new Date(message.occurred_at).getTime();
+      return Number.isFinite(messageTime) && Math.abs(latestTime - messageTime) <= 90_000;
+    })
+    .sort((left, right) => new Date(right.occurred_at).getTime() - new Date(left.occurred_at).getTime());
+
+  const selected: ConversationMessageRow[] = [];
+
+  for (const message of candidates) {
+    const kind = detectInboundMediaKind(message);
+    if (!kind) continue;
+    if (used[kind] >= limits[kind]) continue;
+
+    selected.push(message);
+    used[kind] += 1;
+  }
+
+  return selected.sort((left, right) => new Date(left.occurred_at).getTime() - new Date(right.occurred_at).getTime());
 }
 
 async function transcribeAndPersistInboundAudio(input: {
@@ -1992,6 +2111,7 @@ async function sendAgentResponse(input: {
           type: "ptt",
           file: generatedAudio.audioUrl,
           ...(latestInbound?.provider_message_id ? { replyid: latestInbound.provider_message_id } : {}),
+          ...(resolveGroupMentions(context) ? { mentions: resolveGroupMentions(context) } : {}),
           track_source: "connectyhub",
           track_id: `agent_audio_${context.run.id}_${chunkIndex}`,
         },
@@ -2037,14 +2157,27 @@ async function sendAgentResponse(input: {
       await sleep(delayMs);
     }
 
-    const providerResponse = await sendWhatsappText({
-      credentials: context.credentials,
-      token: input.token,
-      phone: input.phone,
-      text,
-      trackId: `agent_text_${context.run.id}_${chunkIndex}`,
-      replyId: latestInbound?.provider_message_id ?? undefined,
-    });
+    const interactiveMenu = buildInteractiveLinkMenu(text, context);
+    const providerResponse = interactiveMenu
+      ? await sendWhatsappInteractiveButtons({
+          credentials: context.credentials,
+          token: input.token,
+          phone: input.phone,
+          text: interactiveMenu.text,
+          choices: interactiveMenu.choices,
+          trackId: `agent_menu_${context.run.id}_${chunkIndex}`,
+          replyId: latestInbound?.provider_message_id ?? undefined,
+          mentions: resolveGroupMentions(context),
+        })
+      : await sendWhatsappText({
+          credentials: context.credentials,
+          token: input.token,
+          phone: input.phone,
+          text,
+          trackId: `agent_text_${context.run.id}_${chunkIndex}`,
+          replyId: latestInbound?.provider_message_id ?? undefined,
+          mentions: resolveGroupMentions(context),
+        });
 
     const message: OutboundMessage = {
       text,
@@ -2132,6 +2265,53 @@ function shouldSendAudioResponse(
   return shouldSendAudio && !visualMediaKind;
 }
 
+function buildInteractiveLinkMenu(
+  text: string,
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+) {
+  if (!context.behavior.interactiveMessages || context.linkButtons.length === 0) {
+    return null;
+  }
+
+  let cleanedText = text;
+  const choices: string[] = [];
+
+  for (const link of context.linkButtons) {
+    const trackingUrl = buildLeadAwareTrackingUrl(link, { lead: context.lead });
+    const appearsInText = cleanedText.includes(trackingUrl) || cleanedText.includes(link.url);
+
+    if (!appearsInText) {
+      continue;
+    }
+
+    choices.push(`${preview(link.label, 20)}|${trackingUrl}`);
+    cleanedText = cleanedText
+      .replaceAll(trackingUrl, "")
+      .replaceAll(link.url, "")
+      .replace(/\s+\n/g, "\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .replace(/[ \t]{2,}/g, " ")
+      .trim();
+
+    if (choices.length >= 3) {
+      break;
+    }
+  }
+
+  if (choices.length === 0) {
+    return null;
+  }
+
+  return {
+    text: cleanedText || "Separei aqui pra vc:",
+    choices,
+  };
+}
+
+function resolveGroupMentions(context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>) {
+  return isWhatsappGroupChatContext(context) && context.behavior.groupMentionAll ? "all" : undefined;
+}
+
 function resolvePreSendPresenceDelayMs(behavior: WhatsappBehaviorConfig, text: string, audio: boolean) {
   if (!behavior.smartTiming) {
     return 1200;
@@ -2186,6 +2366,7 @@ async function sendWhatsappText(input: {
   text: string;
   trackId: string;
   replyId?: string;
+  mentions?: string;
 }) {
   return callUazapi(input.credentials, "/send/text", {
     method: "POST",
@@ -2197,6 +2378,36 @@ async function sendWhatsappText(input: {
       readchat: true,
       readmessages: true,
       ...(input.replyId ? { replyid: input.replyId } : {}),
+      ...(input.mentions ? { mentions: input.mentions } : {}),
+      track_source: "connectyhub",
+      track_id: input.trackId,
+    },
+  });
+}
+
+async function sendWhatsappInteractiveButtons(input: {
+  credentials: UazapiCredentials;
+  token: string;
+  phone: string;
+  text: string;
+  choices: string[];
+  trackId: string;
+  replyId?: string;
+  mentions?: string;
+}) {
+  return callUazapi(input.credentials, "/send/menu", {
+    method: "POST",
+    token: input.token,
+    body: {
+      number: input.phone,
+      type: "button",
+      text: input.text,
+      choices: input.choices.slice(0, 3),
+      footerText: "ConnectyHub",
+      readchat: true,
+      readmessages: true,
+      ...(input.replyId ? { replyid: input.replyId } : {}),
+      ...(input.mentions ? { mentions: input.mentions } : {}),
       track_source: "connectyhub",
       track_id: input.trackId,
     },
