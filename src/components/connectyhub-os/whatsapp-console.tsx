@@ -1394,6 +1394,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
               <BehaviorSection title="Cenarios especiais do lead" description="Eventos que a IA deve reconhecer para alimentar CRM, memoria e proximos passos.">
                 <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
                   <ToggleTile icon={UserRound} label="Pedido de humano" description="Identifica quando o lead pede vendedor, atendente ou suporte humano." checked={behaviorDraft.detectHumanRequest} onChange={() => updateBehavior("detectHumanRequest", !behaviorDraft.detectHumanRequest)} />
+                  <ToggleTile icon={Bot} label="IA pedido humano" description="Usa IA para entender pedidos indiretos ou contextuais de atendimento humano." checked={behaviorDraft.humanHandoffAiDetection} onChange={() => updateBehavior("humanHandoffAiDetection", !behaviorDraft.humanHandoffAiDetection)} />
                   <ToggleTile icon={Clock3} label="Cancelar/remarcar" description="Reconhece pedidos de cancelamento, reagendamento ou mudanca de horario." checked={behaviorDraft.detectRescheduleCancel} onChange={() => updateBehavior("detectRescheduleCancel", !behaviorDraft.detectRescheduleCancel)} />
                   <ToggleTile icon={MessageSquare} label="Captacao" description="Detecta quando o lead quer cadastrar, vender ou oferecer um imovel/produto." checked={behaviorDraft.detectPropertyCapture} onChange={() => updateBehavior("detectPropertyCapture", !behaviorDraft.detectPropertyCapture)} />
                   <ToggleTile icon={Globe2} label="Localizacao" description="Registra localizacao enviada pelo lead para enriquecer atendimento e CRM." checked={behaviorDraft.detectLocation} onChange={() => updateBehavior("detectLocation", !behaviorDraft.detectLocation)} />
@@ -3125,6 +3126,7 @@ function BehaviorSummary({
 }) {
   const activeScenarios = [
     behavior.detectHumanRequest,
+    behavior.humanHandoffAiDetection,
     behavior.detectRescheduleCancel,
     behavior.detectPropertyCapture,
     behavior.detectLocation,
@@ -3168,7 +3170,7 @@ function BehaviorSummary({
       <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Resumo</p>
       <div className="mt-4 space-y-3">
         <PromptCheck label="Agente ativo" active={behavior.agentEnabled} />
-        <PromptCheck label={`${activeScenarios}/15 cenarios ativos`} active={activeScenarios >= 8} />
+        <PromptCheck label={`${activeScenarios}/16 cenarios ativos`} active={activeScenarios >= 8} />
         <PromptCheck label={`${activeMedia}/4 midias ativas`} active={activeMedia >= 2} />
         <PromptCheck label={`${activeHuman}/17 simulacao humana`} active={activeHuman >= 8} />
         <PromptCheck label="Intervencao humana" active={behavior.humanIntervention} />

@@ -36,6 +36,13 @@ import { loadUazapiCredentials, type UazapiCredentials } from "./uazapi-credenti
 
 type JsonRecord = Record<string, unknown>;
 
+type HumanHandoffIntent = {
+  handoff: boolean;
+  source: "keyword" | "ai_context";
+  confidence: number;
+  reason: string;
+};
+
 const geminiSafetySettings = [
   { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
   { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
@@ -366,14 +373,19 @@ export async function processWhatsappAgentRun(input: {
 
     const humanRequestText = getLeadAuthoredHumanRequestText(latestInbound, userText);
 
-    if (behavior.humanIntervention && behavior.detectHumanRequest && isHumanRequest(humanRequestText)) {
+    const humanHandoffIntent = behavior.humanIntervention && behavior.detectHumanRequest
+      ? await detectHumanHandoffIntent({ context, text: humanRequestText, useAiContext: behavior.humanHandoffAiDetection }).catch(() => null)
+      : null;
+
+    if (humanHandoffIntent?.handoff) {
       return await handleLeadHumanHandoffRequest({
         client,
         context,
         token,
         phone,
         latestInbound,
-        requestText: humanRequestText,
+        requestText: humanRequestText || userText,
+        detection: humanHandoffIntent,
       });
     }
 
@@ -1053,6 +1065,7 @@ function buildSystemInstruction(input: {
     `- Dividir respostas: ${input.behavior.splitMessages ? "sim" : "nao"}.`,
     `- Intervencao humana: ${input.behavior.humanIntervention ? "ativa" : "inativa"}.`,
     `- Detectar pedido de humano: ${input.behavior.detectHumanRequest ? "sim" : "nao"}.`,
+    `- IA para pedido humano contextual: ${input.behavior.humanHandoffAiDetection ? "sim" : "nao"}.`,
     `- Detectar remarcar/cancelar: ${input.behavior.detectRescheduleCancel ? "sim" : "nao"}.`,
     `- Detectar captacao/oferta: ${input.behavior.detectPropertyCapture ? "sim" : "nao"}.`,
     `- Detectar localizacao: ${input.behavior.detectLocation ? "sim" : "nao"}.`,
@@ -2842,8 +2855,9 @@ async function handleLeadHumanHandoffRequest(input: {
   phone: string;
   latestInbound: ConversationMessageRow | null;
   requestText: string;
+  detection?: HumanHandoffIntent;
 }) {
-  const { client, context, latestInbound, requestText } = input;
+  const { client, context, latestInbound, requestText, detection } = input;
   const requestedAt = new Date().toISOString();
   const handoffText = buildHumanHandoffText();
   const sent = await sendWhatsappText({
@@ -2861,6 +2875,9 @@ async function handleLeadHumanHandoffRequest(input: {
     status: "awaiting_human",
     requested_at: requestedAt,
     requested_text: preview(requestText, 700),
+    detection_source: detection?.source ?? null,
+    detection_confidence: detection?.confidence ?? null,
+    detection_reason: detection?.reason ?? null,
     request_message_id: latestInbound?.id ?? null,
     provider_message_id: latestInbound?.provider_message_id ?? null,
     lead_id: context.lead?.id ?? null,
@@ -2878,6 +2895,7 @@ async function handleLeadHumanHandoffRequest(input: {
     pausedUntil,
     requestText,
     latestInbound,
+    detection,
   });
 
   await persistHumanHandoffEvent(client, context, {
@@ -2885,6 +2903,7 @@ async function handleLeadHumanHandoffRequest(input: {
     pausedUntil,
     requestText,
     latestInbound,
+    detection,
   });
 
   const notificationData: WhatsappHandoffNotificationEventData = {
@@ -3001,6 +3020,7 @@ async function persistLeadHumanHandoff(
     pausedUntil: string;
     requestText: string;
     latestInbound: ConversationMessageRow | null;
+    detection?: HumanHandoffIntent;
   },
 ) {
   if (!context.lead?.id) {
@@ -3023,6 +3043,9 @@ async function persistLeadHumanHandoff(
     request_message_id: input.latestInbound?.id ?? null,
     provider_message_id: input.latestInbound?.provider_message_id ?? null,
     request_text: preview(input.requestText, 700),
+    detection_source: input.detection?.source ?? null,
+    detection_confidence: input.detection?.confidence ?? null,
+    detection_reason: input.detection?.reason ?? null,
   };
 
   await client
@@ -3050,6 +3073,7 @@ async function persistHumanHandoffEvent(
     pausedUntil: string;
     requestText: string;
     latestInbound: ConversationMessageRow | null;
+    detection?: HumanHandoffIntent;
   },
 ) {
   await client.from("intelligence_events").insert({
@@ -3073,6 +3097,7 @@ async function persistHumanHandoffEvent(
       requestedAt: input.requestedAt,
       pausedUntil: input.pausedUntil,
       status: "awaiting_human",
+      detection: input.detection ?? null,
     },
   });
 }
@@ -4404,10 +4429,121 @@ function isHumanRequest(value: string) {
   }
 
   return [
-    /\b(falar|fala|conversar|conversa|chama|chamar|aciona|acionar|quero|preciso|pode|passa|passar|coloca|colocar)\b.{0,50}\b(humano|atendente|vendedor|consultor|suporte|alguem|pessoa real|pessoa de verdade)\b/,
-    /\b(humano|atendente|vendedor|consultor|suporte|pessoa real|pessoa de verdade)\b.{0,50}\b(falar|conversar|chamar|acionar|atender|retornar|ligar)\b/,
-    /\b(falar com alguem|me liga|me ligue|liga pra mim|ligacao|telefone de alguem|atendimento humano)\b/,
+    /\b(falar|fala|conversar|conversa|chama|chamar|aciona|acionar|quero|preciso|pode|passa|passar|coloca|colocar|transfere|transferir|transfira|encaminha|encaminhar|manda|mandar)\b.{0,80}\b(humano|atendente|vendedor|consultor|suporte|alguem|pessoa real|pessoa de verdade|pessoal|equipe|time)\b/,
+    /\b(humano|atendente|vendedor|consultor|suporte|pessoa real|pessoa de verdade|pessoal|equipe|time)\b.{0,80}\b(falar|conversar|chamar|acionar|atender|retornar|ligar|assumir|resolver|continuar)\b/,
+    /\b(falar com alguem|me liga|me ligue|liga pra mim|ligacao|telefone de alguem|atendimento humano|passar para alguem|passa para alguem|transferir atendimento|transfere o atendimento|transfira o atendimento)\b/,
   ].some((pattern) => pattern.test(normalized));
+}
+
+async function detectHumanHandoffIntent(input: {
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
+  text: string;
+  useAiContext: boolean;
+}): Promise<HumanHandoffIntent> {
+  const text = input.text.trim();
+
+  if (!text) {
+    return { handoff: false, source: "keyword", confidence: 0, reason: "empty_text" };
+  }
+
+  if (isHumanRequest(text)) {
+    return { handoff: true, source: "keyword", confidence: 0.98, reason: "explicit_handoff_phrase" };
+  }
+
+  if (!input.useAiContext || shouldSkipHumanHandoffAiClassifier(text)) {
+    return { handoff: false, source: "keyword", confidence: 0.2, reason: "low_signal_or_unrelated" };
+  }
+
+  return classifyHumanHandoffIntentWithGemini(input);
+}
+
+function shouldSkipHumanHandoffAiClassifier(text: string) {
+  const normalized = normalizeSearch(text);
+
+  if (!normalized || normalized.length < 8) return true;
+  if (isLowSignalLeadPing(normalized)) return true;
+  if (/^\d+$/.test(normalized)) return true;
+
+  return false;
+}
+
+async function classifyHumanHandoffIntentWithGemini(input: {
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
+  text: string;
+}): Promise<HumanHandoffIntent> {
+  const model = input.context.agent.model_id || input.context.geminiCredentials.model;
+  const url = new URL(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`);
+  url.searchParams.set("key", input.context.geminiCredentials.apiKey);
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      systemInstruction: {
+        parts: [{ text: buildHumanHandoffClassifierInstruction() }],
+      },
+      contents: [{
+        role: "user",
+        parts: [{
+          text: [
+            "Mensagem atual do lead:",
+            input.text,
+            "",
+            "Historico recente:",
+            buildHumanHandoffConversationContext(input.context.messages),
+          ].join("\n"),
+        }],
+      }],
+      generationConfig: {
+        temperature: 0,
+        topP: 0.1,
+        maxOutputTokens: 120,
+        responseMimeType: "application/json",
+      },
+      safetySettings: geminiSafetySettings,
+    }),
+    cache: "no-store",
+  });
+  const data = await readProviderResponse(response);
+
+  if (!response.ok) {
+    throw new Error(readProviderError(data) ?? `Gemini respondeu status ${response.status}.`);
+  }
+
+  const record = readRecord(parseJsonObject(extractGeminiText(data)));
+  const handoff = record?.handoff === true || record?.should_handoff === true || record?.human_handoff === true;
+  const confidence = clampNumber(asNumber(record?.confidence) ?? (handoff ? 0.75 : 0.25), 0, 1);
+  const reason = preview(asString(record?.reason) ?? "ai_context_classifier", 180);
+
+  return {
+    handoff: Boolean(handoff && confidence >= 0.68),
+    source: "ai_context",
+    confidence,
+    reason,
+  };
+}
+
+function buildHumanHandoffClassifierInstruction() {
+  return [
+    "Voce classifica se o lead quer que uma pessoa humana/equipe assuma a conversa agora.",
+    "Responda somente JSON valido no formato {\"handoff\":boolean,\"confidence\":number,\"reason\":\"curto\"}.",
+    "Marque handoff=true quando o lead pede transferencia, fala com vendedor/atendente/suporte/pessoa/equipe, reclama que quer alguem melhor, pede para ligar, ou indica que nao quer continuar com o agente.",
+    "Entenda variacoes informais, erros de digitacao, ironia leve e contexto das ultimas mensagens.",
+    "Marque handoff=false se o lead so menciona humano/IA como assunto, faz teste de Turing, pede explicacao, manda ok/sim/nao, ou esta apenas negociando normalmente.",
+    "Se estiver em duvida, retorne handoff=false.",
+  ].join("\n");
+}
+
+function buildHumanHandoffConversationContext(messages: ConversationMessageRow[]) {
+  return messages
+    .slice(-8)
+    .map((message) => {
+      const speaker = message.direction === "inbound" ? "Lead" : message.direction === "outbound" ? "Agente" : "Sistema";
+      return `${speaker}: ${preview(buildMessageText(message), 350)}`;
+    })
+    .filter((line) => line.trim().length > 0)
+    .join("\n")
+    .slice(-3000);
 }
 
 function getLeadAuthoredHumanRequestText(message: ConversationMessageRow | null, resolvedUserText: string) {
@@ -4931,6 +5067,15 @@ function readRecord(value: unknown): JsonRecord | null {
 
 function asString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function asNumber(value: unknown) {
+  const number = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+  return Number.isFinite(number) ? number : null;
+}
+
+function clampNumber(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
 }
 
 function readPositiveInteger(value: unknown) {

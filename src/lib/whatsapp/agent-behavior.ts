@@ -33,6 +33,7 @@ export type WhatsappBehaviorConfig = {
   whatsappCampaignDelayMinSeconds: number;
   whatsappCampaignDelayMaxSeconds: number;
   detectHumanRequest: boolean;
+  humanHandoffAiDetection: boolean;
   detectRescheduleCancel: boolean;
   detectPropertyCapture: boolean;
   detectLocation: boolean;
@@ -199,6 +200,7 @@ export const defaultWhatsappBehaviorConfig: WhatsappBehaviorConfig = {
   whatsappCampaignDelayMinSeconds: 20,
   whatsappCampaignDelayMaxSeconds: 60,
   detectHumanRequest: true,
+  humanHandoffAiDetection: true,
   detectRescheduleCancel: true,
   detectPropertyCapture: true,
   detectLocation: true,
@@ -302,6 +304,7 @@ export function normalizeWhatsappBehaviorConfig(value: unknown): WhatsappBehavio
     merged.adaptiveRapportMode = "off";
     merged.audioTranscription = false;
     merged.humanIntervention = false;
+    merged.humanHandoffAiDetection = false;
     merged.humanHandoffNotifications = false;
     merged.humanHandoffNotificationNumbers = "";
     merged.botLoopProtection = false;
@@ -358,6 +361,7 @@ export function mergeWhatsappHandoffNotificationSettings(
     ...base,
     humanIntervention: draft.humanIntervention,
     detectHumanRequest: draft.detectHumanRequest,
+    humanHandoffAiDetection: draft.humanHandoffAiDetection,
     humanHandoffNotifications: draft.humanHandoffNotifications,
     humanHandoffNotificationNumbers: draft.humanHandoffNotificationNumbers,
     humanHandoffNotificationCooldownMinutes: draft.humanHandoffNotificationCooldownMinutes,
