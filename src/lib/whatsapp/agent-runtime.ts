@@ -138,6 +138,13 @@ type RuntimeLinkButton = {
   trackingUrl: string;
 };
 
+type InteractiveLinkMatch = {
+  link: RuntimeLinkButton;
+  trackingUrl: string;
+  directIndex: number | null;
+  mentionIndex: number | null;
+};
+
 type CrossAgentConversationContext = {
   previousAgentName: string | null;
   previousConversationAt: string | null;
@@ -1802,6 +1809,8 @@ function buildLinkButtonLines(
     "- Nunca deixe tags internas como {{link_produto}} visiveis para o lead. Tags de link sao marcadores internos e precisam virar botao ou URL antes do envio.",
     "- Nunca envie ou leia links em audio. Quando a resposta tiver link, produto com botao ou tag de link, responda em texto para o sistema anexar o botao/link.",
     "- Nao invente nem encurte tags. Se nao souber a tag, fale do produto pelo nome e peca confirmacao.",
+    "- Se recomendar 2 ou 3 produtos na mesma resposta, inclua a tag/URL de cada produto recomendado. Nao cite duas opcoes e envie link de apenas uma.",
+    "- Se o lead pedir link, outro link, mandar de novo ou disser que nao recebeu, responda incluindo novamente a tag/URL do produto citado.",
     ...linkButtons.map((link) => `- ${link.tag} (${link.label}): ${buildLeadAwareTrackingUrl(link, input)}`),
   ];
 }
@@ -2762,6 +2771,10 @@ function responseContainsLinkButtonReference(
     return false;
   }
 
+  if (context.behavior.interactiveMessages && collectInteractiveLinkMatches(text, context.linkButtons, { lead: context.lead }).length > 0) {
+    return true;
+  }
+
   return context.linkButtons.some((link) => {
     const trackingUrl = buildLeadAwareTrackingUrl(link, { lead: context.lead });
 
@@ -2776,6 +2789,149 @@ function containsLinkButtonTag(text: string) {
   return found;
 }
 
+function collectInteractiveLinkMatches(
+  text: string,
+  linkButtons: RuntimeLinkButton[],
+  input: {
+    lead: LeadRow | null;
+  },
+) {
+  const normalizedText = normalizeSearch(text);
+
+  return linkButtons
+    .map((link) => {
+      const trackingUrl = buildLeadAwareTrackingUrl(link, input);
+      const directIndex = findFirstTextIndex(text, [trackingUrl, link.url, link.tag]);
+      const mentionIndex = findLinkMentionIndex(normalizedText, link);
+
+      if (directIndex === null && mentionIndex === null) {
+        return null;
+      }
+
+      return { link, trackingUrl, directIndex, mentionIndex } satisfies InteractiveLinkMatch;
+    })
+    .filter((match): match is InteractiveLinkMatch => Boolean(match))
+    .sort((left, right) => {
+      const leftIndex = Math.min(left.directIndex ?? Number.POSITIVE_INFINITY, left.mentionIndex ?? Number.POSITIVE_INFINITY);
+      const rightIndex = Math.min(right.directIndex ?? Number.POSITIVE_INFINITY, right.mentionIndex ?? Number.POSITIVE_INFINITY);
+
+      if (leftIndex !== rightIndex) {
+        return leftIndex - rightIndex;
+      }
+
+      const leftDirect = left.directIndex === null ? 1 : 0;
+      const rightDirect = right.directIndex === null ? 1 : 0;
+
+      return leftDirect - rightDirect;
+    });
+}
+
+function findFirstTextIndex(text: string, values: string[]) {
+  const indexes = values
+    .filter((value) => value.trim().length > 0)
+    .map((value) => text.indexOf(value))
+    .filter((index) => index >= 0);
+
+  return indexes.length > 0 ? Math.min(...indexes) : null;
+}
+
+function findLinkMentionIndex(normalizedText: string, link: RuntimeLinkButton) {
+  let index: number | null = null;
+
+  for (const alias of buildLinkMentionAliases(link)) {
+    const aliasIndex = normalizedText.indexOf(alias);
+
+    if (aliasIndex >= 0 && (index === null || aliasIndex < index)) {
+      index = aliasIndex;
+    }
+
+    const tokenIndex = findLinkAliasTokenIndex(normalizedText, alias);
+
+    if (tokenIndex !== null && (index === null || tokenIndex < index)) {
+      index = tokenIndex;
+    }
+  }
+
+  return index;
+}
+
+function findLinkAliasTokenIndex(normalizedText: string, alias: string) {
+  const tokens = alias
+    .split(" ")
+    .filter((token) => token.length >= 3 && !isDosageToken(token));
+
+  if (tokens.length < 2) {
+    return null;
+  }
+
+  const indexes = tokens.map((token) => normalizedText.indexOf(token));
+
+  if (indexes.some((index) => index < 0)) {
+    return null;
+  }
+
+  const firstIndex = Math.min(...indexes);
+  const lastIndex = Math.max(...indexes);
+
+  return lastIndex - firstIndex <= 80 ? firstIndex : null;
+}
+
+function buildLinkMentionAliases(link: RuntimeLinkButton) {
+  const aliases = new Set<string>();
+  addLinkMentionAliases(aliases, link.label);
+
+  const tagAlias = normalizeLinkReference(link.tag)
+    .replace(/^link_/, "")
+    .replace(/_[a-f0-9]{6,}$/i, "")
+    .replace(/_/g, " ");
+
+  addLinkMentionAliases(aliases, tagAlias);
+
+  return Array.from(aliases).sort((left, right) => right.length - left.length);
+}
+
+function addLinkMentionAliases(aliases: Set<string>, value: string) {
+  const normalized = normalizeSearch(value);
+  addLinkMentionAlias(aliases, normalized);
+
+  const tokens = normalized.split(" ").filter(Boolean);
+  const dosageIndex = tokens.findIndex(isDosageToken);
+
+  if (dosageIndex >= 2) {
+    addLinkMentionAlias(aliases, tokens.slice(0, dosageIndex).join(" "));
+  }
+
+  if (tokens.length >= 4) {
+    addLinkMentionAlias(aliases, tokens.slice(0, Math.min(5, tokens.length)).join(" "));
+  }
+}
+
+function addLinkMentionAlias(aliases: Set<string>, value: string) {
+  const alias = normalizeSearch(value);
+
+  if (isUsefulLinkMentionAlias(alias)) {
+    aliases.add(alias);
+  }
+}
+
+function isUsefulLinkMentionAlias(alias: string) {
+  const tokens = alias.split(" ").filter(Boolean);
+
+  if (alias.length < 10 || tokens.length < 2) {
+    return false;
+  }
+
+  const genericTokens = new Set(["link", "produto", "comprar", "preco", "valor", "ampola", "ampolas", "frasco", "oral", "inj", "injetavel"]);
+  const specificTokens = tokens.filter((token) => !genericTokens.has(token) && !isDosageToken(token));
+
+  return specificTokens.length >= 2 || (specificTokens.length >= 1 && alias.length >= 16);
+}
+
+function isDosageToken(token: string) {
+  return /^\d+(?:[,.]\d+)?(?:mg|ml|mcg|ui|iu|g|kg|comp|caps|amp)?$/.test(token)
+    || /^(mg|ml|mcg|ui|iu|comp|caps|amp|ampola|ampolas)$/.test(token);
+}
+
 function buildInteractiveLinkMenu(
   text: string,
   context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
@@ -2786,14 +2942,10 @@ function buildInteractiveLinkMenu(
 
   let cleanedText = text;
   const choices: string[] = [];
+  const matches = collectInteractiveLinkMatches(text, context.linkButtons, { lead: context.lead });
 
-  for (const link of context.linkButtons) {
-    const trackingUrl = buildLeadAwareTrackingUrl(link, { lead: context.lead });
-    const appearsInText = cleanedText.includes(trackingUrl) || cleanedText.includes(link.url) || cleanedText.includes(link.tag);
-
-    if (!appearsInText) {
-      continue;
-    }
+  for (const match of matches) {
+    const { link, trackingUrl } = match;
 
     choices.push(`${preview(link.label, 20)}|${trackingUrl}`);
     cleanedText = cleanedText
