@@ -33,6 +33,7 @@ type ConversationRow = {
 
 type AgentRow = {
   id: string;
+  metadata: JsonRecord | null;
 };
 
 type WebhookEventRow = {
@@ -652,8 +653,12 @@ async function enqueueWhatsappAgentRun(
     return null;
   }
 
-  const behaviorConfig = isRecord(instanceMetadata?.behavior_config) ? instanceMetadata.behavior_config : {};
-  const behavior = normalizeWhatsappBehaviorConfig(behaviorConfig);
+  const behavior = await resolveWebhookBehaviorConfig(client, {
+    organizationId: input.organizationId,
+    instanceMetadata,
+    agent,
+    isPlatformWhatsapp,
+  });
   const isGroupChat = input.isGroupChat || isWhatsappGroupChatId(input.providerChatId);
 
   if (isGroupChat && !behavior.allowGroupChats) {
@@ -768,7 +773,7 @@ async function loadWhatsappInstanceMetadata(client: SupabaseClient, whatsappInst
 async function findPlatformSectorWhatsappAgent(client: SupabaseClient, sectorId: string) {
   const { data } = await client
     .from("agent_registry")
-    .select("id")
+    .select("id, metadata")
     .eq("scope", "platform")
     .is("organization_id", null)
     .contains("metadata", { admin_whatsapp: true, agent_kind: "whatsapp", sector_id: sectorId })
@@ -782,7 +787,7 @@ async function findPlatformSectorWhatsappAgent(client: SupabaseClient, sectorId:
 async function findOrganizationWhatsappAgent(client: SupabaseClient, organizationId: string) {
   const { data } = await client
     .from("agent_registry")
-    .select("id")
+    .select("id, metadata")
     .eq("scope", "organization")
     .eq("organization_id", organizationId)
     .contains("metadata", { client_created: true, agent_kind: "whatsapp" })
@@ -791,6 +796,42 @@ async function findOrganizationWhatsappAgent(client: SupabaseClient, organizatio
     .maybeSingle<AgentRow>();
 
   return data ?? null;
+}
+
+async function resolveWebhookBehaviorConfig(
+  client: SupabaseClient,
+  input: {
+    organizationId: string;
+    instanceMetadata: JsonRecord | null;
+    agent: AgentRow;
+    isPlatformWhatsapp: boolean;
+  },
+) {
+  const instanceConfig = readRecord(input.instanceMetadata?.behavior_config);
+  const agentConfig = readRecord(input.agent.metadata)?.whatsapp_behavior_config;
+
+  if (instanceConfig) {
+    return normalizeWhatsappBehaviorConfig(instanceConfig);
+  }
+
+  if (!input.isPlatformWhatsapp) {
+    const globalConfig = await loadOrganizationGlobalBehaviorConfig(client, input.organizationId);
+    return normalizeWhatsappBehaviorConfig(globalConfig ?? agentConfig);
+  }
+
+  return normalizeWhatsappBehaviorConfig(agentConfig);
+}
+
+async function loadOrganizationGlobalBehaviorConfig(client: SupabaseClient, organizationId: string) {
+  const { data } = await client
+    .from("agent_registry")
+    .select("metadata")
+    .eq("scope", "organization")
+    .eq("organization_id", organizationId)
+    .eq("agent_code", "agente-whatsapp-global")
+    .maybeSingle<{ metadata: JsonRecord | null }>();
+
+  return readRecord(data?.metadata)?.whatsapp_behavior_config ?? null;
 }
 
 async function createIntelligenceEvent(

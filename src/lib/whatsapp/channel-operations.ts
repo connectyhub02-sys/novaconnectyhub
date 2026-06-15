@@ -21,6 +21,10 @@ type WhatsappInstanceRow = {
   metadata: JsonRecord | null;
 };
 
+type AgentBehaviorRow = {
+  metadata: JsonRecord | null;
+};
+
 type ContentPipelineRow = {
   id: string;
   scope: WhatsappScope;
@@ -437,6 +441,12 @@ async function buildOperationalContext(
 
   const credentials = await loadUazapiCredentials(client);
   const metadata = readRecord(instance.metadata);
+  const behavior = await resolveOperationalBehaviorConfig(client, {
+    scope,
+    organizationId,
+    sectorId,
+    instanceMetadata: metadata,
+  });
 
   return {
     scope,
@@ -445,8 +455,62 @@ async function buildOperationalContext(
     instance,
     token,
     credentials,
-    behavior: normalizeWhatsappBehaviorConfig(metadata?.behavior_config),
+    behavior,
   };
+}
+
+async function resolveOperationalBehaviorConfig(
+  client: SupabaseClient,
+  input: {
+    scope: WhatsappScope;
+    organizationId: string | null;
+    sectorId: string | null;
+    instanceMetadata: JsonRecord | null;
+  },
+) {
+  const instanceConfig = readRecord(input.instanceMetadata?.behavior_config);
+
+  if (instanceConfig) {
+    return normalizeWhatsappBehaviorConfig(instanceConfig);
+  }
+
+  if (input.scope === "organization" && input.organizationId) {
+    const globalConfig = await loadOrganizationGlobalBehaviorConfig(client, input.organizationId);
+    return normalizeWhatsappBehaviorConfig(globalConfig);
+  }
+
+  if (input.scope === "platform" && input.sectorId) {
+    const platformConfig = await loadPlatformSectorBehaviorConfig(client, input.sectorId);
+    return normalizeWhatsappBehaviorConfig(platformConfig);
+  }
+
+  return normalizeWhatsappBehaviorConfig(null);
+}
+
+async function loadOrganizationGlobalBehaviorConfig(client: SupabaseClient, organizationId: string) {
+  const { data } = await client
+    .from("agent_registry")
+    .select("metadata")
+    .eq("scope", "organization")
+    .eq("organization_id", organizationId)
+    .eq("agent_code", "agente-whatsapp-global")
+    .maybeSingle<AgentBehaviorRow>();
+
+  return readRecord(data?.metadata)?.whatsapp_behavior_config ?? null;
+}
+
+async function loadPlatformSectorBehaviorConfig(client: SupabaseClient, sectorId: string) {
+  const { data } = await client
+    .from("agent_registry")
+    .select("metadata")
+    .eq("scope", "platform")
+    .is("organization_id", null)
+    .contains("metadata", { admin_whatsapp: true, agent_kind: "whatsapp", sector_id: sectorId })
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<AgentBehaviorRow>();
+
+  return readRecord(data?.metadata)?.whatsapp_behavior_config ?? null;
 }
 
 async function resolveContextByOutboundItem(client: SupabaseClient, item: ContentPipelineRow) {

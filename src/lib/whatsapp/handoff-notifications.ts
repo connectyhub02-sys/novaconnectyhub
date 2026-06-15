@@ -30,6 +30,10 @@ type LeadRow = {
   metadata: JsonRecord | null;
 };
 
+type AgentBehaviorRow = {
+  metadata: JsonRecord | null;
+};
+
 export const whatsappHandoffNotificationEventName = "connectyhub/whatsapp.handoff.notify";
 
 export type WhatsappHandoffNotificationEventData = {
@@ -82,7 +86,7 @@ export async function processWhatsappHandoffNotification(input: {
   ]);
 
   const token = decryptInstanceToken(instance);
-  const behavior = resolveNotificationBehavior(instance, eventData);
+  const behavior = await resolveNotificationBehavior(client, instance, eventData);
   const recipients = resolveNotificationRecipients(behavior, eventData)
     .filter((number) => !samePhone(number, eventData.leadPhone ?? lead?.phone_number))
     .filter((number) => !samePhone(number, instance.phone_number));
@@ -219,20 +223,54 @@ export function describeWhatsappHandoffNotificationResult(result: WhatsappHandof
   return "O aviso humano nao foi enviado.";
 }
 
-function resolveNotificationBehavior(instance: WhatsappInstanceRow, data: WhatsappHandoffNotificationEventData) {
+async function resolveNotificationBehavior(client: SupabaseClient, instance: WhatsappInstanceRow, data: WhatsappHandoffNotificationEventData) {
   const metadata = readRecord(instance.metadata);
-  const stored = normalizeWhatsappBehaviorConfig(metadata?.behavior_config);
+  const instanceConfig = readRecord(metadata?.behavior_config);
+  const fallbackConfig = instanceConfig
+    ?? await loadOrganizationGlobalBehaviorConfig(client, data.organizationId || instance.organization_id)
+    ?? await loadAgentBehaviorConfig(client, data.agentId);
+  const stored = normalizeWhatsappBehaviorConfig(fallbackConfig);
 
-  if (!data.test) {
+  if (!data.test && data.notificationNumbers === undefined && data.notificationCooldownMinutes === undefined) {
     return stored;
   }
 
   return normalizeWhatsappBehaviorConfig({
     ...stored,
-    humanHandoffNotifications: true,
+    humanHandoffNotifications: data.test ? true : Boolean(data.notificationNumbers?.trim()) || stored.humanHandoffNotifications,
     humanHandoffNotificationNumbers: data.notificationNumbers ?? stored.humanHandoffNotificationNumbers,
     humanHandoffNotificationCooldownMinutes: data.notificationCooldownMinutes ?? stored.humanHandoffNotificationCooldownMinutes,
   });
+}
+
+async function loadOrganizationGlobalBehaviorConfig(client: SupabaseClient, organizationId: string | null | undefined) {
+  if (!organizationId) {
+    return null;
+  }
+
+  const { data } = await client
+    .from("agent_registry")
+    .select("metadata")
+    .eq("scope", "organization")
+    .eq("organization_id", organizationId)
+    .eq("agent_code", "agente-whatsapp-global")
+    .maybeSingle<AgentBehaviorRow>();
+
+  return readRecord(data?.metadata)?.whatsapp_behavior_config ?? null;
+}
+
+async function loadAgentBehaviorConfig(client: SupabaseClient, agentId: string | null | undefined) {
+  if (!agentId) {
+    return null;
+  }
+
+  const { data } = await client
+    .from("agent_registry")
+    .select("metadata")
+    .eq("id", agentId)
+    .maybeSingle<AgentBehaviorRow>();
+
+  return readRecord(data?.metadata)?.whatsapp_behavior_config ?? null;
 }
 
 function resolveNotificationRecipients(behavior: WhatsappBehaviorConfig, data: WhatsappHandoffNotificationEventData) {

@@ -96,7 +96,6 @@ export type WhatsappBehaviorConfig = {
   timingMediaBurstSeconds: number;
   timingContextEventSeconds: number;
   timingAudioQualitySeconds: number;
-  debounceSeconds: number;
   humanInterventionMinutes: number;
   aiScheduleEnabled: boolean;
   aiScheduleStart: string;
@@ -265,7 +264,6 @@ export const defaultWhatsappBehaviorConfig: WhatsappBehaviorConfig = {
   timingMediaBurstSeconds: 18,
   timingContextEventSeconds: 5,
   timingAudioQualitySeconds: 18,
-  debounceSeconds: 15,
   humanInterventionMinutes: 60,
   aiScheduleEnabled: false,
   aiScheduleStart: "18:00",
@@ -418,7 +416,6 @@ function readNumber(value: unknown, fallback: number, key: keyof WhatsappBehavio
   if (key === "timingButtonDelaySeconds") return clamp(Math.round(safe), 0, 20);
   if (key === "timingContextEventSeconds") return clamp(Math.round(safe), 2, 60);
   if (key === "timingMediaBurstSeconds" || key === "timingAudioQualitySeconds") return clamp(Math.round(safe), 5, 180);
-  if (key === "debounceSeconds") return clamp(Math.round(safe), 5, 120);
   if (key === "reactionProbability") return clamp(Math.round(safe), 0, 100);
   if (key === "spontaneousAudioProbability") return clamp(Math.round(safe), 0, 100);
   if (key === "readReceiptMinSeconds") return clamp(Math.round(safe), 1, 30);

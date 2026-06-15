@@ -573,9 +573,9 @@ async function loadRunContext(client: SupabaseClient, runId: string) {
 async function loadRunBehaviorContext(client: SupabaseClient, runId: string) {
   const { data: run, error } = await client
     .from("agent_runs")
-    .select("organization_id, metadata")
+    .select("agent_id, organization_id, metadata")
     .eq("id", runId)
-    .maybeSingle<{ organization_id: string | null; metadata: JsonRecord | null }>();
+    .maybeSingle<{ agent_id: string | null; organization_id: string | null; metadata: JsonRecord | null }>();
 
   if (error) {
     throw new Error(`Nao foi possivel carregar comportamento da execucao WhatsApp: ${error.message}`);
@@ -594,14 +594,16 @@ async function loadRunBehaviorContext(client: SupabaseClient, runId: string) {
     return null;
   }
 
-  const [instance, globalAgent] = await Promise.all([
+  const [instance, globalAgent, agent] = await Promise.all([
     loadInstance(client, whatsappInstanceId),
     loadGlobalAgent(client, run.organization_id),
+    run.agent_id ? loadRuntimeAgent(client, run.agent_id, run.organization_id) : Promise.resolve(null),
   ]);
 
   const behavior = normalizeWhatsappBehaviorConfig(
     readRecord(instance?.metadata)?.behavior_config ??
-      readRecord(globalAgent?.metadata)?.whatsapp_behavior_config,
+      readRecord(globalAgent?.metadata)?.whatsapp_behavior_config ??
+      readRecord(agent?.metadata)?.whatsapp_behavior_config,
   );
   const recentInboundMessages = conversationId
     ? await loadRecentInboundMessagesForDelay(client, conversationId)
@@ -3107,6 +3109,10 @@ async function handleLeadHumanHandoffRequest(input: {
     requestText,
     requestedAt,
     pausedUntil,
+    notificationNumbers: context.behavior.humanHandoffNotifications
+      ? context.behavior.humanHandoffNotificationNumbers
+      : null,
+    notificationCooldownMinutes: context.behavior.humanHandoffNotificationCooldownMinutes,
     source: "lead_requested_human",
   };
   const notificationResult = await sendHumanHandoffNotificationNowOrQueue(client, context, notificationData);
