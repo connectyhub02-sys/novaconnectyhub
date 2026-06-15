@@ -998,7 +998,7 @@ async function generateAgentResponse(input: {
       generationConfig: {
         temperature: 0.55,
         topP: 0.9,
-        maxOutputTokens: 180,
+        maxOutputTokens: 420,
       },
       safetySettings: geminiSafetySettings,
     }),
@@ -1039,10 +1039,19 @@ function buildSystemInstruction(input: {
   userText: string;
 }) {
   const agentPrompt = renderPromptVariables(input.agent.prompt?.trim() || defaultWhatsappAgentPrompt, input);
-  const globalPrompt = renderPromptVariables(input.globalAgent?.prompt?.trim() || defaultWhatsappGlobalPrompt, input);
+  const customGlobalPrompt = input.globalAgent?.prompt?.trim();
+  const shouldAppendCustomGlobalPrompt = Boolean(customGlobalPrompt && customGlobalPrompt !== defaultWhatsappGlobalPrompt);
+  const leadNameContext = buildLeadNameContext(input.lead);
 
   return [
-    globalPrompt,
+    renderPromptVariables(defaultWhatsappGlobalPrompt, input),
+    ...(shouldAppendCustomGlobalPrompt
+      ? [
+          "",
+          "DIRETRIZES GLOBAIS DA EMPRESA:",
+          renderPromptVariables(customGlobalPrompt!, input),
+        ]
+      : []),
     "",
     "PROMPT DO AGENTE DA EMPRESA:",
     agentPrompt,
@@ -1050,7 +1059,7 @@ function buildSystemInstruction(input: {
     "CONTEXTO DA EMPRESA:",
     `- Empresa: ${input.organization.name}`,
     `- Agente: ${input.agent.persona_name?.trim() || input.agent.name}`,
-    input.lead?.display_name ? `- Nome do lead: ${input.lead.display_name}` : "- Nome do lead: desconhecido",
+    leadNameContext,
     ...buildLeadMemoryLines(input.lead, input.behavior),
     ...buildKnowledgeLines(input.knowledge),
     ...buildLinkButtonLines(input.linkButtons, input),
@@ -1089,6 +1098,7 @@ function buildSystemInstruction(input: {
     ...buildConfidenceHumilityInstruction(input.behavior),
     ...buildContextProtectionInstruction(input.behavior),
     ...buildHumanizedLanguageInstruction(input.behavior),
+    ...buildAnswerCompletenessInstruction(input.userText),
     ...buildIntentionalTyposInstruction(input.behavior),
     ...buildNaturalAudioFillersInstruction(input.behavior),
     ...buildProactiveMediaInstruction(input.behavior),
@@ -1105,6 +1115,55 @@ function buildSystemInstruction(input: {
     "- Midia com analise automatica: use a analise como contexto real antes de responder.",
     "- Midia sem analise: nao finja que viu. Peca descricao ou reenvio.",
   ].join("\n");
+}
+
+function buildLeadNameContext(lead: LeadRow | null) {
+  const displayName = lead?.display_name?.replace(/\s+/g, " ").trim();
+
+  if (!displayName) {
+    return "- Nome do lead: desconhecido";
+  }
+
+  if (isGenericWhatsappDisplayName(displayName)) {
+    return `- Nome exibido no WhatsApp: ${displayName} (parece nome de empresa, segmento, contato ou teste; nao use isso como nome pessoal do lead).`;
+  }
+
+  return `- Nome do lead: ${displayName}`;
+}
+
+function isGenericWhatsappDisplayName(value: string) {
+  const normalized = normalizeSearch(value);
+
+  if (!normalized) {
+    return true;
+  }
+
+  if (/^\+?\d[\d\s().-]{6,}$/.test(value)) {
+    return true;
+  }
+
+  return /\b(imobiliaria|imoveis|empresa|cliente|lead|contato|atendimento|comercial|vendas|suporte|teste|connectyhub|buffalo|mass|loja|negocio|consultoria|marketing)\b/.test(normalized);
+}
+
+function buildAnswerCompletenessInstruction(userText: string) {
+  if (!isSubstantiveLeadRequest(userText)) {
+    return [];
+  }
+
+  return [
+    "",
+    "REGRA DE COMPLETUDE DA RESPOSTA:",
+    "- O lead fez um pedido direto. Responda o pedido agora, mesmo que seja em 1-2 mensagens curtas.",
+    "- Nao responda apenas com saudacao, confirmacao, brincadeira ou 'show de bola'. Isso trava a conversa.",
+    "- Entregue pelo menos uma orientacao concreta e, se precisar continuar, faca uma pergunta objetiva no final.",
+    "- Se o pedido estiver fora do escopo da empresa, redirecione com naturalidade para o que a empresa realmente pode ajudar.",
+  ];
+}
+
+function isSubstantiveLeadRequest(value: string) {
+  const normalized = normalizeSearch(stripInternalWhatsappContext(value));
+
+  return /\b(me da|me de|manda|recomenda|recomendacao|dica|dicas|receita|plano|estrategia|como|qual|quanto|o que|oq|quero|preciso|ajuda|indica|indicacao|explica|melhor|vale a pena|orcamento|preco|valor)\b/.test(normalized);
 }
 
 function buildLeadMemoryLines(lead: LeadRow | null, behavior: WhatsappBehaviorConfig): string[] {
