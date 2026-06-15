@@ -137,6 +137,17 @@ type RuntimeLinkButton = {
   trackingUrl: string;
 };
 
+type CrossAgentConversationContext = {
+  previousAgentName: string | null;
+  previousConversationAt: string | null;
+  messages: Array<{
+    speaker: "lead" | "agent" | "system";
+    text: string;
+    agentName: string | null;
+    occurredAt: string;
+  }>;
+};
+
 type InboundMediaKind = "image" | "video" | "document";
 
 type OutboundMessage = {
@@ -432,6 +443,7 @@ export async function processWhatsappAgentRun(input: {
       knowledge: context.knowledge,
       linkButtons: context.linkButtons,
       learnings: context.learnings,
+      crossAgentContext: context.crossAgentContext,
       messages: context.messages,
       userText,
     });
@@ -526,7 +538,7 @@ async function loadRunContext(client: SupabaseClient, runId: string) {
     loadGlobalAgent(client, run.organization_id),
     leadId ? loadLead(client, leadId) : Promise.resolve(null),
     loadConversationMetadata(client, conversationId),
-    loadConversationMessages(client, conversationId),
+    loadConversationMessages(client, conversationId, whatsappInstanceId),
     loadUazapiCredentials(client),
     loadGeminiCredentials(client),
   ]);
@@ -558,6 +570,15 @@ async function loadRunContext(client: SupabaseClient, runId: string) {
     ? await loadAgentLearnings(client, run.organization_id, isPlatformWhatsapp)
     : [];
 
+  const crossAgentContext = lead?.id
+    ? await loadCrossAgentConversationContext(client, {
+        organizationId: run.organization_id,
+        leadId: lead.id,
+        currentConversationId: conversationId,
+        currentWhatsappInstanceId: whatsappInstanceId,
+      })
+    : null;
+
   return {
     run,
     organization,
@@ -573,6 +594,7 @@ async function loadRunContext(client: SupabaseClient, runId: string) {
     knowledge,
     linkButtons,
     learnings,
+    crossAgentContext,
     behavior,
     qualification: normalizeLeadQualificationConfig(readRecord(agent.metadata)?.[leadQualificationConfigKey]),
     providerChatId: asString(metadata?.providerChatId),
@@ -863,11 +885,12 @@ async function loadConversationMetadata(client: SupabaseClient, conversationId: 
   return readRecord(data?.metadata);
 }
 
-async function loadConversationMessages(client: SupabaseClient, conversationId: string) {
+async function loadConversationMessages(client: SupabaseClient, conversationId: string, whatsappInstanceId: string) {
   const { data, error } = await client
     .from("conversation_messages")
     .select("id, provider_message_id, provider_chat_id, direction, message_type, text_content, payload, occurred_at")
     .eq("conversation_id", conversationId)
+    .eq("whatsapp_instance_id", whatsappInstanceId)
     .order("occurred_at", { ascending: false })
     .limit(24);
 
@@ -876,6 +899,91 @@ async function loadConversationMessages(client: SupabaseClient, conversationId: 
   }
 
   return ((data ?? []) as ConversationMessageRow[]).reverse();
+}
+
+async function loadCrossAgentConversationContext(
+  client: SupabaseClient,
+  input: {
+    organizationId: string;
+    leadId: string;
+    currentConversationId: string;
+    currentWhatsappInstanceId: string;
+  },
+): Promise<CrossAgentConversationContext | null> {
+  const { data: conversations } = await client
+    .from("conversations")
+    .select("id, last_message_at")
+    .eq("organization_id", input.organizationId)
+    .eq("lead_id", input.leadId)
+    .neq("id", input.currentConversationId)
+    .neq("whatsapp_instance_id", input.currentWhatsappInstanceId)
+    .order("last_message_at", { ascending: false })
+    .limit(3);
+
+  const conversationIds = ((conversations ?? []) as Array<{ id: string; last_message_at: string | null }>)
+    .map((conversation) => conversation.id)
+    .filter(Boolean);
+
+  const messageRows: Array<ConversationMessageRow & { conversation_id: string }> = [];
+
+  if (conversationIds.length > 0) {
+    const { data } = await client
+      .from("conversation_messages")
+      .select("id, conversation_id, provider_message_id, provider_chat_id, direction, message_type, text_content, payload, occurred_at")
+      .eq("organization_id", input.organizationId)
+      .eq("lead_id", input.leadId)
+      .in("conversation_id", conversationIds)
+      .neq("whatsapp_instance_id", input.currentWhatsappInstanceId)
+      .order("occurred_at", { ascending: false })
+      .limit(12);
+
+    messageRows.push(...(((data ?? []) as Array<ConversationMessageRow & { conversation_id: string }>)));
+  }
+
+  const { data: legacyMixedMessages } = await client
+    .from("conversation_messages")
+    .select("id, conversation_id, provider_message_id, provider_chat_id, direction, message_type, text_content, payload, occurred_at")
+    .eq("organization_id", input.organizationId)
+    .eq("lead_id", input.leadId)
+    .eq("conversation_id", input.currentConversationId)
+    .neq("whatsapp_instance_id", input.currentWhatsappInstanceId)
+    .order("occurred_at", { ascending: false })
+    .limit(8);
+
+  messageRows.push(...(((legacyMixedMessages ?? []) as Array<ConversationMessageRow & { conversation_id: string }>)));
+
+  const messages = messageRows
+    .map((message) => {
+      const text = buildMessageText(message).trim();
+      if (!text) return null;
+
+      return {
+        speaker: message.direction === "outbound" ? "agent" : message.direction === "inbound" ? "lead" : "system",
+        text: preview(text, 320),
+        agentName: readConversationMessageAgentName(message),
+        occurredAt: message.occurred_at,
+      };
+    })
+    .filter((message): message is CrossAgentConversationContext["messages"][number] => Boolean(message))
+    .sort((a, b) => Date.parse(a.occurredAt) - Date.parse(b.occurredAt))
+    .slice(-10);
+
+  if (messages.length === 0) {
+    return null;
+  }
+
+  const previousAgentName = messages
+    .slice()
+    .reverse()
+    .find((message) => message.speaker === "agent" && message.agentName)?.agentName ?? null;
+
+  const previousConversationAt = messages[messages.length - 1]?.occurredAt ?? null;
+
+  return {
+    previousAgentName,
+    previousConversationAt,
+    messages,
+  };
 }
 
 async function loadOrganizationKnowledge(client: SupabaseClient, organizationId: string) {
@@ -995,6 +1103,7 @@ async function generateAgentResponse(input: {
   knowledge: KnowledgeMemoryRow[];
   linkButtons: RuntimeLinkButton[];
   learnings: KnowledgeMemoryRow[];
+  crossAgentContext: CrossAgentConversationContext | null;
   messages: ConversationMessageRow[];
   userText: string;
 }) {
@@ -1049,6 +1158,7 @@ function buildSystemInstruction(input: {
   knowledge: KnowledgeMemoryRow[];
   linkButtons: RuntimeLinkButton[];
   learnings: KnowledgeMemoryRow[];
+  crossAgentContext: CrossAgentConversationContext | null;
   messages: ConversationMessageRow[];
   userText: string;
 }) {
@@ -1075,6 +1185,7 @@ function buildSystemInstruction(input: {
     `- Agente: ${input.agent.persona_name?.trim() || input.agent.name}`,
     leadNameContext,
     ...buildLeadMemoryLines(input.lead, input.behavior),
+    ...buildCrossAgentConversationLines(input.crossAgentContext, input.agent),
     ...buildKnowledgeLines(input.knowledge),
     ...buildLinkButtonLines(input.linkButtons, input),
     "",
@@ -1206,6 +1317,38 @@ function buildLeadMemoryLines(lead: LeadRow | null, behavior: WhatsappBehaviorCo
     ...lines,
     "- Use esses detalhes so quando parecer natural. Nao diga que consultou memoria, registro, sistema ou banco de dados.",
     "- Se uma informacao da memoria conflitar com a mensagem atual do lead, confie na mensagem atual.",
+  ];
+}
+
+function buildCrossAgentConversationLines(context: CrossAgentConversationContext | null, agent: AgentRow): string[] {
+  if (!context || context.messages.length === 0) return [];
+
+  const currentAgentName = agent.persona_name?.trim() || agent.name;
+  const previousAgentName = context.previousAgentName && normalizeSearch(context.previousAgentName) !== normalizeSearch(currentAgentName)
+    ? context.previousAgentName
+    : null;
+  const previousLabel = previousAgentName ?? "outro atendimento da mesma empresa";
+  const handoffExample = previousAgentName
+    ? `vi que voce estava falando com ${previousAgentName}, conseguiu ver o link que te enviaram?`
+    : "vi que voce ja estava falando com nosso atendimento, conseguiu ver o link que te enviaram?";
+
+  return [
+    "",
+    "CONTEXTO COMPARTILHADO DO ECOSSISTEMA:",
+    `- Este lead falou recentemente com ${previousLabel}. Use isso como passagem interna, nao como sua propria conversa.`,
+    `- Voce e ${currentAgentName}. Nao diga nem aja como se voce tivesse enviado as mensagens anteriores de outro agente.`,
+    `- Se fizer sentido, conecte a conversa de forma natural. Ex.: "${handoffExample}"`,
+    "- Nao recomece do zero se o contexto recente ja deixou claro o interesse do lead.",
+    "- Nao revele que esta lendo historico, banco de dados, memoria ou sistema interno.",
+    "Resumo recente de outros atendimentos:",
+    ...context.messages.map((message) => {
+      const author = message.speaker === "lead"
+        ? "Lead"
+        : message.agentName
+          ? `Agente ${message.agentName}`
+          : "Agente";
+      return `- ${author}: ${message.text}`;
+    }),
   ];
 }
 
@@ -1654,6 +1797,7 @@ function buildLinkButtonLines(
   return [
     "",
     "LINKS RASTREADOS DISPONIVEIS:",
+    "- Quando o lead pedir ou aceitar um produto/link, use a tag ou URL exata abaixo; o sistema transforma em botao rastreado automaticamente.",
     ...linkButtons.map((link) => `- ${link.tag} (${link.label}): ${buildLeadAwareTrackingUrl(link, input)}`),
   ];
 }
@@ -1782,6 +1926,30 @@ function buildMessageText(message: ConversationMessageRow) {
   const type = describeMessageType(message);
 
   return `Nota interna: o lead enviou ${type} sem texto legivel nessa mensagem.`;
+}
+
+function readConversationMessageAgentName(message: ConversationMessageRow) {
+  const payload = readRecord(message.payload);
+  if (!payload) return null;
+
+  const author = readRecord(payload.message_author);
+  const candidates = [
+    asString(payload.agent_name),
+    asString(payload.author_label),
+    asString(author?.label),
+    asString(author?.agent_name),
+  ];
+
+  for (const candidate of candidates) {
+    const normalized = candidate ? normalizeSearch(candidate) : "";
+    if (!candidate || normalized === "lead" || normalized === "agente" || normalized === "agente ia") {
+      continue;
+    }
+
+    return candidate;
+  }
+
+  return null;
 }
 
 async function resolveInboundUserText(input: {
@@ -2518,7 +2686,7 @@ function buildInteractiveLinkMenu(
   text: string,
   context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
 ) {
-  if (!context.behavior.interactiveMessages || context.linkButtons.length === 0) {
+  if (context.linkButtons.length === 0) {
     return null;
   }
 

@@ -496,6 +496,7 @@ async function ensureConversation(
         .eq("organization_id", input.organizationId)
         .eq("provider", "uazapi")
         .eq("provider_chat_id", input.providerChatId)
+        .eq("whatsapp_instance_id", input.whatsappInstanceId)
         .maybeSingle<ConversationRow>()
     : { data: null };
 
