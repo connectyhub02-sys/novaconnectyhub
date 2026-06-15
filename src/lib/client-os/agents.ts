@@ -10,6 +10,8 @@ export type ClientAgent = {
   id: string;
   companyId: string;
   companyName: string;
+  sectorCode: string;
+  sectorName: string;
   agentCode: string;
   name: string;
   personaName: string;
@@ -25,6 +27,8 @@ export type ClientAgent = {
 type AgentRow = {
   id: string;
   organization_id: string;
+  sector_code: string;
+  sector_name: string;
   agent_code: string;
   name: string;
   persona_name: string | null;
@@ -43,6 +47,7 @@ type DeleteAgentRow = {
 };
 
 const maxAgentNameLength = 80;
+const maxSectorNameLength = 80;
 const maxPromptLength = 8000;
 
 export async function getClientAgentsWorkspace(userId: string, client: SupabaseClient = createServiceClient()) {
@@ -55,7 +60,7 @@ export async function getClientAgentsWorkspace(userId: string, client: SupabaseC
 
   const { data, error } = await client
     .from("agent_registry")
-    .select("id, organization_id, agent_code, name, persona_name, role_title, description, prompt, status, autonomy_level, updated_at, created_at")
+    .select("id, organization_id, sector_code, sector_name, agent_code, name, persona_name, role_title, description, prompt, status, autonomy_level, updated_at, created_at")
     .eq("scope", "organization")
     .in("organization_id", companyIds)
     .contains("metadata", { client_created: true, agent_kind: "whatsapp" })
@@ -75,6 +80,7 @@ export async function createClientAgent(input: {
   userId: string;
   companyId: string;
   name: string;
+  sectorName?: string;
   roleTitle?: string;
   prompt?: string;
   client?: SupabaseClient;
@@ -86,6 +92,8 @@ export async function createClientAgent(input: {
     client,
   });
   const name = normalizeAgentName(input.name);
+  const sectorName = normalizeSectorName(input.sectorName);
+  const sectorCode = createSectorCode(sectorName);
   const roleTitle = normalizeRoleTitle(input.roleTitle);
   const prompt = normalizePrompt(input.prompt);
   const agentCode = createAgentCode(name);
@@ -95,8 +103,8 @@ export async function createClientAgent(input: {
     .insert({
       scope: "organization",
       organization_id: company.id,
-      sector_code: "atendimento",
-      sector_name: "Atendimento WhatsApp",
+      sector_code: sectorCode,
+      sector_name: sectorName,
       agent_code: agentCode,
       name,
       persona_name: name,
@@ -118,11 +126,13 @@ export async function createClientAgent(input: {
         agent_kind: "whatsapp",
         company_id: company.id,
         company_name: company.name,
+        sector_code: sectorCode,
+        sector_name: sectorName,
         whatsapp_behavior_config: defaultWhatsappBehaviorConfig,
         [leadQualificationConfigKey]: defaultLeadQualificationConfig,
       },
     })
-    .select("id, organization_id, agent_code, name, persona_name, role_title, description, prompt, status, autonomy_level, updated_at, created_at")
+    .select("id, organization_id, sector_code, sector_name, agent_code, name, persona_name, role_title, description, prompt, status, autonomy_level, updated_at, created_at")
     .single<AgentRow>();
 
   if (error || !data) {
@@ -186,6 +196,8 @@ function mapAgent(agent: AgentRow, companyById: Map<string, ClientCompany>) {
     id: agent.id,
     companyId: agent.organization_id,
     companyName: company?.name ?? "Empresa",
+    sectorCode: agent.sector_code,
+    sectorName: agent.sector_name,
     agentCode: agent.agent_code,
     name: agent.name,
     personaName: agent.persona_name ?? agent.name,
@@ -218,6 +230,20 @@ function normalizeRoleTitle(value: string | undefined) {
   return roleTitle || "Agente de WhatsApp";
 }
 
+function normalizeSectorName(value: string | undefined) {
+  const sectorName = value?.trim().replace(/\s+/g, " ") || "Atendimento WhatsApp";
+
+  if (sectorName.length < 2) {
+    throw new Error("Informe o nome do setor.");
+  }
+
+  if (sectorName.length > maxSectorNameLength) {
+    throw new Error(`O setor pode ter no maximo ${maxSectorNameLength} caracteres.`);
+  }
+
+  return sectorName;
+}
+
 function normalizePrompt(value: string | undefined) {
   const prompt = value?.trim() || defaultWhatsappAgentPrompt;
 
@@ -226,6 +252,18 @@ function normalizePrompt(value: string | undefined) {
   }
 
   return prompt;
+}
+
+function createSectorCode(value: string) {
+  const slug = value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 36);
+
+  return slug || "atendimento";
 }
 
 function createAgentCode(value: string) {

@@ -20,6 +20,8 @@ type ClientAgent = {
   id: string;
   companyId: string;
   companyName: string;
+  sectorCode: string;
+  sectorName: string;
   agentCode: string;
   name: string;
   personaName: string;
@@ -50,6 +52,7 @@ export function ClientAgentsConsole() {
   const [creating, setCreating] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [companyId, setCompanyId] = useState("");
+  const [sectorName, setSectorName] = useState("Atendimento WhatsApp");
   const [name, setName] = useState("");
   const [roleTitle, setRoleTitle] = useState("Agente de WhatsApp");
   const [prompt, setPrompt] = useState(defaultPrompt);
@@ -109,7 +112,7 @@ export function ClientAgentsConsole() {
       const response = await fetch("/api/dashboard/agents", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ companyId, name, roleTitle, prompt }),
+        body: JSON.stringify({ companyId, sectorName, name, roleTitle, prompt }),
       });
       const data = (await response.json().catch(() => null)) as { agent?: ClientAgent; error?: string } | null;
 
@@ -118,6 +121,7 @@ export function ClientAgentsConsole() {
       }
 
       setAgents((current) => [data.agent!, ...current]);
+      setSectorName("Atendimento WhatsApp");
       setName("");
       setRoleTitle("Agente de WhatsApp");
       setPrompt(defaultPrompt);
@@ -204,6 +208,16 @@ export function ClientAgentsConsole() {
                   value={name}
                   onChange={(event) => setName(event.target.value)}
                   placeholder="Ex: Nina Atendimento"
+                  className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
+                />
+              </label>
+
+              <label className="block">
+                <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Setor</span>
+                <input
+                  value={sectorName}
+                  onChange={(event) => setSectorName(event.target.value)}
+                  placeholder="Ex: Vendas, Suporte, Financeiro"
                   className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
                 />
               </label>
@@ -379,8 +393,9 @@ function AgentCard({
           <Sparkles className="h-4 w-4" />
         </div>
       </div>
-      <div className="mt-4 grid grid-cols-2 gap-2">
+      <div className="mt-4 grid gap-2 sm:grid-cols-3">
         <InfoTile label="Empresa" value={agent.companyName} />
+        <InfoTile label="Setor" value={agent.sectorName} />
         <InfoTile label="Status" value={agent.status} />
       </div>
       <p className="mt-3 line-clamp-3 text-[12px] leading-5 text-slate-500">{agent.prompt}</p>

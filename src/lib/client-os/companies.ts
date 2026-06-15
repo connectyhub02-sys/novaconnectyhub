@@ -123,6 +123,47 @@ export async function deleteClientCompany(input: {
   return company;
 }
 
+export async function updateClientCompany(input: {
+  userId: string;
+  companyId: string;
+  name: string;
+  client?: SupabaseClient;
+}) {
+  const client = input.client ?? createServiceClient();
+  const company = await requireClientCompanyAccess({
+    userId: input.userId,
+    companyId: input.companyId,
+    client,
+  });
+  const name = normalizeCompanyName(input.name);
+
+  const { data, error } = await client
+    .from("organizations")
+    .update({ name })
+    .eq("id", company.id)
+    .eq("owner_id", input.userId)
+    .select("id, name, slug, plan_code, status, created_at")
+    .maybeSingle<OrganizationRow>();
+
+  if (error) {
+    throw new Error(`Nao foi possivel atualizar a empresa: ${error.message}`);
+  }
+
+  if (!data) {
+    throw new Error("Somente o dono da empresa pode editar este cadastro.");
+  }
+
+  return {
+    id: data.id,
+    name: data.name,
+    slug: data.slug,
+    planCode: data.plan_code,
+    status: data.status,
+    role: company.role,
+    createdAt: data.created_at,
+  } satisfies ClientCompany;
+}
+
 export async function requireClientCompanyAccess(input: {
   userId: string;
   companyId: string;

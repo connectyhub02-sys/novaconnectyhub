@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { createClientCompany, deleteClientCompany, listClientCompanies } from "@/lib/client-os/companies";
+import { createClientCompany, deleteClientCompany, listClientCompanies, updateClientCompany } from "@/lib/client-os/companies";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 
 export const dynamic = "force-dynamic";
@@ -36,6 +36,28 @@ export async function POST(request: NextRequest) {
     });
 
     return NextResponse.json({ company }, { status: 201 });
+  } catch (error) {
+    return NextResponse.json(formatError(error), { status: 400 });
+  }
+}
+
+export async function PATCH(request: NextRequest) {
+  const workspace = await getCurrentWorkspace();
+
+  if (!workspace) {
+    return NextResponse.json({ error: "Sessao obrigatoria." }, { status: 401 });
+  }
+
+  const body = await readJson<{ companyId?: unknown; name?: unknown }>(request);
+
+  try {
+    const company = await updateClientCompany({
+      userId: workspace.user.id,
+      companyId: typeof body?.companyId === "string" ? body.companyId : "",
+      name: typeof body?.name === "string" ? body.name : "",
+    });
+
+    return NextResponse.json({ company });
   } catch (error) {
     return NextResponse.json(formatError(error), { status: 400 });
   }

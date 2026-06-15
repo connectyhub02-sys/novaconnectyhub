@@ -30,6 +30,7 @@ export async function POST(request: NextRequest) {
   const body = await readJson<{
     companyId?: unknown;
     name?: unknown;
+    sectorName?: unknown;
     roleTitle?: unknown;
     prompt?: unknown;
   }>(request);
@@ -39,6 +40,7 @@ export async function POST(request: NextRequest) {
       userId: workspace.user.id,
       companyId: typeof body?.companyId === "string" ? body.companyId : "",
       name: typeof body?.name === "string" ? body.name : "",
+      sectorName: typeof body?.sectorName === "string" ? body.sectorName : undefined,
       roleTitle: typeof body?.roleTitle === "string" ? body.roleTitle : undefined,
       prompt: typeof body?.prompt === "string" ? body.prompt : undefined,
     });
