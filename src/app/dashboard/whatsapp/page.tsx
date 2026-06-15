@@ -4,11 +4,11 @@ import { WhatsAppConsole } from "@/components/connectyhub-os/whatsapp-console";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 
 export const metadata: Metadata = {
-  title: "WhatsApp | ConnectyHub",
-  description: "Console de integração Uazapi para conectar WhatsApp, enviar mensagens e configurar webhooks.",
+  title: "Agentes | ConnectyHub",
+  description: "Central para criar agentes, conectar WhatsApp, ajustar prompt e controlar o atendimento.",
 };
 
-export default async function WhatsAppPage() {
+export default async function AgentsPage() {
   const workspace = await getCurrentWorkspace();
   const profile = workspace?.profile;
   const organization = workspace?.organization;

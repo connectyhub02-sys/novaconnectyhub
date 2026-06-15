@@ -332,7 +332,7 @@ const clientWhatsappConsoleVariant = {
   entityPromptToken: "{{empresa}}",
   entityPromptLabel: "Empresa",
   entityPromptDescription: "Usa o nome da empresa cadastrada no painel.",
-  sectionEyebrow: "WhatsApp / Agente comercial",
+  sectionEyebrow: "Agentes / WhatsApp comercial",
   missingEntityTitle: "Cadastre uma empresa primeiro",
   missingEntityDescription: "O agente precisa estar vinculado a uma empresa para atender os leads certos.",
   missingEntityHref: "/dashboard/empresa",
@@ -684,7 +684,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
   const selectedCompany = companies.find((company) => company.id === selectedCompanyId) ?? companies[0] ?? null;
   const needsCompany = !loading && companies.length === 0;
   const needsAgent = !loading && companies.length > 0 && !state?.agent;
-  const headerTitle = loading || (needsCompany && !canManageInternalAgents) ? "WhatsApp" : needsAgent || (needsCompany && canManageInternalAgents) ? "Criar agente WhatsApp" : "Conexao, prompt e comportamento";
+  const headerTitle = loading || (needsCompany && !canManageInternalAgents) ? "Agentes" : needsAgent || (needsCompany && canManageInternalAgents) ? "Criar agente WhatsApp" : "Conexao, prompt e comportamento";
   const headerDescription = loading || needsCompany
     ? variant.headerDescriptions.missingEntity
     : needsAgent
@@ -2964,7 +2964,7 @@ function NoAgentState() {
         </p>
         <Link
           className="mt-5 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg bg-cyan-300 px-4 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-950 transition hover:bg-cyan-200 sm:w-auto"
-          href="/dashboard/agentes"
+          href="/dashboard/whatsapp"
         >
           <Wand2 className="h-4 w-4" />
           Criar agente

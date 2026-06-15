@@ -535,7 +535,7 @@ function CompanyBlock({
                     <NeonBadge tone={agent.status === "active" ? "green" : "amber"}>{agent.status}</NeonBadge>
                     <Link
                       className="rounded-md border border-cyan-400/20 bg-cyan-400/10 px-2 py-1 font-mono text-[9px] font-semibold uppercase tracking-wide text-cyan-200 transition hover:bg-cyan-400/15"
-                      href="/dashboard/agentes"
+                      href="/dashboard/whatsapp"
                     >
                       Editar / clonar
                     </Link>
