@@ -1797,7 +1797,7 @@ function buildLinkButtonLines(
   return [
     "",
     "LINKS RASTREADOS DISPONIVEIS:",
-    "- Quando o lead pedir ou aceitar um produto/link, use a tag ou URL exata abaixo; o sistema transforma em botao rastreado automaticamente.",
+    "- Quando o lead pedir ou aceitar um produto/link, use a tag ou URL exata abaixo. Se mensagens interativas estiverem ativas, o sistema transforma em botao rastreado.",
     ...linkButtons.map((link) => `- ${link.tag} (${link.label}): ${buildLeadAwareTrackingUrl(link, input)}`),
   ];
 }
@@ -2686,7 +2686,7 @@ function buildInteractiveLinkMenu(
   text: string,
   context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
 ) {
-  if (context.linkButtons.length === 0) {
+  if (!context.behavior.interactiveMessages || context.linkButtons.length === 0) {
     return null;
   }
 
