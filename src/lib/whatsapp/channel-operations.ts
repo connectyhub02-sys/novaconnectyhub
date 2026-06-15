@@ -70,13 +70,20 @@ const outboundTypes = ["whatsapp_status", "whatsapp_campaign", "whatsapp_newslet
 export async function resolveClientWhatsappOperationalContext(
   client: SupabaseClient,
   organizationId: string,
+  agentId?: string | null,
 ): Promise<WhatsappOperationalContext> {
-  const { data, error } = await client
+  let query = client
     .from("whatsapp_instances")
     .select(instanceSelect)
     .eq("provider", "uazapi")
     .eq("organization_id", organizationId)
-    .neq("status", "archived")
+    .neq("status", "archived");
+
+  if (agentId) {
+    query = query.contains("metadata", { agent_id: agentId });
+  }
+
+  const { data, error } = await query
     .order("updated_at", { ascending: false })
     .limit(1)
     .maybeSingle<WhatsappInstanceRow>();
@@ -475,8 +482,13 @@ async function resolveOperationalBehaviorConfig(
   }
 
   if (input.scope === "organization" && input.organizationId) {
-    const globalConfig = await loadOrganizationGlobalBehaviorConfig(client, input.organizationId);
-    return normalizeWhatsappBehaviorConfig(globalConfig);
+    const agentId = asString(input.instanceMetadata?.agent_id);
+    const [agentConfig, globalConfig] = await Promise.all([
+      agentId ? loadOrganizationAgentBehaviorConfig(client, input.organizationId, agentId) : Promise.resolve(null),
+      loadOrganizationGlobalBehaviorConfig(client, input.organizationId),
+    ]);
+
+    return normalizeWhatsappBehaviorConfig(agentConfig ?? globalConfig);
   }
 
   if (input.scope === "platform" && input.sectorId) {
@@ -494,6 +506,19 @@ async function loadOrganizationGlobalBehaviorConfig(client: SupabaseClient, orga
     .eq("scope", "organization")
     .eq("organization_id", organizationId)
     .eq("agent_code", "agente-whatsapp-global")
+    .maybeSingle<AgentBehaviorRow>();
+
+  return readRecord(data?.metadata)?.whatsapp_behavior_config ?? null;
+}
+
+async function loadOrganizationAgentBehaviorConfig(client: SupabaseClient, organizationId: string, agentId: string) {
+  const { data } = await client
+    .from("agent_registry")
+    .select("metadata")
+    .eq("id", agentId)
+    .eq("scope", "organization")
+    .eq("organization_id", organizationId)
+    .contains("metadata", { client_created: true, agent_kind: "whatsapp" })
     .maybeSingle<AgentBehaviorRow>();
 
   return readRecord(data?.metadata)?.whatsapp_behavior_config ?? null;

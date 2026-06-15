@@ -80,9 +80,29 @@ type ClientCompany = {
   createdAt: string | null;
 };
 
+type ClientWhatsappAgent = {
+  id: string;
+  companyId: string;
+  companyName: string;
+  sectorCode: string;
+  sectorName: string;
+  agentCode: string;
+  name: string;
+  personaName: string;
+  roleTitle: string;
+  description: string | null;
+  prompt: string;
+  status: string;
+  autonomyLevel: number;
+  updatedAt: string | null;
+  createdAt: string | null;
+};
+
 type WhatsappState = {
   companies: ClientCompany[];
+  agents?: ClientWhatsappAgent[];
   selectedCompanyId: string | null;
+  selectedAgentId: string | null;
   instance: {
     id: string;
     provider: "uazapi";
@@ -99,6 +119,9 @@ type WhatsappState = {
   } | null;
   agent: {
     id: string;
+    companyId?: string;
+    sectorCode?: string | null;
+    sectorName?: string | null;
     name: string;
     avatarUrl: string | null;
     avatarAlt: string | null;
@@ -391,6 +414,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
   const [behaviorDraft, setBehaviorDraft] = useState<WhatsappBehaviorConfig>(defaultWhatsappBehaviorConfig);
   const [qualificationDraft, setQualificationDraft] = useState<LeadQualificationConfig>(defaultLeadQualificationConfig);
   const [selectedCompanyId, setSelectedCompanyId] = useState("");
+  const [selectedAgentId, setSelectedAgentId] = useState("");
   const [showAgentForm, setShowAgentForm] = useState(false);
   const [agentName, setAgentName] = useState("");
   const [agentSectorName, setAgentSectorName] = useState("Atendimento WhatsApp");
@@ -424,6 +448,14 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
   const pendingPromptCaretRef = useRef<number | null>(null);
   const isAwaitingQrScan = Boolean(qrCode) || state?.instance?.status === "qr_pending";
   const isConnected = state?.instance?.status === "connected";
+  const canManageInternalAgents = variant.entityIdKey === "sectorId";
+  const selectedWhatsappEntityId = canManageInternalAgents ? selectedCompanyId : selectedAgentId;
+  const whatsappActionPayload = useMemo(
+    () => canManageInternalAgents
+      ? { [variant.entityIdKey]: selectedCompanyId }
+      : { companyId: selectedCompanyId, agentId: selectedAgentId },
+    [canManageInternalAgents, selectedAgentId, selectedCompanyId, variant.entityIdKey],
+  );
   const promptTags = useMemo(
     () => [
       {
@@ -446,10 +478,14 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
   );
 
   const applyWhatsappState = useCallback((nextState: WhatsappState, options?: { preserveDrafts?: boolean }) => {
-    const nextCompanyId = nextState.selectedCompanyId ?? nextState.companies[0]?.id ?? "";
+    const nextAgents = nextState.agents ?? [];
+    const nextAgentId = nextState.selectedAgentId ?? nextState.agent?.id ?? nextAgents[0]?.id ?? "";
+    const nextAgent = nextAgents.find((agent) => agent.id === nextAgentId);
+    const nextCompanyId = nextState.selectedCompanyId ?? nextAgent?.companyId ?? nextState.agent?.companyId ?? nextState.companies[0]?.id ?? "";
 
     setState(nextState);
     setSelectedCompanyId(nextCompanyId);
+    setSelectedAgentId(nextAgentId);
     if (!nextState.agent || !nextState.instance) {
       setChannelOps(null);
     }
@@ -495,7 +531,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
   }, [applyWhatsappState, variant]);
 
   useEffect(() => {
-    if (!selectedCompanyId || !isAwaitingQrScan || running === "disconnect") {
+    if (!selectedWhatsappEntityId || !isAwaitingQrScan || running === "disconnect") {
       return;
     }
 
@@ -510,7 +546,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
         const response = await fetch(variant.endpoints.action, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "refresh_status", [variant.entityIdKey]: selectedCompanyId }),
+          body: JSON.stringify({ action: "refresh_status", ...whatsappActionPayload }),
         });
         const data = (await response.json().catch(() => null)) as ActionResponse | null;
 
@@ -540,10 +576,10 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
         clearTimeout(timeoutId);
       }
     };
-  }, [applyWhatsappState, isAwaitingQrScan, running, selectedCompanyId, variant]);
+  }, [applyWhatsappState, isAwaitingQrScan, running, selectedWhatsappEntityId, variant.endpoints.action, whatsappActionPayload]);
 
   useEffect(() => {
-    if (!selectedCompanyId || !isConnected || running === "disconnect") {
+    if (!selectedWhatsappEntityId || !isConnected || running === "disconnect") {
       return;
     }
 
@@ -554,7 +590,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
         const response = await fetch(variant.endpoints.action, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "refresh_status", [variant.entityIdKey]: selectedCompanyId }),
+          body: JSON.stringify({ action: "refresh_status", ...whatsappActionPayload }),
         });
         const data = (await response.json().catch(() => null)) as ActionResponse | null;
 
@@ -579,7 +615,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
       clearTimeout(timeoutId);
       clearInterval(intervalId);
     };
-  }, [applyWhatsappState, isConnected, running, selectedCompanyId, variant]);
+  }, [applyWhatsappState, isConnected, running, selectedWhatsappEntityId, variant.endpoints.action, whatsappActionPayload]);
 
   const loadChannelOperations = useCallback(async (options?: { silent?: boolean }) => {
     if (!selectedCompanyId) {
@@ -592,7 +628,11 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
     }
 
     try {
-      const query = `?${variant.entityIdKey}=${encodeURIComponent(selectedCompanyId)}`;
+      const queryParams = new URLSearchParams({ [variant.entityIdKey]: selectedCompanyId });
+      if (!canManageInternalAgents && selectedAgentId) {
+        queryParams.set("agentId", selectedAgentId);
+      }
+      const query = `?${queryParams.toString()}`;
       const response = await fetch(`${variant.endpoints.channels}${query}`, { cache: "no-store" });
       const data = (await response.json().catch(() => null)) as ChannelActionResponse | null;
 
@@ -614,11 +654,11 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
         setChannelAction(null);
       }
     }
-  }, [selectedCompanyId, variant]);
+  }, [canManageInternalAgents, selectedAgentId, selectedCompanyId, variant]);
 
   const channelAgentId = state?.agent?.id ?? "";
   const channelInstanceId = state?.instance?.id ?? "";
-  const hasChannelContext = Boolean(selectedCompanyId && channelAgentId && channelInstanceId);
+  const hasChannelContext = Boolean(selectedCompanyId && (!canManageInternalAgents ? selectedAgentId : true) && channelAgentId && channelInstanceId);
 
   useEffect(() => {
     if (!hasChannelContext) {
@@ -640,8 +680,8 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
     : false;
   const settingsChanged = promptChanged || behaviorChanged || qualificationChanged;
   const companies = state?.companies ?? [];
+  const agents = state?.agents ?? [];
   const selectedCompany = companies.find((company) => company.id === selectedCompanyId) ?? companies[0] ?? null;
-  const canManageInternalAgents = variant.entityIdKey === "sectorId";
   const needsCompany = !loading && companies.length === 0;
   const needsAgent = !loading && companies.length > 0 && !state?.agent;
   const headerTitle = loading || (needsCompany && !canManageInternalAgents) ? "WhatsApp" : needsAgent || (needsCompany && canManageInternalAgents) ? "Criar agente WhatsApp" : "Conexao, prompt e comportamento";
@@ -790,7 +830,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
       const response = await fetch(variant.endpoints.action, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, [variant.entityIdKey]: selectedCompanyId, ...payload }),
+        body: JSON.stringify({ action, ...whatsappActionPayload, ...payload }),
       });
       const data = (await response.json().catch(() => null)) as ActionResponse | null;
 
@@ -821,7 +861,12 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
       const response = await fetch(variant.endpoints.channels, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, [variant.entityIdKey]: selectedCompanyId, ...payload }),
+        body: JSON.stringify({
+          action,
+          [variant.entityIdKey]: selectedCompanyId,
+          ...(!canManageInternalAgents && selectedAgentId ? { agentId: selectedAgentId } : {}),
+          ...payload,
+        }),
       });
       const data = (await response.json().catch(() => null)) as ChannelActionResponse | null;
 
@@ -856,7 +901,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          [variant.entityIdKey]: selectedCompanyId,
+          ...whatsappActionPayload,
           agentPrompt: promptDraft,
           behavior: behaviorDraft,
           qualificationConfig: qualificationDraft,
@@ -933,7 +978,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
         throw new Error(data?.error ?? "Nao foi possivel anexar o arquivo.");
       }
 
-      const nextState = await fetchWhatsappState(variant, selectedCompanyId);
+      const nextState = await fetchWhatsappState(variant, selectedWhatsappEntityId);
       applyWhatsappState(nextState, { preserveDrafts: true });
       setNotice({ tone: "success", message: "Arquivo adicionado a inteligencia do agente." });
     } catch (error) {
@@ -968,7 +1013,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
         throw new Error(data?.error ?? "Nao foi possivel criar o link rastreado.");
       }
 
-      const nextState = await fetchWhatsappState(variant, selectedCompanyId);
+      const nextState = await fetchWhatsappState(variant, selectedWhatsappEntityId);
       applyWhatsappState(nextState, { preserveDrafts: true });
       setLinkButtonLabel("");
       setLinkButtonUrl("");
@@ -1021,7 +1066,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
         throw new Error(data?.error ?? "Nao foi possivel excluir o link rastreado.");
       }
 
-      const nextState = await fetchWhatsappState(variant, selectedCompanyId);
+      const nextState = await fetchWhatsappState(variant, selectedWhatsappEntityId);
       applyWhatsappState(nextState, { preserveDrafts: true });
       setNotice({ tone: "success", message: `Link "${link.label}" excluido.` });
     } catch (error) {
@@ -1052,13 +1097,13 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
           roleTitle: variant.agentRoleTitle,
         }),
       });
-      const data = (await response.json().catch(() => null)) as { error?: string } | null;
+      const data = (await response.json().catch(() => null)) as { agent?: ClientWhatsappAgent; error?: string } | null;
 
       if (!response.ok) {
         throw new Error(data?.error ?? "Nao foi possivel criar o agente.");
       }
 
-      const nextState = await fetchWhatsappState(variant, selectedCompanyId);
+      const nextState = await fetchWhatsappState(variant, data?.agent?.id ?? selectedWhatsappEntityId);
       applyWhatsappState(nextState);
       setAgentName("");
       setAgentSectorName("Atendimento WhatsApp");
@@ -1068,6 +1113,74 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
       setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao criar agente." });
     } finally {
       setCreatingAgent(false);
+    }
+  }
+
+  async function cloneWhatsappAgent(sourceAgentId: string, input: { companyId: string; name: string; sectorName: string }) {
+    if (!sourceAgentId || !input.companyId) {
+      setNotice({ tone: "warning", message: "Escolha o agente e a empresa de destino para clonar." });
+      return;
+    }
+
+    setCreatingAgent(true);
+    setNotice(null);
+
+    try {
+      const response = await fetch(variant.endpoints.createAgent, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "clone",
+          sourceAgentId,
+          companyId: input.companyId,
+          name: input.name.trim(),
+          sectorName: input.sectorName.trim(),
+          roleTitle: variant.agentRoleTitle,
+        }),
+      });
+      const data = (await response.json().catch(() => null)) as { agent?: ClientWhatsappAgent; error?: string } | null;
+
+      if (!response.ok || !data?.agent) {
+        throw new Error(data?.error ?? "Nao foi possivel clonar o agente.");
+      }
+
+      const nextState = await fetchWhatsappState(variant, data.agent.id);
+      applyWhatsappState(nextState);
+      setQrCode(null);
+      setChannelOps(null);
+      setNotice({ tone: "success", message: "Agente clonado sem copiar a instancia. Gere o QR Code quando quiser conectar o novo WhatsApp." });
+    } catch (error) {
+      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao clonar agente." });
+    } finally {
+      setCreatingAgent(false);
+    }
+  }
+
+  async function switchWhatsappAgent(nextAgentId: string) {
+    if (!nextAgentId || nextAgentId === selectedAgentId) {
+      return;
+    }
+
+    if (settingsChanged) {
+      const confirmed = window.confirm("Existem alteracoes nao salvas neste agente. Abrir outro agente mesmo assim?");
+
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    setRunning("switch_agent");
+    setNotice(null);
+
+    try {
+      const nextState = await fetchWhatsappState(variant, nextAgentId);
+      applyWhatsappState(nextState);
+      setQrCode(null);
+      setChannelOps(null);
+    } catch (error) {
+      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Nao foi possivel abrir este agente." });
+    } finally {
+      setRunning(null);
     }
   }
 
@@ -1177,6 +1290,26 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
           onStart={() => setShowInternalAgentForm(true)}
           variant={variant}
         />
+      ) : !state?.agent && !canManageInternalAgents ? (
+        <ClientAgentsManager
+          agentName={agentName}
+          agents={agents}
+          companies={companies}
+          creating={creatingAgent}
+          sectorName={agentSectorName}
+          selectedAgentId={selectedAgentId}
+          selectedCompanyId={selectedCompanyId}
+          showForm={showAgentForm}
+          onAgentNameChange={setAgentName}
+          onCancel={() => setShowAgentForm(false)}
+          onClone={cloneWhatsappAgent}
+          onCreate={createWhatsappAgent}
+          onSectorNameChange={setAgentSectorName}
+          onSelectAgent={switchWhatsappAgent}
+          onSelectCompany={setSelectedCompanyId}
+          onStart={() => setShowAgentForm(true)}
+          variant={variant}
+        />
       ) : !state?.agent ? (
         <AgentCreationGate
           agentName={agentName}
@@ -1196,6 +1329,28 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
         />
       ) : (
       <>
+        {!canManageInternalAgents ? (
+          <ClientAgentsManager
+            agentName={agentName}
+            agents={agents}
+            companies={companies}
+            creating={creatingAgent}
+            sectorName={agentSectorName}
+            selectedAgentId={selectedAgentId}
+            selectedCompanyId={selectedCompanyId}
+            showForm={showAgentForm}
+            onAgentNameChange={setAgentName}
+            onCancel={() => setShowAgentForm(false)}
+            onClone={cloneWhatsappAgent}
+            onCreate={createWhatsappAgent}
+            onSectorNameChange={setAgentSectorName}
+            onSelectAgent={switchWhatsappAgent}
+            onSelectCompany={setSelectedCompanyId}
+            onStart={() => setShowAgentForm(true)}
+            variant={variant}
+          />
+        ) : null}
+
         {canManageInternalAgents ? (
           <InternalAgentsManager
             agentName={internalAgentName}
@@ -1713,7 +1868,8 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
 }
 
 async function fetchWhatsappState(variant: WhatsappConsoleVariant, entityId?: string) {
-  const query = entityId ? `?${variant.entityIdKey}=${encodeURIComponent(entityId)}` : "";
+  const queryKey = variant.entityIdKey === "companyId" ? "agentId" : variant.entityIdKey;
+  const query = entityId ? `?${queryKey}=${encodeURIComponent(entityId)}` : "";
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15000);
 
@@ -1945,6 +2101,231 @@ function SummaryPill({
         {value}
       </p>
     </div>
+  );
+}
+
+function ClientAgentsManager({
+  agentName,
+  agents,
+  companies,
+  creating,
+  sectorName,
+  selectedAgentId,
+  selectedCompanyId,
+  showForm,
+  onAgentNameChange,
+  onCancel,
+  onClone,
+  onCreate,
+  onSectorNameChange,
+  onSelectAgent,
+  onSelectCompany,
+  onStart,
+  variant,
+}: {
+  agentName: string;
+  agents: ClientWhatsappAgent[];
+  companies: ClientCompany[];
+  creating: boolean;
+  sectorName: string;
+  selectedAgentId: string;
+  selectedCompanyId: string;
+  showForm: boolean;
+  onAgentNameChange: (value: string) => void;
+  onCancel: () => void;
+  onClone: (sourceAgentId: string, input: { companyId: string; name: string; sectorName: string }) => Promise<void>;
+  onCreate: () => void;
+  onSectorNameChange: (value: string) => void;
+  onSelectAgent: (value: string) => void;
+  onSelectCompany: (value: string) => void;
+  onStart: () => void;
+  variant: WhatsappConsoleVariant;
+}) {
+  const [cloneSourceId, setCloneSourceId] = useState<string | null>(null);
+  const [cloneCompanyId, setCloneCompanyId] = useState(selectedCompanyId);
+  const [cloneName, setCloneName] = useState("");
+  const [cloneSectorName, setCloneSectorName] = useState("");
+  const cloneSource = agents.find((agent) => agent.id === cloneSourceId) ?? null;
+
+  function openClone(agent: ClientWhatsappAgent) {
+    setCloneSourceId(agent.id);
+    setCloneCompanyId(agent.companyId);
+    setCloneName(`Copia de ${agent.name}`);
+    setCloneSectorName(agent.sectorName);
+  }
+
+  async function submitClone() {
+    if (!cloneSource) return;
+
+    await onClone(cloneSource.id, {
+      companyId: cloneCompanyId || cloneSource.companyId,
+      name: cloneName || `Copia de ${cloneSource.name}`,
+      sectorName: cloneSectorName || cloneSource.sectorName,
+    });
+    setCloneSourceId(null);
+  }
+
+  return (
+    <Panel
+      title="Agentes WhatsApp"
+      eyebrow="escolher / criar / clonar"
+      action={<NeonBadge tone="cyan">{agents.length.toLocaleString("pt-BR")} agentes</NeonBadge>}
+      className="mb-3 sm:mb-4"
+    >
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
+        <div className="grid gap-2 md:grid-cols-2 2xl:grid-cols-3">
+          {agents.length > 0 ? agents.map((agent) => {
+            const active = agent.id === selectedAgentId;
+
+            return (
+              <div
+                key={agent.id}
+                className="rounded-xl border p-3 transition"
+                style={{
+                  background: active ? "rgba(var(--ch-accent-rgb),0.12)" : "var(--ch-panel-2)",
+                  borderColor: active ? "rgba(var(--ch-accent-rgb),0.58)" : "var(--ch-border)",
+                  boxShadow: active ? "0 0 24px rgba(var(--ch-accent-rgb),0.12)" : "none",
+                }}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>
+                      {agent.name}
+                    </p>
+                    <p className="mt-1 truncate text-[11px] text-slate-400">
+                      {agent.companyName} / {agent.sectorName}
+                    </p>
+                  </div>
+                  <NeonBadge tone={active ? "green" : "amber"}>{active ? "aberto" : agent.status}</NeonBadge>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <SecondaryAction
+                    icon={Eye}
+                    label={active ? "Aberto" : "Abrir"}
+                    disabled={active || creating}
+                    onClick={() => onSelectAgent(agent.id)}
+                  />
+                  <SecondaryAction
+                    icon={Copy}
+                    label="Clonar"
+                    disabled={creating}
+                    onClick={() => openClone(agent)}
+                  />
+                </div>
+              </div>
+            );
+          }) : (
+            <div className="rounded-xl border p-4 text-[13px] text-slate-400" style={{ background: "var(--ch-panel-2)", borderColor: "var(--ch-border)" }}>
+              Nenhum agente criado ainda. Crie o primeiro agente para liberar conexao, prompt e comportamento.
+            </div>
+          )}
+        </div>
+
+        <ActionButton
+          icon={Plus}
+          label={showForm ? "Formulario aberto" : "Novo agente"}
+          disabled={showForm || creating}
+          onClick={onStart}
+        />
+      </div>
+
+      {showForm ? (
+        <div className="mt-4 rounded-xl p-4" style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}>
+          <div className="grid gap-3 md:grid-cols-3">
+            <label className="block">
+              <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">{variant.agentGateSelectLabel}</span>
+              <select
+                className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
+                value={selectedCompanyId}
+                onChange={(event) => onSelectCompany(event.target.value)}
+              >
+                {companies.map((company) => (
+                  <option key={company.id} value={company.id}>
+                    {company.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Nome do agente</span>
+              <input
+                className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
+                placeholder="Ex: Gustavo Vendas"
+                value={agentName}
+                onChange={(event) => onAgentNameChange(event.target.value)}
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Setor</span>
+              <input
+                className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
+                placeholder="Ex: Vendas, Suporte, Financeiro"
+                value={sectorName}
+                onChange={(event) => onSectorNameChange(event.target.value)}
+              />
+            </label>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <SecondaryAction icon={X} label="Fechar" disabled={creating} onClick={onCancel} />
+            <ActionButton icon={Wand2} label="Criar agente" disabled={creating || !selectedCompanyId} loading={creating} onClick={onCreate} />
+          </div>
+        </div>
+      ) : null}
+
+      {cloneSource ? (
+        <div className="mt-4 rounded-xl p-4" style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Clonar configuracao</p>
+              <p className="mt-1 text-[13px] font-semibold text-slate-100">{cloneSource.name}</p>
+              <p className="mt-1 text-[11px] text-slate-400">O clone copia prompt e controles, mas nasce sem instancia WhatsApp.</p>
+            </div>
+            <SecondaryAction icon={X} label="Fechar" disabled={creating} onClick={() => setCloneSourceId(null)} />
+          </div>
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
+            <label className="block">
+              <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Empresa destino</span>
+              <select
+                className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
+                value={cloneCompanyId}
+                onChange={(event) => setCloneCompanyId(event.target.value)}
+              >
+                {companies.map((company) => (
+                  <option key={company.id} value={company.id}>
+                    {company.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Nome do clone</span>
+              <input
+                className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
+                value={cloneName}
+                onChange={(event) => setCloneName(event.target.value)}
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Setor destino</span>
+              <input
+                className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
+                value={cloneSectorName}
+                onChange={(event) => setCloneSectorName(event.target.value)}
+              />
+            </label>
+          </div>
+          <div className="mt-4">
+            <ActionButton
+              icon={Copy}
+              label="Clonar agente"
+              disabled={creating || !cloneName.trim() || !cloneCompanyId}
+              loading={creating}
+              onClick={submitClone}
+            />
+          </div>
+        </div>
+      ) : null}
+    </Panel>
   );
 }
 

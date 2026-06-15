@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { getClientAgentsWorkspace, type ClientAgent } from "@/lib/client-os/agents";
 import type { WhatsappAudioVoiceState } from "@/lib/elevenlabs/voices";
-import { listClientCompanies, requireClientCompanyAccess, type ClientCompany } from "@/lib/client-os/companies";
+import { requireClientCompanyAccess, type ClientCompany } from "@/lib/client-os/companies";
 import { getCurrentWorkspace, type CurrentOrganization } from "@/lib/supabase/profile";
 import {
   connectClientWhatsapp,
@@ -21,6 +22,7 @@ export const runtime = "nodejs";
 type ActionBody = {
   action?: unknown;
   companyId?: unknown;
+  agentId?: unknown;
   phone?: unknown;
   text?: unknown;
   behavior?: unknown;
@@ -30,15 +32,23 @@ type WorkspaceContext = {
   organization: CurrentOrganization;
   userId: string;
   companies: ClientCompany[];
+  agents: ClientAgent[];
+  selectedAgentId: string | null;
 };
 
 type DashboardWhatsappState = ClientWhatsappState & {
   companies: ClientCompany[];
+  agents: ClientAgent[];
   selectedCompanyId: string | null;
+  selectedAgentId: string | null;
 };
 
 export async function GET(request: NextRequest) {
-  const context = await requireWorkspaceContext(request.nextUrl.searchParams.get("companyId"), true);
+  const context = await requireWorkspaceContext({
+    requestedCompanyId: request.nextUrl.searchParams.get("companyId"),
+    requestedAgentId: request.nextUrl.searchParams.get("agentId"),
+    allowMissingCompany: true,
+  });
 
   if (context instanceof NextResponse) {
     return context;
@@ -52,6 +62,7 @@ export async function GET(request: NextRequest) {
     const state = await getClientWhatsappState({
       organization: context.organization,
       userId: context.userId,
+      agentId: context.selectedAgentId,
     });
 
     return NextResponse.json(attachWorkspace(context, state));
@@ -62,7 +73,11 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const body = await readJson<ActionBody>(request);
-  const context = await requireWorkspaceContext(asString(body?.companyId), false);
+  const context = await requireWorkspaceContext({
+    requestedCompanyId: asString(body?.companyId),
+    requestedAgentId: asString(body?.agentId),
+    allowMissingCompany: false,
+  });
 
   if (context instanceof NextResponse) {
     return context;
@@ -79,6 +94,7 @@ export async function POST(request: NextRequest) {
       const result = await connectClientWhatsapp({
         organization: context.organization,
         userId: context.userId,
+        agentId: context.selectedAgentId,
       });
 
       return NextResponse.json(attachWorkspaceToResult(context, result));
@@ -88,6 +104,7 @@ export async function POST(request: NextRequest) {
       const result = await refreshClientWhatsappStatus({
         organization: context.organization,
         userId: context.userId,
+        agentId: context.selectedAgentId,
       });
 
       return NextResponse.json(attachWorkspaceToResult(context, result));
@@ -97,6 +114,7 @@ export async function POST(request: NextRequest) {
       const result = await disconnectClientWhatsapp({
         organization: context.organization,
         userId: context.userId,
+        agentId: context.selectedAgentId,
       });
 
       return NextResponse.json(attachWorkspaceToResult(context, result));
@@ -106,6 +124,7 @@ export async function POST(request: NextRequest) {
       const result = await sendClientWhatsappTest({
         organization: context.organization,
         userId: context.userId,
+        agentId: context.selectedAgentId,
         phone: typeof body?.phone === "string" ? body.phone : "",
         text: typeof body?.text === "string" ? body.text : "",
       });
@@ -117,6 +136,7 @@ export async function POST(request: NextRequest) {
       const result = await sendClientWhatsappHandoffNotificationTest({
         organization: context.organization,
         userId: context.userId,
+        agentId: context.selectedAgentId,
         behavior: body?.behavior,
       });
 
@@ -132,13 +152,18 @@ export async function POST(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   const body = await readJson<{
     companyId?: unknown;
+    agentId?: unknown;
     prompt?: unknown;
     agentPrompt?: unknown;
     globalPrompt?: unknown;
     behavior?: unknown;
     qualificationConfig?: unknown;
   }>(request);
-  const context = await requireWorkspaceContext(asString(body?.companyId), false);
+  const context = await requireWorkspaceContext({
+    requestedCompanyId: asString(body?.companyId),
+    requestedAgentId: asString(body?.agentId),
+    allowMissingCompany: false,
+  });
 
   if (context instanceof NextResponse) {
     return context;
@@ -159,6 +184,7 @@ export async function PATCH(request: NextRequest) {
     const state = await updateClientWhatsappPrompt({
       organization: context.organization,
       userId: context.userId,
+      agentId: context.selectedAgentId,
       agentPrompt,
       globalPrompt,
       behavior: body?.behavior,
@@ -171,26 +197,33 @@ export async function PATCH(request: NextRequest) {
   }
 }
 
-async function requireWorkspaceContext(
-  requestedCompanyId: string | null,
-  allowMissingCompany: boolean,
-): Promise<WorkspaceContext | NextResponse | null> {
+async function requireWorkspaceContext(input: {
+  requestedCompanyId: string | null;
+  requestedAgentId: string | null;
+  allowMissingCompany: boolean;
+}): Promise<WorkspaceContext | NextResponse | null> {
   const workspace = await getCurrentWorkspace();
 
   if (!workspace) {
     return NextResponse.json({ error: "Sessao obrigatoria." }, { status: 401 });
   }
 
-  const companies = await listClientCompanies(workspace.user.id);
+  const { companies, agents } = await getClientAgentsWorkspace(workspace.user.id);
 
   if (companies.length === 0) {
-    return allowMissingCompany ? null : NextResponse.json({ error: "Cadastre uma empresa antes de configurar o WhatsApp." }, { status: 422 });
+    return input.allowMissingCompany ? null : NextResponse.json({ error: "Cadastre uma empresa antes de configurar o WhatsApp." }, { status: 422 });
   }
 
-  const companyId = requestedCompanyId || companies[0]?.id;
+  const selectedAgent = resolveSelectedAgent(agents, input.requestedAgentId, input.requestedCompanyId);
+
+  if (input.requestedAgentId && !selectedAgent) {
+    return NextResponse.json({ error: "Escolha um agente vinculado a sua conta." }, { status: 422 });
+  }
+
+  const companyId = selectedAgent?.companyId || input.requestedCompanyId || companies[0]?.id;
 
   if (!companyId) {
-    return allowMissingCompany ? null : NextResponse.json({ error: "Escolha uma empresa." }, { status: 422 });
+    return input.allowMissingCompany ? null : NextResponse.json({ error: "Escolha uma empresa." }, { status: 422 });
   }
 
   try {
@@ -203,10 +236,24 @@ async function requireWorkspaceContext(
       organization,
       userId: workspace.user.id,
       companies,
+      agents,
+      selectedAgentId: selectedAgent?.id ?? null,
     };
   } catch (error) {
     return NextResponse.json(formatError(error), { status: 422 });
   }
+}
+
+function resolveSelectedAgent(agents: ClientAgent[], requestedAgentId: string | null, requestedCompanyId: string | null) {
+  if (requestedAgentId) {
+    return agents.find((agent) => agent.id === requestedAgentId) ?? null;
+  }
+
+  if (requestedCompanyId) {
+    return agents.find((agent) => agent.companyId === requestedCompanyId) ?? null;
+  }
+
+  return agents[0] ?? null;
 }
 
 async function readJson<T>(request: NextRequest): Promise<T | null> {
@@ -225,7 +272,9 @@ function attachWorkspace(context: WorkspaceContext, state: ClientWhatsappState):
   return {
     ...state,
     companies: context.companies,
+    agents: context.agents,
     selectedCompanyId: context.organization.id,
+    selectedAgentId: context.selectedAgentId ?? state.agent?.id ?? null,
   };
 }
 
@@ -245,7 +294,9 @@ function formatError(error: unknown) {
 function buildUnavailableState(): DashboardWhatsappState {
   return {
     companies: [],
+    agents: [],
     selectedCompanyId: null,
+    selectedAgentId: null,
     instance: null,
     agent: null,
     globalAgent: {

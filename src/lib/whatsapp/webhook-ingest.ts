@@ -661,10 +661,11 @@ async function enqueueWhatsappAgentRun(
 ) {
   const instanceMetadata = await loadWhatsappInstanceMetadata(client, input.whatsappInstanceId);
   const sectorId = asString(instanceMetadata?.sector_id);
+  const clientAgentId = asString(instanceMetadata?.agent_id);
   const isPlatformWhatsapp = instanceMetadata?.admin_whatsapp === true && Boolean(sectorId);
   const agent = isPlatformWhatsapp && sectorId
     ? await findPlatformSectorWhatsappAgent(client, sectorId)
-    : await findOrganizationWhatsappAgent(client, input.organizationId);
+    : await findOrganizationWhatsappAgent(client, input.organizationId, clientAgentId);
 
   if (!agent?.id) {
     return null;
@@ -727,7 +728,11 @@ async function enqueueWhatsappAgentRun(
                 sectorCode: asString(instanceMetadata?.sector_code),
                 sectorName: asString(instanceMetadata?.sector_name),
               }
-            : {}),
+            : {
+                clientAgentId: agent.id,
+                sectorCode: asString(instanceMetadata?.sector_code),
+                sectorName: asString(instanceMetadata?.sector_name),
+              }),
         },
       })
       .eq("id", recentRun.id)
@@ -764,7 +769,11 @@ async function enqueueWhatsappAgentRun(
               sectorCode: asString(instanceMetadata?.sector_code),
               sectorName: asString(instanceMetadata?.sector_name),
             }
-          : {}),
+          : {
+              clientAgentId: agent.id,
+              sectorCode: asString(instanceMetadata?.sector_code),
+              sectorName: asString(instanceMetadata?.sector_name),
+            }),
       },
     })
     .select("id, metadata")
@@ -801,7 +810,22 @@ async function findPlatformSectorWhatsappAgent(client: SupabaseClient, sectorId:
   return data ?? null;
 }
 
-async function findOrganizationWhatsappAgent(client: SupabaseClient, organizationId: string) {
+async function findOrganizationWhatsappAgent(client: SupabaseClient, organizationId: string, agentId?: string | null) {
+  if (agentId) {
+    const { data } = await client
+      .from("agent_registry")
+      .select("id, metadata")
+      .eq("id", agentId)
+      .eq("scope", "organization")
+      .eq("organization_id", organizationId)
+      .contains("metadata", { client_created: true, agent_kind: "whatsapp" })
+      .maybeSingle<AgentRow>();
+
+    if (data) {
+      return data;
+    }
+  }
+
   const { data } = await client
     .from("agent_registry")
     .select("id, metadata")
@@ -833,7 +857,7 @@ async function resolveWebhookBehaviorConfig(
 
   if (!input.isPlatformWhatsapp) {
     const globalConfig = await loadOrganizationGlobalBehaviorConfig(client, input.organizationId);
-    return normalizeWhatsappBehaviorConfig(globalConfig ?? agentConfig);
+    return normalizeWhatsappBehaviorConfig(agentConfig ?? globalConfig);
   }
 
   return normalizeWhatsappBehaviorConfig(agentConfig);

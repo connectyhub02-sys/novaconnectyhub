@@ -56,12 +56,17 @@ type WhatsappInstanceRow = {
 
 type AgentRow = {
   id: string;
+  organization_id: string;
+  sector_code: string | null;
+  sector_name: string | null;
+  agent_code: string | null;
   prompt: string | null;
   persona_name: string | null;
   name: string;
   avatar_url: string | null;
   avatar_alt: string | null;
   updated_at: string | null;
+  created_at: string | null;
   metadata: JsonRecord | null;
 };
 
@@ -111,6 +116,9 @@ export type ClientWhatsappState = {
   } | null;
   agent: {
     id: string;
+    companyId?: string;
+    sectorCode?: string | null;
+    sectorName?: string | null;
     name: string;
     avatarUrl: string | null;
     avatarAlt: string | null;
@@ -152,17 +160,18 @@ export type ClientWhatsappActionResult = {
 const whatsappAgentCode = "agente-whatsapp-sistema";
 const whatsappGlobalAgentCode = "agente-whatsapp-global";
 const maxPromptLength = 8000;
-const agentSelectColumns = "id, prompt, persona_name, name, avatar_url, avatar_alt, updated_at, metadata";
+const agentSelectColumns = "id, organization_id, sector_code, sector_name, agent_code, prompt, persona_name, name, avatar_url, avatar_alt, updated_at, created_at, metadata";
 
 export async function getClientWhatsappState(input: {
   organization: CurrentOrganization;
   userId: string;
+  agentId?: string | null;
   client?: SupabaseClient;
 }): Promise<ClientWhatsappState> {
   const client = input.client ?? createServiceClient();
-  const [rawInstance, agent, globalAgent, knowledgeFiles, linkButtons] = await Promise.all([
-    getWorkspaceInstance(client, input.organization.id),
-    getWorkspaceWhatsappAgent(client, input.organization.id),
+  const agent = await getWorkspaceWhatsappAgent(client, input.organization.id, input.agentId);
+  const [rawInstance, globalAgent, knowledgeFiles, linkButtons] = await Promise.all([
+    getWorkspaceInstance(client, input.organization.id, agent),
     getOrCreateWorkspaceGlobalAgent(client, input.organization, input.userId),
     listWorkspaceKnowledge(client, input.organization.id),
     listWorkspaceLinkButtons(client, input.organization.id),
@@ -172,7 +181,7 @@ export async function getClientWhatsappState(input: {
     ? await syncClientInstanceStatus(client, rawInstance).catch(() => rawInstance)
     : rawInstance;
 
-  const behavior = getBehaviorConfig(globalAgent, instance);
+  const behavior = getBehaviorConfig(globalAgent, instance, agent);
   const audio = await listWhatsappAudioVoices({ organizationId: input.organization.id, client });
 
   return buildState(instance, agent, globalAgent, behavior, audio, knowledgeFiles, linkButtons);
@@ -181,16 +190,18 @@ export async function getClientWhatsappState(input: {
 export async function connectClientWhatsapp(input: {
   organization: CurrentOrganization;
   userId: string;
+  agentId?: string | null;
   client?: SupabaseClient;
 }): Promise<ClientWhatsappActionResult> {
   const client = input.client ?? createServiceClient();
   const credentials = await loadUazapiCredentials(client);
-  const existing = await getWorkspaceInstance(client, input.organization.id);
+  const agent = await requireWorkspaceWhatsappAgent(client, input.organization.id, input.agentId);
+  const existing = await getWorkspaceInstance(client, input.organization.id, agent);
   let instance = existing?.instance_token_encrypted
     ? existing
     : existing?.provider_instance_id
-      ? await recoverProviderInstanceToken(client, credentials, existing) ?? await createProviderInstance(client, credentials, input.organization, input.userId)
-      : await createProviderInstance(client, credentials, input.organization, input.userId);
+      ? await recoverProviderInstanceToken(client, credentials, existing) ?? await createProviderInstance(client, credentials, input.organization, agent, input.userId)
+      : await createProviderInstance(client, credentials, input.organization, agent, input.userId);
   let token = decryptInstanceToken(instance);
 
   if (!token) {
@@ -215,7 +226,7 @@ export async function connectClientWhatsapp(input: {
       reason: "invalid_instance_token",
     });
 
-    instance = await createProviderInstance(client, credentials, input.organization, input.userId);
+    instance = await createProviderInstance(client, credentials, input.organization, agent, input.userId);
     token = decryptInstanceToken(instance);
 
     if (!token) {
@@ -262,6 +273,7 @@ export async function connectClientWhatsapp(input: {
       last_synced_at: now,
       metadata: {
         ...(instance.metadata ?? {}),
+        ...buildAgentInstanceMetadata(input.organization, agent),
         ...(profileImageUrl ? { profile_image_url: profileImageUrl, profile_image_synced_at: now } : {}),
         webhook_status: webhookResult.ok ? "configured" : "not_configured",
         webhook_error: webhookResult.ok ? null : webhookResult.reason,
@@ -273,7 +285,7 @@ export async function connectClientWhatsapp(input: {
     })
     .eq("id", instance.id);
 
-  const state = await getClientWhatsappState({ organization: input.organization, userId: input.userId, client });
+  const state = await getClientWhatsappState({ organization: input.organization, userId: input.userId, agentId: agent.id, client });
   revalidatePath("/dashboard/whatsapp");
 
   return {
@@ -290,11 +302,13 @@ export async function connectClientWhatsapp(input: {
 export async function refreshClientWhatsappStatus(input: {
   organization: CurrentOrganization;
   userId: string;
+  agentId?: string | null;
   client?: SupabaseClient;
 }): Promise<ClientWhatsappActionResult> {
   const client = input.client ?? createServiceClient();
   const credentials = await loadUazapiCredentials(client);
-  const instance = await requireWorkspaceInstance(client, input.organization.id);
+  const agent = await requireWorkspaceWhatsappAgent(client, input.organization.id, input.agentId);
+  const instance = await requireWorkspaceInstance(client, input.organization.id, agent);
   const token = decryptInstanceToken(instance);
 
   if (!token) {
@@ -312,7 +326,7 @@ export async function refreshClientWhatsappStatus(input: {
         reason: "invalid_instance_token",
       });
 
-      const state = await getClientWhatsappState({ organization: input.organization, userId: input.userId, client });
+      const state = await getClientWhatsappState({ organization: input.organization, userId: input.userId, agentId: agent.id, client });
       revalidatePath("/dashboard/whatsapp");
 
       return {
@@ -354,6 +368,7 @@ export async function refreshClientWhatsappStatus(input: {
       last_synced_at: now,
       metadata: {
         ...(instance.metadata ?? {}),
+        ...buildAgentInstanceMetadata(input.organization, agent),
         ...(profileImageUrl ? { profile_image_url: profileImageUrl, profile_image_synced_at: now } : {}),
         ...(webhookResult
           ? {
@@ -369,7 +384,7 @@ export async function refreshClientWhatsappStatus(input: {
     })
     .eq("id", instance.id);
 
-  const state = await getClientWhatsappState({ organization: input.organization, userId: input.userId, client });
+  const state = await getClientWhatsappState({ organization: input.organization, userId: input.userId, agentId: agent.id, client });
   revalidatePath("/dashboard/whatsapp");
 
   return {
@@ -386,11 +401,13 @@ export async function refreshClientWhatsappStatus(input: {
 export async function disconnectClientWhatsapp(input: {
   organization: CurrentOrganization;
   userId: string;
+  agentId?: string | null;
   client?: SupabaseClient;
 }): Promise<ClientWhatsappActionResult> {
   const client = input.client ?? createServiceClient();
   const credentials = await loadUazapiCredentials(client);
-  const instance = await requireWorkspaceInstance(client, input.organization.id);
+  const agent = await requireWorkspaceWhatsappAgent(client, input.organization.id, input.agentId);
+  const instance = await requireWorkspaceInstance(client, input.organization.id, agent);
   const token = decryptInstanceToken(instance);
 
   if (!token) {
@@ -400,7 +417,7 @@ export async function disconnectClientWhatsapp(input: {
       reason: "missing_local_token",
     });
 
-    const state = await getClientWhatsappState({ organization: input.organization, userId: input.userId, client });
+    const state = await getClientWhatsappState({ organization: input.organization, userId: input.userId, agentId: agent.id, client });
     revalidatePath("/dashboard/whatsapp");
 
     return {
@@ -426,7 +443,7 @@ export async function disconnectClientWhatsapp(input: {
     reason: tokenInvalid ? "invalid_instance_token" : "manual_disconnect",
   });
 
-  const state = await getClientWhatsappState({ organization: input.organization, userId: input.userId, client });
+  const state = await getClientWhatsappState({ organization: input.organization, userId: input.userId, agentId: agent.id, client });
   revalidatePath("/dashboard/whatsapp");
 
   return {
@@ -445,6 +462,7 @@ export async function disconnectClientWhatsapp(input: {
 export async function sendClientWhatsappTest(input: {
   organization: CurrentOrganization;
   userId: string;
+  agentId?: string | null;
   phone: string;
   text: string;
   client?: SupabaseClient;
@@ -462,9 +480,10 @@ export async function sendClientWhatsappTest(input: {
 
   const client = input.client ?? createServiceClient();
   const credentials = await loadUazapiCredentials(client);
-  const instance = await requireWorkspaceInstance(client, input.organization.id);
+  const agent = await requireWorkspaceWhatsappAgent(client, input.organization.id, input.agentId);
+  const instance = await requireWorkspaceInstance(client, input.organization.id, agent);
   const globalAgent = await getOrCreateWorkspaceGlobalAgent(client, input.organization, input.userId);
-  const behavior = getBehaviorConfig(globalAgent, instance);
+  const behavior = getBehaviorConfig(globalAgent, instance, agent);
   const token = decryptInstanceToken(instance);
 
   if (!token) {
@@ -532,7 +551,7 @@ export async function sendClientWhatsappTest(input: {
     })
     .eq("id", instance.id);
 
-  const state = await getClientWhatsappState({ organization: input.organization, userId: input.userId, client });
+  const state = await getClientWhatsappState({ organization: input.organization, userId: input.userId, agentId: agent.id, client });
 
   return {
     state,
@@ -545,14 +564,16 @@ export async function sendClientWhatsappTest(input: {
 export async function sendClientWhatsappHandoffNotificationTest(input: {
   organization: CurrentOrganization;
   userId: string;
+  agentId?: string | null;
   behavior?: unknown;
   client?: SupabaseClient;
 }): Promise<ClientWhatsappActionResult> {
   const client = input.client ?? createServiceClient();
-  const instance = await requireWorkspaceInstance(client, input.organization.id);
+  const agent = await requireWorkspaceWhatsappAgent(client, input.organization.id, input.agentId);
+  const instance = await requireWorkspaceInstance(client, input.organization.id, agent);
   const globalAgent = await getOrCreateWorkspaceGlobalAgent(client, input.organization, input.userId);
-  const behaviorDraft = normalizeWhatsappBehaviorConfig(input.behavior ?? getBehaviorConfig(globalAgent, instance));
-  const behavior = mergeWhatsappHandoffNotificationSettings(getBehaviorConfig(globalAgent, instance), behaviorDraft);
+  const behaviorDraft = normalizeWhatsappBehaviorConfig(input.behavior ?? getBehaviorConfig(globalAgent, instance, agent));
+  const behavior = mergeWhatsappHandoffNotificationSettings(getBehaviorConfig(globalAgent, instance, agent), behaviorDraft);
   const token = decryptInstanceToken(instance);
 
   if (!token) {
@@ -588,7 +609,7 @@ export async function sendClientWhatsappHandoffNotificationTest(input: {
     throw new Error(resultMessage);
   }
 
-  await persistClientHandoffNotificationSettings(client, globalAgent, behavior, input.userId, requestedAt);
+  await persistClientHandoffNotificationSettings(client, agent, behavior, input.userId, requestedAt);
 
   await client
     .from("whatsapp_instances")
@@ -605,7 +626,7 @@ export async function sendClientWhatsappHandoffNotificationTest(input: {
     })
     .eq("id", instance.id);
 
-  const state = await getClientWhatsappState({ organization: input.organization, userId: input.userId, client });
+  const state = await getClientWhatsappState({ organization: input.organization, userId: input.userId, agentId: agent.id, client });
 
   return {
     state,
@@ -617,7 +638,7 @@ export async function sendClientWhatsappHandoffNotificationTest(input: {
 
 async function persistClientHandoffNotificationSettings(
   client: SupabaseClient,
-  globalAgent: AgentRow,
+  agent: AgentRow,
   behavior: WhatsappBehaviorConfig,
   userId: string,
   updatedAt: string,
@@ -626,17 +647,17 @@ async function persistClientHandoffNotificationSettings(
     .from("agent_registry")
     .update({
       metadata: {
-        ...(globalAgent.metadata ?? {}),
+        ...(agent.metadata ?? {}),
         whatsapp_behavior_config: behavior,
         prompt_control: {
-          ...(readRecord(readRecord(globalAgent.metadata)?.prompt_control) ?? {}),
+          ...(readRecord(readRecord(agent.metadata)?.prompt_control) ?? {}),
           last_updated_at: updatedAt,
           last_updated_by: userId,
           source: "client_dashboard_handoff_test",
         },
       },
     })
-    .eq("id", globalAgent.id);
+    .eq("id", agent.id);
 
   if (agentError) {
     throw new Error(`Nao foi possivel salvar o aviso humano: ${agentError.message}`);
@@ -646,6 +667,7 @@ async function persistClientHandoffNotificationSettings(
 export async function updateClientWhatsappPrompt(input: {
   organization: CurrentOrganization;
   userId: string;
+  agentId?: string | null;
   prompt?: string;
   agentPrompt?: string;
   globalPrompt?: string;
@@ -675,19 +697,20 @@ export async function updateClientWhatsappPrompt(input: {
   }
 
   const client = input.client ?? createServiceClient();
-  const [agent, globalAgent, instance] = await Promise.all([
-    requireWorkspaceWhatsappAgent(client, input.organization.id),
+  const agent = await requireWorkspaceWhatsappAgent(client, input.organization.id, input.agentId);
+  const [globalAgent, instance] = await Promise.all([
     getOrCreateWorkspaceGlobalAgent(client, input.organization, input.userId),
-    getWorkspaceInstance(client, input.organization.id),
+    getWorkspaceInstance(client, input.organization.id, agent),
   ]);
-  const nextBehavior = normalizeWhatsappBehaviorConfig(input.behavior ?? getBehaviorConfig(globalAgent, instance));
+  const resolvedInstance = instance && agent ? await ensureInstanceAgentMetadata(client, instance, input.organization, agent) : instance;
+  const nextBehavior = normalizeWhatsappBehaviorConfig(input.behavior ?? getBehaviorConfig(globalAgent, resolvedInstance, agent));
   const hasQualificationConfig = input.qualificationConfig !== undefined;
   const nextQualificationConfig = hasQualificationConfig
     ? normalizeLeadQualificationConfig(input.qualificationConfig)
     : getLeadQualificationConfig(agent);
   const now = new Date().toISOString();
 
-  if (hasAgentPrompt || hasQualificationConfig) {
+  if (hasAgentPrompt || hasQualificationConfig || input.behavior !== undefined) {
     const promptToSave = hasAgentPrompt ? agentPrompt : agent.prompt?.trim() || defaultWhatsappAgentPrompt;
     const nextVersion = hasAgentPrompt ? await getNextPromptVersion(client, agent.id) : null;
     const { error } = await client
@@ -697,6 +720,7 @@ export async function updateClientWhatsappPrompt(input: {
         status: "needs_review",
         metadata: {
           ...(agent.metadata ?? {}),
+          whatsapp_behavior_config: nextBehavior,
           [leadQualificationConfigKey]: nextQualificationConfig,
           prompt_control: {
             last_updated_at: now,
@@ -724,7 +748,7 @@ export async function updateClientWhatsappPrompt(input: {
     }
   }
 
-  if (hasGlobalPrompt || input.behavior !== undefined) {
+  if (hasGlobalPrompt) {
     const nextGlobalVersion = hasGlobalPrompt ? await getNextPromptVersion(client, globalAgent.id) : null;
     const promptToSave = hasGlobalPrompt ? globalPrompt : globalAgent.prompt?.trim() || defaultWhatsappGlobalPrompt;
     const { error } = await client
@@ -734,7 +758,6 @@ export async function updateClientWhatsappPrompt(input: {
         status: "needs_review",
         metadata: {
           ...(globalAgent.metadata ?? {}),
-          whatsapp_behavior_config: nextBehavior,
           prompt_control: {
             last_updated_at: now,
             last_updated_by: input.userId,
@@ -760,37 +783,40 @@ export async function updateClientWhatsappPrompt(input: {
       });
     }
 
-    if (instance) {
-      await client
-        .from("whatsapp_instances")
-        .update({
-          metadata: {
-            ...(instance.metadata ?? {}),
-            behavior_config: nextBehavior,
-            behavior_updated_at: now,
-            behavior_updated_by: input.userId,
-          },
-        })
-        .eq("id", instance.id);
-    }
+  }
+
+  if (resolvedInstance && input.behavior !== undefined) {
+    await client
+      .from("whatsapp_instances")
+      .update({
+        metadata: {
+          ...(resolvedInstance.metadata ?? {}),
+          ...buildAgentInstanceMetadata(input.organization, agent),
+          behavior_config: nextBehavior,
+          behavior_updated_at: now,
+          behavior_updated_by: input.userId,
+        },
+      })
+      .eq("id", resolvedInstance.id);
   }
 
   revalidatePath("/dashboard/whatsapp");
-  return getClientWhatsappState({ organization: input.organization, userId: input.userId, client });
+  return getClientWhatsappState({ organization: input.organization, userId: input.userId, agentId: agent.id, client });
 }
 
 async function createProviderInstance(
   client: SupabaseClient,
   credentials: UazapiCredentials,
   organization: CurrentOrganization,
+  agent: AgentRow,
   userId: string,
 ) {
   const now = new Date().toISOString();
-  const name = buildProviderInstanceName(organization);
+  const name = buildProviderInstanceName(organization, agent);
 
   const existingInProvider = await findProviderInstanceByName(credentials, name);
   if (existingInProvider) {
-    return await upsertRecoveredClientInstance(client, credentials, existingInProvider, organization, userId, now);
+    return await upsertRecoveredClientInstance(client, credentials, existingInProvider, organization, agent, userId, now);
   }
 
   const result = await callUazapi(credentials, "/instance/create", {
@@ -798,9 +824,10 @@ async function createProviderInstance(
     admin: true,
     body: {
       name,
-      systemName: `ConnectyHub - ${organization.name}`,
+      systemName: `ConnectyHub - ${organization.name} - ${agent.name}`,
       adminField01: organization.id,
       adminField02: userId,
+      adminField03: agent.id,
     },
   });
   const providerInstanceId = findString(result.data, ["id", "instance_id", "instanceId", "instanceid"]);
@@ -831,6 +858,7 @@ async function createProviderInstance(
     metadata: {
       created_from: "client_dashboard",
       provider_name: name,
+      ...buildAgentInstanceMetadata(organization, agent),
       behavior_config: defaultWhatsappBehaviorConfig,
       ...(profileImageUrl ? { profile_image_url: profileImageUrl, profile_image_synced_at: now } : {}),
       webhook_status: webhookResult.ok ? "configured" : "not_configured",
@@ -872,18 +900,53 @@ async function createProviderInstance(
     .update({ status: "archived", metadata: { archived_reason: "replaced_by_new_instance", replaced_by: data.id, archived_at: now } })
     .eq("provider", "uazapi")
     .eq("organization_id", organization.id)
+    .contains("metadata", { agent_id: agent.id })
     .neq("id", data.id)
     .neq("status", "archived");
 
   return data;
 }
 
-async function getWorkspaceInstance(client: SupabaseClient, organizationId: string) {
+async function getWorkspaceInstance(client: SupabaseClient, organizationId: string, agent?: AgentRow | null) {
+  if (agent?.id) {
+    const { data, error } = await client
+      .from("whatsapp_instances")
+      .select("id, organization_id, owner_user_id, provider, provider_instance_id, phone_number, display_name, status, qr_status, instance_token_preview, instance_token_encrypted, webhook_url, webhook_configured_at, last_synced_at, last_heartbeat_at, last_message_at, connected_at, disconnected_at, metadata, updated_at")
+      .eq("organization_id", organizationId)
+      .eq("provider", "uazapi")
+      .contains("metadata", { agent_id: agent.id })
+      .neq("status", "archived")
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle<WhatsappInstanceRow>();
+
+    if (error) {
+      if (error.message.includes("instance_token_encrypted")) {
+        return null;
+      }
+
+      throw new Error(`Nao foi possivel carregar a conexao WhatsApp: ${error.message}`);
+    }
+
+    if (data) {
+      return data;
+    }
+
+    const legacy = await getLegacyWorkspaceInstance(client, organizationId);
+
+    if (legacy && canClaimLegacyInstance(agent, legacy)) {
+      return ensureInstanceAgentMetadata(client, legacy, { id: organizationId, name: "" }, agent);
+    }
+
+    return null;
+  }
+
   const { data, error } = await client
     .from("whatsapp_instances")
     .select("id, organization_id, owner_user_id, provider, provider_instance_id, phone_number, display_name, status, qr_status, instance_token_preview, instance_token_encrypted, webhook_url, webhook_configured_at, last_synced_at, last_heartbeat_at, last_message_at, connected_at, disconnected_at, metadata, updated_at")
     .eq("organization_id", organizationId)
     .eq("provider", "uazapi")
+    .neq("status", "archived")
     .order("updated_at", { ascending: false })
     .limit(1)
     .maybeSingle<WhatsappInstanceRow>();
@@ -897,6 +960,104 @@ async function getWorkspaceInstance(client: SupabaseClient, organizationId: stri
   }
 
   return data ?? null;
+}
+
+async function getLegacyWorkspaceInstance(client: SupabaseClient, organizationId: string) {
+  const { data, error } = await client
+    .from("whatsapp_instances")
+    .select("id, organization_id, owner_user_id, provider, provider_instance_id, phone_number, display_name, status, qr_status, instance_token_preview, instance_token_encrypted, webhook_url, webhook_configured_at, last_synced_at, last_heartbeat_at, last_message_at, connected_at, disconnected_at, metadata, updated_at")
+    .eq("organization_id", organizationId)
+    .eq("provider", "uazapi")
+    .neq("status", "archived")
+    .order("updated_at", { ascending: false })
+    .limit(10)
+    .returns<WhatsappInstanceRow[]>();
+
+  if (error) {
+    if (error.message.includes("instance_token_encrypted")) {
+      return null;
+    }
+
+    throw new Error(`Nao foi possivel carregar a conexao WhatsApp: ${error.message}`);
+  }
+
+  return (data ?? []).find((instance) => !readString(readRecord(instance.metadata)?.agent_id)) ?? null;
+}
+
+function canClaimLegacyInstance(agent: AgentRow, instance: WhatsappInstanceRow) {
+  const agentMetadata = readRecord(agent.metadata);
+
+  if (readString(agentMetadata?.cloned_from_agent_id)) {
+    return false;
+  }
+
+  if (readString(readRecord(instance.metadata)?.agent_id)) {
+    return false;
+  }
+
+  if (!agent.created_at) {
+    return true;
+  }
+
+  const agentCreatedAt = new Date(agent.created_at).getTime();
+  const instanceAnchor = instance.connected_at ?? instance.last_synced_at ?? instance.updated_at;
+  const instanceCreatedBeforeAgent = instanceAnchor && new Date(instanceAnchor).getTime() < agentCreatedAt;
+
+  return !instanceCreatedBeforeAgent;
+}
+
+async function ensureInstanceAgentMetadata(
+  client: SupabaseClient,
+  instance: WhatsappInstanceRow,
+  organization: Pick<CurrentOrganization, "id" | "name">,
+  agent: AgentRow,
+) {
+  const currentMetadata = readRecord(instance.metadata) ?? {};
+
+  if (readString(currentMetadata.agent_id) === agent.id) {
+    return instance;
+  }
+
+  const metadata = {
+    ...currentMetadata,
+    ...buildAgentInstanceMetadata(organization, agent),
+    agent_metadata_claimed_at: new Date().toISOString(),
+  };
+
+  const { data, error } = await client
+    .from("whatsapp_instances")
+    .update({ metadata })
+    .eq("id", instance.id)
+    .select("id, organization_id, owner_user_id, provider, provider_instance_id, phone_number, display_name, status, qr_status, instance_token_preview, instance_token_encrypted, webhook_url, webhook_configured_at, last_synced_at, last_heartbeat_at, last_message_at, connected_at, disconnected_at, metadata, updated_at")
+    .single<WhatsappInstanceRow>();
+
+  if (error || !data) {
+    throw new Error(error?.message ?? "Nao foi possivel vincular esta conexao ao agente.");
+  }
+
+  return data;
+}
+
+function buildAgentInstanceMetadata(
+  organization: Pick<CurrentOrganization, "id" | "name">,
+  agent: AgentRow,
+): JsonRecord {
+  const metadata = readRecord(agent.metadata);
+
+  return compactRecord({
+    client_agent: true,
+    agent_id: agent.id,
+    agent_name: agent.persona_name?.trim() || agent.name,
+    agent_code: agent.agent_code ?? undefined,
+    company_id: organization.id,
+    company_name: readString(metadata?.company_name) ?? organization.name,
+    sector_code: agent.sector_code ?? readString(metadata?.sector_code) ?? undefined,
+    sector_name: agent.sector_name ?? readString(metadata?.sector_name) ?? undefined,
+  });
+}
+
+function compactRecord(record: JsonRecord): JsonRecord {
+  return Object.fromEntries(Object.entries(record).filter(([, value]) => value !== undefined && value !== null));
 }
 
 async function findProviderInstanceByName(
@@ -932,6 +1093,7 @@ async function upsertRecoveredClientInstance(
   credentials: UazapiCredentials,
   providerData: Record<string, unknown>,
   organization: CurrentOrganization,
+  agent: AgentRow,
   userId: string,
   now: string,
 ): Promise<WhatsappInstanceRow> {
@@ -963,6 +1125,7 @@ async function upsertRecoveredClientInstance(
     metadata: {
       created_from: "client_dashboard",
       provider_name: findString(providerData, ["name", "instanceName", "instance_name"]),
+      ...buildAgentInstanceMetadata(organization, agent),
       behavior_config: defaultWhatsappBehaviorConfig,
       ...(profileImageUrl ? { profile_image_url: profileImageUrl, profile_image_synced_at: now } : {}),
       webhook_status: webhookResult.ok ? "configured" : "not_configured",
@@ -1000,6 +1163,7 @@ async function upsertRecoveredClientInstance(
     .update({ status: "archived", metadata: { archived_reason: "replaced_by_recovered_instance", replaced_by: data.id, archived_at: now } })
     .eq("provider", "uazapi")
     .eq("organization_id", organization.id)
+    .contains("metadata", { agent_id: agent.id })
     .neq("id", data.id)
     .neq("status", "archived");
 
@@ -1057,11 +1221,11 @@ async function recoverProviderInstanceToken(
   return error ? null : data;
 }
 
-async function requireWorkspaceInstance(client: SupabaseClient, organizationId: string) {
-  const instance = await getWorkspaceInstance(client, organizationId);
+async function requireWorkspaceInstance(client: SupabaseClient, organizationId: string, agent?: AgentRow | null) {
+  const instance = await getWorkspaceInstance(client, organizationId, agent);
 
   if (!instance) {
-    throw new Error("Conecte um WhatsApp antes de executar esta acao.");
+    throw new Error("Conecte o WhatsApp deste agente antes de executar esta acao.");
   }
 
   return instance;
@@ -1115,7 +1279,24 @@ async function markWorkspaceInstanceDisconnected(
   }
 }
 
-async function getWorkspaceWhatsappAgent(client: SupabaseClient, organizationId: string): Promise<AgentRow | null> {
+async function getWorkspaceWhatsappAgent(client: SupabaseClient, organizationId: string, agentId?: string | null): Promise<AgentRow | null> {
+  if (agentId) {
+    const { data, error } = await client
+      .from("agent_registry")
+      .select(agentSelectColumns)
+      .eq("id", agentId)
+      .eq("scope", "organization")
+      .eq("organization_id", organizationId)
+      .contains("metadata", { client_created: true, agent_kind: "whatsapp" })
+      .maybeSingle<AgentRow>();
+
+    if (error) {
+      throw new Error(`Nao foi possivel carregar o agente WhatsApp: ${error.message}`);
+    }
+
+    return data ?? null;
+  }
+
   const { data: clientAgent, error: clientAgentError } = await client
     .from("agent_registry")
     .select(agentSelectColumns)
@@ -1149,8 +1330,8 @@ async function getWorkspaceWhatsappAgent(client: SupabaseClient, organizationId:
   return existing ?? null;
 }
 
-async function requireWorkspaceWhatsappAgent(client: SupabaseClient, organizationId: string) {
-  const agent = await getWorkspaceWhatsappAgent(client, organizationId);
+async function requireWorkspaceWhatsappAgent(client: SupabaseClient, organizationId: string, agentId?: string | null) {
+  const agent = await getWorkspaceWhatsappAgent(client, organizationId, agentId);
 
   if (!agent) {
     throw new Error("Crie um agente antes de salvar prompt e comportamento.");
@@ -1501,6 +1682,9 @@ function buildState(
     agent: agent
       ? {
           id: agent.id,
+          companyId: agent.organization_id,
+          sectorCode: agent.sector_code,
+          sectorName: agent.sector_name,
           name: agent.persona_name?.trim() || agent.name,
           avatarUrl: agent.avatar_url,
           avatarAlt: agent.avatar_alt,
@@ -1531,11 +1715,12 @@ function buildState(
   };
 }
 
-function getBehaviorConfig(globalAgent: AgentRow, instance: WhatsappInstanceRow | null) {
+function getBehaviorConfig(globalAgent: AgentRow, instance: WhatsappInstanceRow | null, agent?: AgentRow | null) {
   const globalConfig = readRecord(globalAgent.metadata)?.whatsapp_behavior_config;
   const instanceConfig = readRecord(instance?.metadata)?.behavior_config;
+  const agentConfig = readRecord(agent?.metadata)?.whatsapp_behavior_config;
 
-  return normalizeWhatsappBehaviorConfig(instanceConfig ?? globalConfig);
+  return normalizeWhatsappBehaviorConfig(instanceConfig ?? agentConfig ?? globalConfig);
 }
 
 function getLeadQualificationConfig(agent: AgentRow | null) {
@@ -1610,16 +1795,24 @@ function decryptInstanceToken(instance: WhatsappInstanceRow) {
   }
 }
 
-function buildProviderInstanceName(organization: CurrentOrganization) {
+function buildProviderInstanceName(organization: CurrentOrganization, agent?: AgentRow | null) {
   const base = (organization.slug || organization.name || organization.id)
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
-    .slice(0, 34);
+    .slice(0, 28);
 
-  return `connectyhub-${base || organization.id.slice(0, 8)}`;
+  const agentBase = (agent?.agent_code || agent?.sector_code || agent?.name || agent?.id || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 24);
+
+  return `connectyhub-${base || organization.id.slice(0, 8)}${agentBase ? `-${agentBase}` : ""}`.slice(0, 64);
 }
 
 function normalizeWhatsappStatus(value: string | null | undefined): WhatsappStatus {

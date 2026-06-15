@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { listClientCompanies, requireClientCompanyAccess, type ClientCompany } from "@/lib/client-os/companies";
+import { getClientAgentsWorkspace, type ClientAgent } from "@/lib/client-os/agents";
+import { requireClientCompanyAccess, type ClientCompany } from "@/lib/client-os/companies";
 import { inngest } from "@/lib/inngest/client";
 import { getCurrentWorkspace, type CurrentOrganization } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
@@ -23,11 +24,14 @@ type WorkspaceContext = {
   organization: CurrentOrganization;
   userId: string;
   companies: ClientCompany[];
+  agents: ClientAgent[];
+  selectedAgentId: string | null;
 };
 
 type ChannelActionBody = {
   action?: unknown;
   companyId?: unknown;
+  agentId?: unknown;
   text?: unknown;
   title?: unknown;
   numbers?: unknown;
@@ -39,7 +43,11 @@ type ChannelActionBody = {
 };
 
 export async function GET(request: NextRequest) {
-  const context = await requireWorkspaceContext(request.nextUrl.searchParams.get("companyId"), true);
+  const context = await requireWorkspaceContext(
+    request.nextUrl.searchParams.get("companyId"),
+    request.nextUrl.searchParams.get("agentId"),
+    true,
+  );
 
   if (context instanceof NextResponse) {
     return context;
@@ -54,7 +62,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const client = createServiceClient();
-    const whatsapp = await resolveClientWhatsappOperationalContext(client, context.organization.id);
+    const whatsapp = await resolveClientWhatsappOperationalContext(client, context.organization.id, context.selectedAgentId);
 
     return NextResponse.json({
       operations: await getWhatsappOperationsDashboard(client, whatsapp),
@@ -66,7 +74,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const body = await readJson<ChannelActionBody>(request);
-  const context = await requireWorkspaceContext(asString(body?.companyId), false);
+  const context = await requireWorkspaceContext(asString(body?.companyId), asString(body?.agentId), false);
 
   if (context instanceof NextResponse) {
     return context;
@@ -80,7 +88,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const client = createServiceClient();
-    const whatsapp = await resolveClientWhatsappOperationalContext(client, context.organization.id);
+    const whatsapp = await resolveClientWhatsappOperationalContext(client, context.organization.id, context.selectedAgentId);
     let result: unknown;
     let notice = "Operacao concluida.";
 
@@ -142,6 +150,7 @@ export async function POST(request: NextRequest) {
 
 async function requireWorkspaceContext(
   requestedCompanyId: string | null,
+  requestedAgentId: string | null,
   allowMissingCompany: boolean,
 ): Promise<WorkspaceContext | NextResponse | null> {
   const workspace = await getCurrentWorkspace();
@@ -150,13 +159,19 @@ async function requireWorkspaceContext(
     return NextResponse.json({ error: "Sessao obrigatoria." }, { status: 401 });
   }
 
-  const companies = await listClientCompanies(workspace.user.id);
+  const { companies, agents } = await getClientAgentsWorkspace(workspace.user.id);
 
   if (companies.length === 0) {
     return allowMissingCompany ? null : NextResponse.json({ error: "Cadastre uma empresa antes de usar canais do WhatsApp." }, { status: 422 });
   }
 
-  const companyId = requestedCompanyId || companies[0]?.id;
+  const selectedAgent = resolveSelectedAgent(agents, requestedAgentId, requestedCompanyId);
+
+  if (requestedAgentId && !selectedAgent) {
+    return NextResponse.json({ error: "Escolha um agente vinculado a sua conta." }, { status: 422 });
+  }
+
+  const companyId = selectedAgent?.companyId || requestedCompanyId || companies[0]?.id;
 
   if (!companyId) {
     return allowMissingCompany ? null : NextResponse.json({ error: "Escolha uma empresa." }, { status: 422 });
@@ -172,10 +187,24 @@ async function requireWorkspaceContext(
       organization,
       userId: workspace.user.id,
       companies,
+      agents,
+      selectedAgentId: selectedAgent?.id ?? null,
     };
   } catch (error) {
     return NextResponse.json(formatError(error), { status: 422 });
   }
+}
+
+function resolveSelectedAgent(agents: ClientAgent[], requestedAgentId: string | null, requestedCompanyId: string | null) {
+  if (requestedAgentId) {
+    return agents.find((agent) => agent.id === requestedAgentId) ?? null;
+  }
+
+  if (requestedCompanyId) {
+    return agents.find((agent) => agent.companyId === requestedCompanyId) ?? null;
+  }
+
+  return agents[0] ?? null;
 }
 
 async function dispatchOutboundIfDue(item: WhatsappOutboundItem) {
