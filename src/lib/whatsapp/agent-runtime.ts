@@ -1203,7 +1203,7 @@ function buildSystemInstruction(input: {
     `- Detectar localizacao: ${input.behavior.detectLocation ? "sim" : "nao"}.`,
     `- Detectar opt-out: ${input.behavior.detectOptOut ? "sim" : "nao"}.`,
     `- Analisar links: ${input.behavior.analyzeLinks ? "sim" : "nao"}.`,
-    `- Mensagens interativas: ${input.behavior.interactiveMessages ? "sim" : "nao"}.`,
+    `- Botoes de link rastreados: ${input.behavior.interactiveMessages ? "sim" : "nao"}.`,
     `- Mencionar todos em grupos: ${input.behavior.groupMentionAll ? "sim" : "nao"}.`,
     `- Proteger midias em lote: ${input.behavior.mediaBurstGuard ? "sim" : "nao"}.`,
     `- Proteger midia sem legenda: ${input.behavior.missingMediaCaptionGuard ? "sim" : "nao"}.`,
@@ -1797,7 +1797,7 @@ function buildLinkButtonLines(
   return [
     "",
     "LINKS RASTREADOS DISPONIVEIS:",
-    "- Quando o lead pedir ou aceitar um produto/link, use a tag ou URL exata abaixo. Se mensagens interativas estiverem ativas, o sistema transforma em botao rastreado.",
+    "- Quando o lead pedir ou aceitar um produto/link, use a tag ou URL exata abaixo. Se botoes de link estiverem ativos, o sistema transforma em botao rastreado.",
     ...linkButtons.map((link) => `- ${link.tag} (${link.label}): ${buildLeadAwareTrackingUrl(link, input)}`),
   ];
 }

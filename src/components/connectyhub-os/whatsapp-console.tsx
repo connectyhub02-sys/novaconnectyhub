@@ -1464,6 +1464,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
                   linkButtons={state.linkButtons}
                   linkButtonLabel={linkButtonLabel}
                   linkButtonUrl={linkButtonUrl}
+                  linkButtonsEnabled={behaviorDraft.interactiveMessages}
                   creatingLinkButton={creatingLinkButton}
                   deletingLinkButtonId={deletingLinkButtonId}
                   notes={promptNotes}
@@ -1475,6 +1476,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
                   onInsertTag={insertPromptTag}
                   onLinkButtonLabelChange={setLinkButtonLabel}
                   onLinkButtonUrlChange={setLinkButtonUrl}
+                  onLinkButtonsEnabledChange={(value) => updateBehavior("interactiveMessages", value)}
                   onNotesChange={setPromptNotes}
                   onProductUrlChange={setPromptProductUrl}
                   promptTags={promptTags}
@@ -1699,7 +1701,6 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
                   />
                   <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
                     <ToggleTile icon={MessageCircle} label="Mencionar todos" description="Permite usar mencao geral em mensagens operacionais de grupo quando a Uazapi aceitar." checked={behaviorDraft.groupMentionAll} onChange={() => updateBehavior("groupMentionAll", !behaviorDraft.groupMentionAll)} />
-                    <ToggleTile icon={MessageSquare} label="Interativos" description="Libera uso de botoes/listas quando um fluxo operacional pedir esse formato." checked={behaviorDraft.interactiveMessages} onChange={() => updateBehavior("interactiveMessages", !behaviorDraft.interactiveMessages)} />
                     <ToggleTile icon={Globe2} label="Status WhatsApp" description="Permite publicar stories/status pelo painel usando processamento Inngest." checked={behaviorDraft.statusBroadcasts} onChange={() => updateBehavior("statusBroadcasts", !behaviorDraft.statusBroadcasts)} />
                     <ToggleTile icon={FileText} label="Canais" description="Permite postar em canais/newsletters do WhatsApp pelo painel." checked={behaviorDraft.newsletterBroadcasts} onChange={() => updateBehavior("newsletterBroadcasts", !behaviorDraft.newsletterBroadcasts)} />
                     <ToggleTile icon={Forward} label="Campanhas" description="Permite criar disparos em lote via Uazapi Sender, sempre processados pelo Inngest." checked={behaviorDraft.campaignBroadcasts} onChange={() => updateBehavior("campaignBroadcasts", !behaviorDraft.campaignBroadcasts)} />
@@ -2713,6 +2714,7 @@ function PromptToolsPanel({
   linkButtons,
   linkButtonLabel,
   linkButtonUrl,
+  linkButtonsEnabled,
   creatingLinkButton,
   deletingLinkButtonId,
   notes,
@@ -2724,6 +2726,7 @@ function PromptToolsPanel({
   onInsertTag,
   onLinkButtonLabelChange,
   onLinkButtonUrlChange,
+  onLinkButtonsEnabledChange,
   onNotesChange,
   onProductUrlChange,
   promptTags,
@@ -2733,6 +2736,7 @@ function PromptToolsPanel({
   linkButtons: TrackedLinkButton[];
   linkButtonLabel: string;
   linkButtonUrl: string;
+  linkButtonsEnabled: boolean;
   creatingLinkButton: boolean;
   deletingLinkButtonId: string | null;
   notes: string;
@@ -2744,6 +2748,7 @@ function PromptToolsPanel({
   onInsertTag: (token: string) => void;
   onLinkButtonLabelChange: (value: string) => void;
   onLinkButtonUrlChange: (value: string) => void;
+  onLinkButtonsEnabledChange: (value: boolean) => void;
   onNotesChange: (value: string) => void;
   onProductUrlChange: (value: string) => void;
   promptTags: Array<{ token: string; label: string; description: string }>;
@@ -2755,7 +2760,7 @@ function PromptToolsPanel({
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
             Tags do prompt
-            <InfoHint text={`Clique para inserir variaveis e links rastreados do ${entitySingular} no ponto atual do cursor no prompt.`} />
+            <InfoHint text={`Clique para inserir variaveis do ${entitySingular} no ponto atual do cursor no prompt.`} />
           </p>
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
@@ -2771,42 +2776,6 @@ function PromptToolsPanel({
               <span className="font-mono text-[10px] text-cyan-300">{tag.token}</span>
               <span className="text-slate-400">{tag.label}</span>
             </button>
-          ))}
-          {linkButtons.map((link) => (
-            <div
-              key={link.id}
-              className="inline-flex max-w-full items-center gap-1 rounded-lg border px-2 py-1.5"
-              style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface)" }}
-            >
-              <button
-                type="button"
-                className="inline-flex min-h-7 min-w-0 items-center gap-2 rounded-md px-1.5 text-left text-[11px] font-semibold text-cyan-100 transition hover:bg-cyan-400/10"
-                title={`${link.label} / ${link.clicks.toLocaleString("pt-BR")} cliques / ${link.url}`}
-                onClick={() => onInsertTag(link.tag)}
-              >
-                <span className="max-w-[180px] truncate font-mono text-[10px] text-cyan-300">{link.tag}</span>
-                <span className="max-w-[92px] truncate text-slate-400">{link.label}</span>
-              </button>
-              <button
-                type="button"
-                className="grid h-7 w-7 place-items-center rounded-md text-cyan-200 transition hover:bg-cyan-400/10 disabled:cursor-not-allowed disabled:opacity-45"
-                title="Copiar tag"
-                aria-label={`Copiar tag ${link.tag}`}
-                onClick={() => onCopyLinkButtonTag(link)}
-              >
-                <Copy className="h-3.5 w-3.5" />
-              </button>
-              <button
-                type="button"
-                className="grid h-7 w-7 place-items-center rounded-md text-red-200 transition hover:bg-red-400/10 disabled:cursor-not-allowed disabled:opacity-45"
-                title="Excluir link"
-                aria-label={`Excluir link ${link.label}`}
-                disabled={deletingLinkButtonId === link.id}
-                onClick={() => onDeleteLinkButton(link)}
-              >
-                {deletingLinkButtonId === link.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-              </button>
-            </div>
           ))}
         </div>
         <div className="mt-4 grid gap-2 md:grid-cols-[minmax(0,1fr)_auto]">
@@ -2847,12 +2816,19 @@ function PromptToolsPanel({
       <div className="rounded-xl border p-3" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
-            Criar botao de link
-            <InfoHint text="Salva um link rastreado e cria uma tag para inserir no prompt junto com as tags padrao." />
+            Links e botoes
+            <InfoHint text="Cadastre links rastreados e controle se eles podem ser enviados como botoes no WhatsApp." />
           </p>
         </div>
 
         <div className="mt-3 grid gap-3">
+          <ToggleTile
+            icon={MessageSquare}
+            label="Enviar como botao"
+            description="Ligado: links do catalogo podem virar botoes no WhatsApp. Desligado: os links continuam salvos, mas nao viram botao."
+            checked={linkButtonsEnabled}
+            onChange={() => onLinkButtonsEnabledChange(!linkButtonsEnabled)}
+          />
           <label className="block">
             <span className="mb-2 flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
               Nome do botao
@@ -2884,12 +2860,84 @@ function PromptToolsPanel({
           </label>
           <ActionButton
             icon={Plus}
-            label="Criar link"
-            description="Salva o link rastreado e cria uma tag para inserir no prompt."
+            label="Criar botao"
+            description="Salva o link rastreado no catalogo de botoes."
             disabled={!linkButtonLabel.trim() || !linkButtonUrl.trim()}
             loading={creatingLinkButton}
             onClick={onCreateLinkButton}
           />
+
+          <div className="rounded-lg border p-2.5" style={{ background: "var(--ch-surface)", borderColor: "var(--ch-border)" }}>
+            <div className="flex items-center justify-between gap-2">
+              <p className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
+                Catalogo de botoes
+                <InfoHint text="Use a tag quando quiser orientar o agente a enviar um botao especifico no prompt." />
+              </p>
+              <span className="rounded-full border px-2 py-1 font-mono text-[9px] uppercase tracking-widest text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
+                {linkButtons.length.toLocaleString("pt-BR")}
+              </span>
+            </div>
+
+            {linkButtons.length > 0 ? (
+              <div className="mt-3 grid max-h-[340px] gap-2 overflow-y-auto pr-1">
+                {linkButtons.map((link) => (
+                  <div
+                    key={link.id}
+                    className="grid gap-2 rounded-lg border p-2"
+                    style={{ borderColor: "var(--ch-border)", background: "var(--ch-panel-2)" }}
+                  >
+                    <div className="min-w-0">
+                      <div className="flex min-w-0 items-center justify-between gap-2">
+                        <p className="truncate text-[12px] font-semibold text-slate-100" title={link.label}>{link.label}</p>
+                        <span className="shrink-0 rounded-full bg-cyan-400/10 px-2 py-1 font-mono text-[9px] uppercase tracking-widest text-cyan-200">
+                          {link.clicks.toLocaleString("pt-BR")} cliques
+                        </span>
+                      </div>
+                      <p className="mt-1 truncate font-mono text-[10px] text-cyan-300" title={link.tag}>{link.tag}</p>
+                      <p className="mt-1 truncate text-[10px] text-slate-500" title={link.url}>{link.url}</p>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      <button
+                        type="button"
+                        className="inline-flex min-h-8 items-center gap-1.5 rounded-md border px-2 font-mono text-[9px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10"
+                        style={{ borderColor: "var(--ch-border)" }}
+                        title="Inserir tag no prompt"
+                        onClick={() => onInsertTag(link.tag)}
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                        Inserir
+                      </button>
+                      <button
+                        type="button"
+                        className="grid h-8 w-8 place-items-center rounded-md border text-cyan-200 transition hover:bg-cyan-400/10 disabled:cursor-not-allowed disabled:opacity-45"
+                        style={{ borderColor: "var(--ch-border)" }}
+                        title="Copiar tag"
+                        aria-label={`Copiar tag ${link.tag}`}
+                        onClick={() => onCopyLinkButtonTag(link)}
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        className="grid h-8 w-8 place-items-center rounded-md border text-red-200 transition hover:bg-red-400/10 disabled:cursor-not-allowed disabled:opacity-45"
+                        style={{ borderColor: "rgba(251,113,133,0.25)" }}
+                        title="Excluir link"
+                        aria-label={`Excluir link ${link.label}`}
+                        disabled={deletingLinkButtonId === link.id}
+                        onClick={() => onDeleteLinkButton(link)}
+                      >
+                        {deletingLinkButtonId === link.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="mt-3 rounded-lg border border-dashed px-3 py-5 text-center text-[12px] leading-5 text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
+                Nenhum botao cadastrado ainda.
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
