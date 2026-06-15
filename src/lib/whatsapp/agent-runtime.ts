@@ -2133,9 +2133,9 @@ async function sendAgentResponse(input: {
 }) {
   const { context } = input;
   const latestInbound = findLatestInbound(context.messages);
-  const shouldSendAudio = shouldSendAudioResponse(context, latestInbound);
   const cleanText = normalizeAssistantText(input.text);
   const chunks = context.behavior.splitMessages ? splitMessage(cleanText) : [cleanText];
+  const shouldSendAudio = shouldSendAudioForChunks(context, latestInbound, chunks);
   const replyTargets = await resolveOutboundReplyTargets(context, chunks).catch(() => []);
   const persistedChunks = await loadPersistedOutboundChunks(input.client, context.run.id, shouldSendAudio ? "audio" : "text");
   const outbound: OutboundMessage[] = [];
@@ -2436,7 +2436,9 @@ async function prepareAgentPresenceBeforeSend(input: {
   text: string;
 }) {
   const latestInbound = findLatestInbound(input.context.messages);
-  const shouldSendAudio = shouldSendAudioResponse(input.context, latestInbound);
+  const cleanText = normalizeAssistantText(input.text);
+  const chunks = input.context.behavior.splitMessages ? splitMessage(cleanText) : [cleanText];
+  const shouldSendAudio = shouldSendAudioForChunks(input.context, latestInbound, chunks);
   const presence = shouldSendAudio ? "recording" : "composing";
   const delayMs = resolvePreSendPresenceDelayMs(input.context.behavior, input.text, shouldSendAudio);
   const presenceHoldMs = shouldSendAudio ? 60000 : Math.min(delayMs + 10000, 300000);
@@ -2459,6 +2461,18 @@ async function prepareAgentPresenceBeforeSend(input: {
   }
 }
 
+function shouldSendAudioForChunks(
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+  latestInbound: ConversationMessageRow | null,
+  chunks: string[],
+) {
+  if (chunks.some((chunk) => responseContainsLinkButtonReference(chunk, context))) {
+    return false;
+  }
+
+  return shouldSendAudioResponse(context, latestInbound);
+}
+
 function shouldSendAudioResponse(
   context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
   latestInbound: ConversationMessageRow | null,
@@ -2477,6 +2491,25 @@ function shouldSendAudioResponse(
   return shouldSendAudio && !visualMediaKind;
 }
 
+function responseContainsLinkButtonReference(
+  text: string,
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+) {
+  if (/https?:\/\/\S+/i.test(text)) {
+    return true;
+  }
+
+  if (context.linkButtons.length === 0) {
+    return false;
+  }
+
+  return context.linkButtons.some((link) => {
+    const trackingUrl = buildLeadAwareTrackingUrl(link, { lead: context.lead });
+
+    return text.includes(trackingUrl) || text.includes(link.url) || text.includes(link.tag);
+  });
+}
+
 function buildInteractiveLinkMenu(
   text: string,
   context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
@@ -2490,7 +2523,7 @@ function buildInteractiveLinkMenu(
 
   for (const link of context.linkButtons) {
     const trackingUrl = buildLeadAwareTrackingUrl(link, { lead: context.lead });
-    const appearsInText = cleanedText.includes(trackingUrl) || cleanedText.includes(link.url);
+    const appearsInText = cleanedText.includes(trackingUrl) || cleanedText.includes(link.url) || cleanedText.includes(link.tag);
 
     if (!appearsInText) {
       continue;
@@ -2500,6 +2533,7 @@ function buildInteractiveLinkMenu(
     cleanedText = cleanedText
       .replaceAll(trackingUrl, "")
       .replaceAll(link.url, "")
+      .replaceAll(link.tag, "")
       .replace(/\s+\n/g, "\n")
       .replace(/\n{3,}/g, "\n\n")
       .replace(/[ \t]{2,}/g, " ")
