@@ -2123,7 +2123,8 @@ async function sendAgentResponse(input: {
   const { context } = input;
   const latestInbound = findLatestInbound(context.messages);
   const shouldSendAudio = shouldSendAudioResponse(context, latestInbound);
-  const chunks = context.behavior.splitMessages ? splitMessage(input.text) : [input.text];
+  const cleanText = normalizeAssistantText(input.text);
+  const chunks = context.behavior.splitMessages ? splitMessage(cleanText) : [cleanText];
   const replyTargets = await resolveOutboundReplyTargets(context, chunks).catch(() => []);
   const persistedChunks = await loadPersistedOutboundChunks(input.client, context.run.id, shouldSendAudio ? "audio" : "text");
   const outbound: OutboundMessage[] = [];
@@ -5261,6 +5262,10 @@ function readStringList(value: unknown, limit = 6) {
 function normalizeAssistantText(value: string) {
   return value
     .replace(/\r/g, "")
+    .replace(/(?:\\n|\/n){2,}/gi, "\n\n")
+    .replace(/(?:^|\s)n\/n\/?(?=\s|$)/gi, (match) => `${match.startsWith(" ") ? " " : ""}\n\n`)
+    .replace(/(?:\\n|\/n)/gi, "\n")
+    .replace(/[ \t]*\n[ \t]*/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .replace(/[(\[*](?:risada(?:\s+leve)?|risos?|sorriso|gargalhada|suspiro|pausa(?:\s+dramatica)?|tom\s+\w+|voz\s+\w+|rindo|sorrindo|sussurrando|gritando|pensando|respirando)[)\]*]/gi, "")
     .replace(/(?<=[.!?])(?=[A-ZÀ-ÖØ-Ý])/g, " ")
