@@ -11,6 +11,12 @@ import {
 } from "./lead-avatar-sync";
 import { normalizeWhatsappBehaviorConfig } from "./agent-behavior";
 import { isWhatsappHandoffNotificationRecipient } from "./handoff-notifications";
+import {
+  classifyWhatsappLeadDisplayName,
+  isLikelyPersonalLeadName,
+  normalizeLeadNameCandidate,
+  resolveLeadPersonalName,
+} from "./lead-names";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -23,6 +29,7 @@ type WhatsappInstanceRow = {
 
 type LeadRow = {
   id: string;
+  display_name: string | null;
   metadata: JsonRecord | null;
 };
 
@@ -390,20 +397,26 @@ async function ensureLead(
 ) {
   const { data: existing } = await client
     .from("leads")
-    .select("id, metadata")
+    .select("id, display_name, metadata")
     .eq("organization_id", input.organizationId)
     .eq("channel", "whatsapp")
     .eq("phone_number", input.phoneNumber)
     .maybeSingle<LeadRow>();
+  const incomingDisplayName = normalizeLeadNameCandidate(input.displayName);
+  const incomingDisplayNameIsPersonal = isLikelyPersonalLeadName(incomingDisplayName);
 
   if (existing) {
     const metadata = buildLeadMetadata(readRecord(existing.metadata), {
       createdFrom: null,
-      displayName: input.displayName,
+      displayName: incomingDisplayName,
       lastSource: "uazapi_webhook",
       profileImageUrl: input.profileImageUrl,
       providerChatId: input.providerChatId,
       providerMessageId: input.providerMessageId,
+    });
+    const safeExistingName = resolveLeadPersonalName({
+      displayName: existing.display_name,
+      metadata,
     });
     const updatePayload: JsonRecord = {
       status: "active",
@@ -412,15 +425,19 @@ async function ensureLead(
       metadata,
     };
 
-    if (input.displayName) {
-      updatePayload.display_name = input.displayName;
+    if (incomingDisplayNameIsPersonal && incomingDisplayName) {
+      updatePayload.display_name = incomingDisplayName;
+    } else if (safeExistingName) {
+      updatePayload.display_name = safeExistingName;
+    } else if (existing.display_name && !isLikelyPersonalLeadName(existing.display_name)) {
+      updatePayload.display_name = null;
     }
 
     const { data, error } = await client
       .from("leads")
       .update(updatePayload)
       .eq("id", existing.id)
-      .select("id, metadata")
+      .select("id, display_name, metadata")
       .single<LeadRow>();
 
     if (error) {
@@ -436,21 +453,21 @@ async function ensureLead(
       organization_id: input.organizationId,
       channel: "whatsapp",
       phone_number: input.phoneNumber,
-      display_name: input.displayName,
+      display_name: incomingDisplayNameIsPersonal ? incomingDisplayName : null,
       status: "active",
       source: "uazapi_webhook",
       last_event_summary: input.lastEventSummary,
       last_message_at: input.lastMessageAt,
       metadata: buildLeadMetadata(null, {
         createdFrom: "uazapi_webhook",
-        displayName: input.displayName,
+        displayName: incomingDisplayName,
         lastSource: "uazapi_webhook",
         profileImageUrl: input.profileImageUrl,
         providerChatId: input.providerChatId,
         providerMessageId: input.providerMessageId,
       }),
     })
-    .select("id, metadata")
+    .select("id, display_name, metadata")
     .single<LeadRow>();
 
   if (error) {
@@ -1004,11 +1021,23 @@ function buildLeadMetadata(
     providerMessageId: string | null;
   },
 ) {
+  const displayName = normalizeLeadNameCandidate(input.displayName);
+  const displayNameKind = classifyWhatsappLeadDisplayName(displayName);
   const metadata: JsonRecord = {
     ...(baseMetadata ?? {}),
     last_source: input.lastSource,
     ...(input.createdFrom ? { created_from: input.createdFrom } : {}),
-    ...(input.displayName ? { last_display_name: input.displayName } : {}),
+    ...(displayName ? {
+      last_display_name: displayName,
+      whatsapp_display_name: displayName,
+      whatsapp_display_name_kind: displayNameKind,
+    } : {}),
+    ...(displayName && isLikelyPersonalLeadName(displayName) ? {
+      person_name: displayName,
+      personal_name: displayName,
+      name: displayName,
+      lead_name: displayName,
+    } : {}),
     ...(input.providerChatId ? { last_provider_chat_id: input.providerChatId } : {}),
     ...(input.providerMessageId ? { last_provider_message_id: input.providerMessageId } : {}),
   };

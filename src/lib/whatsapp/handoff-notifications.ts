@@ -5,6 +5,7 @@ import { inngest } from "@/lib/inngest/client";
 import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
 import { createServiceClient } from "@/lib/supabase/service";
 import { normalizeWhatsappBehaviorConfig, type WhatsappBehaviorConfig } from "./agent-behavior";
+import { resolveLeadPersonalName } from "./lead-names";
 import { loadUazapiCredentials, type UazapiCredentials } from "./uazapi-credentials";
 
 type JsonRecord = Record<string, unknown>;
@@ -286,7 +287,14 @@ function buildNotificationText(input: {
   lead: LeadRow | null;
   test: boolean;
 }) {
-  const leadName = input.data.leadName?.trim() || input.lead?.display_name?.trim() || "Lead sem nome";
+  const leadName = input.data.leadName?.trim()
+    || (input.lead
+      ? resolveLeadPersonalName({
+          displayName: input.lead.display_name,
+          metadata: input.lead.metadata,
+        })
+      : null)
+    || "Lead sem nome";
   const leadPhone = normalizePhone(input.data.leadPhone ?? input.lead?.phone_number) || "numero nao informado";
   const requestText = preview(input.data.requestText ?? "", 500) || (input.test ? "Teste de aviso de atendimento humano." : "Pedido de atendimento humano.");
   const pausedUntil = formatDateForMessage(input.data.pausedUntil);

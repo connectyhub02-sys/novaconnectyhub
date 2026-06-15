@@ -32,6 +32,12 @@ import {
   type WhatsappHandoffNotificationEventData,
   type WhatsappHandoffNotificationResult,
 } from "./handoff-notifications";
+import {
+  isLikelyPersonalLeadName,
+  normalizeLeadNameCandidate,
+  resolveLeadPersonalName,
+  resolveNonPersonalWhatsappDisplayName,
+} from "./lead-names";
 import { loadUazapiCredentials, type UazapiCredentials } from "./uazapi-credentials";
 
 type JsonRecord = Record<string, unknown>;
@@ -147,6 +153,7 @@ type BehaviorSignal = {
 };
 
 type LeadMemorySnapshot = {
+  personName: string | null;
   summary: string | null;
   goals: string[];
   pains: string[];
@@ -1120,31 +1127,28 @@ function buildSystemInstruction(input: {
 }
 
 function buildLeadNameContext(lead: LeadRow | null) {
-  const displayName = lead?.display_name?.replace(/\s+/g, " ").trim();
+  const personName = resolveLeadPersonalName({
+    displayName: lead?.display_name,
+    metadata: lead?.metadata,
+  });
+  const whatsappDisplayName = resolveNonPersonalWhatsappDisplayName({
+    displayName: lead?.display_name,
+    metadata: lead?.metadata,
+  });
 
-  if (!displayName) {
-    return "- Nome do lead: desconhecido";
+  if (personName) {
+    return `- Nome pessoal do lead no CRM: ${personName}. Use esse nome so quando soar natural.`;
   }
 
-  if (isGenericWhatsappDisplayName(displayName)) {
-    return `- Nome exibido no WhatsApp: ${displayName} (parece nome de empresa, segmento, contato ou teste; nao use isso como nome pessoal do lead).`;
+  if (whatsappDisplayName) {
+    return [
+      `- Nome exibido no WhatsApp: ${whatsappDisplayName} (parece nome de empresa, marca, segmento ou contato generico).`,
+      `- Nome pessoal do lead no CRM: ainda nao informado.`,
+      `- Regra obrigatoria: nao chame o lead de "${whatsappDisplayName}". Pergunte de forma natural o nome da pessoa para atualizar o CRM.`,
+    ].join("\n");
   }
 
-  return `- Nome do lead: ${displayName}`;
-}
-
-function isGenericWhatsappDisplayName(value: string) {
-  const normalized = normalizeSearch(value);
-
-  if (!normalized) {
-    return true;
-  }
-
-  if (/^\+?\d[\d\s().-]{6,}$/.test(value)) {
-    return true;
-  }
-
-  return /\b(imobiliaria|imoveis|empresa|cliente|lead|contato|atendimento|comercial|vendas|suporte|teste|connectyhub|buffalo|mass|loja|negocio|consultoria|marketing)\b/.test(normalized);
+  return "- Nome pessoal do lead no CRM: desconhecido. Se a conversa ainda estiver no inicio, pergunte o nome de forma leve.";
 }
 
 function buildAnswerCompletenessInstruction(userText: string) {
@@ -1176,6 +1180,7 @@ function buildLeadMemoryLines(lead: LeadRow | null, behavior: WhatsappBehaviorCo
   const qualification = readRecord(metadata?.lead_qualification);
   const lines: string[] = [];
 
+  if (memory.personName) lines.push(`- Nome pessoal informado pelo lead: ${memory.personName}`);
   if (memory.summary) lines.push(`- Resumo do lead: ${memory.summary}`);
   if (memory.goals.length) lines.push(`- Objetivos declarados: ${memory.goals.join("; ")}`);
   if (memory.pains.length) lines.push(`- Dores/problemas: ${memory.pains.join("; ")}`);
@@ -1390,7 +1395,10 @@ async function analyzeAndPersistLeadQualification(
   const prompt = buildLeadQualificationAnalysisPrompt({
     config: context.qualification,
     organizationName: context.organization.name,
-    leadName: context.lead.display_name,
+    leadName: resolveLeadPersonalName({
+      displayName: context.lead.display_name,
+      metadata: context.lead.metadata,
+    }),
     conversationText: buildConversationText(context.messages),
     leadMetadata: context.lead.metadata,
   });
@@ -1581,7 +1589,10 @@ function renderPromptVariables(prompt: string, input: {
   lead: LeadRow | null;
   linkButtons?: RuntimeLinkButton[];
 }) {
-  const leadName = input.lead?.display_name?.trim() || "lead";
+  const leadName = resolveLeadPersonalName({
+    displayName: input.lead?.display_name,
+    metadata: input.lead?.metadata,
+  }) ?? "lead";
   const agentName = input.agent.persona_name?.trim() || input.agent.name;
   const replacements = new Map([
     ["{{lead_name}}", leadName],
@@ -3105,7 +3116,12 @@ async function handleLeadHumanHandoffRequest(input: {
     leadId: context.lead?.id ?? null,
     agentId: context.agent.id,
     agentRunId: context.run.id,
-    leadName: context.lead?.display_name ?? null,
+    leadName: context.lead
+      ? resolveLeadPersonalName({
+          displayName: context.lead.display_name,
+          metadata: context.lead.metadata,
+        })
+      : null,
     leadPhone: context.lead?.phone_number ?? null,
     requestText,
     requestedAt,
@@ -3453,6 +3469,11 @@ async function extractLeadMemory(
     "",
     "Objetivo: guardar apenas fatos uteis para proximas respostas parecerem continuas e humanas.",
     "Nao invente. Nao salve dados sensiveis desnecessarios. Nao salve telefone.",
+    "Se o nome exibido no WhatsApp parecer nome de empresa, marca ou contato generico, NAO use isso como nome pessoal.",
+    "Preencha personName somente quando o lead informar o proprio nome ou quando houver nome pessoal claro na conversa.",
+    "",
+    "Contexto de nome atual:",
+    buildLeadNameContext(context.lead),
     "",
     "Memoria atual:",
     JSON.stringify(currentMemory),
@@ -3465,6 +3486,7 @@ async function extractLeadMemory(
     "",
     "JSON esperado:",
     JSON.stringify({
+      personName: "nome pessoal do lead, se informado claramente",
       summary: "resumo curto do lead",
       goals: ["objetivo declarado"],
       pains: ["dor ou problema"],
@@ -3503,18 +3525,28 @@ async function extractLeadMemory(
 
   if (!hasLeadMemoryContent(nextMemory)) return;
 
+  const personName = normalizeLeadNameCandidate(nextMemory.personName);
+  const metadata: JsonRecord = {
+    ...currentMetadata,
+    lead_memory: {
+      ...nextMemory,
+      updated_at: new Date().toISOString(),
+      source: "whatsapp_agent_memory",
+    },
+  };
+  const updatePayload: JsonRecord = { metadata };
+
+  if (personName && isLikelyPersonalLeadName(personName)) {
+    metadata.person_name = personName;
+    metadata.personal_name = personName;
+    metadata.name = personName;
+    metadata.lead_name = personName;
+    updatePayload.display_name = personName;
+  }
+
   await client
     .from("leads")
-    .update({
-      metadata: {
-        ...currentMetadata,
-        lead_memory: {
-          ...nextMemory,
-          updated_at: new Date().toISOString(),
-          source: "whatsapp_agent_memory",
-        },
-      },
-    })
+    .update(updatePayload)
     .eq("id", context.lead.id);
 }
 
@@ -5223,6 +5255,7 @@ function normalizeLeadMemory(value: unknown): LeadMemorySnapshot {
   const record = readRecord(value) ?? {};
 
   return {
+    personName: normalizeLeadNameCandidate(record.personName ?? record.person_name),
     summary: asString(record.summary),
     goals: readStringList(record.goals),
     pains: readStringList(record.pains),
@@ -5241,6 +5274,7 @@ function hasLeadMemoryContent(memory: LeadMemorySnapshot) {
       memory.emotionalState ||
       memory.buyingStage ||
       memory.nextHumanCue ||
+      memory.personName ||
       memory.goals.length ||
       memory.pains.length ||
       memory.objections.length ||

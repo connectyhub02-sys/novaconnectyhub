@@ -7,6 +7,7 @@ import {
   syncLeadAvatarFromUazapi,
   type LeadAvatarSyncInstance,
 } from "@/lib/whatsapp/lead-avatar-sync";
+import { resolveLeadPersonalName } from "@/lib/whatsapp/lead-names";
 import { listClientCompanies, type ClientCompany } from "./companies";
 
 type JsonRecord = Record<string, unknown>;
@@ -493,7 +494,10 @@ function mapLeadRecord(input: {
   const avatarUrl = readLeadProfileImageUrl(metadata)
     ?? readLeadProfileImageUrl(eventMetadata)
     ?? readLeadProfileImageUrl(input.conversations.map((conversation) => conversation.metadata));
-  const name = readString(input.lead.display_name) ?? readString(metadata.name) ?? readString(metadata.lead_name) ?? fallbackLeadName(input.lead.phone_number);
+  const name = resolveLeadPersonalName({
+    displayName: input.lead.display_name,
+    metadata,
+  }) ?? fallbackLeadName(input.lead.phone_number);
   const email = readString(metadata.email) ?? readString(metadata.lead_email);
   const source = readString(input.lead.source) ?? readString(metadata.source) ?? input.lead.channel ?? "whatsapp";
   const qualificationMetadata = readRecord(metadata.qualification) ?? {};
