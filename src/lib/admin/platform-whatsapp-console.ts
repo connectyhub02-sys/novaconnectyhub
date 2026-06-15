@@ -24,7 +24,7 @@ import {
 import type { ClientKnowledgeFile, ClientTrackedLinkButton, ClientWhatsappActionResult, ClientWhatsappState } from "@/lib/whatsapp/client-workspace";
 import { loadUazapiCredentials, type UazapiCredentials } from "@/lib/whatsapp/uazapi-credentials";
 import { createServiceClient } from "@/lib/supabase/service";
-import { createPlatformWhatsappAgent } from "./platform-whatsapp-agents";
+import { createPlatformWhatsappAgent, createPlatformWhatsappSector } from "./platform-whatsapp-agents";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -165,6 +165,40 @@ export async function createPlatformWhatsappConsoleAgent(input: {
   revalidateWhatsappAdmin();
   return getPlatformWhatsappConsoleState({
     sectorId: input.sectorId,
+    userId: input.userId,
+    voiceOrganizationId: input.voiceOrganizationId,
+    client,
+  });
+}
+
+export async function createPlatformWhatsappConsoleSectorAgent(input: {
+  sectorName: string;
+  description?: string;
+  name: string;
+  roleTitle?: string;
+  userId: string;
+  voiceOrganizationId?: string | null;
+  client?: SupabaseClient;
+}) {
+  const client = input.client ?? createServiceClient();
+  const sector = await createPlatformWhatsappSector({
+    name: input.sectorName,
+    description: input.description,
+    userId: input.userId,
+    client,
+  });
+
+  await createPlatformWhatsappAgent({
+    sectorId: sector.id,
+    name: input.name,
+    roleTitle: input.roleTitle,
+    userId: input.userId,
+    client,
+  });
+
+  revalidateWhatsappAdmin();
+  return getPlatformWhatsappConsoleState({
+    sectorId: sector.id,
     userId: input.userId,
     voiceOrganizationId: input.voiceOrganizationId,
     client,

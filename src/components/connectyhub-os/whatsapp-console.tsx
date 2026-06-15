@@ -394,6 +394,11 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
   const [showAgentForm, setShowAgentForm] = useState(false);
   const [agentName, setAgentName] = useState("");
   const [creatingAgent, setCreatingAgent] = useState(false);
+  const [showInternalAgentForm, setShowInternalAgentForm] = useState(false);
+  const [internalSectorName, setInternalSectorName] = useState("");
+  const [internalSectorDescription, setInternalSectorDescription] = useState("");
+  const [internalAgentName, setInternalAgentName] = useState("");
+  const [creatingInternalAgent, setCreatingInternalAgent] = useState(false);
   const [promptProductUrl, setPromptProductUrl] = useState("");
   const [promptNotes, setPromptNotes] = useState("");
   const [linkButtonLabel, setLinkButtonLabel] = useState("");
@@ -635,9 +640,10 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
   const settingsChanged = promptChanged || behaviorChanged || qualificationChanged;
   const companies = state?.companies ?? [];
   const selectedCompany = companies.find((company) => company.id === selectedCompanyId) ?? companies[0] ?? null;
+  const canManageInternalAgents = variant.entityIdKey === "sectorId";
   const needsCompany = !loading && companies.length === 0;
   const needsAgent = !loading && companies.length > 0 && !state?.agent;
-  const headerTitle = loading || needsCompany ? "WhatsApp" : needsAgent ? "Criar agente WhatsApp" : "Conexao, prompt e comportamento";
+  const headerTitle = loading || (needsCompany && !canManageInternalAgents) ? "WhatsApp" : needsAgent || (needsCompany && canManageInternalAgents) ? "Criar agente WhatsApp" : "Conexao, prompt e comportamento";
   const headerDescription = loading || needsCompany
     ? variant.headerDescriptions.missingEntity
     : needsAgent
@@ -1062,6 +1068,79 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
     }
   }
 
+  async function switchWhatsappEntity(nextEntityId: string) {
+    if (!nextEntityId || nextEntityId === selectedCompanyId) {
+      return;
+    }
+
+    if (settingsChanged) {
+      const confirmed = window.confirm("Existem alteracoes nao salvas neste agente. Trocar mesmo assim?");
+
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    setRunning("switch_entity");
+    setNotice(null);
+
+    try {
+      const nextState = await fetchWhatsappState(variant, nextEntityId);
+      applyWhatsappState(nextState);
+      setQrCode(null);
+      setChannelOps(null);
+    } catch (error) {
+      setNotice({ tone: "error", message: error instanceof Error ? error.message : `Nao foi possivel abrir este ${variant.entitySingular}.` });
+    } finally {
+      setRunning(null);
+    }
+  }
+
+  async function createInternalWhatsappAgent() {
+    const sectorName = internalSectorName.trim();
+    const name = internalAgentName.trim() || sectorName;
+
+    if (!sectorName) {
+      setNotice({ tone: "warning", message: "Informe o setor interno do novo agente." });
+      return;
+    }
+
+    setCreatingInternalAgent(true);
+    setNotice(null);
+
+    try {
+      const response = await fetch(variant.endpoints.createAgent, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "create_sector_agent",
+          sectorName,
+          description: internalSectorDescription,
+          name,
+          roleTitle: variant.agentRoleTitle,
+        }),
+      });
+      const data = (await response.json().catch(() => null)) as ActionResponse | null;
+
+      if (!response.ok || !data?.state) {
+        throw new Error(data?.error ?? "Nao foi possivel criar o agente interno.");
+      }
+
+      applyWhatsappState(data.state);
+      setInternalSectorName("");
+      setInternalSectorDescription("");
+      setInternalAgentName("");
+      setShowInternalAgentForm(false);
+      setQrCode(null);
+      setChannelOps(null);
+      setNotice(data.notice ?? { tone: "success", message: "Agente interno criado. Agora configure prompt, conexao e comportamento." });
+    } catch (error) {
+      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao criar agente interno." });
+    } finally {
+      setCreatingInternalAgent(false);
+    }
+  }
+
   return (
     <>
       <SectionHeader
@@ -1074,8 +1153,27 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
 
       {loading ? (
         <LoadingState />
-      ) : companies.length === 0 ? (
+      ) : companies.length === 0 && !canManageInternalAgents ? (
         <CompanyRequiredState variant={variant} />
+      ) : companies.length === 0 && canManageInternalAgents ? (
+        <InternalAgentsManager
+          agentName={internalAgentName}
+          companies={companies}
+          creating={creatingInternalAgent}
+          sectorDescription={internalSectorDescription}
+          sectorName={internalSectorName}
+          selectedCompany={selectedCompany}
+          selectedCompanyId={selectedCompanyId}
+          showForm
+          onAgentNameChange={setInternalAgentName}
+          onCancel={() => setShowInternalAgentForm(false)}
+          onCreate={createInternalWhatsappAgent}
+          onSectorDescriptionChange={setInternalSectorDescription}
+          onSectorNameChange={setInternalSectorName}
+          onSelectCompany={switchWhatsappEntity}
+          onStart={() => setShowInternalAgentForm(true)}
+          variant={variant}
+        />
       ) : !state?.agent ? (
         <AgentCreationGate
           agentName={agentName}
@@ -1093,6 +1191,27 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
         />
       ) : (
       <>
+        {canManageInternalAgents ? (
+          <InternalAgentsManager
+            agentName={internalAgentName}
+            companies={companies}
+            creating={creatingInternalAgent}
+            sectorDescription={internalSectorDescription}
+            sectorName={internalSectorName}
+            selectedCompany={selectedCompany}
+            selectedCompanyId={selectedCompanyId}
+            showForm={showInternalAgentForm}
+            onAgentNameChange={setInternalAgentName}
+            onCancel={() => setShowInternalAgentForm(false)}
+            onCreate={createInternalWhatsappAgent}
+            onSectorDescriptionChange={setInternalSectorDescription}
+            onSectorNameChange={setInternalSectorName}
+            onSelectCompany={switchWhatsappEntity}
+            onStart={() => setShowInternalAgentForm(true)}
+            variant={variant}
+          />
+        ) : null}
+
         <WhatsappConsoleCommandBar
           agent={state.agent}
           behavior={behaviorDraft}
@@ -1821,6 +1940,130 @@ function SummaryPill({
         {value}
       </p>
     </div>
+  );
+}
+
+function InternalAgentsManager({
+  agentName,
+  companies,
+  creating,
+  sectorDescription,
+  sectorName,
+  selectedCompany,
+  selectedCompanyId,
+  showForm,
+  onAgentNameChange,
+  onCancel,
+  onCreate,
+  onSectorDescriptionChange,
+  onSectorNameChange,
+  onSelectCompany,
+  onStart,
+  variant,
+}: {
+  agentName: string;
+  companies: ClientCompany[];
+  creating: boolean;
+  sectorDescription: string;
+  sectorName: string;
+  selectedCompany: ClientCompany | null;
+  selectedCompanyId: string;
+  showForm: boolean;
+  onAgentNameChange: (value: string) => void;
+  onCancel: () => void;
+  onCreate: () => void;
+  onSectorDescriptionChange: (value: string) => void;
+  onSectorNameChange: (value: string) => void;
+  onSelectCompany: (value: string) => void;
+  onStart: () => void;
+  variant: WhatsappConsoleVariant;
+}) {
+  return (
+    <Panel
+      title="Agentes internos"
+      eyebrow="criar / alternar"
+      action={<NeonBadge tone="cyan">{companies.length.toLocaleString("pt-BR")} agentes</NeonBadge>}
+      className="mb-3 sm:mb-4"
+    >
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+        <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(180px,auto)]">
+          <label className="block">
+            <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Agente / setor ativo</span>
+            <select
+              className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
+              disabled={companies.length === 0}
+              value={selectedCompanyId}
+              onChange={(event) => onSelectCompany(event.target.value)}
+            >
+              {companies.length === 0 ? (
+                <option value="">Nenhum agente interno</option>
+              ) : null}
+              {companies.map((company) => (
+                <option key={company.id} value={company.id}>
+                  {company.name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <div className="grid gap-2 sm:grid-cols-2">
+            <InfoTile label={variant.agentGateSelectedLabel} value={selectedCompany?.name ?? "Nenhum"} />
+            <InfoTile label="Status" value={selectedCompany?.status ?? "Novo"} />
+          </div>
+        </div>
+
+        <ActionButton
+          icon={Plus}
+          label={showForm ? "Formulario aberto" : "Novo agente"}
+          disabled={showForm}
+          onClick={onStart}
+        />
+      </div>
+
+      {showForm ? (
+        <div
+          className="mt-4 rounded-xl p-4"
+          style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
+        >
+          <div className="grid gap-3 md:grid-cols-3">
+            <label className="block">
+              <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Setor interno</span>
+              <input
+                className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
+                placeholder="Ex: Suporte comercial"
+                value={sectorName}
+                onChange={(event) => onSectorNameChange(event.target.value)}
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Nome do agente</span>
+              <input
+                className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
+                placeholder="Ex: Lucas Atendimento"
+                value={agentName}
+                onChange={(event) => onAgentNameChange(event.target.value)}
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Descricao</span>
+              <input
+                className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
+                placeholder="Ex: Atende novos leads"
+                value={sectorDescription}
+                onChange={(event) => onSectorDescriptionChange(event.target.value)}
+              />
+            </label>
+          </div>
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            {companies.length > 0 ? (
+              <SecondaryAction icon={X} label="Fechar" disabled={creating} onClick={onCancel} />
+            ) : null}
+            <ActionButton icon={Wand2} label="Criar agente" disabled={creating || !sectorName.trim()} loading={creating} onClick={onCreate} />
+          </div>
+        </div>
+      ) : null}
+    </Panel>
   );
 }
 

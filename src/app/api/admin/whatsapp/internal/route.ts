@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import {
   connectPlatformWhatsappConsole,
   createPlatformWhatsappConsoleAgent,
+  createPlatformWhatsappConsoleSectorAgent,
   disconnectPlatformWhatsappConsole,
   getPlatformWhatsappConsoleState,
   refreshPlatformWhatsappConsoleStatus,
@@ -20,6 +21,8 @@ type ActionBody = {
   sectorId?: unknown;
   name?: unknown;
   roleTitle?: unknown;
+  sectorName?: unknown;
+  description?: unknown;
   prompt?: unknown;
   agentPrompt?: unknown;
   behavior?: unknown;
@@ -70,6 +73,22 @@ export async function POST(request: NextRequest) {
       });
 
       return NextResponse.json({ state, notice: { tone: "success", message: "Agente criado. Agora configure prompt, arquivos, links e comportamento." } }, { status: 201 });
+    }
+
+    if (action === "create_sector_agent") {
+      const state = await createPlatformWhatsappConsoleSectorAgent({
+        sectorName: asString(body?.sectorName) ?? "",
+        description: asString(body?.description) ?? undefined,
+        name: asString(body?.name) ?? "",
+        roleTitle: asString(body?.roleTitle) ?? undefined,
+        userId: auth.userId,
+        client: createServiceClient(),
+      });
+
+      return NextResponse.json({
+        state,
+        notice: { tone: "success", message: "Agente interno criado. Agora configure prompt, conexao e comportamento." },
+      }, { status: 201 });
     }
 
     if (action === "connect") {
