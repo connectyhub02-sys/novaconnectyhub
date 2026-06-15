@@ -393,6 +393,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
   const [selectedCompanyId, setSelectedCompanyId] = useState("");
   const [showAgentForm, setShowAgentForm] = useState(false);
   const [agentName, setAgentName] = useState("");
+  const [agentSectorName, setAgentSectorName] = useState("Atendimento WhatsApp");
   const [creatingAgent, setCreatingAgent] = useState(false);
   const [showInternalAgentForm, setShowInternalAgentForm] = useState(false);
   const [internalSectorName, setInternalSectorName] = useState("");
@@ -1047,6 +1048,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
           action: "create_agent",
           [variant.entityIdKey]: selectedCompanyId,
           name: agentName.trim() || "Agente WhatsApp",
+          sectorName: agentSectorName.trim() || "Atendimento WhatsApp",
           roleTitle: variant.agentRoleTitle,
         }),
       });
@@ -1059,6 +1061,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
       const nextState = await fetchWhatsappState(variant, selectedCompanyId);
       applyWhatsappState(nextState);
       setAgentName("");
+      setAgentSectorName("Atendimento WhatsApp");
       setShowAgentForm(false);
       setNotice({ tone: "success", message: "Agente criado. Agora configure o prompt, comportamento e conexao." });
     } catch (error) {
@@ -1185,8 +1188,10 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
           onAgentNameChange={setAgentName}
           onCancel={() => setShowAgentForm(false)}
           onCreate={createWhatsappAgent}
+          onSectorNameChange={setAgentSectorName}
           onSelectCompany={setSelectedCompanyId}
           onStart={() => setShowAgentForm(true)}
+          sectorName={agentSectorName}
           variant={variant}
         />
       ) : (
@@ -2071,12 +2076,14 @@ function AgentCreationGate({
   agentName,
   companies,
   creating,
+  sectorName,
   selectedCompany,
   selectedCompanyId,
   showForm,
   onAgentNameChange,
   onCancel,
   onCreate,
+  onSectorNameChange,
   onSelectCompany,
   onStart,
   variant,
@@ -2084,12 +2091,14 @@ function AgentCreationGate({
   agentName: string;
   companies: ClientCompany[];
   creating: boolean;
+  sectorName: string;
   selectedCompany: ClientCompany | null;
   selectedCompanyId: string;
   showForm: boolean;
   onAgentNameChange: (value: string) => void;
   onCancel: () => void;
   onCreate: () => void;
+  onSectorNameChange: (value: string) => void;
   onSelectCompany: (value: string) => void;
   onStart: () => void;
   variant: WhatsappConsoleVariant;
@@ -2157,6 +2166,15 @@ function AgentCreationGate({
                   placeholder="Ex: Agente comercial"
                   value={agentName}
                   onChange={(event) => onAgentNameChange(event.target.value)}
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Setor</span>
+                <input
+                  className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
+                  placeholder="Ex: Vendas, Suporte, Financeiro"
+                  value={sectorName}
+                  onChange={(event) => onSectorNameChange(event.target.value)}
                 />
               </label>
             </div>

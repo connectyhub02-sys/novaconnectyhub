@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { Building2, GitBranch, Loader2, Pencil, Plus, Save, Trash2, UserPlus, X } from "lucide-react";
 import { NeonBadge, Panel, SectionHeader } from "./panel-primitives";
 import { cn } from "@/lib/utils";
@@ -530,7 +531,15 @@ function CompanyBlock({
                       {agent.name} - {agent.roleTitle}
                     </p>
                   </div>
-                  <NeonBadge tone={agent.status === "active" ? "green" : "amber"}>{agent.status}</NeonBadge>
+                  <div className="flex shrink-0 flex-col items-end gap-2">
+                    <NeonBadge tone={agent.status === "active" ? "green" : "amber"}>{agent.status}</NeonBadge>
+                    <Link
+                      className="rounded-md border border-cyan-400/20 bg-cyan-400/10 px-2 py-1 font-mono text-[9px] font-semibold uppercase tracking-wide text-cyan-200 transition hover:bg-cyan-400/15"
+                      href="/dashboard/agentes"
+                    >
+                      Editar / clonar
+                    </Link>
+                  </div>
                 </div>
               </div>
             ))}

@@ -6,6 +6,8 @@ import { defaultWhatsappAgentPrompt, defaultWhatsappBehaviorConfig } from "@/lib
 import { createServiceClient } from "@/lib/supabase/service";
 import { listClientCompanies, requireClientCompanyAccess, type ClientCompany } from "./companies";
 
+type JsonRecord = Record<string, unknown>;
+
 export type ClientAgent = {
   id: string;
   companyId: string;
@@ -41,6 +43,22 @@ type AgentRow = {
   created_at: string | null;
 };
 
+type AgentFullRow = AgentRow & {
+  avatar_url: string | null;
+  avatar_alt: string | null;
+  profile_bio: string | null;
+  llm_provider: string;
+  model_id: string | null;
+  requires_human_approval: boolean;
+  tools: string[];
+  triggers: string[];
+  schedule_rrule: string | null;
+  inngest_event_name: string | null;
+  memory_access_level: string;
+  monthly_budget_credits: number | null;
+  metadata: JsonRecord | null;
+};
+
 type DeleteAgentRow = {
   id: string;
   organization_id: string;
@@ -49,6 +67,8 @@ type DeleteAgentRow = {
 const maxAgentNameLength = 80;
 const maxSectorNameLength = 80;
 const maxPromptLength = 8000;
+const agentListSelectColumns = "id, organization_id, sector_code, sector_name, agent_code, name, persona_name, role_title, description, prompt, status, autonomy_level, updated_at, created_at";
+const agentFullSelectColumns = `${agentListSelectColumns}, avatar_url, avatar_alt, profile_bio, llm_provider, model_id, requires_human_approval, tools, triggers, schedule_rrule, inngest_event_name, memory_access_level, monthly_budget_credits, metadata`;
 
 export async function getClientAgentsWorkspace(userId: string, client: SupabaseClient = createServiceClient()) {
   const companies = await listClientCompanies(userId, client);
@@ -60,7 +80,7 @@ export async function getClientAgentsWorkspace(userId: string, client: SupabaseC
 
   const { data, error } = await client
     .from("agent_registry")
-    .select("id, organization_id, sector_code, sector_name, agent_code, name, persona_name, role_title, description, prompt, status, autonomy_level, updated_at, created_at")
+    .select(agentListSelectColumns)
     .eq("scope", "organization")
     .in("organization_id", companyIds)
     .contains("metadata", { client_created: true, agent_kind: "whatsapp" })
@@ -132,7 +152,7 @@ export async function createClientAgent(input: {
         [leadQualificationConfigKey]: defaultLeadQualificationConfig,
       },
     })
-    .select("id, organization_id, sector_code, sector_name, agent_code, name, persona_name, role_title, description, prompt, status, autonomy_level, updated_at, created_at")
+    .select(agentListSelectColumns)
     .single<AgentRow>();
 
   if (error || !data) {
@@ -140,6 +160,137 @@ export async function createClientAgent(input: {
   }
 
   return mapAgent(data, new Map([[company.id, company]]));
+}
+
+export async function updateClientAgent(input: {
+  userId: string;
+  agentId: string;
+  companyId: string;
+  name: string;
+  sectorName?: string;
+  roleTitle?: string;
+  prompt?: string;
+  client?: SupabaseClient;
+}) {
+  const client = input.client ?? createServiceClient();
+  const { agent, companies } = await requireClientAgentAccess({
+    userId: input.userId,
+    agentId: input.agentId,
+    client,
+  });
+  const targetCompany = await requireClientCompanyAccess({
+    userId: input.userId,
+    companyId: input.companyId || agent.organization_id,
+    client,
+  });
+  const name = normalizeAgentName(input.name);
+  const sectorName = normalizeSectorName(input.sectorName);
+  const sectorCode = createSectorCode(sectorName);
+  const roleTitle = normalizeRoleTitle(input.roleTitle);
+  const prompt = normalizePrompt(input.prompt);
+  const metadata = mergeAgentMetadata(agent.metadata, targetCompany, sectorCode, sectorName);
+
+  const { data, error } = await client
+    .from("agent_registry")
+    .update({
+      organization_id: targetCompany.id,
+      sector_code: sectorCode,
+      sector_name: sectorName,
+      name,
+      persona_name: name,
+      avatar_alt: `Agente ${name}`,
+      role_title: roleTitle,
+      prompt,
+      metadata,
+    })
+    .eq("id", agent.id)
+    .eq("scope", "organization")
+    .select(agentListSelectColumns)
+    .single<AgentRow>();
+
+  if (error || !data) {
+    throw new Error(error?.message ?? "Nao foi possivel editar o agente.");
+  }
+
+  const companyById = new Map(companies.map((company) => [company.id, company]));
+  companyById.set(targetCompany.id, targetCompany);
+
+  return mapAgent(data, companyById);
+}
+
+export async function cloneClientAgent(input: {
+  userId: string;
+  sourceAgentId: string;
+  companyId: string;
+  name?: string;
+  sectorName?: string;
+  roleTitle?: string;
+  prompt?: string;
+  client?: SupabaseClient;
+}) {
+  const client = input.client ?? createServiceClient();
+  const { agent: sourceAgent, companies } = await requireClientAgentAccess({
+    userId: input.userId,
+    agentId: input.sourceAgentId,
+    client,
+  });
+  const targetCompany = await requireClientCompanyAccess({
+    userId: input.userId,
+    companyId: input.companyId || sourceAgent.organization_id,
+    client,
+  });
+  const name = normalizeAgentName(input.name || `Copia de ${sourceAgent.name}`);
+  const sectorName = normalizeSectorName(input.sectorName || sourceAgent.sector_name);
+  const sectorCode = createSectorCode(sectorName);
+  const roleTitle = normalizeRoleTitle(input.roleTitle || sourceAgent.role_title);
+  const prompt = normalizePrompt(input.prompt || sourceAgent.prompt);
+  const metadata = mergeAgentMetadata(sourceAgent.metadata, targetCompany, sectorCode, sectorName, {
+    cloned_from_agent_id: sourceAgent.id,
+    cloned_from_agent_name: sourceAgent.name,
+    cloned_at: new Date().toISOString(),
+  });
+
+  const { data, error } = await client
+    .from("agent_registry")
+    .insert({
+      scope: "organization",
+      organization_id: targetCompany.id,
+      sector_code: sectorCode,
+      sector_name: sectorName,
+      agent_code: createAgentCode(name),
+      name,
+      persona_name: name,
+      avatar_url: sourceAgent.avatar_url,
+      avatar_alt: sourceAgent.avatar_alt || `Agente ${name}`,
+      profile_bio: sourceAgent.profile_bio,
+      role_title: roleTitle,
+      description: sourceAgent.description,
+      prompt,
+      llm_provider: sourceAgent.llm_provider,
+      model_id: sourceAgent.model_id,
+      status: "draft",
+      autonomy_level: sourceAgent.autonomy_level,
+      requires_human_approval: sourceAgent.requires_human_approval,
+      tools: sourceAgent.tools,
+      triggers: sourceAgent.triggers,
+      schedule_rrule: sourceAgent.schedule_rrule,
+      inngest_event_name: sourceAgent.inngest_event_name,
+      memory_access_level: sourceAgent.memory_access_level,
+      monthly_budget_credits: sourceAgent.monthly_budget_credits,
+      created_by: input.userId,
+      metadata,
+    })
+    .select(agentListSelectColumns)
+    .single<AgentRow>();
+
+  if (error || !data) {
+    throw new Error(error?.message ?? "Nao foi possivel clonar o agente.");
+  }
+
+  const companyById = new Map(companies.map((company) => [company.id, company]));
+  companyById.set(targetCompany.id, targetCompany);
+
+  return mapAgent(data, companyById);
 }
 
 export async function deleteClientAgent(input: {
@@ -189,6 +340,37 @@ export async function deleteClientAgent(input: {
   return agent;
 }
 
+async function requireClientAgentAccess(input: {
+  userId: string;
+  agentId: string;
+  client: SupabaseClient;
+}) {
+  const companies = await listClientCompanies(input.userId, input.client);
+  const companyIds = new Set(companies.map((company) => company.id));
+
+  if (companyIds.size === 0) {
+    throw new Error("Nenhuma empresa cadastrada para gerenciar agentes.");
+  }
+
+  const { data: agent, error } = await input.client
+    .from("agent_registry")
+    .select(agentFullSelectColumns)
+    .eq("id", input.agentId)
+    .eq("scope", "organization")
+    .contains("metadata", { client_created: true, agent_kind: "whatsapp" })
+    .maybeSingle<AgentFullRow>();
+
+  if (error) {
+    throw new Error(`Nao foi possivel validar o agente: ${error.message}`);
+  }
+
+  if (!agent || !companyIds.has(agent.organization_id)) {
+    throw new Error("Escolha um agente vinculado a sua conta.");
+  }
+
+  return { agent, companies };
+}
+
 function mapAgent(agent: AgentRow, companyById: Map<string, ClientCompany>) {
   const company = companyById.get(agent.organization_id);
 
@@ -209,6 +391,25 @@ function mapAgent(agent: AgentRow, companyById: Map<string, ClientCompany>) {
     updatedAt: agent.updated_at,
     createdAt: agent.created_at,
   } satisfies ClientAgent;
+}
+
+function mergeAgentMetadata(
+  metadata: JsonRecord | null,
+  company: ClientCompany,
+  sectorCode: string,
+  sectorName: string,
+  extra: JsonRecord = {},
+) {
+  return {
+    ...(metadata ?? {}),
+    client_created: true,
+    agent_kind: "whatsapp",
+    company_id: company.id,
+    company_name: company.name,
+    sector_code: sectorCode,
+    sector_name: sectorName,
+    ...extra,
+  };
 }
 
 function normalizeAgentName(value: string) {
