@@ -61,6 +61,7 @@ const agentResponseMaxOutputTokens = 1600;
 const assistantResponseMaxLength = 8000;
 const outboundChunkMaxLength = 420;
 const outboundChunkLimit = 12;
+const linkButtonTagRegex = /\{\{\s*link_[^{}]+?\s*\}\}/gi;
 
 type AgentRunRow = {
   id: string;
@@ -1798,6 +1799,9 @@ function buildLinkButtonLines(
     "",
     "LINKS RASTREADOS DISPONIVEIS:",
     "- Quando o lead pedir ou aceitar um produto/link, use a tag ou URL exata abaixo. Se botoes de link estiverem ativos, o sistema transforma em botao rastreado.",
+    "- Nunca deixe tags internas como {{link_produto}} visiveis para o lead. Tags de link sao marcadores internos e precisam virar botao ou URL antes do envio.",
+    "- Nunca envie ou leia links em audio. Quando a resposta tiver link, produto com botao ou tag de link, responda em texto para o sistema anexar o botao/link.",
+    "- Nao invente nem encurte tags. Se nao souber a tag, fale do produto pelo nome e peca confirmacao.",
     ...linkButtons.map((link) => `- ${link.tag} (${link.label}): ${buildLeadAwareTrackingUrl(link, input)}`),
   ];
 }
@@ -1814,6 +1818,31 @@ function renderLinkButtonTags(
   for (const link of linkButtons) {
     rendered = rendered.replaceAll(link.tag, buildLeadAwareTrackingUrl(link, input));
   }
+
+  return replaceLooseLinkButtonTags(rendered, linkButtons, input);
+}
+
+function replaceLooseLinkButtonTags(
+  text: string,
+  linkButtons: RuntimeLinkButton[],
+  input: {
+    lead: LeadRow | null;
+  },
+) {
+  linkButtonTagRegex.lastIndex = 0;
+
+  if (!linkButtonTagRegex.test(text)) {
+    return text;
+  }
+
+  linkButtonTagRegex.lastIndex = 0;
+
+  const rendered = text.replace(linkButtonTagRegex, (reference) => {
+    const link = findLinkButtonByReference(reference, linkButtons);
+    return link ? buildLeadAwareTrackingUrl(link, input) : "";
+  }).replace(/[ \t]{2,}/g, " ").trim();
+
+  linkButtonTagRegex.lastIndex = 0;
 
   return rendered;
 }
@@ -1837,6 +1866,60 @@ function buildLeadAwareTrackingUrl(
   }
 
   return url.toString();
+}
+
+function findLinkButtonByReference(reference: string, linkButtons: RuntimeLinkButton[]) {
+  const needle = normalizeLinkReference(reference);
+
+  if (!needle) {
+    return null;
+  }
+
+  const candidates = linkButtons
+    .map((link) => {
+      const tag = normalizeLinkReference(link.tag);
+      const label = normalizeLinkReference(link.label);
+      const prefixedLabel = label ? `link_${label}` : "";
+      let score = 0;
+
+      if (tag === needle) {
+        score = 1000;
+      } else if (tag.startsWith(needle) && needle.length >= 14) {
+        score = 900 + needle.length;
+      } else if (needle.startsWith(tag) && tag.length >= 14) {
+        score = 860 + tag.length;
+      } else if (prefixedLabel && needle.startsWith(prefixedLabel) && prefixedLabel.length >= 12) {
+        score = 720 + prefixedLabel.length;
+      } else if (label && needle.includes(label) && label.length >= 12) {
+        score = 650 + label.length;
+      }
+
+      return { link, score };
+    })
+    .filter((candidate) => candidate.score > 0)
+    .sort((left, right) => right.score - left.score);
+
+  if (candidates.length === 0) {
+    return null;
+  }
+
+  if (candidates.length > 1 && candidates[0].score === candidates[1].score) {
+    return null;
+  }
+
+  return candidates[0].link;
+}
+
+function normalizeLinkReference(value: string) {
+  return value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/^\{\{\s*/, "")
+    .replace(/\s*\}\}$/, "")
+    .replace(/[^\p{L}\p{N}]+/gu, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "");
 }
 
 function buildGeminiContents(messages: ConversationMessageRow[], fallbackUserText: string) {
@@ -2307,7 +2390,7 @@ async function sendAgentResponse(input: {
 }) {
   const { context } = input;
   const latestInbound = findLatestInbound(context.messages);
-  const cleanText = normalizeAssistantText(input.text);
+  const cleanText = normalizeAssistantText(renderLinkButtonTags(input.text, context.linkButtons, { lead: context.lead }));
   const { chunks, shouldSendAudio } = resolveOutboundDelivery(context, latestInbound, cleanText);
   const replyTargets = await resolveOutboundReplyTargets(context, chunks).catch(() => []);
   const persistedChunks = await loadPersistedOutboundChunks(input.client, context.run.id, shouldSendAudio ? "audio" : "text");
@@ -2671,6 +2754,10 @@ function responseContainsLinkButtonReference(
     return true;
   }
 
+  if (containsLinkButtonTag(text)) {
+    return true;
+  }
+
   if (context.linkButtons.length === 0) {
     return false;
   }
@@ -2680,6 +2767,13 @@ function responseContainsLinkButtonReference(
 
     return text.includes(trackingUrl) || text.includes(link.url) || text.includes(link.tag);
   });
+}
+
+function containsLinkButtonTag(text: string) {
+  linkButtonTagRegex.lastIndex = 0;
+  const found = linkButtonTagRegex.test(text);
+  linkButtonTagRegex.lastIndex = 0;
+  return found;
 }
 
 function buildInteractiveLinkMenu(
@@ -5575,6 +5669,8 @@ function normalizeAssistantText(value: string) {
 
 function sanitizeTextForTts(value: string) {
   return value
+    .replace(linkButtonTagRegex, "")
+    .replace(/https?:\/\/\S+/gi, "o link")
     .replace(/[(\[*](?:risada(?:\s+leve)?|risos?|sorriso|gargalhada|suspiro|pausa(?:\s+dramatica)?|tom\s+\w+|voz\s+\w+|rindo|sorrindo|sussurrando|gritando|pensando|respirando)[)\]*]/gi, "")
     .replace(/(?<![a-zA-ZÀ-ÿ])(?:rs+|k{2,}|ha{2,}|he{2,}|hi{2,}|hu{2,}|kkkk*|hahaha*|hehehe*|rsrs+)(?![a-zA-ZÀ-ÿ])/gi, "")
     .replace(/\.{2,}/g, ".")
