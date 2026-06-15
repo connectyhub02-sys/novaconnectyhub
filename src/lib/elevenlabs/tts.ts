@@ -33,7 +33,7 @@ export type GeneratedElevenLabsAudio = {
   text: string;
 };
 
-const maxAudioTextLength = 2500;
+const maxAudioTextLength = 4800;
 
 export async function generateElevenLabsAudio(input: GenerateElevenLabsAudioInput): Promise<GeneratedElevenLabsAudio> {
   const text = normalizeAudioText(input.text);

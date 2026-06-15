@@ -57,6 +57,11 @@ const geminiSafetySettings = [
   { category: "HARM_CATEGORY_CIVIC_INTEGRITY", threshold: "BLOCK_NONE" },
 ];
 
+const agentResponseMaxOutputTokens = 1600;
+const assistantResponseMaxLength = 8000;
+const outboundChunkMaxLength = 420;
+const outboundChunkLimit = 12;
+
 type AgentRunRow = {
   id: string;
   agent_id: string;
@@ -1007,7 +1012,7 @@ async function generateAgentResponse(input: {
       generationConfig: {
         temperature: 0.55,
         topP: 0.9,
-        maxOutputTokens: 420,
+        maxOutputTokens: agentResponseMaxOutputTokens,
       },
       safetySettings: geminiSafetySettings,
     }),
@@ -1159,7 +1164,8 @@ function buildAnswerCompletenessInstruction(userText: string) {
   return [
     "",
     "REGRA DE COMPLETUDE DA RESPOSTA:",
-    "- O lead fez um pedido direto. Responda o pedido agora, mesmo que seja em 1-2 mensagens curtas.",
+    "- O lead fez um pedido direto. Responda o pedido agora, usando quantas mensagens curtas forem necessarias para concluir a ideia.",
+    "- Nunca termine a resposta no meio de uma frase. Se a resposta for longa, divida em blocos completos.",
     "- Nao responda apenas com saudacao, confirmacao, brincadeira ou 'show de bola'. Isso trava a conversa.",
     "- Entregue pelo menos uma orientacao concreta e, se precisar continuar, faca uma pergunta objetiva no final.",
     "- Se o pedido estiver fora do escopo da empresa, redirecione com naturalidade para o que a empresa realmente pode ajudar.",
@@ -2134,8 +2140,7 @@ async function sendAgentResponse(input: {
   const { context } = input;
   const latestInbound = findLatestInbound(context.messages);
   const cleanText = normalizeAssistantText(input.text);
-  const chunks = context.behavior.splitMessages ? splitMessage(cleanText) : [cleanText];
-  const shouldSendAudio = shouldSendAudioForChunks(context, latestInbound, chunks);
+  const { chunks, shouldSendAudio } = resolveOutboundDelivery(context, latestInbound, cleanText);
   const replyTargets = await resolveOutboundReplyTargets(context, chunks).catch(() => []);
   const persistedChunks = await loadPersistedOutboundChunks(input.client, context.run.id, shouldSendAudio ? "audio" : "text");
   const outbound: OutboundMessage[] = [];
@@ -2437,8 +2442,7 @@ async function prepareAgentPresenceBeforeSend(input: {
 }) {
   const latestInbound = findLatestInbound(input.context.messages);
   const cleanText = normalizeAssistantText(input.text);
-  const chunks = input.context.behavior.splitMessages ? splitMessage(cleanText) : [cleanText];
-  const shouldSendAudio = shouldSendAudioForChunks(input.context, latestInbound, chunks);
+  const { shouldSendAudio } = resolveOutboundDelivery(input.context, latestInbound, cleanText);
   const presence = shouldSendAudio ? "recording" : "composing";
   const delayMs = resolvePreSendPresenceDelayMs(input.context.behavior, input.text, shouldSendAudio);
   const presenceHoldMs = shouldSendAudio ? 60000 : Math.min(delayMs + 10000, 300000);
@@ -2580,6 +2584,21 @@ function resolveChunkDelayMs(text: string, behavior: WhatsappBehaviorConfig) {
 function resolveAudioChunkDelayMs(text: string, behavior: WhatsappBehaviorConfig) {
   const base = Math.min(Math.max(2200 + text.length * 12, 2500), 6500);
   return applyCircadianFactor(applyJitter(base, behavior), behavior);
+}
+
+function resolveOutboundDelivery(
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+  latestInbound: ConversationMessageRow | null,
+  text: string,
+) {
+  const baseChunks = context.behavior.splitMessages ? splitMessage(text) : [text];
+  const audioFromBase = shouldSendAudioForChunks(context, latestInbound, baseChunks);
+  const chunks = audioFromBase && !context.behavior.splitMessages && text.length > outboundChunkMaxLength
+    ? splitMessage(text)
+    : baseChunks;
+  const shouldSendAudio = shouldSendAudioForChunks(context, latestInbound, chunks);
+
+  return { chunks, shouldSendAudio };
 }
 
 function applyJitter(ms: number, behavior: WhatsappBehaviorConfig): number {
@@ -5118,7 +5137,7 @@ function splitMessage(text: string) {
   const chunks: string[] = [];
 
   for (const paragraph of paragraphs.length ? paragraphs : [text]) {
-    if (paragraph.length <= 200) {
+    if (paragraph.length <= outboundChunkMaxLength) {
       chunks.push(paragraph);
       continue;
     }
@@ -5127,7 +5146,16 @@ function splitMessage(text: string) {
     let current = "";
 
     for (const sentence of sentences) {
-      if ((current + " " + sentence).trim().length > 200 && current) {
+      if (sentence.length > outboundChunkMaxLength) {
+        if (current) {
+          chunks.push(current);
+          current = "";
+        }
+        chunks.push(...splitLongText(sentence, outboundChunkMaxLength));
+        continue;
+      }
+
+      if ((current + " " + sentence).trim().length > outboundChunkMaxLength && current) {
         chunks.push(current);
         current = sentence;
       } else {
@@ -5138,7 +5166,41 @@ function splitMessage(text: string) {
     if (current) chunks.push(current);
   }
 
-  return chunks.slice(0, 2);
+  return compactOutboundChunks(chunks);
+}
+
+function splitLongText(text: string, maxLength: number) {
+  const words = text.split(/\s+/).filter(Boolean);
+  const chunks: string[] = [];
+  let current = "";
+
+  for (const word of words) {
+    if ((current + " " + word).trim().length > maxLength && current) {
+      chunks.push(current);
+      current = word;
+    } else {
+      current = (current + " " + word).trim();
+    }
+  }
+
+  if (current) {
+    chunks.push(current);
+  }
+
+  return chunks;
+}
+
+function compactOutboundChunks(chunks: string[]) {
+  const cleanChunks = chunks.map((chunk) => chunk.trim()).filter(Boolean);
+
+  if (cleanChunks.length <= outboundChunkLimit) {
+    return cleanChunks;
+  }
+
+  const visible = cleanChunks.slice(0, outboundChunkLimit - 1);
+  const tail = cleanChunks.slice(outboundChunkLimit - 1).join("\n\n").trim();
+
+  return tail ? [...visible, tail] : visible;
 }
 
 function extractGeminiText(value: unknown) {
@@ -5340,7 +5402,7 @@ function normalizeAssistantText(value: string) {
     .replace(/\n{3,}/g, "\n\n")
     .replace(/^\s+$/gm, "")
     .trim()
-    .slice(0, 4000);
+    .slice(0, assistantResponseMaxLength);
 }
 
 function sanitizeTextForTts(value: string) {
