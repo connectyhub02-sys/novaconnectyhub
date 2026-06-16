@@ -1811,6 +1811,9 @@ function buildLinkButtonLines(
     "- Nao invente nem encurte tags. Se nao souber a tag, fale do produto pelo nome e peca confirmacao.",
     "- Se recomendar 2 ou 3 produtos na mesma resposta, inclua a tag/URL de cada produto recomendado. Nao cite duas opcoes e envie link de apenas uma.",
     "- Se o lead pedir link, outro link, mandar de novo ou disser que nao recebeu, responda incluindo novamente a tag/URL do produto citado.",
+    "- Se o lead pedir marca, categoria, objetivo ou disser 'me manda um', escolha 1 a 3 produtos EXATOS do catalogo abaixo e inclua a tag/URL de cada escolhido.",
+    "- Nunca escreva 'olha esses aqui', 'segue o link', 'te mandei', 'vou mandar' ou equivalente sem colocar na mesma resposta a tag/URL exata que gera o botao.",
+    "- Se nao conseguir escolher um produto exato do catalogo, nao prometa link. Faca uma pergunta curta para decidir qual produto enviar.",
     ...linkButtons.map((link) => `- ${link.tag} (${link.label}): ${buildLeadAwareTrackingUrl(link, input)}`),
   ];
 }
@@ -2399,7 +2402,8 @@ async function sendAgentResponse(input: {
 }) {
   const { context } = input;
   const latestInbound = findLatestInbound(context.messages);
-  const cleanText = normalizeAssistantText(renderLinkButtonTags(input.text, context.linkButtons, { lead: context.lead }));
+  const renderedText = renderLinkButtonTags(input.text, context.linkButtons, { lead: context.lead });
+  const cleanText = normalizeAssistantText(ensureLinkPromiseIsActionable(renderedText, context));
   const { chunks, shouldSendAudio } = resolveOutboundDelivery(context, latestInbound, cleanText);
   const replyTargets = await resolveOutboundReplyTargets(context, chunks).catch(() => []);
   const persistedChunks = await loadPersistedOutboundChunks(input.client, context.run.id, shouldSendAudio ? "audio" : "text");
@@ -2787,6 +2791,42 @@ function containsLinkButtonTag(text: string) {
   const found = linkButtonTagRegex.test(text);
   linkButtonTagRegex.lastIndex = 0;
   return found;
+}
+
+function ensureLinkPromiseIsActionable(
+  text: string,
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+) {
+  if (!context.behavior.interactiveMessages || context.linkButtons.length === 0) {
+    return text;
+  }
+
+  if (collectInteractiveLinkMatches(text, context.linkButtons, { lead: context.lead }).length > 0) {
+    return text;
+  }
+
+  if (!hasUnresolvedLinkPromise(text)) {
+    return text;
+  }
+
+  return `${text.trim()}\n\npra eu nao te mandar link errado, me fala qual produto exato vc quer ver primeiro.`;
+}
+
+function hasUnresolvedLinkPromise(text: string) {
+  const normalized = normalizeSearch(text);
+
+  if (/\b(qual|quais|confirma|me fala|me diz|escolhe|prefere)\b.{0,60}\b(link|produto|opcao|opcoes)\b/.test(normalized)) {
+    return false;
+  }
+
+  return [
+    /\bolha (?:esse|essa|esses|essas|estes|estas|isso) aqui\b/,
+    /\bseparei aqui\b/,
+    /\bsegue (?:o |os )?(?:link|links|aqui)\b/,
+    /\baqui (?:esta|ta|vai|vao|estao) (?:o |os |as )?(?:link|links|opcoes|produtos)\b/,
+    /\b(?:te )?(?:mandei|enviei) (?:o |os )?(?:link|links)\b/,
+    /\b(?:vou|vo) (?:te )?(?:mandar|enviar) (?:o |os )?(?:link|links)\b/,
+  ].some((pattern) => pattern.test(normalized));
 }
 
 function collectInteractiveLinkMatches(
