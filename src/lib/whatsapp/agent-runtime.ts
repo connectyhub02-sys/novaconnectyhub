@@ -23,6 +23,8 @@ import { buildTrackedLinkUrl } from "@/lib/tracking/tracked-links";
 import {
   defaultWhatsappAgentPrompt,
   defaultWhatsappGlobalPrompt,
+  normalizeWhatsappCloneMemory,
+  normalizeWhatsappCloneProfile,
   normalizeWhatsappBehaviorConfig,
   type WhatsappBehaviorConfig,
 } from "./agent-behavior";
@@ -32,6 +34,10 @@ import {
   type WhatsappHandoffNotificationEventData,
   type WhatsappHandoffNotificationResult,
 } from "./handoff-notifications";
+import {
+  getCloneHumanizationMetricLabel,
+  type CloneHumanizationMetric,
+} from "./clone-humanization";
 import {
   isLikelyPersonalLeadName,
   normalizeLeadNameCandidate,
@@ -189,6 +195,7 @@ type LeadMemorySnapshot = {
   nextHumanCue: string | null;
 };
 
+type CloneMemorySnapshot = ReturnType<typeof normalizeWhatsappCloneMemory>;
 
 export async function getWhatsappAgentRunDelaySeconds(input: {
   runId: string;
@@ -492,6 +499,15 @@ export async function processWhatsappAgentRun(input: {
       }
     }
 
+    if (behavior.cloneRealTestMode) {
+      await persistCloneRealTestTurn(client, context, {
+        userText,
+        aiText,
+        outbound,
+        latestInbound,
+      }).catch(() => {});
+    }
+
     await sendContextualSticker(context.credentials, token, phone, aiText, behavior).catch(() => {});
 
     if (behavior.markAsRead) {
@@ -502,6 +518,7 @@ export async function processWhatsappAgentRun(input: {
 
     extractConversationLearning(client, context).catch(() => {});
     extractLeadMemory(client, context, userText).catch(() => {});
+    await extractCloneMemory(client, context, userText, aiText).catch(() => {});
 
     return await completeRun(client, run.id, preview(aiText, 500), {
       sent: true,
@@ -578,7 +595,7 @@ async function loadRunContext(client: SupabaseClient, runId: string) {
     ? await loadAgentLearnings(client, run.organization_id, isPlatformWhatsapp)
     : [];
 
-  const crossAgentContext = lead?.id
+  const crossAgentContext = behavior.sharedCompanyContext && lead?.id
     ? await loadCrossAgentConversationContext(client, {
         organizationId: run.organization_id,
         leadId: lead.id,
@@ -1187,6 +1204,10 @@ function buildSystemInstruction(input: {
     "",
     "PROMPT DO AGENTE DA EMPRESA:",
     agentPrompt,
+    ...buildCloneProfileLines(input.agent),
+    ...buildCloneMemoryLines(input.agent, input.behavior),
+    ...buildCloneConsistencyInstruction(input.agent, input.behavior),
+    ...buildCloneRealTestInstruction(input.behavior),
     "",
     "CONTEXTO DA EMPRESA:",
     `- Empresa: ${input.organization.name}`,
@@ -1212,6 +1233,10 @@ function buildSystemInstruction(input: {
     `- Detectar opt-out: ${input.behavior.detectOptOut ? "sim" : "nao"}.`,
     `- Analisar links: ${input.behavior.analyzeLinks ? "sim" : "nao"}.`,
     `- Botoes de link rastreados: ${input.behavior.interactiveMessages ? "sim" : "nao"}.`,
+    `- Memoria da empresa entre agentes: ${input.behavior.sharedCompanyContext ? "sim" : "nao"}.`,
+    `- Memoria viva do clone: ${input.behavior.cloneMemory ? "sim" : "nao"}.`,
+    `- Coerencia do clone: ${input.behavior.cloneConsistencyGuard ? "sim" : "nao"}.`,
+    `- Teste real do clone: ${input.behavior.cloneRealTestMode ? "sim" : "nao"}.`,
     `- Mencionar todos em grupos: ${input.behavior.groupMentionAll ? "sim" : "nao"}.`,
     `- Proteger midias em lote: ${input.behavior.mediaBurstGuard ? "sim" : "nao"}.`,
     `- Proteger midia sem legenda: ${input.behavior.missingMediaCaptionGuard ? "sim" : "nao"}.`,
@@ -1248,6 +1273,120 @@ function buildSystemInstruction(input: {
     "- Midia com analise automatica: use a analise como contexto real antes de responder.",
     "- Midia sem analise: nao finja que viu. Peca descricao ou reenvio.",
   ].join("\n");
+}
+
+function buildCloneProfileLines(agent: AgentRow) {
+  const profile = normalizeWhatsappCloneProfile(readRecord(agent.metadata)?.whatsapp_clone_profile);
+
+  if (!profile.enabled) return [];
+
+  const lines = [
+    "",
+    "DNA MANUAL DO AGENTE:",
+    "- Use estas diretrizes para ajustar estilo, ritmo e abordagem deste agente em todas as respostas.",
+    "- Este bloco complementa o prompt do agente, mas nao pode contrariar limites de seguranca, dados reais, links aprovados ou contexto do lead.",
+    "- Nunca mencione DNA manual, perfil, regras internas, treinamento, IA, sistema ou bastidores para o lead.",
+  ];
+
+  appendCloneProfileLine(lines, "Nome/assinatura", profile.displayName);
+  appendCloneProfileLine(lines, "Identidade", profile.roleIdentity);
+  appendCloneProfileLine(lines, "Tom e energia", profile.tone);
+  appendCloneProfileLine(lines, "Vocabulario", profile.vocabulary);
+  appendCloneProfileLine(lines, "Ritmo de resposta", profile.responseRhythm);
+  appendCloneProfileLine(lines, "Estilo de venda", profile.salesStyle);
+  appendCloneProfileLine(lines, "Objecoes", profile.objectionStyle);
+  appendCloneProfileLine(lines, "Fechamento", profile.closingStyle);
+  appendCloneProfileLine(lines, "Emoji", profile.emojiStyle);
+  appendCloneProfileLine(lines, "Audio", profile.audioStyle);
+  appendCloneProfileLine(lines, "Nao fazer", profile.forbiddenPatterns);
+  appendCloneProfileLine(lines, "Notas", profile.notes);
+
+  return lines;
+}
+
+function appendCloneProfileLine(lines: string[], label: string, value: string) {
+  const text = value.trim();
+  if (text) {
+    lines.push(`- ${label}: ${text}`);
+  }
+}
+
+function buildCloneMemoryLines(agent: AgentRow, behavior: WhatsappBehaviorConfig): string[] {
+  if (!behavior.cloneMemory) return [];
+
+  const memory = normalizeWhatsappCloneMemory(readRecord(agent.metadata)?.whatsapp_clone_memory);
+
+  if (!hasCloneMemoryContent(memory)) return [];
+
+  const lines = [
+    "",
+    "MEMORIA VIVA DO CLONE:",
+    "- Use estes aprendizados para manter continuidade no jeito de atender deste agente.",
+    "- Esta memoria pertence somente a este agente/empresa. Nao misture com outros negocios ou empresas da conta.",
+    "- Nunca mencione memoria, aprendizado, treinamento, historico, IA, sistema ou bastidores para o lead.",
+  ];
+
+  if (memory.summary) lines.push(`- Resumo do estilo aprendido: ${memory.summary}`);
+  appendCloneMemoryList(lines, "Padroes de estilo", memory.stylePatterns);
+  appendCloneMemoryList(lines, "Frases e jeito de falar", memory.phrasePatterns);
+  appendCloneMemoryList(lines, "Padroes comerciais", memory.salesPatterns);
+  appendCloneMemoryList(lines, "Correcoes aprendidas", memory.correctionNotes);
+  appendCloneMemoryList(lines, "Evitar", memory.avoidPatterns);
+
+  return lines;
+}
+
+function appendCloneMemoryList(lines: string[], label: string, values: string[]) {
+  if (values.length) {
+    lines.push(`- ${label}: ${values.join("; ")}`);
+  }
+}
+
+function buildCloneConsistencyInstruction(agent: AgentRow, behavior: WhatsappBehaviorConfig): string[] {
+  if (!behavior.cloneConsistencyGuard) return [];
+
+  const profile = normalizeWhatsappCloneProfile(readRecord(agent.metadata)?.whatsapp_clone_profile);
+  const hasProfile = profile.enabled && [
+    profile.displayName,
+    profile.roleIdentity,
+    profile.tone,
+    profile.vocabulary,
+    profile.responseRhythm,
+    profile.salesStyle,
+    profile.objectionStyle,
+    profile.closingStyle,
+    profile.emojiStyle,
+    profile.audioStyle,
+    profile.forbiddenPatterns,
+    profile.notes,
+  ].some((value) => value.trim().length > 0);
+
+  return [
+    "",
+    "GUARDA DE COERENCIA DO CLONE:",
+    hasProfile
+      ? "- Antes de responder, confira se a mensagem combina com o DNA manual: papel, tom, vocabulario, ritmo, venda, objecoes e fechamento."
+      : "- Antes de responder, confira se a mensagem combina com o prompt, papel comercial e estilo configurado deste agente.",
+    "- Nao copie frases do DNA ou do prompt de forma mecanica. Use como direcao de estilo, nao como texto para colar.",
+    "- Se a resposta sair generica demais, formal demais, perfeita demais ou fora do jeito do agente, reescreva internamente antes de enviar.",
+    "- Nao diga que consultou perfil, memoria, historico, sistema, prompt, regras ou DNA. Transforme tudo em conversa natural.",
+    "- Nunca prometa uma acao que nao esta executando agora. Se disser que vai mandar link, botao, catalogo, arquivo, audio, comprovante ou contato, inclua o item na mesma resposta quando ele existir no contexto.",
+    "- Se o link ou botao aprovado nao existir, nao diga que enviou. Diga de forma humana que vai confirmar ou pergunte qual opcao o lead quer.",
+    "- Quando citar outro agente da mesma empresa, aja como passagem natural de atendimento, nunca como se fosse a mesma pessoa ou a mesma conversa.",
+  ];
+}
+
+function buildCloneRealTestInstruction(behavior: WhatsappBehaviorConfig): string[] {
+  if (!behavior.cloneRealTestMode) return [];
+
+  return [
+    "",
+    "MODO DE TESTE REAL DO CLONE:",
+    "- Esta conversa pode estar sendo usada pelo dono para avaliar se o atendimento parece humano no WhatsApp real.",
+    "- Nao fale que esta em teste, nao peca nota e nao explique que existe modo de teste.",
+    "- Atenda como producao normal: natural, comercial, completo e fiel ao agente.",
+    "- Se o lead apontar erro, confusao ou algo estranho, reconheca de forma humana, corrija o rumo e siga o atendimento.",
+  ];
 }
 
 function buildLeadNameContext(lead: LeadRow | null) {
@@ -1343,6 +1482,7 @@ function buildCrossAgentConversationLines(context: CrossAgentConversationContext
   return [
     "",
     "CONTEXTO COMPARTILHADO DO ECOSSISTEMA:",
+    "- Este contexto pertence somente a esta empresa/ecossistema. Nunca use dados de outra empresa, mesmo que o dono da conta seja o mesmo.",
     `- Este lead falou recentemente com ${previousLabel}. Use isso como passagem interna, nao como sua propria conversa.`,
     `- Voce e ${currentAgentName}. Nao diga nem aja como se voce tivesse enviado as mensagens anteriores de outro agente.`,
     `- Se fizer sentido, conecte a conversa de forma natural. Ex.: "${handoffExample}"`,
@@ -3212,6 +3352,233 @@ async function saveOutboundMessage(
   });
 }
 
+async function persistCloneRealTestTurn(
+  client: SupabaseClient,
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+  input: {
+    userText: string;
+    aiText: string;
+    outbound: OutboundMessage[];
+    latestInbound: ConversationMessageRow | null;
+  },
+) {
+  const profile = normalizeWhatsappCloneProfile(readRecord(context.agent.metadata)?.whatsapp_clone_profile);
+  const outputLinks = extractLinks(input.aiText);
+  const normalizedOutput = normalizeSearch(input.aiText);
+  const linkPromiseWithoutLink = /\b(vou mandar|vou te mandar|te mando|segue o link|aqui o link|link da|link do|botao|catalogo|arquivo)\b/.test(normalizedOutput)
+    && outputLinks.length === 0;
+  const identityRisk = hasUnsafeIdentityDisclosure(input.aiText);
+  const genericRisk = /\b(como posso ajudar|fico a disposicao|estou aqui para ajudar|posso auxiliar)\b/.test(normalizedOutput);
+  const reviewFlags = [
+    identityRisk ? "identity_disclosure_risk" : null,
+    linkPromiseWithoutLink ? "promised_link_without_link" : null,
+    genericRisk ? "generic_bot_phrase" : null,
+  ].filter(Boolean);
+  const humanization = evaluateCloneHumanization(context, {
+    userText: input.userText,
+    aiText: input.aiText,
+    outbound: input.outbound,
+    outputLinks,
+    identityRisk,
+    genericRisk,
+    linkPromiseWithoutLink,
+  });
+  const mergedReviewFlags = uniqueStrings([...reviewFlags, ...humanization.reviewFlags]);
+
+  await client.from("intelligence_events").insert({
+    scope: "organization",
+    organization_id: context.organization.id,
+    source_type: "whatsapp",
+    source_id: context.conversationId,
+    producer_agent_id: context.agent.id,
+    event_type: "whatsapp.clone.real_test_turn",
+    title: mergedReviewFlags.length ? "Metrica de humanizacao precisa de revisao" : "Metrica de humanizacao registrada",
+    summary: preview(input.aiText, 500),
+    confidence: humanization.score,
+    visibility: "organization",
+    tags: ["whatsapp", "clone", "real_test", "humanization", mergedReviewFlags.length ? "review" : "ok"],
+    payload: {
+      leadId: context.lead?.id ?? null,
+      conversationId: context.conversationId,
+      agentRunId: context.run.id,
+      whatsappInstanceId: context.instance.id,
+      inboundMessageId: input.latestInbound?.id ?? null,
+      providerMessageId: input.latestInbound?.provider_message_id ?? null,
+      inputPreview: preview(input.userText || (input.latestInbound ? buildMessageText(input.latestInbound) : ""), 500),
+      outputPreview: preview(input.aiText, 800),
+      outboundMessages: input.outbound.length,
+      outboundModes: Array.from(new Set(input.outbound.map((message) => message.mode))),
+      linkCount: outputLinks.length,
+      usedSharedCompanyContext: Boolean(context.crossAgentContext?.messages.length),
+      cloneProfileEnabled: profile.enabled,
+      cloneProfileSource: profile.source,
+      reviewFlags: mergedReviewFlags,
+      score: humanization.score,
+      humanizationScore: humanization.score,
+      humanizationMetrics: humanization.metrics,
+      humanizationReviewFlags: humanization.reviewFlags,
+      createdAt: new Date().toISOString(),
+    },
+  });
+}
+
+type CloneHumanizationEvaluation = {
+  score: number;
+  metrics: CloneHumanizationMetric[];
+  reviewFlags: string[];
+};
+
+function evaluateCloneHumanization(
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+  input: {
+    userText: string;
+    aiText: string;
+    outbound: OutboundMessage[];
+    outputLinks: string[];
+    identityRisk: boolean;
+    genericRisk: boolean;
+    linkPromiseWithoutLink: boolean;
+  },
+): CloneHumanizationEvaluation {
+  const normalizedInput = normalizeSearch(input.userText);
+  const normalizedOutput = normalizeSearch(input.aiText);
+  const profile = normalizeWhatsappCloneProfile(readRecord(context.agent.metadata)?.whatsapp_clone_profile);
+  const cloneMemory = normalizeWhatsappCloneMemory(readRecord(context.agent.metadata)?.whatsapp_clone_memory);
+  const hasCloneMemory = hasCloneMemoryContent(cloneMemory);
+  const linkRequested = /\b(link|botao|comprar|compra|preco|valor|manda|mandar|envia|enviar|ver produto|produto)\b/.test(normalizedInput);
+  const humanRequested = isHumanRequest(input.userText);
+  const repeatedPattern = hasRepeatedRecentAgentOutput(context.messages, input.aiText);
+  const incompleteOutput = isProbablyIncompleteOutput(input.aiText);
+  const hasLiteralNewlineBug = /(?:\\n|\/n|n\/n)/i.test(input.aiText);
+  const hasContext = Boolean(context.crossAgentContext?.messages.length || context.messages.length >= 3 || context.lead?.metadata?.lead_memory);
+  const handoffHandled = !humanRequested || /\b(chamar|chamo|acionar|aciono|equipe|time|pessoal|humano|atendente|alguem)\b/.test(normalizedOutput);
+
+  const metrics = [
+    buildHumanizationMetric(
+      "completeness",
+      incompleteOutput ? 0.35 : input.aiText.trim().length < 12 && normalizedInput.length > 40 ? 0.58 : 1,
+      incompleteOutput ? "Resposta parece terminar antes de concluir." : "Resposta concluiu a ideia principal.",
+    ),
+    buildHumanizationMetric(
+      "naturalness",
+      input.identityRisk || hasLiteralNewlineBug ? 0.25 : input.genericRisk ? 0.62 : 0.94,
+      input.identityRisk
+        ? "Risco de expor bastidor/identidade artificial."
+        : hasLiteralNewlineBug
+          ? "Texto saiu com caracteres de quebra escritos."
+          : input.genericRisk
+            ? "Resposta usou frase generica de bot."
+            : "Tom natural para WhatsApp.",
+    ),
+    buildHumanizationMetric(
+      "variation",
+      repeatedPattern ? 0.38 : 0.92,
+      repeatedPattern ? "Padrao repetido em mensagens recentes." : "Nao repetiu a mesma resposta recente.",
+    ),
+    buildHumanizationMetric(
+      "context",
+      hasContext ? 0.95 : 0.78,
+      hasContext ? "Usou conversa/memoria disponivel como contexto." : "Pouco contexto historico disponivel para avaliar.",
+    ),
+    buildHumanizationMetric(
+      "linkDelivery",
+      !linkRequested && !input.linkPromiseWithoutLink ? 1 : input.outputLinks.length > 0 ? 1 : input.linkPromiseWithoutLink ? 0.2 : 0.58,
+      input.outputLinks.length > 0
+        ? "Link ou botao saiu junto da resposta."
+        : input.linkPromiseWithoutLink
+          ? "Prometeu link/botao sem enviar."
+          : linkRequested
+            ? "Lead pediu produto/link, mas a resposta nao trouxe link."
+            : "Sem necessidade clara de link nesta resposta.",
+    ),
+    buildHumanizationMetric(
+      "promiseDelivery",
+      input.linkPromiseWithoutLink ? 0.15 : 1,
+      input.linkPromiseWithoutLink ? "Promessa sem entrega no mesmo envio." : "Nao prometeu acao sem executar.",
+    ),
+    buildHumanizationMetric(
+      "cloneStyle",
+      input.identityRisk ? 0.22 : input.genericRisk ? 0.64 : profile.enabled || hasCloneMemory ? 0.96 : 0.82,
+      input.identityRisk
+        ? "Quebrou identidade do clone."
+        : input.genericRisk
+          ? "Estilo ficou generico demais."
+          : profile.enabled || hasCloneMemory
+            ? "Manteve DNA/memoria do clone ativa."
+            : "Estilo aceitavel, mas sem DNA/memoria forte ativa.",
+    ),
+    buildHumanizationMetric(
+      "humanHandoff",
+      handoffHandled ? 1 : 0.25,
+      handoffHandled ? "Pedido humano tratado corretamente ou nao aplicavel." : "Lead pediu humano e a resposta nao encaminhou bem.",
+    ),
+  ];
+
+  const weights: Record<string, number> = {
+    completeness: 1.2,
+    naturalness: 1.15,
+    variation: 0.85,
+    context: 0.85,
+    linkDelivery: 1.05,
+    promiseDelivery: 1.25,
+    cloneStyle: 1.15,
+    humanHandoff: 1.1,
+  };
+  const totalWeight = metrics.reduce((sum, metric) => sum + (weights[metric.key] ?? 1), 0);
+  const weightedScore = metrics.reduce((sum, metric) => sum + metric.score * (weights[metric.key] ?? 1), 0) / totalWeight;
+  const reviewFlags = uniqueStrings([
+    incompleteOutput ? "incomplete_response" : null,
+    hasLiteralNewlineBug ? "literal_newline_bug" : null,
+    repeatedPattern ? "repeated_pattern" : null,
+    linkRequested && input.outputLinks.length === 0 ? "link_request_without_link" : null,
+    input.linkPromiseWithoutLink ? "promised_link_without_link" : null,
+    input.genericRisk ? "generic_bot_phrase" : null,
+    input.identityRisk ? "identity_disclosure_risk" : null,
+    !handoffHandled ? "missed_human_handoff" : null,
+    profile.enabled || hasCloneMemory ? null : "weak_clone_style_source",
+  ]);
+
+  return {
+    score: clampNumber(Number(weightedScore.toFixed(3)), 0, 1),
+    metrics,
+    reviewFlags,
+  };
+}
+
+function buildHumanizationMetric(key: string, score: number, reason: string): CloneHumanizationMetric {
+  const safeScore = clampNumber(Number(score.toFixed(3)), 0, 1);
+
+  return {
+    key,
+    label: getCloneHumanizationMetricLabel(key),
+    score: safeScore,
+    status: safeScore >= 0.82 ? "good" : safeScore >= 0.62 ? "warning" : "danger",
+    reason,
+  };
+}
+
+function hasRepeatedRecentAgentOutput(messages: ConversationMessageRow[], aiText: string) {
+  const current = normalizeSearch(aiText);
+  if (!current || current.length < 18) return false;
+
+  return messages
+    .filter((message) => message.direction === "outbound" || readRecord(message.payload)?.author_type === "ai")
+    .slice(-8)
+    .some((message) => {
+      const previous = normalizeSearch(message.text_content ?? "");
+      return previous.length >= 18 && (previous === current || previous.includes(current) || current.includes(previous));
+    });
+}
+
+function isProbablyIncompleteOutput(value: string) {
+  const text = value.trim();
+  if (!text) return true;
+  if (/[.!?)]$/.test(text)) return false;
+
+  const normalized = normalizeSearch(text);
+  return /\b(e|pra|para|com|de|da|do|dos|das|que|se|porque|pois|entao|assim|mas|ou|te|me|nos)\s*$/.test(normalized);
+}
+
 function detectBehaviorSignals(input: {
   behavior: WhatsappBehaviorConfig;
   userText: string;
@@ -3641,6 +4008,20 @@ async function handleLeadHumanHandoffRequest(input: {
   };
   const notificationResult = await sendHumanHandoffNotificationNowOrQueue(client, context, notificationData);
 
+  if (context.behavior.cloneRealTestMode) {
+    await persistCloneRealTestTurn(client, context, {
+      userText: requestText,
+      aiText: handoffText,
+      latestInbound,
+      outbound: [{
+        text: handoffText,
+        mode: "text",
+        providerResponse: sent,
+        persisted: true,
+      }],
+    }).catch(() => {});
+  }
+
   return await completeRun(client, context.run.id, "Lead pediu atendimento humano.", {
     sent: true,
     reason: "lead_requested_human",
@@ -4055,6 +4436,99 @@ async function extractLeadMemory(
     .from("leads")
     .update(updatePayload)
     .eq("id", context.lead.id);
+}
+
+async function extractCloneMemory(
+  client: SupabaseClient,
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+  userText: string,
+  aiText: string,
+) {
+  if (!context.behavior.cloneMemory || context.messages.length < 2 || !aiText.trim()) return;
+
+  const { data: latestAgent } = await client
+    .from("agent_registry")
+    .select("metadata")
+    .eq("id", context.agent.id)
+    .maybeSingle<{ metadata: JsonRecord | null }>();
+  const currentMetadata = readRecord(latestAgent?.metadata) ?? context.agent.metadata ?? {};
+  const currentMemory = normalizeWhatsappCloneMemory(readRecord(currentMetadata.whatsapp_clone_memory));
+  const profile = normalizeWhatsappCloneProfile(readRecord(currentMetadata.whatsapp_clone_profile));
+  const conversationText = buildConversationText(context.messages);
+  const prompt = [
+    "Atualize a memoria viva de estilo de um agente comercial de WhatsApp.",
+    "Responda somente JSON valido, sem markdown e sem texto fora do JSON.",
+    "",
+    "Objetivo: guardar aprendizados sobre COMO este agente deve falar, vender, corrigir rota e evitar erros.",
+    "Nao salve dados do lead, telefone, nomes de clientes, produtos especificos, precos, URLs, links, nomes de marcas ou informacoes que pertencem a um negocio especifico.",
+    "Se houver produto, marca ou preco na conversa, transforme em regra generica de comportamento. Exemplo: em vez de salvar 'Durateston', salve 'quando citar duas opcoes, enviar os dois links aprovados'.",
+    "Esta memoria pertence somente ao agente atual. Nao crie regra para outra empresa.",
+    "",
+    "DNA manual atual:",
+    JSON.stringify(profile),
+    "",
+    "Memoria viva atual:",
+    JSON.stringify(currentMemory),
+    "",
+    "Mensagem mais recente do lead:",
+    userText || "Mensagem sem texto transcrito.",
+    "",
+    "Resposta enviada pelo agente:",
+    aiText,
+    "",
+    "Conversa recente:",
+    conversationText,
+    "",
+    "JSON esperado:",
+    JSON.stringify({
+      summary: "resumo curto do jeito aprendido do agente",
+      stylePatterns: ["padrao de tom, ritmo ou energia"],
+      phrasePatterns: ["frase curta ou expressao recorrente que combina com o agente"],
+      salesPatterns: ["regra comercial generica de conducao"],
+      correctionNotes: ["correcao aprendida quando o lead apontou erro ou confusao"],
+      avoidPatterns: ["padrao que quebra o estilo do agente"],
+    }),
+  ].join("\n");
+
+  const url = new URL(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(context.agent.model_id || context.geminiCredentials.model)}:generateContent`);
+  url.searchParams.set("key", context.geminiCredentials.apiKey);
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: {
+        temperature: 0.12,
+        topP: 0.8,
+        maxOutputTokens: 700,
+        responseMimeType: "application/json",
+      },
+      safetySettings: geminiSafetySettings,
+    }),
+    cache: "no-store",
+  });
+
+  if (!response.ok) return;
+
+  const data = await readProviderResponse(response);
+  const nextMemory = normalizeWhatsappCloneMemory(parseJsonObject(extractGeminiText(data)));
+
+  if (!hasCloneMemoryContent(nextMemory)) return;
+
+  await client
+    .from("agent_registry")
+    .update({
+      metadata: {
+        ...currentMetadata,
+        whatsapp_clone_memory: {
+          ...nextMemory,
+          updatedAt: new Date().toISOString(),
+          source: "whatsapp_clone_memory",
+        },
+      },
+    })
+    .eq("id", context.agent.id);
 }
 
 function readCachedRunResponseText(metadata: JsonRecord | null) {
@@ -5830,6 +6304,17 @@ function hasLeadMemoryContent(memory: LeadMemorySnapshot) {
       memory.objections.length ||
       memory.preferences.length ||
       memory.personalFacts.length,
+  );
+}
+
+function hasCloneMemoryContent(memory: CloneMemorySnapshot) {
+  return Boolean(
+    memory.summary ||
+      memory.stylePatterns.length ||
+      memory.phrasePatterns.length ||
+      memory.salesPatterns.length ||
+      memory.correctionNotes.length ||
+      memory.avoidPatterns.length,
   );
 }
 

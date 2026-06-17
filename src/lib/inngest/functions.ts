@@ -10,6 +10,11 @@ import {
   type WhatsappHandoffNotificationEventData,
   whatsappHandoffNotificationEventName,
 } from "@/lib/whatsapp/handoff-notifications";
+import {
+  processWhatsappCloneProfileImport,
+  type WhatsappCloneProfileImportEventData,
+  whatsappCloneProfileImportEventName,
+} from "@/lib/whatsapp/clone-profile-history";
 import { syncUazapiInstances } from "@/lib/whatsapp/uazapi-sync";
 import { runGrowthAgentMission, type GrowthAgentCode } from "@/lib/growth/growth-agent-runner";
 
@@ -183,6 +188,21 @@ export const connectyhubWhatsappHandoffNotifier = inngest.createFunction(
     ),
 );
 
+export const connectyhubWhatsappCloneProfileImport = inngest.createFunction(
+  {
+    id: "connectyhub-whatsapp-clone-profile-import",
+    name: "ConnectyHub WhatsApp Clone Profile Import",
+    retries: 1,
+    triggers: [{ event: whatsappCloneProfileImportEventName }],
+  },
+  async ({ event, step }) =>
+    step.run("generate-whatsapp-clone-profile-from-history", () =>
+      processWhatsappCloneProfileImport({
+        data: event.data as WhatsappCloneProfileImportEventData,
+      }),
+    ),
+);
+
 const growthAgentSchedules: Array<{
   id: string;
   name: string;
@@ -278,5 +298,6 @@ export const functions = [
   connectyhubWhatsappOutboundDispatcher,
   connectyhubWhatsappOutboundSweep,
   connectyhubWhatsappHandoffNotifier,
+  connectyhubWhatsappCloneProfileImport,
   ...connectyhubGrowthAgentFunctions,
 ];

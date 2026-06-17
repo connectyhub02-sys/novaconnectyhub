@@ -6,6 +6,7 @@ import { getCurrentWorkspace, type CurrentOrganization } from "@/lib/supabase/pr
 import {
   connectClientWhatsapp,
   disconnectClientWhatsapp,
+  generateClientWhatsappCloneProfileFromHistory,
   getClientWhatsappState,
   refreshClientWhatsappStatus,
   sendClientWhatsappHandoffNotificationTest,
@@ -26,6 +27,8 @@ type ActionBody = {
   phone?: unknown;
   text?: unknown;
   behavior?: unknown;
+  maxChats?: unknown;
+  maxMessagesPerChat?: unknown;
 };
 
 type WorkspaceContext = {
@@ -143,6 +146,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(attachWorkspaceToResult(context, result));
     }
 
+    if (action === "generate_clone_profile_from_history") {
+      const result = await generateClientWhatsappCloneProfileFromHistory({
+        organization: context.organization,
+        userId: context.userId,
+        agentId: context.selectedAgentId,
+        maxChats: asNumber(body?.maxChats),
+        maxMessagesPerChat: asNumber(body?.maxMessagesPerChat),
+      });
+
+      return NextResponse.json(attachWorkspaceToResult(context, result));
+    }
+
     return NextResponse.json({ error: "Acao invalida." }, { status: 400 });
   } catch (error) {
     return NextResponse.json(formatError(error), { status: 500 });
@@ -157,6 +172,7 @@ export async function PATCH(request: NextRequest) {
     agentPrompt?: unknown;
     globalPrompt?: unknown;
     behavior?: unknown;
+    cloneProfile?: unknown;
     qualificationConfig?: unknown;
   }>(request);
   const context = await requireWorkspaceContext({
@@ -188,6 +204,7 @@ export async function PATCH(request: NextRequest) {
       agentPrompt,
       globalPrompt,
       behavior: body?.behavior,
+      cloneProfile: body?.cloneProfile,
       qualificationConfig: body?.qualificationConfig,
     });
 
@@ -268,6 +285,11 @@ function asString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
+function asNumber(value: unknown) {
+  const number = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+  return Number.isFinite(number) ? number : undefined;
+}
+
 function attachWorkspace(context: WorkspaceContext, state: ClientWhatsappState): DashboardWhatsappState {
   return {
     ...state,
@@ -312,6 +334,14 @@ function buildUnavailableState(): DashboardWhatsappState {
       files: [],
     },
     linkButtons: [],
+    cloneTest: {
+      total: 0,
+      averageScore: null,
+      lastScore: null,
+      reviewCount: 0,
+      lastEventAt: null,
+      events: [],
+    },
     capability: {
       canConnect: false,
       schemaReady: false,

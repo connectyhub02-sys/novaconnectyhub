@@ -7,6 +7,7 @@ import {
   AudioLines,
   Bell,
   Bot,
+  Brain,
   Building2,
   CheckCircle2,
   CircleHelp,
@@ -51,8 +52,14 @@ import {
 import { NeonBadge, Panel, SectionHeader } from "./panel-primitives";
 import {
   defaultWhatsappBehaviorConfig,
+  defaultWhatsappCloneMemory,
+  defaultWhatsappCloneProfile,
+  normalizeWhatsappCloneMemory,
+  normalizeWhatsappCloneProfile,
   normalizeWhatsappBehaviorConfig,
   type WhatsappBehaviorConfig,
+  type WhatsappCloneMemory,
+  type WhatsappCloneProfile,
   type WhatsappGroupReplyMode,
   type WhatsappPresenceMode,
   type WhatsappQuoteReplyMode,
@@ -66,6 +73,7 @@ import {
   type LeadQualificationConfig,
   type LeadQualificationQuestion,
 } from "@/lib/leads/qualification";
+import type { CloneHumanizationMetric } from "@/lib/whatsapp/clone-humanization";
 import { cn } from "@/lib/utils";
 
 type WhatsappStatus = "draft" | "qr_pending" | "connected" | "disconnected" | "blocked" | "error" | "archived";
@@ -127,6 +135,9 @@ type WhatsappState = {
     avatarAlt: string | null;
     prompt: string;
     promptPreview: string;
+    cloneProfile?: WhatsappCloneProfile;
+    cloneMemory?: WhatsappCloneMemory;
+    cloneProfileImport?: CloneProfileImportStatus;
     qualification?: LeadQualificationConfig;
     updatedAt: string | null;
   } | null;
@@ -150,6 +161,7 @@ type WhatsappState = {
     files: KnowledgeFile[];
   };
   linkButtons: TrackedLinkButton[];
+  cloneTest?: CloneRealTestSummary;
   capability: {
     canConnect: boolean;
     schemaReady: boolean;
@@ -177,6 +189,31 @@ type TrackedLinkButton = {
   createdAt: string | null;
 };
 
+type CloneRealTestEvent = {
+  id: string;
+  title: string;
+  summary: string;
+  score: number | null;
+  humanizationScore: number | null;
+  humanizationMetrics: CloneHumanizationMetric[];
+  reviewFlags: string[];
+  outboundMessages: number;
+  outboundModes: string[];
+  linkCount: number;
+  usedSharedCompanyContext: boolean;
+  cloneProfileEnabled: boolean;
+  createdAt: string | null;
+};
+
+type CloneRealTestSummary = {
+  total: number;
+  averageScore: number | null;
+  lastScore: number | null;
+  reviewCount: number;
+  lastEventAt: string | null;
+  events: CloneRealTestEvent[];
+};
+
 type AudioVoiceOption = {
   voiceId: string;
   name: string;
@@ -191,6 +228,19 @@ type AudioVoiceOption = {
   useCase: string | null;
   defaultForAgents: boolean;
   isDefault: boolean;
+};
+
+type CloneProfileImportStatus = {
+  status: "idle" | "queued" | "running" | "succeeded" | "failed";
+  source: "uazapi_history";
+  requestedAt: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  requestedBy: string | null;
+  sampledChats: number;
+  sampledMessages: number;
+  outboundSamples: number;
+  error: string | null;
 };
 
 type ActionResponse = {
@@ -412,6 +462,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [promptDraft, setPromptDraft] = useState("");
   const [behaviorDraft, setBehaviorDraft] = useState<WhatsappBehaviorConfig>(defaultWhatsappBehaviorConfig);
+  const [cloneProfileDraft, setCloneProfileDraft] = useState<WhatsappCloneProfile>(defaultWhatsappCloneProfile);
   const [qualificationDraft, setQualificationDraft] = useState<LeadQualificationConfig>(defaultLeadQualificationConfig);
   const [selectedCompanyId, setSelectedCompanyId] = useState("");
   const [selectedAgentId, setSelectedAgentId] = useState("");
@@ -446,6 +497,8 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
   const promptTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const promptSelectionRef = useRef({ start: 0, end: 0 });
   const pendingPromptCaretRef = useRef<number | null>(null);
+  const cloneProfileImportBaselineRef = useRef<string | null>(null);
+  const appliedCloneProfileImportRef = useRef<string | null>(null);
   const isAwaitingQrScan = Boolean(qrCode) || state?.instance?.status === "qr_pending";
   const isConnected = state?.instance?.status === "connected";
   const canManageInternalAgents = variant.entityIdKey === "sectorId";
@@ -497,6 +550,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
       promptSelectionRef.current = { start: nextPrompt.length, end: nextPrompt.length };
       const nextBehavior = normalizeWhatsappBehaviorConfig(nextState.behavior);
       setBehaviorDraft(nextBehavior);
+      setCloneProfileDraft(normalizeWhatsappCloneProfile(nextState.agent?.cloneProfile));
       setStatusMaxRecipients(nextBehavior.whatsappMaxStatusRecipients);
       setQualificationDraft(normalizeLeadQualificationConfig(nextState.agent?.qualification));
     }
@@ -529,6 +583,25 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
       cancelled = true;
     };
   }, [applyWhatsappState, variant]);
+
+  useEffect(() => {
+    const importStatus = state?.agent?.cloneProfileImport;
+    const completedAt = importStatus?.completedAt;
+
+    if (importStatus?.status !== "succeeded" || !completedAt || appliedCloneProfileImportRef.current === completedAt) {
+      return;
+    }
+
+    const currentDraftSnapshot = JSON.stringify(normalizeWhatsappCloneProfile(cloneProfileDraft));
+    const baselineSnapshot = cloneProfileImportBaselineRef.current;
+
+    if (!baselineSnapshot || baselineSnapshot === currentDraftSnapshot) {
+      setCloneProfileDraft(normalizeWhatsappCloneProfile(state?.agent?.cloneProfile));
+      cloneProfileImportBaselineRef.current = null;
+    }
+
+    appliedCloneProfileImportRef.current = completedAt;
+  }, [cloneProfileDraft, state?.agent?.cloneProfile, state?.agent?.cloneProfileImport]);
 
   useEffect(() => {
     if (!selectedWhatsappEntityId || !isAwaitingQrScan || running === "disconnect") {
@@ -675,10 +748,13 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
   const promptChanged = state?.agent ? promptDraft.trim() !== state.agent.prompt.trim() : false;
   const promptTooLong = promptDraft.length > agentPromptMaxLength;
   const behaviorChanged = state ? !isBehaviorEqual(behaviorDraft, state.behavior) : false;
+  const cloneProfileChanged = state?.agent
+    ? !isCloneProfileEqual(cloneProfileDraft, normalizeWhatsappCloneProfile(state.agent.cloneProfile))
+    : false;
   const qualificationChanged = state?.agent
     ? !isLeadQualificationConfigEqual(qualificationDraft, normalizeLeadQualificationConfig(state.agent.qualification))
     : false;
-  const settingsChanged = promptChanged || behaviorChanged || qualificationChanged;
+  const settingsChanged = promptChanged || behaviorChanged || cloneProfileChanged || qualificationChanged;
   const companies = state?.companies ?? [];
   const agents = state?.agents ?? [];
   const selectedCompany = companies.find((company) => company.id === selectedCompanyId) ?? companies[0] ?? null;
@@ -730,6 +806,20 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
 
   function updatePromptDraft(value: string) {
     setPromptDraft(value.slice(0, agentPromptMaxLength));
+  }
+
+  function updateCloneProfileDraft(value: Partial<WhatsappCloneProfile>) {
+    setCloneProfileDraft((current) => normalizeWhatsappCloneProfile({ ...current, ...value }));
+  }
+
+  async function generateCloneProfileFromHistory() {
+    if (!state?.instance?.tokenReady) {
+      setNotice({ tone: "warning", message: "Conecte ou reconecte o WhatsApp deste agente antes de gerar o DNA pelo historico." });
+      return;
+    }
+
+    cloneProfileImportBaselineRef.current = JSON.stringify(normalizeWhatsappCloneProfile(cloneProfileDraft));
+    await runAction("generate_clone_profile_from_history");
   }
 
   function updateQualificationDraft(value: Partial<LeadQualificationConfig>) {
@@ -904,6 +994,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
           ...whatsappActionPayload,
           agentPrompt: promptDraft,
           behavior: behaviorDraft,
+          cloneProfile: cloneProfileDraft,
           qualificationConfig: qualificationDraft,
         }),
       });
@@ -1379,6 +1470,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
           entityLabel={variant.entityPromptLabel}
           instance={state.instance}
           promptChanged={promptChanged}
+          cloneProfileChanged={cloneProfileChanged}
           qualificationChanged={qualificationChanged}
           settingsChanged={settingsChanged}
           behaviorChanged={behaviorChanged}
@@ -1441,7 +1533,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
         <Panel
           title="Prompt do agente"
           eyebrow="atendimento / vendas"
-          action={<NeonBadge tone={promptChanged ? "amber" : "green"}>{promptChanged ? "alterado" : "salvo"}</NeonBadge>}
+          action={<NeonBadge tone={promptChanged || cloneProfileChanged ? "amber" : "green"}>{promptChanged || cloneProfileChanged ? "alterado" : "salvo"}</NeonBadge>}
         >
           {state?.agent ? (
             <div className="grid gap-4">
@@ -1458,6 +1550,20 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
                   textareaRef={promptTextareaRef}
                   helper={promptHelper}
                 />
+
+                <CloneProfileEditor
+                  profile={cloneProfileDraft}
+                  importStatus={state.agent.cloneProfileImport}
+                  importing={running === "generate_clone_profile_from_history"}
+                  canImport={Boolean(state.instance?.tokenReady)}
+                  changed={cloneProfileChanged}
+                  onGenerateFromHistory={generateCloneProfileFromHistory}
+                  onChange={updateCloneProfileDraft}
+                />
+
+                <CloneMemoryPanel memory={state.agent.cloneMemory} enabled={behaviorDraft.cloneMemory} />
+
+                <CloneRealTestPanel summary={state.cloneTest} enabled={behaviorDraft.cloneRealTestMode} />
 
                 <PromptToolsPanel
                   generatingPrompt={generatingPrompt}
@@ -1646,6 +1752,9 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
                   <ToggleTile icon={Sticker} label="Figurinhas" description="Envia stickers contextuais ocasionalmente para simular comportamento natural do WhatsApp." checked={behaviorDraft.sendStickers} onChange={() => updateBehavior("sendStickers", !behaviorDraft.sendStickers)} />
                   <ToggleTile icon={Forward} label="Midia proativa" description="Permite que o agente envie imagens, catalogos ou midias relevantes de forma espontanea." checked={behaviorDraft.proactiveMedia} onChange={() => updateBehavior("proactiveMedia", !behaviorDraft.proactiveMedia)} />
                   <ToggleTile icon={GraduationCap} label="Aprendizado continuo" description="O agente aprende com cada atendimento e cita experiencias reais anonimizadas de outros clientes." checked={behaviorDraft.agentLearning} onChange={() => updateBehavior("agentLearning", !behaviorDraft.agentLearning)} />
+                  <ToggleTile icon={Building2} label="Memoria da empresa" description="Permite usar historico do lead com outros agentes da mesma empresa, sem misturar empresas diferentes da conta." checked={behaviorDraft.sharedCompanyContext} onChange={() => updateBehavior("sharedCompanyContext", !behaviorDraft.sharedCompanyContext)} />
+                  <ToggleTile icon={Brain} label="Memoria do clone" description="Guarda aprendizados de estilo deste agente sem salvar dados de leads, produtos ou outras empresas." checked={behaviorDraft.cloneMemory} onChange={() => updateBehavior("cloneMemory", !behaviorDraft.cloneMemory)} />
+                  <ToggleTile icon={ShieldCheck} label="Coerencia do clone" description="Mantem o agente fiel ao DNA/prompt e evita prometer links, botoes ou arquivos sem enviar junto." checked={behaviorDraft.cloneConsistencyGuard} onChange={() => updateBehavior("cloneConsistencyGuard", !behaviorDraft.cloneConsistencyGuard)} />
                 </div>
                 <div className="mt-2 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
                   <NumberField label="Chance reacao %" description="Probabilidade de reagir a cada mensagem com emoji." value={behaviorDraft.reactionProbability} min={0} max={100} onChange={(value) => updateBehavior("reactionProbability", value)} />
@@ -1682,6 +1791,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
                   <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
                   <ToggleTile icon={Bot} label="Protecao bots/loops" description="Evita conversas infinitas quando outro bot ou automacao responder o agente." checked={behaviorDraft.botLoopProtection} onChange={() => updateBehavior("botLoopProtection", !behaviorDraft.botLoopProtection)} />
                   <ToggleTile icon={UserRound} label="Teste entre instancias" description="Permite testar mensagens entre numeros internos sem bloquear a automacao." checked={behaviorDraft.allowInternalInstanceMessages} onChange={() => updateBehavior("allowInternalInstanceMessages", !behaviorDraft.allowInternalInstanceMessages)} />
+                  <ToggleTile icon={CheckCircle2} label="Teste real do clone" description="Registra respostas reais do WhatsApp como eventos de avaliacao para ajustar o clone depois." checked={behaviorDraft.cloneRealTestMode} onChange={() => updateBehavior("cloneRealTestMode", !behaviorDraft.cloneRealTestMode)} />
                   <ToggleTile icon={MessageCircle} label="Atender grupos" description="Permite que o agente responda mensagens em grupos do WhatsApp. Desligado, grupos sao ignorados." checked={behaviorDraft.allowGroupChats} onChange={() => updateBehavior("allowGroupChats", !behaviorDraft.allowGroupChats)} />
                   <ToggleTile icon={Clock3} label="Janela da IA ativa" description="Faz o agente responder apenas dentro do horario configurado na Janela da IA." checked={behaviorDraft.aiScheduleEnabled} onChange={() => updateBehavior("aiScheduleEnabled", !behaviorDraft.aiScheduleEnabled)} />
                   </div>
@@ -1898,6 +2008,47 @@ function isBehaviorEqual(left: WhatsappBehaviorConfig, right: WhatsappBehaviorCo
   return JSON.stringify(normalizeWhatsappBehaviorConfig(left)) === JSON.stringify(normalizeWhatsappBehaviorConfig(right));
 }
 
+function isCloneProfileEqual(left: WhatsappCloneProfile, right: WhatsappCloneProfile) {
+  return JSON.stringify(normalizeWhatsappCloneProfile(left)) === JSON.stringify(normalizeWhatsappCloneProfile(right));
+}
+
+function countCloneProfileFields(profile: WhatsappCloneProfile) {
+  return [
+    profile.displayName,
+    profile.roleIdentity,
+    profile.tone,
+    profile.vocabulary,
+    profile.responseRhythm,
+    profile.salesStyle,
+    profile.objectionStyle,
+    profile.closingStyle,
+    profile.emojiStyle,
+    profile.audioStyle,
+    profile.forbiddenPatterns,
+    profile.notes,
+  ].filter((value) => value.trim().length > 0).length;
+}
+
+function formatCloneProfileImportStatus(status?: CloneProfileImportStatus | null) {
+  if (!status || status.status === "idle") {
+    return "Ainda nao gerado pelo historico.";
+  }
+
+  if (status.status === "queued") {
+    return "Na fila do Inngest.";
+  }
+
+  if (status.status === "running") {
+    return "Analisando historico agora.";
+  }
+
+  if (status.status === "succeeded") {
+    return `Concluido em ${formatDate(status.completedAt)}.`;
+  }
+
+  return "Falhou. Ajuste a conexao ou tente novamente.";
+}
+
 function NoticeBar({ notice }: { notice: Notice }) {
   const colors = {
     success: "border-emerald-400/25 bg-emerald-400/10 text-emerald-200",
@@ -1968,6 +2119,7 @@ function WhatsappConsoleCommandBar({
   entityLabel,
   instance,
   promptChanged,
+  cloneProfileChanged,
   qualificationChanged,
   settingsChanged,
   behaviorChanged,
@@ -1982,6 +2134,7 @@ function WhatsappConsoleCommandBar({
   entityLabel: string;
   instance: WhatsappState["instance"];
   promptChanged: boolean;
+  cloneProfileChanged: boolean;
   qualificationChanged: boolean;
   settingsChanged: boolean;
   behaviorChanged: boolean;
@@ -1993,6 +2146,7 @@ function WhatsappConsoleCommandBar({
   const statusMeta = getStatusMeta(instance?.status ?? "draft");
   const changedAreas = [
     promptChanged ? "Prompt" : null,
+    cloneProfileChanged ? "DNA manual" : null,
     qualificationChanged ? "CRM" : null,
     behaviorChanged ? "Comportamento" : null,
   ].filter(Boolean);
@@ -2706,6 +2860,327 @@ function PromptBox({
       />
       <span className="mt-2 block font-mono text-[10px] uppercase tracking-widest text-slate-500">{helper}</span>
     </label>
+  );
+}
+
+function CloneProfileEditor({
+  profile,
+  importStatus,
+  importing,
+  canImport,
+  changed,
+  onGenerateFromHistory,
+  onChange,
+}: {
+  profile: WhatsappCloneProfile;
+  importStatus?: CloneProfileImportStatus;
+  importing: boolean;
+  canImport: boolean;
+  changed: boolean;
+  onGenerateFromHistory: () => void;
+  onChange: (value: Partial<WhatsappCloneProfile>) => void;
+}) {
+  const activeFields = countCloneProfileFields(profile);
+  const status = importStatus ?? null;
+  const importBusy = importing || status?.status === "queued" || status?.status === "running";
+
+  return (
+    <BehaviorSection
+      title="DNA manual do agente"
+      description="Perfil opcional para ensinar estilo, tom, ritmo e jeito de vender manualmente ou a partir do historico do WhatsApp."
+    >
+      <div className="grid gap-3">
+        <div className="grid gap-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,0.72fr)_minmax(240px,0.58fr)]">
+          <ToggleTile
+            icon={UserRound}
+            label="Usar DNA manual"
+            description="Quando ligado, estas regras entram no contexto de toda resposta deste agente."
+            checked={profile.enabled}
+            onChange={() => onChange({ enabled: !profile.enabled, source: "manual" })}
+          />
+          <div className="rounded-lg border px-3 py-2" style={{ background: "var(--ch-panel-2)", borderColor: "var(--ch-border)" }}>
+            <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Resumo</p>
+            <div className="mt-2 grid gap-2 sm:grid-cols-2">
+              <PromptCheck label={profile.enabled ? "DNA ativo" : "DNA pausado"} active={profile.enabled} />
+              <PromptCheck label={`${activeFields}/12 campos`} active={activeFields >= 4} />
+              <PromptCheck label={profile.source === "history" ? "Historico" : "Manual"} active />
+              <PromptCheck label={changed ? "Alterado" : "Salvo"} active={!changed} />
+            </div>
+          </div>
+          <div className="rounded-lg border px-3 py-2" style={{ background: "var(--ch-panel-2)", borderColor: "var(--ch-border)" }}>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Historico</p>
+                <p className="mt-1 text-[11px] leading-4 text-slate-400">
+                  {formatCloneProfileImportStatus(status)}
+                </p>
+              </div>
+              <SecondaryAction
+                icon={Wand2}
+                label={importBusy ? "Gerando" : "Gerar pelo historico"}
+                description="Analisa uma amostra recente de mensagens humanas enviadas pelo WhatsApp conectado e preenche este DNA."
+                disabled={!canImport || importBusy}
+                loading={importBusy}
+                onClick={onGenerateFromHistory}
+              />
+            </div>
+            {status?.status === "succeeded" ? (
+              <p className="mt-2 text-[10px] leading-4 text-emerald-200">
+                {status.outboundSamples} saidas usadas em {status.sampledChats} chats.
+              </p>
+            ) : null}
+            {status?.status === "failed" && status.error ? (
+              <p className="mt-2 text-[10px] leading-4 text-rose-200">{status.error}</p>
+            ) : null}
+            {!canImport ? (
+              <p className="mt-2 text-[10px] leading-4 text-amber-200">Conecte o WhatsApp para liberar a leitura do historico.</p>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="grid gap-3 xl:grid-cols-2">
+          <TextField
+            label="Nome de assinatura"
+            description="Nome que representa a pessoa ou estilo que este agente deve assumir."
+            value={profile.displayName}
+            onChange={(displayName) => onChange({ displayName, source: "manual" })}
+          />
+          <TextAreaField
+            label="Identidade"
+            description="Quem essa pessoa e no atendimento, cargo, postura e papel comercial."
+            minHeight="96px"
+            placeholder="Ex.: consultor direto, experiente, passa seguranca e entende do produto na pratica."
+            value={profile.roleIdentity}
+            onChange={(roleIdentity) => onChange({ roleIdentity, source: "manual" })}
+          />
+          <TextAreaField
+            label="Tom e energia"
+            description="Como fala quando o lead esta frio, quente, inseguro ou decidido."
+            placeholder="Ex.: casual, confiante, sem parecer vendedor empurrando."
+            value={profile.tone}
+            onChange={(tone) => onChange({ tone, source: "manual" })}
+          />
+          <TextAreaField
+            label="Vocabulario"
+            description="Palavras, girias, abreviacoes e expressoes que combinam com a pessoa."
+            placeholder="Ex.: show, boa, fechado, me diz uma coisa, top demais, vc, pq."
+            value={profile.vocabulary}
+            onChange={(vocabulary) => onChange({ vocabulary, source: "manual" })}
+          />
+          <TextAreaField
+            label="Ritmo de resposta"
+            description="Tamanho dos blocos, quando perguntar, quando responder curto e quando detalhar."
+            placeholder="Ex.: responde em blocos curtos, faz uma pergunta por vez, nao manda textao."
+            value={profile.responseRhythm}
+            onChange={(responseRhythm) => onChange({ responseRhythm, source: "manual" })}
+          />
+          <TextAreaField
+            label="Estilo de venda"
+            description="Como recomenda, compara opcoes, conduz para link, agenda ou humano."
+            placeholder="Ex.: recomenda 1 ou 2 opcoes, explica o motivo e manda o botao certo."
+            value={profile.salesStyle}
+            onChange={(salesStyle) => onChange({ salesStyle, source: "manual" })}
+          />
+          <TextAreaField
+            label="Objecoes"
+            description="Como responde preco, medo, duvida, atraso, comparacao e lead indeciso."
+            placeholder="Ex.: acolhe a duvida, explica simples, nao briga e chama para o proximo passo."
+            value={profile.objectionStyle}
+            onChange={(objectionStyle) => onChange({ objectionStyle, source: "manual" })}
+          />
+          <TextAreaField
+            label="Fechamento"
+            description="Como chama para acao sem parecer robo ou vendedor insistente."
+            placeholder="Ex.: pergunta se quer que envie o link, confirma cidade, ou chama o humano quando precisa."
+            value={profile.closingStyle}
+            onChange={(closingStyle) => onChange({ closingStyle, source: "manual" })}
+          />
+          <TextAreaField
+            label="Emoji"
+            description="Quando usa emoji, quando evita e quais combinam com a pessoa."
+            placeholder="Ex.: emoji com moderacao; usa fogo ou joinha quando o lead esta animado."
+            value={profile.emojiStyle}
+            onChange={(emojiStyle) => onChange({ emojiStyle, source: "manual" })}
+          />
+          <TextAreaField
+            label="Audio"
+            description="Quando prefere audio e como deve soar quando responde por voz."
+            placeholder="Ex.: audio so para explicar algo mais longo, tom tranquilo e direto."
+            value={profile.audioStyle}
+            onChange={(audioStyle) => onChange({ audioStyle, source: "manual" })}
+          />
+          <TextAreaField
+            label="Nao fazer"
+            description="Padroes que quebram o clone ou nao combinam com a pessoa."
+            placeholder="Ex.: nao chamar cliente pelo nome da empresa, nao prometer link sem enviar, nao ser formal."
+            value={profile.forbiddenPatterns}
+            onChange={(forbiddenPatterns) => onChange({ forbiddenPatterns, source: "manual" })}
+          />
+        </div>
+
+        <TextAreaField
+          label="Notas livres"
+          description="Regras extras que nao cabem nos campos acima."
+          minHeight="96px"
+          placeholder="Detalhes de personalidade, contexto comercial e cuidados do atendimento."
+          value={profile.notes}
+          onChange={(notes) => onChange({ notes, source: "manual" })}
+        />
+      </div>
+    </BehaviorSection>
+  );
+}
+
+function CloneRealTestPanel({
+  summary,
+  enabled,
+}: {
+  summary?: CloneRealTestSummary;
+  enabled: boolean;
+}) {
+  const data = summary ?? emptyCloneRealTestSummary();
+  const hasEvents = data.events.length > 0;
+
+  return (
+    <BehaviorSection
+      title="Metrica de humanizacao"
+      description="Mostra se o clone respondeu completo, natural, variado, contextual, com links corretos, sem prometer sem entregar e mantendo o estilo."
+    >
+      <div className="grid gap-3">
+        <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+          <InfoTile label="Modo" value={enabled ? "Ativo" : "Pausado"} />
+          <InfoTile label="Testes lidos" value={String(data.total)} />
+          <InfoTile label="Humanizacao" value={formatCloneScore(data.averageScore)} />
+          <InfoTile label="Alertas" value={String(data.reviewCount)} />
+        </div>
+
+        {hasEvents ? (
+          <div className="grid gap-2">
+            {data.events.slice(0, 5).map((event) => (
+              <div key={event.id} className="rounded-lg border px-3 py-2" style={{ background: "var(--ch-panel-2)", borderColor: "var(--ch-border)" }}>
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="truncate text-[12px] font-semibold text-slate-100">{event.title}</p>
+                    <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-slate-400">{event.summary || "Resposta sem resumo salvo."}</p>
+                  </div>
+                  <span className={cn(
+                    "shrink-0 rounded-md px-2 py-1 font-mono text-[9px] font-bold uppercase tracking-widest",
+                    event.reviewFlags.length ? "bg-amber-400/15 text-amber-200" : "bg-emerald-400/15 text-emerald-200",
+                  )}>
+                    {formatCloneScore(event.humanizationScore ?? event.score)}
+                  </span>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-slate-500">
+                  <span>{formatDate(event.createdAt)}</span>
+                  <span>{event.outboundMessages} msg</span>
+                  <span>{event.outboundModes.join(", ") || "texto"}</span>
+                  <span>{event.linkCount} links</span>
+                  {event.usedSharedCompanyContext ? <span>memoria empresa</span> : null}
+                  {event.cloneProfileEnabled ? <span>DNA ativo</span> : null}
+                </div>
+                {event.humanizationMetrics.length ? (
+                  <div className="mt-3 grid gap-1.5 sm:grid-cols-2 xl:grid-cols-4">
+                    {event.humanizationMetrics.map((metric) => (
+                      <div
+                        key={`${event.id}-${metric.key}`}
+                        className="rounded-md border px-2 py-1.5"
+                        style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface)" }}
+                        title={metric.reason}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="truncate text-[10px] font-semibold text-slate-300">{metric.label}</span>
+                          <span className={cn("font-mono text-[9px] font-bold", getHumanizationMetricTextColor(metric.status))}>
+                            {formatCloneScore(metric.score)}
+                          </span>
+                        </div>
+                        <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-800">
+                          <span
+                            className={cn("block h-full rounded-full", getHumanizationMetricBarColor(metric.status))}
+                            style={{ width: `${Math.max(4, Math.min(100, Math.round(metric.score * 100)))}%` }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+                {event.reviewFlags.length ? (
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {event.reviewFlags.map((flag) => (
+                      <span key={flag} className="rounded-md border border-amber-300/20 bg-amber-300/10 px-2 py-1 font-mono text-[9px] uppercase tracking-widest text-amber-100">
+                        {formatCloneReviewFlag(flag)}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-lg border px-3 py-6 text-center text-[12px] leading-5 text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
+            Nenhuma metrica registrada ainda. Ligue Teste real do clone em Seguranca e testes e converse pelo WhatsApp para gerar os primeiros registros.
+          </div>
+        )}
+      </div>
+    </BehaviorSection>
+  );
+}
+
+function CloneMemoryPanel({
+  memory,
+  enabled,
+}: {
+  memory?: WhatsappCloneMemory;
+  enabled: boolean;
+}) {
+  const data = normalizeWhatsappCloneMemory(memory ?? defaultWhatsappCloneMemory);
+  const groups = [
+    { label: "Estilo", values: data.stylePatterns },
+    { label: "Frases", values: data.phrasePatterns },
+    { label: "Venda", values: data.salesPatterns },
+    { label: "Correcoes", values: data.correctionNotes },
+    { label: "Evitar", values: data.avoidPatterns },
+  ].filter((group) => group.values.length > 0);
+  const hasMemory = Boolean(data.summary || groups.length);
+
+  return (
+    <BehaviorSection
+      title="Memoria do clone"
+      description="Aprendizados vivos de estilo deste agente. Nao guarda lead, produto, preco, link ou dado de outra empresa."
+    >
+      <div className="grid gap-3">
+        <div className="grid gap-2 md:grid-cols-3">
+          <InfoTile label="Modo" value={enabled ? "Ativa" : "Pausada"} />
+          <InfoTile label="Aprendizados" value={String(groups.reduce((total, group) => total + group.values.length, 0))} />
+          <InfoTile label="Atualizada" value={data.updatedAt ? formatDate(data.updatedAt) : "Ainda nao"} />
+        </div>
+
+        {hasMemory ? (
+          <div className="grid gap-2">
+            {data.summary ? (
+              <div className="rounded-lg border px-3 py-2 text-[12px] leading-5 text-slate-300" style={{ borderColor: "var(--ch-border)", background: "var(--ch-panel-2)" }}>
+                {data.summary}
+              </div>
+            ) : null}
+            {groups.map((group) => (
+              <div key={group.label} className="rounded-lg border px-3 py-2" style={{ borderColor: "var(--ch-border)", background: "var(--ch-panel-2)" }}>
+                <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">{group.label}</p>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {group.values.map((value) => (
+                    <span key={`${group.label}-${value}`} className="rounded-md border border-cyan-300/15 bg-cyan-300/10 px-2 py-1 text-[10px] leading-4 text-cyan-100">
+                      {value}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-lg border px-3 py-6 text-center text-[12px] leading-5 text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
+            A memoria do clone ainda esta vazia. Ela vai aprender estilo e correcoes nas proximas conversas reais quando o controle estiver ativo.
+          </div>
+        )}
+      </div>
+    </BehaviorSection>
   );
 }
 
@@ -4037,6 +4512,9 @@ function BehaviorSummary({
     behavior.sendStickers,
     behavior.proactiveMedia,
     behavior.agentLearning,
+    behavior.sharedCompanyContext,
+    behavior.cloneMemory,
+    behavior.cloneConsistencyGuard,
     behavior.identityGuard,
     behavior.leadMemory,
     behavior.emotionSensing,
@@ -4051,9 +4529,11 @@ function BehaviorSummary({
         <PromptCheck label="Agente ativo" active={behavior.agentEnabled} />
         <PromptCheck label={`${activeScenarios}/16 cenarios ativos`} active={activeScenarios >= 8} />
         <PromptCheck label={`${activeMedia}/4 midias ativas`} active={activeMedia >= 2} />
-        <PromptCheck label={`${activeHuman}/17 simulacao humana`} active={activeHuman >= 8} />
+        <PromptCheck label={`${activeHuman}/20 simulacao humana`} active={activeHuman >= 10} />
         <PromptCheck label="Intervencao humana" active={behavior.humanIntervention} />
         <PromptCheck label="Aviso humano WhatsApp" active={behavior.humanHandoffNotifications && Boolean(behavior.humanHandoffNotificationNumbers.trim())} />
+        <PromptCheck label="Memoria do clone" active={behavior.cloneMemory} />
+        <PromptCheck label="Teste real do clone" active={behavior.cloneRealTestMode} />
         <PromptCheck label="Grupos WhatsApp" active={behavior.allowGroupChats} />
         <PromptCheck label="Temporizacao inteligente" active={behavior.smartTiming} />
       </div>
@@ -4765,4 +5245,75 @@ function formatDate(value: string | null | undefined) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(date);
+}
+
+function emptyCloneRealTestSummary(): CloneRealTestSummary {
+  return {
+    total: 0,
+    averageScore: null,
+    lastScore: null,
+    reviewCount: 0,
+    lastEventAt: null,
+    events: [],
+  };
+}
+
+function formatCloneScore(value: number | null | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return "--";
+  }
+
+  return `${Math.round(value * 100)}%`;
+}
+
+function formatCloneReviewFlag(value: string) {
+  if (value === "identity_disclosure_risk") {
+    return "identidade";
+  }
+
+  if (value === "promised_link_without_link") {
+    return "link prometido";
+  }
+
+  if (value === "link_request_without_link") {
+    return "link ausente";
+  }
+
+  if (value === "generic_bot_phrase") {
+    return "frase generica";
+  }
+
+  if (value === "incomplete_response") {
+    return "incompleta";
+  }
+
+  if (value === "literal_newline_bug") {
+    return "quebra texto";
+  }
+
+  if (value === "repeated_pattern") {
+    return "repeticao";
+  }
+
+  if (value === "missed_human_handoff") {
+    return "humano";
+  }
+
+  if (value === "weak_clone_style_source") {
+    return "estilo fraco";
+  }
+
+  return value.replace(/_/g, " ");
+}
+
+function getHumanizationMetricTextColor(status: CloneHumanizationMetric["status"]) {
+  if (status === "good") return "text-emerald-300";
+  if (status === "warning") return "text-amber-300";
+  return "text-rose-300";
+}
+
+function getHumanizationMetricBarColor(status: CloneHumanizationMetric["status"]) {
+  if (status === "good") return "bg-emerald-400";
+  if (status === "warning") return "bg-amber-400";
+  return "bg-rose-400";
 }

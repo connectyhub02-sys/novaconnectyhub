@@ -4,6 +4,7 @@ import {
   createPlatformWhatsappConsoleAgent,
   createPlatformWhatsappConsoleSectorAgent,
   disconnectPlatformWhatsappConsole,
+  generatePlatformWhatsappCloneProfileFromHistory,
   getPlatformWhatsappConsoleState,
   refreshPlatformWhatsappConsoleStatus,
   sendPlatformWhatsappHandoffNotificationTest,
@@ -26,7 +27,10 @@ type ActionBody = {
   prompt?: unknown;
   agentPrompt?: unknown;
   behavior?: unknown;
+  cloneProfile?: unknown;
   qualificationConfig?: unknown;
+  maxChats?: unknown;
+  maxMessagesPerChat?: unknown;
   phone?: unknown;
   text?: unknown;
 };
@@ -144,6 +148,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(result);
     }
 
+    if (action === "generate_clone_profile_from_history") {
+      const result = await generatePlatformWhatsappCloneProfileFromHistory({
+        sectorId: asString(body?.sectorId) ?? "",
+        userId: auth.userId,
+        maxChats: asNumber(body?.maxChats),
+        maxMessagesPerChat: asNumber(body?.maxMessagesPerChat),
+        client: createServiceClient(),
+      });
+
+      return NextResponse.json(result);
+    }
+
     return NextResponse.json({ error: "Acao invalida." }, { status: 422 });
   } catch (error) {
     return NextResponse.json(formatError(error), { status: 400 });
@@ -169,6 +185,7 @@ export async function PATCH(request: NextRequest) {
           ? body.prompt
           : undefined,
       behavior: body?.behavior,
+      cloneProfile: body?.cloneProfile,
       qualificationConfig: body?.qualificationConfig,
       client: createServiceClient(),
     });
@@ -189,6 +206,11 @@ async function readJson<T>(request: NextRequest): Promise<T | null> {
 
 function asString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function asNumber(value: unknown) {
+  const number = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+  return Number.isFinite(number) ? number : undefined;
 }
 
 function formatError(error: unknown) {

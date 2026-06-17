@@ -2,7 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { defaultLeadQualificationConfig, leadQualificationConfigKey } from "@/lib/leads/qualification";
-import { defaultWhatsappAgentPrompt, defaultWhatsappBehaviorConfig } from "@/lib/whatsapp/agent-behavior";
+import { defaultWhatsappAgentPrompt, defaultWhatsappBehaviorConfig, defaultWhatsappCloneMemory, defaultWhatsappCloneProfile } from "@/lib/whatsapp/agent-behavior";
 import { createServiceClient } from "@/lib/supabase/service";
 import { listClientCompanies, requireClientCompanyAccess, type ClientCompany } from "./companies";
 
@@ -149,6 +149,8 @@ export async function createClientAgent(input: {
         sector_code: sectorCode,
         sector_name: sectorName,
         whatsapp_behavior_config: defaultWhatsappBehaviorConfig,
+        whatsapp_clone_profile: defaultWhatsappCloneProfile,
+        whatsapp_clone_memory: defaultWhatsappCloneMemory,
         [leadQualificationConfigKey]: defaultLeadQualificationConfig,
       },
     })
@@ -249,6 +251,9 @@ export async function cloneClientAgent(input: {
     cloned_from_agent_name: sourceAgent.name,
     cloned_at: new Date().toISOString(),
   });
+  if (targetCompany.id !== sourceAgent.organization_id) {
+    delete metadata.whatsapp_clone_memory;
+  }
 
   const { data, error } = await client
     .from("agent_registry")
@@ -399,7 +404,7 @@ function mergeAgentMetadata(
   sectorCode: string,
   sectorName: string,
   extra: JsonRecord = {},
-) {
+): JsonRecord {
   return {
     ...(metadata ?? {}),
     client_created: true,

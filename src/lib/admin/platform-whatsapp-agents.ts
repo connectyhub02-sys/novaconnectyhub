@@ -2,7 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { defaultLeadQualificationConfig, leadQualificationConfigKey } from "@/lib/leads/qualification";
-import { defaultWhatsappBehaviorConfig } from "@/lib/whatsapp/agent-behavior";
+import { defaultWhatsappBehaviorConfig, defaultWhatsappCloneMemory, defaultWhatsappCloneProfile } from "@/lib/whatsapp/agent-behavior";
 import { createServiceClient } from "@/lib/supabase/service";
 
 type JsonRecord = Record<string, unknown>;
@@ -186,6 +186,8 @@ export async function createPlatformWhatsappAgent(input: {
         sector_code: sector.sectorCode,
         sector_name: sector.name,
         whatsapp_behavior_config: defaultWhatsappBehaviorConfig,
+        whatsapp_clone_profile: defaultWhatsappCloneProfile,
+        whatsapp_clone_memory: defaultWhatsappCloneMemory,
         [leadQualificationConfigKey]: defaultLeadQualificationConfig,
       },
     })

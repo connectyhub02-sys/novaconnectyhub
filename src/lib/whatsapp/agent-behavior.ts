@@ -3,6 +3,34 @@ export type WhatsappRapportMode = "off" | "soft" | "strong";
 export type WhatsappGroupReplyMode = "all" | "mentions" | "admins";
 export type WhatsappPresenceMode = "focused" | "natural" | "always";
 export type WhatsappQuoteReplyMode = "off" | "smart" | "always";
+export type WhatsappCloneProfileSource = "manual" | "history";
+
+export type WhatsappCloneProfile = {
+  enabled: boolean;
+  source: WhatsappCloneProfileSource;
+  displayName: string;
+  roleIdentity: string;
+  tone: string;
+  vocabulary: string;
+  responseRhythm: string;
+  salesStyle: string;
+  objectionStyle: string;
+  closingStyle: string;
+  emojiStyle: string;
+  audioStyle: string;
+  forbiddenPatterns: string;
+  notes: string;
+};
+
+export type WhatsappCloneMemory = {
+  summary: string;
+  stylePatterns: string[];
+  phrasePatterns: string[];
+  salesPatterns: string[];
+  correctionNotes: string[];
+  avoidPatterns: string[];
+  updatedAt: string | null;
+};
 
 export type WhatsappBehaviorConfig = {
   agentEnabled: boolean;
@@ -69,6 +97,10 @@ export type WhatsappBehaviorConfig = {
   stickerProbability: number;
   proactiveMedia: boolean;
   agentLearning: boolean;
+  sharedCompanyContext: boolean;
+  cloneMemory: boolean;
+  cloneConsistencyGuard: boolean;
+  cloneRealTestMode: boolean;
   identityGuard: boolean;
   leadMemory: boolean;
   emotionSensing: boolean;
@@ -178,6 +210,33 @@ export const defaultWhatsappAgentPrompt = [
   "Quando nao tiver certeza, faca uma pergunta objetiva antes de prometer algo.",
 ].join("\n\n");
 
+export const defaultWhatsappCloneProfile: WhatsappCloneProfile = {
+  enabled: false,
+  source: "manual",
+  displayName: "",
+  roleIdentity: "",
+  tone: "",
+  vocabulary: "",
+  responseRhythm: "",
+  salesStyle: "",
+  objectionStyle: "",
+  closingStyle: "",
+  emojiStyle: "",
+  audioStyle: "",
+  forbiddenPatterns: "",
+  notes: "",
+};
+
+export const defaultWhatsappCloneMemory: WhatsappCloneMemory = {
+  summary: "",
+  stylePatterns: [],
+  phrasePatterns: [],
+  salesPatterns: [],
+  correctionNotes: [],
+  avoidPatterns: [],
+  updatedAt: null,
+};
+
 export const defaultWhatsappBehaviorConfig: WhatsappBehaviorConfig = {
   agentEnabled: true,
   alwaysOnline: false,
@@ -243,6 +302,10 @@ export const defaultWhatsappBehaviorConfig: WhatsappBehaviorConfig = {
   stickerProbability: 20,
   proactiveMedia: false,
   agentLearning: true,
+  sharedCompanyContext: true,
+  cloneMemory: true,
+  cloneConsistencyGuard: true,
+  cloneRealTestMode: false,
   identityGuard: true,
   leadMemory: true,
   emotionSensing: true,
@@ -368,6 +431,10 @@ export function normalizeWhatsappBehaviorConfig(value: unknown): WhatsappBehavio
     merged.sendStickers = false;
     merged.proactiveMedia = false;
     merged.agentLearning = false;
+    merged.sharedCompanyContext = false;
+    merged.cloneMemory = false;
+    merged.cloneConsistencyGuard = false;
+    merged.cloneRealTestMode = false;
     merged.identityGuard = false;
     merged.leadMemory = false;
     merged.emotionSensing = false;
@@ -395,6 +462,42 @@ export function mergeWhatsappHandoffNotificationSettings(
     humanHandoffNotificationNumbers: draft.humanHandoffNotificationNumbers,
     humanHandoffNotificationCooldownMinutes: draft.humanHandoffNotificationCooldownMinutes,
   });
+}
+
+export function normalizeWhatsappCloneProfile(value: unknown): WhatsappCloneProfile {
+  const input = isRecord(value) ? value : {};
+  const source = input.source === "history" ? "history" : "manual";
+
+  return {
+    enabled: readBoolean(input.enabled, defaultWhatsappCloneProfile.enabled),
+    source,
+    displayName: readLimitedString(input.displayName, 80),
+    roleIdentity: readLimitedString(input.roleIdentity, 700),
+    tone: readLimitedString(input.tone, 700),
+    vocabulary: readLimitedString(input.vocabulary, 900),
+    responseRhythm: readLimitedString(input.responseRhythm, 900),
+    salesStyle: readLimitedString(input.salesStyle, 900),
+    objectionStyle: readLimitedString(input.objectionStyle, 900),
+    closingStyle: readLimitedString(input.closingStyle, 700),
+    emojiStyle: readLimitedString(input.emojiStyle, 500),
+    audioStyle: readLimitedString(input.audioStyle, 700),
+    forbiddenPatterns: readLimitedString(input.forbiddenPatterns, 900),
+    notes: readLimitedString(input.notes, 1200),
+  };
+}
+
+export function normalizeWhatsappCloneMemory(value: unknown): WhatsappCloneMemory {
+  const input = isRecord(value) ? value : {};
+
+  return {
+    summary: readLimitedString(input.summary, 700),
+    stylePatterns: readLimitedStringList(input.stylePatterns ?? input.style_patterns, 8, 180),
+    phrasePatterns: readLimitedStringList(input.phrasePatterns ?? input.phrase_patterns, 8, 140),
+    salesPatterns: readLimitedStringList(input.salesPatterns ?? input.sales_patterns, 8, 180),
+    correctionNotes: readLimitedStringList(input.correctionNotes ?? input.correction_notes, 8, 180),
+    avoidPatterns: readLimitedStringList(input.avoidPatterns ?? input.avoid_patterns, 8, 180),
+    updatedAt: readLimitedString(input.updatedAt ?? input.updated_at, 80) || null,
+  };
 }
 
 function readBoolean(value: unknown, fallback: boolean) {
@@ -429,6 +532,20 @@ function readNumber(value: unknown, fallback: number, key: keyof WhatsappBehavio
   if (key === "stickerProbability") return clamp(Math.round(safe), 0, 100);
 
   return clamp(Math.round(safe), 2, 180);
+}
+
+function readLimitedString(value: unknown, maxLength: number) {
+  if (typeof value !== "string") return "";
+  return value.trim().replace(/\s+\n/g, "\n").slice(0, maxLength);
+}
+
+function readLimitedStringList(value: unknown, limit: number, maxLength: number) {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item) => typeof item === "string" ? item.replace(/\s+/g, " ").trim().slice(0, maxLength) : "")
+    .filter(Boolean)
+    .slice(0, limit);
 }
 
 function clamp(value: number, min: number, max: number) {

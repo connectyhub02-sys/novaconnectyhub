@@ -14,14 +14,28 @@ import {
   defaultWhatsappBehaviorConfig,
   defaultWhatsappGlobalPrompt,
   mergeWhatsappHandoffNotificationSettings,
+  normalizeWhatsappCloneMemory,
+  normalizeWhatsappCloneProfile,
   normalizeWhatsappBehaviorConfig,
   type WhatsappBehaviorConfig,
+  type WhatsappCloneProfile,
 } from "@/lib/whatsapp/agent-behavior";
 import {
   describeWhatsappHandoffNotificationResult,
   processWhatsappHandoffNotification,
 } from "@/lib/whatsapp/handoff-notifications";
-import type { ClientKnowledgeFile, ClientTrackedLinkButton, ClientWhatsappActionResult, ClientWhatsappState } from "@/lib/whatsapp/client-workspace";
+import {
+  enqueueWhatsappCloneProfileImport,
+  normalizeWhatsappCloneProfileImportStatus,
+} from "@/lib/whatsapp/clone-profile-history";
+import { normalizeCloneHumanizationMetrics } from "@/lib/whatsapp/clone-humanization";
+import type {
+  ClientCloneRealTestSummary,
+  ClientKnowledgeFile,
+  ClientTrackedLinkButton,
+  ClientWhatsappActionResult,
+  ClientWhatsappState,
+} from "@/lib/whatsapp/client-workspace";
 import { loadUazapiCredentials, type UazapiCredentials } from "@/lib/whatsapp/uazapi-credentials";
 import { createServiceClient } from "@/lib/supabase/service";
 import { createPlatformWhatsappAgent, createPlatformWhatsappSector } from "./platform-whatsapp-agents";
@@ -105,6 +119,15 @@ type KnowledgeMemoryRow = {
   created_at: string | null;
 };
 
+type CloneRealTestEventRow = {
+  id: string;
+  title: string | null;
+  summary: string | null;
+  confidence: number | null;
+  payload: JsonRecord | null;
+  created_at: string | null;
+};
+
 const maxPromptLength = 8000;
 const fallbackVoiceOrganizationId = "00000000-0000-4000-8000-000000000000";
 const platformWhatsappOrganizationSlug = "connectyhub-platform-whatsapp";
@@ -135,9 +158,12 @@ export async function getPlatformWhatsappConsoleState(input: {
   const instance = rawInstance?.instance_token_encrypted && rawInstance.status !== "connected"
     ? await syncInstanceStatusFromProvider(client, rawInstance).catch(() => rawInstance)
     : rawInstance;
+  const cloneTest = agent
+    ? await listPlatformCloneRealTests(client, agent.id)
+    : emptyCloneRealTestSummary();
 
   return {
-    ...buildState(instance, agent, getBehaviorConfig(agent, instance), audio, knowledgeFiles, linkButtons),
+    ...buildState(instance, agent, getBehaviorConfig(agent, instance), audio, knowledgeFiles, linkButtons, cloneTest),
     companies: sectors.map(mapSectorEntity),
     selectedCompanyId: selectedSector.id,
   };
@@ -210,6 +236,7 @@ export async function updatePlatformWhatsappConsoleSettings(input: {
   userId: string;
   agentPrompt?: string;
   behavior?: unknown;
+  cloneProfile?: unknown;
   qualificationConfig?: unknown;
   voiceOrganizationId?: string | null;
   client?: SupabaseClient;
@@ -238,6 +265,10 @@ export async function updatePlatformWhatsappConsoleSettings(input: {
 
   const currentBehavior = getBehaviorConfig(agent, instance);
   const nextBehavior = normalizeWhatsappBehaviorConfig(input.behavior ?? currentBehavior);
+  const hasCloneProfile = input.cloneProfile !== undefined;
+  const nextCloneProfile = hasCloneProfile
+    ? normalizeWhatsappCloneProfile(input.cloneProfile)
+    : getCloneProfileConfig(agent);
   const nextQualificationConfig = input.qualificationConfig !== undefined
     ? normalizeLeadQualificationConfig(input.qualificationConfig)
     : normalizeLeadQualificationConfig(readRecord(agent.metadata)?.[leadQualificationConfigKey]);
@@ -247,6 +278,7 @@ export async function updatePlatformWhatsappConsoleSettings(input: {
   const metadata = {
     ...(agent.metadata ?? {}),
     whatsapp_behavior_config: nextBehavior,
+    whatsapp_clone_profile: nextCloneProfile,
     [leadQualificationConfigKey]: nextQualificationConfig,
     prompt_control: {
       last_updated_at: now,
@@ -781,6 +813,54 @@ async function persistPlatformHandoffNotificationSettings(
   }
 }
 
+export async function generatePlatformWhatsappCloneProfileFromHistory(input: {
+  sectorId: string;
+  userId: string;
+  maxChats?: number;
+  maxMessagesPerChat?: number;
+  client?: SupabaseClient;
+}): Promise<ClientWhatsappActionResult> {
+  const client = input.client ?? createServiceClient();
+  const sector = await requirePlatformWhatsappSector(client, input.sectorId);
+  const [agent, instance] = await Promise.all([
+    requireSectorWhatsappAgent(client, sector.id),
+    requireSectorWhatsappInstance(client, sector.id),
+  ]);
+
+  if (!instance.instance_token_encrypted) {
+    throw new Error("Reconecte o WhatsApp interno antes de gerar o DNA pelo historico.");
+  }
+
+  await enqueueWhatsappCloneProfileImport({
+    scope: "platform",
+    agentId: agent.id,
+    organizationId: null,
+    sectorId: sector.id,
+    instanceId: instance.id,
+    requestedBy: input.userId,
+    maxChats: input.maxChats,
+    maxMessagesPerChat: input.maxMessagesPerChat,
+    client,
+  });
+
+  revalidateWhatsappAdmin();
+  const state = await getPlatformWhatsappConsoleState({
+    sectorId: sector.id,
+    userId: input.userId,
+    client,
+  });
+
+  return {
+    state,
+    notice: {
+      tone: "success",
+      message: "Analise do historico enviada para o Inngest. O DNA interno sera preenchido quando terminar.",
+    },
+    qrCode: null,
+    pairCode: null,
+  };
+}
+
 export async function requirePlatformWhatsappSector(client: SupabaseClient, sectorId: string) {
   const id = sectorId.trim();
 
@@ -841,6 +921,7 @@ function buildState(
   audio: WhatsappAudioVoiceState,
   knowledgeFiles: ClientKnowledgeFile[],
   linkButtons: ClientTrackedLinkButton[],
+  cloneTest: ClientCloneRealTestSummary = emptyCloneRealTestSummary(),
 ): ClientWhatsappState {
   const agentPrompt = agent?.prompt?.trim() || defaultWhatsappAgentPrompt;
   const profileImageUrl = readProfileImageUrl(instance);
@@ -870,6 +951,9 @@ function buildState(
           avatarAlt: agent.avatar_alt,
           prompt: agentPrompt,
           promptPreview: preview(agentPrompt),
+          cloneProfile: getCloneProfileConfig(agent),
+          cloneMemory: getCloneMemoryConfig(agent),
+          cloneProfileImport: getCloneProfileImportStatus(agent),
           qualification: normalizeLeadQualificationConfig(readRecord(agent.metadata)?.[leadQualificationConfigKey]),
           updatedAt: agent.updated_at,
         }
@@ -887,6 +971,7 @@ function buildState(
       files: knowledgeFiles,
     },
     linkButtons,
+    cloneTest,
     capability: {
       canConnect: Boolean(agent),
       schemaReady: true,
@@ -1378,6 +1463,25 @@ async function listSectorLinkButtons(client: SupabaseClient, sectorId: string) {
   return ((data ?? []) as KnowledgeMemoryRow[]).map(mapTrackedLinkButton);
 }
 
+async function listPlatformCloneRealTests(
+  client: SupabaseClient,
+  agentId: string,
+): Promise<ClientCloneRealTestSummary> {
+  const { data, error } = await client
+    .from("intelligence_events")
+    .select("id, title, summary, confidence, payload, created_at")
+    .eq("producer_agent_id", agentId)
+    .eq("event_type", "whatsapp.clone.real_test_turn")
+    .order("created_at", { ascending: false })
+    .limit(12);
+
+  if (error) {
+    return emptyCloneRealTestSummary();
+  }
+
+  return buildCloneRealTestSummary((data ?? []) as CloneRealTestEventRow[]);
+}
+
 function mapSectorEntity(row: SectorRow): PlatformWhatsappConsoleEntity {
   return {
     id: row.id,
@@ -1394,6 +1498,72 @@ function getBehaviorConfig(agent: AgentRow | null, instance: WhatsappInstanceRow
   const instanceConfig = readRecord(instance?.metadata)?.behavior_config;
   const agentConfig = readRecord(agent?.metadata)?.whatsapp_behavior_config;
   return normalizeWhatsappBehaviorConfig(instanceConfig ?? agentConfig ?? defaultWhatsappBehaviorConfig);
+}
+
+function getCloneProfileConfig(agent: AgentRow | null): WhatsappCloneProfile {
+  return normalizeWhatsappCloneProfile(readRecord(agent?.metadata)?.whatsapp_clone_profile);
+}
+
+function getCloneMemoryConfig(agent: AgentRow | null) {
+  return normalizeWhatsappCloneMemory(readRecord(agent?.metadata)?.whatsapp_clone_memory);
+}
+
+function getCloneProfileImportStatus(agent: AgentRow | null) {
+  return normalizeWhatsappCloneProfileImportStatus(readRecord(agent?.metadata)?.whatsapp_clone_profile_import);
+}
+
+function emptyCloneRealTestSummary(): ClientCloneRealTestSummary {
+  return {
+    total: 0,
+    averageScore: null,
+    lastScore: null,
+    reviewCount: 0,
+    lastEventAt: null,
+    events: [],
+  };
+}
+
+function buildCloneRealTestSummary(rows: CloneRealTestEventRow[]): ClientCloneRealTestSummary {
+  const events = rows.map(mapCloneRealTestEvent);
+  const scores = events
+    .map((event) => event.score)
+    .filter((score): score is number => typeof score === "number" && Number.isFinite(score));
+
+  return {
+    total: events.length,
+    averageScore: scores.length
+      ? scores.reduce((sum, score) => sum + score, 0) / scores.length
+      : null,
+    lastScore: events[0]?.score ?? null,
+    reviewCount: events.filter((event) => event.reviewFlags.length > 0).length,
+    lastEventAt: events[0]?.createdAt ?? null,
+    events,
+  };
+}
+
+function mapCloneRealTestEvent(row: CloneRealTestEventRow): ClientCloneRealTestSummary["events"][number] {
+  const payload = readRecord(row.payload) ?? {};
+  const humanizationScore = readNumber(payload.humanizationScore) ?? readNumber(payload.score) ?? row.confidence ?? null;
+  const reviewFlags = uniqueStrings([
+    ...readStringList(payload.humanizationReviewFlags, 8),
+    ...readStringList(payload.reviewFlags, 8),
+  ]);
+
+  return {
+    id: row.id,
+    title: row.title ?? "Metrica de humanizacao",
+    summary: row.summary ?? readString(payload.outputPreview) ?? "",
+    score: humanizationScore,
+    humanizationScore,
+    humanizationMetrics: normalizeCloneHumanizationMetrics(payload.humanizationMetrics),
+    reviewFlags,
+    outboundMessages: readNumber(payload.outboundMessages) ?? 0,
+    outboundModes: readStringList(payload.outboundModes, 4),
+    linkCount: readNumber(payload.linkCount) ?? 0,
+    usedSharedCompanyContext: payload.usedSharedCompanyContext === true,
+    cloneProfileEnabled: payload.cloneProfileEnabled === true,
+    createdAt: row.created_at,
+  };
 }
 
 async function getNextPromptVersion(client: SupabaseClient, agentId: string) {
@@ -1843,6 +2013,19 @@ function readString(value: unknown) {
 
 function readNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function readStringList(value: unknown, limit: number) {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item) => typeof item === "string" ? item.trim() : "")
+    .filter(Boolean)
+    .slice(0, limit);
+}
+
+function uniqueStrings(values: Array<string | null | undefined>) {
+  return Array.from(new Set(values.map((value) => value?.trim()).filter((value): value is string => Boolean(value))));
 }
 
 function slugify(value: string) {
