@@ -9,13 +9,17 @@ import {
   Bot,
   Brain,
   Building2,
+  Calendar,
   CheckCircle2,
   CircleHelp,
+  Coffee,
   Copy,
   Clock3,
+  Crosshair,
   Eye,
   FileText,
   Forward,
+  Gauge,
   Globe2,
   GraduationCap,
   ImageIcon,
@@ -32,6 +36,7 @@ import {
   Plus,
   QrCode,
   RefreshCcw,
+  Repeat,
   Send,
   ShieldCheck,
   Shuffle,
@@ -40,6 +45,7 @@ import {
   SplitSquareVertical,
   Sticker,
   Sun,
+  Target,
   Timer,
   Trash2,
   type LucideIcon,
@@ -1755,6 +1761,11 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
                   <ToggleTile icon={Building2} label="Memoria da empresa" description="Permite usar historico do lead com outros agentes da mesma empresa, sem misturar empresas diferentes da conta." checked={behaviorDraft.sharedCompanyContext} onChange={() => updateBehavior("sharedCompanyContext", !behaviorDraft.sharedCompanyContext)} />
                   <ToggleTile icon={Brain} label="Memoria do clone" description="Guarda aprendizados de estilo deste agente sem salvar dados de leads, produtos ou outras empresas." checked={behaviorDraft.cloneMemory} onChange={() => updateBehavior("cloneMemory", !behaviorDraft.cloneMemory)} />
                   <ToggleTile icon={ShieldCheck} label="Coerencia do clone" description="Mantem o agente fiel ao DNA/prompt e evita prometer links, botoes ou arquivos sem enviar junto." checked={behaviorDraft.cloneConsistencyGuard} onChange={() => updateBehavior("cloneConsistencyGuard", !behaviorDraft.cloneConsistencyGuard)} />
+                  <ToggleTile icon={Calendar} label="Consciencia temporal" description="Injeta hora, dia e periodo no prompt para saudacoes e ritmo contextual." checked={behaviorDraft.temporalAwareness} onChange={() => updateBehavior("temporalAwareness", !behaviorDraft.temporalAwareness)} />
+                  <ToggleTile icon={Gauge} label="Ritmo WPM" description="Calcula delay de digitacao baseado em palavras por minuto em vez de formula linear." checked={behaviorDraft.wpmTypingModel} onChange={() => updateBehavior("wpmTypingModel", !behaviorDraft.wpmTypingModel)} />
+                  <ToggleTile icon={Repeat} label="Correcoes mid-message" description="Injeta erros de digitacao reais e envia correcao com asterisco, como humano faz." checked={behaviorDraft.midMessageCorrections} onChange={() => updateBehavior("midMessageCorrections", !behaviorDraft.midMessageCorrections)} />
+                  <ToggleTile icon={Brain} label="Arco da conversa" description="Gera resumo do arco conversacional via IA para continuidade entre sessoes." checked={behaviorDraft.conversationArcMemory} onChange={() => updateBehavior("conversationArcMemory", !behaviorDraft.conversationArcMemory)} />
+                  <ToggleTile icon={Coffee} label="Small talk" description="Injeta contexto cultural e temporal brasileiro para papo leve quando o lead abrir espaco." checked={behaviorDraft.smallTalk} onChange={() => updateBehavior("smallTalk", !behaviorDraft.smallTalk)} />
                 </div>
                 <div className="mt-2 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
                   <NumberField label="Chance reacao %" description="Probabilidade de reagir a cada mensagem com emoji." value={behaviorDraft.reactionProbability} min={0} max={100} onChange={(value) => updateBehavior("reactionProbability", value)} />
@@ -1762,6 +1773,8 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
                   <NumberField label="Leitura max (s)" description="Segundos maximos antes de marcar como lido." value={behaviorDraft.readReceiptMaxSeconds} min={2} max={60} onChange={(value) => updateBehavior("readReceiptMaxSeconds", value)} />
                   <NumberField label="Chance audio %" description="Probabilidade de responder com audio espontaneo em vez de texto." value={behaviorDraft.spontaneousAudioProbability} min={0} max={100} onChange={(value) => updateBehavior("spontaneousAudioProbability", value)} />
                   <NumberField label="Chance figurinha %" description="Probabilidade de enviar sticker apos responder." value={behaviorDraft.stickerProbability} min={0} max={100} onChange={(value) => updateBehavior("stickerProbability", value)} />
+                  <NumberField label="WPM" description="Velocidade de digitacao simulada em palavras por minuto." value={behaviorDraft.wpmSpeed} min={25} max={80} onChange={(value) => updateBehavior("wpmSpeed", value)} />
+                  <NumberField label="Chance correcao %" description="Probabilidade de injetar um typo com correcao por asterisco." value={behaviorDraft.correctionFrequency} min={5} max={50} onChange={(value) => updateBehavior("correctionFrequency", value)} />
                 </div>
               </BehaviorSection>
 
@@ -1792,6 +1805,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
                   <ToggleTile icon={Bot} label="Protecao bots/loops" description="Evita conversas infinitas quando outro bot ou automacao responder o agente." checked={behaviorDraft.botLoopProtection} onChange={() => updateBehavior("botLoopProtection", !behaviorDraft.botLoopProtection)} />
                   <ToggleTile icon={UserRound} label="Teste entre instancias" description="Permite testar mensagens entre numeros internos sem bloquear a automacao." checked={behaviorDraft.allowInternalInstanceMessages} onChange={() => updateBehavior("allowInternalInstanceMessages", !behaviorDraft.allowInternalInstanceMessages)} />
                   <ToggleTile icon={CheckCircle2} label="Teste real do clone" description="Registra respostas reais do WhatsApp como eventos de avaliacao para ajustar o clone depois." checked={behaviorDraft.cloneRealTestMode} onChange={() => updateBehavior("cloneRealTestMode", !behaviorDraft.cloneRealTestMode)} />
+                  <ToggleTile icon={Crosshair} label="Turing benchmark" description="Avalia cada resposta de teste com score 0-100 de humanidade via IA. Requer teste real do clone ativo." checked={behaviorDraft.turingBenchmark} onChange={() => updateBehavior("turingBenchmark", !behaviorDraft.turingBenchmark)} />
                   <ToggleTile icon={MessageCircle} label="Atender grupos" description="Permite que o agente responda mensagens em grupos do WhatsApp. Desligado, grupos sao ignorados." checked={behaviorDraft.allowGroupChats} onChange={() => updateBehavior("allowGroupChats", !behaviorDraft.allowGroupChats)} />
                   <ToggleTile icon={Clock3} label="Janela da IA ativa" description="Faz o agente responder apenas dentro do horario configurado na Janela da IA." checked={behaviorDraft.aiScheduleEnabled} onChange={() => updateBehavior("aiScheduleEnabled", !behaviorDraft.aiScheduleEnabled)} />
                   </div>
@@ -1850,7 +1864,20 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
                     <ToggleTile icon={ShieldCheck} label="Opt-out" description="Detecta quando o lead pede para parar contato ou sair da lista." checked={behaviorDraft.detectOptOut} onChange={() => updateBehavior("detectOptOut", !behaviorDraft.detectOptOut)} />
                     <ToggleTile icon={Link2} label="Links do lead" description="Analisa links enviados pelo lead e guarda contexto util para atendimento." checked={behaviorDraft.analyzeLinks} onChange={() => updateBehavior("analyzeLinks", !behaviorDraft.analyzeLinks)} />
                     <ToggleTile icon={FileText} label="Salvar midia" description={`Salva arquivos relevantes recebidos para historico, CRM e memoria do ${variant.entitySingular}.`} checked={behaviorDraft.leadFileStorage} onChange={() => updateBehavior("leadFileStorage", !behaviorDraft.leadFileStorage)} />
+                    <ToggleTile icon={Target} label="Rastreamento de negociacao" description="Classifica estagio do funil de vendas e injeta contexto progressivo no prompt da IA." checked={behaviorDraft.negotiationTracking} onChange={() => updateBehavior("negotiationTracking", !behaviorDraft.negotiationTracking)} />
                   </div>
+                </div>
+              </BehaviorSection>
+
+              <BehaviorSection title="Follow-up proativo" description="O agente reenvia mensagem contextual quando o lead para de responder, como um vendedor real faria.">
+                <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                  <ToggleTile icon={Forward} label="Follow-up automatico" description="Envia mensagem de retomada quando o lead silencia apos engajamento." checked={behaviorDraft.proactiveFollowUp} onChange={() => updateBehavior("proactiveFollowUp", !behaviorDraft.proactiveFollowUp)} />
+                  <NumberField label="Delay (min)" description="Minutos de silencio do lead antes de enviar o follow-up." value={behaviorDraft.followUpDelayMinutes} min={30} max={1440} onChange={(value) => updateBehavior("followUpDelayMinutes", value)} />
+                  <NumberField label="Max por conversa" description="Limite de follow-ups automaticos por conversa." value={behaviorDraft.followUpMaxPerConversation} min={1} max={5} onChange={(value) => updateBehavior("followUpMaxPerConversation", value)} />
+                </div>
+                <div className="mt-2 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                  <TextField label="Janela inicio" description="Horario minimo para enviar follow-up (ex: 09:00)." value={behaviorDraft.followUpTimeWindowStart} onChange={(value) => updateBehavior("followUpTimeWindowStart", value)} />
+                  <TextField label="Janela fim" description="Horario maximo para enviar follow-up (ex: 20:00)." value={behaviorDraft.followUpTimeWindowEnd} onChange={(value) => updateBehavior("followUpTimeWindowEnd", value)} />
                 </div>
               </BehaviorSection>
 

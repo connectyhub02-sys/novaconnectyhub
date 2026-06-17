@@ -461,6 +461,7 @@ export async function processWhatsappAgentRun(input: {
       crossAgentContext: context.crossAgentContext,
       messages: context.messages,
       userText,
+      conversationMetadata: context.conversationMetadata,
     });
 
     if (!cachedAiText) {
@@ -519,6 +520,9 @@ export async function processWhatsappAgentRun(input: {
     extractConversationLearning(client, context).catch(() => {});
     extractLeadMemory(client, context, userText).catch(() => {});
     await extractCloneMemory(client, context, userText, aiText).catch(() => {});
+    extractConversationArcSummary(client, context).catch(() => {});
+    extractNegotiationState(client, context).catch(() => {});
+    scheduleProactiveFollowUp(context).catch(() => {});
 
     return await completeRun(client, run.id, preview(aiText, 500), {
       sent: true,
@@ -1131,6 +1135,7 @@ async function generateAgentResponse(input: {
   crossAgentContext: CrossAgentConversationContext | null;
   messages: ConversationMessageRow[];
   userText: string;
+  conversationMetadata: Record<string, unknown> | null;
 }) {
   const url = new URL(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(input.agent.model_id || input.credentials.model)}:generateContent`);
   url.searchParams.set("key", input.credentials.apiKey);
@@ -1186,6 +1191,7 @@ function buildSystemInstruction(input: {
   crossAgentContext: CrossAgentConversationContext | null;
   messages: ConversationMessageRow[];
   userText: string;
+  conversationMetadata: Record<string, unknown> | null;
 }) {
   const agentPrompt = renderPromptVariables(input.agent.prompt?.trim() || defaultWhatsappAgentPrompt, input);
   const customGlobalPrompt = input.globalAgent?.prompt?.trim();
@@ -1261,6 +1267,10 @@ function buildSystemInstruction(input: {
     ...buildNaturalAudioFillersInstruction(input.behavior),
     ...buildProactiveMediaInstruction(input.behavior),
     ...buildSocialProofInstruction(input.learnings),
+    ...buildTemporalAwarenessInstruction(input.behavior),
+    ...buildConversationArcInstruction(input.behavior, input.conversationMetadata),
+    ...buildNegotiationStateInstruction(input.behavior, input.conversationMetadata),
+    ...buildSmallTalkContext(input.behavior),
     "",
     "REGRAS TECNICAS DE SAIDA:",
     "- NUNCA escreva acoes entre parenteses, colchetes ou asteriscos: (risada), (risos), *sorriso*, [pausa], (tom serio). O texto pode virar audio e o TTS le essas palavras literalmente.",
@@ -1679,6 +1689,119 @@ function buildSocialProofInstruction(learnings: KnowledgeMemoryRow[]): string[] 
     lines.push(`- ${learning.content}`);
   }
   return lines;
+}
+
+function buildTemporalAwarenessInstruction(behavior: WhatsappBehaviorConfig): string[] {
+  if (!behavior.temporalAwareness) return [];
+  const tz = behavior.aiScheduleTimezone || "America/Sao_Paulo";
+  let hour: number;
+  let weekday: string;
+  try {
+    hour = parseInt(new Intl.DateTimeFormat("en-US", { hour: "numeric", hour12: false, timeZone: tz }).format(new Date()), 10);
+    weekday = new Intl.DateTimeFormat("pt-BR", { weekday: "long", timeZone: tz }).format(new Date());
+  } catch {
+    hour = new Date().getHours();
+    weekday = new Intl.DateTimeFormat("pt-BR", { weekday: "long" }).format(new Date());
+  }
+  let period: string;
+  let greeting: string;
+  if (hour >= 5 && hour < 12) {
+    period = "manha";
+    greeting = "bom dia";
+  } else if (hour >= 12 && hour < 18) {
+    period = "tarde";
+    greeting = "boa tarde";
+  } else if (hour >= 18 && hour < 22) {
+    period = "noite";
+    greeting = "boa noite";
+  } else {
+    period = "madrugada";
+    greeting = "boa noite";
+  }
+  return [
+    "",
+    "CONSCIENCIA TEMPORAL:",
+    `- Agora sao aproximadamente ${hour}h (${period}), ${weekday}.`,
+    `- Use '${greeting}' como saudacao quando iniciar ou retomar conversa. Nunca misture periodo.`,
+    "- Adapte energia ao horario: mais animado de manha, mais tranquilo a noite.",
+    "- Se o lead mandar mensagem de madrugada, seja breve e acolhedor.",
+    "- Nunca diga 'eu sei que horas sao' ou mencione sistema/relogio. Use naturalmente.",
+  ];
+}
+
+function buildConversationArcInstruction(behavior: WhatsappBehaviorConfig, conversationMetadata: Record<string, unknown> | null): string[] {
+  if (!behavior.conversationArcMemory || !conversationMetadata) return [];
+  const arcSummary = typeof conversationMetadata.conversation_arc_summary === "string"
+    ? conversationMetadata.conversation_arc_summary.trim()
+    : null;
+  if (!arcSummary) return [];
+  return [
+    "",
+    "ARCO DA CONVERSA (resumo acumulado):",
+    `- ${arcSummary}`,
+    "- Use este contexto para continuidade. Retome de onde pararam, nao pergunte o que ja foi discutido.",
+    "- Se o lead voltar dias depois, faca referencia natural: 'e ai, conseguiu pensar sobre...', 'lembra que a gente tava vendo...'.",
+  ];
+}
+
+function buildNegotiationStateInstruction(behavior: WhatsappBehaviorConfig, conversationMetadata: Record<string, unknown> | null): string[] {
+  if (!behavior.negotiationTracking || !conversationMetadata) return [];
+  const stage = typeof conversationMetadata.negotiation_state === "string"
+    ? conversationMetadata.negotiation_state.trim()
+    : null;
+  if (!stage) return [];
+  const discussed = typeof conversationMetadata.negotiation_discussed === "string"
+    ? conversationMetadata.negotiation_discussed.trim()
+    : "";
+  const stageGuide: Record<string, string> = {
+    discovery: "Faca perguntas abertas. Descubra necessidade, orcamento, urgencia. Nao empurre produto ainda.",
+    qualification: "Valide se o lead tem perfil. Confirme dados e expectativas antes de apresentar solucao.",
+    objection: "Escute a objecao com empatia. Reformule o valor, use prova social. Nao force.",
+    negotiation: "Explore flexibilidade. Oferte condicoes, prazos, bonus. Crie urgencia sem pressao.",
+    closing: "Confirme decisao. Simplifique proximo passo. Evite reabrir negociacao.",
+    post_sale: "Agradeca, confirme entrega, ofereca suporte. Plante semente para indicacao.",
+  };
+  return [
+    "",
+    "ESTAGIO DA NEGOCIACAO:",
+    `- Estagio atual: ${stage}.`,
+    ...(discussed ? [`- Ja discutido: ${discussed}.`] : []),
+    `- Orientacao: ${stageGuide[stage] ?? "Avance naturalmente conforme o contexto."}`,
+    "- Avance de estagio apenas quando o lead sinalizar. Nunca pule etapas.",
+  ];
+}
+
+function buildSmallTalkContext(behavior: WhatsappBehaviorConfig): string[] {
+  if (!behavior.smallTalk) return [];
+  const tz = behavior.aiScheduleTimezone || "America/Sao_Paulo";
+  let dayOfWeek: number;
+  let month: number;
+  try {
+    const now = new Date();
+    const formatted = new Intl.DateTimeFormat("en-US", { weekday: "narrow", timeZone: tz }).format(now);
+    const dayMap: Record<string, number> = { S: 0, M: 1, T: 2, W: 3, R: 4, F: 5, A: 6 };
+    dayOfWeek = dayMap[formatted] ?? now.getDay();
+    month = parseInt(new Intl.DateTimeFormat("en-US", { month: "numeric", timeZone: tz }).format(now), 10);
+  } catch {
+    const now = new Date();
+    dayOfWeek = now.getDay();
+    month = now.getMonth() + 1;
+  }
+  const vibes: string[] = [];
+  if (dayOfWeek === 1) vibes.push("Segunda-feira — 'comecando a semana', energia de produtividade.");
+  if (dayOfWeek === 5) vibes.push("Sexta-feira — 'sextou!', tom leve e otimista.");
+  if (dayOfWeek === 0 || dayOfWeek === 6) vibes.push("Fim de semana — tom relaxado, respeite que o lead pode estar descansando.");
+  if (month === 12) vibes.push("Dezembro — fim de ano, festas, retrospectiva. 'Fechando o ano com chave de ouro'.");
+  if (month === 6) vibes.push("Junho — festas juninas, arraia, quentao, pamonha.");
+  if (month === 2 || month === 3) vibes.push("Carnaval proximo — energia festiva, 'vai curtir o carnaval?'.");
+  if (vibes.length === 0) return [];
+  return [
+    "",
+    "SMALL TALK / CONTEXTO CULTURAL:",
+    ...vibes.map((v) => `- ${v}`),
+    "- Use como gancho SOMENTE se o lead abrir espaco (saudacao, conversa leve). Nunca force durante negociacao seria.",
+    "- Maximo 1 referencia cultural por conversa. O foco e vender, nao bater papo.",
+  ];
 }
 
 async function analyzeAndPersistLeadQualification(
@@ -2545,7 +2668,8 @@ async function sendAgentResponse(input: {
   const renderedText = renderLinkButtonTags(input.text, context.linkButtons, { lead: context.lead });
   const cleanText = normalizeAssistantText(ensureLinkPromiseIsActionable(renderedText, context));
   const { chunks, shouldSendAudio } = resolveOutboundDelivery(context, latestInbound, cleanText);
-  const replyTargets = await resolveOutboundReplyTargets(context, chunks).catch(() => []);
+  const correctedChunks = shouldSendAudio ? chunks : applyMidMessageCorrection(chunks, context.behavior);
+  const replyTargets = await resolveOutboundReplyTargets(context, correctedChunks).catch(() => []);
   const persistedChunks = await loadPersistedOutboundChunks(input.client, context.run.id, shouldSendAudio ? "audio" : "text");
   const outbound: OutboundMessage[] = [];
 
@@ -2624,10 +2748,10 @@ async function sendAgentResponse(input: {
     return outbound;
   }
 
-  for (let index = 0; index < chunks.length; index++) {
-    const text = chunks[index];
+  for (let index = 0; index < correctedChunks.length; index++) {
+    const text = correctedChunks[index];
     const chunkIndex = index + 1;
-    const chunksTotal = chunks.length;
+    const chunksTotal = correctedChunks.length;
 
     if (persistedChunks.has(chunkIndex)) {
       outbound.push({
@@ -3171,6 +3295,23 @@ function resolvePreSendPresenceDelayMs(behavior: WhatsappBehaviorConfig, text: s
 }
 
 function resolveChunkDelayMs(text: string, behavior: WhatsappBehaviorConfig) {
+  if (behavior.wpmTypingModel) {
+    const words = text.split(/\s+/).filter(Boolean).length;
+    const wpm = behavior.wpmSpeed || 45;
+    let base: number;
+    if (words <= 3) {
+      base = 800 + Math.random() * 700;
+    } else if (words <= 20) {
+      const nominal = (words / wpm) * 60000;
+      const variance = 1 + (Math.random() + Math.random() - 1) * 0.2;
+      base = Math.min(Math.max(nominal * variance, 1200), 8000);
+    } else {
+      const thinkPause = 1500 + Math.random() * 1500;
+      const typingMs = (words / (wpm * 1.3)) * 60000;
+      base = Math.min(Math.max(thinkPause + typingMs, 2500), 10000);
+    }
+    return applyCircadianFactor(applyJitter(Math.round(base), behavior), behavior);
+  }
   const base = Math.min(Math.max(3000 + text.length * 25, 3500), 7000);
   return applyCircadianFactor(applyJitter(base, behavior), behavior);
 }
@@ -3417,6 +3558,111 @@ async function persistCloneRealTestTurn(
       humanizationScore: humanization.score,
       humanizationMetrics: humanization.metrics,
       humanizationReviewFlags: humanization.reviewFlags,
+      createdAt: new Date().toISOString(),
+    },
+  });
+
+  if (context.behavior.turingBenchmark) {
+    evaluateTuringScore(client, context, {
+      userText: input.userText,
+      aiText: input.aiText,
+    }).catch(() => {});
+  }
+}
+
+async function evaluateTuringScore(
+  client: SupabaseClient,
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+  input: { userText: string; aiText: string },
+) {
+  const recentMessages = context.messages.slice(-8);
+  const conversationText = recentMessages
+    .map((m) => `${m.direction === "inbound" ? "Lead" : "Agente"}: ${buildMessageText(m)}`)
+    .join("\n");
+
+  const prompt = [
+    "Voce e um avaliador de teste de Turing para conversas de vendas no WhatsApp brasileiro.",
+    "Avalie se a resposta do agente parece ter sido escrita por um humano real.",
+    "",
+    "CONVERSA RECENTE:",
+    conversationText,
+    "",
+    "ULTIMA RESPOSTA DO AGENTE:",
+    input.aiText,
+    "",
+    "Avalie de 0 a 100 nos criterios abaixo (cada um vale ~14 pontos):",
+    "1. Naturalidade linguistica — abreviacoes, tom informal, fluxo de pensamento",
+    "2. Ritmo e tamanho — respostas no tamanho certo para WhatsApp, sem parecer artigo",
+    "3. Empatia e leitura emocional — entendeu o que o lead sente, respondeu adequadamente",
+    "4. Coerencia comercial — avancou a venda sem ser robotico ou generico",
+    "5. Ausencia de padroes de bot — sem frases como 'fico a disposicao', 'como posso ajudar'",
+    "6. Contexto e memoria — referenciou coisas que ja foram ditas, nao repetiu",
+    "7. Personalidade consistente — parece a mesma pessoa, nao muda de tom sem razao",
+    "",
+    "Responda SOMENTE em JSON:",
+    '{"score": <0-100>, "strengths": ["..."], "weaknesses": ["..."], "verdict": "human|suspicious|bot"}',
+  ].join("\n");
+
+  const url = new URL(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(context.agent.model_id || context.geminiCredentials.model)}:generateContent`);
+  url.searchParams.set("key", context.geminiCredentials.apiKey);
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: {
+        temperature: 0.15,
+        topP: 0.8,
+        maxOutputTokens: 600,
+        responseMimeType: "application/json",
+      },
+      safetySettings: geminiSafetySettings,
+    }),
+    cache: "no-store",
+  });
+
+  const data = await readProviderResponse(response);
+  if (!response.ok) return;
+
+  const text = extractGeminiText(data);
+  if (!text) return;
+
+  let parsed: { score?: number; strengths?: string[]; weaknesses?: string[]; verdict?: string };
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return;
+  }
+
+  const score = typeof parsed.score === "number" && Number.isFinite(parsed.score)
+    ? Math.min(100, Math.max(0, Math.round(parsed.score)))
+    : null;
+  if (score === null) return;
+
+  await client.from("intelligence_events").insert({
+    scope: "organization",
+    organization_id: context.organization.id,
+    source_type: "whatsapp",
+    source_id: context.conversationId,
+    producer_agent_id: context.agent.id,
+    event_type: "whatsapp.clone.turing_benchmark",
+    title: `Turing score: ${score}/100 (${parsed.verdict ?? "unknown"})`,
+    summary: preview(input.aiText, 300),
+    confidence: score / 100,
+    visibility: "organization",
+    tags: ["whatsapp", "clone", "turing_benchmark", parsed.verdict ?? "unknown"],
+    payload: {
+      leadId: context.lead?.id ?? null,
+      conversationId: context.conversationId,
+      agentRunId: context.run.id,
+      whatsappInstanceId: context.instance.id,
+      score,
+      verdict: parsed.verdict ?? null,
+      strengths: Array.isArray(parsed.strengths) ? parsed.strengths.slice(0, 5) : [],
+      weaknesses: Array.isArray(parsed.weaknesses) ? parsed.weaknesses.slice(0, 5) : [],
+      inputPreview: preview(input.userText, 300),
+      outputPreview: preview(input.aiText, 500),
       createdAt: new Date().toISOString(),
     },
   });
@@ -4529,6 +4775,166 @@ async function extractCloneMemory(
       },
     })
     .eq("id", context.agent.id);
+}
+
+async function extractConversationArcSummary(
+  client: SupabaseClient,
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+) {
+  if (!context.behavior.conversationArcMemory || context.messages.length < 6) return;
+
+  const metadata = context.conversationMetadata ?? {};
+  const lastUpdatedAt = typeof metadata.conversation_arc_updated_at === "string" ? metadata.conversation_arc_updated_at : null;
+  if (lastUpdatedAt) {
+    const elapsed = Date.now() - new Date(lastUpdatedAt).getTime();
+    if (elapsed < 3 * 60 * 1000 && context.messages.length < 12) return;
+  }
+
+  const conversationText = buildConversationText(context.messages);
+  const currentArc = typeof metadata.conversation_arc_summary === "string" ? metadata.conversation_arc_summary : "";
+  const prompt = [
+    "Resuma o arco conversacional abaixo em 3-5 frases curtas para dar continuidade em futuras conversas.",
+    "Foque em: o que o lead quer, o que ja foi oferecido, decisoes tomadas, pendencias, tom emocional.",
+    "Nao inclua telefone, dados sensiveis, ou detalhes tecnicos internos.",
+    "Responda somente JSON: {\"arc_summary\": \"...\"}",
+    "",
+    ...(currentArc ? [`Resumo anterior: ${currentArc}`, ""] : []),
+    "Conversa:",
+    conversationText,
+  ].join("\n");
+
+  const url = new URL(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(context.agent.model_id || context.geminiCredentials.model)}:generateContent`);
+  url.searchParams.set("key", context.geminiCredentials.apiKey);
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: {
+        temperature: 0.15,
+        topP: 0.8,
+        maxOutputTokens: 400,
+        responseMimeType: "application/json",
+      },
+      safetySettings: geminiSafetySettings,
+    }),
+    cache: "no-store",
+  });
+
+  if (!response.ok) return;
+
+  const data = await readProviderResponse(response);
+  const parsed = readRecord(parseJsonObject(extractGeminiText(data)));
+  const arcSummary = typeof parsed?.arc_summary === "string" ? parsed.arc_summary.trim().slice(0, 1000) : null;
+  if (!arcSummary) return;
+
+  const { data: current } = await client
+    .from("conversations")
+    .select("metadata")
+    .eq("id", context.conversationId)
+    .maybeSingle<{ metadata: JsonRecord | null }>();
+
+  await client
+    .from("conversations")
+    .update({
+      metadata: {
+        ...(readRecord(current?.metadata) ?? {}),
+        conversation_arc_summary: arcSummary,
+        conversation_arc_updated_at: new Date().toISOString(),
+      },
+    })
+    .eq("id", context.conversationId);
+}
+
+const negotiationStages = new Set(["discovery", "qualification", "objection", "negotiation", "closing", "post_sale"]);
+
+async function extractNegotiationState(
+  client: SupabaseClient,
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+) {
+  if (!context.behavior.negotiationTracking || context.messages.length < 3) return;
+
+  const recentMessages = context.messages.slice(-10);
+  const conversationText = recentMessages
+    .map((m) => `${m.direction === "inbound" ? "Lead" : "Agente"}: ${buildMessageText(m)}`)
+    .join("\n");
+
+  const prompt = [
+    "Classifique o estagio de negociacao desta conversa de vendas no WhatsApp.",
+    "Estagios possiveis: discovery, qualification, objection, negotiation, closing, post_sale.",
+    "Responda somente JSON: {\"stage\": \"...\", \"discussed\": \"resumo do que ja foi negociado em 1 frase\"}",
+    "",
+    "Conversa recente:",
+    conversationText,
+  ].join("\n");
+
+  const url = new URL(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(context.agent.model_id || context.geminiCredentials.model)}:generateContent`);
+  url.searchParams.set("key", context.geminiCredentials.apiKey);
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: {
+        temperature: 0.1,
+        topP: 0.8,
+        maxOutputTokens: 200,
+        responseMimeType: "application/json",
+      },
+      safetySettings: geminiSafetySettings,
+    }),
+    cache: "no-store",
+  });
+
+  if (!response.ok) return;
+
+  const data = await readProviderResponse(response);
+  const parsed = readRecord(parseJsonObject(extractGeminiText(data)));
+  const stage = typeof parsed?.stage === "string" && negotiationStages.has(parsed.stage) ? parsed.stage : null;
+  if (!stage) return;
+
+  const discussed = typeof parsed?.discussed === "string" ? parsed.discussed.trim().slice(0, 500) : "";
+
+  const { data: current } = await client
+    .from("conversations")
+    .select("metadata")
+    .eq("id", context.conversationId)
+    .maybeSingle<{ metadata: JsonRecord | null }>();
+
+  await client
+    .from("conversations")
+    .update({
+      metadata: {
+        ...(readRecord(current?.metadata) ?? {}),
+        negotiation_state: stage,
+        negotiation_discussed: discussed,
+        negotiation_updated_at: new Date().toISOString(),
+      },
+    })
+    .eq("id", context.conversationId);
+}
+
+async function scheduleProactiveFollowUp(
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+) {
+  if (!context.behavior.proactiveFollowUp || !context.lead?.id) return;
+
+  const latestMessage = context.messages[context.messages.length - 1];
+  if (!latestMessage || latestMessage.direction !== "inbound") return;
+
+  try {
+    const { enqueueWhatsappFollowUp } = await import("./proactive-followup");
+    await enqueueWhatsappFollowUp({
+      organizationId: context.organization.id,
+      whatsappInstanceId: context.instance.id,
+      conversationId: context.conversationId,
+      leadId: context.lead.id,
+      agentId: context.agent.id,
+      agentRunId: context.run.id,
+    }, context.behavior.followUpDelayMinutes);
+  } catch {}
 }
 
 function readCachedRunResponseText(metadata: JsonRecord | null) {
@@ -6129,6 +6535,46 @@ function compactOutboundChunks(chunks: string[]) {
   const tail = cleanChunks.slice(outboundChunkLimit - 1).join("\n\n").trim();
 
   return tail ? [...visible, tail] : visible;
+}
+
+function applyMidMessageCorrection(chunks: string[], behavior: WhatsappBehaviorConfig): string[] {
+  if (!behavior.midMessageCorrections || chunks.length < 2) return chunks;
+  if (Math.random() > (behavior.correctionFrequency || 15) / 100) return chunks;
+
+  const targetIndex = chunks.length > 2
+    ? 1 + Math.floor(Math.random() * (chunks.length - 2))
+    : 0;
+  const targetChunk = chunks[targetIndex];
+  const words = targetChunk.split(/\s+/);
+  const eligible = words
+    .map((w, i) => ({ word: w, index: i }))
+    .filter(({ word }) =>
+      word.length >= 4 &&
+      !/^\d/.test(word) &&
+      !word.startsWith("http") &&
+      !word.startsWith("{{") &&
+      !word.startsWith("*"),
+    );
+
+  if (eligible.length === 0) return chunks;
+
+  const pick = eligible[Math.floor(Math.random() * eligible.length)];
+  const chars = [...pick.word];
+  const swapPos = 1 + Math.floor(Math.random() * Math.max(chars.length - 2, 1));
+  [chars[swapPos], chars[swapPos - 1]] = [chars[swapPos - 1], chars[swapPos]];
+  const typoWord = chars.join("");
+
+  if (typoWord === pick.word) return chunks;
+
+  const modifiedWords = [...words];
+  modifiedWords[pick.index] = typoWord;
+  const modifiedChunk = modifiedWords.join(" ");
+  const correctionChunk = `*${pick.word}`;
+
+  const result = [...chunks];
+  result[targetIndex] = modifiedChunk;
+  result.splice(targetIndex + 1, 0, correctionChunk);
+  return compactOutboundChunks(result);
 }
 
 function extractGeminiText(value: unknown) {

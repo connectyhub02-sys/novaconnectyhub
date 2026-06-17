@@ -133,6 +133,20 @@ export type WhatsappBehaviorConfig = {
   aiScheduleStart: string;
   aiScheduleEnd: string;
   aiScheduleTimezone: string;
+  temporalAwareness: boolean;
+  wpmTypingModel: boolean;
+  wpmSpeed: number;
+  midMessageCorrections: boolean;
+  correctionFrequency: number;
+  proactiveFollowUp: boolean;
+  followUpDelayMinutes: number;
+  followUpMaxPerConversation: number;
+  followUpTimeWindowStart: string;
+  followUpTimeWindowEnd: string;
+  conversationArcMemory: boolean;
+  negotiationTracking: boolean;
+  smallTalk: boolean;
+  turingBenchmark: boolean;
 };
 
 export const defaultWhatsappGlobalPrompt = [
@@ -338,6 +352,20 @@ export const defaultWhatsappBehaviorConfig: WhatsappBehaviorConfig = {
   aiScheduleStart: "18:00",
   aiScheduleEnd: "08:00",
   aiScheduleTimezone: "America/Sao_Paulo",
+  temporalAwareness: true,
+  wpmTypingModel: true,
+  wpmSpeed: 45,
+  midMessageCorrections: true,
+  correctionFrequency: 15,
+  proactiveFollowUp: false,
+  followUpDelayMinutes: 120,
+  followUpMaxPerConversation: 2,
+  followUpTimeWindowStart: "09:00",
+  followUpTimeWindowEnd: "20:00",
+  conversationArcMemory: true,
+  negotiationTracking: true,
+  smallTalk: false,
+  turingBenchmark: false,
 };
 
 const responseModes = new Set<WhatsappResponseMode>(["text", "audio", "mirror"]);
@@ -440,6 +468,14 @@ export function normalizeWhatsappBehaviorConfig(value: unknown): WhatsappBehavio
     merged.emotionSensing = false;
     merged.conversationChoreography = false;
     merged.confidenceHumility = false;
+    merged.temporalAwareness = false;
+    merged.wpmTypingModel = false;
+    merged.midMessageCorrections = false;
+    merged.proactiveFollowUp = false;
+    merged.conversationArcMemory = false;
+    merged.negotiationTracking = false;
+    merged.smallTalk = false;
+    merged.turingBenchmark = false;
   }
 
   if (merged.whatsappCampaignDelayMaxSeconds < merged.whatsappCampaignDelayMinSeconds) {
@@ -530,6 +566,10 @@ function readNumber(value: unknown, fallback: number, key: keyof WhatsappBehavio
   if (key === "readReceiptMinSeconds") return clamp(Math.round(safe), 1, 30);
   if (key === "readReceiptMaxSeconds") return clamp(Math.round(safe), 2, 60);
   if (key === "stickerProbability") return clamp(Math.round(safe), 0, 100);
+  if (key === "wpmSpeed") return clamp(Math.round(safe), 25, 80);
+  if (key === "correctionFrequency") return clamp(Math.round(safe), 5, 50);
+  if (key === "followUpDelayMinutes") return clamp(Math.round(safe), 30, 1440);
+  if (key === "followUpMaxPerConversation") return clamp(Math.round(safe), 1, 5);
 
   return clamp(Math.round(safe), 2, 180);
 }
