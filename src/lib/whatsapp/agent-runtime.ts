@@ -460,6 +460,7 @@ export async function processWhatsappAgentRun(input: {
       learnings: context.learnings,
       crossAgentContext: context.crossAgentContext,
       messages: context.messages,
+      latestInbound,
       userText,
       conversationMetadata: context.conversationMetadata,
     });
@@ -1134,6 +1135,7 @@ async function generateAgentResponse(input: {
   learnings: KnowledgeMemoryRow[];
   crossAgentContext: CrossAgentConversationContext | null;
   messages: ConversationMessageRow[];
+  latestInbound: ConversationMessageRow | null;
   userText: string;
   conversationMetadata: Record<string, unknown> | null;
 }) {
@@ -1147,7 +1149,7 @@ async function generateAgentResponse(input: {
       systemInstruction: {
         parts: [{ text: buildSystemInstruction(input) }],
       },
-      contents: buildGeminiContents(input.messages, input.userText),
+      contents: buildGeminiContents(input.messages, input.userText, input.latestInbound?.id ?? null),
       generationConfig: {
         temperature: 0.55,
         topP: 0.9,
@@ -2197,10 +2199,10 @@ function normalizeLinkReference(value: string) {
     .replace(/^_+|_+$/g, "");
 }
 
-function buildGeminiContents(messages: ConversationMessageRow[], fallbackUserText: string) {
+function buildGeminiContents(messages: ConversationMessageRow[], fallbackUserText: string, activeInboundMessageId: string | null = null) {
   const contents = messages
     .map((message) => {
-      const text = buildMessageText(message);
+      const text = buildMessageText(message, { activeInboundMessageId });
       if (!text) return null;
 
       return {
@@ -2270,7 +2272,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-function buildMessageText(message: ConversationMessageRow) {
+function buildMessageText(
+  message: ConversationMessageRow,
+  options: { activeInboundMessageId?: string | null } = {},
+) {
   const text = message.text_content?.trim();
 
   if (text) {
@@ -2278,6 +2283,13 @@ function buildMessageText(message: ConversationMessageRow) {
   }
 
   if (isAudioMessage(message)) {
+    if (options.activeInboundMessageId && message.id !== options.activeInboundMessageId) {
+      return [
+        "Nota interna: o lead enviou um audio anterior sem transcricao disponivel.",
+        "Nao retome esse audio por conta propria se o lead ja enviou mensagens depois; responda a mensagem mais recente.",
+      ].join(" ");
+    }
+
     return "Nota interna: o lead enviou um audio sem transcricao disponivel; nao ha texto falado confiavel nessa mensagem.";
   }
 
