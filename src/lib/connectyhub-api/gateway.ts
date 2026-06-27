@@ -14,6 +14,8 @@ import { loadUazapiCredentials, type UazapiCredentials } from "@/lib/whatsapp/ua
 
 type JsonRecord = Record<string, unknown>;
 
+const DEFAULT_CLIENT_WEBHOOK_PATH = "/api/webhooks/connectyhub";
+
 export type GatewayScope =
   | "instances:read"
   | "instances:write"
@@ -3125,10 +3127,20 @@ function normalizePhone(value: string | null | undefined) {
 function normalizeUrl(value: string | null | undefined) {
   if (!value) return null;
 
+  let raw = value.trim();
+  if (!raw) return null;
+
+  if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(raw)) {
+    raw = `https://${raw}`;
+  }
+
   try {
-    const url = new URL(value.trim());
+    const url = new URL(raw);
     if (url.protocol !== "http:" && url.protocol !== "https:") {
       return null;
+    }
+    if (url.pathname === "/" || !url.pathname) {
+      url.pathname = DEFAULT_CLIENT_WEBHOOK_PATH;
     }
     return url.toString();
   } catch {

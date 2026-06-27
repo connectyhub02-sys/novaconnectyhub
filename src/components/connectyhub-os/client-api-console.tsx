@@ -385,8 +385,8 @@ export function ClientApiConsole({
             <form className="space-y-3" onSubmit={submitForm}>
               <input name="action" type="hidden" value="create_webhook" />
               {activeClient && <input name="clientId" type="hidden" value={activeClient.id} />}
-              <Field label="URL publica">
-                <input className={inputClassName} name="url" placeholder="https://cliente.com/webhooks/connectyhub" required />
+              <Field label="Dominio ou URL publica">
+                <input className={inputClassName} name="url" placeholder="guilhermepilger.ai" required />
               </Field>
               <Field label="Descricao">
                 <input className={inputClassName} name="description" placeholder="Webhook principal" />
