@@ -386,7 +386,7 @@ export function ClientApiConsole({
               <input name="action" type="hidden" value="create_webhook" />
               {activeClient && <input name="clientId" type="hidden" value={activeClient.id} />}
               <Field label="Dominio ou URL publica">
-                <input className={inputClassName} name="url" placeholder="guilhermepilger.ai" required />
+                <input className={inputClassName} name="url" placeholder="meuprojeto.com.br" required />
               </Field>
               <Field label="Descricao">
                 <input className={inputClassName} name="description" placeholder="Webhook principal" />

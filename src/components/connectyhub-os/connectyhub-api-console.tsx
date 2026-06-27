@@ -329,7 +329,7 @@ export function ConnectyHubApiConsole({
               <input name="action" type="hidden" value="create_webhook" />
               <ClientSelect clients={state.clients} />
               <Field label="Dominio ou URL publica">
-                <input name="url" required className={inputClassName} placeholder="guilhermepilger.ai" />
+                <input name="url" required className={inputClassName} placeholder="meuprojeto.com.br" />
               </Field>
               <Field label="Descricao">
                 <input name="description" className={inputClassName} placeholder="Webhook principal" />
