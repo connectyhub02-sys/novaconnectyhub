@@ -85,6 +85,14 @@ const webhookEventGroups = [
       { value: "newsletter_messages", label: "Newsletters/canais" },
     ],
   },
+  {
+    title: "Operacao",
+    events: [
+      { value: "call", label: "Chamadas" },
+      { value: "blocks", label: "Bloqueios" },
+      { value: "sender", label: "Campanhas" },
+    ],
+  },
 ];
 
 export function ClientApiConsole({

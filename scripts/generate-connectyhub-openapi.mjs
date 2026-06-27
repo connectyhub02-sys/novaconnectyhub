@@ -25,6 +25,9 @@ const CONNECTYHUB_WEBHOOK_EVENTS = [
   "labels",
   "chat_labels",
   "newsletter_messages",
+  "call",
+  "blocks",
+  "sender",
 ];
 
 const tagNames = {

@@ -2661,7 +2661,7 @@ async function configureGatewayProviderWebhook(credentials: UazapiCredentials, t
     tolerateError: true,
     body: {
       url: webhookUrl.toString(),
-      events: ["messages", "messages_update", "connection", "history", "presence", "chats", "contacts", "groups", "labels", "chat_labels", "newsletter_messages"],
+      events: ["messages", "messages_update", "connection", "history", "presence", "chats", "contacts", "groups", "labels", "chat_labels", "newsletter_messages", "call", "blocks", "sender"],
       excludeMessages: ["wasSentByApi"],
       enabled: true,
       addUrlEvents: false,

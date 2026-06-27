@@ -2117,7 +2117,10 @@
                         "groups",
                         "labels",
                         "chat_labels",
-                        "newsletter_messages"
+                        "newsletter_messages",
+                        "call",
+                        "blocks",
+                        "sender"
                       ]
                     },
                     "example": [
@@ -2216,7 +2219,10 @@
                         "groups",
                         "labels",
                         "chat_labels",
-                        "newsletter_messages"
+                        "newsletter_messages",
+                        "call",
+                        "blocks",
+                        "sender"
                       ]
                     }
                   },
