@@ -4,6 +4,7 @@ import type { User } from "@supabase/supabase-js";
 import { isSupabaseAuthConfigured } from "./env";
 import { createClient } from "./server";
 import { createServiceClient } from "./service";
+import { ensureClientApiClient } from "@/lib/connectyhub-api/gateway";
 
 export type CurrentProfile = {
   id: string;
@@ -114,6 +115,15 @@ export async function ensureStarterOrganization() {
     organization_id: organization.id,
     user_id: workspace.user.id,
     role: "owner",
+  });
+
+  await ensureClientApiClient({
+    organizationId: organization.id,
+    organizationName: organization.name,
+    organizationSlug: organization.slug,
+    contactEmail: workspace.profile.email,
+    actorId: workspace.user.id,
+    client: supabase,
   });
 
   return {

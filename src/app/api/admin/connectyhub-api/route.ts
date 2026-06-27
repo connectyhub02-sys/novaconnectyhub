@@ -1,0 +1,124 @@
+import { NextResponse, type NextRequest } from "next/server";
+import {
+  adoptAdminProviderInstance,
+  createAdminApiClient,
+  createAdminApiKey,
+  createAdminWebhookEndpoint,
+  formatGatewayError,
+  getAdminGatewayState,
+} from "@/lib/connectyhub-api/gateway";
+import { requirePlatformAdmin } from "@/lib/supabase/admin-auth";
+import { createServiceClient } from "@/lib/supabase/service";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+type ActionBody = {
+  action?: unknown;
+  organizationId?: unknown;
+  clientId?: unknown;
+  name?: unknown;
+  contactEmail?: unknown;
+  planCode?: unknown;
+  providerInstanceId?: unknown;
+  url?: unknown;
+  description?: unknown;
+  events?: unknown;
+  scopes?: unknown;
+};
+
+export async function GET() {
+  const auth = await requirePlatformAdmin();
+
+  if (auth instanceof NextResponse) {
+    return auth;
+  }
+
+  try {
+    const state = await getAdminGatewayState(createServiceClient());
+    return NextResponse.json({ ok: true, state });
+  } catch (error) {
+    const formatted = formatGatewayError(error);
+    return NextResponse.json(formatted.body, { status: formatted.status });
+  }
+}
+
+export async function POST(request: NextRequest) {
+  const auth = await requirePlatformAdmin();
+
+  if (auth instanceof NextResponse) {
+    return auth;
+  }
+
+  const body = await readJson<ActionBody>(request);
+  const action = asString(body?.action);
+  const client = createServiceClient();
+
+  try {
+    if (action === "create_client") {
+      const apiClient = await createAdminApiClient({
+        organizationId: asString(body?.organizationId) ?? "",
+        name: asString(body?.name) ?? "",
+        contactEmail: asString(body?.contactEmail),
+        planCode: asString(body?.planCode),
+        actorId: auth.userId,
+        client,
+      });
+
+      return NextResponse.json({ ok: true, apiClient });
+    }
+
+    if (action === "create_key") {
+      const result = await createAdminApiKey({
+        clientId: asString(body?.clientId) ?? "",
+        name: asString(body?.name) ?? "Chave principal",
+        scopes: Array.isArray(body?.scopes) ? body.scopes.filter((item): item is string => typeof item === "string") : undefined,
+        actorId: auth.userId,
+        client,
+      });
+
+      return NextResponse.json({ ok: true, apiKey: result.apiKey, secret: result.secret });
+    }
+
+    if (action === "create_webhook") {
+      const result = await createAdminWebhookEndpoint({
+        clientId: asString(body?.clientId) ?? "",
+        url: asString(body?.url) ?? "",
+        description: asString(body?.description),
+        events: Array.isArray(body?.events) ? body.events.filter((item): item is string => typeof item === "string") : undefined,
+        actorId: auth.userId,
+        client,
+      });
+
+      return NextResponse.json({ ok: true, endpoint: result.endpoint, secret: result.secret });
+    }
+
+    if (action === "adopt_instance") {
+      const instance = await adoptAdminProviderInstance({
+        clientId: asString(body?.clientId) ?? "",
+        providerInstanceId: asString(body?.providerInstanceId) ?? "",
+        actorId: auth.userId,
+        client,
+      });
+
+      return NextResponse.json({ ok: true, instance });
+    }
+
+    return NextResponse.json({ ok: false, error: { code: "invalid_action", message: "Acao invalida." } }, { status: 422 });
+  } catch (error) {
+    const formatted = formatGatewayError(error);
+    return NextResponse.json(formatted.body, { status: formatted.status });
+  }
+}
+
+async function readJson<T>(request: NextRequest): Promise<T | null> {
+  try {
+    return (await request.json()) as T;
+  } catch {
+    return null;
+  }
+}
+
+function asString(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}

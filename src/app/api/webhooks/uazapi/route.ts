@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { after } from "next/server";
+import { dispatchGatewayWebhookDeliveries } from "@/lib/connectyhub-api/gateway";
 import { ingestUazapiWebhook } from "@/lib/whatsapp/webhook-ingest";
 import { getWhatsappAgentRunDelaySeconds, processWhatsappAgentRun } from "@/lib/whatsapp/agent-runtime";
 
@@ -38,6 +39,16 @@ export async function POST(request: NextRequest) {
 
   if (ingest.agentRunId) {
     scheduleWhatsappAgentFallback(ingest.agentRunId);
+  }
+
+  if (ingest.whatsappInstanceId && !ingest.duplicate) {
+    scheduleGatewayWebhookDelivery({
+      payload,
+      eventType: event,
+      webhookEventId: ingest.eventId,
+      whatsappInstanceId: ingest.whatsappInstanceId,
+      ingest,
+    });
   }
 
   console.info(
@@ -104,6 +115,27 @@ function scheduleWhatsappAgentFallback(runId: string) {
         JSON.stringify({
           runId,
           error: error instanceof Error ? error.message : "Falha desconhecida no fallback do agente WhatsApp.",
+        }),
+      );
+    });
+  });
+}
+
+function scheduleGatewayWebhookDelivery(input: {
+  payload: unknown;
+  eventType: string;
+  webhookEventId: string | null;
+  whatsappInstanceId: string;
+  ingest: unknown;
+}) {
+  after(async () => {
+    await dispatchGatewayWebhookDeliveries(input).catch((error: unknown) => {
+      console.error(
+        "[uazapi:webhook:gateway-delivery]",
+        JSON.stringify({
+          whatsappInstanceId: input.whatsappInstanceId,
+          eventType: input.eventType,
+          error: error instanceof Error ? error.message : "Falha ao entregar webhook ao cliente API.",
         }),
       );
     });

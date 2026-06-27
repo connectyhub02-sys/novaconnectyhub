@@ -36,6 +36,7 @@ import type {
   ClientWhatsappActionResult,
   ClientWhatsappState,
 } from "@/lib/whatsapp/client-workspace";
+import { resolveUazapiWhatsappStatus } from "@/lib/uazapi/status";
 import { loadUazapiCredentials, type UazapiCredentials } from "@/lib/whatsapp/uazapi-credentials";
 import { createServiceClient } from "@/lib/supabase/service";
 import { createPlatformWhatsappAgent, createPlatformWhatsappSector } from "./platform-whatsapp-agents";
@@ -396,7 +397,7 @@ export async function connectPlatformWhatsappConsole(input: {
     throw new Error(readProviderError(connectResult.data) ?? `Uazapi respondeu status ${connectResult.status}.`);
   }
 
-  const status = normalizeWhatsappStatus(findString(connectResult.data, ["status", "state", "connectionStatus"]) ?? "qr_pending");
+  const status = resolveUazapiWhatsappStatus(connectResult.data, "qr_pending");
   const qrCode = normalizeQrCode(findString(connectResult.data, ["qrcode", "qrCode", "qr", "base64"]));
   const phoneNumber = normalizePhone(findString(connectResult.data, ["owner", "phone", "number", "phone_number"]) ?? instance.phone_number);
   const profileData = status === "connected" ? await getConnectedProfileData(credentials, token) : null;
@@ -489,7 +490,7 @@ export async function refreshPlatformWhatsappConsoleStatus(input: {
     throw new Error(readProviderError(result.data) ?? `Uazapi respondeu status ${result.status}.`);
   }
 
-  const status = normalizeWhatsappStatus(findString(result.data, ["status", "state", "connectionStatus"]));
+  const status = resolveUazapiWhatsappStatus(result.data);
   const phoneNumber = normalizePhone(findString(result.data, ["owner", "phone", "number", "phone_number"]) ?? instance.phone_number);
   const profileData = status === "connected" ? await getConnectedProfileData(credentials, token) : null;
   const avatarData = status === "connected" && phoneNumber ? await getConnectedAvatarData(credentials, token, phoneNumber) : null;
@@ -1784,7 +1785,7 @@ async function syncInstanceStatusFromProvider(
     return instance;
   }
 
-  const status = normalizeWhatsappStatus(findString(result.data, ["status", "state", "connectionStatus"]));
+  const status = resolveUazapiWhatsappStatus(result.data);
 
   if (status === instance.status) {
     return instance;
@@ -1837,18 +1838,6 @@ function buildPlatformInstanceMetadata(sector: SectorRow, agent: AgentRow) {
 function buildProviderInstanceName(sector: SectorRow) {
   const base = slugify(`${sector.name}-${sector.id.slice(0, 8)}`).slice(0, 28);
   return `connectyhub-interno-${base || sector.id.slice(0, 8)}`;
-}
-
-function normalizeWhatsappStatus(value: string | null | undefined): WhatsappStatus {
-  const status = value?.toLowerCase() ?? "";
-
-  if (["disconnected", "not_connected", "notconnected", "not connected", "not_logged", "not logged", "close", "logout", "offline"].some((item) => status.includes(item))) return "disconnected";
-  if (["connected", "open", "online", "logged", "ready"].some((item) => status.includes(item))) return "connected";
-  if (["qr", "pair", "scan"].some((item) => status.includes(item))) return "qr_pending";
-  if (["blocked", "ban"].some((item) => status.includes(item))) return "blocked";
-  if (["error", "fail"].some((item) => status.includes(item))) return "error";
-
-  return "draft";
 }
 
 function normalizePhone(value: string | null | undefined) {

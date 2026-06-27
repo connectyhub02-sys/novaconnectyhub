@@ -1,8 +1,13 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { encryptCredentialValue, previewCredentialValue } from "@/lib/security/credentials-crypto";
+import { decryptCredentialValue, encryptCredentialValue, previewCredentialValue } from "@/lib/security/credentials-crypto";
 import { createServiceClient } from "@/lib/supabase/service";
+import { resolveUazapiWhatsappStatus } from "@/lib/uazapi/status";
+import {
+  buildWhatsappInstanceProfileImageMetadata,
+  getWhatsappInstanceProfileImage,
+} from "./instance-profile-image";
 import { loadUazapiCredentials, type UazapiCredentials } from "./uazapi-credentials";
 
 type JsonRecord = Record<string, unknown>;
@@ -13,6 +18,10 @@ type ExistingInstanceRow = {
 };
 
 type ExistingInstanceWithMetadataRow = ExistingInstanceRow & {
+  phone_number: string | null;
+  display_name: string | null;
+  status: string | null;
+  instance_token_encrypted: string | null;
   metadata: JsonRecord | null;
 };
 
@@ -29,6 +38,8 @@ export type UazapiSyncedInstance = {
   phoneNumber: string | null;
   displayName: string | null;
   webhookConfigured: boolean;
+  profileImageUrl: string | null;
+  profileImageStatus: "synced" | "not_found" | "skipped";
 };
 
 export type UazapiSkippedInstance = {
@@ -44,6 +55,8 @@ export type UazapiInstanceSyncSummary = {
   skipped: number;
   webhooksConfigured: number;
   webhookFailures: number;
+  profileImagesSynced: number;
+  profileImageFailures: number;
   instances: UazapiSyncedInstance[];
   skippedInstances: UazapiSkippedInstance[];
   errors: string[];
@@ -76,6 +89,8 @@ export async function syncUazapiInstances(options: {
     skipped: 0,
     webhooksConfigured: 0,
     webhookFailures: 0,
+    profileImagesSynced: 0,
+    profileImageFailures: 0,
     instances: [],
     skippedInstances: [],
     errors: [],
@@ -95,6 +110,8 @@ export async function syncUazapiInstances(options: {
       summary.upserted += 1;
       summary.webhooksConfigured += syncResult.instance.webhookConfigured ? 1 : 0;
       summary.webhookFailures += syncResult.webhookFailed ? 1 : 0;
+      summary.profileImagesSynced += syncResult.instance.profileImageStatus === "synced" ? 1 : 0;
+      summary.profileImageFailures += syncResult.profileImageFailed ? 1 : 0;
       summary.instances.push(syncResult.instance);
     } else {
       summary.skipped += 1;
@@ -118,6 +135,8 @@ export async function syncUazapiInstances(options: {
       skipped: summary.skipped,
       webhooksConfigured: summary.webhooksConfigured,
       webhookFailures: summary.webhookFailures,
+      profileImagesSynced: summary.profileImagesSynced,
+      profileImageFailures: summary.profileImageFailures,
       errors: summary.errors.slice(0, 10),
     },
   });
@@ -144,6 +163,7 @@ async function syncOneInstance({
       ok: true;
       instance: UazapiSyncedInstance;
       webhookFailed: boolean;
+      profileImageFailed: boolean;
       error?: string;
     }
   | {
@@ -184,13 +204,12 @@ async function syncOneInstance({
     configureWebhook && credentials.webhookUrl && token
       ? await configureInstanceWebhook(credentials, token, providerInstanceId)
       : { ok: false as const, reason: "Webhook nao configurado por falta de URL ou token." };
-  const status = normalizeWhatsappStatus(readString(providerInstance, ["status", "state", "connectionStatus"]));
+  const status = resolveUazapiWhatsappStatus(providerInstance);
   const phoneNumber = normalizePhone(readString(providerInstance, ["owner", "phone", "number", "phone_number"]));
   const displayName = readString(providerInstance, ["profileName", "name", "systemName", "displayName"]);
-  const tokenPayload = buildTokenPayload(token);
   const { data: existing, error: lookupError } = await client
     .from("whatsapp_instances")
-    .select("id, organization_id, metadata")
+    .select("id, organization_id, phone_number, display_name, status, instance_token_encrypted, metadata")
     .eq("provider", "uazapi")
     .eq("provider_instance_id", providerInstanceId)
     .maybeSingle<ExistingInstanceWithMetadataRow>();
@@ -207,6 +226,31 @@ async function syncOneInstance({
     };
   }
 
+  const tokenForRuntime = token ?? decryptExistingInstanceToken(existing);
+  const tokenPayload = buildTokenPayload(token);
+  const profileImage = status === "connected" && tokenForRuntime
+    ? await getWhatsappInstanceProfileImage({
+        credentials,
+        token: tokenForRuntime,
+        phoneNumber: phoneNumber ?? existing?.phone_number,
+        providerData: providerInstance,
+      }).catch(() => null)
+    : null;
+  const profileImageStatus = profileImage?.profileImageUrl
+    ? "synced"
+    : status === "connected" && tokenForRuntime
+      ? "not_found"
+      : "skipped";
+  const profileImageMetadata = status === "connected" && tokenForRuntime
+    ? buildWhatsappInstanceProfileImageMetadata({
+        profileImageUrl: profileImage?.profileImageUrl,
+        source: profileImage?.source,
+        syncedAt: checkedAt,
+        providerData: providerInstance,
+        profileData: profileImage?.profileData,
+        avatarData: profileImage?.avatarData,
+      })
+    : {};
   const syncMetadata = {
     sync_source: "uazapi",
     sync_reason: organization.reason,
@@ -230,6 +274,7 @@ async function syncOneInstance({
     metadata: {
       ...(isRecord(existing?.metadata) ? existing.metadata : {}),
       ...syncMetadata,
+      ...profileImageMetadata,
     },
     updated_at: checkedAt,
     ...tokenPayload,
@@ -268,8 +313,11 @@ async function syncOneInstance({
       phoneNumber,
       displayName,
       webhookConfigured: webhookResult.ok,
+      profileImageUrl: profileImage?.profileImageUrl ?? null,
+      profileImageStatus,
     },
     webhookFailed: Boolean(credentials.webhookUrl && token && !webhookResult.ok),
+    profileImageFailed: status === "connected" && tokenForRuntime ? profileImageStatus === "not_found" : false,
     error: webhookResult.ok ? undefined : webhookResult.reason,
   };
 }
@@ -440,32 +488,6 @@ function extractInstanceList(value: unknown) {
   return Array.isArray(list) ? list.filter(isRecord) : [];
 }
 
-function normalizeWhatsappStatus(value: string | null) {
-  const normalized = value?.toLowerCase() ?? "";
-
-  if (normalized.includes("connect") && !normalized.includes("disconnect")) {
-    return "connected";
-  }
-
-  if (normalized.includes("disconnect") || normalized.includes("close")) {
-    return "disconnected";
-  }
-
-  if (normalized.includes("block")) {
-    return "blocked";
-  }
-
-  if (normalized.includes("qr")) {
-    return "qr_pending";
-  }
-
-  if (normalized.includes("error") || normalized.includes("fail")) {
-    return "error";
-  }
-
-  return "draft";
-}
-
 function buildTokenPayload(token: string | null) {
   if (!token) {
     return {};
@@ -477,6 +499,18 @@ function buildTokenPayload(token: string | null) {
     };
   } catch {
     return {};
+  }
+}
+
+function decryptExistingInstanceToken(instance: ExistingInstanceWithMetadataRow | null) {
+  if (!instance?.instance_token_encrypted) {
+    return null;
+  }
+
+  try {
+    return decryptCredentialValue(instance.instance_token_encrypted);
+  } catch {
+    return null;
   }
 }
 

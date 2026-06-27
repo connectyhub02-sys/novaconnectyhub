@@ -930,6 +930,7 @@ function Header() {
           <a href="#teste-turing" className="transition-colors hover:text-white">[ Teste de Turing ]</a>
           <a href="#como-funciona" className="transition-colors hover:text-white">[ Como funciona ]</a>
           <a href="#planos" className="transition-colors hover:text-white">[ Planos ]</a>
+          <a href="/docs/api" className="transition-colors hover:text-white">[ API Docs ]</a>
         </nav>
         <a
           className="rounded-full px-4 py-2 text-xs font-bold text-black transition-all hover:opacity-90"
