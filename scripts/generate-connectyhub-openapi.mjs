@@ -13,6 +13,19 @@ const HTTP_METHODS = ["get", "post", "put", "patch", "delete"];
 const CONNECTYHUB_BASE_URL = "https://www.connectyhub.com.br/api/v1";
 const PROVIDER_PREFIX = "/provider";
 const EXAMPLE_INSTANCE_ID = "ea36f5db-c8dd-48ca-9e28-73ca3f015d78";
+const CONNECTYHUB_WEBHOOK_EVENTS = [
+  "messages",
+  "messages_update",
+  "connection",
+  "chats",
+  "contacts",
+  "history",
+  "presence",
+  "groups",
+  "labels",
+  "chat_labels",
+  "newsletter_messages",
+];
 
 const tagNames = {
   "Admininstração": "Administracao",
@@ -282,7 +295,7 @@ const nativePaths = {
         properties: {
           url: { type: "string", format: "uri", example: "https://cliente.com/webhooks/connectyhub" },
           description: { type: "string", example: "Webhook principal" },
-          events: { type: "array", items: { type: "string" }, example: ["messages", "connection"] },
+          events: { type: "array", items: { type: "string", enum: CONNECTYHUB_WEBHOOK_EVENTS }, example: ["messages", "connection"] },
         },
       }),
       responses: { "201": { description: "Webhook criado" } },
@@ -297,7 +310,7 @@ const nativePaths = {
         properties: {
           url: { type: "string", format: "uri" },
           description: { type: "string" },
-          events: { type: "array", items: { type: "string" } },
+          events: { type: "array", items: { type: "string", enum: CONNECTYHUB_WEBHOOK_EVENTS } },
           status: { type: "string", enum: ["active", "paused", "archived"] },
         },
       }),

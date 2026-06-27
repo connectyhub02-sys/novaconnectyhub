@@ -58,12 +58,33 @@ const tabs: Array<{ id: TabId; label: string; icon: LucideIcon }> = [
   { id: "usage", label: "Uso", icon: Activity },
 ];
 
-const webhookEvents = [
-  "messages",
-  "messages_update",
-  "connection",
-  "chats",
-  "contacts",
+const webhookEventGroups = [
+  {
+    title: "Essenciais",
+    events: [
+      { value: "messages", label: "Mensagens", defaultChecked: true },
+      { value: "messages_update", label: "Atualizacoes", defaultChecked: true },
+      { value: "connection", label: "Conexao", defaultChecked: true },
+    ],
+  },
+  {
+    title: "CRM",
+    events: [
+      { value: "chats", label: "Conversas" },
+      { value: "contacts", label: "Contatos" },
+      { value: "history", label: "Historico" },
+    ],
+  },
+  {
+    title: "Avancados",
+    events: [
+      { value: "presence", label: "Presenca" },
+      { value: "groups", label: "Grupos" },
+      { value: "labels", label: "Etiquetas" },
+      { value: "chat_labels", label: "Etiquetas do chat" },
+      { value: "newsletter_messages", label: "Newsletters/canais" },
+    ],
+  },
 ];
 
 export function ClientApiConsole({
@@ -362,17 +383,7 @@ export function ClientApiConsole({
               <Field label="Descricao">
                 <input className={inputClassName} name="description" placeholder="Webhook principal" />
               </Field>
-              <div>
-                <p className="mb-2 font-mono text-[9px] uppercase tracking-widest text-slate-500">Eventos</p>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  {webhookEvents.map((event) => (
-                    <label key={event} className="flex min-h-9 items-center gap-2 rounded-xl border border-slate-700 bg-slate-950/35 px-3 text-[12px] text-slate-300">
-                      <input className="h-3.5 w-3.5 accent-cyan-400" defaultChecked={event === "messages" || event === "messages_update" || event === "connection"} name="events" type="checkbox" value={event} />
-                      {event}
-                    </label>
-                  ))}
-                </div>
-              </div>
+              <WebhookEventPicker />
               <ActionButton disabled={!canManage} loading={running === "create_webhook"} type="submit">Criar webhook</ActionButton>
             </form>
           </Panel>
@@ -454,6 +465,39 @@ function SecretBox({ secret }: { secret: string }) {
         <IconButton icon={Copy} label="Copiar" onClick={() => copyText(secret)} tone="cyan" />
       </div>
       <code className="mt-2 block break-all font-mono text-[12px] text-cyan-200">{secret}</code>
+    </div>
+  );
+}
+
+function WebhookEventPicker() {
+  return (
+    <div className="space-y-3">
+      <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Eventos</p>
+      {webhookEventGroups.map((group) => (
+        <div key={group.title} className="space-y-2">
+          <div className="flex items-center justify-between gap-3">
+            <span className="font-mono text-[9px] uppercase tracking-widest text-slate-500">{group.title}</span>
+            <span className="font-mono text-[9px] text-slate-600">{group.events.length}</span>
+          </div>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {group.events.map((event) => (
+              <label key={event.value} className="flex min-h-10 items-center gap-2 rounded-xl border border-slate-700 bg-slate-950/35 px-3 text-[12px] text-slate-300">
+                <input
+                  className="h-3.5 w-3.5 accent-cyan-400"
+                  defaultChecked={"defaultChecked" in event && event.defaultChecked === true}
+                  name="events"
+                  type="checkbox"
+                  value={event.value}
+                />
+                <span className="min-w-0">
+                  <span className="block truncate" style={{ color: "var(--ch-text)" }}>{event.label}</span>
+                  <span className="block truncate font-mono text-[8px] uppercase tracking-wider text-slate-600">{event.value}</span>
+                </span>
+              </label>
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

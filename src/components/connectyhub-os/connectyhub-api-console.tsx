@@ -31,6 +31,35 @@ type ActionResponse = {
   };
 };
 
+const webhookEventGroups = [
+  {
+    title: "Essenciais",
+    events: [
+      { value: "messages", label: "Mensagens", defaultChecked: true },
+      { value: "messages_update", label: "Atualizacoes", defaultChecked: true },
+      { value: "connection", label: "Conexao", defaultChecked: true },
+    ],
+  },
+  {
+    title: "CRM",
+    events: [
+      { value: "chats", label: "Conversas" },
+      { value: "contacts", label: "Contatos" },
+      { value: "history", label: "Historico" },
+    ],
+  },
+  {
+    title: "Avancados",
+    events: [
+      { value: "presence", label: "Presenca" },
+      { value: "groups", label: "Grupos" },
+      { value: "labels", label: "Etiquetas" },
+      { value: "chat_labels", label: "Etiquetas do chat" },
+      { value: "newsletter_messages", label: "Newsletters/canais" },
+    ],
+  },
+];
+
 export function ConnectyHubApiConsole({
   state,
   userLabel = "CEO_HUMAN_ADM",
@@ -64,9 +93,14 @@ export function ConnectyHubApiConsole({
     const payload: Record<string, unknown> = { action };
 
     for (const [key, value] of formData.entries()) {
-      if (key !== "action" && typeof value === "string" && value.trim()) {
+      if (key !== "action" && key !== "events" && typeof value === "string" && value.trim()) {
         payload[key] = value.trim();
       }
+    }
+
+    const events = formData.getAll("events").filter((value): value is string => typeof value === "string" && value.trim().length > 0);
+    if (events.length > 0) {
+      payload.events = events;
     }
 
     setRunning(action);
@@ -292,6 +326,7 @@ export function ConnectyHubApiConsole({
               <Field label="Descricao">
                 <input name="description" className={inputClassName} placeholder="Webhook principal" />
               </Field>
+              <WebhookEventPicker />
               <ActionButton loading={running === "create_webhook"}>Criar webhook</ActionButton>
             </form>
           </Panel>
@@ -333,6 +368,39 @@ export function ConnectyHubApiConsole({
         </div>
       </div>
     </ConnectyShell>
+  );
+}
+
+function WebhookEventPicker() {
+  return (
+    <div className="space-y-3">
+      <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Eventos</p>
+      {webhookEventGroups.map((group) => (
+        <div key={group.title} className="space-y-2">
+          <div className="flex items-center justify-between gap-3">
+            <span className="font-mono text-[9px] uppercase tracking-widest text-slate-500">{group.title}</span>
+            <span className="font-mono text-[9px] text-slate-600">{group.events.length}</span>
+          </div>
+          <div className="grid grid-cols-1 gap-2">
+            {group.events.map((event) => (
+              <label key={event.value} className="flex min-h-10 items-center gap-2 rounded-xl border border-slate-700 bg-slate-950/35 px-3 text-[12px] text-slate-300">
+                <input
+                  className="h-3.5 w-3.5 accent-cyan-400"
+                  defaultChecked={"defaultChecked" in event && event.defaultChecked === true}
+                  name="events"
+                  type="checkbox"
+                  value={event.value}
+                />
+                <span className="min-w-0">
+                  <span className="block truncate" style={{ color: "var(--ch-text)" }}>{event.label}</span>
+                  <span className="block truncate font-mono text-[8px] uppercase tracking-wider text-slate-600">{event.value}</span>
+                </span>
+              </label>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
 
