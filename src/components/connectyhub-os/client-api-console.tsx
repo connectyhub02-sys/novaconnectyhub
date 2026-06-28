@@ -121,8 +121,7 @@ export function ClientApiConsole({
   const [notice, setNotice] = useState<Notice | null>(null);
   const clientsById = useMemo(() => new Map(state.clients.map((client) => [client.id, client])), [state.clients]);
   const activeClient = state.activeClientId ? clientsById.get(state.activeClientId) ?? null : state.clients[0] ?? null;
-  const apiInstances = state.instances.filter((instance) => instance.apiClientId);
-  const connectyhubInstances = state.instances.filter((instance) => !instance.apiClientId);
+  const apiInstances = state.instances;
 
   async function submitForm(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -245,7 +244,7 @@ export function ClientApiConsole({
       <div className="mb-5 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         <MetricTile icon={PlugZap} label="Cliente API" value={String(state.summary.clients)} detail={`${state.summary.activeClients} ativo(s)`} tone="cyan" />
         <MetricTile icon={KeyRound} label="Chaves" value={String(state.summary.keys)} detail={`${state.summary.activeKeys} ativas`} tone="green" />
-        <MetricTile icon={MessageCircle} label="Instancias" value={String(state.summary.workspaceInstances)} detail={`${state.summary.connectedWorkspaceInstances} conectadas`} tone="green" />
+        <MetricTile icon={MessageCircle} label="Instancias API" value={String(state.summary.workspaceInstances)} detail={`${state.summary.connectedWorkspaceInstances} conectadas`} tone="green" />
         <MetricTile icon={Webhook} label="Webhooks" value={String(state.summary.endpoints)} detail={`${state.summary.activeEndpoints} ativos`} tone="violet" />
         <MetricTile icon={Activity} label="Mes atual" value={String(state.summary.requestsCurrentPeriod)} detail={`${state.summary.messagesUsed} mensagens`} tone="amber" />
       </div>
@@ -304,34 +303,29 @@ export function ClientApiConsole({
               )}
             </Panel>
 
-            <Panel title="Instancias do workspace" eyebrow="foto / status / acesso api">
+            <Panel title="Instancias da API" eyebrow="foto / status / consumo externo">
               {state.instances.length > 0 ? (
                 <DataTable
-                  columns={["WhatsApp", "Status", "Numero", "Acesso API", "Ultimo sinal", "Acoes"]}
+                  columns={["WhatsApp", "Status", "Numero", "Ultimo sinal", "Acoes"]}
                   rows={state.instances.map((instance) => [
                     <InstanceCell key="instance" instance={instance} />,
                     <StatusBadge key="status" status={instanceTone(instance.status)} label={instance.status} />,
                     <TextCell key="phone" value={formatPhone(instance.phoneNumber)} muted={instance.providerInstanceId ?? "sem provider id"} />,
-                    <StatusBadge key="api" status={instance.apiClientId ? "online" : "idle"} label={instance.apiClientId ? "liberada" : "connectyhub"} />,
                     <TextCell key="sync" value={formatDate(instance.lastMessageAt ?? instance.lastHeartbeatAt ?? instance.updatedAt)} muted="sync" />,
                     <RowActions key="actions">
-                      {instance.apiClientId ? (
-                        <IconButton
-                          disabled={!canManage || running === `delete_instance:${instance.id}`}
-                          icon={Trash2}
-                          label="Excluir"
-                          loading={running === `delete_instance:${instance.id}`}
-                          onClick={() => confirmDeleteInstance(instance)}
-                          tone="rose"
-                        />
-                      ) : (
-                        <NeonBadge tone="zinc">Interna</NeonBadge>
-                      )}
+                      <IconButton
+                        disabled={!canManage || running === `delete_instance:${instance.id}`}
+                        icon={Trash2}
+                        label="Excluir"
+                        loading={running === `delete_instance:${instance.id}`}
+                        onClick={() => confirmDeleteInstance(instance)}
+                        tone="rose"
+                      />
                     </RowActions>,
                   ])}
                 />
               ) : (
-                <EmptyCopy title="Sem instancias" text="As instancias conectadas no WhatsApp aparecem aqui com a foto do perfil quando sincronizada." />
+                <EmptyCopy title="Sem instancias API" text="Instancias usadas por agentes ficam fora desta pagina e aparecem apenas na area de agentes." />
               )}
             </Panel>
           </div>
@@ -342,7 +336,6 @@ export function ClientApiConsole({
               <div className="grid gap-3">
                 <InfoTile label="Cliente ativo" value={activeClient?.name ?? "Nao ativado"} />
                 <InfoTile label="Instancias API" value={`${apiInstances.length} liberada(s)`} />
-                <InfoTile label="Instancias ConnectyHub" value={`${connectyhubInstances.length} interna(s)`} />
                 <InfoTile label="Limite mensal" value={formatLimit(state.summary.monthlyMessageLimit)} />
               </div>
             </Panel>

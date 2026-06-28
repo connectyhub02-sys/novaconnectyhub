@@ -104,6 +104,15 @@ type GatewayInstanceRow = {
   updated_at: string;
 };
 
+type GatewayClientAgentRow = {
+  id: string;
+  organization_id: string | null;
+  agent_code: string | null;
+  name: string | null;
+  persona_name: string | null;
+  metadata: JsonRecord | null;
+};
+
 type WebhookEndpointRow = {
   id: string;
   client_id: string;
@@ -1976,6 +1985,7 @@ export async function getClientGatewayState(input: {
   const [
     clientsResult,
     instancesResult,
+    clientAgentsResult,
     usageResult,
     deliveriesResult,
     monthlyMessagesResult,
@@ -1995,6 +2005,11 @@ export async function getClientGatewayState(input: {
       .neq("status", "archived")
       .order("updated_at", { ascending: false })
       .limit(100),
+    client
+      .from("agent_registry")
+      .select("id, organization_id, agent_code, name, persona_name, metadata")
+      .eq("organization_id", input.organizationId)
+      .limit(500),
     client
       .from("connectyhub_api_usage_events")
       .select(gatewayUsageColumns)
@@ -2026,6 +2041,7 @@ export async function getClientGatewayState(input: {
 
   if (clientsResult.error) warnings.push(`Clientes API indisponiveis: ${clientsResult.error.message}`);
   if (instancesResult.error) warnings.push(`Instancias WhatsApp indisponiveis: ${instancesResult.error.message}`);
+  if (clientAgentsResult.error) warnings.push(`Agentes WhatsApp indisponiveis: ${clientAgentsResult.error.message}`);
   if (usageResult.error) warnings.push(`Uso API indisponivel: ${usageResult.error.message}`);
   if (deliveriesResult.error) warnings.push(`Entregas webhook indisponiveis: ${deliveriesResult.error.message}`);
   if (monthlyMessagesResult.error) warnings.push(`Cota mensal indisponivel: ${monthlyMessagesResult.error.message}`);
@@ -2058,11 +2074,18 @@ export async function getClientGatewayState(input: {
 
   const apiKeys = ((keysResult?.data ?? []) as ApiKeySafeRow[]).map(mapApiKeySafe);
   const endpoints = ((endpointsResult?.data ?? []) as WebhookEndpointSafeRow[]).map(mapWebhookEndpointSafe);
-  const instances = ((instancesResult.data ?? []) as GatewayInstanceRow[]).map(mapGatewayInstance);
+  const instanceRows = (instancesResult.data ?? []) as GatewayInstanceRow[];
+  const clientAgents = ((clientAgentsResult.data ?? []) as GatewayClientAgentRow[]).filter(isGatewayClientWhatsappAgent);
+  const apiInstanceRows = instanceRows.filter((row) => {
+    return Boolean(row.connectyhub_api_client_id && clientIds.includes(row.connectyhub_api_client_id))
+      && isPublicApiGatewayInstance(row)
+      && !isClientAgentGatewayInstance(row, clientAgents);
+  });
+  const instances = apiInstanceRows.map(mapGatewayInstance);
   const usage = ((usageResult.data ?? []) as ApiUsageEventRow[]).map(mapUsageEvent);
   const deliveries = ((deliveriesResult.data ?? []) as WebhookDeliveryRow[]).map(mapWebhookDelivery);
   const activeClient = apiClients.find((apiClient) => apiClient.status === "active") ?? apiClients[0] ?? null;
-  const apiInstances = instances.filter((instance) => instance.apiClientId && clientIds.includes(instance.apiClientId));
+  const apiInstances = instances;
   const activeClientMonthlyLimit = activeClient?.monthlyMessageLimit ?? null;
   const messagesUsed = monthlyMessagesResult.count ?? 0;
   const traffic = buildApiTrafficTelemetry({ usage, clients: apiClients, deliveries });
@@ -2075,8 +2098,8 @@ export async function getClientGatewayState(input: {
       activeKeys: apiKeys.filter((apiKey) => apiKey.status === "active").length,
       endpoints: endpoints.length,
       activeEndpoints: endpoints.filter((endpoint) => endpoint.status === "active").length,
-      workspaceInstances: instances.length,
-      connectedWorkspaceInstances: instances.filter((instance) => instance.status === "connected").length,
+      workspaceInstances: apiInstances.length,
+      connectedWorkspaceInstances: apiInstances.filter((instance) => instance.status === "connected").length,
       apiInstances: apiInstances.length,
       connectedApiInstances: apiInstances.filter((instance) => instance.status === "connected").length,
       requestsCurrentPeriod: monthlyRequestsResult.count ?? 0,
@@ -3476,10 +3499,76 @@ function isPublicApiGatewayInstance(row: GatewayInstanceRow) {
     return false;
   }
 
-  return metadata.api_gateway === true
+  const hasApiOrigin = metadata.api_gateway === true
     || createdFrom === "connectyhub_public_api"
     || createdFrom === "admin_connectyhub_api"
-    || Boolean(row.connectyhub_api_client_id && row.connectyhub_api_visibility !== "internal");
+    || row.connectyhub_api_visibility === "api_customer"
+    || row.connectyhub_api_visibility === "hybrid";
+
+  return Boolean(row.connectyhub_api_client_id) && hasApiOrigin;
+}
+
+function isGatewayClientWhatsappAgent(row: GatewayClientAgentRow) {
+  const metadata = isRecord(row.metadata) ? row.metadata : {};
+  const agentKind = readMetadataString(metadata, "agent_kind")?.toLowerCase();
+  const agentType = readMetadataString(metadata, "agent_type")?.toLowerCase();
+  const code = (row.agent_code ?? "").toLowerCase();
+  const name = (row.name ?? "").toLowerCase();
+  const personaName = (row.persona_name ?? "").toLowerCase();
+
+  return agentKind === "whatsapp"
+    || agentType === "whatsapp_attendant"
+    || code.includes("agente-whatsapp")
+    || name.includes("whatsapp")
+    || personaName.includes("whatsapp");
+}
+
+function isClientAgentGatewayInstance(row: GatewayInstanceRow, agents: GatewayClientAgentRow[]) {
+  const metadata = isRecord(row.metadata) ? row.metadata : {};
+  const createdFrom = readMetadataString(metadata, "created_from")?.toLowerCase() ?? "";
+
+  if (createdFrom === "client_dashboard" || readMetadataBoolean(metadata, "client_agent")) {
+    return true;
+  }
+
+  if (getGatewayInstanceAgentCandidateIds(metadata).length > 0) {
+    return true;
+  }
+
+  if (readMetadataString(metadata, "agent_name") || readMetadataString(metadata, "agent_code")) {
+    return true;
+  }
+
+  const hasExplicitApiOrigin = metadata.api_gateway === true
+    || createdFrom === "connectyhub_public_api"
+    || createdFrom === "admin_connectyhub_api";
+
+  if (hasExplicitApiOrigin || agents.length === 0) {
+    return false;
+  }
+
+  const fingerprint = normalizeComparable([
+    row.display_name,
+    row.provider_instance_id,
+    readMetadataString(metadata, "provider_name"),
+  ].filter(Boolean).join(" "));
+
+  return agents.some((agent) => {
+    const agentCode = normalizeComparable(agent.agent_code ?? "");
+    const agentName = normalizeComparable(agent.persona_name || agent.name || "");
+
+    return Boolean((agentCode && fingerprint.includes(agentCode)) || (agentName && fingerprint.includes(agentName)));
+  });
+}
+
+function getGatewayInstanceAgentCandidateIds(metadata: JsonRecord) {
+  return uniqueStrings([
+    readMetadataString(metadata, "agent_id"),
+    readMetadataString(metadata, "agentId"),
+    readMetadataString(metadata, "whatsapp_agent_id"),
+    readMetadataString(metadata, "producer_agent_id"),
+    ...readMetadataStringArray(metadata, "agent_ids"),
+  ]);
 }
 
 function mapApiClient(row: ApiClientRow) {
@@ -4049,6 +4138,35 @@ function findValue(value: unknown, predicate: (key: string, value: unknown) => b
 
 function isRecord(value: unknown): value is JsonRecord {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function readMetadataString(record: JsonRecord, key: string) {
+  const value = record[key];
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function readMetadataBoolean(record: JsonRecord, key: string) {
+  return record[key] === true;
+}
+
+function readMetadataStringArray(record: JsonRecord, key: string) {
+  const value = record[key];
+  if (!Array.isArray(value)) return [];
+
+  return value.filter((item): item is string => typeof item === "string" && item.trim().length > 0).map((item) => item.trim());
+}
+
+function uniqueStrings(values: Array<string | null | undefined>) {
+  return Array.from(new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0).map((value) => value.trim())));
+}
+
+function normalizeComparable(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
 }
 
 function isPresent<T>(value: T | null | undefined): value is T {
