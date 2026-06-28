@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServiceClient } from "@/lib/supabase/service";
 
 type JsonRecord = Record<string, unknown>;
+type ConnectyHubApiVisibility = "internal" | "api_customer" | "hybrid";
 
 export type CustomerWhatsappInstanceStatus =
   | "draft"
@@ -28,6 +29,8 @@ export type AdminCustomerWhatsappInstance = {
   organizationSlug: string | null;
   organizationPlan: string | null;
   organizationStatus: string | null;
+  apiClientId: string | null;
+  apiVisibility: ConnectyHubApiVisibility;
   provider: string;
   providerInstanceId: string | null;
   phoneNumber: string | null;
@@ -85,6 +88,8 @@ type RelatedOrganization =
 type InstanceRow = {
   id: string;
   organization_id: string;
+  connectyhub_api_client_id: string | null;
+  connectyhub_api_visibility: ConnectyHubApiVisibility | null;
   provider: string | null;
   provider_instance_id: string | null;
   phone_number: string | null;
@@ -97,6 +102,7 @@ type InstanceRow = {
   connected_at: string | null;
   disconnected_at: string | null;
   updated_at: string | null;
+  metadata: JsonRecord | null;
   organizations: RelatedOrganization;
 };
 
@@ -124,6 +130,7 @@ type LeadRow = {
 type ConversationRow = {
   id: string;
   organization_id: string;
+  lead_id: string | null;
   whatsapp_instance_id: string | null;
   status: string | null;
   last_message_at: string | null;
@@ -151,8 +158,9 @@ export async function getAdminCustomerWhatsappWorkspace(
   const { data: instanceData, error: instanceError } = await client
     .from("whatsapp_instances")
     .select(
-      "id, organization_id, provider, provider_instance_id, phone_number, display_name, status, webhook_url, webhook_configured_at, last_heartbeat_at, last_message_at, connected_at, disconnected_at, updated_at, organizations(name, slug, plan_code, status)",
+      "id, organization_id, connectyhub_api_client_id, connectyhub_api_visibility, provider, provider_instance_id, phone_number, display_name, status, webhook_url, webhook_configured_at, last_heartbeat_at, last_message_at, connected_at, disconnected_at, updated_at, metadata, organizations(name, slug, plan_code, status)",
     )
+    .neq("status", "archived")
     .order("updated_at", { ascending: false })
     .limit(500);
 
@@ -163,7 +171,7 @@ export async function getAdminCustomerWhatsappWorkspace(
     };
   }
 
-  const instanceRows = (instanceData ?? []) as InstanceRow[];
+  const instanceRows = ((instanceData ?? []) as InstanceRow[]).filter(isCustomerPanelInstance);
   const organizationIds = Array.from(new Set(instanceRows.map((row) => row.organization_id).filter(Boolean)));
 
   if (organizationIds.length === 0) {
@@ -186,7 +194,7 @@ export async function getAdminCustomerWhatsappWorkspace(
       .limit(5000),
     client
       .from("conversations")
-      .select("id, organization_id, whatsapp_instance_id, status, last_message_at")
+      .select("id, organization_id, lead_id, whatsapp_instance_id, status, last_message_at")
       .in("organization_id", organizationIds)
       .limit(5000),
     client
@@ -204,20 +212,21 @@ export async function getAdminCustomerWhatsappWorkspace(
 
   const whatsappAgents = ((agentsResult.data ?? []) as AgentRow[])
     .filter((agent) => agent.organization_id && isWhatsappAgent(agent));
-  const agentsByOrg = groupAgentsByOrganization(whatsappAgents);
+  const agentsById = indexAgentsById(whatsappAgents);
   const leadsByOrg = groupLeads((leadsResult.data ?? []) as LeadRow[]);
+  const leadsById = indexLeadsById((leadsResult.data ?? []) as LeadRow[]);
+  const conversations = (conversationsResult.data ?? []) as ConversationRow[];
+  const leadsByInstance = groupLeadsByInstance(conversations, leadsById);
   const conversationsByOrg = groupConversationsByOrganization((conversationsResult.data ?? []) as ConversationRow[]);
-  const conversationsByInstance = groupConversationsByInstance((conversationsResult.data ?? []) as ConversationRow[]);
+  const conversationsByInstance = groupConversationsByInstance(conversations);
   const webhookByInstance = latestWebhookByInstance((webhooksResult.data ?? []) as WebhookEventRow[]);
   const webhookErrors = ((webhooksResult.data ?? []) as WebhookEventRow[]).filter(hasWebhookError).length;
 
   const instances = instanceRows.map((row) => {
     const organization = readOrganization(row.organizations);
-    const agents = agentsByOrg.get(row.organization_id) ?? [];
-    const leadBucket = leadsByOrg.get(row.organization_id) ?? emptyBucket();
-    const instanceConversationBucket = conversationsByInstance.get(row.id);
-    const orgConversationBucket = conversationsByOrg.get(row.organization_id) ?? emptyBucket();
-    const conversationBucket = instanceConversationBucket ?? orgConversationBucket;
+    const agents = resolveInstanceAgents(row, agentsById);
+    const leadBucket = leadsByInstance.get(row.id) ?? emptyBucket();
+    const conversationBucket = conversationsByInstance.get(row.id) ?? emptyBucket();
     const webhookEvent = webhookByInstance.get(row.id);
 
     return {
@@ -227,6 +236,8 @@ export async function getAdminCustomerWhatsappWorkspace(
       organizationSlug: organization?.slug ?? null,
       organizationPlan: organization?.plan_code ?? null,
       organizationStatus: organization?.status ?? null,
+      apiClientId: row.connectyhub_api_client_id,
+      apiVisibility: normalizeApiVisibility(row.connectyhub_api_visibility),
       provider: row.provider ?? "uazapi",
       providerInstanceId: row.provider_instance_id,
       phoneNumber: row.phone_number,
@@ -284,23 +295,19 @@ const emptyWorkspace: AdminCustomerWhatsappWorkspace = {
   warnings: [],
 };
 
-function groupAgentsByOrganization(rows: AgentRow[]) {
-  const grouped = new Map<string, AdminCustomerWhatsappAgent[]>();
+function indexAgentsById(rows: AgentRow[]) {
+  const indexed = new Map<string, AdminCustomerWhatsappAgent>();
 
   for (const row of rows) {
-    if (!row.organization_id) continue;
-
-    const current = grouped.get(row.organization_id) ?? [];
-    current.push({
+    indexed.set(row.id, {
       id: row.id,
       name: row.name,
       status: row.status ?? "draft",
       agentCode: row.agent_code,
     });
-    grouped.set(row.organization_id, current);
   }
 
-  return grouped;
+  return indexed;
 }
 
 function groupLeads(rows: LeadRow[]) {
@@ -314,6 +321,41 @@ function groupLeads(rows: LeadRow[]) {
     }
     bucket.latestAt = pickLatest(bucket.latestAt, row.last_message_at);
     grouped.set(row.organization_id, bucket);
+  }
+
+  return grouped;
+}
+
+function indexLeadsById(rows: LeadRow[]) {
+  const indexed = new Map<string, LeadRow>();
+
+  for (const row of rows) {
+    indexed.set(row.id, row);
+  }
+
+  return indexed;
+}
+
+function groupLeadsByInstance(rows: ConversationRow[], leadsById: Map<string, LeadRow>) {
+  const grouped = new Map<string, CountBucket>();
+  const seenByInstance = new Map<string, Set<string>>();
+
+  for (const row of rows) {
+    if (!row.whatsapp_instance_id || !row.lead_id) continue;
+
+    const seen = seenByInstance.get(row.whatsapp_instance_id) ?? new Set<string>();
+    if (seen.has(row.lead_id)) continue;
+    seen.add(row.lead_id);
+    seenByInstance.set(row.whatsapp_instance_id, seen);
+
+    const lead = leadsById.get(row.lead_id);
+    const bucket = grouped.get(row.whatsapp_instance_id) ?? emptyBucket();
+    bucket.total += 1;
+    if (isActiveLeadStatus(lead?.status)) {
+      bucket.active += 1;
+    }
+    bucket.latestAt = pickLatest(bucket.latestAt, lead?.last_message_at, row.last_message_at);
+    grouped.set(row.whatsapp_instance_id, bucket);
   }
 
   return grouped;
@@ -366,6 +408,36 @@ function latestWebhookByInstance(rows: WebhookEventRow[]) {
   return grouped;
 }
 
+function resolveInstanceAgents(row: InstanceRow, agentsById: Map<string, AdminCustomerWhatsappAgent>) {
+  const metadata = readRecord(row.metadata) ?? {};
+  const candidateIds = uniqueStrings([
+    readString(metadata.agent_id),
+    readString(metadata.agentId),
+    readString(metadata.whatsapp_agent_id),
+    readString(metadata.producer_agent_id),
+    ...toStringArray(metadata.agent_ids),
+  ]);
+  const agents = candidateIds
+    .map((id) => agentsById.get(id))
+    .filter((agent): agent is AdminCustomerWhatsappAgent => Boolean(agent));
+
+  if (agents.length > 0) {
+    return agents;
+  }
+
+  const metadataAgentName = readString(metadata.agent_name);
+  if (metadataAgentName) {
+    return [{
+      id: `metadata:${row.id}`,
+      name: metadataAgentName,
+      status: "vinculado",
+      agentCode: readString(metadata.agent_code) ?? "metadata",
+    }];
+  }
+
+  return [];
+}
+
 function isWhatsappAgent(row: AgentRow) {
   const metadata = readRecord(row.metadata) ?? {};
   const agentType = readString(metadata.agent_type);
@@ -385,9 +457,38 @@ function isWhatsappAgent(row: AgentRow) {
     || tools.includes("whatsapp");
 }
 
+function isCustomerPanelInstance(row: InstanceRow) {
+  if (normalizeApiVisibility(row.connectyhub_api_visibility) === "api_customer") {
+    return false;
+  }
+
+  return !isPlatformInternalInstance(row);
+}
+
+function isPlatformInternalInstance(row: InstanceRow) {
+  const metadata = readRecord(row.metadata) ?? {};
+  const organization = readOrganization(row.organizations);
+  const providerInstanceId = (row.provider_instance_id ?? "").toLowerCase();
+  const displayName = (row.display_name ?? "").toLowerCase();
+  const organizationName = (organization?.name ?? "").toLowerCase();
+  const createdFrom = (readString(metadata.created_from) ?? "").toLowerCase();
+
+  return readBoolean(metadata.connectyhub_internal)
+    || readBoolean(metadata.platform_whatsapp)
+    || readBoolean(metadata.admin_whatsapp)
+    || createdFrom === "admin_whatsapp_internal"
+    || providerInstanceId.includes("connectyhub-interno")
+    || displayName.includes("connectyhub interno")
+    || organizationName.includes("connectyhub interno");
+}
+
 function hasWebhookError(row: WebhookEventRow) {
   const status = (row.processing_status ?? "").toLowerCase();
   return Boolean(row.error_message) || status === "failed" || status === "error";
+}
+
+function normalizeApiVisibility(value: unknown): ConnectyHubApiVisibility {
+  return value === "api_customer" || value === "hybrid" ? value : "internal";
 }
 
 function readOrganization(value: RelatedOrganization) {
@@ -402,8 +503,20 @@ function readString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
-function toStringArray(value: string[] | null | undefined) {
-  return Array.isArray(value) ? value.filter((item) => typeof item === "string") : [];
+function readBoolean(value: unknown) {
+  return value === true || value === "true";
+}
+
+function toStringArray(value: unknown) {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0) : [];
+}
+
+function uniqueStrings(values: Array<string | null | undefined>) {
+  return Array.from(new Set(values.filter((value): value is string => Boolean(value))));
+}
+
+function isActiveLeadStatus(status: string | null | undefined) {
+  return ["new", "active", "qualified"].includes(status ?? "new");
 }
 
 function emptyBucket(): CountBucket {

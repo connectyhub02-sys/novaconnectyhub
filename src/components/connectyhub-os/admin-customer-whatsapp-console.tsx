@@ -35,11 +35,12 @@ export function AdminCustomerWhatsappConsole({
       <PageHeader
         eyebrow="Clientes / WhatsApp"
         title="WhatsApp dos clientes"
-        description="Instancias conectadas pelos usuarios, separadas dos agentes internos que operam a ConnectyHub."
+        description="Instancias usadas dentro do painel ConnectyHub. Instancias vendidas ou controladas por API ficam isoladas em API WhatsApp."
         actions={
           <div className="flex flex-wrap gap-2">
             <NeonBadge tone="green">{workspace.summary.connectedInstances} conectadas</NeonBadge>
-            <NeonBadge tone="cyan">Area isolada da operacao interna</NeonBadge>
+            <NeonBadge tone="cyan">Painel cliente</NeonBadge>
+            <NeonBadge tone="violet">API isolada</NeonBadge>
           </div>
         }
       />
@@ -94,7 +95,7 @@ export function AdminCustomerWhatsappConsole({
 
       <div className="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_390px]">
         <Panel
-          title="Instancias conectadas dos usuarios"
+          title="Instancias do painel dos usuarios"
           eyebrow="empresa / numero / agente / crm"
           action={<NeonBadge tone="cyan">{workspace.instances.length} registros</NeonBadge>}
         >
@@ -121,7 +122,7 @@ export function AdminCustomerWhatsappConsole({
             <EmptyState
               icon={MessageCircle}
               title="Nenhuma instancia de cliente registrada"
-              text="Quando um usuario conectar o WhatsApp pelo painel cliente, o numero aparece aqui para monitoramento administrativo."
+              text="Quando um usuario conectar o WhatsApp pelo painel cliente, o numero aparece aqui. Instancias criadas pela API ficam na area API WhatsApp."
             />
           )}
         </Panel>
@@ -137,17 +138,17 @@ export function AdminCustomerWhatsappConsole({
               <RuleRow
                 icon={MessageCircle}
                 title="WhatsApp dos usuarios"
-                text="Fica nesta area por empresa, numero, status, webhook, agente vinculado, leads e conversas."
+                text="Fica nesta area quando o numero e usado no painel ConnectyHub do cliente."
               />
               <RuleRow
                 icon={Network}
-                title="Arquivo do lead"
-                text="Mensagens, eventos e sinais de marketing continuam alimentando o CRM e a memoria do lead."
+                title="API WhatsApp"
+                text="Fica separada para empresas que usam nossa API em sistemas externos."
               />
             </div>
           </Panel>
 
-          <Panel title="Sincronia com provedor" eyebrow="uazapi / webhooks">
+          <Panel title="Sincronia com provedor" eyebrow="provedor / webhooks">
             <div className="space-y-4">
               <SyncWhatsAppInstancesButton />
               <div className="grid gap-3">
