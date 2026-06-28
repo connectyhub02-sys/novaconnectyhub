@@ -1,6 +1,6 @@
 type JsonRecord = Record<string, unknown>;
 
-const primaryNameKeys = [
+const profileNameKeys = [
   "profileName",
   "profile_name",
   "businessName",
@@ -15,6 +15,32 @@ const primaryNameKeys = [
   "ownerName",
   "contactName",
   "name",
+];
+
+const providerPayloadNameKeys = [
+  "profileName",
+  "profile_name",
+  "businessName",
+  "business_name",
+  "displayName",
+  "display_name",
+  "waName",
+  "wa_name",
+  "pushName",
+  "notifyName",
+  "verifiedName",
+  "ownerName",
+  "contactName",
+];
+
+const metadataNameKeys = [
+  ...providerPayloadNameKeys,
+  "requestedDisplayName",
+  "requested_display_name",
+  "whatsappDisplayName",
+  "whatsapp_display_name",
+  "lastDisplayName",
+  "last_display_name",
 ];
 
 const fallbackNameKeys = [
@@ -38,16 +64,15 @@ export function resolveWhatsappInstanceDisplayName(input: {
 }) {
   const blocked = [input.phoneNumber, input.providerInstanceId, input.instanceId];
   const candidates = [
-    findHumanName(input.profileData, primaryNameKeys, blocked),
-    findHumanName(input.avatarData, primaryNameKeys, blocked),
-    findHumanName(input.providerData, primaryNameKeys, blocked),
-    findHumanName(input.metadata, primaryNameKeys, blocked),
+    findHumanName(input.profileData, profileNameKeys, blocked),
+    findHumanName(input.avatarData, profileNameKeys, blocked),
+    findHumanName(input.providerData, providerPayloadNameKeys, blocked),
+    findHumanName(input.metadata, metadataNameKeys, blocked),
     normalizeWhatsappInstanceDisplayName(input.existingDisplayName, blocked),
     normalizeWhatsappInstanceDisplayName(input.requestedName, blocked),
     normalizeWhatsappInstanceDisplayName(input.fallbackName, blocked),
     findHumanName(input.profileData, fallbackNameKeys, blocked),
     findHumanName(input.avatarData, fallbackNameKeys, blocked),
-    findHumanName(input.providerData, fallbackNameKeys, blocked),
   ];
 
   return candidates.find(Boolean) ?? null;
@@ -75,10 +100,19 @@ export function isTechnicalWhatsappInstanceName(value: string | null | undefined
   }
 
   const lower = cleaned.toLowerCase();
+  const operationalLabels = new Set([
+    "agente global",
+    "whatsapp global",
+    "api whatsapp",
+    "connectyhub api",
+  ]);
 
   return (
+    operationalLabels.has(lower) ||
     /^(ch-api|user|instance|api)[_-]/.test(lower) ||
     lower.startsWith("connectyhub-") ||
+    lower.startsWith("connectyhub api -") ||
+    lower.startsWith("connectyhub interno -") ||
     /^[a-z]+_[0-9a-f-]{12,}_\d{8,}$/.test(lower) ||
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleaned) ||
     /^[0-9a-f]{16,}$/i.test(cleaned)
