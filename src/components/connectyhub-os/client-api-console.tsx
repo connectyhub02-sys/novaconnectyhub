@@ -36,11 +36,16 @@ type Notice = {
   tone: "success" | "warning" | "error";
   message: string;
   secret?: string;
+  secretLabel?: string;
+  webhookUrl?: string;
 };
 
 type ActionResponse = {
   ok?: boolean;
   secret?: string;
+  endpoint?: {
+    url?: string | null;
+  } | null;
   result?: {
     deleted?: boolean;
     ok?: boolean;
@@ -166,6 +171,7 @@ export function ClientApiConsole({
       }
 
       const actionResult = data.result;
+      const webhookUrl = action === "create_webhook" ? data.endpoint?.url?.trim() || null : null;
       setNotice({
         tone: actionResult?.ok === false || actionResult?.providerDeleted === false ? "warning" : "success",
         message: actionResult?.ok === false
@@ -174,6 +180,8 @@ export function ClientApiConsole({
             ? "Instancia removida da ConnectyHub, mas a exclusao no provedor ficou pendente."
             : successMessage(action),
         secret: data.secret,
+        secretLabel: action === "create_webhook" ? "Token webhook" : "Token API",
+        webhookUrl: webhookUrl ?? undefined,
       });
       form?.reset();
       router.refresh();
@@ -236,7 +244,11 @@ export function ClientApiConsole({
             <NeonBadge tone={notice.tone === "error" ? "rose" : notice.tone === "warning" ? "amber" : "green"}>
               {notice.message}
             </NeonBadge>
-            {notice.secret && <SecretBox secret={notice.secret} />}
+            {notice.webhookUrl && notice.secret ? (
+              <WebhookCredentialBox secret={notice.secret} url={notice.webhookUrl} />
+            ) : notice.secret ? (
+              <SecretBox label={notice.secretLabel ?? "Token"} secret={notice.secret} />
+            ) : null}
           </div>
         </Panel>
       )}
@@ -562,14 +574,35 @@ function DocsPanel({ baseUrl, docsUrl, openapiUrl }: { baseUrl: string; docsUrl:
   );
 }
 
-function SecretBox({ secret }: { secret: string }) {
+function SecretBox({ label, secret }: { label: string; secret: string }) {
   return (
     <div className="rounded-xl p-3" style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}>
       <div className="flex items-center justify-between gap-3">
-        <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">exibida uma unica vez</p>
+        <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">{label} exibido uma unica vez</p>
         <IconButton icon={Copy} label="Copiar" onClick={() => copyText(secret)} tone="cyan" />
       </div>
       <code className="mt-2 block break-all font-mono text-[12px] text-cyan-200">{secret}</code>
+    </div>
+  );
+}
+
+function WebhookCredentialBox({ secret, url }: { secret: string; url: string }) {
+  return (
+    <div className="grid gap-3 lg:grid-cols-2">
+      <CopyBox label="URL do webhook" value={url} />
+      <CopyBox label="Token webhook" once value={secret} />
+    </div>
+  );
+}
+
+function CopyBox({ label, once, value }: { label: string; once?: boolean; value: string }) {
+  return (
+    <div className="rounded-xl p-3" style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}>
+      <div className="flex items-center justify-between gap-3">
+        <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">{label}{once ? " exibido uma unica vez" : ""}</p>
+        <IconButton icon={Copy} label="Copiar" onClick={() => copyText(value)} tone="cyan" />
+      </div>
+      <code className="mt-2 block break-all font-mono text-[12px] text-cyan-200">{value}</code>
     </div>
   );
 }
@@ -794,6 +827,12 @@ function WebhookActions({
 
   return (
     <RowActions>
+      <IconButton
+        icon={Copy}
+        label="URL"
+        onClick={() => copyText(endpoint.url)}
+        tone="cyan"
+      />
       <IconButton
         disabled={!canManage || running === `set_webhook_status:${endpoint.id}`}
         icon={endpoint.status === "active" ? Pause : Play}
