@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { revalidatePath } from "next/cache";
 import { defaultLeadQualificationConfig, leadQualificationConfigKey } from "@/lib/leads/qualification";
 import { defaultWhatsappAgentPrompt, defaultWhatsappBehaviorConfig, defaultWhatsappCloneMemory, defaultWhatsappCloneProfile } from "@/lib/whatsapp/agent-behavior";
 import { createServiceClient } from "@/lib/supabase/service";
@@ -62,6 +63,13 @@ type AgentFullRow = AgentRow & {
 type DeleteAgentRow = {
   id: string;
   organization_id: string;
+};
+
+type AgentWhatsappInstanceRow = {
+  id: string;
+  status: string | null;
+  phone_number: string | null;
+  metadata: JsonRecord | null;
 };
 
 const maxAgentNameLength = 80;
@@ -327,6 +335,8 @@ export async function deleteClientAgent(input: {
     throw new Error("Escolha um agente vinculado a sua conta.");
   }
 
+  await archiveDisconnectedAgentWhatsappInstances(client, agent, input.userId);
+
   const { data: deleted, error } = await client
     .from("agent_registry")
     .delete()
@@ -342,7 +352,67 @@ export async function deleteClientAgent(input: {
     throw new Error("Nao foi possivel confirmar a exclusao do agente.");
   }
 
+  revalidatePath("/dashboard/agentes");
+  revalidatePath("/dashboard/whatsapp");
+  revalidatePath("/admin/clientes/whatsapp");
+
   return agent;
+}
+
+async function archiveDisconnectedAgentWhatsappInstances(
+  client: SupabaseClient,
+  agent: DeleteAgentRow,
+  userId: string,
+) {
+  const { data, error } = await client
+    .from("whatsapp_instances")
+    .select("id, status, phone_number, metadata")
+    .eq("organization_id", agent.organization_id)
+    .contains("metadata", { agent_id: agent.id })
+    .neq("status", "archived")
+    .returns<AgentWhatsappInstanceRow[]>();
+
+  if (error) {
+    throw new Error(`Nao foi possivel verificar instancias do agente: ${error.message}`);
+  }
+
+  const rowsToArchive = (data ?? []).filter(shouldArchiveWithDeletedAgent);
+
+  if (rowsToArchive.length === 0) {
+    return;
+  }
+
+  const now = new Date().toISOString();
+
+  for (const row of rowsToArchive) {
+    const { error: archiveError } = await client
+      .from("whatsapp_instances")
+      .update({
+        status: "archived",
+        qr_status: null,
+        instance_token_preview: null,
+        instance_token_encrypted: null,
+        webhook_url: null,
+        webhook_configured_at: null,
+        disconnected_at: now,
+        metadata: {
+          ...(row.metadata ?? {}),
+          archived_reason: "agent_deleted",
+          archived_agent_id: agent.id,
+          archived_at: now,
+          archived_by: userId,
+        },
+      })
+      .eq("id", row.id);
+
+    if (archiveError) {
+      throw new Error(`Nao foi possivel arquivar a instancia ${row.id}: ${archiveError.message}`);
+    }
+  }
+}
+
+function shouldArchiveWithDeletedAgent(row: AgentWhatsappInstanceRow) {
+  return row.status !== "connected" || !row.phone_number;
 }
 
 async function requireClientAgentAccess(input: {

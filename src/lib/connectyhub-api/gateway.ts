@@ -163,6 +163,7 @@ type ApiUsageEventRow = {
   client_id: string | null;
   organization_id: string | null;
   whatsapp_instance_id: string | null;
+  request_id: string | null;
   method: string;
   endpoint: string;
   status_code: number | null;
@@ -170,6 +171,8 @@ type ApiUsageEventRow = {
   quantity: number;
   provider: string | null;
   provider_status: number | null;
+  latency_ms: number | null;
+  metadata: JsonRecord | null;
   created_at: string;
 };
 
@@ -187,7 +190,7 @@ const gatewayWebhookDeliveryColumns =
   "id, endpoint_id, client_id, organization_id, whatsapp_instance_id, webhook_event_id, event_type, target_url, status, status_code, attempt_count, error_message, payload, response_preview, delivered_at, created_at";
 
 const gatewayUsageColumns =
-  "id, client_id, organization_id, whatsapp_instance_id, method, endpoint, status_code, unit_type, quantity, provider, provider_status, created_at";
+  "id, client_id, organization_id, whatsapp_instance_id, request_id, method, endpoint, status_code, unit_type, quantity, provider, provider_status, latency_ms, metadata, created_at";
 
 const gatewayProviderWebhookEventColumns =
   "id, provider, event_type, provider_instance_id, whatsapp_instance_id, organization_id, provider_message_id, provider_chat_id, processing_status, error_message, received_at, processed_at, created_at";
@@ -327,6 +330,7 @@ export async function createGatewayInstance(
     auth.apiClient.name;
   const providerName = normalizeProviderInstanceName(requestedDisplayName);
   const now = new Date().toISOString();
+  const providerStartedAt = Date.now();
   const createResult = await callUazapi(credentials, "/instance/create", {
     method: "POST",
     admin: true,
@@ -390,6 +394,7 @@ export async function createGatewayInstance(
     whatsappInstanceId: data.id,
     provider: "uazapi",
     providerStatus: createResult.status,
+    latencyMs: createResult.latencyMs ?? Date.now() - providerStartedAt,
   });
 
   return mapGatewayInstance(data);
@@ -404,6 +409,7 @@ export async function connectGatewayInstance(auth: GatewayAuthContext, instanceI
   }
 
   const credentials = await loadUazapiCredentials(auth.client);
+  const providerStartedAt = Date.now();
   const result = await callUazapi(credentials, "/instance/connect", {
     method: "POST",
     token,
@@ -476,6 +482,7 @@ export async function connectGatewayInstance(auth: GatewayAuthContext, instanceI
     whatsappInstanceId: instance.id,
     provider: "uazapi",
     providerStatus: result.status,
+    latencyMs: result.latencyMs ?? Date.now() - providerStartedAt,
   });
 
   return {
@@ -495,6 +502,7 @@ export async function refreshGatewayInstanceStatus(auth: GatewayAuthContext, ins
   }
 
   const credentials = await loadUazapiCredentials(auth.client);
+  const providerStartedAt = Date.now();
   const result = await callUazapi(credentials, "/instance/status", {
     method: "GET",
     token,
@@ -562,6 +570,7 @@ export async function refreshGatewayInstanceStatus(auth: GatewayAuthContext, ins
     whatsappInstanceId: instance.id,
     provider: "uazapi",
     providerStatus: result.status,
+    latencyMs: result.latencyMs ?? Date.now() - providerStartedAt,
   });
 
   return {
@@ -606,6 +615,7 @@ export async function deleteGatewayInstance(auth: GatewayAuthContext, instanceId
     whatsappInstanceId: instance.id,
     provider: "uazapi",
     providerStatus: result.providerStatus ?? undefined,
+    latencyMs: result.providerLatencyMs,
     metadata: {
       providerDeleted: result.providerDeleted,
       providerResponse: result.provider,
@@ -650,6 +660,7 @@ export async function deleteClientGatewayInstance(input: {
       refreshedTokenUsed: result.refreshedTokenUsed,
     },
     providerStatus: result.providerStatus ?? undefined,
+    latencyMs: result.providerLatencyMs,
     statusCode: result.providerDeleted ? 200 : 202,
     whatsappInstanceId: instance.id,
   });
@@ -690,6 +701,7 @@ export async function deleteAdminGatewayInstance(input: {
       refreshedTokenUsed: result.refreshedTokenUsed,
     },
     providerStatus: result.providerStatus ?? undefined,
+    latencyMs: result.providerLatencyMs,
     statusCode: result.providerDeleted ? 200 : 202,
     whatsappInstanceId: instance.id,
   });
@@ -746,6 +758,7 @@ export async function sendGatewayTextMessage(
   await assertMonthlyMessageQuota(auth);
 
   const credentials = await loadUazapiCredentials(auth.client);
+  const providerStartedAt = Date.now();
   const result = await callUazapi(credentials, "/send/text", {
     method: "POST",
     token,
@@ -782,6 +795,7 @@ export async function sendGatewayTextMessage(
     provider: "uazapi",
     providerStatus: result.status,
     unitType: "message",
+    latencyMs: result.latencyMs ?? Date.now() - providerStartedAt,
     metadata: {
       messageType: "text",
       ok: result.ok,
@@ -900,6 +914,7 @@ export async function sendGatewayMediaMessage(
     track_source: "connectyhub_api",
     track_id: input.trackId ?? `ch_api_${Date.now()}`,
   });
+  const providerStartedAt = Date.now();
   const result = await callUazapi(credentials, "/send/media", {
     method: "POST",
     token,
@@ -929,6 +944,7 @@ export async function sendGatewayMediaMessage(
     provider: "uazapi",
     providerStatus: result.status,
     unitType: "message",
+    latencyMs: result.latencyMs ?? Date.now() - providerStartedAt,
     metadata: {
       messageType: mediaType,
       ok: result.ok,
@@ -1087,6 +1103,7 @@ export async function proxyGatewayProviderRequest(
   }
 
   const credentials = await loadUazapiCredentials(auth.client);
+  const providerStartedAt = Date.now();
   const result = await callUazapi(credentials, input.path, {
     method: input.method,
     token,
@@ -1102,6 +1119,7 @@ export async function proxyGatewayProviderRequest(
     whatsappInstanceId: instance.id,
     provider: "uazapi",
     providerStatus: result.status,
+    latencyMs: result.latencyMs ?? Date.now() - providerStartedAt,
     metadata: {
       proxiedPath: input.path,
       ok: result.ok,
@@ -1824,7 +1842,7 @@ export async function getAdminGatewayState(client: SupabaseClient = createServic
       .limit(500),
     client
       .from("connectyhub_api_usage_events")
-      .select("id, client_id, organization_id, whatsapp_instance_id, method, endpoint, status_code, unit_type, quantity, provider, provider_status, created_at")
+      .select(gatewayUsageColumns)
       .order("created_at", { ascending: false })
       .limit(800),
     client
@@ -1881,38 +1899,30 @@ export async function getAdminGatewayState(client: SupabaseClient = createServic
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
   }));
-  const instances = ((instancesResult.data ?? []) as Array<GatewayInstanceRow & { organizations?: OrganizationRow | OrganizationRow[] | null }>).map((row) => ({
+  const instanceRows = (instancesResult.data ?? []) as Array<GatewayInstanceRow & { organizations?: OrganizationRow | OrganizationRow[] | null }>;
+  const apiInstanceRows = instanceRows.filter(isPublicApiGatewayInstance);
+  const instances = apiInstanceRows.map((row) => ({
     ...mapGatewayInstance(row),
     organization: mapOrganization(readFirst(row.organizations)),
   }));
-  const usage = (usageResult.data ?? []).map((row) => ({
-    id: String(row.id),
-    clientId: row.client_id as string | null,
-    instanceId: row.whatsapp_instance_id as string | null,
-    method: String(row.method),
-    endpoint: String(row.endpoint),
-    statusCode: typeof row.status_code === "number" ? row.status_code : null,
-    unitType: String(row.unit_type),
-    quantity: Number(row.quantity ?? 0),
-    provider: row.provider as string | null,
-    providerStatus: typeof row.provider_status === "number" ? row.provider_status : null,
-    createdAt: String(row.created_at),
-  }));
+  const usage = ((usageResult.data ?? []) as ApiUsageEventRow[]).map(mapUsageEvent);
   const deliveries = ((deliveriesResult.data ?? []) as WebhookDeliveryRow[]).map(mapWebhookDelivery);
   const providerEvents = ((providerEventsResult.data ?? []) as ProviderWebhookEventRow[]).map(mapProviderWebhookEvent);
   const organizations = ((organizationsResult.data ?? []) as OrganizationRow[]).map(mapOrganization).filter(isPresent);
   const providerInstances = "instances" in providerResult ? providerResult.instances : [];
-  const localProviderIds = new Set(instances.map((instance) => instance.providerInstanceId).filter(Boolean));
-  const apiMappedProviderIds = new Set(instances.filter((instance) => Boolean(instance.apiClientId)).map((instance) => instance.providerInstanceId).filter(Boolean));
+  const localProviderIds = new Set(instanceRows.map((instance) => instance.provider_instance_id).filter(Boolean));
+  const apiMappedProviderIds = new Set(apiInstanceRows.filter((instance) => Boolean(instance.connectyhub_api_client_id)).map((instance) => instance.provider_instance_id).filter(Boolean));
   const localProfileImagesByProviderId = new Map(
-    instances
-      .filter((instance) => Boolean(instance.providerInstanceId && instance.profileImageUrl))
-      .map((instance) => [instance.providerInstanceId, instance.profileImageUrl]),
+    instanceRows
+      .filter((instance) => Boolean(instance.provider_instance_id))
+      .map((instance) => [instance.provider_instance_id, readWhatsappInstanceProfileImageUrl(instance.metadata)])
+      .filter((item): item is [string, string] => Boolean(item[0] && item[1])),
   );
   const availableProviderInstances = providerInstances.filter((instance) => {
     const providerInstanceId = instance.providerInstanceId;
     return !localProviderIds.has(providerInstanceId) && !apiMappedProviderIds.has(providerInstanceId);
   });
+  const traffic = buildApiTrafficTelemetry({ usage, clients: apiClients, deliveries });
 
   return {
     summary: {
@@ -1931,6 +1941,7 @@ export async function getAdminGatewayState(client: SupabaseClient = createServic
       webhookFailures24h: deliveries.filter((item) => item.status === "failed" && Date.now() - new Date(item.createdAt).getTime() <= 86_400_000).length,
     },
     clients: apiClients,
+    traffic,
     keys: apiKeys,
     endpoints,
     instances,
@@ -2054,6 +2065,7 @@ export async function getClientGatewayState(input: {
   const apiInstances = instances.filter((instance) => instance.apiClientId && clientIds.includes(instance.apiClientId));
   const activeClientMonthlyLimit = activeClient?.monthlyMessageLimit ?? null;
   const messagesUsed = monthlyMessagesResult.count ?? 0;
+  const traffic = buildApiTrafficTelemetry({ usage, clients: apiClients, deliveries });
 
   return {
     summary: {
@@ -2073,6 +2085,7 @@ export async function getClientGatewayState(input: {
       messagesRemaining: typeof activeClientMonthlyLimit === "number" ? Math.max(activeClientMonthlyLimit - messagesUsed, 0) : null,
     },
     clients: apiClients,
+    traffic,
     activeClientId: activeClient?.id ?? null,
     keys: apiKeys,
     endpoints,
@@ -2461,6 +2474,7 @@ async function callInstanceUazapi(
   }
 
   const credentials = await loadUazapiCredentials(auth.client);
+  const providerStartedAt = Date.now();
   const result = await callUazapi(credentials, input.providerPath, {
     method: input.method,
     token,
@@ -2476,6 +2490,7 @@ async function callInstanceUazapi(
     whatsappInstanceId: instance.id,
     provider: "uazapi",
     providerStatus: result.status,
+    latencyMs: result.latencyMs ?? Date.now() - providerStartedAt,
     metadata: {
       providerPath: input.providerPath,
       ok: result.ok,
@@ -2738,6 +2753,7 @@ async function deleteGatewayInstanceRow(input: {
     deleted: true,
     providerDeleted,
     providerStatus,
+    providerLatencyMs: deleteResult?.latencyMs ?? null,
     provider: providerResponse,
     refreshedTokenUsed,
     instance: mapGatewayInstance(data),
@@ -3097,6 +3113,7 @@ async function callUazapi(
     }
   });
 
+  const startedAt = Date.now();
   const response = await fetch(url, {
     method: options.method,
     headers: {
@@ -3117,6 +3134,7 @@ async function callUazapi(
   return {
     ok: response.ok,
     status: response.status,
+    latencyMs: Date.now() - startedAt,
     data,
   };
 }
@@ -3252,8 +3270,11 @@ async function recordUsageEvent(
     statusCode?: number;
     whatsappInstanceId?: string | null;
     unitType?: string;
+    quantity?: number;
     provider?: string;
     providerStatus?: number;
+    requestId?: string | null;
+    latencyMs?: number | null;
     metadata?: JsonRecord;
   },
 ) {
@@ -3262,13 +3283,15 @@ async function recordUsageEvent(
     organization_id: auth.apiClient.organization_id,
     api_key_id: auth.apiKey.id,
     whatsapp_instance_id: input.whatsappInstanceId ?? null,
+    request_id: input.requestId ?? createGatewayRequestId(),
     method: input.method,
     endpoint: input.endpoint,
     status_code: input.statusCode ?? null,
     unit_type: input.unitType ?? "request",
-    quantity: 1,
+    quantity: input.quantity ?? 1,
     provider: input.provider ?? null,
     provider_status: input.providerStatus ?? null,
+    latency_ms: normalizeLatencyMs(input.latencyMs),
     metadata: input.metadata ?? {},
   });
 }
@@ -3281,8 +3304,11 @@ async function recordPanelUsageEvent(
     statusCode?: number;
     whatsappInstanceId?: string | null;
     unitType?: string;
+    quantity?: number;
     provider?: string;
     providerStatus?: number;
+    requestId?: string | null;
+    latencyMs?: number | null;
     metadata?: JsonRecord;
   },
 ) {
@@ -3291,13 +3317,15 @@ async function recordPanelUsageEvent(
     organization_id: input.apiClient.organization_id,
     api_key_id: null,
     whatsapp_instance_id: input.whatsappInstanceId ?? null,
+    request_id: input.requestId ?? createGatewayRequestId(),
     method: "DELETE",
     endpoint: input.endpoint,
     status_code: input.statusCode ?? null,
     unit_type: input.unitType ?? "request",
-    quantity: 1,
+    quantity: input.quantity ?? 1,
     provider: input.provider ?? "uazapi",
     provider_status: input.providerStatus ?? null,
+    latency_ms: normalizeLatencyMs(input.latencyMs),
     metadata: input.metadata ?? {},
   });
 }
@@ -3348,6 +3376,16 @@ function publicProviderName(provider: string | null | undefined) {
 
 function generateGatewayApiKey() {
   return `ch_live_${randomBytes(32).toString("base64url")}`;
+}
+
+function createGatewayRequestId() {
+  return `ch_req_${randomBytes(10).toString("hex")}`;
+}
+
+function normalizeLatencyMs(value: number | null | undefined) {
+  return typeof value === "number" && Number.isFinite(value)
+    ? Math.max(0, Math.round(value))
+    : null;
 }
 
 function hashSecret(value: string) {
@@ -3428,6 +3466,20 @@ function mapGatewayInstance(row: GatewayInstanceRow) {
     lastMessageAt: row.last_message_at,
     updatedAt: row.updated_at,
   };
+}
+
+function isPublicApiGatewayInstance(row: GatewayInstanceRow) {
+  const metadata = isRecord(row.metadata) ? row.metadata : {};
+  const createdFrom = typeof metadata.created_from === "string" ? metadata.created_from.toLowerCase() : "";
+
+  if (createdFrom === "client_dashboard" || metadata.client_agent === true || Boolean(metadata.agent_id)) {
+    return false;
+  }
+
+  return metadata.api_gateway === true
+    || createdFrom === "connectyhub_public_api"
+    || createdFrom === "admin_connectyhub_api"
+    || Boolean(row.connectyhub_api_client_id && row.connectyhub_api_visibility !== "internal");
 }
 
 function mapApiClient(row: ApiClientRow) {
@@ -3528,6 +3580,7 @@ function mapUsageEvent(row: ApiUsageEventRow) {
     id: row.id,
     clientId: row.client_id,
     instanceId: row.whatsapp_instance_id,
+    requestId: row.request_id,
     method: row.method,
     endpoint: row.endpoint,
     statusCode: row.status_code,
@@ -3535,8 +3588,202 @@ function mapUsageEvent(row: ApiUsageEventRow) {
     quantity: Number(row.quantity ?? 0),
     provider: publicProviderName(row.provider),
     providerStatus: row.provider_status,
+    latencyMs: normalizeLatencyMs(row.latency_ms),
+    metadata: isRecord(row.metadata) ? row.metadata : {},
     createdAt: row.created_at,
   };
+}
+
+function buildApiTrafficTelemetry(input: {
+  usage: ReturnType<typeof mapUsageEvent>[];
+  clients: Array<ReturnType<typeof mapApiClient> & { organization?: ReturnType<typeof mapOrganization> }>;
+  deliveries: ReturnType<typeof mapWebhookDelivery>[];
+}) {
+  const now = Date.now();
+  const dayAgo = now - 86_400_000;
+  const recentUsage = input.usage.filter((event) => {
+    const timestamp = new Date(event.createdAt).getTime();
+    return Number.isFinite(timestamp) && timestamp >= dayAgo;
+  });
+  const recentDeliveries = input.deliveries.filter((delivery) => {
+    const timestamp = new Date(delivery.createdAt).getTime();
+    return Number.isFinite(timestamp) && timestamp >= dayAgo;
+  });
+  const activeClientIds = new Set(recentUsage.map((event) => event.clientId).filter((clientId): clientId is string => Boolean(clientId)));
+  const successfulRequests24h = recentUsage.filter((event) => isUsageSuccess(event)).length;
+  const failedRequests24h = recentUsage.filter((event) => isUsageFailure(event)).length;
+  const requests24h = recentUsage.length;
+  const messageEvents = recentUsage.filter((event) => event.unitType === "message");
+  const textMessages24h = messageEvents.filter((event) => isTextMessageUsage(event)).reduce((total, event) => total + event.quantity, 0);
+  const mediaMessages24h = messageEvents.filter((event) => isMediaMessageUsage(event)).reduce((total, event) => total + event.quantity, 0);
+  const latencyValues = recentUsage
+    .map((event) => event.latencyMs)
+    .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+  const clientsById = new Map(input.clients.map((client) => [client.id, client]));
+
+  return {
+    requests24h,
+    successfulRequests24h,
+    failedRequests24h,
+    successRate24h: requests24h > 0 ? Math.round((successfulRequests24h / requests24h) * 100) : 100,
+    activeClients24h: activeClientIds.size,
+    messages24h: messageEvents.reduce((total, event) => total + event.quantity, 0),
+    textMessages24h,
+    mediaMessages24h,
+    instanceRequests24h: recentUsage.filter((event) => event.endpoint.includes("/instances")).length,
+    webhookRequests24h: recentUsage.filter((event) => event.endpoint.includes("/webhooks")).length,
+    providerProxyRequests24h: recentUsage.filter((event) => event.endpoint.includes("/provider/")).length,
+    averageLatencyMs: averageNumbers(latencyValues),
+    topEndpoints: buildTopEndpointTraffic(recentUsage),
+    topClients: buildTopClientTraffic(recentUsage, recentDeliveries, clientsById),
+  };
+}
+
+function buildTopEndpointTraffic(usage: ReturnType<typeof mapUsageEvent>[]) {
+  type Bucket = {
+    endpoint: string;
+    method: string;
+    requests: number;
+    errors: number;
+    messages: number;
+    latencyTotal: number;
+    latencyCount: number;
+    lastUsedAt: string | null;
+  };
+  const buckets = new Map<string, Bucket>();
+
+  for (const event of usage) {
+    const key = `${event.method} ${event.endpoint}`;
+    const bucket = buckets.get(key) ?? {
+      endpoint: event.endpoint,
+      method: event.method,
+      requests: 0,
+      errors: 0,
+      messages: 0,
+      latencyTotal: 0,
+      latencyCount: 0,
+      lastUsedAt: null,
+    };
+
+    bucket.requests += 1;
+    bucket.errors += isUsageFailure(event) ? 1 : 0;
+    bucket.messages += event.unitType === "message" ? event.quantity : 0;
+    if (typeof event.latencyMs === "number") {
+      bucket.latencyTotal += event.latencyMs;
+      bucket.latencyCount += 1;
+    }
+    bucket.lastUsedAt = pickLatestIso(bucket.lastUsedAt, event.createdAt);
+    buckets.set(key, bucket);
+  }
+
+  return Array.from(buckets.values())
+    .sort((a, b) => b.requests - a.requests || b.errors - a.errors)
+    .slice(0, 8)
+    .map((bucket) => ({
+      endpoint: bucket.endpoint,
+      method: bucket.method,
+      requests: bucket.requests,
+      errors: bucket.errors,
+      messages: bucket.messages,
+      averageLatencyMs: bucket.latencyCount > 0 ? Math.round(bucket.latencyTotal / bucket.latencyCount) : null,
+      lastUsedAt: bucket.lastUsedAt,
+    }));
+}
+
+function buildTopClientTraffic(
+  usage: ReturnType<typeof mapUsageEvent>[],
+  deliveries: ReturnType<typeof mapWebhookDelivery>[],
+  clientsById: Map<string, ReturnType<typeof mapApiClient> & { organization?: ReturnType<typeof mapOrganization> }>,
+) {
+  type Bucket = {
+    clientId: string | null;
+    clientName: string;
+    organizationName: string | null;
+    requests: number;
+    errors: number;
+    messages: number;
+    webhookDeliveries: number;
+    webhookFailures: number;
+    lastUsedAt: string | null;
+  };
+  const buckets = new Map<string, Bucket>();
+
+  for (const event of usage) {
+    const key = event.clientId ?? "unknown";
+    const client = event.clientId ? clientsById.get(event.clientId) : null;
+    const bucket = buckets.get(key) ?? {
+      clientId: event.clientId,
+      clientName: client?.name ?? "Sem cliente",
+      organizationName: client?.organization?.name ?? null,
+      requests: 0,
+      errors: 0,
+      messages: 0,
+      webhookDeliveries: 0,
+      webhookFailures: 0,
+      lastUsedAt: null,
+    };
+
+    bucket.requests += 1;
+    bucket.errors += isUsageFailure(event) ? 1 : 0;
+    bucket.messages += event.unitType === "message" ? event.quantity : 0;
+    bucket.lastUsedAt = pickLatestIso(bucket.lastUsedAt, event.createdAt);
+    buckets.set(key, bucket);
+  }
+
+  for (const delivery of deliveries) {
+    const key = delivery.clientId ?? "unknown";
+    const client = delivery.clientId ? clientsById.get(delivery.clientId) : null;
+    const bucket = buckets.get(key) ?? {
+      clientId: delivery.clientId,
+      clientName: client?.name ?? "Sem cliente",
+      organizationName: client?.organization?.name ?? null,
+      requests: 0,
+      errors: 0,
+      messages: 0,
+      webhookDeliveries: 0,
+      webhookFailures: 0,
+      lastUsedAt: null,
+    };
+
+    bucket.webhookDeliveries += 1;
+    bucket.webhookFailures += delivery.status === "failed" ? 1 : 0;
+    bucket.lastUsedAt = pickLatestIso(bucket.lastUsedAt, delivery.createdAt);
+    buckets.set(key, bucket);
+  }
+
+  return Array.from(buckets.values())
+    .sort((a, b) => b.requests + b.webhookDeliveries - (a.requests + a.webhookDeliveries))
+    .slice(0, 8);
+}
+
+function isUsageSuccess(event: ReturnType<typeof mapUsageEvent>) {
+  return typeof event.statusCode === "number" && event.statusCode >= 200 && event.statusCode < 400;
+}
+
+function isUsageFailure(event: ReturnType<typeof mapUsageEvent>) {
+  return !isUsageSuccess(event)
+    || (typeof event.providerStatus === "number" && event.providerStatus >= 400);
+}
+
+function isTextMessageUsage(event: ReturnType<typeof mapUsageEvent>) {
+  const messageType = typeof event.metadata.messageType === "string" ? event.metadata.messageType.toLowerCase() : "";
+  return event.endpoint.includes("/messages/text") || messageType === "text";
+}
+
+function isMediaMessageUsage(event: ReturnType<typeof mapUsageEvent>) {
+  if (event.unitType !== "message") return false;
+  return !isTextMessageUsage(event);
+}
+
+function averageNumbers(values: number[]) {
+  if (values.length === 0) return null;
+  return Math.round(values.reduce((total, value) => total + value, 0) / values.length);
+}
+
+function pickLatestIso(current: string | null, candidate: string | null | undefined) {
+  if (!candidate) return current;
+  if (!current) return candidate;
+  return new Date(candidate).getTime() > new Date(current).getTime() ? candidate : current;
 }
 
 function mapOrganization(row: OrganizationRow | null | undefined) {

@@ -1,7 +1,7 @@
+import Image from "next/image";
 import {
   Activity,
   Bot,
-  Building2,
   MessageCircle,
   Network,
   ShieldCheck,
@@ -93,6 +93,30 @@ export function AdminCustomerWhatsappConsole({
         />
       </div>
 
+      <Panel className="mb-5" title="Telemetria WhatsApp" eyebrow="mensagens / midia / agentes">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+          <KpiStat label="mensagens" value={String(workspace.summary.messagesTotal)} tone="cyan" />
+          <KpiStat label="recebidas" value={String(workspace.summary.inboundMessages)} tone="green" />
+          <KpiStat label="enviadas" value={String(workspace.summary.outboundMessages)} tone="violet" />
+          <KpiStat
+            label="audio / midia"
+            value={`${workspace.summary.audioMessages} / ${workspace.summary.mediaMessages}`}
+            tone="amber"
+          />
+          <KpiStat
+            label="ia concluida / falha"
+            value={`${workspace.summary.agentRunsCompleted} / ${workspace.summary.agentRunsFailed}`}
+            tone={workspace.summary.agentRunsFailed > 0 ? "amber" : "green"}
+          />
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <NeonBadge tone="cyan">{workspace.summary.agentRunsTotal} execucoes IA</NeonBadge>
+          <NeonBadge tone={workspace.summary.averageAgentRunSeconds ? "green" : "zinc"}>
+            media {formatDuration(workspace.summary.averageAgentRunSeconds)}
+          </NeonBadge>
+        </div>
+      </Panel>
+
       <div className="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_390px]">
         <Panel
           title="Instancias do painel dos usuarios"
@@ -101,7 +125,7 @@ export function AdminCustomerWhatsappConsole({
         >
           {workspace.instances.length > 0 ? (
             <DataTable
-              columns={["Empresa", "Numero", "Status", "Agente", "Leads", "Conversas", "Webhook", "Ultimo sinal"]}
+              columns={["Empresa", "Numero", "Status", "Agente", "Leads", "Conversas", "Mensagens", "IA", "Webhook", "Ultimo sinal"]}
               rows={workspace.instances.map((instance) => [
                 <InstanceIdentity key="identity" instance={instance} />,
                 <PhoneCell key="phone" instance={instance} />,
@@ -114,6 +138,8 @@ export function AdminCustomerWhatsappConsole({
                   active={instance.openConversationCount}
                   activeLabel="abertas"
                 />,
+                <MessageTelemetryCell key="messages" instance={instance} />,
+                <AgentTelemetryCell key="ai" instance={instance} />,
                 <WebhookCell key="webhook" instance={instance} />,
                 <LastSignalCell key="signal" instance={instance} />,
               ])}
@@ -199,21 +225,40 @@ function MetricTile({
 }
 
 function InstanceIdentity({ instance }: { instance: AdminCustomerWhatsappInstance }) {
+  const primaryAgentName = instance.agents[0]?.name ?? "sem vinculo";
+
   return (
-    <div className="min-w-[190px]">
-      <div className="flex items-center gap-2">
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-cyan-500/10 text-cyan-300">
-          <Building2 className="h-4 w-4" />
-        </span>
+    <div className="min-w-[220px]">
+      <div className="flex items-center gap-2.5">
+        <WhatsappAvatar fallback={primaryAgentName || instance.organizationName} imageUrl={instance.profileImageUrl} />
         <div className="min-w-0">
           <p className="truncate text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>
             {instance.organizationName}
           </p>
-          <p className="font-mono text-[9px] uppercase tracking-wider text-slate-500">
-            {instance.organizationPlan ?? "sem plano"} / {instance.organizationStatus ?? "sem status"}
+          <p className="truncate text-[11px] text-slate-500">
+            {primaryAgentName}
+          </p>
+          <p className="font-mono text-[8px] uppercase tracking-wider text-slate-600">
+            {instance.profileImageUrl ? "foto whatsapp" : "foto pendente"}
           </p>
         </div>
       </div>
+    </div>
+  );
+}
+
+function WhatsappAvatar({ fallback, imageUrl }: { fallback: string; imageUrl: string | null }) {
+  return (
+    <div
+      className="relative grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-xl border bg-cyan-400/10 text-cyan-200"
+      style={{ borderColor: "var(--ch-border)" }}
+      title={imageUrl ? "Foto do WhatsApp conectado" : "Foto pendente"}
+    >
+      {imageUrl ? (
+        <Image alt={`Foto do WhatsApp ${fallback}`} className="object-cover" fill sizes="40px" src={imageUrl} unoptimized />
+      ) : (
+        <span className="font-mono text-[11px] font-bold uppercase tracking-widest">{getInitials(fallback)}</span>
+      )}
     </div>
   );
 }
@@ -233,7 +278,7 @@ function PhoneCell({ instance }: { instance: AdminCustomerWhatsappInstance }) {
 
 function AgentsCell({ instance }: { instance: AdminCustomerWhatsappInstance }) {
   if (instance.agents.length === 0) {
-    return <NeonBadge tone="amber">sem agente</NeonBadge>;
+    return <NeonBadge tone="amber">sem vinculo</NeonBadge>;
   }
 
   return (
@@ -263,6 +308,48 @@ function CountCell({ total, active, activeLabel }: { total: number; active: numb
       </p>
       <p className="font-mono text-[9px] uppercase tracking-wider text-slate-500">
         {active} {activeLabel}
+      </p>
+    </div>
+  );
+}
+
+function MessageTelemetryCell({ instance }: { instance: AdminCustomerWhatsappInstance }) {
+  return (
+    <div className="min-w-[150px]">
+      <p className="font-mono text-[14px] font-semibold" style={{ color: "var(--ch-text)" }}>
+        {instance.messageCount}
+      </p>
+      <p className="font-mono text-[9px] uppercase tracking-wider text-slate-500">
+        {instance.inboundMessageCount} in / {instance.outboundMessageCount} out
+      </p>
+      <p className="font-mono text-[9px] uppercase tracking-wider text-slate-600">
+        {instance.audioMessageCount} audio / {instance.mediaMessageCount} midia
+      </p>
+    </div>
+  );
+}
+
+function AgentTelemetryCell({ instance }: { instance: AdminCustomerWhatsappInstance }) {
+  if (instance.agentRunCount === 0) {
+    return <NeonBadge tone="zinc">sem runs</NeonBadge>;
+  }
+
+  return (
+    <div className="min-w-[150px] space-y-1">
+      <div className="flex items-center gap-2">
+        <p className="font-mono text-[14px] font-semibold" style={{ color: "var(--ch-text)" }}>
+          {instance.agentRunCount}
+        </p>
+        <StatusBadge
+          status={instance.failedAgentRunCount > 0 ? "warning" : "online"}
+          label={instance.lastAgentRunStatus ?? "ia"}
+        />
+      </div>
+      <p className="font-mono text-[9px] uppercase tracking-wider text-slate-500">
+        {instance.completedAgentRunCount} ok / {instance.failedAgentRunCount} falhas
+      </p>
+      <p className="font-mono text-[9px] uppercase tracking-wider text-slate-600">
+        media {formatDuration(instance.averageAgentRunSeconds)}
       </p>
     </div>
   );
@@ -372,4 +459,35 @@ function formatDate(value: string | null | undefined) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(date);
+}
+
+function formatDuration(seconds: number | null | undefined) {
+  if (!seconds || seconds <= 0) {
+    return "sem dados";
+  }
+
+  if (seconds < 60) {
+    return `${seconds}s`;
+  }
+
+  const minutes = Math.floor(seconds / 60);
+  const rest = seconds % 60;
+  return rest > 0 ? `${minutes}m ${rest}s` : `${minutes}m`;
+}
+
+function getInitials(value: string) {
+  const parts = value
+    .split(/\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  if (parts.length === 0) {
+    return "WA";
+  }
+
+  return parts
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase();
 }

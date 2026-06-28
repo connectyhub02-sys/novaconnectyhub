@@ -13,6 +13,7 @@ import {
   Pause,
   Play,
   PlugZap,
+  RadioTower,
   RefreshCcw,
   Send,
   ShieldCheck,
@@ -249,6 +250,8 @@ export function ClientApiConsole({
         <MetricTile icon={Activity} label="Mes atual" value={String(state.summary.requestsCurrentPeriod)} detail={`${state.summary.messagesUsed} mensagens`} tone="amber" />
       </div>
 
+      <ClientTrafficPanel state={state} />
+
       <div className="mb-5 flex gap-2 overflow-x-auto pb-1">
         {tabs.map((tab) => {
           const Icon = tab.icon;
@@ -435,11 +438,12 @@ export function ClientApiConsole({
           <Panel title="Uso recente" eyebrow="requests / status">
             {state.usage.length > 0 ? (
               <DataTable
-                columns={["Endpoint", "Status", "Unidade", "Quando"]}
+                columns={["Endpoint", "Status", "Unidade", "Latencia", "Quando"]}
                 rows={state.usage.map((event) => [
-                  <TextCell key="endpoint" value={`${event.method} ${event.endpoint}`} muted={event.provider ?? "gateway"} />,
+                  <TextCell key="endpoint" value={`${event.method} ${event.endpoint}`} muted={event.requestId ?? event.provider ?? "gateway"} />,
                   <StatusBadge key="status" status={(event.statusCode ?? 500) < 400 ? "online" : "critical"} label={String(event.statusCode ?? "-")} />,
                   <TextCell key="unit" value={event.unitType} muted={String(event.quantity)} />,
+                  <TextCell key="latency" value={formatLatency(event.latencyMs)} muted={event.providerStatus ? `provider ${event.providerStatus}` : event.provider ?? "gateway"} />,
                   <TextCell key="date" value={formatDate(event.createdAt)} muted="request" />,
                 ])}
               />
@@ -476,6 +480,74 @@ export function ClientApiConsole({
         </div>
       )}
     </ConnectyShell>
+  );
+}
+
+function ClientTrafficPanel({ state }: { state: ClientGatewayState }) {
+  const traffic = state.traffic;
+
+  return (
+    <Panel className="mb-5" title="Telemetria da API" eyebrow="trafego / consumo / qualidade">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+        <MetricTile
+          icon={Activity}
+          label="Sucesso 24h"
+          value={`${traffic.successRate24h}%`}
+          detail={`${traffic.successfulRequests24h} ok / ${traffic.failedRequests24h} falhas`}
+          tone={traffic.failedRequests24h > 0 ? "amber" : "green"}
+        />
+        <MetricTile
+          icon={Send}
+          label="Mensagens 24h"
+          value={String(traffic.messages24h)}
+          detail={`${traffic.textMessages24h} texto / ${traffic.mediaMessages24h} midia`}
+          tone="cyan"
+        />
+        <MetricTile
+          icon={MessageCircle}
+          label="Instancias"
+          value={String(traffic.instanceRequests24h)}
+          detail="requests 24h"
+          tone="violet"
+        />
+        <MetricTile
+          icon={Webhook}
+          label="Webhooks"
+          value={String(traffic.webhookRequests24h)}
+          detail={`${state.summary.activeEndpoints} ativos`}
+          tone="green"
+        />
+        <MetricTile
+          icon={RadioTower}
+          label="Latencia media"
+          value={formatLatency(traffic.averageLatencyMs)}
+          detail={`${traffic.providerProxyRequests24h} provider proxy`}
+          tone="amber"
+        />
+      </div>
+
+      <div className="mt-4 rounded-2xl border border-slate-800/80 bg-slate-950/20 p-3">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Rotas mais usadas</p>
+          <NeonBadge tone="cyan">{traffic.topEndpoints.length} rotas</NeonBadge>
+        </div>
+        {traffic.topEndpoints.length > 0 ? (
+          <DataTable
+            columns={["Endpoint", "Requests", "Erros", "Msgs", "Latencia", "Ultimo"]}
+            rows={traffic.topEndpoints.map((endpoint) => [
+              <TextCell key="endpoint" value={`${endpoint.method} ${endpoint.endpoint}`} muted="24h" />,
+              <TextCell key="requests" value={String(endpoint.requests)} muted="requests" />,
+              <StatusBadge key="errors" status={endpoint.errors > 0 ? "warning" : "online"} label={String(endpoint.errors)} />,
+              <TextCell key="messages" value={String(endpoint.messages)} muted="mensagens" />,
+              <TextCell key="latency" value={formatLatency(endpoint.averageLatencyMs)} muted="media" />,
+              <TextCell key="last" value={formatDate(endpoint.lastUsedAt)} muted="ultimo uso" />,
+            ])}
+          />
+        ) : (
+          <EmptyCopy title="Sem trafego em 24h" text="As chamadas feitas pela sua chave API aparecem aqui." />
+        )}
+      </div>
+    </Panel>
   );
 }
 
@@ -833,6 +905,12 @@ function formatDate(value: string | null | undefined) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(date);
+}
+
+function formatLatency(value: number | null | undefined) {
+  if (typeof value !== "number") return "Sem dado";
+  if (value >= 1000) return `${(value / 1000).toFixed(value >= 10_000 ? 0 : 1)}s`;
+  return `${value}ms`;
 }
 
 function formatPhone(value: string | null | undefined) {

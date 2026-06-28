@@ -253,6 +253,8 @@ export function ConnectyHubApiConsole({
         event.statusCode,
         event.providerStatus,
         event.unitType,
+        event.requestId,
+        event.latencyMs,
       ]);
     });
   }, [clientsById, state.usage, usageQuery, usageStatus]);
@@ -401,6 +403,8 @@ export function ConnectyHubApiConsole({
         <MetricTile icon={Activity} label="24h" value={String(state.summary.requests24h)} detail="requests API" tone="violet" />
         <MetricTile icon={Send} label="Webhooks 24h" value={String(state.summary.webhookDeliveries24h)} detail={`${state.summary.webhookFailures24h} falhas`} tone={state.summary.webhookFailures24h > 0 ? "amber" : "cyan"} />
       </div>
+
+      <ApiTrafficPanel state={state} />
 
       <div className="mb-5 overflow-x-auto pb-1">
         <div className="flex min-w-max gap-2 rounded-2xl border border-slate-800 bg-slate-950/45 p-1">
@@ -717,14 +721,15 @@ export function ConnectyHubApiConsole({
                 {filteredUsage.length > 0 ? (
                   <ScrollableTable>
                     <DataTable
-                      columns={["Empresa", "Endpoint", "Status", "Unidade", "Quando"]}
+                      columns={["Empresa", "Endpoint", "Status", "Unidade", "Latencia", "Quando"]}
                       rows={filteredUsage.map((event) => {
                         const client = event.clientId ? clientsById.get(event.clientId) : null;
                         return [
                           <TextCell key="client" value={client?.name ?? "Sem cliente"} muted={event.method} />,
-                          <TextCell key="endpoint" value={event.endpoint} muted={event.provider ?? "gateway"} />,
+                          <TextCell key="endpoint" value={event.endpoint} muted={event.requestId ?? event.provider ?? "gateway"} />,
                           <StatusBadge key="status" status={(event.statusCode ?? 500) < 400 ? "online" : "critical"} label={String(event.statusCode ?? "-")} />,
                           <TextCell key="unit" value={event.unitType} muted={String(event.quantity)} />,
+                          <TextCell key="latency" value={formatLatency(event.latencyMs)} muted={event.providerStatus ? `provider ${event.providerStatus}` : event.provider ?? "gateway"} />,
                           <TextCell key="date" value={formatDate(event.createdAt)} muted="request" />,
                         ];
                       })}
@@ -913,6 +918,98 @@ function WebhookEventPicker() {
         </div>
       ))}
     </div>
+  );
+}
+
+function ApiTrafficPanel({ state }: { state: AdminGatewayState }) {
+  const traffic = state.traffic;
+  const hasEndpointRows = traffic.topEndpoints.length > 0;
+  const hasClientRows = traffic.topClients.length > 0;
+
+  return (
+    <Panel className="mb-5" title="Telemetria da API" eyebrow="trafego / consumo / qualidade">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+        <MetricTile
+          icon={Activity}
+          label="Sucesso 24h"
+          value={`${traffic.successRate24h}%`}
+          detail={`${traffic.successfulRequests24h} ok / ${traffic.failedRequests24h} falhas`}
+          tone={traffic.failedRequests24h > 0 ? "amber" : "green"}
+        />
+        <MetricTile
+          icon={Send}
+          label="Mensagens 24h"
+          value={String(traffic.messages24h)}
+          detail={`${traffic.textMessages24h} texto / ${traffic.mediaMessages24h} midia`}
+          tone="cyan"
+        />
+        <MetricTile
+          icon={PlugZap}
+          label="Clientes ativos"
+          value={String(traffic.activeClients24h)}
+          detail={`${traffic.requests24h} requests`}
+          tone="green"
+        />
+        <MetricTile
+          icon={MessageCircle}
+          label="Instancias"
+          value={String(traffic.instanceRequests24h)}
+          detail={`${traffic.webhookRequests24h} webhooks`}
+          tone="violet"
+        />
+        <MetricTile
+          icon={RadioTower}
+          label="Latencia media"
+          value={formatLatency(traffic.averageLatencyMs)}
+          detail={`${traffic.providerProxyRequests24h} provider proxy`}
+          tone="amber"
+        />
+      </div>
+
+      <div className="mt-4 grid gap-4 xl:grid-cols-2">
+        <div className="rounded-2xl border border-slate-800/80 bg-slate-950/20 p-3">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Endpoints mais usados</p>
+            <NeonBadge tone="cyan">{traffic.topEndpoints.length} rotas</NeonBadge>
+          </div>
+          {hasEndpointRows ? (
+            <DataTable
+              columns={["Endpoint", "Requests", "Erros", "Msgs", "Latencia"]}
+              rows={traffic.topEndpoints.map((endpoint) => [
+                <TextCell key="endpoint" value={`${endpoint.method} ${endpoint.endpoint}`} muted={formatDate(endpoint.lastUsedAt)} />,
+                <TextCell key="requests" value={String(endpoint.requests)} muted="24h" />,
+                <StatusBadge key="errors" status={endpoint.errors > 0 ? "warning" : "online"} label={String(endpoint.errors)} />,
+                <TextCell key="messages" value={String(endpoint.messages)} muted="mensagens" />,
+                <TextCell key="latency" value={formatLatency(endpoint.averageLatencyMs)} muted="media" />,
+              ])}
+            />
+          ) : (
+            <EmptyCopy title="Sem trafego em 24h" text="As rotas mais usadas aparecem aqui quando clientes chamarem a API." />
+          )}
+        </div>
+
+        <div className="rounded-2xl border border-slate-800/80 bg-slate-950/20 p-3">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Clientes com trafego</p>
+            <NeonBadge tone="green">{traffic.topClients.length} clientes</NeonBadge>
+          </div>
+          {hasClientRows ? (
+            <DataTable
+              columns={["Cliente", "Requests", "Msgs", "Webhooks", "Ultimo"]}
+              rows={traffic.topClients.map((client) => [
+                <TextCell key="client" value={client.organizationName ?? client.clientName} muted={client.clientName} />,
+                <TextCell key="requests" value={String(client.requests)} muted={`${client.errors} erros`} />,
+                <TextCell key="messages" value={String(client.messages)} muted="mensagens" />,
+                <StatusBadge key="webhooks" status={client.webhookFailures > 0 ? "warning" : "online"} label={`${client.webhookDeliveries}/${client.webhookFailures}`} />,
+                <TextCell key="last" value={formatDate(client.lastUsedAt)} muted={client.clientId ?? "sem id"} />,
+              ])}
+            />
+          ) : (
+            <EmptyCopy title="Sem cliente ativo em 24h" text="Quando um cliente consumir a API, ele aparece neste ranking." />
+          )}
+        </div>
+      </div>
+    </Panel>
   );
 }
 
@@ -1186,6 +1283,12 @@ function formatDate(value: string | null | undefined) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(date);
+}
+
+function formatLatency(value: number | null | undefined) {
+  if (typeof value !== "number") return "Sem dado";
+  if (value >= 1000) return `${(value / 1000).toFixed(value >= 10_000 ? 0 : 1)}s`;
+  return `${value}ms`;
 }
 
 function getInitials(value: string) {
