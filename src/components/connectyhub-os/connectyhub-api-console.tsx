@@ -9,6 +9,8 @@ import {
   MessageCircle,
   PlugZap,
   RadioTower,
+  RefreshCcw,
+  Send,
   ShieldCheck,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -82,6 +84,8 @@ export function ConnectyHubApiConsole({
   const keysByClient = useMemo(() => groupBy(state.keys, (key) => key.clientId), [state.keys]);
   const endpointsByClient = useMemo(() => groupBy(state.endpoints, (endpoint) => endpoint.clientId), [state.endpoints]);
   const instancesByClient = useMemo(() => groupBy(state.instances, (instance) => instance.apiClientId ?? "internal"), [state.instances]);
+  const latestProviderEventByOrg = useMemo(() => latestBy(state.providerEvents, (event) => event.organizationId), [state.providerEvents]);
+  const latestDeliveryByClient = useMemo(() => latestBy(state.deliveries, (delivery) => delivery.clientId), [state.deliveries]);
   const clientsUsingApi = useMemo(() => {
     const clientIds = new Set<string>();
     state.keys.forEach((key) => clientIds.add(key.clientId));
@@ -143,6 +147,37 @@ export function ConnectyHubApiConsole({
     }
   }
 
+  async function runAction(actionKey: string, payload: Record<string, unknown>) {
+    setRunning(actionKey);
+    setNotice(null);
+
+    try {
+      const response = await fetch("/api/admin/connectyhub-api", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = (await response.json().catch(() => null)) as ActionResponse | null;
+
+      if (!response.ok || !data?.ok) {
+        throw new Error(data?.error?.message ?? "Acao nao concluida.");
+      }
+
+      setNotice({
+        tone: "success",
+        message: successMessage(String(payload.action ?? actionKey)),
+      });
+      router.refresh();
+    } catch (error) {
+      setNotice({
+        tone: "error",
+        message: error instanceof Error ? error.message : "Erro inesperado.",
+      });
+    } finally {
+      setRunning(null);
+    }
+  }
+
   return (
     <ConnectyShell mode="admin" isPlatformAdmin userLabel={userLabel} activeHref="/admin/api-whatsapp">
       <PageHeader
@@ -184,12 +219,13 @@ export function ConnectyHubApiConsole({
         </Panel>
       )}
 
-      <div className="mb-5 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+      <div className="mb-5 grid gap-4 md:grid-cols-2 xl:grid-cols-6">
         <MetricTile icon={PlugZap} label="Empresas com acesso" value={String(state.summary.clients)} detail={`${state.summary.activeClients} ativas`} tone="cyan" />
         <MetricTile icon={KeyRound} label="Usando API" value={String(clientsUsingApi.length)} detail={`${state.summary.activeKeys} chaves ativas`} tone="green" />
         <MetricTile icon={MessageCircle} label="Instancias API" value={String(state.summary.apiInstances)} detail={`${state.summary.connectedApiInstances} conectadas`} tone="green" />
         <MetricTile icon={RadioTower} label="Provedor" value={String(state.summary.providerInstances)} detail={`${state.summary.unmappedProviderInstances} disponiveis p/ API`} tone="amber" />
         <MetricTile icon={Activity} label="24h" value={String(state.summary.requests24h)} detail="requests API" tone="violet" />
+        <MetricTile icon={Send} label="Webhooks 24h" value={String(state.summary.webhookDeliveries24h)} detail={`${state.summary.webhookFailures24h} falhas`} tone={state.summary.webhookFailures24h > 0 ? "amber" : "cyan"} />
       </div>
 
       <div className="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_420px]">
@@ -244,6 +280,114 @@ export function ConnectyHubApiConsole({
               />
             ) : (
               <EmptyCopy title="Nenhuma instancia API vinculada" text="Adote uma instancia existente do provedor ou crie uma instancia nova pela API ConnectyHub." />
+            )}
+          </Panel>
+
+          <Panel title="Diagnostico de webhook por cliente" eyebrow="entrada / entrega / resposta">
+            {clientsUsingApi.length > 0 ? (
+              <DataTable
+                columns={["Empresa", "Entrada ConnectyHub", "Entrega cliente", "HTTP", "Acoes"]}
+                rows={clientsUsingApi.map((client) => {
+                  const latestEvent = latestProviderEventByOrg.get(client.organizationId);
+                  const latestDelivery = latestDeliveryByClient.get(client.id);
+                  const endpoint = endpointsByClient.get(client.id)?.find((item) => item.status === "active") ?? endpointsByClient.get(client.id)?.[0] ?? null;
+                  const retryableDelivery = latestDelivery && latestDelivery.status !== "delivered" ? latestDelivery : null;
+
+                  return [
+                    <IdentityCell key="client" title={client.organization?.name ?? client.name} subtitle={client.name} icon={PlugZap} />,
+                    <TextCell
+                      key="event"
+                      value={latestEvent?.eventType ?? "Sem evento"}
+                      muted={latestEvent ? `${latestEvent.processingStatus} / ${formatDate(latestEvent.receivedAt)}` : "nenhum webhook recebido"}
+                    />,
+                    <StatusBadge
+                      key="delivery"
+                      status={latestDelivery ? deliveryTone(latestDelivery.status) : "idle"}
+                      label={latestDelivery ? latestDelivery.status : "sem entrega"}
+                    />,
+                    <TextCell
+                      key="http"
+                      value={latestDelivery?.statusCode ? String(latestDelivery.statusCode) : "-"}
+                      muted={latestDelivery?.errorMessage ?? latestDelivery?.targetUrl ?? endpoint?.url ?? "sem webhook ativo"}
+                    />,
+                    <div key="actions" className="flex min-w-[120px] flex-wrap gap-2">
+                      <InlineActionButton
+                        disabled={!endpoint || running === `test_webhook:${endpoint?.id}`}
+                        icon={Send}
+                        label="Testar"
+                        loading={running === `test_webhook:${endpoint?.id}`}
+                        onClick={() => {
+                          if (!endpoint) return;
+                          void runAction(`test_webhook:${endpoint.id}`, { action: "test_webhook", clientId: client.id, webhookId: endpoint.id });
+                        }}
+                      />
+                      <InlineActionButton
+                        disabled={!retryableDelivery || running === `retry_delivery:${retryableDelivery?.id}`}
+                        icon={RefreshCcw}
+                        label="Retry"
+                        loading={running === `retry_delivery:${retryableDelivery?.id}`}
+                        onClick={() => {
+                          if (!retryableDelivery) return;
+                          void runAction(`retry_delivery:${retryableDelivery.id}`, { action: "retry_delivery", deliveryId: retryableDelivery.id });
+                        }}
+                      />
+                    </div>,
+                  ];
+                })}
+              />
+            ) : (
+              <EmptyCopy title="Nenhum cliente usando a API" text="Quando houver chave, webhook ou instancia adotada, o diagnostico aparece aqui." />
+            )}
+          </Panel>
+
+          <Panel title="Entregas webhook recentes" eyebrow="cliente / destino / http">
+            {state.deliveries.length > 0 ? (
+              <DataTable
+                columns={["Empresa", "Evento", "Destino", "Status", "Erro", "Quando", "Acoes"]}
+                rows={state.deliveries.slice(0, 60).map((delivery) => {
+                  const client = delivery.clientId ? clientsById.get(delivery.clientId) : null;
+
+                  return [
+                    <TextCell key="client" value={client?.organization?.name ?? client?.name ?? "Sem cliente"} muted={delivery.clientId ?? "sem client id"} />,
+                    <TextCell key="event" value={delivery.eventType} muted={delivery.webhookEventId ?? delivery.whatsappInstanceId ?? "evento manual"} />,
+                    <TextCell key="target" value={delivery.targetUrl} muted={delivery.endpointId ?? "sem endpoint"} />,
+                    <StatusBadge key="status" status={deliveryTone(delivery.status)} label={delivery.statusCode ? `${delivery.status} ${delivery.statusCode}` : delivery.status} />,
+                    <TextCell key="error" value={delivery.errorMessage ?? "Sem erro"} muted={delivery.responsePreview ?? `${delivery.attemptCount} tentativa(s)`} />,
+                    <TextCell key="date" value={formatDate(delivery.deliveredAt ?? delivery.createdAt)} muted={delivery.deliveredAt ? "entregue" : "criado"} />,
+                    <InlineActionButton
+                      key="retry"
+                      disabled={delivery.status === "delivered" || running === `retry_delivery:${delivery.id}`}
+                      icon={RefreshCcw}
+                      label="Retry"
+                      loading={running === `retry_delivery:${delivery.id}`}
+                      onClick={() => void runAction(`retry_delivery:${delivery.id}`, { action: "retry_delivery", deliveryId: delivery.id })}
+                    />,
+                  ];
+                })}
+              />
+            ) : (
+              <EmptyCopy title="Sem entregas registradas" text="Quando a ConnectyHub receber evento do WhatsApp e enviar ao cliente API, a entrega aparece aqui." />
+            )}
+          </Panel>
+
+          <Panel title="Eventos recebidos do provedor" eyebrow="provedor / entrada / processamento">
+            {state.providerEvents.length > 0 ? (
+              <DataTable
+                columns={["Empresa", "Evento", "Instancia", "Status", "Quando"]}
+                rows={state.providerEvents.slice(0, 60).map((event) => {
+                  const client = state.clients.find((item) => item.organizationId === event.organizationId);
+
+                  return [
+                    <TextCell key="client" value={client?.organization?.name ?? client?.name ?? "Sem cliente API"} muted={event.organizationId ?? "sem organizacao"} />,
+                    <TextCell key="event" value={event.eventType} muted={event.providerMessageId ?? event.providerChatId ?? event.provider} />,
+                    <TextCell key="instance" value={event.providerInstanceId ?? "Sem provider id"} muted={event.whatsappInstanceId ?? "sem instancia local"} />,
+                    <StatusBadge key="status" status={providerEventTone(event.processingStatus)} label={event.processingStatus} />,
+                    <TextCell key="date" value={formatDate(event.receivedAt)} muted={event.errorMessage ?? "recebido"} />,
+                  ];
+                })}
+              />
+            ) : (
+              <EmptyCopy title="Sem eventos recebidos" text="Assim que o provedor enviar eventos para a ConnectyHub, eles aparecem aqui." />
             )}
           </Panel>
 
@@ -535,6 +679,33 @@ function ActionButton({ children, loading }: { children: string; loading: boolea
   );
 }
 
+function InlineActionButton({
+  disabled,
+  icon: Icon,
+  label,
+  loading,
+  onClick,
+}: {
+  disabled?: boolean;
+  icon: LucideIcon;
+  label: string;
+  loading?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled || loading}
+      onClick={onClick}
+      title={label}
+      className="inline-flex h-8 min-w-20 items-center justify-center gap-1.5 rounded-xl border border-cyan-500/25 bg-cyan-500/10 px-2 font-mono text-[9px] uppercase tracking-wide text-cyan-300 transition hover:bg-cyan-500/15 disabled:cursor-not-allowed disabled:opacity-40"
+    >
+      <Icon className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+      <span>{loading ? "..." : label}</span>
+    </button>
+  );
+}
+
 function EmptyCopy({ title, text }: { title: string; text: string }) {
   return (
     <div className="flex min-h-[180px] flex-col items-center justify-center rounded-2xl p-8 text-center" style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}>
@@ -554,6 +725,19 @@ function instanceTone(status: string): StatusTone {
   return "idle";
 }
 
+function deliveryTone(status: string): StatusTone {
+  if (status === "delivered") return "online";
+  if (status === "queued") return "warning";
+  if (status === "failed") return "critical";
+  return "idle";
+}
+
+function providerEventTone(status: string): StatusTone {
+  if (["processed", "completed", "queued", "received"].includes(status)) return "online";
+  if (["failed", "error"].includes(status)) return "critical";
+  return "warning";
+}
+
 function profileImageStatusLabel(status: string | null | undefined) {
   if (status === "synced") return "foto sincronizada";
   if (status === "not_found") return "sem foto localizada";
@@ -566,6 +750,8 @@ function successMessage(action: string) {
     create_key: "Chave API gerada.",
     create_webhook: "Webhook do cliente criado.",
     adopt_instance: "Instancia adotada pela ConnectyHub API.",
+    test_webhook: "Teste de webhook registrado.",
+    retry_delivery: "Reenvio de webhook registrado.",
   };
 
   return messages[action] ?? "Acao concluida.";
@@ -600,6 +786,19 @@ function groupBy<T>(items: T[], getKey: (item: T) => string) {
   for (const item of items) {
     const key = getKey(item);
     map.set(key, [...(map.get(key) ?? []), item]);
+  }
+
+  return map;
+}
+
+function latestBy<T>(items: T[], getKey: (item: T) => string | null | undefined) {
+  const map = new Map<string, T>();
+
+  for (const item of items) {
+    const key = getKey(item);
+    if (key && !map.has(key)) {
+      map.set(key, item);
+    }
   }
 
   return map;

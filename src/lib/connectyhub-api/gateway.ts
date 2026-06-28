@@ -138,6 +138,22 @@ type WebhookDeliveryRow = {
   created_at: string;
 };
 
+type ProviderWebhookEventRow = {
+  id: string;
+  provider: string;
+  event_type: string;
+  provider_instance_id: string | null;
+  whatsapp_instance_id: string | null;
+  organization_id: string | null;
+  provider_message_id: string | null;
+  provider_chat_id: string | null;
+  processing_status: string;
+  error_message: string | null;
+  received_at: string;
+  processed_at: string | null;
+  created_at: string;
+};
+
 type ApiUsageEventRow = {
   id: string;
   client_id: string | null;
@@ -168,6 +184,9 @@ const gatewayWebhookDeliveryColumns =
 
 const gatewayUsageColumns =
   "id, client_id, organization_id, whatsapp_instance_id, method, endpoint, status_code, unit_type, quantity, provider, provider_status, created_at";
+
+const gatewayProviderWebhookEventColumns =
+  "id, provider, event_type, provider_instance_id, whatsapp_instance_id, organization_id, provider_message_id, provider_chat_id, processing_status, error_message, received_at, processed_at, created_at";
 
 const gatewayInstanceColumns =
   "id, organization_id, connectyhub_api_client_id, connectyhub_api_instance_id, connectyhub_api_visibility, provider, provider_instance_id, phone_number, display_name, status, qr_status, instance_token_preview, instance_token_encrypted, webhook_url, webhook_configured_at, last_synced_at, last_heartbeat_at, last_message_at, connected_at, disconnected_at, metadata, provider_payload, updated_at";
@@ -1460,6 +1479,69 @@ export async function createAdminWebhookEndpoint(input: {
   };
 }
 
+export async function testAdminWebhookEndpoint(input: {
+  clientId: string;
+  webhookId: string;
+  actorId: string;
+  client?: SupabaseClient;
+}) {
+  const client = input.client ?? createServiceClient();
+  const apiClient = await requireAdminApiClient(client, input.clientId);
+  const endpoint = await requireAdminWebhookEndpoint(client, input.webhookId, apiClient.id);
+
+  if (endpoint.status !== "active") {
+    throw new GatewayHttpError(409, "webhook_endpoint_inactive", "Ative o webhook antes de enviar teste.");
+  }
+
+  return deliverGatewayWebhook(client, {
+    endpoint,
+    apiClientId: apiClient.id,
+    organizationId: apiClient.organization_id,
+    whatsappInstanceId: null,
+    publicInstanceId: "test",
+    webhookEventId: null,
+    eventType: "webhook.test",
+    payload: {
+      test: true,
+      message: "Teste de webhook ConnectyHub",
+      sentBy: input.actorId,
+      clientId: apiClient.id,
+    },
+    ingest: {
+      status: "admin_test",
+      origin: "admin_connectyhub_api",
+    },
+  });
+}
+
+export async function retryAdminWebhookDelivery(input: {
+  deliveryId: string;
+  client?: SupabaseClient;
+}) {
+  const client = input.client ?? createServiceClient();
+  const { data: delivery, error } = await client
+    .from("connectyhub_webhook_deliveries")
+    .select(gatewayWebhookDeliveryColumns)
+    .eq("id", input.deliveryId)
+    .maybeSingle<WebhookDeliveryRow>();
+
+  if (error) {
+    throw new GatewayHttpError(500, "webhook_delivery_lookup_failed", error.message);
+  }
+
+  if (!delivery?.endpoint_id) {
+    throw new GatewayHttpError(404, "webhook_delivery_not_found", "Entrega de webhook nao encontrada.");
+  }
+
+  const endpoint = await requireAdminWebhookEndpoint(client, delivery.endpoint_id, delivery.client_id);
+
+  return sendExistingGatewayWebhookDelivery(client, {
+    delivery,
+    endpoint,
+    publicInstanceId: await readPublicInstanceId(client, delivery.whatsapp_instance_id),
+  });
+}
+
 export async function adoptAdminProviderInstance(input: {
   clientId: string;
   providerInstanceId: string;
@@ -1571,6 +1653,8 @@ export async function getAdminGatewayState(client: SupabaseClient = createServic
     endpointsResult,
     instancesResult,
     usageResult,
+    deliveriesResult,
+    providerEventsResult,
     organizationsResult,
     providerResult,
   ] = await Promise.all([
@@ -1601,6 +1685,16 @@ export async function getAdminGatewayState(client: SupabaseClient = createServic
       .order("created_at", { ascending: false })
       .limit(800),
     client
+      .from("connectyhub_webhook_deliveries")
+      .select(gatewayWebhookDeliveryColumns)
+      .order("created_at", { ascending: false })
+      .limit(300),
+    client
+      .from("whatsapp_webhook_events")
+      .select(gatewayProviderWebhookEventColumns)
+      .order("received_at", { ascending: false })
+      .limit(300),
+    client
       .from("organizations")
       .select("id, name, slug, plan_code, status")
       .order("created_at", { ascending: false })
@@ -1613,6 +1707,8 @@ export async function getAdminGatewayState(client: SupabaseClient = createServic
   if (endpointsResult.error) warnings.push(`Webhooks API indisponiveis: ${endpointsResult.error.message}`);
   if (instancesResult.error) warnings.push(`Instancias WhatsApp indisponiveis: ${instancesResult.error.message}`);
   if (usageResult.error) warnings.push(`Uso API indisponivel: ${usageResult.error.message}`);
+  if (deliveriesResult.error) warnings.push(`Entregas webhook indisponiveis: ${deliveriesResult.error.message}`);
+  if (providerEventsResult.error) warnings.push(`Eventos recebidos indisponiveis: ${providerEventsResult.error.message}`);
   if (organizationsResult.error) warnings.push(`Empresas indisponiveis: ${organizationsResult.error.message}`);
   if ("error" in providerResult && providerResult.error) warnings.push(`Uazapi: ${providerResult.error}`);
 
@@ -1659,6 +1755,8 @@ export async function getAdminGatewayState(client: SupabaseClient = createServic
     providerStatus: typeof row.provider_status === "number" ? row.provider_status : null,
     createdAt: String(row.created_at),
   }));
+  const deliveries = ((deliveriesResult.data ?? []) as WebhookDeliveryRow[]).map(mapWebhookDelivery);
+  const providerEvents = ((providerEventsResult.data ?? []) as ProviderWebhookEventRow[]).map(mapProviderWebhookEvent);
   const organizations = ((organizationsResult.data ?? []) as OrganizationRow[]).map(mapOrganization).filter(isPresent);
   const providerInstances = "instances" in providerResult ? providerResult.instances : [];
   const localProviderIds = new Set(instances.map((instance) => instance.providerInstanceId).filter(Boolean));
@@ -1685,6 +1783,9 @@ export async function getAdminGatewayState(client: SupabaseClient = createServic
       providerInstances: providerInstances.length,
       unmappedProviderInstances: availableProviderInstances.length,
       requests24h: usage.filter((item) => Date.now() - new Date(item.createdAt).getTime() <= 86_400_000).length,
+      providerEvents24h: providerEvents.filter((item) => Date.now() - new Date(item.receivedAt).getTime() <= 86_400_000).length,
+      webhookDeliveries24h: deliveries.filter((item) => Date.now() - new Date(item.createdAt).getTime() <= 86_400_000).length,
+      webhookFailures24h: deliveries.filter((item) => item.status === "failed" && Date.now() - new Date(item.createdAt).getTime() <= 86_400_000).length,
     },
     clients: apiClients,
     keys: apiKeys,
@@ -1702,6 +1803,8 @@ export async function getAdminGatewayState(client: SupabaseClient = createServic
     })),
     organizations,
     usage: usage.slice(0, 80),
+    deliveries: deliveries.slice(0, 120),
+    providerEvents: providerEvents.slice(0, 120),
     warnings,
   };
 }
@@ -2519,6 +2622,30 @@ async function requireAdminApiClient(client: SupabaseClient, clientId: string) {
   return data;
 }
 
+async function requireAdminWebhookEndpoint(client: SupabaseClient, webhookId: string, clientId?: string | null) {
+  let query = client
+    .from("connectyhub_webhook_endpoints")
+    .select(gatewayWebhookEndpointColumns)
+    .eq("id", webhookId)
+    .neq("status", "archived");
+
+  if (clientId) {
+    query = query.eq("client_id", clientId);
+  }
+
+  const { data, error } = await query.maybeSingle<WebhookEndpointRow>();
+
+  if (error) {
+    throw new GatewayHttpError(500, "webhook_endpoint_lookup_failed", error.message);
+  }
+
+  if (!data) {
+    throw new GatewayHttpError(404, "webhook_endpoint_not_found", "Webhook nao encontrado.");
+  }
+
+  return data;
+}
+
 async function requireOrganizationApiClient(client: SupabaseClient, organizationId: string, clientId: string) {
   const { data, error } = await client
     .from("connectyhub_api_clients")
@@ -3063,6 +3190,24 @@ function mapWebhookDelivery(row: WebhookDeliveryRow) {
     errorMessage: row.error_message,
     responsePreview: row.response_preview,
     deliveredAt: row.delivered_at,
+    createdAt: row.created_at,
+  };
+}
+
+function mapProviderWebhookEvent(row: ProviderWebhookEventRow) {
+  return {
+    id: row.id,
+    provider: publicProviderName(row.provider),
+    eventType: row.event_type,
+    providerInstanceId: row.provider_instance_id,
+    whatsappInstanceId: row.whatsapp_instance_id,
+    organizationId: row.organization_id,
+    providerMessageId: row.provider_message_id,
+    providerChatId: row.provider_chat_id,
+    processingStatus: row.processing_status,
+    errorMessage: row.error_message,
+    receivedAt: row.received_at,
+    processedAt: row.processed_at,
     createdAt: row.created_at,
   };
 }

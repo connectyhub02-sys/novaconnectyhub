@@ -6,6 +6,7 @@ const sourcePath =
   process.env.SOURCE_OPENAPI_SPEC ||
   "C:/Users/conne/Downloads/uazapi-openapi-spec.yaml";
 const outputPath = path.resolve("src/lib/connectyhub-api/openapi.generated.json");
+const yamlOutputPath = path.resolve("docs/connectyhub-openapi-spec.yaml");
 
 const rawSpec = yaml.load(fs.readFileSync(sourcePath, "utf8"));
 
@@ -435,12 +436,22 @@ const publicSpec = {
 
 fs.mkdirSync(path.dirname(outputPath), { recursive: true });
 fs.writeFileSync(outputPath, `${JSON.stringify(publicSpec, null, 2)}\n`);
+fs.mkdirSync(path.dirname(yamlOutputPath), { recursive: true });
+fs.writeFileSync(
+  yamlOutputPath,
+  yaml.dump(publicSpec, {
+    lineWidth: 120,
+    noRefs: true,
+    sortKeys: false,
+  }),
+);
 
 const endpointCount = Object.values(publicSpec.paths).reduce((total, item) => {
   return total + HTTP_METHODS.filter((method) => item?.[method]).length;
 }, 0);
 
 console.log(`Generated ${outputPath}`);
+console.log(`Generated ${yamlOutputPath}`);
 console.log(`${endpointCount} public endpoints, ${Object.keys(publicSpec.components.schemas).length} schemas`);
 
 function buildProviderPaths(paths) {

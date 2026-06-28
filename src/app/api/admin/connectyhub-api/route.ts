@@ -6,6 +6,8 @@ import {
   createAdminWebhookEndpoint,
   formatGatewayError,
   getAdminGatewayState,
+  retryAdminWebhookDelivery,
+  testAdminWebhookEndpoint,
 } from "@/lib/connectyhub-api/gateway";
 import { requirePlatformAdmin } from "@/lib/supabase/admin-auth";
 import { createServiceClient } from "@/lib/supabase/service";
@@ -21,6 +23,8 @@ type ActionBody = {
   contactEmail?: unknown;
   planCode?: unknown;
   providerInstanceId?: unknown;
+  webhookId?: unknown;
+  deliveryId?: unknown;
   url?: unknown;
   description?: unknown;
   events?: unknown;
@@ -102,6 +106,26 @@ export async function POST(request: NextRequest) {
       });
 
       return NextResponse.json({ ok: true, instance });
+    }
+
+    if (action === "test_webhook") {
+      const result = await testAdminWebhookEndpoint({
+        clientId: asString(body?.clientId) ?? "",
+        webhookId: asString(body?.webhookId) ?? "",
+        actorId: auth.userId,
+        client,
+      });
+
+      return NextResponse.json({ ok: true, result });
+    }
+
+    if (action === "retry_delivery") {
+      const result = await retryAdminWebhookDelivery({
+        deliveryId: asString(body?.deliveryId) ?? "",
+        client,
+      });
+
+      return NextResponse.json({ ok: true, result });
     }
 
     return NextResponse.json({ ok: false, error: { code: "invalid_action", message: "Acao invalida." } }, { status: 422 });
