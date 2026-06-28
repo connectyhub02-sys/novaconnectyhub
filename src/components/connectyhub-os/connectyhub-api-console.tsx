@@ -13,6 +13,7 @@ import {
   Search,
   Send,
   ShieldCheck,
+  Trash2,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { AdminGatewayState } from "@/lib/connectyhub-api/gateway";
@@ -29,6 +30,11 @@ type Notice = {
 type ActionResponse = {
   ok?: boolean;
   secret?: string;
+  result?: {
+    deleted?: boolean;
+    providerDeleted?: boolean;
+    providerStatus?: number | null;
+  };
   error?: {
     message?: string;
   };
@@ -73,6 +79,7 @@ const webhookEventGroups = [
 
 type AdminApiTab = "overview" | "clients" | "instances" | "webhooks" | "provider" | "settings";
 type AdminDelivery = AdminGatewayState["deliveries"][number];
+type AdminGatewayInstance = AdminGatewayState["instances"][number];
 type AdminProviderEvent = AdminGatewayState["providerEvents"][number];
 type AdminUsageEvent = AdminGatewayState["usage"][number];
 type FilterOption = { value: string; label: string };
@@ -315,8 +322,10 @@ export function ConnectyHubApiConsole({
       }
 
       setNotice({
-        tone: "success",
-        message: successMessage(String(payload.action ?? actionKey)),
+        tone: data.result?.providerDeleted === false ? "warning" : "success",
+        message: data.result?.providerDeleted === false
+          ? "Instancia removida da ConnectyHub, mas a exclusao no provedor ficou pendente."
+          : successMessage(String(payload.action ?? actionKey)),
       });
       router.refresh();
     } catch (error) {
@@ -327,6 +336,18 @@ export function ConnectyHubApiConsole({
     } finally {
       setRunning(null);
     }
+  }
+
+  function confirmDeleteInstance(instance: AdminGatewayInstance) {
+    const label = instance.displayName ?? instance.providerInstanceId ?? instance.id;
+    const confirmed = window.confirm(`Excluir a instancia "${label}"?\n\nA ConnectyHub vai remover o registro do cliente API e tentar excluir imediatamente no provedor WhatsApp.`);
+
+    if (!confirmed) return;
+
+    void runAction(`delete_instance:${instance.id}`, {
+      action: "delete_instance",
+      instanceId: instance.id,
+    });
   }
 
   return (
@@ -446,7 +467,7 @@ export function ConnectyHubApiConsole({
             {state.instances.filter((instance) => instance.apiClientId).length > 0 ? (
               <ScrollableTable>
                 <DataTable
-                  columns={["Empresa", "Instancia", "Status", "Numero", "Webhook", "Ultimo sinal"]}
+                  columns={["Empresa", "Instancia", "Status", "Numero", "Webhook", "Ultimo sinal", "Acoes"]}
                   rows={state.instances.filter((instance) => instance.apiClientId).map((instance) => {
                     const client = instance.apiClientId ? clientsById.get(instance.apiClientId) : null;
                     return [
@@ -462,6 +483,16 @@ export function ConnectyHubApiConsole({
                       <TextCell key="phone" value={instance.phoneNumber ?? "Sem numero"} muted={instance.providerInstanceId ?? "sem provider id"} />,
                       <StatusBadge key="webhook" status={instance.webhookConfigured ? "online" : "warning"} label={instance.webhookConfigured ? "ok" : "pendente"} />,
                       <TextCell key="sync" value={formatDate(instance.lastMessageAt ?? instance.lastHeartbeatAt ?? instance.updatedAt)} muted="sync" />,
+                      <div key="actions" className="flex min-w-[120px] flex-wrap gap-2">
+                        <InlineActionButton
+                          disabled={running === `delete_instance:${instance.id}`}
+                          icon={Trash2}
+                          label="Excluir"
+                          loading={running === `delete_instance:${instance.id}`}
+                          onClick={() => confirmDeleteInstance(instance)}
+                          tone="rose"
+                        />
+                      </div>,
                     ];
                   })}
                 />
@@ -779,6 +810,7 @@ export function ConnectyHubApiConsole({
             <div className="space-y-3">
               {[
                 ["POST", "/api/v1/instances"],
+                ["DELETE", "/api/v1/instances/:id"],
                 ["POST", "/api/v1/instances/:id/connect"],
                 ["GET", "/api/v1/instances/:id/status"],
                 ["POST", "/api/v1/messages/text"],
@@ -1011,20 +1043,29 @@ function InlineActionButton({
   label,
   loading,
   onClick,
+  tone = "cyan",
 }: {
   disabled?: boolean;
   icon: LucideIcon;
   label: string;
   loading?: boolean;
   onClick: () => void;
+  tone?: "cyan" | "green" | "amber" | "rose";
 }) {
+  const toneClass = {
+    cyan: "border-cyan-500/25 bg-cyan-500/10 text-cyan-300 hover:bg-cyan-500/15",
+    green: "border-emerald-500/25 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/15",
+    amber: "border-amber-500/25 bg-amber-500/10 text-amber-300 hover:bg-amber-500/15",
+    rose: "border-rose-500/25 bg-rose-500/10 text-rose-300 hover:bg-rose-500/15",
+  }[tone];
+
   return (
     <button
       type="button"
       disabled={disabled || loading}
       onClick={onClick}
       title={label}
-      className="inline-flex h-8 min-w-20 items-center justify-center gap-1.5 rounded-xl border border-cyan-500/25 bg-cyan-500/10 px-2 font-mono text-[9px] uppercase tracking-wide text-cyan-300 transition hover:bg-cyan-500/15 disabled:cursor-not-allowed disabled:opacity-40"
+      className={`inline-flex h-8 min-w-20 items-center justify-center gap-1.5 rounded-xl border px-2 font-mono text-[9px] uppercase tracking-wide transition disabled:cursor-not-allowed disabled:opacity-40 ${toneClass}`}
     >
       <Icon className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
       <span>{loading ? "..." : label}</span>
@@ -1099,6 +1140,8 @@ function profileImageStatusLabel(status: string | null | undefined) {
 }
 
 function successMessage(action: string) {
+  if (action.startsWith("delete_instance")) return "Instancia excluida da ConnectyHub e do provedor.";
+
   const messages: Record<string, string> = {
     create_client: "API garantida para a empresa.",
     create_key: "Chave API gerada.",

@@ -40,7 +40,10 @@ type ActionResponse = {
   ok?: boolean;
   secret?: string;
   result?: {
+    deleted?: boolean;
     ok?: boolean;
+    providerDeleted?: boolean;
+    providerStatus?: number | null;
     statusCode?: number | null;
     error?: string | null;
   };
@@ -163,10 +166,12 @@ export function ClientApiConsole({
 
       const actionResult = data.result;
       setNotice({
-        tone: actionResult?.ok === false ? "warning" : "success",
+        tone: actionResult?.ok === false || actionResult?.providerDeleted === false ? "warning" : "success",
         message: actionResult?.ok === false
           ? actionResult.error ?? "Teste enviado, mas o endpoint nao confirmou sucesso."
-          : successMessage(action),
+          : actionResult?.providerDeleted === false
+            ? "Instancia removida da ConnectyHub, mas a exclusao no provedor ficou pendente."
+            : successMessage(action),
         secret: data.secret,
       });
       form?.reset();
@@ -179,6 +184,18 @@ export function ClientApiConsole({
     } finally {
       setRunning(null);
     }
+  }
+
+  function confirmDeleteInstance(instance: ClientGatewayInstance) {
+    const label = instance.displayName ?? instance.phoneNumber ?? instance.id;
+    const confirmed = window.confirm(`Excluir a instancia "${label}"?\n\nEla sera removida deste painel e a ConnectyHub tentara excluir imediatamente no provedor WhatsApp.`);
+
+    if (!confirmed) return;
+
+    void runAction(`delete_instance:${instance.id}`, {
+      action: "delete_instance",
+      instanceId: instance.id,
+    });
   }
 
   return (
@@ -286,13 +303,27 @@ export function ClientApiConsole({
             <Panel title="Instancias do workspace" eyebrow="foto / status / acesso api">
               {state.instances.length > 0 ? (
                 <DataTable
-                  columns={["WhatsApp", "Status", "Numero", "Acesso API", "Ultimo sinal"]}
+                  columns={["WhatsApp", "Status", "Numero", "Acesso API", "Ultimo sinal", "Acoes"]}
                   rows={state.instances.map((instance) => [
                     <InstanceCell key="instance" instance={instance} />,
                     <StatusBadge key="status" status={instanceTone(instance.status)} label={instance.status} />,
                     <TextCell key="phone" value={formatPhone(instance.phoneNumber)} muted={instance.providerInstanceId ?? "sem provider id"} />,
                     <StatusBadge key="api" status={instance.apiClientId ? "online" : "idle"} label={instance.apiClientId ? "liberada" : "connectyhub"} />,
                     <TextCell key="sync" value={formatDate(instance.lastMessageAt ?? instance.lastHeartbeatAt ?? instance.updatedAt)} muted="sync" />,
+                    <RowActions key="actions">
+                      {instance.apiClientId ? (
+                        <IconButton
+                          disabled={!canManage || running === `delete_instance:${instance.id}`}
+                          icon={Trash2}
+                          label="Excluir"
+                          loading={running === `delete_instance:${instance.id}`}
+                          onClick={() => confirmDeleteInstance(instance)}
+                          tone="rose"
+                        />
+                      ) : (
+                        <NeonBadge tone="zinc">Interna</NeonBadge>
+                      )}
+                    </RowActions>,
                   ])}
                 />
               ) : (
@@ -765,6 +796,7 @@ function deliveryTone(delivery: ClientGatewayDelivery): StatusTone {
 }
 
 function successMessage(action: string) {
+  if (action.startsWith("delete_instance")) return "Instancia excluida da ConnectyHub e do provedor.";
   if (action.startsWith("revoke_key")) return "Chave revogada.";
   if (action.startsWith("set_webhook_status")) return "Webhook atualizado.";
   if (action.startsWith("test_webhook")) return "Teste enviado.";

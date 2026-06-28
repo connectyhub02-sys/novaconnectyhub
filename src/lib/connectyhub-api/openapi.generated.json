@@ -1544,6 +1544,42 @@
         }
       }
     },
+    "/instances/{instanceId}": {
+      "delete": {
+        "tags": [
+          "Nativo ConnectyHub"
+        ],
+        "summary": "Excluir instancia",
+        "description": "Exclui uma instancia do cliente API autenticado. A ConnectyHub tenta remover a instancia no provedor WhatsApp e arquiva o registro local para bloquear novas conexoes, mensagens e webhooks. Quando o provedor nao confirma a exclusao, a resposta retorna providerDeleted=false e status HTTP 202 para indicar limpeza pendente no provedor.",
+        "operationId": "connectyhubDeleteInstance",
+        "parameters": [
+          {
+            "name": "instanceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "ID publico da instancia ConnectyHub",
+            "example": "ch-api-atendimento-01"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Instancia excluida na ConnectyHub e no provedor"
+          },
+          "202": {
+            "description": "Instancia arquivada na ConnectyHub, mas exclusao no provedor ficou pendente"
+          },
+          "401": {
+            "description": "Chave ausente, invalida ou expirada"
+          },
+          "404": {
+            "description": "Instancia nao encontrada para este cliente"
+          }
+        }
+      }
+    },
     "/instances/{instanceId}/connect": {
       "post": {
         "tags": [
@@ -1558,10 +1594,10 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
-            "description": "ID publico da instancia ConnectyHub"
+            "description": "ID publico da instancia ConnectyHub",
+            "example": "ch-api-atendimento-01"
           }
         ],
         "requestBody": {
@@ -1608,10 +1644,10 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
-            "description": "ID publico da instancia ConnectyHub"
+            "description": "ID publico da instancia ConnectyHub",
+            "example": "ch-api-atendimento-01"
           }
         ],
         "responses": {
@@ -1657,8 +1693,7 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "number": {
                     "type": "string",
@@ -1732,8 +1767,7 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "number": {
                     "type": "string",
@@ -1848,8 +1882,7 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "limit": {
                     "type": "integer",
@@ -1937,8 +1970,7 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "limit": {
                     "type": "integer",
@@ -2369,9 +2401,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -2485,11 +2516,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostInstanceConnect"
@@ -2550,11 +2580,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "requestBody": {
@@ -2569,9 +2598,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -2774,11 +2802,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "requestBody": {
@@ -2793,9 +2820,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -2909,11 +2935,10 @@
             "in": "query",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Obrigatorio em chamadas GET.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerGetInstanceStatus"
@@ -3152,11 +3177,10 @@
             "in": "query",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Obrigatorio em chamadas GET.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerGetInstanceWaMessagesLimits"
@@ -3182,9 +3206,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -3331,11 +3354,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostInstanceUpdateFieldsMap"
@@ -3361,9 +3383,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -3418,11 +3439,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostInstanceUpdateInstanceName"
@@ -3668,11 +3688,10 @@
             "in": "query",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Obrigatorio em chamadas GET.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerGetInstanceProxy"
@@ -3704,9 +3723,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -4024,11 +4042,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostInstanceProxy"
@@ -4047,11 +4064,10 @@
             "in": "query",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Obrigatorio em chamadas GET.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           },
           {
             "in": "query",
@@ -4228,9 +4244,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -4358,11 +4373,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostProfileName"
@@ -4396,9 +4410,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -4560,11 +4573,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostProfileImage"
@@ -4661,11 +4673,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "requestBody": {
@@ -4680,9 +4691,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -4849,11 +4859,10 @@
             "in": "query",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Obrigatorio em chamadas GET.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerGetInstancePrivacy"
@@ -4877,9 +4886,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -5149,11 +5157,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostInstancePrivacy"
@@ -5179,9 +5186,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -5292,11 +5298,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostInstancePresence"
@@ -5322,9 +5327,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -5618,11 +5622,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostSendText"
@@ -5648,9 +5651,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -5895,11 +5897,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostSendMedia"
@@ -5925,9 +5926,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -6131,11 +6131,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostSendContact"
@@ -6161,9 +6160,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -6362,11 +6360,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostSendLocation"
@@ -6392,9 +6389,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -6515,11 +6511,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostMessagePresence"
@@ -6545,9 +6540,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -6802,11 +6796,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostSendStatus"
@@ -6832,9 +6825,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -7060,11 +7052,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostSendMenu"
@@ -7090,9 +7081,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -7328,11 +7318,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostSendCarousel"
@@ -7358,9 +7347,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -7522,11 +7510,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostSendLocationButton"
@@ -7552,9 +7539,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -7769,11 +7755,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostSendRequestPayment"
@@ -7799,9 +7784,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -7972,11 +7956,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostSendPixButton"
@@ -8082,11 +8065,10 @@
             "in": "query",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Obrigatorio em chamadas GET.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerGetMessageAsync"
@@ -8212,11 +8194,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "requestBody": {
@@ -8231,9 +8212,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -8268,9 +8248,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -8379,11 +8358,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostInstanceUpdateDelaySettings"
@@ -8409,9 +8387,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -8579,11 +8556,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostMessageDownload"
@@ -8609,9 +8585,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -8721,11 +8696,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostMessageFind"
@@ -8751,9 +8725,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -8906,11 +8879,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostMessageHistorySync"
@@ -8936,9 +8908,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -9049,11 +9020,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostMessageMarkread"
@@ -9079,9 +9049,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -9239,11 +9208,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostMessageReact"
@@ -9269,9 +9237,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -9389,11 +9356,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostMessageDelete"
@@ -9427,9 +9393,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -9574,11 +9539,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostMessageEdit"
@@ -9612,9 +9576,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -9829,11 +9792,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostMessagePin"
@@ -9859,9 +9821,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -9956,11 +9917,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostGroupCreate"
@@ -9986,9 +9946,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -10112,11 +10071,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostGroupInfo"
@@ -10142,9 +10100,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -10253,11 +10210,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostGroupInviteInfo"
@@ -10283,9 +10239,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -10395,11 +10350,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostGroupJoin"
@@ -10425,9 +10379,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -10512,11 +10465,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostGroupLeave"
@@ -10535,11 +10487,10 @@
             "in": "query",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Obrigatorio em chamadas GET.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           },
           {
             "name": "force",
@@ -10626,9 +10577,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -10732,11 +10682,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostGroupList"
@@ -10762,9 +10711,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -10873,11 +10821,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostGroupResetInviteCode"
@@ -10903,9 +10850,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -10983,11 +10929,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostGroupUpdateAnnounce"
@@ -11013,9 +10958,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -11122,11 +11066,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostGroupUpdateJoinApproval"
@@ -11152,9 +11095,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -11249,11 +11191,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostGroupUpdateMemberAddMode"
@@ -11279,9 +11220,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -11361,11 +11301,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostGroupUpdateDescription"
@@ -11391,9 +11330,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -11562,11 +11500,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostGroupEphemeral"
@@ -11592,9 +11529,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -11630,11 +11566,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "responses": {
@@ -11709,9 +11644,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -11783,11 +11717,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostGroupUpdateLocked"
@@ -11821,9 +11754,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -11963,11 +11895,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostGroupUpdateName"
@@ -11993,9 +11924,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -12104,11 +12034,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostGroupUpdateParticipants"
@@ -12134,9 +12063,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -12223,11 +12151,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostCommunityCreate"
@@ -12253,9 +12180,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -12353,11 +12279,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostCommunityEditgroups"
@@ -12383,9 +12308,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -12494,11 +12418,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostNewsletterCreate"
@@ -12578,11 +12501,10 @@
             "in": "query",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Obrigatorio em chamadas GET.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerGetNewsletterList"
@@ -12608,9 +12530,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -12712,11 +12633,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostNewsletterInfo"
@@ -12742,9 +12662,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -12844,11 +12763,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostNewsletterLink"
@@ -12874,9 +12792,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -12977,11 +12894,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostNewsletterSubscribe"
@@ -13007,9 +12923,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -13191,11 +13106,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostNewsletterMessages"
@@ -13221,9 +13135,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -13397,11 +13310,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostNewsletterMessagesEdit"
@@ -13427,9 +13339,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -13595,11 +13506,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostNewsletterMessagesDelete"
@@ -13625,9 +13535,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -13811,11 +13720,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostNewsletterUpdates"
@@ -13841,9 +13749,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -13953,11 +13860,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostNewsletterViewed"
@@ -13983,9 +13889,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -14097,11 +14002,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostNewsletterReaction"
@@ -14127,9 +14031,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -14229,11 +14132,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostNewsletterFollow"
@@ -14259,9 +14161,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -14361,11 +14262,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostNewsletterUnfollow"
@@ -14391,9 +14291,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -14493,11 +14392,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostNewsletterMute"
@@ -14523,9 +14421,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -14625,11 +14522,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostNewsletterUnmute"
@@ -14655,9 +14551,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -14757,11 +14652,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostNewsletterDelete"
@@ -14787,9 +14681,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -14896,11 +14789,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostNewsletterPicture"
@@ -14926,9 +14818,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -15035,11 +14926,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostNewsletterName"
@@ -15065,9 +14955,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -15171,11 +15060,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostNewsletterDescription"
@@ -15201,9 +15089,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -15310,11 +15197,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostNewsletterSettings"
@@ -15340,9 +15226,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -15472,11 +15357,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostNewsletterSearch"
@@ -15502,9 +15386,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -15611,11 +15494,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostNewsletterAdminInvite"
@@ -15641,9 +15523,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -15743,11 +15624,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostNewsletterAdminAccept"
@@ -15773,9 +15653,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -15882,11 +15761,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostNewsletterAdminRemove"
@@ -15912,9 +15790,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -16021,11 +15898,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostNewsletterAdminRevoke"
@@ -16051,9 +15927,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -16164,11 +16039,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostNewsletterOwnerTransfer"
@@ -16271,11 +16145,10 @@
             "in": "query",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Obrigatorio em chamadas GET.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerGetWebhook"
@@ -16299,9 +16172,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -16465,11 +16337,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostWebhook"
@@ -16591,11 +16462,10 @@
             "in": "query",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Obrigatorio em chamadas GET.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerGetWebhookErrors"
@@ -16622,11 +16492,10 @@
             "in": "query",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Obrigatorio em chamadas GET.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           },
           {
             "name": "events",
@@ -16677,9 +16546,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -16956,11 +16824,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostSenderSimple"
@@ -16986,9 +16853,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -17310,11 +17176,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostSenderAdvanced"
@@ -17340,9 +17205,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -17468,11 +17332,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostSenderEdit"
@@ -17497,9 +17360,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -17550,11 +17412,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostSenderCleardone"
@@ -17643,11 +17504,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "requestBody": {
@@ -17662,9 +17522,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -17692,11 +17551,10 @@
             "in": "query",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Obrigatorio em chamadas GET.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           },
           {
             "in": "query",
@@ -17772,9 +17630,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -17898,11 +17755,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostSenderListmessages"
@@ -17928,9 +17784,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -18009,11 +17864,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostChatBlock"
@@ -18071,11 +17925,10 @@
             "in": "query",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Obrigatorio em chamadas GET.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerGetChatBlocklist"
@@ -18101,9 +17954,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -18257,11 +18109,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostChatLabels"
@@ -18287,9 +18138,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -18413,11 +18263,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostChatDelete"
@@ -18443,9 +18292,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -18538,11 +18386,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostChatArchive"
@@ -18568,9 +18415,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -18709,11 +18555,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostChatEphemeral"
@@ -18739,9 +18584,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -18807,11 +18651,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostChatRead"
@@ -18837,9 +18680,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -18912,11 +18754,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostChatMute"
@@ -18942,9 +18783,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -19037,11 +18877,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostChatPin"
@@ -19067,9 +18906,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -19224,11 +19062,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostChatFind"
@@ -19254,9 +19091,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -19378,11 +19214,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostChatNotes"
@@ -19408,9 +19243,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -19541,11 +19375,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostChatNotesRefresh"
@@ -19571,9 +19404,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -19707,11 +19539,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostChatNotesEdit"
@@ -19737,9 +19568,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -19951,11 +19781,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostChatEditLead"
@@ -19982,11 +19811,10 @@
             "in": "query",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Obrigatorio em chamadas GET.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           },
           {
             "in": "query",
@@ -20104,9 +19932,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -20234,11 +20061,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostContactsList"
@@ -20272,9 +20098,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -20403,11 +20228,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostContactAdd"
@@ -20441,9 +20265,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -20577,11 +20400,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostContactRemove"
@@ -20607,9 +20429,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -20776,11 +20597,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostChatDetails"
@@ -20806,9 +20626,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -20938,11 +20757,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostChatCheck"
@@ -20968,9 +20786,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -21089,11 +20906,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostLabelEdit"
@@ -21151,11 +20967,10 @@
             "in": "query",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Obrigatorio em chamadas GET.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerGetLabels"
@@ -21180,9 +20995,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -21291,11 +21105,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostLabelsRefresh"
@@ -21321,9 +21134,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -21434,11 +21246,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostQuickreplyEdit"
@@ -21483,11 +21294,10 @@
             "in": "query",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Obrigatorio em chamadas GET.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerGetQuickreplyShowall"
@@ -21513,9 +21323,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -21643,11 +21452,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostCallMake"
@@ -21673,9 +21481,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -21782,11 +21589,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostCallReject"
@@ -21875,11 +21681,10 @@
             "in": "query",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Obrigatorio em chamadas GET.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerGetChatwootConfig"
@@ -21903,9 +21708,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -22013,11 +21817,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPutChatwootConfig"
@@ -22043,9 +21846,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -22184,11 +21986,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostBusinessGetProfile"
@@ -22277,11 +22078,10 @@
             "in": "query",
             "required": true,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Obrigatorio em chamadas GET.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerGetBusinessGetCategories"
@@ -22307,9 +22107,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -22509,11 +22308,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostBusinessUpdateProfile"
@@ -22539,9 +22337,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -22863,11 +22660,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostBusinessCatalogList"
@@ -22893,9 +22689,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -23019,11 +22814,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostBusinessCatalogInfo"
@@ -23049,9 +22843,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -23153,11 +22946,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostBusinessCatalogDelete"
@@ -23183,9 +22975,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -23287,11 +23078,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostBusinessCatalogShow"
@@ -23317,9 +23107,8 @@
                 "properties": {
                   "instanceId": {
                     "type": "string",
-                    "format": "uuid",
                     "description": "ID publico da instancia ConnectyHub.",
-                    "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+                    "example": "ch-api-atendimento-01"
                   },
                   "payload": {
                     "type": "object",
@@ -23421,11 +23210,10 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "description": "ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.",
-            "example": "ea36f5db-c8dd-48ca-9e28-73ca3f015d78"
+            "example": "ch-api-atendimento-01"
           }
         ],
         "operationId": "providerPostBusinessCatalogHide"

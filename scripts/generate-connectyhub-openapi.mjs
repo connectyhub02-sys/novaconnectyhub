@@ -13,7 +13,7 @@ const rawSpec = yaml.load(fs.readFileSync(sourcePath, "utf8"));
 const HTTP_METHODS = ["get", "post", "put", "patch", "delete"];
 const CONNECTYHUB_BASE_URL = "https://www.connectyhub.com.br/api/v1";
 const PROVIDER_PREFIX = "/provider";
-const EXAMPLE_INSTANCE_ID = "ea36f5db-c8dd-48ca-9e28-73ca3f015d78";
+const EXAMPLE_INSTANCE_ID = "ch-api-atendimento-01";
 const CONNECTYHUB_WEBHOOK_EVENTS = [
   "messages",
   "messages_update",
@@ -112,6 +112,22 @@ const nativePaths = {
       },
     },
   },
+  "/instances/{instanceId}": {
+    delete: {
+      tags: ["Nativo ConnectyHub"],
+      summary: "Excluir instancia",
+      description:
+        "Exclui uma instancia do cliente API autenticado. A ConnectyHub tenta remover a instancia no provedor WhatsApp e arquiva o registro local para bloquear novas conexoes, mensagens e webhooks. Quando o provedor nao confirma a exclusao, a resposta retorna providerDeleted=false e status HTTP 202 para indicar limpeza pendente no provedor.",
+      operationId: "connectyhubDeleteInstance",
+      parameters: [instanceIdParam("ID publico da instancia ConnectyHub")],
+      responses: {
+        "200": { description: "Instancia excluida na ConnectyHub e no provedor" },
+        "202": { description: "Instancia arquivada na ConnectyHub, mas exclusao no provedor ficou pendente" },
+        "401": { description: "Chave ausente, invalida ou expirada" },
+        "404": { description: "Instancia nao encontrada para este cliente" },
+      },
+    },
+  },
   "/instances/{instanceId}/connect": {
     post: {
       tags: ["Nativo ConnectyHub"],
@@ -119,7 +135,7 @@ const nativePaths = {
       description:
         "Inicia ou atualiza o fluxo de conexao da instancia. A resposta pode incluir QR Code, codigo de pareamento, telefone conectado e status atual.",
       operationId: "connectyhubConnectInstance",
-      parameters: [pathParam("instanceId", "ID publico da instancia ConnectyHub")],
+      parameters: [instanceIdParam("ID publico da instancia ConnectyHub")],
       requestBody: jsonBody({
         type: "object",
         properties: {
@@ -140,7 +156,7 @@ const nativePaths = {
       description:
         "Consulta o status atual, sincroniza o registro da ConnectyHub e retorna informacoes de conexao, perfil, numero e foto quando disponiveis.",
       operationId: "connectyhubRefreshInstanceStatus",
-      parameters: [pathParam("instanceId", "ID publico da instancia ConnectyHub")],
+      parameters: [instanceIdParam("ID publico da instancia ConnectyHub")],
       responses: {
         "200": { description: "Status atualizado" },
         "404": { description: "Instancia nao encontrada para este cliente" },
@@ -160,7 +176,7 @@ const nativePaths = {
           type: "object",
           required: ["instanceId", "number", "text"],
           properties: {
-            instanceId: { type: "string", format: "uuid", example: EXAMPLE_INSTANCE_ID },
+            instanceId: { type: "string", example: EXAMPLE_INSTANCE_ID },
             number: { type: "string", description: "Numero em formato internacional", example: "5511999999999" },
             text: { type: "string", description: "Texto da mensagem", example: "Ola! Sua conversa foi iniciada pela ConnectyHub API." },
             linkPreview: { type: "boolean", description: "Ativa preview de link quando aplicavel", example: true },
@@ -189,7 +205,7 @@ const nativePaths = {
           type: "object",
           required: ["instanceId", "number", "type", "file"],
           properties: {
-            instanceId: { type: "string", format: "uuid", example: EXAMPLE_INSTANCE_ID },
+            instanceId: { type: "string", example: EXAMPLE_INSTANCE_ID },
             number: { type: "string", example: "5511999999999" },
             type: { type: "string", enum: ["image", "video", "videoplay", "document", "audio", "myaudio", "ptt", "ptv", "sticker"], example: "image" },
             file: { type: "string", description: "URL publica ou conteudo base64", example: "https://exemplo.com/foto.jpg" },
@@ -217,7 +233,7 @@ const nativePaths = {
         type: "object",
         required: ["instanceId"],
         properties: {
-          instanceId: { type: "string", format: "uuid", example: EXAMPLE_INSTANCE_ID },
+          instanceId: { type: "string", example: EXAMPLE_INSTANCE_ID },
           limit: { type: "integer", example: 50 },
           offset: { type: "integer", example: 0 },
           chatId: { type: "string", example: "5511999999999@s.whatsapp.net" },
@@ -237,7 +253,7 @@ const nativePaths = {
         type: "object",
         required: ["instanceId"],
         properties: {
-          instanceId: { type: "string", format: "uuid", example: EXAMPLE_INSTANCE_ID },
+          instanceId: { type: "string", example: EXAMPLE_INSTANCE_ID },
           limit: { type: "integer", example: 50 },
           offset: { type: "integer", example: 0 },
         },
@@ -484,7 +500,7 @@ function buildProviderOperation(sourcePathKey, method, operation) {
       name: "instanceId",
       in: "query",
       required: method === "get",
-      schema: { type: "string", format: "uuid" },
+      schema: { type: "string" },
       description:
         method === "get"
           ? "ID publico da instancia ConnectyHub. Obrigatorio em chamadas GET."
@@ -548,7 +564,6 @@ function buildProviderRequestBody(originalSchema, originalRequired) {
       properties: {
         instanceId: {
           type: "string",
-          format: "uuid",
           description: "ID publico da instancia ConnectyHub.",
           example: EXAMPLE_INSTANCE_ID,
         },
@@ -758,6 +773,17 @@ function pathParam(name, description) {
     required: true,
     schema: { type: "string", format: "uuid" },
     description,
+  };
+}
+
+function instanceIdParam(description) {
+  return {
+    name: "instanceId",
+    in: "path",
+    required: true,
+    schema: { type: "string" },
+    description,
+    example: EXAMPLE_INSTANCE_ID,
   };
 }
 

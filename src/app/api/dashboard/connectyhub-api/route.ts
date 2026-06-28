@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import {
   createClientApiKey,
   createClientWebhookEndpoint,
+  deleteClientGatewayInstance,
   ensureClientApiClient,
   formatGatewayError,
   getClientGatewayState,
@@ -22,6 +23,7 @@ type ActionBody = {
   keyId?: unknown;
   webhookId?: unknown;
   deliveryId?: unknown;
+  instanceId?: unknown;
   name?: unknown;
   url?: unknown;
   description?: unknown;
@@ -175,6 +177,17 @@ export async function POST(request: NextRequest) {
       });
 
       return NextResponse.json({ ok: true, result });
+    }
+
+    if (action === "delete_instance") {
+      const result = await deleteClientGatewayInstance({
+        organizationId: context.organization.id,
+        instanceId: asString(body?.instanceId) ?? "",
+        actorId: context.userId,
+        client,
+      });
+
+      return NextResponse.json({ ok: true, result }, { status: result.providerDeleted ? 200 : 202 });
     }
 
     return NextResponse.json({ ok: false, error: { code: "invalid_action", message: "Acao invalida." } }, { status: 422 });

@@ -4,6 +4,7 @@ import {
   createAdminApiClient,
   createAdminApiKey,
   createAdminWebhookEndpoint,
+  deleteAdminGatewayInstance,
   formatGatewayError,
   getAdminGatewayState,
   retryAdminWebhookDelivery,
@@ -23,6 +24,7 @@ type ActionBody = {
   contactEmail?: unknown;
   planCode?: unknown;
   providerInstanceId?: unknown;
+  instanceId?: unknown;
   webhookId?: unknown;
   deliveryId?: unknown;
   url?: unknown;
@@ -126,6 +128,16 @@ export async function POST(request: NextRequest) {
       });
 
       return NextResponse.json({ ok: true, result });
+    }
+
+    if (action === "delete_instance") {
+      const result = await deleteAdminGatewayInstance({
+        instanceId: asString(body?.instanceId) ?? "",
+        actorId: auth.userId,
+        client,
+      });
+
+      return NextResponse.json({ ok: true, result }, { status: result.providerDeleted ? 200 : 202 });
     }
 
     return NextResponse.json({ ok: false, error: { code: "invalid_action", message: "Acao invalida." } }, { status: 422 });

@@ -562,6 +562,114 @@ export async function refreshGatewayInstanceStatus(auth: GatewayAuthContext, ins
   };
 }
 
+export async function deleteGatewayInstance(auth: GatewayAuthContext, instanceId: string) {
+  const instance = await requireGatewayInstance(auth, instanceId);
+  const result = await deleteGatewayInstanceRow({
+    apiClient: auth.apiClient,
+    client: auth.client,
+    endpoint: `/api/v1/instances/${instanceId}`,
+    instance,
+    source: "public_api",
+  });
+
+  await recordUsageEvent(auth, {
+    method: "DELETE",
+    endpoint: `/api/v1/instances/${instanceId}`,
+    statusCode: result.providerDeleted ? 200 : 202,
+    whatsappInstanceId: instance.id,
+    provider: "uazapi",
+    providerStatus: result.providerStatus ?? undefined,
+    metadata: {
+      providerDeleted: result.providerDeleted,
+      providerResponse: result.provider,
+      refreshedTokenUsed: result.refreshedTokenUsed,
+    },
+  });
+
+  return result;
+}
+
+export async function deleteClientGatewayInstance(input: {
+  organizationId: string;
+  instanceId: string;
+  actorId: string;
+  client?: SupabaseClient;
+}) {
+  const client = input.client ?? createServiceClient();
+  const instance = await requireOrganizationGatewayInstance(client, input.organizationId, input.instanceId);
+
+  if (!instance.connectyhub_api_client_id) {
+    throw new GatewayHttpError(409, "instance_not_api_controlled", "Esta instancia nao pertence ao gateway API deste workspace.");
+  }
+
+  const apiClient = await requireOrganizationApiClient(client, input.organizationId, instance.connectyhub_api_client_id);
+  const result = await deleteGatewayInstanceRow({
+    actorId: input.actorId,
+    apiClient,
+    client,
+    endpoint: `/dashboard/api-whatsapp/instances/${input.instanceId}`,
+    instance,
+    source: "client_dashboard",
+  });
+
+  await recordPanelUsageEvent(client, {
+    apiClient,
+    endpoint: `/dashboard/api-whatsapp/instances/${input.instanceId}`,
+    metadata: {
+      actorId: input.actorId,
+      source: "client_dashboard",
+      providerDeleted: result.providerDeleted,
+      providerResponse: result.provider,
+      refreshedTokenUsed: result.refreshedTokenUsed,
+    },
+    providerStatus: result.providerStatus ?? undefined,
+    statusCode: result.providerDeleted ? 200 : 202,
+    whatsappInstanceId: instance.id,
+  });
+
+  return result;
+}
+
+export async function deleteAdminGatewayInstance(input: {
+  instanceId: string;
+  actorId: string;
+  client?: SupabaseClient;
+}) {
+  const client = input.client ?? createServiceClient();
+  const instance = await requireAdminGatewayInstance(client, input.instanceId);
+
+  if (!instance.connectyhub_api_client_id) {
+    throw new GatewayHttpError(409, "instance_not_api_controlled", "Esta instancia nao pertence a nenhum cliente API.");
+  }
+
+  const apiClient = await requireAdminApiClient(client, instance.connectyhub_api_client_id);
+  const result = await deleteGatewayInstanceRow({
+    actorId: input.actorId,
+    apiClient,
+    client,
+    endpoint: `/admin/api-whatsapp/instances/${input.instanceId}`,
+    instance,
+    source: "admin_dashboard",
+  });
+
+  await recordPanelUsageEvent(client, {
+    apiClient,
+    endpoint: `/admin/api-whatsapp/instances/${input.instanceId}`,
+    metadata: {
+      actorId: input.actorId,
+      source: "admin_dashboard",
+      providerDeleted: result.providerDeleted,
+      providerResponse: result.provider,
+      refreshedTokenUsed: result.refreshedTokenUsed,
+    },
+    providerStatus: result.providerStatus ?? undefined,
+    statusCode: result.providerDeleted ? 200 : 202,
+    whatsappInstanceId: instance.id,
+  });
+
+  return result;
+}
+
 export async function sendGatewayTextMessage(
   auth: GatewayAuthContext,
   input: {
@@ -2478,6 +2586,129 @@ async function requireGatewayInstance(auth: GatewayAuthContext, publicInstanceId
   return data;
 }
 
+async function requireOrganizationGatewayInstance(client: SupabaseClient, organizationId: string, publicInstanceId: string) {
+  const { data, error } = await client
+    .from("whatsapp_instances")
+    .select(gatewayInstanceColumns)
+    .eq("organization_id", organizationId)
+    .eq("connectyhub_api_instance_id", publicInstanceId)
+    .neq("status", "archived")
+    .maybeSingle<GatewayInstanceRow>();
+
+  if (error) {
+    throw new GatewayHttpError(500, "instance_lookup_failed", error.message);
+  }
+
+  if (!data) {
+    throw new GatewayHttpError(404, "instance_not_found", "Instancia nao encontrada para este workspace.");
+  }
+
+  return data;
+}
+
+async function requireAdminGatewayInstance(client: SupabaseClient, publicInstanceId: string) {
+  const { data, error } = await client
+    .from("whatsapp_instances")
+    .select(gatewayInstanceColumns)
+    .eq("connectyhub_api_instance_id", publicInstanceId)
+    .neq("status", "archived")
+    .maybeSingle<GatewayInstanceRow>();
+
+  if (error) {
+    throw new GatewayHttpError(500, "instance_lookup_failed", error.message);
+  }
+
+  if (!data) {
+    throw new GatewayHttpError(404, "instance_not_found", "Instancia nao encontrada.");
+  }
+
+  return data;
+}
+
+async function deleteGatewayInstanceRow(input: {
+  actorId?: string;
+  apiClient: Pick<ApiClientRow, "id" | "organization_id" | "name">;
+  client: SupabaseClient;
+  endpoint: string;
+  instance: GatewayInstanceRow;
+  source: "public_api" | "client_dashboard" | "admin_dashboard";
+}) {
+  const credentials = await loadUazapiCredentials(input.client);
+  const initialToken = decryptInstanceToken(input.instance);
+  let deleteResult: Awaited<ReturnType<typeof callUazapi>> | null = null;
+  let refreshedTokenUsed = false;
+
+  if (initialToken) {
+    deleteResult = await callUazapi(credentials, "/instance", {
+      method: "DELETE",
+      token: initialToken,
+      tolerateError: true,
+    });
+  }
+
+  if ((!deleteResult?.ok || !initialToken) && input.instance.provider_instance_id) {
+    const providerInstance = await findProviderInstance(credentials, input.instance.provider_instance_id).catch(() => null);
+    const refreshedToken = providerInstance ? findString(providerInstance, ["token", "instanceToken", "instance_token"]) : null;
+
+    if (refreshedToken && refreshedToken !== initialToken) {
+      refreshedTokenUsed = true;
+      deleteResult = await callUazapi(credentials, "/instance", {
+        method: "DELETE",
+        token: refreshedToken,
+        tolerateError: true,
+      });
+    }
+  }
+
+  const providerDeleted = Boolean(deleteResult?.ok);
+  const providerStatus = deleteResult?.status ?? null;
+  const providerResponse = sanitizeProviderData(deleteResult?.data ?? null);
+  const now = new Date().toISOString();
+
+  const { data, error } = await input.client
+    .from("whatsapp_instances")
+    .update({
+      status: "archived",
+      qr_status: null,
+      instance_token_preview: null,
+      instance_token_encrypted: null,
+      webhook_url: null,
+      webhook_configured_at: null,
+      disconnected_at: now,
+      last_synced_at: now,
+      provider_payload: providerResponse,
+      metadata: {
+        ...(input.instance.metadata ?? {}),
+        last_api_action: "delete",
+        deleted_at: now,
+        deleted_by: input.actorId ?? null,
+        delete_endpoint: input.endpoint,
+        delete_source: input.source,
+        provider_delete_ok: providerDeleted,
+        provider_delete_status: providerStatus,
+        provider_delete_response: providerResponse,
+        provider_delete_refreshed_token_used: refreshedTokenUsed,
+      },
+    })
+    .eq("id", input.instance.id)
+    .select(gatewayInstanceColumns)
+    .single<GatewayInstanceRow>();
+
+  if (error || !data) {
+    throw new GatewayHttpError(500, "instance_archive_failed", error?.message ?? "Nao foi possivel arquivar a instancia ConnectyHub.");
+  }
+
+  return {
+    instanceId: input.instance.connectyhub_api_instance_id,
+    deleted: true,
+    providerDeleted,
+    providerStatus,
+    provider: providerResponse,
+    refreshedTokenUsed,
+    instance: mapGatewayInstance(data),
+  };
+}
+
 async function requireGatewayWebhookEndpoint(auth: GatewayAuthContext, endpointId: string) {
   const { data, error } = await auth.client
     .from("connectyhub_webhook_endpoints")
@@ -2995,6 +3226,35 @@ async function recordUsageEvent(
     unit_type: input.unitType ?? "request",
     quantity: 1,
     provider: input.provider ?? null,
+    provider_status: input.providerStatus ?? null,
+    metadata: input.metadata ?? {},
+  });
+}
+
+async function recordPanelUsageEvent(
+  client: SupabaseClient,
+  input: {
+    apiClient: Pick<ApiClientRow, "id" | "organization_id">;
+    endpoint: string;
+    statusCode?: number;
+    whatsappInstanceId?: string | null;
+    unitType?: string;
+    provider?: string;
+    providerStatus?: number;
+    metadata?: JsonRecord;
+  },
+) {
+  await client.from("connectyhub_api_usage_events").insert({
+    client_id: input.apiClient.id,
+    organization_id: input.apiClient.organization_id,
+    api_key_id: null,
+    whatsapp_instance_id: input.whatsappInstanceId ?? null,
+    method: "DELETE",
+    endpoint: input.endpoint,
+    status_code: input.statusCode ?? null,
+    unit_type: input.unitType ?? "request",
+    quantity: 1,
+    provider: input.provider ?? "uazapi",
     provider_status: input.providerStatus ?? null,
     metadata: input.metadata ?? {},
   });

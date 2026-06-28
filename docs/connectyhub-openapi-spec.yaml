@@ -1182,6 +1182,33 @@ paths:
           description: Chave ausente, invalida ou expirada
         '403':
           description: Cliente pausado ou sem permissao
+  /instances/{instanceId}:
+    delete:
+      tags:
+        - Nativo ConnectyHub
+      summary: Excluir instancia
+      description: >-
+        Exclui uma instancia do cliente API autenticado. A ConnectyHub tenta remover a instancia no provedor WhatsApp e
+        arquiva o registro local para bloquear novas conexoes, mensagens e webhooks. Quando o provedor nao confirma a
+        exclusao, a resposta retorna providerDeleted=false e status HTTP 202 para indicar limpeza pendente no provedor.
+      operationId: connectyhubDeleteInstance
+      parameters:
+        - name: instanceId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: ID publico da instancia ConnectyHub
+          example: ch-api-atendimento-01
+      responses:
+        '200':
+          description: Instancia excluida na ConnectyHub e no provedor
+        '202':
+          description: Instancia arquivada na ConnectyHub, mas exclusao no provedor ficou pendente
+        '401':
+          description: Chave ausente, invalida ou expirada
+        '404':
+          description: Instancia nao encontrada para este cliente
   /instances/{instanceId}/connect:
     post:
       tags:
@@ -1197,8 +1224,8 @@ paths:
           required: true
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub
+          example: ch-api-atendimento-01
       requestBody:
         required: false
         content:
@@ -1232,8 +1259,8 @@ paths:
           required: true
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub
+          example: ch-api-atendimento-01
       responses:
         '200':
           description: Status atualizado
@@ -1268,8 +1295,7 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 number:
                   type: string
                   description: Numero em formato internacional
@@ -1323,8 +1349,7 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 number:
                   type: string
                   example: '5511999999999'
@@ -1405,8 +1430,7 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 limit:
                   type: integer
                   example: 50
@@ -1465,8 +1489,7 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 limit:
                   type: integer
                   example: 50
@@ -1828,9 +1851,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -1920,9 +1942,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostInstanceConnect
   /provider/instance/disconnect:
     post:
@@ -2015,9 +2036,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       requestBody:
         required: false
         content:
@@ -2029,9 +2049,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   additionalProperties: true
@@ -2198,9 +2217,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       requestBody:
         required: false
         content:
@@ -2212,9 +2230,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   additionalProperties: true
@@ -2326,9 +2343,8 @@ paths:
           required: true
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Obrigatorio em chamadas GET.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerGetInstanceStatus
   /provider/instance/wa_messages_limits:
     get:
@@ -2559,9 +2575,8 @@ paths:
           required: true
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Obrigatorio em chamadas GET.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerGetInstanceWaMessagesLimits
   /provider/instance/updateFieldsMap:
     post:
@@ -2700,9 +2715,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -2808,9 +2822,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostInstanceUpdateFieldsMap
   /provider/instance/updateInstanceName:
     post:
@@ -2840,9 +2853,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -2874,9 +2886,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostInstanceUpdateInstanceName
   /provider/instance/proxy:
     get:
@@ -3178,9 +3189,8 @@ paths:
           required: true
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Obrigatorio em chamadas GET.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerGetInstanceProxy
     post:
       tags:
@@ -3249,9 +3259,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -3494,9 +3503,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostInstanceProxy
   /provider/proxy-managed/cities:
     get:
@@ -3563,9 +3571,8 @@ paths:
           required: true
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Obrigatorio em chamadas GET.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
         - in: query
           name: country
           required: false
@@ -3710,9 +3717,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   required:
@@ -3794,9 +3800,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostProfileName
   /provider/profile/image:
     post:
@@ -3847,9 +3852,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   required:
@@ -3956,9 +3960,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostProfileImage
   /provider/instance:
     delete:
@@ -4027,9 +4030,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       requestBody:
         required: false
         content:
@@ -4041,9 +4043,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   additionalProperties: true
@@ -4198,9 +4199,8 @@ paths:
           required: true
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Obrigatorio em chamadas GET.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerGetInstancePrivacy
     post:
       tags:
@@ -4295,9 +4295,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -4489,9 +4488,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostInstancePrivacy
   /provider/instance/presence:
     post:
@@ -4583,9 +4581,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -4654,9 +4651,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostInstancePresence
   /provider/send/text:
     post:
@@ -4754,9 +4750,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -4992,9 +4987,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostSendText
   /provider/send/media:
     post:
@@ -5129,9 +5123,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -5306,9 +5299,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostSendMedia
   /provider/send/contact:
     post:
@@ -5373,9 +5365,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -5513,9 +5504,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostSendContact
   /provider/send/location:
     post:
@@ -5581,9 +5571,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -5717,9 +5706,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostSendLocation
   /provider/message/presence:
     post:
@@ -5829,9 +5817,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -5912,9 +5899,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostMessagePresence
   /provider/send/status:
     post:
@@ -6107,9 +6093,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -6298,9 +6283,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostSendStatus
   /provider/send/menu:
     post:
@@ -6600,9 +6584,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -6758,9 +6741,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostSendMenu
   /provider/send/carousel:
     post:
@@ -6926,9 +6908,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -7099,9 +7080,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostSendCarousel
   /provider/send/location-button:
     post:
@@ -7171,9 +7151,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -7280,9 +7259,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostSendLocationButton
   /provider/send/request-payment:
     post:
@@ -7334,9 +7312,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -7484,9 +7461,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostSendRequestPayment
   /provider/send/pix-button:
     post:
@@ -7545,9 +7521,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -7660,9 +7635,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostSendPixButton
   /provider/message/async:
     get:
@@ -7762,9 +7736,8 @@ paths:
           required: true
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Obrigatorio em chamadas GET.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerGetMessageAsync
     delete:
       tags:
@@ -7883,9 +7856,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       requestBody:
         required: false
         content:
@@ -7897,9 +7869,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   additionalProperties: true
@@ -7958,9 +7929,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -8028,9 +7998,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostInstanceUpdateDelaySettings
   /provider/message/download:
     post:
@@ -8165,9 +8134,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -8278,9 +8246,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostMessageDownload
   /provider/message/find:
     post:
@@ -8319,9 +8286,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -8395,9 +8361,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostMessageFind
   /provider/message/history-sync:
     post:
@@ -8473,9 +8438,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   required:
@@ -8587,9 +8551,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostMessageHistorySync
   /provider/message/markread:
     post:
@@ -8675,9 +8638,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -8745,9 +8707,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostMessageMarkread
   /provider/message/react:
     post:
@@ -8922,9 +8883,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -9028,9 +8988,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostMessageReact
   /provider/message/delete:
     post:
@@ -9081,9 +9040,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -9154,9 +9112,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostMessageDelete
   /provider/message/edit:
     post:
@@ -9213,9 +9170,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   required:
@@ -9312,9 +9268,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostMessageEdit
   /provider/message/pin:
     post:
@@ -9381,9 +9336,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   required:
@@ -9536,9 +9490,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostMessagePin
   /provider/group/create:
     post:
@@ -9584,9 +9537,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -9646,9 +9598,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostGroupCreate
   /provider/group/info:
     post:
@@ -9684,9 +9635,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -9765,9 +9715,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostGroupInfo
   /provider/group/inviteInfo:
     post:
@@ -9804,9 +9753,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -9874,9 +9822,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostGroupInviteInfo
   /provider/group/join:
     post:
@@ -9915,9 +9862,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   required:
@@ -9989,9 +9935,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostGroupJoin
   /provider/group/leave:
     post:
@@ -10033,9 +9978,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -10089,9 +10033,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostGroupLeave
   /provider/group/list:
     get:
@@ -10120,9 +10063,8 @@ paths:
           required: true
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Obrigatorio em chamadas GET.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
         - name: force
           in: query
           schema:
@@ -10202,9 +10144,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -10275,9 +10216,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostGroupList
   /provider/group/resetInviteCode:
     post:
@@ -10316,9 +10256,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -10385,9 +10324,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostGroupResetInviteCode
   /provider/group/updateAnnounce:
     post:
@@ -10434,9 +10372,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -10485,9 +10422,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostGroupUpdateAnnounce
   /provider/group/updateJoinApproval:
     post:
@@ -10532,9 +10468,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -10602,9 +10537,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostGroupUpdateJoinApproval
   /provider/group/updateMemberAddMode:
     post:
@@ -10644,9 +10578,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -10707,9 +10640,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostGroupUpdateMemberAddMode
   /provider/group/updateDescription:
     post:
@@ -10741,9 +10673,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   required:
@@ -10794,9 +10725,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostGroupUpdateDescription
   /provider/group/ephemeral:
     post:
@@ -10846,9 +10776,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   required:
@@ -10956,9 +10885,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostGroupEphemeral
   /provider/group/updateImage:
     post:
@@ -10998,9 +10926,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -11026,9 +10953,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       responses:
         '200':
           description: Imagem atualizada com sucesso
@@ -11101,9 +11027,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -11151,9 +11076,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostGroupUpdateLocked
   /provider/group/updateName:
     post:
@@ -11186,9 +11110,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   required:
@@ -11278,9 +11201,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostGroupUpdateName
   /provider/group/updateParticipants:
     post:
@@ -11317,9 +11239,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -11401,9 +11322,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostGroupUpdateParticipants
   /provider/community/create:
     post:
@@ -11443,9 +11363,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -11498,9 +11417,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostCommunityCreate
   /provider/community/editgroups:
     post:
@@ -11556,9 +11474,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   required:
@@ -11625,9 +11542,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostCommunityEditgroups
   /provider/newsletter/create:
     post:
@@ -11666,9 +11582,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   required:
@@ -11735,9 +11650,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostNewsletterCreate
   /provider/newsletter/list:
     get:
@@ -11795,9 +11709,8 @@ paths:
           required: true
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Obrigatorio em chamadas GET.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerGetNewsletterList
   /provider/newsletter/info:
     post:
@@ -11825,9 +11738,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -11889,9 +11801,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostNewsletterInfo
   /provider/newsletter/link:
     post:
@@ -11919,9 +11830,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   required:
@@ -11981,9 +11891,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostNewsletterLink
   /provider/newsletter/subscribe:
     post:
@@ -12018,9 +11927,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -12081,9 +11989,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostNewsletterSubscribe
   /provider/newsletter/messages:
     post:
@@ -12138,9 +12045,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -12263,9 +12169,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostNewsletterMessages
   /provider/newsletter/messages/edit:
     post:
@@ -12315,9 +12220,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   required:
@@ -12433,9 +12337,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostNewsletterMessagesEdit
   /provider/newsletter/messages/delete:
     post:
@@ -12481,9 +12384,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -12593,9 +12495,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostNewsletterMessagesDelete
   /provider/newsletter/updates:
     post:
@@ -12659,9 +12560,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -12789,9 +12689,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostNewsletterUpdates
   /provider/newsletter/viewed:
     post:
@@ -12824,9 +12723,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -12893,9 +12791,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostNewsletterViewed
   /provider/newsletter/reaction:
     post:
@@ -12934,9 +12831,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -13005,9 +12901,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostNewsletterReaction
   /provider/newsletter/follow:
     post:
@@ -13035,9 +12930,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -13097,9 +12991,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostNewsletterFollow
   /provider/newsletter/unfollow:
     post:
@@ -13127,9 +13020,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -13189,9 +13081,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostNewsletterUnfollow
   /provider/newsletter/mute:
     post:
@@ -13219,9 +13110,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -13281,9 +13171,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostNewsletterMute
   /provider/newsletter/unmute:
     post:
@@ -13311,9 +13200,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -13373,9 +13261,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostNewsletterUnmute
   /provider/newsletter/delete:
     post:
@@ -13403,9 +13290,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -13465,9 +13351,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostNewsletterDelete
   /provider/newsletter/picture:
     post:
@@ -13502,9 +13387,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   required:
@@ -13569,9 +13453,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostNewsletterPicture
   /provider/newsletter/name:
     post:
@@ -13599,9 +13482,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   required:
@@ -13666,9 +13548,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostNewsletterName
   /provider/newsletter/description:
     post:
@@ -13696,9 +13577,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -13761,9 +13641,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostNewsletterDescription
   /provider/newsletter/settings:
     post:
@@ -13805,9 +13684,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   required:
@@ -13872,9 +13750,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostNewsletterSettings
   /provider/newsletter/search:
     post:
@@ -13911,9 +13788,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -13994,9 +13870,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostNewsletterSearch
   /provider/newsletter/admin/invite:
     post:
@@ -14024,9 +13899,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   required:
@@ -14091,9 +13965,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostNewsletterAdminInvite
   /provider/newsletter/admin/accept:
     post:
@@ -14121,9 +13994,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -14183,9 +14055,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostNewsletterAdminAccept
   /provider/newsletter/admin/remove:
     post:
@@ -14213,9 +14084,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   required:
@@ -14280,9 +14150,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostNewsletterAdminRemove
   /provider/newsletter/admin/revoke:
     post:
@@ -14310,9 +14179,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   required:
@@ -14377,9 +14245,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostNewsletterAdminRevoke
   /provider/newsletter/owner/transfer:
     post:
@@ -14414,9 +14281,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   required:
@@ -14484,9 +14350,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostNewsletterOwnerTransfer
   /provider/webhook:
     get:
@@ -14600,9 +14465,8 @@ paths:
           required: true
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Obrigatorio em chamadas GET.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerGetWebhook
     post:
       tags:
@@ -14768,9 +14632,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -14894,9 +14757,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostWebhook
   /provider/webhook/errors:
     get:
@@ -15014,9 +14876,8 @@ paths:
           required: true
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Obrigatorio em chamadas GET.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerGetWebhookErrors
   /provider/sse:
     get:
@@ -15148,9 +15009,8 @@ paths:
           required: true
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Obrigatorio em chamadas GET.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
         - name: events
           in: query
           schema:
@@ -15201,9 +15061,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   required:
@@ -15401,9 +15260,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostSenderSimple
   /provider/sender/advanced:
     post:
@@ -15433,9 +15291,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -15692,9 +15549,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostSenderAdvanced
   /provider/sender/edit:
     post:
@@ -15771,9 +15627,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -15857,9 +15712,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostSenderEdit
   /provider/sender/cleardone:
     post:
@@ -15887,9 +15741,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -15921,9 +15774,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostSenderCleardone
   /provider/sender/clearall:
     delete:
@@ -15991,9 +15843,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       requestBody:
         required: false
         content:
@@ -16005,9 +15856,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   additionalProperties: true
@@ -16038,9 +15888,8 @@ paths:
           required: true
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Obrigatorio em chamadas GET.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
         - in: query
           name: status
           schema:
@@ -16099,9 +15948,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -16181,9 +16029,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostSenderListmessages
   /provider/chat/block:
     post:
@@ -16213,9 +16060,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -16265,9 +16111,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostChatBlock
   /provider/chat/blocklist:
     get:
@@ -16314,9 +16159,8 @@ paths:
           required: true
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Obrigatorio em chamadas GET.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerGetChatBlocklist
   /provider/chat/labels:
     post:
@@ -16358,9 +16202,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -16455,9 +16298,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostChatLabels
   /provider/chat/delete:
     post:
@@ -16501,9 +16343,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -16592,9 +16433,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostChatDelete
   /provider/chat/archive:
     post:
@@ -16628,9 +16468,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   required:
@@ -16687,9 +16526,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostChatArchive
   /provider/chat/ephemeral:
     post:
@@ -16737,9 +16575,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   required:
@@ -16826,9 +16663,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostChatEphemeral
   /provider/chat/read:
     post:
@@ -16872,9 +16708,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   required:
@@ -16919,9 +16754,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostChatRead
   /provider/chat/mute:
     post:
@@ -16959,9 +16793,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   required:
@@ -17012,9 +16845,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostChatMute
   /provider/chat/pin:
     post:
@@ -17044,9 +16876,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -17107,9 +16938,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostChatPin
   /provider/chat/find:
     post:
@@ -17158,9 +16988,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -17264,9 +17093,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostChatFind
   /provider/chat/notes:
     post:
@@ -17308,9 +17136,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -17386,9 +17213,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostChatNotes
   /provider/chat/notes/refresh:
     post:
@@ -17425,9 +17251,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -17512,9 +17337,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostChatNotesRefresh
   /provider/chat/notes/edit:
     post:
@@ -17551,9 +17375,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -17637,9 +17460,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostChatNotesEdit
   /provider/chat/editLead:
     post:
@@ -17674,9 +17496,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   required:
@@ -17847,9 +17668,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostChatEditLead
   /provider/contacts:
     get:
@@ -17885,9 +17705,8 @@ paths:
           required: true
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Obrigatorio em chamadas GET.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
         - in: query
           name: contactScope
           required: false
@@ -17982,9 +17801,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -18072,9 +17890,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostContactsList
   /provider/contact/add:
     post:
@@ -18116,9 +17933,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   required:
@@ -18209,9 +18025,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostContactAdd
   /provider/contact/remove:
     post:
@@ -18251,9 +18066,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   required:
@@ -18345,9 +18159,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostContactRemove
   /provider/chat/details:
     post:
@@ -18416,9 +18229,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -18535,9 +18347,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostChatDetails
   /provider/chat/check:
     post:
@@ -18590,9 +18401,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -18674,9 +18484,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostChatCheck
   /provider/label/edit:
     post:
@@ -18721,9 +18530,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -18803,9 +18611,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostLabelEdit
   /provider/labels:
     get:
@@ -18849,9 +18656,8 @@ paths:
           required: true
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Obrigatorio em chamadas GET.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerGetLabels
   /provider/labels/refresh:
     post:
@@ -18901,9 +18707,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -18976,9 +18781,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostLabelsRefresh
   /provider/quickreply/edit:
     post:
@@ -19021,9 +18825,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   required:
@@ -19101,9 +18904,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostQuickreplyEdit
   /provider/quickreply/showall:
     get:
@@ -19139,9 +18941,8 @@ paths:
           required: true
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Obrigatorio em chamadas GET.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerGetQuickreplyShowall
   /provider/call/make:
     post:
@@ -19218,9 +19019,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -19302,9 +19102,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostCallMake
   /provider/call/reject:
     post:
@@ -19377,9 +19176,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   example: {}
@@ -19445,9 +19243,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostCallReject
   /provider/chatwoot/config:
     get:
@@ -19527,9 +19324,8 @@ paths:
           required: true
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Obrigatorio em chamadas GET.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerGetChatwootConfig
     put:
       tags:
@@ -19613,9 +19409,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -19690,9 +19485,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPutChatwootConfig
   /provider/business/get/profile:
     post:
@@ -19720,9 +19514,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -19810,9 +19603,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostBusinessGetProfile
   /provider/business/get/categories:
     get:
@@ -19876,9 +19668,8 @@ paths:
           required: true
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Obrigatorio em chamadas GET.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerGetBusinessGetCategories
   /provider/business/update/profile:
     post:
@@ -19908,9 +19699,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -20039,9 +19829,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostBusinessUpdateProfile
   /provider/business/catalog/list:
     post:
@@ -20085,9 +19874,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -20308,9 +20096,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostBusinessCatalogList
   /provider/business/catalog/info:
     post:
@@ -20338,9 +20125,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -20417,9 +20203,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostBusinessCatalogInfo
   /provider/business/catalog/delete:
     post:
@@ -20447,9 +20232,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -20511,9 +20295,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostBusinessCatalogDelete
   /provider/business/catalog/show:
     post:
@@ -20541,9 +20324,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -20605,9 +20387,8 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostBusinessCatalogShow
   /provider/business/catalog/hide:
     post:
@@ -20635,9 +20416,8 @@ paths:
               properties:
                 instanceId:
                   type: string
-                  format: uuid
                   description: ID publico da instancia ConnectyHub.
-                  example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+                  example: ch-api-atendimento-01
                 payload:
                   type: object
                   properties:
@@ -20699,7 +20479,6 @@ paths:
           required: false
           schema:
             type: string
-            format: uuid
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
-          example: ea36f5db-c8dd-48ca-9e28-73ca3f015d78
+          example: ch-api-atendimento-01
       operationId: providerPostBusinessCatalogHide
