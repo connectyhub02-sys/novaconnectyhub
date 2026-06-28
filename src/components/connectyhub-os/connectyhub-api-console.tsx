@@ -70,6 +70,17 @@ const webhookEventGroups = [
   },
 ];
 
+type AdminApiTab = "overview" | "clients" | "instances" | "webhooks" | "provider" | "settings";
+
+const adminApiTabs: Array<{ id: AdminApiTab; label: string; icon: LucideIcon }> = [
+  { id: "overview", label: "Visao geral", icon: Activity },
+  { id: "clients", label: "Empresas", icon: PlugZap },
+  { id: "instances", label: "Instancias", icon: MessageCircle },
+  { id: "webhooks", label: "Webhooks", icon: Send },
+  { id: "provider", label: "Provedor", icon: RadioTower },
+  { id: "settings", label: "Configuracao", icon: KeyRound },
+];
+
 export function ConnectyHubApiConsole({
   state,
   userLabel = "CEO_HUMAN_ADM",
@@ -80,6 +91,7 @@ export function ConnectyHubApiConsole({
   const router = useRouter();
   const [running, setRunning] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
+  const [activeTab, setActiveTab] = useState<AdminApiTab>("overview");
   const clientsById = useMemo(() => new Map(state.clients.map((client) => [client.id, client])), [state.clients]);
   const keysByClient = useMemo(() => groupBy(state.keys, (key) => key.clientId), [state.keys]);
   const endpointsByClient = useMemo(() => groupBy(state.endpoints, (endpoint) => endpoint.clientId), [state.endpoints]);
@@ -228,9 +240,40 @@ export function ConnectyHubApiConsole({
         <MetricTile icon={Send} label="Webhooks 24h" value={String(state.summary.webhookDeliveries24h)} detail={`${state.summary.webhookFailures24h} falhas`} tone={state.summary.webhookFailures24h > 0 ? "amber" : "cyan"} />
       </div>
 
-      <div className="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_420px]">
+      <div className="mb-5 overflow-x-auto pb-1">
+        <div className="flex min-w-max gap-2 rounded-2xl border border-slate-800 bg-slate-950/45 p-1">
+          {adminApiTabs.map((tab) => {
+            const Icon = tab.icon;
+            const selected = activeTab === tab.id;
+
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                className={`flex h-10 items-center gap-2 rounded-xl px-4 font-mono text-[10px] uppercase tracking-widest transition ${
+                  selected
+                    ? "bg-cyan-400/15 text-cyan-100 ring-1 ring-cyan-400/40"
+                    : "text-slate-500 hover:bg-slate-900 hover:text-slate-200"
+                }`}
+                onClick={() => setActiveTab(tab.id)}
+              >
+                <Icon className="h-3.5 w-3.5" />
+                <span>{tab.label}</span>
+                {tab.id === "webhooks" && state.summary.webhookFailures24h > 0 && (
+                  <span className="rounded-full bg-amber-400/15 px-2 py-0.5 text-[9px] text-amber-200">
+                    {state.summary.webhookFailures24h}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="space-y-5">
         <div className="space-y-5">
-          <Panel title="Empresas com acesso a API" eyebrow="empresa / acesso / uso real">
+          {activeTab === "clients" && (
+            <Panel title="Empresas com acesso a API" eyebrow="empresa / acesso / uso real">
             {state.clients.length > 0 ? (
               <DataTable
                 columns={["Empresa", "Acesso", "Uso API", "Chaves", "Instancias API", "Webhooks", "Plano"]}
@@ -254,9 +297,11 @@ export function ConnectyHubApiConsole({
             ) : (
               <EmptyCopy title="Nenhuma empresa com acesso a API" text="Todo workspace ConnectyHub deve receber acesso automaticamente." />
             )}
-          </Panel>
+            </Panel>
+          )}
 
-          <Panel title="Instancias controladas pela API" eyebrow="connectyhub_instance_id / provider_instance_id">
+          {activeTab === "instances" && (
+            <Panel title="Instancias controladas pela API" eyebrow="connectyhub_instance_id / provider_instance_id">
             {state.instances.filter((instance) => instance.apiClientId).length > 0 ? (
               <DataTable
                 columns={["Empresa", "Instancia", "Status", "Numero", "Webhook", "Ultimo sinal"]}
@@ -281,13 +326,15 @@ export function ConnectyHubApiConsole({
             ) : (
               <EmptyCopy title="Nenhuma instancia API vinculada" text="Adote uma instancia existente do provedor ou crie uma instancia nova pela API ConnectyHub." />
             )}
-          </Panel>
+            </Panel>
+          )}
 
-          <Panel title="Diagnostico de webhook por cliente" eyebrow="entrada / entrega / resposta">
+          {(activeTab === "overview" || activeTab === "webhooks") && (
+            <Panel title="Diagnostico de webhook por cliente" eyebrow="entrada / entrega / resposta">
             {clientsUsingApi.length > 0 ? (
               <DataTable
                 columns={["Empresa", "Entrada ConnectyHub", "Entrega cliente", "HTTP", "Acoes"]}
-                rows={clientsUsingApi.map((client) => {
+                rows={clientsUsingApi.slice(0, activeTab === "overview" ? 12 : clientsUsingApi.length).map((client) => {
                   const latestEvent = latestProviderEventByOrg.get(client.organizationId);
                   const latestDelivery = latestDeliveryByClient.get(client.id);
                   const endpoint = endpointsByClient.get(client.id)?.find((item) => item.status === "active") ?? endpointsByClient.get(client.id)?.[0] ?? null;
@@ -338,9 +385,11 @@ export function ConnectyHubApiConsole({
             ) : (
               <EmptyCopy title="Nenhum cliente usando a API" text="Quando houver chave, webhook ou instancia adotada, o diagnostico aparece aqui." />
             )}
-          </Panel>
+            </Panel>
+          )}
 
-          <Panel title="Entregas webhook recentes" eyebrow="cliente / destino / http">
+          {activeTab === "webhooks" && (
+            <Panel title="Entregas webhook recentes" eyebrow="cliente / destino / http">
             {state.deliveries.length > 0 ? (
               <DataTable
                 columns={["Empresa", "Evento", "Destino", "Status", "Erro", "Quando", "Acoes"]}
@@ -368,9 +417,11 @@ export function ConnectyHubApiConsole({
             ) : (
               <EmptyCopy title="Sem entregas registradas" text="Quando a ConnectyHub receber evento do WhatsApp e enviar ao cliente API, a entrega aparece aqui." />
             )}
-          </Panel>
+            </Panel>
+          )}
 
-          <Panel title="Eventos recebidos do provedor" eyebrow="provedor / entrada / processamento">
+          {activeTab === "webhooks" && (
+            <Panel title="Eventos recebidos do provedor" eyebrow="provedor / entrada / processamento">
             {state.providerEvents.length > 0 ? (
               <DataTable
                 columns={["Empresa", "Evento", "Instancia", "Status", "Quando"]}
@@ -389,9 +440,11 @@ export function ConnectyHubApiConsole({
             ) : (
               <EmptyCopy title="Sem eventos recebidos" text="Assim que o provedor enviar eventos para a ConnectyHub, eles aparecem aqui." />
             )}
-          </Panel>
+            </Panel>
+          )}
 
-          <Panel title="Instancias do provedor disponiveis para API" eyebrow="adocao / controle / origem">
+          {activeTab === "provider" && (
+            <Panel title="Instancias do provedor disponiveis para API" eyebrow="adocao / controle / origem">
             {providerInstancesAvailableForApi.length > 0 ? (
               <DataTable
                 columns={["WhatsApp", "Status", "Numero", "Token", "ConnectyHub"]}
@@ -412,13 +465,15 @@ export function ConnectyHubApiConsole({
             ) : (
               <EmptyCopy title="Nenhuma instancia livre para API" text="Instancias ja usadas no painel normal da ConnectyHub ficam fora da adocao API." />
             )}
-          </Panel>
+            </Panel>
+          )}
 
-          <Panel title="Uso recente da API" eyebrow="requests / status / provedor">
+          {(activeTab === "overview" || activeTab === "provider") && (
+            <Panel title="Uso recente da API" eyebrow="requests / status / provedor">
             {state.usage.length > 0 ? (
               <DataTable
                 columns={["Empresa", "Endpoint", "Status", "Unidade", "Quando"]}
-                rows={state.usage.slice(0, 40).map((event) => {
+                rows={state.usage.slice(0, activeTab === "overview" ? 12 : 40).map((event) => {
                   const client = event.clientId ? clientsById.get(event.clientId) : null;
                   return [
                     <TextCell key="client" value={client?.name ?? "Sem cliente"} muted={event.method} />,
@@ -432,10 +487,12 @@ export function ConnectyHubApiConsole({
             ) : (
               <EmptyCopy title="Sem uso registrado" text="As chamadas feitas em /api/v1 vao aparecer aqui." />
             )}
-          </Panel>
+            </Panel>
+          )}
         </div>
 
-        <div className="space-y-5 2xl:sticky 2xl:top-20 2xl:self-start">
+        {activeTab === "settings" && (
+          <div className="grid gap-5 lg:grid-cols-2 2xl:grid-cols-3">
           <Panel title="Garantir acesso a API" eyebrow="empresa / produto">
             <form className="space-y-3" onSubmit={submitForm}>
               <input name="action" type="hidden" value="create_client" />
@@ -517,7 +574,8 @@ export function ConnectyHubApiConsole({
               ))}
             </div>
           </Panel>
-        </div>
+          </div>
+        )}
       </div>
     </ConnectyShell>
   );
