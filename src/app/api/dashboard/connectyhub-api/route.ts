@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import {
   createClientApiKey,
   createClientWebhookEndpoint,
+  deleteClientApiKey,
   deleteClientGatewayInstance,
   ensureClientApiClient,
   formatGatewayError,
@@ -9,6 +10,7 @@ import {
   retryClientWebhookDelivery,
   revokeClientApiKey,
   testClientWebhookEndpoint,
+  updateClientApiKeyStatus,
   updateClientWebhookEndpointStatus,
 } from "@/lib/connectyhub-api/gateway";
 import { createServiceClient } from "@/lib/supabase/service";
@@ -119,6 +121,27 @@ export async function POST(request: NextRequest) {
 
     if (action === "revoke_key") {
       const apiKey = await revokeClientApiKey({
+        organizationId: context.organization.id,
+        keyId: asString(body?.keyId) ?? "",
+        client,
+      });
+
+      return NextResponse.json({ ok: true, apiKey });
+    }
+
+    if (action === "set_key_status") {
+      const apiKey = await updateClientApiKeyStatus({
+        organizationId: context.organization.id,
+        keyId: asString(body?.keyId) ?? "",
+        status: asKeyStatus(body?.status),
+        client,
+      });
+
+      return NextResponse.json({ ok: true, apiKey });
+    }
+
+    if (action === "delete_key") {
+      const apiKey = await deleteClientApiKey({
         organizationId: context.organization.id,
         keyId: asString(body?.keyId) ?? "",
         client,
@@ -275,6 +298,14 @@ function asWebhookStatus(value: unknown): "active" | "paused" | "archived" {
   }
 
   return "paused";
+}
+
+function asKeyStatus(value: unknown): "active" | "paused" | "revoked" {
+  if (value === "active" || value === "paused" || value === "revoked") {
+    return value;
+  }
+
+  return "active";
 }
 
 function isOrganizationManager(role: string) {

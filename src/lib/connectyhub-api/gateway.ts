@@ -2227,13 +2227,28 @@ export async function revokeClientApiKey(input: {
   keyId: string;
   client?: SupabaseClient;
 }) {
+  return updateClientApiKeyStatus({
+    organizationId: input.organizationId,
+    keyId: input.keyId,
+    status: "revoked",
+    client: input.client,
+  });
+}
+
+export async function updateClientApiKeyStatus(input: {
+  organizationId: string;
+  keyId: string;
+  status: GatewayApiKeyStatus;
+  client?: SupabaseClient;
+}) {
   const client = input.client ?? createServiceClient();
+  const now = new Date().toISOString();
+  const payload = input.status === "revoked"
+    ? { status: input.status, revoked_at: now }
+    : { status: input.status, revoked_at: null };
   const { data, error } = await client
     .from("connectyhub_api_keys")
-    .update({
-      status: "revoked",
-      revoked_at: new Date().toISOString(),
-    })
+    .update(payload)
     .eq("id", input.keyId)
     .eq("organization_id", input.organizationId)
     .select("id, client_id, organization_id, name, key_prefix, scopes, status, last_used_at, expires_at, created_at")
@@ -2241,6 +2256,31 @@ export async function revokeClientApiKey(input: {
 
   if (error) {
     throw new GatewayHttpError(500, "api_key_revoke_failed", error.message);
+  }
+
+  if (!data) {
+    throw new GatewayHttpError(404, "api_key_not_found", "Chave API nao encontrada para este workspace.");
+  }
+
+  return mapApiKeySafe(data);
+}
+
+export async function deleteClientApiKey(input: {
+  organizationId: string;
+  keyId: string;
+  client?: SupabaseClient;
+}) {
+  const client = input.client ?? createServiceClient();
+  const { data, error } = await client
+    .from("connectyhub_api_keys")
+    .delete()
+    .eq("id", input.keyId)
+    .eq("organization_id", input.organizationId)
+    .select("id, client_id, organization_id, name, key_prefix, scopes, status, last_used_at, expires_at, created_at")
+    .maybeSingle<ApiKeySafeRow>();
+
+  if (error) {
+    throw new GatewayHttpError(500, "api_key_delete_failed", error.message);
   }
 
   if (!data) {

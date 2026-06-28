@@ -35,9 +35,6 @@ type ClientGatewayDelivery = ClientGatewayState["deliveries"][number];
 type Notice = {
   tone: "success" | "warning" | "error";
   message: string;
-  secret?: string;
-  secretLabel?: string;
-  webhookUrl?: string;
 };
 
 type ActionResponse = {
@@ -60,6 +57,11 @@ type ActionResponse = {
 };
 
 type TabId = "overview" | "keys" | "webhooks" | "usage";
+type ClientGatewayKey = ClientGatewayState["keys"][number];
+type GeneratedCredential = {
+  token: string;
+  url: string;
+};
 
 const tabs: Array<{ id: TabId; label: string; icon: LucideIcon }> = [
   { id: "overview", label: "Visao geral", icon: PlugZap },
@@ -124,6 +126,8 @@ export function ClientApiConsole({
   const [activeTab, setActiveTab] = useState<TabId>("overview");
   const [running, setRunning] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
+  const [generatedApiCredential, setGeneratedApiCredential] = useState<GeneratedCredential | null>(null);
+  const [generatedWebhookCredential, setGeneratedWebhookCredential] = useState<GeneratedCredential | null>(null);
   const clientsById = useMemo(() => new Map(state.clients.map((client) => [client.id, client])), [state.clients]);
   const activeClient = state.activeClientId ? clientsById.get(state.activeClientId) ?? null : state.clients[0] ?? null;
   const apiInstances = state.instances;
@@ -157,6 +161,12 @@ export function ClientApiConsole({
 
     setRunning(action);
     setNotice(null);
+    if (action === "create_key") {
+      setGeneratedApiCredential(null);
+    }
+    if (action === "create_webhook") {
+      setGeneratedWebhookCredential(null);
+    }
 
     try {
       const response = await fetch("/api/dashboard/connectyhub-api", {
@@ -172,6 +182,12 @@ export function ClientApiConsole({
 
       const actionResult = data.result;
       const webhookUrl = action === "create_webhook" ? data.endpoint?.url?.trim() || null : null;
+      if (action === "create_key" && data.secret) {
+        setGeneratedApiCredential({ token: data.secret, url: state.docs.baseUrl });
+      }
+      if (action === "create_webhook" && data.secret && webhookUrl) {
+        setGeneratedWebhookCredential({ token: data.secret, url: webhookUrl });
+      }
       setNotice({
         tone: actionResult?.ok === false || actionResult?.providerDeleted === false ? "warning" : "success",
         message: actionResult?.ok === false
@@ -179,9 +195,6 @@ export function ClientApiConsole({
           : actionResult?.providerDeleted === false
             ? "Instancia removida da ConnectyHub, mas a exclusao no provedor ficou pendente."
             : successMessage(action),
-        secret: data.secret,
-        secretLabel: action === "create_webhook" ? "Token webhook" : "Token API",
-        webhookUrl: webhookUrl ?? undefined,
       });
       form?.reset();
       router.refresh();
@@ -204,6 +217,17 @@ export function ClientApiConsole({
     void runAction(`delete_instance:${instance.id}`, {
       action: "delete_instance",
       instanceId: instance.id,
+    });
+  }
+
+  function confirmDeleteKey(apiKey: ClientGatewayKey) {
+    const confirmed = window.confirm(`Excluir a chave "${apiKey.name}"?\n\nO token deixa de funcionar imediatamente. O historico de uso ja registrado sera mantido sem o vinculo da chave.`);
+
+    if (!confirmed) return;
+
+    void runAction(`delete_key:${apiKey.id}`, {
+      action: "delete_key",
+      keyId: apiKey.id,
     });
   }
 
@@ -240,16 +264,9 @@ export function ClientApiConsole({
 
       {notice && (
         <Panel className="mb-5" title={notice.tone === "error" ? "Falha na acao" : "Acao concluida"} eyebrow="api">
-          <div className="space-y-3">
-            <NeonBadge tone={notice.tone === "error" ? "rose" : notice.tone === "warning" ? "amber" : "green"}>
-              {notice.message}
-            </NeonBadge>
-            {notice.webhookUrl && notice.secret ? (
-              <WebhookCredentialBox secret={notice.secret} url={notice.webhookUrl} />
-            ) : notice.secret ? (
-              <SecretBox label={notice.secretLabel ?? "Token"} secret={notice.secret} />
-            ) : null}
-          </div>
+          <NeonBadge tone={notice.tone === "error" ? "rose" : notice.tone === "warning" ? "amber" : "green"}>
+            {notice.message}
+          </NeonBadge>
         </Panel>
       )}
 
@@ -366,16 +383,15 @@ export function ClientApiConsole({
                   <StatusBadge key="status" status={key.status === "active" ? "online" : key.status === "paused" ? "warning" : "idle"} label={key.status} />,
                   <TextCell key="scopes" value={`${key.scopes.length} permissoes`} muted={key.scopes.slice(0, 3).join(", ")} />,
                   <TextCell key="used" value={formatDate(key.lastUsedAt ?? key.createdAt)} muted={key.lastUsedAt ? "last used" : "criada"} />,
-                  <RowActions key="actions">
-                    <IconButton
-                      disabled={!canManage || key.status === "revoked" || running === `revoke_key:${key.id}`}
-                      icon={Trash2}
-                      label="Revogar"
-                      loading={running === `revoke_key:${key.id}`}
-                      onClick={() => runAction(`revoke_key:${key.id}`, { action: "revoke_key", keyId: key.id })}
-                      tone="rose"
-                    />
-                  </RowActions>,
+                  <KeyActions
+                    key="actions"
+                    apiKey={key}
+                    baseUrl={state.docs.baseUrl}
+                    canManage={canManage}
+                    confirmDeleteKey={confirmDeleteKey}
+                    running={running}
+                    runAction={runAction}
+                  />,
                 ])}
               />
             ) : (
@@ -392,6 +408,15 @@ export function ClientApiConsole({
               </Field>
               <ActionButton disabled={!canManage} loading={running === "create_key"} type="submit">Gerar chave</ActionButton>
             </form>
+            {generatedApiCredential && (
+              <CredentialGrid
+                className="mt-3"
+                tokenLabel="Token API"
+                tokenValue={generatedApiCredential.token}
+                urlLabel="Base URL"
+                urlValue={generatedApiCredential.url}
+              />
+            )}
           </Panel>
         </div>
       )}
@@ -434,6 +459,15 @@ export function ClientApiConsole({
               <WebhookEventPicker />
               <ActionButton disabled={!canManage} loading={running === "create_webhook"} type="submit">Criar webhook</ActionButton>
             </form>
+            {generatedWebhookCredential && (
+              <CredentialGrid
+                className="mt-3"
+                tokenLabel="Token webhook"
+                tokenValue={generatedWebhookCredential.token}
+                urlLabel="URL do webhook"
+                urlValue={generatedWebhookCredential.url}
+              />
+            )}
           </Panel>
         </div>
       )}
@@ -574,23 +608,23 @@ function DocsPanel({ baseUrl, docsUrl, openapiUrl }: { baseUrl: string; docsUrl:
   );
 }
 
-function SecretBox({ label, secret }: { label: string; secret: string }) {
+function CredentialGrid({
+  className,
+  tokenLabel,
+  tokenValue,
+  urlLabel,
+  urlValue,
+}: {
+  className?: string;
+  tokenLabel: string;
+  tokenValue: string;
+  urlLabel: string;
+  urlValue: string;
+}) {
   return (
-    <div className="rounded-xl p-3" style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}>
-      <div className="flex items-center justify-between gap-3">
-        <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">{label} exibido uma unica vez</p>
-        <IconButton icon={Copy} label="Copiar" onClick={() => copyText(secret)} tone="cyan" />
-      </div>
-      <code className="mt-2 block break-all font-mono text-[12px] text-cyan-200">{secret}</code>
-    </div>
-  );
-}
-
-function WebhookCredentialBox({ secret, url }: { secret: string; url: string }) {
-  return (
-    <div className="grid gap-3 lg:grid-cols-2">
-      <CopyBox label="URL do webhook" value={url} />
-      <CopyBox label="Token webhook" once value={secret} />
+    <div className={cn("grid gap-3 lg:grid-cols-2", className)}>
+      <CopyBox label={urlLabel} value={urlValue} />
+      <CopyBox label={tokenLabel} once value={tokenValue} />
     </div>
   );
 }
@@ -604,6 +638,59 @@ function CopyBox({ label, once, value }: { label: string; once?: boolean; value:
       </div>
       <code className="mt-2 block break-all font-mono text-[12px] text-cyan-200">{value}</code>
     </div>
+  );
+}
+
+function KeyActions({
+  apiKey,
+  baseUrl,
+  canManage,
+  confirmDeleteKey,
+  running,
+  runAction,
+}: {
+  apiKey: ClientGatewayKey;
+  baseUrl: string;
+  canManage: boolean;
+  confirmDeleteKey: (apiKey: ClientGatewayKey) => void;
+  running: string | null;
+  runAction: (action: string, payload?: Record<string, unknown>) => Promise<void>;
+}) {
+  const isActive = apiKey.status === "active";
+  const nextStatus = isActive ? "revoked" : "active";
+
+  return (
+    <RowActions>
+      <IconButton
+        icon={Copy}
+        label="URL"
+        onClick={() => copyText(baseUrl)}
+        tone="cyan"
+      />
+      <IconButton
+        disabled={!canManage || running === `set_key_status:${apiKey.id}` || running === `revoke_key:${apiKey.id}`}
+        icon={isActive ? Pause : Play}
+        label={isActive ? "Revogar" : "Ativar"}
+        loading={running === `set_key_status:${apiKey.id}` || running === `revoke_key:${apiKey.id}`}
+        onClick={() => {
+          const action = isActive ? "revoke_key" : "set_key_status";
+          void runAction(`${action}:${apiKey.id}`, {
+            action,
+            keyId: apiKey.id,
+            status: nextStatus,
+          });
+        }}
+        tone={isActive ? "amber" : "green"}
+      />
+      <IconButton
+        disabled={!canManage || running === `delete_key:${apiKey.id}`}
+        icon={Trash2}
+        label="Excluir"
+        loading={running === `delete_key:${apiKey.id}`}
+        onClick={() => confirmDeleteKey(apiKey)}
+        tone="rose"
+      />
+    </RowActions>
   );
 }
 
@@ -913,6 +1000,8 @@ function deliveryTone(delivery: ClientGatewayDelivery): StatusTone {
 function successMessage(action: string) {
   if (action.startsWith("delete_instance")) return "Instancia excluida da ConnectyHub e do provedor.";
   if (action.startsWith("revoke_key")) return "Chave revogada.";
+  if (action.startsWith("set_key_status")) return "Chave atualizada.";
+  if (action.startsWith("delete_key")) return "Chave excluida.";
   if (action.startsWith("set_webhook_status")) return "Webhook atualizado.";
   if (action.startsWith("test_webhook")) return "Teste enviado.";
   if (action.startsWith("retry_delivery")) return "Entrega reenviada.";
