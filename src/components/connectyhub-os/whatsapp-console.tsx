@@ -476,6 +476,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
   const [agentName, setAgentName] = useState("");
   const [agentSectorName, setAgentSectorName] = useState("Atendimento WhatsApp");
   const [creatingAgent, setCreatingAgent] = useState(false);
+  const [deletingAgentId, setDeletingAgentId] = useState<string | null>(null);
   const [showInternalAgentForm, setShowInternalAgentForm] = useState(false);
   const [internalSectorName, setInternalSectorName] = useState("");
   const [internalSectorDescription, setInternalSectorDescription] = useState("");
@@ -1253,6 +1254,46 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
     }
   }
 
+  async function deleteWhatsappAgent(agent: ClientWhatsappAgent) {
+    const hasUnsavedChanges = agent.id === selectedAgentId && settingsChanged;
+    const confirmed = window.confirm(
+      `Excluir o agente "${agent.name}"?\n\nEsta acao remove o agente do painel. Leads, conversas e historico do CRM continuam preservados.${hasUnsavedChanges ? "\n\nAlteracoes nao salvas deste agente serao descartadas." : ""}`,
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setDeletingAgentId(agent.id);
+    setNotice(null);
+
+    try {
+      const response = await fetch(variant.endpoints.createAgent, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agentId: agent.id }),
+      });
+      const data = (await response.json().catch(() => null)) as { deletedAgentId?: string; error?: string } | null;
+
+      if (!response.ok || data?.deletedAgentId !== agent.id) {
+        throw new Error(data?.error ?? "Nao foi possivel excluir o agente.");
+      }
+
+      const remainingAgents = agents.filter((item) => item.id !== agent.id);
+      const nextAgentId = selectedAgentId === agent.id ? remainingAgents[0]?.id ?? "" : selectedAgentId;
+      const nextState = await fetchWhatsappState(variant, nextAgentId || undefined);
+
+      applyWhatsappState(nextState);
+      setQrCode(null);
+      setChannelOps(null);
+      setNotice({ tone: "success", message: `Agente "${agent.name}" excluido.` });
+    } catch (error) {
+      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao excluir agente." });
+    } finally {
+      setDeletingAgentId(null);
+    }
+  }
+
   async function switchWhatsappAgent(nextAgentId: string) {
     if (!nextAgentId || nextAgentId === selectedAgentId) {
       return;
@@ -1393,6 +1434,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
           agents={agents}
           companies={companies}
           creating={creatingAgent}
+          deletingAgentId={deletingAgentId}
           sectorName={agentSectorName}
           selectedAgentId={selectedAgentId}
           selectedCompanyId={selectedCompanyId}
@@ -1401,6 +1443,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
           onCancel={() => setShowAgentForm(false)}
           onClone={cloneWhatsappAgent}
           onCreate={createWhatsappAgent}
+          onDelete={deleteWhatsappAgent}
           onSectorNameChange={setAgentSectorName}
           onSelectAgent={switchWhatsappAgent}
           onSelectCompany={setSelectedCompanyId}
@@ -1432,6 +1475,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
             agents={agents}
             companies={companies}
             creating={creatingAgent}
+            deletingAgentId={deletingAgentId}
             sectorName={agentSectorName}
             selectedAgentId={selectedAgentId}
             selectedCompanyId={selectedCompanyId}
@@ -1440,6 +1484,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
             onCancel={() => setShowAgentForm(false)}
             onClone={cloneWhatsappAgent}
             onCreate={createWhatsappAgent}
+            onDelete={deleteWhatsappAgent}
             onSectorNameChange={setAgentSectorName}
             onSelectAgent={switchWhatsappAgent}
             onSelectCompany={setSelectedCompanyId}
@@ -2291,6 +2336,7 @@ function ClientAgentsManager({
   agents,
   companies,
   creating,
+  deletingAgentId,
   sectorName,
   selectedAgentId,
   selectedCompanyId,
@@ -2299,6 +2345,7 @@ function ClientAgentsManager({
   onCancel,
   onClone,
   onCreate,
+  onDelete,
   onSectorNameChange,
   onSelectAgent,
   onSelectCompany,
@@ -2309,6 +2356,7 @@ function ClientAgentsManager({
   agents: ClientWhatsappAgent[];
   companies: ClientCompany[];
   creating: boolean;
+  deletingAgentId: string | null;
   sectorName: string;
   selectedAgentId: string;
   selectedCompanyId: string;
@@ -2317,6 +2365,7 @@ function ClientAgentsManager({
   onCancel: () => void;
   onClone: (sourceAgentId: string, input: { companyId: string; name: string; sectorName: string }) => Promise<void>;
   onCreate: () => void;
+  onDelete: (agent: ClientWhatsappAgent) => Promise<void>;
   onSectorNameChange: (value: string) => void;
   onSelectAgent: (value: string) => void;
   onSelectCompany: (value: string) => void;
@@ -2358,6 +2407,7 @@ function ClientAgentsManager({
         <div className="grid gap-2 md:grid-cols-2 2xl:grid-cols-3">
           {agents.length > 0 ? agents.map((agent) => {
             const active = agent.id === selectedAgentId;
+            const deleting = deletingAgentId === agent.id;
 
             return (
               <div
@@ -2384,14 +2434,22 @@ function ClientAgentsManager({
                   <SecondaryAction
                     icon={Eye}
                     label={active ? "Aberto" : "Abrir"}
-                    disabled={active || creating}
+                    disabled={active || creating || deleting}
                     onClick={() => onSelectAgent(agent.id)}
                   />
                   <SecondaryAction
                     icon={Copy}
                     label="Clonar"
-                    disabled={creating}
+                    disabled={creating || deleting}
                     onClick={() => openClone(agent)}
+                  />
+                  <SecondaryAction
+                    icon={Trash2}
+                    label={deleting ? "Excluindo" : "Excluir"}
+                    loading={deleting}
+                    disabled={creating}
+                    tone="danger"
+                    onClick={() => onDelete(agent)}
                   />
                 </div>
               </div>
