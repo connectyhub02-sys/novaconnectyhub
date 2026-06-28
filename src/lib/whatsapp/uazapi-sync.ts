@@ -8,6 +8,7 @@ import {
   buildWhatsappInstanceProfileImageMetadata,
   getWhatsappInstanceProfileImage,
 } from "./instance-profile-image";
+import { resolveWhatsappInstanceDisplayName } from "./instance-display-name";
 import { loadUazapiCredentials, type UazapiCredentials } from "./uazapi-credentials";
 
 type JsonRecord = Record<string, unknown>;
@@ -206,7 +207,6 @@ async function syncOneInstance({
       : { ok: false as const, reason: "Webhook nao configurado por falta de URL ou token." };
   const status = resolveUazapiWhatsappStatus(providerInstance);
   const phoneNumber = normalizePhone(readString(providerInstance, ["owner", "phone", "number", "phone_number"]));
-  const displayName = readString(providerInstance, ["profileName", "name", "systemName", "displayName"]);
   const { data: existing, error: lookupError } = await client
     .from("whatsapp_instances")
     .select("id, organization_id, phone_number, display_name, status, instance_token_encrypted, metadata")
@@ -251,6 +251,16 @@ async function syncOneInstance({
         avatarData: profileImage?.avatarData,
       })
     : {};
+  const displayName = resolveWhatsappInstanceDisplayName({
+    providerData: providerInstance,
+    profileData: profileImage?.profileData,
+    avatarData: profileImage?.avatarData,
+    metadata: existing?.metadata,
+    existingDisplayName: existing?.display_name,
+    fallbackName: organization.reason === "existing_whatsapp_instance" ? existing?.display_name : null,
+    phoneNumber,
+    providerInstanceId,
+  });
   const syncMetadata = {
     sync_source: "uazapi",
     sync_reason: organization.reason,

@@ -23,6 +23,7 @@ import type { LucideIcon } from "lucide-react";
 import type { ClientGatewayState } from "@/lib/connectyhub-api/gateway";
 import type { StatusTone, Tone } from "@/lib/connectyhub-os-data";
 import { cn } from "@/lib/utils";
+import { normalizeWhatsappInstanceDisplayName } from "@/lib/whatsapp/instance-display-name";
 import { ConnectyShell } from "./connecty-shell";
 import { DataTable, NeonBadge, PageHeader, Panel, StatusBadge } from "./panel-primitives";
 
@@ -187,7 +188,7 @@ export function ClientApiConsole({
   }
 
   function confirmDeleteInstance(instance: ClientGatewayInstance) {
-    const label = instance.displayName ?? instance.phoneNumber ?? instance.id;
+    const label = getInstanceDisplayTitle(instance);
     const confirmed = window.confirm(`Excluir a instancia "${label}"?\n\nEla sera removida deste painel e a ConnectyHub tentara excluir imediatamente no provedor WhatsApp.`);
 
     if (!confirmed) return;
@@ -583,7 +584,7 @@ function IdentityCell({ title, subtitle, icon: Icon }: { title: string; subtitle
 }
 
 function InstanceCell({ instance }: { instance: ClientGatewayInstance }) {
-  const label = instance.displayName ?? instance.phoneNumber ?? instance.id;
+  const label = getInstanceDisplayTitle(instance);
 
   return (
     <div className="flex min-w-[230px] items-center gap-2">
@@ -594,6 +595,16 @@ function InstanceCell({ instance }: { instance: ClientGatewayInstance }) {
       </div>
     </div>
   );
+}
+
+function getInstanceDisplayTitle(instance: ClientGatewayInstance) {
+  const phoneLabel = instance.phoneNumber ? formatPhone(instance.phoneNumber) : null;
+
+  return normalizeWhatsappInstanceDisplayName(instance.displayName, [
+    instance.phoneNumber,
+    instance.providerInstanceId,
+    instance.id,
+  ]) ?? phoneLabel ?? instance.id;
 }
 
 function WhatsappAvatar({ fallback, imageUrl }: { fallback: string; imageUrl: string | null }) {

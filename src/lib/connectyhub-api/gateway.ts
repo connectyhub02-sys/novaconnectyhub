@@ -10,6 +10,10 @@ import {
   getWhatsappInstanceProfileImage,
   readWhatsappInstanceProfileImageUrl,
 } from "@/lib/whatsapp/instance-profile-image";
+import {
+  normalizeWhatsappInstanceDisplayName,
+  resolveWhatsappInstanceDisplayName,
+} from "@/lib/whatsapp/instance-display-name";
 import { loadUazapiCredentials, type UazapiCredentials } from "@/lib/whatsapp/uazapi-credentials";
 
 type JsonRecord = Record<string, unknown>;
@@ -317,13 +321,17 @@ export async function createGatewayInstance(
   },
 ) {
   const credentials = await loadUazapiCredentials(auth.client);
-  const name = normalizeProviderInstanceName(input.name ?? auth.apiClient.name);
+  const requestedDisplayName =
+    normalizeWhatsappInstanceDisplayName(input.name) ??
+    normalizeWhatsappInstanceDisplayName(auth.apiClient.name) ??
+    auth.apiClient.name;
+  const providerName = normalizeProviderInstanceName(requestedDisplayName);
   const now = new Date().toISOString();
   const createResult = await callUazapi(credentials, "/instance/create", {
     method: "POST",
     admin: true,
     body: {
-      name,
+      name: providerName,
       systemName: `ConnectyHub API - ${auth.apiClient.name}`,
       adminField01: auth.apiClient.organization_id,
       adminField02: auth.apiClient.id,
@@ -341,7 +349,8 @@ export async function createGatewayInstance(
     api_gateway: true,
     connectyhub_api_client_id: auth.apiClient.id,
     connectyhub_api_client_name: auth.apiClient.name,
-    provider_name: name,
+    requested_display_name: requestedDisplayName,
+    provider_name: providerName,
     external_webhook_url: normalizeUrl(input.webhookUrl),
     create_response: sanitizeProviderData(createResult.data),
     webhook_status: webhookResult.ok ? "configured" : "not_configured",
@@ -357,7 +366,7 @@ export async function createGatewayInstance(
       connectyhub_api_visibility: "api_customer",
       provider: "uazapi",
       provider_instance_id: providerInstanceId,
-      display_name: name,
+      display_name: requestedDisplayName,
       status: "draft",
       instance_token_preview: previewCredentialValue(token, "secret"),
       instance_token_encrypted: encryptCredentialValue(token),
@@ -428,7 +437,16 @@ export async function connectGatewayInstance(auth: GatewayAuthContext, instanceI
       status: qrCode ? "qr_pending" : status,
       qr_status: qrCode ? "available" : null,
       phone_number: phoneNumber,
-      display_name: findString(result.data, ["profileName", "displayName", "name"]) ?? instance.display_name,
+      display_name: resolveWhatsappInstanceDisplayName({
+        providerData: result.data,
+        profileData: profileImage?.profileData,
+        avatarData: profileImage?.avatarData,
+        existingDisplayName: instance.display_name,
+        fallbackName: auth.apiClient.name,
+        phoneNumber,
+        providerInstanceId: instance.provider_instance_id,
+        instanceId: instance.connectyhub_api_instance_id,
+      }),
       connected_at: status === "connected" ? instance.connected_at ?? now : instance.connected_at,
       disconnected_at: status === "connected" ? null : instance.disconnected_at,
       last_synced_at: now,
@@ -504,7 +522,16 @@ export async function refreshGatewayInstanceStatus(auth: GatewayAuthContext, ins
     .update({
       status,
       phone_number: phoneNumber,
-      display_name: findString(result.data, ["profileName", "displayName", "name"]) ?? instance.display_name,
+      display_name: resolveWhatsappInstanceDisplayName({
+        providerData: result.data,
+        profileData: profileImage?.profileData,
+        avatarData: profileImage?.avatarData,
+        existingDisplayName: instance.display_name,
+        fallbackName: auth.apiClient.name,
+        phoneNumber,
+        providerInstanceId: instance.provider_instance_id,
+        instanceId: instance.connectyhub_api_instance_id,
+      }),
       connected_at: status === "connected" ? instance.connected_at ?? now : instance.connected_at,
       disconnected_at: status === "disconnected" ? now : status === "connected" ? null : instance.disconnected_at,
       last_heartbeat_at: now,
@@ -1684,6 +1711,14 @@ export async function adoptAdminProviderInstance(input: {
       }).catch(() => null)
     : null;
   const webhookResult = await configureGatewayProviderWebhook(credentials, token, providerInstanceId);
+  const displayName = resolveWhatsappInstanceDisplayName({
+    providerData: providerInstance,
+    profileData: profileImage?.profileData,
+    avatarData: profileImage?.avatarData,
+    fallbackName: apiClient.name,
+    phoneNumber,
+    providerInstanceId,
+  });
   const basePayload = {
     organization_id: apiClient.organization_id,
     connectyhub_api_client_id: apiClient.id,
@@ -1691,7 +1726,7 @@ export async function adoptAdminProviderInstance(input: {
     provider: "uazapi",
     provider_instance_id: providerInstanceId,
     phone_number: phoneNumber,
-    display_name: findString(providerInstance, ["profileName", "displayName", "name", "systemName"]) ?? providerInstanceId,
+    display_name: displayName,
     status,
     instance_token_preview: previewCredentialValue(token, "secret"),
     instance_token_encrypted: encryptCredentialValue(token),
@@ -2945,6 +2980,7 @@ async function mapProviderInstanceForAdmin(item: JsonRecord, credentials: Uazapi
   const status = resolveUazapiWhatsappStatus(item);
   const token = findString(item, ["token", "instanceToken", "instance_token"]);
   const phoneNumber = normalizePhone(findString(item, ["owner", "phone", "number", "phone_number"]));
+  const providerInstanceId = findString(item, ["id", "instance_id", "instanceId", "instanceid"]) ?? "unknown";
   const payloadProfileImageUrl = readWhatsappInstanceProfileImageUrl(item);
   const liveProfileImage = payloadProfileImageUrl || status !== "connected" || !token
     ? null
@@ -2957,8 +2993,14 @@ async function mapProviderInstanceForAdmin(item: JsonRecord, credentials: Uazapi
   const profileImageUrl = payloadProfileImageUrl ?? liveProfileImage?.profileImageUrl ?? null;
 
   return {
-    providerInstanceId: findString(item, ["id", "instance_id", "instanceId", "instanceid"]) ?? "unknown",
-    name: findString(item, ["name", "systemName", "instanceName", "instance_name"]),
+    providerInstanceId,
+    name: resolveWhatsappInstanceDisplayName({
+      providerData: item,
+      profileData: liveProfileImage?.profileData,
+      avatarData: liveProfileImage?.avatarData,
+      phoneNumber,
+      providerInstanceId,
+    }),
     status,
     phoneNumber,
     tokenPresent: Boolean(token),
@@ -3356,6 +3398,15 @@ function decryptWebhookSecret(endpoint: WebhookEndpointRow) {
 }
 
 function mapGatewayInstance(row: GatewayInstanceRow) {
+  const displayName = resolveWhatsappInstanceDisplayName({
+    providerData: row.provider_payload,
+    metadata: row.metadata,
+    existingDisplayName: row.display_name,
+    phoneNumber: row.phone_number,
+    providerInstanceId: row.provider_instance_id,
+    instanceId: row.connectyhub_api_instance_id,
+  });
+
   return {
     id: row.connectyhub_api_instance_id,
     internalId: row.id,
@@ -3364,7 +3415,7 @@ function mapGatewayInstance(row: GatewayInstanceRow) {
     provider: publicProviderName(row.provider),
     providerInstanceId: row.provider_instance_id,
     phoneNumber: row.phone_number,
-    displayName: row.display_name,
+    displayName,
     profileImageUrl: readWhatsappInstanceProfileImageUrl(row.metadata),
     status: row.status,
     visibility: row.connectyhub_api_visibility,

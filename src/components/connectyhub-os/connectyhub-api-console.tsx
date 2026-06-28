@@ -18,6 +18,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import type { AdminGatewayState } from "@/lib/connectyhub-api/gateway";
 import type { StatusTone, Tone } from "@/lib/connectyhub-os-data";
+import { normalizeWhatsappInstanceDisplayName } from "@/lib/whatsapp/instance-display-name";
 import { ConnectyShell } from "./connecty-shell";
 import { DataTable, NeonBadge, PageHeader, Panel, StatusBadge } from "./panel-primitives";
 
@@ -80,6 +81,7 @@ const webhookEventGroups = [
 type AdminApiTab = "overview" | "clients" | "instances" | "webhooks" | "provider" | "settings";
 type AdminDelivery = AdminGatewayState["deliveries"][number];
 type AdminGatewayInstance = AdminGatewayState["instances"][number];
+type AdminProviderInstance = AdminGatewayState["providerInstances"][number];
 type AdminProviderEvent = AdminGatewayState["providerEvents"][number];
 type AdminUsageEvent = AdminGatewayState["usage"][number];
 type FilterOption = { value: string; label: string };
@@ -339,7 +341,7 @@ export function ConnectyHubApiConsole({
   }
 
   function confirmDeleteInstance(instance: AdminGatewayInstance) {
-    const label = instance.displayName ?? instance.providerInstanceId ?? instance.id;
+    const label = getAdminInstanceDisplayTitle(instance);
     const confirmed = window.confirm(`Excluir a instancia "${label}"?\n\nA ConnectyHub vai remover o registro do cliente API e tentar excluir imediatamente no provedor WhatsApp.`);
 
     if (!confirmed) return;
@@ -474,7 +476,7 @@ export function ConnectyHubApiConsole({
                       <TextCell key="client" value={client?.name ?? "Sem cliente"} muted={client?.organization?.name ?? instance.organization?.name ?? instance.organizationId} />,
                       <InstanceIdentityCell
                         key="id"
-                        title={instance.displayName ?? instance.providerInstanceId ?? instance.id}
+                        title={getAdminInstanceDisplayTitle(instance)}
                         subtitle={instance.id}
                         imageUrl={instance.profileImageUrl}
                         imageStatus={instance.profileImageUrl ? "foto sincronizada" : "foto pendente"}
@@ -680,7 +682,7 @@ export function ConnectyHubApiConsole({
                   rows={providerInstancesAvailableForApi.map((instance) => [
                     <InstanceIdentityCell
                       key="provider"
-                      title={instance.name ?? instance.phoneNumber ?? instance.providerInstanceId}
+                      title={getProviderInstanceDisplayTitle(instance)}
                       subtitle={instance.providerInstanceId}
                       imageUrl={instance.profileImageUrl}
                       imageStatus={profileImageStatusLabel(instance.profileImageStatus)}
@@ -797,7 +799,7 @@ export function ConnectyHubApiConsole({
                   <option value="">Selecione</option>
                   {providerInstancesAvailableForApi.map((instance) => (
                     <option key={instance.providerInstanceId} value={instance.providerInstanceId}>
-                      {instance.name ?? instance.providerInstanceId} / {instance.status}
+                      {getProviderInstanceDisplayTitle(instance)} / {instance.status}
                     </option>
                   ))}
                 </select>
@@ -1131,6 +1133,25 @@ function providerEventTone(status: string): StatusTone {
   if (["processed", "completed", "queued", "received"].includes(status)) return "online";
   if (["failed", "error"].includes(status)) return "critical";
   return "warning";
+}
+
+function getAdminInstanceDisplayTitle(instance: AdminGatewayInstance) {
+  const phoneLabel = instance.phoneNumber ?? null;
+
+  return normalizeWhatsappInstanceDisplayName(instance.displayName, [
+    instance.phoneNumber,
+    instance.providerInstanceId,
+    instance.id,
+  ]) ?? phoneLabel ?? instance.providerInstanceId ?? instance.id;
+}
+
+function getProviderInstanceDisplayTitle(instance: AdminProviderInstance) {
+  const phoneLabel = instance.phoneNumber ?? null;
+
+  return normalizeWhatsappInstanceDisplayName(instance.name, [
+    instance.phoneNumber,
+    instance.providerInstanceId,
+  ]) ?? phoneLabel ?? instance.providerInstanceId;
 }
 
 function profileImageStatusLabel(status: string | null | undefined) {
