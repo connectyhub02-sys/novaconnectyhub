@@ -5,6 +5,7 @@ import { useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import {
   Activity,
+  ChevronDown,
   KeyRound,
   MessageCircle,
   PlugZap,
@@ -80,11 +81,26 @@ const webhookEventGroups = [
 
 type AdminApiTab = "overview" | "clients" | "instances" | "webhooks" | "provider" | "settings";
 type AdminDelivery = AdminGatewayState["deliveries"][number];
+type AdminGatewayClient = AdminGatewayState["clients"][number];
 type AdminGatewayInstance = AdminGatewayState["instances"][number];
 type AdminProviderInstance = AdminGatewayState["providerInstances"][number];
 type AdminProviderEvent = AdminGatewayState["providerEvents"][number];
 type AdminUsageEvent = AdminGatewayState["usage"][number];
 type FilterOption = { value: string; label: string };
+type AdminApiInstanceGroup = {
+  key: string;
+  client: AdminGatewayClient | null;
+  fallbackTitle: string;
+  fallbackSubtitle: string;
+  instances: AdminGatewayInstance[];
+};
+type AdminApiClientItemGroup<T> = {
+  key: string;
+  client: AdminGatewayClient | null;
+  fallbackTitle: string;
+  fallbackSubtitle: string;
+  items: T[];
+};
 
 const adminApiTabs: Array<{ id: AdminApiTab; label: string; icon: LucideIcon }> = [
   { id: "overview", label: "Visao geral", icon: Activity },
@@ -123,6 +139,23 @@ const usageStatusOptions: FilterOption[] = [
   { value: "ok", label: "OK" },
 ];
 
+const apiInstanceStatusOptions: FilterOption[] = [
+  { value: "all", label: "Todas" },
+  { value: "issues", label: "Com atencao" },
+  { value: "connected", label: "Conectadas" },
+  { value: "disconnected", label: "Desconectadas" },
+  { value: "webhook_pending", label: "Webhook pendente" },
+];
+
+const apiClientStatusOptions: FilterOption[] = [
+  { value: "all", label: "Todas" },
+  { value: "active", label: "Ativas" },
+  { value: "paused", label: "Pausadas" },
+  { value: "inactive", label: "Inativas" },
+  { value: "in_use", label: "Em uso" },
+  { value: "without_use", label: "Sem uso" },
+];
+
 export function ConnectyHubApiConsole({
   state,
   userLabel = "CEO_HUMAN_ADM",
@@ -142,10 +175,100 @@ export function ConnectyHubApiConsole({
   const [providerEventStatus, setProviderEventStatus] = useState("all");
   const [usageQuery, setUsageQuery] = useState("");
   const [usageStatus, setUsageStatus] = useState("all");
+  const [apiInstanceQuery, setApiInstanceQuery] = useState("");
+  const [apiInstanceStatus, setApiInstanceStatus] = useState("all");
+  const [apiClientQuery, setApiClientQuery] = useState("");
+  const [apiClientStatus, setApiClientStatus] = useState("all");
+  const [apiClientGroupOpenState, setApiClientGroupOpenState] = useState<Record<string, boolean>>({});
+  const [apiInstanceGroupOpenState, setApiInstanceGroupOpenState] = useState<Record<string, boolean>>({});
+  const [diagnosticGroupOpenState, setDiagnosticGroupOpenState] = useState<Record<string, boolean>>({});
+  const [deliveryGroupOpenState, setDeliveryGroupOpenState] = useState<Record<string, boolean>>({});
+  const [providerEventGroupOpenState, setProviderEventGroupOpenState] = useState<Record<string, boolean>>({});
   const clientsById = useMemo(() => new Map(state.clients.map((client) => [client.id, client])), [state.clients]);
+  const clientsByOrganizationId = useMemo(() => new Map(state.clients.map((client) => [client.organizationId, client])), [state.clients]);
   const keysByClient = useMemo(() => groupBy(state.keys, (key) => key.clientId), [state.keys]);
   const endpointsByClient = useMemo(() => groupBy(state.endpoints, (endpoint) => endpoint.clientId), [state.endpoints]);
   const instancesByClient = useMemo(() => groupBy(state.instances, (instance) => instance.apiClientId ?? "internal"), [state.instances]);
+  const filteredApiClients = useMemo(() => {
+    const query = normalizeSearch(apiClientQuery);
+
+    return state.clients.filter((client) => {
+      const keyCount = keysByClient.get(client.id)?.length ?? 0;
+      const instanceCount = instancesByClient.get(client.id)?.length ?? 0;
+      const webhookCount = endpointsByClient.get(client.id)?.length ?? 0;
+      const inUse = keyCount > 0 || instanceCount > 0 || webhookCount > 0;
+      const statusMatch =
+        apiClientStatus === "all"
+        || client.status === apiClientStatus
+        || (apiClientStatus === "inactive" && client.status !== "active" && client.status !== "paused")
+        || (apiClientStatus === "in_use" && inUse)
+        || (apiClientStatus === "without_use" && !inUse);
+
+      return statusMatch && matchesQuery(query, [
+        client.name,
+        client.slug,
+        client.organization?.name,
+        client.planCode,
+        client.contactEmail,
+        client.status,
+      ]);
+    });
+  }, [apiClientQuery, apiClientStatus, endpointsByClient, instancesByClient, keysByClient, state.clients]);
+  const apiInstances = useMemo(() => state.instances.filter((instance) => instance.apiClientId), [state.instances]);
+  const filteredApiInstances = useMemo(() => {
+    const query = normalizeSearch(apiInstanceQuery);
+
+    return apiInstances.filter((instance) => {
+      const client = instance.apiClientId ? clientsById.get(instance.apiClientId) : null;
+      const hasIssue = hasApiInstanceIssue(instance);
+      const statusMatch =
+        apiInstanceStatus === "all"
+        || (apiInstanceStatus === "issues" && hasIssue)
+        || (apiInstanceStatus === "connected" && instance.status === "connected")
+        || (apiInstanceStatus === "disconnected" && instance.status !== "connected")
+        || (apiInstanceStatus === "webhook_pending" && !instance.webhookConfigured);
+
+      return statusMatch && matchesQuery(query, [
+        client?.name,
+        client?.slug,
+        client?.organization?.name,
+        instance.organization?.name,
+        instance.displayName,
+        instance.phoneNumber,
+        instance.providerInstanceId,
+        instance.id,
+        instance.status,
+      ]);
+    });
+  }, [apiInstanceQuery, apiInstanceStatus, apiInstances, clientsById]);
+  const apiInstanceGroups = useMemo(() => {
+    const groups = new Map<string, AdminApiInstanceGroup>();
+
+    for (const instance of filteredApiInstances) {
+      const key = instance.apiClientId ?? `organization:${instance.organizationId}`;
+      const client = instance.apiClientId ? clientsById.get(instance.apiClientId) ?? null : null;
+      const group = groups.get(key) ?? {
+        key,
+        client,
+        fallbackTitle: instance.organization?.name ?? "Empresa sem cadastro",
+        fallbackSubtitle: instance.organizationId,
+        instances: [],
+      };
+
+      group.instances.push(instance);
+      groups.set(key, group);
+    }
+
+    return Array.from(groups.values())
+      .map((group) => ({
+        ...group,
+        instances: [...group.instances].sort((a, b) => {
+          const statusOrder = Number(b.status === "connected") - Number(a.status === "connected");
+          return statusOrder || getAdminInstanceDisplayTitle(a).localeCompare(getAdminInstanceDisplayTitle(b));
+        }),
+      }))
+      .sort((a, b) => getApiInstanceGroupTitle(a).localeCompare(getApiInstanceGroupTitle(b)));
+  }, [clientsById, filteredApiInstances]);
   const latestProviderEventByOrg = useMemo(() => latestBy(state.providerEvents, (event) => event.organizationId), [state.providerEvents]);
   const latestDeliveryByClient = useMemo(() => latestBy(state.deliveries, (delivery) => delivery.clientId), [state.deliveries]);
   const clientsUsingApi = useMemo(() => {
@@ -158,6 +281,56 @@ export function ConnectyHubApiConsole({
     return state.clients.filter((client) => clientIds.has(client.id));
   }, [state.clients, state.endpoints, state.instances, state.keys]);
   const providerInstancesAvailableForApi = state.providerInstances.filter((instance) => instance.availableForApi);
+  const isApiClientGroupOpen = (client: AdminGatewayClient) => {
+    if (apiClientQuery.trim() || apiClientStatus !== "all") return true;
+    const manualState = apiClientGroupOpenState[client.id];
+    if (typeof manualState === "boolean") return manualState;
+    return false;
+  };
+  const toggleApiClientGroup = (client: AdminGatewayClient) => {
+    const isOpen = isApiClientGroupOpen(client);
+    setApiClientGroupOpenState((current) => ({ ...current, [client.id]: !isOpen }));
+  };
+  const isApiInstanceGroupOpen = (group: AdminApiInstanceGroup) => {
+    if (apiInstanceQuery.trim() || apiInstanceStatus !== "all") return true;
+    const manualState = apiInstanceGroupOpenState[group.key];
+    if (typeof manualState === "boolean") return manualState;
+    return false;
+  };
+  const toggleApiInstanceGroup = (group: AdminApiInstanceGroup) => {
+    const isOpen = isApiInstanceGroupOpen(group);
+    setApiInstanceGroupOpenState((current) => ({ ...current, [group.key]: !isOpen }));
+  };
+  const isDiagnosticGroupOpen = (client: AdminGatewayClient) => {
+    if (diagnosticQuery.trim() || diagnosticStatus !== "all") return true;
+    const manualState = diagnosticGroupOpenState[client.id];
+    if (typeof manualState === "boolean") return manualState;
+    return false;
+  };
+  const toggleDiagnosticGroup = (client: AdminGatewayClient) => {
+    const isOpen = isDiagnosticGroupOpen(client);
+    setDiagnosticGroupOpenState((current) => ({ ...current, [client.id]: !isOpen }));
+  };
+  const isDeliveryGroupOpen = (group: AdminApiClientItemGroup<AdminDelivery>) => {
+    if (deliveryQuery.trim() || deliveryStatus !== "all") return true;
+    const manualState = deliveryGroupOpenState[group.key];
+    if (typeof manualState === "boolean") return manualState;
+    return false;
+  };
+  const toggleDeliveryGroup = (group: AdminApiClientItemGroup<AdminDelivery>) => {
+    const isOpen = isDeliveryGroupOpen(group);
+    setDeliveryGroupOpenState((current) => ({ ...current, [group.key]: !isOpen }));
+  };
+  const isProviderEventGroupOpen = (group: AdminApiClientItemGroup<AdminProviderEvent>) => {
+    if (providerEventQuery.trim() || providerEventStatus !== "all") return true;
+    const manualState = providerEventGroupOpenState[group.key];
+    if (typeof manualState === "boolean") return manualState;
+    return false;
+  };
+  const toggleProviderEventGroup = (group: AdminApiClientItemGroup<AdminProviderEvent>) => {
+    const isOpen = isProviderEventGroupOpen(group);
+    setProviderEventGroupOpenState((current) => ({ ...current, [group.key]: !isOpen }));
+  };
   const filteredDiagnosticClients = useMemo(() => {
     const query = normalizeSearch(diagnosticQuery);
 
@@ -211,11 +384,31 @@ export function ConnectyHubApiConsole({
       ]);
     });
   }, [clientsById, deliveryQuery, deliveryStatus, state.deliveries]);
+  const deliveryGroups = useMemo(() => {
+    const groups = new Map<string, AdminApiClientItemGroup<AdminDelivery>>();
+
+    for (const delivery of filteredDeliveries) {
+      const client = delivery.clientId ? clientsById.get(delivery.clientId) ?? null : null;
+      const key = client?.id ?? `delivery:${delivery.clientId ?? delivery.endpointId ?? delivery.targetUrl}`;
+      const group: AdminApiClientItemGroup<AdminDelivery> = groups.get(key) ?? {
+        key,
+        client,
+        fallbackTitle: "Sem cliente API",
+        fallbackSubtitle: delivery.clientId ?? delivery.targetUrl ?? "sem destino",
+        items: [],
+      };
+
+      group.items.push(delivery);
+      groups.set(key, group);
+    }
+
+    return Array.from(groups.values()).sort((a, b) => getClientItemGroupTitle(a).localeCompare(getClientItemGroupTitle(b)));
+  }, [clientsById, filteredDeliveries]);
   const filteredProviderEvents = useMemo(() => {
     const query = normalizeSearch(providerEventQuery);
 
     return state.providerEvents.filter((event) => {
-      const client = state.clients.find((item) => item.organizationId === event.organizationId);
+      const client = event.organizationId ? clientsByOrganizationId.get(event.organizationId) : null;
       const statusMatch =
         providerEventStatus === "all"
         || (providerEventStatus === "error" && hasProviderEventIssue(event))
@@ -234,7 +427,27 @@ export function ConnectyHubApiConsole({
         event.providerChatId,
       ]);
     });
-  }, [providerEventQuery, providerEventStatus, state.clients, state.providerEvents]);
+  }, [clientsByOrganizationId, providerEventQuery, providerEventStatus, state.providerEvents]);
+  const providerEventGroups = useMemo(() => {
+    const groups = new Map<string, AdminApiClientItemGroup<AdminProviderEvent>>();
+
+    for (const event of filteredProviderEvents) {
+      const client = event.organizationId ? clientsByOrganizationId.get(event.organizationId) ?? null : null;
+      const key = client?.id ?? `provider:${event.organizationId ?? event.provider}`;
+      const group: AdminApiClientItemGroup<AdminProviderEvent> = groups.get(key) ?? {
+        key,
+        client,
+        fallbackTitle: event.organizationId ? "Empresa sem cliente API" : "Sem organizacao",
+        fallbackSubtitle: event.organizationId ?? event.provider ?? "sem provedor",
+        items: [],
+      };
+
+      group.items.push(event);
+      groups.set(key, group);
+    }
+
+    return Array.from(groups.values()).sort((a, b) => getClientItemGroupTitle(a).localeCompare(getClientItemGroupTitle(b)));
+  }, [clientsByOrganizationId, filteredProviderEvents]);
   const filteredUsage = useMemo(() => {
     const query = normalizeSearch(usageQuery);
 
@@ -441,27 +654,64 @@ export function ConnectyHubApiConsole({
           {activeTab === "clients" && (
             <Panel title="Empresas com acesso a API" eyebrow="empresa / acesso / uso real">
             {state.clients.length > 0 ? (
-              <ScrollableTable>
-                <DataTable
-                  columns={["Empresa", "Acesso", "Uso API", "Chaves", "Instancias API", "Webhooks", "Plano"]}
-                  rows={state.clients.map((client) => {
-                    const keyCount = keysByClient.get(client.id)?.length ?? 0;
-                    const instanceCount = instancesByClient.get(client.id)?.length ?? 0;
-                    const webhookCount = endpointsByClient.get(client.id)?.length ?? 0;
-                    const inUse = keyCount > 0 || instanceCount > 0 || webhookCount > 0;
-
-                    return [
-                      <IdentityCell key="client" title={client.organization?.name ?? client.name} subtitle={client.name} icon={PlugZap} />,
-                      <StatusBadge key="status" status={client.status === "active" ? "online" : client.status === "paused" ? "warning" : "idle"} label={client.status} />,
-                      <StatusBadge key="usage" status={inUse ? "online" : "idle"} label={inUse ? "cliente API" : "sem uso"} />,
-                      <TextCell key="keys" value={String(keyCount)} muted="chaves" />,
-                      <TextCell key="instances" value={String(instanceCount)} muted="instancias" />,
-                      <TextCell key="hooks" value={String(webhookCount)} muted="webhooks" />,
-                      <NeonBadge key="plan" tone="cyan">{client.planCode ?? "api_starter"}</NeonBadge>,
-                    ];
-                  })}
+              <div className="space-y-3">
+                <TableFilterBar
+                  filteredCount={filteredApiClients.length}
+                  options={apiClientStatusOptions}
+                  placeholder="Buscar empresa, plano, email ou status"
+                  query={apiClientQuery}
+                  status={apiClientStatus}
+                  totalCount={state.clients.length}
+                  onQueryChange={setApiClientQuery}
+                  onStatusChange={setApiClientStatus}
                 />
-              </ScrollableTable>
+                {filteredApiClients.length > 0 ? (
+                  <ScrollableTable>
+                    <div className="space-y-3 p-2">
+                      {filteredApiClients.map((client) => {
+                        const keyCount = keysByClient.get(client.id)?.length ?? 0;
+                        const instanceCount = instancesByClient.get(client.id)?.length ?? 0;
+                        const webhookCount = endpointsByClient.get(client.id)?.length ?? 0;
+                        const inUse = keyCount > 0 || instanceCount > 0 || webhookCount > 0;
+                        const isOpen = isApiClientGroupOpen(client);
+
+                        return (
+                          <AccordionGroupCard
+                            key={client.id}
+                            title={getClientTitle(client)}
+                            subtitle={getClientSubtitle(client)}
+                            isOpen={isOpen}
+                            onToggle={() => toggleApiClientGroup(client)}
+                            badges={(
+                              <>
+                                <NeonBadge tone={client.status === "active" ? "green" : client.status === "paused" ? "amber" : "zinc"}>{client.status}</NeonBadge>
+                                <NeonBadge tone={inUse ? "cyan" : "zinc"}>{inUse ? "em uso" : "sem uso"}</NeonBadge>
+                                <NeonBadge tone="cyan">{keyCount} chaves</NeonBadge>
+                                <NeonBadge tone={instanceCount > 0 ? "green" : "zinc"}>{instanceCount} instancias</NeonBadge>
+                                <NeonBadge tone={webhookCount > 0 ? "violet" : "zinc"}>{webhookCount} webhooks</NeonBadge>
+                              </>
+                            )}
+                          >
+                            <DataTable
+                              columns={["Acesso", "Uso API", "Chaves", "Instancias API", "Webhooks", "Plano"]}
+                              rows={[[
+                                <StatusBadge key="status" status={client.status === "active" ? "online" : client.status === "paused" ? "warning" : "idle"} label={client.status} />,
+                                <StatusBadge key="usage" status={inUse ? "online" : "idle"} label={inUse ? "cliente API" : "sem uso"} />,
+                                <TextCell key="keys" value={String(keyCount)} muted="chaves" />,
+                                <TextCell key="instances" value={String(instanceCount)} muted="instancias" />,
+                                <TextCell key="hooks" value={String(webhookCount)} muted="webhooks" />,
+                                <NeonBadge key="plan" tone="cyan">{client.planCode ?? "api_starter"}</NeonBadge>,
+                              ]]}
+                            />
+                          </AccordionGroupCard>
+                        );
+                      })}
+                    </div>
+                  </ScrollableTable>
+                ) : (
+                  <EmptyCopy title="Nenhuma empresa encontrada" text="Ajuste a busca ou o filtro para localizar empresas com acesso a API." />
+                )}
+              </div>
             ) : (
               <EmptyCopy title="Nenhuma empresa com acesso a API" text="Todo workspace ConnectyHub deve receber acesso automaticamente." />
             )}
@@ -470,39 +720,78 @@ export function ConnectyHubApiConsole({
 
           {activeTab === "instances" && (
             <Panel title="Instancias controladas pela API" eyebrow="connectyhub_instance_id / provider_instance_id">
-            {state.instances.filter((instance) => instance.apiClientId).length > 0 ? (
-              <ScrollableTable>
-                <DataTable
-                  columns={["Empresa", "Instancia", "Status", "Numero", "Webhook", "Ultimo sinal", "Acoes"]}
-                  rows={state.instances.filter((instance) => instance.apiClientId).map((instance) => {
-                    const client = instance.apiClientId ? clientsById.get(instance.apiClientId) : null;
-                    return [
-                      <TextCell key="client" value={client?.name ?? "Sem cliente"} muted={client?.organization?.name ?? instance.organization?.name ?? instance.organizationId} />,
-                      <InstanceIdentityCell
-                        key="id"
-                        title={getAdminInstanceDisplayTitle(instance)}
-                        subtitle={instance.id}
-                        imageUrl={instance.profileImageUrl}
-                        imageStatus={instance.profileImageUrl ? "foto sincronizada" : "foto pendente"}
-                      />,
-                      <StatusBadge key="status" status={instanceTone(instance.status)} label={instance.status} />,
-                      <TextCell key="phone" value={instance.phoneNumber ?? "Sem numero"} muted={instance.providerInstanceId ?? "sem provider id"} />,
-                      <StatusBadge key="webhook" status={instance.webhookConfigured ? "online" : "warning"} label={instance.webhookConfigured ? "ok" : "pendente"} />,
-                      <TextCell key="sync" value={formatDate(instance.lastMessageAt ?? instance.lastHeartbeatAt ?? instance.updatedAt)} muted="sync" />,
-                      <div key="actions" className="flex min-w-[120px] flex-wrap gap-2">
-                        <InlineActionButton
-                          disabled={running === `delete_instance:${instance.id}`}
-                          icon={Trash2}
-                          label="Excluir"
-                          loading={running === `delete_instance:${instance.id}`}
-                          onClick={() => confirmDeleteInstance(instance)}
-                          tone="rose"
-                        />
-                      </div>,
-                    ];
-                  })}
+            {apiInstances.length > 0 ? (
+              <div className="space-y-3">
+                <TableFilterBar
+                  filteredCount={filteredApiInstances.length}
+                  options={apiInstanceStatusOptions}
+                  placeholder="Buscar empresa, numero, instancia ou provider id"
+                  query={apiInstanceQuery}
+                  status={apiInstanceStatus}
+                  totalCount={apiInstances.length}
+                  onQueryChange={setApiInstanceQuery}
+                  onStatusChange={setApiInstanceStatus}
                 />
-              </ScrollableTable>
+                {apiInstanceGroups.length > 0 ? (
+                  <ScrollableTable>
+                    <div className="space-y-3 p-2">
+                      {apiInstanceGroups.map((group) => {
+                        const connectedCount = group.instances.filter((instance) => instance.status === "connected").length;
+                        const webhookOkCount = group.instances.filter((instance) => instance.webhookConfigured).length;
+                        const hasIssue = group.instances.some(hasApiInstanceIssue);
+                        const isOpen = isApiInstanceGroupOpen(group);
+
+                        return (
+                          <AccordionGroupCard
+                            key={group.key}
+                            title={getApiInstanceGroupTitle(group)}
+                            subtitle={getApiInstanceGroupSubtitle(group)}
+                            hasIssue={hasIssue}
+                            isOpen={isOpen}
+                            onToggle={() => toggleApiInstanceGroup(group)}
+                            badges={(
+                              <>
+                                <NeonBadge tone="cyan">{group.instances.length} instancias</NeonBadge>
+                                <NeonBadge tone={connectedCount > 0 ? "green" : "zinc"}>{connectedCount} conectadas</NeonBadge>
+                                <NeonBadge tone={webhookOkCount === group.instances.length ? "green" : "amber"}>{webhookOkCount} webhooks ok</NeonBadge>
+                              </>
+                            )}
+                          >
+                            <DataTable
+                              columns={["Instancia", "Status", "Numero", "Webhook", "Ultimo sinal", "Acoes"]}
+                              rows={group.instances.map((instance) => [
+                                <InstanceIdentityCell
+                                  key="id"
+                                  title={getAdminInstanceDisplayTitle(instance)}
+                                  subtitle={instance.id}
+                                  imageUrl={instance.profileImageUrl}
+                                  imageStatus={instance.profileImageUrl ? "foto sincronizada" : "foto pendente"}
+                                />,
+                                <StatusBadge key="status" status={instanceTone(instance.status)} label={instance.status} />,
+                                <TextCell key="phone" value={instance.phoneNumber ?? "Sem numero"} muted={instance.providerInstanceId ?? "sem provider id"} />,
+                                <StatusBadge key="webhook" status={instance.webhookConfigured ? "online" : "warning"} label={instance.webhookConfigured ? "ok" : "pendente"} />,
+                                <TextCell key="sync" value={formatDate(instance.lastMessageAt ?? instance.lastHeartbeatAt ?? instance.updatedAt)} muted="sync" />,
+                                <div key="actions" className="flex min-w-[120px] flex-wrap gap-2">
+                                  <InlineActionButton
+                                    disabled={running === `delete_instance:${instance.id}`}
+                                    icon={Trash2}
+                                    label="Excluir"
+                                    loading={running === `delete_instance:${instance.id}`}
+                                    onClick={() => confirmDeleteInstance(instance)}
+                                    tone="rose"
+                                  />
+                                </div>,
+                              ])}
+                            />
+                          </AccordionGroupCard>
+                        );
+                      })}
+                    </div>
+                  </ScrollableTable>
+                ) : (
+                  <EmptyCopy title="Nenhuma instancia encontrada" text="Ajuste a busca ou o filtro para localizar instancias API de uma empresa." />
+                )}
+              </div>
             ) : (
               <EmptyCopy title="Nenhuma instancia API vinculada" text="Adote uma instancia existente do provedor ou crie uma instancia nova pela API ConnectyHub." />
             )}
@@ -525,56 +814,77 @@ export function ConnectyHubApiConsole({
                 />
                 {filteredDiagnosticClients.length > 0 ? (
                   <ScrollableTable>
-                    <DataTable
-                      columns={["Empresa", "Entrada ConnectyHub", "Entrega cliente", "HTTP", "Acoes"]}
-                      rows={filteredDiagnosticClients.map((client) => {
+                    <div className="space-y-3 p-2">
+                      {filteredDiagnosticClients.map((client) => {
                         const latestEvent = latestProviderEventByOrg.get(client.organizationId);
                         const latestDelivery = latestDeliveryByClient.get(client.id);
                         const endpoint = endpointsByClient.get(client.id)?.find((item) => item.status === "active") ?? endpointsByClient.get(client.id)?.[0] ?? null;
                         const retryableDelivery = latestDelivery && latestDelivery.status !== "delivered" ? latestDelivery : null;
+                        const hasIssue = hasDeliveryIssue(latestDelivery) || hasProviderEventIssue(latestEvent) || !endpoint || !latestDelivery;
+                        const isOpen = isDiagnosticGroupOpen(client);
 
-                        return [
-                          <IdentityCell key="client" title={client.organization?.name ?? client.name} subtitle={client.name} icon={PlugZap} />,
-                          <TextCell
-                            key="event"
-                            value={latestEvent?.eventType ?? "Sem evento"}
-                            muted={latestEvent ? `${latestEvent.processingStatus} / ${formatDate(latestEvent.receivedAt)}` : "nenhum webhook recebido"}
-                          />,
-                          <StatusBadge
-                            key="delivery"
-                            status={latestDelivery ? deliveryTone(latestDelivery.status) : "idle"}
-                            label={latestDelivery ? latestDelivery.status : "sem entrega"}
-                          />,
-                          <TextCell
-                            key="http"
-                            value={latestDelivery?.statusCode ? String(latestDelivery.statusCode) : "-"}
-                            muted={latestDelivery?.errorMessage ?? latestDelivery?.targetUrl ?? endpoint?.url ?? "sem webhook ativo"}
-                          />,
-                          <div key="actions" className="flex min-w-[120px] flex-wrap gap-2">
-                            <InlineActionButton
-                              disabled={!endpoint || running === `test_webhook:${endpoint?.id}`}
-                              icon={Send}
-                              label="Testar"
-                              loading={running === `test_webhook:${endpoint?.id}`}
-                              onClick={() => {
-                                if (!endpoint) return;
-                                void runAction(`test_webhook:${endpoint.id}`, { action: "test_webhook", clientId: client.id, webhookId: endpoint.id });
-                              }}
+                        return (
+                          <AccordionGroupCard
+                            key={client.id}
+                            title={getClientTitle(client)}
+                            subtitle={getClientSubtitle(client)}
+                            hasIssue={hasIssue}
+                            isOpen={isOpen}
+                            onToggle={() => toggleDiagnosticGroup(client)}
+                            badges={(
+                              <>
+                                <NeonBadge tone={hasIssue ? "amber" : "green"}>{hasIssue ? "atencao" : "ok"}</NeonBadge>
+                                <NeonBadge tone={endpoint ? "cyan" : "zinc"}>{endpoint ? "webhook ativo" : "sem webhook"}</NeonBadge>
+                                <NeonBadge tone={latestDelivery?.status === "delivered" ? "green" : latestDelivery ? "amber" : "zinc"}>{latestDelivery?.status ?? "sem entrega"}</NeonBadge>
+                              </>
+                            )}
+                          >
+                            <DataTable
+                              columns={["Entrada ConnectyHub", "Entrega cliente", "HTTP", "Acoes"]}
+                              rows={[[
+                                <TextCell
+                                  key="event"
+                                  value={latestEvent?.eventType ?? "Sem evento"}
+                                  muted={latestEvent ? `${latestEvent.processingStatus} / ${formatDate(latestEvent.receivedAt)}` : "nenhum webhook recebido"}
+                                />,
+                                <StatusBadge
+                                  key="delivery"
+                                  status={latestDelivery ? deliveryTone(latestDelivery.status) : "idle"}
+                                  label={latestDelivery ? latestDelivery.status : "sem entrega"}
+                                />,
+                                <TextCell
+                                  key="http"
+                                  value={latestDelivery?.statusCode ? String(latestDelivery.statusCode) : "-"}
+                                  muted={latestDelivery?.errorMessage ?? latestDelivery?.targetUrl ?? endpoint?.url ?? "sem webhook ativo"}
+                                />,
+                                <div key="actions" className="flex min-w-[120px] flex-wrap gap-2">
+                                  <InlineActionButton
+                                    disabled={!endpoint || running === `test_webhook:${endpoint?.id}`}
+                                    icon={Send}
+                                    label="Testar"
+                                    loading={running === `test_webhook:${endpoint?.id}`}
+                                    onClick={() => {
+                                      if (!endpoint) return;
+                                      void runAction(`test_webhook:${endpoint.id}`, { action: "test_webhook", clientId: client.id, webhookId: endpoint.id });
+                                    }}
+                                  />
+                                  <InlineActionButton
+                                    disabled={!retryableDelivery || running === `retry_delivery:${retryableDelivery?.id}`}
+                                    icon={RefreshCcw}
+                                    label="Retry"
+                                    loading={running === `retry_delivery:${retryableDelivery?.id}`}
+                                    onClick={() => {
+                                      if (!retryableDelivery) return;
+                                      void runAction(`retry_delivery:${retryableDelivery.id}`, { action: "retry_delivery", deliveryId: retryableDelivery.id });
+                                    }}
+                                  />
+                                </div>,
+                              ]]}
                             />
-                            <InlineActionButton
-                              disabled={!retryableDelivery || running === `retry_delivery:${retryableDelivery?.id}`}
-                              icon={RefreshCcw}
-                              label="Retry"
-                              loading={running === `retry_delivery:${retryableDelivery?.id}`}
-                              onClick={() => {
-                                if (!retryableDelivery) return;
-                                void runAction(`retry_delivery:${retryableDelivery.id}`, { action: "retry_delivery", deliveryId: retryableDelivery.id });
-                              }}
-                            />
-                          </div>,
-                        ];
+                          </AccordionGroupCard>
+                        );
                       })}
-                    />
+                    </div>
                   </ScrollableTable>
                 ) : (
                   <EmptyCopy title="Nenhum resultado nesse filtro" text="Ajuste a busca ou selecione outro status." />
@@ -602,29 +912,50 @@ export function ConnectyHubApiConsole({
                 />
                 {filteredDeliveries.length > 0 ? (
                   <ScrollableTable>
-                    <DataTable
-                      columns={["Empresa", "Evento", "Destino", "Status", "Erro", "Quando", "Acoes"]}
-                      rows={filteredDeliveries.map((delivery) => {
-                        const client = delivery.clientId ? clientsById.get(delivery.clientId) : null;
+                    <div className="space-y-3 p-2">
+                      {deliveryGroups.map((group) => {
+                        const failedCount = group.items.filter(hasDeliveryIssue).length;
+                        const deliveredCount = group.items.filter((delivery) => delivery.status === "delivered").length;
+                        const isOpen = isDeliveryGroupOpen(group);
 
-                        return [
-                          <TextCell key="client" value={client?.organization?.name ?? client?.name ?? "Sem cliente"} muted={delivery.clientId ?? "sem client id"} />,
-                          <TextCell key="event" value={delivery.eventType} muted={delivery.webhookEventId ?? delivery.whatsappInstanceId ?? "evento manual"} />,
-                          <TextCell key="target" value={delivery.targetUrl} muted={delivery.endpointId ?? "sem endpoint"} />,
-                          <StatusBadge key="status" status={deliveryTone(delivery.status)} label={delivery.statusCode ? `${delivery.status} ${delivery.statusCode}` : delivery.status} />,
-                          <TextCell key="error" value={delivery.errorMessage ?? "Sem erro"} muted={delivery.responsePreview ?? `${delivery.attemptCount} tentativa(s)`} />,
-                          <TextCell key="date" value={formatDate(delivery.deliveredAt ?? delivery.createdAt)} muted={delivery.deliveredAt ? "entregue" : "criado"} />,
-                          <InlineActionButton
-                            key="retry"
-                            disabled={delivery.status === "delivered" || running === `retry_delivery:${delivery.id}`}
-                            icon={RefreshCcw}
-                            label="Retry"
-                            loading={running === `retry_delivery:${delivery.id}`}
-                            onClick={() => void runAction(`retry_delivery:${delivery.id}`, { action: "retry_delivery", deliveryId: delivery.id })}
-                          />,
-                        ];
+                        return (
+                          <AccordionGroupCard
+                            key={group.key}
+                            title={getClientItemGroupTitle(group)}
+                            subtitle={getClientItemGroupSubtitle(group)}
+                            hasIssue={failedCount > 0}
+                            isOpen={isOpen}
+                            onToggle={() => toggleDeliveryGroup(group)}
+                            badges={(
+                              <>
+                                <NeonBadge tone="cyan">{group.items.length} entregas</NeonBadge>
+                                <NeonBadge tone={deliveredCount > 0 ? "green" : "zinc"}>{deliveredCount} entregues</NeonBadge>
+                                <NeonBadge tone={failedCount > 0 ? "amber" : "green"}>{failedCount} falhas</NeonBadge>
+                              </>
+                            )}
+                          >
+                            <DataTable
+                              columns={["Evento", "Destino", "Status", "Erro", "Quando", "Acoes"]}
+                              rows={group.items.map((delivery) => [
+                                <TextCell key="event" value={delivery.eventType} muted={delivery.webhookEventId ?? delivery.whatsappInstanceId ?? "evento manual"} />,
+                                <TextCell key="target" value={delivery.targetUrl} muted={delivery.endpointId ?? "sem endpoint"} />,
+                                <StatusBadge key="status" status={deliveryTone(delivery.status)} label={delivery.statusCode ? `${delivery.status} ${delivery.statusCode}` : delivery.status} />,
+                                <TextCell key="error" value={delivery.errorMessage ?? "Sem erro"} muted={delivery.responsePreview ?? `${delivery.attemptCount} tentativa(s)`} />,
+                                <TextCell key="date" value={formatDate(delivery.deliveredAt ?? delivery.createdAt)} muted={delivery.deliveredAt ? "entregue" : "criado"} />,
+                                <InlineActionButton
+                                  key="retry"
+                                  disabled={delivery.status === "delivered" || running === `retry_delivery:${delivery.id}`}
+                                  icon={RefreshCcw}
+                                  label="Retry"
+                                  loading={running === `retry_delivery:${delivery.id}`}
+                                  onClick={() => void runAction(`retry_delivery:${delivery.id}`, { action: "retry_delivery", deliveryId: delivery.id })}
+                                />,
+                              ])}
+                            />
+                          </AccordionGroupCard>
+                        );
                       })}
-                    />
+                    </div>
                   </ScrollableTable>
                 ) : (
                   <EmptyCopy title="Nenhuma entrega nesse filtro" text="Ajuste a busca ou selecione outro status." />
@@ -652,20 +983,41 @@ export function ConnectyHubApiConsole({
                 />
                 {filteredProviderEvents.length > 0 ? (
                   <ScrollableTable>
-                    <DataTable
-                      columns={["Empresa", "Evento", "Instancia", "Status", "Quando"]}
-                      rows={filteredProviderEvents.map((event) => {
-                        const client = state.clients.find((item) => item.organizationId === event.organizationId);
+                    <div className="space-y-3 p-2">
+                      {providerEventGroups.map((group) => {
+                        const issueCount = group.items.filter(hasProviderEventIssue).length;
+                        const processedCount = group.items.filter(isProviderEventProcessed).length;
+                        const isOpen = isProviderEventGroupOpen(group);
 
-                        return [
-                          <TextCell key="client" value={client?.organization?.name ?? client?.name ?? "Sem cliente API"} muted={event.organizationId ?? "sem organizacao"} />,
-                          <TextCell key="event" value={event.eventType} muted={event.providerMessageId ?? event.providerChatId ?? event.provider} />,
-                          <TextCell key="instance" value={event.providerInstanceId ?? "Sem provider id"} muted={event.whatsappInstanceId ?? "sem instancia local"} />,
-                          <StatusBadge key="status" status={providerEventTone(event.processingStatus)} label={event.processingStatus} />,
-                          <TextCell key="date" value={formatDate(event.receivedAt)} muted={event.errorMessage ?? "recebido"} />,
-                        ];
+                        return (
+                          <AccordionGroupCard
+                            key={group.key}
+                            title={getClientItemGroupTitle(group)}
+                            subtitle={getClientItemGroupSubtitle(group)}
+                            hasIssue={issueCount > 0}
+                            isOpen={isOpen}
+                            onToggle={() => toggleProviderEventGroup(group)}
+                            badges={(
+                              <>
+                                <NeonBadge tone="cyan">{group.items.length} eventos</NeonBadge>
+                                <NeonBadge tone={processedCount > 0 ? "green" : "zinc"}>{processedCount} processados</NeonBadge>
+                                <NeonBadge tone={issueCount > 0 ? "amber" : "green"}>{issueCount} erros</NeonBadge>
+                              </>
+                            )}
+                          >
+                            <DataTable
+                              columns={["Evento", "Instancia", "Status", "Quando"]}
+                              rows={group.items.map((event) => [
+                                <TextCell key="event" value={event.eventType} muted={event.providerMessageId ?? event.providerChatId ?? event.provider} />,
+                                <TextCell key="instance" value={event.providerInstanceId ?? "Sem provider id"} muted={event.whatsappInstanceId ?? "sem instancia local"} />,
+                                <StatusBadge key="status" status={providerEventTone(event.processingStatus)} label={event.processingStatus} />,
+                                <TextCell key="date" value={formatDate(event.receivedAt)} muted={event.errorMessage ?? "recebido"} />,
+                              ])}
+                            />
+                          </AccordionGroupCard>
+                        );
                       })}
-                    />
+                    </div>
                   </ScrollableTable>
                 ) : (
                   <EmptyCopy title="Nenhum evento nesse filtro" text="Ajuste a busca ou selecione outro status." />
@@ -888,6 +1240,51 @@ function ScrollableTable({ children }: { children: ReactNode }) {
   );
 }
 
+function AccordionGroupCard({
+  badges,
+  children,
+  hasIssue,
+  isOpen,
+  onToggle,
+  subtitle,
+  title,
+}: {
+  badges: ReactNode;
+  children: ReactNode;
+  hasIssue?: boolean;
+  isOpen: boolean;
+  onToggle: () => void;
+  subtitle: string;
+  title: string;
+}) {
+  return (
+    <div className={`overflow-hidden rounded-xl border bg-slate-950/35 ${hasIssue ? "border-amber-500/20" : "border-slate-800"}`}>
+      <button
+        type="button"
+        aria-expanded={isOpen}
+        onClick={onToggle}
+        className="flex w-full flex-col gap-3 border-b border-slate-800 bg-cyan-500/[0.03] px-3 py-3 text-left transition hover:bg-cyan-500/[0.06] lg:flex-row lg:items-center lg:justify-between"
+      >
+        <span className="flex min-w-0 items-center gap-3">
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl border border-slate-700 bg-slate-950/60 text-cyan-300">
+            <ChevronDown className={`h-4 w-4 transition-transform ${isOpen ? "" : "-rotate-90"}`} />
+          </span>
+          <span className="min-w-0">
+            <span className="block truncate text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>
+              {title}
+            </span>
+            <span className="mt-1 block truncate font-mono text-[9px] uppercase tracking-wider text-slate-500">
+              {subtitle}
+            </span>
+          </span>
+        </span>
+        <span className="flex flex-wrap gap-2">{badges}</span>
+      </button>
+      {isOpen && <div className="p-3">{children}</div>}
+    </div>
+  );
+}
+
 function WebhookEventPicker() {
   return (
     <div className="space-y-3">
@@ -1036,20 +1433,6 @@ function MetricTile({
       </div>
       <p className="mt-3 font-mono text-[26px] font-bold leading-none" style={{ color: "var(--ch-text)" }}>{value}</p>
       <div className="mt-3"><NeonBadge tone={tone}>{detail}</NeonBadge></div>
-    </div>
-  );
-}
-
-function IdentityCell({ title, subtitle, icon: Icon }: { title: string; subtitle: string; icon: LucideIcon }) {
-  return (
-    <div className="flex min-w-[210px] items-center gap-2">
-      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-cyan-500/10 text-cyan-300">
-        <Icon className="h-4 w-4" />
-      </span>
-      <div className="min-w-0">
-        <p className="truncate text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>{title}</p>
-        <p className="truncate font-mono text-[9px] uppercase tracking-wider text-slate-500">{subtitle}</p>
-      </div>
     </div>
   );
 }
@@ -1212,6 +1595,10 @@ function hasUsageIssue(event: AdminUsageEvent) {
   return (event.statusCode ?? 500) >= 400 || (typeof event.providerStatus === "number" && event.providerStatus >= 400);
 }
 
+function hasApiInstanceIssue(instance: AdminGatewayInstance) {
+  return instance.status !== "connected" || !instance.webhookConfigured;
+}
+
 function instanceTone(status: string): StatusTone {
   if (status === "connected") return "online";
   if (status === "error" || status === "blocked") return "critical";
@@ -1240,6 +1627,39 @@ function getAdminInstanceDisplayTitle(instance: AdminGatewayInstance) {
     instance.providerInstanceId,
     instance.id,
   ]) ?? phoneLabel ?? instance.providerInstanceId ?? instance.id;
+}
+
+function getClientTitle(client: AdminGatewayClient | null) {
+  return client?.organization?.name ?? client?.name ?? "Sem cliente API";
+}
+
+function getClientSubtitle(client: AdminGatewayClient | null) {
+  const organizationName = client?.organization?.name;
+  const clientName = client?.name;
+
+  if (organizationName && clientName && organizationName !== clientName) {
+    return clientName;
+  }
+
+  return client?.slug ?? client?.organizationId ?? "sem cliente";
+}
+
+function getApiInstanceGroupTitle(group: AdminApiInstanceGroup) {
+  return getClientTitle(group.client) === "Sem cliente API" ? group.fallbackTitle : getClientTitle(group.client);
+}
+
+function getApiInstanceGroupSubtitle(group: AdminApiInstanceGroup) {
+  const subtitle = getClientSubtitle(group.client);
+  return subtitle === "sem cliente" ? group.fallbackSubtitle : subtitle;
+}
+
+function getClientItemGroupTitle<T>(group: AdminApiClientItemGroup<T>) {
+  return getClientTitle(group.client) === "Sem cliente API" ? group.fallbackTitle : getClientTitle(group.client);
+}
+
+function getClientItemGroupSubtitle<T>(group: AdminApiClientItemGroup<T>) {
+  const subtitle = getClientSubtitle(group.client);
+  return subtitle === "sem cliente" ? group.fallbackSubtitle : subtitle;
 }
 
 function getProviderInstanceDisplayTitle(instance: AdminProviderInstance) {
