@@ -117,14 +117,16 @@ export async function ensureStarterOrganization() {
     role: "owner",
   });
 
-  await ensureClientApiClient({
-    organizationId: organization.id,
-    organizationName: organization.name,
-    organizationSlug: organization.slug,
-    contactEmail: workspace.profile.email,
-    actorId: workspace.user.id,
-    client: supabase,
-  });
+  if (!workspace.profile.isPlatformAdmin) {
+    await ensureClientApiClient({
+      organizationId: organization.id,
+      organizationName: organization.name,
+      organizationSlug: organization.slug,
+      contactEmail: workspace.profile.email,
+      actorId: workspace.user.id,
+      client: supabase,
+    });
+  }
 
   return {
     id: organization.id,

@@ -76,6 +76,22 @@ type OrganizationRow = {
   slug: string | null;
   plan_code: string | null;
   status: string | null;
+  owner_id?: string | null;
+};
+
+type ApiProvisionProfileRow = {
+  id: string;
+  email: string | null;
+  full_name: string | null;
+  company_name: string | null;
+  is_platform_admin: boolean | null;
+};
+
+type ApiProvisionMembershipRow = {
+  user_id: string | null;
+  role: string | null;
+  created_at: string | null;
+  organizations: (OrganizationRow & { created_at?: string | null }) | Array<OrganizationRow & { created_at?: string | null }> | null;
 };
 
 type GatewayInstanceRow = {
@@ -1515,6 +1531,8 @@ export async function createAdminApiClient(input: {
     throw new GatewayHttpError(422, "invalid_client_name", "Informe o nome do cliente API.");
   }
 
+  await assertOrganizationCanReceiveApiClient(client, input.organizationId);
+
   const { data: existing, error: lookupError } = await client
     .from("connectyhub_api_clients")
     .select(apiClientColumns)
@@ -1817,6 +1835,17 @@ export async function adoptAdminProviderInstance(input: {
 
 export async function getAdminGatewayState(client: SupabaseClient = createServiceClient()) {
   const warnings: string[] = [];
+  let apiProvisionContext: Awaited<ReturnType<typeof ensureApiClientsForRegisteredCustomers>> = {
+    customerOrganizationIds: new Set<string>(),
+    platformOrganizationIds: new Set<string>(),
+  };
+
+  try {
+    apiProvisionContext = await ensureApiClientsForRegisteredCustomers(client);
+  } catch (error) {
+    warnings.push(`Sincronia dos clientes API indisponivel: ${error instanceof Error ? error.message : "erro desconhecido"}`);
+  }
+
   const [
     clientsResult,
     keysResult,
@@ -1831,6 +1860,7 @@ export async function getAdminGatewayState(client: SupabaseClient = createServic
     client
       .from("connectyhub_api_clients")
       .select(`${apiClientColumns}, organizations(id, name, slug, plan_code, status)`)
+      .neq("status", "archived")
       .order("updated_at", { ascending: false })
       .limit(200),
     client
@@ -1866,7 +1896,7 @@ export async function getAdminGatewayState(client: SupabaseClient = createServic
       .limit(300),
     client
       .from("organizations")
-      .select("id, name, slug, plan_code, status")
+      .select("id, name, slug, plan_code, status, owner_id")
       .order("created_at", { ascending: false })
       .limit(500),
     listProviderInstancesForAdmin(client).catch((error) => ({ error: error instanceof Error ? error.message : "Falha ao consultar Uazapi.", instances: [] })),
@@ -1886,7 +1916,8 @@ export async function getAdminGatewayState(client: SupabaseClient = createServic
     ...mapApiClient(row),
     organization: mapOrganization(readFirst(row.organizations)),
   }));
-  const apiKeys = (keysResult.data ?? []).map((row) => ({
+  const visibleClientIds = new Set(apiClients.map((apiClient) => apiClient.id));
+  const apiKeys = (keysResult.data ?? []).filter((row) => visibleClientIds.has(String(row.client_id))).map((row) => ({
     id: String(row.id),
     clientId: String(row.client_id),
     name: String(row.name),
@@ -1897,7 +1928,7 @@ export async function getAdminGatewayState(client: SupabaseClient = createServic
     expiresAt: row.expires_at as string | null,
     createdAt: String(row.created_at),
   }));
-  const endpoints = (endpointsResult.data ?? []).map((row) => ({
+  const endpoints = (endpointsResult.data ?? []).filter((row) => visibleClientIds.has(String(row.client_id))).map((row) => ({
     id: String(row.id),
     clientId: String(row.client_id),
     url: String(row.url),
@@ -1917,7 +1948,10 @@ export async function getAdminGatewayState(client: SupabaseClient = createServic
   const usage = ((usageResult.data ?? []) as ApiUsageEventRow[]).map(mapUsageEvent);
   const deliveries = ((deliveriesResult.data ?? []) as WebhookDeliveryRow[]).map(mapWebhookDelivery);
   const providerEvents = ((providerEventsResult.data ?? []) as ProviderWebhookEventRow[]).map(mapProviderWebhookEvent);
-  const organizations = ((organizationsResult.data ?? []) as OrganizationRow[]).map(mapOrganization).filter(isPresent);
+  const organizations = ((organizationsResult.data ?? []) as OrganizationRow[])
+    .filter((organization) => !apiProvisionContext.platformOrganizationIds.has(organization.id))
+    .map(mapOrganization)
+    .filter(isPresent);
   const providerInstances = "instances" in providerResult ? providerResult.instances : [];
   const localProviderIds = new Set(instanceRows.map((instance) => instance.provider_instance_id).filter(Boolean));
   const apiMappedProviderIds = new Set(apiInstanceRows.filter((instance) => Boolean(instance.connectyhub_api_client_id)).map((instance) => instance.provider_instance_id).filter(Boolean));
@@ -2136,6 +2170,8 @@ export async function ensureClientApiClient(input: {
   client?: SupabaseClient;
 }) {
   const client = input.client ?? createServiceClient();
+  await assertOrganizationCanReceiveApiClient(client, input.organizationId);
+
   const { data: existing, error: lookupError } = await client
     .from("connectyhub_api_clients")
     .select(apiClientColumns)
@@ -2176,6 +2212,204 @@ export async function ensureClientApiClient(input: {
   }
 
   return data;
+}
+
+async function ensureApiClientsForRegisteredCustomers(client: SupabaseClient) {
+  const authResult = await client.auth.admin.listUsers({ perPage: 1000 });
+
+  if (authResult.error) {
+    throw new Error(authResult.error.message);
+  }
+
+  const [profilesResult, membershipsResult, existingClientsResult] = await Promise.all([
+    client.from("profiles").select("id, email, full_name, company_name, is_platform_admin"),
+    client
+      .from("organization_members")
+      .select("user_id, role, created_at, organizations(id, name, slug, plan_code, status, owner_id, created_at)")
+      .order("created_at", { ascending: true }),
+    client
+      .from("connectyhub_api_clients")
+      .select("id, organization_id, status, created_at")
+      .neq("status", "archived"),
+  ]);
+
+  if (profilesResult.error) throw new Error(profilesResult.error.message);
+  if (membershipsResult.error) throw new Error(membershipsResult.error.message);
+  if (existingClientsResult.error) throw new Error(existingClientsResult.error.message);
+
+  const profilesById = new Map(((profilesResult.data ?? []) as ApiProvisionProfileRow[]).map((profile) => [profile.id, profile]));
+  const existingClientRows = (existingClientsResult.data ?? []) as Array<{ id: string; organization_id: string | null; created_at?: string | null }>;
+  const existingClientOrgIds = new Set(existingClientRows.map((clientRow) => clientRow.organization_id).filter(isPresent));
+  const membershipsByUser = new Map<string, Array<OrganizationRow & { created_at?: string | null }>>();
+
+  for (const row of (membershipsResult.data ?? []) as unknown as ApiProvisionMembershipRow[]) {
+    const organization = readFirst(row.organizations);
+    if (!row.user_id || !organization) continue;
+    const current = membershipsByUser.get(row.user_id) ?? [];
+    current.push(organization);
+    membershipsByUser.set(row.user_id, current);
+  }
+
+  const customerOrganizationIds = new Set<string>();
+  const platformOrganizationIds = new Set<string>();
+
+  for (const memberships of membershipsByUser.values()) {
+    for (const organization of memberships) {
+      if (organization.owner_id && profilesById.get(organization.owner_id)?.is_platform_admin) {
+        platformOrganizationIds.add(organization.id);
+      }
+    }
+  }
+
+  for (const user of authResult.data.users) {
+    if (!user.email) continue;
+
+    const profile = profilesById.get(user.id);
+    const memberships = (membershipsByUser.get(user.id) ?? []).filter((organization) => {
+      return !platformOrganizationIds.has(organization.id);
+    });
+
+    if (profile?.is_platform_admin) {
+      continue;
+    }
+
+    let organization = memberships.find((item) => existingClientOrgIds.has(item.id)) ?? memberships[0] ?? null;
+
+    if (!organization) {
+      organization = await createCustomerOrganizationForApiUser({
+        client,
+        userId: user.id,
+        email: user.email,
+        profile,
+      });
+      existingClientOrgIds.delete(organization.id);
+    }
+
+    customerOrganizationIds.add(organization.id);
+
+    const apiClient = await ensureClientApiClient({
+      organizationId: organization.id,
+      organizationName: organization.name,
+      organizationSlug: organization.slug,
+      contactEmail: profile?.email ?? user.email,
+      actorId: user.id,
+      client,
+    });
+
+    existingClientOrgIds.add(apiClient.organization_id);
+  }
+
+  if (platformOrganizationIds.size > 0) {
+    await client
+      .from("connectyhub_api_clients")
+      .update({ status: "archived" })
+      .in("organization_id", Array.from(platformOrganizationIds))
+      .neq("status", "archived");
+  }
+
+  const activeClientsResult = await client
+    .from("connectyhub_api_clients")
+    .select("id, organization_id, created_at")
+    .neq("status", "archived")
+    .order("created_at", { ascending: true });
+
+  if (activeClientsResult.error) {
+    throw new Error(activeClientsResult.error.message);
+  }
+
+  const keptCustomerOrganizations = new Set<string>();
+  const staleClientIds: string[] = [];
+
+  for (const clientRow of (activeClientsResult.data ?? []) as Array<{ id: string; organization_id: string | null }>) {
+    if (!clientRow.organization_id || !customerOrganizationIds.has(clientRow.organization_id)) {
+      staleClientIds.push(clientRow.id);
+      continue;
+    }
+
+    if (keptCustomerOrganizations.has(clientRow.organization_id)) {
+      staleClientIds.push(clientRow.id);
+      continue;
+    }
+
+    keptCustomerOrganizations.add(clientRow.organization_id);
+  }
+
+  if (staleClientIds.length > 0) {
+    await client
+      .from("connectyhub_api_clients")
+      .update({ status: "archived" })
+      .in("id", staleClientIds);
+  }
+
+  return { customerOrganizationIds, platformOrganizationIds };
+}
+
+async function createCustomerOrganizationForApiUser(input: {
+  client: SupabaseClient;
+  userId: string;
+  email: string;
+  profile: ApiProvisionProfileRow | undefined;
+}) {
+  const baseName = normalizeProvisionedOrganizationName(input.profile?.company_name ?? input.profile?.full_name ?? input.email.split("@")[0] ?? "Workspace");
+  const slug = `empresa-cliente-${slugify(baseName) || "workspace"}-${Date.now().toString(36)}-${randomBytes(2).toString("hex")}`.slice(0, 96);
+
+  const { data: organization, error: organizationError } = await input.client
+    .from("organizations")
+    .insert({
+      name: baseName,
+      slug,
+      owner_id: input.userId,
+      plan_code: "trial",
+      status: "trial",
+    })
+    .select("id, name, slug, plan_code, status, owner_id")
+    .single<OrganizationRow>();
+
+  if (organizationError || !organization) {
+    throw new Error(organizationError?.message ?? "Nao foi possivel criar a empresa do cliente API.");
+  }
+
+  const { error: memberError } = await input.client.from("organization_members").insert({
+    organization_id: organization.id,
+    user_id: input.userId,
+    role: "owner",
+  });
+
+  if (memberError) {
+    throw new Error(memberError.message);
+  }
+
+  return organization;
+}
+
+async function assertOrganizationCanReceiveApiClient(client: SupabaseClient, organizationId: string) {
+  const { data: organization, error: organizationError } = await client
+    .from("organizations")
+    .select("id, owner_id")
+    .eq("id", organizationId)
+    .maybeSingle<{ id: string; owner_id: string | null }>();
+
+  if (organizationError) {
+    throw new GatewayHttpError(500, "organization_lookup_failed", organizationError.message);
+  }
+
+  if (!organization?.owner_id) {
+    return;
+  }
+
+  const { data: profile, error: profileError } = await client
+    .from("profiles")
+    .select("is_platform_admin")
+    .eq("id", organization.owner_id)
+    .maybeSingle<{ is_platform_admin: boolean | null }>();
+
+  if (profileError) {
+    throw new GatewayHttpError(500, "organization_owner_lookup_failed", profileError.message);
+  }
+
+  if (profile?.is_platform_admin) {
+    throw new GatewayHttpError(403, "platform_organization_api_disabled", "A ConnectyHub fornece a API e nao pode ser cadastrada como cliente API.");
+  }
 }
 
 export async function createClientApiKey(input: {
@@ -4220,4 +4454,9 @@ function slugify(value: string) {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
+}
+
+function normalizeProvisionedOrganizationName(value: string) {
+  const name = value.trim().replace(/\s+/g, " ");
+  return name.length >= 2 ? name.slice(0, 96) : "Minha empresa";
 }

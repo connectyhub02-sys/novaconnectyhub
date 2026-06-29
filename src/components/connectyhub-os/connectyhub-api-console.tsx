@@ -184,6 +184,7 @@ export function ConnectyHubApiConsole({
   const [diagnosticGroupOpenState, setDiagnosticGroupOpenState] = useState<Record<string, boolean>>({});
   const [deliveryGroupOpenState, setDeliveryGroupOpenState] = useState<Record<string, boolean>>({});
   const [providerEventGroupOpenState, setProviderEventGroupOpenState] = useState<Record<string, boolean>>({});
+  const [usageGroupOpenState, setUsageGroupOpenState] = useState<Record<string, boolean>>({});
   const clientsById = useMemo(() => new Map(state.clients.map((client) => [client.id, client])), [state.clients]);
   const clientsByOrganizationId = useMemo(() => new Map(state.clients.map((client) => [client.organizationId, client])), [state.clients]);
   const keysByClient = useMemo(() => groupBy(state.keys, (key) => key.clientId), [state.keys]);
@@ -331,6 +332,16 @@ export function ConnectyHubApiConsole({
     const isOpen = isProviderEventGroupOpen(group);
     setProviderEventGroupOpenState((current) => ({ ...current, [group.key]: !isOpen }));
   };
+  const isUsageGroupOpen = (group: AdminApiClientItemGroup<AdminUsageEvent>) => {
+    if (usageQuery.trim() || usageStatus !== "all") return true;
+    const manualState = usageGroupOpenState[group.key];
+    if (typeof manualState === "boolean") return manualState;
+    return false;
+  };
+  const toggleUsageGroup = (group: AdminApiClientItemGroup<AdminUsageEvent>) => {
+    const isOpen = isUsageGroupOpen(group);
+    setUsageGroupOpenState((current) => ({ ...current, [group.key]: !isOpen }));
+  };
   const filteredDiagnosticClients = useMemo(() => {
     const query = normalizeSearch(diagnosticQuery);
 
@@ -471,6 +482,26 @@ export function ConnectyHubApiConsole({
       ]);
     });
   }, [clientsById, state.usage, usageQuery, usageStatus]);
+  const usageGroups = useMemo(() => {
+    const groups = new Map<string, AdminApiClientItemGroup<AdminUsageEvent>>();
+
+    for (const event of filteredUsage) {
+      const client = event.clientId ? clientsById.get(event.clientId) ?? null : null;
+      const key = client?.id ?? `usage:${event.clientId ?? "unknown"}`;
+      const group: AdminApiClientItemGroup<AdminUsageEvent> = groups.get(key) ?? {
+        key,
+        client,
+        fallbackTitle: event.clientId ? "Cliente API nao localizado" : "Sem cliente API",
+        fallbackSubtitle: event.clientId ?? event.provider ?? "gateway",
+        items: [],
+      };
+
+      group.items.push(event);
+      groups.set(key, group);
+    }
+
+    return Array.from(groups.values()).sort((a, b) => getClientItemGroupTitle(a).localeCompare(getClientItemGroupTitle(b)));
+  }, [clientsById, filteredUsage]);
 
   async function submitForm(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1070,22 +1101,44 @@ export function ConnectyHubApiConsole({
                   onQueryChange={setUsageQuery}
                   onStatusChange={setUsageStatus}
                 />
-                {filteredUsage.length > 0 ? (
+                {usageGroups.length > 0 ? (
                   <ScrollableTable>
-                    <DataTable
-                      columns={["Empresa", "Endpoint", "Status", "Unidade", "Latencia", "Quando"]}
-                      rows={filteredUsage.map((event) => {
-                        const client = event.clientId ? clientsById.get(event.clientId) : null;
-                        return [
-                          <TextCell key="client" value={client?.name ?? "Sem cliente"} muted={event.method} />,
-                          <TextCell key="endpoint" value={event.endpoint} muted={event.requestId ?? event.provider ?? "gateway"} />,
-                          <StatusBadge key="status" status={(event.statusCode ?? 500) < 400 ? "online" : "critical"} label={String(event.statusCode ?? "-")} />,
-                          <TextCell key="unit" value={event.unitType} muted={String(event.quantity)} />,
-                          <TextCell key="latency" value={formatLatency(event.latencyMs)} muted={event.providerStatus ? `provider ${event.providerStatus}` : event.provider ?? "gateway"} />,
-                          <TextCell key="date" value={formatDate(event.createdAt)} muted="request" />,
-                        ];
+                    <div className="space-y-3 p-2">
+                      {usageGroups.map((group) => {
+                        const errorCount = group.items.filter(hasUsageIssue).length;
+                        const averageLatency = getAverageLatency(group.items);
+                        const isOpen = isUsageGroupOpen(group);
+
+                        return (
+                          <AccordionGroupCard
+                            key={group.key}
+                            title={getClientItemGroupTitle(group)}
+                            subtitle={getClientItemGroupSubtitle(group)}
+                            isOpen={isOpen}
+                            onToggle={() => toggleUsageGroup(group)}
+                            hasIssue={errorCount > 0}
+                            badges={(
+                              <>
+                                <NeonBadge tone="cyan">{group.items.length} requests</NeonBadge>
+                                <NeonBadge tone={errorCount > 0 ? "amber" : "green"}>{errorCount} falhas</NeonBadge>
+                                <NeonBadge tone="violet">{formatLatency(averageLatency)}</NeonBadge>
+                              </>
+                            )}
+                          >
+                            <DataTable
+                              columns={["Endpoint", "Status", "Unidade", "Latencia", "Quando"]}
+                              rows={group.items.map((event) => [
+                                <TextCell key="endpoint" value={event.endpoint} muted={event.requestId ?? event.provider ?? "gateway"} />,
+                                <StatusBadge key="status" status={(event.statusCode ?? 500) < 400 ? "online" : "critical"} label={String(event.statusCode ?? "-")} />,
+                                <TextCell key="unit" value={event.unitType} muted={String(event.quantity)} />,
+                                <TextCell key="latency" value={formatLatency(event.latencyMs)} muted={event.providerStatus ? `provider ${event.providerStatus}` : event.provider ?? "gateway"} />,
+                                <TextCell key="date" value={formatDate(event.createdAt)} muted={event.method ?? "request"} />,
+                              ])}
+                            />
+                          </AccordionGroupCard>
+                        );
                       })}
-                    />
+                    </div>
                   </ScrollableTable>
                 ) : (
                   <EmptyCopy title="Nenhum uso nesse filtro" text="Ajuste a busca ou selecione outro status." />
@@ -1709,6 +1762,17 @@ function formatLatency(value: number | null | undefined) {
   if (typeof value !== "number") return "Sem dado";
   if (value >= 1000) return `${(value / 1000).toFixed(value >= 10_000 ? 0 : 1)}s`;
   return `${value}ms`;
+}
+
+function getAverageLatency(events: AdminUsageEvent[]) {
+  const latencies = events
+    .map((event) => event.latencyMs)
+    .filter((value): value is number => typeof value === "number");
+
+  if (latencies.length === 0) return null;
+
+  const total = latencies.reduce((sum, value) => sum + value, 0);
+  return Math.round(total / latencies.length);
 }
 
 function getInitials(value: string) {

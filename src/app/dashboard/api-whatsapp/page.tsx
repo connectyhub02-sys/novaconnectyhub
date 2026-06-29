@@ -20,6 +20,10 @@ export default async function DashboardApiWhatsappPage() {
     redirect("/login?next=%2Fdashboard%2Fapi-whatsapp");
   }
 
+  if (workspace.profile.isPlatformAdmin) {
+    redirect("/admin/api-whatsapp");
+  }
+
   const organization = workspace.organization ?? await ensureStarterOrganization();
 
   if (!organization) {

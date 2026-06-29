@@ -17,6 +17,7 @@ type OrgInfo = { id: string; name: string; status: string; plan_code: string };
 type RawMembership = {
   user_id: string;
   role: string;
+  created_at: string | null;
   organizations: OrgInfo | OrgInfo[] | null;
 };
 
@@ -40,7 +41,8 @@ export async function GET() {
     service.from("profiles").select("id, full_name, email, company_name, is_platform_admin"),
     service
       .from("organization_members")
-      .select("user_id, role, organizations(id, name, status, plan_code)"),
+      .select("user_id, role, created_at, organizations(id, name, status, plan_code)")
+      .order("created_at", { ascending: true }),
   ]);
 
   if (authResult.error) {
@@ -55,7 +57,7 @@ export async function GET() {
 
   for (const raw of (membershipsResult.data ?? []) as unknown as RawMembership[]) {
     const org = resolveOrg(raw.organizations);
-    if (raw.user_id && org) {
+    if (raw.user_id && org && !membershipMap.has(raw.user_id)) {
       membershipMap.set(raw.user_id, {
         orgName: org.name,
         role: raw.role,

@@ -287,9 +287,8 @@ function UserRow({
 
         <button
           type="button"
-          disabled={isAccessingPanel || isSendingLink || user.isPlatformAdmin}
+          disabled={isAccessingPanel || isSendingLink}
           onClick={onAccessPanel}
-          title={user.isPlatformAdmin ? "Nao e possivel acessar o painel de outro admin" : undefined}
           className="inline-flex min-h-8 items-center gap-1.5 rounded-lg bg-cyan-300 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-40"
         >
           {isAccessingPanel ? (

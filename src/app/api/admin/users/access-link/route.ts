@@ -44,9 +44,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Usuario nao encontrado." }, { status: 404 });
   }
 
+  const redirectTo = new URL("/auth/callback", request.url);
+  redirectTo.searchParams.set("next", "/dashboard");
+
   const { data, error } = await service.auth.admin.generateLink({
     type: "magiclink",
     email: targetData.user.email,
+    options: {
+      redirectTo: redirectTo.toString(),
+    },
   });
 
   if (error) {
