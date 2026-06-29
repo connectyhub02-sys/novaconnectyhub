@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { ExternalLink, Loader2, Mail, Shield, User } from "lucide-react";
 import { NeonBadge, PageHeader, Panel } from "./panel-primitives";
+import { clearAdminImpersonationReturn, saveAdminImpersonationReturn } from "@/lib/admin-impersonation";
+import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
 type PlatformUser = {
@@ -94,9 +96,32 @@ export function AdminUsersConsole() {
     setNotice(null);
 
     try {
+      const targetUser = users.find((user) => user.id === userId) ?? null;
       const link = await getAccessLink(userId);
-      window.open(link!, "_blank", "noopener,noreferrer");
+      const supabase = createClient();
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
+
+      if (sessionError || !session?.access_token || !session.refresh_token) {
+        throw new Error("Nao foi possivel guardar sua sessao admin antes de acessar o cliente.");
+      }
+
+      saveAdminImpersonationReturn({
+        accessToken: session.access_token,
+        refreshToken: session.refresh_token,
+        returnPath: `${window.location.pathname}${window.location.search}`,
+        adminEmail: session.user.email ?? null,
+        adminName: readUserDisplayName(session.user.user_metadata),
+        targetEmail: targetUser?.email ?? null,
+        targetName: getUserDisplayName(targetUser),
+        startedAt: new Date().toISOString(),
+      });
+
+      window.location.assign(link!);
     } catch (error) {
+      clearAdminImpersonationReturn();
       setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao gerar link de acesso." });
     } finally {
       setActionUserId(null);
@@ -311,4 +336,36 @@ function formatShortDate(value: string) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(value));
+}
+
+function getUserDisplayName(user: PlatformUser | null) {
+  if (!user) {
+    return null;
+  }
+
+  return user.fullName || user.companyName || user.email?.split("@")[0] || null;
+}
+
+function readUserDisplayName(metadata: Record<string, unknown> | null | undefined) {
+  if (!metadata) {
+    return null;
+  }
+
+  const fullName = metadata.full_name;
+  const companyName = metadata.company_name;
+  const name = metadata.name;
+
+  if (typeof fullName === "string" && fullName.trim()) {
+    return fullName;
+  }
+
+  if (typeof companyName === "string" && companyName.trim()) {
+    return companyName;
+  }
+
+  if (typeof name === "string" && name.trim()) {
+    return name;
+  }
+
+  return null;
 }

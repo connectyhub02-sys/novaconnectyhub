@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, type ChangeEvent } from "react";
+import { useEffect, useState, type ChangeEvent } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
 import {
+  ArrowLeft,
   BarChart3,
   Bell,
   Bot,
@@ -51,6 +52,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ConnectyLogo } from "@/components/brand/connecty-logo";
+import {
+  clearAdminImpersonationReturn,
+  readAdminImpersonationReturn,
+  type AdminImpersonationReturn,
+} from "@/lib/admin-impersonation";
+import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -659,10 +666,99 @@ export function ConnectyShell({
 
         {/* Content */}
         <main className="flex-1 overflow-auto">
+          {mode === "client" ? <AdminImpersonationBanner /> : null}
           <div className="mx-auto w-full max-w-[1680px] px-3 py-4 sm:px-4 sm:py-5 lg:px-8 lg:py-6">
             {children}
           </div>
         </main>
+      </div>
+    </div>
+  );
+}
+
+function AdminImpersonationBanner() {
+  const [returnSession, setReturnSession] = useState<AdminImpersonationReturn | null>(null);
+  const [returning, setReturning] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setReturnSession(readAdminImpersonationReturn());
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  if (!returnSession) {
+    return null;
+  }
+
+  const targetName = returnSession.targetName || returnSession.targetEmail || "este usuario";
+  const adminName = returnSession.adminName || returnSession.adminEmail || "admin";
+
+  async function handleReturnToAdmin() {
+    if (!returnSession) {
+      return;
+    }
+
+    setReturning(true);
+    setError(null);
+
+    try {
+      const supabase = createClient();
+      const { error: restoreError } = await supabase.auth.setSession({
+        access_token: returnSession.accessToken,
+        refresh_token: returnSession.refreshToken,
+      });
+
+      if (restoreError) {
+        throw restoreError;
+      }
+
+      clearAdminImpersonationReturn();
+      window.location.replace(returnSession.returnPath || "/admin/clientes");
+    } catch {
+      setError("Nao foi possivel restaurar sua sessao admin. Entre novamente pelo login.");
+      setReturning(false);
+    }
+  }
+
+  return (
+    <div className="mx-auto w-full max-w-[1680px] px-3 pt-4 sm:px-4 sm:pt-5 lg:px-8 lg:pt-6">
+      <div
+        className="flex flex-col gap-3 rounded-2xl border px-4 py-3 shadow-2xl sm:flex-row sm:items-center sm:justify-between"
+        style={{
+          background:
+            "linear-gradient(135deg, rgba(var(--ch-accent-rgb),0.16), rgba(251,191,36,0.10)), var(--ch-surface)",
+          borderColor: "rgba(251,191,36,0.42)",
+          boxShadow: "0 18px 44px rgba(0,0,0,0.26)",
+        }}
+      >
+        <div className="min-w-0">
+          <div className="font-mono text-[9px] uppercase tracking-[0.22em] text-amber-200">
+            Acesso administrativo ativo
+          </div>
+          <p className="mt-1 text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>
+            Voce esta acessando o painel de <span className="text-amber-200">{targetName}</span> como{" "}
+            <span className="text-cyan-200">{adminName}</span>.
+          </p>
+          {error ? <p className="mt-1 text-[11px] text-rose-200">{error}</p> : null}
+        </div>
+
+        <button
+          type="button"
+          className="inline-flex min-h-9 shrink-0 items-center justify-center gap-2 rounded-xl border px-4 font-mono text-[10px] font-bold uppercase tracking-wide transition disabled:cursor-not-allowed disabled:opacity-60"
+          disabled={returning}
+          onClick={handleReturnToAdmin}
+          style={{
+            background: "rgba(251,191,36,0.18)",
+            borderColor: "rgba(251,191,36,0.42)",
+            color: "#fde68a",
+          }}
+        >
+          {returning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ArrowLeft className="h-3.5 w-3.5" />}
+          Voltar ao Admin OS
+        </button>
       </div>
     </div>
   );
