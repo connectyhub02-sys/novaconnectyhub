@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { Audiowide, Geist, Geist_Mono } from "next/font/google";
+import { MagicLinkFragmentRedirect } from "@/components/auth/magic-link-fragment-redirect";
 import { ConnectyTracker } from "@/components/tracking/connecty-tracker";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import "./globals.css";
@@ -60,6 +61,7 @@ export default function RootLayout({
       </head>
       <body className="min-h-full flex flex-col">
         <TooltipProvider>
+          <MagicLinkFragmentRedirect />
           <Suspense fallback={null}>
             <ConnectyTracker />
           </Suspense>
