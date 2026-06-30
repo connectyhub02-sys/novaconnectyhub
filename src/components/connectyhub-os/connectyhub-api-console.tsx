@@ -83,6 +83,8 @@ type AdminApiTab = "overview" | "clients" | "instances" | "webhooks" | "provider
 type AdminDelivery = AdminGatewayState["deliveries"][number];
 type AdminGatewayClient = AdminGatewayState["clients"][number];
 type AdminGatewayInstance = AdminGatewayState["instances"][number];
+type AdminGatewayHealthSummary = NonNullable<AdminGatewayClient["health"]>;
+type AdminGatewayHealthSignal = NonNullable<AdminGatewayInstance["health"]>;
 type AdminProviderInstance = AdminGatewayState["providerInstances"][number];
 type AdminProviderEvent = AdminGatewayState["providerEvents"][number];
 type AdminUsageEvent = AdminGatewayState["usage"][number];
@@ -281,6 +283,10 @@ export function ConnectyHubApiConsole({
     });
     return state.clients.filter((client) => clientIds.has(client.id));
   }, [state.clients, state.endpoints, state.instances, state.keys]);
+  const gatewayHealth = useMemo(
+    () => summarizeGatewayHealth(state.clients.map((client) => client.health)),
+    [state.clients],
+  );
   const providerInstancesAvailableForApi = state.providerInstances.filter((instance) => instance.availableForApi);
   const isApiClientGroupOpen = (client: AdminGatewayClient) => {
     if (apiClientQuery.trim() || apiClientStatus !== "all") return true;
@@ -609,6 +615,7 @@ export function ConnectyHubApiConsole({
             <NeonBadge tone="green">{state.summary.activeClients} empresas com acesso</NeonBadge>
             <NeonBadge tone="amber">{clientsUsingApi.length} usando API</NeonBadge>
             <NeonBadge tone="cyan">{state.summary.connectedApiInstances} instancias conectadas</NeonBadge>
+            <NeonBadge tone={healthTone(gatewayHealth.status)}>{healthLabel(gatewayHealth.status)}</NeonBadge>
           </div>
         }
       />
@@ -639,13 +646,14 @@ export function ConnectyHubApiConsole({
         </Panel>
       )}
 
-      <div className="mb-5 grid gap-4 md:grid-cols-2 xl:grid-cols-6">
+      <div className="mb-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-7">
         <MetricTile icon={PlugZap} label="Empresas com acesso" value={String(state.summary.clients)} detail={`${state.summary.activeClients} ativas`} tone="cyan" />
         <MetricTile icon={KeyRound} label="Usando API" value={String(clientsUsingApi.length)} detail={`${state.summary.activeKeys} chaves ativas`} tone="green" />
         <MetricTile icon={MessageCircle} label="Instancias API" value={String(state.summary.apiInstances)} detail={`${state.summary.connectedApiInstances} conectadas`} tone="green" />
         <MetricTile icon={RadioTower} label="Provedor" value={String(state.summary.providerInstances)} detail={`${state.summary.unmappedProviderInstances} disponiveis p/ API`} tone="amber" />
         <MetricTile icon={Activity} label="24h" value={String(state.summary.requests24h)} detail="requests API" tone="violet" />
         <MetricTile icon={Send} label="Webhooks 24h" value={String(state.summary.webhookDeliveries24h)} detail={`${state.summary.webhookFailures24h} falhas`} tone={state.summary.webhookFailures24h > 0 ? "amber" : "cyan"} />
+        <MetricTile icon={ShieldCheck} label="Saude API" value={healthLabel(gatewayHealth.status)} detail={`${gatewayHealth.critical} criticos / ${gatewayHealth.warning} avisos`} tone={healthTone(gatewayHealth.status)} />
       </div>
 
       <ApiTrafficPanel state={state} />
@@ -717,6 +725,7 @@ export function ConnectyHubApiConsole({
                               <>
                                 <NeonBadge tone={client.status === "active" ? "green" : client.status === "paused" ? "amber" : "zinc"}>{client.status}</NeonBadge>
                                 <NeonBadge tone={inUse ? "cyan" : "zinc"}>{inUse ? "em uso" : "sem uso"}</NeonBadge>
+                                <NeonBadge tone={healthTone(client.health?.status)}>{healthLabel(client.health?.status)}</NeonBadge>
                                 <NeonBadge tone="cyan">{keyCount} chaves</NeonBadge>
                                 <NeonBadge tone={instanceCount > 0 ? "green" : "zinc"}>{instanceCount} instancias</NeonBadge>
                                 <NeonBadge tone={webhookCount > 0 ? "violet" : "zinc"}>{webhookCount} webhooks</NeonBadge>
@@ -724,10 +733,11 @@ export function ConnectyHubApiConsole({
                             )}
                           >
                             <DataTable
-                              columns={["Acesso", "Uso API", "Chaves", "Instancias API", "Webhooks", "Plano"]}
+                              columns={["Acesso", "Uso API", "Saude", "Chaves", "Instancias API", "Webhooks", "Plano"]}
                               rows={[[
                                 <StatusBadge key="status" status={client.status === "active" ? "online" : client.status === "paused" ? "warning" : "idle"} label={client.status} />,
                                 <StatusBadge key="usage" status={inUse ? "online" : "idle"} label={inUse ? "cliente API" : "sem uso"} />,
+                                <TextCell key="health" value={healthLabel(client.health?.status)} muted={healthSummaryDetail(client.health)} />,
                                 <TextCell key="keys" value={String(keyCount)} muted="chaves" />,
                                 <TextCell key="instances" value={String(instanceCount)} muted="instancias" />,
                                 <TextCell key="hooks" value={String(webhookCount)} muted="webhooks" />,
@@ -769,6 +779,7 @@ export function ConnectyHubApiConsole({
                       {apiInstanceGroups.map((group) => {
                         const connectedCount = group.instances.filter((instance) => instance.status === "connected").length;
                         const webhookOkCount = group.instances.filter((instance) => instance.webhookConfigured).length;
+                        const healthIssueCount = group.instances.filter((instance) => isHealthIssue(instance.health?.status)).length;
                         const hasIssue = group.instances.some(hasApiInstanceIssue);
                         const isOpen = isApiInstanceGroupOpen(group);
 
@@ -785,11 +796,12 @@ export function ConnectyHubApiConsole({
                                 <NeonBadge tone="cyan">{group.instances.length} instancias</NeonBadge>
                                 <NeonBadge tone={connectedCount > 0 ? "green" : "zinc"}>{connectedCount} conectadas</NeonBadge>
                                 <NeonBadge tone={webhookOkCount === group.instances.length ? "green" : "amber"}>{webhookOkCount} webhooks ok</NeonBadge>
+                                <NeonBadge tone={healthIssueCount > 0 ? "amber" : "green"}>{healthIssueCount} alertas</NeonBadge>
                               </>
                             )}
                           >
                             <DataTable
-                              columns={["Instancia", "Status", "Numero", "Webhook", "Ultimo sinal", "Acoes"]}
+                              columns={["Instancia", "Status", "Saude", "Numero", "Webhook", "Ultimo sinal", "Acoes"]}
                               rows={group.instances.map((instance) => [
                                 <InstanceIdentityCell
                                   key="id"
@@ -799,6 +811,7 @@ export function ConnectyHubApiConsole({
                                   imageStatus={instance.profileImageUrl ? "foto sincronizada" : "foto pendente"}
                                 />,
                                 <StatusBadge key="status" status={instanceTone(instance.status)} label={instance.status} />,
+                                <TextCell key="health" value={healthLabel(instance.health?.status)} muted={healthSignalDetail(instance.health)} />,
                                 <TextCell key="phone" value={instance.phoneNumber ?? "Sem numero"} muted={instance.providerInstanceId ?? "sem provider id"} />,
                                 <StatusBadge key="webhook" status={instance.webhookConfigured ? "online" : "warning"} label={instance.webhookConfigured ? "ok" : "pendente"} />,
                                 <TextCell key="sync" value={formatDate(instance.lastMessageAt ?? instance.lastHeartbeatAt ?? instance.updatedAt)} muted="sync" />,
@@ -1649,7 +1662,58 @@ function hasUsageIssue(event: AdminUsageEvent) {
 }
 
 function hasApiInstanceIssue(instance: AdminGatewayInstance) {
-  return instance.status !== "connected" || !instance.webhookConfigured;
+  return instance.status !== "connected" || !instance.webhookConfigured || isHealthIssue(instance.health?.status);
+}
+
+function summarizeGatewayHealth(items: Array<AdminGatewayClient["health"] | null | undefined>) {
+  const known = items.filter(Boolean) as AdminGatewayHealthSummary[];
+  const critical = known.filter((item) => item.status === "critical").length;
+  const warning = known.filter((item) => item.status === "warning").length;
+  const ok = known.filter((item) => item.status === "ok").length;
+  const unknown = items.length - known.length + known.filter((item) => item.status === "unknown").length;
+  const status = critical > 0 ? "critical" : warning > 0 ? "warning" : ok > 0 ? "ok" : "unknown";
+
+  return {
+    status,
+    ok,
+    warning,
+    critical,
+    unknown,
+  };
+}
+
+function isHealthIssue(status: string | null | undefined) {
+  return status === "warning" || status === "critical";
+}
+
+function healthTone(status: string | null | undefined): Tone {
+  if (status === "ok") return "green";
+  if (status === "warning") return "amber";
+  if (status === "critical") return "rose";
+  return "zinc";
+}
+
+function healthLabel(status: string | null | undefined) {
+  if (status === "ok") return "ok";
+  if (status === "warning") return "atencao";
+  if (status === "critical") return "critico";
+  return "sem check";
+}
+
+function healthSummaryDetail(health: AdminGatewayClient["health"] | null | undefined) {
+  if (!health) return "aguardando inngest";
+  return `${health.provider.ok}/${health.provider.total} provider - ${health.webhooks.ok}/${health.webhooks.total} webhooks`;
+}
+
+function healthSignalDetail(health: AdminGatewayHealthSignal | null | undefined) {
+  if (!health) return "aguardando check";
+  const parts = [
+    health.message,
+    formatLatency(health.latencyMs),
+    formatDate(health.checkedAt),
+  ].filter(Boolean);
+
+  return parts.join(" / ");
 }
 
 function instanceTone(status: string): StatusTone {

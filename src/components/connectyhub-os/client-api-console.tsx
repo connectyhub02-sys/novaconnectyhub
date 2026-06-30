@@ -31,6 +31,8 @@ import { DataTable, NeonBadge, PageHeader, Panel, StatusBadge } from "./panel-pr
 type ClientGatewayInstance = ClientGatewayState["instances"][number];
 type ClientGatewayEndpoint = ClientGatewayState["endpoints"][number];
 type ClientGatewayDelivery = ClientGatewayState["deliveries"][number];
+type ClientGatewayHealthSummary = NonNullable<ClientGatewayState["clients"][number]["health"]>;
+type ClientGatewayHealthSignal = NonNullable<ClientGatewayInstance["health"]>;
 
 type Notice = {
   tone: "success" | "warning" | "error";
@@ -130,6 +132,7 @@ export function ClientApiConsole({
   const [generatedWebhookCredential, setGeneratedWebhookCredential] = useState<GeneratedCredential | null>(null);
   const clientsById = useMemo(() => new Map(state.clients.map((client) => [client.id, client])), [state.clients]);
   const activeClient = state.activeClientId ? clientsById.get(state.activeClientId) ?? null : state.clients[0] ?? null;
+  const activeHealth = activeClient?.health ?? null;
   const apiInstances = state.instances;
 
   async function submitForm(event: FormEvent<HTMLFormElement>) {
@@ -248,6 +251,7 @@ export function ClientApiConsole({
           <div className="flex flex-wrap gap-2">
             <NeonBadge tone={state.summary.activeKeys > 0 ? "green" : "amber"}>{state.summary.activeKeys} chaves ativas</NeonBadge>
             <NeonBadge tone="cyan">{state.summary.connectedApiInstances} instancias API</NeonBadge>
+            <NeonBadge tone={healthTone(activeHealth?.status)}>{healthLabel(activeHealth?.status)}</NeonBadge>
           </div>
         }
       />
@@ -270,12 +274,13 @@ export function ClientApiConsole({
         </Panel>
       )}
 
-      <div className="mb-5 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+      <div className="mb-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
         <MetricTile icon={PlugZap} label="Cliente API" value={String(state.summary.clients)} detail={`${state.summary.activeClients} ativo(s)`} tone="cyan" />
         <MetricTile icon={KeyRound} label="Chaves" value={String(state.summary.keys)} detail={`${state.summary.activeKeys} ativas`} tone="green" />
         <MetricTile icon={MessageCircle} label="Instancias API" value={String(state.summary.workspaceInstances)} detail={`${state.summary.connectedWorkspaceInstances} conectadas`} tone="green" />
         <MetricTile icon={Webhook} label="Webhooks" value={String(state.summary.endpoints)} detail={`${state.summary.activeEndpoints} ativos`} tone="violet" />
         <MetricTile icon={Activity} label="Mes atual" value={String(state.summary.requestsCurrentPeriod)} detail={`${state.summary.messagesUsed} mensagens`} tone="amber" />
+        <MetricTile icon={ShieldCheck} label="Saude API" value={healthLabel(activeHealth?.status)} detail={healthSummaryDetail(activeHealth)} tone={healthTone(activeHealth?.status)} />
       </div>
 
       <ClientTrafficPanel state={state} />
@@ -317,10 +322,11 @@ export function ClientApiConsole({
             <Panel title="Cliente API" eyebrow="workspace / plano / status">
               {state.clients.length > 0 ? (
                 <DataTable
-                  columns={["Cliente", "Status", "Plano", "Chaves", "Webhooks", "Criado"]}
+                  columns={["Cliente", "Status", "Saude", "Plano", "Chaves", "Webhooks", "Criado"]}
                   rows={state.clients.map((client) => [
                     <IdentityCell key="client" icon={PlugZap} title={client.name} subtitle={client.slug ?? client.id} />,
                     <StatusBadge key="status" status={client.status === "active" ? "online" : client.status === "paused" ? "warning" : "idle"} label={client.status} />,
+                    <TextCell key="health" value={healthLabel(client.health?.status)} muted={healthSummaryDetail(client.health)} />,
                     <NeonBadge key="plan" tone="cyan">{client.planCode ?? "api_starter"}</NeonBadge>,
                     <TextCell key="keys" value={String(state.keys.filter((key) => key.clientId === client.id).length)} muted="chaves" />,
                     <TextCell key="hooks" value={String(state.endpoints.filter((endpoint) => endpoint.clientId === client.id).length)} muted="webhooks" />,
@@ -335,10 +341,11 @@ export function ClientApiConsole({
             <Panel title="Instancias da API" eyebrow="foto / status / consumo externo">
               {state.instances.length > 0 ? (
                 <DataTable
-                  columns={["WhatsApp", "Status", "Numero", "Ultimo sinal", "Acoes"]}
+                  columns={["WhatsApp", "Status", "Saude", "Numero", "Ultimo sinal", "Acoes"]}
                   rows={state.instances.map((instance) => [
                     <InstanceCell key="instance" instance={instance} />,
                     <StatusBadge key="status" status={instanceTone(instance.status)} label={instance.status} />,
+                    <TextCell key="health" value={healthLabel(instance.health?.status)} muted={healthSignalDetail(instance.health)} />,
                     <TextCell key="phone" value={formatPhone(instance.phoneNumber)} muted={instance.providerInstanceId ?? "sem provider id"} />,
                     <TextCell key="sync" value={formatDate(instance.lastMessageAt ?? instance.lastHeartbeatAt ?? instance.updatedAt)} muted="sync" />,
                     <RowActions key="actions">
@@ -365,6 +372,7 @@ export function ClientApiConsole({
               <div className="grid gap-3">
                 <InfoTile label="Cliente ativo" value={activeClient?.name ?? "Nao ativado"} />
                 <InfoTile label="Instancias API" value={`${apiInstances.length} liberada(s)`} />
+                <InfoTile label="Saude API" value={`${healthLabel(activeHealth?.status)} - ${healthSummaryDetail(activeHealth)}`} />
                 <InfoTile label="Limite mensal" value={formatLimit(state.summary.monthlyMessageLimit)} />
               </div>
             </Panel>
@@ -426,10 +434,11 @@ export function ClientApiConsole({
           <Panel title="Webhooks" eyebrow="eventos / entregas">
             {state.endpoints.length > 0 ? (
               <DataTable
-                columns={["Endpoint", "Status", "Eventos", "Ultimo sucesso", "Acoes"]}
+                columns={["Endpoint", "Status", "Saude", "Eventos", "Ultimo sucesso", "Acoes"]}
                 rows={state.endpoints.map((endpoint) => [
                   <TextCell key="url" value={endpoint.description ?? endpoint.url} muted={endpoint.url} />,
                   <StatusBadge key="status" status={endpoint.status === "active" ? "online" : endpoint.status === "paused" ? "warning" : "idle"} label={endpoint.status} />,
+                  <TextCell key="health" value={healthLabel(endpoint.health?.status)} muted={healthSignalDetail(endpoint.health)} />,
                   <TextCell key="events" value={`${endpoint.events.length} eventos`} muted={endpoint.events.join(", ")} />,
                   <TextCell key="last" value={formatDate(endpoint.lastSuccessAt ?? endpoint.lastFailureAt ?? endpoint.createdAt)} muted={endpoint.lastSuccessAt ? "sucesso" : endpoint.lastFailureAt ? "falha" : "criado"} />,
                   <WebhookActions
@@ -995,6 +1004,36 @@ function deliveryTone(delivery: ClientGatewayDelivery): StatusTone {
   if (delivery.status === "delivered") return "online";
   if (delivery.status === "queued") return "warning";
   return "critical";
+}
+
+function healthTone(status: string | null | undefined): Tone {
+  if (status === "ok") return "green";
+  if (status === "warning") return "amber";
+  if (status === "critical") return "rose";
+  return "zinc";
+}
+
+function healthLabel(status: string | null | undefined) {
+  if (status === "ok") return "ok";
+  if (status === "warning") return "atencao";
+  if (status === "critical") return "critico";
+  return "sem check";
+}
+
+function healthSummaryDetail(health: ClientGatewayHealthSummary | null | undefined) {
+  if (!health) return "aguardando inngest";
+  return `${health.provider.ok}/${health.provider.total} provider - ${health.webhooks.ok}/${health.webhooks.total} webhooks`;
+}
+
+function healthSignalDetail(health: ClientGatewayHealthSignal | null | undefined) {
+  if (!health) return "aguardando check";
+  const parts = [
+    health.message,
+    formatLatency(health.latencyMs),
+    formatDate(health.checkedAt),
+  ].filter(Boolean);
+
+  return parts.join(" / ");
 }
 
 function successMessage(action: string) {

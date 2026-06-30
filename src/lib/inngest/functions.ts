@@ -20,6 +20,7 @@ import {
   type WhatsappFollowUpEventData,
   whatsappFollowUpEventName,
 } from "@/lib/whatsapp/proactive-followup";
+import { runConnectyHubGatewayHealthCheck } from "@/lib/connectyhub-api/gateway";
 import { syncUazapiInstances } from "@/lib/whatsapp/uazapi-sync";
 import { runGrowthAgentMission, type GrowthAgentCode } from "@/lib/growth/growth-agent-runner";
 
@@ -178,6 +179,31 @@ export const connectyhubWhatsappOutboundSweep = inngest.createFunction(
   },
 );
 
+export const connectyhubApiHealthMonitor = inngest.createFunction(
+  {
+    id: "connectyhub-api-health-monitor",
+    name: "ConnectyHub API Health Monitor",
+    retries: 1,
+    triggers: [
+      { event: "connectyhub/api.health.requested" },
+      { cron: "*/10 * * * *" },
+    ],
+  },
+  async ({ step }) => {
+    const summary = await step.run("run-connectyhub-api-health-check", () =>
+      runConnectyHubGatewayHealthCheck({
+        instanceLimit: 60,
+        webhookLimit: 60,
+      }),
+    );
+
+    return {
+      status: "checked",
+      summary,
+    };
+  },
+);
+
 export const connectyhubWhatsappHandoffNotifier = inngest.createFunction(
   {
     id: "connectyhub-whatsapp-handoff-notifier",
@@ -317,6 +343,7 @@ export const functions = [
   connectyhubWhatsappAgentSweep,
   connectyhubWhatsappOutboundDispatcher,
   connectyhubWhatsappOutboundSweep,
+  connectyhubApiHealthMonitor,
   connectyhubWhatsappHandoffNotifier,
   connectyhubWhatsappCloneProfileImport,
   connectyhubWhatsappFollowUp,

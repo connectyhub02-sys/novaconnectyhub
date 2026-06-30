@@ -4,7 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createHash, createHmac, randomBytes } from "node:crypto";
 import { decryptCredentialValue, encryptCredentialValue, previewCredentialValue } from "@/lib/security/credentials-crypto";
 import { createServiceClient } from "@/lib/supabase/service";
-import { resolveUazapiWhatsappStatus } from "@/lib/uazapi/status";
+import { resolveUazapiWhatsappStatus, type UazapiWhatsappStatus } from "@/lib/uazapi/status";
 import {
   buildWhatsappInstanceProfileImageMetadata,
   getWhatsappInstanceProfileImage,
@@ -19,6 +19,9 @@ import { loadUazapiCredentials, type UazapiCredentials } from "@/lib/whatsapp/ua
 type JsonRecord = Record<string, unknown>;
 
 const DEFAULT_CLIENT_WEBHOOK_PATH = "/api/webhooks/connectyhub";
+const GATEWAY_STATUS_REVALIDATE_MS = 60_000;
+const GATEWAY_STATUS_REVALIDATE_LIMIT = 8;
+const GATEWAY_HEALTH_EVENT_TYPE = "connectyhub.health_check";
 
 export type GatewayScope =
   | "instances:read"
@@ -31,6 +34,46 @@ export type GatewayScope =
 
 export type GatewayApiClientStatus = "active" | "paused" | "archived";
 export type GatewayApiKeyStatus = "active" | "paused" | "revoked";
+export type GatewayHealthStatus = "ok" | "warning" | "critical" | "unknown";
+
+export type GatewayHealthSignal = {
+  status: GatewayHealthStatus;
+  checkedAt: string;
+  latencyMs: number | null;
+  message: string | null;
+  providerStatus?: number | null;
+  statusCode?: number | null;
+};
+
+export type GatewayHealthIssue = {
+  scope: "provider" | "webhook" | "instance" | "connectyhub";
+  severity: Exclude<GatewayHealthStatus, "ok">;
+  message: string;
+  targetId?: string | null;
+};
+
+export type GatewayHealthCounter = {
+  status: GatewayHealthStatus;
+  total: number;
+  ok: number;
+  warning: number;
+  critical: number;
+  averageLatencyMs: number | null;
+};
+
+export type GatewayHealthSummary = {
+  status: GatewayHealthStatus;
+  checkedAt: string | null;
+  score: number | null;
+  provider: GatewayHealthCounter;
+  webhooks: GatewayHealthCounter;
+  instances: GatewayHealthCounter & {
+    connected: number;
+    disconnected: number;
+    stale: number;
+  };
+  issues: GatewayHealthIssue[];
+};
 
 export type GatewayAuthContext = {
   client: SupabaseClient;
@@ -139,6 +182,7 @@ type WebhookEndpointRow = {
   events: string[] | null;
   secret_preview: string | null;
   secret_encrypted?: string | null;
+  metadata?: JsonRecord | null;
   created_at: string;
   updated_at: string;
 };
@@ -209,7 +253,7 @@ type GatewayWebhookInstanceRow = {
 };
 
 const gatewayWebhookEndpointColumns =
-  "id, client_id, organization_id, url, description, status, events, secret_preview, secret_encrypted, last_success_at, last_failure_at, created_at, updated_at";
+  "id, client_id, organization_id, url, description, status, events, secret_preview, secret_encrypted, metadata, last_success_at, last_failure_at, created_at, updated_at";
 
 const gatewayWebhookDeliveryColumns =
   "id, endpoint_id, client_id, organization_id, whatsapp_instance_id, webhook_event_id, event_type, target_url, status, status_code, attempt_count, error_message, payload, response_preview, delivered_at, created_at";
@@ -337,7 +381,13 @@ export async function listGatewayInstances(auth: GatewayAuthContext) {
     throw new GatewayHttpError(500, "instances_lookup_failed", error.message);
   }
 
-  return ((data ?? []) as GatewayInstanceRow[]).map(mapGatewayInstance);
+  const rows = await revalidateStaleGatewayInstanceRows({
+    apiClientById: new Map([[auth.apiClient.id, auth.apiClient]]),
+    client: auth.client,
+    rows: (data ?? []) as GatewayInstanceRow[],
+  });
+
+  return rows.map(mapGatewayInstance);
 }
 
 export async function createGatewayInstance(
@@ -520,26 +570,74 @@ export async function connectGatewayInstance(auth: GatewayAuthContext, instanceI
 
 export async function refreshGatewayInstanceStatus(auth: GatewayAuthContext, instanceId: string) {
   const instance = await requireGatewayInstance(auth, instanceId);
-  const token = decryptInstanceToken(instance);
+  const refreshed = await refreshGatewayInstanceStatusRow({
+    apiClient: auth.apiClient,
+    client: auth.client,
+    instance,
+  });
+
+  await recordUsageEvent(auth, {
+    method: "GET",
+    endpoint: `/api/v1/instances/${instanceId}/status`,
+    statusCode: 200,
+    whatsappInstanceId: instance.id,
+    provider: "uazapi",
+    providerStatus: refreshed.providerStatus,
+    latencyMs: refreshed.latencyMs,
+  });
+
+  return {
+    ...mapGatewayInstance(refreshed.instance),
+    provider: refreshed.provider,
+  };
+}
+
+async function refreshGatewayInstanceStatusRow(input: {
+  apiClient: Pick<ApiClientRow, "id" | "organization_id" | "name">;
+  client: SupabaseClient;
+  instance: GatewayInstanceRow;
+}) {
+  const token = decryptInstanceToken(input.instance);
 
   if (!token) {
     throw new GatewayHttpError(409, "missing_instance_token", "Instancia sem token seguro. Adote ou recrie a instancia.");
   }
 
-  const credentials = await loadUazapiCredentials(auth.client);
+  const credentials = await loadUazapiCredentials(input.client);
   const providerStartedAt = Date.now();
   const result = await callUazapi(credentials, "/instance/status", {
     method: "GET",
     token,
     tolerateError: true,
   });
+  const provider = sanitizeProviderData(result.data);
 
   if (!result.ok) {
-    throw new GatewayHttpError(result.status, "provider_status_failed", readProviderError(result.data) ?? "Falha ao consultar status no provedor WhatsApp.", sanitizeProviderData(result.data));
+    if (isInvalidInstanceTokenResponse(result)) {
+      const instance = await markGatewayInstanceDisconnected(input.client, {
+        instance: input.instance,
+        metadata: {
+          last_api_action: "refresh_status",
+          last_status_error: readProviderError(result.data) ?? "Token invalido no provedor WhatsApp.",
+          last_status_response: provider,
+          connection_loss_reason: "invalid_instance_token",
+        },
+        provider,
+      });
+
+      return {
+        instance,
+        provider,
+        providerStatus: result.status,
+        latencyMs: result.latencyMs ?? Date.now() - providerStartedAt,
+      };
+    }
+
+    throw new GatewayHttpError(result.status, "provider_status_failed", readProviderError(result.data) ?? "Falha ao consultar status no provedor WhatsApp.", provider);
   }
 
-  const status = resolveUazapiWhatsappStatus(result.data, instance.status === "connected" ? "connected" : "draft");
-  const phoneNumber = normalizePhone(findString(result.data, ["owner", "phone", "number", "phone_number"]) ?? instance.phone_number);
+  const status = resolveUazapiWhatsappStatus(result.data, providerStatusFallback(input.instance.status));
+  const phoneNumber = normalizePhone(findString(result.data, ["owner", "phone", "number", "phone_number"]) ?? input.instance.phone_number);
   const profileImage = status === "connected"
     ? await getWhatsappInstanceProfileImage({
         credentials,
@@ -549,8 +647,18 @@ export async function refreshGatewayInstanceStatus(auth: GatewayAuthContext, ins
       }).catch(() => null)
     : null;
   const now = new Date().toISOString();
+  const profileImageMetadata = status === "connected"
+    ? buildWhatsappInstanceProfileImageMetadata({
+        profileImageUrl: profileImage?.profileImageUrl,
+        source: profileImage?.source,
+        syncedAt: now,
+        providerData: result.data,
+        profileData: profileImage?.profileData,
+        avatarData: profileImage?.avatarData,
+      })
+    : {};
 
-  await auth.client
+  const { data, error } = await input.client
     .from("whatsapp_instances")
     .update({
       status,
@@ -559,67 +667,37 @@ export async function refreshGatewayInstanceStatus(auth: GatewayAuthContext, ins
         providerData: result.data,
         profileData: profileImage?.profileData,
         avatarData: profileImage?.avatarData,
-        existingDisplayName: instance.display_name,
-        fallbackName: auth.apiClient.name,
+        existingDisplayName: input.instance.display_name,
+        fallbackName: input.apiClient.name,
         phoneNumber,
-        providerInstanceId: instance.provider_instance_id,
-        instanceId: instance.connectyhub_api_instance_id,
+        providerInstanceId: input.instance.provider_instance_id,
+        instanceId: input.instance.connectyhub_api_instance_id,
       }),
-      connected_at: status === "connected" ? instance.connected_at ?? now : instance.connected_at,
-      disconnected_at: status === "disconnected" ? now : status === "connected" ? null : instance.disconnected_at,
+      connected_at: status === "connected" ? input.instance.connected_at ?? now : input.instance.connected_at,
+      disconnected_at: status === "disconnected" ? now : status === "connected" ? null : input.instance.disconnected_at,
       last_heartbeat_at: now,
       last_synced_at: now,
-      provider_payload: sanitizeProviderData(result.data),
+      provider_payload: provider,
       metadata: {
-        ...(instance.metadata ?? {}),
+        ...(input.instance.metadata ?? {}),
         last_api_action: "refresh_status",
-        last_status_response: sanitizeProviderData(result.data),
-        ...(status === "connected"
-          ? buildWhatsappInstanceProfileImageMetadata({
-              profileImageUrl: profileImage?.profileImageUrl,
-              source: profileImage?.source,
-              syncedAt: now,
-              providerData: result.data,
-              profileData: profileImage?.profileData,
-              avatarData: profileImage?.avatarData,
-            })
-          : {}),
+        last_status_response: provider,
+        ...profileImageMetadata,
       },
     })
-    .eq("id", instance.id);
+    .eq("id", input.instance.id)
+    .select(gatewayInstanceColumns)
+    .single<GatewayInstanceRow>();
 
-  await recordUsageEvent(auth, {
-    method: "GET",
-    endpoint: `/api/v1/instances/${instanceId}/status`,
-    statusCode: 200,
-    whatsappInstanceId: instance.id,
-    provider: "uazapi",
-    providerStatus: result.status,
-    latencyMs: result.latencyMs ?? Date.now() - providerStartedAt,
-  });
+  if (error || !data) {
+    throw new GatewayHttpError(500, "instance_status_save_failed", error?.message ?? "Nao foi possivel salvar o status da instancia.");
+  }
 
   return {
-    ...mapGatewayInstance({
-      ...instance,
-      status,
-      phone_number: phoneNumber,
-      metadata: {
-        ...(instance.metadata ?? {}),
-        ...(status === "connected"
-          ? buildWhatsappInstanceProfileImageMetadata({
-              profileImageUrl: profileImage?.profileImageUrl,
-              source: profileImage?.source,
-              syncedAt: now,
-              providerData: result.data,
-              profileData: profileImage?.profileData,
-              avatarData: profileImage?.avatarData,
-            })
-          : {}),
-      },
-      last_heartbeat_at: now,
-      last_synced_at: now,
-    }),
-    provider: sanitizeProviderData(result.data),
+    instance: data,
+    provider,
+    providerStatus: result.status,
+    latencyMs: result.latencyMs ?? Date.now() - providerStartedAt,
   };
 }
 
@@ -1186,7 +1264,7 @@ export async function dispatchGatewayWebhookDeliveries(input: {
 
   const { data: endpoints, error: endpointsError } = await client
     .from("connectyhub_webhook_endpoints")
-    .select("id, client_id, organization_id, url, description, status, events, secret_preview, secret_encrypted, created_at, updated_at")
+    .select("id, client_id, organization_id, url, description, status, events, secret_preview, secret_encrypted, metadata, created_at, updated_at")
     .eq("client_id", instance.connectyhub_api_client_id)
     .eq("status", "active");
 
@@ -1870,7 +1948,7 @@ export async function getAdminGatewayState(client: SupabaseClient = createServic
       .limit(500),
     client
       .from("connectyhub_webhook_endpoints")
-      .select("id, client_id, organization_id, url, description, status, events, secret_preview, last_success_at, last_failure_at, created_at, updated_at")
+      .select("id, client_id, organization_id, url, description, status, events, secret_preview, metadata, last_success_at, last_failure_at, created_at, updated_at")
       .order("updated_at", { ascending: false })
       .limit(500),
     client
@@ -2081,7 +2159,8 @@ export async function getClientGatewayState(input: {
   if (monthlyMessagesResult.error) warnings.push(`Cota mensal indisponivel: ${monthlyMessagesResult.error.message}`);
   if (monthlyRequestsResult.error) warnings.push(`Requests mensais indisponiveis: ${monthlyRequestsResult.error.message}`);
 
-  const apiClients = ((clientsResult.data ?? []) as ApiClientRow[]).map(mapApiClient);
+  const apiClientRows = (clientsResult.data ?? []) as ApiClientRow[];
+  const apiClients = apiClientRows.map(mapApiClient);
   const clientIds = apiClients.map((apiClient) => apiClient.id);
   const [keysResult, endpointsResult] = clientIds.length > 0
     ? await Promise.all([
@@ -2094,7 +2173,7 @@ export async function getClientGatewayState(input: {
           .limit(100),
         client
           .from("connectyhub_webhook_endpoints")
-          .select("id, client_id, organization_id, url, description, status, events, secret_preview, last_success_at, last_failure_at, created_at, updated_at")
+          .select("id, client_id, organization_id, url, description, status, events, secret_preview, metadata, last_success_at, last_failure_at, created_at, updated_at")
           .eq("organization_id", input.organizationId)
           .in("client_id", clientIds)
           .neq("status", "archived")
@@ -2110,10 +2189,15 @@ export async function getClientGatewayState(input: {
   const endpoints = ((endpointsResult?.data ?? []) as WebhookEndpointSafeRow[]).map(mapWebhookEndpointSafe);
   const instanceRows = (instancesResult.data ?? []) as GatewayInstanceRow[];
   const clientAgents = ((clientAgentsResult.data ?? []) as GatewayClientAgentRow[]).filter(isGatewayClientWhatsappAgent);
-  const apiInstanceRows = instanceRows.filter((row) => {
+  let apiInstanceRows = instanceRows.filter((row) => {
     return Boolean(row.connectyhub_api_client_id && clientIds.includes(row.connectyhub_api_client_id))
       && isPublicApiGatewayInstance(row)
       && !isClientAgentGatewayInstance(row, clientAgents);
+  });
+  apiInstanceRows = await revalidateStaleGatewayInstanceRows({
+    apiClientById: new Map(apiClientRows.map((row) => [row.id, row])),
+    client,
+    rows: apiInstanceRows,
   });
   const instances = apiInstanceRows.map(mapGatewayInstance);
   const usage = ((usageResult.data ?? []) as ApiUsageEventRow[]).map(mapUsageEvent);
@@ -2160,6 +2244,179 @@ export async function getClientGatewayState(input: {
 }
 
 export type ClientGatewayState = Awaited<ReturnType<typeof getClientGatewayState>>;
+
+type GatewayHealthCheckResult = {
+  clientId: string;
+  scope: "provider" | "webhook";
+  targetId: string | null;
+  status: GatewayHealthStatus;
+  latencyMs: number | null;
+  message: string | null;
+  instanceStatus?: GatewayInstanceRow["status"] | null;
+};
+
+export async function runConnectyHubGatewayHealthCheck(input: {
+  apiClientId?: string;
+  organizationId?: string;
+  instanceLimit?: number;
+  webhookLimit?: number;
+  client?: SupabaseClient;
+} = {}) {
+  const client = input.client ?? createServiceClient();
+  const checkedAt = new Date().toISOString();
+  const queryIssues: GatewayHealthIssue[] = [];
+
+  let clientsQuery = client
+    .from("connectyhub_api_clients")
+    .select(apiClientColumns)
+    .neq("status", "archived")
+    .limit(200);
+
+  let instancesQuery = client
+    .from("whatsapp_instances")
+    .select(gatewayInstanceColumns)
+    .neq("status", "archived")
+    .not("connectyhub_api_client_id", "is", null)
+    .order("updated_at", { ascending: false })
+    .limit(input.instanceLimit ?? 80);
+
+  let endpointsQuery = client
+    .from("connectyhub_webhook_endpoints")
+    .select(gatewayWebhookEndpointColumns)
+    .eq("status", "active")
+    .order("updated_at", { ascending: false })
+    .limit(input.webhookLimit ?? 80);
+
+  if (input.apiClientId) {
+    clientsQuery = clientsQuery.eq("id", input.apiClientId);
+    instancesQuery = instancesQuery.eq("connectyhub_api_client_id", input.apiClientId);
+    endpointsQuery = endpointsQuery.eq("client_id", input.apiClientId);
+  }
+
+  if (input.organizationId) {
+    clientsQuery = clientsQuery.eq("organization_id", input.organizationId);
+    instancesQuery = instancesQuery.eq("organization_id", input.organizationId);
+    endpointsQuery = endpointsQuery.eq("organization_id", input.organizationId);
+  }
+
+  const [clientsResult, instancesResult, endpointsResult] = await Promise.all([
+    clientsQuery,
+    instancesQuery,
+    endpointsQuery,
+  ]);
+
+  if (clientsResult.error) {
+    queryIssues.push({
+      scope: "connectyhub",
+      severity: "critical",
+      message: `Clientes API indisponiveis: ${clientsResult.error.message}`,
+    });
+  }
+
+  if (instancesResult.error) {
+    queryIssues.push({
+      scope: "connectyhub",
+      severity: "critical",
+      message: `Instancias API indisponiveis: ${instancesResult.error.message}`,
+    });
+  }
+
+  if (endpointsResult.error) {
+    queryIssues.push({
+      scope: "connectyhub",
+      severity: "critical",
+      message: `Webhooks API indisponiveis: ${endpointsResult.error.message}`,
+    });
+  }
+
+  const apiClients = (clientsResult.data ?? []) as ApiClientRow[];
+  const apiClientById = new Map(apiClients.map((apiClient) => [apiClient.id, apiClient]));
+  const instanceRows = ((instancesResult.data ?? []) as GatewayInstanceRow[]).filter(isPublicApiGatewayInstance);
+  const endpointRows = (endpointsResult.data ?? []) as WebhookEndpointRow[];
+
+  const providerResults = await mapWithConcurrency(instanceRows, 4, async (instance) => {
+    const apiClient = instance.connectyhub_api_client_id ? apiClientById.get(instance.connectyhub_api_client_id) : null;
+
+    if (!apiClient) {
+      return {
+        clientId: instance.connectyhub_api_client_id ?? "unknown",
+        scope: "provider" as const,
+        targetId: instance.connectyhub_api_instance_id,
+        status: "warning" as const,
+        latencyMs: null,
+        message: "Instancia sem cliente API correspondente.",
+        instanceStatus: instance.status,
+      };
+    }
+
+    return checkGatewayProviderHealth({
+      apiClient,
+      checkedAt,
+      client,
+      instance,
+    });
+  });
+
+  const webhookResults = await mapWithConcurrency(endpointRows, 4, async (endpoint) => {
+    const apiClient = apiClientById.get(endpoint.client_id);
+
+    if (!apiClient) {
+      return {
+        clientId: endpoint.client_id,
+        scope: "webhook" as const,
+        targetId: endpoint.id,
+        status: "warning" as const,
+        latencyMs: null,
+        message: "Webhook sem cliente API correspondente.",
+      };
+    }
+
+    return checkGatewayWebhookHealth({
+      apiClient,
+      checkedAt,
+      client,
+      endpoint,
+    });
+  });
+
+  const clientSummaries = await Promise.all(apiClients.map(async (apiClient) => {
+    const summary = buildGatewayHealthSummary({
+      checkedAt,
+      providerResults: providerResults.filter((result) => result.clientId === apiClient.id),
+      webhookResults: webhookResults.filter((result) => result.clientId === apiClient.id),
+      extraIssues: queryIssues.filter((issue) => issue.targetId === apiClient.id),
+    });
+
+    await saveGatewayApiClientHealth(client, apiClient, summary);
+
+    return {
+      clientId: apiClient.id,
+      organizationId: apiClient.organization_id,
+      status: summary.status,
+      score: summary.score,
+      issues: summary.issues.length,
+    };
+  }));
+
+  const summary = buildGatewayHealthSummary({
+    checkedAt,
+    providerResults,
+    webhookResults,
+    extraIssues: queryIssues,
+  });
+
+  return {
+    checkedAt,
+    status: summary.status,
+    score: summary.score,
+    clients: apiClients.length,
+    provider: summary.provider,
+    webhooks: summary.webhooks,
+    instances: summary.instances,
+    issues: summary.issues,
+    clientSummaries,
+  };
+}
 
 export async function ensureClientApiClient(input: {
   organizationId: string;
@@ -2562,7 +2819,7 @@ export async function createClientWebhookEndpoint(input: {
         created_from: "client_dashboard",
       },
     })
-    .select("id, client_id, organization_id, url, description, status, events, secret_preview, last_success_at, last_failure_at, created_at, updated_at")
+    .select("id, client_id, organization_id, url, description, status, events, secret_preview, metadata, last_success_at, last_failure_at, created_at, updated_at")
     .single<WebhookEndpointSafeRow>();
 
   if (error || !data) {
@@ -2587,7 +2844,7 @@ export async function updateClientWebhookEndpointStatus(input: {
     .update({ status: input.status })
     .eq("id", input.webhookId)
     .eq("organization_id", input.organizationId)
-    .select("id, client_id, organization_id, url, description, status, events, secret_preview, last_success_at, last_failure_at, created_at, updated_at")
+    .select("id, client_id, organization_id, url, description, status, events, secret_preview, metadata, last_success_at, last_failure_at, created_at, updated_at")
     .maybeSingle<WebhookEndpointSafeRow>();
 
   if (error) {
@@ -2967,6 +3224,108 @@ async function requireAdminGatewayInstance(client: SupabaseClient, publicInstanc
 
   if (!data) {
     throw new GatewayHttpError(404, "instance_not_found", "Instancia nao encontrada.");
+  }
+
+  return data;
+}
+
+async function revalidateStaleGatewayInstanceRows(input: {
+  apiClientById: Map<string, Pick<ApiClientRow, "id" | "organization_id" | "name">>;
+  client: SupabaseClient;
+  rows: GatewayInstanceRow[];
+}) {
+  const nextRows = [...input.rows];
+  const candidates = input.rows
+    .filter(shouldRevalidateGatewayStatus)
+    .slice(0, GATEWAY_STATUS_REVALIDATE_LIMIT);
+
+  if (candidates.length === 0) {
+    return nextRows;
+  }
+
+  const refreshed = await Promise.all(
+    candidates.map(async (instance) => {
+      const apiClient = instance.connectyhub_api_client_id
+        ? input.apiClientById.get(instance.connectyhub_api_client_id)
+        : null;
+
+      if (!apiClient) {
+        return null;
+      }
+
+      try {
+        return await refreshGatewayInstanceStatusRow({
+          apiClient,
+          client: input.client,
+          instance,
+        });
+      } catch {
+        return null;
+      }
+    }),
+  );
+
+  for (const item of refreshed) {
+    if (!item) continue;
+    const index = nextRows.findIndex((row) => row.id === item.instance.id);
+
+    if (index >= 0) {
+      nextRows[index] = item.instance;
+    }
+  }
+
+  return nextRows;
+}
+
+function shouldRevalidateGatewayStatus(instance: GatewayInstanceRow) {
+  if (instance.status !== "connected") {
+    return false;
+  }
+
+  const lastSignal = instance.last_heartbeat_at ?? instance.last_synced_at ?? instance.updated_at;
+  const lastSignalMs = lastSignal ? Date.parse(lastSignal) : 0;
+
+  return !Number.isFinite(lastSignalMs) || Date.now() - lastSignalMs > GATEWAY_STATUS_REVALIDATE_MS;
+}
+
+function providerStatusFallback(status: GatewayInstanceRow["status"]): UazapiWhatsappStatus {
+  if (status === "connected") return "disconnected";
+  if (status === "qr_pending") return "qr_pending";
+  if (status === "blocked") return "blocked";
+  if (status === "error") return "error";
+  return "draft";
+}
+
+async function markGatewayInstanceDisconnected(
+  client: SupabaseClient,
+  input: {
+    instance: GatewayInstanceRow;
+    metadata: JsonRecord;
+    provider: unknown;
+  },
+) {
+  const now = new Date().toISOString();
+  const { data, error } = await client
+    .from("whatsapp_instances")
+    .update({
+      status: "disconnected",
+      qr_status: null,
+      disconnected_at: now,
+      last_heartbeat_at: now,
+      last_synced_at: now,
+      provider_payload: input.provider,
+      metadata: {
+        ...(input.instance.metadata ?? {}),
+        ...input.metadata,
+        connection_loss_synced_at: now,
+      },
+    })
+    .eq("id", input.instance.id)
+    .select(gatewayInstanceColumns)
+    .single<GatewayInstanceRow>();
+
+  if (error || !data) {
+    throw new GatewayHttpError(500, "instance_status_save_failed", error?.message ?? "Nao foi possivel marcar a instancia como desconectada.");
   }
 
   return data;
@@ -3492,6 +3851,8 @@ async function deliverGatewayWebhook(
     return { ok: false, error: insertError?.message ?? "Falha ao registrar delivery." };
   }
 
+  const deliveryStartedAt = Date.now();
+
   try {
     const response = await fetch(input.endpoint.url, {
       method: "POST",
@@ -3521,8 +3882,8 @@ async function deliverGatewayWebhook(
       .eq("id", input.endpoint.id);
 
     return ok
-      ? { ok: true }
-      : { ok: false, error: `Endpoint respondeu status ${response.status}.` };
+      ? { ok: true, statusCode: response.status, latencyMs: Date.now() - deliveryStartedAt }
+      : { ok: false, error: `Endpoint respondeu status ${response.status}.`, statusCode: response.status, latencyMs: Date.now() - deliveryStartedAt };
   } catch (error) {
     const failedAt = new Date().toISOString();
     const message = error instanceof Error ? error.message : "Falha ao chamar endpoint.";
@@ -3541,7 +3902,7 @@ async function deliverGatewayWebhook(
       .update({ last_failure_at: failedAt })
       .eq("id", input.endpoint.id);
 
-    return { ok: false, error: message };
+    return { ok: false, error: message, statusCode: null, latencyMs: Date.now() - deliveryStartedAt };
   }
 }
 
@@ -3685,6 +4046,275 @@ function normalizeLatencyMs(value: number | null | undefined) {
     : null;
 }
 
+async function checkGatewayProviderHealth(input: {
+  apiClient: Pick<ApiClientRow, "id" | "organization_id" | "name">;
+  checkedAt: string;
+  client: SupabaseClient;
+  instance: GatewayInstanceRow;
+}): Promise<GatewayHealthCheckResult> {
+  try {
+    const refreshed = await refreshGatewayInstanceStatusRow({
+      apiClient: input.apiClient,
+      client: input.client,
+      instance: input.instance,
+    });
+    const status = providerHealthStatusFromInstance(refreshed.instance, refreshed.providerStatus);
+    const message = providerHealthMessage(refreshed.instance, refreshed.providerStatus);
+    const signal: GatewayHealthSignal = {
+      status,
+      checkedAt: input.checkedAt,
+      latencyMs: normalizeLatencyMs(refreshed.latencyMs),
+      message,
+      providerStatus: refreshed.providerStatus,
+    };
+
+    await saveGatewayInstanceHealth(input.client, refreshed.instance, signal);
+
+    return {
+      clientId: input.apiClient.id,
+      scope: "provider",
+      targetId: refreshed.instance.connectyhub_api_instance_id,
+      status,
+      latencyMs: signal.latencyMs,
+      message,
+      instanceStatus: refreshed.instance.status,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Falha ao consultar provedor.";
+    const signal: GatewayHealthSignal = {
+      status: "critical",
+      checkedAt: input.checkedAt,
+      latencyMs: null,
+      message,
+      providerStatus: error instanceof GatewayHttpError ? error.status : null,
+    };
+
+    await saveGatewayInstanceHealth(input.client, input.instance, signal);
+
+    return {
+      clientId: input.apiClient.id,
+      scope: "provider",
+      targetId: input.instance.connectyhub_api_instance_id,
+      status: "critical",
+      latencyMs: null,
+      message,
+      instanceStatus: input.instance.status,
+    };
+  }
+}
+
+async function checkGatewayWebhookHealth(input: {
+  apiClient: Pick<ApiClientRow, "id" | "organization_id" | "name">;
+  checkedAt: string;
+  client: SupabaseClient;
+  endpoint: WebhookEndpointRow;
+}): Promise<GatewayHealthCheckResult> {
+  const result = await deliverGatewayWebhook(input.client, {
+    endpoint: input.endpoint,
+    apiClientId: input.apiClient.id,
+    organizationId: input.apiClient.organization_id,
+    whatsappInstanceId: null,
+    publicInstanceId: "health-check",
+    webhookEventId: null,
+    eventType: GATEWAY_HEALTH_EVENT_TYPE,
+    payload: {
+      check: "connectyhub_gateway_health",
+      clientId: input.apiClient.id,
+      organizationId: input.apiClient.organization_id,
+      checkedAt: input.checkedAt,
+    },
+    ingest: {
+      healthCheck: true,
+      source: "connectyhub_api_health_monitor",
+    },
+  });
+  const latencyMs = "latencyMs" in result ? normalizeLatencyMs(result.latencyMs) : null;
+  const statusCode = "statusCode" in result ? result.statusCode : null;
+  const status: GatewayHealthStatus = result.ok ? "ok" : "critical";
+  const message = result.ok
+    ? "Webhook do cliente respondeu com sucesso."
+    : result.error ?? "Webhook do cliente falhou.";
+  const signal: GatewayHealthSignal = {
+    status,
+    checkedAt: input.checkedAt,
+    latencyMs,
+    message,
+    statusCode,
+  };
+
+  await saveGatewayWebhookHealth(input.client, input.endpoint, signal);
+
+  return {
+    clientId: input.apiClient.id,
+    scope: "webhook",
+    targetId: input.endpoint.id,
+    status,
+    latencyMs,
+    message,
+  };
+}
+
+function buildGatewayHealthSummary(input: {
+  checkedAt: string;
+  providerResults: GatewayHealthCheckResult[];
+  webhookResults: GatewayHealthCheckResult[];
+  extraIssues?: GatewayHealthIssue[];
+}): GatewayHealthSummary {
+  const provider = summarizeGatewayHealthResults(input.providerResults);
+  const webhooks = summarizeGatewayHealthResults(input.webhookResults);
+  const connected = input.providerResults.filter((result) => result.instanceStatus === "connected").length;
+  const disconnected = input.providerResults.filter((result) => result.instanceStatus && result.instanceStatus !== "connected").length;
+  const issues: GatewayHealthIssue[] = [
+    ...(input.extraIssues ?? []),
+    ...[...input.providerResults, ...input.webhookResults]
+      .filter((result) => result.status !== "ok")
+      .map((result) => ({
+        scope: result.scope,
+        severity: result.status === "critical" ? "critical" as const : "warning" as const,
+        message: result.message ?? (result.scope === "provider" ? "Provider sem resposta." : "Webhook sem resposta."),
+        targetId: result.targetId,
+      })),
+  ].slice(0, 12);
+  const criticalCount = provider.critical + webhooks.critical + issues.filter((issue) => issue.severity === "critical").length;
+  const warningCount = provider.warning + webhooks.warning + issues.filter((issue) => issue.severity === "warning" || issue.severity === "unknown").length;
+  const checkedTotal = provider.total + webhooks.total;
+  const status: GatewayHealthStatus = criticalCount > 0
+    ? "critical"
+    : warningCount > 0
+      ? "warning"
+      : checkedTotal > 0
+        ? "ok"
+        : "unknown";
+  const score = checkedTotal > 0 || issues.length > 0
+    ? Math.max(0, 100 - criticalCount * 30 - warningCount * 10)
+    : null;
+
+  return {
+    status,
+    checkedAt: checkedTotal > 0 || issues.length > 0 ? input.checkedAt : null,
+    score,
+    provider,
+    webhooks,
+    instances: {
+      ...provider,
+      connected,
+      disconnected,
+      stale: 0,
+    },
+    issues,
+  };
+}
+
+function summarizeGatewayHealthResults(results: GatewayHealthCheckResult[]): GatewayHealthCounter {
+  const total = results.length;
+  const ok = results.filter((result) => result.status === "ok").length;
+  const warning = results.filter((result) => result.status === "warning" || result.status === "unknown").length;
+  const critical = results.filter((result) => result.status === "critical").length;
+  const latencies = results
+    .map((result) => result.latencyMs)
+    .filter((latency): latency is number => typeof latency === "number" && Number.isFinite(latency));
+
+  return {
+    status: total === 0 ? "unknown" : critical > 0 ? "critical" : warning > 0 ? "warning" : "ok",
+    total,
+    ok,
+    warning,
+    critical,
+    averageLatencyMs: latencies.length > 0
+      ? Math.round(latencies.reduce((sum, latency) => sum + latency, 0) / latencies.length)
+      : null,
+  };
+}
+
+function providerHealthStatusFromInstance(
+  instance: GatewayInstanceRow,
+  providerStatus: number | null | undefined,
+): GatewayHealthStatus {
+  if (providerStatus === 401 || providerStatus === 403) return "critical";
+  if (typeof providerStatus === "number" && providerStatus >= 500) return "critical";
+  if (instance.status === "connected") return "ok";
+  if (instance.status === "error" || instance.status === "blocked") return "critical";
+  if (instance.status === "qr_pending" || instance.status === "draft" || instance.status === "disconnected") return "warning";
+  return "unknown";
+}
+
+function providerHealthMessage(instance: GatewayInstanceRow, providerStatus: number | null | undefined) {
+  if (providerStatus === 401 || providerStatus === 403) {
+    return "Token recusado pelo provedor.";
+  }
+
+  if (typeof providerStatus === "number" && providerStatus >= 500) {
+    return `Provedor respondeu ${providerStatus}.`;
+  }
+
+  if (instance.status === "connected") {
+    return "Instancia conectada no provedor.";
+  }
+
+  return `Instancia retornou status ${instance.status}.`;
+}
+
+async function saveGatewayApiClientHealth(
+  client: SupabaseClient,
+  apiClient: ApiClientRow,
+  health: GatewayHealthSummary,
+) {
+  await client
+    .from("connectyhub_api_clients")
+    .update({
+      metadata: {
+        ...(apiClient.metadata ?? {}),
+        gateway_health: health,
+      },
+    })
+    .eq("id", apiClient.id);
+}
+
+async function saveGatewayInstanceHealth(
+  client: SupabaseClient,
+  instance: GatewayInstanceRow,
+  health: GatewayHealthSignal,
+) {
+  await client
+    .from("whatsapp_instances")
+    .update({
+      metadata: {
+        ...(instance.metadata ?? {}),
+        gateway_health_instance: health,
+      },
+    })
+    .eq("id", instance.id);
+}
+
+async function saveGatewayWebhookHealth(
+  client: SupabaseClient,
+  endpoint: WebhookEndpointRow,
+  health: GatewayHealthSignal,
+) {
+  await client
+    .from("connectyhub_webhook_endpoints")
+    .update({
+      metadata: {
+        ...(endpoint.metadata ?? {}),
+        gateway_health_webhook: health,
+      },
+    })
+    .eq("id", endpoint.id);
+}
+
+function readGatewayHealthSummary(metadata: JsonRecord | null | undefined): GatewayHealthSummary | null {
+  const value = isRecord(metadata) ? metadata.gateway_health : null;
+  return isRecord(value) ? value as GatewayHealthSummary : null;
+}
+
+function readGatewayHealthSignal(
+  metadata: JsonRecord | null | undefined,
+  key: "gateway_health_instance" | "gateway_health_webhook",
+): GatewayHealthSignal | null {
+  const value = isRecord(metadata) ? metadata[key] : null;
+  return isRecord(value) ? value as GatewayHealthSignal : null;
+}
+
 function hashSecret(value: string) {
   return createHash("sha256").update(value).digest("hex");
 }
@@ -3762,6 +4392,7 @@ function mapGatewayInstance(row: GatewayInstanceRow) {
     lastHeartbeatAt: row.last_heartbeat_at,
     lastMessageAt: row.last_message_at,
     updatedAt: row.updated_at,
+    health: readGatewayHealthSignal(row.metadata, "gateway_health_instance"),
   };
 }
 
@@ -3857,6 +4488,7 @@ function mapApiClient(row: ApiClientRow) {
     monthlyMessageLimit: row.monthly_message_limit,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    health: readGatewayHealthSummary(row.metadata),
   };
 }
 
@@ -3889,6 +4521,7 @@ function mapWebhookEndpoint(row: WebhookEndpointRow) {
     secretPreview: row.secret_preview,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    health: readGatewayHealthSignal(row.metadata ?? null, "gateway_health_webhook"),
   };
 }
 
@@ -4361,6 +4994,15 @@ function readProviderError(value: unknown) {
 
   const message = findString(value, ["error", "message", "detail"]);
   return message ? scrubProviderName(message) : null;
+}
+
+function isInvalidInstanceTokenResponse(result: { status: number; data: unknown }) {
+  const message = readProviderError(result.data)?.toLowerCase() ?? "";
+
+  return (
+    (message.includes("token") && (message.includes("invalid") || message.includes("invalido") || message.includes("inválido"))) ||
+    ([401, 403].includes(result.status) && message.includes("token"))
+  );
 }
 
 function scrubProviderName(value: string) {

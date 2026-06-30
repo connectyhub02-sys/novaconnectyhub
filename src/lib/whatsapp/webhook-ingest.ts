@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { inngest } from "@/lib/inngest/client";
 import { createServiceClient } from "@/lib/supabase/service";
+import { resolveUazapiWhatsappStatus } from "@/lib/uazapi/status";
 import {
   mergeLeadProfileImageMetadata,
   readLeadProfileImageUrl,
@@ -125,6 +126,12 @@ export async function ingestUazapiWebhook(input: {
       error: "Instancia nao mapeada para organizacao.",
     };
   }
+
+  await syncInstanceConnectionFromWebhook(client, {
+    eventType,
+    instance,
+    payload,
+  });
 
   if (!message.providerChatId && !message.phoneNumber && !message.providerMessageId) {
     await markWebhookEvent(client, eventResult.eventId, "processed");
@@ -299,6 +306,59 @@ async function findWhatsappInstance(client: SupabaseClient, providerInstanceId: 
     .maybeSingle<WhatsappInstanceRow>();
 
   return byProviderName ?? null;
+}
+
+async function syncInstanceConnectionFromWebhook(
+  client: SupabaseClient,
+  input: {
+    eventType: string;
+    instance: WhatsappInstanceRow;
+    payload: JsonRecord;
+  },
+) {
+  if (!isConnectionWebhookEvent(input.eventType)) {
+    return;
+  }
+
+  const status = resolveUazapiWhatsappStatus(input.payload, "draft");
+
+  if (status === "draft") {
+    return;
+  }
+
+  const now = new Date().toISOString();
+  const update: JsonRecord = {
+    status,
+    last_heartbeat_at: now,
+    last_synced_at: now,
+    metadata: {
+      ...(input.instance.metadata ?? {}),
+      last_connection_event: input.eventType,
+      last_connection_event_status: status,
+      last_connection_event_synced_at: now,
+    },
+  };
+
+  if (status === "connected") {
+    update.connected_at = now;
+    update.disconnected_at = null;
+  }
+
+  if (status === "disconnected") {
+    update.disconnected_at = now;
+  }
+
+  await client
+    .from("whatsapp_instances")
+    .update(update)
+    .eq("id", input.instance.id)
+    .neq("status", "archived");
+}
+
+function isConnectionWebhookEvent(eventType: string) {
+  const normalized = eventType.toLowerCase().replace(/[_-]+/g, " ");
+
+  return normalized.includes("connection") || normalized.includes("connect") || normalized.includes("status");
 }
 
 async function insertWebhookEvent(

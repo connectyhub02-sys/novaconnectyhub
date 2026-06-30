@@ -8,6 +8,19 @@ export type UazapiWhatsappStatus =
 
 type JsonRecord = Record<string, unknown>;
 
+const CONNECTION_BOOLEAN_KEYS = [
+  "connected",
+  "isConnected",
+  "loggedIn",
+  "isLoggedIn",
+  "online",
+  "isOnline",
+  "authenticated",
+  "isAuthenticated",
+  "ready",
+  "isReady",
+];
+
 export function resolveUazapiWhatsappStatus(
   payload: unknown,
   fallback: UazapiWhatsappStatus = "draft",
@@ -22,14 +35,14 @@ export function resolveUazapiWhatsappStatus(
   const normalized = normalizeUazapiWhatsappStatus(rawStatus, fallback);
 
   if (normalized !== "draft") {
+    if (explicitConnection === false && normalized === "connected") {
+      return "disconnected";
+    }
+
     return normalized;
   }
 
-  if (explicitConnection === false) {
-    return "qr_pending";
-  }
-
-  return fallback;
+  return explicitConnection === false ? "disconnected" : fallback;
 }
 
 export function normalizeUazapiWhatsappStatus(
@@ -40,11 +53,11 @@ export function normalizeUazapiWhatsappStatus(
 
   if (!status) return fallback;
 
-  if (["disconnected", "not connected", "not logged", "closed", "close", "logout", "offline"].some((item) => status.includes(item))) {
+  if (["disconnected", "desconect", "not connected", "not logged", "closed", "close", "logout", "offline"].some((item) => status.includes(item))) {
     return "disconnected";
   }
 
-  if (["qr", "pair", "scan", "connecting"].some((item) => status.includes(item))) {
+  if (["qr", "pair", "scan", "connecting", "pending"].some((item) => status.includes(item))) {
     return "qr_pending";
   }
 
@@ -64,21 +77,51 @@ export function normalizeUazapiWhatsappStatus(
 }
 
 function readExplicitConnection(value: unknown): boolean | null {
-  const status = readRecord(readRecord(value)?.status);
+  const direct = readConnectionBoolean(readRecord(value));
 
-  if (!status) {
+  if (direct !== null) {
+    return direct;
+  }
+
+  const root = readRecord(value);
+  const status = readConnectionBoolean(readRecord(root?.status));
+
+  if (status !== null) {
+    return status;
+  }
+
+  const instance = readConnectionBoolean(readRecord(root?.instance));
+
+  if (instance !== null) {
+    return instance;
+  }
+
+  return findConnectionBoolean(value);
+}
+
+function readConnectionBoolean(record: JsonRecord | null): boolean | null {
+  if (!record) {
     return null;
   }
 
-  if (typeof status.connected === "boolean") {
-    return status.connected;
-  }
+  const values = new Map(Object.entries(record).map(([key, item]) => [key.toLowerCase(), item]));
 
-  if (typeof status.loggedIn === "boolean") {
-    return status.loggedIn;
+  for (const key of CONNECTION_BOOLEAN_KEYS) {
+    const value = values.get(key.toLowerCase());
+
+    if (typeof value === "boolean") {
+      return value;
+    }
   }
 
   return null;
+}
+
+function findConnectionBoolean(value: unknown): boolean | null {
+  const lowerKeys = new Set(CONNECTION_BOOLEAN_KEYS.map((key) => key.toLowerCase()));
+  const found = findValue(value, (key, item) => lowerKeys.has(key.toLowerCase()) && typeof item === "boolean");
+
+  return typeof found === "boolean" ? found : null;
 }
 
 function findStatusString(value: unknown): string | null {
@@ -117,7 +160,7 @@ function findValue(value: unknown, predicate: (key: string, value: unknown) => b
   if (Array.isArray(value)) {
     for (const item of value) {
       const found = findValue(item, predicate);
-      if (found) return found;
+      if (found !== null) return found;
     }
 
     return null;
@@ -129,7 +172,7 @@ function findValue(value: unknown, predicate: (key: string, value: unknown) => b
     }
 
     const found = findValue(item, predicate);
-    if (found) return found;
+    if (found !== null) return found;
   }
 
   return null;
