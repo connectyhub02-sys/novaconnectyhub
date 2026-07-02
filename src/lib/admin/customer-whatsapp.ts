@@ -24,6 +24,17 @@ export type AdminCustomerWhatsappAgent = {
   agentCode: string;
 };
 
+export type AdminCustomerWhatsappRuntimeAlert = {
+  runId: string;
+  conversationId: string | null;
+  whatsappInstanceId: string | null;
+  providerChatId: string | null;
+  phoneNumber: string | null;
+  occurredAt: string | null;
+  inputPreview: string | null;
+  outputSummary: string | null;
+};
+
 export type AdminCustomerWhatsappInstance = {
   id: string;
   organizationId: string;
@@ -64,6 +75,10 @@ export type AdminCustomerWhatsappInstance = {
   lastAgentRunStatus: string | null;
   lastAgentRunAt: string | null;
   lastAgentRunError: string | null;
+  internalInstanceBlockedRunCount: number;
+  lastInternalInstanceBlockedAt: string | null;
+  lastInternalInstanceBlockedPhone: string | null;
+  runtimeAlerts: AdminCustomerWhatsappRuntimeAlert[];
   lastWebhookStatus: string | null;
   lastWebhookAt: string | null;
   lastWebhookError: string | null;
@@ -88,6 +103,7 @@ export type AdminCustomerWhatsappWorkspace = {
     agentRunsTotal: number;
     agentRunsCompleted: number;
     agentRunsFailed: number;
+    internalInstanceBlockedRuns: number;
     averageAgentRunSeconds: number | null;
   };
   instances: AdminCustomerWhatsappInstance[];
@@ -186,7 +202,10 @@ type AgentRunRow = {
   organization_id: string | null;
   run_status: string | null;
   trigger_source: string | null;
+  input_summary: string | null;
+  output_summary: string | null;
   error_message: string | null;
+  metadata: JsonRecord | null;
   started_at: string | null;
   finished_at: string | null;
   created_at: string | null;
@@ -218,6 +237,10 @@ type AgentRunBucket = {
   latestAt: string | null;
   latestStatus: string | null;
   latestError: string | null;
+  internalInstanceBlocked: number;
+  latestInternalInstanceBlockedAt: string | null;
+  latestInternalInstanceBlockedPhone: string | null;
+  runtimeAlerts: AdminCustomerWhatsappRuntimeAlert[];
 };
 
 export async function getAdminCustomerWhatsappWorkspace(
@@ -280,7 +303,7 @@ export async function getAdminCustomerWhatsappWorkspace(
       .limit(10000),
     client
       .from("agent_runs")
-      .select("id, agent_id, organization_id, run_status, trigger_source, error_message, started_at, finished_at, created_at")
+      .select("id, agent_id, organization_id, run_status, trigger_source, input_summary, output_summary, error_message, metadata, started_at, finished_at, created_at")
       .in("organization_id", organizationIds)
       .order("started_at", { ascending: false })
       .limit(5000),
@@ -364,6 +387,10 @@ export async function getAdminCustomerWhatsappWorkspace(
       lastAgentRunStatus: runBucket.latestStatus,
       lastAgentRunAt: runBucket.latestAt,
       lastAgentRunError: runBucket.latestError,
+      internalInstanceBlockedRunCount: runBucket.internalInstanceBlocked,
+      lastInternalInstanceBlockedAt: runBucket.latestInternalInstanceBlockedAt,
+      lastInternalInstanceBlockedPhone: runBucket.latestInternalInstanceBlockedPhone,
+      runtimeAlerts: runBucket.runtimeAlerts,
       lastWebhookStatus: webhookEvent?.processing_status ?? null,
       lastWebhookAt: webhookEvent?.received_at ?? null,
       lastWebhookError: webhookEvent?.error_message ?? null,
@@ -389,6 +416,7 @@ export async function getAdminCustomerWhatsappWorkspace(
       agentRunsTotal: agentRunSummary.total,
       agentRunsCompleted: agentRunSummary.completed,
       agentRunsFailed: agentRunSummary.failed,
+      internalInstanceBlockedRuns: agentRunSummary.internalInstanceBlocked,
       averageAgentRunSeconds: readAverageRunSeconds(agentRunSummary),
     },
     instances,
@@ -415,6 +443,7 @@ const emptyWorkspace: AdminCustomerWhatsappWorkspace = {
     agentRunsTotal: 0,
     agentRunsCompleted: 0,
     agentRunsFailed: 0,
+    internalInstanceBlockedRuns: 0,
     averageAgentRunSeconds: null,
   },
   instances: [],
@@ -680,7 +709,12 @@ function groupAgentRunsByInstance(rows: AgentRunRow[], instanceIdsByAgent: Map<s
   for (const row of rows) {
     if (!row.agent_id) continue;
 
-    const instanceIds = instanceIdsByAgent.get(row.agent_id) ?? [];
+    let instanceIds = instanceIdsByAgent.get(row.agent_id) ?? [];
+    const runInstanceId = readRunWhatsappInstanceId(row);
+    if (runInstanceId && instanceIds.includes(runInstanceId)) {
+      instanceIds = [runInstanceId];
+    }
+
     for (const instanceId of instanceIds) {
       const bucket = grouped.get(instanceId) ?? emptyAgentRunBucket();
       updateAgentRunBucket(bucket, row);
@@ -722,6 +756,22 @@ function updateAgentRunBucket(bucket: AgentRunBucket, row: AgentRunRow) {
   }
 
   const eventAt = pickLatest(row.finished_at, row.started_at, row.created_at);
+  if (isInternalInstanceBlockedRun(row)) {
+    const alert = mapInternalInstanceRuntimeAlert(row);
+    bucket.internalInstanceBlocked += 1;
+
+    if (alert) {
+      bucket.runtimeAlerts = [alert, ...bucket.runtimeAlerts]
+        .sort((left, right) => dateTime(right.occurredAt) - dateTime(left.occurredAt))
+        .slice(0, 5);
+    }
+
+    if (!bucket.latestInternalInstanceBlockedAt || (eventAt && dateTime(eventAt) > dateTime(bucket.latestInternalInstanceBlockedAt))) {
+      bucket.latestInternalInstanceBlockedAt = eventAt;
+      bucket.latestInternalInstanceBlockedPhone = alert?.phoneNumber ?? null;
+    }
+  }
+
   if (!bucket.latestAt || (eventAt && new Date(eventAt).getTime() > new Date(bucket.latestAt).getTime())) {
     bucket.latestAt = eventAt;
     bucket.latestStatus = status;
@@ -903,6 +953,40 @@ function hasWebhookError(row: WebhookEventRow) {
   return Boolean(row.error_message) || status === "failed" || status === "error";
 }
 
+function isInternalInstanceBlockedRun(row: AgentRunRow) {
+  const metadata = readRecord(row.metadata) ?? {};
+  const reason = readString(metadata.reason)?.toLowerCase();
+  const outputSummary = (row.output_summary ?? "").toLowerCase();
+
+  return reason === "internal_instance" || outputSummary.includes("mensagem interna entre instancias");
+}
+
+function mapInternalInstanceRuntimeAlert(row: AgentRunRow): AdminCustomerWhatsappRuntimeAlert | null {
+  if (!isInternalInstanceBlockedRun(row)) {
+    return null;
+  }
+
+  const metadata = readRecord(row.metadata) ?? {};
+  const providerChatId = readString(metadata.providerChatId) ?? readString(metadata.provider_chat_id);
+  const phoneNumber = readString(metadata.phoneNumber) ?? readString(metadata.phone_number) ?? providerChatId;
+
+  return {
+    runId: row.id,
+    conversationId: readString(metadata.conversationId) ?? readString(metadata.conversation_id),
+    whatsappInstanceId: readRunWhatsappInstanceId(row),
+    providerChatId,
+    phoneNumber,
+    occurredAt: pickLatest(row.finished_at, row.started_at, row.created_at),
+    inputPreview: previewText(row.input_summary),
+    outputSummary: row.output_summary,
+  };
+}
+
+function readRunWhatsappInstanceId(row: AgentRunRow) {
+  const metadata = readRecord(row.metadata) ?? {};
+  return readString(metadata.whatsappInstanceId) ?? readString(metadata.whatsapp_instance_id);
+}
+
 function normalizeApiVisibility(value: unknown): ConnectyHubApiVisibility {
   return value === "api_customer" || value === "hybrid" ? value : "internal";
 }
@@ -940,6 +1024,24 @@ function normalizeComparable(value: string | null | undefined) {
     .trim();
 }
 
+function previewText(value: string | null | undefined) {
+  const cleaned = (value ?? "").replace(/\s+/g, " ").trim();
+  if (!cleaned) {
+    return null;
+  }
+
+  return cleaned.length > 160 ? `${cleaned.slice(0, 157)}...` : cleaned;
+}
+
+function dateTime(value: string | null | undefined) {
+  if (!value) {
+    return 0;
+  }
+
+  const time = new Date(value).getTime();
+  return Number.isFinite(time) ? time : 0;
+}
+
 function isActiveLeadStatus(status: string | null | undefined) {
   return ["new", "active", "qualified"].includes(status ?? "new");
 }
@@ -971,6 +1073,10 @@ function emptyAgentRunBucket(): AgentRunBucket {
     latestAt: null,
     latestStatus: null,
     latestError: null,
+    internalInstanceBlocked: 0,
+    latestInternalInstanceBlockedAt: null,
+    latestInternalInstanceBlockedPhone: null,
+    runtimeAlerts: [],
   };
 }
 

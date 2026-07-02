@@ -28,6 +28,7 @@ import {
   MessageCircle,
   MessageSquare,
   Mic,
+  Network,
   Pause,
   PenLine,
   PenOff,
@@ -83,6 +84,22 @@ import type { CloneHumanizationMetric } from "@/lib/whatsapp/clone-humanization"
 import { cn } from "@/lib/utils";
 
 type WhatsappStatus = "draft" | "qr_pending" | "connected" | "disconnected" | "blocked" | "error" | "archived";
+
+type RuntimeAlert = {
+  id: string;
+  kind: "internal_instance_block";
+  tone: "warning";
+  title: string;
+  message: string;
+  runId: string;
+  conversationId: string | null;
+  whatsappInstanceId: string | null;
+  providerChatId: string | null;
+  phoneNumber: string | null;
+  occurredAt: string | null;
+  inputPreview: string | null;
+  outputSummary: string | null;
+};
 
 type ClientCompany = {
   id: string;
@@ -168,6 +185,7 @@ type WhatsappState = {
   };
   linkButtons: TrackedLinkButton[];
   cloneTest?: CloneRealTestSummary;
+  runtimeAlerts: RuntimeAlert[];
   capability: {
     canConnect: boolean;
     schemaReady: boolean;
@@ -1531,6 +1549,11 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
           onSave={saveAgentSettings}
         />
 
+        <RuntimeAlertsPanel
+          allowInternalInstanceMessages={behaviorDraft.allowInternalInstanceMessages}
+          alerts={state.runtimeAlerts ?? []}
+        />
+
         <WhatsappConsoleTabs activeTab={activeTab} onChange={setActiveTab} />
 
         {activeTab === "connection" ? (
@@ -2132,6 +2155,70 @@ function NoticeBar({ notice }: { notice: Notice }) {
     <div className={cn("mb-5 rounded-xl border px-4 py-3 text-[13px] leading-5", colors[notice.tone])}>
       {notice.message}
     </div>
+  );
+}
+
+function RuntimeAlertsPanel({
+  alerts,
+  allowInternalInstanceMessages,
+}: {
+  alerts: RuntimeAlert[];
+  allowInternalInstanceMessages: boolean;
+}) {
+  if (alerts.length === 0) {
+    return null;
+  }
+
+  const latestAlerts = alerts.slice(0, 3);
+
+  return (
+    <Panel
+      className="mb-4"
+      title="Protecao entre instancias"
+      eyebrow="ecossistema / agentes"
+      action={<NeonBadge tone="amber">{alerts.length} alerta{alerts.length === 1 ? "" : "s"}</NeonBadge>}
+    >
+      <div className="grid gap-4 lg:grid-cols-[56px_minmax(0,1fr)]">
+        <div className="grid h-14 w-14 place-items-center rounded-2xl bg-amber-400/10 text-amber-200">
+          <Network className="h-6 w-6" />
+        </div>
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <NeonBadge tone={allowInternalInstanceMessages ? "amber" : "green"}>
+              {allowInternalInstanceMessages ? "teste interno ligado" : "protecao ativa"}
+            </NeonBadge>
+            <NeonBadge tone="zinc">Gemini nao acionada</NeonBadge>
+          </div>
+          <p className="mt-3 max-w-3xl text-[13px] leading-6 text-slate-400">
+            O agente pausou a resposta porque identificou outro numero conectado ao ecossistema ConnectyHub na conversa.
+          </p>
+
+          <div className="mt-4 grid gap-3">
+            {latestAlerts.map((alert) => (
+              <div
+                key={alert.id}
+                className="rounded-xl border border-amber-300/15 bg-amber-300/[0.04] px-4 py-3"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <ShieldCheck className="h-4 w-4 shrink-0 text-amber-200" />
+                    <p className="truncate text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>
+                      {formatPhone(alert.phoneNumber ?? alert.providerChatId)}
+                    </p>
+                  </div>
+                  <span className="font-mono text-[10px] uppercase tracking-wider text-slate-500">
+                    {formatDate(alert.occurredAt)}
+                  </span>
+                </div>
+                <p className="mt-2 text-[12px] leading-5 text-slate-500">
+                  {alert.inputPreview || alert.outputSummary || alert.message}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </Panel>
   );
 }
 

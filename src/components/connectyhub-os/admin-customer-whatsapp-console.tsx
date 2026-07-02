@@ -39,6 +39,9 @@ export function AdminCustomerWhatsappConsole({
         actions={
           <div className="flex flex-wrap gap-2">
             <NeonBadge tone="green">{workspace.summary.connectedInstances} conectadas</NeonBadge>
+            {workspace.summary.internalInstanceBlockedRuns > 0 ? (
+              <NeonBadge tone="amber">{workspace.summary.internalInstanceBlockedRuns} protecoes eco</NeonBadge>
+            ) : null}
             <NeonBadge tone="cyan">Painel cliente</NeonBadge>
             <NeonBadge tone="violet">API isolada</NeonBadge>
           </div>
@@ -55,7 +58,7 @@ export function AdminCustomerWhatsappConsole({
         </Panel>
       )}
 
-      <div className="mb-5 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+      <div className="mb-5 grid gap-4 md:grid-cols-2 xl:grid-cols-6">
         <MetricTile
           icon={MessageCircle}
           label="Instancias"
@@ -91,6 +94,13 @@ export function AdminCustomerWhatsappConsole({
           detail={`${workspace.summary.pendingInstances} pendentes`}
           tone="amber"
         />
+        <MetricTile
+          icon={ShieldCheck}
+          label="Protecao eco"
+          value={String(workspace.summary.internalInstanceBlockedRuns)}
+          detail="instancias internas"
+          tone={workspace.summary.internalInstanceBlockedRuns > 0 ? "amber" : "green"}
+        />
       </div>
 
       <Panel className="mb-5" title="Telemetria WhatsApp" eyebrow="mensagens / midia / agentes">
@@ -114,8 +124,16 @@ export function AdminCustomerWhatsappConsole({
           <NeonBadge tone={workspace.summary.averageAgentRunSeconds ? "green" : "zinc"}>
             media {formatDuration(workspace.summary.averageAgentRunSeconds)}
           </NeonBadge>
+          {workspace.summary.internalInstanceBlockedRuns > 0 ? (
+            <NeonBadge tone="amber">{workspace.summary.internalInstanceBlockedRuns} conversas internas ignoradas</NeonBadge>
+          ) : null}
         </div>
       </Panel>
+
+      <EcosystemProtectionPanel
+        instances={workspace.instances}
+        total={workspace.summary.internalInstanceBlockedRuns}
+      />
 
       <div className="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_390px]">
         <Panel
@@ -221,6 +239,70 @@ function MetricTile({
         <NeonBadge tone={tone}>{detail}</NeonBadge>
       </div>
     </div>
+  );
+}
+
+function EcosystemProtectionPanel({
+  instances,
+  total,
+}: {
+  instances: AdminCustomerWhatsappInstance[];
+  total: number;
+}) {
+  if (total === 0) {
+    return null;
+  }
+
+  const alertedInstances = instances
+    .filter((instance) => instance.internalInstanceBlockedRunCount > 0)
+    .sort((left, right) => dateTime(right.lastInternalInstanceBlockedAt) - dateTime(left.lastInternalInstanceBlockedAt))
+    .slice(0, 6);
+
+  return (
+    <Panel
+      className="mb-5"
+      title="Protecao entre instancias"
+      eyebrow="ecossistema / agentes"
+      action={<NeonBadge tone="amber">{total} bloqueio{total === 1 ? "" : "s"}</NeonBadge>}
+    >
+      <div className="grid gap-3 xl:grid-cols-2">
+        {alertedInstances.map((instance) => {
+          const latestAlert = instance.runtimeAlerts[0] ?? null;
+
+          return (
+            <div
+              key={instance.id}
+              className="rounded-2xl p-4"
+              style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
+            >
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="flex min-w-0 gap-3">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 text-amber-200">
+                    <Network className="h-4 w-4" />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="truncate text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>
+                      {instance.organizationName}
+                    </p>
+                    <p className="mt-1 font-mono text-[10px] uppercase tracking-wider text-slate-500">
+                      {instance.phoneNumber ?? instance.providerInstanceId ?? "numero nao informado"}
+                    </p>
+                  </div>
+                </div>
+                <NeonBadge tone="amber">{instance.internalInstanceBlockedRunCount} eco</NeonBadge>
+              </div>
+              <p className="mt-3 text-[12px] leading-5 text-slate-500">
+                {latestAlert?.inputPreview || latestAlert?.outputSummary || "Conversa ignorada por protecao entre instancias conectadas."}
+              </p>
+              <p className="mt-3 font-mono text-[10px] uppercase tracking-wider text-slate-600">
+                ultimo sinal {formatDate(instance.lastInternalInstanceBlockedAt)}
+                {instance.lastInternalInstanceBlockedPhone ? ` / ${instance.lastInternalInstanceBlockedPhone}` : ""}
+              </p>
+            </div>
+          );
+        })}
+      </div>
+    </Panel>
   );
 }
 
@@ -348,6 +430,9 @@ function AgentTelemetryCell({ instance }: { instance: AdminCustomerWhatsappInsta
       <p className="font-mono text-[9px] uppercase tracking-wider text-slate-500">
         {instance.completedAgentRunCount} ok / {instance.failedAgentRunCount} falhas
       </p>
+      {instance.internalInstanceBlockedRunCount > 0 ? (
+        <NeonBadge tone="amber">{instance.internalInstanceBlockedRunCount} eco</NeonBadge>
+      ) : null}
       <p className="font-mono text-[9px] uppercase tracking-wider text-slate-600">
         media {formatDuration(instance.averageAgentRunSeconds)}
       </p>
@@ -459,6 +544,15 @@ function formatDate(value: string | null | undefined) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(date);
+}
+
+function dateTime(value: string | null | undefined) {
+  if (!value) {
+    return 0;
+  }
+
+  const time = new Date(value).getTime();
+  return Number.isFinite(time) ? time : 0;
 }
 
 function formatDuration(seconds: number | null | undefined) {

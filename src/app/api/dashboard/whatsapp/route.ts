@@ -342,6 +342,7 @@ function buildUnavailableState(): DashboardWhatsappState {
       lastEventAt: null,
       events: [],
     },
+    runtimeAlerts: [],
     capability: {
       canConnect: false,
       schemaReady: false,

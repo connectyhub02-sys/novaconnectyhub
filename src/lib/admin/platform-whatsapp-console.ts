@@ -29,12 +29,13 @@ import {
   normalizeWhatsappCloneProfileImportStatus,
 } from "@/lib/whatsapp/clone-profile-history";
 import { normalizeCloneHumanizationMetrics } from "@/lib/whatsapp/clone-humanization";
-import type {
-  ClientCloneRealTestSummary,
-  ClientKnowledgeFile,
-  ClientTrackedLinkButton,
-  ClientWhatsappActionResult,
-  ClientWhatsappState,
+import {
+  listWhatsappRuntimeAlerts,
+  type ClientCloneRealTestSummary,
+  type ClientKnowledgeFile,
+  type ClientTrackedLinkButton,
+  type ClientWhatsappActionResult,
+  type ClientWhatsappState,
 } from "@/lib/whatsapp/client-workspace";
 import { resolveUazapiWhatsappStatus } from "@/lib/uazapi/status";
 import { loadUazapiCredentials, type UazapiCredentials } from "@/lib/whatsapp/uazapi-credentials";
@@ -159,12 +160,17 @@ export async function getPlatformWhatsappConsoleState(input: {
   const instance = rawInstance?.instance_token_encrypted && rawInstance.status !== "connected"
     ? await syncInstanceStatusFromProvider(client, rawInstance).catch(() => rawInstance)
     : rawInstance;
-  const cloneTest = agent
-    ? await listPlatformCloneRealTests(client, agent.id)
-    : emptyCloneRealTestSummary();
+  const [cloneTest, runtimeAlerts] = await Promise.all([
+    agent
+      ? listPlatformCloneRealTests(client, agent.id)
+      : Promise.resolve(emptyCloneRealTestSummary()),
+    agent
+      ? listWhatsappRuntimeAlerts(client, { agentId: agent.id, instanceId: instance?.id ?? null })
+      : Promise.resolve([]),
+  ]);
 
   return {
-    ...buildState(instance, agent, getBehaviorConfig(agent, instance), audio, knowledgeFiles, linkButtons, cloneTest),
+    ...buildState(instance, agent, getBehaviorConfig(agent, instance), audio, knowledgeFiles, linkButtons, cloneTest, runtimeAlerts),
     companies: sectors.map(mapSectorEntity),
     selectedCompanyId: selectedSector.id,
   };
@@ -923,6 +929,7 @@ function buildState(
   knowledgeFiles: ClientKnowledgeFile[],
   linkButtons: ClientTrackedLinkButton[],
   cloneTest: ClientCloneRealTestSummary = emptyCloneRealTestSummary(),
+  runtimeAlerts: ClientWhatsappState["runtimeAlerts"] = [],
 ): ClientWhatsappState {
   const agentPrompt = agent?.prompt?.trim() || defaultWhatsappAgentPrompt;
   const profileImageUrl = readProfileImageUrl(instance);
@@ -973,6 +980,7 @@ function buildState(
     },
     linkButtons,
     cloneTest,
+    runtimeAlerts,
     capability: {
       canConnect: Boolean(agent),
       schemaReady: true,

@@ -84,6 +84,19 @@ type AgentRow = {
   metadata: JsonRecord | null;
 };
 
+type AgentRunAlertRow = {
+  id: string;
+  agent_id: string | null;
+  organization_id: string | null;
+  run_status: string | null;
+  input_summary: string | null;
+  output_summary: string | null;
+  metadata: JsonRecord | null;
+  started_at: string | null;
+  finished_at: string | null;
+  created_at: string | null;
+};
+
 type KnowledgeMemoryRow = {
   id: string;
   title: string;
@@ -111,6 +124,22 @@ export type ClientTrackedLinkButton = {
   trackingUrl: string;
   clicks: number;
   createdAt: string | null;
+};
+
+export type ClientWhatsappRuntimeAlert = {
+  id: string;
+  kind: "internal_instance_block";
+  tone: "warning";
+  title: string;
+  message: string;
+  runId: string;
+  conversationId: string | null;
+  whatsappInstanceId: string | null;
+  providerChatId: string | null;
+  phoneNumber: string | null;
+  occurredAt: string | null;
+  inputPreview: string | null;
+  outputSummary: string | null;
 };
 
 export type ClientCloneRealTestEvent = {
@@ -183,6 +212,7 @@ export type ClientWhatsappState = {
   };
   linkButtons: ClientTrackedLinkButton[];
   cloneTest: ClientCloneRealTestSummary;
+  runtimeAlerts: ClientWhatsappRuntimeAlert[];
   capability: {
     canConnect: boolean;
     schemaReady: boolean;
@@ -228,9 +258,57 @@ export async function getClientWhatsappState(input: {
     : rawInstance;
 
   const behavior = getBehaviorConfig(globalAgent, instance, agent);
-  const audio = await listWhatsappAudioVoices({ organizationId: input.organization.id, client });
+  const [audio, runtimeAlerts] = await Promise.all([
+    listWhatsappAudioVoices({ organizationId: input.organization.id, client }),
+    listWhatsappRuntimeAlerts(client, {
+      organizationId: input.organization.id,
+      agentId: agent?.id ?? null,
+      instanceId: instance?.id ?? null,
+    }),
+  ]);
 
-  return buildState(instance, agent, globalAgent, behavior, audio, knowledgeFiles, linkButtons, cloneTest);
+  return buildState(instance, agent, globalAgent, behavior, audio, knowledgeFiles, linkButtons, cloneTest, runtimeAlerts);
+}
+
+export async function listWhatsappRuntimeAlerts(
+  client: SupabaseClient,
+  input: {
+    organizationId?: string | null;
+    agentId?: string | null;
+    instanceId?: string | null;
+    limit?: number;
+  },
+): Promise<ClientWhatsappRuntimeAlert[]> {
+  const limit = Math.min(Math.max(input.limit ?? 3, 1), 10);
+
+  if (!input.organizationId && !input.agentId && !input.instanceId) {
+    return [];
+  }
+
+  let query = client
+    .from("agent_runs")
+    .select("id, agent_id, organization_id, run_status, input_summary, output_summary, metadata, started_at, finished_at, created_at")
+    .order("created_at", { ascending: false })
+    .limit(100);
+
+  if (input.organizationId) {
+    query = query.eq("organization_id", input.organizationId);
+  }
+
+  if (input.agentId) {
+    query = query.eq("agent_id", input.agentId);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    return [];
+  }
+
+  return ((data ?? []) as AgentRunAlertRow[])
+    .filter((row) => isInternalInstanceRuntimeRun(row, input.instanceId ?? null))
+    .slice(0, limit)
+    .map(mapInternalInstanceRuntimeAlert);
 }
 
 export async function connectClientWhatsapp(input: {
@@ -1785,6 +1863,7 @@ function buildState(
   knowledgeFiles: ClientKnowledgeFile[],
   linkButtons: ClientTrackedLinkButton[],
   cloneTest: ClientCloneRealTestSummary = emptyCloneRealTestSummary(),
+  runtimeAlerts: ClientWhatsappRuntimeAlert[] = [],
 ): ClientWhatsappState {
   const agentPrompt = agent?.prompt?.trim() || defaultWhatsappAgentPrompt;
   const globalPrompt = globalAgent.prompt?.trim() || defaultWhatsappGlobalPrompt;
@@ -1839,11 +1918,53 @@ function buildState(
     },
     linkButtons,
     cloneTest,
+    runtimeAlerts,
     capability: {
       canConnect: true,
       schemaReady: true,
       message: null,
     },
+  };
+}
+
+function isInternalInstanceRuntimeRun(row: AgentRunAlertRow, instanceId: string | null) {
+  const metadata = readRecord(row.metadata) ?? {};
+  const reason = readString(metadata.reason)?.toLowerCase();
+  const outputSummary = (row.output_summary ?? "").toLowerCase();
+
+  if (reason !== "internal_instance" && !outputSummary.includes("mensagem interna entre instancias")) {
+    return false;
+  }
+
+  if (!instanceId) {
+    return true;
+  }
+
+  const metadataInstanceId = readString(metadata.whatsappInstanceId) ?? readString(metadata.whatsapp_instance_id);
+  return !metadataInstanceId || metadataInstanceId === instanceId;
+}
+
+function mapInternalInstanceRuntimeAlert(row: AgentRunAlertRow): ClientWhatsappRuntimeAlert {
+  const metadata = readRecord(row.metadata) ?? {};
+  const providerChatId = readString(metadata.providerChatId) ?? readString(metadata.provider_chat_id);
+  const phoneNumber = readString(metadata.phoneNumber) ?? readString(metadata.phone_number) ?? providerChatId;
+  const occurredAt = row.finished_at ?? row.started_at ?? row.created_at;
+  const inputPreview = row.input_summary ? preview(row.input_summary) : null;
+
+  return {
+    id: `internal-instance-${row.id}`,
+    kind: "internal_instance_block",
+    tone: "warning",
+    title: "Protecao entre instancias acionada",
+    message: "O agente ignorou esta entrada porque o numero tambem pertence a uma instancia conectada do ecossistema ConnectyHub.",
+    runId: row.id,
+    conversationId: readString(metadata.conversationId) ?? readString(metadata.conversation_id),
+    whatsappInstanceId: readString(metadata.whatsappInstanceId) ?? readString(metadata.whatsapp_instance_id),
+    providerChatId,
+    phoneNumber,
+    occurredAt,
+    inputPreview,
+    outputSummary: row.output_summary,
   };
 }
 
