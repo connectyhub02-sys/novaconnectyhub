@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ChangeEvent } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ChangeEvent } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import Image from "next/image";
 import Link from "next/link";
@@ -77,6 +77,28 @@ type NavSection = {
 };
 
 type AccentTone = "teal" | "emerald" | "sky" | "blue" | "violet" | "amber" | "rose" | "fuchsia" | "slate";
+
+type NotificationTone = "green" | "cyan" | "amber" | "rose" | "zinc";
+
+export type ConnectyShellNotification = {
+  id: string;
+  title: string;
+  description: string;
+  meta?: string | null;
+  occurredAt?: string | null;
+  tone?: NotificationTone;
+};
+
+type ConnectyShellNotificationsContextValue = {
+  setNotificationGroup: (source: string, notifications: ConnectyShellNotification[]) => void;
+  clearNotificationGroup: (source: string) => void;
+};
+
+const ConnectyShellNotificationsContext = createContext<ConnectyShellNotificationsContextValue | null>(null);
+
+export function useConnectyShellNotifications() {
+  return useContext(ConnectyShellNotificationsContext);
+}
 
 type AccentPalette = {
   accent: string;
@@ -174,6 +196,7 @@ export function ConnectyShell({
   userLabel,
   activeHref,
   userAvatarUrl,
+  initialNotifications = [],
 }: {
   mode: "admin" | "client";
   children: ReactNode;
@@ -182,6 +205,7 @@ export function ConnectyShell({
   userLabel?: string;
   activeHref?: string;
   userAvatarUrl?: string | null;
+  initialNotifications?: ConnectyShellNotification[];
 }) {
   const pathname  = usePathname();
   const active    = activeHref ?? pathname ?? "/";
@@ -204,6 +228,47 @@ export function ConnectyShell({
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [avatarError, setAvatarError] = useState<string | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [notificationGroups, setNotificationGroups] = useState<Record<string, ConnectyShellNotification[]>>({});
+
+  const setNotificationGroup = useCallback((source: string, notifications: ConnectyShellNotification[]) => {
+    setNotificationGroups((current) => {
+      const next = { ...current };
+
+      if (notifications.length === 0) {
+        delete next[source];
+      } else {
+        next[source] = notifications;
+      }
+
+      return next;
+    });
+  }, []);
+
+  const clearNotificationGroup = useCallback((source: string) => {
+    setNotificationGroups((current) => {
+      if (!current[source]) {
+        return current;
+      }
+
+      const next = { ...current };
+      delete next[source];
+      return next;
+    });
+  }, []);
+
+  const shellNotificationContext = useMemo(
+    () => ({ setNotificationGroup, clearNotificationGroup }),
+    [clearNotificationGroup, setNotificationGroup],
+  );
+  const notifications = useMemo(
+    () => [
+      ...initialNotifications,
+      ...Object.values(notificationGroups).flat(),
+    ].sort((left, right) => dateTime(right.occurredAt) - dateTime(left.occurredAt)),
+    [initialNotifications, notificationGroups],
+  );
+  const notificationCount = notifications.length;
 
   async function handleAvatarUpload(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0] ?? null;
@@ -280,12 +345,13 @@ export function ConnectyShell({
   } as CSSProperties;
 
   return (
-    <div
-      className="connecty-shell flex min-h-svh"
-      data-connecty-accent={activeTone}
-      data-connecty-mode={mode}
-      style={shellTheme}
-    >
+    <ConnectyShellNotificationsContext.Provider value={shellNotificationContext}>
+      <div
+        className="connecty-shell flex min-h-svh"
+        data-connecty-accent={activeTone}
+        data-connecty-mode={mode}
+        style={shellTheme}
+      >
       {/* ── Sidebar ── */}
       <aside
         className="sticky top-0 hidden h-svh w-[240px] shrink-0 flex-col lg:flex"
@@ -487,19 +553,107 @@ export function ConnectyShell({
             </div>
 
             {/* Notifications */}
-            <button
-              type="button"
-              className="relative flex h-8 w-8 items-center justify-center rounded-lg transition"
-              onMouseEnter={e => (e.currentTarget.style.background = "var(--ch-hover)")}
-              onMouseLeave={e => (e.currentTarget.style.background = "var(--ch-surface-2)")}
-              style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
-            >
-              <Bell className="h-4 w-4" style={{ color: "var(--ch-muted)" }} />
-              <span
-                className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full"
-                style={{ background: "var(--ch-accent)", boxShadow: `0 0 6px var(--ch-accent)` }}
-              />
-            </button>
+            <div className="relative">
+              <button
+                type="button"
+                aria-expanded={notificationsOpen}
+                aria-haspopup="dialog"
+                aria-label={notificationCount > 0 ? `${notificationCount} notificacoes` : "Notificacoes"}
+                className="relative flex h-8 w-8 items-center justify-center rounded-lg transition"
+                onClick={() => setNotificationsOpen((current) => !current)}
+                onMouseEnter={e => (e.currentTarget.style.background = "var(--ch-hover)")}
+                onMouseLeave={e => (e.currentTarget.style.background = "var(--ch-surface-2)")}
+                style={{ background: notificationsOpen ? "var(--ch-hover)" : "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
+              >
+                <Bell className="h-4 w-4" style={{ color: notificationCount > 0 ? "var(--ch-accent)" : "var(--ch-muted)" }} />
+                {notificationCount > 0 ? (
+                  <span
+                    className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full px-1 font-mono text-[8px] font-bold leading-none text-slate-950"
+                    style={{ background: "var(--ch-accent)", boxShadow: `0 0 8px var(--ch-accent)` }}
+                  >
+                    {notificationCount > 9 ? "9+" : notificationCount}
+                  </span>
+                ) : null}
+              </button>
+
+              {notificationsOpen ? (
+                <div
+                  className="absolute right-0 top-10 z-[9999] w-[min(360px,calc(100vw-24px))] rounded-2xl p-3 shadow-2xl"
+                  role="dialog"
+                  aria-label="Notificacoes"
+                  style={{
+                    background: "linear-gradient(180deg, #111b2a 0%, #07111d 100%)",
+                    border: "1px solid rgba(224,233,246,0.46)",
+                    boxShadow: "0 28px 90px rgba(0,0,0,0.72)",
+                    color: "#fbfdff",
+                  }}
+                >
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>
+                        Notificacoes
+                      </p>
+                      <p className="font-mono text-[9px] uppercase tracking-[0.2em]" style={{ color: "var(--ch-muted)" }}>
+                        {notificationCount > 0 ? `${notificationCount} alerta${notificationCount === 1 ? "" : "s"}` : "sem alertas"}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      aria-label="Fechar notificacoes"
+                      className="grid h-7 w-7 place-items-center rounded-lg transition"
+                      onClick={() => setNotificationsOpen(false)}
+                      style={{ background: "rgba(255,255,255,0.075)", border: "1px solid rgba(224,233,246,0.14)" }}
+                    >
+                      <X className="h-3.5 w-3.5" style={{ color: "var(--ch-muted)" }} />
+                    </button>
+                  </div>
+
+                  {notificationCount > 0 ? (
+                    <div className="grid max-h-[360px] gap-2 overflow-y-auto pr-1">
+                      {notifications.slice(0, 12).map((notification) => (
+                        <div
+                          key={notification.id}
+                          className="rounded-xl p-3"
+                          style={{
+                            background: "rgba(255,255,255,0.055)",
+                            border: `1px solid ${notificationToneBorder(notification.tone)}`,
+                          }}
+                        >
+                          <div className="flex gap-2.5">
+                            <span
+                              className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
+                              style={{
+                                background: notificationToneBackground(notification.tone),
+                                color: notificationToneColor(notification.tone),
+                              }}
+                            >
+                              <ShieldCheck className="h-3.5 w-3.5" />
+                            </span>
+                            <div className="min-w-0">
+                              <p className="truncate text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>
+                                {notification.title}
+                              </p>
+                              <p className="mt-1 text-[11px] leading-5 text-slate-400">
+                                {notification.description}
+                              </p>
+                              {notification.meta ? (
+                                <p className="mt-2 truncate font-mono text-[9px] uppercase tracking-wider text-slate-500">
+                                  {notification.meta}
+                                </p>
+                              ) : null}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="rounded-xl px-3 py-4 text-[12px] leading-5 text-slate-500" style={{ background: "rgba(255,255,255,0.045)" }}>
+                      Nenhuma notificacao ativa.
+                    </div>
+                  )}
+                </div>
+              ) : null}
+            </div>
 
             {/* Mode switch */}
             {canSwitch && (
@@ -672,7 +826,8 @@ export function ConnectyShell({
           </div>
         </main>
       </div>
-    </div>
+      </div>
+    </ConnectyShellNotificationsContext.Provider>
   );
 }
 
@@ -765,6 +920,51 @@ function AdminImpersonationBanner() {
 }
 
 // ─── SidebarLink ─────────────────────────────────────────────────────────────
+
+function notificationToneColor(tone: NotificationTone = "zinc") {
+  const colors: Record<NotificationTone, string> = {
+    green: "#34d399",
+    cyan: "#38e8d6",
+    amber: "#fbbf24",
+    rose: "#fb7185",
+    zinc: "#cbd5e1",
+  };
+
+  return colors[tone];
+}
+
+function notificationToneBackground(tone: NotificationTone = "zinc") {
+  const backgrounds: Record<NotificationTone, string> = {
+    green: "rgba(52,211,153,0.12)",
+    cyan: "rgba(56,232,214,0.12)",
+    amber: "rgba(251,191,36,0.12)",
+    rose: "rgba(251,113,133,0.12)",
+    zinc: "rgba(203,213,225,0.10)",
+  };
+
+  return backgrounds[tone];
+}
+
+function notificationToneBorder(tone: NotificationTone = "zinc") {
+  const borders: Record<NotificationTone, string> = {
+    green: "rgba(52,211,153,0.24)",
+    cyan: "rgba(56,232,214,0.24)",
+    amber: "rgba(251,191,36,0.30)",
+    rose: "rgba(251,113,133,0.28)",
+    zinc: "rgba(203,213,225,0.16)",
+  };
+
+  return borders[tone];
+}
+
+function dateTime(value: string | null | undefined) {
+  if (!value) {
+    return 0;
+  }
+
+  const time = new Date(value).getTime();
+  return Number.isFinite(time) ? time : 0;
+}
 
 function AccountAvatar({
   avatarUrl,

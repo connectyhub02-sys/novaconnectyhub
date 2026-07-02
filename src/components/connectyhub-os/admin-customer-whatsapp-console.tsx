@@ -15,7 +15,7 @@ import type {
   CustomerWhatsappInstanceStatus,
 } from "@/lib/admin/customer-whatsapp";
 import type { StatusTone, Tone } from "@/lib/connectyhub-os-data";
-import { ConnectyShell } from "./connecty-shell";
+import { ConnectyShell, type ConnectyShellNotification } from "./connecty-shell";
 import { DataTable, KpiStat, NeonBadge, PageHeader, Panel, StatusBadge } from "./panel-primitives";
 import { SyncWhatsAppInstancesButton } from "./sync-whatsapp-instances-button";
 
@@ -31,7 +31,13 @@ export function AdminCustomerWhatsappConsole({
     : 0;
 
   return (
-    <ConnectyShell mode="admin" isPlatformAdmin userLabel={userLabel} activeHref="/admin/clientes/whatsapp">
+    <ConnectyShell
+      mode="admin"
+      isPlatformAdmin
+      userLabel={userLabel}
+      activeHref="/admin/clientes/whatsapp"
+      initialNotifications={buildCustomerWhatsappNotifications(workspace)}
+    >
       <PageHeader
         eyebrow="Clientes / WhatsApp"
         title="WhatsApp dos clientes"
@@ -129,11 +135,6 @@ export function AdminCustomerWhatsappConsole({
           ) : null}
         </div>
       </Panel>
-
-      <EcosystemProtectionPanel
-        instances={workspace.instances}
-        total={workspace.summary.internalInstanceBlockedRuns}
-      />
 
       <div className="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_390px]">
         <Panel
@@ -242,68 +243,32 @@ function MetricTile({
   );
 }
 
-function EcosystemProtectionPanel({
-  instances,
-  total,
-}: {
-  instances: AdminCustomerWhatsappInstance[];
-  total: number;
-}) {
-  if (total === 0) {
-    return null;
-  }
-
-  const alertedInstances = instances
+function buildCustomerWhatsappNotifications(workspace: AdminCustomerWhatsappWorkspace): ConnectyShellNotification[] {
+  return workspace.instances
     .filter((instance) => instance.internalInstanceBlockedRunCount > 0)
-    .sort((left, right) => dateTime(right.lastInternalInstanceBlockedAt) - dateTime(left.lastInternalInstanceBlockedAt))
-    .slice(0, 6);
+    .flatMap((instance) => {
+      if (instance.runtimeAlerts.length > 0) {
+        return instance.runtimeAlerts.map((alert) => ({
+          id: `customer-whatsapp-${alert.runId}`,
+          title: "Protecao entre instancias",
+          description: `${instance.organizationName}: ${alert.inputPreview || alert.outputSummary || "Conversa interna ignorada."}`,
+          meta: `${alert.phoneNumber ?? alert.providerChatId ?? instance.phoneNumber ?? "numero nao informado"} / ${formatDate(alert.occurredAt)} / Gemini nao acionada`,
+          occurredAt: alert.occurredAt,
+          tone: "amber" as const,
+        }));
+      }
 
-  return (
-    <Panel
-      className="mb-5"
-      title="Protecao entre instancias"
-      eyebrow="ecossistema / agentes"
-      action={<NeonBadge tone="amber">{total} bloqueio{total === 1 ? "" : "s"}</NeonBadge>}
-    >
-      <div className="grid gap-3 xl:grid-cols-2">
-        {alertedInstances.map((instance) => {
-          const latestAlert = instance.runtimeAlerts[0] ?? null;
-
-          return (
-            <div
-              key={instance.id}
-              className="rounded-2xl p-4"
-              style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
-            >
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="flex min-w-0 gap-3">
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 text-amber-200">
-                    <Network className="h-4 w-4" />
-                  </span>
-                  <div className="min-w-0">
-                    <p className="truncate text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>
-                      {instance.organizationName}
-                    </p>
-                    <p className="mt-1 font-mono text-[10px] uppercase tracking-wider text-slate-500">
-                      {instance.phoneNumber ?? instance.providerInstanceId ?? "numero nao informado"}
-                    </p>
-                  </div>
-                </div>
-                <NeonBadge tone="amber">{instance.internalInstanceBlockedRunCount} eco</NeonBadge>
-              </div>
-              <p className="mt-3 text-[12px] leading-5 text-slate-500">
-                {latestAlert?.inputPreview || latestAlert?.outputSummary || "Conversa ignorada por protecao entre instancias conectadas."}
-              </p>
-              <p className="mt-3 font-mono text-[10px] uppercase tracking-wider text-slate-600">
-                ultimo sinal {formatDate(instance.lastInternalInstanceBlockedAt)}
-                {instance.lastInternalInstanceBlockedPhone ? ` / ${instance.lastInternalInstanceBlockedPhone}` : ""}
-              </p>
-            </div>
-          );
-        })}
-      </div>
-    </Panel>
-  );
+      return [{
+        id: `customer-whatsapp-${instance.id}`,
+        title: "Protecao entre instancias",
+        description: `${instance.organizationName}: conversa interna ignorada.`,
+        meta: `${instance.lastInternalInstanceBlockedPhone ?? instance.phoneNumber ?? "numero nao informado"} / ${formatDate(instance.lastInternalInstanceBlockedAt)} / Gemini nao acionada`,
+        occurredAt: instance.lastInternalInstanceBlockedAt,
+        tone: "amber" as const,
+      }];
+    })
+    .sort((left, right) => dateTime(right.occurredAt) - dateTime(left.occurredAt))
+    .slice(0, 12);
 }
 
 function InstanceIdentity({ instance }: { instance: AdminCustomerWhatsappInstance }) {
