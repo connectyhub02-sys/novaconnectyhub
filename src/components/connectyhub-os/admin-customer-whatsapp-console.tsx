@@ -3,7 +3,6 @@ import {
   Activity,
   Bot,
   MessageCircle,
-  Network,
   ShieldCheck,
   UsersRound,
   Webhook,
@@ -138,37 +137,14 @@ export function AdminCustomerWhatsappConsole({
       </Panel>
 
       <Panel
-        className="mb-5"
-        title="Operacao e sincronia"
-        eyebrow="admin / clientes / provedor"
-        action={<SyncWhatsAppInstancesButton variant="compact" />}
-      >
-        <div className="grid gap-3 xl:grid-cols-[repeat(3,minmax(0,1fr))_repeat(3,minmax(120px,0.62fr))]">
-          <RuleRow
-            icon={ShieldCheck}
-            title="Agentes internos"
-            text="Operadores, auditoria e orquestracao ficam em /admin/agentes."
-          />
-          <RuleRow
-            icon={MessageCircle}
-            title="WhatsApp dos usuarios"
-            text="Numeros usados dentro do painel do cliente aparecem nesta lista."
-          />
-          <RuleRow
-            icon={Network}
-            title="API WhatsApp"
-            text="Instancias de sistemas externos continuam isoladas na area API."
-          />
-          <KpiStat label="conectadas" value={String(workspace.summary.connectedInstances)} tone="green" />
-          <KpiStat label="aguardando qr" value={String(workspace.summary.pendingInstances)} tone="amber" />
-          <KpiStat label="webhook ok" value={String(workspace.summary.webhookConfigured)} tone="cyan" />
-        </div>
-      </Panel>
-
-      <Panel
         title="Instancias do painel dos usuarios"
         eyebrow="empresa / numero / agente / crm"
-        action={<NeonBadge tone="cyan">{workspace.instances.length} registros</NeonBadge>}
+        action={
+          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+            <NeonBadge tone="cyan">{workspace.instances.length} registros</NeonBadge>
+            <SyncWhatsAppInstancesButton variant="compact" />
+          </div>
+        }
       >
         {workspace.instances.length > 0 ? (
           <DataTable
@@ -430,22 +406,6 @@ function LastSignalCell({ instance }: { instance: AdminCustomerWhatsappInstance 
       <p className="font-mono text-[9px] uppercase tracking-wider text-slate-500">
         {instance.lastMessageAt ? "mensagem" : instance.lastHeartbeatAt ? "heartbeat" : "atualizacao"}
       </p>
-    </div>
-  );
-}
-
-function RuleRow({ icon: Icon, title, text }: { icon: LucideIcon; title: string; text: string }) {
-  return (
-    <div className="h-full rounded-xl px-3 py-2.5" style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}>
-      <div className="flex h-full items-center gap-2.5">
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-cyan-500/10 text-cyan-300">
-          <Icon className="h-4 w-4" />
-        </span>
-        <div className="min-w-0">
-          <p className="truncate text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>{title}</p>
-          <p className="mt-0.5 text-[11px] leading-4 text-slate-500">{text}</p>
-        </div>
-      </div>
     </div>
   );
 }
