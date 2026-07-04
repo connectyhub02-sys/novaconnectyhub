@@ -15,6 +15,11 @@ import {
   resolveWhatsappInstanceDisplayName,
 } from "@/lib/whatsapp/instance-display-name";
 import { loadUazapiCredentials, type UazapiCredentials } from "@/lib/whatsapp/uazapi-credentials";
+import {
+  appendConnectionDiagnosticEvent,
+  readConnectionDiagnostics,
+  resolveConnectionDiagnosticEventType,
+} from "@/lib/whatsapp/connection-diagnostics";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -487,6 +492,7 @@ export async function connectGatewayInstance(auth: GatewayAuthContext, instanceI
 
   const credentials = await loadUazapiCredentials(auth.client);
   const providerStartedAt = Date.now();
+  const connectStartedAt = new Date().toISOString();
   const connectPayload = buildGatewayConnectPayload(input, auth.apiClient.name);
   const result = await callUazapi(credentials, "/instance/connect", {
     method: "POST",
@@ -505,6 +511,25 @@ export async function connectGatewayInstance(auth: GatewayAuthContext, instanceI
   const pendingConnection = status !== "connected" && Boolean(qrCode || pairCode);
   const lastDisconnectReason = readProviderDisconnectReason(result.data);
   const requestedPhone = normalizePhone(typeof connectPayload.phone === "string" ? connectPayload.phone : null);
+  const connectionMode = requestedPhone ? "phone" : "qr";
+  const connectionEventType = resolveConnectionDiagnosticEventType({
+    defaultType: "connect_response",
+    providerPayload: result.data,
+    resolvedStatus: status,
+  });
+  let connectionMetadata = appendConnectionDiagnosticEvent(instance.metadata, {
+    type: "connect_requested",
+    mode: connectionMode,
+    phone: requestedPhone,
+    at: connectStartedAt,
+    providerPayload: connectPayload,
+  });
+  connectionMetadata = appendConnectionDiagnosticEvent(connectionMetadata, {
+    type: connectionEventType,
+    mode: connectionMode,
+    providerStatus: result.status,
+    providerPayload: result.data,
+  });
   const phoneNumber = normalizePhone(findString(result.data, ["owner", "phone", "number", "phone_number"]) ?? requestedPhone ?? instance.phone_number);
   const profileImage = status === "connected"
     ? await getWhatsappInstanceProfileImage({
@@ -537,7 +562,7 @@ export async function connectGatewayInstance(auth: GatewayAuthContext, instanceI
       last_synced_at: now,
       provider_payload: sanitizeProviderData(result.data),
       metadata: {
-        ...(instance.metadata ?? {}),
+        ...connectionMetadata,
         last_api_action: "connect",
         last_connect_request: sanitizeProviderData(connectPayload),
         last_connect_response: sanitizeProviderData(result.data),
@@ -572,6 +597,7 @@ export async function connectGatewayInstance(auth: GatewayAuthContext, instanceI
     qrCode,
     pairCode,
     lastDisconnectReason,
+    connectionDiagnostics: readConnectionDiagnostics(connectionMetadata),
     provider: sanitizeProviderData(result.data),
   };
 }
@@ -653,6 +679,16 @@ async function refreshGatewayInstanceStatusRow(input: {
   const pairCode = findString(result.data, ["paircode", "pairCode", "pair_code"]);
   const pendingConnection = status !== "connected" && Boolean(qrCode || pairCode);
   const lastDisconnectReason = readProviderDisconnectReason(result.data);
+  const connectionEventType = resolveConnectionDiagnosticEventType({
+    defaultType: "status_poll",
+    providerPayload: result.data,
+    resolvedStatus: status,
+  });
+  const connectionMetadata = appendConnectionDiagnosticEvent(input.instance.metadata, {
+    type: connectionEventType,
+    providerStatus: result.status,
+    providerPayload: result.data,
+  });
   const profileImage = status === "connected"
     ? await getWhatsappInstanceProfileImage({
         credentials,
@@ -695,7 +731,7 @@ async function refreshGatewayInstanceStatusRow(input: {
       last_synced_at: now,
       provider_payload: provider,
       metadata: {
-        ...(input.instance.metadata ?? {}),
+        ...connectionMetadata,
         last_api_action: "refresh_status",
         last_status_response: provider,
         last_disconnect_reason: lastDisconnectReason,
@@ -753,6 +789,13 @@ export async function resetGatewayInstance(auth: GatewayAuthContext, instanceId:
   }
 
   const now = new Date().toISOString();
+  const connectionMetadata = appendConnectionDiagnosticEvent(instance.metadata, {
+    type: "reset_requested",
+    providerStatus: result.status,
+    providerPayload: result.data,
+    finalStatus: "reset",
+    finalReason: readProviderError(result.data) ?? "runtime_reset",
+  });
   const { data, error } = await auth.client
     .from("whatsapp_instances")
     .update({
@@ -760,7 +803,7 @@ export async function resetGatewayInstance(auth: GatewayAuthContext, instanceId:
       last_synced_at: now,
       provider_payload: provider,
       metadata: {
-        ...(instance.metadata ?? {}),
+        ...connectionMetadata,
         last_api_action: "reset",
         last_reset_response: provider,
         last_reset_at: now,
@@ -4474,6 +4517,7 @@ function mapGatewayInstance(row: GatewayInstanceRow) {
     lastHeartbeatAt: row.last_heartbeat_at,
     lastMessageAt: row.last_message_at,
     updatedAt: row.updated_at,
+    connectionDiagnostics: readConnectionDiagnostics(row.metadata),
     health: readGatewayHealthSignal(row.metadata, "gateway_health_instance"),
   };
 }

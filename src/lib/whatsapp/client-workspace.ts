@@ -39,6 +39,13 @@ import {
   normalizeWhatsappCloneProfileImportStatus,
   type WhatsappCloneProfileImportStatus,
 } from "./clone-profile-history";
+import {
+  appendConnectionDiagnosticEvent,
+  isPasskeyDisconnectReason,
+  readConnectionDiagnostics,
+  resolveConnectionDiagnosticEventType,
+  type WhatsappConnectionDiagnostics,
+} from "./connection-diagnostics";
 import { loadUazapiCredentials, type UazapiCredentials } from "./uazapi-credentials";
 
 type JsonRecord = Record<string, unknown>;
@@ -181,6 +188,7 @@ export type ClientWhatsappState = {
     lastHeartbeatAt: string | null;
     lastMessageAt: string | null;
     tokenReady: boolean;
+    connectionDiagnostics: WhatsappConnectionDiagnostics;
   } | null;
   agent: {
     id: string;
@@ -322,6 +330,8 @@ export async function connectClientWhatsapp(input: {
   const credentials = await loadUazapiCredentials(client);
   const agent = await requireWorkspaceWhatsappAgent(client, input.organization.id, input.agentId);
   const connectPhone = normalizePhone(input.connectPhone);
+  const connectionMode = connectPhone ? "phone" : "qr";
+  const connectStartedAt = new Date().toISOString();
   const connectPayload: JsonRecord = {
     browser: "auto",
     systemName: "ConnectyHub",
@@ -377,6 +387,24 @@ export async function connectClientWhatsapp(input: {
   const qrCode = normalizeQrCode(findString(connectResult.data, ["qrcode", "qrCode", "qr", "base64"]));
   const pairCode = findString(connectResult.data, ["paircode", "pairCode", "pair_code"]);
   const pendingConnection = status !== "connected" && Boolean(qrCode || pairCode);
+  const connectionEventType = resolveConnectionDiagnosticEventType({
+    defaultType: "connect_response",
+    providerPayload: connectResult.data,
+    resolvedStatus: status,
+  });
+  let connectionMetadata = appendConnectionDiagnosticEvent(instance.metadata, {
+    type: "connect_requested",
+    mode: connectionMode,
+    phone: connectPhone,
+    at: connectStartedAt,
+    providerPayload: connectPayload,
+  });
+  connectionMetadata = appendConnectionDiagnosticEvent(connectionMetadata, {
+    type: connectionEventType,
+    mode: connectionMode,
+    providerStatus: connectResult.status,
+    providerPayload: connectResult.data,
+  });
   const phoneNumber = normalizePhone(findString(connectResult.data, ["owner", "phone", "number", "phone_number"]) ?? connectPhone ?? instance.phone_number);
   const profileData = status === "connected" ? await getConnectedProfileData(credentials, token) : null;
   const avatarData = status === "connected" && phoneNumber ? await getConnectedAvatarData(credentials, token, phoneNumber) : null;
@@ -399,7 +427,7 @@ export async function connectClientWhatsapp(input: {
       webhook_configured_at: webhookResult.ok ? now : instance.webhook_configured_at,
       last_synced_at: now,
       metadata: {
-        ...(instance.metadata ?? {}),
+        ...connectionMetadata,
         ...buildAgentInstanceMetadata(input.organization, agent),
         ...(profileImageUrl ? { profile_image_url: profileImageUrl, profile_image_synced_at: now } : {}),
         webhook_status: webhookResult.ok ? "configured" : "not_configured",
@@ -479,6 +507,17 @@ export async function refreshClientWhatsappStatus(input: {
   const qrCode = normalizeQrCode(findString(result.data, ["qrcode", "qrCode", "qr", "base64"]));
   const pairCode = findString(result.data, ["paircode", "pairCode", "pair_code"]);
   const pendingConnection = status !== "connected" && Boolean(qrCode || pairCode);
+  const lastDisconnectReason = findString(result.data, ["lastDisconnectReason", "last_disconnect_reason", "disconnectReason", "disconnect_reason"]);
+  const connectionEventType = resolveConnectionDiagnosticEventType({
+    defaultType: "status_poll",
+    providerPayload: result.data,
+    resolvedStatus: status,
+  });
+  const connectionMetadata = appendConnectionDiagnosticEvent(instance.metadata, {
+    type: connectionEventType,
+    providerStatus: result.status,
+    providerPayload: result.data,
+  });
   const phoneNumber = normalizePhone(findString(result.data, ["owner", "phone", "number", "phone_number"]) ?? instance.phone_number);
   const profileData = status === "connected" ? await getConnectedProfileData(credentials, token) : null;
   const avatarData = status === "connected" && phoneNumber ? await getConnectedAvatarData(credentials, token, phoneNumber) : null;
@@ -503,7 +542,7 @@ export async function refreshClientWhatsappStatus(input: {
       last_heartbeat_at: now,
       last_synced_at: now,
       metadata: {
-        ...(instance.metadata ?? {}),
+        ...connectionMetadata,
         ...buildAgentInstanceMetadata(input.organization, agent),
         ...(profileImageUrl ? { profile_image_url: profileImageUrl, profile_image_synced_at: now } : {}),
         ...(webhookResult
@@ -514,6 +553,7 @@ export async function refreshClientWhatsappStatus(input: {
           : {}),
         last_client_action: "refresh_status",
         last_status_response: sanitizeProviderData(result.data),
+        last_disconnect_reason: lastDisconnectReason,
         ...(profileData ? { last_profile_response: sanitizeProviderData(profileData) } : {}),
         ...(avatarData ? { last_avatar_response: sanitizeProviderData(avatarData) } : {}),
       },
@@ -529,6 +569,8 @@ export async function refreshClientWhatsappStatus(input: {
       tone: state.instance?.status === "connected" ? "success" : "warning",
       message: state.instance?.status === "connected"
         ? "WhatsApp conectado."
+        : isPasskeyDisconnectReason(lastDisconnectReason)
+          ? "Esta conta exigiu chave de acesso e o provedor nao concluiu essa etapa. O diagnostico foi registrado."
         : pairCode
           ? "Codigo de pareamento atualizado."
           : "Status atualizado. Conexao ainda nao esta ativa.",
@@ -1433,8 +1475,16 @@ async function markWorkspaceInstanceDisconnected(
   },
 ) {
   const now = new Date().toISOString();
+  const disconnectedByUser = input.reason === "manual_disconnect";
+  const connectionMetadata = appendConnectionDiagnosticEvent(instance.metadata, {
+    type: disconnectedByUser ? "status_disconnected" : "provider_error",
+    providerPayload: input.providerData,
+    message: input.reason,
+    finalStatus: disconnectedByUser ? "disconnected" : "provider_error",
+    finalReason: input.reason,
+  });
   const metadata: JsonRecord = {
-    ...(instance.metadata ?? {}),
+    ...connectionMetadata,
     connection_loss_reason: input.reason,
     connection_loss_synced_at: now,
     last_client_action: input.action,
@@ -1900,6 +1950,7 @@ function buildState(
           lastHeartbeatAt: instance.last_heartbeat_at,
           lastMessageAt: instance.last_message_at,
           tokenReady: Boolean(instance.instance_token_encrypted),
+          connectionDiagnostics: readConnectionDiagnostics(instance.metadata),
         }
       : null,
     agent: agent

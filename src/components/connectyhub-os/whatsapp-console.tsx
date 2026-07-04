@@ -86,6 +86,59 @@ import { cn } from "@/lib/utils";
 
 type WhatsappStatus = "draft" | "qr_pending" | "connected" | "disconnected" | "blocked" | "error" | "archived";
 type ConnectionMode = "qr" | "phone";
+type ConnectionFinalStatus = "pending" | "success" | "passkey_blocked" | "qr_timeout" | "disconnected" | "provider_error" | "reset" | "unknown";
+type ConnectionEventType =
+  | "connect_requested"
+  | "connect_response"
+  | "qr_received"
+  | "qr_updated"
+  | "pair_code_received"
+  | "pair_code_updated"
+  | "status_poll"
+  | "status_connected"
+  | "status_disconnected"
+  | "passkey_blocked"
+  | "timeout"
+  | "provider_error"
+  | "reset_requested";
+
+type ConnectionDiagnosticEvent = {
+  type: ConnectionEventType;
+  at: string;
+  providerStatus: number | null;
+  status: string | null;
+  connected: boolean | null;
+  loggedIn: boolean | null;
+  hasQrCode: boolean;
+  qrCodeLength: number | null;
+  hasPairCode: boolean;
+  pairCodeLength: number | null;
+  lastDisconnectReason: string | null;
+  message: string | null;
+};
+
+type ConnectionAttemptDiagnostic = {
+  id: string;
+  mode: ConnectionMode;
+  phonePreview: string | null;
+  startedAt: string;
+  updatedAt: string;
+  finishedAt: string | null;
+  finalStatus: ConnectionFinalStatus;
+  finalReason: string | null;
+  lastDisconnectReason: string | null;
+  qrReceivedCount: number;
+  pairCodeReceivedCount: number;
+  statusPollCount: number;
+  scanDetected: boolean | null;
+  events: ConnectionDiagnosticEvent[];
+};
+
+type ConnectionDiagnostics = {
+  activeAttemptId: string | null;
+  latestAttempt: ConnectionAttemptDiagnostic | null;
+  attempts: ConnectionAttemptDiagnostic[];
+};
 
 type RuntimeAlert = {
   id: string;
@@ -149,6 +202,7 @@ type WhatsappState = {
     lastHeartbeatAt: string | null;
     lastMessageAt: string | null;
     tokenReady: boolean;
+    connectionDiagnostics: ConnectionDiagnostics;
   } | null;
   agent: {
     id: string;
@@ -5085,6 +5139,16 @@ function CompactConnectionCard({
   const connectionActionDescription = phoneModeSelected
     ? "Gera um codigo de pareamento para conectar pelo numero informado."
     : "Abre um QR Code para conectar ou reconectar o numero pelo WhatsApp.";
+  const latestConnectionAttempt = instance?.connectionDiagnostics?.latestAttempt ?? null;
+  const connectionHelperText = latestConnectionAttempt?.finalStatus === "passkey_blocked"
+    ? "Conta pediu chave de acesso; o diagnostico foi registrado para acompanharmos essa barreira."
+    : !enabled
+      ? disabledReason
+      : visiblePairCode
+        ? "Digite o codigo no WhatsApp para concluir."
+        : visibleQrCode
+          ? "Escaneie o QR Code pelo WhatsApp para concluir."
+          : meta.description;
 
   useEffect(() => {
     if (visibleQrCode && visibleQrCode !== prevQrRef.current) {
@@ -5170,8 +5234,12 @@ function CompactConnectionCard({
       </div>
 
       <p className="mt-3 text-[12px] leading-5 text-slate-500">
-        {!enabled ? disabledReason : visiblePairCode ? "Digite o codigo no WhatsApp para concluir." : visibleQrCode ? "Escaneie o QR Code pelo WhatsApp para concluir." : meta.description}
+        {connectionHelperText}
       </p>
+
+      {latestConnectionAttempt ? (
+        <ConnectionDiagnosticsPanel attempt={latestConnectionAttempt} />
+      ) : null}
 
       <div className="mt-4 grid gap-2">
         <div className="grid grid-cols-2 gap-1 rounded-lg p-1" style={{ background: "var(--ch-panel-2)", border: "1px solid var(--ch-border)" }}>
@@ -5287,6 +5355,66 @@ function CompactConnectionCard({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function ConnectionDiagnosticsPanel({ attempt }: { attempt: ConnectionAttemptDiagnostic }) {
+  const tone = getConnectionDiagnosticTone(attempt.finalStatus);
+  const latestEvents = attempt.events.slice(-4).reverse();
+  const reason = attempt.lastDisconnectReason ?? attempt.finalReason;
+
+  return (
+    <div className="mt-3 rounded-lg border border-white/10 bg-white/[0.03] p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="font-mono text-[9px] uppercase tracking-wide text-slate-500">Diagnostico</p>
+          <p className={cn("mt-1 text-[12px] font-semibold leading-4", tone.text)}>
+            {formatConnectionFinalStatus(attempt.finalStatus)}
+          </p>
+        </div>
+        <span className={cn("rounded-full px-2 py-1 font-mono text-[9px] font-semibold uppercase", tone.badge)}>
+          {attempt.mode === "phone" ? "codigo" : "qr"}
+        </span>
+      </div>
+
+      <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+        <ConnectionDiagnosticCounter label="QR" value={attempt.qrReceivedCount} />
+        <ConnectionDiagnosticCounter label="Codigo" value={attempt.pairCodeReceivedCount} />
+        <ConnectionDiagnosticCounter label="Polls" value={attempt.statusPollCount} />
+      </div>
+
+      {reason ? (
+        <p className="mt-3 break-words rounded-md bg-black/20 px-2 py-2 text-[11px] leading-4 text-slate-400">
+          {reason}
+        </p>
+      ) : null}
+
+      {attempt.scanDetected !== null ? (
+        <p className="mt-2 text-[10px] leading-4 text-slate-500">
+          Leitura {attempt.scanDetected ? "detectada no handshake" : "nao detectada pelo provedor"}
+        </p>
+      ) : null}
+
+      {latestEvents.length > 0 ? (
+        <div className="mt-3 grid gap-1.5">
+          {latestEvents.map((event) => (
+            <div key={`${event.type}-${event.at}`} className="flex items-center justify-between gap-2 text-[10px] leading-4">
+              <span className="truncate text-slate-400">{formatConnectionEventType(event.type)}</span>
+              <span className="shrink-0 font-mono text-slate-600">{formatConnectionEventTime(event.at)}</span>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function ConnectionDiagnosticCounter({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-md bg-black/20 px-2 py-1.5">
+      <p className="font-mono text-[9px] uppercase text-slate-500">{label}</p>
+      <p className="mt-0.5 text-[12px] font-semibold text-slate-100">{value.toLocaleString("pt-BR")}</p>
     </div>
   );
 }
@@ -5485,6 +5613,84 @@ function formatDate(value: string | null | undefined) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(date);
+}
+
+function formatConnectionFinalStatus(status: ConnectionFinalStatus) {
+  const labels: Record<ConnectionFinalStatus, string> = {
+    pending: "Tentativa em andamento",
+    success: "Conexao concluida",
+    passkey_blocked: "Chave de acesso solicitada",
+    qr_timeout: "QR expirou antes de conectar",
+    disconnected: "Desconectou durante a tentativa",
+    provider_error: "Erro do provedor",
+    reset: "Sessao resetada",
+    unknown: "Resultado desconhecido",
+  };
+
+  return labels[status];
+}
+
+function formatConnectionEventType(type: ConnectionEventType) {
+  const labels: Record<ConnectionEventType, string> = {
+    connect_requested: "inicio solicitado",
+    connect_response: "resposta do provedor",
+    qr_received: "qr recebido",
+    qr_updated: "qr atualizado",
+    pair_code_received: "codigo recebido",
+    pair_code_updated: "codigo atualizado",
+    status_poll: "status consultado",
+    status_connected: "conexao confirmada",
+    status_disconnected: "desconexao informada",
+    passkey_blocked: "chave de acesso",
+    timeout: "timeout do qr",
+    provider_error: "erro do provedor",
+    reset_requested: "reset solicitado",
+  };
+
+  return labels[type];
+}
+
+function formatConnectionEventTime(value: string) {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "--:--";
+  }
+
+  return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).format(date);
+}
+
+function getConnectionDiagnosticTone(status: ConnectionFinalStatus) {
+  if (status === "success") {
+    return {
+      text: "text-emerald-300",
+      badge: "bg-emerald-400/10 text-emerald-200",
+    };
+  }
+
+  if (status === "passkey_blocked" || status === "qr_timeout") {
+    return {
+      text: "text-amber-300",
+      badge: "bg-amber-400/10 text-amber-200",
+    };
+  }
+
+  if (status === "provider_error" || status === "disconnected") {
+    return {
+      text: "text-rose-300",
+      badge: "bg-rose-400/10 text-rose-200",
+    };
+  }
+
+  return {
+    text: "text-cyan-300",
+    badge: "bg-cyan-400/10 text-cyan-200",
+  };
 }
 
 function emptyCloneRealTestSummary(): CloneRealTestSummary {
