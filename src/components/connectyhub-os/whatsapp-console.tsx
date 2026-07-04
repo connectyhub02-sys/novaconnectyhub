@@ -730,8 +730,20 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
             return;
           }
 
-          setQrCode((current) => data.qrCode ?? current);
-          setPairCode((current) => data.pairCode ?? current);
+          const latestAttempt = data.state.instance?.connectionDiagnostics?.latestAttempt ?? null;
+          const attemptFinished = Boolean(latestAttempt && latestAttempt.finalStatus !== "pending");
+          const hasActiveArtifact = Boolean(data.qrCode || data.pairCode);
+
+          if (attemptFinished || (data.state.instance?.status !== "qr_pending" && !hasActiveArtifact)) {
+            setQrCode(null);
+            setPairCode(null);
+            if (data.notice) {
+              setNotice(data.notice);
+            }
+          } else {
+            setQrCode((current) => data.qrCode ?? current);
+            setPairCode((current) => data.pairCode ?? current);
+          }
         }
       } catch {
         // Mantem o polling silencioso; o botao Status continua disponivel para acao manual.
@@ -5127,8 +5139,10 @@ function CompactConnectionCard({
   const Icon = meta.icon;
   const profileImageUrl = instance?.profileImageUrl ?? null;
   const whatsappLabel = instance?.displayName ?? formatPhone(instance?.phoneNumber);
-  const visibleQrCode = status === "connected" ? null : qrCode;
-  const visiblePairCode = status === "connected" ? null : pairCode;
+  const latestConnectionAttempt = instance?.connectionDiagnostics?.latestAttempt ?? null;
+  const connectionAttemptFinished = Boolean(latestConnectionAttempt && latestConnectionAttempt.finalStatus !== "pending");
+  const visibleQrCode = status === "connected" || connectionAttemptFinished ? null : qrCode;
+  const visiblePairCode = status === "connected" || connectionAttemptFinished ? null : pairCode;
   const phoneModeSelected = connectMode === "phone";
   const connectPhoneDigits = normalizeConnectPhoneInput(connectPhone);
   const connectionActionDisabled = !enabled || (phoneModeSelected && connectPhoneDigits.length < 10);
@@ -5139,7 +5153,6 @@ function CompactConnectionCard({
   const connectionActionDescription = phoneModeSelected
     ? "Gera um codigo de pareamento para conectar pelo numero informado."
     : "Abre um QR Code para conectar ou reconectar o numero pelo WhatsApp.";
-  const latestConnectionAttempt = instance?.connectionDiagnostics?.latestAttempt ?? null;
   const connectionHelperText = latestConnectionAttempt?.finalStatus === "passkey_blocked"
     ? "Conta pediu chave de acesso; o diagnostico foi registrado para acompanharmos essa barreira."
     : !enabled
@@ -5151,11 +5164,11 @@ function CompactConnectionCard({
           : meta.description;
 
   useEffect(() => {
-    if (visibleQrCode && visibleQrCode !== prevQrRef.current) {
+    if (visibleQrCode && !connectionAttemptFinished && visibleQrCode !== prevQrRef.current) {
       setQrModalOpen(true);
     }
     prevQrRef.current = visibleQrCode;
-  }, [visibleQrCode]);
+  }, [connectionAttemptFinished, visibleQrCode]);
 
   return (
     <div
@@ -5318,7 +5331,7 @@ function CompactConnectionCard({
         </div>
       </div>
 
-      {qrModalOpen && visibleQrCode && (
+      {qrModalOpen && visibleQrCode && !connectionAttemptFinished && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
           onClick={() => setQrModalOpen(false)}
