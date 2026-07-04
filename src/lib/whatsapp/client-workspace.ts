@@ -46,6 +46,10 @@ import {
   resolveConnectionDiagnosticEventType,
   type WhatsappConnectionDiagnostics,
 } from "./connection-diagnostics";
+import {
+  deleteUazapiProviderInstance,
+  type UazapiProviderInstanceDeleteResult,
+} from "./uazapi-instance-cleanup";
 import { loadUazapiCredentials, type UazapiCredentials } from "./uazapi-credentials";
 
 type JsonRecord = Record<string, unknown>;
@@ -590,39 +594,23 @@ export async function disconnectClientWhatsapp(input: {
   const credentials = await loadUazapiCredentials(client);
   const agent = await requireWorkspaceWhatsappAgent(client, input.organization.id, input.agentId);
   const instance = await requireWorkspaceInstance(client, input.organization.id, agent);
-  const token = decryptInstanceToken(instance);
 
-  if (!token) {
-    await markWorkspaceInstanceDisconnected(client, instance, {
-      action: "disconnect_missing_token",
-      clearToken: true,
-      reason: "missing_local_token",
-    });
+  const deleteResult = await deleteUazapiProviderInstance({
+    credentials,
+    providerInstanceId: instance.provider_instance_id,
+    token: decryptInstanceToken(instance),
+  });
 
-    const state = await getClientWhatsappState({ organization: input.organization, userId: input.userId, agentId: agent.id, client });
-    revalidatePath("/dashboard/whatsapp");
-
-    return {
-      state,
-      notice: { tone: "warning", message: "WhatsApp marcado como desconectado. Gere um novo QR Code para reconectar." },
-      qrCode: null,
-      pairCode: null,
-    };
+  if (!deleteResult.providerDeleted && !deleteResult.skipped) {
+    const providerMessage = readProviderError(deleteResult.providerResponse);
+    throw new Error(providerMessage ?? "Nao foi possivel excluir a instancia na Uazapi. A conexao foi mantida para evitar divergencia.");
   }
 
-  const result = await callUazapi(credentials, "/instance/disconnect", { method: "POST", token, tolerateError: true });
-
-  if (!result.ok && !isInvalidInstanceTokenResponse(result)) {
-    throw new Error(readProviderError(result.data) ?? `Uazapi respondeu status ${result.status}.`);
-  }
-
-  const tokenInvalid = !result.ok && isInvalidInstanceTokenResponse(result);
-
-  await markWorkspaceInstanceDisconnected(client, instance, {
-    action: tokenInvalid ? "disconnect_invalid_token" : "disconnect",
-    clearToken: tokenInvalid,
-    providerData: result.data,
-    reason: tokenInvalid ? "invalid_instance_token" : "manual_disconnect",
+  await archiveWorkspaceInstanceAfterProviderDelete(client, instance, {
+    actorId: input.userId,
+    action: "manual_disconnect_delete",
+    reason: "manual_disconnect",
+    providerDeleteResult: deleteResult,
   });
 
   const state = await getClientWhatsappState({ organization: input.organization, userId: input.userId, agentId: agent.id, client });
@@ -631,10 +619,8 @@ export async function disconnectClientWhatsapp(input: {
   return {
     state,
     notice: {
-      tone: "warning",
-      message: tokenInvalid
-        ? "A sessao ja estava desconectada. Gere um novo QR Code para reconectar."
-        : "WhatsApp desconectado.",
+      tone: "success",
+      message: "Conexao WhatsApp removida. Gere um novo QR Code para criar uma nova instancia.",
     },
     qrCode: null,
     pairCode: null,
@@ -688,12 +674,21 @@ export async function resetClientWhatsappConnection(input: {
         providerData: resetResult.data,
         reason: isInvalidInstanceTokenResponse(resetResult) ? "invalid_instance_token" : "not_reconnectable",
       });
-      await createProviderInstance(client, credentials, input.organization, agent, input.userId, { forceNew: true });
+      await createProviderInstance(client, credentials, input.organization, agent, input.userId, {
+        forceNew: true,
+        replacingInstance: instance,
+        replacementProviderData: resetResult.data,
+        replacementReason: isInvalidInstanceTokenResponse(resetResult) ? "reset_invalid_token" : "reset_not_reconnectable",
+      });
     } else {
       throw new Error(readProviderError(resetResult.data) ?? `Uazapi respondeu status ${resetResult.status}.`);
     }
   } else {
-    await createProviderInstance(client, credentials, input.organization, agent, input.userId, { forceNew: true });
+    await createProviderInstance(client, credentials, input.organization, agent, input.userId, {
+      forceNew: true,
+      replacingInstance: instance,
+      replacementReason: "missing_instance_token",
+    });
   }
 
   const result = await connectClientWhatsapp({
@@ -1119,11 +1114,23 @@ async function createProviderInstance(
   organization: CurrentOrganization,
   agent: AgentRow,
   userId: string,
-  options: { forceNew?: boolean } = {},
+  options: {
+    forceNew?: boolean;
+    replacingInstance?: WhatsappInstanceRow | null;
+    replacementProviderData?: unknown;
+    replacementReason?: string;
+  } = {},
 ) {
   const now = new Date().toISOString();
   const baseName = buildProviderInstanceName(organization, agent);
   const name = options.forceNew ? buildResetProviderInstanceName(baseName) : baseName;
+  const replacementCleanup = options.forceNew && options.replacingInstance
+    ? await deleteWorkspaceProviderInstanceBeforeReplacement(client, credentials, options.replacingInstance, {
+        providerData: options.replacementProviderData,
+        reason: options.replacementReason ?? "force_new_instance",
+        userId,
+      })
+    : null;
 
   const existingInProvider = options.forceNew ? null : await findProviderInstanceByName(credentials, name);
   if (!options.forceNew && existingInProvider) {
@@ -1206,16 +1213,157 @@ async function createProviderInstance(
     throw new Error(error?.message ?? "Nao foi possivel salvar a instancia WhatsApp.");
   }
 
-  await client
-    .from("whatsapp_instances")
-    .update({ status: "archived", metadata: { archived_reason: "replaced_by_new_instance", replaced_by: data.id, archived_at: now } })
-    .eq("provider", "uazapi")
-    .eq("organization_id", organization.id)
-    .contains("metadata", { agent_id: agent.id })
-    .neq("id", data.id)
-    .neq("status", "archived");
+  await archiveWorkspaceInstancesReplacedByNewInstance(client, organization.id, agent.id, data.id, now, replacementCleanup);
 
   return data;
+}
+
+type WorkspaceReplacementCleanup = {
+  instanceId: string;
+  at: string;
+  userId: string;
+  reason: string;
+  providerData?: unknown;
+  deleteResult: UazapiProviderInstanceDeleteResult;
+};
+
+async function archiveWorkspaceInstanceAfterProviderDelete(
+  client: SupabaseClient,
+  instance: WhatsappInstanceRow,
+  input: {
+    actorId: string;
+    action: string;
+    reason: string;
+    providerDeleteResult: UazapiProviderInstanceDeleteResult;
+  },
+) {
+  const now = new Date().toISOString();
+  const metadata = {
+    ...(instance.metadata ?? {}),
+    archived_reason: input.reason,
+    archived_at: now,
+    archived_by: input.actorId,
+    last_client_action: input.action,
+    provider_delete_ok: input.providerDeleteResult.providerDeleted,
+    provider_delete_status: input.providerDeleteResult.providerStatus,
+    provider_delete_response: input.providerDeleteResult.providerResponse,
+    provider_delete_refreshed_token_used: input.providerDeleteResult.refreshedTokenUsed,
+    provider_delete_skipped: input.providerDeleteResult.skipped,
+  };
+
+  const { error } = await client
+    .from("whatsapp_instances")
+    .update({
+      status: "archived",
+      qr_status: null,
+      instance_token_preview: null,
+      instance_token_encrypted: null,
+      webhook_url: null,
+      webhook_configured_at: null,
+      disconnected_at: now,
+      last_synced_at: now,
+      metadata,
+    })
+    .eq("id", instance.id);
+
+  if (error) {
+    throw new Error(`Nao foi possivel remover a conexao WhatsApp: ${error.message}`);
+  }
+}
+
+async function deleteWorkspaceProviderInstanceBeforeReplacement(
+  client: SupabaseClient,
+  credentials: UazapiCredentials,
+  instance: WhatsappInstanceRow,
+  input: {
+    providerData?: unknown;
+    reason: string;
+    userId: string;
+  },
+): Promise<WorkspaceReplacementCleanup> {
+  const deleteResult = await deleteUazapiProviderInstance({
+    credentials,
+    providerInstanceId: instance.provider_instance_id,
+    token: decryptInstanceToken(instance),
+  });
+
+  if (!deleteResult.providerDeleted && !deleteResult.skipped) {
+    const providerMessage = readProviderError(deleteResult.providerResponse);
+    throw new Error(providerMessage ?? "Nao foi possivel excluir a instancia antiga na Uazapi. Nenhuma nova instancia foi criada para evitar cobranca duplicada.");
+  }
+
+  return {
+    instanceId: instance.id,
+    at: new Date().toISOString(),
+    userId: input.userId,
+    reason: input.reason,
+    providerData: input.providerData,
+    deleteResult,
+  };
+}
+
+async function archiveWorkspaceInstancesReplacedByNewInstance(
+  client: SupabaseClient,
+  organizationId: string,
+  agentId: string,
+  replacementInstanceId: string,
+  archivedAt: string,
+  cleanup: WorkspaceReplacementCleanup | null,
+) {
+  const { data: rows, error } = await client
+    .from("whatsapp_instances")
+    .select("id, metadata")
+    .eq("provider", "uazapi")
+    .eq("organization_id", organizationId)
+    .contains("metadata", { agent_id: agentId })
+    .neq("id", replacementInstanceId)
+    .neq("status", "archived");
+
+  if (error) {
+    throw new Error(`Nao foi possivel listar instancias antigas para arquivar: ${error.message}`);
+  }
+
+  await Promise.all((rows ?? []).map(async (row) => {
+    const cleanupMetadata = cleanup && cleanup.instanceId === row.id
+      ? {
+          replacement_cleanup_at: cleanup.at,
+          replacement_cleanup_by: cleanup.userId,
+          replacement_cleanup_reason: cleanup.reason,
+          replacement_reset_response: sanitizeProviderData(cleanup.providerData),
+          provider_delete_ok: cleanup.deleteResult.providerDeleted,
+          provider_delete_status: cleanup.deleteResult.providerStatus,
+          provider_delete_response: cleanup.deleteResult.providerResponse,
+          provider_delete_refreshed_token_used: cleanup.deleteResult.refreshedTokenUsed,
+          provider_delete_skipped: cleanup.deleteResult.skipped,
+        }
+      : {};
+    const metadata = {
+      ...((row.metadata as JsonRecord | null) ?? {}),
+      archived_reason: "replaced_by_new_instance",
+      replaced_by: replacementInstanceId,
+      archived_at: archivedAt,
+      ...cleanupMetadata,
+    };
+
+    const { error: archiveError } = await client
+      .from("whatsapp_instances")
+      .update({
+        status: "archived",
+        qr_status: null,
+        instance_token_preview: null,
+        instance_token_encrypted: null,
+        webhook_url: null,
+        webhook_configured_at: null,
+        disconnected_at: archivedAt,
+        last_synced_at: archivedAt,
+        metadata,
+      })
+      .eq("id", row.id);
+
+    if (archiveError) {
+      throw new Error(`Nao foi possivel arquivar a instancia antiga: ${archiveError.message}`);
+    }
+  }));
 }
 
 async function getWorkspaceInstance(client: SupabaseClient, organizationId: string, agent?: AgentRow | null) {

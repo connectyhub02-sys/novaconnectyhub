@@ -15,6 +15,7 @@ import type {
   CustomerWhatsappInstanceStatus,
 } from "@/lib/admin/customer-whatsapp";
 import type { StatusTone, Tone } from "@/lib/connectyhub-os-data";
+import { AdminCustomerWhatsappActions } from "./admin-customer-whatsapp-actions";
 import { ConnectyShell, type ConnectyShellNotification } from "./connecty-shell";
 import { DataTable, KpiStat, NeonBadge, PageHeader, Panel, StatusBadge } from "./panel-primitives";
 import { SyncWhatsAppInstancesButton } from "./sync-whatsapp-instances-button";
@@ -144,7 +145,7 @@ export function AdminCustomerWhatsappConsole({
         >
           {workspace.instances.length > 0 ? (
             <DataTable
-              columns={["Empresa", "Numero", "Status", "Agente", "Leads", "Conversas", "Mensagens", "IA", "Webhook", "Ultimo sinal"]}
+              columns={["Empresa", "Numero", "Status", "Agente", "Leads", "Conversas", "Mensagens", "IA", "Webhook", "Ultimo sinal", "Acoes"]}
               rows={workspace.instances.map((instance) => [
                 <InstanceIdentity key="identity" instance={instance} />,
                 <PhoneCell key="phone" instance={instance} />,
@@ -161,6 +162,12 @@ export function AdminCustomerWhatsappConsole({
                 <AgentTelemetryCell key="ai" instance={instance} />,
                 <WebhookCell key="webhook" instance={instance} />,
                 <LastSignalCell key="signal" instance={instance} />,
+                <AdminCustomerWhatsappActions
+                  key="actions"
+                  agents={instance.agents.map((agent) => ({ id: agent.id, name: agent.name }))}
+                  instanceId={instance.id}
+                  instanceLabel={instance.organizationName}
+                />,
               ])}
             />
           ) : (

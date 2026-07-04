@@ -1366,7 +1366,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
   async function deleteWhatsappAgent(agent: ClientWhatsappAgent) {
     const hasUnsavedChanges = agent.id === selectedAgentId && settingsChanged;
     const confirmed = window.confirm(
-      `Excluir o agente "${agent.name}"?\n\nEsta acao remove o agente do painel. Leads, conversas e historico do CRM continuam preservados.${hasUnsavedChanges ? "\n\nAlteracoes nao salvas deste agente serao descartadas." : ""}`,
+      `Excluir o agente "${agent.name}"?\n\nEsta acao remove o agente do painel e exclui qualquer instancia WhatsApp vinculada a ele na Uazapi. Leads, conversas e historico do CRM continuam preservados.${hasUnsavedChanges ? "\n\nAlteracoes nao salvas deste agente serao descartadas." : ""}`,
     );
 
     if (!confirmed) {
@@ -1672,7 +1672,10 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
                 onConnect={() => runAction("connect", connectMode === "phone" ? { connectPhone: normalizeConnectPhoneInput(connectPhone) } : {})}
                 onConnectModeChange={setConnectMode}
                 onConnectPhoneChange={setConnectPhone}
-                onDisconnect={() => runAction("disconnect")}
+                onDisconnect={() => {
+                  const confirmed = window.confirm("Remover esta conexao WhatsApp?\n\nA instancia sera excluida do painel e da Uazapi para evitar cobranca duplicada. Para conectar novamente, gere um novo QR Code ou codigo.");
+                  if (confirmed) void runAction("disconnect");
+                }}
                 onRefresh={() => runAction("refresh_status")}
                 onReset={() => runAction("reset_connection", connectMode === "phone" ? { connectPhone: normalizeConnectPhoneInput(connectPhone) } : {})}
                 enabled={variant.connectionEnabled && state.capability.canConnect}
@@ -5136,7 +5139,9 @@ function CompactConnectionCard({
   onReset: () => void;
 }) {
   const [qrModalOpen, setQrModalOpen] = useState(false);
+  const [passkeyModalOpen, setPasskeyModalOpen] = useState(false);
   const prevQrRef = useRef<string | null>(null);
+  const notifiedPasskeyAttemptRef = useRef<string | null>(null);
   const status = instance?.status ?? "draft";
   const meta = getStatusMeta(status);
   const Icon = meta.icon;
@@ -5144,6 +5149,7 @@ function CompactConnectionCard({
   const whatsappLabel = instance?.displayName ?? formatPhone(instance?.phoneNumber);
   const latestConnectionAttempt = instance?.connectionDiagnostics?.latestAttempt ?? null;
   const connectionAttemptFinished = Boolean(latestConnectionAttempt && latestConnectionAttempt.finalStatus !== "pending");
+  const passkeyBlockedAttempt = latestConnectionAttempt?.finalStatus === "passkey_blocked" ? latestConnectionAttempt : null;
   const visibleQrCode = status === "connected" || connectionAttemptFinished ? null : qrCode;
   const visiblePairCode = status === "connected" || connectionAttemptFinished ? null : pairCode;
   const phoneModeSelected = connectMode === "phone";
@@ -5173,6 +5179,19 @@ function CompactConnectionCard({
     }
     prevQrRef.current = visibleQrCode;
   }, [connectionAttemptFinished, visibleQrCode]);
+
+  useEffect(() => {
+    if (!passkeyBlockedAttempt) {
+      return;
+    }
+
+    if (notifiedPasskeyAttemptRef.current === passkeyBlockedAttempt.id) {
+      return;
+    }
+
+    notifiedPasskeyAttemptRef.current = passkeyBlockedAttempt.id;
+    setPasskeyModalOpen(true);
+  }, [passkeyBlockedAttempt]);
 
   return (
     <div
@@ -5333,8 +5352,8 @@ function CompactConnectionCard({
           />
           <SecondaryAction
             icon={Power}
-            label="Desconectar"
-            description="Encerra a sessao atual do WhatsApp conectado."
+            label="Remover"
+            description="Exclui a instancia do painel e da Uazapi para permitir uma nova conexao sem duplicar cobranca."
             disabled={!enabled || !instance}
             loading={running === "disconnect"}
             tone="danger"
@@ -5377,6 +5396,69 @@ function CompactConnectionCard({
             <p className="mt-3 text-center text-xs text-slate-400">
               Abra o WhatsApp &gt; Dispositivos conectados &gt; Conectar dispositivo
             </p>
+          </div>
+        </div>
+      )}
+
+      {passkeyModalOpen && passkeyBlockedAttempt && (
+        <div
+          aria-labelledby="passkey-blocked-title"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm"
+          onClick={() => setPasskeyModalOpen(false)}
+          onKeyDown={(event) => event.key === "Escape" && setPasskeyModalOpen(false)}
+          role="dialog"
+          tabIndex={0}
+        >
+          <div
+            className="relative w-full max-w-md rounded-2xl border border-amber-300/25 bg-[#121827] p-5 text-left shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              aria-label="Fechar aviso"
+              className="absolute right-3 top-3 grid h-8 w-8 place-items-center rounded-full bg-white/5 text-slate-400 transition hover:bg-white/10 hover:text-white"
+              onClick={() => setPasskeyModalOpen(false)}
+              type="button"
+            >
+              <X className="h-4 w-4" />
+            </button>
+
+            <div className="grid h-12 w-12 place-items-center rounded-2xl bg-amber-300/10 text-amber-200">
+              <KeyRound className="h-6 w-6" />
+            </div>
+
+            <h3 id="passkey-blocked-title" className="mt-4 pr-8 text-lg font-semibold text-white">
+              Verificacao extra solicitada
+            </h3>
+            <p className="mt-3 text-sm leading-6 text-slate-300">
+              Esta conta do WhatsApp pediu uma verificacao por chave de acesso. Nosso servico ainda nao suporta concluir essa etapa pelo painel.
+            </p>
+            <p className="mt-3 text-xs leading-5 text-slate-500">
+              Voce pode tentar resetar a conexao e gerar um novo QR Code. Se a conta pedir a mesma verificacao novamente, sera necessario usar outra conta enquanto acompanhamos essa limitacao.
+            </p>
+
+            <div className="mt-5 flex flex-col gap-2 sm:flex-row">
+              {!resetActionDisabled ? (
+                <button
+                  className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-lg border border-amber-300/30 bg-amber-300/10 px-4 font-mono text-[11px] font-semibold uppercase text-amber-100 transition hover:bg-amber-300/15"
+                  onClick={() => {
+                    setPasskeyModalOpen(false);
+                    onReset();
+                  }}
+                  type="button"
+                >
+                  <Repeat className="h-4 w-4" />
+                  Tentar reset
+                </button>
+              ) : null}
+              <button
+                className="inline-flex min-h-10 flex-1 items-center justify-center rounded-lg bg-white px-4 font-mono text-[11px] font-semibold uppercase text-slate-950 transition hover:bg-slate-100"
+                onClick={() => setPasskeyModalOpen(false)}
+                type="button"
+              >
+                Entendi
+              </button>
+            </div>
           </div>
         </div>
       )}

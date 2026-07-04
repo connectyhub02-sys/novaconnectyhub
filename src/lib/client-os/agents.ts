@@ -4,6 +4,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
 import { defaultLeadQualificationConfig, leadQualificationConfigKey } from "@/lib/leads/qualification";
 import { defaultWhatsappAgentPrompt, defaultWhatsappBehaviorConfig, defaultWhatsappCloneMemory, defaultWhatsappCloneProfile } from "@/lib/whatsapp/agent-behavior";
+import { deleteUazapiProviderInstance } from "@/lib/whatsapp/uazapi-instance-cleanup";
+import { loadUazapiCredentials } from "@/lib/whatsapp/uazapi-credentials";
+import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
 import { createServiceClient } from "@/lib/supabase/service";
 import { listClientCompanies, requireClientCompanyAccess, type ClientCompany } from "./companies";
 
@@ -67,8 +70,10 @@ type DeleteAgentRow = {
 
 type AgentWhatsappInstanceRow = {
   id: string;
+  provider_instance_id: string | null;
   status: string | null;
   phone_number: string | null;
+  instance_token_encrypted: string | null;
   metadata: JsonRecord | null;
 };
 
@@ -335,7 +340,7 @@ export async function deleteClientAgent(input: {
     throw new Error("Escolha um agente vinculado a sua conta.");
   }
 
-  await archiveDisconnectedAgentWhatsappInstances(client, agent, input.userId);
+  await deleteAgentWhatsappInstances(client, agent, input.userId);
 
   const { data: deleted, error } = await client
     .from("agent_registry")
@@ -359,14 +364,15 @@ export async function deleteClientAgent(input: {
   return agent;
 }
 
-async function archiveDisconnectedAgentWhatsappInstances(
+async function deleteAgentWhatsappInstances(
   client: SupabaseClient,
   agent: DeleteAgentRow,
   userId: string,
 ) {
+  const credentials = await loadUazapiCredentials(client);
   const { data, error } = await client
     .from("whatsapp_instances")
-    .select("id, status, phone_number, metadata")
+    .select("id, provider_instance_id, status, phone_number, instance_token_encrypted, metadata")
     .eq("organization_id", agent.organization_id)
     .contains("metadata", { agent_id: agent.id })
     .neq("status", "archived")
@@ -376,7 +382,7 @@ async function archiveDisconnectedAgentWhatsappInstances(
     throw new Error(`Nao foi possivel verificar instancias do agente: ${error.message}`);
   }
 
-  const rowsToArchive = (data ?? []).filter(shouldArchiveWithDeletedAgent);
+  const rowsToArchive = data ?? [];
 
   if (rowsToArchive.length === 0) {
     return;
@@ -385,6 +391,16 @@ async function archiveDisconnectedAgentWhatsappInstances(
   const now = new Date().toISOString();
 
   for (const row of rowsToArchive) {
+    const deleteResult = await deleteUazapiProviderInstance({
+      credentials,
+      providerInstanceId: row.provider_instance_id,
+      token: decryptAgentInstanceToken(row),
+    });
+
+    if (!deleteResult.providerDeleted && !deleteResult.skipped) {
+      throw new Error(`Nao foi possivel excluir a instancia WhatsApp ${row.id} na Uazapi. O agente nao foi excluido para evitar cobranca duplicada.`);
+    }
+
     const { error: archiveError } = await client
       .from("whatsapp_instances")
       .update({
@@ -401,6 +417,11 @@ async function archiveDisconnectedAgentWhatsappInstances(
           archived_agent_id: agent.id,
           archived_at: now,
           archived_by: userId,
+          provider_delete_ok: deleteResult.providerDeleted,
+          provider_delete_status: deleteResult.providerStatus,
+          provider_delete_response: deleteResult.providerResponse,
+          provider_delete_refreshed_token_used: deleteResult.refreshedTokenUsed,
+          provider_delete_skipped: deleteResult.skipped,
         },
       })
       .eq("id", row.id);
@@ -411,8 +432,16 @@ async function archiveDisconnectedAgentWhatsappInstances(
   }
 }
 
-function shouldArchiveWithDeletedAgent(row: AgentWhatsappInstanceRow) {
-  return row.status !== "connected" || !row.phone_number;
+function decryptAgentInstanceToken(instance: AgentWhatsappInstanceRow) {
+  if (!instance.instance_token_encrypted) {
+    return null;
+  }
+
+  try {
+    return decryptCredentialValue(instance.instance_token_encrypted);
+  } catch {
+    return null;
+  }
 }
 
 async function requireClientAgentAccess(input: {

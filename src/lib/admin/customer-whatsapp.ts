@@ -1,7 +1,11 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { revalidatePath } from "next/cache";
 import { createServiceClient } from "@/lib/supabase/service";
+import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
+import { deleteUazapiProviderInstance } from "@/lib/whatsapp/uazapi-instance-cleanup";
+import { loadUazapiCredentials } from "@/lib/whatsapp/uazapi-credentials";
 import { readWhatsappInstanceProfileImageUrl } from "@/lib/whatsapp/instance-profile-image";
 
 type JsonRecord = Record<string, unknown>;
@@ -144,6 +148,27 @@ type InstanceRow = {
   updated_at: string | null;
   metadata: JsonRecord | null;
   organizations: RelatedOrganization;
+};
+
+type InstanceDeleteRow = {
+  id: string;
+  organization_id: string;
+  provider_instance_id: string | null;
+  instance_token_encrypted: string | null;
+  metadata: JsonRecord | null;
+};
+
+type AgentDeleteRow = {
+  id: string;
+  organization_id: string;
+  metadata: JsonRecord | null;
+};
+
+type AgentInstanceDeleteRow = {
+  id: string;
+  provider_instance_id: string | null;
+  instance_token_encrypted: string | null;
+  metadata: JsonRecord | null;
 };
 
 type AgentRow = {
@@ -422,6 +447,189 @@ export async function getAdminCustomerWhatsappWorkspace(
     instances,
     warnings,
   };
+}
+
+export async function deleteAdminCustomerWhatsappInstance(input: {
+  instanceId: string;
+  actorId: string;
+  client?: SupabaseClient;
+}) {
+  const client = input.client ?? createServiceClient();
+  const credentials = await loadUazapiCredentials(client);
+  const { data: instance, error } = await client
+    .from("whatsapp_instances")
+    .select("id, organization_id, provider_instance_id, instance_token_encrypted, metadata")
+    .eq("id", input.instanceId)
+    .neq("status", "archived")
+    .maybeSingle<InstanceDeleteRow>();
+
+  if (error) {
+    throw new Error(`Nao foi possivel localizar a instancia: ${error.message}`);
+  }
+
+  if (!instance) {
+    throw new Error("Instancia nao encontrada ou ja arquivada.");
+  }
+
+  const deleteResult = await deleteUazapiProviderInstance({
+    credentials,
+    providerInstanceId: instance.provider_instance_id,
+    token: decryptInstanceToken(instance.instance_token_encrypted),
+  });
+
+  if (!deleteResult.providerDeleted && !deleteResult.skipped) {
+    throw new Error("Nao foi possivel excluir a instancia na Uazapi. A instancia foi mantida para evitar divergencia.");
+  }
+
+  await archiveCustomerWhatsappInstance(client, instance, {
+    actorId: input.actorId,
+    reason: "admin_customer_whatsapp_delete",
+    deleteResult,
+  });
+
+  revalidatePath("/admin/clientes/whatsapp");
+
+  return {
+    instanceId: instance.id,
+    providerDeleted: deleteResult.providerDeleted,
+    providerStatus: deleteResult.providerStatus,
+  };
+}
+
+export async function deleteAdminCustomerWhatsappAgent(input: {
+  agentId: string;
+  actorId: string;
+  client?: SupabaseClient;
+}) {
+  const client = input.client ?? createServiceClient();
+  const credentials = await loadUazapiCredentials(client);
+  const { data: agent, error: agentError } = await client
+    .from("agent_registry")
+    .select("id, organization_id, metadata")
+    .eq("id", input.agentId)
+    .eq("scope", "organization")
+    .contains("metadata", { client_created: true, agent_kind: "whatsapp" })
+    .maybeSingle<AgentDeleteRow>();
+
+  if (agentError) {
+    throw new Error(`Nao foi possivel localizar o agente: ${agentError.message}`);
+  }
+
+  if (!agent) {
+    throw new Error("Agente de cliente nao encontrado.");
+  }
+
+  const { data: instances, error: instancesError } = await client
+    .from("whatsapp_instances")
+    .select("id, provider_instance_id, instance_token_encrypted, metadata")
+    .eq("organization_id", agent.organization_id)
+    .contains("metadata", { agent_id: agent.id })
+    .neq("status", "archived")
+    .returns<AgentInstanceDeleteRow[]>();
+
+  if (instancesError) {
+    throw new Error(`Nao foi possivel listar instancias do agente: ${instancesError.message}`);
+  }
+
+  for (const instance of instances ?? []) {
+    const deleteResult = await deleteUazapiProviderInstance({
+      credentials,
+      providerInstanceId: instance.provider_instance_id,
+      token: decryptInstanceToken(instance.instance_token_encrypted),
+    });
+
+    if (!deleteResult.providerDeleted && !deleteResult.skipped) {
+      throw new Error(`Nao foi possivel excluir a instancia ${instance.id} na Uazapi. O agente foi mantido para evitar cobranca duplicada.`);
+    }
+
+    await archiveCustomerWhatsappInstance(client, {
+      id: instance.id,
+      organization_id: agent.organization_id,
+      provider_instance_id: instance.provider_instance_id,
+      instance_token_encrypted: instance.instance_token_encrypted,
+      metadata: instance.metadata,
+    }, {
+      actorId: input.actorId,
+      reason: "admin_customer_agent_deleted",
+      deleteResult,
+    });
+  }
+
+  const { data: deleted, error: deleteError } = await client
+    .from("agent_registry")
+    .delete()
+    .eq("id", agent.id)
+    .select("id")
+    .maybeSingle<{ id: string }>();
+
+  if (deleteError) {
+    throw new Error(`Nao foi possivel excluir o agente: ${deleteError.message}`);
+  }
+
+  if (!deleted) {
+    throw new Error("Nao foi possivel confirmar a exclusao do agente.");
+  }
+
+  revalidatePath("/admin/clientes/whatsapp");
+  revalidatePath("/dashboard/whatsapp");
+  revalidatePath("/dashboard/agentes");
+
+  return {
+    agentId: agent.id,
+    archivedInstances: (instances ?? []).length,
+  };
+}
+
+async function archiveCustomerWhatsappInstance(
+  client: SupabaseClient,
+  instance: InstanceDeleteRow,
+  input: {
+    actorId: string;
+    reason: string;
+    deleteResult: Awaited<ReturnType<typeof deleteUazapiProviderInstance>>;
+  },
+) {
+  const now = new Date().toISOString();
+  const { error } = await client
+    .from("whatsapp_instances")
+    .update({
+      status: "archived",
+      qr_status: null,
+      instance_token_preview: null,
+      instance_token_encrypted: null,
+      webhook_url: null,
+      webhook_configured_at: null,
+      disconnected_at: now,
+      last_synced_at: now,
+      metadata: {
+        ...(instance.metadata ?? {}),
+        archived_reason: input.reason,
+        archived_at: now,
+        archived_by: input.actorId,
+        provider_delete_ok: input.deleteResult.providerDeleted,
+        provider_delete_status: input.deleteResult.providerStatus,
+        provider_delete_response: input.deleteResult.providerResponse,
+        provider_delete_refreshed_token_used: input.deleteResult.refreshedTokenUsed,
+        provider_delete_skipped: input.deleteResult.skipped,
+      },
+    })
+    .eq("id", instance.id);
+
+  if (error) {
+    throw new Error(`Nao foi possivel arquivar a instancia: ${error.message}`);
+  }
+}
+
+function decryptInstanceToken(value: string | null) {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    return decryptCredentialValue(value);
+  } catch {
+    return null;
+  }
 }
 
 const emptyWorkspace: AdminCustomerWhatsappWorkspace = {
