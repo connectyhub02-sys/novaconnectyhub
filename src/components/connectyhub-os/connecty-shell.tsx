@@ -389,7 +389,7 @@ export function ConnectyShell({
               </div>
               <div className="space-y-0.5">
                 {section.items.map((item) => (
-                  <SidebarLink key={item.href} item={item} isActive={isActive(item.href, active)} />
+                  <SidebarLink key={item.href} item={item} isActive={item.href === activeItem?.href} />
                 ))}
               </div>
             </div>
@@ -806,7 +806,7 @@ export function ConnectyShell({
                         <MobileMenuLink
                           key={item.href}
                           item={item}
-                          isActive={isActive(item.href, active)}
+                          isActive={item.href === activeItem?.href}
                           onClick={() => setMobileMenuOpen(false)}
                         />
                       ))}
@@ -1108,10 +1108,13 @@ function MobileMenuLink({
 
 function isActive(href: string, current: string) {
   if (href === current) return true;
-  if (href !== "/admin" && href !== "/dashboard" && current.startsWith(href)) return true;
+  if (href !== "/admin" && href !== "/dashboard" && current.startsWith(`${href}/`)) return true;
   return false;
 }
 
 function resolveActiveItem(sections: NavSection[], active: string) {
-  return sections.flatMap((s) => s.items).find((i) => isActive(i.href, active));
+  return sections
+    .flatMap((s) => s.items)
+    .filter((item) => isActive(item.href, active))
+    .sort((left, right) => right.href.length - left.href.length)[0];
 }

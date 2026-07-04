@@ -137,81 +137,74 @@ export function AdminCustomerWhatsappConsole({
         </div>
       </Panel>
 
-      <div className="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_390px]">
-        <Panel
-          title="Instancias do painel dos usuarios"
-          eyebrow="empresa / numero / agente / crm"
-          action={<NeonBadge tone="cyan">{workspace.instances.length} registros</NeonBadge>}
-        >
-          {workspace.instances.length > 0 ? (
-            <DataTable
-              columns={["Empresa", "Numero", "Status", "Agente", "Leads", "Conversas", "Mensagens", "IA", "Webhook", "Ultimo sinal", "Acoes"]}
-              rows={workspace.instances.map((instance) => [
-                <InstanceIdentity key="identity" instance={instance} />,
-                <PhoneCell key="phone" instance={instance} />,
-                <StatusBadge key="status" status={instanceStatusTone(instance.status)} label={statusLabel(instance.status)} />,
-                <AgentsCell key="agents" instance={instance} />,
-                <CountCell key="leads" total={instance.leadCount} active={instance.activeLeadCount} activeLabel="ativos" />,
-                <CountCell
-                  key="conversations"
-                  total={instance.conversationCount}
-                  active={instance.openConversationCount}
-                  activeLabel="abertas"
-                />,
-                <MessageTelemetryCell key="messages" instance={instance} />,
-                <AgentTelemetryCell key="ai" instance={instance} />,
-                <WebhookCell key="webhook" instance={instance} />,
-                <LastSignalCell key="signal" instance={instance} />,
-                <AdminCustomerWhatsappActions
-                  key="actions"
-                  agents={instance.agents.map((agent) => ({ id: agent.id, name: agent.name }))}
-                  instanceId={instance.id}
-                  instanceLabel={instance.organizationName}
-                />,
-              ])}
-            />
-          ) : (
-            <EmptyState
-              icon={MessageCircle}
-              title="Nenhuma instancia de cliente registrada"
-              text="Quando um usuario conectar o WhatsApp pelo painel cliente, o numero aparece aqui. Instancias criadas pela API ficam na area API WhatsApp."
-            />
-          )}
-        </Panel>
-
-        <div className="space-y-5 2xl:sticky 2xl:top-20 2xl:self-start">
-          <Panel title="Separacao operacional" eyebrow="admin / clientes">
-            <div className="space-y-3">
-              <RuleRow
-                icon={ShieldCheck}
-                title="Agentes internos"
-                text="Ficam em /admin/agentes e atuam como operadores do sistema, auditoria, inteligencia e orquestracao."
-              />
-              <RuleRow
-                icon={MessageCircle}
-                title="WhatsApp dos usuarios"
-                text="Fica nesta area quando o numero e usado no painel ConnectyHub do cliente."
-              />
-              <RuleRow
-                icon={Network}
-                title="API WhatsApp"
-                text="Fica separada para empresas que usam nossa API em sistemas externos."
-              />
-            </div>
-          </Panel>
-
-          <Panel title="Sincronia com provedor" eyebrow="provedor / webhooks">
-            <div className="space-y-4">
-              <SyncWhatsAppInstancesButton />
-              <div className="grid gap-3">
-                <KpiStat label="conectadas" value={String(workspace.summary.connectedInstances)} tone="green" />
-                <KpiStat label="aguardando qr" value={String(workspace.summary.pendingInstances)} tone="amber" />
-                <KpiStat label="webhook ok" value={String(workspace.summary.webhookConfigured)} tone="cyan" />
-              </div>
-            </div>
-          </Panel>
+      <Panel
+        className="mb-5"
+        title="Operacao e sincronia"
+        eyebrow="admin / clientes / provedor"
+        action={<SyncWhatsAppInstancesButton variant="compact" />}
+      >
+        <div className="grid gap-3 xl:grid-cols-[repeat(3,minmax(0,1fr))_repeat(3,minmax(120px,0.62fr))]">
+          <RuleRow
+            icon={ShieldCheck}
+            title="Agentes internos"
+            text="Operadores, auditoria e orquestracao ficam em /admin/agentes."
+          />
+          <RuleRow
+            icon={MessageCircle}
+            title="WhatsApp dos usuarios"
+            text="Numeros usados dentro do painel do cliente aparecem nesta lista."
+          />
+          <RuleRow
+            icon={Network}
+            title="API WhatsApp"
+            text="Instancias de sistemas externos continuam isoladas na area API."
+          />
+          <KpiStat label="conectadas" value={String(workspace.summary.connectedInstances)} tone="green" />
+          <KpiStat label="aguardando qr" value={String(workspace.summary.pendingInstances)} tone="amber" />
+          <KpiStat label="webhook ok" value={String(workspace.summary.webhookConfigured)} tone="cyan" />
         </div>
-      </div>
+      </Panel>
+
+      <Panel
+        title="Instancias do painel dos usuarios"
+        eyebrow="empresa / numero / agente / crm"
+        action={<NeonBadge tone="cyan">{workspace.instances.length} registros</NeonBadge>}
+      >
+        {workspace.instances.length > 0 ? (
+          <DataTable
+            columns={["Empresa", "Numero", "Status", "Agente", "Leads", "Conversas", "Mensagens", "IA", "Webhook", "Ultimo sinal", "Acoes"]}
+            rows={workspace.instances.map((instance) => [
+              <InstanceIdentity key="identity" instance={instance} />,
+              <PhoneCell key="phone" instance={instance} />,
+              <StatusBadge key="status" status={instanceStatusTone(instance.status)} label={statusLabel(instance.status)} />,
+              <AgentsCell key="agents" instance={instance} />,
+              <CountCell key="leads" total={instance.leadCount} active={instance.activeLeadCount} activeLabel="ativos" />,
+              <CountCell
+                key="conversations"
+                total={instance.conversationCount}
+                active={instance.openConversationCount}
+                activeLabel="abertas"
+              />,
+              <MessageTelemetryCell key="messages" instance={instance} />,
+              <AgentTelemetryCell key="ai" instance={instance} />,
+              <WebhookCell key="webhook" instance={instance} />,
+              <LastSignalCell key="signal" instance={instance} />,
+              <AdminCustomerWhatsappActions
+                key="actions"
+                agents={instance.agents.map((agent) => ({ id: agent.id, name: agent.name }))}
+                instanceId={instance.id}
+                instanceLabel={instance.organizationName}
+              />,
+            ])}
+          />
+        ) : (
+          <EmptyState
+            icon={MessageCircle}
+            title="Nenhuma instancia de cliente registrada"
+            text="Quando um usuario conectar o WhatsApp pelo painel cliente, o numero aparece aqui. Instancias criadas pela API ficam na area API WhatsApp."
+          />
+        )}
+      </Panel>
     </ConnectyShell>
   );
 }
@@ -443,14 +436,14 @@ function LastSignalCell({ instance }: { instance: AdminCustomerWhatsappInstance 
 
 function RuleRow({ icon: Icon, title, text }: { icon: LucideIcon; title: string; text: string }) {
   return (
-    <div className="rounded-xl p-4" style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}>
-      <div className="flex gap-3">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-cyan-500/10 text-cyan-300">
+    <div className="h-full rounded-xl px-3 py-2.5" style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}>
+      <div className="flex h-full items-center gap-2.5">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-cyan-500/10 text-cyan-300">
           <Icon className="h-4 w-4" />
         </span>
-        <div>
-          <p className="text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>{title}</p>
-          <p className="mt-1 text-[12px] leading-5 text-slate-500">{text}</p>
+        <div className="min-w-0">
+          <p className="truncate text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>{title}</p>
+          <p className="mt-0.5 text-[11px] leading-4 text-slate-500">{text}</p>
         </div>
       </div>
     </div>
