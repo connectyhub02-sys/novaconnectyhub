@@ -641,6 +641,82 @@ export async function disconnectClientWhatsapp(input: {
   };
 }
 
+export async function resetClientWhatsappConnection(input: {
+  organization: CurrentOrganization;
+  userId: string;
+  agentId?: string | null;
+  connectPhone?: string | null;
+  client?: SupabaseClient;
+}): Promise<ClientWhatsappActionResult> {
+  const connectPhone = normalizePhone(input.connectPhone);
+
+  if (input.connectPhone && (!connectPhone || connectPhone.length < 10)) {
+    throw new Error("Informe o telefone com DDI usando apenas numeros.");
+  }
+
+  const client = input.client ?? createServiceClient();
+  const credentials = await loadUazapiCredentials(client);
+  const agent = await requireWorkspaceWhatsappAgent(client, input.organization.id, input.agentId);
+  const existing = await getWorkspaceInstance(client, input.organization.id, agent);
+
+  if (!existing) {
+    throw new Error("Gere uma conexao WhatsApp antes de usar o reset.");
+  }
+
+  let instance = existing;
+  let token = decryptInstanceToken(instance);
+
+  if (!token && instance.provider_instance_id) {
+    instance = await recoverProviderInstanceToken(client, credentials, instance) ?? instance;
+    token = decryptInstanceToken(instance);
+  }
+
+  if (token) {
+    const resetResult = await callUazapi(credentials, "/instance/reset", {
+      method: "POST",
+      token,
+      tolerateError: true,
+    });
+
+    if (resetResult.ok) {
+      await recordWorkspaceConnectionReset(client, instance, resetResult);
+      await sleep(6000);
+    } else if (isInvalidInstanceTokenResponse(resetResult) || isNotReconnectableResetResponse(resetResult)) {
+      await markWorkspaceInstanceDisconnected(client, instance, {
+        action: isInvalidInstanceTokenResponse(resetResult) ? "reset_invalid_token" : "reset_not_reconnectable",
+        clearToken: isInvalidInstanceTokenResponse(resetResult),
+        providerData: resetResult.data,
+        reason: isInvalidInstanceTokenResponse(resetResult) ? "invalid_instance_token" : "not_reconnectable",
+      });
+      await createProviderInstance(client, credentials, input.organization, agent, input.userId, { forceNew: true });
+    } else {
+      throw new Error(readProviderError(resetResult.data) ?? `Uazapi respondeu status ${resetResult.status}.`);
+    }
+  } else {
+    await createProviderInstance(client, credentials, input.organization, agent, input.userId, { forceNew: true });
+  }
+
+  const result = await connectClientWhatsapp({
+    organization: input.organization,
+    userId: input.userId,
+    agentId: agent.id,
+    connectPhone,
+    client,
+  });
+
+  return {
+    ...result,
+    notice: {
+      tone: result.notice?.tone ?? "success",
+      message: result.pairCode
+        ? "Sessao resetada. Use o codigo de pareamento para concluir."
+        : result.qrCode
+          ? "Sessao resetada. Escaneie o novo QR Code para concluir."
+          : "Sessao resetada e reconexao iniciada.",
+    },
+  };
+}
+
 export async function sendClientWhatsappTest(input: {
   organization: CurrentOrganization;
   userId: string;
@@ -1043,12 +1119,14 @@ async function createProviderInstance(
   organization: CurrentOrganization,
   agent: AgentRow,
   userId: string,
+  options: { forceNew?: boolean } = {},
 ) {
   const now = new Date().toISOString();
-  const name = buildProviderInstanceName(organization, agent);
+  const baseName = buildProviderInstanceName(organization, agent);
+  const name = options.forceNew ? buildResetProviderInstanceName(baseName) : baseName;
 
-  const existingInProvider = await findProviderInstanceByName(credentials, name);
-  if (existingInProvider) {
+  const existingInProvider = options.forceNew ? null : await findProviderInstanceByName(credentials, name);
+  if (!options.forceNew && existingInProvider) {
     return await upsertRecoveredClientInstance(client, credentials, existingInProvider, organization, agent, userId, now);
   }
 
@@ -1517,6 +1595,39 @@ async function markWorkspaceInstanceDisconnected(
 
   if (error) {
     throw new Error(`Nao foi possivel atualizar a conexao WhatsApp: ${error.message}`);
+  }
+}
+
+async function recordWorkspaceConnectionReset(
+  client: SupabaseClient,
+  instance: WhatsappInstanceRow,
+  result: { status: number; data: unknown },
+) {
+  const now = new Date().toISOString();
+  const connectionMetadata = appendConnectionDiagnosticEvent(instance.metadata, {
+    type: "reset_requested",
+    providerStatus: result.status,
+    providerPayload: result.data,
+    finalStatus: "reset",
+    finalReason: readProviderError(result.data) ?? "runtime_reset",
+  });
+
+  const { error } = await client
+    .from("whatsapp_instances")
+    .update({
+      qr_status: null,
+      last_synced_at: now,
+      metadata: {
+        ...connectionMetadata,
+        last_client_action: "reset_connection",
+        last_reset_response: sanitizeProviderData(result.data),
+        last_reset_at: now,
+      },
+    })
+    .eq("id", instance.id);
+
+  if (error) {
+    throw new Error(`Nao foi possivel registrar o reset da conexao WhatsApp: ${error.message}`);
   }
 }
 
@@ -2214,9 +2325,31 @@ function buildProviderInstanceName(organization: CurrentOrganization, agent?: Ag
   return `connectyhub-${base || organization.id.slice(0, 8)}${agentBase ? `-${agentBase}` : ""}`.slice(0, 64);
 }
 
+function buildResetProviderInstanceName(baseName: string) {
+  const suffix = `reset-${Date.now().toString(36).slice(-8)}`;
+  return `${baseName.slice(0, 63 - suffix.length)}-${suffix}`.slice(0, 64);
+}
+
 function normalizePhone(value: string | null | undefined) {
   const digits = value?.replace(/\D/g, "") ?? "";
   return digits || null;
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isNotReconnectableResetResponse(result: { data: unknown }) {
+  const text = `${readProviderError(result.data) ?? ""} ${safeJsonStringify(result.data)}`.toLowerCase();
+  return /not reconnectable|nao.*recuper|não.*recuper|not.*recover|cannot.*recover|can't.*recover/.test(text);
+}
+
+function safeJsonStringify(value: unknown) {
+  try {
+    return JSON.stringify(value ?? {});
+  } catch {
+    return "";
+  }
 }
 
 function readProfileImageUrl(instance: WhatsappInstanceRow | null) {

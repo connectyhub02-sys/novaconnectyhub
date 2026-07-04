@@ -1674,6 +1674,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
                 onConnectPhoneChange={setConnectPhone}
                 onDisconnect={() => runAction("disconnect")}
                 onRefresh={() => runAction("refresh_status")}
+                onReset={() => runAction("reset_connection", connectMode === "phone" ? { connectPhone: normalizeConnectPhoneInput(connectPhone) } : {})}
                 enabled={variant.connectionEnabled && state.capability.canConnect}
                 disabledReason={state.capability.message ?? variant.connectionDisabledReason}
               />
@@ -5117,6 +5118,7 @@ function CompactConnectionCard({
   onConnectPhoneChange,
   onDisconnect,
   onRefresh,
+  onReset,
 }: {
   instance: WhatsappState["instance"];
   qrCode: string | null;
@@ -5131,6 +5133,7 @@ function CompactConnectionCard({
   onConnectPhoneChange: (phone: string) => void;
   onDisconnect: () => void;
   onRefresh: () => void;
+  onReset: () => void;
 }) {
   const [qrModalOpen, setQrModalOpen] = useState(false);
   const prevQrRef = useRef<string | null>(null);
@@ -5146,6 +5149,7 @@ function CompactConnectionCard({
   const phoneModeSelected = connectMode === "phone";
   const connectPhoneDigits = normalizeConnectPhoneInput(connectPhone);
   const connectionActionDisabled = !enabled || (phoneModeSelected && connectPhoneDigits.length < 10);
+  const resetActionDisabled = !enabled || !instance || (phoneModeSelected && connectPhoneDigits.length < 10);
   const connectionActionIcon = phoneModeSelected ? Smartphone : QrCode;
   const connectionActionLabel = phoneModeSelected
     ? visiblePairCode ? "Gerar novo codigo" : "Gerar codigo"
@@ -5318,6 +5322,14 @@ function CompactConnectionCard({
             disabled={!enabled || !instance}
             loading={running === "refresh_status"}
             onClick={onRefresh}
+          />
+          <SecondaryAction
+            icon={Repeat}
+            label="Reset"
+            description="Limpa a sessao travada e gera um novo QR ou codigo sem apagar agente, prompt, arquivos ou comportamento."
+            disabled={resetActionDisabled}
+            loading={running === "reset_connection"}
+            onClick={onReset}
           />
           <SecondaryAction
             icon={Power}

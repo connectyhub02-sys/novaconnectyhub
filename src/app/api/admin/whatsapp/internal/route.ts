@@ -7,6 +7,7 @@ import {
   generatePlatformWhatsappCloneProfileFromHistory,
   getPlatformWhatsappConsoleState,
   refreshPlatformWhatsappConsoleStatus,
+  resetPlatformWhatsappConsoleConnection,
   sendPlatformWhatsappHandoffNotificationTest,
   sendPlatformWhatsappConsoleTest,
   updatePlatformWhatsappConsoleSettings,
@@ -111,6 +112,17 @@ export async function POST(request: NextRequest) {
       const result = await refreshPlatformWhatsappConsoleStatus({
         sectorId: asString(body?.sectorId) ?? "",
         userId: auth.userId,
+        client: createServiceClient(),
+      });
+
+      return NextResponse.json(result);
+    }
+
+    if (action === "reset_connection") {
+      const result = await resetPlatformWhatsappConsoleConnection({
+        sectorId: asString(body?.sectorId) ?? "",
+        userId: auth.userId,
+        connectPhone: asString(body?.connectPhone),
         client: createServiceClient(),
       });
 

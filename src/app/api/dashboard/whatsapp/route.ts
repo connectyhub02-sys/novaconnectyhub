@@ -9,6 +9,7 @@ import {
   generateClientWhatsappCloneProfileFromHistory,
   getClientWhatsappState,
   refreshClientWhatsappStatus,
+  resetClientWhatsappConnection,
   sendClientWhatsappHandoffNotificationTest,
   sendClientWhatsappTest,
   updateClientWhatsappPrompt,
@@ -110,6 +111,17 @@ export async function POST(request: NextRequest) {
         organization: context.organization,
         userId: context.userId,
         agentId: context.selectedAgentId,
+      });
+
+      return NextResponse.json(attachWorkspaceToResult(context, result));
+    }
+
+    if (action === "reset_connection") {
+      const result = await resetClientWhatsappConnection({
+        organization: context.organization,
+        userId: context.userId,
+        agentId: context.selectedAgentId,
+        connectPhone: asString(body?.connectPhone),
       });
 
       return NextResponse.json(attachWorkspaceToResult(context, result));
