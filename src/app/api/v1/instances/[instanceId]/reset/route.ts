@@ -1,8 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import {
   authenticateGatewayRequest,
-  connectGatewayInstance,
   formatGatewayError,
+  resetGatewayInstance,
 } from "@/lib/connectyhub-api/gateway";
 
 export const runtime = "nodejs";
@@ -16,20 +16,11 @@ export async function POST(request: NextRequest, ctx: InstanceRouteContext) {
   try {
     const auth = await authenticateGatewayRequest(request, ["instances:write"]);
     const { instanceId } = await ctx.params;
-    const body = await readJson<Record<string, unknown>>(request);
-    const result = await connectGatewayInstance(auth, instanceId, body);
+    const result = await resetGatewayInstance(auth, instanceId);
 
     return NextResponse.json({ ok: true, ...result });
   } catch (error) {
     const formatted = formatGatewayError(error);
     return NextResponse.json(formatted.body, { status: formatted.status });
-  }
-}
-
-async function readJson<T>(request: NextRequest): Promise<T | null> {
-  try {
-    return (await request.json()) as T;
-  } catch {
-    return null;
   }
 }

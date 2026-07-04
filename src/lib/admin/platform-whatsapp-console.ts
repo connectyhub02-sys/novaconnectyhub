@@ -345,12 +345,19 @@ export async function updatePlatformWhatsappConsoleSettings(input: {
 export async function connectPlatformWhatsappConsole(input: {
   sectorId: string;
   userId: string;
+  connectPhone?: string | null;
   client?: SupabaseClient;
 }): Promise<ClientWhatsappActionResult> {
   const client = input.client ?? createServiceClient();
   const credentials = await loadUazapiCredentials(client);
   const sector = await requirePlatformWhatsappSector(client, input.sectorId);
   const agent = await requireSectorWhatsappAgent(client, sector.id);
+  const connectPhone = normalizePhone(input.connectPhone);
+  const connectPayload: JsonRecord = {
+    browser: "auto",
+    systemName: `ConnectyHub Interno - ${sector.name}`,
+    ...(connectPhone ? { phone: connectPhone } : {}),
+  };
   const existing = await getSectorWhatsappInstance(client, sector.id);
   let instance = existing?.instance_token_encrypted
     ? existing
@@ -366,10 +373,7 @@ export async function connectPlatformWhatsappConsole(input: {
   let connectResult = await callUazapi(credentials, "/instance/connect", {
     method: "POST",
     token,
-    body: {
-      browser: "auto",
-      systemName: `ConnectyHub Interno - ${sector.name}`,
-    },
+    body: connectPayload,
     tolerateError: true,
   });
 
@@ -391,10 +395,7 @@ export async function connectPlatformWhatsappConsole(input: {
     connectResult = await callUazapi(credentials, "/instance/connect", {
       method: "POST",
       token,
-      body: {
-        browser: "auto",
-        systemName: `ConnectyHub Interno - ${sector.name}`,
-      },
+      body: connectPayload,
       tolerateError: true,
     });
   }
@@ -405,7 +406,9 @@ export async function connectPlatformWhatsappConsole(input: {
 
   const status = resolveUazapiWhatsappStatus(connectResult.data, "qr_pending");
   const qrCode = normalizeQrCode(findString(connectResult.data, ["qrcode", "qrCode", "qr", "base64"]));
-  const phoneNumber = normalizePhone(findString(connectResult.data, ["owner", "phone", "number", "phone_number"]) ?? instance.phone_number);
+  const pairCode = findString(connectResult.data, ["paircode", "pairCode", "pair_code"]);
+  const pendingConnection = status !== "connected" && Boolean(qrCode || pairCode);
+  const phoneNumber = normalizePhone(findString(connectResult.data, ["owner", "phone", "number", "phone_number"]) ?? connectPhone ?? instance.phone_number);
   const profileData = status === "connected" ? await getConnectedProfileData(credentials, token) : null;
   const avatarData = status === "connected" && phoneNumber ? await getConnectedAvatarData(credentials, token, phoneNumber) : null;
   const displayName = findString(connectResult.data, ["profileName", "displayName", "name"]) ?? findString(profileData, ["profileName", "displayName", "businessName", "name"]) ?? instance.display_name;
@@ -416,8 +419,8 @@ export async function connectPlatformWhatsappConsole(input: {
   await client
     .from("whatsapp_instances")
     .update({
-      status: qrCode ? "qr_pending" : status,
-      qr_status: qrCode ? "available" : null,
+      status: pendingConnection ? "qr_pending" : status,
+      qr_status: qrCode ? "available" : pairCode ? "pair_code" : null,
       phone_number: phoneNumber,
       display_name: displayName,
       connected_at: status === "connected" ? now : instance.connected_at,
@@ -432,6 +435,7 @@ export async function connectPlatformWhatsappConsole(input: {
         webhook_status: webhookResult.ok ? "configured" : "not_configured",
         webhook_error: webhookResult.ok ? null : webhookResult.reason,
         last_platform_action: "connect",
+        last_connect_request: sanitizeProviderData(connectPayload),
         last_connect_response: sanitizeProviderData(connectResult.data),
         ...(profileData ? { last_profile_response: sanitizeProviderData(profileData) } : {}),
         ...(avatarData ? { last_avatar_response: sanitizeProviderData(avatarData) } : {}),
@@ -445,11 +449,15 @@ export async function connectPlatformWhatsappConsole(input: {
   return {
     state,
     notice: {
-      tone: qrCode ? "warning" : "success",
-      message: qrCode ? "Escaneie o QR Code para concluir a conexao interna." : "WhatsApp interno conectado ou em processo de conexao.",
+      tone: pendingConnection ? "warning" : "success",
+      message: qrCode
+        ? "Escaneie o QR Code para concluir a conexao interna."
+        : pairCode
+          ? "Use o codigo de pareamento no WhatsApp para concluir a conexao interna."
+          : "WhatsApp interno conectado ou em processo de conexao.",
     },
     qrCode,
-    pairCode: null,
+    pairCode,
   };
 }
 
@@ -497,6 +505,9 @@ export async function refreshPlatformWhatsappConsoleStatus(input: {
   }
 
   const status = resolveUazapiWhatsappStatus(result.data);
+  const qrCode = normalizeQrCode(findString(result.data, ["qrcode", "qrCode", "qr", "base64"]));
+  const pairCode = findString(result.data, ["paircode", "pairCode", "pair_code"]);
+  const pendingConnection = status !== "connected" && Boolean(qrCode || pairCode);
   const phoneNumber = normalizePhone(findString(result.data, ["owner", "phone", "number", "phone_number"]) ?? instance.phone_number);
   const profileData = status === "connected" ? await getConnectedProfileData(credentials, token) : null;
   const avatarData = status === "connected" && phoneNumber ? await getConnectedAvatarData(credentials, token, phoneNumber) : null;
@@ -508,7 +519,8 @@ export async function refreshPlatformWhatsappConsoleStatus(input: {
   await client
     .from("whatsapp_instances")
     .update({
-      status,
+      status: pendingConnection ? "qr_pending" : status,
+      qr_status: qrCode ? "available" : pairCode ? "pair_code" : null,
       phone_number: phoneNumber,
       display_name: displayName,
       connected_at: status === "connected" ? instance.connected_at ?? now : instance.connected_at,
@@ -541,10 +553,14 @@ export async function refreshPlatformWhatsappConsoleStatus(input: {
     state,
     notice: {
       tone: state.instance?.status === "connected" ? "success" : "warning",
-      message: state.instance?.status === "connected" ? "WhatsApp interno conectado." : "Status atualizado. Conexao interna ainda nao esta ativa.",
+      message: state.instance?.status === "connected"
+        ? "WhatsApp interno conectado."
+        : pairCode
+          ? "Codigo de pareamento interno atualizado."
+          : "Status atualizado. Conexao interna ainda nao esta ativa.",
     },
-    qrCode: null,
-    pairCode: null,
+    qrCode: state.instance?.status === "connected" ? null : qrCode,
+    pairCode: state.instance?.status === "connected" ? null : pairCode,
   };
 }
 

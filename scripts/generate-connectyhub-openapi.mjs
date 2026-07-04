@@ -4,7 +4,7 @@ import yaml from "js-yaml";
 
 const sourcePath =
   process.env.SOURCE_OPENAPI_SPEC ||
-  "C:/Users/conne/Downloads/uazapi-openapi-spec.yaml";
+  path.resolve("uazapi-openapi-spec.yaml");
 const outputPath = path.resolve("src/lib/connectyhub-api/openapi.generated.json");
 const yamlOutputPath = path.resolve("docs/connectyhub-openapi-spec.yaml");
 
@@ -133,19 +133,58 @@ const nativePaths = {
       tags: ["Nativo ConnectyHub"],
       summary: "Conectar instancia",
       description:
-        "Inicia ou atualiza o fluxo de conexao da instancia. A resposta pode incluir QR Code, codigo de pareamento, telefone conectado e status atual.",
+        "Inicia ou atualiza o fluxo de conexao da instancia. Sem phone, solicita QR Code. Com phone em formato internacional, solicita codigo de pareamento. Quando o WhatsApp retornar lastDisconnectReason=Passkey pairing not supported, use o fluxo com phone/codigo de pareamento.",
       operationId: "connectyhubConnectInstance",
       parameters: [instanceIdParam("ID publico da instancia ConnectyHub")],
       requestBody: jsonBody({
         type: "object",
         properties: {
           phone: { type: "string", description: "Numero em formato internacional para gerar codigo de pareamento", example: "5511999999999" },
+          browser: { type: "string", enum: ["auto", "safari", "firefox", "edge", "chrome"], description: "Perfil de navegador usado no pareamento. Use auto como padrao.", default: "auto", example: "auto" },
+          systemName: { type: "string", description: "Nome exibido no WhatsApp em aparelhos conectados. Envie vazio para usar o padrao do provedor.", example: "ViralCheck" },
+          proxyManagedCountry: { type: "string", description: "Pais do proxy regional gerenciado. Alias aceito: proxy_managed_country.", example: "br" },
+          proxyManagedState: { type: "string", description: "Estado/subdivisao do proxy regional. Alias aceito: proxy_managed_state.", example: "sp" },
+          proxyManagedCity: { type: "string", description: "Cidade do proxy regional. Alias aceito: proxy_managed_city.", example: "campinas" },
         },
       }),
       responses: {
-        "200": { description: "Status de conexao atualizado" },
+        "200": {
+          description: "Status de conexao atualizado",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  ok: { type: "boolean", example: true },
+                  instanceId: { type: "string", example: EXAMPLE_INSTANCE_ID },
+                  status: { type: "string", enum: ["draft", "qr_pending", "connected", "disconnected", "blocked", "error"], example: "qr_pending" },
+                  qrCode: { type: ["string", "null"], description: "Data URL do QR Code quando o fluxo por QR estiver ativo." },
+                  pairCode: { type: ["string", "null"], description: "Codigo de pareamento quando phone for informado." },
+                  lastDisconnectReason: { type: ["string", "null"], example: "Passkey pairing not supported" },
+                  provider: { type: "object", description: "Resposta sanitizada do provedor WhatsApp." },
+                },
+              },
+            },
+          },
+        },
         "404": { description: "Instancia nao encontrada para este cliente" },
         "429": { description: "Limite de conexoes simultaneas atingido" },
+        "503": { description: "Capacidade de conexao temporariamente indisponivel" },
+      },
+    },
+  },
+  "/instances/{instanceId}/reset": {
+    post: {
+      tags: ["Nativo ConnectyHub"],
+      summary: "Resetar runtime da instancia",
+      description:
+        "Solicita um reset controlado do runtime da instancia no provedor WhatsApp. Use antes de gerar uma nova tentativa de conexao quando a sessao ficou presa, mas sem apagar o registro da instancia.",
+      operationId: "connectyhubResetInstance",
+      parameters: [instanceIdParam("ID publico da instancia ConnectyHub")],
+      responses: {
+        "200": { description: "Reset aceito pelo provedor" },
+        "404": { description: "Instancia nao encontrada para este cliente" },
+        "409": { description: "Sessao atual nao e reconectavel por reset" },
       },
     },
   },
@@ -154,11 +193,24 @@ const nativePaths = {
       tags: ["Nativo ConnectyHub"],
       summary: "Atualizar status da instancia",
       description:
-        "Consulta o status atual, sincroniza o registro da ConnectyHub e retorna informacoes de conexao, perfil, numero e foto quando disponiveis.",
+        "Consulta o status atual, sincroniza o registro da ConnectyHub e retorna informacoes de conexao, perfil, numero, foto, QR Code ou codigo de pareamento quando o provedor ainda mantiver o fluxo em andamento.",
       operationId: "connectyhubRefreshInstanceStatus",
       parameters: [instanceIdParam("ID publico da instancia ConnectyHub")],
       responses: {
-        "200": { description: "Status atualizado" },
+        "200": {
+          description: "Status atualizado",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  ok: { type: "boolean", example: true },
+                  instance: { $ref: "#/components/schemas/ConnectyHubInstance" },
+                },
+              },
+            },
+          },
+        },
         "404": { description: "Instancia nao encontrada para este cliente" },
       },
     },
@@ -437,8 +489,11 @@ const publicSpec = {
           phoneNumber: { type: ["string", "null"] },
           displayName: { type: ["string", "null"] },
           profileImageUrl: { type: ["string", "null"] },
-          status: { type: "string", enum: ["disconnected", "connecting", "connected", "hibernated"] },
+          status: { type: "string", enum: ["draft", "qr_pending", "connected", "disconnected", "blocked", "error", "archived"] },
           webhookConfigured: { type: "boolean" },
+          qrCode: { type: ["string", "null"], description: "Data URL do QR Code atualizado quando disponivel no status do provedor." },
+          pairCode: { type: ["string", "null"], description: "Codigo de pareamento atualizado quando disponivel no status do provedor." },
+          lastDisconnectReason: { type: ["string", "null"], description: "Ultimo motivo de desconexao reportado pelo provedor, quando disponivel." },
         },
       },
       ...sourceSchemas,

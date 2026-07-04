@@ -31,6 +31,7 @@ type ActionBody = {
   qualificationConfig?: unknown;
   maxChats?: unknown;
   maxMessagesPerChat?: unknown;
+  connectPhone?: unknown;
   phone?: unknown;
   text?: unknown;
 };
@@ -99,6 +100,7 @@ export async function POST(request: NextRequest) {
       const result = await connectPlatformWhatsappConsole({
         sectorId: asString(body?.sectorId) ?? "",
         userId: auth.userId,
+        connectPhone: asString(body?.connectPhone),
         client: createServiceClient(),
       });
 

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: uazapiGO - WhatsApp API
-  version: 2.1.0
+  version: 2.1.1
   x-logo:
     url: /uazapi-logo.png
   description: >
@@ -30,6 +30,8 @@ info:
     - `connecting`: Em processo de conexão
 
     - `connected`: Conectado e autenticado com sucesso
+
+    - `hibernated`: Sessão pausada, com credenciais preservadas para reconexão
 
 
     ## Limites de Uso
@@ -74,6 +76,11 @@ components:
         status:
           type: string
           description: Status atual da conexão
+          enum:
+            - disconnected
+            - connecting
+            - connected
+            - hibernated
         paircode:
           type: string
           description: Código de pareamento
@@ -854,7 +861,7 @@ components:
           description: ID único da resposta rápida
         onWhatsApp:
           type: boolean
-          description: Indica se a resposta veio do WhatsApp (não pode ser editada/excluída)
+          description: Indica se a resposta está sincronizada com o WhatsApp Business
           default: false
         docName:
           type: string
@@ -1512,6 +1519,8 @@ paths:
 
         - `connected`: Conectado e autenticado
 
+        - `hibernated`: Sessão pausada, com credenciais preservadas para reconexão
+
 
         Campos administrativos (adminField01/adminField02) são opcionais e podem ser usados para armazenar metadados
         personalizados. 
@@ -1563,7 +1572,7 @@ paths:
       description: |
         Retorna uma lista completa de todas as instâncias do sistema, incluindo:
         - ID e nome de cada instância
-        - Status atual (disconnected, connecting, connected)
+        - Status atual (disconnected, connecting, connected, hibernated)
         - Data de criação
         - Última desconexão e motivo
         - Informações de perfil (se conectado)
@@ -1668,6 +1677,8 @@ paths:
         - `connecting`: Em processo de conexão
 
         - `connected`: Conectado e autenticado
+
+        - `hibernated`: Sessão pausada, com credenciais preservadas para reconexão
 
 
         Sincronização e armazenamento de mensagens:
@@ -1787,6 +1798,14 @@ paths:
           description: Limite de conexões simultâneas atingido
         '500':
           description: Erro interno
+        '503':
+          description: Capacidade de conexão temporariamente indisponível
+          headers:
+            Retry-After:
+              description: Tempo recomendado, em segundos, para tentar novamente.
+              schema:
+                type: integer
+                example: 5
   /instance/disconnect:
     post:
       operationId: disconnectInstance
@@ -1994,7 +2013,7 @@ paths:
       summary: Verificar status da instância
       description: |
         Retorna o status atual de uma instância, incluindo:
-        - Estado da conexão (disconnected, connecting, connected)
+        - Estado da conexão (disconnected, connecting, connected, hibernated)
         - QR code atualizado (se em processo de conexão)
         - Código de pareamento (se disponível)
         - Informações da última desconexão
@@ -2010,6 +2029,7 @@ paths:
         - `disconnected`: Desconectado do WhatsApp
         - `connecting`: Em processo de conexão (aguardando QR code ou código de pareamento)
         - `connected`: Conectado e autenticado com sucesso
+        - `hibernated`: Sessão pausada, com credenciais preservadas para reconexão
       responses:
         '200':
           description: Sucesso
@@ -2615,8 +2635,8 @@ paths:
         - `proxy_url`: proxy persistido na instância, sempre mascarado. Se `mode=custom`, continua mostrando o proxy do
         cliente mesmo quando a sessão caiu em fallback.
 
-        - `proxy_fallback`: política persistida de contingência para `mode=custom`. Pode ser `internal_proxy`, `never`
-        ou outra URL de proxy.
+        - `proxy_fallback`: política persistida de contingência para `mode=custom`. Pode ser `internal`, `never` ou
+        outra URL de proxy.
 
         - `managed`: campo legado. Fica `true` quando a infraestrutura interna da plataforma está envolvida no
         transporte atual ou pretendido.
@@ -2671,7 +2691,7 @@ paths:
                       reason: ''
                       since: 0
                     proxy_url: http://***:***@cliente-proxy.example:8080
-                    proxy_fallback: internal_proxy
+                    proxy_fallback: internal
                     managed: false
                     last_test_at: 0
                     last_test_error: ''
@@ -2687,7 +2707,7 @@ paths:
                       reason: custom_failed_internal:dial tcp timeout
                       since: 1760000000000
                     proxy_url: http://***:***@cliente-proxy.example:8080
-                    proxy_fallback: internal_proxy
+                    proxy_fallback: internal
                     managed: true
                     last_test_at: 1760000000000
                     last_test_error: dial tcp timeout
@@ -2702,7 +2722,7 @@ paths:
                       reason: custom_failed_direct:dial tcp timeout
                       since: 1760000005000
                     proxy_url: http://***:***@cliente-proxy.example:8080
-                    proxy_fallback: internal_proxy
+                    proxy_fallback: internal
                     managed: false
                     last_test_at: 1760000005000
                     last_test_error: dial tcp timeout
@@ -2718,7 +2738,7 @@ paths:
                       reason: ''
                       since: 0
                     proxy_url: ''
-                    proxy_fallback: internal_proxy
+                    proxy_fallback: internal
                     managed: true
                     last_test_at: 0
                     last_test_error: ''
@@ -2734,7 +2754,7 @@ paths:
                     reason: custom_failed_internal:dial tcp timeout
                     since: 1760000000000
                   proxy_url: http://***:***@cliente-proxy.example:8080
-                  proxy_fallback: internal_proxy
+                  proxy_fallback: internal
                   managed: true
                   last_test_at: 1760000000000
                   last_test_error: dial tcp timeout
@@ -2802,10 +2822,10 @@ paths:
                     description: |
                       Política de contingência persistida para `mode=custom`.
                       Valores aceitos:
-                        - `internal_proxy`
+                        - `internal`
                         - `never`
                         - uma URL de proxy HTTP/HTTPS/SOCKS para contingência explícita
-                    example: internal_proxy
+                    example: internal
                   managed:
                     type: boolean
                     description: >-
@@ -2872,9 +2892,16 @@ paths:
             - `validation_error`
 
         Quando `mode=custom`, você também pode definir a contingência via `proxy_fallback`:
-          - `internal_proxy`: tenta a infraestrutura interna e, se ainda assim falhar, pode usar direto como último recurso;
+          - `internal`: tenta a infraestrutura interna e, se ainda assim falhar, pode usar direto como último recurso;
           - `never`: não usa contingência; ou
           - uma URL de proxy de contingência controlada pelo próprio cliente.
+
+        Quando `mode=internal`, `rotate_now: true` troca imediatamente o proxy interno persistido.
+
+        Se houver mais de uma origem interna disponível, a plataforma escolhe outra origem sem expor o fornecedor.
+
+        Se houver apenas uma origem, troca apenas o proxy/IP dentro dessa origem.
+
 
         Protocolos aceitos em URLs de proxy customizado:
           - `http://usuario:senha@host:porta`
@@ -2895,7 +2922,7 @@ paths:
                 value:
                   mode: custom
                   proxy_url: http://usuario:senha@proxy-do-cliente.example:8080
-                  proxy_fallback: internal_proxy
+                  proxy_fallback: internal
               custom_with_explicit_backup_proxy:
                 summary: Proxy customizado com proxy de contingência próprio
                 value:
@@ -2906,6 +2933,11 @@ paths:
                 summary: Modo interno
                 value:
                   mode: internal
+              internal_rotate_now:
+                summary: Rotacionar proxy interno agora
+                value:
+                  mode: internal
+                  rotate_now: true
               no_proxy:
                 summary: Direto explícito
                 value:
@@ -2933,11 +2965,17 @@ paths:
                   description: >
                     Política de contingência para `mode=custom`.
 
-                    Aceita `internal_proxy`, `never` ou uma URL de proxy de contingência usando `http://`, `https://`,
+                    Aceita `internal`, `never` ou uma URL de proxy de contingência usando `http://`, `https://`,
                     `socks5://` ou `socks5h://`.
                 confirm_no_proxy:
                   type: boolean
                   description: Obrigatório quando `mode=none`.
+                rotate_now:
+                  type: boolean
+                  description: >-
+                    Quando `true` com `mode=internal`, troca imediatamente o proxy interno persistido sem expor o
+                    fornecedor usado.
+                  default: false
       responses:
         '200':
           description: Proxy configurado com sucesso
@@ -2956,7 +2994,7 @@ paths:
                         reason: ''
                         since: 0
                       proxy_url: http://***:***@proxy-do-cliente.example:8080
-                      proxy_fallback: internal_proxy
+                      proxy_fallback: internal
                       managed: false
                       last_test_at: 0
                       last_test_error: ''
@@ -2974,7 +3012,7 @@ paths:
                         reason: ''
                         since: 0
                       proxy_url: http://***:***@proxy-do-cliente.example:8080
-                      proxy_fallback: internal_proxy
+                      proxy_fallback: internal
                       managed: false
                       last_test_at: 0
                       last_test_error: ''
@@ -2992,8 +3030,27 @@ paths:
                         reason: ''
                         since: 0
                       proxy_url: ''
-                      proxy_fallback: internal_proxy
+                      proxy_fallback: internal
                       managed: false
+                      last_test_at: 0
+                      last_test_error: ''
+                      validation_error: false
+                internal_rotated:
+                  summary: Proxy interno rotacionado
+                  value:
+                    details: Proxy configurado
+                    rotated: true
+                    proxy:
+                      mode: internal
+                      effective_mode: internal
+                      effective_detail: managed_pool
+                      fallback:
+                        active: false
+                        reason: ''
+                        since: 0
+                      proxy_url: managed_pool://hidden
+                      proxy_fallback: internal
+                      managed: true
                       last_test_at: 0
                       last_test_error: ''
                       validation_error: false
@@ -3009,7 +3066,7 @@ paths:
                       reason: ''
                       since: 0
                     proxy_url: http://***:***@proxy-do-cliente.example:8080
-                    proxy_fallback: internal_proxy
+                    proxy_fallback: internal
                     managed: false
                     last_test_at: 0
                     last_test_error: ''
@@ -3079,6 +3136,9 @@ paths:
                   restart_requested:
                     type: boolean
                     description: Indica se uma reinicialização da conexão foi solicitada para aplicar o proxy.
+                  rotated:
+                    type: boolean
+                    description: Presente como `true` quando `rotate_now` troca o proxy interno com sucesso.
         '400':
           description: Payload inválido ou falha na validação do proxy
           content:
@@ -3099,6 +3159,16 @@ paths:
                   error:
                     type: string
                     example: Unauthorized
+        '409':
+          description: Não há proxy alternativo disponível para rotação interna
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: 'nao foi possivel rotacionar proxy interno: nenhum proxy alternativo disponível para rotação'
         '500':
           description: Erro interno do servidor ao configurar o proxy
           content:
@@ -15816,18 +15886,48 @@ paths:
       tags:
         - Respostas Rápidas
       summary: Criar, atualizar ou excluir resposta rápida
-      description: |
-        Gerencia templates de respostas rápidas para agilizar o atendimento. Suporta mensagens de texto e mídia.
+      description: >
+        Gerencia templates de respostas rápidas para agilizar o atendimento. Por padrão, cria respostas rápidas locais.
+
+        Para criar/sincronizar uma resposta rápida no WhatsApp Business, envie `onWhatsApp: true`.
+
 
         - Para criar: não inclua o campo `id`
+
         - Para atualizar: inclua o `id` existente
+
         - Para excluir: defina `delete: true` e inclua o `id`
 
-        Observação: Templates originados do WhatsApp (onWhatsApp=true) não podem ser modificados ou excluídos.
+
+        Observação: respostas rápidas sincronizadas com o WhatsApp suportam apenas `type: text`.
+
+        Não é possível converter uma resposta rápida local existente em resposta do WhatsApp; para criar no WhatsApp,
+        envie `onWhatsApp: true` sem `id`.
       requestBody:
         required: true
         content:
           application/json:
+            examples:
+              criar_apenas_api:
+                summary: Criar apenas na API
+                value:
+                  shortCut: saudacao
+                  type: text
+                  text: Olá! Como posso ajudar?
+              criar_api_whatsapp:
+                summary: Criar na API e no WhatsApp Business
+                value:
+                  onWhatsApp: true
+                  shortCut: saudacao
+                  type: text
+                  text: Olá! Como posso ajudar?
+              editar_existente:
+                summary: Editar resposta rápida existente
+                value:
+                  id: rb9da9c03637452
+                  shortCut: saudacao
+                  type: text
+                  text: Olá! Como posso ajudar hoje?
             schema:
               type: object
               required:
@@ -15841,6 +15941,12 @@ paths:
                 delete:
                   type: boolean
                   description: Definir como true para excluir o template
+                  default: false
+                onWhatsApp:
+                  type: boolean
+                  description: >-
+                    Quando true, cria/sincroniza a resposta rápida no WhatsApp Business via app state. Disponível apenas
+                    para type=text.
                   default: false
                 shortCut:
                   type: string
@@ -15886,12 +15992,10 @@ paths:
                       $ref: ../schemas/quick_reply.yaml#/QuickReply
         '400':
           description: Requisição inválida (erro de validação)
-        '403':
-          description: Não é possível modificar template originado do WhatsApp
         '404':
           description: Template não encontrado
         '500':
-          description: Erro no servidor
+          description: Erro no servidor ou falha ao sincronizar com WhatsApp
   /quickreply/showall:
     get:
       operationId: listQuickReplies

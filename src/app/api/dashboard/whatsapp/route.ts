@@ -24,6 +24,7 @@ type ActionBody = {
   action?: unknown;
   companyId?: unknown;
   agentId?: unknown;
+  connectPhone?: unknown;
   phone?: unknown;
   text?: unknown;
   behavior?: unknown;
@@ -98,6 +99,7 @@ export async function POST(request: NextRequest) {
         organization: context.organization,
         userId: context.userId,
         agentId: context.selectedAgentId,
+        connectPhone: asString(body?.connectPhone),
       });
 
       return NextResponse.json(attachWorkspaceToResult(context, result));

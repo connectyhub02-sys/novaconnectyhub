@@ -23,6 +23,7 @@ import {
   Globe2,
   GraduationCap,
   ImageIcon,
+  KeyRound,
   Link2,
   Loader2,
   MessageCircle,
@@ -84,6 +85,7 @@ import type { CloneHumanizationMetric } from "@/lib/whatsapp/clone-humanization"
 import { cn } from "@/lib/utils";
 
 type WhatsappStatus = "draft" | "qr_pending" | "connected" | "disconnected" | "blocked" | "error" | "archived";
+type ConnectionMode = "qr" | "phone";
 
 type RuntimeAlert = {
   id: string;
@@ -485,6 +487,9 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
   const [running, setRunning] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [qrCode, setQrCode] = useState<string | null>(null);
+  const [pairCode, setPairCode] = useState<string | null>(null);
+  const [connectMode, setConnectMode] = useState<ConnectionMode>("qr");
+  const [connectPhone, setConnectPhone] = useState("");
   const [promptDraft, setPromptDraft] = useState("");
   const [behaviorDraft, setBehaviorDraft] = useState<WhatsappBehaviorConfig>(defaultWhatsappBehaviorConfig);
   const [cloneProfileDraft, setCloneProfileDraft] = useState<WhatsappCloneProfile>(defaultWhatsappCloneProfile);
@@ -525,7 +530,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
   const pendingPromptCaretRef = useRef<number | null>(null);
   const cloneProfileImportBaselineRef = useRef<string | null>(null);
   const appliedCloneProfileImportRef = useRef<string | null>(null);
-  const isAwaitingQrScan = Boolean(qrCode) || state?.instance?.status === "qr_pending";
+  const isAwaitingConnection = Boolean(qrCode || pairCode) || state?.instance?.status === "qr_pending";
   const isConnected = state?.instance?.status === "connected";
   const canManageInternalAgents = variant.entityIdKey === "sectorId";
   const selectedWhatsappEntityId = canManageInternalAgents ? selectedCompanyId : selectedAgentId;
@@ -642,7 +647,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
   }, [cloneProfileDraft, state?.agent?.cloneProfile, state?.agent?.cloneProfileImport]);
 
   useEffect(() => {
-    if (!selectedWhatsappEntityId || !isAwaitingQrScan || running === "disconnect") {
+    if (!selectedWhatsappEntityId || !isAwaitingConnection || running === "disconnect") {
       return;
     }
 
@@ -666,9 +671,13 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
 
           if (data.state.instance?.status === "connected") {
             setQrCode(null);
+            setPairCode(null);
             setNotice({ tone: "success", message: "WhatsApp conectado. Foto e status sincronizados." });
             return;
           }
+
+          setQrCode((current) => data.qrCode ?? current);
+          setPairCode((current) => data.pairCode ?? current);
         }
       } catch {
         // Mantem o polling silencioso; o botao Status continua disponivel para acao manual.
@@ -687,7 +696,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
         clearTimeout(timeoutId);
       }
     };
-  }, [applyWhatsappState, isAwaitingQrScan, running, selectedWhatsappEntityId, variant.endpoints.action, whatsappActionPayload]);
+  }, [applyWhatsappState, isAwaitingConnection, running, selectedWhatsappEntityId, variant.endpoints.action, whatsappActionPayload]);
 
   useEffect(() => {
     if (!selectedWhatsappEntityId || !isConnected || running === "disconnect") {
@@ -710,6 +719,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
 
           if (data.state.instance?.status !== "connected") {
             setQrCode(null);
+            setPairCode(null);
             setNotice(data.notice ?? { tone: "warning", message: "WhatsApp desconectado. Gere um novo QR Code para reconectar." });
           }
         }
@@ -968,6 +978,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
 
       applyWhatsappState(data.state, { preserveDrafts: true });
       setQrCode(data.state.instance?.status === "connected" ? null : data.qrCode ?? null);
+      setPairCode(data.state.instance?.status === "connected" ? null : data.pairCode ?? null);
       setNotice(data.notice ?? { tone: "success", message: "Acao concluida." });
     } catch (error) {
       setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro inesperado no WhatsApp." });
@@ -1276,6 +1287,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
       const nextState = await fetchWhatsappState(variant, data.agent.id);
       applyWhatsappState(nextState);
       setQrCode(null);
+      setPairCode(null);
       setChannelOps(null);
       setNotice({ tone: "success", message: "Agente clonado sem copiar a instancia. Gere o QR Code quando quiser conectar o novo WhatsApp." });
     } catch (error) {
@@ -1316,6 +1328,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
 
       applyWhatsappState(nextState);
       setQrCode(null);
+      setPairCode(null);
       setChannelOps(null);
       setNotice({ tone: "success", message: `Agente "${agent.name}" excluido.` });
     } catch (error) {
@@ -1345,6 +1358,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
       const nextState = await fetchWhatsappState(variant, nextAgentId);
       applyWhatsappState(nextState);
       setQrCode(null);
+      setPairCode(null);
       setChannelOps(null);
     } catch (error) {
       setNotice({ tone: "error", message: error instanceof Error ? error.message : "Nao foi possivel abrir este agente." });
@@ -1373,6 +1387,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
       const nextState = await fetchWhatsappState(variant, nextEntityId);
       applyWhatsappState(nextState);
       setQrCode(null);
+      setPairCode(null);
       setChannelOps(null);
     } catch (error) {
       setNotice({ tone: "error", message: error instanceof Error ? error.message : `Nao foi possivel abrir este ${variant.entitySingular}.` });
@@ -1417,6 +1432,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
       setInternalAgentName("");
       setShowInternalAgentForm(false);
       setQrCode(null);
+      setPairCode(null);
       setChannelOps(null);
       setNotice(data.notice ?? { tone: "success", message: "Agente interno criado. Agora configure prompt, conexao e comportamento." });
     } catch (error) {
@@ -1565,33 +1581,38 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
         <WhatsappConsoleTabs activeTab={activeTab} onChange={setActiveTab} />
 
         {activeTab === "connection" ? (
-        <Panel
-          title="Conexao e identidade"
-          eyebrow="numero / agente / status"
-          action={<NeonBadge tone={state.instance?.status === "connected" ? "green" : "amber"}>{state.instance?.status === "connected" ? "online" : "pendente"}</NeonBadge>}
-        >
-          <div className="grid gap-3 sm:gap-4 2xl:grid-cols-[minmax(0,1fr)_320px]">
-            <div className="grid content-start gap-4">
-              <AgentIdentityCard agent={state.agent} company={selectedCompany} entityLabel={variant.entityPromptLabel} />
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                <InfoTile label="Conversa" value={formatResponseMode(behaviorDraft.responseMode)} />
-                <InfoTile label="Rapport" value={formatRapportMode(behaviorDraft.adaptiveRapportMode)} />
-                <InfoTile label="Grupos" value={behaviorDraft.allowGroupChats ? formatGroupReplyMode(behaviorDraft.groupReplyMode) : "Pausado"} />
-                <InfoTile label="Alteracoes" value={settingsChanged ? "Pendentes" : "Salvo"} />
+          <Panel
+            title="Conexao e identidade"
+            eyebrow="numero / agente / status"
+            action={<NeonBadge tone={state.instance?.status === "connected" ? "green" : "amber"}>{state.instance?.status === "connected" ? "online" : "pendente"}</NeonBadge>}
+          >
+            <div className="grid gap-3 sm:gap-4 2xl:grid-cols-[minmax(0,1fr)_320px]">
+              <div className="grid content-start gap-4">
+                <AgentIdentityCard agent={state.agent} company={selectedCompany} entityLabel={variant.entityPromptLabel} />
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                  <InfoTile label="Conversa" value={formatResponseMode(behaviorDraft.responseMode)} />
+                  <InfoTile label="Rapport" value={formatRapportMode(behaviorDraft.adaptiveRapportMode)} />
+                  <InfoTile label="Grupos" value={behaviorDraft.allowGroupChats ? formatGroupReplyMode(behaviorDraft.groupReplyMode) : "Pausado"} />
+                  <InfoTile label="Alteracoes" value={settingsChanged ? "Pendentes" : "Salvo"} />
+                </div>
               </div>
+              <CompactConnectionCard
+                instance={state.instance}
+                qrCode={qrCode}
+                pairCode={pairCode}
+                connectMode={connectMode}
+                connectPhone={connectPhone}
+                running={running}
+                onConnect={() => runAction("connect", connectMode === "phone" ? { connectPhone: normalizeConnectPhoneInput(connectPhone) } : {})}
+                onConnectModeChange={setConnectMode}
+                onConnectPhoneChange={setConnectPhone}
+                onDisconnect={() => runAction("disconnect")}
+                onRefresh={() => runAction("refresh_status")}
+                enabled={variant.connectionEnabled && state.capability.canConnect}
+                disabledReason={state.capability.message ?? variant.connectionDisabledReason}
+              />
             </div>
-            <CompactConnectionCard
-              instance={state.instance}
-              qrCode={qrCode}
-              running={running}
-              onConnect={() => runAction("connect")}
-              onDisconnect={() => runAction("disconnect")}
-              onRefresh={() => runAction("refresh_status")}
-              enabled={variant.connectionEnabled && state.capability.canConnect}
-              disabledReason={state.capability.message ?? variant.connectionDisabledReason}
-            />
-          </div>
-        </Panel>
+          </Panel>
         ) : null}
 
         {activeTab === "files" ? (
@@ -5006,22 +5027,42 @@ function localDatetimeToIso(value: string) {
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
+function normalizeConnectPhoneInput(value: string) {
+  return value.replace(/\D/g, "");
+}
+
+function formatPairCode(value: string) {
+  const compact = value.replace(/\s+/g, "");
+  const parts = compact.match(/.{1,4}/g);
+  return parts ? parts.join(" ") : value;
+}
+
 function CompactConnectionCard({
   instance,
   qrCode,
+  pairCode,
+  connectMode,
+  connectPhone,
   running,
   enabled,
   disabledReason,
   onConnect,
+  onConnectModeChange,
+  onConnectPhoneChange,
   onDisconnect,
   onRefresh,
 }: {
   instance: WhatsappState["instance"];
   qrCode: string | null;
+  pairCode: string | null;
+  connectMode: ConnectionMode;
+  connectPhone: string;
   running: string | null;
   enabled: boolean;
   disabledReason?: string;
   onConnect: () => void;
+  onConnectModeChange: (mode: ConnectionMode) => void;
+  onConnectPhoneChange: (phone: string) => void;
   onDisconnect: () => void;
   onRefresh: () => void;
 }) {
@@ -5033,6 +5074,17 @@ function CompactConnectionCard({
   const profileImageUrl = instance?.profileImageUrl ?? null;
   const whatsappLabel = instance?.displayName ?? formatPhone(instance?.phoneNumber);
   const visibleQrCode = status === "connected" ? null : qrCode;
+  const visiblePairCode = status === "connected" ? null : pairCode;
+  const phoneModeSelected = connectMode === "phone";
+  const connectPhoneDigits = normalizeConnectPhoneInput(connectPhone);
+  const connectionActionDisabled = !enabled || (phoneModeSelected && connectPhoneDigits.length < 10);
+  const connectionActionIcon = phoneModeSelected ? Smartphone : QrCode;
+  const connectionActionLabel = phoneModeSelected
+    ? visiblePairCode ? "Gerar novo codigo" : "Gerar codigo"
+    : instance ? "Gerar novo QR" : "Gerar QR";
+  const connectionActionDescription = phoneModeSelected
+    ? "Gera um codigo de pareamento para conectar pelo numero informado."
+    : "Abre um QR Code para conectar ou reconectar o numero pelo WhatsApp.";
 
   useEffect(() => {
     if (visibleQrCode && visibleQrCode !== prevQrRef.current) {
@@ -5074,6 +5126,18 @@ function CompactConnectionCard({
               Instancia dedicada pendente
             </p>
           </div>
+        ) : visiblePairCode ? (
+          <div className="grid place-items-center">
+            <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-sky-500/10 text-sky-300">
+              <KeyRound className="h-6 w-6" />
+            </div>
+            <p className="mt-2 text-[11px] leading-4 text-sky-300">
+              Codigo de pareamento
+            </p>
+            <p className="mt-2 rounded-lg border border-sky-300/20 bg-sky-300/10 px-3 py-2 font-mono text-[18px] font-bold text-sky-100">
+              {formatPairCode(visiblePairCode)}
+            </p>
+          </div>
         ) : visibleQrCode ? (
           <button className="group cursor-pointer border-0 bg-transparent p-0" onClick={() => setQrModalOpen(true)} title="Clique para abrir o QR Code" type="button">
             <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-emerald-500/10 text-emerald-400">
@@ -5106,15 +5170,62 @@ function CompactConnectionCard({
       </div>
 
       <p className="mt-3 text-[12px] leading-5 text-slate-500">
-        {!enabled ? disabledReason : visibleQrCode ? "Escaneie o QR Code pelo WhatsApp para concluir." : meta.description}
+        {!enabled ? disabledReason : visiblePairCode ? "Digite o codigo no WhatsApp para concluir." : visibleQrCode ? "Escaneie o QR Code pelo WhatsApp para concluir." : meta.description}
       </p>
 
       <div className="mt-4 grid gap-2">
+        <div className="grid grid-cols-2 gap-1 rounded-lg p-1" style={{ background: "var(--ch-panel-2)", border: "1px solid var(--ch-border)" }}>
+          <button
+            className={cn(
+              "inline-flex min-h-9 items-center justify-center gap-2 rounded-md px-3 font-mono text-[10px] font-semibold uppercase transition disabled:cursor-not-allowed disabled:opacity-50",
+              connectMode === "qr" ? "bg-white/10 text-cyan-100" : "text-slate-400 hover:text-slate-100",
+            )}
+            disabled={!enabled || running === "connect"}
+            onClick={() => onConnectModeChange("qr")}
+            type="button"
+          >
+            <QrCode className="h-3.5 w-3.5" />
+            QR Code
+          </button>
+          <button
+            className={cn(
+              "inline-flex min-h-9 items-center justify-center gap-2 rounded-md px-3 font-mono text-[10px] font-semibold uppercase transition disabled:cursor-not-allowed disabled:opacity-50",
+              connectMode === "phone" ? "bg-white/10 text-sky-100" : "text-slate-400 hover:text-slate-100",
+            )}
+            disabled={!enabled || running === "connect"}
+            onClick={() => onConnectModeChange("phone")}
+            type="button"
+          >
+            <Smartphone className="h-3.5 w-3.5" />
+            Codigo
+          </button>
+        </div>
+
+        {phoneModeSelected ? (
+          <label className="grid gap-1">
+            <span className="flex items-center gap-1.5 font-mono text-[9px] uppercase text-slate-500">
+              Telefone com DDI
+              <InfoHint text="Use somente numeros, incluindo pais e DDD. Exemplo: 5511999999999." />
+            </span>
+            <input
+              className="min-h-10 rounded-lg border bg-white/[0.04] px-3 text-[13px] text-slate-100 outline-none transition placeholder:text-slate-600 focus:border-sky-300/60"
+              inputMode="tel"
+              onChange={(event) => onConnectPhoneChange(event.target.value)}
+              placeholder="5511999999999"
+              style={{ borderColor: "var(--ch-border)" }}
+              type="tel"
+              value={connectPhone}
+            />
+          </label>
+        ) : null}
+      </div>
+
+      <div className="mt-4 grid gap-2">
         <ActionButton
-          icon={QrCode}
-          label={instance ? "Gerar novo QR" : "Gerar QR"}
-          description="Abre um QR Code para conectar ou reconectar o numero pelo WhatsApp."
-          disabled={!enabled}
+          icon={connectionActionIcon}
+          label={connectionActionLabel}
+          description={connectionActionDescription}
+          disabled={connectionActionDisabled}
           loading={running === "connect"}
           onClick={onConnect}
         />

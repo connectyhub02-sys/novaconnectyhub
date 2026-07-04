@@ -53,7 +53,7 @@ export function normalizeUazapiWhatsappStatus(
 
   if (!status) return fallback;
 
-  if (["disconnected", "desconect", "not connected", "not logged", "closed", "close", "logout", "offline"].some((item) => status.includes(item))) {
+  if (["disconnected", "desconect", "not connected", "not logged", "closed", "close", "logout", "offline", "hibernat"].some((item) => status.includes(item))) {
     return "disconnected";
   }
 

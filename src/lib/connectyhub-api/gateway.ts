@@ -113,6 +113,8 @@ type ApiKeySafeRow = Omit<ApiKeyRow, "key_hash"> & {
   key_hash?: string;
 };
 
+type GatewayConnectInput = Record<string, unknown> | null | undefined;
+
 type OrganizationRow = {
   id: string;
   name: string;
@@ -475,7 +477,7 @@ export async function createGatewayInstance(
   return mapGatewayInstance(data);
 }
 
-export async function connectGatewayInstance(auth: GatewayAuthContext, instanceId: string) {
+export async function connectGatewayInstance(auth: GatewayAuthContext, instanceId: string, input?: GatewayConnectInput) {
   const instance = await requireGatewayInstance(auth, instanceId);
   const token = decryptInstanceToken(instance);
 
@@ -485,14 +487,12 @@ export async function connectGatewayInstance(auth: GatewayAuthContext, instanceI
 
   const credentials = await loadUazapiCredentials(auth.client);
   const providerStartedAt = Date.now();
+  const connectPayload = buildGatewayConnectPayload(input, auth.apiClient.name);
   const result = await callUazapi(credentials, "/instance/connect", {
     method: "POST",
     token,
     tolerateError: true,
-    body: {
-      browser: "auto",
-      systemName: `ConnectyHub API - ${auth.apiClient.name}`,
-    },
+    body: connectPayload,
   });
 
   if (!result.ok) {
@@ -501,7 +501,11 @@ export async function connectGatewayInstance(auth: GatewayAuthContext, instanceI
 
   const status = resolveUazapiWhatsappStatus(result.data, "qr_pending");
   const qrCode = normalizeQrCode(findString(result.data, ["qrcode", "qrCode", "qr", "base64"]));
-  const phoneNumber = normalizePhone(findString(result.data, ["owner", "phone", "number", "phone_number"]) ?? instance.phone_number);
+  const pairCode = findString(result.data, ["paircode", "pairCode", "pair_code"]);
+  const pendingConnection = status !== "connected" && Boolean(qrCode || pairCode);
+  const lastDisconnectReason = readProviderDisconnectReason(result.data);
+  const requestedPhone = normalizePhone(typeof connectPayload.phone === "string" ? connectPayload.phone : null);
+  const phoneNumber = normalizePhone(findString(result.data, ["owner", "phone", "number", "phone_number"]) ?? requestedPhone ?? instance.phone_number);
   const profileImage = status === "connected"
     ? await getWhatsappInstanceProfileImage({
         credentials,
@@ -515,8 +519,8 @@ export async function connectGatewayInstance(auth: GatewayAuthContext, instanceI
   await auth.client
     .from("whatsapp_instances")
     .update({
-      status: qrCode ? "qr_pending" : status,
-      qr_status: qrCode ? "available" : null,
+      status: pendingConnection ? "qr_pending" : status,
+      qr_status: qrCode ? "available" : pairCode ? "pair_code" : null,
       phone_number: phoneNumber,
       display_name: resolveWhatsappInstanceDisplayName({
         providerData: result.data,
@@ -535,7 +539,9 @@ export async function connectGatewayInstance(auth: GatewayAuthContext, instanceI
       metadata: {
         ...(instance.metadata ?? {}),
         last_api_action: "connect",
+        last_connect_request: sanitizeProviderData(connectPayload),
         last_connect_response: sanitizeProviderData(result.data),
+        last_disconnect_reason: lastDisconnectReason,
         ...(status === "connected"
           ? buildWhatsappInstanceProfileImageMetadata({
               profileImageUrl: profileImage?.profileImageUrl,
@@ -562,8 +568,10 @@ export async function connectGatewayInstance(auth: GatewayAuthContext, instanceI
 
   return {
     instanceId,
-    status: qrCode ? "qr_pending" : status,
+    status: pendingConnection ? "qr_pending" : status,
     qrCode,
+    pairCode,
+    lastDisconnectReason,
     provider: sanitizeProviderData(result.data),
   };
 }
@@ -588,6 +596,9 @@ export async function refreshGatewayInstanceStatus(auth: GatewayAuthContext, ins
 
   return {
     ...mapGatewayInstance(refreshed.instance),
+    qrCode: refreshed.qrCode,
+    pairCode: refreshed.pairCode,
+    lastDisconnectReason: refreshed.lastDisconnectReason,
     provider: refreshed.provider,
   };
 }
@@ -638,6 +649,10 @@ async function refreshGatewayInstanceStatusRow(input: {
 
   const status = resolveUazapiWhatsappStatus(result.data, providerStatusFallback(input.instance.status));
   const phoneNumber = normalizePhone(findString(result.data, ["owner", "phone", "number", "phone_number"]) ?? input.instance.phone_number);
+  const qrCode = normalizeQrCode(findString(result.data, ["qrcode", "qrCode", "qr", "base64"]));
+  const pairCode = findString(result.data, ["paircode", "pairCode", "pair_code"]);
+  const pendingConnection = status !== "connected" && Boolean(qrCode || pairCode);
+  const lastDisconnectReason = readProviderDisconnectReason(result.data);
   const profileImage = status === "connected"
     ? await getWhatsappInstanceProfileImage({
         credentials,
@@ -661,7 +676,8 @@ async function refreshGatewayInstanceStatusRow(input: {
   const { data, error } = await input.client
     .from("whatsapp_instances")
     .update({
-      status,
+      status: pendingConnection ? "qr_pending" : status,
+      qr_status: qrCode ? "available" : pairCode ? "pair_code" : null,
       phone_number: phoneNumber,
       display_name: resolveWhatsappInstanceDisplayName({
         providerData: result.data,
@@ -682,6 +698,7 @@ async function refreshGatewayInstanceStatusRow(input: {
         ...(input.instance.metadata ?? {}),
         last_api_action: "refresh_status",
         last_status_response: provider,
+        last_disconnect_reason: lastDisconnectReason,
         ...profileImageMetadata,
       },
     })
@@ -698,6 +715,70 @@ async function refreshGatewayInstanceStatusRow(input: {
     provider,
     providerStatus: result.status,
     latencyMs: result.latencyMs ?? Date.now() - providerStartedAt,
+    qrCode,
+    pairCode,
+    lastDisconnectReason,
+  };
+}
+
+export async function resetGatewayInstance(auth: GatewayAuthContext, instanceId: string) {
+  const instance = await requireGatewayInstance(auth, instanceId);
+  const token = decryptInstanceToken(instance);
+
+  if (!token) {
+    throw new GatewayHttpError(409, "missing_instance_token", "Instancia sem token seguro. Adote ou recrie a instancia.");
+  }
+
+  const credentials = await loadUazapiCredentials(auth.client);
+  const providerStartedAt = Date.now();
+  const result = await callUazapi(credentials, "/instance/reset", {
+    method: "POST",
+    token,
+    tolerateError: true,
+  });
+  const provider = sanitizeProviderData(result.data);
+
+  await recordUsageEvent(auth, {
+    method: "POST",
+    endpoint: `/api/v1/instances/${instanceId}/reset`,
+    statusCode: result.status,
+    whatsappInstanceId: instance.id,
+    provider: "uazapi",
+    providerStatus: result.status,
+    latencyMs: result.latencyMs ?? Date.now() - providerStartedAt,
+  });
+
+  if (!result.ok) {
+    throw new GatewayHttpError(result.status, "provider_reset_failed", readProviderError(result.data) ?? "Falha ao resetar runtime da instancia no provedor WhatsApp.", provider);
+  }
+
+  const now = new Date().toISOString();
+  const { data, error } = await auth.client
+    .from("whatsapp_instances")
+    .update({
+      qr_status: null,
+      last_synced_at: now,
+      provider_payload: provider,
+      metadata: {
+        ...(instance.metadata ?? {}),
+        last_api_action: "reset",
+        last_reset_response: provider,
+        last_reset_at: now,
+      },
+    })
+    .eq("id", instance.id)
+    .select(gatewayInstanceColumns)
+    .single<GatewayInstanceRow>();
+
+  if (error || !data) {
+    throw new GatewayHttpError(500, "instance_reset_save_failed", error?.message ?? "Nao foi possivel salvar o reset da instancia.");
+  }
+
+  return {
+    instanceId,
+    reset: provider,
+    provider,
+    instance: mapGatewayInstance(data),
   };
 }
 
@@ -1207,10 +1288,11 @@ export async function proxyGatewayProviderRequest(
 
   const credentials = await loadUazapiCredentials(auth.client);
   const providerStartedAt = Date.now();
+  const providerBody = normalizeProviderProxyRequestBody(input.path, input.body);
   const result = await callUazapi(credentials, input.path, {
     method: input.method,
     token,
-    body: input.body,
+    body: providerBody,
     query: input.query,
     tolerateError: true,
   });
@@ -4818,6 +4900,68 @@ function normalizeProviderInstanceName(value: string | null | undefined) {
   return `ch-api-${base || randomBytes(4).toString("hex")}`.slice(0, 64);
 }
 
+function buildGatewayConnectPayload(input: GatewayConnectInput, apiClientName: string) {
+  const payload: JsonRecord = {
+    browser: normalizeConnectBrowser(readInputString(input, "browser")) ?? "auto",
+  };
+  const phone = normalizePhone(readInputString(input, "phone"));
+  const systemName = normalizeConnectString(readInputString(input, "systemName"));
+  const proxyManagedCountry = normalizeConnectString(readInputString(input, "proxyManagedCountry", "proxy_managed_country"))?.toLowerCase();
+  const proxyManagedState = normalizeConnectString(readInputString(input, "proxyManagedState", "proxy_managed_state"))?.toLowerCase();
+  const proxyManagedCity = normalizeConnectString(readInputString(input, "proxyManagedCity", "proxy_managed_city"))?.toLowerCase();
+
+  if (phone) {
+    payload.phone = phone;
+  }
+
+  if (input && Object.prototype.hasOwnProperty.call(input, "systemName")) {
+    if (systemName) {
+      payload.systemName = systemName;
+    }
+  } else {
+    payload.systemName = `ConnectyHub API - ${apiClientName}`.slice(0, 80);
+  }
+
+  if (proxyManagedCountry) {
+    payload.proxy_managed_country = proxyManagedCountry;
+  }
+
+  if (proxyManagedState) {
+    payload.proxy_managed_state = proxyManagedState;
+  }
+
+  if (proxyManagedCity) {
+    payload.proxy_managed_city = proxyManagedCity;
+  }
+
+  return payload;
+}
+
+function normalizeConnectBrowser(value: string | null | undefined) {
+  const browser = value?.toLowerCase().trim();
+  return browser && ["auto", "safari", "firefox", "edge", "chrome"].includes(browser) ? browser : null;
+}
+
+function normalizeConnectString(value: string | null | undefined) {
+  const cleaned = value?.replace(/\s+/g, " ").trim() ?? "";
+  return cleaned ? cleaned.slice(0, 80) : null;
+}
+
+function readInputString(input: GatewayConnectInput, ...keys: string[]) {
+  if (!input || typeof input !== "object") {
+    return null;
+  }
+
+  for (const key of keys) {
+    const value = input[key];
+    if (typeof value === "string") {
+      return value;
+    }
+  }
+
+  return null;
+}
+
 function normalizePhone(value: string | null | undefined) {
   const digits = value?.replace(/\D/g, "") ?? "";
   return digits || null;
@@ -4957,6 +5101,16 @@ function isProxyPathAllowed(path: string) {
   return normalized.startsWith("/") && !normalized.includes("..") && !blockedPrefixes.some((prefix) => normalized.startsWith(prefix));
 }
 
+function normalizeProviderProxyRequestBody(path: string, body: unknown) {
+  const normalized = path.toLowerCase();
+
+  if (normalized === "/instance/reset" && isRecord(body) && Object.keys(body).length === 0) {
+    return undefined;
+  }
+
+  return body;
+}
+
 function sanitizeProviderData(value: unknown): unknown {
   if (typeof value === "string") {
     return scrubProviderName(value);
@@ -4993,6 +5147,11 @@ function readProviderError(value: unknown) {
   }
 
   const message = findString(value, ["error", "message", "detail"]);
+  return message ? scrubProviderName(message) : null;
+}
+
+function readProviderDisconnectReason(value: unknown) {
+  const message = findString(value, ["lastDisconnectReason", "last_disconnect_reason", "disconnectReason", "disconnect_reason"]);
   return message ? scrubProviderName(message) : null;
 }
 
