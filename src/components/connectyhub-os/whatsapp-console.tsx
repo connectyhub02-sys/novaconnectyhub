@@ -5158,7 +5158,7 @@ function CompactConnectionCard({
     ? "Gera um codigo de pareamento para conectar pelo numero informado."
     : "Abre um QR Code para conectar ou reconectar o numero pelo WhatsApp.";
   const connectionHelperText = latestConnectionAttempt?.finalStatus === "passkey_blocked"
-    ? "O WhatsApp pediu um segundo QR de chave de acesso, mas o provedor nao retornou esse desafio para o painel."
+    ? "Esta conta pediu uma verificacao extra por chave de acesso. Nosso servico ainda nao suporta essa verificacao pelo painel."
     : !enabled
       ? disabledReason
       : visiblePairCode
@@ -5417,7 +5417,7 @@ function ConnectionDiagnosticsPanel({ attempt }: { attempt: ConnectionAttemptDia
 
       {attempt.scanDetected !== null ? (
         <p className="mt-2 text-[10px] leading-4 text-slate-500">
-          Leitura {attempt.scanDetected ? "detectada no handshake" : "nao detectada pelo provedor"}
+          {attempt.scanDetected ? "Leitura do QR detectada" : "Leitura do QR nao confirmada"}
         </p>
       ) : null}
 
@@ -5644,10 +5644,10 @@ function formatConnectionFinalStatus(status: ConnectionFinalStatus) {
   const labels: Record<ConnectionFinalStatus, string> = {
     pending: "Tentativa em andamento",
     success: "Conexao concluida",
-    passkey_blocked: "Segundo QR de chave de acesso",
+    passkey_blocked: "Verificacao extra solicitada",
     qr_timeout: "QR expirou antes de conectar",
     disconnected: "Desconectou durante a tentativa",
-    provider_error: "Erro do provedor",
+    provider_error: "Erro na conexao",
     reset: "Sessao resetada",
     unknown: "Resultado desconhecido",
   };
@@ -5658,7 +5658,7 @@ function formatConnectionFinalStatus(status: ConnectionFinalStatus) {
 function formatConnectionEventType(type: ConnectionEventType) {
   const labels: Record<ConnectionEventType, string> = {
     connect_requested: "inicio solicitado",
-    connect_response: "resposta do provedor",
+    connect_response: "resposta recebida",
     qr_received: "qr recebido",
     qr_updated: "qr atualizado",
     pair_code_received: "codigo recebido",
@@ -5668,7 +5668,7 @@ function formatConnectionEventType(type: ConnectionEventType) {
     status_disconnected: "desconexao informada",
     passkey_blocked: "chave de acesso",
     timeout: "timeout do qr",
-    provider_error: "erro do provedor",
+    provider_error: "erro na conexao",
     reset_requested: "reset solicitado",
   };
 

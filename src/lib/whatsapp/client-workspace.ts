@@ -570,7 +570,7 @@ export async function refreshClientWhatsappStatus(input: {
       message: state.instance?.status === "connected"
         ? "WhatsApp conectado."
         : isPasskeyDisconnectReason(lastDisconnectReason)
-          ? "O WhatsApp pediu um segundo QR de chave de acesso, mas o provedor nao retornou esse desafio para o painel."
+          ? "Esta conta pediu uma verificacao extra por chave de acesso. Nosso servico ainda nao suporta essa verificacao pelo painel."
         : pairCode
           ? "Codigo de pareamento atualizado."
           : "Status atualizado. Conexao ainda nao esta ativa.",
@@ -633,7 +633,7 @@ export async function disconnectClientWhatsapp(input: {
     notice: {
       tone: "warning",
       message: tokenInvalid
-        ? "A sessao ja estava desconectada no provedor. Gere um novo QR Code para reconectar."
+        ? "A sessao ja estava desconectada. Gere um novo QR Code para reconectar."
         : "WhatsApp desconectado.",
     },
     qrCode: null,

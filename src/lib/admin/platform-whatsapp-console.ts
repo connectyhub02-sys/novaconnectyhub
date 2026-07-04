@@ -594,7 +594,7 @@ export async function refreshPlatformWhatsappConsoleStatus(input: {
       message: state.instance?.status === "connected"
         ? "WhatsApp interno conectado."
         : isPasskeyDisconnectReason(lastDisconnectReason)
-          ? "O WhatsApp pediu um segundo QR de chave de acesso, mas o provedor nao retornou esse desafio para o painel."
+          ? "Esta conta pediu uma verificacao extra por chave de acesso. Nosso servico ainda nao suporta essa verificacao pelo painel."
         : pairCode
           ? "Codigo de pareamento interno atualizado."
           : "Status atualizado. Conexao interna ainda nao esta ativa.",
@@ -656,7 +656,7 @@ export async function disconnectPlatformWhatsappConsole(input: {
     notice: {
       tone: "warning",
       message: tokenInvalid
-        ? "A sessao interna ja estava desconectada no provedor. Gere um novo QR Code para reconectar."
+        ? "A sessao interna ja estava desconectada. Gere um novo QR Code para reconectar."
         : "WhatsApp interno desconectado.",
     },
     qrCode: null,
