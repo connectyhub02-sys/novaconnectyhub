@@ -570,7 +570,7 @@ export async function refreshClientWhatsappStatus(input: {
       message: state.instance?.status === "connected"
         ? "WhatsApp conectado."
         : isPasskeyDisconnectReason(lastDisconnectReason)
-          ? "Esta conta exigiu chave de acesso e o provedor nao concluiu essa etapa. O diagnostico foi registrado."
+          ? "O WhatsApp pediu um segundo QR de chave de acesso, mas o provedor nao retornou esse desafio para o painel."
         : pairCode
           ? "Codigo de pareamento atualizado."
           : "Status atualizado. Conexao ainda nao esta ativa.",

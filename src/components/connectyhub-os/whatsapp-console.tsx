@@ -5158,7 +5158,7 @@ function CompactConnectionCard({
     ? "Gera um codigo de pareamento para conectar pelo numero informado."
     : "Abre um QR Code para conectar ou reconectar o numero pelo WhatsApp.";
   const connectionHelperText = latestConnectionAttempt?.finalStatus === "passkey_blocked"
-    ? "Conta pediu chave de acesso; o diagnostico foi registrado para acompanharmos essa barreira."
+    ? "O WhatsApp pediu um segundo QR de chave de acesso, mas o provedor nao retornou esse desafio para o painel."
     : !enabled
       ? disabledReason
       : visiblePairCode
@@ -5644,7 +5644,7 @@ function formatConnectionFinalStatus(status: ConnectionFinalStatus) {
   const labels: Record<ConnectionFinalStatus, string> = {
     pending: "Tentativa em andamento",
     success: "Conexao concluida",
-    passkey_blocked: "Chave de acesso solicitada",
+    passkey_blocked: "Segundo QR de chave de acesso",
     qr_timeout: "QR expirou antes de conectar",
     disconnected: "Desconectou durante a tentativa",
     provider_error: "Erro do provedor",
