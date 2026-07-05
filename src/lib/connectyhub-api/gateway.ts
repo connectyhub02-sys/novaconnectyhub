@@ -27,6 +27,8 @@ const DEFAULT_CLIENT_WEBHOOK_PATH = "/api/webhooks/connectyhub";
 const GATEWAY_STATUS_REVALIDATE_MS = 60_000;
 const GATEWAY_STATUS_REVALIDATE_LIMIT = 8;
 const GATEWAY_HEALTH_EVENT_TYPE = "connectyhub.health_check";
+const ADMIN_GATEWAY_PROVIDER_EVENT_LIMIT = 100;
+const ADMIN_GATEWAY_PROVIDER_EVENT_LOOKBACK_DAYS = 14;
 
 export type GatewayScope =
   | "instances:read"
@@ -2038,6 +2040,9 @@ export async function adoptAdminProviderInstance(input: {
 
 export async function getAdminGatewayState(client: SupabaseClient = createServiceClient()) {
   const warnings: string[] = [];
+  const providerEventsSince = new Date(
+    Date.now() - ADMIN_GATEWAY_PROVIDER_EVENT_LOOKBACK_DAYS * 24 * 60 * 60 * 1000,
+  ).toISOString();
   let apiProvisionContext: Awaited<ReturnType<typeof ensureApiClientsForRegisteredCustomers>> = {
     customerOrganizationIds: new Set<string>(),
     platformOrganizationIds: new Set<string>(),
@@ -2095,8 +2100,9 @@ export async function getAdminGatewayState(client: SupabaseClient = createServic
     client
       .from("whatsapp_webhook_events")
       .select(gatewayProviderWebhookEventColumns)
+      .gte("received_at", providerEventsSince)
       .order("received_at", { ascending: false })
-      .limit(300),
+      .limit(ADMIN_GATEWAY_PROVIDER_EVENT_LIMIT),
     client
       .from("organizations")
       .select("id, name, slug, plan_code, status, owner_id")
