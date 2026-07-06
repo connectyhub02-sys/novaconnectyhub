@@ -171,6 +171,12 @@ export function SalesCatalogConsole({
     () => (selectedSettings?.configured ? selectedSettings.attributes : settingsDraft.attributes).filter((attribute) => attribute.values.length > 0),
     [selectedSettings, settingsDraft.attributes],
   );
+  const categoryRows = useMemo(() => getCategoryRows(settingsDraft.categoriesText), [settingsDraft.categoriesText]);
+  const currentBusinessTemplate = salesCatalogBusinessTemplates.find((template) => template.value === settingsDraft.businessType) ?? salesCatalogBusinessTemplates[0];
+  const categoryPresetOptions = currentBusinessTemplate.categories.filter((categoryName) => (
+    !parseLines(settingsDraft.categoriesText).some((current) => current.toLowerCase() === categoryName.toLowerCase())
+  ));
+  const attributePresetOptions = buildAttributePresetOptions(settingsDraft.attributes);
   const categoryOptions = selectedSettings?.configured ? selectedSettings.categories : parseLines(settingsDraft.categoriesText);
   const selectedShippingRule = shippingDraft.rules.find((rule) => rule.uf === selectedShippingUf) ?? shippingDraft.rules[0] ?? null;
   const canCreate = Boolean(selectedCompanyId && title.trim() && description.trim() && !creating);
@@ -235,6 +241,43 @@ export function SalesCatalogConsole({
     setSettingsDraft((current) => ({
       ...current,
       attributes: current.attributes.filter((attribute) => attribute.id !== attributeId),
+    }));
+  }
+
+  function setCategoryRows(rows: string[]) {
+    setSettingsDraft((current) => ({
+      ...current,
+      categoriesText: rows.map((row) => row.replace(/\s+/g, " ").slice(0, 80)).join("\n").slice(0, 1400),
+    }));
+  }
+
+  function updateCategoryRow(index: number, value: string) {
+    const rows = [...categoryRows];
+    rows[index] = value;
+    setCategoryRows(rows);
+  }
+
+  function addCategoryRow(value = "") {
+    const nextValue = value || `Categoria ${categoryRows.length + 1}`;
+    setCategoryRows([...categoryRows, nextValue]);
+  }
+
+  function removeCategoryRow(index: number) {
+    const rows = categoryRows.filter((_, rowIndex) => rowIndex !== index);
+    setCategoryRows(rows.length > 0 ? rows : [""]);
+  }
+
+  function addAttributePreset(attribute: SalesCatalogAttribute) {
+    setSettingsDraft((current) => ({
+      ...current,
+      attributes: [
+        ...current.attributes,
+        {
+          ...attribute,
+          id: createUniqueAttributeId(attribute.name, current.attributes),
+          values: [...attribute.values],
+        },
+      ],
     }));
   }
 
@@ -764,16 +807,59 @@ export function SalesCatalogConsole({
                 </select>
               </label>
 
-              <label className="block">
-                <FieldLabel>Categorias</FieldLabel>
-                <textarea
-                  value={settingsDraft.categoriesText}
-                  onChange={(event) => setSettingsDraft((current) => ({ ...current, categoriesText: event.target.value.slice(0, 1400) }))}
-                  className="min-h-40 w-full resize-y rounded-lg border bg-transparent px-3 py-2 text-[12px] leading-5 outline-none"
-                  placeholder="Uma categoria por linha"
-                  style={{ borderColor: "var(--ch-border)" }}
-                />
-              </label>
+              <div className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <FieldLabel>Categorias</FieldLabel>
+                  <button
+                    type="button"
+                    onClick={() => addCategoryRow()}
+                    className="inline-flex min-h-8 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10"
+                    style={{ borderColor: "var(--ch-border)" }}
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Nova
+                  </button>
+                </div>
+
+                <div className="grid gap-2">
+                  {categoryRows.map((categoryName, index) => (
+                    <div key={index} className="grid grid-cols-[minmax(0,1fr)_40px] gap-2">
+                      <input
+                        value={categoryName}
+                        onChange={(event) => updateCategoryRow(index, event.target.value)}
+                        className="h-10 min-w-0 rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                        placeholder="Nome da categoria"
+                        style={{ borderColor: "var(--ch-border)" }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeCategoryRow(index)}
+                        className="grid h-10 w-10 place-items-center rounded-lg border text-slate-400 transition hover:bg-rose-400/10 hover:text-rose-100"
+                        style={{ borderColor: "var(--ch-border)" }}
+                        title="Remover categoria"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                {categoryPresetOptions.length > 0 ? (
+                  <select
+                    value=""
+                    onChange={(event) => {
+                      if (event.target.value) addCategoryRow(event.target.value);
+                    }}
+                    className="mt-3 h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                    style={{ borderColor: "var(--ch-border)" }}
+                  >
+                    <option value="">Adicionar categoria pronta</option>
+                    {categoryPresetOptions.map((categoryName) => (
+                      <option key={categoryName} value={categoryName}>{categoryName}</option>
+                    ))}
+                  </select>
+                ) : null}
+              </div>
 
               <div className="grid gap-2">
                 <label className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-[12px]" style={{ borderColor: "var(--ch-border)" }}>
@@ -798,15 +884,33 @@ export function SalesCatalogConsole({
             <div className="space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <FieldLabel>Variacoes</FieldLabel>
-                <button
-                  type="button"
-                  onClick={addAttribute}
-                  className="inline-flex min-h-8 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10"
-                  style={{ borderColor: "var(--ch-border)" }}
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  Adicionar
-                </button>
+                <div className="flex flex-wrap gap-2">
+                  {attributePresetOptions.length > 0 ? (
+                    <select
+                      value=""
+                      onChange={(event) => {
+                        const preset = attributePresetOptions.find((attribute) => attribute.id === event.target.value);
+                        if (preset) addAttributePreset(preset);
+                      }}
+                      className="h-8 rounded-lg border bg-transparent px-3 text-[11px] outline-none"
+                      style={{ borderColor: "var(--ch-border)" }}
+                    >
+                      <option value="">Adicionar variacao pronta</option>
+                      {attributePresetOptions.map((attribute) => (
+                        <option key={attribute.id} value={attribute.id}>{attribute.name}</option>
+                      ))}
+                    </select>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={addAttribute}
+                    className="inline-flex min-h-8 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10"
+                    style={{ borderColor: "var(--ch-border)" }}
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Manual
+                  </button>
+                </div>
               </div>
 
               <div className="grid gap-3 lg:grid-cols-2">
@@ -1032,7 +1136,7 @@ export function SalesCatalogConsole({
             </div>
 
             {selectedShippingRule ? (
-              <div className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+              <div className="rounded-xl border p-3 xl:col-span-2" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <FieldLabel>Servicos e faixas</FieldLabel>
@@ -1050,7 +1154,7 @@ export function SalesCatalogConsole({
                   </select>
                 </div>
 
-                <div className="grid gap-3 2xl:grid-cols-3">
+                <div className="grid gap-3 xl:grid-cols-2">
                   {selectedShippingRule.services.map((service) => (
                     <div key={service.id} className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-panel)" }}>
                       <div className="flex items-center justify-between gap-3">
@@ -1073,63 +1177,74 @@ export function SalesCatalogConsole({
                         style={{ borderColor: "var(--ch-border)" }}
                       />
 
-                      <div className="mt-3 grid gap-2">
-                        {service.tiers.map((tier) => (
-                          <div key={tier.id} className="grid grid-cols-[22px_minmax(82px,1fr)_82px_92px_54px_54px_34px] items-center gap-1.5">
-                            <input
-                              checked={tier.active}
-                              type="checkbox"
-                              onChange={(event) => updateWeightTier(selectedShippingRule.uf, service.id, tier.id, { active: event.target.checked })}
-                            />
-                            <input
-                              value={tier.name}
-                              onChange={(event) => updateWeightTier(selectedShippingRule.uf, service.id, tier.id, { name: event.target.value.slice(0, 80) })}
-                              className="h-9 rounded-lg border bg-transparent px-2 text-[11px] outline-none"
-                              placeholder="Faixa"
-                              style={{ borderColor: "var(--ch-border)" }}
-                            />
-                            <input
-                              value={tier.maxWeightGrams ?? ""}
-                              onChange={(event) => updateWeightTier(selectedShippingRule.uf, service.id, tier.id, { maxWeightGrams: parseOptionalNumber(event.target.value) })}
-                              className="h-9 rounded-lg border bg-transparent px-2 text-[11px] outline-none"
-                              inputMode="numeric"
-                              placeholder="g"
-                              style={{ borderColor: "var(--ch-border)" }}
-                            />
-                            <input
-                              value={tier.price ?? ""}
-                              onChange={(event) => updateWeightTier(selectedShippingRule.uf, service.id, tier.id, { price: event.target.value.slice(0, 40) })}
-                              className="h-9 rounded-lg border bg-transparent px-2 text-[11px] outline-none"
-                              placeholder="R$"
-                              style={{ borderColor: "var(--ch-border)" }}
-                            />
-                            <input
-                              value={tier.minDays ?? ""}
-                              onChange={(event) => updateWeightTier(selectedShippingRule.uf, service.id, tier.id, { minDays: parseOptionalNumber(event.target.value) })}
-                              className="h-9 rounded-lg border bg-transparent px-2 text-[11px] outline-none"
-                              inputMode="numeric"
-                              placeholder="min"
-                              style={{ borderColor: "var(--ch-border)" }}
-                            />
-                            <input
-                              value={tier.maxDays ?? ""}
-                              onChange={(event) => updateWeightTier(selectedShippingRule.uf, service.id, tier.id, { maxDays: parseOptionalNumber(event.target.value) })}
-                              className="h-9 rounded-lg border bg-transparent px-2 text-[11px] outline-none"
-                              inputMode="numeric"
-                              placeholder="max"
-                              style={{ borderColor: "var(--ch-border)" }}
-                            />
-                            <button
-                              type="button"
-                              onClick={() => removeWeightTier(selectedShippingRule.uf, service.id, tier.id)}
-                              className="grid h-9 w-9 place-items-center rounded-lg border text-slate-500 transition hover:bg-rose-400/10 hover:text-rose-100"
-                              style={{ borderColor: "var(--ch-border)" }}
-                              title="Remover faixa"
-                            >
-                              <X className="h-3.5 w-3.5" />
-                            </button>
+                      <div className="mt-3 overflow-x-auto">
+                        <div className="grid min-w-[520px] gap-2">
+                          <div className="grid grid-cols-[22px_minmax(120px,1.4fr)_92px_106px_58px_58px_34px] gap-2 px-1 font-mono text-[8px] uppercase tracking-widest text-slate-500">
+                            <span></span>
+                            <span>Faixa</span>
+                            <span>Peso</span>
+                            <span>Valor</span>
+                            <span>Min</span>
+                            <span>Max</span>
+                            <span></span>
                           </div>
-                        ))}
+                          {service.tiers.map((tier) => (
+                            <div key={tier.id} className="grid grid-cols-[22px_minmax(120px,1.4fr)_92px_106px_58px_58px_34px] items-center gap-2">
+                              <input
+                                checked={tier.active}
+                                type="checkbox"
+                                onChange={(event) => updateWeightTier(selectedShippingRule.uf, service.id, tier.id, { active: event.target.checked })}
+                              />
+                              <input
+                                value={tier.name}
+                                onChange={(event) => updateWeightTier(selectedShippingRule.uf, service.id, tier.id, { name: event.target.value.slice(0, 80) })}
+                                className="h-9 min-w-0 rounded-lg border bg-transparent px-2 text-[11px] outline-none"
+                                placeholder="Faixa"
+                                style={{ borderColor: "var(--ch-border)" }}
+                              />
+                              <input
+                                value={tier.maxWeightGrams ?? ""}
+                                onChange={(event) => updateWeightTier(selectedShippingRule.uf, service.id, tier.id, { maxWeightGrams: parseOptionalNumber(event.target.value) })}
+                                className="h-9 min-w-0 rounded-lg border bg-transparent px-2 text-[11px] outline-none"
+                                inputMode="numeric"
+                                placeholder="g"
+                                style={{ borderColor: "var(--ch-border)" }}
+                              />
+                              <input
+                                value={tier.price ?? ""}
+                                onChange={(event) => updateWeightTier(selectedShippingRule.uf, service.id, tier.id, { price: event.target.value.slice(0, 40) })}
+                                className="h-9 min-w-0 rounded-lg border bg-transparent px-2 text-[11px] outline-none"
+                                placeholder="R$"
+                                style={{ borderColor: "var(--ch-border)" }}
+                              />
+                              <input
+                                value={tier.minDays ?? ""}
+                                onChange={(event) => updateWeightTier(selectedShippingRule.uf, service.id, tier.id, { minDays: parseOptionalNumber(event.target.value) })}
+                                className="h-9 min-w-0 rounded-lg border bg-transparent px-2 text-[11px] outline-none"
+                                inputMode="numeric"
+                                placeholder="min"
+                                style={{ borderColor: "var(--ch-border)" }}
+                              />
+                              <input
+                                value={tier.maxDays ?? ""}
+                                onChange={(event) => updateWeightTier(selectedShippingRule.uf, service.id, tier.id, { maxDays: parseOptionalNumber(event.target.value) })}
+                                className="h-9 min-w-0 rounded-lg border bg-transparent px-2 text-[11px] outline-none"
+                                inputMode="numeric"
+                                placeholder="max"
+                                style={{ borderColor: "var(--ch-border)" }}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => removeWeightTier(selectedShippingRule.uf, service.id, tier.id)}
+                                className="grid h-9 w-9 place-items-center rounded-lg border text-slate-500 transition hover:bg-rose-400/10 hover:text-rose-100"
+                                style={{ borderColor: "var(--ch-border)" }}
+                                title="Remover faixa"
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
                       </div>
 
                       <button
@@ -1147,7 +1262,7 @@ export function SalesCatalogConsole({
               </div>
             ) : null}
 
-            <div className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+            <div className="rounded-xl border p-3 xl:col-span-2" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
               <div className="mb-3 flex items-center gap-2">
                 <Truck className="h-4 w-4 text-cyan-300" />
                 <FieldLabel>Calculo por CEP</FieldLabel>
@@ -1793,6 +1908,33 @@ function buildShippingDraft(settings: ClientSalesCatalogShippingSettings | null)
   };
 }
 
+function getCategoryRows(value: string) {
+  const rows = value.split("\n").map((row) => row.replace(/\s+/g, " ").trim());
+  return rows.length > 0 ? rows : [""];
+}
+
+function buildAttributePresetOptions(currentAttributes: SalesCatalogAttribute[]) {
+  const usedNames = new Set(currentAttributes.map((attribute) => attribute.name.trim().toLowerCase()));
+  const seen = new Set<string>();
+  const output: SalesCatalogAttribute[] = [];
+
+  for (const template of salesCatalogBusinessTemplates) {
+    for (const attribute of template.attributes) {
+      const key = attribute.name.trim().toLowerCase();
+      if (usedNames.has(key) || seen.has(key)) continue;
+
+      seen.add(key);
+      output.push({
+        ...attribute,
+        id: `${template.value}_${attribute.id}`,
+        values: [...attribute.values],
+      });
+    }
+  }
+
+  return output;
+}
+
 function cloneAttributes(attributes: SalesCatalogAttribute[]) {
   return attributes.map((attribute) => ({
     ...attribute,
@@ -1892,6 +2034,20 @@ function createAttributeId(value: string) {
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "")
     .slice(0, 40) || "atributo";
+}
+
+function createUniqueAttributeId(value: string, attributes: SalesCatalogAttribute[]) {
+  const base = createAttributeId(value);
+  const existing = new Set(attributes.map((attribute) => attribute.id));
+
+  if (!existing.has(base)) return base;
+
+  let index = 2;
+  while (existing.has(`${base}_${index}`)) {
+    index += 1;
+  }
+
+  return `${base}_${index}`;
 }
 
 function buildSelectedItemAttributes(
