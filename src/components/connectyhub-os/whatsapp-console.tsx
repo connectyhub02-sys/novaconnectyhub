@@ -146,12 +146,16 @@ type ConnectionDiagnostics = {
   attempts: ConnectionAttemptDiagnostic[];
 };
 
+type MigrationCredentialKind = "serverUrl" | "instanceToken";
+
 const PASSKEY_CONNECTION_HELP_TEXT =
   "Esta conta pediu uma verificacao extra por chave de acesso. Esse tipo de verificacao ainda nao pode ser concluido diretamente pelo QR Code do painel.";
 const PASSKEY_CONNECTION_ASSISTED_TEXT =
   "Se o reset nao resolver, sera necessario usar uma conexao assistida por migracao de sessao.";
 const PASSKEY_CONNECTION_REASON_TEXT =
   "Conta pediu verificacao por chave de acesso durante a leitura do QR.";
+const PASSKEY_MIGRATION_EXTENSION_URL =
+  "https://chromewebstore.google.com/detail/cdjfbjfolpeenlmanmkoglhhcjfgcbpp";
 
 type RuntimeAlert = {
   id: string;
@@ -345,6 +349,12 @@ type ActionResponse = {
   };
   qrCode?: string | null;
   pairCode?: string | null;
+  error?: string;
+};
+
+type MigrationCredentialResponse = {
+  value?: string;
+  notice?: Notice;
   error?: string;
 };
 
@@ -593,6 +603,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
   const [newsletterText, setNewsletterText] = useState("");
   const [channelScheduledFor, setChannelScheduledFor] = useState("");
   const [activeTab, setActiveTab] = useState<WhatsappConsoleTab>("connection");
+  const [migrationCopying, setMigrationCopying] = useState<MigrationCredentialKind | null>(null);
   const promptTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const promptSelectionRef = useRef({ start: 0, end: 0 });
   const pendingPromptCaretRef = useRef<number | null>(null);
@@ -1064,6 +1075,46 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
       setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro inesperado no WhatsApp." });
     } finally {
       setRunning(null);
+    }
+  }
+
+  async function copyMigrationCredential(kind: MigrationCredentialKind) {
+    if (!selectedCompanyId) {
+      setNotice({ tone: "warning", message: `Escolha um ${variant.entitySingular} antes de copiar os dados de migracao.` });
+      return;
+    }
+
+    setMigrationCopying(kind);
+    setNotice(null);
+
+    try {
+      const response = await fetch(variant.endpoints.action, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "copy_migration_credential",
+          credential: kind,
+          ...whatsappActionPayload,
+        }),
+      });
+      const data = (await response.json().catch(() => null)) as MigrationCredentialResponse | null;
+
+      if (!response.ok || !data?.value) {
+        throw new Error(data?.error ?? "Nao foi possivel liberar a credencial de migracao.");
+      }
+
+      await navigator.clipboard.writeText(data.value);
+      setNotice(data.notice ?? {
+        tone: "success",
+        message: kind === "serverUrl" ? "Server URL copiada." : "Instance Token copiado com seguranca.",
+      });
+    } catch (error) {
+      setNotice({
+        tone: "error",
+        message: error instanceof Error ? error.message : "Nao foi possivel copiar a credencial de migracao.",
+      });
+    } finally {
+      setMigrationCopying(null);
     }
   }
 
@@ -1683,7 +1734,9 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
                 connectMode={connectMode}
                 connectPhone={connectPhone}
                 running={running}
+                migrationCopying={migrationCopying}
                 onConnect={() => runAction("connect", connectMode === "phone" ? { connectPhone: normalizeConnectPhoneInput(connectPhone) } : {})}
+                onCopyMigrationCredential={copyMigrationCredential}
                 onConnectModeChange={setConnectMode}
                 onConnectPhoneChange={setConnectPhone}
                 onDisconnect={() => {
@@ -5294,9 +5347,11 @@ function CompactConnectionCard({
   connectMode,
   connectPhone,
   running,
+  migrationCopying,
   enabled,
   disabledReason,
   onConnect,
+  onCopyMigrationCredential,
   onConnectModeChange,
   onConnectPhoneChange,
   onDisconnect,
@@ -5309,9 +5364,11 @@ function CompactConnectionCard({
   connectMode: ConnectionMode;
   connectPhone: string;
   running: string | null;
+  migrationCopying: MigrationCredentialKind | null;
   enabled: boolean;
   disabledReason?: string;
   onConnect: () => void;
+  onCopyMigrationCredential: (kind: MigrationCredentialKind) => void;
   onConnectModeChange: (mode: ConnectionMode) => void;
   onConnectPhoneChange: (phone: string) => void;
   onDisconnect: () => void;
@@ -5320,6 +5377,7 @@ function CompactConnectionCard({
 }) {
   const [qrModalOpen, setQrModalOpen] = useState(false);
   const [passkeyModalOpen, setPasskeyModalOpen] = useState(false);
+  const [migrationModalOpen, setMigrationModalOpen] = useState(false);
   const prevQrRef = useRef<string | null>(null);
   const notifiedPasskeyAttemptRef = useRef<string | null>(null);
   const status = instance?.status ?? "draft";
@@ -5632,6 +5690,17 @@ function CompactConnectionCard({
                 </button>
               ) : null}
               <button
+                className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-lg border border-cyan-300/30 bg-cyan-300/10 px-4 font-mono text-[11px] font-semibold uppercase text-cyan-100 transition hover:bg-cyan-300/15"
+                onClick={() => {
+                  setPasskeyModalOpen(false);
+                  setMigrationModalOpen(true);
+                }}
+                type="button"
+              >
+                <KeyRound className="h-4 w-4" />
+                Migracao assistida
+              </button>
+              <button
                 className="inline-flex min-h-10 flex-1 items-center justify-center rounded-lg bg-white px-4 font-mono text-[11px] font-semibold uppercase text-slate-950 transition hover:bg-slate-100"
                 onClick={() => setPasskeyModalOpen(false)}
                 type="button"
@@ -5642,7 +5711,132 @@ function CompactConnectionCard({
           </div>
         </div>
       )}
+
+      {migrationModalOpen && passkeyBlockedAttempt && (
+        <div
+          aria-labelledby="passkey-migration-title"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm"
+          onClick={() => setMigrationModalOpen(false)}
+          onKeyDown={(event) => event.key === "Escape" && setMigrationModalOpen(false)}
+          role="dialog"
+          tabIndex={0}
+        >
+          <div
+            className="relative max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl border border-cyan-300/20 bg-[#101827] p-5 text-left shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              aria-label="Fechar migracao assistida"
+              className="absolute right-3 top-3 grid h-8 w-8 place-items-center rounded-full bg-white/5 text-slate-400 transition hover:bg-white/10 hover:text-white"
+              onClick={() => setMigrationModalOpen(false)}
+              type="button"
+            >
+              <X className="h-4 w-4" />
+            </button>
+
+            <div className="grid h-12 w-12 place-items-center rounded-2xl bg-cyan-300/10 text-cyan-200">
+              <KeyRound className="h-6 w-6" />
+            </div>
+
+            <h3 id="passkey-migration-title" className="mt-4 pr-8 text-lg font-semibold text-white">
+              Migracao assistida
+            </h3>
+            <p className="mt-3 text-sm leading-6 text-slate-300">
+              Conecte esta conta no WhatsApp Web oficial, conclua a verificacao por chave de acesso e use a extensao para migrar a sessao autenticada.
+            </p>
+
+            <div className="mt-4 grid gap-2 text-[12px] leading-5 text-slate-400">
+              <p>1. Instale a extensao Session Migration Connector.</p>
+              <p>2. Entre no WhatsApp Web oficial e conclua a verificacao pelo celular.</p>
+              <p>3. Na extensao, use os botoes abaixo para copiar a Server URL e o Instance Token.</p>
+              <p>4. Clique em Migrar sessao e volte aqui para atualizar o status.</p>
+            </div>
+
+            <a
+              className="mt-4 inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-cyan-300/25 bg-cyan-300/10 px-4 font-mono text-[11px] font-semibold uppercase text-cyan-100 transition hover:bg-cyan-300/15"
+              href={PASSKEY_MIGRATION_EXTENSION_URL}
+              rel="noreferrer"
+              target="_blank"
+            >
+              <Link2 className="h-4 w-4" />
+              Abrir extensao
+            </a>
+
+            <div className="mt-4 grid gap-2 sm:grid-cols-2">
+              <MigrationCopyButton
+                description="URL do servidor da UaZapi"
+                disabled={Boolean(migrationCopying)}
+                label="Copiar Server URL"
+                loading={migrationCopying === "serverUrl"}
+                onClick={() => onCopyMigrationCredential("serverUrl")}
+              />
+              <MigrationCopyButton
+                description="Token sensivel desta instancia"
+                disabled={Boolean(migrationCopying)}
+                label="Copiar Instance Token"
+                loading={migrationCopying === "instanceToken"}
+                onClick={() => onCopyMigrationCredential("instanceToken")}
+              />
+            </div>
+
+            <div className="mt-4 rounded-lg border border-amber-300/20 bg-amber-300/10 px-3 py-2 text-[11px] leading-5 text-amber-100/90">
+              O token permite migrar esta sessao do WhatsApp. Use apenas na extensao indicada e nao compartilhe com terceiros.
+            </div>
+
+            <div className="mt-5 flex flex-col gap-2 sm:flex-row">
+              <button
+                className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/5 px-4 font-mono text-[11px] font-semibold uppercase text-slate-100 transition hover:bg-white/10"
+                onClick={() => {
+                  setMigrationModalOpen(false);
+                  onRefresh();
+                }}
+                type="button"
+              >
+                <RefreshCcw className="h-4 w-4" />
+                Atualizar status
+              </button>
+              <button
+                className="inline-flex min-h-10 flex-1 items-center justify-center rounded-lg bg-white px-4 font-mono text-[11px] font-semibold uppercase text-slate-950 transition hover:bg-slate-100"
+                onClick={() => setMigrationModalOpen(false)}
+                type="button"
+              >
+                Entendi
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+function MigrationCopyButton({
+  description,
+  disabled,
+  label,
+  loading,
+  onClick,
+}: {
+  description: string;
+  disabled: boolean;
+  label: string;
+  loading: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      className="grid min-h-20 gap-1 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-3 text-left transition hover:bg-white/[0.07] disabled:cursor-not-allowed disabled:opacity-60"
+      disabled={disabled}
+      onClick={onClick}
+      type="button"
+    >
+      <span className="inline-flex items-center gap-2 font-mono text-[11px] font-semibold uppercase text-white">
+        {loading ? <Loader2 className="h-4 w-4 animate-spin text-cyan-200" /> : <Copy className="h-4 w-4 text-cyan-200" />}
+        {label}
+      </span>
+      <span className="text-[11px] leading-4 text-slate-500">{description}</span>
+    </button>
   );
 }
 

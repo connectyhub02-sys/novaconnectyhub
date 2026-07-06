@@ -5,6 +5,7 @@ import {
   createPlatformWhatsappConsoleSectorAgent,
   disconnectPlatformWhatsappConsole,
   generatePlatformWhatsappCloneProfileFromHistory,
+  getPlatformWhatsappMigrationCredential,
   getPlatformWhatsappConsoleState,
   refreshPlatformWhatsappConsoleStatus,
   resetPlatformWhatsappConsoleConnection,
@@ -35,6 +36,7 @@ type ActionBody = {
   connectPhone?: unknown;
   phone?: unknown;
   text?: unknown;
+  credential?: unknown;
 };
 
 export async function GET(request: NextRequest) {
@@ -139,6 +141,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(result);
     }
 
+    if (action === "copy_migration_credential") {
+      const credential = asMigrationCredentialKind(body?.credential);
+
+      if (!credential) {
+        return NextResponse.json({ error: "Credencial de migracao invalida." }, { status: 422 });
+      }
+
+      const result = await getPlatformWhatsappMigrationCredential({
+        sectorId: asString(body?.sectorId) ?? "",
+        userId: auth.userId,
+        credential,
+        client: createServiceClient(),
+      });
+
+      return NextResponse.json(result);
+    }
+
     if (action === "send_test") {
       const result = await sendPlatformWhatsappConsoleTest({
         sectorId: asString(body?.sectorId) ?? "",
@@ -225,6 +244,10 @@ function asString(value: unknown) {
 function asNumber(value: unknown) {
   const number = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
   return Number.isFinite(number) ? number : undefined;
+}
+
+function asMigrationCredentialKind(value: unknown) {
+  return value === "serverUrl" || value === "instanceToken" ? value : null;
 }
 
 function formatError(error: unknown) {

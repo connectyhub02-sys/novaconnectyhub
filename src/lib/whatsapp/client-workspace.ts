@@ -245,6 +245,16 @@ export type ClientWhatsappActionResult = {
   pairCode: string | null;
 };
 
+export type ClientWhatsappMigrationCredentialKind = "serverUrl" | "instanceToken";
+
+export type ClientWhatsappMigrationCredentialResult = {
+  value: string;
+  notice: {
+    tone: "success" | "warning" | "error";
+    message: string;
+  };
+};
+
 const whatsappAgentCode = "agente-whatsapp-sistema";
 const whatsappGlobalAgentCode = "agente-whatsapp-global";
 const maxPromptLength = 8000;
@@ -585,6 +595,54 @@ export async function refreshClientWhatsappStatus(input: {
     },
     qrCode: state.instance?.status === "connected" ? null : qrCode,
     pairCode: state.instance?.status === "connected" ? null : pairCode,
+  };
+}
+
+export async function getClientWhatsappMigrationCredential(input: {
+  organization: CurrentOrganization;
+  userId: string;
+  agentId?: string | null;
+  credential: ClientWhatsappMigrationCredentialKind;
+  client?: SupabaseClient;
+}): Promise<ClientWhatsappMigrationCredentialResult> {
+  const client = input.client ?? createServiceClient();
+  const agent = await requireWorkspaceWhatsappAgent(client, input.organization.id, input.agentId);
+  const instance = await requireWorkspaceInstance(client, input.organization.id, agent);
+
+  assertPasskeyMigrationAllowed(instance);
+
+  const credentials = await loadUazapiCredentials(client);
+
+  if (input.credential === "serverUrl") {
+    return {
+      value: credentials.baseUrl,
+      notice: { tone: "success", message: "Server URL copiada. Cole este valor na extensao de migracao." },
+    };
+  }
+
+  const token = decryptInstanceToken(instance);
+
+  if (!token) {
+    throw new Error("Token da instancia indisponivel. Tente resetar a conexao antes de migrar.");
+  }
+
+  const now = new Date().toISOString();
+  const metadata = instance.metadata ?? {};
+  await client
+    .from("whatsapp_instances")
+    .update({
+      metadata: {
+        ...metadata,
+        passkey_migration_token_copied_at: now,
+        passkey_migration_token_copied_by: input.userId,
+        passkey_migration_token_copy_count: (readNumber(metadata.passkey_migration_token_copy_count) ?? 0) + 1,
+      },
+    })
+    .eq("id", instance.id);
+
+  return {
+    value: token,
+    notice: { tone: "success", message: "Instance Token copiado. Use apenas na extensao de migracao indicada." },
   };
 }
 
@@ -2457,6 +2515,22 @@ function decryptInstanceToken(instance: WhatsappInstanceRow) {
   } catch {
     return null;
   }
+}
+
+function assertPasskeyMigrationAllowed(instance: WhatsappInstanceRow) {
+  const diagnostics = readConnectionDiagnostics(instance.metadata);
+  const latestAttempt = diagnostics.latestAttempt;
+  const metadata = instance.metadata ?? {};
+  const lastDisconnectReason =
+    latestAttempt?.lastDisconnectReason ??
+    latestAttempt?.finalReason ??
+    readString(metadata.last_disconnect_reason);
+
+  if (latestAttempt?.finalStatus === "passkey_blocked" || isPasskeyDisconnectReason(lastDisconnectReason)) {
+    return;
+  }
+
+  throw new Error("A migracao assistida so fica disponivel quando o WhatsApp solicita chave de acesso nesta instancia.");
 }
 
 function buildProviderInstanceName(organization: CurrentOrganization, agent?: AgentRow | null) {

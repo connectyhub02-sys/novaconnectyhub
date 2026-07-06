@@ -7,6 +7,7 @@ import {
   connectClientWhatsapp,
   disconnectClientWhatsapp,
   generateClientWhatsappCloneProfileFromHistory,
+  getClientWhatsappMigrationCredential,
   getClientWhatsappState,
   refreshClientWhatsappStatus,
   resetClientWhatsappConnection,
@@ -29,6 +30,7 @@ type ActionBody = {
   phone?: unknown;
   text?: unknown;
   behavior?: unknown;
+  credential?: unknown;
   maxChats?: unknown;
   maxMessagesPerChat?: unknown;
 };
@@ -135,6 +137,23 @@ export async function POST(request: NextRequest) {
       });
 
       return NextResponse.json(attachWorkspaceToResult(context, result));
+    }
+
+    if (action === "copy_migration_credential") {
+      const credential = asMigrationCredentialKind(body?.credential);
+
+      if (!credential) {
+        return NextResponse.json({ error: "Credencial de migracao invalida." }, { status: 422 });
+      }
+
+      const result = await getClientWhatsappMigrationCredential({
+        organization: context.organization,
+        userId: context.userId,
+        agentId: context.selectedAgentId,
+        credential,
+      });
+
+      return NextResponse.json(result);
     }
 
     if (action === "send_test") {
@@ -302,6 +321,10 @@ function asString(value: unknown) {
 function asNumber(value: unknown) {
   const number = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
   return Number.isFinite(number) ? number : undefined;
+}
+
+function asMigrationCredentialKind(value: unknown) {
+  return value === "serverUrl" || value === "instanceToken" ? value : null;
 }
 
 function attachWorkspace(context: WorkspaceContext, state: ClientWhatsappState): DashboardWhatsappState {
