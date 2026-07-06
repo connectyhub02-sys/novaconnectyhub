@@ -9,6 +9,7 @@ import {
   extractMercadoPagoPixData,
   normalizeCurrencyAmount,
 } from "@/lib/sales-catalog/mercado-pago";
+import { handleSalesCatalogApprovedPayment } from "@/lib/sales-catalog/post-payment";
 import { createServiceClient } from "@/lib/supabase/service";
 
 export const dynamic = "force-dynamic";
@@ -180,6 +181,18 @@ export async function POST(
       .eq("id", order.id)
       .eq("organization_id", sourceSession.organization_id);
 
+    const postPayment = paymentData.status === "approved"
+      ? await handleSalesCatalogApprovedPayment({
+          client,
+          organizationId: sourceSession.organization_id,
+          orderId: order.id,
+          paymentSessionId: cardSessionId,
+          providerPaymentId: paymentData.providerPaymentId,
+          paymentMethodLabel: "Cartao Mercado Pago",
+          source: "checkout_card",
+        })
+      : null;
+
     await client.from("intelligence_events").insert({
       scope: "organization",
       organization_id: sourceSession.organization_id,
@@ -198,6 +211,7 @@ export async function POST(
         provider_payment_id: paymentData.providerPaymentId,
         provider_status: paymentData.providerStatus,
         status: paymentData.status,
+        post_payment: postPayment,
       },
     });
 

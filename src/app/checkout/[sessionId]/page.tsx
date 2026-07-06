@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import type { ReactNode } from "react";
+import { CheckoutStatusPoller } from "@/components/checkout/checkout-status-poller";
 import { MercadoPagoCardBrick } from "@/components/checkout/mercado-pago-card-brick";
 import { createServiceClient } from "@/lib/supabase/service";
 import { formatSalesCatalogPaymentSessionStatus } from "@/lib/sales-catalog/shared";
@@ -57,6 +58,7 @@ type CheckoutOrderItemRow = {
   sale_price: string | null;
   total: string | null;
   attributes: unknown;
+  fulfillment: unknown;
 };
 
 type OrganizationRow = {
@@ -104,7 +106,8 @@ export default async function CheckoutPage({
   const subtotal = formatCurrency(order.subtotal);
   const shipping = formatCurrency(order.shipping_total);
   const updatedAt = formatDateTime(session.updated_at);
-  const canUseCard = !paid && !failed && amountNumber !== null && integration?.status === "connected" && Boolean(integration.public_key);
+  const shippingBlocked = requiresShippingBeforePayment(order, items) && !paid;
+  const canUseCard = !shippingBlocked && !paid && !failed && amountNumber !== null && integration?.status === "connected" && Boolean(integration.public_key);
 
   return (
     <CheckoutShell>
@@ -127,6 +130,12 @@ export default async function CheckoutPage({
                 {formatSalesCatalogPaymentSessionStatus(status)}
               </span>
             </div>
+
+            <CheckoutStatusPoller
+              sessionId={session.id}
+              initialStatus={status}
+              initialOrderStatus={order.status}
+            />
 
             <div className="mt-8 grid gap-3 sm:grid-cols-3">
               <CheckoutMetric label="Total" value={amount} />
@@ -182,6 +191,12 @@ export default async function CheckoutPage({
               tone="error"
               title="Pagamento nao concluido"
               body={session.failure_reason ?? "Solicite um novo link no WhatsApp para tentar novamente."}
+            />
+          ) : shippingBlocked ? (
+            <CheckoutState
+              tone="info"
+              title="Frete pendente"
+              body="Este pedido tem produto fisico. O pagamento sera liberado assim que o frete, retirada ou entrega for definido no WhatsApp."
             />
           ) : session.method === "card" ? (
             <CheckoutState
@@ -332,7 +347,7 @@ async function loadCheckoutData(client: ReturnType<typeof createServiceClient>, 
       .maybeSingle<CheckoutOrderRow>(),
     client
       .from("sales_catalog_order_items")
-      .select("id, title, sku_code, quantity, unit_price, sale_price, total, attributes")
+      .select("id, title, sku_code, quantity, unit_price, sale_price, total, attributes, fulfillment")
       .eq("order_id", session.order_id)
       .eq("organization_id", session.organization_id)
       .order("created_at", { ascending: true }),
@@ -415,4 +430,21 @@ function formatDateTime(value: string | null) {
     timeStyle: "short",
     timeZone: "America/Sao_Paulo",
   }).format(date);
+}
+
+function requiresShippingBeforePayment(order: CheckoutOrderRow, items: CheckoutOrderItemRow[]) {
+  const hasPhysicalItem = items.some((item) => readFulfillmentMode(item.fulfillment) === "physical");
+
+  if (!hasPhysicalItem) {
+    return false;
+  }
+
+  return !order.shipping_method && !order.shipping_total;
+}
+
+function readFulfillmentMode(value: unknown) {
+  const record = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  const mode = typeof record.mode === "string" ? record.mode : null;
+
+  return mode === "digital" || mode === "service" || mode === "subscription" ? mode : "physical";
 }

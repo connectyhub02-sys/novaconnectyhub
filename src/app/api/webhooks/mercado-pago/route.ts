@@ -6,6 +6,7 @@ import {
   getMercadoPagoPayment,
   verifyMercadoPagoWebhookSignature,
 } from "@/lib/sales-catalog/mercado-pago";
+import { handleSalesCatalogApprovedPayment } from "@/lib/sales-catalog/post-payment";
 import { createServiceClient } from "@/lib/supabase/service";
 
 export const dynamic = "force-dynamic";
@@ -165,6 +166,18 @@ export async function POST(request: NextRequest) {
       .eq("id", session.order_id)
       .eq("organization_id", session.organization_id);
 
+    const postPayment = pixData.status === "approved"
+      ? await handleSalesCatalogApprovedPayment({
+          client,
+          organizationId: session.organization_id,
+          orderId: session.order_id,
+          paymentSessionId: session.id,
+          providerPaymentId: dataId,
+          paymentMethodLabel: "Pix Mercado Pago",
+          source: "mercado_pago_webhook",
+        })
+      : null;
+
     await recordWebhookEvent(client, {
       providerEventId,
       dataId,
@@ -195,6 +208,7 @@ export async function POST(request: NextRequest) {
         provider_payment_id: dataId,
         provider_status: pixData.providerStatus,
         status: pixData.status,
+        post_payment: postPayment,
       },
     });
 
