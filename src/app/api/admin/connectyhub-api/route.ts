@@ -7,6 +7,8 @@ import {
   deleteAdminGatewayInstance,
   formatGatewayError,
   getAdminGatewayState,
+  getAdminGatewayMigrationCredential,
+  type GatewayMigrationCredentialKind,
   retryAdminWebhookDelivery,
   testAdminWebhookEndpoint,
 } from "@/lib/connectyhub-api/gateway";
@@ -31,6 +33,7 @@ type ActionBody = {
   description?: unknown;
   events?: unknown;
   scopes?: unknown;
+  credential?: unknown;
 };
 
 export async function GET() {
@@ -140,6 +143,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true, result }, { status: result.providerDeleted ? 200 : 202 });
     }
 
+    if (action === "copy_migration_credential") {
+      const credential = asMigrationCredentialKind(body?.credential);
+
+      if (!credential) {
+        return NextResponse.json({ ok: false, error: { code: "invalid_credential", message: "Credencial de migracao invalida." } }, { status: 422 });
+      }
+
+      const result = await getAdminGatewayMigrationCredential({
+        instanceId: asString(body?.instanceId) ?? "",
+        actorId: auth.userId,
+        credential,
+        client,
+      });
+
+      return NextResponse.json({ ok: true, ...result });
+    }
+
     return NextResponse.json({ ok: false, error: { code: "invalid_action", message: "Acao invalida." } }, { status: 422 });
   } catch (error) {
     const formatted = formatGatewayError(error);
@@ -157,4 +177,12 @@ async function readJson<T>(request: NextRequest): Promise<T | null> {
 
 function asString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function asMigrationCredentialKind(value: unknown): GatewayMigrationCredentialKind | null {
+  if (value === "serverUrl" || value === "instanceToken") {
+    return value;
+  }
+
+  return null;
 }

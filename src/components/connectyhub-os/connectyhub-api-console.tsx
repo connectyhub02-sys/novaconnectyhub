@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import {
   Activity,
   ChevronDown,
+  Copy,
+  ExternalLink,
   KeyRound,
   MessageCircle,
   PlugZap,
@@ -15,6 +17,7 @@ import {
   Send,
   ShieldCheck,
   Trash2,
+  X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { AdminGatewayState } from "@/lib/connectyhub-api/gateway";
@@ -41,6 +44,22 @@ type ActionResponse = {
     message?: string;
   };
 };
+
+type MigrationCredentialKind = "serverUrl" | "instanceToken";
+
+type MigrationCredentialResponse = {
+  ok?: boolean;
+  value?: string;
+  notice?: Notice;
+  error?: {
+    message?: string;
+  };
+};
+
+const PASSKEY_CONNECTION_HELP_TEXT =
+  "Esta conta pediu uma verificacao extra por chave de acesso. Esse tipo de verificacao ainda nao pode ser concluido diretamente pelo QR Code do painel.";
+const PASSKEY_MIGRATION_EXTENSION_URL =
+  "https://chromewebstore.google.com/detail/cdjfbjfolpeenlmanmkoglhhcjfgcbpp";
 
 const webhookEventGroups = [
   {
@@ -168,6 +187,8 @@ export function ConnectyHubApiConsole({
   const router = useRouter();
   const [running, setRunning] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
+  const [migrationInstance, setMigrationInstance] = useState<AdminGatewayInstance | null>(null);
+  const [migrationCopying, setMigrationCopying] = useState<MigrationCredentialKind | null>(null);
   const [activeTab, setActiveTab] = useState<AdminApiTab>("overview");
   const [diagnosticQuery, setDiagnosticQuery] = useState("");
   const [diagnosticStatus, setDiagnosticStatus] = useState("all");
@@ -592,6 +613,43 @@ export function ConnectyHubApiConsole({
     }
   }
 
+  async function copyMigrationCredential(kind: MigrationCredentialKind) {
+    if (!migrationInstance) {
+      setNotice({ tone: "warning", message: "Escolha uma instancia antes de copiar os dados de migracao." });
+      return;
+    }
+
+    setMigrationCopying(kind);
+    setNotice(null);
+
+    try {
+      const response = await fetch("/api/admin/connectyhub-api", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "copy_migration_credential",
+          instanceId: migrationInstance.id,
+          credential: kind,
+        }),
+      });
+      const data = (await response.json().catch(() => null)) as MigrationCredentialResponse | null;
+
+      if (!response.ok || !data?.ok || !data.value) {
+        throw new Error(data?.error?.message ?? "Nao foi possivel liberar a credencial de migracao.");
+      }
+
+      copyText(data.value);
+      setNotice(data.notice ?? { tone: "success", message: "Credencial copiada para a area de transferencia." });
+    } catch (error) {
+      setNotice({
+        tone: "error",
+        message: error instanceof Error ? error.message : "Nao foi possivel copiar a credencial de migracao.",
+      });
+    } finally {
+      setMigrationCopying(null);
+    }
+  }
+
   function confirmDeleteInstance(instance: AdminGatewayInstance) {
     const label = getAdminInstanceDisplayTitle(instance);
     const confirmed = window.confirm(`Excluir a instancia "${label}"?\n\nA ConnectyHub vai remover o registro do cliente API e tentar excluir imediatamente no provedor WhatsApp.`);
@@ -816,6 +874,14 @@ export function ConnectyHubApiConsole({
                                 <StatusBadge key="webhook" status={instance.webhookConfigured ? "online" : "warning"} label={instance.webhookConfigured ? "ok" : "pendente"} />,
                                 <TextCell key="sync" value={formatDate(instance.lastMessageAt ?? instance.lastHeartbeatAt ?? instance.updatedAt)} muted="sync" />,
                                 <div key="actions" className="flex min-w-[120px] flex-wrap gap-2">
+                                  {isPasskeyBlockedInstance(instance) && (
+                                    <InlineActionButton
+                                      icon={KeyRound}
+                                      label="Migrar"
+                                      onClick={() => setMigrationInstance(instance)}
+                                      tone="amber"
+                                    />
+                                  )}
                                   <InlineActionButton
                                     disabled={running === `delete_instance:${instance.id}`}
                                     icon={Trash2}
@@ -1251,6 +1317,15 @@ export function ConnectyHubApiConsole({
           </div>
         )}
       </div>
+
+      {migrationInstance && (
+        <MigrationAssistModal
+          instance={migrationInstance}
+          loading={migrationCopying}
+          onClose={() => setMigrationInstance(null)}
+          onCopyCredential={copyMigrationCredential}
+        />
+      )}
     </ConnectyShell>
   );
 }
@@ -1585,6 +1660,125 @@ function ActionButton({ children, loading }: { children: string; loading: boolea
   );
 }
 
+function MigrationAssistModal({
+  instance,
+  loading,
+  onClose,
+  onCopyCredential,
+}: {
+  instance: AdminGatewayInstance;
+  loading: MigrationCredentialKind | null;
+  onClose: () => void;
+  onCopyCredential: (kind: MigrationCredentialKind) => void;
+}) {
+  return (
+    <div
+      aria-labelledby="admin-api-passkey-migration-title"
+      aria-modal="true"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm"
+      onClick={onClose}
+      onKeyDown={(event) => event.key === "Escape" && onClose()}
+      role="dialog"
+      tabIndex={0}
+    >
+      <div
+        className="relative max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl border border-cyan-300/20 bg-[#101827] p-5 text-left shadow-2xl"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <button
+          aria-label="Fechar migracao assistida"
+          className="absolute right-3 top-3 grid h-8 w-8 place-items-center rounded-full bg-white/5 text-slate-400 transition hover:bg-white/10 hover:text-white"
+          onClick={onClose}
+          type="button"
+        >
+          <X className="h-4 w-4" />
+        </button>
+
+        <div className="grid h-12 w-12 place-items-center rounded-2xl bg-amber-300/10 text-amber-200">
+          <KeyRound className="h-6 w-6" />
+        </div>
+
+        <h3 id="admin-api-passkey-migration-title" className="mt-4 pr-8 text-lg font-semibold text-white">
+          Migracao assistida
+        </h3>
+        <p className="mt-2 font-mono text-[10px] uppercase tracking-wider text-cyan-300">
+          {getAdminInstanceDisplayTitle(instance)}
+        </p>
+        <p className="mt-3 text-sm leading-6 text-slate-300">
+          {PASSKEY_CONNECTION_HELP_TEXT}
+        </p>
+
+        <div className="mt-4 grid gap-2 text-[12px] leading-5 text-slate-400">
+          <p>1. Instale a extensao Session Migration Connector.</p>
+          <p>2. Entre no WhatsApp Web oficial e conclua a verificacao pelo celular.</p>
+          <p>3. Na extensao, use os botoes abaixo para copiar a Server URL e o Instance Token.</p>
+          <p>4. Clique em Migrar sessao e volte aqui para atualizar o status da instancia.</p>
+        </div>
+
+        <a
+          className="mt-4 inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-cyan-300/25 bg-cyan-300/10 px-4 font-mono text-[11px] font-semibold uppercase text-cyan-100 transition hover:bg-cyan-300/15"
+          href={PASSKEY_MIGRATION_EXTENSION_URL}
+          rel="noreferrer"
+          target="_blank"
+        >
+          <ExternalLink className="h-4 w-4" />
+          Abrir extensao
+        </a>
+
+        <div className="mt-4 grid gap-2 sm:grid-cols-2">
+          <MigrationCopyButton
+            description="URL do servidor da UaZapi"
+            disabled={Boolean(loading)}
+            label="Copiar Server URL"
+            loading={loading === "serverUrl"}
+            onClick={() => onCopyCredential("serverUrl")}
+          />
+          <MigrationCopyButton
+            description="Token sensivel desta instancia"
+            disabled={Boolean(loading)}
+            label="Copiar Instance Token"
+            loading={loading === "instanceToken"}
+            onClick={() => onCopyCredential("instanceToken")}
+          />
+        </div>
+
+        <div className="mt-4 rounded-lg border border-amber-300/20 bg-amber-300/10 px-3 py-2 text-[11px] leading-5 text-amber-100/90">
+          O token nao fica visivel no painel. Ele e copiado diretamente para uso na extensao indicada.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MigrationCopyButton({
+  description,
+  disabled,
+  label,
+  loading,
+  onClick,
+}: {
+  description: string;
+  disabled: boolean;
+  label: string;
+  loading: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      className="grid min-h-20 gap-1 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-3 text-left transition hover:bg-white/[0.07] disabled:cursor-not-allowed disabled:opacity-60"
+      disabled={disabled}
+      onClick={onClick}
+      type="button"
+    >
+      <span className="inline-flex items-center gap-2 font-mono text-[11px] font-semibold uppercase text-white">
+        {loading ? <RefreshCcw className="h-4 w-4 animate-spin text-cyan-200" /> : <Copy className="h-4 w-4 text-cyan-200" />}
+        {label}
+      </span>
+      <span className="text-[11px] leading-4 text-slate-500">{description}</span>
+    </button>
+  );
+}
+
 function InlineActionButton({
   disabled,
   icon: Icon,
@@ -1663,6 +1857,18 @@ function hasUsageIssue(event: AdminUsageEvent) {
 
 function hasApiInstanceIssue(instance: AdminGatewayInstance) {
   return instance.status !== "connected" || !instance.webhookConfigured || isHealthIssue(instance.health?.status);
+}
+
+function isPasskeyBlockedInstance(instance: AdminGatewayInstance) {
+  const attempt = instance.connectionDiagnostics?.latestAttempt;
+  const reason = `${attempt?.lastDisconnectReason ?? ""} ${attempt?.finalReason ?? ""}`.toLowerCase();
+
+  return attempt?.finalStatus === "passkey_blocked"
+    || reason.includes("passkey")
+    || reason.includes("chave de acesso")
+    || reason.includes("access key")
+    || reason.includes("security key")
+    || reason.includes("webauthn");
 }
 
 function summarizeGatewayHealth(items: Array<AdminGatewayClient["health"] | null | undefined>) {
@@ -1847,6 +2053,10 @@ function getInitials(value: string) {
     .slice(0, 2);
 
   return (parts.map((part) => part[0]).join("") || "WA").toUpperCase();
+}
+
+function copyText(value: string) {
+  void navigator.clipboard?.writeText(value).catch(() => undefined);
 }
 
 function groupBy<T>(items: T[], getKey: (item: T) => string) {

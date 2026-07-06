@@ -17,6 +17,7 @@ import {
 import { loadUazapiCredentials, type UazapiCredentials } from "@/lib/whatsapp/uazapi-credentials";
 import {
   appendConnectionDiagnosticEvent,
+  isPasskeyDisconnectReason,
   readConnectionDiagnostics,
   resolveConnectionDiagnosticEventType,
 } from "@/lib/whatsapp/connection-diagnostics";
@@ -86,6 +87,16 @@ export type GatewayAuthContext = {
   client: SupabaseClient;
   apiClient: ApiClientRow;
   apiKey: ApiKeyRow;
+};
+
+export type GatewayMigrationCredentialKind = "serverUrl" | "instanceToken";
+
+export type GatewayMigrationCredentialResult = {
+  value: string;
+  notice: {
+    tone: "success";
+    message: string;
+  };
 };
 
 export type ApiClientRow = {
@@ -936,6 +947,47 @@ export async function deleteAdminGatewayInstance(input: {
   });
 
   return result;
+}
+
+export async function getClientGatewayMigrationCredential(input: {
+  organizationId: string;
+  instanceId: string;
+  actorId: string;
+  credential: GatewayMigrationCredentialKind;
+  client?: SupabaseClient;
+}): Promise<GatewayMigrationCredentialResult> {
+  const client = input.client ?? createServiceClient();
+  const instance = await requireOrganizationGatewayInstance(client, input.organizationId, input.instanceId);
+
+  assertApiGatewayPasskeyMigrationAllowed(instance);
+
+  return buildGatewayMigrationCredential({
+    actorId: input.actorId,
+    client,
+    credential: input.credential,
+    instance,
+    source: "client_dashboard",
+  });
+}
+
+export async function getAdminGatewayMigrationCredential(input: {
+  instanceId: string;
+  actorId: string;
+  credential: GatewayMigrationCredentialKind;
+  client?: SupabaseClient;
+}): Promise<GatewayMigrationCredentialResult> {
+  const client = input.client ?? createServiceClient();
+  const instance = await requireAdminGatewayInstance(client, input.instanceId);
+
+  assertApiGatewayPasskeyMigrationAllowed(instance);
+
+  return buildGatewayMigrationCredential({
+    actorId: input.actorId,
+    client,
+    credential: input.credential,
+    instance,
+    source: "admin_dashboard",
+  });
 }
 
 export async function sendGatewayTextMessage(
@@ -4481,6 +4533,78 @@ function decryptInstanceToken(instance: GatewayInstanceRow) {
   }
 }
 
+function assertApiGatewayPasskeyMigrationAllowed(instance: GatewayInstanceRow) {
+  if (!isPublicApiGatewayInstance(instance)) {
+    throw new GatewayHttpError(409, "instance_not_api_controlled", "Esta instancia nao pertence ao gateway API.");
+  }
+
+  const metadata = isRecord(instance.metadata) ? instance.metadata : {};
+  const diagnostics = readConnectionDiagnostics(metadata);
+  const latestAttempt = diagnostics.latestAttempt;
+  const disconnectReason =
+    latestAttempt?.lastDisconnectReason
+    ?? latestAttempt?.finalReason
+    ?? readMetadataString(metadata, "last_disconnect_reason")
+    ?? readProviderDisconnectReason(instance.provider_payload);
+
+  if (latestAttempt?.finalStatus === "passkey_blocked" || isPasskeyDisconnectReason(disconnectReason)) {
+    return;
+  }
+
+  throw new GatewayHttpError(
+    409,
+    "passkey_migration_not_allowed",
+    "A migracao assistida so fica disponivel quando o WhatsApp solicita chave de acesso nesta instancia.",
+  );
+}
+
+async function buildGatewayMigrationCredential(input: {
+  actorId: string;
+  client: SupabaseClient;
+  credential: GatewayMigrationCredentialKind;
+  instance: GatewayInstanceRow;
+  source: "client_dashboard" | "admin_dashboard";
+}): Promise<GatewayMigrationCredentialResult> {
+  const credentials = await loadUazapiCredentials(input.client);
+
+  if (input.credential === "serverUrl") {
+    return {
+      value: credentials.baseUrl,
+      notice: { tone: "success", message: "Server URL copiada. Cole este valor na extensao de migracao." },
+    };
+  }
+
+  const token = decryptInstanceToken(input.instance);
+
+  if (!token) {
+    throw new GatewayHttpError(409, "missing_instance_token", "Token da instancia indisponivel. Tente resetar a conexao antes de migrar.");
+  }
+
+  const now = new Date().toISOString();
+  const metadata = input.instance.metadata ?? {};
+  const { error } = await input.client
+    .from("whatsapp_instances")
+    .update({
+      metadata: {
+        ...metadata,
+        api_passkey_migration_token_copied_at: now,
+        api_passkey_migration_token_copied_by: input.actorId,
+        api_passkey_migration_token_copied_from: input.source,
+        api_passkey_migration_token_copy_count: readMetadataNumber(metadata, "api_passkey_migration_token_copy_count") + 1,
+      },
+    })
+    .eq("id", input.instance.id);
+
+  if (error) {
+    throw new GatewayHttpError(500, "migration_audit_save_failed", error.message);
+  }
+
+  return {
+    value: token,
+    notice: { tone: "success", message: "Instance Token copiado. Use apenas na extensao de migracao indicada." },
+  };
+}
+
 function decryptWebhookSecret(endpoint: WebhookEndpointRow) {
   if (!endpoint.secret_encrypted) {
     return null;
@@ -5268,6 +5392,21 @@ function isRecord(value: unknown): value is JsonRecord {
 function readMetadataString(record: JsonRecord, key: string) {
   const value = record[key];
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function readMetadataNumber(record: JsonRecord, key: string) {
+  const value = record[key];
+
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const parsed = Number.parseInt(value, 10);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  return 0;
 }
 
 function readMetadataBoolean(record: JsonRecord, key: string) {

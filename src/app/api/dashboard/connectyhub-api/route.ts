@@ -7,6 +7,8 @@ import {
   ensureClientApiClient,
   formatGatewayError,
   getClientGatewayState,
+  getClientGatewayMigrationCredential,
+  type GatewayMigrationCredentialKind,
   retryClientWebhookDelivery,
   revokeClientApiKey,
   testClientWebhookEndpoint,
@@ -31,6 +33,7 @@ type ActionBody = {
   description?: unknown;
   events?: unknown;
   status?: unknown;
+  credential?: unknown;
 };
 
 type WorkspaceContext = {
@@ -213,6 +216,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true, result }, { status: result.providerDeleted ? 200 : 202 });
     }
 
+    if (action === "copy_migration_credential") {
+      const credential = asMigrationCredentialKind(body?.credential);
+
+      if (!credential) {
+        return NextResponse.json({ ok: false, error: { code: "invalid_credential", message: "Credencial de migracao invalida." } }, { status: 422 });
+      }
+
+      const result = await getClientGatewayMigrationCredential({
+        organizationId: context.organization.id,
+        instanceId: asString(body?.instanceId) ?? "",
+        actorId: context.userId,
+        credential,
+        client,
+      });
+
+      return NextResponse.json({ ok: true, ...result });
+    }
+
     return NextResponse.json({ ok: false, error: { code: "invalid_action", message: "Acao invalida." } }, { status: 422 });
   } catch (error) {
     const formatted = formatGatewayError(error);
@@ -306,6 +327,14 @@ function asKeyStatus(value: unknown): "active" | "paused" | "revoked" {
   }
 
   return "active";
+}
+
+function asMigrationCredentialKind(value: unknown): GatewayMigrationCredentialKind | null {
+  if (value === "serverUrl" || value === "instanceToken") {
+    return value;
+  }
+
+  return null;
 }
 
 function isOrganizationManager(role: string) {
