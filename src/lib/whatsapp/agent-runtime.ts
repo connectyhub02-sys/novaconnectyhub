@@ -20,6 +20,8 @@ import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
 import { loadR2Config, putR2Object } from "@/lib/storage/r2";
 import { createServiceClient } from "@/lib/supabase/service";
 import { buildTrackedLinkUrl } from "@/lib/tracking/tracked-links";
+import { listOrganizationSalesCatalog } from "@/lib/client-os/sales-catalog";
+import { formatSalesCatalogInline, type ClientSalesCatalogItem, type SalesCatalogMedia } from "@/lib/sales-catalog/shared";
 import {
   defaultWhatsappAgentPrompt,
   defaultWhatsappGlobalPrompt,
@@ -143,6 +145,8 @@ type RuntimeLinkButton = {
   tag: string;
   trackingUrl: string;
 };
+
+type RuntimeSalesCatalogItem = ClientSalesCatalogItem;
 
 type InteractiveLinkMatch = {
   link: RuntimeLinkButton;
@@ -457,6 +461,7 @@ export async function processWhatsappAgentRun(input: {
       lead,
       knowledge: context.knowledge,
       linkButtons: context.linkButtons,
+      salesCatalog: context.salesCatalog,
       learnings: context.learnings,
       crossAgentContext: context.crossAgentContext,
       messages: context.messages,
@@ -580,14 +585,16 @@ async function loadRunContext(client: SupabaseClient, runId: string) {
   const instanceMetadata = readRecord(instance.metadata);
   const sectorId = asString(instanceMetadata?.sector_id) ?? asString(readRecord(agent.metadata)?.sector_id);
   const isPlatformWhatsapp = instanceMetadata?.admin_whatsapp === true && Boolean(sectorId);
-  const [knowledge, linkButtons] = isPlatformWhatsapp && sectorId
+  const [knowledge, linkButtons, salesCatalog] = isPlatformWhatsapp && sectorId
     ? await Promise.all([
         loadPlatformSectorKnowledge(client, sectorId),
         loadPlatformSectorLinkButtons(client, sectorId),
+        Promise.resolve([] as RuntimeSalesCatalogItem[]),
       ])
     : await Promise.all([
         loadOrganizationKnowledge(client, run.organization_id),
         loadOrganizationLinkButtons(client, run.organization_id),
+        listOrganizationSalesCatalog(client, run.organization_id).then((items) => items.filter((item) => item.status === "active")),
       ]);
 
   const behavior = normalizeWhatsappBehaviorConfig(
@@ -623,6 +630,7 @@ async function loadRunContext(client: SupabaseClient, runId: string) {
     geminiCredentials,
     knowledge,
     linkButtons,
+    salesCatalog,
     learnings,
     crossAgentContext,
     behavior,
@@ -1132,6 +1140,7 @@ async function generateAgentResponse(input: {
   lead: LeadRow | null;
   knowledge: KnowledgeMemoryRow[];
   linkButtons: RuntimeLinkButton[];
+  salesCatalog: RuntimeSalesCatalogItem[];
   learnings: KnowledgeMemoryRow[];
   crossAgentContext: CrossAgentConversationContext | null;
   messages: ConversationMessageRow[];
@@ -1189,6 +1198,7 @@ function buildSystemInstruction(input: {
   lead: LeadRow | null;
   knowledge: KnowledgeMemoryRow[];
   linkButtons: RuntimeLinkButton[];
+  salesCatalog: RuntimeSalesCatalogItem[];
   learnings: KnowledgeMemoryRow[];
   crossAgentContext: CrossAgentConversationContext | null;
   messages: ConversationMessageRow[];
@@ -1225,6 +1235,7 @@ function buildSystemInstruction(input: {
     ...buildCrossAgentConversationLines(input.crossAgentContext, input.agent),
     ...buildKnowledgeLines(input.knowledge),
     ...buildLinkButtonLines(input.linkButtons, input),
+    ...buildSalesCatalogLines(input.salesCatalog),
     "",
     "COMPORTAMENTO CONFIGURADO:",
     `- Modo de resposta: ${input.behavior.responseMode}.`,
@@ -2010,6 +2021,7 @@ function renderPromptVariables(prompt: string, input: {
   agent: AgentRow;
   lead: LeadRow | null;
   linkButtons?: RuntimeLinkButton[];
+  salesCatalog?: RuntimeSalesCatalogItem[];
 }) {
   const leadName = resolveLeadPersonalName({
     displayName: input.lead?.display_name,
@@ -2033,6 +2045,10 @@ function renderPromptVariables(prompt: string, input: {
 
   for (const link of input.linkButtons ?? []) {
     rendered = rendered.replaceAll(link.tag, buildLeadAwareTrackingUrl(link, input));
+  }
+
+  for (const item of input.salesCatalog ?? []) {
+    rendered = rendered.replaceAll(item.tag, formatSalesCatalogInline(item));
   }
 
   return rendered;
@@ -2080,6 +2096,28 @@ function buildLinkButtonLines(
     "- Nunca escreva 'olha esses aqui', 'segue o link', 'te mandei', 'vou mandar' ou equivalente sem colocar na mesma resposta a tag/URL exata que gera o botao.",
     "- Se nao conseguir escolher um produto exato do catalogo, nao prometa link. Faca uma pergunta curta para decidir qual produto enviar.",
     ...linkButtons.map((link) => `- ${link.tag} (${link.label}): ${buildLeadAwareTrackingUrl(link, input)}`),
+  ];
+}
+
+function buildSalesCatalogLines(items: RuntimeSalesCatalogItem[]) {
+  if (items.length === 0) {
+    return [];
+  }
+
+  return [
+    "",
+    "CATALOGO DE VENDAS DISPONIVEL:",
+    "- Quando o lead pedir um produto, servico, catalogo, foto, video, PDF, preco ou proposta, escolha o item exato abaixo e use a tag correspondente.",
+    "- Nunca invente produto, preco, arquivo ou condicao que nao esteja no catalogo.",
+    "- Se o lead pedir algo generico, recomende no maximo 3 itens do catalogo e inclua a tag de cada um.",
+    "- Se o item tiver arquivos, o sistema tentara enviar as midias no WhatsApp depois da resposta.",
+    "- Se nao houver item adequado, faca uma pergunta curta para identificar melhor a necessidade.",
+    ...items.slice(0, 40).map((item) => {
+      const mediaSummary = item.media.length > 0
+        ? `${item.media.length} arquivo(s): ${item.media.map((media) => media.kind).join(", ")}`
+        : "sem arquivo";
+      return `- ${item.tag} (${item.title})${item.price ? ` | ${item.price} ${item.currency}` : ""}${item.category ? ` | ${item.category}` : ""} | ${mediaSummary}: ${preview(item.description, 420)}`;
+    }),
   ];
 }
 
@@ -2677,13 +2715,15 @@ async function sendAgentResponse(input: {
 }) {
   const { context } = input;
   const latestInbound = findLatestInbound(context.messages);
-  const renderedText = renderLinkButtonTags(input.text, context.linkButtons, { lead: context.lead });
-  const cleanText = normalizeAssistantText(ensureLinkPromiseIsActionable(renderedText, context));
-  const { chunks, shouldSendAudio } = resolveOutboundDelivery(context, latestInbound, cleanText);
+  const renderedLinks = renderLinkButtonTags(input.text, context.linkButtons, { lead: context.lead });
+  const renderedCatalog = renderSalesCatalogTags(renderedLinks, context.salesCatalog);
+  const cleanText = normalizeAssistantText(ensureLinkPromiseIsActionable(renderedCatalog.text, context));
+  const { chunks, shouldSendAudio } = resolveOutboundDelivery(context, latestInbound, cleanText, renderedCatalog.items.length > 0);
   const correctedChunks = shouldSendAudio ? chunks : applyMidMessageCorrection(chunks, context.behavior);
   const replyTargets = await resolveOutboundReplyTargets(context, correctedChunks).catch(() => []);
   const persistedChunks = await loadPersistedOutboundChunks(input.client, context.run.id, shouldSendAudio ? "audio" : "text");
   const outbound: OutboundMessage[] = [];
+  const catalogAttachments = collectSalesCatalogAttachments(renderedCatalog.items);
 
   if (shouldSendAudio) {
     for (let index = 0; index < chunks.length; index++) {
@@ -2819,7 +2859,154 @@ async function sendAgentResponse(input: {
     outbound.push({ ...message, persisted: true });
   }
 
+  if (catalogAttachments.length > 0) {
+    const mediaOutbound = await sendSalesCatalogMediaAttachments({
+      client: input.client,
+      context,
+      token: input.token,
+      phone: input.phone,
+      attachments: catalogAttachments,
+      persistedChunks,
+      startChunkIndex: correctedChunks.length + 1,
+    });
+    outbound.push(...mediaOutbound);
+  }
+
   return outbound;
+}
+
+function renderSalesCatalogTags(text: string, items: RuntimeSalesCatalogItem[]) {
+  let rendered = text;
+  const selected = new Map<string, RuntimeSalesCatalogItem>();
+
+  for (const item of items) {
+    if (!item.tag || !rendered.includes(item.tag)) continue;
+
+    selected.set(item.id, item);
+    rendered = rendered.replaceAll(item.tag, formatSalesCatalogInline(item));
+  }
+
+  return {
+    text: rendered,
+    items: Array.from(selected.values()),
+  };
+}
+
+function collectSalesCatalogAttachments(items: RuntimeSalesCatalogItem[]) {
+  const attachments: Array<{ item: RuntimeSalesCatalogItem; media: SalesCatalogMedia }> = [];
+
+  for (const item of items) {
+    for (const media of item.media) {
+      if (!media.storageUrl) continue;
+
+      attachments.push({ item, media });
+      if (attachments.length >= 6) {
+        return attachments;
+      }
+    }
+  }
+
+  return attachments;
+}
+
+async function sendSalesCatalogMediaAttachments(input: {
+  client: SupabaseClient;
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
+  token: string;
+  phone: string;
+  attachments: Array<{ item: RuntimeSalesCatalogItem; media: SalesCatalogMedia }>;
+  persistedChunks: Set<number>;
+  startChunkIndex: number;
+}) {
+  const outbound: OutboundMessage[] = [];
+  const sentItems = new Map<string, RuntimeSalesCatalogItem>();
+  const chunksTotal = input.startChunkIndex + input.attachments.length - 1;
+
+  for (let index = 0; index < input.attachments.length; index++) {
+    const { item, media } = input.attachments[index];
+    const chunkIndex = input.startChunkIndex + index;
+    const caption = buildSalesCatalogMediaCaption(item, media);
+
+    if (input.persistedChunks.has(chunkIndex)) {
+      outbound.push({
+        text: caption,
+        mode: "text",
+        providerResponse: { skipped: true, reason: "catalog_media_already_persisted", chunkIndex },
+        chunkIndex,
+        chunksTotal,
+        persisted: true,
+      });
+      continue;
+    }
+
+    if (index > 0) {
+      const delayMs = resolveChunkDelayMs(caption, input.context.behavior);
+      await setChatPresence(input.context.credentials, input.token, input.phone, "composing", delayMs + 5000);
+      await sleep(delayMs);
+    }
+
+    const providerResponse = await callUazapi(input.context.credentials, "/send/media", {
+      method: "POST",
+      token: input.token,
+      body: {
+        number: input.phone,
+        type: media.kind,
+        file: media.storageUrl,
+        text: caption,
+        ...(resolveGroupMentions(input.context) ? { mentions: resolveGroupMentions(input.context) } : {}),
+        track_source: "connectyhub",
+        track_id: `agent_catalog_${input.context.run.id}_${chunkIndex}`,
+      },
+    });
+    const message: OutboundMessage = {
+      text: caption,
+      mode: "text",
+      providerResponse,
+      chunkIndex,
+      chunksTotal,
+    };
+
+    await saveOutboundMessage(input.client, input.context, message);
+    input.persistedChunks.add(chunkIndex);
+    sentItems.set(item.id, item);
+    outbound.push({ ...message, persisted: true });
+  }
+
+  if (sentItems.size > 0) {
+    await input.client.from("intelligence_events").insert({
+      scope: "organization",
+      organization_id: input.context.organization.id,
+      source_type: "sales_catalog",
+      source_id: input.context.conversationId,
+      producer_agent_id: input.context.agent.id,
+      event_type: "sales_catalog.item_sent",
+      title: "Produto do catalogo enviado no WhatsApp",
+      summary: Array.from(sentItems.values()).map((item) => item.title).join(", "),
+      confidence: 1,
+      visibility: "organization",
+      tags: ["sales_catalog", "whatsapp", "lead_tracking"],
+      payload: {
+        leadId: input.context.lead?.id ?? null,
+        conversationId: input.context.conversationId,
+        agentRunId: input.context.run.id,
+        productIds: Array.from(sentItems.keys()),
+        productTags: Array.from(sentItems.values()).map((item) => item.tag),
+        mediaCount: outbound.filter((message) => message.persisted).length,
+      },
+    });
+  }
+
+  return outbound;
+}
+
+function buildSalesCatalogMediaCaption(item: RuntimeSalesCatalogItem, media: SalesCatalogMedia) {
+  const parts = [
+    item.title,
+    item.price ? `${item.price} ${item.currency}` : "",
+    media.kind === "document" ? media.fileName : "",
+  ];
+
+  return parts.filter(Boolean).join(" | ");
 }
 
 async function resolveOutboundReplyTargets(
@@ -3337,13 +3524,14 @@ function resolveOutboundDelivery(
   context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
   latestInbound: ConversationMessageRow | null,
   text: string,
+  forceText = false,
 ) {
   const baseChunks = context.behavior.splitMessages ? splitMessage(text) : [text];
-  const audioFromBase = shouldSendAudioForChunks(context, latestInbound, baseChunks);
+  const audioFromBase = !forceText && shouldSendAudioForChunks(context, latestInbound, baseChunks);
   const chunks = audioFromBase && !context.behavior.splitMessages && text.length > outboundChunkMaxLength
     ? splitMessage(text)
     : baseChunks;
-  const shouldSendAudio = shouldSendAudioForChunks(context, latestInbound, chunks);
+  const shouldSendAudio = !forceText && shouldSendAudioForChunks(context, latestInbound, chunks);
 
   return { chunks, shouldSendAudio };
 }

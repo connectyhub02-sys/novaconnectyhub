@@ -29,6 +29,7 @@ import {
   MessageCircle,
   MessageSquare,
   Mic,
+  Package,
   Pause,
   PenLine,
   PenOff,
@@ -82,6 +83,7 @@ import {
   type LeadQualificationQuestion,
 } from "@/lib/leads/qualification";
 import type { CloneHumanizationMetric } from "@/lib/whatsapp/clone-humanization";
+import type { ClientSalesCatalogItem } from "@/lib/sales-catalog/shared";
 import { cn } from "@/lib/utils";
 
 type WhatsappStatus = "draft" | "qr_pending" | "connected" | "disconnected" | "blocked" | "error" | "archived";
@@ -240,6 +242,7 @@ type WhatsappState = {
     files: KnowledgeFile[];
   };
   linkButtons: TrackedLinkButton[];
+  salesCatalog: ClientSalesCatalogItem[];
   cloneTest?: CloneRealTestSummary;
   runtimeAlerts: RuntimeAlert[];
   capability: {
@@ -1741,6 +1744,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
                 <PromptToolsPanel
                   generatingPrompt={generatingPrompt}
                   linkButtons={state.linkButtons}
+                  salesCatalog={state.salesCatalog}
                   linkButtonLabel={linkButtonLabel}
                   linkButtonUrl={linkButtonUrl}
                   linkButtonsEnabled={behaviorDraft.interactiveMessages}
@@ -3407,6 +3411,7 @@ function CloneMemoryPanel({
 function PromptToolsPanel({
   generatingPrompt,
   linkButtons,
+  salesCatalog,
   linkButtonLabel,
   linkButtonUrl,
   linkButtonsEnabled,
@@ -3429,6 +3434,7 @@ function PromptToolsPanel({
 }: {
   generatingPrompt: boolean;
   linkButtons: TrackedLinkButton[];
+  salesCatalog: ClientSalesCatalogItem[];
   linkButtonLabel: string;
   linkButtonUrl: string;
   linkButtonsEnabled: boolean;
@@ -3472,6 +3478,49 @@ function PromptToolsPanel({
               <span className="text-slate-400">{tag.label}</span>
             </button>
           ))}
+        </div>
+        <div className="mt-4 rounded-lg border p-3" style={{ background: "var(--ch-surface)", borderColor: "var(--ch-border)" }}>
+          <div className="flex items-center justify-between gap-2">
+            <p className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
+              Catalogo de Vendas
+              <InfoHint text="Tags criadas em Catalogo de Vendas. Insira no prompt para orientar o agente a enviar o produto certo." />
+            </p>
+            <span className="rounded-full border px-2 py-1 font-mono text-[9px] uppercase tracking-widest text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
+              {salesCatalog.length.toLocaleString("pt-BR")}
+            </span>
+          </div>
+          {salesCatalog.length > 0 ? (
+            <div className="mt-3 grid max-h-[220px] gap-2 overflow-y-auto pr-1">
+              {salesCatalog.slice(0, 12).map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className="grid gap-1 rounded-lg border p-2 text-left transition hover:bg-cyan-400/10"
+                  style={{ borderColor: "var(--ch-border)" }}
+                  title={item.tag}
+                  onClick={() => onInsertTag(item.tag)}
+                >
+                  <span className="flex min-w-0 items-center justify-between gap-2">
+                    <span className="flex min-w-0 items-center gap-1.5 text-[12px] font-semibold text-slate-100">
+                      <Package className="h-3.5 w-3.5 shrink-0 text-cyan-300" />
+                      <span className="truncate">{item.title}</span>
+                    </span>
+                    <span className="shrink-0 rounded-full bg-cyan-400/10 px-2 py-1 font-mono text-[8px] uppercase tracking-widest text-cyan-200">
+                      {item.media.length} midia
+                    </span>
+                  </span>
+                  <span className="truncate font-mono text-[10px] text-cyan-300">{item.tag}</span>
+                  <span className="truncate text-[10px] text-slate-500">
+                    {[item.category, item.price].filter(Boolean).join(" / ") || "produto cadastrado"}
+                  </span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="mt-3 rounded-lg border border-dashed px-3 py-4 text-center text-[12px] leading-5 text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
+              Nenhum item cadastrado em Catalogo de Vendas.
+            </div>
+          )}
         </div>
         <div className="mt-4 grid gap-2 md:grid-cols-[minmax(0,1fr)_auto]">
           <label className="block">

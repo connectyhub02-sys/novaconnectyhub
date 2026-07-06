@@ -14,6 +14,8 @@ import type { CurrentOrganization } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
 import { buildTrackedLinkUrl } from "@/lib/tracking/tracked-links";
 import { resolveUazapiWhatsappStatus } from "@/lib/uazapi/status";
+import { listOrganizationSalesCatalog } from "@/lib/client-os/sales-catalog";
+import type { ClientSalesCatalogItem } from "@/lib/sales-catalog/shared";
 import {
   defaultWhatsappAgentPrompt,
   defaultWhatsappBehaviorConfig,
@@ -223,6 +225,7 @@ export type ClientWhatsappState = {
     files: ClientKnowledgeFile[];
   };
   linkButtons: ClientTrackedLinkButton[];
+  salesCatalog: ClientSalesCatalogItem[];
   cloneTest: ClientCloneRealTestSummary;
   runtimeAlerts: ClientWhatsappRuntimeAlert[];
   capability: {
@@ -255,11 +258,12 @@ export async function getClientWhatsappState(input: {
 }): Promise<ClientWhatsappState> {
   const client = input.client ?? createServiceClient();
   const agent = await getWorkspaceWhatsappAgent(client, input.organization.id, input.agentId);
-  const [rawInstance, globalAgent, knowledgeFiles, linkButtons, cloneTest] = await Promise.all([
+  const [rawInstance, globalAgent, knowledgeFiles, linkButtons, salesCatalog, cloneTest] = await Promise.all([
     getWorkspaceInstance(client, input.organization.id, agent),
     getOrCreateWorkspaceGlobalAgent(client, input.organization, input.userId),
     listWorkspaceKnowledge(client, input.organization.id),
     listWorkspaceLinkButtons(client, input.organization.id),
+    listOrganizationSalesCatalog(client, input.organization.id),
     agent
       ? listOrganizationCloneRealTests(client, input.organization.id, agent.id)
       : Promise.resolve(emptyCloneRealTestSummary()),
@@ -279,7 +283,7 @@ export async function getClientWhatsappState(input: {
     }),
   ]);
 
-  return buildState(instance, agent, globalAgent, behavior, audio, knowledgeFiles, linkButtons, cloneTest, runtimeAlerts);
+  return buildState(instance, agent, globalAgent, behavior, audio, knowledgeFiles, linkButtons, salesCatalog, cloneTest, runtimeAlerts);
 }
 
 export async function listWhatsappRuntimeAlerts(
@@ -2187,6 +2191,7 @@ function buildState(
   audio: WhatsappAudioVoiceState,
   knowledgeFiles: ClientKnowledgeFile[],
   linkButtons: ClientTrackedLinkButton[],
+  salesCatalog: ClientSalesCatalogItem[],
   cloneTest: ClientCloneRealTestSummary = emptyCloneRealTestSummary(),
   runtimeAlerts: ClientWhatsappRuntimeAlert[] = [],
 ): ClientWhatsappState {
@@ -2243,6 +2248,7 @@ function buildState(
       files: knowledgeFiles,
     },
     linkButtons,
+    salesCatalog,
     cloneTest,
     runtimeAlerts,
     capability: {

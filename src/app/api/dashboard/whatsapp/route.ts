@@ -348,6 +348,7 @@ function buildUnavailableState(): DashboardWhatsappState {
       files: [],
     },
     linkButtons: [],
+    salesCatalog: [],
     cloneTest: {
       total: 0,
       averageScore: null,
