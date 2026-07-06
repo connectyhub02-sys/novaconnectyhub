@@ -251,6 +251,56 @@ export async function createMercadoPagoPixPayment(input: {
   return { payment: body, idempotencyKey };
 }
 
+export async function createMercadoPagoCardPayment(input: {
+  accessToken: string;
+  amount: number;
+  description: string;
+  externalReference: string;
+  payerEmail: string;
+  token: string;
+  paymentMethodId: string;
+  installments: number;
+  issuerId?: string | number | null;
+  payerIdentification?: {
+    type: string | null;
+    number: string | null;
+  } | null;
+  notificationUrl?: string | null;
+  idempotencyKey?: string | null;
+}) {
+  const idempotencyKey = input.idempotencyKey ?? randomUUID();
+  const response = await fetch(`${mercadoPagoApiBaseUrl}/v1/payments`, {
+    method: "POST",
+    headers: {
+      accept: "application/json",
+      "content-type": "application/json",
+      Authorization: `Bearer ${input.accessToken}`,
+      "X-Idempotency-Key": idempotencyKey,
+    },
+    body: JSON.stringify({
+      transaction_amount: input.amount,
+      token: input.token,
+      description: input.description,
+      installments: input.installments,
+      payment_method_id: input.paymentMethodId,
+      issuer_id: input.issuerId ?? undefined,
+      external_reference: input.externalReference,
+      notification_url: input.notificationUrl ?? undefined,
+      payer: {
+        email: input.payerEmail,
+        identification: normalizePayerIdentification(input.payerIdentification),
+      },
+    }),
+  });
+  const body = await response.json().catch(() => null) as MercadoPagoPaymentResponse & { message?: string; error?: string } | null;
+
+  if (!response.ok || !body?.id) {
+    throw new Error(body?.message ?? body?.error ?? "Nao foi possivel processar cartao no Mercado Pago.");
+  }
+
+  return { payment: body, idempotencyKey };
+}
+
 export async function getMercadoPagoPayment(input: {
   accessToken: string;
   paymentId: string;
@@ -383,6 +433,20 @@ function buildPixPayer(input: {
       ? { zip_code: input.payerZipCode.replace(/\D/g, "") }
       : undefined,
   };
+}
+
+function normalizePayerIdentification(value: {
+  type: string | null;
+  number: string | null;
+} | null | undefined) {
+  const type = value?.type?.trim().toUpperCase();
+  const number = value?.number?.replace(/\D/g, "");
+
+  if (!type || !number) {
+    return undefined;
+  }
+
+  return { type, number };
 }
 
 export function serializeMercadoPagoOAuthTokens(tokens: MercadoPagoOAuthTokenResponse): JsonRecord {

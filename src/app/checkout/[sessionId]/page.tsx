@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import type { ReactNode } from "react";
+import { MercadoPagoCardBrick } from "@/components/checkout/mercado-pago-card-brick";
 import { createServiceClient } from "@/lib/supabase/service";
 import { formatSalesCatalogPaymentSessionStatus } from "@/lib/sales-catalog/shared";
 import { cn } from "@/lib/utils";
@@ -18,6 +19,7 @@ type CheckoutSessionRow = {
   id: string;
   organization_id: string;
   order_id: string;
+  integration_id: string | null;
   provider: string | null;
   method: string | null;
   status: string | null;
@@ -63,6 +65,12 @@ type OrganizationRow = {
   slug: string | null;
 };
 
+type CheckoutIntegrationRow = {
+  id: string;
+  public_key: string | null;
+  status: string | null;
+};
+
 export default async function CheckoutPage({
   params,
 }: {
@@ -70,7 +78,7 @@ export default async function CheckoutPage({
 }) {
   const { sessionId } = await params;
   const client = createServiceClient();
-  const { session, order, items, organization } = await loadCheckoutData(client, sessionId);
+  const { session, order, items, organization, integration } = await loadCheckoutData(client, sessionId);
 
   if (!session || !order || !organization) {
     return (
@@ -92,9 +100,11 @@ export default async function CheckoutPage({
   const paid = status === "approved";
   const failed = status === "rejected" || status === "cancelled" || status === "expired" || status === "error";
   const amount = formatCurrency(session.amount ?? order.total ?? order.subtotal);
+  const amountNumber = normalizeCurrency(session.amount ?? order.total ?? order.subtotal);
   const subtotal = formatCurrency(order.subtotal);
   const shipping = formatCurrency(order.shipping_total);
   const updatedAt = formatDateTime(session.updated_at);
+  const canUseCard = !paid && !failed && amountNumber !== null && integration?.status === "connected" && Boolean(integration.public_key);
 
   return (
     <CheckoutShell>
@@ -121,7 +131,7 @@ export default async function CheckoutPage({
             <div className="mt-8 grid gap-3 sm:grid-cols-3">
               <CheckoutMetric label="Total" value={amount} />
               <CheckoutMetric label="Pedido" value={`#${order.id.slice(0, 8).toUpperCase()}`} />
-              <CheckoutMetric label="Pagamento" value={session.method === "pix" ? "Pix" : "Online"} />
+              <CheckoutMetric label="Pagamento" value={session.method === "card" ? "Cartao" : "Pix"} />
             </div>
 
             <div className="mt-8">
@@ -156,7 +166,7 @@ export default async function CheckoutPage({
           <div className="flex items-start justify-between gap-4">
             <div>
               <span className="text-xs font-semibold uppercase tracking-[0.22em] text-cyan-200">Mercado Pago</span>
-              <h2 className="mt-2 text-2xl font-semibold text-white">Pague com Pix</h2>
+              <h2 className="mt-2 text-2xl font-semibold text-white">{session.method === "card" ? "Pagamento do pedido" : "Pague com Pix"}</h2>
             </div>
             <span className="rounded-full border border-slate-600 px-3 py-1 text-xs font-semibold text-slate-200">Seguro</span>
           </div>
@@ -172,6 +182,12 @@ export default async function CheckoutPage({
               tone="error"
               title="Pagamento nao concluido"
               body={session.failure_reason ?? "Solicite um novo link no WhatsApp para tentar novamente."}
+            />
+          ) : session.method === "card" ? (
+            <CheckoutState
+              tone="info"
+              title="Pagamento com cartao registrado"
+              body="A confirmacao pode levar alguns instantes. Volte ao WhatsApp para acompanhar o pedido."
             />
           ) : (
             <>
@@ -220,6 +236,15 @@ export default async function CheckoutPage({
               ) : null}
             </>
           )}
+
+          {canUseCard ? (
+            <MercadoPagoCardBrick
+              publicKey={integration!.public_key!}
+              sessionId={session.id}
+              amount={amountNumber}
+              payerEmail={session.payer_email}
+            />
+          ) : null}
 
           <p className="mt-5 text-xs leading-5 text-slate-400">
             A confirmacao volta automaticamente para a loja no ConnectyHub. Nao envie comprovantes fora da conversa oficial.
@@ -284,7 +309,7 @@ function CheckoutState({
 async function loadCheckoutData(client: ReturnType<typeof createServiceClient>, sessionId: string) {
   const { data: session } = await client
     .from("sales_catalog_payment_sessions")
-    .select("id, organization_id, order_id, provider, method, status, amount, currency, payer_email, pix_qr_code, pix_qr_code_base64, pix_ticket_url, provider_status, failure_reason, paid_at, updated_at")
+    .select("id, organization_id, order_id, integration_id, provider, method, status, amount, currency, payer_email, pix_qr_code, pix_qr_code_base64, pix_ticket_url, provider_status, failure_reason, paid_at, updated_at")
     .eq("id", sessionId)
     .maybeSingle<CheckoutSessionRow>();
 
@@ -294,10 +319,11 @@ async function loadCheckoutData(client: ReturnType<typeof createServiceClient>, 
       order: null,
       items: [] as CheckoutOrderItemRow[],
       organization: null,
+      integration: null,
     };
   }
 
-  const [orderResult, itemsResult, organizationResult] = await Promise.all([
+  const [orderResult, itemsResult, organizationResult, integrationResult] = await Promise.all([
     client
       .from("sales_catalog_orders")
       .select("id, customer_name, customer_phone, subtotal, shipping_total, total, shipping_method, status, payment_status, metadata")
@@ -315,6 +341,14 @@ async function loadCheckoutData(client: ReturnType<typeof createServiceClient>, 
       .select("id, name, slug")
       .eq("id", session.organization_id)
       .maybeSingle<OrganizationRow>(),
+    session.integration_id
+      ? client
+          .from("sales_catalog_payment_integrations")
+          .select("id, public_key, status")
+          .eq("id", session.integration_id)
+          .eq("organization_id", session.organization_id)
+          .maybeSingle<CheckoutIntegrationRow>()
+      : Promise.resolve({ data: null }),
   ]);
 
   return {
@@ -322,6 +356,7 @@ async function loadCheckoutData(client: ReturnType<typeof createServiceClient>, 
     order: orderResult.data ?? null,
     items: (itemsResult.data ?? []) as CheckoutOrderItemRow[],
     organization: organizationResult.data ?? null,
+    integration: integrationResult.data ?? null,
   };
 }
 
