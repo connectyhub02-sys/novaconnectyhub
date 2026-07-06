@@ -566,7 +566,8 @@ export function SalesCatalogConsole({
       return;
     }
     setConnectingPayment(true);
-    setNotice({ tone: "warning", message: "Abrindo a autorizacao oficial do Mercado Pago..." });
+    setNotice({ tone: "warning", message: "Abrindo Mercado Pago em uma nova aba para login e autorizacao..." });
+    window.setTimeout(() => setConnectingPayment(false), 1500);
   }
 
   async function saveMercadoPagoWebhookSecret() {
@@ -2204,40 +2205,26 @@ export function SalesCatalogConsole({
               <div className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <p className="text-[13px] font-semibold text-slate-100">Conexao guiada pelo Mercado Pago</p>
+                    <p className="text-[13px] font-semibold text-slate-100">Conectar conta Mercado Pago</p>
                     <p className="mt-1 max-w-xl text-[11px] leading-5 text-slate-500">
-                      O usuario clica em conectar, entra na pagina oficial do Mercado Pago, autoriza a conta dele e volta para o ConnectyHub com Pix e cartao liberados no checkout.
+                      O usuario clica em conectar, uma nova aba oficial do Mercado Pago abre, ele faz login se precisar, autoriza a conta e volta para o ConnectyHub.
                     </p>
                   </div>
                   <NeonBadge tone={paymentConnected ? "green" : "cyan"}>
-                    {paymentConnected ? "pronto para vender" : "oauth oficial"}
+                    {paymentConnected ? "pronto para vender" : "nova aba oficial"}
                   </NeonBadge>
                 </div>
 
                 <div className="mt-3 grid gap-2 sm:grid-cols-4">
                   <PaymentGuideStep done={Boolean(selectedCompanyId)} index="1" title="Empresa" body="Escolha o catalogo" />
-                  <PaymentGuideStep done={paymentConnected} index="2" title="Autorizar" body="Login Mercado Pago" />
+                  <PaymentGuideStep done={paymentConnected} index="2" title="Autorizar" body="Aba Mercado Pago" />
                   <PaymentGuideStep done={paymentConnected} index="3" title="Retorno" body="Conta conectada" />
                   <PaymentGuideStep done={paymentWebhookReady} index="4" title="Webhook" body="Confirmacao automatica" />
                 </div>
 
-                <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_180px]">
-                  <input
-                    readOnly
-                    value={paymentCallbackUrl}
-                    className="h-10 rounded-lg border bg-transparent px-3 text-[11px] outline-none"
-                    style={{ borderColor: "var(--ch-border)" }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => navigator.clipboard.writeText(paymentCallbackUrl)}
-                    className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10"
-                    style={{ borderColor: "var(--ch-border)" }}
-                  >
-                    <Copy className="h-3.5 w-3.5" />
-                    Copiar callback
-                  </button>
-                </div>
+                <p className="mt-3 rounded-lg border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-[11px] leading-5 text-cyan-100">
+                  Se o usuario ja estiver logado no Mercado Pago neste navegador, ele so confirma a autorizacao. Se nao estiver, o Mercado Pago pede login na propria pagina oficial.
+                </p>
               </div>
 
               <label className="block">
@@ -2269,13 +2256,15 @@ export function SalesCatalogConsole({
 
                 {selectedPaymentIntegration?.lastError ? (
                   <p className="mt-3 rounded-lg border border-rose-400/25 bg-rose-400/10 px-3 py-2 text-[11px] text-rose-100">
-                    {selectedPaymentIntegration.lastError}
+                    {formatMercadoPagoUserFacingError(selectedPaymentIntegration.lastError)}
                   </p>
                 ) : null}
 
                 <div className="mt-3 grid gap-2 sm:grid-cols-2">
                   <a
                     href={mercadoPagoConnectUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
                     aria-disabled={!selectedCompanyId || connectingPayment}
                     onClick={handleMercadoPagoConnectClick}
                     className={cn(
@@ -2302,8 +2291,32 @@ export function SalesCatalogConsole({
                 </p>
               </div>
 
-              <div className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
-                <div className="mb-3 flex items-center gap-2">
+              <details className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
+                  <span className="inline-flex items-center gap-2">
+                    <QrCode className="h-4 w-4 text-cyan-300" />
+                    <span className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Configuracao avancada</span>
+                  </span>
+                  <span className="text-[11px] text-slate-500">Callback e webhook</span>
+                </summary>
+                <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_180px]">
+                  <input
+                    readOnly
+                    value={paymentCallbackUrl}
+                    className="h-10 rounded-lg border bg-transparent px-3 text-[11px] outline-none"
+                    style={{ borderColor: "var(--ch-border)" }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => navigator.clipboard.writeText(paymentCallbackUrl)}
+                    className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10"
+                    style={{ borderColor: "var(--ch-border)" }}
+                  >
+                    <Copy className="h-3.5 w-3.5" />
+                    Copiar callback
+                  </button>
+                </div>
+                <div className="mb-3 mt-3 flex items-center gap-2">
                   <QrCode className="h-4 w-4 text-cyan-300" />
                   <FieldLabel>Webhook</FieldLabel>
                 </div>
@@ -2343,7 +2356,7 @@ export function SalesCatalogConsole({
                     Salvar
                   </button>
                 </div>
-              </div>
+              </details>
             </div>
           </Panel>
 
@@ -3726,7 +3739,7 @@ function StatTile({ icon: Icon, label, value }: { icon: typeof PackagePlus; labe
 
 function getMercadoPagoConnectionErrorMessage(reason: string | null) {
   if (reason === "config") {
-    return "Mercado Pago ainda nao esta configurado no ambiente. Configure MERCADO_PAGO_CLIENT_ID, MERCADO_PAGO_CLIENT_SECRET e a Redirect URL do app.";
+    return "A conexao automatica com Mercado Pago ainda esta sendo ativada pela ConnectyHub. Quando estiver pronta, este botao abrira a tela oficial de autorizacao.";
   }
 
   if (reason === "missing_company") {
@@ -3738,10 +3751,18 @@ function getMercadoPagoConnectionErrorMessage(reason: string | null) {
   }
 
   if (reason === "token_exchange") {
-    return "Mercado Pago retornou a autorizacao, mas nao conseguimos salvar as credenciais. Confira Client Secret e Redirect URL.";
+    return "Mercado Pago retornou a autorizacao, mas nao conseguimos concluir a conexao. Tente novamente ou chame o suporte.";
   }
 
-  return "Nao foi possivel abrir a conexao com Mercado Pago. Confira as credenciais do app e tente novamente.";
+  return "Nao foi possivel abrir a conexao com Mercado Pago agora. Tente novamente ou chame o suporte.";
+}
+
+function formatMercadoPagoUserFacingError(message: string) {
+  if (message.includes("MERCADO_PAGO_CLIENT_ID") || message.includes("MERCADO_PAGO_CLIENT_SECRET")) {
+    return "A conexao automatica com Mercado Pago ainda esta sendo ativada pela ConnectyHub.";
+  }
+
+  return message;
 }
 
 function PaymentGuideStep({
