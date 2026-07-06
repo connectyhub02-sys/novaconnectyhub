@@ -4,19 +4,25 @@ import { useMemo, useState, type ChangeEvent } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import {
+  BadgePercent,
   CheckCircle2,
+  ClipboardList,
   CloudDownload,
   Copy,
+  CreditCard,
   Eye,
   EyeOff,
   FileText,
   ImageIcon,
   Loader2,
+  MessageSquareText,
   PackagePlus,
+  PencilLine,
   Plus,
   RefreshCw,
   Save,
   Settings2,
+  ShieldCheck,
   SlidersHorizontal,
   Tags,
   Trash2,
@@ -29,22 +35,40 @@ import { NeonBadge, PageHeader, Panel } from "./panel-primitives";
 import type { ClientCompany } from "@/lib/client-os/companies";
 import {
   brazilianStates,
+  createDefaultSalesCatalogCommerceSettings,
   defaultSalesCatalogShippingRules,
+  formatSalesCatalogFulfillmentStatus,
+  formatSalesCatalogFulfillmentMode,
+  formatSalesCatalogOrderStatus,
+  formatSalesCatalogPaymentStatus,
+  formatSalesCatalogStockStatus,
   formatSalesCatalogWeight,
+  salesCatalogLeadDataFields,
   salesCatalogBusinessTemplates,
   type ClientSalesCatalogItem,
+  type ClientSalesCatalogOrder,
   type ClientSalesCatalogSettings,
   type ClientSalesCatalogShippingSettings,
   type SalesCatalogAttribute,
   type SalesCatalogBusinessType,
+  type SalesCatalogFulfillmentStatus,
   type SalesCatalogItemAttribute,
   type SalesCatalogItemStatus,
+  type SalesCatalogLeadDataField,
   type SalesCatalogMedia,
+  type SalesCatalogFulfillmentMode,
+  type SalesCatalogOrderStatus,
+  type SalesCatalogOrderPolicy,
+  type SalesCatalogPaymentMethod,
+  type SalesCatalogPaymentStatus,
+  type SalesCatalogReservationPolicy,
   type SalesCatalogShippingQuote,
   type SalesCatalogShippingProfile,
   type SalesCatalogShippingRule,
   type SalesCatalogShippingService,
   type SalesCatalogShippingWeightTier,
+  type SalesCatalogStockStatus,
+  type SalesCatalogWhatsAppMessageTemplates,
 } from "@/lib/sales-catalog/shared";
 import { cn } from "@/lib/utils";
 
@@ -56,12 +80,13 @@ type Notice = {
 type SalesCatalogConsoleProps = {
   initialCompanies: ClientCompany[];
   initialItems: ClientSalesCatalogItem[];
+  initialOrders: ClientSalesCatalogOrder[];
   initialSettings: ClientSalesCatalogSettings[];
   initialShippingSettings: ClientSalesCatalogShippingSettings[];
   initialCompanyId: string | null;
 };
 
-type CatalogTab = "setup" | "shipping" | "products" | "whatsapp";
+type CatalogTab = "setup" | "shipping" | "products" | "orders" | "whatsapp";
 
 type SettingsDraft = {
   businessType: SalesCatalogBusinessType;
@@ -69,6 +94,10 @@ type SettingsDraft = {
   attributes: SalesCatalogAttribute[];
   trackInventory: boolean;
   variationMedia: boolean;
+  paymentMethods: SalesCatalogPaymentMethod[];
+  orderPolicy: SalesCatalogOrderPolicy;
+  leadDataPolicy: ClientSalesCatalogSettings["leadDataPolicy"];
+  messageTemplates: SalesCatalogWhatsAppMessageTemplates;
 };
 
 type ShippingDraft = {
@@ -99,9 +128,37 @@ const statusOptions: Array<{ value: SalesCatalogItemStatus; label: string }> = [
   { value: "draft", label: "Rascunho" },
 ];
 
+const orderStatusOptions: SalesCatalogOrderStatus[] = [
+  "draft",
+  "pending_payment",
+  "paid",
+  "in_preparation",
+  "shipped",
+  "delivered",
+  "cancelled",
+  "needs_human",
+];
+
+const paymentStatusOptions: SalesCatalogPaymentStatus[] = [
+  "pending",
+  "proof_sent",
+  "confirmed",
+  "failed",
+  "refunded",
+];
+
+const fulfillmentStatusOptions: SalesCatalogFulfillmentStatus[] = [
+  "pending",
+  "scheduled",
+  "in_progress",
+  "fulfilled",
+  "cancelled",
+];
+
 export function SalesCatalogConsole({
   initialCompanies,
   initialItems,
+  initialOrders,
   initialSettings,
   initialShippingSettings,
   initialCompanyId,
@@ -111,6 +168,7 @@ export function SalesCatalogConsole({
   const initialSelectedShippingSettings = initialShippingSettings.find((settings) => settings.companyId === initialSelectedCompanyId) ?? null;
   const [companies] = useState(initialCompanies);
   const [items, setItems] = useState(initialItems);
+  const [orders, setOrders] = useState(initialOrders);
   const [settings, setSettings] = useState(initialSettings);
   const [shippingSettings, setShippingSettings] = useState(initialShippingSettings);
   const [selectedCompanyId, setSelectedCompanyId] = useState(initialSelectedCompanyId);
@@ -128,8 +186,25 @@ export function SalesCatalogConsole({
   const [category, setCategory] = useState("");
   const [price, setPrice] = useState("");
   const [description, setDescription] = useState("");
+  const [salePrice, setSalePrice] = useState("");
+  const [saleStartsAt, setSaleStartsAt] = useState("");
+  const [saleEndsAt, setSaleEndsAt] = useState("");
+  const [couponCode, setCouponCode] = useState("");
+  const [couponDescription, setCouponDescription] = useState("");
+  const [callToAction, setCallToAction] = useState("");
+  const [offerNotes, setOfferNotes] = useState("");
   const [status, setStatus] = useState<SalesCatalogItemStatus>("active");
   const [selectedAttributes, setSelectedAttributes] = useState<Record<string, string[]>>({});
+  const [inventoryStatus, setInventoryStatus] = useState<SalesCatalogStockStatus>("in_stock");
+  const [stockQuantity, setStockQuantity] = useState("");
+  const [lowStockThreshold, setLowStockThreshold] = useState("");
+  const [allowBackorder, setAllowBackorder] = useState(false);
+  const [inventoryNotes, setInventoryNotes] = useState("");
+  const [fulfillmentMode, setFulfillmentMode] = useState<SalesCatalogFulfillmentMode>("physical");
+  const [schedulingRequired, setSchedulingRequired] = useState(false);
+  const [serviceDuration, setServiceDuration] = useState("");
+  const [deliveryInstructions, setDeliveryInstructions] = useState("");
+  const [accessInstructions, setAccessInstructions] = useState("");
   const [weightGrams, setWeightGrams] = useState("");
   const [lengthCm, setLengthCm] = useState("");
   const [widthCm, setWidthCm] = useState("");
@@ -137,8 +212,28 @@ export function SalesCatalogConsole({
   const [shippingProfile, setShippingProfile] = useState<SalesCatalogShippingProfile>("default");
   const [shippingNotes, setShippingNotes] = useState("");
   const [files, setFiles] = useState<File[]>([]);
+  const [editingMedia, setEditingMedia] = useState<SalesCatalogMedia[]>([]);
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [catalogJid, setCatalogJid] = useState("");
+  const [orderItemId, setOrderItemId] = useState("");
+  const [orderQuantity, setOrderQuantity] = useState("1");
+  const [orderCustomerName, setOrderCustomerName] = useState("");
+  const [orderCustomerPhone, setOrderCustomerPhone] = useState("");
+  const [orderCustomerDocument, setOrderCustomerDocument] = useState("");
+  const [orderCustomerEmail, setOrderCustomerEmail] = useState("");
+  const [orderDestinationCep, setOrderDestinationCep] = useState("");
+  const [orderDestinationAddress, setOrderDestinationAddress] = useState("");
+  const [orderShippingTotal, setOrderShippingTotal] = useState("");
+  const [orderTotal, setOrderTotal] = useState("");
+  const [orderPaymentMethod, setOrderPaymentMethod] = useState("");
+  const [orderShippingMethod, setOrderShippingMethod] = useState("");
+  const [orderInternalNotes, setOrderInternalNotes] = useState("");
+  const [orderStatus, setOrderStatus] = useState<SalesCatalogOrderStatus>("pending_payment");
+  const [orderPaymentStatus, setOrderPaymentStatus] = useState<SalesCatalogPaymentStatus>("pending");
+  const [orderFulfillmentStatus, setOrderFulfillmentStatus] = useState<SalesCatalogFulfillmentStatus>("pending");
   const [creating, setCreating] = useState(false);
+  const [creatingOrder, setCreatingOrder] = useState(false);
+  const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -149,14 +244,19 @@ export function SalesCatalogConsole({
     () => items.filter((item) => !selectedCompanyId || item.companyId === selectedCompanyId),
     [items, selectedCompanyId],
   );
+  const visibleOrders = useMemo(
+    () => orders.filter((order) => !selectedCompanyId || order.companyId === selectedCompanyId),
+    [orders, selectedCompanyId],
+  );
   const stats = useMemo(() => {
     const active = visibleItems.filter((item) => item.status === "active").length;
     const ready = visibleItems.filter((item) => item.readiness === "ready").length;
     const media = visibleItems.reduce((total, item) => total + item.media.length, 0);
     const whatsapp = visibleItems.filter((item) => item.source === "whatsapp_catalog").length;
+    const orderCount = visibleOrders.length;
 
-    return { active, ready, media, whatsapp };
-  }, [visibleItems]);
+    return { active, ready, media, whatsapp, orderCount };
+  }, [visibleItems, visibleOrders]);
   const selectedCompany = companies.find((company) => company.id === selectedCompanyId) ?? null;
   const selectedSettings = useMemo(
     () => settings.find((entry) => entry.companyId === selectedCompanyId) ?? null,
@@ -178,9 +278,11 @@ export function SalesCatalogConsole({
   ));
   const attributePresetOptions = buildAttributePresetOptions(settingsDraft.attributes);
   const categoryOptions = selectedSettings?.configured ? selectedSettings.categories : parseLines(settingsDraft.categoriesText);
+  const inventoryEnabled = selectedSettings?.trackInventory ?? settingsDraft.trackInventory;
   const selectedShippingRule = shippingDraft.rules.find((rule) => rule.uf === selectedShippingUf) ?? shippingDraft.rules[0] ?? null;
   const canCreate = Boolean(selectedCompanyId && title.trim() && description.trim() && !creating);
   const canCalculateQuote = Boolean(selectedCompanyId && quoteItemId && cleanCep(quoteCep) && !calculatingQuote);
+  const canCreateOrder = Boolean(selectedCompanyId && orderItemId && (orderCustomerName.trim() || orderCustomerPhone.trim()) && !creatingOrder);
 
   function changeCompany(companyId: string) {
     const nextSettings = settings.find((entry) => entry.companyId === companyId) ?? null;
@@ -190,9 +292,12 @@ export function SalesCatalogConsole({
     setShippingDraft(buildShippingDraft(nextShippingSettings));
     setSelectedShippingUf(nextShippingSettings?.rules.find((rule) => rule.active)?.uf ?? "SP");
     setSelectedAttributes({});
+    setEditingItemId(null);
     setQuoteItemId("");
     setQuoteCep("");
     setQuoteResult(null);
+    setOrderItemId("");
+    setOrderTotal("");
     if (!nextSettings?.configured) {
       setActiveTab("setup");
     }
@@ -200,13 +305,17 @@ export function SalesCatalogConsole({
 
   function applyBusinessTemplate(value: SalesCatalogBusinessType) {
     const template = salesCatalogBusinessTemplates.find((item) => item.value === value) ?? salesCatalogBusinessTemplates[salesCatalogBusinessTemplates.length - 1];
-    setSettingsDraft({
+    setSettingsDraft((current) => ({
       businessType: template.value,
       categoriesText: template.categories.join("\n"),
       attributes: cloneAttributes(template.attributes),
       trackInventory: template.trackInventory,
       variationMedia: template.variationMedia,
-    });
+      paymentMethods: current.paymentMethods,
+      orderPolicy: current.orderPolicy,
+      leadDataPolicy: current.leadDataPolicy,
+      messageTemplates: current.messageTemplates,
+    }));
   }
 
   function updateAttribute(attributeId: string, patch: Partial<SalesCatalogAttribute>) {
@@ -281,6 +390,54 @@ export function SalesCatalogConsole({
     }));
   }
 
+  function updatePaymentMethod(methodId: SalesCatalogPaymentMethod["id"], patch: Partial<SalesCatalogPaymentMethod>) {
+    setSettingsDraft((current) => ({
+      ...current,
+      paymentMethods: current.paymentMethods.map((method) => (
+        method.id === methodId ? { ...method, ...patch } : method
+      )),
+    }));
+  }
+
+  function updateOrderPolicy(patch: Partial<SalesCatalogOrderPolicy>) {
+    setSettingsDraft((current) => ({
+      ...current,
+      orderPolicy: { ...current.orderPolicy, ...patch },
+    }));
+  }
+
+  function toggleLeadDataField(field: SalesCatalogLeadDataField) {
+    setSettingsDraft((current) => {
+      const exists = current.leadDataPolicy.requiredFields.includes(field);
+      return {
+        ...current,
+        leadDataPolicy: {
+          ...current.leadDataPolicy,
+          requiredFields: exists
+            ? current.leadDataPolicy.requiredFields.filter((item) => item !== field)
+            : [...current.leadDataPolicy.requiredFields, field],
+        },
+      };
+    });
+  }
+
+  function updateLeadDataPolicy(patch: Partial<ClientSalesCatalogSettings["leadDataPolicy"]>) {
+    setSettingsDraft((current) => ({
+      ...current,
+      leadDataPolicy: { ...current.leadDataPolicy, ...patch },
+    }));
+  }
+
+  function updateMessageTemplate(key: keyof SalesCatalogWhatsAppMessageTemplates, value: string) {
+    setSettingsDraft((current) => ({
+      ...current,
+      messageTemplates: {
+        ...current.messageTemplates,
+        [key]: value.slice(0, 360),
+      },
+    }));
+  }
+
   function toggleSelectedAttribute(attribute: SalesCatalogAttribute, value: string) {
     setSelectedAttributes((current) => {
       const values = current[attribute.id] ?? [];
@@ -321,6 +478,28 @@ export function SalesCatalogConsole({
           attributes,
           trackInventory: settingsDraft.trackInventory,
           variationMedia: settingsDraft.variationMedia,
+          paymentMethods: settingsDraft.paymentMethods.map((method) => ({
+            id: method.id,
+            label: method.label,
+            enabled: method.enabled,
+            instructions: cleanInput(method.instructions, 240),
+            requiresProof: method.requiresProof,
+          })),
+          orderPolicy: {
+            minimumOrderValue: cleanInput(settingsDraft.orderPolicy.minimumOrderValue, 40),
+            reservationPolicy: settingsDraft.orderPolicy.reservationPolicy,
+            allowOrderWithoutPayment: settingsDraft.orderPolicy.allowOrderWithoutPayment,
+            requireHumanConfirmation: settingsDraft.orderPolicy.requireHumanConfirmation,
+            askCepBeforeQuote: settingsDraft.orderPolicy.askCepBeforeQuote,
+            abandonedCartMinutes: settingsDraft.orderPolicy.abandonedCartMinutes,
+            followUpDays: settingsDraft.orderPolicy.followUpDays,
+          },
+          leadDataPolicy: {
+            requiredFields: settingsDraft.leadDataPolicy.requiredFields,
+            consentMessage: cleanInput(settingsDraft.leadDataPolicy.consentMessage, 240),
+            retentionDays: settingsDraft.leadDataPolicy.retentionDays,
+          },
+          messageTemplates: settingsDraft.messageTemplates,
         }),
       });
       const data = await response.json().catch(() => null) as { settings?: ClientSalesCatalogSettings; error?: string } | null;
@@ -537,19 +716,41 @@ export function SalesCatalogConsole({
   async function createItem() {
     if (!canCreate) return;
 
+    const isEditing = Boolean(editingItemId);
     setCreating(true);
     setNotice(null);
 
     try {
       const formData = new FormData();
       formData.set("companyId", selectedCompanyId);
+      if (editingItemId) {
+        formData.set("itemId", editingItemId);
+        formData.set("keepMediaIds", JSON.stringify(editingMedia.map((media) => media.id)));
+      }
       formData.set("title", title);
       formData.set("description", description);
       formData.set("category", category);
       formData.set("price", price);
       formData.set("currency", "BRL");
+      formData.set("salePrice", salePrice);
+      formData.set("saleStartsAt", saleStartsAt);
+      formData.set("saleEndsAt", saleEndsAt);
+      formData.set("couponCode", couponCode);
+      formData.set("couponDescription", couponDescription);
+      formData.set("callToAction", callToAction);
+      formData.set("offerNotes", offerNotes);
       formData.set("status", status);
       formData.set("attributes", JSON.stringify(buildSelectedItemAttributes(productAttributes, selectedAttributes)));
+      formData.set("inventoryStatus", inventoryStatus);
+      formData.set("stockQuantity", stockQuantity);
+      formData.set("lowStockThreshold", lowStockThreshold);
+      formData.set("allowBackorder", String(allowBackorder));
+      formData.set("inventoryNotes", inventoryNotes);
+      formData.set("fulfillmentMode", fulfillmentMode);
+      formData.set("schedulingRequired", String(schedulingRequired));
+      formData.set("serviceDuration", serviceDuration);
+      formData.set("deliveryInstructions", deliveryInstructions);
+      formData.set("accessInstructions", accessInstructions);
       formData.set("weightGrams", weightGrams);
       formData.set("lengthCm", lengthCm);
       formData.set("widthCm", widthCm);
@@ -568,16 +769,130 @@ export function SalesCatalogConsole({
       const data = await response.json().catch(() => null) as { item?: ClientSalesCatalogItem; error?: string } | null;
 
       if (!response.ok || !data?.item) {
-        throw new Error(data?.error ?? "Nao foi possivel cadastrar o item.");
+        throw new Error(data?.error ?? (isEditing ? "Nao foi possivel atualizar o item." : "Nao foi possivel cadastrar o item."));
       }
 
       setItems((current) => [data.item!, ...current.filter((item) => item.id !== data.item!.id)]);
       resetForm();
-      setNotice({ tone: "success", message: "Item cadastrado no catalogo." });
+      setNotice({ tone: "success", message: isEditing ? "Item atualizado no catalogo." : "Item cadastrado no catalogo." });
     } catch (error) {
-      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao cadastrar item." });
+      setNotice({ tone: "error", message: error instanceof Error ? error.message : isEditing ? "Erro ao atualizar item." : "Erro ao cadastrar item." });
     } finally {
       setCreating(false);
+    }
+  }
+
+  function selectOrderItem(itemId: string) {
+    const item = visibleItems.find((entry) => entry.id === itemId) ?? null;
+    setOrderItemId(itemId);
+    setOrderTotal(item?.offer.salePrice ?? item?.price ?? "");
+    setOrderFulfillmentStatus(item?.fulfillment.schedulingRequired ? "scheduled" : "pending");
+  }
+
+  function applyUpdatedItems(updatedItems?: ClientSalesCatalogItem[]) {
+    if (!updatedItems?.length) return;
+
+    setItems((current) => {
+      const updatesById = new Map(updatedItems.map((item) => [item.id, item]));
+      const currentIds = new Set(current.map((item) => item.id));
+      const refreshed = current.map((item) => updatesById.get(item.id) ?? item);
+      const missing = updatedItems.filter((item) => !currentIds.has(item.id));
+
+      return [...missing, ...refreshed];
+    });
+  }
+
+  async function createOrder() {
+    if (!canCreateOrder) return;
+
+    setCreatingOrder(true);
+    setNotice(null);
+
+    try {
+      const response = await fetch("/api/dashboard/sales-catalog", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "create_order",
+          companyId: selectedCompanyId,
+          itemId: orderItemId,
+          quantity: parseOptionalNumber(orderQuantity) ?? 1,
+          customerName: orderCustomerName,
+          customerPhone: orderCustomerPhone,
+          customerDocument: orderCustomerDocument,
+          customerEmail: orderCustomerEmail,
+          destinationCep: orderDestinationCep,
+          destinationAddress: orderDestinationAddress,
+          shippingTotal: orderShippingTotal,
+          total: orderTotal,
+          paymentMethod: orderPaymentMethod,
+          shippingMethod: orderShippingMethod,
+          internalNotes: orderInternalNotes,
+          status: orderStatus,
+          paymentStatus: orderPaymentStatus,
+          fulfillmentStatus: orderFulfillmentStatus,
+        }),
+      });
+      const data = await response.json().catch(() => null) as {
+        order?: ClientSalesCatalogOrder;
+        items?: ClientSalesCatalogItem[];
+        error?: string;
+      } | null;
+
+      if (!response.ok || !data?.order) {
+        throw new Error(data?.error ?? "Nao foi possivel criar o pedido.");
+      }
+
+      setOrders((current) => [data.order!, ...current.filter((order) => order.id !== data.order!.id)]);
+      applyUpdatedItems(data.items);
+      resetOrderForm();
+      setNotice({ tone: "success", message: "Pedido registrado para acompanhar pelo WhatsApp." });
+    } catch (error) {
+      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao criar pedido." });
+    } finally {
+      setCreatingOrder(false);
+    }
+  }
+
+  async function updateOrder(
+    order: ClientSalesCatalogOrder,
+    patch: Partial<Pick<ClientSalesCatalogOrder, "status" | "paymentStatus" | "fulfillmentStatus">>,
+  ) {
+    if (updatingOrderId) return;
+
+    setUpdatingOrderId(order.id);
+    setNotice(null);
+
+    try {
+      const response = await fetch("/api/dashboard/sales-catalog", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "update_order_status",
+          companyId: order.companyId,
+          orderId: order.id,
+          status: patch.status,
+          paymentStatus: patch.paymentStatus,
+          fulfillmentStatus: patch.fulfillmentStatus,
+        }),
+      });
+      const data = await response.json().catch(() => null) as {
+        order?: ClientSalesCatalogOrder;
+        items?: ClientSalesCatalogItem[];
+        error?: string;
+      } | null;
+
+      if (!response.ok || !data?.order) {
+        throw new Error(data?.error ?? "Nao foi possivel atualizar o pedido.");
+      }
+
+      setOrders((current) => current.map((entry) => (entry.id === data.order!.id ? data.order! : entry)));
+      applyUpdatedItems(data.items);
+      setNotice({ tone: "success", message: "Pedido atualizado." });
+    } catch (error) {
+      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao atualizar pedido." });
+    } finally {
+      setUpdatingOrderId(null);
     }
   }
 
@@ -698,17 +1013,78 @@ export function SalesCatalogConsole({
     }
   }
 
+  function editItem(item: ClientSalesCatalogItem) {
+    if (item.companyId && item.companyId !== selectedCompanyId) {
+      changeCompany(item.companyId);
+    }
+
+    setEditingItemId(item.id);
+    setActiveTab("products");
+    setTitle(item.title);
+    setCategory(item.category ?? "");
+    setPrice(item.price ?? "");
+    setDescription(item.description);
+    setSalePrice(item.offer.salePrice ?? "");
+    setSaleStartsAt(item.offer.saleStartsAt ?? "");
+    setSaleEndsAt(item.offer.saleEndsAt ?? "");
+    setCouponCode(item.offer.couponCode ?? "");
+    setCouponDescription(item.offer.couponDescription ?? "");
+    setCallToAction(item.offer.callToAction ?? "");
+    setOfferNotes(item.offer.notes ?? "");
+    setStatus(item.status === "archived" ? "draft" : item.status);
+    setSelectedAttributes(Object.fromEntries(item.attributes.map((attribute) => [attribute.id, attribute.values])));
+    setInventoryStatus(item.inventory.status);
+    setStockQuantity(item.inventory.quantity !== null ? String(item.inventory.quantity) : "");
+    setLowStockThreshold(item.inventory.lowStockThreshold !== null ? String(item.inventory.lowStockThreshold) : "");
+    setAllowBackorder(item.inventory.allowBackorder);
+    setInventoryNotes(item.inventory.notes ?? "");
+    setFulfillmentMode(item.fulfillment.mode);
+    setSchedulingRequired(item.fulfillment.schedulingRequired);
+    setServiceDuration(item.fulfillment.serviceDuration ?? "");
+    setDeliveryInstructions(item.fulfillment.deliveryInstructions ?? "");
+    setAccessInstructions(item.fulfillment.accessInstructions ?? "");
+    setWeightGrams(item.shipping.weightGrams !== null ? String(item.shipping.weightGrams) : "");
+    setLengthCm(item.shipping.dimensions.lengthCm !== null ? String(item.shipping.dimensions.lengthCm) : "");
+    setWidthCm(item.shipping.dimensions.widthCm !== null ? String(item.shipping.dimensions.widthCm) : "");
+    setHeightCm(item.shipping.dimensions.heightCm !== null ? String(item.shipping.dimensions.heightCm) : "");
+    setShippingProfile(item.shipping.profile);
+    setShippingNotes(item.shipping.notes ?? "");
+    setEditingMedia(item.media);
+    setFiles([]);
+    setConfirmDeleteId(null);
+    setNotice({ tone: "warning", message: `Editando item: ${item.title}` });
+  }
+
   function handleFiles(event: ChangeEvent<HTMLInputElement>) {
     setFiles(Array.from(event.target.files ?? []).slice(0, 8));
   }
 
   function resetForm() {
+    setEditingItemId(null);
+    setEditingMedia([]);
     setTitle("");
     setCategory("");
     setPrice("");
     setDescription("");
+    setSalePrice("");
+    setSaleStartsAt("");
+    setSaleEndsAt("");
+    setCouponCode("");
+    setCouponDescription("");
+    setCallToAction("");
+    setOfferNotes("");
     setStatus("active");
     setSelectedAttributes({});
+    setInventoryStatus("in_stock");
+    setStockQuantity("");
+    setLowStockThreshold("");
+    setAllowBackorder(false);
+    setInventoryNotes("");
+    setFulfillmentMode("physical");
+    setSchedulingRequired(false);
+    setServiceDuration("");
+    setDeliveryInstructions("");
+    setAccessInstructions("");
     setWeightGrams("");
     setLengthCm("");
     setWidthCm("");
@@ -716,6 +1092,25 @@ export function SalesCatalogConsole({
     setShippingProfile("default");
     setShippingNotes("");
     setFiles([]);
+  }
+
+  function resetOrderForm() {
+    setOrderItemId("");
+    setOrderQuantity("1");
+    setOrderCustomerName("");
+    setOrderCustomerPhone("");
+    setOrderCustomerDocument("");
+    setOrderCustomerEmail("");
+    setOrderDestinationCep("");
+    setOrderDestinationAddress("");
+    setOrderShippingTotal("");
+    setOrderTotal("");
+    setOrderPaymentMethod("");
+    setOrderShippingMethod("");
+    setOrderInternalNotes("");
+    setOrderStatus("pending_payment");
+    setOrderPaymentStatus("pending");
+    setOrderFulfillmentStatus("pending");
   }
 
   if (companies.length === 0) {
@@ -761,17 +1156,19 @@ export function SalesCatalogConsole({
         </div>
       ) : null}
 
-      <div className="mb-4 grid gap-3 md:grid-cols-4">
+      <div className="mb-4 grid gap-3 md:grid-cols-5">
         <StatTile icon={PackagePlus} label="Ativos" value={String(stats.active)} />
         <StatTile icon={CheckCircle2} label="Prontos" value={String(stats.ready)} />
         <StatTile icon={Upload} label="Arquivos" value={String(stats.media)} />
         <StatTile icon={CloudDownload} label="WhatsApp" value={String(stats.whatsapp)} />
+        <StatTile icon={ClipboardList} label="Pedidos" value={String(stats.orderCount)} />
       </div>
 
       <div className="mb-4 flex flex-wrap gap-2">
         <TabButton active={activeTab === "setup"} icon={Settings2} label="Configuracao" onClick={() => setActiveTab("setup")} />
         <TabButton active={activeTab === "shipping"} icon={Truck} label="Entrega e Frete" onClick={() => setActiveTab("shipping")} />
         <TabButton active={activeTab === "products"} disabled={!hasConfiguredSettings} icon={PackagePlus} label="Produtos" onClick={() => setActiveTab("products")} />
+        <TabButton active={activeTab === "orders"} icon={ClipboardList} label="Pedidos WhatsApp" onClick={() => setActiveTab("orders")} />
         <TabButton active={activeTab === "whatsapp"} icon={CloudDownload} label="WhatsApp" onClick={() => setActiveTab("whatsapp")} />
       </div>
 
@@ -951,6 +1348,222 @@ export function SalesCatalogConsole({
                     </label>
                   </div>
                 ))}
+              </div>
+
+              <div className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+                <div className="mb-3 flex items-center gap-2">
+                  <CreditCard className="h-4 w-4 text-cyan-300" />
+                  <FieldLabel>Pagamentos no WhatsApp</FieldLabel>
+                </div>
+                <div className="divide-y" style={{ borderColor: "var(--ch-border)" }}>
+                  {settingsDraft.paymentMethods.map((method) => (
+                    <div key={method.id} className="grid gap-2 py-3 first:pt-0 last:pb-0" style={{ borderColor: "var(--ch-border)" }}>
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <label className="flex items-center gap-2 text-[12px] font-semibold text-slate-200">
+                          <input
+                            checked={method.enabled}
+                            type="checkbox"
+                            onChange={(event) => updatePaymentMethod(method.id, { enabled: event.target.checked })}
+                          />
+                          {method.label}
+                        </label>
+                        <label className="flex items-center gap-2 text-[11px] text-slate-400">
+                          <input
+                            checked={method.requiresProof}
+                            type="checkbox"
+                            onChange={(event) => updatePaymentMethod(method.id, { requiresProof: event.target.checked })}
+                          />
+                          Comprovante
+                        </label>
+                      </div>
+                      <input
+                        value={method.instructions ?? ""}
+                        onChange={(event) => updatePaymentMethod(method.id, { instructions: event.target.value.slice(0, 240) })}
+                        className="h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                        placeholder="Regra que o agente deve seguir"
+                        style={{ borderColor: "var(--ch-border)" }}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+                <div className="mb-3 flex items-center gap-2">
+                  <ClipboardList className="h-4 w-4 text-cyan-300" />
+                  <FieldLabel>Pedido e dados do lead</FieldLabel>
+                </div>
+                <div className="grid gap-3 lg:grid-cols-2">
+                  <label className="block">
+                    <FieldLabel>Pedido minimo</FieldLabel>
+                    <input
+                      value={settingsDraft.orderPolicy.minimumOrderValue ?? ""}
+                      onChange={(event) => updateOrderPolicy({ minimumOrderValue: event.target.value.slice(0, 40) })}
+                      className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                      placeholder="R$ 100,00"
+                      style={{ borderColor: "var(--ch-border)" }}
+                    />
+                  </label>
+                  <label className="block">
+                    <FieldLabel>Reserva</FieldLabel>
+                    <select
+                      value={settingsDraft.orderPolicy.reservationPolicy}
+                      onChange={(event) => updateOrderPolicy({ reservationPolicy: event.target.value as SalesCatalogReservationPolicy })}
+                      className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                      style={{ borderColor: "var(--ch-border)" }}
+                    >
+                      <option value="after_payment">Apos pagamento</option>
+                      <option value="before_payment">Antes do pagamento</option>
+                      <option value="manual_approval">Aprovacao humana</option>
+                    </select>
+                  </label>
+                  <label className="block">
+                    <FieldLabel>Carrinho parado</FieldLabel>
+                    <input
+                      value={settingsDraft.orderPolicy.abandonedCartMinutes ?? ""}
+                      onChange={(event) => updateOrderPolicy({ abandonedCartMinutes: parseOptionalNumber(event.target.value) })}
+                      className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                      inputMode="numeric"
+                      placeholder="Minutos"
+                      style={{ borderColor: "var(--ch-border)" }}
+                    />
+                  </label>
+                  <label className="block">
+                    <FieldLabel>Pos-venda</FieldLabel>
+                    <input
+                      value={settingsDraft.orderPolicy.followUpDays ?? ""}
+                      onChange={(event) => updateOrderPolicy({ followUpDays: parseOptionalNumber(event.target.value) })}
+                      className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                      inputMode="numeric"
+                      placeholder="Dias"
+                      style={{ borderColor: "var(--ch-border)" }}
+                    />
+                  </label>
+                </div>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  <label className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-[12px]" style={{ borderColor: "var(--ch-border)" }}>
+                    <span className="text-slate-300">Fechar sem pagamento</span>
+                    <input
+                      checked={settingsDraft.orderPolicy.allowOrderWithoutPayment}
+                      type="checkbox"
+                      onChange={(event) => updateOrderPolicy({ allowOrderWithoutPayment: event.target.checked })}
+                    />
+                  </label>
+                  <label className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-[12px]" style={{ borderColor: "var(--ch-border)" }}>
+                    <span className="text-slate-300">Confirmacao humana</span>
+                    <input
+                      checked={settingsDraft.orderPolicy.requireHumanConfirmation}
+                      type="checkbox"
+                      onChange={(event) => updateOrderPolicy({ requireHumanConfirmation: event.target.checked })}
+                    />
+                  </label>
+                  <label className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-[12px]" style={{ borderColor: "var(--ch-border)" }}>
+                    <span className="text-slate-300">Pedir CEP antes do frete</span>
+                    <input
+                      checked={settingsDraft.orderPolicy.askCepBeforeQuote}
+                      type="checkbox"
+                      onChange={(event) => updateOrderPolicy({ askCepBeforeQuote: event.target.checked })}
+                    />
+                  </label>
+                  <label className="block">
+                    <FieldLabel>Retencao</FieldLabel>
+                    <input
+                      value={settingsDraft.leadDataPolicy.retentionDays ?? ""}
+                      onChange={(event) => updateLeadDataPolicy({ retentionDays: parseOptionalNumber(event.target.value) })}
+                      className="h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                      inputMode="numeric"
+                      placeholder="Dias"
+                      style={{ borderColor: "var(--ch-border)" }}
+                    />
+                  </label>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {salesCatalogLeadDataFields.map((field) => {
+                    const checked = settingsDraft.leadDataPolicy.requiredFields.includes(field.value);
+                    return (
+                      <button
+                        key={field.value}
+                        type="button"
+                        onClick={() => toggleLeadDataField(field.value)}
+                        className={cn(
+                          "inline-flex min-h-8 items-center gap-1.5 rounded-lg border px-2.5 text-[11px] transition",
+                          checked ? "border-cyan-300/60 bg-cyan-300/15 text-cyan-100" : "text-slate-400 hover:bg-cyan-400/10 hover:text-cyan-100",
+                        )}
+                        style={{ borderColor: checked ? undefined : "var(--ch-border)" }}
+                      >
+                        {checked ? <CheckCircle2 className="h-3.5 w-3.5" /> : null}
+                        {field.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <label className="mt-3 block">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="h-4 w-4 text-cyan-300" />
+                    <FieldLabel>Consentimento</FieldLabel>
+                  </div>
+                  <input
+                    value={settingsDraft.leadDataPolicy.consentMessage ?? ""}
+                    onChange={(event) => updateLeadDataPolicy({ consentMessage: event.target.value.slice(0, 240) })}
+                    className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                    placeholder="Mensagem curta para uso dos dados do pedido"
+                    style={{ borderColor: "var(--ch-border)" }}
+                  />
+                </label>
+              </div>
+
+              <div className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+                <div className="mb-3 flex items-center gap-2">
+                  <MessageSquareText className="h-4 w-4 text-cyan-300" />
+                  <FieldLabel>Mensagens automaticas</FieldLabel>
+                </div>
+                <div className="grid gap-3 lg:grid-cols-2">
+                  <label className="block">
+                    <FieldLabel>Resumo do pedido</FieldLabel>
+                    <textarea
+                      value={settingsDraft.messageTemplates.orderSummary}
+                      onChange={(event) => updateMessageTemplate("orderSummary", event.target.value)}
+                      className="min-h-20 w-full resize-y rounded-lg border bg-transparent px-3 py-2 text-[12px] leading-5 outline-none"
+                      style={{ borderColor: "var(--ch-border)" }}
+                    />
+                  </label>
+                  <label className="block">
+                    <FieldLabel>Pedido de pagamento</FieldLabel>
+                    <textarea
+                      value={settingsDraft.messageTemplates.paymentRequest}
+                      onChange={(event) => updateMessageTemplate("paymentRequest", event.target.value)}
+                      className="min-h-20 w-full resize-y rounded-lg border bg-transparent px-3 py-2 text-[12px] leading-5 outline-none"
+                      style={{ borderColor: "var(--ch-border)" }}
+                    />
+                  </label>
+                  <label className="block">
+                    <FieldLabel>Pagamento confirmado</FieldLabel>
+                    <textarea
+                      value={settingsDraft.messageTemplates.paymentConfirmed}
+                      onChange={(event) => updateMessageTemplate("paymentConfirmed", event.target.value)}
+                      className="min-h-20 w-full resize-y rounded-lg border bg-transparent px-3 py-2 text-[12px] leading-5 outline-none"
+                      style={{ borderColor: "var(--ch-border)" }}
+                    />
+                  </label>
+                  <label className="block">
+                    <FieldLabel>Item indisponivel</FieldLabel>
+                    <textarea
+                      value={settingsDraft.messageTemplates.unavailableItem}
+                      onChange={(event) => updateMessageTemplate("unavailableItem", event.target.value)}
+                      className="min-h-20 w-full resize-y rounded-lg border bg-transparent px-3 py-2 text-[12px] leading-5 outline-none"
+                      style={{ borderColor: "var(--ch-border)" }}
+                    />
+                  </label>
+                  <label className="block lg:col-span-2">
+                    <FieldLabel>Transferencia humana</FieldLabel>
+                    <textarea
+                      value={settingsDraft.messageTemplates.humanHandoff}
+                      onChange={(event) => updateMessageTemplate("humanHandoff", event.target.value)}
+                      className="min-h-20 w-full resize-y rounded-lg border bg-transparent px-3 py-2 text-[12px] leading-5 outline-none"
+                      style={{ borderColor: "var(--ch-border)" }}
+                    />
+                  </label>
+                </div>
               </div>
 
               <button
@@ -1337,11 +1950,232 @@ export function SalesCatalogConsole({
             </div>
           </div>
         </Panel>
+      ) : activeTab === "orders" ? (
+        <div className="grid gap-4 xl:grid-cols-[minmax(320px,0.58fr)_minmax(0,1fr)]">
+          <Panel title="Novo pedido WhatsApp" eyebrow={selectedCompany?.name ?? "empresa"}>
+            <div className="space-y-3">
+              <label className="block">
+                <FieldLabel>Empresa</FieldLabel>
+                <select
+                  value={selectedCompanyId}
+                  onChange={(event) => changeCompany(event.target.value)}
+                  className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                  style={{ borderColor: "var(--ch-border)" }}
+                >
+                  {companies.map((company) => (
+                    <option key={company.id} value={company.id}>{company.name}</option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="block">
+                <FieldLabel>Produto do pedido</FieldLabel>
+                <select
+                  value={orderItemId}
+                  onChange={(event) => selectOrderItem(event.target.value)}
+                  className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                  style={{ borderColor: "var(--ch-border)" }}
+                >
+                  <option value="">Selecionar item do catalogo</option>
+                  {visibleItems.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.title}{item.offer.salePrice ? ` - ${item.offer.salePrice}` : item.price ? ` - ${item.price}` : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <div className="grid gap-3 sm:grid-cols-[110px_minmax(0,1fr)]">
+                <label className="block">
+                  <FieldLabel>Qtd.</FieldLabel>
+                  <input
+                    value={orderQuantity}
+                    onChange={(event) => setOrderQuantity(digitsOnly(event.target.value, 5) || "1")}
+                    className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                    inputMode="numeric"
+                    style={{ borderColor: "var(--ch-border)" }}
+                  />
+                </label>
+                <label className="block">
+                  <FieldLabel>Total</FieldLabel>
+                  <input
+                    value={orderTotal}
+                    onChange={(event) => setOrderTotal(event.target.value.slice(0, 80))}
+                    className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                    placeholder="R$ 197,00"
+                    style={{ borderColor: "var(--ch-border)" }}
+                  />
+                </label>
+              </div>
+
+              <div className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+                <div className="mb-3 flex items-center gap-2">
+                  <MessageSquareText className="h-4 w-4 text-cyan-300" />
+                  <FieldLabel>Lead no WhatsApp</FieldLabel>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <input
+                    value={orderCustomerName}
+                    onChange={(event) => setOrderCustomerName(event.target.value.slice(0, 140))}
+                    className="h-10 rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                    placeholder="Nome do lead"
+                    style={{ borderColor: "var(--ch-border)" }}
+                  />
+                  <input
+                    value={orderCustomerPhone}
+                    onChange={(event) => setOrderCustomerPhone(event.target.value.slice(0, 40))}
+                    className="h-10 rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                    placeholder="Telefone WhatsApp"
+                    style={{ borderColor: "var(--ch-border)" }}
+                  />
+                  <input
+                    value={orderCustomerDocument}
+                    onChange={(event) => setOrderCustomerDocument(event.target.value.slice(0, 40))}
+                    className="h-10 rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                    placeholder="CPF/CNPJ opcional"
+                    style={{ borderColor: "var(--ch-border)" }}
+                  />
+                  <input
+                    value={orderCustomerEmail}
+                    onChange={(event) => setOrderCustomerEmail(event.target.value.slice(0, 160))}
+                    className="h-10 rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                    placeholder="E-mail opcional"
+                    style={{ borderColor: "var(--ch-border)" }}
+                  />
+                </div>
+              </div>
+
+              <div className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+                <div className="mb-3 flex items-center gap-2">
+                  <Truck className="h-4 w-4 text-cyan-300" />
+                  <FieldLabel>Entrega e pagamento</FieldLabel>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <input
+                    value={orderDestinationCep}
+                    onChange={(event) => setOrderDestinationCep(cepInput(event.target.value))}
+                    className="h-10 rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                    inputMode="numeric"
+                    placeholder="CEP"
+                    style={{ borderColor: "var(--ch-border)" }}
+                  />
+                  <input
+                    value={orderShippingTotal}
+                    onChange={(event) => setOrderShippingTotal(event.target.value.slice(0, 80))}
+                    className="h-10 rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                    placeholder="Frete"
+                    style={{ borderColor: "var(--ch-border)" }}
+                  />
+                  <input
+                    value={orderPaymentMethod}
+                    onChange={(event) => setOrderPaymentMethod(event.target.value.slice(0, 80))}
+                    className="h-10 rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                    placeholder="Pagamento: Pix, link, boleto"
+                    style={{ borderColor: "var(--ch-border)" }}
+                  />
+                  <input
+                    value={orderShippingMethod}
+                    onChange={(event) => setOrderShippingMethod(event.target.value.slice(0, 80))}
+                    className="h-10 rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                    placeholder="Entrega: PAC, Sedex, retirada"
+                    style={{ borderColor: "var(--ch-border)" }}
+                  />
+                </div>
+                <input
+                  value={orderDestinationAddress}
+                  onChange={(event) => setOrderDestinationAddress(event.target.value.slice(0, 300))}
+                  className="mt-3 h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                  placeholder="Endereco de entrega"
+                  style={{ borderColor: "var(--ch-border)" }}
+                />
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-3">
+                <label className="block">
+                  <FieldLabel>Pedido</FieldLabel>
+                  <select
+                    value={orderStatus}
+                    onChange={(event) => setOrderStatus(event.target.value as SalesCatalogOrderStatus)}
+                    className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                    style={{ borderColor: "var(--ch-border)" }}
+                  >
+                    {orderStatusOptions.map((option) => (
+                      <option key={option} value={option}>{formatSalesCatalogOrderStatus(option)}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block">
+                  <FieldLabel>Pagamento</FieldLabel>
+                  <select
+                    value={orderPaymentStatus}
+                    onChange={(event) => setOrderPaymentStatus(event.target.value as SalesCatalogPaymentStatus)}
+                    className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                    style={{ borderColor: "var(--ch-border)" }}
+                  >
+                    {paymentStatusOptions.map((option) => (
+                      <option key={option} value={option}>{formatSalesCatalogPaymentStatus(option)}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block">
+                  <FieldLabel>Execucao</FieldLabel>
+                  <select
+                    value={orderFulfillmentStatus}
+                    onChange={(event) => setOrderFulfillmentStatus(event.target.value as SalesCatalogFulfillmentStatus)}
+                    className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                    style={{ borderColor: "var(--ch-border)" }}
+                  >
+                    {fulfillmentStatusOptions.map((option) => (
+                      <option key={option} value={option}>{formatSalesCatalogFulfillmentStatus(option)}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+              <textarea
+                value={orderInternalNotes}
+                onChange={(event) => setOrderInternalNotes(event.target.value.slice(0, 1200))}
+                className="min-h-24 w-full resize-y rounded-lg border bg-transparent px-3 py-2 text-[12px] leading-5 outline-none"
+                placeholder="Observacoes internas do pedido, combinado no WhatsApp, comprovante, restricoes ou proximo passo."
+                style={{ borderColor: "var(--ch-border)" }}
+              />
+
+              <button
+                type="button"
+                disabled={!canCreateOrder}
+                onClick={createOrder}
+                className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-cyan-300 px-4 text-[12px] font-bold text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {creatingOrder ? <Loader2 className="h-4 w-4 animate-spin" /> : <ClipboardList className="h-4 w-4" />}
+                Registrar pedido
+              </button>
+            </div>
+          </Panel>
+
+          <Panel title="Pedidos WhatsApp" eyebrow={selectedCompany?.name ?? "acompanhamento"}>
+            {visibleOrders.length > 0 ? (
+              <div className="grid gap-3">
+                {visibleOrders.map((order) => (
+                  <OrderCard
+                    key={order.id}
+                    order={order}
+                    updating={updatingOrderId === order.id}
+                    onUpdate={(patch) => updateOrder(order, patch)}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-xl border border-dashed px-4 py-10 text-center text-[12px] text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
+                Nenhum pedido registrado para esta empresa.
+              </div>
+            )}
+          </Panel>
+        </div>
       ) : (
         <div className="grid gap-4 xl:grid-cols-[minmax(320px,0.72fr)_minmax(0,1fr)]">
         <div className="space-y-4">
           {activeTab === "products" ? (
-          <Panel title="Novo item" eyebrow={selectedCompany?.name ?? "empresa"}>
+          <Panel title={editingItemId ? "Editar item" : "Novo item"} eyebrow={selectedCompany?.name ?? "empresa"}>
             <div className="space-y-3">
             <label className="block">
               <FieldLabel>Empresa</FieldLabel>
@@ -1416,6 +2250,80 @@ export function SalesCatalogConsole({
               />
             </label>
 
+            <div className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+              <div className="mb-3 flex items-center gap-2">
+                <BadgePercent className="h-4 w-4 text-cyan-300" />
+                <FieldLabel>Oferta e fechamento</FieldLabel>
+              </div>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <label className="block">
+                  <FieldLabel>Valor promocional</FieldLabel>
+                  <input
+                    value={salePrice}
+                    onChange={(event) => setSalePrice(event.target.value.slice(0, 60))}
+                    className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                    placeholder="R$ 147,00"
+                    style={{ borderColor: "var(--ch-border)" }}
+                  />
+                </label>
+                <label className="block">
+                  <FieldLabel>Cupom</FieldLabel>
+                  <input
+                    value={couponCode}
+                    onChange={(event) => setCouponCode(event.target.value.toUpperCase().replace(/[^A-Z0-9_-]+/g, "").slice(0, 32))}
+                    className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                    placeholder="WHATS10"
+                    style={{ borderColor: "var(--ch-border)" }}
+                  />
+                </label>
+              </div>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <label className="block">
+                  <FieldLabel>Inicio</FieldLabel>
+                  <input
+                    value={saleStartsAt}
+                    onChange={(event) => setSaleStartsAt(event.target.value)}
+                    className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                    type="date"
+                    style={{ borderColor: "var(--ch-border)" }}
+                  />
+                </label>
+                <label className="block">
+                  <FieldLabel>Fim</FieldLabel>
+                  <input
+                    value={saleEndsAt}
+                    onChange={(event) => setSaleEndsAt(event.target.value)}
+                    className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                    type="date"
+                    style={{ borderColor: "var(--ch-border)" }}
+                  />
+                </label>
+              </div>
+              <div className="mt-3 grid gap-3">
+                <input
+                  value={couponDescription}
+                  onChange={(event) => setCouponDescription(event.target.value.slice(0, 160))}
+                  className="h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                  placeholder="Ex.: 10% de desconto para pedidos fechados no WhatsApp"
+                  style={{ borderColor: "var(--ch-border)" }}
+                />
+                <input
+                  value={callToAction}
+                  onChange={(event) => setCallToAction(event.target.value.slice(0, 180))}
+                  className="h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                  placeholder="Ex.: Posso reservar essa oferta para voce agora?"
+                  style={{ borderColor: "var(--ch-border)" }}
+                />
+                <input
+                  value={offerNotes}
+                  onChange={(event) => setOfferNotes(event.target.value.slice(0, 240))}
+                  className="h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                  placeholder="Condicoes: nao cumulativo, valido enquanto houver estoque, pagamento via Pix"
+                  style={{ borderColor: "var(--ch-border)" }}
+                />
+              </div>
+            </div>
+
             {productAttributes.length > 0 ? (
               <div className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
                 <div className="mb-3 flex items-center gap-2">
@@ -1454,10 +2362,121 @@ export function SalesCatalogConsole({
 
             <div className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
               <div className="mb-3 flex items-center gap-2">
+                <PackagePlus className="h-4 w-4 text-cyan-300" />
+                <FieldLabel>Estoque deste item</FieldLabel>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <label className="block">
+                  <FieldLabel>Disponibilidade</FieldLabel>
+                  <select
+                    value={inventoryStatus}
+                    onChange={(event) => setInventoryStatus(event.target.value as SalesCatalogStockStatus)}
+                    className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                    style={{ borderColor: "var(--ch-border)" }}
+                  >
+                    <option value="in_stock">Disponivel</option>
+                    <option value="out_of_stock">Esgotado</option>
+                    <option value="on_backorder">Sob encomenda</option>
+                  </select>
+                </label>
+                <label className="block">
+                  <FieldLabel>Quantidade</FieldLabel>
+                  <input
+                    value={stockQuantity}
+                    onChange={(event) => setStockQuantity(digitsOnly(event.target.value, 7))}
+                    className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                    inputMode="numeric"
+                    placeholder={inventoryEnabled ? "Unidades" : "Opcional"}
+                    style={{ borderColor: "var(--ch-border)" }}
+                  />
+                </label>
+                <label className="block">
+                  <FieldLabel>Alerta baixo</FieldLabel>
+                  <input
+                    value={lowStockThreshold}
+                    onChange={(event) => setLowStockThreshold(digitsOnly(event.target.value, 7))}
+                    className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                    inputMode="numeric"
+                    placeholder="Unidades"
+                    style={{ borderColor: "var(--ch-border)" }}
+                  />
+                </label>
+              </div>
+              <div className="mt-3 grid gap-3 sm:grid-cols-[190px_minmax(0,1fr)]">
+                <label className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-[12px]" style={{ borderColor: "var(--ch-border)" }}>
+                  <span className="text-slate-300">Aceita encomenda</span>
+                  <input
+                    checked={allowBackorder}
+                    type="checkbox"
+                    onChange={(event) => setAllowBackorder(event.target.checked)}
+                  />
+                </label>
+                <input
+                  value={inventoryNotes}
+                  onChange={(event) => setInventoryNotes(event.target.value.slice(0, 240))}
+                  className="h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                  placeholder="Ex.: reposicao toda sexta, poucas unidades, lote sob pedido"
+                  style={{ borderColor: "var(--ch-border)" }}
+                />
+              </div>
+            </div>
+
+            <div className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+              <div className="mb-3 flex items-center gap-2">
                 <Truck className="h-4 w-4 text-cyan-300" />
                 <FieldLabel>Entrega deste item</FieldLabel>
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
+                <label className="block">
+                  <FieldLabel>Tipo</FieldLabel>
+                  <select
+                    value={fulfillmentMode}
+                    onChange={(event) => setFulfillmentMode(event.target.value as SalesCatalogFulfillmentMode)}
+                    className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                    style={{ borderColor: "var(--ch-border)" }}
+                  >
+                    <option value="physical">Produto fisico</option>
+                    <option value="digital">Digital no WhatsApp</option>
+                    <option value="service">Servico / agendamento</option>
+                    <option value="subscription">Assinatura / plano</option>
+                  </select>
+                </label>
+                <label className="block">
+                  <FieldLabel>Duracao ou prazo</FieldLabel>
+                  <input
+                    value={serviceDuration}
+                    onChange={(event) => setServiceDuration(event.target.value.slice(0, 80))}
+                    className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                    placeholder="Ex.: 1 hora, 30 dias, acesso imediato"
+                    style={{ borderColor: "var(--ch-border)" }}
+                  />
+                </label>
+              </div>
+              <div className="mt-3 grid gap-3 sm:grid-cols-[190px_minmax(0,1fr)]">
+                <label className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-[12px]" style={{ borderColor: "var(--ch-border)" }}>
+                  <span className="text-slate-300">Precisa agendar</span>
+                  <input
+                    checked={schedulingRequired}
+                    type="checkbox"
+                    onChange={(event) => setSchedulingRequired(event.target.checked)}
+                  />
+                </label>
+                <input
+                  value={accessInstructions}
+                  onChange={(event) => setAccessInstructions(event.target.value.slice(0, 240))}
+                  className="h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                  placeholder="Acesso/execucao: link, arquivo, chamada, onboarding, renovacao"
+                  style={{ borderColor: "var(--ch-border)" }}
+                />
+              </div>
+              <input
+                value={deliveryInstructions}
+                onChange={(event) => setDeliveryInstructions(event.target.value.slice(0, 240))}
+                className="mt-3 h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                placeholder="Instrucao de entrega: prazo, local, retirada, envio digital, dados necessarios"
+                style={{ borderColor: "var(--ch-border)" }}
+              />
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
                 <label className="block">
                   <FieldLabel>Peso</FieldLabel>
                   <input
@@ -1563,6 +2582,28 @@ export function SalesCatalogConsole({
               </label>
             </div>
 
+            {editingItemId && editingMedia.length > 0 ? (
+              <div className="grid gap-2">
+                {editingMedia.map((media) => (
+                  <div key={media.id} className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-[11px]" style={{ borderColor: "var(--ch-border)" }}>
+                    <span className="flex min-w-0 items-center gap-2 text-slate-300">
+                      <MediaIcon media={media} />
+                      <span className="truncate">{media.fileName}</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setEditingMedia((current) => current.filter((entry) => entry.id !== media.id))}
+                      className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border text-slate-400 transition hover:bg-rose-400/10 hover:text-rose-100"
+                      style={{ borderColor: "var(--ch-border)" }}
+                      title="Remover arquivo"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+
             {files.length > 0 ? (
               <div className="grid gap-2">
                 {files.map((file) => (
@@ -1574,15 +2615,28 @@ export function SalesCatalogConsole({
               </div>
             ) : null}
 
-            <button
-              type="button"
-              disabled={!canCreate}
-              onClick={createItem}
-              className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-cyan-300 px-4 text-[12px] font-bold text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <PackagePlus className="h-4 w-4" />}
-              Cadastrar no catalogo
+            <div className={cn("grid gap-2", editingItemId ? "sm:grid-cols-[minmax(0,1fr)_160px]" : "")}>
+              <button
+                type="button"
+                disabled={!canCreate}
+                onClick={createItem}
+                className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-cyan-300 px-4 text-[12px] font-bold text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : editingItemId ? <Save className="h-4 w-4" /> : <PackagePlus className="h-4 w-4" />}
+                {editingItemId ? "Salvar alteracoes" : "Cadastrar no catalogo"}
               </button>
+              {editingItemId ? (
+                <button
+                  type="button"
+                  onClick={resetForm}
+                  className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border px-4 text-[12px] font-bold text-slate-300 transition hover:bg-slate-400/10 hover:text-slate-100"
+                  style={{ borderColor: "var(--ch-border)" }}
+                >
+                  <X className="h-4 w-4" />
+                  Cancelar
+                </button>
+              ) : null}
+            </div>
             </div>
           </Panel>
           ) : (
@@ -1638,6 +2692,7 @@ export function SalesCatalogConsole({
                   visibilityLoading={visibilityId === item.id}
                   onCopy={() => copyTag(item)}
                   onDelete={() => deleteItem(item)}
+                  onEdit={() => editItem(item)}
                   onWhatsappVisibility={(visible) => setWhatsappVisibility(item, visible)}
                 />
               ))}
@@ -1654,6 +2709,120 @@ export function SalesCatalogConsole({
   );
 }
 
+function OrderCard({
+  order,
+  updating,
+  onUpdate,
+}: {
+  order: ClientSalesCatalogOrder;
+  updating: boolean;
+  onUpdate: (patch: Partial<Pick<ClientSalesCatalogOrder, "status" | "paymentStatus" | "fulfillmentStatus">>) => void;
+}) {
+  const customerLabel = order.customerName ?? order.customerPhone ?? "Lead sem nome";
+  const itemSummary = order.items.length > 0
+    ? order.items.map((item) => `${item.quantity}x ${item.title}`).join(", ")
+    : "Pedido sem item vinculado";
+
+  return (
+    <div className="rounded-xl border p-3" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate text-[14px] font-semibold text-slate-100">{customerLabel}</p>
+          <p className="mt-1 flex flex-wrap gap-2 text-[11px] text-slate-500">
+            {order.customerPhone ? <span>{order.customerPhone}</span> : null}
+            {order.destinationCep ? <span>CEP {order.destinationCep}</span> : null}
+            {order.updatedAt ? <span>{formatDateTime(order.updatedAt)}</span> : null}
+          </p>
+        </div>
+        <div className="flex flex-wrap justify-end gap-1.5">
+          <NeonBadge tone={orderStatusTone(order.status)}>{formatSalesCatalogOrderStatus(order.status)}</NeonBadge>
+          <NeonBadge tone={paymentStatusTone(order.paymentStatus)}>{formatSalesCatalogPaymentStatus(order.paymentStatus)}</NeonBadge>
+          <NeonBadge tone={fulfillmentStatusTone(order.fulfillmentStatus)}>{formatSalesCatalogFulfillmentStatus(order.fulfillmentStatus)}</NeonBadge>
+        </div>
+      </div>
+
+      <div className="mt-3 rounded-lg border px-3 py-2" style={{ borderColor: "var(--ch-border)", background: "var(--ch-panel)" }}>
+        <p className="line-clamp-2 text-[12px] text-slate-300">{itemSummary}</p>
+        <p className="mt-1 flex flex-wrap gap-2 text-[11px] text-slate-500">
+          {order.total ? <span>Total {order.total}</span> : null}
+          {order.shippingTotal ? <span>Frete {order.shippingTotal}</span> : null}
+          {order.paymentMethod ? <span>{order.paymentMethod}</span> : null}
+          {order.shippingMethod ? <span>{order.shippingMethod}</span> : null}
+        </p>
+      </div>
+
+      {order.items.some((item) => item.attributes.length > 0) ? (
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {order.items.flatMap((item) => item.attributes.map((attribute) => (
+            <span key={`${item.id}-${attribute.id}`} className="inline-flex max-w-full items-center gap-1 rounded-md border px-2 py-1 text-[10px] text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
+              <SlidersHorizontal className="h-3 w-3 shrink-0" />
+              <span className="truncate">{attribute.name}: {attribute.values.join(", ")}</span>
+            </span>
+          )))}
+        </div>
+      ) : null}
+
+      <div className="mt-3 grid gap-2 lg:grid-cols-3">
+        <label className="block">
+          <FieldLabel>Pedido</FieldLabel>
+          <select
+            value={order.status}
+            disabled={updating}
+            onChange={(event) => onUpdate({ status: event.target.value as SalesCatalogOrderStatus })}
+            className="h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none disabled:opacity-50"
+            style={{ borderColor: "var(--ch-border)" }}
+          >
+            {orderStatusOptions.map((option) => (
+              <option key={option} value={option}>{formatSalesCatalogOrderStatus(option)}</option>
+            ))}
+          </select>
+        </label>
+        <label className="block">
+          <FieldLabel>Pagamento</FieldLabel>
+          <div className="relative">
+            <CreditCard className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-500" />
+            <select
+              value={order.paymentStatus}
+              disabled={updating}
+              onChange={(event) => onUpdate({ paymentStatus: event.target.value as SalesCatalogPaymentStatus })}
+              className="h-10 w-full rounded-lg border bg-transparent pl-9 pr-3 text-[12px] outline-none disabled:opacity-50"
+              style={{ borderColor: "var(--ch-border)" }}
+            >
+              {paymentStatusOptions.map((option) => (
+                <option key={option} value={option}>{formatSalesCatalogPaymentStatus(option)}</option>
+              ))}
+            </select>
+          </div>
+        </label>
+        <label className="block">
+          <FieldLabel>Execucao</FieldLabel>
+          <div className="relative">
+            <ShieldCheck className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-500" />
+            <select
+              value={order.fulfillmentStatus}
+              disabled={updating}
+              onChange={(event) => onUpdate({ fulfillmentStatus: event.target.value as SalesCatalogFulfillmentStatus })}
+              className="h-10 w-full rounded-lg border bg-transparent pl-9 pr-3 text-[12px] outline-none disabled:opacity-50"
+              style={{ borderColor: "var(--ch-border)" }}
+            >
+              {fulfillmentStatusOptions.map((option) => (
+                <option key={option} value={option}>{formatSalesCatalogFulfillmentStatus(option)}</option>
+              ))}
+            </select>
+          </div>
+        </label>
+      </div>
+
+      {order.internalNotes || updating ? (
+        <div className="mt-3 flex items-start gap-2 rounded-lg border px-3 py-2 text-[11px] text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
+          {updating ? <Loader2 className="mt-0.5 h-3.5 w-3.5 animate-spin text-cyan-300" /> : <ClipboardList className="mt-0.5 h-3.5 w-3.5 text-slate-500" />}
+          <span className="min-w-0">{updating ? "Atualizando pedido..." : order.internalNotes}</span>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function CatalogItemCard({
   item,
   confirmDelete,
@@ -1661,6 +2830,7 @@ function CatalogItemCard({
   visibilityLoading,
   onCopy,
   onDelete,
+  onEdit,
   onWhatsappVisibility,
 }: {
   item: ClientSalesCatalogItem;
@@ -1669,6 +2839,7 @@ function CatalogItemCard({
   visibilityLoading: boolean;
   onCopy: () => void;
   onDelete: () => void;
+  onEdit: () => void;
   onWhatsappVisibility: (visible: boolean) => void;
 }) {
   const cover = item.media.find((media) => media.kind === "image");
@@ -1689,17 +2860,48 @@ function CatalogItemCard({
             <p className="truncate text-[14px] font-semibold text-slate-100">{item.title}</p>
             <p className="mt-1 flex flex-wrap gap-2 text-[11px] text-slate-500">
               {item.category ? <span>{item.category}</span> : null}
-              {item.price ? <span>{item.price} {item.currency}</span> : null}
+              {item.offer.salePrice ? (
+                <span>Oferta {item.offer.salePrice} {item.currency}</span>
+              ) : item.price ? (
+                <span>{item.price} {item.currency}</span>
+              ) : null}
               <span>{formatStatus(item.status)}</span>
             </p>
           </div>
           <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
             <NeonBadge tone={item.source === "whatsapp_catalog" ? "green" : "cyan"}>{sourceLabel}</NeonBadge>
+            <NeonBadge tone={inventoryTone(item.inventory.status)}>{formatSalesCatalogStockStatus(item.inventory.status)}</NeonBadge>
             <NeonBadge tone={item.readiness === "ready" ? "green" : "amber"}>{formatReadiness(item.readiness)}</NeonBadge>
           </div>
         </div>
 
         <p className="mt-2 line-clamp-2 text-[12px] leading-5 text-slate-400">{item.description || "Sem descricao cadastrada."}</p>
+
+        {hasOfferDetails(item) ? (
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {item.price && item.offer.salePrice ? (
+              <span className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[10px] text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
+                de {item.price}
+              </span>
+            ) : null}
+            {item.offer.salePrice ? (
+              <span className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[10px] text-cyan-200" style={{ borderColor: "var(--ch-border)" }}>
+                <BadgePercent className="h-3 w-3" />
+                {item.offer.salePrice}
+              </span>
+            ) : null}
+            {item.offer.couponCode ? (
+              <span className="inline-flex items-center gap-1 rounded-md border px-2 py-1 font-mono text-[10px] text-slate-300" style={{ borderColor: "var(--ch-border)" }}>
+                {item.offer.couponCode}
+              </span>
+            ) : null}
+            {formatOfferWindow(item) ? (
+              <span className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[10px] text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
+                {formatOfferWindow(item)}
+              </span>
+            ) : null}
+          </div>
+        ) : null}
 
         {item.attributes.length > 0 ? (
           <div className="mt-3 flex flex-wrap gap-1.5">
@@ -1709,6 +2911,51 @@ function CatalogItemCard({
                 <span className="truncate">{attribute.name}: {attribute.values.join(", ")}</span>
               </span>
             ))}
+          </div>
+        ) : null}
+
+        {hasFulfillmentDetails(item) ? (
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            <span className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[10px] text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
+              <Truck className="h-3 w-3" />
+              {formatSalesCatalogFulfillmentMode(item.fulfillment.mode)}
+            </span>
+            {item.fulfillment.schedulingRequired ? (
+              <span className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[10px] text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
+                agendamento
+              </span>
+            ) : null}
+            {item.fulfillment.serviceDuration ? (
+              <span className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[10px] text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
+                {item.fulfillment.serviceDuration}
+              </span>
+            ) : null}
+          </div>
+        ) : null}
+
+        {hasInventoryDetails(item) ? (
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {item.inventory.quantity !== null ? (
+              <span className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[10px] text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
+                <PackagePlus className="h-3 w-3" />
+                {item.inventory.quantity} un.
+              </span>
+            ) : null}
+            {item.inventory.lowStockThreshold !== null ? (
+              <span className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[10px] text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
+                alerta {item.inventory.lowStockThreshold}
+              </span>
+            ) : null}
+            {item.inventory.allowBackorder ? (
+              <span className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[10px] text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
+                encomenda
+              </span>
+            ) : null}
+            {item.inventory.notes ? (
+              <span className="inline-flex max-w-full items-center gap-1 rounded-md border px-2 py-1 text-[10px] text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
+                <span className="truncate">{item.inventory.notes}</span>
+              </span>
+            ) : null}
           </div>
         ) : null}
 
@@ -1771,6 +3018,15 @@ function CatalogItemCard({
               {item.whatsappCatalogHidden ? "Mostrar no WhatsApp" : "Ocultar no WhatsApp"}
             </button>
           ) : null}
+          <button
+            type="button"
+            onClick={onEdit}
+            className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-slate-300 transition hover:bg-cyan-400/10 hover:text-cyan-100"
+            style={{ borderColor: "var(--ch-border)" }}
+          >
+            <PencilLine className="h-3.5 w-3.5" />
+            Editar
+          </button>
           <button
             type="button"
             onClick={onDelete}
@@ -1854,6 +3110,12 @@ function formatReadiness(value: ClientSalesCatalogItem["readiness"]) {
   return "sem descricao";
 }
 
+function inventoryTone(status: SalesCatalogStockStatus) {
+  if (status === "out_of_stock") return "rose";
+  if (status === "on_backorder") return "amber";
+  return "green";
+}
+
 function formatBytes(value: number) {
   if (value < 1024 * 1024) return `${Math.max(1, Math.round(value / 1024))} KB`;
   return `${(value / 1024 / 1024).toFixed(1)} MB`;
@@ -1864,6 +3126,7 @@ function buildSettingsDraft(settings: ClientSalesCatalogSettings | null): Settin
     ? salesCatalogBusinessTemplates.find((item) => item.value === settings.businessType)
     : salesCatalogBusinessTemplates.find((item) => item.value === "fashion");
   const fallback = template ?? salesCatalogBusinessTemplates[0];
+  const commerceDefaults = createDefaultSalesCatalogCommerceSettings();
 
   return {
     businessType: settings?.businessType ?? fallback.value,
@@ -1871,6 +3134,13 @@ function buildSettingsDraft(settings: ClientSalesCatalogSettings | null): Settin
     attributes: cloneAttributes(settings?.attributes.length ? settings.attributes : fallback.attributes),
     trackInventory: settings?.trackInventory ?? fallback.trackInventory,
     variationMedia: settings?.variationMedia ?? fallback.variationMedia,
+    paymentMethods: clonePaymentMethods(settings?.paymentMethods.length ? settings.paymentMethods : commerceDefaults.paymentMethods),
+    orderPolicy: { ...(settings?.orderPolicy ?? commerceDefaults.orderPolicy) },
+    leadDataPolicy: {
+      ...(settings?.leadDataPolicy ?? commerceDefaults.leadDataPolicy),
+      requiredFields: [...(settings?.leadDataPolicy.requiredFields ?? commerceDefaults.leadDataPolicy.requiredFields)],
+    },
+    messageTemplates: { ...(settings?.messageTemplates ?? commerceDefaults.messageTemplates) },
   };
 }
 
@@ -1940,6 +3210,10 @@ function cloneAttributes(attributes: SalesCatalogAttribute[]) {
     ...attribute,
     values: [...attribute.values],
   }));
+}
+
+function clonePaymentMethods(methods: SalesCatalogPaymentMethod[]) {
+  return methods.map((method) => ({ ...method }));
 }
 
 function cloneShippingRule(rule: SalesCatalogShippingRule): SalesCatalogShippingRule {
@@ -2079,6 +3353,78 @@ function hasShippingDetails(item: ClientSalesCatalogItem) {
       || item.shipping.profile !== "default"
       || item.shipping.notes,
   );
+}
+
+function hasInventoryDetails(item: ClientSalesCatalogItem) {
+  return Boolean(
+    item.inventory.quantity !== null
+      || item.inventory.lowStockThreshold !== null
+      || item.inventory.allowBackorder
+      || item.inventory.notes,
+  );
+}
+
+function hasOfferDetails(item: ClientSalesCatalogItem) {
+  return Boolean(
+    item.offer.salePrice
+      || item.offer.saleStartsAt
+      || item.offer.saleEndsAt
+      || item.offer.couponCode
+      || item.offer.couponDescription
+      || item.offer.callToAction
+      || item.offer.notes,
+  );
+}
+
+function hasFulfillmentDetails(item: ClientSalesCatalogItem) {
+  return Boolean(
+    item.fulfillment.mode !== "physical"
+      || item.fulfillment.schedulingRequired
+      || item.fulfillment.serviceDuration
+      || item.fulfillment.deliveryInstructions
+      || item.fulfillment.accessInstructions,
+  );
+}
+
+function formatOfferWindow(item: ClientSalesCatalogItem) {
+  if (item.offer.saleStartsAt && item.offer.saleEndsAt) return `${item.offer.saleStartsAt} ate ${item.offer.saleEndsAt}`;
+  if (item.offer.saleStartsAt) return `desde ${item.offer.saleStartsAt}`;
+  if (item.offer.saleEndsAt) return `ate ${item.offer.saleEndsAt}`;
+  return null;
+}
+
+function orderStatusTone(status: SalesCatalogOrderStatus): "green" | "cyan" | "amber" | "rose" | "violet" | "zinc" {
+  if (status === "paid" || status === "delivered") return "green";
+  if (status === "pending_payment" || status === "in_preparation" || status === "shipped") return "cyan";
+  if (status === "needs_human" || status === "draft") return "amber";
+  if (status === "cancelled") return "rose";
+  return "zinc";
+}
+
+function paymentStatusTone(status: SalesCatalogPaymentStatus): "green" | "cyan" | "amber" | "rose" | "violet" | "zinc" {
+  if (status === "confirmed") return "green";
+  if (status === "proof_sent") return "cyan";
+  if (status === "failed" || status === "refunded") return "rose";
+  return "amber";
+}
+
+function fulfillmentStatusTone(status: SalesCatalogFulfillmentStatus): "green" | "cyan" | "amber" | "rose" | "violet" | "zinc" {
+  if (status === "fulfilled") return "green";
+  if (status === "scheduled" || status === "in_progress") return "cyan";
+  if (status === "cancelled") return "rose";
+  return "amber";
+}
+
+function formatDateTime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+
+  return date.toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function formatDimensions(item: ClientSalesCatalogItem) {

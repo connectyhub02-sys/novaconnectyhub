@@ -20,8 +20,29 @@ import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
 import { loadR2Config, putR2Object } from "@/lib/storage/r2";
 import { createServiceClient } from "@/lib/supabase/service";
 import { buildTrackedLinkUrl } from "@/lib/tracking/tracked-links";
-import { listOrganizationSalesCatalog } from "@/lib/client-os/sales-catalog";
-import { formatSalesCatalogInline, type ClientSalesCatalogItem, type SalesCatalogMedia } from "@/lib/sales-catalog/shared";
+import {
+  getOrganizationSalesCatalogSettings,
+  getOrganizationSalesCatalogShippingSettings,
+  listOrganizationSalesCatalog,
+  mapSalesCatalogOrder,
+  type SalesCatalogOrderItemRow,
+  type SalesCatalogOrderRow,
+} from "@/lib/client-os/sales-catalog";
+import {
+  formatSalesCatalogFulfillmentMode,
+  formatSalesCatalogFulfillmentStatus,
+  formatSalesCatalogInline,
+  formatSalesCatalogOrderStatus,
+  formatSalesCatalogPaymentStatus,
+  formatSalesCatalogStockStatus,
+  type ClientSalesCatalogItem,
+  type ClientSalesCatalogOrder,
+  type ClientSalesCatalogSettings,
+  type ClientSalesCatalogShippingSettings,
+  type SalesCatalogMedia,
+  type SalesCatalogShippingQuote,
+} from "@/lib/sales-catalog/shared";
+import { calculateSalesCatalogShippingQuotes, normalizeSalesCatalogCep } from "@/lib/sales-catalog/shipping-calculator";
 import {
   defaultWhatsappAgentPrompt,
   defaultWhatsappGlobalPrompt,
@@ -147,6 +168,16 @@ type RuntimeLinkButton = {
 };
 
 type RuntimeSalesCatalogItem = ClientSalesCatalogItem;
+type RuntimeSalesCatalogOrder = ClientSalesCatalogOrder;
+type RuntimeSalesCatalogShippingQuote = {
+  itemId: string;
+  itemTitle: string;
+  itemTag: string | null;
+  cep: string;
+  destination: string | null;
+  quotes: SalesCatalogShippingQuote[];
+  error: string | null;
+};
 
 type InteractiveLinkMatch = {
   link: RuntimeLinkButton;
@@ -386,6 +417,27 @@ export async function processWhatsappAgentRun(input: {
       await persistLeadMediaFile({ client, context, token, latestInbound }).catch(() => {});
     }
 
+    const refreshedSalesCatalogOrders = await maybeMarkSalesCatalogPaymentProof({
+      client,
+      context,
+      latestInbound,
+      userText,
+    }).catch(() => null);
+
+    if (refreshedSalesCatalogOrders) {
+      context.salesCatalogOrders = refreshedSalesCatalogOrders;
+    }
+
+    const refreshedSalesCatalogOrdersWithShipping = await maybeAttachSalesCatalogShippingQuoteToOrder({
+      client,
+      context,
+      userText,
+    }).catch(() => null);
+
+    if (refreshedSalesCatalogOrdersWithShipping) {
+      context.salesCatalogOrders = refreshedSalesCatalogOrdersWithShipping;
+    }
+
     if (behavior.botLoopProtection && isBotLoopRisk(context.messages)) {
       await pauseConversationForHuman(client, context.conversationId, behavior, "bot_loop_protection");
       return await completeRun(client, run.id, "Protecao contra loop acionada.", { skipped: true, reason: "bot_loop_protection" });
@@ -451,6 +503,12 @@ export async function processWhatsappAgentRun(input: {
     await maybeSetInstanceAvailable(context, token, "before");
 
     const cachedAiText = readCachedRunResponseText(context.run.metadata);
+    const salesCatalogShippingQuotes = buildRuntimeSalesCatalogShippingQuoteContext({
+      items: context.salesCatalog,
+      orders: context.salesCatalogOrders,
+      settings: context.salesCatalogShippingSettings,
+      userText,
+    });
     const aiText = cachedAiText ?? await generateAgentResponse({
       credentials: context.geminiCredentials,
       organization,
@@ -462,6 +520,9 @@ export async function processWhatsappAgentRun(input: {
       knowledge: context.knowledge,
       linkButtons: context.linkButtons,
       salesCatalog: context.salesCatalog,
+      salesCatalogSettings: context.salesCatalogSettings,
+      salesCatalogShippingQuotes,
+      salesCatalogOrders: context.salesCatalogOrders,
       learnings: context.learnings,
       crossAgentContext: context.crossAgentContext,
       messages: context.messages,
@@ -585,16 +646,26 @@ async function loadRunContext(client: SupabaseClient, runId: string) {
   const instanceMetadata = readRecord(instance.metadata);
   const sectorId = asString(instanceMetadata?.sector_id) ?? asString(readRecord(agent.metadata)?.sector_id);
   const isPlatformWhatsapp = instanceMetadata?.admin_whatsapp === true && Boolean(sectorId);
-  const [knowledge, linkButtons, salesCatalog] = isPlatformWhatsapp && sectorId
+  const [knowledge, linkButtons, salesCatalog, salesCatalogSettings, salesCatalogShippingSettings, salesCatalogOrders] = isPlatformWhatsapp && sectorId
     ? await Promise.all([
         loadPlatformSectorKnowledge(client, sectorId),
         loadPlatformSectorLinkButtons(client, sectorId),
         Promise.resolve([] as RuntimeSalesCatalogItem[]),
+        Promise.resolve(null as ClientSalesCatalogSettings | null),
+        Promise.resolve(null as ClientSalesCatalogShippingSettings | null),
+        Promise.resolve([] as RuntimeSalesCatalogOrder[]),
       ])
     : await Promise.all([
         loadOrganizationKnowledge(client, run.organization_id),
         loadOrganizationLinkButtons(client, run.organization_id),
         listOrganizationSalesCatalog(client, run.organization_id).then((items) => items.filter((item) => item.status === "active")),
+        getOrganizationSalesCatalogSettings(client, run.organization_id),
+        getOrganizationSalesCatalogShippingSettings(client, run.organization_id).catch(() => null),
+        loadOrganizationSalesCatalogOrders(client, {
+          organizationId: run.organization_id,
+          leadId,
+          conversationId,
+        }),
       ]);
 
   const behavior = normalizeWhatsappBehaviorConfig(
@@ -631,6 +702,9 @@ async function loadRunContext(client: SupabaseClient, runId: string) {
     knowledge,
     linkButtons,
     salesCatalog,
+    salesCatalogSettings,
+    salesCatalogShippingSettings,
+    salesCatalogOrders,
     learnings,
     crossAgentContext,
     behavior,
@@ -939,6 +1013,300 @@ async function loadConversationMessages(client: SupabaseClient, conversationId: 
   return ((data ?? []) as ConversationMessageRow[]).reverse();
 }
 
+async function loadOrganizationSalesCatalogOrders(
+  client: SupabaseClient,
+  input: {
+    organizationId: string;
+    leadId: string | null;
+    conversationId: string | null;
+  },
+): Promise<RuntimeSalesCatalogOrder[]> {
+  if (!input.leadId && !input.conversationId) {
+    return [];
+  }
+
+  try {
+    let query = client
+      .from("sales_catalog_orders")
+      .select([
+        "id",
+        "organization_id",
+        "lead_id",
+        "conversation_id",
+        "source",
+        "status",
+        "payment_status",
+        "fulfillment_status",
+        "customer_name",
+        "customer_phone",
+        "customer_document",
+        "customer_email",
+        "destination_cep",
+        "destination_address",
+        "subtotal",
+        "discount_total",
+        "shipping_total",
+        "total",
+        "payment_method",
+        "shipping_method",
+        "agent_notes",
+        "internal_notes",
+        "metadata",
+        "created_by",
+        "created_at",
+        "updated_at",
+      ].join(", "))
+      .eq("organization_id", input.organizationId)
+      .order("updated_at", { ascending: false })
+      .limit(8);
+
+    if (input.leadId && input.conversationId) {
+      query = query.or(`lead_id.eq.${input.leadId},conversation_id.eq.${input.conversationId}`);
+    } else if (input.leadId) {
+      query = query.eq("lead_id", input.leadId);
+    } else if (input.conversationId) {
+      query = query.eq("conversation_id", input.conversationId);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      return [];
+    }
+
+    const orderRows = (data ?? []) as unknown as SalesCatalogOrderRow[];
+    const orderIds = orderRows.map((order) => order.id);
+
+    if (orderIds.length === 0) {
+      return [];
+    }
+
+    const { data: itemData, error: itemError } = await client
+      .from("sales_catalog_order_items")
+      .select("id, order_id, organization_id, catalog_item_id, title, tag, quantity, unit_price, sale_price, total, attributes, fulfillment, metadata, created_at")
+      .in("order_id", orderIds)
+      .order("created_at", { ascending: true });
+
+    if (itemError) {
+      return orderRows.map((order) => mapSalesCatalogOrder(order, []));
+    }
+
+    const itemsByOrder = new Map<string, SalesCatalogOrderItemRow[]>();
+
+    for (const item of (itemData ?? []) as unknown as SalesCatalogOrderItemRow[]) {
+      const current = itemsByOrder.get(item.order_id) ?? [];
+      current.push(item);
+      itemsByOrder.set(item.order_id, current);
+    }
+
+    return orderRows.map((order) => mapSalesCatalogOrder(order, itemsByOrder.get(order.id) ?? []));
+  } catch {
+    return [];
+  }
+}
+
+async function maybeMarkSalesCatalogPaymentProof(input: {
+  client: SupabaseClient;
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
+  latestInbound: ConversationMessageRow | null;
+  userText: string;
+}): Promise<RuntimeSalesCatalogOrder[] | null> {
+  if (!hasPaymentProofSignal(input.latestInbound, input.userText)) {
+    return null;
+  }
+
+  const order = input.context.salesCatalogOrders.find((item) => (
+    item.paymentStatus !== "confirmed"
+    && item.paymentStatus !== "refunded"
+    && item.status !== "cancelled"
+    && item.status !== "delivered"
+  ));
+
+  if (!order) {
+    return null;
+  }
+
+  const now = new Date().toISOString();
+  const note = [
+    `Comprovante sinalizado pelo lead em ${formatRuntimeDate(now)}.`,
+    input.userText ? `Mensagem: ${preview(input.userText, 320)}` : "",
+    input.latestInbound ? `Midia: ${detectInboundMediaKind(input.latestInbound) ?? input.latestInbound.message_type ?? "texto"}` : "",
+  ].filter(Boolean).join(" ");
+  const internalNotes = appendInternalOrderNote(order.internalNotes, note);
+  const { error } = await input.client
+    .from("sales_catalog_orders")
+    .update({
+      payment_status: "proof_sent",
+      status: "needs_human",
+      internal_notes: internalNotes,
+    })
+    .eq("id", order.id)
+    .eq("organization_id", input.context.organization.id);
+
+  if (error) {
+    return null;
+  }
+
+  await input.client.from("intelligence_events").insert({
+    scope: "organization",
+    organization_id: input.context.organization.id,
+    source_type: "sales_catalog_order",
+    source_id: order.id,
+    producer_agent_id: input.context.agent.id,
+    event_type: "sales_catalog.payment_proof_received",
+    title: "Comprovante recebido no WhatsApp",
+    summary: `Pedido ${order.id.slice(0, 8)} marcado para validacao humana.`,
+    confidence: 0.82,
+    visibility: "organization",
+    tags: ["sales_catalog", "sales_catalog_order", "payment", "whatsapp", "lead_tracking"],
+    payload: {
+      order_id: order.id,
+      lead_id: input.context.lead?.id ?? null,
+      conversation_id: input.context.conversationId,
+      agent_run_id: input.context.run.id,
+      media_kind: input.latestInbound ? detectInboundMediaKind(input.latestInbound) : null,
+      message_preview: preview(input.userText, 500),
+    },
+  });
+
+  return loadOrganizationSalesCatalogOrders(input.client, {
+    organizationId: input.context.organization.id,
+    leadId: input.context.lead?.id ?? null,
+    conversationId: input.context.conversationId,
+  });
+}
+
+async function maybeAttachSalesCatalogShippingQuoteToOrder(input: {
+  client: SupabaseClient;
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
+  userText: string;
+}): Promise<RuntimeSalesCatalogOrder[] | null> {
+  const cep = extractFirstBrazilianCep(input.userText);
+  if (!cep || !input.context.salesCatalogShippingSettings?.configured) return null;
+
+  const order = input.context.salesCatalogOrders.find((item) => (
+    item.status !== "cancelled"
+    && item.status !== "delivered"
+    && item.fulfillmentStatus !== "fulfilled"
+    && !item.shippingTotal
+    && item.items.some((orderItem) => Boolean(orderItem.catalogItemId))
+  ));
+
+  if (!order) return null;
+
+  const orderItem = order.items.find((item) => item.catalogItemId);
+  const catalogItem = input.context.salesCatalog.find((item) => item.id === orderItem?.catalogItemId);
+  if (!catalogItem) return null;
+
+  const result = calculateSalesCatalogShippingQuotes({
+    item: catalogItem,
+    settings: input.context.salesCatalogShippingSettings,
+    cep,
+  });
+  const quote = result.quotes[0];
+
+  if (result.error || !quote) return null;
+
+  const now = new Date().toISOString();
+  const note = [
+    `Frete calculado automaticamente em ${formatRuntimeDate(now)}.`,
+    `CEP ${cep}.`,
+    `${quote.serviceName}: ${quote.price}.`,
+    formatRuntimeShippingDeadline(quote.minDays, quote.maxDays)
+      ? `Prazo ${formatRuntimeShippingDeadline(quote.minDays, quote.maxDays)}.`
+      : "",
+  ].filter(Boolean).join(" ");
+  const internalNotes = appendInternalOrderNote(order.internalNotes, note);
+  const { data: current } = await input.client
+    .from("sales_catalog_orders")
+    .select("metadata")
+    .eq("id", order.id)
+    .eq("organization_id", input.context.organization.id)
+    .maybeSingle<{ metadata: JsonRecord | null }>();
+  const metadata = readRecord(current?.metadata) ?? {};
+  const { error } = await input.client
+    .from("sales_catalog_orders")
+    .update({
+      destination_cep: cep,
+      shipping_total: quote.price,
+      shipping_method: quote.serviceName,
+      internal_notes: internalNotes,
+      metadata: {
+        ...metadata,
+        shipping_quote_calculated_at: now,
+        shipping_quote_calculated_from: "whatsapp_agent_runtime",
+        shipping_quote: {
+          service_id: quote.serviceId,
+          service_name: quote.serviceName,
+          provider: quote.provider,
+          price: quote.price,
+          min_days: quote.minDays,
+          max_days: quote.maxDays,
+          cep: quote.cep,
+          uf: quote.uf,
+          state: quote.state,
+          weight_grams: quote.weightGrams,
+          notes: quote.notes,
+        },
+      },
+    })
+    .eq("id", order.id)
+    .eq("organization_id", input.context.organization.id);
+
+  if (error) return null;
+
+  await input.client.from("intelligence_events").insert({
+    scope: "organization",
+    organization_id: input.context.organization.id,
+    source_type: "sales_catalog_order",
+    source_id: order.id,
+    producer_agent_id: input.context.agent.id,
+    event_type: "sales_catalog.shipping_quote_saved",
+    title: "Frete calculado pelo WhatsApp",
+    summary: `${quote.serviceName}: ${quote.price} para CEP ${cep}.`,
+    confidence: 0.82,
+    visibility: "organization",
+    tags: ["sales_catalog", "sales_catalog_order", "shipping", "whatsapp", "lead_tracking"],
+    payload: {
+      order_id: order.id,
+      lead_id: input.context.lead?.id ?? null,
+      conversation_id: input.context.conversationId,
+      agent_run_id: input.context.run.id,
+      product_id: catalogItem.id,
+      cep,
+      quote,
+    },
+  });
+
+  return loadOrganizationSalesCatalogOrders(input.client, {
+    organizationId: input.context.organization.id,
+    leadId: input.context.lead?.id ?? null,
+    conversationId: input.context.conversationId,
+  });
+}
+
+function hasPaymentProofSignal(message: ConversationMessageRow | null, userText: string) {
+  const normalized = normalizeSearch(userText);
+  const mediaKind = detectInboundMediaKind(message);
+  const mentionsProof = /\b(comprovante|paguei|pagamento feito|pix feito|ja paguei|ja fiz o pix|transferencia|recibo|print do pix|enviei o pix|mandei o pix)\b/.test(normalized);
+
+  if (mentionsProof) {
+    return true;
+  }
+
+  return Boolean(mediaKind && /\b(comprovante|pix|paguei|pagamento|recibo|transferencia)\b/.test(normalized));
+}
+
+function appendInternalOrderNote(current: string | null, note: string) {
+  const existing = current?.trim();
+
+  if (!existing) {
+    return note.slice(0, 1800);
+  }
+
+  return `${existing}\n${note}`.slice(0, 1800);
+}
+
 async function loadCrossAgentConversationContext(
   client: SupabaseClient,
   input: {
@@ -1141,6 +1509,9 @@ async function generateAgentResponse(input: {
   knowledge: KnowledgeMemoryRow[];
   linkButtons: RuntimeLinkButton[];
   salesCatalog: RuntimeSalesCatalogItem[];
+  salesCatalogSettings: ClientSalesCatalogSettings | null;
+  salesCatalogShippingQuotes: RuntimeSalesCatalogShippingQuote[];
+  salesCatalogOrders: RuntimeSalesCatalogOrder[];
   learnings: KnowledgeMemoryRow[];
   crossAgentContext: CrossAgentConversationContext | null;
   messages: ConversationMessageRow[];
@@ -1199,6 +1570,9 @@ function buildSystemInstruction(input: {
   knowledge: KnowledgeMemoryRow[];
   linkButtons: RuntimeLinkButton[];
   salesCatalog: RuntimeSalesCatalogItem[];
+  salesCatalogSettings: ClientSalesCatalogSettings | null;
+  salesCatalogShippingQuotes: RuntimeSalesCatalogShippingQuote[];
+  salesCatalogOrders: RuntimeSalesCatalogOrder[];
   learnings: KnowledgeMemoryRow[];
   crossAgentContext: CrossAgentConversationContext | null;
   messages: ConversationMessageRow[];
@@ -1236,6 +1610,9 @@ function buildSystemInstruction(input: {
     ...buildKnowledgeLines(input.knowledge),
     ...buildLinkButtonLines(input.linkButtons, input),
     ...buildSalesCatalogLines(input.salesCatalog),
+    ...buildSalesCatalogCommerceLines(input.salesCatalogSettings),
+    ...buildSalesCatalogShippingQuoteLines(input.salesCatalogShippingQuotes),
+    ...buildSalesCatalogOrderLines(input.salesCatalogOrders),
     "",
     "COMPORTAMENTO CONFIGURADO:",
     `- Modo de resposta: ${input.behavior.responseMode}.`,
@@ -2110,15 +2487,273 @@ function buildSalesCatalogLines(items: RuntimeSalesCatalogItem[]) {
     "- Quando o lead pedir um produto, servico, catalogo, foto, video, PDF, preco ou proposta, escolha o item exato abaixo e use a tag correspondente.",
     "- Nunca invente produto, preco, arquivo ou condicao que nao esteja no catalogo.",
     "- Se o lead pedir algo generico, recomende no maximo 3 itens do catalogo e inclua a tag de cada um.",
+    "- Nunca invente desconto, cupom, prazo promocional ou condicao comercial; use somente oferta/cupom cadastrado no item.",
+    "- Quando houver preco promocional ou CTA cadastrado, use isso para conduzir o fechamento sem parecer texto automatico.",
+    "- Se o item estiver esgotado, nao venda como disponivel; ofereca alternativa ou pergunte se pode avisar quando voltar.",
+    "- Se o item estiver sob encomenda, deixe claro que depende de prazo/confirmacao antes de fechar.",
+    "- Para produto fisico, peca CEP/endereco quando precisar calcular entrega.",
+    "- Para item digital, conduza pagamento e envie/prepare o acesso dentro do WhatsApp.",
+    "- Para servico ou assinatura, confirme escopo, agenda/duracao e proximo passo antes de pedir pagamento.",
     "- Se o item tiver arquivos, o sistema tentara enviar as midias no WhatsApp depois da resposta.",
     "- Se nao houver item adequado, faca uma pergunta curta para identificar melhor a necessidade.",
     ...items.slice(0, 40).map((item) => {
       const mediaSummary = item.media.length > 0
         ? `${item.media.length} arquivo(s): ${item.media.map((media) => media.kind).join(", ")}`
         : "sem arquivo";
-      return `- ${item.tag} (${item.title})${item.price ? ` | ${item.price} ${item.currency}` : ""}${item.category ? ` | ${item.category}` : ""} | ${mediaSummary}: ${preview(item.description, 420)}`;
+      const inventorySummary = [
+        formatSalesCatalogStockStatus(item.inventory.status),
+        item.inventory.quantity !== null ? `${item.inventory.quantity} un.` : "",
+        item.inventory.allowBackorder ? "aceita encomenda" : "",
+      ].filter(Boolean).join(", ");
+      const offerSummary = [
+        item.offer.salePrice ? `oferta ${item.offer.salePrice}` : "",
+        item.offer.couponCode ? `cupom ${item.offer.couponCode}` : "",
+        item.offer.saleEndsAt ? `ate ${item.offer.saleEndsAt}` : "",
+        item.offer.callToAction ? `CTA: ${item.offer.callToAction}` : "",
+      ].filter(Boolean).join(", ");
+      const fulfillmentSummary = [
+        formatSalesCatalogFulfillmentMode(item.fulfillment.mode),
+        item.fulfillment.schedulingRequired ? "precisa agendar" : "",
+        item.fulfillment.serviceDuration ? `duracao/prazo ${item.fulfillment.serviceDuration}` : "",
+      ].filter(Boolean).join(", ");
+      return `- ${item.tag} (${item.title})${item.price ? ` | ${item.price} ${item.currency}` : ""}${item.category ? ` | ${item.category}` : ""}${offerSummary ? ` | ${offerSummary}` : ""} | execucao: ${fulfillmentSummary} | estoque: ${inventorySummary} | ${mediaSummary}: ${preview(item.description, 420)}`;
     }),
   ];
+}
+
+function buildSalesCatalogCommerceLines(settings: ClientSalesCatalogSettings | null) {
+  if (!settings?.configured) {
+    return [];
+  }
+
+  const activePaymentMethods = settings.paymentMethods.filter((method) => method.enabled);
+  const requiredFields = settings.leadDataPolicy.requiredFields.length > 0
+    ? settings.leadDataPolicy.requiredFields.join(", ")
+    : "somente os dados essenciais do pedido";
+
+  return [
+    "",
+    "REGRAS DE VENDA DO CATALOGO NO WHATSAPP:",
+    "- Use estas regras para conduzir orcamento, fechamento, pagamento e acompanhamento sem tirar o lead do WhatsApp.",
+    "- Quando o lead confirmar compra, reserva ou pagamento, responda com resumo curto do item, dados ainda faltantes e proximo passo; o sistema registra a intencao de pedido no painel.",
+    activePaymentMethods.length > 0
+      ? `- Metodos de pagamento ativos: ${activePaymentMethods.map((method) => `${method.label}${method.requiresProof ? " (pedir comprovante)" : ""}`).join(", ")}.`
+      : "- Nenhum pagamento automatico ativo; acione humano para fechar pagamento.",
+    ...activePaymentMethods
+      .map((method) => method.instructions ? `- ${method.label}: ${method.instructions}` : "")
+      .filter(Boolean),
+    settings.orderPolicy.minimumOrderValue ? `- Pedido minimo: ${settings.orderPolicy.minimumOrderValue}.` : "",
+    `- Reserva do pedido: ${formatRuntimeReservationPolicy(settings.orderPolicy.reservationPolicy)}.`,
+    `- Pode fechar sem pagamento: ${settings.orderPolicy.allowOrderWithoutPayment ? "sim" : "nao"}.`,
+    `- Confirmacao humana antes de finalizar: ${settings.orderPolicy.requireHumanConfirmation ? "sim" : "nao"}.`,
+    `- Pedir CEP antes de informar frete: ${settings.orderPolicy.askCepBeforeQuote ? "sim" : "nao"}.`,
+    settings.orderPolicy.abandonedCartMinutes !== null ? `- Retomar conversa parada apos ${settings.orderPolicy.abandonedCartMinutes} minuto(s), se a automacao estiver ativa.` : "",
+    settings.orderPolicy.followUpDays !== null ? `- Pos-venda em ${settings.orderPolicy.followUpDays} dia(s), se a automacao estiver ativa.` : "",
+    `- Dados para fechar pedido: ${requiredFields}.`,
+    settings.leadDataPolicy.consentMessage ? `- Consentimento de dados: ${settings.leadDataPolicy.consentMessage}` : "",
+    settings.leadDataPolicy.retentionDays !== null ? `- Retencao de dados configurada: ${settings.leadDataPolicy.retentionDays} dia(s).` : "",
+    "- Templates disponiveis para adaptar sem repetir mecanicamente:",
+    `  Resumo: ${settings.messageTemplates.orderSummary}`,
+    `  Pagamento: ${settings.messageTemplates.paymentRequest}`,
+    `  Pago: ${settings.messageTemplates.paymentConfirmed}`,
+    `  Indisponivel: ${settings.messageTemplates.unavailableItem}`,
+    `  Humano: ${settings.messageTemplates.humanHandoff}`,
+  ].filter(Boolean);
+}
+
+function buildSalesCatalogShippingQuoteLines(quotes: RuntimeSalesCatalogShippingQuote[]) {
+  if (quotes.length === 0) {
+    return [];
+  }
+
+  return [
+    "",
+    "COTACAO DE FRETE CALCULADA PELO SISTEMA:",
+    "- Use estes valores quando responder sobre frete/entrega. Nao invente outro valor, prazo ou transportadora.",
+    "- Se houver erro abaixo, explique de forma curta e peca o dado que falta ou acione humano.",
+    ...quotes.flatMap((entry) => {
+      const header = `- ${entry.itemTag ? `${entry.itemTag} ` : ""}${entry.itemTitle} para CEP ${entry.cep}${entry.destination ? ` (${entry.destination})` : ""}:`;
+
+      if (entry.error) {
+        return [header, `  - ${entry.error}`];
+      }
+
+      if (entry.quotes.length === 0) {
+        return [header, "  - Nenhuma opcao de frete configurada para esse destino."];
+      }
+
+      return [
+        header,
+        ...entry.quotes.slice(0, 4).map((quote) => {
+          const deadline = formatRuntimeShippingDeadline(quote.minDays, quote.maxDays);
+          const notes = quote.notes ? ` | obs: ${preview(quote.notes, 140)}` : "";
+          return `  - ${quote.serviceName}: ${quote.price}${deadline ? ` | prazo ${deadline}` : ""}${notes}`;
+        }),
+      ];
+    }),
+  ];
+}
+
+function buildSalesCatalogOrderLines(orders: RuntimeSalesCatalogOrder[]) {
+  if (orders.length === 0) {
+    return [];
+  }
+
+  return [
+    "",
+    "PEDIDOS DO LEAD NO CATALOGO:",
+    "- Use estes pedidos para acompanhar venda, pagamento, entrega e pos-venda pelo WhatsApp.",
+    "- Se o lead perguntar sobre status, responda somente com o que esta cadastrado aqui; nao invente codigo de rastreio, data ou confirmacao.",
+    "- Se faltar dado importante ou houver divergencia, peca o dado de forma curta ou acione humano.",
+    "- Se o pedido estiver cancelado, nao conduza pagamento como se estivesse ativo sem confirmar antes.",
+    ...orders.slice(0, 6).map((order) => {
+      const itemSummary = order.items.length > 0
+        ? order.items.slice(0, 4).map((item) => {
+            const attributes = item.attributes.length > 0
+              ? ` (${item.attributes.map((attribute) => `${attribute.name}: ${attribute.values.join("/")}`).join("; ")})`
+              : "";
+            return `${item.quantity}x ${item.title}${attributes}`;
+          }).join(", ")
+        : "sem item vinculado";
+      const parts = [
+        `pedido ${order.id.slice(0, 8)}`,
+        `status ${formatSalesCatalogOrderStatus(order.status)}`,
+        `pagamento ${formatSalesCatalogPaymentStatus(order.paymentStatus)}`,
+        `execucao ${formatSalesCatalogFulfillmentStatus(order.fulfillmentStatus)}`,
+        order.total ? `total ${order.total}` : "",
+        order.shippingTotal ? `frete ${order.shippingTotal}` : "",
+        order.paymentMethod ? `metodo ${order.paymentMethod}` : "",
+        order.shippingMethod ? `entrega ${order.shippingMethod}` : "",
+        order.destinationCep ? `CEP ${order.destinationCep}` : "",
+        order.updatedAt ? `atualizado ${formatRuntimeDate(order.updatedAt)}` : "",
+      ].filter(Boolean);
+
+      return `- ${parts.join(" | ")} | itens: ${itemSummary}${order.internalNotes ? ` | nota interna: ${preview(order.internalNotes, 220)}` : ""}${order.agentNotes ? ` | nota do agente: ${preview(order.agentNotes, 220)}` : ""}`;
+    }),
+  ];
+}
+
+function formatRuntimeReservationPolicy(value: ClientSalesCatalogSettings["orderPolicy"]["reservationPolicy"]) {
+  if (value === "before_payment") return "pode reservar antes do pagamento";
+  if (value === "manual_approval") return "so reserve depois de aprovacao humana";
+  return "reserve apenas apos pagamento confirmado";
+}
+
+function buildRuntimeSalesCatalogShippingQuoteContext(input: {
+  items: RuntimeSalesCatalogItem[];
+  orders: RuntimeSalesCatalogOrder[];
+  settings: ClientSalesCatalogShippingSettings | null;
+  userText: string;
+}): RuntimeSalesCatalogShippingQuote[] {
+  if (!input.settings?.configured || input.items.length === 0) return [];
+
+  const cep = extractFirstBrazilianCep(input.userText);
+  if (!cep) return [];
+
+  const selectedItems = selectSalesCatalogItemsForShipping(input.items, input.orders, input.userText);
+  if (selectedItems.length === 0) {
+    return [{
+      itemId: "unknown",
+      itemTitle: "Produto nao identificado",
+      itemTag: null,
+      cep,
+      destination: null,
+      quotes: [],
+      error: "CEP recebido, mas nao foi possivel identificar para qual produto calcular o frete.",
+    }];
+  }
+
+  return selectedItems.slice(0, 3).map((item) => {
+    const result = calculateSalesCatalogShippingQuotes({ item, settings: input.settings!, cep });
+
+    return {
+      itemId: item.id,
+      itemTitle: item.title,
+      itemTag: item.tag,
+      cep,
+      destination: result.destination ? `${result.destination.uf} - ${result.destination.state}` : null,
+      quotes: result.quotes,
+      error: result.error,
+    };
+  });
+}
+
+function selectSalesCatalogItemsForShipping(
+  items: RuntimeSalesCatalogItem[],
+  orders: RuntimeSalesCatalogOrder[],
+  userText: string,
+) {
+  const itemsById = new Map(items.map((item) => [item.id, item]));
+  const selected = new Map<string, RuntimeSalesCatalogItem>();
+
+  for (const order of orders) {
+    if (order.status === "cancelled") continue;
+
+    for (const orderItem of order.items) {
+      if (!orderItem.catalogItemId) continue;
+
+      const item = itemsById.get(orderItem.catalogItemId);
+      if (item) selected.set(item.id, item);
+    }
+  }
+
+  const normalizedText = normalizeSearch(userText);
+
+  for (const item of items) {
+    if (item.tag && userText.includes(item.tag)) {
+      selected.set(item.id, item);
+      continue;
+    }
+
+    const title = normalizeSearch(item.title);
+    if (title.length >= 4 && normalizedText.includes(title)) {
+      selected.set(item.id, item);
+      continue;
+    }
+
+    const category = normalizeSearch(item.category ?? "");
+    if (category.length >= 4 && normalizedText.includes(category)) {
+      selected.set(item.id, item);
+    }
+  }
+
+  if (selected.size === 0 && items.length === 1) {
+    selected.set(items[0].id, items[0]);
+  }
+
+  return Array.from(selected.values());
+}
+
+function extractFirstBrazilianCep(value: string) {
+  const matches = value.match(/\b\d{5}[-.\s]?\d{3}\b/g);
+  if (!matches) return null;
+
+  for (const match of matches) {
+    const cep = normalizeSalesCatalogCep(match);
+    if (cep) return cep;
+  }
+
+  return null;
+}
+
+function formatRuntimeShippingDeadline(minDays: number | null, maxDays: number | null) {
+  if (minDays !== null && maxDays !== null) return `${minDays}-${maxDays} dia(s)`;
+  if (minDays !== null) return `a partir de ${minDays} dia(s)`;
+  if (maxDays !== null) return `ate ${maxDays} dia(s)`;
+  return "";
+}
+
+function formatRuntimeDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+
+  return date.toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function renderLinkButtonTags(
@@ -2797,6 +3432,13 @@ async function sendAgentResponse(input: {
       outbound.push({ ...message, persisted: true });
     }
 
+    await recordSalesCatalogOrderIntent({
+      client: input.client,
+      context,
+      items: renderedCatalog.items,
+      text: cleanText,
+    });
+
     return outbound;
   }
 
@@ -2872,6 +3514,13 @@ async function sendAgentResponse(input: {
     outbound.push(...mediaOutbound);
   }
 
+  await recordSalesCatalogOrderIntent({
+    client: input.client,
+    context,
+    items: renderedCatalog.items,
+    text: cleanText,
+  });
+
   return outbound;
 }
 
@@ -2907,6 +3556,241 @@ function collectSalesCatalogAttachments(items: RuntimeSalesCatalogItem[]) {
   }
 
   return attachments;
+}
+
+async function recordSalesCatalogOrderIntent(input: {
+  client: SupabaseClient;
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
+  items: RuntimeSalesCatalogItem[];
+  text: string;
+}) {
+  const unavailableItems = input.items.filter((item) => item.status === "active" && !isSalesCatalogItemSellable(item));
+  const items = input.items.filter((item) => item.status === "active" && isSalesCatalogItemSellable(item)).slice(0, 8);
+
+  if (items.length === 0 || !hasSalesCatalogOrderIntent(input.text)) {
+    if (unavailableItems.length > 0 && hasSalesCatalogOrderIntent(input.text)) {
+      await persistSalesCatalogUnavailableOrderAttempt({
+        client: input.client,
+        context: input.context,
+        items: unavailableItems,
+        text: input.text,
+      });
+    }
+    return;
+  }
+
+  try {
+    const { data: existingData } = await input.client
+      .from("sales_catalog_orders")
+      .select("id")
+      .eq("organization_id", input.context.organization.id)
+      .eq("metadata->>agent_run_id", input.context.run.id)
+      .limit(1)
+      .maybeSingle();
+    const existing = existingData as unknown as { id: string } | null;
+
+    if (existing?.id) {
+      return;
+    }
+
+    const customerName = input.context.lead
+      ? resolveLeadPersonalName({
+          displayName: input.context.lead.display_name,
+          metadata: input.context.lead.metadata,
+        })
+      : null;
+    const customerPhone = input.context.lead?.phone_number ?? input.context.phoneNumber ?? null;
+    const primaryItem = items[0];
+    const total = items.length === 1 ? primaryItem.offer.salePrice ?? primaryItem.price : null;
+    const now = new Date().toISOString();
+    const { data: orderData, error: orderError } = await input.client
+      .from("sales_catalog_orders")
+      .insert({
+        organization_id: input.context.organization.id,
+        lead_id: input.context.lead?.id ?? null,
+        conversation_id: input.context.conversationId,
+        source: "whatsapp_agent",
+        status: "pending_payment",
+        payment_status: "pending",
+        fulfillment_status: primaryItem.fulfillment.schedulingRequired ? "scheduled" : "pending",
+        customer_name: customerName,
+        customer_phone: customerPhone,
+        subtotal: total,
+        total,
+        agent_notes: preview(input.text, 1000),
+        metadata: {
+          created_from: "whatsapp_agent_runtime",
+          agent_run_id: input.context.run.id,
+          agent_id: input.context.agent.id,
+          selected_catalog_item_ids: items.map((item) => item.id),
+          selected_catalog_item_tags: items.map((item) => item.tag),
+        },
+        created_at: now,
+        updated_at: now,
+      })
+      .select("id")
+      .single();
+    const order = orderData as unknown as { id: string } | null;
+
+    if (orderError || !order?.id) {
+      return;
+    }
+
+    const orderItems = items.map((item) => ({
+      order_id: order.id,
+      organization_id: input.context.organization.id,
+      catalog_item_id: item.id,
+      title: item.title,
+      tag: item.tag,
+      quantity: 1,
+      unit_price: item.price,
+      sale_price: item.offer.salePrice,
+      total: item.offer.salePrice ?? item.price,
+      attributes: item.attributes.map((attribute) => ({
+        id: attribute.id,
+        name: attribute.name,
+        values: attribute.values,
+      })),
+      fulfillment: {
+        mode: item.fulfillment.mode,
+        scheduling_required: item.fulfillment.schedulingRequired,
+        service_duration: item.fulfillment.serviceDuration,
+        delivery_instructions: item.fulfillment.deliveryInstructions,
+        access_instructions: item.fulfillment.accessInstructions,
+      },
+      metadata: {
+        category: item.category,
+        currency: item.currency,
+        source: item.source,
+        stock_status: item.inventory.status,
+      },
+    }));
+
+    await input.client.from("sales_catalog_order_items").insert(orderItems);
+    await input.client.from("intelligence_events").insert({
+      scope: "organization",
+      organization_id: input.context.organization.id,
+      source_type: "sales_catalog_order",
+      source_id: order.id,
+      producer_agent_id: input.context.agent.id,
+      event_type: "sales_catalog.order_intent_created",
+      title: "Intencao de pedido criada pelo WhatsApp",
+      summary: items.map((item) => item.title).join(", "),
+      confidence: 0.76,
+      visibility: "organization",
+      tags: ["sales_catalog", "sales_catalog_order", "whatsapp", "lead_tracking"],
+      payload: {
+        order_id: order.id,
+        lead_id: input.context.lead?.id ?? null,
+        conversation_id: input.context.conversationId,
+        agent_run_id: input.context.run.id,
+        product_ids: items.map((item) => item.id),
+        product_tags: items.map((item) => item.tag),
+      },
+    });
+
+    await scheduleSalesCatalogOrderAbandonedFollowUp({
+      client: input.client,
+      context: input.context,
+      orderId: order.id,
+    });
+  } catch {
+    return;
+  }
+}
+
+async function scheduleSalesCatalogOrderAbandonedFollowUp(input: {
+  client: SupabaseClient;
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
+  orderId: string;
+}) {
+  const delayMinutes = input.context.salesCatalogSettings?.orderPolicy.abandonedCartMinutes;
+  if (
+    !input.context.behavior.proactiveFollowUp
+    || !input.context.lead?.id
+    || !delayMinutes
+    || delayMinutes <= 0
+  ) {
+    return;
+  }
+
+  try {
+    const { enqueueWhatsappFollowUp } = await import("./proactive-followup");
+    await enqueueWhatsappFollowUp({
+      organizationId: input.context.organization.id,
+      whatsappInstanceId: input.context.instance.id,
+      conversationId: input.context.conversationId,
+      leadId: input.context.lead.id,
+      agentId: input.context.agent.id,
+      agentRunId: input.context.run.id,
+      salesCatalogOrderId: input.orderId,
+      salesCatalogFollowUpKind: "abandoned_order",
+    }, delayMinutes);
+
+    await input.client.from("intelligence_events").insert({
+      scope: "organization",
+      organization_id: input.context.organization.id,
+      source_type: "sales_catalog_order",
+      source_id: input.orderId,
+      producer_agent_id: input.context.agent.id,
+      event_type: "sales_catalog.order_followup_scheduled",
+      title: "Follow-up de pedido agendado",
+      summary: `Retomar pedido se o lead ficar sem resposta por ${delayMinutes} minuto(s).`,
+      confidence: 0.74,
+      visibility: "organization",
+      tags: ["sales_catalog", "sales_catalog_order", "whatsapp", "follow_up"],
+      payload: {
+        order_id: input.orderId,
+        lead_id: input.context.lead.id,
+        conversation_id: input.context.conversationId,
+        agent_run_id: input.context.run.id,
+        delay_minutes: delayMinutes,
+        follow_up_kind: "abandoned_order",
+      },
+    });
+  } catch {
+    return;
+  }
+}
+
+function isSalesCatalogItemSellable(item: RuntimeSalesCatalogItem) {
+  return item.inventory.status !== "out_of_stock" || item.inventory.allowBackorder;
+}
+
+async function persistSalesCatalogUnavailableOrderAttempt(input: {
+  client: SupabaseClient;
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
+  items: RuntimeSalesCatalogItem[];
+  text: string;
+}) {
+  await input.client.from("intelligence_events").insert({
+    scope: "organization",
+    organization_id: input.context.organization.id,
+    source_type: "sales_catalog",
+    source_id: input.items[0]?.id ?? input.context.conversationId,
+    producer_agent_id: input.context.agent.id,
+    event_type: "sales_catalog.unavailable_order_attempt",
+    title: "Tentativa de pedido com item indisponivel",
+    summary: input.items.map((item) => item.title).join(", "),
+    confidence: 0.72,
+    visibility: "organization",
+    tags: ["sales_catalog", "sales_catalog_order", "inventory", "whatsapp", "lead_tracking"],
+    payload: {
+      lead_id: input.context.lead?.id ?? null,
+      conversation_id: input.context.conversationId,
+      agent_run_id: input.context.run.id,
+      product_ids: input.items.map((item) => item.id),
+      product_tags: input.items.map((item) => item.tag),
+      message_preview: preview(input.text, 500),
+    },
+  });
+}
+
+function hasSalesCatalogOrderIntent(text: string) {
+  const normalized = normalizeSearch(text);
+
+  return /\b(fechar|fechamos|confirmar|confirmo|confirmado|comprar|compra|pedido|pedir|reservar|reservo|reservado|pagamento|pagar|pix|comprovante|entrega|frete|cep)\b/.test(normalized)
+    && !/\b(nao quero|nao vou|sem interesse|apenas olhando|so olhando|so ver|somente ver)\b/.test(normalized);
 }
 
 async function sendSalesCatalogMediaAttachments(input: {

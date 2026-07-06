@@ -4,6 +4,14 @@ export type SalesCatalogSource = "manual" | "whatsapp_catalog";
 export type SalesCatalogBusinessType = "simple" | "fashion" | "physical" | "services" | "digital" | "food";
 export type SalesCatalogShippingProfile = "default" | "free" | "custom";
 export type SalesCatalogShippingProvider = "correios" | "carrier";
+export type SalesCatalogPaymentMethodId = "pix" | "card_link" | "boleto" | "cash_on_delivery" | "manual";
+export type SalesCatalogReservationPolicy = "after_payment" | "before_payment" | "manual_approval";
+export type SalesCatalogLeadDataField = "name" | "phone" | "cep" | "address" | "cpf_cnpj" | "email";
+export type SalesCatalogStockStatus = "in_stock" | "out_of_stock" | "on_backorder";
+export type SalesCatalogFulfillmentMode = "physical" | "digital" | "service" | "subscription";
+export type SalesCatalogOrderStatus = "draft" | "pending_payment" | "paid" | "in_preparation" | "shipped" | "delivered" | "cancelled" | "needs_human";
+export type SalesCatalogPaymentStatus = "pending" | "proof_sent" | "confirmed" | "failed" | "refunded";
+export type SalesCatalogFulfillmentStatus = "pending" | "scheduled" | "in_progress" | "fulfilled" | "cancelled";
 
 export type SalesCatalogAttribute = {
   id: string;
@@ -16,6 +24,64 @@ export type SalesCatalogItemAttribute = {
   id: string;
   name: string;
   values: string[];
+};
+
+export type SalesCatalogPaymentMethod = {
+  id: SalesCatalogPaymentMethodId;
+  label: string;
+  enabled: boolean;
+  instructions: string | null;
+  requiresProof: boolean;
+};
+
+export type SalesCatalogOrderPolicy = {
+  minimumOrderValue: string | null;
+  reservationPolicy: SalesCatalogReservationPolicy;
+  allowOrderWithoutPayment: boolean;
+  requireHumanConfirmation: boolean;
+  askCepBeforeQuote: boolean;
+  abandonedCartMinutes: number | null;
+  followUpDays: number | null;
+};
+
+export type SalesCatalogLeadDataPolicy = {
+  requiredFields: SalesCatalogLeadDataField[];
+  consentMessage: string | null;
+  retentionDays: number | null;
+};
+
+export type SalesCatalogWhatsAppMessageTemplates = {
+  orderSummary: string;
+  paymentRequest: string;
+  paymentConfirmed: string;
+  unavailableItem: string;
+  humanHandoff: string;
+};
+
+export type SalesCatalogProductInventory = {
+  status: SalesCatalogStockStatus;
+  quantity: number | null;
+  lowStockThreshold: number | null;
+  allowBackorder: boolean;
+  notes: string | null;
+};
+
+export type SalesCatalogProductOffer = {
+  salePrice: string | null;
+  saleStartsAt: string | null;
+  saleEndsAt: string | null;
+  couponCode: string | null;
+  couponDescription: string | null;
+  callToAction: string | null;
+  notes: string | null;
+};
+
+export type SalesCatalogProductFulfillment = {
+  mode: SalesCatalogFulfillmentMode;
+  schedulingRequired: boolean;
+  serviceDuration: string | null;
+  deliveryInstructions: string | null;
+  accessInstructions: string | null;
 };
 
 export type SalesCatalogMedia = {
@@ -71,6 +137,9 @@ export type ClientSalesCatalogItem = {
   tag: string;
   media: SalesCatalogMedia[];
   attributes: SalesCatalogItemAttribute[];
+  inventory: SalesCatalogProductInventory;
+  offer: SalesCatalogProductOffer;
+  fulfillment: SalesCatalogProductFulfillment;
   shipping: SalesCatalogProductShipping;
   source: SalesCatalogSource;
   whatsappCatalogId: string | null;
@@ -79,6 +148,51 @@ export type ClientSalesCatalogItem = {
   whatsappCatalogStatus: string | null;
   whatsappCatalogSyncedAt: string | null;
   readiness: "ready" | "needs_media" | "needs_description";
+  createdAt: string | null;
+  updatedAt: string | null;
+};
+
+export type ClientSalesCatalogOrderItem = {
+  id: string;
+  orderId: string;
+  companyId: string;
+  catalogItemId: string | null;
+  title: string;
+  tag: string | null;
+  quantity: number;
+  unitPrice: string | null;
+  salePrice: string | null;
+  total: string | null;
+  attributes: SalesCatalogItemAttribute[];
+  fulfillment: SalesCatalogProductFulfillment;
+  createdAt: string | null;
+};
+
+export type ClientSalesCatalogOrder = {
+  id: string;
+  companyId: string;
+  leadId: string | null;
+  conversationId: string | null;
+  source: string;
+  status: SalesCatalogOrderStatus;
+  paymentStatus: SalesCatalogPaymentStatus;
+  fulfillmentStatus: SalesCatalogFulfillmentStatus;
+  customerName: string | null;
+  customerPhone: string | null;
+  customerDocument: string | null;
+  customerEmail: string | null;
+  destinationCep: string | null;
+  destinationAddress: string | null;
+  subtotal: string | null;
+  discountTotal: string | null;
+  shippingTotal: string | null;
+  total: string | null;
+  paymentMethod: string | null;
+  shippingMethod: string | null;
+  agentNotes: string | null;
+  internalNotes: string | null;
+  items: ClientSalesCatalogOrderItem[];
+  createdBy: string | null;
   createdAt: string | null;
   updatedAt: string | null;
 };
@@ -139,9 +253,104 @@ export type ClientSalesCatalogSettings = {
   attributes: SalesCatalogAttribute[];
   trackInventory: boolean;
   variationMedia: boolean;
+  paymentMethods: SalesCatalogPaymentMethod[];
+  orderPolicy: SalesCatalogOrderPolicy;
+  leadDataPolicy: SalesCatalogLeadDataPolicy;
+  messageTemplates: SalesCatalogWhatsAppMessageTemplates;
   createdAt: string | null;
   updatedAt: string | null;
 };
+
+export type SalesCatalogCommerceSettings = Pick<
+  ClientSalesCatalogSettings,
+  "paymentMethods" | "orderPolicy" | "leadDataPolicy" | "messageTemplates"
+>;
+
+export const salesCatalogPaymentMethodTemplates: SalesCatalogPaymentMethod[] = [
+  {
+    id: "pix",
+    label: "Pix",
+    enabled: true,
+    instructions: "Enviar chave Pix, valor e pedir comprovante na mesma conversa.",
+    requiresProof: true,
+  },
+  {
+    id: "card_link",
+    label: "Cartao por link",
+    enabled: false,
+    instructions: "Enviar link de pagamento depois de confirmar produto, frete e dados do lead.",
+    requiresProof: false,
+  },
+  {
+    id: "boleto",
+    label: "Boleto",
+    enabled: false,
+    instructions: "Gerar boleto somente depois de confirmar dados do lead.",
+    requiresProof: false,
+  },
+  {
+    id: "cash_on_delivery",
+    label: "Pagamento na entrega",
+    enabled: false,
+    instructions: "Confirmar endereco, disponibilidade e taxa antes de concluir o pedido.",
+    requiresProof: false,
+  },
+  {
+    id: "manual",
+    label: "Combinar com atendente",
+    enabled: true,
+    instructions: "Acionar humano quando o lead pedir condicao especial, desconto ou contrato.",
+    requiresProof: false,
+  },
+];
+
+export const salesCatalogLeadDataFields: Array<{ value: SalesCatalogLeadDataField; label: string }> = [
+  { value: "name", label: "Nome" },
+  { value: "phone", label: "Telefone" },
+  { value: "cep", label: "CEP" },
+  { value: "address", label: "Endereco" },
+  { value: "cpf_cnpj", label: "CPF/CNPJ" },
+  { value: "email", label: "E-mail" },
+];
+
+export function createDefaultSalesCatalogOrderPolicy(): SalesCatalogOrderPolicy {
+  return {
+    minimumOrderValue: null,
+    reservationPolicy: "after_payment",
+    allowOrderWithoutPayment: false,
+    requireHumanConfirmation: false,
+    askCepBeforeQuote: true,
+    abandonedCartMinutes: 45,
+    followUpDays: 2,
+  };
+}
+
+export function createDefaultSalesCatalogLeadDataPolicy(): SalesCatalogLeadDataPolicy {
+  return {
+    requiredFields: ["name", "phone", "cep", "address"],
+    consentMessage: "Posso registrar seus dados para montar e acompanhar este pedido pelo WhatsApp?",
+    retentionDays: 365,
+  };
+}
+
+export function createDefaultSalesCatalogMessageTemplates(): SalesCatalogWhatsAppMessageTemplates {
+  return {
+    orderSummary: "Resumo do pedido: {{itens}}, entrega {{frete}}, total {{total}}.",
+    paymentRequest: "Para confirmar, o pagamento pode ser feito por {{metodo_pagamento}}. Assim que fizer, me envie o comprovante por aqui.",
+    paymentConfirmed: "Pagamento confirmado. Vou acompanhar a separacao e te aviso por aqui.",
+    unavailableItem: "Esse item nao esta disponivel agora. Posso te mandar uma opcao parecida?",
+    humanHandoff: "Vou chamar uma pessoa do time para fechar esse ponto com voce.",
+  };
+}
+
+export function createDefaultSalesCatalogCommerceSettings(): SalesCatalogCommerceSettings {
+  return {
+    paymentMethods: salesCatalogPaymentMethodTemplates.map((method) => ({ ...method })),
+    orderPolicy: createDefaultSalesCatalogOrderPolicy(),
+    leadDataPolicy: createDefaultSalesCatalogLeadDataPolicy(),
+    messageTemplates: createDefaultSalesCatalogMessageTemplates(),
+  };
+}
 
 export type SalesCatalogContentInput = {
   title: string;
@@ -151,6 +360,9 @@ export type SalesCatalogContentInput = {
   currency?: string | null;
   media?: SalesCatalogMedia[];
   attributes?: SalesCatalogItemAttribute[];
+  inventory?: SalesCatalogProductInventory | null;
+  offer?: SalesCatalogProductOffer | null;
+  fulfillment?: SalesCatalogProductFulfillment | null;
   shipping?: SalesCatalogProductShipping | null;
 };
 
@@ -361,6 +573,38 @@ export function emptySalesCatalogProductShipping(): SalesCatalogProductShipping 
   };
 }
 
+export function emptySalesCatalogProductInventory(): SalesCatalogProductInventory {
+  return {
+    status: "in_stock",
+    quantity: null,
+    lowStockThreshold: null,
+    allowBackorder: false,
+    notes: null,
+  };
+}
+
+export function emptySalesCatalogProductOffer(): SalesCatalogProductOffer {
+  return {
+    salePrice: null,
+    saleStartsAt: null,
+    saleEndsAt: null,
+    couponCode: null,
+    couponDescription: null,
+    callToAction: null,
+    notes: null,
+  };
+}
+
+export function emptySalesCatalogProductFulfillment(): SalesCatalogProductFulfillment {
+  return {
+    mode: "physical",
+    schedulingRequired: false,
+    serviceDuration: null,
+    deliveryInstructions: null,
+    accessInstructions: null,
+  };
+}
+
 export function createDefaultSalesCatalogShippingServices(): SalesCatalogShippingService[] {
   return salesCatalogShippingServiceTemplates.map((service) => ({
     ...service,
@@ -391,7 +635,13 @@ export function buildSalesCatalogContent(input: SalesCatalogContentInput) {
   ];
   const attributes = input.attributes ?? [];
   const media = input.media ?? [];
+  const inventory = input.inventory ?? emptySalesCatalogProductInventory();
+  const offer = input.offer ?? emptySalesCatalogProductOffer();
+  const fulfillment = input.fulfillment ?? emptySalesCatalogProductFulfillment();
   const shipping = input.shipping ?? emptySalesCatalogProductShipping();
+  const inventoryLines = buildInventoryLines(inventory);
+  const offerLines = buildOfferLines(offer);
+  const fulfillmentLines = buildFulfillmentLines(fulfillment);
   const shippingLines = buildShippingLines(shipping);
 
   if (attributes.length > 0) {
@@ -408,6 +658,21 @@ export function buildSalesCatalogContent(input: SalesCatalogContentInput) {
     for (const item of media) {
       lines.push(`- ${item.kind}: ${item.fileName} (${item.storageUrl})`);
     }
+  }
+
+  if (inventoryLines.length > 0) {
+    lines.push("Estoque e disponibilidade:");
+    lines.push(...inventoryLines);
+  }
+
+  if (offerLines.length > 0) {
+    lines.push("Oferta comercial:");
+    lines.push(...offerLines);
+  }
+
+  if (fulfillmentLines.length > 0) {
+    lines.push("Entrega/execucao:");
+    lines.push(...fulfillmentLines);
   }
 
   if (shippingLines.length > 0) {
@@ -432,6 +697,9 @@ export function formatSalesCatalogInline(item: ClientSalesCatalogItem) {
   ];
   const attributes = item.attributes.filter((attribute) => attribute.values.length > 0);
   const media = item.media.slice(0, 4);
+  const inventoryLines = buildInventoryLines(item.inventory);
+  const offerLines = buildOfferLines(item.offer);
+  const fulfillmentLines = buildFulfillmentLines(item.fulfillment);
   const shippingLines = buildShippingLines(item.shipping);
 
   if (attributes.length > 0) {
@@ -448,12 +716,137 @@ export function formatSalesCatalogInline(item: ClientSalesCatalogItem) {
     }
   }
 
+  if (inventoryLines.length > 0) {
+    lines.push("Estoque e disponibilidade:");
+    lines.push(...inventoryLines);
+  }
+
+  if (offerLines.length > 0) {
+    lines.push("Oferta comercial:");
+    lines.push(...offerLines);
+  }
+
+  if (fulfillmentLines.length > 0) {
+    lines.push("Entrega/execucao:");
+    lines.push(...fulfillmentLines);
+  }
+
   if (shippingLines.length > 0) {
     lines.push("Entrega e frete:");
     lines.push(...shippingLines);
   }
 
   return lines.filter(Boolean).join("\n");
+}
+
+function buildInventoryLines(inventory: SalesCatalogProductInventory) {
+  const lines: string[] = [`- Status: ${formatSalesCatalogStockStatus(inventory.status)}`];
+
+  if (inventory.quantity !== null) {
+    lines.push(`- Quantidade disponivel: ${inventory.quantity}`);
+  }
+
+  if (inventory.lowStockThreshold !== null) {
+    lines.push(`- Alerta de baixo estoque: ${inventory.lowStockThreshold}`);
+  }
+
+  if (inventory.allowBackorder) {
+    lines.push("- Aceita encomenda quando acabar.");
+  }
+
+  if (inventory.notes) {
+    lines.push(`- Observacoes: ${inventory.notes}`);
+  }
+
+  return lines;
+}
+
+export function formatSalesCatalogStockStatus(status: SalesCatalogStockStatus) {
+  if (status === "out_of_stock") return "esgotado";
+  if (status === "on_backorder") return "sob encomenda";
+  return "disponivel";
+}
+
+function buildOfferLines(offer: SalesCatalogProductOffer) {
+  const lines: string[] = [];
+
+  if (offer.salePrice) {
+    lines.push(`- Preco promocional: ${offer.salePrice}`);
+  }
+
+  if (offer.saleStartsAt || offer.saleEndsAt) {
+    lines.push(`- Validade: ${offer.saleStartsAt ?? "agora"} ate ${offer.saleEndsAt ?? "sem data final"}`);
+  }
+
+  if (offer.couponCode) {
+    lines.push(`- Cupom: ${offer.couponCode}${offer.couponDescription ? ` (${offer.couponDescription})` : ""}`);
+  }
+
+  if (offer.callToAction) {
+    lines.push(`- Chamada de venda: ${offer.callToAction}`);
+  }
+
+  if (offer.notes) {
+    lines.push(`- Condicoes: ${offer.notes}`);
+  }
+
+  return lines;
+}
+
+function buildFulfillmentLines(fulfillment: SalesCatalogProductFulfillment) {
+  const lines: string[] = [`- Tipo: ${formatSalesCatalogFulfillmentMode(fulfillment.mode)}`];
+
+  if (fulfillment.schedulingRequired) {
+    lines.push("- Precisa agendamento.");
+  }
+
+  if (fulfillment.serviceDuration) {
+    lines.push(`- Duracao/prazo: ${fulfillment.serviceDuration}`);
+  }
+
+  if (fulfillment.deliveryInstructions) {
+    lines.push(`- Entrega: ${fulfillment.deliveryInstructions}`);
+  }
+
+  if (fulfillment.accessInstructions) {
+    lines.push(`- Acesso/execucao: ${fulfillment.accessInstructions}`);
+  }
+
+  return lines;
+}
+
+export function formatSalesCatalogFulfillmentMode(mode: SalesCatalogFulfillmentMode) {
+  if (mode === "digital") return "digital no WhatsApp";
+  if (mode === "service") return "servico/agendamento";
+  if (mode === "subscription") return "assinatura/plano";
+  return "produto fisico";
+}
+
+export function formatSalesCatalogOrderStatus(status: SalesCatalogOrderStatus) {
+  if (status === "pending_payment") return "aguardando pagamento";
+  if (status === "paid") return "pago";
+  if (status === "in_preparation") return "em separacao";
+  if (status === "shipped") return "enviado";
+  if (status === "delivered") return "entregue";
+  if (status === "cancelled") return "cancelado";
+  if (status === "needs_human") return "precisa humano";
+  return "rascunho";
+}
+
+export function formatSalesCatalogPaymentStatus(status: SalesCatalogPaymentStatus) {
+  if (status === "proof_sent") return "comprovante enviado";
+  if (status === "confirmed") return "confirmado";
+  if (status === "failed") return "falhou";
+  if (status === "refunded") return "estornado";
+  return "pendente";
+}
+
+export function formatSalesCatalogFulfillmentStatus(status: SalesCatalogFulfillmentStatus) {
+  if (status === "scheduled") return "agendado";
+  if (status === "in_progress") return "em andamento";
+  if (status === "fulfilled") return "concluido";
+  if (status === "cancelled") return "cancelado";
+  return "pendente";
 }
 
 function buildShippingLines(shipping: SalesCatalogProductShipping) {

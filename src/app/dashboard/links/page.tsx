@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { ConnectyShell } from "@/components/connectyhub-os/connecty-shell";
 import { SalesCatalogConsole } from "@/components/connectyhub-os/sales-catalog-console";
 import { listClientCompanies } from "@/lib/client-os/companies";
-import { listClientSalesCatalog, listClientSalesCatalogSettings, listClientSalesCatalogShippingSettings } from "@/lib/client-os/sales-catalog";
+import { listClientSalesCatalog, listClientSalesCatalogOrders, listClientSalesCatalogSettings, listClientSalesCatalogShippingSettings } from "@/lib/client-os/sales-catalog";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
 
@@ -22,11 +22,12 @@ export default async function DashboardLinksPage() {
   }
 
   const client = createServiceClient();
-  const [companies, items, settings, shippingSettings] = await Promise.all([
+  const [companies, items, settings, shippingSettings, orders] = await Promise.all([
     listClientCompanies(workspace.user.id, client),
     listClientSalesCatalog({ userId: workspace.user.id, client }),
     listClientSalesCatalogSettings({ userId: workspace.user.id, client }),
     listClientSalesCatalogShippingSettings({ userId: workspace.user.id, client }),
+    listClientSalesCatalogOrders({ userId: workspace.user.id, client }),
   ]);
   const organization = workspace.organization;
 
@@ -43,6 +44,7 @@ export default async function DashboardLinksPage() {
         initialCompanies={companies}
         initialCompanyId={organization?.id ?? companies[0]?.id ?? null}
         initialItems={items}
+        initialOrders={orders}
         initialSettings={settings}
         initialShippingSettings={shippingSettings}
       />

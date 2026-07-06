@@ -5,26 +5,46 @@ import { requireClientCompanyAccess, listClientCompanies } from "@/lib/client-os
 import { createServiceClient } from "@/lib/supabase/service";
 import {
   createDefaultSalesCatalogShippingServices,
+  createDefaultSalesCatalogCommerceSettings,
   defaultSalesCatalogShippingRules,
+  emptySalesCatalogProductFulfillment,
+  emptySalesCatalogProductInventory,
+  emptySalesCatalogProductOffer,
   emptySalesCatalogProductShipping,
   createSalesCatalogTag,
   getSalesCatalogReadiness,
   resolveSalesCatalogMediaKind,
+  salesCatalogLeadDataFields,
+  salesCatalogPaymentMethodTemplates,
   salesCatalogBusinessTemplates,
   type ClientSalesCatalogSettings,
   type ClientSalesCatalogItem,
+  type ClientSalesCatalogOrder,
   type ClientSalesCatalogShippingSettings,
   type SalesCatalogAttribute,
   type SalesCatalogBusinessType,
+  type SalesCatalogFulfillmentStatus,
   type SalesCatalogItemAttribute,
   type SalesCatalogItemStatus,
+  type SalesCatalogLeadDataField,
+  type SalesCatalogPaymentMethod,
+  type SalesCatalogPaymentMethodId,
+  type SalesCatalogPaymentStatus,
+  type SalesCatalogReservationPolicy,
   type SalesCatalogMedia,
+  type SalesCatalogFulfillmentMode,
+  type SalesCatalogOrderStatus,
+  type SalesCatalogProductFulfillment,
   type SalesCatalogProductShipping,
+  type SalesCatalogProductInventory,
+  type SalesCatalogProductOffer,
   type SalesCatalogShippingProvider,
   type SalesCatalogShippingProfile,
   type SalesCatalogShippingRule,
   type SalesCatalogShippingService,
   type SalesCatalogShippingWeightTier,
+  type SalesCatalogStockStatus,
+  type SalesCatalogWhatsAppMessageTemplates,
   type SalesCatalogSource,
 } from "@/lib/sales-catalog/shared";
 
@@ -38,6 +58,52 @@ type SalesCatalogMemoryRow = {
   metadata: JsonRecord | null;
   created_at: string | null;
   updated_at: string | null;
+};
+
+export type SalesCatalogOrderRow = {
+  id: string;
+  organization_id: string | null;
+  lead_id: string | null;
+  conversation_id: string | null;
+  source: string | null;
+  status: string | null;
+  payment_status: string | null;
+  fulfillment_status: string | null;
+  customer_name: string | null;
+  customer_phone: string | null;
+  customer_document: string | null;
+  customer_email: string | null;
+  destination_cep: string | null;
+  destination_address: string | null;
+  subtotal: string | null;
+  discount_total: string | null;
+  shipping_total: string | null;
+  total: string | null;
+  payment_method: string | null;
+  shipping_method: string | null;
+  agent_notes: string | null;
+  internal_notes: string | null;
+  metadata: JsonRecord | null;
+  created_by: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+export type SalesCatalogOrderItemRow = {
+  id: string;
+  order_id: string;
+  organization_id: string | null;
+  catalog_item_id: string | null;
+  title: string;
+  tag: string | null;
+  quantity: number | null;
+  unit_price: string | null;
+  sale_price: string | null;
+  total: string | null;
+  attributes: unknown;
+  fulfillment: unknown;
+  metadata: JsonRecord | null;
+  created_at: string | null;
 };
 
 export async function listClientSalesCatalog(input: {
@@ -148,6 +214,85 @@ export async function listClientSalesCatalogShippingSettings(input: {
   return Array.from(latestByCompany.values());
 }
 
+export async function listClientSalesCatalogOrders(input: {
+  userId: string;
+  companyId?: string | null;
+  client?: SupabaseClient;
+}) {
+  const client = input.client ?? createServiceClient();
+  const companyIds = input.companyId
+    ? [(await requireClientCompanyAccess({ userId: input.userId, companyId: input.companyId, client })).id]
+    : (await listClientCompanies(input.userId, client)).map((company) => company.id);
+
+  if (companyIds.length === 0) {
+    return [];
+  }
+
+  const { data, error } = await client
+    .from("sales_catalog_orders")
+    .select([
+      "id",
+      "organization_id",
+      "lead_id",
+      "conversation_id",
+      "source",
+      "status",
+      "payment_status",
+      "fulfillment_status",
+      "customer_name",
+      "customer_phone",
+      "customer_document",
+      "customer_email",
+      "destination_cep",
+      "destination_address",
+      "subtotal",
+      "discount_total",
+      "shipping_total",
+      "total",
+      "payment_method",
+      "shipping_method",
+      "agent_notes",
+      "internal_notes",
+      "metadata",
+      "created_by",
+      "created_at",
+      "updated_at",
+    ].join(", "))
+    .in("organization_id", companyIds)
+    .order("updated_at", { ascending: false })
+    .limit(120);
+
+  if (error) {
+    throw new Error(`Nao foi possivel carregar os pedidos do catalogo: ${error.message}`);
+  }
+
+  const orderRows = (data ?? []) as unknown as SalesCatalogOrderRow[];
+  const orderIds = orderRows.map((order) => order.id);
+
+  if (orderIds.length === 0) {
+    return [];
+  }
+
+  const { data: itemData, error: itemError } = await client
+    .from("sales_catalog_order_items")
+    .select("id, order_id, organization_id, catalog_item_id, title, tag, quantity, unit_price, sale_price, total, attributes, fulfillment, metadata, created_at")
+    .in("order_id", orderIds)
+    .order("created_at", { ascending: true });
+
+  if (itemError) {
+    throw new Error(`Nao foi possivel carregar os itens dos pedidos: ${itemError.message}`);
+  }
+
+  const itemsByOrder = new Map<string, SalesCatalogOrderItemRow[]>();
+  for (const item of (itemData ?? []) as unknown as SalesCatalogOrderItemRow[]) {
+    const current = itemsByOrder.get(item.order_id) ?? [];
+    current.push(item);
+    itemsByOrder.set(item.order_id, current);
+  }
+
+  return orderRows.map((order) => mapSalesCatalogOrder(order, itemsByOrder.get(order.id) ?? []));
+}
+
 export async function listOrganizationSalesCatalog(
   client: SupabaseClient,
   organizationId: string,
@@ -170,6 +315,48 @@ export async function listOrganizationSalesCatalog(
   return ((data ?? []) as SalesCatalogMemoryRow[]).map(mapSalesCatalogItem);
 }
 
+export async function getOrganizationSalesCatalogSettings(
+  client: SupabaseClient,
+  organizationId: string,
+) {
+  const { data, error } = await client
+    .from("intelligence_memory")
+    .select("id, organization_id, title, content, metadata, created_at, updated_at")
+    .eq("scope", "organization")
+    .eq("organization_id", organizationId)
+    .eq("memory_type", "sales_catalog_settings")
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<SalesCatalogMemoryRow>();
+
+  if (error) {
+    throw new Error(`Nao foi possivel carregar a configuracao do catalogo de vendas: ${error.message}`);
+  }
+
+  return data ? mapSalesCatalogSettings(data) : null;
+}
+
+export async function getOrganizationSalesCatalogShippingSettings(
+  client: SupabaseClient,
+  organizationId: string,
+) {
+  const { data, error } = await client
+    .from("intelligence_memory")
+    .select("id, organization_id, title, content, metadata, created_at, updated_at")
+    .eq("scope", "organization")
+    .eq("organization_id", organizationId)
+    .eq("memory_type", "sales_catalog_shipping_settings")
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<SalesCatalogMemoryRow>();
+
+  if (error) {
+    throw new Error(`Nao foi possivel carregar o frete do catalogo de vendas: ${error.message}`);
+  }
+
+  return data ? mapSalesCatalogShippingSettings(data) : null;
+}
+
 export function mapSalesCatalogItem(row: SalesCatalogMemoryRow): ClientSalesCatalogItem {
   const metadata = readRecord(row.metadata) ?? {};
   const media = readMediaList(metadata.media);
@@ -189,6 +376,9 @@ export function mapSalesCatalogItem(row: SalesCatalogMemoryRow): ClientSalesCata
     tag: readString(metadata.tag) ?? createSalesCatalogTag(row.title, row.id),
     media,
     attributes: readItemAttributes(metadata.attributes),
+    inventory: readProductInventory(metadata.inventory),
+    offer: readProductOffer(metadata.offer),
+    fulfillment: readProductFulfillment(metadata.fulfillment),
     shipping: readProductShipping(metadata.shipping),
     source: normalizeSource(readString(metadata.source)),
     whatsappCatalogId: readString(metadata.whatsapp_catalog_id),
@@ -223,6 +413,7 @@ export function mapSalesCatalogSettings(row: SalesCatalogMemoryRow): ClientSales
   const businessType = normalizeBusinessType(readString(metadata.business_type));
   const fallback = salesCatalogBusinessTemplates.find((template) => template.value === businessType)
     ?? salesCatalogBusinessTemplates[salesCatalogBusinessTemplates.length - 1];
+  const commerceDefaults = createDefaultSalesCatalogCommerceSettings();
 
   return {
     id: row.id,
@@ -233,8 +424,64 @@ export function mapSalesCatalogSettings(row: SalesCatalogMemoryRow): ClientSales
     attributes: readAttributeList(metadata.attributes, fallback.attributes),
     trackInventory: readNullableBoolean(metadata.track_inventory) ?? fallback.trackInventory,
     variationMedia: readNullableBoolean(metadata.variation_media) ?? fallback.variationMedia,
+    paymentMethods: readPaymentMethods(metadata.payment_methods, commerceDefaults.paymentMethods),
+    orderPolicy: readOrderPolicy(metadata.order_policy, commerceDefaults.orderPolicy),
+    leadDataPolicy: readLeadDataPolicy(metadata.lead_data_policy, commerceDefaults.leadDataPolicy),
+    messageTemplates: readMessageTemplates(metadata.message_templates, commerceDefaults.messageTemplates),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  };
+}
+
+export function mapSalesCatalogOrder(
+  row: SalesCatalogOrderRow,
+  items: SalesCatalogOrderItemRow[] = [],
+): ClientSalesCatalogOrder {
+  return {
+    id: row.id,
+    companyId: readString(row.organization_id) ?? "",
+    leadId: readString(row.lead_id),
+    conversationId: readString(row.conversation_id),
+    source: readString(row.source) ?? "dashboard",
+    status: normalizeOrderStatus(readString(row.status)),
+    paymentStatus: normalizePaymentStatus(readString(row.payment_status)),
+    fulfillmentStatus: normalizeFulfillmentStatus(readString(row.fulfillment_status)),
+    customerName: readString(row.customer_name),
+    customerPhone: readString(row.customer_phone),
+    customerDocument: readString(row.customer_document),
+    customerEmail: readString(row.customer_email),
+    destinationCep: readString(row.destination_cep),
+    destinationAddress: readString(row.destination_address),
+    subtotal: readString(row.subtotal),
+    discountTotal: readString(row.discount_total),
+    shippingTotal: readString(row.shipping_total),
+    total: readString(row.total),
+    paymentMethod: readString(row.payment_method),
+    shippingMethod: readString(row.shipping_method),
+    agentNotes: readString(row.agent_notes),
+    internalNotes: readString(row.internal_notes),
+    items: items.map(mapSalesCatalogOrderItem),
+    createdBy: readString(row.created_by),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function mapSalesCatalogOrderItem(row: SalesCatalogOrderItemRow): ClientSalesCatalogOrder["items"][number] {
+  return {
+    id: row.id,
+    orderId: row.order_id,
+    companyId: readString(row.organization_id) ?? "",
+    catalogItemId: readString(row.catalog_item_id),
+    title: readString(row.title) ?? "Item do catalogo",
+    tag: readString(row.tag),
+    quantity: readNumber(row.quantity) ?? 1,
+    unitPrice: readString(row.unit_price),
+    salePrice: readString(row.sale_price),
+    total: readString(row.total),
+    attributes: readItemAttributes(row.attributes),
+    fulfillment: readProductFulfillment(row.fulfillment),
+    createdAt: row.created_at,
   };
 }
 
@@ -283,6 +530,52 @@ function readProductShipping(value: unknown): SalesCatalogProductShipping {
     },
     profile: normalizeShippingProfile(readString(record.profile)),
     notes: readString(record.notes),
+  };
+}
+
+function readProductInventory(value: unknown): SalesCatalogProductInventory {
+  const fallback = emptySalesCatalogProductInventory();
+  const record = readRecord(value);
+
+  if (!record) return fallback;
+
+  return {
+    status: normalizeStockStatus(readString(record.status)),
+    quantity: readNumber(record.quantity),
+    lowStockThreshold: readNumber(record.low_stock_threshold) ?? readNumber(record.lowStockThreshold),
+    allowBackorder: readNullableBoolean(record.allow_backorder) ?? readNullableBoolean(record.allowBackorder) ?? fallback.allowBackorder,
+    notes: readString(record.notes),
+  };
+}
+
+function readProductOffer(value: unknown): SalesCatalogProductOffer {
+  const record = readRecord(value);
+
+  if (!record) return emptySalesCatalogProductOffer();
+
+  return {
+    salePrice: readString(record.sale_price) ?? readString(record.salePrice),
+    saleStartsAt: readString(record.sale_starts_at) ?? readString(record.saleStartsAt),
+    saleEndsAt: readString(record.sale_ends_at) ?? readString(record.saleEndsAt),
+    couponCode: readString(record.coupon_code) ?? readString(record.couponCode),
+    couponDescription: readString(record.coupon_description) ?? readString(record.couponDescription),
+    callToAction: readString(record.call_to_action) ?? readString(record.callToAction),
+    notes: readString(record.notes),
+  };
+}
+
+function readProductFulfillment(value: unknown): SalesCatalogProductFulfillment {
+  const fallback = emptySalesCatalogProductFulfillment();
+  const record = readRecord(value);
+
+  if (!record) return fallback;
+
+  return {
+    mode: normalizeFulfillmentMode(readString(record.mode)),
+    schedulingRequired: readNullableBoolean(record.scheduling_required) ?? readNullableBoolean(record.schedulingRequired) ?? fallback.schedulingRequired,
+    serviceDuration: readString(record.service_duration) ?? readString(record.serviceDuration),
+    deliveryInstructions: readString(record.delivery_instructions) ?? readString(record.deliveryInstructions),
+    accessInstructions: readString(record.access_instructions) ?? readString(record.accessInstructions),
   };
 }
 
@@ -430,6 +723,65 @@ function normalizeShippingProfile(value: string | null): SalesCatalogShippingPro
   return "default";
 }
 
+function normalizeStockStatus(value: string | null): SalesCatalogStockStatus {
+  if (value === "out_of_stock" || value === "on_backorder") return value;
+  return "in_stock";
+}
+
+function normalizeFulfillmentMode(value: string | null): SalesCatalogFulfillmentMode {
+  if (value === "digital" || value === "service" || value === "subscription") return value;
+  return "physical";
+}
+
+function normalizeOrderStatus(value: string | null): SalesCatalogOrderStatus {
+  if (
+    value === "pending_payment"
+    || value === "paid"
+    || value === "in_preparation"
+    || value === "shipped"
+    || value === "delivered"
+    || value === "cancelled"
+    || value === "needs_human"
+  ) {
+    return value;
+  }
+
+  return "draft";
+}
+
+function normalizePaymentStatus(value: string | null): SalesCatalogPaymentStatus {
+  if (value === "proof_sent" || value === "confirmed" || value === "failed" || value === "refunded") {
+    return value;
+  }
+
+  return "pending";
+}
+
+function normalizeFulfillmentStatus(value: string | null): SalesCatalogFulfillmentStatus {
+  if (value === "scheduled" || value === "in_progress" || value === "fulfilled" || value === "cancelled") {
+    return value;
+  }
+
+  return "pending";
+}
+
+function normalizePaymentMethodId(value: string | null): SalesCatalogPaymentMethodId | null {
+  if (value === "pix" || value === "card_link" || value === "boleto" || value === "cash_on_delivery" || value === "manual") {
+    return value;
+  }
+
+  return null;
+}
+
+function normalizeReservationPolicy(value: string | null): SalesCatalogReservationPolicy {
+  if (value === "before_payment" || value === "manual_approval") return value;
+  return "after_payment";
+}
+
+function normalizeLeadDataField(value: string | null): SalesCatalogLeadDataField | null {
+  return salesCatalogLeadDataFields.some((field) => field.value === value) ? (value as SalesCatalogLeadDataField) : null;
+}
+
 function normalizeUf(value: string | null) {
   if (!value) return null;
   const uf = value.trim().toUpperCase();
@@ -485,6 +837,76 @@ function readAttributeList(value: unknown, fallback: SalesCatalogAttribute[]): S
     .filter((item): item is SalesCatalogAttribute => Boolean(item));
 
   return attributes.length > 0 ? attributes : fallback;
+}
+
+function readPaymentMethods(value: unknown, fallback: SalesCatalogPaymentMethod[]): SalesCatalogPaymentMethod[] {
+  const methodsById = new Map(fallback.map((method) => [method.id, { ...method }]));
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const record = readRecord(item);
+      if (!record) continue;
+
+      const id = normalizePaymentMethodId(readString(record.id));
+      if (!id) continue;
+
+      const fallbackMethod = methodsById.get(id) ?? salesCatalogPaymentMethodTemplates.find((method) => method.id === id);
+      methodsById.set(id, {
+        id,
+        label: readString(record.label) ?? fallbackMethod?.label ?? id,
+        enabled: readNullableBoolean(record.enabled) ?? fallbackMethod?.enabled ?? false,
+        instructions: readString(record.instructions) ?? fallbackMethod?.instructions ?? null,
+        requiresProof: readNullableBoolean(record.requires_proof) ?? readNullableBoolean(record.requiresProof) ?? fallbackMethod?.requiresProof ?? false,
+      });
+    }
+  }
+
+  return salesCatalogPaymentMethodTemplates.map((method) => methodsById.get(method.id) ?? { ...method });
+}
+
+function readOrderPolicy(value: unknown, fallback: ClientSalesCatalogSettings["orderPolicy"]) {
+  const record = readRecord(value);
+  if (!record) return fallback;
+
+  return {
+    minimumOrderValue: readString(record.minimum_order_value) ?? readString(record.minimumOrderValue) ?? fallback.minimumOrderValue,
+    reservationPolicy: normalizeReservationPolicy(readString(record.reservation_policy) ?? readString(record.reservationPolicy)),
+    allowOrderWithoutPayment: readNullableBoolean(record.allow_order_without_payment) ?? readNullableBoolean(record.allowOrderWithoutPayment) ?? fallback.allowOrderWithoutPayment,
+    requireHumanConfirmation: readNullableBoolean(record.require_human_confirmation) ?? readNullableBoolean(record.requireHumanConfirmation) ?? fallback.requireHumanConfirmation,
+    askCepBeforeQuote: readNullableBoolean(record.ask_cep_before_quote) ?? readNullableBoolean(record.askCepBeforeQuote) ?? fallback.askCepBeforeQuote,
+    abandonedCartMinutes: readNumber(record.abandoned_cart_minutes) ?? readNumber(record.abandonedCartMinutes) ?? fallback.abandonedCartMinutes,
+    followUpDays: readNumber(record.follow_up_days) ?? readNumber(record.followUpDays) ?? fallback.followUpDays,
+  };
+}
+
+function readLeadDataPolicy(value: unknown, fallback: ClientSalesCatalogSettings["leadDataPolicy"]) {
+  const record = readRecord(value);
+  if (!record) return fallback;
+
+  const requiredFields = Array.isArray(record.required_fields) || Array.isArray(record.requiredFields)
+    ? readStringList(record.required_fields ?? record.requiredFields, [])
+        .map(normalizeLeadDataField)
+        .filter((field): field is SalesCatalogLeadDataField => Boolean(field))
+    : fallback.requiredFields;
+
+  return {
+    requiredFields,
+    consentMessage: readString(record.consent_message) ?? readString(record.consentMessage) ?? fallback.consentMessage,
+    retentionDays: readNumber(record.retention_days) ?? readNumber(record.retentionDays) ?? fallback.retentionDays,
+  };
+}
+
+function readMessageTemplates(value: unknown, fallback: SalesCatalogWhatsAppMessageTemplates): SalesCatalogWhatsAppMessageTemplates {
+  const record = readRecord(value);
+  if (!record) return fallback;
+
+  return {
+    orderSummary: readString(record.order_summary) ?? readString(record.orderSummary) ?? fallback.orderSummary,
+    paymentRequest: readString(record.payment_request) ?? readString(record.paymentRequest) ?? fallback.paymentRequest,
+    paymentConfirmed: readString(record.payment_confirmed) ?? readString(record.paymentConfirmed) ?? fallback.paymentConfirmed,
+    unavailableItem: readString(record.unavailable_item) ?? readString(record.unavailableItem) ?? fallback.unavailableItem,
+    humanHandoff: readString(record.human_handoff) ?? readString(record.humanHandoff) ?? fallback.humanHandoff,
+  };
 }
 
 function readStringList(value: unknown, fallback: string[]) {
