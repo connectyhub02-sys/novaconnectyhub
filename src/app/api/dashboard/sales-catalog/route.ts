@@ -5,10 +5,13 @@ import {
   getOrganizationSalesCatalogSettings,
   mapSalesCatalogItem,
   mapSalesCatalogOrder,
+  mapSalesCatalogPaymentIntegration,
   mapSalesCatalogSettings,
   mapSalesCatalogShippingSettings,
   type SalesCatalogOrderItemRow,
   type SalesCatalogOrderRow,
+  type SalesCatalogPaymentIntegrationRow,
+  type SalesCatalogSkuRow,
 } from "@/lib/client-os/sales-catalog";
 import { requireClientCompanyAccess } from "@/lib/client-os/companies";
 import {
@@ -50,7 +53,12 @@ import {
   type SalesCatalogShippingWeightTier,
   type SalesCatalogStockStatus,
   type SalesCatalogWhatsAppMessageTemplates,
+  type SalesCatalogSku,
+  type SalesCatalogSkuStatus,
 } from "@/lib/sales-catalog/shared";
+import { encryptCredentialValue } from "@/lib/security/credentials-crypto";
+import { buildMercadoPagoAuthorizationUrl, buildMercadoPagoWebhookUrl } from "@/lib/sales-catalog/mercado-pago";
+import { createSalesCatalogPixPaymentSession } from "@/lib/sales-catalog/payment-sessions";
 import { calculateSalesCatalogShippingQuotes, normalizeSalesCatalogCep } from "@/lib/sales-catalog/shipping-calculator";
 import { importWhatsappCatalog, setWhatsappCatalogVisibility } from "@/lib/sales-catalog/whatsapp-sync";
 import { loadR2Config, putR2Object } from "@/lib/storage/r2";
@@ -102,13 +110,15 @@ const salesCatalogOrderSelect = [
   "shipping_method",
   "agent_notes",
   "internal_notes",
+  "latest_payment_session_id",
   "metadata",
   "created_by",
   "created_at",
   "updated_at",
 ].join(", ");
 
-const salesCatalogOrderItemSelect = "id, order_id, organization_id, catalog_item_id, title, tag, quantity, unit_price, sale_price, total, attributes, fulfillment, metadata, created_at";
+const salesCatalogOrderItemSelect = "id, order_id, organization_id, catalog_item_id, sku_id, sku_code, title, tag, quantity, unit_price, sale_price, total, attributes, fulfillment, metadata, created_at";
+const salesCatalogPaymentIntegrationSelect = "id, organization_id, provider, mode, status, account_label, provider_account_id, public_key, access_token_encrypted, refresh_token_encrypted, token_expires_at, connected_at, last_error, webhook_secret_encrypted, webhook_url, metadata, created_at, updated_at";
 
 export async function POST(request: NextRequest) {
   const workspace = await getCurrentWorkspace();
@@ -140,6 +150,7 @@ export async function POST(request: NextRequest) {
   const offer = readProductOfferPayload(formData);
   const fulfillment = readProductFulfillmentPayload(formData);
   const shipping = readProductShippingPayload(formData);
+  const skus = readProductSkusPayload(formData.get("skus"));
   const files = formData.getAll("files").filter(isFormFile);
   const keepMediaIds = readKeepMediaIds(formData.get("keepMediaIds"));
 
@@ -263,6 +274,7 @@ export async function POST(request: NextRequest) {
       fulfillment: serializeProductFulfillment(fulfillment),
       shipping: serializeProductShipping(shipping),
       media: serializeSalesCatalogMedia(media),
+      skus: serializeSalesCatalogSkus(skus),
       source: metadataSource,
       readiness: getSalesCatalogReadiness({ description, media }),
       created_by: readFormString(existingMetadata.created_by) ?? workspace.user.id,
@@ -314,6 +326,22 @@ export async function POST(request: NextRequest) {
         coupon_code: offer.couponCode,
         fulfillment_mode: fulfillment.mode,
         actor_id: workspace.user.id,
+      },
+    });
+
+    await persistSalesCatalogSkus({
+      client,
+      companyId: company.id,
+      itemId: data.id,
+      skus,
+      fallback: {
+        title,
+        price,
+        salePrice: offer.salePrice,
+        currency,
+        inventory,
+        shipping,
+        attributes,
       },
     });
 
@@ -389,6 +417,55 @@ async function handleJsonPost(request: NextRequest, workspace: CurrentWorkspace)
       });
 
       return NextResponse.json(quote);
+    }
+
+    if (action === "start_mercado_pago_oauth") {
+      const result = await startMercadoPagoOAuth({
+        client,
+        companyId,
+        userId: workspace.user.id,
+      });
+
+      return NextResponse.json(result);
+    }
+
+    if (action === "save_mercado_pago_webhook_secret") {
+      const result = await saveMercadoPagoWebhookSecret({
+        client,
+        companyId,
+        userId: workspace.user.id,
+        body,
+      });
+
+      revalidatePath("/dashboard/links");
+
+      return NextResponse.json(result);
+    }
+
+    if (action === "disconnect_mercado_pago") {
+      const result = await disconnectMercadoPagoIntegration({
+        client,
+        companyId,
+        userId: workspace.user.id,
+      });
+
+      revalidatePath("/dashboard/links");
+
+      return NextResponse.json(result);
+    }
+
+    if (action === "create_payment_session") {
+      const result = await createPaymentSession({
+        client,
+        companyId,
+        userId: workspace.user.id,
+        body,
+      });
+
+      revalidatePath("/dashboard/links");
+      revalidatePath("/dashboard/whatsapp");
+
+      return NextResponse.json(result);
     }
 
     if (action === "create_order") {
@@ -731,6 +808,165 @@ async function calculateShippingQuote(input: {
   };
 }
 
+async function startMercadoPagoOAuth(input: {
+  client: ReturnType<typeof createServiceClient>;
+  companyId: string;
+  userId: string;
+}) {
+  const company = await requireClientCompanyAccess({
+    userId: input.userId,
+    companyId: input.companyId,
+    client: input.client,
+  });
+  const state = `mp_${randomUUID()}`;
+  const webhookUrl = buildMercadoPagoWebhookUrl();
+  const now = new Date().toISOString();
+  const payload = {
+    organization_id: company.id,
+    provider: "mercado_pago",
+    status: "pending",
+    mode: process.env.MERCADO_PAGO_TEST_TOKEN === "true" ? "sandbox" : "production",
+    webhook_url: webhookUrl,
+    last_error: null,
+    metadata: {
+      oauth_state: state,
+      oauth_requested_by: input.userId,
+      oauth_requested_at: now,
+    },
+    updated_at: now,
+  };
+  const { data, error } = await input.client
+    .from("sales_catalog_payment_integrations")
+    .upsert(payload, { onConflict: "organization_id,provider" })
+    .select(salesCatalogPaymentIntegrationSelect)
+    .single<SalesCatalogPaymentIntegrationRow>();
+
+  if (error || !data) {
+    throw new Error(error?.message ?? "Nao foi possivel iniciar a conexao com Mercado Pago.");
+  }
+
+  return {
+    integration: mapSalesCatalogPaymentIntegration(data),
+    authorizationUrl: buildMercadoPagoAuthorizationUrl({ companyId: company.id, state }),
+    webhookUrl,
+  };
+}
+
+async function saveMercadoPagoWebhookSecret(input: {
+  client: ReturnType<typeof createServiceClient>;
+  companyId: string;
+  userId: string;
+  body: JsonRecord | null;
+}) {
+  const company = await requireClientCompanyAccess({
+    userId: input.userId,
+    companyId: input.companyId,
+    client: input.client,
+  });
+  const secret = normalizeOptionalText(readFormString(input.body?.webhookSecret), 240);
+  const { data: existing } = await input.client
+    .from("sales_catalog_payment_integrations")
+    .select(salesCatalogPaymentIntegrationSelect)
+    .eq("organization_id", company.id)
+    .eq("provider", "mercado_pago")
+    .maybeSingle<SalesCatalogPaymentIntegrationRow>();
+  const existingMetadata = readRecord(existing?.metadata) ?? {};
+  const now = new Date().toISOString();
+  const { data, error } = await input.client
+    .from("sales_catalog_payment_integrations")
+    .upsert({
+      organization_id: company.id,
+      provider: "mercado_pago",
+      status: existing?.status ?? "pending",
+      mode: existing?.mode ?? (process.env.MERCADO_PAGO_TEST_TOKEN === "true" ? "sandbox" : "production"),
+      webhook_secret_encrypted: secret ? encryptCredentialValue(secret) : null,
+      webhook_url: buildMercadoPagoWebhookUrl(),
+      metadata: {
+        ...existingMetadata,
+        webhook_secret_saved_by: input.userId,
+        webhook_secret_saved_at: now,
+      },
+      updated_at: now,
+    }, { onConflict: "organization_id,provider" })
+    .select(salesCatalogPaymentIntegrationSelect)
+    .single<SalesCatalogPaymentIntegrationRow>();
+
+  if (error || !data) {
+    throw new Error(error?.message ?? "Nao foi possivel salvar o segredo do webhook Mercado Pago.");
+  }
+
+  return { integration: mapSalesCatalogPaymentIntegration(data) };
+}
+
+async function disconnectMercadoPagoIntegration(input: {
+  client: ReturnType<typeof createServiceClient>;
+  companyId: string;
+  userId: string;
+}) {
+  const company = await requireClientCompanyAccess({
+    userId: input.userId,
+    companyId: input.companyId,
+    client: input.client,
+  });
+  const { data, error } = await input.client
+    .from("sales_catalog_payment_integrations")
+    .update({
+      status: "disabled",
+      access_token_encrypted: null,
+      refresh_token_encrypted: null,
+      token_expires_at: null,
+      last_error: null,
+      metadata: {
+        disconnected_by: input.userId,
+        disconnected_at: new Date().toISOString(),
+      },
+    })
+    .eq("organization_id", company.id)
+    .eq("provider", "mercado_pago")
+    .select(salesCatalogPaymentIntegrationSelect)
+    .maybeSingle<SalesCatalogPaymentIntegrationRow>();
+
+  if (error) {
+    throw new Error(`Nao foi possivel desconectar Mercado Pago: ${error.message}`);
+  }
+
+  if (!data) {
+    throw new Error("Nenhuma conexao Mercado Pago encontrada para esta empresa.");
+  }
+
+  return { integration: mapSalesCatalogPaymentIntegration(data) };
+}
+
+async function createPaymentSession(input: {
+  client: ReturnType<typeof createServiceClient>;
+  companyId: string;
+  userId: string;
+  body: JsonRecord | null;
+}) {
+  const company = await requireClientCompanyAccess({
+    userId: input.userId,
+    companyId: input.companyId,
+    client: input.client,
+  });
+  const orderId = normalizeUuid(readFormString(input.body?.orderId));
+
+  if (!orderId) {
+    throw new Error("Informe o pedido para gerar pagamento.");
+  }
+
+  const result = await createSalesCatalogPixPaymentSession({
+    client: input.client,
+    organizationId: company.id,
+    orderId,
+    amount: readFormString(input.body?.amount),
+    payerEmail: readFormString(input.body?.payerEmail),
+    source: "dashboard",
+    actorId: input.userId,
+  });
+
+  return result;
+}
+
 async function createSalesCatalogOrder(input: {
   client: ReturnType<typeof createServiceClient>;
   companyId: string;
@@ -743,6 +979,7 @@ async function createSalesCatalogOrder(input: {
     client: input.client,
   });
   const itemId = readFormString(input.body?.itemId);
+  const skuId = normalizeUuid(readFormString(input.body?.skuId));
   const quantity = normalizeNullableInteger(input.body?.quantity, 1, 100000) ?? 1;
   const customerName = normalizeOptionalText(readFormString(input.body?.customerName), 140);
   const customerPhone = normalizeOptionalText(readFormString(input.body?.customerPhone), 40);
@@ -773,6 +1010,25 @@ async function createSalesCatalogOrder(input: {
   }
 
   const item = mapSalesCatalogItem(itemRow);
+  let skuRow: SalesCatalogSkuRow | null = null;
+
+  if (skuId) {
+    const { data: loadedSku, error: skuError } = await input.client
+      .from("sales_catalog_skus")
+      .select("id, organization_id, catalog_item_id, sku_code, title, attributes, price, sale_price, currency, stock_status, stock_quantity, low_stock_threshold, weight_grams, dimensions, media_ids, status, metadata, created_at, updated_at")
+      .eq("id", skuId)
+      .eq("organization_id", company.id)
+      .eq("catalog_item_id", item.id)
+      .neq("status", "archived")
+      .maybeSingle<SalesCatalogSkuRow>();
+
+    if (skuError) {
+      throw new Error(`Nao foi possivel carregar o SKU do pedido: ${skuError.message}`);
+    }
+
+    skuRow = loadedSku ?? null;
+  }
+
   if (item.status === "archived") {
     throw new Error("Este produto esta arquivado e nao pode virar pedido.");
   }
@@ -781,10 +1037,15 @@ async function createSalesCatalogOrder(input: {
     throw new Error("Este produto esta esgotado. Ative encomenda ou escolha outro item.");
   }
 
+  if (skuRow?.stock_status === "out_of_stock" && !item.inventory.allowBackorder) {
+    throw new Error("Este SKU esta esgotado. Escolha outra variacao ou ative encomenda.");
+  }
+
   const attributes = readItemAttributesPayload(input.body?.attributes);
-  const selectedAttributes = attributes.length > 0 ? attributes : item.attributes;
-  const unitPrice = item.price;
-  const salePrice = item.offer.salePrice;
+  const skuAttributes = skuRow ? readItemAttributesPayload(skuRow.attributes) : [];
+  const selectedAttributes = attributes.length > 0 ? attributes : skuAttributes.length > 0 ? skuAttributes : item.attributes;
+  const unitPrice = skuRow?.price ?? item.price;
+  const salePrice = skuRow?.sale_price ?? item.offer.salePrice;
   const subtotal = normalizeOptionalText(readFormString(input.body?.subtotal), 80) ?? salePrice ?? unitPrice;
   const shippingTotal = normalizeOptionalText(readFormString(input.body?.shippingTotal), 80);
   const discountTotal = normalizeOptionalText(readFormString(input.body?.discountTotal), 80);
@@ -850,6 +1111,8 @@ async function createSalesCatalogOrder(input: {
       order_id: orderRow.id,
       organization_id: company.id,
       catalog_item_id: item.id,
+      sku_id: skuRow?.id ?? null,
+      sku_code: skuRow?.sku_code ?? null,
       title: item.title,
       tag: item.tag,
       quantity,
@@ -862,6 +1125,7 @@ async function createSalesCatalogOrder(input: {
         category: item.category,
         currency: item.currency,
         stock_status: item.inventory.status,
+        sku_code: skuRow?.sku_code ?? null,
         source: item.source,
       },
     })
@@ -1888,6 +2152,49 @@ function readItemAttributesPayload(value: unknown): SalesCatalogItemAttribute[] 
     .filter((item): item is SalesCatalogItemAttribute => Boolean(item));
 }
 
+function readProductSkusPayload(value: unknown): SalesCatalogSku[] {
+  const parsed = typeof value === "string" ? parseJson(value) : value;
+  if (!Array.isArray(parsed)) return [];
+
+  return parsed
+    .map((item): SalesCatalogSku | null => {
+      const record = readRecord(item);
+      if (!record) return null;
+
+      const skuCode = normalizeSkuCode(readFormString(record.skuCode ?? record.sku_code));
+      if (!skuCode) return null;
+
+      const dimensions = readRecord(record.dimensions) ?? {};
+
+      return {
+        id: normalizeUuid(readFormString(record.id)),
+        companyId: "",
+        catalogItemId: null,
+        skuCode,
+        title: normalizeOptionalText(readFormString(record.title), 120),
+        attributes: readItemAttributesPayload(record.attributes),
+        price: normalizeOptionalText(readFormString(record.price), 60),
+        salePrice: normalizeOptionalText(readFormString(record.salePrice ?? record.sale_price), 60),
+        currency: normalizeOptionalText(readFormString(record.currency), 12) ?? "BRL",
+        stockStatus: normalizeStockStatus(readFormString(record.stockStatus ?? record.stock_status)),
+        stockQuantity: normalizeNullableInteger(record.stockQuantity ?? record.stock_quantity, 0, 1000000),
+        lowStockThreshold: normalizeNullableInteger(record.lowStockThreshold ?? record.low_stock_threshold, 0, 1000000),
+        weightGrams: normalizeNullableInteger(record.weightGrams ?? record.weight_grams, 1, 500000),
+        dimensions: {
+          lengthCm: normalizeNullableDecimal(dimensions.lengthCm ?? dimensions.length_cm, 1, 1000),
+          widthCm: normalizeNullableDecimal(dimensions.widthCm ?? dimensions.width_cm, 1, 1000),
+          heightCm: normalizeNullableDecimal(dimensions.heightCm ?? dimensions.height_cm, 1, 1000),
+        },
+        mediaIds: normalizeStringList(record.mediaIds ?? record.media_ids, [], 12, 80),
+        status: normalizeSkuStatus(readFormString(record.status)),
+        createdAt: readFormString(record.createdAt ?? record.created_at),
+        updatedAt: readFormString(record.updatedAt ?? record.updated_at),
+      };
+    })
+    .filter((item): item is SalesCatalogSku => Boolean(item))
+    .slice(0, 80);
+}
+
 function readProductShippingPayload(formData: FormData): SalesCatalogProductShipping {
   return {
     weightGrams: normalizeNullableInteger(formData.get("weightGrams"), 1, 500000),
@@ -1960,6 +2267,29 @@ function serializeProductShipping(shipping: SalesCatalogProductShipping) {
   };
 }
 
+function serializeSalesCatalogSkus(skus: SalesCatalogSku[]) {
+  return skus.map((sku) => ({
+    id: sku.id,
+    sku_code: sku.skuCode,
+    title: sku.title,
+    attributes: serializeItemAttributes(sku.attributes),
+    price: sku.price,
+    sale_price: sku.salePrice,
+    currency: sku.currency,
+    stock_status: sku.stockStatus,
+    stock_quantity: sku.stockQuantity,
+    low_stock_threshold: sku.lowStockThreshold,
+    weight_grams: sku.weightGrams,
+    dimensions: {
+      length_cm: sku.dimensions.lengthCm,
+      width_cm: sku.dimensions.widthCm,
+      height_cm: sku.dimensions.heightCm,
+    },
+    media_ids: sku.mediaIds,
+    status: sku.status,
+  }));
+}
+
 function serializeProductInventory(inventory: SalesCatalogProductInventory) {
   return {
     status: inventory.status,
@@ -1990,6 +2320,83 @@ function serializeProductFulfillment(fulfillment: SalesCatalogProductFulfillment
     delivery_instructions: fulfillment.deliveryInstructions,
     access_instructions: fulfillment.accessInstructions,
   };
+}
+
+async function persistSalesCatalogSkus(input: {
+  client: ReturnType<typeof createServiceClient>;
+  companyId: string;
+  itemId: string;
+  skus: SalesCatalogSku[];
+  fallback: {
+    title: string;
+    price: string | null;
+    salePrice: string | null;
+    currency: string;
+    inventory: SalesCatalogProductInventory;
+    shipping: SalesCatalogProductShipping;
+    attributes: SalesCatalogItemAttribute[];
+  };
+}) {
+  const now = new Date().toISOString();
+  const sourceSkus = input.skus.length > 0
+    ? input.skus
+    : [{
+        id: null,
+        companyId: input.companyId,
+        catalogItemId: input.itemId,
+        skuCode: createSkuCode(input.fallback.title, input.itemId),
+        title: input.fallback.title,
+        attributes: input.fallback.attributes,
+        price: input.fallback.price,
+        salePrice: input.fallback.salePrice,
+        currency: input.fallback.currency,
+        stockStatus: input.fallback.inventory.status,
+        stockQuantity: input.fallback.inventory.quantity,
+        lowStockThreshold: input.fallback.inventory.lowStockThreshold,
+        weightGrams: input.fallback.shipping.weightGrams,
+        dimensions: input.fallback.shipping.dimensions,
+        mediaIds: [],
+        status: "active" as SalesCatalogSkuStatus,
+        createdAt: null,
+        updatedAt: null,
+      }];
+  const payload = sourceSkus.map((sku) => ({
+    id: sku.id ?? randomUUID(),
+    organization_id: input.companyId,
+    catalog_item_id: input.itemId,
+    sku_code: sku.skuCode,
+    title: sku.title,
+    attributes: serializeItemAttributes(sku.attributes),
+    price: sku.price,
+    sale_price: sku.salePrice,
+    currency: sku.currency,
+    stock_status: sku.stockStatus,
+    stock_quantity: sku.stockQuantity,
+    low_stock_threshold: sku.lowStockThreshold,
+    weight_grams: sku.weightGrams,
+    dimensions: {
+      length_cm: sku.dimensions.lengthCm,
+      width_cm: sku.dimensions.widthCm,
+      height_cm: sku.dimensions.heightCm,
+    },
+    media_ids: sku.mediaIds,
+    status: sku.status,
+    updated_at: now,
+  }));
+  const activeCodes = payload.map((sku) => sku.sku_code);
+
+  if (payload.length > 0) {
+    await input.client
+      .from("sales_catalog_skus")
+      .upsert(payload, { onConflict: "catalog_item_id,sku_code" });
+  }
+
+  await input.client
+    .from("sales_catalog_skus")
+    .update({ status: "archived", updated_at: now })
+    .eq("organization_id", input.companyId)
+    .eq("catalog_item_id", input.itemId)
+    .not("sku_code", "in", `(${activeCodes.map((code) => `"${code}"`).join(",")})`);
 }
 
 function normalizeShippingRules(value: unknown): SalesCatalogShippingRule[] {
@@ -2146,6 +2553,28 @@ function cloneShippingService(service: SalesCatalogShippingService): SalesCatalo
 function normalizeShippingProvider(value: string | null, fallback?: SalesCatalogShippingProvider): SalesCatalogShippingProvider {
   if (value === "correios" || value === "carrier") return value;
   return fallback ?? "carrier";
+}
+
+function normalizeSkuStatus(value: string | null): SalesCatalogSkuStatus {
+  if (value === "draft" || value === "archived") return value;
+  return "active";
+}
+
+function normalizeSkuCode(value: string | null) {
+  if (!value) return null;
+  const normalized = value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 64);
+
+  return normalized || null;
+}
+
+function createSkuCode(title: string, id: string) {
+  return `${createAttributeId(title).toUpperCase().replace(/_/g, "-").slice(0, 24) || "SKU"}-${id.slice(0, 6).toUpperCase()}`;
 }
 
 function formatShippingDeadline(minDays: number | null, maxDays: number | null) {

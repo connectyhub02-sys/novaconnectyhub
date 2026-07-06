@@ -12,6 +12,12 @@ export type SalesCatalogFulfillmentMode = "physical" | "digital" | "service" | "
 export type SalesCatalogOrderStatus = "draft" | "pending_payment" | "paid" | "in_preparation" | "shipped" | "delivered" | "cancelled" | "needs_human";
 export type SalesCatalogPaymentStatus = "pending" | "proof_sent" | "confirmed" | "failed" | "refunded";
 export type SalesCatalogFulfillmentStatus = "pending" | "scheduled" | "in_progress" | "fulfilled" | "cancelled";
+export type SalesCatalogSkuStatus = "active" | "draft" | "archived";
+export type SalesCatalogPaymentProvider = "mercado_pago";
+export type SalesCatalogPaymentIntegrationStatus = "pending" | "connected" | "disabled" | "error";
+export type SalesCatalogPaymentIntegrationMode = "production" | "sandbox";
+export type SalesCatalogPaymentSessionMethod = "pix" | "card" | "checkout_link";
+export type SalesCatalogPaymentSessionStatus = "created" | "pending" | "approved" | "rejected" | "cancelled" | "expired" | "refunded" | "error";
 
 export type SalesCatalogAttribute = {
   id: string;
@@ -107,6 +113,27 @@ export type SalesCatalogProductShipping = {
   notes: string | null;
 };
 
+export type SalesCatalogSku = {
+  id: string | null;
+  companyId: string;
+  catalogItemId: string | null;
+  skuCode: string;
+  title: string | null;
+  attributes: SalesCatalogItemAttribute[];
+  price: string | null;
+  salePrice: string | null;
+  currency: string;
+  stockStatus: SalesCatalogStockStatus;
+  stockQuantity: number | null;
+  lowStockThreshold: number | null;
+  weightGrams: number | null;
+  dimensions: SalesCatalogProductDimensions;
+  mediaIds: string[];
+  status: SalesCatalogSkuStatus;
+  createdAt: string | null;
+  updatedAt: string | null;
+};
+
 export type SalesCatalogShippingWeightTier = {
   id: string;
   name: string;
@@ -138,6 +165,7 @@ export type ClientSalesCatalogItem = {
   media: SalesCatalogMedia[];
   attributes: SalesCatalogItemAttribute[];
   inventory: SalesCatalogProductInventory;
+  skus: SalesCatalogSku[];
   offer: SalesCatalogProductOffer;
   fulfillment: SalesCatalogProductFulfillment;
   shipping: SalesCatalogProductShipping;
@@ -157,6 +185,8 @@ export type ClientSalesCatalogOrderItem = {
   orderId: string;
   companyId: string;
   catalogItemId: string | null;
+  skuId: string | null;
+  skuCode: string | null;
   title: string;
   tag: string | null;
   quantity: number;
@@ -191,8 +221,55 @@ export type ClientSalesCatalogOrder = {
   shippingMethod: string | null;
   agentNotes: string | null;
   internalNotes: string | null;
+  latestPaymentSessionId: string | null;
   items: ClientSalesCatalogOrderItem[];
   createdBy: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+};
+
+export type ClientSalesCatalogPaymentIntegration = {
+  id: string;
+  companyId: string;
+  provider: SalesCatalogPaymentProvider;
+  mode: SalesCatalogPaymentIntegrationMode;
+  status: SalesCatalogPaymentIntegrationStatus;
+  accountLabel: string | null;
+  providerAccountId: string | null;
+  publicKey: string | null;
+  tokenExpiresAt: string | null;
+  connectedAt: string | null;
+  lastError: string | null;
+  webhookUrl: string | null;
+  hasAccessToken: boolean;
+  hasRefreshToken: boolean;
+  hasWebhookSecret: boolean;
+  createdAt: string | null;
+  updatedAt: string | null;
+};
+
+export type ClientSalesCatalogPaymentSession = {
+  id: string;
+  companyId: string;
+  orderId: string;
+  integrationId: string | null;
+  provider: SalesCatalogPaymentProvider;
+  method: SalesCatalogPaymentSessionMethod;
+  status: SalesCatalogPaymentSessionStatus;
+  amount: string;
+  currency: string;
+  payerEmail: string | null;
+  providerPaymentId: string | null;
+  providerStatus: string | null;
+  providerStatusDetail: string | null;
+  checkoutUrl: string | null;
+  pixQrCode: string | null;
+  pixQrCodeBase64: string | null;
+  pixTicketUrl: string | null;
+  externalReference: string;
+  expiresAt: string | null;
+  paidAt: string | null;
+  failureReason: string | null;
   createdAt: string | null;
   updatedAt: string | null;
 };
@@ -573,6 +650,41 @@ export function emptySalesCatalogProductShipping(): SalesCatalogProductShipping 
   };
 }
 
+export function createDefaultSalesCatalogSku(input: {
+  companyId?: string;
+  catalogItemId?: string | null;
+  skuCode?: string | null;
+  title?: string | null;
+  price?: string | null;
+  salePrice?: string | null;
+  currency?: string | null;
+  stockStatus?: SalesCatalogStockStatus;
+  stockQuantity?: number | null;
+  weightGrams?: number | null;
+  dimensions?: SalesCatalogProductDimensions;
+} = {}): SalesCatalogSku {
+  return {
+    id: null,
+    companyId: input.companyId ?? "",
+    catalogItemId: input.catalogItemId ?? null,
+    skuCode: input.skuCode?.trim() || "SKU",
+    title: input.title ?? null,
+    attributes: [],
+    price: input.price ?? null,
+    salePrice: input.salePrice ?? null,
+    currency: input.currency ?? "BRL",
+    stockStatus: input.stockStatus ?? "in_stock",
+    stockQuantity: input.stockQuantity ?? null,
+    lowStockThreshold: null,
+    weightGrams: input.weightGrams ?? null,
+    dimensions: input.dimensions ?? { lengthCm: null, widthCm: null, heightCm: null },
+    mediaIds: [],
+    status: "active",
+    createdAt: null,
+    updatedAt: null,
+  };
+}
+
 export function emptySalesCatalogProductInventory(): SalesCatalogProductInventory {
   return {
     status: "in_stock",
@@ -838,6 +950,24 @@ export function formatSalesCatalogPaymentStatus(status: SalesCatalogPaymentStatu
   if (status === "confirmed") return "confirmado";
   if (status === "failed") return "falhou";
   if (status === "refunded") return "estornado";
+  return "pendente";
+}
+
+export function formatSalesCatalogPaymentSessionStatus(status: SalesCatalogPaymentSessionStatus) {
+  if (status === "approved") return "pago";
+  if (status === "rejected") return "recusado";
+  if (status === "cancelled") return "cancelado";
+  if (status === "expired") return "expirado";
+  if (status === "refunded") return "estornado";
+  if (status === "error") return "erro";
+  if (status === "pending") return "aguardando pagamento";
+  return "criado";
+}
+
+export function formatSalesCatalogPaymentIntegrationStatus(status: SalesCatalogPaymentIntegrationStatus) {
+  if (status === "connected") return "conectado";
+  if (status === "disabled") return "desativado";
+  if (status === "error") return "erro";
   return "pendente";
 }
 

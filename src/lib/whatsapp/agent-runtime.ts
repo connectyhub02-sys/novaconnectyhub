@@ -28,6 +28,7 @@ import {
   type SalesCatalogOrderItemRow,
   type SalesCatalogOrderRow,
 } from "@/lib/client-os/sales-catalog";
+import { createSalesCatalogPixPaymentSession } from "@/lib/sales-catalog/payment-sessions";
 import {
   formatSalesCatalogFulfillmentMode,
   formatSalesCatalogFulfillmentStatus,
@@ -169,6 +170,13 @@ type RuntimeLinkButton = {
 
 type RuntimeSalesCatalogItem = ClientSalesCatalogItem;
 type RuntimeSalesCatalogOrder = ClientSalesCatalogOrder;
+
+type SalesCatalogPaymentLinkResult = {
+  orderId: string;
+  checkoutUrl: string;
+  pixQrCode: string | null;
+  pixTicketUrl: string | null;
+};
 type RuntimeSalesCatalogShippingQuote = {
   itemId: string;
   itemTitle: string;
@@ -1051,6 +1059,7 @@ async function loadOrganizationSalesCatalogOrders(
         "shipping_method",
         "agent_notes",
         "internal_notes",
+        "latest_payment_session_id",
         "metadata",
         "created_by",
         "created_at",
@@ -1083,7 +1092,7 @@ async function loadOrganizationSalesCatalogOrders(
 
     const { data: itemData, error: itemError } = await client
       .from("sales_catalog_order_items")
-      .select("id, order_id, organization_id, catalog_item_id, title, tag, quantity, unit_price, sale_price, total, attributes, fulfillment, metadata, created_at")
+      .select("id, order_id, organization_id, catalog_item_id, sku_id, sku_code, title, tag, quantity, unit_price, sale_price, total, attributes, fulfillment, metadata, created_at")
       .in("order_id", orderIds)
       .order("created_at", { ascending: true });
 
@@ -3432,12 +3441,27 @@ async function sendAgentResponse(input: {
       outbound.push({ ...message, persisted: true });
     }
 
-    await recordSalesCatalogOrderIntent({
+    const paymentLink = await recordSalesCatalogOrderIntent({
       client: input.client,
       context,
       items: renderedCatalog.items,
       text: cleanText,
     });
+
+    if (paymentLink) {
+      try {
+        const paymentOutbound = await sendSalesCatalogPaymentLink({
+          client: input.client,
+          context,
+          token: input.token,
+          phone: input.phone,
+          payment: paymentLink,
+        });
+        outbound.push(paymentOutbound);
+      } catch {
+        // O pedido e a sessao ficam salvos no painel mesmo se o envio do link falhar.
+      }
+    }
 
     return outbound;
   }
@@ -3514,12 +3538,27 @@ async function sendAgentResponse(input: {
     outbound.push(...mediaOutbound);
   }
 
-  await recordSalesCatalogOrderIntent({
+  const paymentLink = await recordSalesCatalogOrderIntent({
     client: input.client,
     context,
     items: renderedCatalog.items,
     text: cleanText,
   });
+
+  if (paymentLink) {
+    try {
+      const paymentOutbound = await sendSalesCatalogPaymentLink({
+        client: input.client,
+        context,
+        token: input.token,
+        phone: input.phone,
+        payment: paymentLink,
+      });
+      outbound.push(paymentOutbound);
+    } catch {
+      // O pedido e a sessao ficam salvos no painel mesmo se o envio do link falhar.
+    }
+  }
 
   return outbound;
 }
@@ -3563,7 +3602,7 @@ async function recordSalesCatalogOrderIntent(input: {
   context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
   items: RuntimeSalesCatalogItem[];
   text: string;
-}) {
+}): Promise<SalesCatalogPaymentLinkResult | null> {
   const unavailableItems = input.items.filter((item) => item.status === "active" && !isSalesCatalogItemSellable(item));
   const items = input.items.filter((item) => item.status === "active" && isSalesCatalogItemSellable(item)).slice(0, 8);
 
@@ -3576,7 +3615,7 @@ async function recordSalesCatalogOrderIntent(input: {
         text: input.text,
       });
     }
-    return;
+    return null;
   }
 
   try {
@@ -3590,7 +3629,7 @@ async function recordSalesCatalogOrderIntent(input: {
     const existing = existingData as unknown as { id: string } | null;
 
     if (existing?.id) {
-      return;
+      return null;
     }
 
     const customerName = input.context.lead
@@ -3601,7 +3640,9 @@ async function recordSalesCatalogOrderIntent(input: {
       : null;
     const customerPhone = input.context.lead?.phone_number ?? input.context.phoneNumber ?? null;
     const primaryItem = items[0];
-    const total = items.length === 1 ? primaryItem.offer.salePrice ?? primaryItem.price : null;
+    const primarySku = resolveRuntimeOrderSku(primaryItem);
+    const primaryTotal = primarySku?.salePrice ?? primarySku?.price ?? primaryItem.offer.salePrice ?? primaryItem.price;
+    const total = items.length === 1 ? primaryTotal : null;
     const now = new Date().toISOString();
     const { data: orderData, error: orderError } = await input.client
       .from("sales_catalog_orders")
@@ -3633,38 +3674,46 @@ async function recordSalesCatalogOrderIntent(input: {
     const order = orderData as unknown as { id: string } | null;
 
     if (orderError || !order?.id) {
-      return;
+      return null;
     }
 
-    const orderItems = items.map((item) => ({
-      order_id: order.id,
-      organization_id: input.context.organization.id,
-      catalog_item_id: item.id,
-      title: item.title,
-      tag: item.tag,
-      quantity: 1,
-      unit_price: item.price,
-      sale_price: item.offer.salePrice,
-      total: item.offer.salePrice ?? item.price,
-      attributes: item.attributes.map((attribute) => ({
-        id: attribute.id,
-        name: attribute.name,
-        values: attribute.values,
-      })),
-      fulfillment: {
-        mode: item.fulfillment.mode,
-        scheduling_required: item.fulfillment.schedulingRequired,
-        service_duration: item.fulfillment.serviceDuration,
-        delivery_instructions: item.fulfillment.deliveryInstructions,
-        access_instructions: item.fulfillment.accessInstructions,
-      },
-      metadata: {
-        category: item.category,
-        currency: item.currency,
-        source: item.source,
-        stock_status: item.inventory.status,
-      },
-    }));
+    const orderItems = items.map((item) => {
+      const sku = resolveRuntimeOrderSku(item);
+      const unitPrice = sku?.price ?? item.price;
+      const salePrice = sku?.salePrice ?? item.offer.salePrice;
+
+      return {
+        order_id: order.id,
+        organization_id: input.context.organization.id,
+        catalog_item_id: item.id,
+        sku_id: sku?.id ?? null,
+        sku_code: sku?.skuCode ?? null,
+        title: sku?.title || item.title,
+        tag: item.tag,
+        quantity: 1,
+        unit_price: unitPrice,
+        sale_price: salePrice,
+        total: salePrice ?? unitPrice,
+        attributes: (sku?.attributes.length ? sku.attributes : item.attributes).map((attribute) => ({
+          id: attribute.id,
+          name: attribute.name,
+          values: attribute.values,
+        })),
+        fulfillment: {
+          mode: item.fulfillment.mode,
+          scheduling_required: item.fulfillment.schedulingRequired,
+          service_duration: item.fulfillment.serviceDuration,
+          delivery_instructions: item.fulfillment.deliveryInstructions,
+          access_instructions: item.fulfillment.accessInstructions,
+        },
+        metadata: {
+          category: item.category,
+          currency: sku?.currency ?? item.currency,
+          source: item.source,
+          stock_status: sku?.stockStatus ?? item.inventory.status,
+        },
+      };
+    });
 
     await input.client.from("sales_catalog_order_items").insert(orderItems);
     await input.client.from("intelligence_events").insert({
@@ -3694,9 +3743,108 @@ async function recordSalesCatalogOrderIntent(input: {
       context: input.context,
       orderId: order.id,
     });
+
+    return maybeCreateSalesCatalogPaymentLink({
+      client: input.client,
+      context: input.context,
+      orderId: order.id,
+      total,
+    });
   } catch {
-    return;
+    return null;
   }
+}
+
+async function maybeCreateSalesCatalogPaymentLink(input: {
+  client: SupabaseClient;
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
+  orderId: string;
+  total: string | null;
+}): Promise<SalesCatalogPaymentLinkResult | null> {
+  if (!input.total) {
+    return null;
+  }
+
+  try {
+    const result = await createSalesCatalogPixPaymentSession({
+      client: input.client,
+      organizationId: input.context.organization.id,
+      orderId: input.orderId,
+      amount: input.total,
+      payerEmail: findString(input.context.lead?.metadata, ["email", "customer_email", "lead_email"]),
+      source: "whatsapp_agent",
+      actorId: null,
+    });
+
+    return {
+      orderId: input.orderId,
+      checkoutUrl: result.checkoutUrl,
+      pixQrCode: result.pixQrCode,
+      pixTicketUrl: result.pixTicketUrl,
+    };
+  } catch (error) {
+    await input.client.from("intelligence_events").insert({
+      scope: "organization",
+      organization_id: input.context.organization.id,
+      source_type: "sales_catalog_order",
+      source_id: input.orderId,
+      producer_agent_id: input.context.agent.id,
+      event_type: "sales_catalog.payment_session_failed",
+      title: "Pagamento automatico nao gerado",
+      summary: error instanceof Error ? error.message : "Falha ao gerar pagamento automatico.",
+      confidence: 0.7,
+      visibility: "organization",
+      tags: ["sales_catalog", "sales_catalog_order", "payment", "mercado_pago", "whatsapp"],
+      payload: {
+        order_id: input.orderId,
+        agent_run_id: input.context.run.id,
+      },
+    });
+
+    return null;
+  }
+}
+
+async function sendSalesCatalogPaymentLink(input: {
+  client: SupabaseClient;
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
+  token: string;
+  phone: string;
+  payment: SalesCatalogPaymentLinkResult;
+}): Promise<OutboundMessage> {
+  const text = [
+    "Perfeito, gerei um checkout seguro para concluir seu pedido pelo Pix:",
+    input.payment.checkoutUrl,
+    "",
+    "Assim que o pagamento for confirmado, eu acompanho por aqui no WhatsApp.",
+  ].join("\n");
+  const providerResponse = await sendWhatsappText({
+    credentials: input.context.credentials,
+    token: input.token,
+    phone: input.phone,
+    text,
+    trackId: `agent_payment_${input.context.run.id}_${input.payment.orderId.slice(0, 8)}`,
+    mentions: resolveGroupMentions(input.context),
+  });
+  const message: OutboundMessage = {
+    text,
+    mode: "text",
+    providerResponse,
+    persisted: true,
+  };
+
+  await saveOutboundMessage(input.client, input.context, message);
+
+  return message;
+}
+
+function resolveRuntimeOrderSku(item: RuntimeSalesCatalogItem): RuntimeSalesCatalogItem["skus"][number] | null {
+  const activeSkus = item.skus.filter((sku) => (
+    sku.status === "active"
+    && (sku.stockStatus !== "out_of_stock" || item.inventory.allowBackorder)
+  ));
+
+  return activeSkus.length === 1 ? activeSkus[0] : null;
 }
 
 async function scheduleSalesCatalogOrderAbandonedFollowUp(input: {

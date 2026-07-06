@@ -10,6 +10,7 @@ import {
   CloudDownload,
   Copy,
   CreditCard,
+  ExternalLink,
   Eye,
   EyeOff,
   FileText,
@@ -20,6 +21,7 @@ import {
   PencilLine,
   Plus,
   RefreshCw,
+  QrCode,
   Save,
   Settings2,
   ShieldCheck,
@@ -41,12 +43,16 @@ import {
   formatSalesCatalogFulfillmentMode,
   formatSalesCatalogOrderStatus,
   formatSalesCatalogPaymentStatus,
+  formatSalesCatalogPaymentIntegrationStatus,
+  formatSalesCatalogPaymentSessionStatus,
   formatSalesCatalogStockStatus,
   formatSalesCatalogWeight,
   salesCatalogLeadDataFields,
   salesCatalogBusinessTemplates,
   type ClientSalesCatalogItem,
   type ClientSalesCatalogOrder,
+  type ClientSalesCatalogPaymentIntegration,
+  type ClientSalesCatalogPaymentSession,
   type ClientSalesCatalogSettings,
   type ClientSalesCatalogShippingSettings,
   type SalesCatalogAttribute,
@@ -61,7 +67,10 @@ import {
   type SalesCatalogOrderPolicy,
   type SalesCatalogPaymentMethod,
   type SalesCatalogPaymentStatus,
+  type SalesCatalogPaymentSessionStatus,
   type SalesCatalogReservationPolicy,
+  type SalesCatalogSku,
+  type SalesCatalogSkuStatus,
   type SalesCatalogShippingQuote,
   type SalesCatalogShippingProfile,
   type SalesCatalogShippingRule,
@@ -81,12 +90,14 @@ type SalesCatalogConsoleProps = {
   initialCompanies: ClientCompany[];
   initialItems: ClientSalesCatalogItem[];
   initialOrders: ClientSalesCatalogOrder[];
+  initialPaymentIntegrations: ClientSalesCatalogPaymentIntegration[];
+  initialPaymentSessions: ClientSalesCatalogPaymentSession[];
   initialSettings: ClientSalesCatalogSettings[];
   initialShippingSettings: ClientSalesCatalogShippingSettings[];
   initialCompanyId: string | null;
 };
 
-type CatalogTab = "setup" | "shipping" | "products" | "orders" | "whatsapp";
+type CatalogTab = "setup" | "shipping" | "products" | "orders" | "payments" | "whatsapp";
 
 type SettingsDraft = {
   businessType: SalesCatalogBusinessType;
@@ -121,6 +132,20 @@ type ShippingQuoteResult = {
   } | null;
   quotes: SalesCatalogShippingQuote[];
   error: string | null;
+};
+
+type SkuDraft = {
+  id: string | null;
+  skuCode: string;
+  title: string;
+  attributesText: string;
+  price: string;
+  salePrice: string;
+  stockStatus: SalesCatalogSku["stockStatus"];
+  stockQuantity: string;
+  lowStockThreshold: string;
+  weightGrams: string;
+  status: SalesCatalogSkuStatus;
 };
 
 const statusOptions: Array<{ value: SalesCatalogItemStatus; label: string }> = [
@@ -159,6 +184,8 @@ export function SalesCatalogConsole({
   initialCompanies,
   initialItems,
   initialOrders,
+  initialPaymentIntegrations,
+  initialPaymentSessions,
   initialSettings,
   initialShippingSettings,
   initialCompanyId,
@@ -169,6 +196,8 @@ export function SalesCatalogConsole({
   const [companies] = useState(initialCompanies);
   const [items, setItems] = useState(initialItems);
   const [orders, setOrders] = useState(initialOrders);
+  const [paymentIntegrations, setPaymentIntegrations] = useState(initialPaymentIntegrations);
+  const [paymentSessions, setPaymentSessions] = useState(initialPaymentSessions);
   const [settings, setSettings] = useState(initialSettings);
   const [shippingSettings, setShippingSettings] = useState(initialShippingSettings);
   const [selectedCompanyId, setSelectedCompanyId] = useState(initialSelectedCompanyId);
@@ -200,6 +229,7 @@ export function SalesCatalogConsole({
   const [lowStockThreshold, setLowStockThreshold] = useState("");
   const [allowBackorder, setAllowBackorder] = useState(false);
   const [inventoryNotes, setInventoryNotes] = useState("");
+  const [skuDrafts, setSkuDrafts] = useState<SkuDraft[]>([]);
   const [fulfillmentMode, setFulfillmentMode] = useState<SalesCatalogFulfillmentMode>("physical");
   const [schedulingRequired, setSchedulingRequired] = useState(false);
   const [serviceDuration, setServiceDuration] = useState("");
@@ -216,6 +246,7 @@ export function SalesCatalogConsole({
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [catalogJid, setCatalogJid] = useState("");
   const [orderItemId, setOrderItemId] = useState("");
+  const [orderSkuId, setOrderSkuId] = useState("");
   const [orderQuantity, setOrderQuantity] = useState("1");
   const [orderCustomerName, setOrderCustomerName] = useState("");
   const [orderCustomerPhone, setOrderCustomerPhone] = useState("");
@@ -231,8 +262,13 @@ export function SalesCatalogConsole({
   const [orderStatus, setOrderStatus] = useState<SalesCatalogOrderStatus>("pending_payment");
   const [orderPaymentStatus, setOrderPaymentStatus] = useState<SalesCatalogPaymentStatus>("pending");
   const [orderFulfillmentStatus, setOrderFulfillmentStatus] = useState<SalesCatalogFulfillmentStatus>("pending");
+  const [webhookSecret, setWebhookSecret] = useState("");
   const [creating, setCreating] = useState(false);
   const [creatingOrder, setCreatingOrder] = useState(false);
+  const [connectingPayment, setConnectingPayment] = useState(false);
+  const [savingPaymentSecret, setSavingPaymentSecret] = useState(false);
+  const [disconnectingPayment, setDisconnectingPayment] = useState(false);
+  const [creatingPaymentSessionId, setCreatingPaymentSessionId] = useState<string | null>(null);
   const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -247,6 +283,10 @@ export function SalesCatalogConsole({
   const visibleOrders = useMemo(
     () => orders.filter((order) => !selectedCompanyId || order.companyId === selectedCompanyId),
     [orders, selectedCompanyId],
+  );
+  const visiblePaymentSessions = useMemo(
+    () => paymentSessions.filter((session) => !selectedCompanyId || session.companyId === selectedCompanyId),
+    [paymentSessions, selectedCompanyId],
   );
   const stats = useMemo(() => {
     const active = visibleItems.filter((item) => item.status === "active").length;
@@ -266,6 +306,10 @@ export function SalesCatalogConsole({
     () => shippingSettings.find((entry) => entry.companyId === selectedCompanyId) ?? null,
     [shippingSettings, selectedCompanyId],
   );
+  const selectedPaymentIntegration = useMemo(
+    () => paymentIntegrations.find((entry) => entry.companyId === selectedCompanyId && entry.provider === "mercado_pago") ?? null,
+    [paymentIntegrations, selectedCompanyId],
+  );
   const hasConfiguredSettings = Boolean(selectedSettings?.configured);
   const productAttributes = useMemo(
     () => (selectedSettings?.configured ? selectedSettings.attributes : settingsDraft.attributes).filter((attribute) => attribute.values.length > 0),
@@ -280,6 +324,7 @@ export function SalesCatalogConsole({
   const categoryOptions = selectedSettings?.configured ? selectedSettings.categories : parseLines(settingsDraft.categoriesText);
   const inventoryEnabled = selectedSettings?.trackInventory ?? settingsDraft.trackInventory;
   const selectedShippingRule = shippingDraft.rules.find((rule) => rule.uf === selectedShippingUf) ?? shippingDraft.rules[0] ?? null;
+  const selectedOrderItem = visibleItems.find((item) => item.id === orderItemId) ?? null;
   const canCreate = Boolean(selectedCompanyId && title.trim() && description.trim() && !creating);
   const canCalculateQuote = Boolean(selectedCompanyId && quoteItemId && cleanCep(quoteCep) && !calculatingQuote);
   const canCreateOrder = Boolean(selectedCompanyId && orderItemId && (orderCustomerName.trim() || orderCustomerPhone.trim()) && !creatingOrder);
@@ -292,11 +337,13 @@ export function SalesCatalogConsole({
     setShippingDraft(buildShippingDraft(nextShippingSettings));
     setSelectedShippingUf(nextShippingSettings?.rules.find((rule) => rule.active)?.uf ?? "SP");
     setSelectedAttributes({});
+    setSkuDrafts([]);
     setEditingItemId(null);
     setQuoteItemId("");
     setQuoteCep("");
     setQuoteResult(null);
     setOrderItemId("");
+    setOrderSkuId("");
     setOrderTotal("");
     if (!nextSettings?.configured) {
       setActiveTab("setup");
@@ -448,6 +495,176 @@ export function SalesCatalogConsole({
         [attribute.id]: nextValues,
       };
     });
+  }
+
+  function addSkuDraft() {
+    setSkuDrafts((current) => [
+      ...current,
+      buildEmptySkuDraft({
+        index: current.length + 1,
+        title,
+        price,
+        salePrice,
+        inventoryStatus,
+        stockQuantity,
+        lowStockThreshold,
+        weightGrams,
+        selectedAttributes: buildSelectedItemAttributes(productAttributes, selectedAttributes),
+      }),
+    ]);
+  }
+
+  function updateSkuDraft(index: number, patch: Partial<SkuDraft>) {
+    setSkuDrafts((current) => current.map((sku, skuIndex) => (
+      skuIndex === index ? { ...sku, ...patch } : sku
+    )));
+  }
+
+  function removeSkuDraft(index: number) {
+    setSkuDrafts((current) => current.filter((_, skuIndex) => skuIndex !== index));
+  }
+
+  async function startMercadoPagoConnection() {
+    if (!selectedCompanyId || connectingPayment) return;
+
+    setConnectingPayment(true);
+    setNotice(null);
+
+    try {
+      const response = await fetch("/api/dashboard/sales-catalog", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "start_mercado_pago_oauth",
+          companyId: selectedCompanyId,
+        }),
+      });
+      const data = await response.json().catch(() => null) as {
+        integration?: ClientSalesCatalogPaymentIntegration;
+        authorizationUrl?: string;
+        error?: string;
+      } | null;
+
+      if (!response.ok || !data?.authorizationUrl || !data.integration) {
+        throw new Error(data?.error ?? "Nao foi possivel iniciar conexao Mercado Pago.");
+      }
+
+      setPaymentIntegrations((current) => [data.integration!, ...current.filter((entry) => entry.id !== data.integration!.id)]);
+      window.location.href = data.authorizationUrl;
+    } catch (error) {
+      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao conectar Mercado Pago." });
+      setConnectingPayment(false);
+    }
+  }
+
+  async function saveMercadoPagoWebhookSecret() {
+    if (!selectedCompanyId || savingPaymentSecret) return;
+
+    setSavingPaymentSecret(true);
+    setNotice(null);
+
+    try {
+      const response = await fetch("/api/dashboard/sales-catalog", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "save_mercado_pago_webhook_secret",
+          companyId: selectedCompanyId,
+          webhookSecret,
+        }),
+      });
+      const data = await response.json().catch(() => null) as {
+        integration?: ClientSalesCatalogPaymentIntegration;
+        error?: string;
+      } | null;
+
+      if (!response.ok || !data?.integration) {
+        throw new Error(data?.error ?? "Nao foi possivel salvar o segredo do webhook.");
+      }
+
+      setPaymentIntegrations((current) => [data.integration!, ...current.filter((entry) => entry.id !== data.integration!.id)]);
+      setWebhookSecret("");
+      setNotice({ tone: "success", message: "Webhook Mercado Pago salvo." });
+    } catch (error) {
+      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao salvar webhook." });
+    } finally {
+      setSavingPaymentSecret(false);
+    }
+  }
+
+  async function disconnectMercadoPago() {
+    if (!selectedCompanyId || disconnectingPayment) return;
+
+    setDisconnectingPayment(true);
+    setNotice(null);
+
+    try {
+      const response = await fetch("/api/dashboard/sales-catalog", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "disconnect_mercado_pago",
+          companyId: selectedCompanyId,
+        }),
+      });
+      const data = await response.json().catch(() => null) as {
+        integration?: ClientSalesCatalogPaymentIntegration;
+        error?: string;
+      } | null;
+
+      if (!response.ok || !data?.integration) {
+        throw new Error(data?.error ?? "Nao foi possivel desconectar Mercado Pago.");
+      }
+
+      setPaymentIntegrations((current) => [data.integration!, ...current.filter((entry) => entry.id !== data.integration!.id)]);
+      setNotice({ tone: "success", message: "Mercado Pago desconectado deste catalogo." });
+    } catch (error) {
+      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao desconectar Mercado Pago." });
+    } finally {
+      setDisconnectingPayment(false);
+    }
+  }
+
+  async function createOrderPaymentSession(order: ClientSalesCatalogOrder) {
+    if (creatingPaymentSessionId) return;
+
+    setCreatingPaymentSessionId(order.id);
+    setNotice(null);
+
+    try {
+      const response = await fetch("/api/dashboard/sales-catalog", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "create_payment_session",
+          companyId: order.companyId,
+          orderId: order.id,
+          amount: order.total,
+          payerEmail: order.customerEmail,
+        }),
+      });
+      const data = await response.json().catch(() => null) as {
+        session?: ClientSalesCatalogPaymentSession;
+        checkoutUrl?: string;
+        error?: string;
+      } | null;
+
+      if (!response.ok || !data?.session) {
+        throw new Error(data?.error ?? "Nao foi possivel gerar Pix para este pedido.");
+      }
+
+      setPaymentSessions((current) => [data.session!, ...current.filter((session) => session.id !== data.session!.id)]);
+      setOrders((current) => current.map((entry) => (
+        entry.id === order.id
+          ? { ...entry, latestPaymentSessionId: data.session!.id, paymentMethod: "Pix Mercado Pago", paymentStatus: "pending", status: "pending_payment" }
+          : entry
+      )));
+      setNotice({ tone: "success", message: "Pix gerado. O link de checkout ja pode ser enviado no WhatsApp." });
+    } catch (error) {
+      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao gerar Pix." });
+    } finally {
+      setCreatingPaymentSessionId(null);
+    }
   }
 
   async function saveSettings() {
@@ -741,6 +958,18 @@ export function SalesCatalogConsole({
       formData.set("offerNotes", offerNotes);
       formData.set("status", status);
       formData.set("attributes", JSON.stringify(buildSelectedItemAttributes(productAttributes, selectedAttributes)));
+      formData.set("skus", JSON.stringify(serializeSkuDrafts(skuDrafts, {
+        title,
+        price,
+        salePrice,
+        inventoryStatus,
+        stockQuantity,
+        lowStockThreshold,
+        weightGrams,
+        lengthCm,
+        widthCm,
+        heightCm,
+      })));
       formData.set("inventoryStatus", inventoryStatus);
       formData.set("stockQuantity", stockQuantity);
       formData.set("lowStockThreshold", lowStockThreshold);
@@ -785,6 +1014,7 @@ export function SalesCatalogConsole({
   function selectOrderItem(itemId: string) {
     const item = visibleItems.find((entry) => entry.id === itemId) ?? null;
     setOrderItemId(itemId);
+    setOrderSkuId(item?.skus.find((sku) => sku.status === "active")?.id ?? "");
     setOrderTotal(item?.offer.salePrice ?? item?.price ?? "");
     setOrderFulfillmentStatus(item?.fulfillment.schedulingRequired ? "scheduled" : "pending");
   }
@@ -816,6 +1046,7 @@ export function SalesCatalogConsole({
           action: "create_order",
           companyId: selectedCompanyId,
           itemId: orderItemId,
+          skuId: orderSkuId,
           quantity: parseOptionalNumber(orderQuantity) ?? 1,
           customerName: orderCustomerName,
           customerPhone: orderCustomerPhone,
@@ -1038,6 +1269,7 @@ export function SalesCatalogConsole({
     setLowStockThreshold(item.inventory.lowStockThreshold !== null ? String(item.inventory.lowStockThreshold) : "");
     setAllowBackorder(item.inventory.allowBackorder);
     setInventoryNotes(item.inventory.notes ?? "");
+    setSkuDrafts(item.skus.map(buildSkuDraftFromSku));
     setFulfillmentMode(item.fulfillment.mode);
     setSchedulingRequired(item.fulfillment.schedulingRequired);
     setServiceDuration(item.fulfillment.serviceDuration ?? "");
@@ -1080,6 +1312,7 @@ export function SalesCatalogConsole({
     setLowStockThreshold("");
     setAllowBackorder(false);
     setInventoryNotes("");
+    setSkuDrafts([]);
     setFulfillmentMode("physical");
     setSchedulingRequired(false);
     setServiceDuration("");
@@ -1096,6 +1329,7 @@ export function SalesCatalogConsole({
 
   function resetOrderForm() {
     setOrderItemId("");
+    setOrderSkuId("");
     setOrderQuantity("1");
     setOrderCustomerName("");
     setOrderCustomerPhone("");
@@ -1169,6 +1403,7 @@ export function SalesCatalogConsole({
         <TabButton active={activeTab === "shipping"} icon={Truck} label="Entrega e Frete" onClick={() => setActiveTab("shipping")} />
         <TabButton active={activeTab === "products"} disabled={!hasConfiguredSettings} icon={PackagePlus} label="Produtos" onClick={() => setActiveTab("products")} />
         <TabButton active={activeTab === "orders"} icon={ClipboardList} label="Pedidos WhatsApp" onClick={() => setActiveTab("orders")} />
+        <TabButton active={activeTab === "payments"} icon={CreditCard} label="Pagamentos" onClick={() => setActiveTab("payments")} />
         <TabButton active={activeTab === "whatsapp"} icon={CloudDownload} label="WhatsApp" onClick={() => setActiveTab("whatsapp")} />
       </div>
 
@@ -1950,6 +2185,114 @@ export function SalesCatalogConsole({
             </div>
           </div>
         </Panel>
+      ) : activeTab === "payments" ? (
+        <div className="grid gap-4 xl:grid-cols-[minmax(320px,0.58fr)_minmax(0,1fr)]">
+          <Panel title="Mercado Pago" eyebrow={selectedCompany?.name ?? "gateway"}>
+            <div className="space-y-3">
+              <label className="block">
+                <FieldLabel>Empresa</FieldLabel>
+                <select
+                  value={selectedCompanyId}
+                  onChange={(event) => changeCompany(event.target.value)}
+                  className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                  style={{ borderColor: "var(--ch-border)" }}
+                >
+                  {companies.map((company) => (
+                    <option key={company.id} value={company.id}>{company.name}</option>
+                  ))}
+                </select>
+              </label>
+
+              <div className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-[13px] font-semibold text-slate-100">Conta Mercado Pago</p>
+                    <p className="mt-1 text-[11px] text-slate-500">
+                      {selectedPaymentIntegration?.providerAccountId ? `ID ${selectedPaymentIntegration.providerAccountId}` : "Nenhuma conta conectada"}
+                    </p>
+                  </div>
+                  <NeonBadge tone={selectedPaymentIntegration?.status === "connected" ? "green" : selectedPaymentIntegration?.status === "error" ? "rose" : "amber"}>
+                    {formatSalesCatalogPaymentIntegrationStatus(selectedPaymentIntegration?.status ?? "pending")}
+                  </NeonBadge>
+                </div>
+
+                {selectedPaymentIntegration?.lastError ? (
+                  <p className="mt-3 rounded-lg border border-rose-400/25 bg-rose-400/10 px-3 py-2 text-[11px] text-rose-100">
+                    {selectedPaymentIntegration.lastError}
+                  </p>
+                ) : null}
+
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    disabled={!selectedCompanyId || connectingPayment}
+                    onClick={startMercadoPagoConnection}
+                    className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-cyan-300 px-4 text-[12px] font-bold text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {connectingPayment ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
+                    {selectedPaymentIntegration?.status === "connected" ? "Reconectar" : "Conectar conta"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!selectedPaymentIntegration || disconnectingPayment}
+                    onClick={disconnectMercadoPago}
+                    className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border px-4 text-[12px] font-bold text-slate-300 transition hover:bg-rose-400/10 hover:text-rose-100 disabled:cursor-not-allowed disabled:opacity-50"
+                    style={{ borderColor: "var(--ch-border)" }}
+                  >
+                    {disconnectingPayment ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
+                    Desconectar
+                  </button>
+                </div>
+              </div>
+
+              <div className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+                <div className="mb-3 flex items-center gap-2">
+                  <QrCode className="h-4 w-4 text-cyan-300" />
+                  <FieldLabel>Webhook</FieldLabel>
+                </div>
+                <input
+                  readOnly
+                  value={selectedPaymentIntegration?.webhookUrl ?? "/api/webhooks/mercado-pago"}
+                  className="h-10 w-full rounded-lg border bg-transparent px-3 text-[11px] outline-none"
+                  style={{ borderColor: "var(--ch-border)" }}
+                />
+                <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_150px]">
+                  <input
+                    value={webhookSecret}
+                    onChange={(event) => setWebhookSecret(event.target.value.slice(0, 240))}
+                    className="h-10 rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                    placeholder={selectedPaymentIntegration?.hasWebhookSecret ? "Segredo salvo" : "Colar secret signature"}
+                    style={{ borderColor: "var(--ch-border)" }}
+                  />
+                  <button
+                    type="button"
+                    disabled={!selectedCompanyId || savingPaymentSecret}
+                    onClick={saveMercadoPagoWebhookSecret}
+                    className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10 disabled:opacity-50"
+                    style={{ borderColor: "var(--ch-border)" }}
+                  >
+                    {savingPaymentSecret ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                    Salvar
+                  </button>
+                </div>
+              </div>
+            </div>
+          </Panel>
+
+          <Panel title="Sessoes de pagamento" eyebrow={selectedCompany?.name ?? "checkout"}>
+            {visiblePaymentSessions.length > 0 ? (
+              <div className="grid gap-3">
+                {visiblePaymentSessions.slice(0, 12).map((session) => (
+                  <PaymentSessionCard key={session.id} session={session} />
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-xl border border-dashed px-4 py-10 text-center text-[12px] text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
+                Nenhum Pix gerado para esta empresa.
+              </div>
+            )}
+          </Panel>
+        </div>
       ) : activeTab === "orders" ? (
         <div className="grid gap-4 xl:grid-cols-[minmax(320px,0.58fr)_minmax(0,1fr)]">
           <Panel title="Novo pedido WhatsApp" eyebrow={selectedCompany?.name ?? "empresa"}>
@@ -1984,6 +2327,29 @@ export function SalesCatalogConsole({
                   ))}
                 </select>
               </label>
+
+              {selectedOrderItem?.skus.length ? (
+                <label className="block">
+                  <FieldLabel>SKU / variacao</FieldLabel>
+                  <select
+                    value={orderSkuId}
+                    onChange={(event) => {
+                      const sku = selectedOrderItem.skus.find((entry) => entry.id === event.target.value) ?? null;
+                      setOrderSkuId(event.target.value);
+                      setOrderTotal(sku?.salePrice ?? sku?.price ?? selectedOrderItem.offer.salePrice ?? selectedOrderItem.price ?? "");
+                    }}
+                    className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                    style={{ borderColor: "var(--ch-border)" }}
+                  >
+                    <option value="">Sem SKU especifico</option>
+                    {selectedOrderItem.skus.map((sku) => (
+                      <option key={sku.id ?? sku.skuCode} value={sku.id ?? ""}>
+                        {sku.skuCode}{sku.title ? ` - ${sku.title}` : ""}{sku.salePrice ? ` - ${sku.salePrice}` : sku.price ? ` - ${sku.price}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
 
               <div className="grid gap-3 sm:grid-cols-[110px_minmax(0,1fr)]">
                 <label className="block">
@@ -2158,8 +2524,11 @@ export function SalesCatalogConsole({
                 {visibleOrders.map((order) => (
                   <OrderCard
                     key={order.id}
+                    paymentSession={visiblePaymentSessions.find((session) => session.id === order.latestPaymentSessionId || session.orderId === order.id) ?? null}
                     order={order}
+                    paymentLoading={creatingPaymentSessionId === order.id}
                     updating={updatingOrderId === order.id}
+                    onCreatePayment={() => createOrderPaymentSession(order)}
                     onUpdate={(patch) => updateOrder(order, patch)}
                   />
                 ))}
@@ -2419,6 +2788,120 @@ export function SalesCatalogConsole({
                   style={{ borderColor: "var(--ch-border)" }}
                 />
               </div>
+            </div>
+
+            <div className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Tags className="h-4 w-4 text-cyan-300" />
+                  <FieldLabel>SKUs e variacoes vendaveis</FieldLabel>
+                </div>
+                <button
+                  type="button"
+                  onClick={addSkuDraft}
+                  className="inline-flex min-h-8 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10"
+                  style={{ borderColor: "var(--ch-border)" }}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Adicionar SKU
+                </button>
+              </div>
+
+              {skuDrafts.length > 0 ? (
+                <div className="grid gap-3">
+                  {skuDrafts.map((sku, index) => (
+                    <div key={`${sku.id ?? "new"}-${index}`} className="rounded-lg border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-panel)" }}>
+                      <div className="grid gap-2 lg:grid-cols-[140px_minmax(160px,1fr)_minmax(180px,1.2fr)_90px]">
+                        <input
+                          value={sku.skuCode}
+                          onChange={(event) => updateSkuDraft(index, { skuCode: skuCodeInput(event.target.value) })}
+                          className="h-10 rounded-lg border bg-transparent px-3 font-mono text-[11px] outline-none"
+                          placeholder="SKU"
+                          style={{ borderColor: "var(--ch-border)" }}
+                        />
+                        <input
+                          value={sku.title}
+                          onChange={(event) => updateSkuDraft(index, { title: event.target.value.slice(0, 120) })}
+                          className="h-10 rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                          placeholder="Nome interno"
+                          style={{ borderColor: "var(--ch-border)" }}
+                        />
+                        <input
+                          value={sku.attributesText}
+                          onChange={(event) => updateSkuDraft(index, { attributesText: event.target.value.slice(0, 220) })}
+                          className="h-10 rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                          placeholder="Tamanho: M; Cor: Preto"
+                          style={{ borderColor: "var(--ch-border)" }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeSkuDraft(index)}
+                          className="grid h-10 place-items-center rounded-lg border text-slate-400 transition hover:bg-rose-400/10 hover:text-rose-100"
+                          style={{ borderColor: "var(--ch-border)" }}
+                          title="Remover SKU"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                      <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-6">
+                        <input
+                          value={sku.price}
+                          onChange={(event) => updateSkuDraft(index, { price: event.target.value.slice(0, 60) })}
+                          className="h-10 rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                          placeholder="Preco"
+                          style={{ borderColor: "var(--ch-border)" }}
+                        />
+                        <input
+                          value={sku.salePrice}
+                          onChange={(event) => updateSkuDraft(index, { salePrice: event.target.value.slice(0, 60) })}
+                          className="h-10 rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                          placeholder="Oferta"
+                          style={{ borderColor: "var(--ch-border)" }}
+                        />
+                        <select
+                          value={sku.stockStatus}
+                          onChange={(event) => updateSkuDraft(index, { stockStatus: event.target.value as SalesCatalogSku["stockStatus"] })}
+                          className="h-10 rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                          style={{ borderColor: "var(--ch-border)" }}
+                        >
+                          <option value="in_stock">Disponivel</option>
+                          <option value="out_of_stock">Esgotado</option>
+                          <option value="on_backorder">Encomenda</option>
+                        </select>
+                        <input
+                          value={sku.stockQuantity}
+                          onChange={(event) => updateSkuDraft(index, { stockQuantity: digitsOnly(event.target.value, 7) })}
+                          className="h-10 rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                          inputMode="numeric"
+                          placeholder="Qtd."
+                          style={{ borderColor: "var(--ch-border)" }}
+                        />
+                        <input
+                          value={sku.weightGrams}
+                          onChange={(event) => updateSkuDraft(index, { weightGrams: digitsOnly(event.target.value, 6) })}
+                          className="h-10 rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                          inputMode="numeric"
+                          placeholder="Peso g"
+                          style={{ borderColor: "var(--ch-border)" }}
+                        />
+                        <select
+                          value={sku.status}
+                          onChange={(event) => updateSkuDraft(index, { status: event.target.value as SalesCatalogSkuStatus })}
+                          className="h-10 rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                          style={{ borderColor: "var(--ch-border)" }}
+                        >
+                          <option value="active">Ativo</option>
+                          <option value="draft">Rascunho</option>
+                        </select>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="rounded-lg border border-dashed px-3 py-4 text-center text-[12px] text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
+                  Sem SKUs manuais. O sistema cria um SKU principal automaticamente ao salvar.
+                </p>
+              )}
             </div>
 
             <div className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
@@ -2711,11 +3194,17 @@ export function SalesCatalogConsole({
 
 function OrderCard({
   order,
+  paymentSession,
+  paymentLoading,
   updating,
+  onCreatePayment,
   onUpdate,
 }: {
   order: ClientSalesCatalogOrder;
+  paymentSession: ClientSalesCatalogPaymentSession | null;
+  paymentLoading: boolean;
   updating: boolean;
+  onCreatePayment: () => void;
   onUpdate: (patch: Partial<Pick<ClientSalesCatalogOrder, "status" | "paymentStatus" | "fulfillmentStatus">>) => void;
 }) {
   const customerLabel = order.customerName ?? order.customerPhone ?? "Lead sem nome";
@@ -2749,6 +3238,56 @@ function OrderCard({
           {order.paymentMethod ? <span>{order.paymentMethod}</span> : null}
           {order.shippingMethod ? <span>{order.shippingMethod}</span> : null}
         </p>
+      </div>
+
+      <div className="mt-3 rounded-lg border px-3 py-2" style={{ borderColor: "var(--ch-border)", background: "var(--ch-panel)" }}>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="min-w-0">
+            <p className="text-[12px] font-semibold text-slate-200">Pagamento Pix</p>
+            <p className="mt-1 text-[11px] text-slate-500">
+              {paymentSession ? formatSalesCatalogPaymentSessionStatus(paymentSession.status) : "Nenhum checkout gerado"}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {paymentSession?.checkoutUrl ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => navigator.clipboard.writeText(paymentSession.checkoutUrl!)}
+                  className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10"
+                  style={{ borderColor: "var(--ch-border)" }}
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                  Copiar link
+                </button>
+                <a
+                  className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-slate-300 transition hover:bg-cyan-400/10 hover:text-cyan-100"
+                  href={paymentSession.checkoutUrl}
+                  rel="noreferrer"
+                  target="_blank"
+                  style={{ borderColor: "var(--ch-border)" }}
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  Abrir
+                </a>
+              </>
+            ) : (
+              <button
+                type="button"
+                disabled={paymentLoading || !order.total}
+                onClick={onCreatePayment}
+                className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10 disabled:opacity-50"
+                style={{ borderColor: "var(--ch-border)" }}
+              >
+                {paymentLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <QrCode className="h-3.5 w-3.5" />}
+                Gerar Pix
+              </button>
+            )}
+          </div>
+        </div>
+        {paymentSession?.pixQrCode ? (
+          <p className="mt-2 line-clamp-2 break-all font-mono text-[10px] text-slate-500">{paymentSession.pixQrCode}</p>
+        ) : null}
       </div>
 
       {order.items.some((item) => item.attributes.length > 0) ? (
@@ -2818,6 +3357,54 @@ function OrderCard({
           {updating ? <Loader2 className="mt-0.5 h-3.5 w-3.5 animate-spin text-cyan-300" /> : <ClipboardList className="mt-0.5 h-3.5 w-3.5 text-slate-500" />}
           <span className="min-w-0">{updating ? "Atualizando pedido..." : order.internalNotes}</span>
         </div>
+      ) : null}
+    </div>
+  );
+}
+
+function PaymentSessionCard({ session }: { session: ClientSalesCatalogPaymentSession }) {
+  return (
+    <div className="rounded-xl border p-3" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate text-[14px] font-semibold text-slate-100">Pedido {session.orderId.slice(0, 8)}</p>
+          <p className="mt-1 flex flex-wrap gap-2 text-[11px] text-slate-500">
+            <span>R$ {session.amount}</span>
+            {session.providerPaymentId ? <span>MP {session.providerPaymentId}</span> : null}
+            {session.createdAt ? <span>{formatDateTime(session.createdAt)}</span> : null}
+          </p>
+        </div>
+        <NeonBadge tone={paymentSessionTone(session.status)}>{formatSalesCatalogPaymentSessionStatus(session.status)}</NeonBadge>
+      </div>
+
+      {session.checkoutUrl ? (
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => navigator.clipboard.writeText(session.checkoutUrl!)}
+            className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10"
+            style={{ borderColor: "var(--ch-border)" }}
+          >
+            <Copy className="h-3.5 w-3.5" />
+            Copiar checkout
+          </button>
+          <a
+            className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-slate-300 transition hover:bg-cyan-400/10 hover:text-cyan-100"
+            href={session.checkoutUrl}
+            rel="noreferrer"
+            target="_blank"
+            style={{ borderColor: "var(--ch-border)" }}
+          >
+            <ExternalLink className="h-3.5 w-3.5" />
+            Abrir
+          </a>
+        </div>
+      ) : null}
+
+      {session.failureReason ? (
+        <p className="mt-3 rounded-lg border border-rose-400/25 bg-rose-400/10 px-3 py-2 text-[11px] text-rose-100">
+          {session.failureReason}
+        </p>
       ) : null}
     </div>
   );
@@ -2909,6 +3496,17 @@ function CatalogItemCard({
               <span key={attribute.id} className="inline-flex max-w-full items-center gap-1 rounded-md border px-2 py-1 text-[10px] text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
                 <SlidersHorizontal className="h-3 w-3 shrink-0" />
                 <span className="truncate">{attribute.name}: {attribute.values.join(", ")}</span>
+              </span>
+            ))}
+          </div>
+        ) : null}
+
+        {item.skus.length > 0 ? (
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {item.skus.slice(0, 6).map((sku) => (
+              <span key={sku.id ?? sku.skuCode} className="inline-flex max-w-full items-center gap-1 rounded-md border px-2 py-1 font-mono text-[10px] text-cyan-200" style={{ borderColor: "var(--ch-border)" }}>
+                <Tags className="h-3 w-3 shrink-0" />
+                <span className="truncate">{sku.skuCode}</span>
               </span>
             ))}
           </div>
@@ -3216,6 +3814,115 @@ function clonePaymentMethods(methods: SalesCatalogPaymentMethod[]) {
   return methods.map((method) => ({ ...method }));
 }
 
+function buildEmptySkuDraft(input: {
+  index: number;
+  title: string;
+  price: string;
+  salePrice: string;
+  inventoryStatus: SalesCatalogSku["stockStatus"];
+  stockQuantity: string;
+  lowStockThreshold: string;
+  weightGrams: string;
+  selectedAttributes: SalesCatalogItemAttribute[];
+}): SkuDraft {
+  const suffix = String(input.index).padStart(2, "0");
+
+  return {
+    id: null,
+    skuCode: skuCodeInput(`${input.title || "SKU"}-${suffix}`),
+    title: input.title,
+    attributesText: formatSkuAttributesText(input.selectedAttributes),
+    price: input.price,
+    salePrice: input.salePrice,
+    stockStatus: input.inventoryStatus,
+    stockQuantity: input.stockQuantity,
+    lowStockThreshold: input.lowStockThreshold,
+    weightGrams: input.weightGrams,
+    status: "active",
+  };
+}
+
+function buildSkuDraftFromSku(sku: SalesCatalogSku): SkuDraft {
+  return {
+    id: sku.id,
+    skuCode: sku.skuCode,
+    title: sku.title ?? "",
+    attributesText: formatSkuAttributesText(sku.attributes),
+    price: sku.price ?? "",
+    salePrice: sku.salePrice ?? "",
+    stockStatus: sku.stockStatus,
+    stockQuantity: sku.stockQuantity !== null ? String(sku.stockQuantity) : "",
+    lowStockThreshold: sku.lowStockThreshold !== null ? String(sku.lowStockThreshold) : "",
+    weightGrams: sku.weightGrams !== null ? String(sku.weightGrams) : "",
+    status: sku.status,
+  };
+}
+
+function serializeSkuDrafts(
+  drafts: SkuDraft[],
+  fallback: {
+    title: string;
+    price: string;
+    salePrice: string;
+    inventoryStatus: SalesCatalogSku["stockStatus"];
+    stockQuantity: string;
+    lowStockThreshold: string;
+    weightGrams: string;
+    lengthCm: string;
+    widthCm: string;
+    heightCm: string;
+  },
+) {
+  return drafts
+    .map((sku) => ({
+      id: sku.id,
+      skuCode: skuCodeInput(sku.skuCode),
+      title: cleanInput(sku.title, 120),
+      attributes: parseSkuAttributesText(sku.attributesText),
+      price: cleanInput(sku.price, 60) ?? cleanInput(fallback.price, 60),
+      salePrice: cleanInput(sku.salePrice, 60) ?? cleanInput(fallback.salePrice, 60),
+      currency: "BRL",
+      stockStatus: sku.stockStatus || fallback.inventoryStatus,
+      stockQuantity: parseOptionalNumber(sku.stockQuantity) ?? parseOptionalNumber(fallback.stockQuantity),
+      lowStockThreshold: parseOptionalNumber(sku.lowStockThreshold) ?? parseOptionalNumber(fallback.lowStockThreshold),
+      weightGrams: parseOptionalNumber(sku.weightGrams) ?? parseOptionalNumber(fallback.weightGrams),
+      dimensions: {
+        lengthCm: parseOptionalNumber(fallback.lengthCm),
+        widthCm: parseOptionalNumber(fallback.widthCm),
+        heightCm: parseOptionalNumber(fallback.heightCm),
+      },
+      mediaIds: [],
+      status: sku.status,
+    }))
+    .filter((sku) => sku.skuCode);
+}
+
+function parseSkuAttributesText(value: string): SalesCatalogItemAttribute[] {
+  return value
+    .split(/[;\n]/g)
+    .map((part): SalesCatalogItemAttribute | null => {
+      const [name, ...rest] = part.split(":");
+      const label = name?.trim();
+      const values = sanitizeList(rest.join(":").split(/[|,/]/g));
+
+      if (!label || values.length === 0) return null;
+
+      return {
+        id: createAttributeId(label),
+        name: label.slice(0, 50),
+        values,
+      };
+    })
+    .filter((item): item is SalesCatalogItemAttribute => Boolean(item));
+}
+
+function formatSkuAttributesText(attributes: SalesCatalogItemAttribute[]) {
+  return attributes
+    .filter((attribute) => attribute.values.length > 0)
+    .map((attribute) => `${attribute.name}: ${attribute.values.join("/")}`)
+    .join("; ");
+}
+
 function cloneShippingRule(rule: SalesCatalogShippingRule): SalesCatalogShippingRule {
   return {
     ...rule,
@@ -3254,6 +3961,16 @@ function sanitizeList(values: string[]) {
 
 function digitsOnly(value: string, maxLength: number) {
   return value.replace(/\D/g, "").slice(0, maxLength);
+}
+
+function skuCodeInput(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 64);
 }
 
 function cepInput(value: string) {
@@ -3412,6 +4129,14 @@ function fulfillmentStatusTone(status: SalesCatalogFulfillmentStatus): "green" |
   if (status === "fulfilled") return "green";
   if (status === "scheduled" || status === "in_progress") return "cyan";
   if (status === "cancelled") return "rose";
+  return "amber";
+}
+
+function paymentSessionTone(status: SalesCatalogPaymentSessionStatus): "green" | "cyan" | "amber" | "rose" | "violet" | "zinc" {
+  if (status === "approved") return "green";
+  if (status === "pending" || status === "created") return "cyan";
+  if (status === "rejected" || status === "cancelled" || status === "expired" || status === "error") return "rose";
+  if (status === "refunded") return "violet";
   return "amber";
 }
 

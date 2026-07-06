@@ -17,6 +17,8 @@ import {
   salesCatalogLeadDataFields,
   salesCatalogPaymentMethodTemplates,
   salesCatalogBusinessTemplates,
+  type ClientSalesCatalogPaymentIntegration,
+  type ClientSalesCatalogPaymentSession,
   type ClientSalesCatalogSettings,
   type ClientSalesCatalogItem,
   type ClientSalesCatalogOrder,
@@ -30,6 +32,11 @@ import {
   type SalesCatalogPaymentMethod,
   type SalesCatalogPaymentMethodId,
   type SalesCatalogPaymentStatus,
+  type SalesCatalogPaymentIntegrationMode,
+  type SalesCatalogPaymentIntegrationStatus,
+  type SalesCatalogPaymentProvider,
+  type SalesCatalogPaymentSessionMethod,
+  type SalesCatalogPaymentSessionStatus,
   type SalesCatalogReservationPolicy,
   type SalesCatalogMedia,
   type SalesCatalogFulfillmentMode,
@@ -46,6 +53,8 @@ import {
   type SalesCatalogStockStatus,
   type SalesCatalogWhatsAppMessageTemplates,
   type SalesCatalogSource,
+  type SalesCatalogSku,
+  type SalesCatalogSkuStatus,
 } from "@/lib/sales-catalog/shared";
 
 type JsonRecord = Record<string, unknown>;
@@ -83,6 +92,7 @@ export type SalesCatalogOrderRow = {
   shipping_method: string | null;
   agent_notes: string | null;
   internal_notes: string | null;
+  latest_payment_session_id: string | null;
   metadata: JsonRecord | null;
   created_by: string | null;
   created_at: string | null;
@@ -94,6 +104,8 @@ export type SalesCatalogOrderItemRow = {
   order_id: string;
   organization_id: string | null;
   catalog_item_id: string | null;
+  sku_id: string | null;
+  sku_code: string | null;
   title: string;
   tag: string | null;
   quantity: number | null;
@@ -104,6 +116,76 @@ export type SalesCatalogOrderItemRow = {
   fulfillment: unknown;
   metadata: JsonRecord | null;
   created_at: string | null;
+};
+
+export type SalesCatalogSkuRow = {
+  id: string;
+  organization_id: string | null;
+  catalog_item_id: string | null;
+  sku_code: string | null;
+  title: string | null;
+  attributes: unknown;
+  price: string | null;
+  sale_price: string | null;
+  currency: string | null;
+  stock_status: string | null;
+  stock_quantity: number | null;
+  low_stock_threshold: number | null;
+  weight_grams: number | null;
+  dimensions: JsonRecord | null;
+  media_ids: string[] | null;
+  status: string | null;
+  metadata: JsonRecord | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+export type SalesCatalogPaymentIntegrationRow = {
+  id: string;
+  organization_id: string | null;
+  provider: string | null;
+  mode: string | null;
+  status: string | null;
+  account_label: string | null;
+  provider_account_id: string | null;
+  public_key: string | null;
+  access_token_encrypted: string | null;
+  refresh_token_encrypted: string | null;
+  token_expires_at: string | null;
+  connected_at: string | null;
+  last_error: string | null;
+  webhook_secret_encrypted: string | null;
+  webhook_url: string | null;
+  metadata: JsonRecord | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+export type SalesCatalogPaymentSessionRow = {
+  id: string;
+  organization_id: string | null;
+  order_id: string | null;
+  integration_id: string | null;
+  provider: string | null;
+  method: string | null;
+  status: string | null;
+  amount: string | number | null;
+  currency: string | null;
+  payer_email: string | null;
+  provider_payment_id: string | null;
+  provider_status: string | null;
+  provider_status_detail: string | null;
+  checkout_url: string | null;
+  pix_qr_code: string | null;
+  pix_qr_code_base64: string | null;
+  pix_ticket_url: string | null;
+  external_reference: string | null;
+  expires_at: string | null;
+  paid_at: string | null;
+  failure_reason: string | null;
+  metadata: JsonRecord | null;
+  created_at: string | null;
+  updated_at: string | null;
 };
 
 export async function listClientSalesCatalog(input: {
@@ -133,7 +215,7 @@ export async function listClientSalesCatalog(input: {
     throw new Error(`Nao foi possivel carregar o catalogo de vendas: ${error.message}`);
   }
 
-  return ((data ?? []) as SalesCatalogMemoryRow[]).map(mapSalesCatalogItem);
+  return attachSalesCatalogSkus(client, ((data ?? []) as SalesCatalogMemoryRow[]).map(mapSalesCatalogItem));
 }
 
 export async function listClientSalesCatalogSettings(input: {
@@ -253,6 +335,7 @@ export async function listClientSalesCatalogOrders(input: {
       "shipping_method",
       "agent_notes",
       "internal_notes",
+      "latest_payment_session_id",
       "metadata",
       "created_by",
       "created_at",
@@ -275,7 +358,7 @@ export async function listClientSalesCatalogOrders(input: {
 
   const { data: itemData, error: itemError } = await client
     .from("sales_catalog_order_items")
-    .select("id, order_id, organization_id, catalog_item_id, title, tag, quantity, unit_price, sale_price, total, attributes, fulfillment, metadata, created_at")
+    .select("id, order_id, organization_id, catalog_item_id, sku_id, sku_code, title, tag, quantity, unit_price, sale_price, total, attributes, fulfillment, metadata, created_at")
     .in("order_id", orderIds)
     .order("created_at", { ascending: true });
 
@@ -291,6 +374,61 @@ export async function listClientSalesCatalogOrders(input: {
   }
 
   return orderRows.map((order) => mapSalesCatalogOrder(order, itemsByOrder.get(order.id) ?? []));
+}
+
+export async function listClientSalesCatalogPaymentIntegrations(input: {
+  userId: string;
+  companyId?: string | null;
+  client?: SupabaseClient;
+}) {
+  const client = input.client ?? createServiceClient();
+  const companyIds = input.companyId
+    ? [(await requireClientCompanyAccess({ userId: input.userId, companyId: input.companyId, client })).id]
+    : (await listClientCompanies(input.userId, client)).map((company) => company.id);
+
+  if (companyIds.length === 0) {
+    return [];
+  }
+
+  const { data, error } = await client
+    .from("sales_catalog_payment_integrations")
+    .select("id, organization_id, provider, mode, status, account_label, provider_account_id, public_key, access_token_encrypted, refresh_token_encrypted, token_expires_at, connected_at, last_error, webhook_secret_encrypted, webhook_url, metadata, created_at, updated_at")
+    .in("organization_id", companyIds)
+    .order("updated_at", { ascending: false });
+
+  if (error) {
+    throw new Error(`Nao foi possivel carregar pagamentos do catalogo: ${error.message}`);
+  }
+
+  return ((data ?? []) as unknown as SalesCatalogPaymentIntegrationRow[]).map(mapSalesCatalogPaymentIntegration);
+}
+
+export async function listClientSalesCatalogPaymentSessions(input: {
+  userId: string;
+  companyId?: string | null;
+  client?: SupabaseClient;
+}) {
+  const client = input.client ?? createServiceClient();
+  const companyIds = input.companyId
+    ? [(await requireClientCompanyAccess({ userId: input.userId, companyId: input.companyId, client })).id]
+    : (await listClientCompanies(input.userId, client)).map((company) => company.id);
+
+  if (companyIds.length === 0) {
+    return [];
+  }
+
+  const { data, error } = await client
+    .from("sales_catalog_payment_sessions")
+    .select("id, organization_id, order_id, integration_id, provider, method, status, amount, currency, payer_email, provider_payment_id, provider_status, provider_status_detail, checkout_url, pix_qr_code, pix_qr_code_base64, pix_ticket_url, external_reference, expires_at, paid_at, failure_reason, metadata, created_at, updated_at")
+    .in("organization_id", companyIds)
+    .order("created_at", { ascending: false })
+    .limit(120);
+
+  if (error) {
+    throw new Error(`Nao foi possivel carregar sessoes de pagamento: ${error.message}`);
+  }
+
+  return ((data ?? []) as unknown as SalesCatalogPaymentSessionRow[]).map(mapSalesCatalogPaymentSession);
 }
 
 export async function listOrganizationSalesCatalog(
@@ -312,7 +450,7 @@ export async function listOrganizationSalesCatalog(
     throw new Error(`Nao foi possivel carregar o catalogo de vendas: ${error.message}`);
   }
 
-  return ((data ?? []) as SalesCatalogMemoryRow[]).map(mapSalesCatalogItem);
+  return attachSalesCatalogSkus(client, ((data ?? []) as SalesCatalogMemoryRow[]).map(mapSalesCatalogItem));
 }
 
 export async function getOrganizationSalesCatalogSettings(
@@ -357,6 +495,40 @@ export async function getOrganizationSalesCatalogShippingSettings(
   return data ? mapSalesCatalogShippingSettings(data) : null;
 }
 
+async function attachSalesCatalogSkus(client: SupabaseClient, items: ClientSalesCatalogItem[]) {
+  const itemIds = items.map((item) => item.id);
+
+  if (itemIds.length === 0) {
+    return items;
+  }
+
+  const { data, error } = await client
+    .from("sales_catalog_skus")
+    .select("id, organization_id, catalog_item_id, sku_code, title, attributes, price, sale_price, currency, stock_status, stock_quantity, low_stock_threshold, weight_grams, dimensions, media_ids, status, metadata, created_at, updated_at")
+    .in("catalog_item_id", itemIds)
+    .neq("status", "archived")
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    return items;
+  }
+
+  const skusByItem = new Map<string, SalesCatalogSku[]>();
+  for (const row of (data ?? []) as unknown as SalesCatalogSkuRow[]) {
+    const catalogItemId = readString(row.catalog_item_id);
+    if (!catalogItemId) continue;
+
+    const current = skusByItem.get(catalogItemId) ?? [];
+    current.push(mapSalesCatalogSku(row));
+    skusByItem.set(catalogItemId, current);
+  }
+
+  return items.map((item) => ({
+    ...item,
+    skus: skusByItem.get(item.id) ?? item.skus,
+  }));
+}
+
 export function mapSalesCatalogItem(row: SalesCatalogMemoryRow): ClientSalesCatalogItem {
   const metadata = readRecord(row.metadata) ?? {};
   const media = readMediaList(metadata.media);
@@ -377,6 +549,7 @@ export function mapSalesCatalogItem(row: SalesCatalogMemoryRow): ClientSalesCata
     media,
     attributes: readItemAttributes(metadata.attributes),
     inventory: readProductInventory(metadata.inventory),
+    skus: readSkus(metadata.skus, readString(row.organization_id) ?? "", row.id),
     offer: readProductOffer(metadata.offer),
     fulfillment: readProductFulfillment(metadata.fulfillment),
     shipping: readProductShipping(metadata.shipping),
@@ -460,6 +633,7 @@ export function mapSalesCatalogOrder(
     shippingMethod: readString(row.shipping_method),
     agentNotes: readString(row.agent_notes),
     internalNotes: readString(row.internal_notes),
+    latestPaymentSessionId: readString(row.latest_payment_session_id),
     items: items.map(mapSalesCatalogOrderItem),
     createdBy: readString(row.created_by),
     createdAt: row.created_at,
@@ -473,6 +647,8 @@ export function mapSalesCatalogOrderItem(row: SalesCatalogOrderItemRow): ClientS
     orderId: row.order_id,
     companyId: readString(row.organization_id) ?? "",
     catalogItemId: readString(row.catalog_item_id),
+    skuId: readString(row.sku_id),
+    skuCode: readString(row.sku_code),
     title: readString(row.title) ?? "Item do catalogo",
     tag: readString(row.tag),
     quantity: readNumber(row.quantity) ?? 1,
@@ -482,6 +658,85 @@ export function mapSalesCatalogOrderItem(row: SalesCatalogOrderItemRow): ClientS
     attributes: readItemAttributes(row.attributes),
     fulfillment: readProductFulfillment(row.fulfillment),
     createdAt: row.created_at,
+  };
+}
+
+export function mapSalesCatalogSku(row: SalesCatalogSkuRow): SalesCatalogSku {
+  const dimensions = readRecord(row.dimensions) ?? {};
+
+  return {
+    id: row.id,
+    companyId: readString(row.organization_id) ?? "",
+    catalogItemId: readString(row.catalog_item_id),
+    skuCode: readString(row.sku_code) ?? row.id.slice(0, 8),
+    title: readString(row.title),
+    attributes: readItemAttributes(row.attributes),
+    price: readString(row.price),
+    salePrice: readString(row.sale_price),
+    currency: readString(row.currency) ?? "BRL",
+    stockStatus: normalizeStockStatus(readString(row.stock_status)),
+    stockQuantity: readNumber(row.stock_quantity),
+    lowStockThreshold: readNumber(row.low_stock_threshold),
+    weightGrams: readNumber(row.weight_grams),
+    dimensions: {
+      lengthCm: readNumber(dimensions.length_cm) ?? readNumber(dimensions.lengthCm),
+      widthCm: readNumber(dimensions.width_cm) ?? readNumber(dimensions.widthCm),
+      heightCm: readNumber(dimensions.height_cm) ?? readNumber(dimensions.heightCm),
+    },
+    mediaIds: Array.isArray(row.media_ids) ? row.media_ids.filter((item): item is string => typeof item === "string") : [],
+    status: normalizeSkuStatus(readString(row.status)),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function mapSalesCatalogPaymentIntegration(row: SalesCatalogPaymentIntegrationRow): ClientSalesCatalogPaymentIntegration {
+  return {
+    id: row.id,
+    companyId: readString(row.organization_id) ?? "",
+    provider: normalizePaymentProvider(readString(row.provider)),
+    mode: normalizePaymentIntegrationMode(readString(row.mode)),
+    status: normalizePaymentIntegrationStatus(readString(row.status)),
+    accountLabel: readString(row.account_label),
+    providerAccountId: readString(row.provider_account_id),
+    publicKey: readString(row.public_key),
+    tokenExpiresAt: row.token_expires_at,
+    connectedAt: row.connected_at,
+    lastError: readString(row.last_error),
+    webhookUrl: readString(row.webhook_url),
+    hasAccessToken: Boolean(row.access_token_encrypted),
+    hasRefreshToken: Boolean(row.refresh_token_encrypted),
+    hasWebhookSecret: Boolean(row.webhook_secret_encrypted),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function mapSalesCatalogPaymentSession(row: SalesCatalogPaymentSessionRow): ClientSalesCatalogPaymentSession {
+  return {
+    id: row.id,
+    companyId: readString(row.organization_id) ?? "",
+    orderId: readString(row.order_id) ?? "",
+    integrationId: readString(row.integration_id),
+    provider: normalizePaymentProvider(readString(row.provider)),
+    method: normalizePaymentSessionMethod(readString(row.method)),
+    status: normalizePaymentSessionStatus(readString(row.status)),
+    amount: formatAmount(row.amount),
+    currency: readString(row.currency) ?? "BRL",
+    payerEmail: readString(row.payer_email),
+    providerPaymentId: readString(row.provider_payment_id),
+    providerStatus: readString(row.provider_status),
+    providerStatusDetail: readString(row.provider_status_detail),
+    checkoutUrl: readString(row.checkout_url),
+    pixQrCode: readString(row.pix_qr_code),
+    pixQrCodeBase64: readString(row.pix_qr_code_base64),
+    pixTicketUrl: readString(row.pix_ticket_url),
+    externalReference: readString(row.external_reference) ?? row.id,
+    expiresAt: row.expires_at,
+    paidAt: row.paid_at,
+    failureReason: readString(row.failure_reason),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   };
 }
 
@@ -511,6 +766,47 @@ function readMediaList(value: unknown): SalesCatalogMedia[] {
       };
     })
     .filter((item): item is SalesCatalogMedia => Boolean(item));
+}
+
+function readSkus(value: unknown, companyId: string, catalogItemId: string): SalesCatalogSku[] {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item): SalesCatalogSku | null => {
+      const record = readRecord(item);
+      if (!record) return null;
+
+      const skuCode = readString(record.sku_code) ?? readString(record.skuCode);
+      if (!skuCode) return null;
+
+      const dimensions = readRecord(record.dimensions) ?? {};
+
+      return {
+        id: readString(record.id),
+        companyId,
+        catalogItemId,
+        skuCode,
+        title: readString(record.title),
+        attributes: readItemAttributes(record.attributes),
+        price: readString(record.price),
+        salePrice: readString(record.sale_price) ?? readString(record.salePrice),
+        currency: readString(record.currency) ?? "BRL",
+        stockStatus: normalizeStockStatus(readString(record.stock_status) ?? readString(record.stockStatus)),
+        stockQuantity: readNumber(record.stock_quantity) ?? readNumber(record.stockQuantity),
+        lowStockThreshold: readNumber(record.low_stock_threshold) ?? readNumber(record.lowStockThreshold),
+        weightGrams: readNumber(record.weight_grams) ?? readNumber(record.weightGrams),
+        dimensions: {
+          lengthCm: readNumber(dimensions.length_cm) ?? readNumber(dimensions.lengthCm),
+          widthCm: readNumber(dimensions.width_cm) ?? readNumber(dimensions.widthCm),
+          heightCm: readNumber(dimensions.height_cm) ?? readNumber(dimensions.heightCm),
+        },
+        mediaIds: readStringList(record.media_ids ?? record.mediaIds, []),
+        status: normalizeSkuStatus(readString(record.status)),
+        createdAt: readString(record.created_at) ?? readString(record.createdAt),
+        updatedAt: readString(record.updated_at) ?? readString(record.updatedAt),
+      };
+    })
+    .filter((item): item is SalesCatalogSku => Boolean(item));
 }
 
 function readProductShipping(value: unknown): SalesCatalogProductShipping {
@@ -716,6 +1012,47 @@ function normalizeBusinessType(value: string | null): SalesCatalogBusinessType {
 function normalizeSource(value: string | null): SalesCatalogSource {
   if (value === "whatsapp_catalog") return "whatsapp_catalog";
   return "manual";
+}
+
+function normalizeSkuStatus(value: string | null): SalesCatalogSkuStatus {
+  if (value === "draft" || value === "archived") return value;
+  return "active";
+}
+
+function normalizePaymentProvider(value: string | null): SalesCatalogPaymentProvider {
+  if (value === "mercado_pago") return "mercado_pago";
+  return "mercado_pago";
+}
+
+function normalizePaymentIntegrationStatus(value: string | null): SalesCatalogPaymentIntegrationStatus {
+  if (value === "connected" || value === "disabled" || value === "error") return value;
+  return "pending";
+}
+
+function normalizePaymentIntegrationMode(value: string | null): SalesCatalogPaymentIntegrationMode {
+  if (value === "sandbox") return "sandbox";
+  return "production";
+}
+
+function normalizePaymentSessionMethod(value: string | null): SalesCatalogPaymentSessionMethod {
+  if (value === "card" || value === "checkout_link") return value;
+  return "pix";
+}
+
+function normalizePaymentSessionStatus(value: string | null): SalesCatalogPaymentSessionStatus {
+  if (
+    value === "pending"
+    || value === "approved"
+    || value === "rejected"
+    || value === "cancelled"
+    || value === "expired"
+    || value === "refunded"
+    || value === "error"
+  ) {
+    return value;
+  }
+
+  return "created";
 }
 
 function normalizeShippingProfile(value: string | null): SalesCatalogShippingProfile {
@@ -929,6 +1266,18 @@ function readString(value: unknown) {
 
 function readNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function formatAmount(value: string | number | null) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value.toFixed(2);
+  }
+
+  if (typeof value === "string" && value.trim()) {
+    return value.trim();
+  }
+
+  return "0.00";
 }
 
 function readBoolean(value: unknown) {
