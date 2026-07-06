@@ -310,6 +310,11 @@ export function SalesCatalogConsole({
     () => paymentIntegrations.find((entry) => entry.companyId === selectedCompanyId && entry.provider === "mercado_pago") ?? null,
     [paymentIntegrations, selectedCompanyId],
   );
+  const publicAppUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/+$/, "") ?? "";
+  const paymentConnected = selectedPaymentIntegration?.status === "connected";
+  const paymentWebhookReady = Boolean(selectedPaymentIntegration?.hasWebhookSecret);
+  const paymentWebhookUrl = selectedPaymentIntegration?.webhookUrl ?? `${publicAppUrl}/api/webhooks/mercado-pago`;
+  const paymentCallbackUrl = `${publicAppUrl}/api/dashboard/sales-catalog/payments/mercado-pago/callback`;
   const hasConfiguredSettings = Boolean(selectedSettings?.configured);
   const productAttributes = useMemo(
     () => (selectedSettings?.configured ? selectedSettings.attributes : settingsDraft.attributes).filter((attribute) => attribute.values.length > 0),
@@ -2189,6 +2194,45 @@ export function SalesCatalogConsole({
         <div className="grid gap-4 xl:grid-cols-[minmax(320px,0.58fr)_minmax(0,1fr)]">
           <Panel title="Mercado Pago" eyebrow={selectedCompany?.name ?? "gateway"}>
             <div className="space-y-3">
+              <div className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-[13px] font-semibold text-slate-100">Conexao guiada pelo Mercado Pago</p>
+                    <p className="mt-1 max-w-xl text-[11px] leading-5 text-slate-500">
+                      O usuario clica em conectar, entra na pagina oficial do Mercado Pago, autoriza a conta dele e volta para o ConnectyHub com Pix e cartao liberados no checkout.
+                    </p>
+                  </div>
+                  <NeonBadge tone={paymentConnected ? "green" : "cyan"}>
+                    {paymentConnected ? "pronto para vender" : "oauth oficial"}
+                  </NeonBadge>
+                </div>
+
+                <div className="mt-3 grid gap-2 sm:grid-cols-4">
+                  <PaymentGuideStep done={Boolean(selectedCompanyId)} index="1" title="Empresa" body="Escolha o catalogo" />
+                  <PaymentGuideStep done={paymentConnected} index="2" title="Autorizar" body="Login Mercado Pago" />
+                  <PaymentGuideStep done={paymentConnected} index="3" title="Retorno" body="Conta conectada" />
+                  <PaymentGuideStep done={paymentWebhookReady} index="4" title="Webhook" body="Confirmacao automatica" />
+                </div>
+
+                <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_180px]">
+                  <input
+                    readOnly
+                    value={paymentCallbackUrl}
+                    className="h-10 rounded-lg border bg-transparent px-3 text-[11px] outline-none"
+                    style={{ borderColor: "var(--ch-border)" }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => navigator.clipboard.writeText(paymentCallbackUrl)}
+                    className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10"
+                    style={{ borderColor: "var(--ch-border)" }}
+                  >
+                    <Copy className="h-3.5 w-3.5" />
+                    Copiar callback
+                  </button>
+                </div>
+              </div>
+
               <label className="block">
                 <FieldLabel>Empresa</FieldLabel>
                 <select
@@ -2229,8 +2273,8 @@ export function SalesCatalogConsole({
                     onClick={startMercadoPagoConnection}
                     className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-cyan-300 px-4 text-[12px] font-bold text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    {connectingPayment ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
-                    {selectedPaymentIntegration?.status === "connected" ? "Reconectar" : "Conectar conta"}
+                    {connectingPayment ? <Loader2 className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}
+                    {selectedPaymentIntegration?.status === "connected" ? "Reconectar no Mercado Pago" : "Conectar com Mercado Pago"}
                   </button>
                   <button
                     type="button"
@@ -2243,6 +2287,9 @@ export function SalesCatalogConsole({
                     Desconectar
                   </button>
                 </div>
+                <p className="mt-2 text-[11px] leading-5 text-slate-500">
+                  A autorizacao acontece no ambiente oficial do Mercado Pago. O ConnectyHub nao pede senha nem token manual do cliente.
+                </p>
               </div>
 
               <div className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
@@ -2250,12 +2297,23 @@ export function SalesCatalogConsole({
                   <QrCode className="h-4 w-4 text-cyan-300" />
                   <FieldLabel>Webhook</FieldLabel>
                 </div>
-                <input
-                  readOnly
-                  value={selectedPaymentIntegration?.webhookUrl ?? "/api/webhooks/mercado-pago"}
-                  className="h-10 w-full rounded-lg border bg-transparent px-3 text-[11px] outline-none"
-                  style={{ borderColor: "var(--ch-border)" }}
-                />
+                <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_150px]">
+                  <input
+                    readOnly
+                    value={paymentWebhookUrl}
+                    className="h-10 rounded-lg border bg-transparent px-3 text-[11px] outline-none"
+                    style={{ borderColor: "var(--ch-border)" }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => navigator.clipboard.writeText(paymentWebhookUrl)}
+                    className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10"
+                    style={{ borderColor: "var(--ch-border)" }}
+                  >
+                    <Copy className="h-3.5 w-3.5" />
+                    Copiar
+                  </button>
+                </div>
                 <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_150px]">
                   <input
                     value={webhookSecret}
@@ -3652,6 +3710,33 @@ function StatTile({ icon: Icon, label, value }: { icon: typeof PackagePlus; labe
         <Icon className="h-4 w-4 text-cyan-300" />
       </div>
       <p className="mt-3 font-mono text-[24px] font-bold text-cyan-200">{value}</p>
+    </div>
+  );
+}
+
+function PaymentGuideStep({
+  done,
+  index,
+  title,
+  body,
+}: {
+  done: boolean;
+  index: string;
+  title: string;
+  body: string;
+}) {
+  return (
+    <div className="rounded-lg border px-3 py-2" style={{ borderColor: "var(--ch-border)", background: "var(--ch-panel)" }}>
+      <div className="flex items-center gap-2">
+        <span className={cn(
+          "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border font-mono text-[10px] font-bold",
+          done ? "border-emerald-300/50 bg-emerald-300/15 text-emerald-100" : "border-cyan-300/40 bg-cyan-300/10 text-cyan-100",
+        )}>
+          {done ? <CheckCircle2 className="h-3.5 w-3.5" /> : index}
+        </span>
+        <p className="text-[12px] font-semibold text-slate-100">{title}</p>
+      </div>
+      <p className="mt-1 pl-8 text-[10px] leading-4 text-slate-500">{body}</p>
     </div>
   );
 }
