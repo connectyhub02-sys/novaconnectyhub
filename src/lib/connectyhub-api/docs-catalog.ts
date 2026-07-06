@@ -156,6 +156,12 @@ export function buildConnectyhubDocsCatalog(spec: OpenApiSpec): ApiDocsCatalog {
         curl: `curl "${BASE_URL}/provider/chat/details" \\\n  -X POST \\\n  -H "Authorization: Bearer ch_live_SEU_TOKEN" \\\n  -H "Content-Type: application/json" \\\n  -d '{\n    "instanceId": "${EXAMPLE_INSTANCE_ID}",\n    "payload": {\n      "number": "5511999999999",\n      "preview": true\n    }\n  }'`,
         response: `{\n  "id": "5511999999999@s.whatsapp.net",\n  "name": "Cliente",\n  "profileImageUrl": "https://pps.whatsapp.net/..."\n}`,
       },
+      {
+        title: "Detectar passkey no pareamento",
+        description: "Quando o WhatsApp ler o QR inicial mas exigir chave de acesso, o painel do integrador deve detectar passkey_blocked e orientar o usuario sem tratar como erro de QR ou webhook.",
+        curl: `curl "${BASE_URL}/instances/${EXAMPLE_INSTANCE_ID}/status" \\\n  -H "Authorization: Bearer ch_live_SEU_TOKEN"`,
+        response: `{\n  "ok": true,\n  "instance": {\n    "id": "${EXAMPLE_INSTANCE_ID}",\n    "status": "disconnected",\n    "lastDisconnectReason": "Passkey pairing not supported",\n    "connectionDiagnostics": {\n      "latestAttempt": {\n        "finalStatus": "passkey_blocked",\n        "scanDetected": true\n      }\n    }\n  }\n}`,
+      },
     ],
   };
 }

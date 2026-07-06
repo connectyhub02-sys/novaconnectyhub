@@ -31,6 +31,21 @@ const CONNECTYHUB_WEBHOOK_EVENTS = [
   "sender",
 ];
 
+const PASSKEY_PAIRING_GUIDE = [
+  "## Contas com chave de acesso/passkey",
+  "",
+  "Algumas contas do WhatsApp leem o QR inicial, mas exigem uma verificacao extra por chave de acesso antes de concluir a sessao. Quando isso acontecer, a API retorna sinais de diagnostico para o painel do cliente tratar o caso sem acionar suporte:",
+  "",
+  "- `connectionDiagnostics.latestAttempt.finalStatus = passkey_blocked`",
+  "- `lastDisconnectReason = Passkey pairing not supported`",
+  "",
+  "Esse caso nao indica token invalido, webhook quebrado ou QR renderizado errado. O QR inicial foi lido, mas o WhatsApp exigiu uma etapa de seguranca que ainda nao retorna o segundo QR pela API.",
+  "",
+  "No painel do seu produto, detecte esse status, pare de insistir no QR atual e mostre uma mensagem amigavel: `Esta conta pediu uma verificacao extra por chave de acesso. Esse tipo de verificacao ainda nao pode ser concluido diretamente pelo QR Code do painel.`",
+  "",
+  "Voce pode oferecer reset e nova tentativa de QR. Se a conta voltar ao mesmo status, use um fluxo de migracao assistida de sessao apos concluir a validacao no WhatsApp Web oficial.",
+].join("\n");
+
 const tagNames = {
   "Admininstração": "Administracao",
   "Administração": "Administracao",
@@ -133,7 +148,7 @@ const nativePaths = {
       tags: ["Nativo ConnectyHub"],
       summary: "Conectar instancia",
       description:
-        "Inicia ou atualiza o fluxo de conexao da instancia. Sem phone, solicita QR Code. Com phone em formato internacional, solicita codigo de pareamento. Quando o WhatsApp retornar lastDisconnectReason=Passkey pairing not supported, o provedor ainda nao disponibiliza o segundo QR de chave de acesso pela API; o fluxo por phone pode ser testado, mas nao e garantido. A alternativa operacional e concluir a validacao no WhatsApp Web oficial e migrar a sessao autenticada pelo Session Migration Connector.",
+        `Inicia ou atualiza o fluxo de conexao da instancia. Sem phone, solicita QR Code. Com phone em formato internacional, solicita codigo de pareamento. Quando o WhatsApp retornar lastDisconnectReason=Passkey pairing not supported, o provedor ainda nao disponibiliza o segundo QR de chave de acesso pela API; o fluxo por phone pode ser testado, mas nao e garantido. A alternativa operacional e concluir a validacao no WhatsApp Web oficial e migrar a sessao autenticada pelo Session Migration Connector.\n\n${PASSKEY_PAIRING_GUIDE}`,
       operationId: "connectyhubConnectInstance",
       parameters: [instanceIdParam("ID publico da instancia ConnectyHub")],
       requestBody: jsonBody({
@@ -199,7 +214,7 @@ const nativePaths = {
       tags: ["Nativo ConnectyHub"],
       summary: "Atualizar status da instancia",
       description:
-        "Consulta o status atual, sincroniza o registro da ConnectyHub e retorna informacoes de conexao, perfil, numero, foto, QR Code ou codigo de pareamento quando o provedor ainda mantiver o fluxo em andamento.",
+        `Consulta o status atual, sincroniza o registro da ConnectyHub e retorna informacoes de conexao, perfil, numero, foto, QR Code ou codigo de pareamento quando o provedor ainda mantiver o fluxo em andamento.\n\n${PASSKEY_PAIRING_GUIDE}`,
       operationId: "connectyhubRefreshInstanceStatus",
       parameters: [instanceIdParam("ID publico da instancia ConnectyHub")],
       responses: {
@@ -557,7 +572,8 @@ const publicSpec = {
       },
       ConnectionDiagnostics: {
         type: "object",
-        description: "Historico resumido e sanitizado das ultimas tentativas de conexao por QR ou codigo de pareamento.",
+        description:
+          "Historico resumido e sanitizado das ultimas tentativas de conexao por QR ou codigo de pareamento. Use latestAttempt.finalStatus=passkey_blocked para detectar contas que exigiram chave de acesso/passkey apos a leitura do QR inicial.",
         properties: {
           activeAttemptId: { type: ["string", "null"] },
           latestAttempt: {

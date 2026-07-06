@@ -214,6 +214,25 @@ function Overview({ catalog }: { catalog: ApiDocsCatalog }) {
         <Feature title="Eventos assinados" text="Webhooks entregues ao cliente recebem headers ConnectyHub e assinatura HMAC quando houver secret." icon={Webhook} />
       </div>
 
+      <section className="rounded-lg border border-amber-300/20 bg-amber-300/10 p-5">
+        <div className="flex items-center gap-2">
+          <KeyRound className="h-4 w-4 text-amber-200" />
+          <h3 className="text-lg font-black text-white">QR lido, mas WhatsApp pediu chave de acesso</h3>
+        </div>
+        <p className="mt-3 text-sm leading-7 text-amber-50/85">
+          Algumas contas exigem uma verificacao extra por passkey depois da leitura do QR inicial. Isso nao e erro de
+          token, webhook ou renderizacao do QR. O integrador deve detectar esse estado e mostrar uma mensagem amigavel
+          no proprio painel.
+        </p>
+        <div className="mt-4 grid gap-4 lg:grid-cols-2">
+          <CodeBlock code={`const attempt = response.connectionDiagnostics?.latestAttempt;\n\nconst passkeyBlocked =\n  attempt?.finalStatus === "passkey_blocked" ||\n  response.lastDisconnectReason\n    ?.toLowerCase()\n    .includes("passkey pairing not supported");`} />
+          <CodeBlock code={`{\n  "lastDisconnectReason": "Passkey pairing not supported",\n  "connectionDiagnostics": {\n    "latestAttempt": {\n      "finalStatus": "passkey_blocked",\n      "scanDetected": true\n    }\n  }\n}`} />
+        </div>
+        <p className="mt-4 text-sm leading-7 text-slate-300">
+          Mensagem recomendada: <InlineCode>Esta conta pediu uma verificacao extra por chave de acesso. Esse tipo de verificacao ainda nao pode ser concluido diretamente pelo QR Code do painel.</InlineCode>
+        </p>
+      </section>
+
       <section>
         <div className="mb-4 flex items-center gap-2">
           <Play className="h-4 w-4 text-emerald-300" />
