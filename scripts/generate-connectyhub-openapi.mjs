@@ -133,7 +133,7 @@ const nativePaths = {
       tags: ["Nativo ConnectyHub"],
       summary: "Conectar instancia",
       description:
-        "Inicia ou atualiza o fluxo de conexao da instancia. Sem phone, solicita QR Code. Com phone em formato internacional, solicita codigo de pareamento. Quando o WhatsApp retornar lastDisconnectReason=Passkey pairing not supported, use o fluxo com phone/codigo de pareamento.",
+        "Inicia ou atualiza o fluxo de conexao da instancia. Sem phone, solicita QR Code. Com phone em formato internacional, solicita codigo de pareamento. Quando o WhatsApp retornar lastDisconnectReason=Passkey pairing not supported, o provedor ainda nao disponibiliza o segundo QR de chave de acesso pela API; o fluxo por phone pode ser testado, mas nao e garantido. A alternativa operacional e concluir a validacao no WhatsApp Web oficial e migrar a sessao autenticada pelo Session Migration Connector.",
       operationId: "connectyhubConnectInstance",
       parameters: [instanceIdParam("ID publico da instancia ConnectyHub")],
       requestBody: jsonBody({
@@ -160,7 +160,12 @@ const nativePaths = {
                   status: { type: "string", enum: ["draft", "qr_pending", "connected", "disconnected", "blocked", "error"], example: "qr_pending" },
                   qrCode: { type: ["string", "null"], description: "Data URL do QR Code quando o fluxo por QR estiver ativo." },
                   pairCode: { type: ["string", "null"], description: "Codigo de pareamento quando phone for informado." },
-                  lastDisconnectReason: { type: ["string", "null"], example: "Passkey pairing not supported" },
+                  lastDisconnectReason: {
+                    type: ["string", "null"],
+                    description:
+                      "Ultimo motivo informado pelo provedor. Passkey pairing not supported indica que a conta exigiu WebAuthn/chave de acesso e que o segundo QR nao e retornado pela API.",
+                    example: "Passkey pairing not supported",
+                  },
                   connectionDiagnostics: { $ref: "#/components/schemas/ConnectionDiagnostics" },
                   provider: { type: "object", description: "Resposta sanitizada do provedor WhatsApp." },
                 },
@@ -512,7 +517,12 @@ const publicSpec = {
           qrCodeLength: { type: ["integer", "null"], description: "Tamanho do QR retornado, usado para identificar atualizacoes sem armazenar o QR." },
           hasPairCode: { type: "boolean", description: "Indica que o provedor retornou codigo de pareamento, sem expor o codigo." },
           pairCodeLength: { type: ["integer", "null"], description: "Tamanho do codigo retornado, sem armazenar o codigo." },
-          lastDisconnectReason: { type: ["string", "null"], example: "Passkey pairing not supported" },
+          lastDisconnectReason: {
+            type: ["string", "null"],
+            description:
+              "Ultimo motivo informado pelo provedor. Passkey pairing not supported indica que a conta exigiu WebAuthn/chave de acesso e que o segundo QR nao e retornado pela API.",
+            example: "Passkey pairing not supported",
+          },
           message: { type: ["string", "null"] },
         },
       },
@@ -530,7 +540,11 @@ const publicSpec = {
             enum: ["pending", "success", "passkey_blocked", "qr_timeout", "disconnected", "provider_error", "reset", "unknown"],
           },
           finalReason: { type: ["string", "null"] },
-          lastDisconnectReason: { type: ["string", "null"] },
+          lastDisconnectReason: {
+            type: ["string", "null"],
+            description:
+              "Ultimo motivo informado pelo provedor. Em passkey_blocked, indica a barreira de chave de acesso exigida pelo WhatsApp.",
+          },
           qrReceivedCount: { type: "integer" },
           pairCodeReceivedCount: { type: "integer" },
           statusPollCount: { type: "integer" },

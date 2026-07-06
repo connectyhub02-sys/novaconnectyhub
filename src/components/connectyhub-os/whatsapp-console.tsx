@@ -146,6 +146,13 @@ type ConnectionDiagnostics = {
   attempts: ConnectionAttemptDiagnostic[];
 };
 
+const PASSKEY_CONNECTION_HELP_TEXT =
+  "Esta conta pediu uma verificacao extra por chave de acesso. Esse tipo de verificacao ainda nao pode ser concluido diretamente pelo QR Code do painel.";
+const PASSKEY_CONNECTION_ASSISTED_TEXT =
+  "Se o reset nao resolver, sera necessario usar uma conexao assistida por migracao de sessao.";
+const PASSKEY_CONNECTION_REASON_TEXT =
+  "Conta pediu verificacao por chave de acesso durante a leitura do QR.";
+
 type RuntimeAlert = {
   id: string;
   kind: "internal_instance_block";
@@ -5337,7 +5344,7 @@ function CompactConnectionCard({
     ? "Gera um codigo de pareamento para conectar pelo numero informado."
     : "Abre um QR Code para conectar ou reconectar o numero pelo WhatsApp.";
   const connectionHelperText = latestConnectionAttempt?.finalStatus === "passkey_blocked"
-    ? "Esta conta pediu uma verificacao extra por chave de acesso. Nosso servico ainda nao suporta essa verificacao pelo painel."
+    ? PASSKEY_CONNECTION_HELP_TEXT
     : !enabled
       ? disabledReason
       : visiblePairCode
@@ -5604,10 +5611,10 @@ function CompactConnectionCard({
               Verificacao extra solicitada
             </h3>
             <p className="mt-3 text-sm leading-6 text-slate-300">
-              Esta conta do WhatsApp pediu uma verificacao por chave de acesso. Nosso servico ainda nao suporta concluir essa etapa pelo painel.
+              {PASSKEY_CONNECTION_HELP_TEXT}
             </p>
             <p className="mt-3 text-xs leading-5 text-slate-500">
-              Voce pode tentar resetar a conexao e gerar um novo QR Code. Se a conta pedir a mesma verificacao novamente, sera necessario usar outra conta enquanto acompanhamos essa limitacao.
+              Voce pode tentar resetar a conexao e gerar um novo QR Code. {PASSKEY_CONNECTION_ASSISTED_TEXT}
             </p>
 
             <div className="mt-5 flex flex-col gap-2 sm:flex-row">
@@ -5643,6 +5650,7 @@ function ConnectionDiagnosticsPanel({ attempt }: { attempt: ConnectionAttemptDia
   const tone = getConnectionDiagnosticTone(attempt.finalStatus);
   const latestEvents = attempt.events.slice(-4).reverse();
   const reason = attempt.lastDisconnectReason ?? attempt.finalReason;
+  const readableReason = attempt.finalStatus === "passkey_blocked" && reason ? PASSKEY_CONNECTION_REASON_TEXT : reason;
 
   return (
     <div className="mt-3 rounded-lg border border-white/10 bg-white/[0.03] p-3">
@@ -5664,10 +5672,19 @@ function ConnectionDiagnosticsPanel({ attempt }: { attempt: ConnectionAttemptDia
         <ConnectionDiagnosticCounter label="Polls" value={attempt.statusPollCount} />
       </div>
 
-      {reason ? (
+      {readableReason ? (
         <p className="mt-3 break-words rounded-md bg-black/20 px-2 py-2 text-[11px] leading-4 text-slate-400">
-          {reason}
+          {readableReason}
         </p>
+      ) : null}
+
+      {attempt.finalStatus === "passkey_blocked" ? (
+        <div className="mt-3 rounded-md border border-amber-300/20 bg-amber-300/10 px-2 py-2">
+          <p className="font-mono text-[9px] uppercase text-amber-200">Conexao assistida recomendada</p>
+          <p className="mt-1 text-[11px] leading-4 text-amber-100/85">
+            {PASSKEY_CONNECTION_ASSISTED_TEXT} A validacao deve ser concluida no WhatsApp Web oficial antes de migrar a sessao autenticada.
+          </p>
+        </div>
       ) : null}
 
       {attempt.scanDetected !== null ? (

@@ -222,6 +222,7 @@
               "string",
               "null"
             ],
+            "description": "Ultimo motivo informado pelo provedor. Passkey pairing not supported indica que a conta exigiu WebAuthn/chave de acesso e que o segundo QR nao e retornado pela API.",
             "example": "Passkey pairing not supported"
           },
           "message": {
@@ -290,7 +291,8 @@
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "description": "Ultimo motivo informado pelo provedor. Em passkey_blocked, indica a barreira de chave de acesso exigida pelo WhatsApp."
           },
           "qrReceivedCount": {
             "type": "integer"
@@ -1814,7 +1816,7 @@
           "Nativo ConnectyHub"
         ],
         "summary": "Conectar instancia",
-        "description": "Inicia ou atualiza o fluxo de conexao da instancia. Sem phone, solicita QR Code. Com phone em formato internacional, solicita codigo de pareamento. Quando o WhatsApp retornar lastDisconnectReason=Passkey pairing not supported, use o fluxo com phone/codigo de pareamento.",
+        "description": "Inicia ou atualiza o fluxo de conexao da instancia. Sem phone, solicita QR Code. Com phone em formato internacional, solicita codigo de pareamento. Quando o WhatsApp retornar lastDisconnectReason=Passkey pairing not supported, o provedor ainda nao disponibiliza o segundo QR de chave de acesso pela API; o fluxo por phone pode ser testado, mas nao e garantido. A alternativa operacional e concluir a validacao no WhatsApp Web oficial e migrar a sessao autenticada pelo Session Migration Connector.",
         "operationId": "connectyhubConnectInstance",
         "parameters": [
           {
@@ -1925,6 +1927,7 @@
                         "string",
                         "null"
                       ],
+                      "description": "Ultimo motivo informado pelo provedor. Passkey pairing not supported indica que a conta exigiu WebAuthn/chave de acesso e que o segundo QR nao e retornado pela API.",
                       "example": "Passkey pairing not supported"
                     },
                     "connectionDiagnostics": {
