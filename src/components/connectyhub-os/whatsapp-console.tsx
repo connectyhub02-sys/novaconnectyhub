@@ -83,7 +83,11 @@ import {
   type LeadQualificationQuestion,
 } from "@/lib/leads/qualification";
 import type { CloneHumanizationMetric } from "@/lib/whatsapp/clone-humanization";
-import type { ClientSalesCatalogItem } from "@/lib/sales-catalog/shared";
+import {
+  formatSalesCatalogFulfillmentMode,
+  formatSalesCatalogStockStatus,
+  type ClientSalesCatalogItem,
+} from "@/lib/sales-catalog/shared";
 import { cn } from "@/lib/utils";
 
 type WhatsappStatus = "draft" | "qr_pending" | "connected" | "disconnected" | "blocked" | "error" | "archived";
@@ -3492,13 +3496,11 @@ function PromptToolsPanel({
           {salesCatalog.length > 0 ? (
             <div className="mt-3 grid max-h-[220px] gap-2 overflow-y-auto pr-1">
               {salesCatalog.slice(0, 12).map((item) => (
-                <button
+                <div
                   key={item.id}
-                  type="button"
                   className="grid gap-1 rounded-lg border p-2 text-left transition hover:bg-cyan-400/10"
                   style={{ borderColor: "var(--ch-border)" }}
                   title={item.tag}
-                  onClick={() => onInsertTag(item.tag)}
                 >
                   <span className="flex min-w-0 items-center justify-between gap-2">
                     <span className="flex min-w-0 items-center gap-1.5 text-[12px] font-semibold text-slate-100">
@@ -3511,9 +3513,31 @@ function PromptToolsPanel({
                   </span>
                   <span className="truncate font-mono text-[10px] text-cyan-300">{item.tag}</span>
                   <span className="truncate text-[10px] text-slate-500">
-                    {[item.category, item.price].filter(Boolean).join(" / ") || "produto cadastrado"}
+                    {formatSalesCatalogPromptItemMeta(item)}
                   </span>
-                </button>
+                  <div className="mt-1 flex flex-wrap gap-1.5">
+                    <button
+                      type="button"
+                      className="inline-flex min-h-8 items-center gap-1.5 rounded-md border px-2 font-mono text-[9px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10"
+                      style={{ borderColor: "var(--ch-border)" }}
+                      title="Inserir tag do item"
+                      onClick={() => onInsertTag(item.tag)}
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Tag
+                    </button>
+                    <button
+                      type="button"
+                      className="inline-flex min-h-8 items-center gap-1.5 rounded-md border px-2 font-mono text-[9px] font-semibold uppercase tracking-wide text-emerald-100 transition hover:bg-emerald-400/10"
+                      style={{ borderColor: "var(--ch-border)" }}
+                      title="Inserir regra de venda do item"
+                      onClick={() => onInsertTag(buildSalesCatalogPromptRule(item))}
+                    >
+                      <Wand2 className="h-3.5 w-3.5" />
+                      Regra
+                    </button>
+                  </div>
+                </div>
               ))}
             </div>
           ) : (
@@ -3686,6 +3710,106 @@ function PromptToolsPanel({
       </div>
     </div>
   );
+}
+
+function buildSalesCatalogPromptRule(item: ClientSalesCatalogItem) {
+  const lines = [
+    "",
+    `REGRA DE VENDA DO CATALOGO: ${item.title}`,
+    `- Tag obrigatoria para enviar este item no WhatsApp: ${item.tag}`,
+    "- Quando o lead pedir este produto, demonstrar interesse claro ou aceitar a oferta, responda naturalmente e inclua a tag acima na mesma resposta.",
+    "- Nao prometa que vai enviar foto, video, PDF, catalogo, preco ou proposta sem incluir a tag correspondente na mesma resposta.",
+    "- Se o lead pedir algo generico, ofereca este item somente quando ele combinar com a necessidade declarada.",
+  ];
+
+  appendSalesCatalogPromptRuleLine(lines, "Categoria", item.category);
+  appendSalesCatalogPromptRuleLine(lines, "Preco base", item.price ? `${item.price} ${item.currency}` : null);
+  appendSalesCatalogPromptRuleLine(lines, "Oferta", formatSalesCatalogPromptOffer(item));
+  appendSalesCatalogPromptRuleLine(lines, "Variacoes", formatSalesCatalogPromptAttributes(item));
+  appendSalesCatalogPromptRuleLine(lines, "Estoque", formatSalesCatalogStockStatus(item.inventory.status));
+  appendSalesCatalogPromptRuleLine(lines, "Quantidade", item.inventory.quantity !== null ? `${item.inventory.quantity} unidade(s)` : null);
+  appendSalesCatalogPromptRuleLine(lines, "Entrega", formatSalesCatalogFulfillmentMode(item.fulfillment.mode));
+  appendSalesCatalogPromptRuleLine(lines, "Prazo/duracao", item.fulfillment.serviceDuration);
+  appendSalesCatalogPromptRuleLine(lines, "Frete", formatSalesCatalogPromptShipping(item));
+  appendSalesCatalogPromptRuleLine(lines, "Midias", item.media.length > 0 ? `${item.media.length} arquivo(s) cadastrado(s)` : null);
+
+  if (item.description) {
+    lines.push(`- Descricao comercial: ${buildCompactPromptText(item.description, 360)}`);
+  }
+
+  if (item.offer.callToAction) {
+    lines.push(`- Chamada sugerida: ${item.offer.callToAction}`);
+  }
+
+  if (item.inventory.status === "out_of_stock" && !item.inventory.allowBackorder) {
+    lines.push("- Se estiver esgotado, nao tente fechar pedido. Ofereca alternativa ou encaminhe para humano.");
+  }
+
+  return lines.join("\n");
+}
+
+function appendSalesCatalogPromptRuleLine(lines: string[], label: string, value: string | null) {
+  if (value) {
+    lines.push(`- ${label}: ${value}`);
+  }
+}
+
+function formatSalesCatalogPromptItemMeta(item: ClientSalesCatalogItem) {
+  return [
+    item.category,
+    formatSalesCatalogPromptPrice(item),
+    formatSalesCatalogStockStatus(item.inventory.status),
+  ].filter(Boolean).join(" / ") || "produto cadastrado";
+}
+
+function formatSalesCatalogPromptPrice(item: ClientSalesCatalogItem) {
+  if (item.offer.salePrice) return `Oferta ${item.offer.salePrice}`;
+  return item.price;
+}
+
+function formatSalesCatalogPromptOffer(item: ClientSalesCatalogItem) {
+  const parts = [
+    item.offer.salePrice ? `${item.offer.salePrice} ${item.currency}` : null,
+    item.offer.couponCode ? `cupom ${item.offer.couponCode}` : null,
+    item.offer.couponDescription,
+    item.offer.notes,
+  ].filter(Boolean);
+
+  return parts.length > 0 ? parts.join(" / ") : null;
+}
+
+function formatSalesCatalogPromptAttributes(item: ClientSalesCatalogItem) {
+  if (item.attributes.length === 0) return null;
+
+  return item.attributes
+    .map((attribute) => `${attribute.name}: ${attribute.values.join(", ")}`)
+    .join("; ");
+}
+
+function formatSalesCatalogPromptShipping(item: ClientSalesCatalogItem) {
+  const parts = [
+    item.shipping.profile === "free" ? "frete gratis" : item.shipping.profile === "custom" ? "combinar no atendimento" : null,
+    item.shipping.weightGrams ? `${item.shipping.weightGrams} g` : null,
+    formatSalesCatalogPromptDimensions(item),
+    item.shipping.notes,
+  ].filter(Boolean);
+
+  return parts.length > 0 ? parts.join(" / ") : null;
+}
+
+function formatSalesCatalogPromptDimensions(item: ClientSalesCatalogItem) {
+  const dimensions = [
+    item.shipping.dimensions.lengthCm ? `${item.shipping.dimensions.lengthCm}C` : null,
+    item.shipping.dimensions.widthCm ? `${item.shipping.dimensions.widthCm}L` : null,
+    item.shipping.dimensions.heightCm ? `${item.shipping.dimensions.heightCm}A` : null,
+  ].filter(Boolean);
+
+  return dimensions.length > 0 ? `${dimensions.join(" x ")} cm` : null;
+}
+
+function buildCompactPromptText(value: string, maxLength: number) {
+  const cleaned = value.replace(/\s+/g, " ").trim();
+  return cleaned.length > maxLength ? `${cleaned.slice(0, maxLength - 3)}...` : cleaned;
 }
 
 function KnowledgeFilesPanel({
