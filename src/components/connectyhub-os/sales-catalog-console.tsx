@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type ChangeEvent } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent, type MouseEvent } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import {
@@ -315,6 +315,9 @@ export function SalesCatalogConsole({
   const paymentWebhookReady = Boolean(selectedPaymentIntegration?.hasWebhookSecret);
   const paymentWebhookUrl = selectedPaymentIntegration?.webhookUrl ?? `${publicAppUrl}/api/webhooks/mercado-pago`;
   const paymentCallbackUrl = `${publicAppUrl}/api/dashboard/sales-catalog/payments/mercado-pago/callback`;
+  const mercadoPagoConnectUrl = selectedCompanyId
+    ? `/api/dashboard/sales-catalog/payments/mercado-pago/connect?companyId=${encodeURIComponent(selectedCompanyId)}`
+    : "#";
   const hasConfiguredSettings = Boolean(selectedSettings?.configured);
   const productAttributes = useMemo(
     () => (selectedSettings?.configured ? selectedSettings.attributes : settingsDraft.attributes).filter((attribute) => attribute.values.length > 0),
@@ -333,6 +336,34 @@ export function SalesCatalogConsole({
   const canCreate = Boolean(selectedCompanyId && title.trim() && description.trim() && !creating);
   const canCalculateQuote = Boolean(selectedCompanyId && quoteItemId && cleanCep(quoteCep) && !calculatingQuote);
   const canCreateOrder = Boolean(selectedCompanyId && orderItemId && (orderCustomerName.trim() || orderCustomerPhone.trim()) && !creatingOrder);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const payment = params.get("payment");
+
+    if (!payment) return;
+
+    const reason = params.get("reason");
+    const timeoutId = window.setTimeout(() => {
+      setActiveTab("payments");
+
+      if (payment === "mercado_pago_connected") {
+        setNotice({ tone: "success", message: "Mercado Pago conectado. O agente ja pode cobrar por Pix e cartao no checkout." });
+      }
+
+      if (payment === "mercado_pago_error") {
+        setNotice({ tone: "error", message: getMercadoPagoConnectionErrorMessage(reason) });
+      }
+    }, 0);
+
+    params.delete("payment");
+    params.delete("reason");
+    const nextSearch = params.toString();
+    const nextUrl = `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ""}${window.location.hash}`;
+    window.history.replaceState(null, "", nextUrl);
+
+    return () => window.clearTimeout(timeoutId);
+  }, []);
 
   function changeCompany(companyId: string) {
     const nextSettings = settings.find((entry) => entry.companyId === companyId) ?? null;
@@ -529,37 +560,13 @@ export function SalesCatalogConsole({
     setSkuDrafts((current) => current.filter((_, skuIndex) => skuIndex !== index));
   }
 
-  async function startMercadoPagoConnection() {
-    if (!selectedCompanyId || connectingPayment) return;
-
-    setConnectingPayment(true);
-    setNotice(null);
-
-    try {
-      const response = await fetch("/api/dashboard/sales-catalog", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "start_mercado_pago_oauth",
-          companyId: selectedCompanyId,
-        }),
-      });
-      const data = await response.json().catch(() => null) as {
-        integration?: ClientSalesCatalogPaymentIntegration;
-        authorizationUrl?: string;
-        error?: string;
-      } | null;
-
-      if (!response.ok || !data?.authorizationUrl || !data.integration) {
-        throw new Error(data?.error ?? "Nao foi possivel iniciar conexao Mercado Pago.");
-      }
-
-      setPaymentIntegrations((current) => [data.integration!, ...current.filter((entry) => entry.id !== data.integration!.id)]);
-      window.location.href = data.authorizationUrl;
-    } catch (error) {
-      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao conectar Mercado Pago." });
-      setConnectingPayment(false);
+  function handleMercadoPagoConnectClick(event: MouseEvent<HTMLAnchorElement>) {
+    if (!selectedCompanyId || connectingPayment) {
+      event.preventDefault();
+      return;
     }
+    setConnectingPayment(true);
+    setNotice({ tone: "warning", message: "Abrindo a autorizacao oficial do Mercado Pago..." });
   }
 
   async function saveMercadoPagoWebhookSecret() {
@@ -2267,15 +2274,18 @@ export function SalesCatalogConsole({
                 ) : null}
 
                 <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                  <button
-                    type="button"
-                    disabled={!selectedCompanyId || connectingPayment}
-                    onClick={startMercadoPagoConnection}
-                    className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-cyan-300 px-4 text-[12px] font-bold text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-50"
+                  <a
+                    href={mercadoPagoConnectUrl}
+                    aria-disabled={!selectedCompanyId || connectingPayment}
+                    onClick={handleMercadoPagoConnectClick}
+                    className={cn(
+                      "inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-cyan-300 px-4 text-[12px] font-bold text-slate-950 transition hover:bg-cyan-200",
+                      !selectedCompanyId || connectingPayment ? "cursor-not-allowed opacity-50" : "",
+                    )}
                   >
                     {connectingPayment ? <Loader2 className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}
                     {selectedPaymentIntegration?.status === "connected" ? "Reconectar no Mercado Pago" : "Conectar com Mercado Pago"}
-                  </button>
+                  </a>
                   <button
                     type="button"
                     disabled={!selectedPaymentIntegration || disconnectingPayment}
@@ -3712,6 +3722,26 @@ function StatTile({ icon: Icon, label, value }: { icon: typeof PackagePlus; labe
       <p className="mt-3 font-mono text-[24px] font-bold text-cyan-200">{value}</p>
     </div>
   );
+}
+
+function getMercadoPagoConnectionErrorMessage(reason: string | null) {
+  if (reason === "config") {
+    return "Mercado Pago ainda nao esta configurado no ambiente. Configure MERCADO_PAGO_CLIENT_ID, MERCADO_PAGO_CLIENT_SECRET e a Redirect URL do app.";
+  }
+
+  if (reason === "missing_company") {
+    return "Escolha uma empresa antes de conectar o Mercado Pago.";
+  }
+
+  if (reason === "invalid_state") {
+    return "Nao conseguimos validar o retorno do Mercado Pago. Tente conectar novamente.";
+  }
+
+  if (reason === "token_exchange") {
+    return "Mercado Pago retornou a autorizacao, mas nao conseguimos salvar as credenciais. Confira Client Secret e Redirect URL.";
+  }
+
+  return "Nao foi possivel abrir a conexao com Mercado Pago. Confira as credenciais do app e tente novamente.";
 }
 
 function PaymentGuideStep({
