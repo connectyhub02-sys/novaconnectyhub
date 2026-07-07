@@ -415,39 +415,6 @@ export const maintenanceIntegrations: IntegrationDefinition[] = [
     ],
   },
   {
-    id: "payments",
-    name: "Stripe / Planos e tokens",
-    sector: "Financeiro e billing",
-    owner: "Setor Financeiro IA",
-    description:
-      "Cobranca de planos, compra avulsa de tokens, assinaturas e webhook financeiro da plataforma.",
-    tone: "cyan",
-    modules: ["Planos", "Tokens", "Faturas", "Margem por cliente"],
-    fields: [
-      {
-        label: "Secret key",
-        env: "STRIPE_SECRET_KEY",
-        kind: "secret",
-        requirement: "recommended",
-        help: "Chave server-side para checkout e assinaturas.",
-      },
-      {
-        label: "Publishable key",
-        env: "NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY",
-        kind: "public",
-        requirement: "optional",
-        help: "Chave publica para telas de pagamento.",
-      },
-      {
-        label: "Webhook secret",
-        env: "STRIPE_WEBHOOK_SECRET",
-        kind: "secret",
-        requirement: "recommended",
-        help: "Segredo para validar eventos financeiros.",
-      },
-    ],
-  },
-  {
     id: "mercado-pago",
     name: "Mercado Pago / Checkout WhatsApp",
     sector: "Pagamentos no WhatsApp",
