@@ -447,6 +447,53 @@ export const maintenanceIntegrations: IntegrationDefinition[] = [
       },
     ],
   },
+  {
+    id: "mercado-pago",
+    name: "Mercado Pago / Checkout WhatsApp",
+    sector: "Pagamentos no WhatsApp",
+    owner: "Setor Financeiro IA",
+    description:
+      "Aplicativo OAuth da ConnectyHub usado para que cada cliente autorize a propria conta Mercado Pago sem informar token manual no painel.",
+    tone: "cyan",
+    modules: ["OAuth guiado", "Pix", "Cartao", "Checkout transparente", "Webhooks"],
+    fields: [
+      {
+        label: "Client ID",
+        env: "MERCADO_PAGO_CLIENT_ID",
+        kind: "identifier",
+        requirement: "required",
+        help: "Client ID do aplicativo Mercado Pago criado pela ConnectyHub Developers.",
+      },
+      {
+        label: "Client Secret",
+        env: "MERCADO_PAGO_CLIENT_SECRET",
+        kind: "secret",
+        requirement: "required",
+        help: "Client Secret do aplicativo Mercado Pago. Fica somente no servidor da ConnectyHub.",
+      },
+      {
+        label: "Redirect URI",
+        env: "MERCADO_PAGO_REDIRECT_URI",
+        kind: "endpoint",
+        requirement: "recommended",
+        help: "URL de retorno cadastrada no app Mercado Pago: https://www.connectyhub.com.br/api/dashboard/sales-catalog/payments/mercado-pago/callback.",
+      },
+      {
+        label: "Webhook signature",
+        env: "MERCADO_PAGO_WEBHOOK_SECRET",
+        kind: "secret",
+        requirement: "recommended",
+        help: "Assinatura secreta configurada no webhook do Mercado Pago para validar notificacoes de pagamento.",
+      },
+      {
+        label: "Modo teste OAuth",
+        env: "MERCADO_PAGO_TEST_TOKEN",
+        kind: "identifier",
+        requirement: "optional",
+        help: "Use true apenas em sandbox. Em producao deixe vazio ou false.",
+      },
+    ],
+  },
 ];
 
 export function getMaintenanceVaultSnapshot(options: { storedCredentials?: MaintenanceStoredCredential[] } = {}): MaintenanceVaultSnapshot {

@@ -4,6 +4,7 @@ import {
   ensureMercadoPagoAccessToken,
   extractMercadoPagoPixData,
   getMercadoPagoPayment,
+  loadMercadoPagoWebhookSecret,
   verifyMercadoPagoWebhookSignature,
 } from "@/lib/sales-catalog/mercado-pago";
 import { handleSalesCatalogApprovedPayment } from "@/lib/sales-catalog/post-payment";
@@ -78,11 +79,12 @@ export async function POST(request: NextRequest) {
     client,
     organizationId: session.organization_id,
   }).catch(() => null);
+  const platformWebhookSecret = await loadMercadoPagoWebhookSecret({ client });
   const signature = verifyMercadoPagoWebhookSignature({
     signatureHeader,
     requestId,
     dataId,
-    secret: integration?.webhookSecret ?? null,
+    secret: integration?.webhookSecret ?? platformWebhookSecret,
   });
 
   if (!signature.ok) {

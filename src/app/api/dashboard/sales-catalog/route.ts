@@ -57,7 +57,11 @@ import {
   type SalesCatalogSkuStatus,
 } from "@/lib/sales-catalog/shared";
 import { encryptCredentialValue } from "@/lib/security/credentials-crypto";
-import { buildMercadoPagoAuthorizationUrl, buildMercadoPagoWebhookUrl } from "@/lib/sales-catalog/mercado-pago";
+import {
+  buildMercadoPagoAuthorizationUrl,
+  buildMercadoPagoWebhookUrl,
+  isMercadoPagoTestTokenEnabled,
+} from "@/lib/sales-catalog/mercado-pago";
 import { createSalesCatalogPixPaymentSession } from "@/lib/sales-catalog/payment-sessions";
 import { calculateSalesCatalogShippingQuotes, normalizeSalesCatalogCep } from "@/lib/sales-catalog/shipping-calculator";
 import { importWhatsappCatalog, setWhatsappCatalogVisibility } from "@/lib/sales-catalog/whatsapp-sync";
@@ -820,12 +824,13 @@ async function startMercadoPagoOAuth(input: {
   });
   const state = `mp_${randomUUID()}`;
   const webhookUrl = buildMercadoPagoWebhookUrl();
+  const testTokenEnabled = await isMercadoPagoTestTokenEnabled({ client: input.client });
   const now = new Date().toISOString();
   const payload = {
     organization_id: company.id,
     provider: "mercado_pago",
     status: "pending",
-    mode: process.env.MERCADO_PAGO_TEST_TOKEN === "true" ? "sandbox" : "production",
+    mode: testTokenEnabled ? "sandbox" : "production",
     webhook_url: webhookUrl,
     last_error: null,
     metadata: {
@@ -847,7 +852,7 @@ async function startMercadoPagoOAuth(input: {
 
   return {
     integration: mapSalesCatalogPaymentIntegration(data),
-    authorizationUrl: buildMercadoPagoAuthorizationUrl({ companyId: company.id, state }),
+    authorizationUrl: await buildMercadoPagoAuthorizationUrl({ companyId: company.id, state, client: input.client }),
     webhookUrl,
   };
 }

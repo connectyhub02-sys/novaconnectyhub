@@ -262,11 +262,9 @@ export function SalesCatalogConsole({
   const [orderStatus, setOrderStatus] = useState<SalesCatalogOrderStatus>("pending_payment");
   const [orderPaymentStatus, setOrderPaymentStatus] = useState<SalesCatalogPaymentStatus>("pending");
   const [orderFulfillmentStatus, setOrderFulfillmentStatus] = useState<SalesCatalogFulfillmentStatus>("pending");
-  const [webhookSecret, setWebhookSecret] = useState("");
   const [creating, setCreating] = useState(false);
   const [creatingOrder, setCreatingOrder] = useState(false);
   const [connectingPayment, setConnectingPayment] = useState(false);
-  const [savingPaymentSecret, setSavingPaymentSecret] = useState(false);
   const [disconnectingPayment, setDisconnectingPayment] = useState(false);
   const [creatingPaymentSessionId, setCreatingPaymentSessionId] = useState<string | null>(null);
   const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
@@ -310,11 +308,7 @@ export function SalesCatalogConsole({
     () => paymentIntegrations.find((entry) => entry.companyId === selectedCompanyId && entry.provider === "mercado_pago") ?? null,
     [paymentIntegrations, selectedCompanyId],
   );
-  const publicAppUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/+$/, "") ?? "";
   const paymentConnected = selectedPaymentIntegration?.status === "connected";
-  const paymentWebhookReady = Boolean(selectedPaymentIntegration?.hasWebhookSecret);
-  const paymentWebhookUrl = selectedPaymentIntegration?.webhookUrl ?? `${publicAppUrl}/api/webhooks/mercado-pago`;
-  const paymentCallbackUrl = `${publicAppUrl}/api/dashboard/sales-catalog/payments/mercado-pago/callback`;
   const mercadoPagoConnectUrl = selectedCompanyId
     ? `/api/dashboard/sales-catalog/payments/mercado-pago/connect?companyId=${encodeURIComponent(selectedCompanyId)}`
     : "#";
@@ -568,41 +562,6 @@ export function SalesCatalogConsole({
     setConnectingPayment(true);
     setNotice({ tone: "warning", message: "Abrindo Mercado Pago em uma nova aba para login e autorizacao..." });
     window.setTimeout(() => setConnectingPayment(false), 1500);
-  }
-
-  async function saveMercadoPagoWebhookSecret() {
-    if (!selectedCompanyId || savingPaymentSecret) return;
-
-    setSavingPaymentSecret(true);
-    setNotice(null);
-
-    try {
-      const response = await fetch("/api/dashboard/sales-catalog", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "save_mercado_pago_webhook_secret",
-          companyId: selectedCompanyId,
-          webhookSecret,
-        }),
-      });
-      const data = await response.json().catch(() => null) as {
-        integration?: ClientSalesCatalogPaymentIntegration;
-        error?: string;
-      } | null;
-
-      if (!response.ok || !data?.integration) {
-        throw new Error(data?.error ?? "Nao foi possivel salvar o segredo do webhook.");
-      }
-
-      setPaymentIntegrations((current) => [data.integration!, ...current.filter((entry) => entry.id !== data.integration!.id)]);
-      setWebhookSecret("");
-      setNotice({ tone: "success", message: "Webhook Mercado Pago salvo." });
-    } catch (error) {
-      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao salvar webhook." });
-    } finally {
-      setSavingPaymentSecret(false);
-    }
   }
 
   async function disconnectMercadoPago() {
@@ -2219,7 +2178,7 @@ export function SalesCatalogConsole({
                   <PaymentGuideStep done={Boolean(selectedCompanyId)} index="1" title="Empresa" body="Escolha o catalogo" />
                   <PaymentGuideStep done={paymentConnected} index="2" title="Autorizar" body="Aba Mercado Pago" />
                   <PaymentGuideStep done={paymentConnected} index="3" title="Retorno" body="Conta conectada" />
-                  <PaymentGuideStep done={paymentWebhookReady} index="4" title="Webhook" body="Confirmacao automatica" />
+                  <PaymentGuideStep done={paymentConnected} index="4" title="Confirmar" body="Checkout liberado" />
                 </div>
 
                 <p className="mt-3 rounded-lg border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-[11px] leading-5 text-cyan-100">
@@ -2287,76 +2246,9 @@ export function SalesCatalogConsole({
                   </button>
                 </div>
                 <p className="mt-2 text-[11px] leading-5 text-slate-500">
-                  A autorizacao acontece no ambiente oficial do Mercado Pago. O ConnectyHub nao pede senha nem token manual do cliente.
+                  A autorizacao acontece no ambiente oficial do Mercado Pago. O ConnectyHub nao pede senha, token manual, callback ou webhook do cliente.
                 </p>
               </div>
-
-              <details className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
-                <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
-                  <span className="inline-flex items-center gap-2">
-                    <QrCode className="h-4 w-4 text-cyan-300" />
-                    <span className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Configuracao avancada</span>
-                  </span>
-                  <span className="text-[11px] text-slate-500">Callback e webhook</span>
-                </summary>
-                <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_180px]">
-                  <input
-                    readOnly
-                    value={paymentCallbackUrl}
-                    className="h-10 rounded-lg border bg-transparent px-3 text-[11px] outline-none"
-                    style={{ borderColor: "var(--ch-border)" }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => navigator.clipboard.writeText(paymentCallbackUrl)}
-                    className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10"
-                    style={{ borderColor: "var(--ch-border)" }}
-                  >
-                    <Copy className="h-3.5 w-3.5" />
-                    Copiar callback
-                  </button>
-                </div>
-                <div className="mb-3 mt-3 flex items-center gap-2">
-                  <QrCode className="h-4 w-4 text-cyan-300" />
-                  <FieldLabel>Webhook</FieldLabel>
-                </div>
-                <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_150px]">
-                  <input
-                    readOnly
-                    value={paymentWebhookUrl}
-                    className="h-10 rounded-lg border bg-transparent px-3 text-[11px] outline-none"
-                    style={{ borderColor: "var(--ch-border)" }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => navigator.clipboard.writeText(paymentWebhookUrl)}
-                    className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10"
-                    style={{ borderColor: "var(--ch-border)" }}
-                  >
-                    <Copy className="h-3.5 w-3.5" />
-                    Copiar
-                  </button>
-                </div>
-                <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_150px]">
-                  <input
-                    value={webhookSecret}
-                    onChange={(event) => setWebhookSecret(event.target.value.slice(0, 240))}
-                    className="h-10 rounded-lg border bg-transparent px-3 text-[12px] outline-none"
-                    placeholder={selectedPaymentIntegration?.hasWebhookSecret ? "Segredo salvo" : "Colar secret signature"}
-                    style={{ borderColor: "var(--ch-border)" }}
-                  />
-                  <button
-                    type="button"
-                    disabled={!selectedCompanyId || savingPaymentSecret}
-                    onClick={saveMercadoPagoWebhookSecret}
-                    className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10 disabled:opacity-50"
-                    style={{ borderColor: "var(--ch-border)" }}
-                  >
-                    {savingPaymentSecret ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-                    Salvar
-                  </button>
-                </div>
-              </details>
             </div>
           </Panel>
 
@@ -3739,7 +3631,7 @@ function StatTile({ icon: Icon, label, value }: { icon: typeof PackagePlus; labe
 
 function getMercadoPagoConnectionErrorMessage(reason: string | null) {
   if (reason === "config") {
-    return "A conexao automatica com Mercado Pago ainda esta sendo ativada pela ConnectyHub. Quando estiver pronta, este botao abrira a tela oficial de autorizacao.";
+    return "Mercado Pago ainda precisa ser configurado no painel admin da ConnectyHub. Depois disso, este botao abre a autorizacao oficial.";
   }
 
   if (reason === "missing_company") {
@@ -3758,8 +3650,12 @@ function getMercadoPagoConnectionErrorMessage(reason: string | null) {
 }
 
 function formatMercadoPagoUserFacingError(message: string) {
-  if (message.includes("MERCADO_PAGO_CLIENT_ID") || message.includes("MERCADO_PAGO_CLIENT_SECRET")) {
-    return "A conexao automatica com Mercado Pago ainda esta sendo ativada pela ConnectyHub.";
+  if (
+    message.includes("MERCADO_PAGO_CLIENT_ID")
+    || message.includes("MERCADO_PAGO_CLIENT_SECRET")
+    || message.includes("painel admin")
+  ) {
+    return "Mercado Pago ainda precisa ser configurado no painel admin da ConnectyHub.";
   }
 
   return message;

@@ -5,6 +5,7 @@ import {
   buildMercadoPagoAuthorizationUrl,
   buildMercadoPagoWebhookUrl,
   getAppBaseUrl,
+  isMercadoPagoTestTokenEnabled,
 } from "@/lib/sales-catalog/mercado-pago";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
@@ -40,7 +41,8 @@ export async function GET(request: NextRequest) {
     });
     const state = `mp_${randomUUID()}`;
     const webhookUrl = buildMercadoPagoWebhookUrl();
-    const authorizationUrl = buildMercadoPagoAuthorizationUrl({ companyId: company.id, state });
+    const authorizationUrl = await buildMercadoPagoAuthorizationUrl({ companyId: company.id, state, client });
+    const testTokenEnabled = await isMercadoPagoTestTokenEnabled({ client });
     const now = new Date().toISOString();
     const { error } = await client
       .from("sales_catalog_payment_integrations")
@@ -48,7 +50,7 @@ export async function GET(request: NextRequest) {
         organization_id: company.id,
         provider: "mercado_pago",
         status: "pending",
-        mode: process.env.MERCADO_PAGO_TEST_TOKEN === "true" ? "sandbox" : "production",
+        mode: testTokenEnabled ? "sandbox" : "production",
         webhook_url: webhookUrl,
         last_error: null,
         metadata: {
@@ -76,7 +78,11 @@ export async function GET(request: NextRequest) {
 function getMercadoPagoConnectErrorReason(error: unknown) {
   const message = error instanceof Error ? error.message : "";
 
-  if (message.includes("MERCADO_PAGO_CLIENT_ID") || message.includes("MERCADO_PAGO_CLIENT_SECRET")) {
+  if (
+    message.includes("MERCADO_PAGO_CLIENT_ID")
+    || message.includes("MERCADO_PAGO_CLIENT_SECRET")
+    || message.includes("painel admin")
+  ) {
     return "config";
   }
 

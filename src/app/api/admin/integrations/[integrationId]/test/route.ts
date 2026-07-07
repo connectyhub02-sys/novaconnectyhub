@@ -181,6 +181,8 @@ async function testIntegration(integrationId: string, credentials: CredentialBag
       return testVapid(credentials);
     case "payments":
       return testStripe(credentials);
+    case "mercado-pago":
+      return testMercadoPago(credentials);
     default:
       return testConfiguredCredentials(credentials);
   }
@@ -452,6 +454,27 @@ async function testStripe(credentials: CredentialBag): Promise<ConnectionTestRes
   return online("Stripe online. Secret key validada na conta.", { httpStatus: result.httpStatus });
 }
 
+async function testMercadoPago(credentials: CredentialBag): Promise<ConnectionTestResult> {
+  const clientId = getCredential(credentials, ["MERCADO_PAGO_CLIENT_ID"]);
+  const clientSecret = getCredential(credentials, ["MERCADO_PAGO_CLIENT_SECRET"]);
+  const redirectUri = getCredential(credentials, ["MERCADO_PAGO_REDIRECT_URI"]) || `${resolveAppBaseUrlForTest()}/api/dashboard/sales-catalog/payments/mercado-pago/callback`;
+  const webhookSecret = getCredential(credentials, ["MERCADO_PAGO_WEBHOOK_SECRET"]);
+
+  if (!clientId || !clientSecret) {
+    return offline("Preencha Client ID e Client Secret do aplicativo Mercado Pago antes de testar.");
+  }
+
+  if (!normalizeBaseUrl(redirectUri)) {
+    return offline("Redirect URI do Mercado Pago precisa ser uma URL https valida.");
+  }
+
+  return online("Mercado Pago pronto para OAuth. Client ID, Client Secret e Redirect URI estao presentes; o secret e validado no retorno oficial do Mercado Pago.", {
+    details: webhookSecret
+      ? ["Webhook signature configurada para validar notificacoes."]
+      : ["Webhook signature ainda ausente; notificacoes serao processadas sem validacao HMAC ate configurar."],
+  });
+}
+
 async function testConfiguredCredentials(credentials: CredentialBag): Promise<ConnectionTestResult> {
   if (credentials.size === 0) {
     return offline("Nenhuma credencial salva para testar nesta integracao.");
@@ -488,6 +511,18 @@ function normalizeBaseUrl(value?: string) {
   } catch {
     return "";
   }
+}
+
+function resolveAppBaseUrlForTest() {
+  const productionUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL
+    ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+    : "";
+  const deploymentUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "";
+
+  return normalizeBaseUrl(process.env.NEXT_PUBLIC_APP_URL)
+    || normalizeBaseUrl(process.env.APP_URL)
+    || normalizeBaseUrl(productionUrl)
+    || normalizeBaseUrl(deploymentUrl);
 }
 
 function normalizeGeminiModel(value: string) {

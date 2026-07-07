@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
       companyId: integration.organization_id,
       client,
     });
-    const tokens = await exchangeMercadoPagoAuthorizationCode(code);
+    const tokens = await exchangeMercadoPagoAuthorizationCode({ code, client });
     const now = new Date().toISOString();
 
     await client
