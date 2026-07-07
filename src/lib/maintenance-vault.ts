@@ -461,6 +461,46 @@ export const maintenanceIntegrations: IntegrationDefinition[] = [
       },
     ],
   },
+  {
+    id: "mercado-pago-billing",
+    name: "Mercado Pago / Cobranca ConnectyHub",
+    sector: "Assinaturas e creditos",
+    owner: "Setor Financeiro IA",
+    description:
+      "Credenciais da conta Mercado Pago da ConnectyHub usadas para cobrar mensalidade, pacotes e creditos excedentes dos clientes da plataforma.",
+    tone: "amber",
+    modules: ["Assinaturas", "Cartao salvo", "Creditos extras", "Webhooks de billing"],
+    fields: [
+      {
+        label: "Access Token ConnectyHub",
+        env: "MERCADO_PAGO_BILLING_ACCESS_TOKEN",
+        kind: "secret",
+        requirement: "required",
+        help: "Access Token de producao da conta Mercado Pago da ConnectyHub. Usado somente no servidor para assinaturas e pagamentos da plataforma.",
+      },
+      {
+        label: "Public Key ConnectyHub",
+        env: "MERCADO_PAGO_BILLING_PUBLIC_KEY",
+        kind: "public",
+        requirement: "recommended",
+        help: "Public Key da conta Mercado Pago da ConnectyHub para checkout transparente quando habilitarmos assinatura por cartao.",
+      },
+      {
+        label: "Webhook secret billing",
+        env: "MERCADO_PAGO_BILLING_WEBHOOK_SECRET",
+        kind: "secret",
+        requirement: "recommended",
+        help: "Assinatura secreta do webhook dedicado a cobranca da ConnectyHub: /api/webhooks/mercado-pago/platform-billing.",
+      },
+      {
+        label: "Modo cobranca",
+        env: "MERCADO_PAGO_BILLING_MODE",
+        kind: "identifier",
+        requirement: "optional",
+        help: "Use production para cobranca real. Use sandbox apenas nos testes de assinatura e pagamento.",
+      },
+    ],
+  },
 ];
 
 export function getMaintenanceVaultSnapshot(options: { storedCredentials?: MaintenanceStoredCredential[] } = {}): MaintenanceVaultSnapshot {
