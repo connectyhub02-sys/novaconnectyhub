@@ -65,7 +65,7 @@ export async function resolveSalesCatalogOrderPaymentOwner(input: {
   orderId: string;
 }): Promise<SalesCatalogPaymentOwner> {
   const items = await loadOrderItems(input.client, input.organizationId, input.orderId);
-  const platformItems = await findPlatformOrderItems(input.client, items);
+  const platformItems = await findPlatformOrderItems(input.client, input.organizationId, items);
 
   if (platformItems.length === 0) {
     return { owner: "seller", platformProductIds: [], catalogItemIds: [] };
@@ -95,7 +95,7 @@ export async function recordPlatformProductCommissionsForApprovedPayment(input: 
   source: string;
 }) {
   const items = await loadOrderItems(input.client, input.organizationId, input.orderId);
-  const platformItems = await findPlatformOrderItems(input.client, items);
+  const platformItems = await findPlatformOrderItems(input.client, input.organizationId, items);
 
   if (platformItems.length === 0) {
     return {
@@ -273,34 +273,38 @@ async function loadOrderItems(client: SupabaseClient, organizationId: string, or
   return (data ?? []) as unknown as OrderItemRow[];
 }
 
-async function findPlatformOrderItems(client: SupabaseClient, items: OrderItemRow[]) {
+async function findPlatformOrderItems(client: SupabaseClient, organizationId: string, items: OrderItemRow[]) {
   const catalogItemIds = uniqueStrings(items.map((item) => item.catalog_item_id));
-  if (catalogItemIds.length === 0) return [] as PlatformOrderItem[];
-
-  const { data } = await client
-    .from("intelligence_memory")
-    .select("id, metadata")
-    .eq("scope", "organization")
-    .eq("memory_type", "sales_catalog_item")
-    .in("id", catalogItemIds);
   const catalogById = new Map<string, CatalogItemRow>();
 
-  for (const row of (data ?? []) as unknown as CatalogItemRow[]) {
-    catalogById.set(row.id, row);
+  if (catalogItemIds.length > 0) {
+    const { data } = await client
+      .from("intelligence_memory")
+      .select("id, metadata")
+      .eq("scope", "organization")
+      .eq("organization_id", organizationId)
+      .eq("memory_type", "sales_catalog_item")
+      .in("id", catalogItemIds);
+
+    for (const row of (data ?? []) as unknown as CatalogItemRow[]) {
+      catalogById.set(row.id, row);
+    }
   }
 
   return items
     .map((item): PlatformOrderItem | null => {
-      if (!item.catalog_item_id) return null;
-      const catalogItem = catalogById.get(item.catalog_item_id);
-      const catalogMetadata = readRecord(catalogItem?.metadata);
       const itemMetadata = readRecord(item.metadata);
-      const platformProductId = readString(itemMetadata.platform_product_id)
-        ?? readString(catalogMetadata.platform_product_id);
+      const catalogItem = item.catalog_item_id ? catalogById.get(item.catalog_item_id) : null;
+      const catalogMetadata = readRecord(catalogItem?.metadata);
+      const platformMetadata = {
+        ...catalogMetadata,
+        ...itemMetadata,
+      };
+      const platformProductId = readString(platformMetadata.platform_product_id);
 
       if (!platformProductId) return null;
 
-      return { item, platformProductId, catalogMetadata };
+      return { item, platformProductId, catalogMetadata: platformMetadata };
     })
     .filter((item): item is PlatformOrderItem => Boolean(item));
 }
