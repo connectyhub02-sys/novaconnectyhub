@@ -1,0 +1,1040 @@
+"use client";
+
+import { useMemo, useState, type ChangeEvent, type FormEvent, type ReactNode } from "react";
+import Image from "next/image";
+import { useRouter } from "next/navigation";
+import type { LucideIcon } from "lucide-react";
+import {
+  BadgePercent,
+  Box,
+  CheckCircle2,
+  Copy,
+  FileText,
+  Image as ImageIcon,
+  Loader2,
+  PackagePlus,
+  Plus,
+  Save,
+  SlidersHorizontal,
+  Tags,
+  Trash2,
+  Truck,
+  Upload,
+  Video,
+  X,
+} from "lucide-react";
+import type {
+  PlatformProduct,
+  PlatformProductCatalog,
+  PlatformProductCommission,
+  PlatformProductCommissionStatus,
+  PlatformProductMarketplaceStatus,
+  PlatformProductStatus,
+} from "@/lib/platform-products";
+import {
+  salesCatalogBusinessTemplates,
+  type SalesCatalogFulfillmentMode,
+  type SalesCatalogMedia,
+  type SalesCatalogShippingProfile,
+  type SalesCatalogSkuStatus,
+  type SalesCatalogStockStatus,
+} from "@/lib/sales-catalog/shared";
+import { ConnectyShell } from "./connecty-shell";
+import { NeonBadge, PageHeader, Panel, StatusBadge } from "./panel-primitives";
+
+type ProductDraft = {
+  productId: string;
+  name: string;
+  productCode: string;
+  slug: string;
+  shortDescription: string;
+  commercialDescription: string;
+  category: string;
+  price: string;
+  currency: string;
+  status: PlatformProductStatus;
+  marketplaceStatus: PlatformProductMarketplaceStatus;
+  commissionPercentage: string;
+  commissionBase: "gross" | "net";
+  commissionReleaseDays: string;
+  recurringCommissionMonths: string;
+  refundWindowDays: string;
+  salePrice: string;
+  saleStartsAt: string;
+  saleEndsAt: string;
+  couponCode: string;
+  couponDescription: string;
+  callToAction: string;
+  offerNotes: string;
+  inventoryStatus: SalesCatalogStockStatus;
+  stockQuantity: string;
+  lowStockThreshold: string;
+  allowBackorder: boolean;
+  inventoryNotes: string;
+  fulfillmentMode: SalesCatalogFulfillmentMode;
+  schedulingRequired: boolean;
+  serviceDuration: string;
+  deliveryInstructions: string;
+  accessInstructions: string;
+  weightGrams: string;
+  lengthCm: string;
+  widthCm: string;
+  heightCm: string;
+  shippingProfile: SalesCatalogShippingProfile;
+  shippingNotes: string;
+  agentTag: string;
+  agentPrompt: string;
+  salesNotes: string;
+};
+
+type AttributeDraft = {
+  id: string;
+  name: string;
+  valuesText: string;
+};
+
+type SkuDraft = {
+  skuCode: string;
+  title: string;
+  attributesText: string;
+  price: string;
+  salePrice: string;
+  stockStatus: SalesCatalogStockStatus;
+  stockQuantity: string;
+  lowStockThreshold: string;
+  weightGrams: string;
+  status: SalesCatalogSkuStatus;
+};
+
+type Notice = {
+  tone: "success" | "error";
+  message: string;
+};
+
+const emptyDraft: ProductDraft = {
+  productId: "",
+  name: "",
+  productCode: "",
+  slug: "",
+  shortDescription: "",
+  commercialDescription: "",
+  category: "",
+  price: "",
+  currency: "BRL",
+  status: "draft",
+  marketplaceStatus: "hidden",
+  commissionPercentage: "0",
+  commissionBase: "gross",
+  commissionReleaseDays: "15",
+  recurringCommissionMonths: "0",
+  refundWindowDays: "7",
+  salePrice: "",
+  saleStartsAt: "",
+  saleEndsAt: "",
+  couponCode: "",
+  couponDescription: "",
+  callToAction: "",
+  offerNotes: "",
+  inventoryStatus: "in_stock",
+  stockQuantity: "",
+  lowStockThreshold: "",
+  allowBackorder: false,
+  inventoryNotes: "",
+  fulfillmentMode: "digital",
+  schedulingRequired: false,
+  serviceDuration: "",
+  deliveryInstructions: "",
+  accessInstructions: "",
+  weightGrams: "",
+  lengthCm: "",
+  widthCm: "",
+  heightCm: "",
+  shippingProfile: "default",
+  shippingNotes: "",
+  agentTag: "",
+  agentPrompt: "",
+  salesNotes: "",
+};
+
+const inputStyle = {
+  background: "var(--ch-surface)",
+  border: "1px solid var(--ch-border)",
+  color: "var(--ch-text)",
+};
+
+export function PlatformProductsConsole({
+  catalog,
+  userLabel = "CEO_HUMAN_ADM",
+}: {
+  catalog: PlatformProductCatalog;
+  userLabel?: string;
+}) {
+  const router = useRouter();
+  const [products, setProducts] = useState(catalog.products);
+  const [draft, setDraft] = useState<ProductDraft>(() => createDraft(null));
+  const [attributes, setAttributes] = useState<AttributeDraft[]>([]);
+  const [skus, setSkus] = useState<SkuDraft[]>([]);
+  const [files, setFiles] = useState<File[]>([]);
+  const [editingMedia, setEditingMedia] = useState<SalesCatalogMedia[]>([]);
+  const [commissions, setCommissions] = useState(catalog.commissions);
+  const [saving, setSaving] = useState(false);
+  const [commissionLoadingId, setCommissionLoadingId] = useState<string | null>(null);
+  const [notice, setNotice] = useState<Notice | null>(null);
+  const metrics = useMemo(() => buildMetrics(products, catalog.imports.length, commissions), [products, catalog.imports.length, commissions]);
+  const categories = useMemo(() => Array.from(new Set([
+    ...salesCatalogBusinessTemplates.flatMap((template) => template.categories),
+    ...products.map((product) => product.category).filter((item): item is string => Boolean(item)),
+  ])).sort((left, right) => left.localeCompare(right)), [products]);
+
+  async function saveProduct(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSaving(true);
+    setNotice(null);
+
+    try {
+      const formData = buildFormData();
+      const response = await fetch("/api/admin/platform-products", {
+        method: draft.productId ? "PATCH" : "POST",
+        body: formData,
+      });
+      const data = (await response.json().catch(() => null)) as { product?: PlatformProduct; error?: string } | null;
+
+      if (!response.ok || !data?.product) {
+        throw new Error(data?.error ?? "Nao foi possivel salvar o produto ConnectyHub.");
+      }
+
+      setProducts((current) => upsertProduct(current, data.product!));
+      resetForm();
+      setNotice({ tone: "success", message: "Produto ConnectyHub salvo e pronto para aparecer na vitrine conforme a visibilidade." });
+      router.refresh();
+    } catch (error) {
+      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Falha ao salvar produto." });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function buildFormData() {
+    const formData = new FormData();
+    const attributesPayload = attributesToPayload(attributes);
+    const skusPayload = skusToPayload(skus, draft, attributesPayload);
+
+    for (const [key, value] of Object.entries(draft)) {
+      formData.set(key, typeof value === "boolean" ? String(value) : value);
+    }
+
+    formData.set("attributes", JSON.stringify(attributesPayload));
+    formData.set("skus", JSON.stringify(skusPayload));
+    formData.set("keepMediaIds", JSON.stringify(editingMedia.map((media) => media.id)));
+
+    for (const file of files) {
+      formData.append("files", file);
+    }
+
+    return formData;
+  }
+
+  function editProduct(product: PlatformProduct) {
+    setDraft(createDraft(product));
+    setAttributes(product.attributes.map((attribute) => ({
+      id: attribute.id,
+      name: attribute.name,
+      valuesText: attribute.values.join("\n"),
+    })));
+    setSkus(product.skus.map((sku) => ({
+      skuCode: sku.skuCode,
+      title: sku.title ?? "",
+      attributesText: sku.attributes.map((attribute) => `${attribute.name}: ${attribute.values.join(", ")}`).join("; "),
+      price: sku.price ?? "",
+      salePrice: sku.salePrice ?? "",
+      stockStatus: sku.stockStatus,
+      stockQuantity: sku.stockQuantity !== null ? String(sku.stockQuantity) : "",
+      lowStockThreshold: sku.lowStockThreshold !== null ? String(sku.lowStockThreshold) : "",
+      weightGrams: sku.weightGrams !== null ? String(sku.weightGrams) : "",
+      status: sku.status,
+    })));
+    setEditingMedia(product.media);
+    setFiles([]);
+    setNotice(null);
+  }
+
+  function resetForm() {
+    setDraft(createDraft(null));
+    setAttributes([]);
+    setSkus([]);
+    setFiles([]);
+    setEditingMedia([]);
+  }
+
+  function applyTemplate(templateValue: string) {
+    const template = salesCatalogBusinessTemplates.find((item) => item.value === templateValue);
+    if (!template) return;
+
+    setAttributes(template.attributes.map((attribute) => ({
+      id: attribute.id,
+      name: attribute.name,
+      valuesText: attribute.values.join("\n"),
+    })));
+    setDraft((current) => ({
+      ...current,
+      category: current.category || template.categories[0] || "",
+      fulfillmentMode: template.value === "services" ? "service" : template.value === "digital" ? "digital" : "physical",
+    }));
+  }
+
+  function handleFiles(event: ChangeEvent<HTMLInputElement>) {
+    setFiles(Array.from(event.target.files ?? []).slice(0, 12));
+  }
+
+  async function updateCommissionStatus(commission: PlatformProductCommission, status: PlatformProductCommissionStatus) {
+    setCommissionLoadingId(commission.id);
+    setNotice(null);
+
+    try {
+      const response = await fetch("/api/admin/platform-product-commissions", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ commissionId: commission.id, status }),
+      });
+      const data = (await response.json().catch(() => null)) as { commission?: PlatformProductCommission; error?: string } | null;
+
+      if (!response.ok || !data?.commission) {
+        throw new Error(data?.error ?? "Nao foi possivel atualizar a comissao.");
+      }
+
+      setCommissions((current) => current.map((item) => item.id === data.commission!.id ? data.commission! : item));
+      setNotice({ tone: "success", message: `Comissao atualizada para ${formatCommissionStatus(data.commission.status)}.` });
+      router.refresh();
+    } catch (error) {
+      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Falha ao atualizar comissao." });
+    } finally {
+      setCommissionLoadingId(null);
+    }
+  }
+
+  return (
+    <ConnectyShell mode="admin" isPlatformAdmin userLabel={userLabel} activeHref="/admin/produtos-connectyhub">
+      <PageHeader
+        eyebrow="Admin OS / Marketplace"
+        title="Produtos ConnectyHub"
+        description="Cadastre os produtos globais que podem aparecer no painel do usuario para importacao e venda por comissao."
+        actions={
+          <div className="flex flex-wrap gap-2">
+            <NeonBadge tone={catalog.schemaReady ? "green" : "amber"}>{catalog.schemaReady ? "Schema pronto" : "Aguardando SQL"}</NeonBadge>
+            <NeonBadge tone="cyan">{metrics.available} na vitrine</NeonBadge>
+            <NeonBadge tone="amber">{metrics.imports} importacoes</NeonBadge>
+            <NeonBadge tone="green">{formatMoney(metrics.payableCommission)} repasse</NeonBadge>
+          </div>
+        }
+      />
+
+      {!catalog.schemaReady ? (
+        <Panel title="Migration pendente" eyebrow="supabase">
+          <div className="rounded-xl border border-amber-400/25 bg-amber-400/10 px-4 py-3 text-[13px] leading-6 text-amber-100">
+            Aplique a migration de marketplace de produtos no Supabase para liberar cadastro, vitrine e importacao.
+          </div>
+        </Panel>
+      ) : (
+        <div className="space-y-5">
+          {notice ? (
+            <div
+              className="rounded-2xl px-4 py-3 text-[13px] font-medium"
+              style={{
+                background: notice.tone === "success" ? "rgba(16,185,129,0.10)" : "rgba(244,63,94,0.08)",
+                border: notice.tone === "success" ? "1px solid rgba(16,185,129,0.24)" : "1px solid rgba(244,63,94,0.22)",
+                color: notice.tone === "success" ? "#86efac" : "#fda4af",
+              }}
+            >
+              {notice.message}
+            </div>
+          ) : null}
+
+          <div className="grid gap-4 md:grid-cols-5">
+            <Metric icon={Box} label="Produtos" value={String(products.length)} detail={`${metrics.active} ativos`} />
+            <Metric icon={PackagePlus} label="Vitrine" value={String(metrics.available)} detail={`${metrics.featured} em destaque`} />
+            <Metric icon={BadgePercent} label="Comissao media" value={`${metrics.averageCommission}%`} detail="produtos ativos" />
+            <Metric icon={Tags} label="Importacoes" value={String(metrics.imports)} detail="empresas de clientes" />
+            <Metric icon={CheckCircle2} label="Repasses" value={formatMoney(metrics.payableCommission)} detail={`${metrics.pendingCommissions} pendentes`} />
+          </div>
+
+          <div className="grid gap-5 xl:grid-cols-[minmax(380px,0.82fr)_minmax(0,1fr)]">
+            <Panel title={draft.productId ? "Editar produto ConnectyHub" : "Novo produto ConnectyHub"} eyebrow="cadastro espelhado ao catalogo">
+              <form className="space-y-4" onSubmit={saveProduct}>
+                <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_160px]">
+                  <Field label="Nome">
+                    <input value={draft.name} onChange={(event) => patchDraft({ name: event.target.value.slice(0, 120) })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" style={inputStyle} />
+                  </Field>
+                  <Field label="Status">
+                    <select value={draft.status} onChange={(event) => patchDraft({ status: event.target.value as PlatformProductStatus })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" style={inputStyle}>
+                      <option value="draft">Rascunho</option>
+                      <option value="active">Ativo</option>
+                      <option value="paused">Pausado</option>
+                      <option value="archived">Arquivado</option>
+                    </select>
+                  </Field>
+                </div>
+
+                <div className="grid gap-3 md:grid-cols-[1fr_1fr_170px]">
+                  <Field label="Codigo">
+                    <input value={draft.productCode} onChange={(event) => patchDraft({ productCode: cleanCode(event.target.value) })} className="h-10 w-full rounded-xl px-3 font-mono text-[12px] outline-none" placeholder="Automatico se vazio" style={inputStyle} />
+                  </Field>
+                  <Field label="Slug">
+                    <input value={draft.slug} onChange={(event) => patchDraft({ slug: slugInput(event.target.value) })} className="h-10 w-full rounded-xl px-3 font-mono text-[12px] outline-none" placeholder="Automatico se vazio" style={inputStyle} />
+                  </Field>
+                  <Field label="Vitrine usuario">
+                    <select value={draft.marketplaceStatus} onChange={(event) => patchDraft({ marketplaceStatus: event.target.value as PlatformProductMarketplaceStatus })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" style={inputStyle}>
+                      <option value="hidden">Oculto</option>
+                      <option value="visible">Visivel</option>
+                      <option value="featured">Destaque</option>
+                    </select>
+                  </Field>
+                </div>
+
+                <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_150px]">
+                  <Field label="Categoria">
+                    <input list="platform-product-categories" value={draft.category} onChange={(event) => patchDraft({ category: event.target.value.slice(0, 80) })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" style={inputStyle} />
+                    <datalist id="platform-product-categories">
+                      {categories.map((category) => <option key={category} value={category} />)}
+                    </datalist>
+                  </Field>
+                  <Field label="Valor">
+                    <input value={draft.price} onChange={(event) => patchDraft({ price: event.target.value.slice(0, 60) })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" placeholder="R$ 197,00" style={inputStyle} />
+                  </Field>
+                </div>
+
+                <Field label="Descricao curta para vitrine">
+                  <input value={draft.shortDescription} onChange={(event) => patchDraft({ shortDescription: event.target.value.slice(0, 220) })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" style={inputStyle} />
+                </Field>
+
+                <Field label="Descricao comercial">
+                  <textarea value={draft.commercialDescription} onChange={(event) => patchDraft({ commercialDescription: event.target.value.slice(0, 2200) })} className="min-h-28 w-full resize-y rounded-xl px-3 py-3 text-[13px] leading-5 outline-none" style={inputStyle} />
+                </Field>
+
+                <Block icon={BadgePercent} title="Regra de comissao">
+                  <div className="grid gap-3 md:grid-cols-5">
+                    <NumberField label="% comissao" value={draft.commissionPercentage} onChange={(value) => patchDraft({ commissionPercentage: value })} step="0.01" />
+                    <Field label="Base">
+                      <select value={draft.commissionBase} onChange={(event) => patchDraft({ commissionBase: event.target.value as "gross" | "net" })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" style={inputStyle}>
+                        <option value="gross">Bruto</option>
+                        <option value="net">Liquido</option>
+                      </select>
+                    </Field>
+                    <NumberField label="Repasse dias" value={draft.commissionReleaseDays} onChange={(value) => patchDraft({ commissionReleaseDays: value })} step="1" />
+                    <NumberField label="Recorrencia meses" value={draft.recurringCommissionMonths} onChange={(value) => patchDraft({ recurringCommissionMonths: value })} step="1" />
+                    <NumberField label="Garantia dias" value={draft.refundWindowDays} onChange={(value) => patchDraft({ refundWindowDays: value })} step="1" />
+                  </div>
+                </Block>
+
+                <Block icon={SlidersHorizontal} title="Variacoes padrao">
+                  <div className="mb-3 flex flex-wrap gap-2">
+                    {salesCatalogBusinessTemplates.map((template) => (
+                      <button key={template.value} type="button" onClick={() => applyTemplate(template.value)} className="rounded-lg border px-3 py-2 font-mono text-[10px] uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10" style={{ borderColor: "var(--ch-border)" }}>
+                        {template.label}
+                      </button>
+                    ))}
+                    <button type="button" onClick={addAttribute} className="rounded-lg border px-3 py-2 font-mono text-[10px] uppercase tracking-wide text-slate-300 transition hover:bg-cyan-400/10" style={{ borderColor: "var(--ch-border)" }}>
+                      + variacao
+                    </button>
+                  </div>
+                  <div className="grid gap-3">
+                    {attributes.map((attribute, index) => (
+                      <div key={`${attribute.id}-${index}`} className="grid gap-2 md:grid-cols-[150px_180px_minmax(0,1fr)_40px]">
+                        <input value={attribute.id} onChange={(event) => updateAttribute(index, { id: slugInput(event.target.value) })} className="h-10 rounded-xl px-3 font-mono text-[12px] outline-none" placeholder="id" style={inputStyle} />
+                        <input value={attribute.name} onChange={(event) => updateAttribute(index, { name: event.target.value.slice(0, 80) })} className="h-10 rounded-xl px-3 text-[13px] outline-none" placeholder="Nome" style={inputStyle} />
+                        <textarea value={attribute.valuesText} onChange={(event) => updateAttribute(index, { valuesText: event.target.value.slice(0, 700) })} className="min-h-10 rounded-xl px-3 py-2 text-[13px] outline-none" placeholder="Um valor por linha" style={inputStyle} />
+                        <button type="button" onClick={() => removeAttribute(index)} className="grid h-10 place-items-center rounded-xl border text-slate-400 transition hover:bg-rose-400/10 hover:text-rose-100" style={{ borderColor: "var(--ch-border)" }}>
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </Block>
+
+                <Block icon={PackagePlus} title="Estoque">
+                  <div className="grid gap-3 md:grid-cols-4">
+                    <Field label="Disponibilidade">
+                      <select value={draft.inventoryStatus} onChange={(event) => patchDraft({ inventoryStatus: event.target.value as SalesCatalogStockStatus })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" style={inputStyle}>
+                        <option value="in_stock">Disponivel</option>
+                        <option value="out_of_stock">Esgotado</option>
+                        <option value="on_backorder">Sob encomenda</option>
+                      </select>
+                    </Field>
+                    <NumberField label="Quantidade" value={draft.stockQuantity} onChange={(value) => patchDraft({ stockQuantity: value })} step="1" allowBlank />
+                    <NumberField label="Alerta baixo" value={draft.lowStockThreshold} onChange={(value) => patchDraft({ lowStockThreshold: value })} step="1" allowBlank />
+                    <label className="mt-[18px] flex h-10 items-center justify-between rounded-xl px-3 text-[12px]" style={inputStyle}>
+                      Aceita encomenda
+                      <input checked={draft.allowBackorder} type="checkbox" onChange={(event) => patchDraft({ allowBackorder: event.target.checked })} />
+                    </label>
+                  </div>
+                  <input value={draft.inventoryNotes} onChange={(event) => patchDraft({ inventoryNotes: event.target.value.slice(0, 240) })} className="mt-3 h-10 w-full rounded-xl px-3 text-[13px] outline-none" placeholder="Observacoes de estoque" style={inputStyle} />
+                </Block>
+
+                <Block icon={Tags} title="SKUs e variacoes vendaveis">
+                  <div className="mb-3 flex justify-end">
+                    <button type="button" onClick={addSku} className="inline-flex h-9 items-center gap-2 rounded-xl border px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-cyan-100" style={{ borderColor: "var(--ch-border)" }}>
+                      <Plus className="h-3.5 w-3.5" />
+                      Adicionar SKU
+                    </button>
+                  </div>
+                  <div className="grid gap-3">
+                    {skus.length > 0 ? skus.map((sku, index) => (
+                      <div key={`${sku.skuCode}-${index}`} className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-panel)" }}>
+                        <div className="grid gap-2 lg:grid-cols-[150px_minmax(140px,1fr)_minmax(180px,1.2fr)_40px]">
+                          <input value={sku.skuCode} onChange={(event) => updateSku(index, { skuCode: cleanCode(event.target.value) })} className="h-10 rounded-xl px-3 font-mono text-[12px] outline-none" placeholder="SKU" style={inputStyle} />
+                          <input value={sku.title} onChange={(event) => updateSku(index, { title: event.target.value.slice(0, 120) })} className="h-10 rounded-xl px-3 text-[13px] outline-none" placeholder="Nome interno" style={inputStyle} />
+                          <input value={sku.attributesText} onChange={(event) => updateSku(index, { attributesText: event.target.value.slice(0, 220) })} className="h-10 rounded-xl px-3 text-[13px] outline-none" placeholder="Tamanho: M; Cor: Preto" style={inputStyle} />
+                          <button type="button" onClick={() => removeSku(index)} className="grid h-10 place-items-center rounded-xl border text-slate-400 transition hover:bg-rose-400/10 hover:text-rose-100" style={{ borderColor: "var(--ch-border)" }}>
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                        <div className="mt-2 grid gap-2 md:grid-cols-6">
+                          <input value={sku.price} onChange={(event) => updateSku(index, { price: event.target.value.slice(0, 60) })} className="h-10 rounded-xl px-3 text-[13px] outline-none" placeholder="Preco" style={inputStyle} />
+                          <input value={sku.salePrice} onChange={(event) => updateSku(index, { salePrice: event.target.value.slice(0, 60) })} className="h-10 rounded-xl px-3 text-[13px] outline-none" placeholder="Oferta" style={inputStyle} />
+                          <select value={sku.stockStatus} onChange={(event) => updateSku(index, { stockStatus: event.target.value as SalesCatalogStockStatus })} className="h-10 rounded-xl px-3 text-[13px] outline-none" style={inputStyle}>
+                            <option value="in_stock">Disponivel</option>
+                            <option value="out_of_stock">Esgotado</option>
+                            <option value="on_backorder">Encomenda</option>
+                          </select>
+                          <input value={sku.stockQuantity} onChange={(event) => updateSku(index, { stockQuantity: digitsOnly(event.target.value) })} className="h-10 rounded-xl px-3 text-[13px] outline-none" placeholder="Qtd." style={inputStyle} />
+                          <input value={sku.weightGrams} onChange={(event) => updateSku(index, { weightGrams: digitsOnly(event.target.value) })} className="h-10 rounded-xl px-3 text-[13px] outline-none" placeholder="Peso g" style={inputStyle} />
+                          <select value={sku.status} onChange={(event) => updateSku(index, { status: event.target.value as SalesCatalogSkuStatus })} className="h-10 rounded-xl px-3 text-[13px] outline-none" style={inputStyle}>
+                            <option value="active">Ativo</option>
+                            <option value="draft">Rascunho</option>
+                          </select>
+                        </div>
+                      </div>
+                    )) : (
+                      <p className="rounded-xl border border-dashed px-3 py-4 text-center text-[12px] text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
+                        Sem SKUs manuais. Na importacao, o sistema cria um SKU principal automaticamente.
+                      </p>
+                    )}
+                  </div>
+                </Block>
+
+                <Block icon={BadgePercent} title="Oferta e fechamento">
+                  <div className="grid gap-3 md:grid-cols-4">
+                    <Field label="Promocional"><input value={draft.salePrice} onChange={(event) => patchDraft({ salePrice: event.target.value.slice(0, 60) })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" style={inputStyle} /></Field>
+                    <Field label="Cupom"><input value={draft.couponCode} onChange={(event) => patchDraft({ couponCode: cleanCode(event.target.value) })} className="h-10 w-full rounded-xl px-3 font-mono text-[12px] outline-none" style={inputStyle} /></Field>
+                    <Field label="Inicio"><input type="date" value={draft.saleStartsAt} onChange={(event) => patchDraft({ saleStartsAt: event.target.value })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" style={inputStyle} /></Field>
+                    <Field label="Fim"><input type="date" value={draft.saleEndsAt} onChange={(event) => patchDraft({ saleEndsAt: event.target.value })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" style={inputStyle} /></Field>
+                  </div>
+                  <div className="mt-3 grid gap-3">
+                    <input value={draft.couponDescription} onChange={(event) => patchDraft({ couponDescription: event.target.value.slice(0, 160) })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" placeholder="Descricao do cupom" style={inputStyle} />
+                    <input value={draft.callToAction} onChange={(event) => patchDraft({ callToAction: event.target.value.slice(0, 180) })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" placeholder="Chamada que o agente pode usar" style={inputStyle} />
+                    <input value={draft.offerNotes} onChange={(event) => patchDraft({ offerNotes: event.target.value.slice(0, 240) })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" placeholder="Condicoes comerciais" style={inputStyle} />
+                  </div>
+                </Block>
+
+                <Block icon={Truck} title="Entrega deste item">
+                  <div className="grid gap-3 md:grid-cols-4">
+                    <Field label="Tipo">
+                      <select value={draft.fulfillmentMode} onChange={(event) => patchDraft({ fulfillmentMode: event.target.value as SalesCatalogFulfillmentMode })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" style={inputStyle}>
+                        <option value="physical">Produto fisico</option>
+                        <option value="digital">Digital no WhatsApp</option>
+                        <option value="service">Servico</option>
+                        <option value="subscription">Assinatura</option>
+                      </select>
+                    </Field>
+                    <Field label="Prazo/duracao"><input value={draft.serviceDuration} onChange={(event) => patchDraft({ serviceDuration: event.target.value.slice(0, 80) })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" style={inputStyle} /></Field>
+                    <NumberField label="Peso g" value={draft.weightGrams} onChange={(value) => patchDraft({ weightGrams: value })} step="1" allowBlank />
+                    <Field label="Frete">
+                      <select value={draft.shippingProfile} onChange={(event) => patchDraft({ shippingProfile: event.target.value as SalesCatalogShippingProfile })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" style={inputStyle}>
+                        <option value="default">Tabela por estado</option>
+                        <option value="free">Frete gratis</option>
+                        <option value="custom">Combinar</option>
+                      </select>
+                    </Field>
+                  </div>
+                  <div className="mt-3 grid gap-3 md:grid-cols-3">
+                    <NumberField label="Comprimento cm" value={draft.lengthCm} onChange={(value) => patchDraft({ lengthCm: value })} step="0.01" allowBlank />
+                    <NumberField label="Largura cm" value={draft.widthCm} onChange={(value) => patchDraft({ widthCm: value })} step="0.01" allowBlank />
+                    <NumberField label="Altura cm" value={draft.heightCm} onChange={(value) => patchDraft({ heightCm: value })} step="0.01" allowBlank />
+                  </div>
+                  <div className="mt-3 grid gap-3">
+                    <label className="flex h-10 items-center justify-between rounded-xl px-3 text-[12px]" style={inputStyle}>
+                      Precisa agendar
+                      <input checked={draft.schedulingRequired} type="checkbox" onChange={(event) => patchDraft({ schedulingRequired: event.target.checked })} />
+                    </label>
+                    <input value={draft.accessInstructions} onChange={(event) => patchDraft({ accessInstructions: event.target.value.slice(0, 240) })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" placeholder="Acesso/execucao" style={inputStyle} />
+                    <input value={draft.deliveryInstructions} onChange={(event) => patchDraft({ deliveryInstructions: event.target.value.slice(0, 240) })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" placeholder="Instrucao de entrega" style={inputStyle} />
+                    <input value={draft.shippingNotes} onChange={(event) => patchDraft({ shippingNotes: event.target.value.slice(0, 240) })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" placeholder="Observacao de frete" style={inputStyle} />
+                  </div>
+                </Block>
+
+                <Block icon={Upload} title="Fotos, videos ou arquivos">
+                  <label className="flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed px-3 text-center text-[12px] text-slate-400 transition hover:border-cyan-300/60 hover:text-cyan-200" style={{ borderColor: "var(--ch-border)" }}>
+                    <Upload className="h-4 w-4" />
+                    {files.length > 0 ? `${files.length} arquivo(s)` : "Selecionar arquivos"}
+                    <input multiple accept="image/*,video/*,.pdf,.doc,.docx,.txt,.md,.csv" className="sr-only" type="file" onChange={handleFiles} />
+                  </label>
+                  {editingMedia.length > 0 ? (
+                    <div className="mt-3 grid gap-2">
+                      {editingMedia.map((media) => (
+                        <div key={media.id} className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-[11px]" style={{ borderColor: "var(--ch-border)" }}>
+                          <span className="flex min-w-0 items-center gap-2 text-slate-300"><MediaIcon media={media} /><span className="truncate">{media.fileName}</span></span>
+                          <button type="button" onClick={() => setEditingMedia((current) => current.filter((entry) => entry.id !== media.id))} className="grid h-7 w-7 place-items-center rounded-md border text-slate-400 hover:bg-rose-400/10 hover:text-rose-100" style={{ borderColor: "var(--ch-border)" }}>
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </Block>
+
+                <Block icon={CheckCircle2} title="Agente e venda">
+                  <Field label="Tag">
+                    <input value={draft.agentTag} onChange={(event) => patchDraft({ agentTag: event.target.value.slice(0, 120) })} className="h-10 w-full rounded-xl px-3 font-mono text-[12px] outline-none" placeholder="Automatico se vazio" style={inputStyle} />
+                  </Field>
+                  <div className="mt-3 grid gap-3 md:grid-cols-2">
+                    <Field label="Prompt do agente">
+                      <textarea value={draft.agentPrompt} onChange={(event) => patchDraft({ agentPrompt: event.target.value.slice(0, 1200) })} className="min-h-24 w-full resize-y rounded-xl px-3 py-3 text-[13px] leading-5 outline-none" style={inputStyle} />
+                    </Field>
+                    <Field label="Notas internas de venda">
+                      <textarea value={draft.salesNotes} onChange={(event) => patchDraft({ salesNotes: event.target.value.slice(0, 1200) })} className="min-h-24 w-full resize-y rounded-xl px-3 py-3 text-[13px] leading-5 outline-none" style={inputStyle} />
+                    </Field>
+                  </div>
+                </Block>
+
+                <div className="flex flex-wrap items-center gap-3">
+                  <button disabled={saving} type="submit" className="inline-flex h-11 items-center justify-center gap-2 rounded-xl px-5 text-[12px] font-bold transition disabled:opacity-50" style={{ background: "var(--ch-accent)", color: "#061015" }}>
+                    {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                    {saving ? "Salvando" : "Salvar produto"}
+                  </button>
+                  <button type="button" onClick={resetForm} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl px-4 text-[12px] font-semibold transition hover:opacity-90" style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)", color: "var(--ch-text)" }}>
+                    <Plus className="h-4 w-4" />
+                    Novo
+                  </button>
+                </div>
+              </form>
+            </Panel>
+
+            <div className="space-y-5">
+              <Panel title="Produtos cadastrados" eyebrow="vitrine / importacao">
+                <div className="grid gap-3">
+                  {products.length > 0 ? products.map((product) => (
+                    <ProductCard key={product.id} product={product} imports={catalog.imports.filter((item) => item.platformProductId === product.id).length} onCopy={() => copyText(product.agentTag)} onEdit={() => editProduct(product)} />
+                  )) : (
+                    <div className="rounded-xl border border-dashed px-4 py-10 text-center text-[12px] text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
+                      Nenhum produto ConnectyHub cadastrado ainda.
+                    </div>
+                  )}
+                </div>
+              </Panel>
+
+              <Panel title="Comissoes e repasses" eyebrow="vendas marketplace">
+                <div className="grid gap-3">
+                  {commissions.length > 0 ? commissions.map((commission) => (
+                    <CommissionCard
+                      key={commission.id}
+                      commission={commission}
+                      loading={commissionLoadingId === commission.id}
+                      product={products.find((item) => item.id === commission.platformProductId) ?? null}
+                      onStatus={(status) => updateCommissionStatus(commission, status)}
+                    />
+                  )) : (
+                    <div className="rounded-xl border border-dashed px-4 py-10 text-center text-[12px] text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
+                      Nenhuma comissao registrada ainda.
+                    </div>
+                  )}
+                </div>
+              </Panel>
+            </div>
+          </div>
+        </div>
+      )}
+    </ConnectyShell>
+  );
+
+  function patchDraft(patch: Partial<ProductDraft>) {
+    setDraft((current) => ({ ...current, ...patch }));
+  }
+
+  function addAttribute() {
+    setAttributes((current) => [...current, { id: "", name: "", valuesText: "" }]);
+  }
+
+  function updateAttribute(index: number, patch: Partial<AttributeDraft>) {
+    setAttributes((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item));
+  }
+
+  function removeAttribute(index: number) {
+    setAttributes((current) => current.filter((_, itemIndex) => itemIndex !== index));
+  }
+
+  function addSku() {
+    setSkus((current) => [...current, {
+      skuCode: "",
+      title: "",
+      attributesText: "",
+      price: "",
+      salePrice: "",
+      stockStatus: "in_stock",
+      stockQuantity: "",
+      lowStockThreshold: "",
+      weightGrams: "",
+      status: "active",
+    }]);
+  }
+
+  function updateSku(index: number, patch: Partial<SkuDraft>) {
+    setSkus((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item));
+  }
+
+  function removeSku(index: number) {
+    setSkus((current) => current.filter((_, itemIndex) => itemIndex !== index));
+  }
+}
+
+function ProductCard({ product, imports, onCopy, onEdit }: { product: PlatformProduct; imports: number; onCopy: () => void; onEdit: () => void }) {
+  const cover = product.media.find((media) => media.kind === "image");
+
+  return (
+    <div className="grid gap-3 rounded-xl border p-3 sm:grid-cols-[96px_minmax(0,1fr)]" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
+      <div className="relative grid aspect-square place-items-center overflow-hidden rounded-lg border" style={{ borderColor: "var(--ch-border)", background: "var(--ch-panel)" }}>
+        {cover ? <Image alt={product.name} className="object-cover" fill sizes="96px" src={cover.storageUrl} unoptimized /> : <PackagePlus className="h-8 w-8 text-slate-600" />}
+      </div>
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="min-w-0">
+            <p className="truncate text-[14px] font-semibold text-slate-100">{product.name}</p>
+            <p className="mt-1 flex flex-wrap gap-2 text-[11px] text-slate-500">
+              <span>{product.productCode}</span>
+              {product.category ? <span>{product.category}</span> : null}
+              {product.offer.salePrice ? <span>Oferta {product.offer.salePrice}</span> : product.price ? <span>{product.price}</span> : null}
+            </p>
+          </div>
+          <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
+            <StatusBadge status={product.status === "active" ? "online" : product.status === "draft" ? "warning" : "idle"} label={product.status} />
+            <NeonBadge tone={product.marketplaceStatus === "featured" ? "amber" : product.marketplaceStatus === "visible" ? "cyan" : "zinc"}>{product.marketplaceStatus}</NeonBadge>
+          </div>
+        </div>
+        <p className="mt-2 line-clamp-2 text-[12px] leading-5 text-slate-400">{product.shortDescription || product.commercialDescription}</p>
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          <MiniTag icon={BadgePercent}>{product.commissionPercentage}%</MiniTag>
+          <MiniTag icon={Truck}>{product.shipping.profile === "free" ? "frete gratis" : product.shipping.profile === "custom" ? "frete combinado" : "tabela por estado"}</MiniTag>
+          <MiniTag icon={Tags}>{product.skus.length || 1} SKU</MiniTag>
+          <MiniTag icon={PackagePlus}>{imports} import.</MiniTag>
+          {product.media.length > 0 ? <MiniTag icon={Upload}>{product.media.length} arq.</MiniTag> : null}
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button type="button" onClick={onEdit} className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10" style={{ borderColor: "var(--ch-border)" }}>
+            <Save className="h-3.5 w-3.5" />
+            Editar
+          </button>
+          <button type="button" onClick={onCopy} className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-slate-300 transition hover:bg-cyan-400/10 hover:text-cyan-100" style={{ borderColor: "var(--ch-border)" }}>
+            <Copy className="h-3.5 w-3.5" />
+            Copiar tag
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CommissionCard({
+  commission,
+  product,
+  loading,
+  onStatus,
+}: {
+  commission: PlatformProductCommission;
+  product: PlatformProduct | null;
+  loading: boolean;
+  onStatus: (status: PlatformProductCommissionStatus) => void;
+}) {
+  const title = readString(commission.metadata.product_name) ?? product?.name ?? "Produto ConnectyHub";
+
+  return (
+    <div className="rounded-xl border p-3" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate text-[13px] font-semibold text-slate-100">{title}</p>
+          <p className="mt-1 text-[11px] text-slate-500">
+            {commission.organizationId.slice(0, 8)} - {commission.saleQuantity} un. - venda {formatMoney(commission.saleAmount)}
+          </p>
+        </div>
+        <NeonBadge tone={commissionStatusTone(commission.status)}>{formatCommissionStatus(commission.status)}</NeonBadge>
+      </div>
+
+      <div className="mt-3 grid gap-2 sm:grid-cols-3">
+        <MiniValue label="Comissao" value={formatMoney(commission.commissionAmount)} />
+        <MiniValue label="Percentual" value={`${commission.commissionPercentage}%`} />
+        <MiniValue label="Libera em" value={formatDate(commission.releaseAt)} />
+      </div>
+
+      <div className="mt-3 flex flex-wrap gap-2">
+        {commission.status === "pending" ? (
+          <button type="button" disabled={loading} onClick={() => onStatus("available")} className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-emerald-100 transition hover:bg-emerald-400/10 disabled:opacity-50" style={{ borderColor: "var(--ch-border)" }}>
+            {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+            Liberar
+          </button>
+        ) : null}
+        {commission.status === "pending" || commission.status === "available" ? (
+          <button type="button" disabled={loading} onClick={() => onStatus("paid")} className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10 disabled:opacity-50" style={{ borderColor: "var(--ch-border)" }}>
+            {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+            Pago
+          </button>
+        ) : null}
+        {commission.status === "pending" || commission.status === "available" ? (
+          <button type="button" disabled={loading} onClick={() => onStatus("blocked")} className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-amber-100 transition hover:bg-amber-400/10 disabled:opacity-50" style={{ borderColor: "var(--ch-border)" }}>
+            Bloquear
+          </button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function Metric({ icon: Icon, label, value, detail }: { icon: LucideIcon; label: string; value: string; detail: string }) {
+  return (
+    <div className="rounded-2xl p-5" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}>
+      <div className="flex items-start justify-between gap-3">
+        <p className="font-mono text-[10px] uppercase tracking-widest text-slate-500">{label}</p>
+        <div className="flex h-9 w-9 items-center justify-center rounded-xl" style={{ background: "rgba(6,182,212,0.14)", color: "#22d3ee" }}>
+          <Icon className="h-4 w-4" />
+        </div>
+      </div>
+      <p className="mt-4 font-mono text-[26px] font-bold leading-none" style={{ color: "var(--ch-text)" }}>{value}</p>
+      <p className="mt-3 text-[12px] text-slate-500">{detail}</p>
+    </div>
+  );
+}
+
+function MiniValue({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border px-3 py-2" style={{ borderColor: "var(--ch-border)", background: "var(--ch-panel)" }}>
+      <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-slate-500">{label}</p>
+      <p className="mt-1 truncate text-[12px] font-semibold text-slate-200">{value}</p>
+    </div>
+  );
+}
+
+function Field({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <label className="block">
+      <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">{label}</span>
+      {children}
+    </label>
+  );
+}
+
+function NumberField({ label, value, onChange, step, allowBlank = false }: { label: string; value: string; onChange: (value: string) => void; step: string; allowBlank?: boolean }) {
+  return (
+    <Field label={label}>
+      <input type="number" min="0" step={step} value={value} onChange={(event) => onChange(allowBlank && event.target.value === "" ? "" : event.target.value)} className="h-10 w-full rounded-xl px-3 font-mono text-[13px] outline-none" style={inputStyle} />
+    </Field>
+  );
+}
+
+function Block({ icon: Icon, title, children }: { icon: LucideIcon; title: string; children: ReactNode }) {
+  return (
+    <div className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+      <div className="mb-3 flex items-center gap-2">
+        <Icon className="h-4 w-4 text-cyan-300" />
+        <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">{title}</p>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function MiniTag({ icon: Icon, children }: { icon: LucideIcon; children: ReactNode }) {
+  return (
+    <span className="inline-flex max-w-full items-center gap-1 rounded-md border px-2 py-1 text-[10px] text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
+      <Icon className="h-3 w-3 shrink-0" />
+      <span className="truncate">{children}</span>
+    </span>
+  );
+}
+
+function MediaIcon({ media }: { media: SalesCatalogMedia }) {
+  if (media.kind === "image") return <ImageIcon className="h-3 w-3" />;
+  if (media.kind === "video") return <Video className="h-3 w-3" />;
+  return <FileText className="h-3 w-3" />;
+}
+
+function createDraft(product: PlatformProduct | null): ProductDraft {
+  if (!product) return { ...emptyDraft };
+
+  return {
+    productId: product.id,
+    name: product.name,
+    productCode: product.productCode,
+    slug: product.slug,
+    shortDescription: product.shortDescription ?? "",
+    commercialDescription: product.commercialDescription,
+    category: product.category ?? "",
+    price: product.price ?? "",
+    currency: product.currency,
+    status: product.status,
+    marketplaceStatus: product.marketplaceStatus,
+    commissionPercentage: String(product.commissionPercentage),
+    commissionBase: product.commissionBase,
+    commissionReleaseDays: String(product.commissionReleaseDays),
+    recurringCommissionMonths: String(product.recurringCommissionMonths),
+    refundWindowDays: String(product.refundWindowDays),
+    salePrice: product.offer.salePrice ?? "",
+    saleStartsAt: product.offer.saleStartsAt ?? "",
+    saleEndsAt: product.offer.saleEndsAt ?? "",
+    couponCode: product.offer.couponCode ?? "",
+    couponDescription: product.offer.couponDescription ?? "",
+    callToAction: product.offer.callToAction ?? "",
+    offerNotes: product.offer.notes ?? "",
+    inventoryStatus: product.inventory.status,
+    stockQuantity: product.inventory.quantity !== null ? String(product.inventory.quantity) : "",
+    lowStockThreshold: product.inventory.lowStockThreshold !== null ? String(product.inventory.lowStockThreshold) : "",
+    allowBackorder: product.inventory.allowBackorder,
+    inventoryNotes: product.inventory.notes ?? "",
+    fulfillmentMode: product.fulfillment.mode,
+    schedulingRequired: product.fulfillment.schedulingRequired,
+    serviceDuration: product.fulfillment.serviceDuration ?? "",
+    deliveryInstructions: product.fulfillment.deliveryInstructions ?? "",
+    accessInstructions: product.fulfillment.accessInstructions ?? "",
+    weightGrams: product.shipping.weightGrams !== null ? String(product.shipping.weightGrams) : "",
+    lengthCm: product.shipping.dimensions.lengthCm !== null ? String(product.shipping.dimensions.lengthCm) : "",
+    widthCm: product.shipping.dimensions.widthCm !== null ? String(product.shipping.dimensions.widthCm) : "",
+    heightCm: product.shipping.dimensions.heightCm !== null ? String(product.shipping.dimensions.heightCm) : "",
+    shippingProfile: product.shipping.profile,
+    shippingNotes: product.shipping.notes ?? "",
+    agentTag: product.agentTag,
+    agentPrompt: product.agentPrompt ?? "",
+    salesNotes: product.salesNotes ?? "",
+  };
+}
+
+function attributesToPayload(attributes: AttributeDraft[]) {
+  return attributes
+    .map((attribute) => ({
+      id: slugInput(attribute.id || attribute.name),
+      name: attribute.name.trim(),
+      values: attribute.valuesText.split(/\n|,/).map((item) => item.trim()).filter(Boolean),
+    }))
+    .filter((attribute) => attribute.id && attribute.name && attribute.values.length > 0);
+}
+
+function skusToPayload(skus: SkuDraft[], draft: ProductDraft, attributes: ReturnType<typeof attributesToPayload>) {
+  return skus
+    .map((sku) => ({
+      skuCode: cleanCode(sku.skuCode),
+      title: sku.title.trim(),
+      attributes: parseSkuAttributes(sku.attributesText, attributes),
+      price: sku.price || draft.price,
+      salePrice: sku.salePrice || draft.salePrice,
+      currency: draft.currency,
+      stockStatus: sku.stockStatus,
+      stockQuantity: numberOrNull(sku.stockQuantity),
+      lowStockThreshold: numberOrNull(sku.lowStockThreshold),
+      weightGrams: numberOrNull(sku.weightGrams) ?? numberOrNull(draft.weightGrams),
+      dimensions: {
+        lengthCm: numberOrNull(draft.lengthCm),
+        widthCm: numberOrNull(draft.widthCm),
+        heightCm: numberOrNull(draft.heightCm),
+      },
+      mediaIds: [],
+      status: sku.status,
+    }))
+    .filter((sku) => sku.skuCode);
+}
+
+function parseSkuAttributes(value: string, fallback: ReturnType<typeof attributesToPayload>) {
+  if (!value.trim()) return fallback;
+
+  return value
+    .split(";")
+    .map((part) => {
+      const [name, values] = part.split(":");
+      if (!name || !values) return null;
+      return {
+        id: slugInput(name),
+        name: name.trim(),
+        values: values.split(",").map((item) => item.trim()).filter(Boolean),
+      };
+    })
+    .filter((item): item is { id: string; name: string; values: string[] } => Boolean(item && item.id && item.name && item.values.length > 0));
+}
+
+function buildMetrics(products: PlatformProduct[], imports: number, commissions: PlatformProductCommission[]) {
+  const active = products.filter((product) => product.status === "active");
+  const available = active.filter((product) => product.marketplaceStatus !== "hidden").length;
+  const featured = active.filter((product) => product.marketplaceStatus === "featured").length;
+  const averageCommission = active.length > 0
+    ? (active.reduce((total, product) => total + product.commissionPercentage, 0) / active.length).toFixed(1)
+    : "0";
+  const pendingCommissions = commissions.filter((commission) => commission.status === "pending").length;
+  const payableCommission = commissions
+    .filter((commission) => commission.status === "pending" || commission.status === "available")
+    .reduce((total, commission) => total + commission.commissionAmount, 0);
+
+  return { active: active.length, available, featured, imports, averageCommission, pendingCommissions, payableCommission };
+}
+
+function upsertProduct(products: PlatformProduct[], product: PlatformProduct) {
+  const exists = products.some((item) => item.id === product.id);
+  const next = exists ? products.map((item) => item.id === product.id ? product : item) : [product, ...products];
+  return next.sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt));
+}
+
+function cleanCode(value: string) {
+  return value.toUpperCase().replace(/[^A-Z0-9_-]+/g, "-").replace(/-+/g, "-").replace(/^-+|-+$/g, "").slice(0, 64);
+}
+
+function slugInput(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+}
+
+function digitsOnly(value: string) {
+  return value.replace(/\D+/g, "").slice(0, 8);
+}
+
+function numberOrNull(value: string) {
+  if (!value) return null;
+  const parsed = Number(value.replace(",", "."));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function copyText(value: string) {
+  void navigator.clipboard.writeText(value);
+}
+
+function formatMoney(value: number) {
+  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
+}
+
+function formatDate(value: string | null) {
+  if (!value) return "Sem data";
+  const time = Date.parse(value);
+  if (!Number.isFinite(time)) return "Sem data";
+  return new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit" }).format(new Date(time));
+}
+
+function formatCommissionStatus(status: PlatformProductCommissionStatus) {
+  const labels: Record<PlatformProductCommissionStatus, string> = {
+    pending: "pendente",
+    available: "liberada",
+    paid: "paga",
+    cancelled: "cancelada",
+    blocked: "bloqueada",
+    refunded: "estornada",
+  };
+
+  return labels[status];
+}
+
+function commissionStatusTone(status: PlatformProductCommissionStatus): "cyan" | "green" | "amber" | "rose" | "zinc" {
+  if (status === "available") return "green";
+  if (status === "paid") return "cyan";
+  if (status === "pending") return "amber";
+  if (status === "cancelled" || status === "refunded") return "rose";
+  return "zinc";
+}
+
+function readString(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}

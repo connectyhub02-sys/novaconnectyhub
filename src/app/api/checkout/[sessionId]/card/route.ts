@@ -7,8 +7,10 @@ import {
   createMercadoPagoCardPayment,
   ensureMercadoPagoAccessToken,
   extractMercadoPagoPixData,
+  loadMercadoPagoPlatformBillingConfig,
   normalizeCurrencyAmount,
 } from "@/lib/sales-catalog/mercado-pago";
+import { resolveSalesCatalogOrderPaymentOwner } from "@/lib/platform-product-sales";
 import { handleSalesCatalogApprovedPayment } from "@/lib/sales-catalog/post-payment";
 import { createServiceClient } from "@/lib/supabase/service";
 
@@ -25,6 +27,7 @@ type PaymentSessionRow = {
   amount: string | number | null;
   currency: string | null;
   payer_email: string | null;
+  metadata: JsonRecord | null;
 };
 
 type OrderRow = {
@@ -53,7 +56,7 @@ export async function POST(
   const client = createServiceClient();
   const { data: sourceSession, error: sessionError } = await client
     .from("sales_catalog_payment_sessions")
-    .select("id, organization_id, order_id, integration_id, amount, currency, payer_email")
+    .select("id, organization_id, order_id, integration_id, amount, currency, payer_email, metadata")
     .eq("id", sessionId)
     .maybeSingle<PaymentSessionRow>();
 
@@ -93,10 +96,31 @@ export async function POST(
   let cardSessionId: string | null = null;
 
   try {
-    const integration = await ensureMercadoPagoAccessToken({
+    const sourceMetadata = readRecord(sourceSession.metadata) ?? {};
+    const resolvedOwner = await resolveSalesCatalogOrderPaymentOwner({
       client,
       organizationId: sourceSession.organization_id,
+      orderId: order.id,
     });
+    const sourceOwner = readString(sourceMetadata.payment_owner);
+    const connectyHubOwned = sourceOwner === "connectyhub" || (!sourceOwner && resolvedOwner.owner === "connectyhub");
+    const platformProductIds = readStringList(sourceMetadata.platform_product_ids, resolvedOwner.platformProductIds);
+    const platformCatalogItemIds = readStringList(sourceMetadata.platform_catalog_item_ids, resolvedOwner.catalogItemIds);
+    const integration = connectyHubOwned
+      ? null
+      : await ensureMercadoPagoAccessToken({
+          client,
+          organizationId: sourceSession.organization_id,
+        });
+    const platformBilling = connectyHubOwned
+      ? await loadMercadoPagoPlatformBillingConfig({ client })
+      : null;
+    const accessToken = platformBilling?.accessToken ?? integration?.accessToken;
+
+    if (!accessToken) {
+      throw new Error("Nao foi possivel localizar a conta Mercado Pago para este pagamento.");
+    }
+
     cardSessionId = randomUUID();
     const idempotencyKey = randomUUID();
     const externalReference = `sales_catalog_order:${order.id}:${cardSessionId}`;
@@ -109,7 +133,7 @@ export async function POST(
         id: cardSessionId,
         organization_id: sourceSession.organization_id,
         order_id: order.id,
-        integration_id: integration.id,
+        integration_id: integration?.id ?? null,
         provider: "mercado_pago",
         method: "card",
         status: "created",
@@ -124,6 +148,11 @@ export async function POST(
           source_payment_session_id: sourceSession.id,
           payment_method_id: paymentMethodId,
           installments,
+          payment_owner: connectyHubOwned ? "connectyhub" : "seller",
+          payment_receiver: connectyHubOwned ? "connectyhub" : "seller",
+          platform_product_marketplace: connectyHubOwned,
+          platform_product_ids: platformProductIds,
+          platform_catalog_item_ids: platformCatalogItemIds,
         },
         created_at: now,
         updated_at: now,
@@ -136,7 +165,7 @@ export async function POST(
     }
 
     const payment = await createMercadoPagoCardPayment({
-      accessToken: integration.accessToken,
+      accessToken,
       amount,
       description,
       externalReference,
@@ -168,6 +197,11 @@ export async function POST(
           source_payment_session_id: sourceSession.id,
           payment_method_id: paymentMethodId,
           installments,
+          payment_owner: connectyHubOwned ? "connectyhub" : "seller",
+          payment_receiver: connectyHubOwned ? "connectyhub" : "seller",
+          platform_product_marketplace: connectyHubOwned,
+          platform_product_ids: platformProductIds,
+          platform_catalog_item_ids: platformCatalogItemIds,
           mercado_pago_payment_id: paymentData.providerPaymentId,
           mercado_pago_status: paymentData.providerStatus,
         },
@@ -211,6 +245,7 @@ export async function POST(
         provider_payment_id: paymentData.providerPaymentId,
         provider_status: paymentData.providerStatus,
         status: paymentData.status,
+        payment_owner: connectyHubOwned ? "connectyhub" : "seller",
         post_payment: postPayment,
       },
     });
@@ -333,4 +368,12 @@ function readString(value: unknown) {
 
 function readNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function readStringList(value: unknown, fallback: string[]) {
+  if (!Array.isArray(value)) return fallback;
+
+  return value
+    .map((item) => readString(item))
+    .filter((item): item is string => Boolean(item));
 }

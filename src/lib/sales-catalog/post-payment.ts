@@ -2,6 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
+import { recordPlatformProductCommissionsForApprovedPayment } from "@/lib/platform-product-sales";
 import { buildSalesCatalogContent, type SalesCatalogProductInventory, type SalesCatalogStockStatus } from "@/lib/sales-catalog/shared";
 import { mapSalesCatalogItem } from "@/lib/client-os/sales-catalog";
 import { loadUazapiCredentials, type UazapiCredentials } from "@/lib/whatsapp/uazapi-credentials";
@@ -105,8 +106,17 @@ export async function handleSalesCatalogApprovedPayment(input: {
     paymentMethodLabel: input.paymentMethodLabel,
     source: input.source,
   });
+  const commissions = await recordPlatformProductCommissionsForApprovedPayment({
+    client: input.client,
+    organizationId: input.organizationId,
+    orderId: input.orderId,
+    paymentSessionId: input.paymentSessionId,
+    providerPaymentId: input.providerPaymentId,
+    paymentMethodLabel: input.paymentMethodLabel,
+    source: input.source,
+  });
 
-  return { inventoryDeducted, whatsappNotified };
+  return { inventoryDeducted, whatsappNotified, commissions };
 }
 
 async function maybeDeductInventory(input: {

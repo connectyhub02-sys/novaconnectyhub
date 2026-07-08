@@ -6,12 +6,14 @@ import {
   mapSalesCatalogPaymentSession,
   type SalesCatalogPaymentSessionRow,
 } from "@/lib/client-os/sales-catalog";
+import { resolveSalesCatalogOrderPaymentOwner } from "@/lib/platform-product-sales";
 import {
   buildMercadoPagoWebhookUrl,
   buildSalesCatalogCheckoutUrl,
   createMercadoPagoPixPayment,
   ensureMercadoPagoAccessToken,
   extractMercadoPagoPixData,
+  loadMercadoPagoPlatformBillingConfig,
   normalizeCurrencyAmount,
 } from "./mercado-pago";
 
@@ -78,10 +80,27 @@ export async function createSalesCatalogPixPaymentSession(input: {
     throw new Error("Informe o total do pedido antes de gerar Pix.");
   }
 
-  const integration = await ensureMercadoPagoAccessToken({
+  const paymentOwner = await resolveSalesCatalogOrderPaymentOwner({
     client: input.client,
     organizationId: input.organizationId,
+    orderId: order.id,
   });
+  const connectyHubOwned = paymentOwner.owner === "connectyhub";
+  const integration = connectyHubOwned
+    ? null
+    : await ensureMercadoPagoAccessToken({
+        client: input.client,
+        organizationId: input.organizationId,
+      });
+  const platformBilling = connectyHubOwned
+    ? await loadMercadoPagoPlatformBillingConfig({ client: input.client })
+    : null;
+  const accessToken = platformBilling?.accessToken ?? integration?.accessToken;
+
+  if (!accessToken) {
+    throw new Error("Nao foi possivel localizar a conta Mercado Pago para este pagamento.");
+  }
+
   const sessionId = randomUUID();
   const idempotencyKey = randomUUID();
   const externalReference = `sales_catalog_order:${order.id}:${sessionId}`;
@@ -96,7 +115,7 @@ export async function createSalesCatalogPixPaymentSession(input: {
       id: sessionId,
       organization_id: input.organizationId,
       order_id: order.id,
-      integration_id: integration.id,
+      integration_id: integration?.id ?? null,
       provider: "mercado_pago",
       method: "pix",
       status: "created",
@@ -110,6 +129,11 @@ export async function createSalesCatalogPixPaymentSession(input: {
         created_from: input.source,
         actor_id: input.actorId ?? null,
         order_item_count: items.length,
+        payment_owner: paymentOwner.owner,
+        payment_receiver: connectyHubOwned ? "connectyhub" : "seller",
+        platform_product_marketplace: connectyHubOwned,
+        platform_product_ids: paymentOwner.platformProductIds,
+        platform_catalog_item_ids: paymentOwner.catalogItemIds,
       },
       created_at: now,
       updated_at: now,
@@ -123,7 +147,7 @@ export async function createSalesCatalogPixPaymentSession(input: {
 
   try {
     const pix = await createMercadoPagoPixPayment({
-      accessToken: integration.accessToken,
+      accessToken,
       amount,
       description,
       externalReference,
@@ -175,6 +199,9 @@ export async function createSalesCatalogPixPaymentSession(input: {
           latest_payment_provider: "mercado_pago",
           latest_payment_method: "pix",
           latest_provider_payment_id: pixData.providerPaymentId,
+          latest_payment_owner: paymentOwner.owner,
+          platform_product_marketplace: connectyHubOwned,
+          platform_product_ids: paymentOwner.platformProductIds,
         },
       })
       .eq("id", order.id)
@@ -198,6 +225,8 @@ export async function createSalesCatalogPixPaymentSession(input: {
         checkout_url: checkoutUrl,
         amount,
         source: input.source,
+        payment_owner: paymentOwner.owner,
+        platform_product_marketplace: connectyHubOwned,
       },
     });
 

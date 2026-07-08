@@ -50,6 +50,13 @@ type MercadoPagoOAuthConfig = {
   testTokenEnabled: boolean;
 };
 
+export type MercadoPagoPlatformBillingConfig = {
+  accessToken: string;
+  publicKey: string | null;
+  webhookSecret: string | null;
+  mode: "production" | "sandbox";
+};
+
 type PlatformCredentialRow = {
   env_name: string;
   encrypted_value: string | null;
@@ -58,6 +65,7 @@ type PlatformCredentialRow = {
 const mercadoPagoApiBaseUrl = "https://api.mercadopago.com";
 const mercadoPagoAuthorizationUrl = "https://auth.mercadopago.com/authorization";
 const mercadoPagoPlatformIntegrationId = "mercado-pago";
+const mercadoPagoBillingIntegrationId = "mercado-pago-billing";
 const mercadoPagoOAuthCredentialNames = [
   "MERCADO_PAGO_CLIENT_ID",
   "MERCADO_PAGO_CLIENT_SECRET",
@@ -65,6 +73,12 @@ const mercadoPagoOAuthCredentialNames = [
   "MERCADO_PAGO_TEST_TOKEN",
 ];
 const mercadoPagoWebhookCredentialNames = ["MERCADO_PAGO_WEBHOOK_SECRET"];
+const mercadoPagoBillingCredentialNames = [
+  "MERCADO_PAGO_BILLING_ACCESS_TOKEN",
+  "MERCADO_PAGO_BILLING_PUBLIC_KEY",
+  "MERCADO_PAGO_BILLING_WEBHOOK_SECRET",
+  "MERCADO_PAGO_BILLING_MODE",
+];
 
 export function getMercadoPagoOAuthConfig() {
   return buildMercadoPagoOAuthConfigFromCredentials(new Map());
@@ -88,6 +102,29 @@ export async function isMercadoPagoTestTokenEnabled(input: { client?: SupabaseCl
   return readEnabledFlag(getCredentialValue(credentials, ["MERCADO_PAGO_TEST_TOKEN"]));
 }
 
+export async function loadMercadoPagoPlatformBillingConfig(input: { client?: SupabaseClient } = {}): Promise<MercadoPagoPlatformBillingConfig> {
+  const credentials = await loadMercadoPagoPlatformCredentials(
+    input.client,
+    mercadoPagoBillingCredentialNames,
+    mercadoPagoBillingIntegrationId,
+  );
+  const accessToken = getCredentialValue(credentials, ["MERCADO_PAGO_BILLING_ACCESS_TOKEN"]);
+  const publicKey = getCredentialValue(credentials, ["MERCADO_PAGO_BILLING_PUBLIC_KEY"]) || null;
+  const webhookSecret = getCredentialValue(credentials, ["MERCADO_PAGO_BILLING_WEBHOOK_SECRET"]) || null;
+  const modeValue = getCredentialValue(credentials, ["MERCADO_PAGO_BILLING_MODE"]).toLowerCase();
+
+  if (!accessToken) {
+    throw new Error("Configure MERCADO_PAGO_BILLING_ACCESS_TOKEN para cobrar produtos ConnectyHub importados.");
+  }
+
+  return {
+    accessToken,
+    publicKey,
+    webhookSecret,
+    mode: modeValue === "sandbox" ? "sandbox" : "production",
+  };
+}
+
 function buildMercadoPagoOAuthConfigFromCredentials(credentials: Map<string, string>): MercadoPagoOAuthConfig {
   const clientId = getCredentialValue(credentials, ["MERCADO_PAGO_CLIENT_ID"]);
   const clientSecret = getCredentialValue(credentials, ["MERCADO_PAGO_CLIENT_SECRET"]);
@@ -102,7 +139,11 @@ function buildMercadoPagoOAuthConfigFromCredentials(credentials: Map<string, str
   return { clientId, clientSecret, redirectUri, testTokenEnabled };
 }
 
-async function loadMercadoPagoPlatformCredentials(client: SupabaseClient | undefined, envNames: string[]) {
+async function loadMercadoPagoPlatformCredentials(
+  client: SupabaseClient | undefined,
+  envNames: string[],
+  integrationId = mercadoPagoPlatformIntegrationId,
+) {
   const credentials = new Map<string, string>();
 
   if (client) {
@@ -110,7 +151,7 @@ async function loadMercadoPagoPlatformCredentials(client: SupabaseClient | undef
       .from("integration_credentials")
       .select("env_name, encrypted_value")
       .eq("scope", "platform")
-      .eq("integration_id", mercadoPagoPlatformIntegrationId)
+      .eq("integration_id", integrationId)
       .is("organization_id", null)
       .in("env_name", envNames)
       .order("updated_at", { ascending: false });

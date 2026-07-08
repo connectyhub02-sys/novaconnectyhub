@@ -1014,6 +1014,7 @@ async function createSalesCatalogOrder(input: {
     throw new Error("Produto nao encontrado para esta empresa.");
   }
 
+  const itemMetadata = readRecord(itemRow.metadata) ?? {};
   const item = mapSalesCatalogItem(itemRow);
   let skuRow: SalesCatalogSkuRow | null = null;
 
@@ -1067,6 +1068,12 @@ async function createSalesCatalogOrder(input: {
   const paymentStatus = normalizeSalesCatalogPaymentStatus(readFormString(input.body?.paymentStatus), "pending");
   const fulfillmentStatus = normalizeSalesCatalogFulfillmentStatus(readFormString(input.body?.fulfillmentStatus), "pending");
   const source = normalizeOptionalText(readFormString(input.body?.source), 40) ?? "dashboard";
+  const skuMetadata = readRecord(skuRow?.metadata) ?? {};
+  const platformProductId = readFormString(skuMetadata.platform_product_id) ?? readFormString(itemMetadata.platform_product_id);
+  const platformProductCode = readFormString(skuMetadata.platform_product_code) ?? readFormString(itemMetadata.platform_product_code);
+  const platformCommissionPercentage = normalizeNumber(itemMetadata.platform_product_commission_percentage);
+  const platformCommissionReleaseDays = normalizeNumber(itemMetadata.platform_product_commission_release_days);
+  const platformAgentPrompt = readFormString(itemMetadata.platform_product_agent_prompt);
   const now = new Date().toISOString();
 
   const { data: orderRow, error: orderError } = await input.client
@@ -1098,6 +1105,9 @@ async function createSalesCatalogOrder(input: {
         catalog_item_id: item.id,
         catalog_item_tag: item.tag,
         currency: item.currency,
+        platform_product_id: platformProductId,
+        platform_product_code: platformProductCode,
+        platform_product_marketplace: Boolean(platformProductId),
       },
       created_by: input.userId,
       created_at: now,
@@ -1132,6 +1142,11 @@ async function createSalesCatalogOrder(input: {
         stock_status: item.inventory.status,
         sku_code: skuRow?.sku_code ?? null,
         source: item.source,
+        platform_product_id: platformProductId,
+        platform_product_code: platformProductCode,
+        platform_product_commission_percentage: platformCommissionPercentage,
+        platform_product_commission_release_days: platformCommissionReleaseDays,
+        platform_product_agent_prompt: platformAgentPrompt,
       },
     })
     .select(salesCatalogOrderItemSelect)

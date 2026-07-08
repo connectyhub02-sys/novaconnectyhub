@@ -138,6 +138,7 @@ const adminSections: NavSection[] = [
       { label: "Clientes",          href: "/admin/clientes",          icon: Users, tone: "sky", badge: "142" },
       { label: "CRM Leads",         href: "/admin/leads",             icon: UserCheck, tone: "emerald" },
       { label: "Planos",            href: "/admin/planos",            icon: Coins, tone: "amber" },
+      { label: "Produtos CH",       href: "/admin/produtos-connectyhub", icon: ShoppingBag, tone: "amber" },
       { label: "WhatsApp Clientes", href: "/admin/clientes/whatsapp", icon: MessageCircle, tone: "teal" },
       { label: "API WhatsApp",      href: "/admin/api-whatsapp",      icon: PlugZap, tone: "emerald" },
     ],

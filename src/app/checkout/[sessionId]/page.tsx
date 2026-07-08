@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { CheckoutStatusPoller } from "@/components/checkout/checkout-status-poller";
 import { MercadoPagoCardBrick } from "@/components/checkout/mercado-pago-card-brick";
 import { createServiceClient } from "@/lib/supabase/service";
+import { loadMercadoPagoPlatformBillingConfig } from "@/lib/sales-catalog/mercado-pago";
 import { formatSalesCatalogPaymentSessionStatus } from "@/lib/sales-catalog/shared";
 import { cn } from "@/lib/utils";
 
@@ -34,6 +35,7 @@ type CheckoutSessionRow = {
   failure_reason: string | null;
   paid_at: string | null;
   updated_at: string | null;
+  metadata: JsonRecord | null;
 };
 
 type CheckoutOrderRow = {
@@ -324,7 +326,7 @@ function CheckoutState({
 async function loadCheckoutData(client: ReturnType<typeof createServiceClient>, sessionId: string) {
   const { data: session } = await client
     .from("sales_catalog_payment_sessions")
-    .select("id, organization_id, order_id, integration_id, provider, method, status, amount, currency, payer_email, pix_qr_code, pix_qr_code_base64, pix_ticket_url, provider_status, failure_reason, paid_at, updated_at")
+    .select("id, organization_id, order_id, integration_id, provider, method, status, amount, currency, payer_email, pix_qr_code, pix_qr_code_base64, pix_ticket_url, provider_status, failure_reason, paid_at, updated_at, metadata")
     .eq("id", sessionId)
     .maybeSingle<CheckoutSessionRow>();
 
@@ -338,7 +340,7 @@ async function loadCheckoutData(client: ReturnType<typeof createServiceClient>, 
     };
   }
 
-  const [orderResult, itemsResult, organizationResult, integrationResult] = await Promise.all([
+  const [orderResult, itemsResult, organizationResult, integration] = await Promise.all([
     client
       .from("sales_catalog_orders")
       .select("id, customer_name, customer_phone, subtotal, shipping_total, total, shipping_method, status, payment_status, metadata")
@@ -356,14 +358,7 @@ async function loadCheckoutData(client: ReturnType<typeof createServiceClient>, 
       .select("id, name, slug")
       .eq("id", session.organization_id)
       .maybeSingle<OrganizationRow>(),
-    session.integration_id
-      ? client
-          .from("sales_catalog_payment_integrations")
-          .select("id, public_key, status")
-          .eq("id", session.integration_id)
-          .eq("organization_id", session.organization_id)
-          .maybeSingle<CheckoutIntegrationRow>()
-      : Promise.resolve({ data: null }),
+    loadCheckoutIntegration(client, session),
   ]);
 
   return {
@@ -371,8 +366,38 @@ async function loadCheckoutData(client: ReturnType<typeof createServiceClient>, 
     order: orderResult.data ?? null,
     items: (itemsResult.data ?? []) as CheckoutOrderItemRow[],
     organization: organizationResult.data ?? null,
-    integration: integrationResult.data ?? null,
+    integration,
   };
+}
+
+async function loadCheckoutIntegration(client: ReturnType<typeof createServiceClient>, session: CheckoutSessionRow) {
+  if (session.integration_id) {
+    const { data } = await client
+      .from("sales_catalog_payment_integrations")
+      .select("id, public_key, status")
+      .eq("id", session.integration_id)
+      .eq("organization_id", session.organization_id)
+      .maybeSingle<CheckoutIntegrationRow>();
+
+    return data ?? null;
+  }
+
+  const metadata = readRecord(session.metadata);
+  if (readString(metadata.payment_owner) !== "connectyhub") {
+    return null;
+  }
+
+  try {
+    const billing = await loadMercadoPagoPlatformBillingConfig({ client });
+
+    return {
+      id: "connectyhub-platform-billing",
+      public_key: billing.publicKey,
+      status: billing.publicKey ? "connected" : "pending",
+    };
+  } catch {
+    return null;
+  }
 }
 
 function normalizePaymentSessionStatus(value: string | null) {
@@ -415,6 +440,14 @@ function normalizeCurrency(value: string | number | null | undefined) {
   const parsed = Number(String(value).replace(/[^\d,.-]/g, "").replace(/\.(?=\d{3}(\D|$))/g, "").replace(",", "."));
 
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function readRecord(value: unknown): JsonRecord {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as JsonRecord) : {};
+}
+
+function readString(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 function formatDateTime(value: string | null) {

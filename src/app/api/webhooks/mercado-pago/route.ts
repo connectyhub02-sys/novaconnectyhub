@@ -4,9 +4,11 @@ import {
   ensureMercadoPagoAccessToken,
   extractMercadoPagoPixData,
   getMercadoPagoPayment,
+  loadMercadoPagoPlatformBillingConfig,
   loadMercadoPagoWebhookSecret,
   verifyMercadoPagoWebhookSignature,
 } from "@/lib/sales-catalog/mercado-pago";
+import { markPlatformProductCommissionsForPaymentStatus } from "@/lib/platform-product-sales";
 import { handleSalesCatalogApprovedPayment } from "@/lib/sales-catalog/post-payment";
 import { createServiceClient } from "@/lib/supabase/service";
 
@@ -75,16 +77,25 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, ignored: true });
   }
 
-  const integration = await ensureMercadoPagoAccessToken({
-    client,
-    organizationId: session.organization_id,
-  }).catch(() => null);
+  const sessionMetadata = readRecord(session.metadata);
+  const connectyHubOwned = readString(sessionMetadata.payment_owner) === "connectyhub";
+  const integration = connectyHubOwned
+    ? null
+    : await ensureMercadoPagoAccessToken({
+        client,
+        organizationId: session.organization_id,
+      }).catch(() => null);
+  const platformBilling = connectyHubOwned
+    ? await loadMercadoPagoPlatformBillingConfig({ client }).catch(() => null)
+    : null;
   const platformWebhookSecret = await loadMercadoPagoWebhookSecret({ client });
   const signature = verifyMercadoPagoWebhookSignature({
     signatureHeader,
     requestId,
     dataId,
-    secret: integration?.webhookSecret ?? platformWebhookSecret,
+    secret: connectyHubOwned
+      ? (platformBilling?.webhookSecret ?? platformWebhookSecret)
+      : (integration?.webhookSecret ?? platformWebhookSecret),
   });
 
   if (!signature.ok) {
@@ -105,7 +116,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "invalid_signature" }, { status: 401 });
   }
 
-  if (!integration) {
+  const accessToken = connectyHubOwned ? platformBilling?.accessToken : integration?.accessToken;
+
+  if (!accessToken) {
     await recordWebhookEvent(client, {
       providerEventId,
       dataId,
@@ -117,7 +130,9 @@ export async function POST(request: NextRequest) {
       organizationId: session.organization_id,
       paymentSessionId: session.id,
       processingStatus: "failed",
-      errorMessage: "Integracao Mercado Pago indisponivel.",
+      errorMessage: connectyHubOwned
+        ? "Credenciais Mercado Pago ConnectyHub indisponiveis."
+        : "Integracao Mercado Pago indisponivel.",
     });
 
     return NextResponse.json({ ok: true, deferred: true });
@@ -125,7 +140,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const payment = await getMercadoPagoPayment({
-      accessToken: integration.accessToken,
+      accessToken,
       paymentId: dataId,
     });
     const pixData = extractMercadoPagoPixData(payment);
@@ -178,7 +193,13 @@ export async function POST(request: NextRequest) {
           paymentMethodLabel: "Pix Mercado Pago",
           source: "mercado_pago_webhook",
         })
-      : null;
+      : await markPlatformProductCommissionsForPaymentStatus({
+          client,
+          organizationId: session.organization_id,
+          paymentSessionId: session.id,
+          providerPaymentId: dataId,
+          status: pixData.status,
+        });
 
     await recordWebhookEvent(client, {
       providerEventId,
@@ -210,6 +231,7 @@ export async function POST(request: NextRequest) {
         provider_payment_id: dataId,
         provider_status: pixData.providerStatus,
         status: pixData.status,
+        payment_owner: connectyHubOwned ? "connectyhub" : "seller",
         post_payment: postPayment,
       },
     });
