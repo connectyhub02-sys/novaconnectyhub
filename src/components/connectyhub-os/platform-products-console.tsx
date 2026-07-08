@@ -180,6 +180,7 @@ export function PlatformProductsConsole({
   const [editingMedia, setEditingMedia] = useState<SalesCatalogMedia[]>([]);
   const [commissions, setCommissions] = useState(catalog.commissions);
   const [saving, setSaving] = useState(false);
+  const [publishingProductId, setPublishingProductId] = useState<string | null>(null);
   const [commissionLoadingId, setCommissionLoadingId] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [activeTab, setActiveTab] = useState<PlatformProductAdminTab>("products");
@@ -218,48 +219,58 @@ export function PlatformProductsConsole({
   }
 
   function buildFormData() {
-    const formData = new FormData();
-    const attributesPayload = attributesToPayload(attributes);
-    const skusPayload = skusToPayload(skus, draft, attributesPayload);
-
-    for (const [key, value] of Object.entries(draft)) {
-      formData.set(key, typeof value === "boolean" ? String(value) : value);
-    }
-
-    formData.set("attributes", JSON.stringify(attributesPayload));
-    formData.set("skus", JSON.stringify(skusPayload));
-    formData.set("keepMediaIds", JSON.stringify(editingMedia.map((media) => media.id)));
-
-    for (const file of files) {
-      formData.append("files", file);
-    }
-
-    return formData;
+    return buildProductFormData({
+      attributes,
+      draft,
+      files,
+      keepMediaIds: editingMedia.map((media) => media.id),
+      skus,
+    });
   }
 
   function editProduct(product: PlatformProduct) {
     setDraft(createDraft(product));
-    setAttributes(product.attributes.map((attribute) => ({
-      id: attribute.id,
-      name: attribute.name,
-      valuesText: attribute.values.join("\n"),
-    })));
-    setSkus(product.skus.map((sku) => ({
-      skuCode: sku.skuCode,
-      title: sku.title ?? "",
-      attributesText: sku.attributes.map((attribute) => `${attribute.name}: ${attribute.values.join(", ")}`).join("; "),
-      price: sku.price ?? "",
-      salePrice: sku.salePrice ?? "",
-      stockStatus: sku.stockStatus,
-      stockQuantity: sku.stockQuantity !== null ? String(sku.stockQuantity) : "",
-      lowStockThreshold: sku.lowStockThreshold !== null ? String(sku.lowStockThreshold) : "",
-      weightGrams: sku.weightGrams !== null ? String(sku.weightGrams) : "",
-      status: sku.status,
-    })));
+    setAttributes(productAttributesToDrafts(product));
+    setSkus(productSkusToDrafts(product));
     setEditingMedia(product.media);
     setFiles([]);
     setNotice(null);
     setActiveTab("products");
+  }
+
+  async function publishProduct(product: PlatformProduct) {
+    setPublishingProductId(product.id);
+    setNotice(null);
+
+    try {
+      const formData = buildProductFormData({
+        attributes: productAttributesToDrafts(product),
+        draft: {
+          ...createDraft(product),
+          status: "active",
+          marketplaceStatus: product.marketplaceStatus === "featured" ? "featured" : "visible",
+        },
+        keepMediaIds: product.media.map((media) => media.id),
+        skus: productSkusToDrafts(product),
+      });
+      const response = await fetch("/api/admin/platform-products", {
+        method: "PATCH",
+        body: formData,
+      });
+      const data = (await response.json().catch(() => null)) as { product?: PlatformProduct; error?: string } | null;
+
+      if (!response.ok || !data?.product) {
+        throw new Error(data?.error ?? "Nao foi possivel publicar o produto.");
+      }
+
+      setProducts((current) => upsertProduct(current, data.product!));
+      setNotice({ tone: "success", message: "Produto publicado. Ele ja pode aparecer em Produtos no painel do usuario apos atualizar a pagina." });
+      router.refresh();
+    } catch (error) {
+      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Falha ao publicar produto." });
+    } finally {
+      setPublishingProductId(null);
+    }
   }
 
   function resetForm() {
@@ -706,7 +717,15 @@ export function PlatformProductsConsole({
                 <Panel title="Produtos cadastrados" eyebrow="vitrine / importacao">
                   <div className="grid gap-3">
                     {products.length > 0 ? products.map((product) => (
-                      <ProductCard key={product.id} product={product} imports={catalog.imports.filter((item) => item.platformProductId === product.id).length} onCopy={() => copyText(product.agentTag)} onEdit={() => editProduct(product)} />
+                      <ProductCard
+                        key={product.id}
+                        product={product}
+                        imports={catalog.imports.filter((item) => item.platformProductId === product.id).length}
+                        publishing={publishingProductId === product.id}
+                        onCopy={() => copyText(product.agentTag)}
+                        onEdit={() => editProduct(product)}
+                        onPublish={() => publishProduct(product)}
+                      />
                     )) : (
                       <div className="rounded-xl border border-dashed px-4 py-10 text-center text-[12px] text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
                         Nenhum produto ConnectyHub cadastrado ainda.
@@ -770,8 +789,23 @@ export function PlatformProductsConsole({
   }
 }
 
-function ProductCard({ product, imports, onCopy, onEdit }: { product: PlatformProduct; imports: number; onCopy: () => void; onEdit: () => void }) {
+function ProductCard({
+  product,
+  imports,
+  publishing,
+  onCopy,
+  onEdit,
+  onPublish,
+}: {
+  product: PlatformProduct;
+  imports: number;
+  publishing: boolean;
+  onCopy: () => void;
+  onEdit: () => void;
+  onPublish: () => void;
+}) {
   const cover = product.media.find((media) => media.kind === "image");
+  const isVisibleToClients = product.status === "active" && product.marketplaceStatus !== "hidden";
 
   return (
     <div className="grid gap-3 rounded-xl border p-3 sm:grid-cols-[96px_minmax(0,1fr)]" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
@@ -802,6 +836,12 @@ function ProductCard({ product, imports, onCopy, onEdit }: { product: PlatformPr
           {product.media.length > 0 ? <MiniTag icon={Upload}>{product.media.length} arq.</MiniTag> : null}
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
+          {!isVisibleToClients ? (
+            <button type="button" disabled={publishing} onClick={onPublish} className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-emerald-100 transition hover:bg-emerald-400/10 disabled:opacity-50" style={{ borderColor: "var(--ch-border)" }}>
+              {publishing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+              Publicar
+            </button>
+          ) : null}
           <button type="button" onClick={onEdit} className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10" style={{ borderColor: "var(--ch-border)" }}>
             <Save className="h-3.5 w-3.5" />
             Editar
@@ -1003,6 +1043,61 @@ function createDraft(product: PlatformProduct | null): ProductDraft {
     agentPrompt: product.agentPrompt ?? "",
     salesNotes: product.salesNotes ?? "",
   };
+}
+
+function productAttributesToDrafts(product: PlatformProduct): AttributeDraft[] {
+  return product.attributes.map((attribute) => ({
+    id: attribute.id,
+    name: attribute.name,
+    valuesText: attribute.values.join("\n"),
+  }));
+}
+
+function productSkusToDrafts(product: PlatformProduct): SkuDraft[] {
+  return product.skus.map((sku) => ({
+    skuCode: sku.skuCode,
+    title: sku.title ?? "",
+    attributesText: sku.attributes.map((attribute) => `${attribute.name}: ${attribute.values.join(", ")}`).join("; "),
+    price: sku.price ?? "",
+    salePrice: sku.salePrice ?? "",
+    stockStatus: sku.stockStatus,
+    stockQuantity: sku.stockQuantity !== null ? String(sku.stockQuantity) : "",
+    lowStockThreshold: sku.lowStockThreshold !== null ? String(sku.lowStockThreshold) : "",
+    weightGrams: sku.weightGrams !== null ? String(sku.weightGrams) : "",
+    status: sku.status,
+  }));
+}
+
+function buildProductFormData({
+  attributes,
+  draft,
+  files = [],
+  keepMediaIds,
+  skus,
+}: {
+  attributes: AttributeDraft[];
+  draft: ProductDraft;
+  files?: File[];
+  keepMediaIds: string[];
+  skus: SkuDraft[];
+}) {
+  const formData = new FormData();
+  const attributesPayload = attributesToPayload(attributes);
+  const skusPayload = skusToPayload(skus, draft, attributesPayload);
+
+  for (const [key, value] of Object.entries(draft)) {
+    formData.set(key, typeof value === "boolean" ? String(value) : value);
+  }
+
+  formData.set("attributes", JSON.stringify(attributesPayload));
+  formData.set("skus", JSON.stringify(skusPayload));
+  formData.set("keepMediaIds", JSON.stringify(keepMediaIds));
+
+  for (const file of files) {
+    formData.append("files", file);
+  }
+
+  return formData;
 }
 
 function attributesToPayload(attributes: AttributeDraft[]) {
