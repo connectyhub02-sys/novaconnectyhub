@@ -111,6 +111,8 @@ type Notice = {
   message: string;
 };
 
+type PlatformProductAdminTab = "setup" | "products" | "shipping" | "marketplace" | "commissions";
+
 const emptyDraft: ProductDraft = {
   productId: "",
   name: "",
@@ -180,6 +182,7 @@ export function PlatformProductsConsole({
   const [saving, setSaving] = useState(false);
   const [commissionLoadingId, setCommissionLoadingId] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
+  const [activeTab, setActiveTab] = useState<PlatformProductAdminTab>("products");
   const metrics = useMemo(() => buildMetrics(products, catalog.imports.length, commissions), [products, catalog.imports.length, commissions]);
   const categories = useMemo(() => Array.from(new Set([
     ...salesCatalogBusinessTemplates.flatMap((template) => template.categories),
@@ -256,6 +259,7 @@ export function PlatformProductsConsole({
     setEditingMedia(product.media);
     setFiles([]);
     setNotice(null);
+    setActiveTab("products");
   }
 
   function resetForm() {
@@ -264,6 +268,7 @@ export function PlatformProductsConsole({
     setSkus([]);
     setFiles([]);
     setEditingMedia([]);
+    setActiveTab("products");
   }
 
   function applyTemplate(templateValue: string) {
@@ -357,289 +362,355 @@ export function PlatformProductsConsole({
             <Metric icon={CheckCircle2} label="Repasses" value={formatMoney(metrics.payableCommission)} detail={`${metrics.pendingCommissions} pendentes`} />
           </div>
 
-          <div className="grid gap-5 xl:grid-cols-[minmax(380px,0.82fr)_minmax(0,1fr)]">
-            <Panel title={draft.productId ? "Editar produto ConnectyHub" : "Novo produto ConnectyHub"} eyebrow="cadastro espelhado ao catalogo">
-              <form className="space-y-4" onSubmit={saveProduct}>
-                <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_160px]">
-                  <Field label="Nome">
-                    <input value={draft.name} onChange={(event) => patchDraft({ name: event.target.value.slice(0, 120) })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" style={inputStyle} />
-                  </Field>
-                  <Field label="Status">
-                    <select value={draft.status} onChange={(event) => patchDraft({ status: event.target.value as PlatformProductStatus })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" style={inputStyle}>
-                      <option value="draft">Rascunho</option>
-                      <option value="active">Ativo</option>
-                      <option value="paused">Pausado</option>
-                      <option value="archived">Arquivado</option>
-                    </select>
-                  </Field>
-                </div>
+          <div className="flex flex-wrap gap-2">
+            <CatalogTabButton active={activeTab === "setup"} icon={SlidersHorizontal} label="Configuracao" onClick={() => setActiveTab("setup")} />
+            <CatalogTabButton active={activeTab === "products"} icon={PackagePlus} label="Produtos" onClick={() => setActiveTab("products")} />
+            <CatalogTabButton active={activeTab === "shipping"} icon={Truck} label="Entrega e Frete" onClick={() => setActiveTab("shipping")} />
+            <CatalogTabButton active={activeTab === "marketplace"} icon={BadgePercent} label="Vitrine / Comissao" onClick={() => setActiveTab("marketplace")} />
+            <CatalogTabButton active={activeTab === "commissions"} icon={CheckCircle2} label="Repasses" onClick={() => setActiveTab("commissions")} />
+          </div>
 
-                <div className="grid gap-3 md:grid-cols-[1fr_1fr_170px]">
-                  <Field label="Codigo">
-                    <input value={draft.productCode} onChange={(event) => patchDraft({ productCode: cleanCode(event.target.value) })} className="h-10 w-full rounded-xl px-3 font-mono text-[12px] outline-none" placeholder="Automatico se vazio" style={inputStyle} />
-                  </Field>
-                  <Field label="Slug">
-                    <input value={draft.slug} onChange={(event) => patchDraft({ slug: slugInput(event.target.value) })} className="h-10 w-full rounded-xl px-3 font-mono text-[12px] outline-none" placeholder="Automatico se vazio" style={inputStyle} />
-                  </Field>
-                  <Field label="Vitrine usuario">
-                    <select value={draft.marketplaceStatus} onChange={(event) => patchDraft({ marketplaceStatus: event.target.value as PlatformProductMarketplaceStatus })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" style={inputStyle}>
-                      <option value="hidden">Oculto</option>
-                      <option value="visible">Visivel</option>
-                      <option value="featured">Destaque</option>
-                    </select>
-                  </Field>
-                </div>
-
-                <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_150px]">
-                  <Field label="Categoria">
-                    <input list="platform-product-categories" value={draft.category} onChange={(event) => patchDraft({ category: event.target.value.slice(0, 80) })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" style={inputStyle} />
-                    <datalist id="platform-product-categories">
-                      {categories.map((category) => <option key={category} value={category} />)}
-                    </datalist>
-                  </Field>
-                  <Field label="Valor">
-                    <input value={draft.price} onChange={(event) => patchDraft({ price: event.target.value.slice(0, 60) })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" placeholder="R$ 197,00" style={inputStyle} />
-                  </Field>
-                </div>
-
-                <Field label="Descricao curta para vitrine">
-                  <input value={draft.shortDescription} onChange={(event) => patchDraft({ shortDescription: event.target.value.slice(0, 220) })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" style={inputStyle} />
-                </Field>
-
-                <Field label="Descricao comercial">
-                  <textarea value={draft.commercialDescription} onChange={(event) => patchDraft({ commercialDescription: event.target.value.slice(0, 2200) })} className="min-h-28 w-full resize-y rounded-xl px-3 py-3 text-[13px] leading-5 outline-none" style={inputStyle} />
-                </Field>
-
-                <Block icon={BadgePercent} title="Regra de comissao">
-                  <div className="grid gap-3 md:grid-cols-5">
-                    <NumberField label="% comissao" value={draft.commissionPercentage} onChange={(value) => patchDraft({ commissionPercentage: value })} step="0.01" />
-                    <Field label="Base">
-                      <select value={draft.commissionBase} onChange={(event) => patchDraft({ commissionBase: event.target.value as "gross" | "net" })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" style={inputStyle}>
-                        <option value="gross">Bruto</option>
-                        <option value="net">Liquido</option>
-                      </select>
-                    </Field>
-                    <NumberField label="Repasse dias" value={draft.commissionReleaseDays} onChange={(value) => patchDraft({ commissionReleaseDays: value })} step="1" />
-                    <NumberField label="Recorrencia meses" value={draft.recurringCommissionMonths} onChange={(value) => patchDraft({ recurringCommissionMonths: value })} step="1" />
-                    <NumberField label="Garantia dias" value={draft.refundWindowDays} onChange={(value) => patchDraft({ refundWindowDays: value })} step="1" />
+          {activeTab === "commissions" ? (
+            <Panel title="Comissoes e repasses" eyebrow="vendas marketplace">
+              <div className="grid gap-3 lg:grid-cols-2">
+                {commissions.length > 0 ? commissions.map((commission) => (
+                  <CommissionCard
+                    key={commission.id}
+                    commission={commission}
+                    loading={commissionLoadingId === commission.id}
+                    product={products.find((item) => item.id === commission.platformProductId) ?? null}
+                    onStatus={(status) => updateCommissionStatus(commission, status)}
+                  />
+                )) : (
+                  <div className="rounded-xl border border-dashed px-4 py-10 text-center text-[12px] text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
+                    Nenhuma comissao registrada ainda.
                   </div>
-                </Block>
+                )}
+              </div>
+            </Panel>
+          ) : (
+            <div className="grid gap-5 xl:grid-cols-[minmax(380px,0.82fr)_minmax(0,1fr)]">
+              <Panel
+                title={activeTab === "setup" ? "Configuracao do Catalogo" : draft.productId ? "Editar item" : "Novo item"}
+                eyebrow={activeTab === "marketplace" ? "connectyhub marketplace" : activeTab === "shipping" ? "entrega e frete" : "catalogo de produtos"}
+              >
+                <form className="space-y-4" onSubmit={saveProduct}>
+                  {activeTab === "setup" ? (
+                    <>
+                      <Block icon={SlidersHorizontal} title="Base do catalogo ConnectyHub">
+                        <div className="grid gap-3 md:grid-cols-3">
+                          <MiniValue label="Origem" value="Produtos CH" />
+                          <MiniValue label="Destino" value="Painel do usuario" />
+                          <MiniValue label="Venda" value="Comissao" />
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {salesCatalogBusinessTemplates.map((template) => (
+                            <button key={template.value} type="button" onClick={() => applyTemplate(template.value)} className="rounded-lg border px-3 py-2 font-mono text-[10px] uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10" style={{ borderColor: "var(--ch-border)" }}>
+                              {template.label}
+                            </button>
+                          ))}
+                        </div>
+                      </Block>
 
-                <Block icon={SlidersHorizontal} title="Variacoes padrao">
-                  <div className="mb-3 flex flex-wrap gap-2">
-                    {salesCatalogBusinessTemplates.map((template) => (
-                      <button key={template.value} type="button" onClick={() => applyTemplate(template.value)} className="rounded-lg border px-3 py-2 font-mono text-[10px] uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10" style={{ borderColor: "var(--ch-border)" }}>
-                        {template.label}
-                      </button>
-                    ))}
-                    <button type="button" onClick={addAttribute} className="rounded-lg border px-3 py-2 font-mono text-[10px] uppercase tracking-wide text-slate-300 transition hover:bg-cyan-400/10" style={{ borderColor: "var(--ch-border)" }}>
-                      + variacao
-                    </button>
-                  </div>
-                  <div className="grid gap-3">
-                    {attributes.map((attribute, index) => (
-                      <div key={`${attribute.id}-${index}`} className="grid gap-2 md:grid-cols-[150px_180px_minmax(0,1fr)_40px]">
-                        <input value={attribute.id} onChange={(event) => updateAttribute(index, { id: slugInput(event.target.value) })} className="h-10 rounded-xl px-3 font-mono text-[12px] outline-none" placeholder="id" style={inputStyle} />
-                        <input value={attribute.name} onChange={(event) => updateAttribute(index, { name: event.target.value.slice(0, 80) })} className="h-10 rounded-xl px-3 text-[13px] outline-none" placeholder="Nome" style={inputStyle} />
-                        <textarea value={attribute.valuesText} onChange={(event) => updateAttribute(index, { valuesText: event.target.value.slice(0, 700) })} className="min-h-10 rounded-xl px-3 py-2 text-[13px] outline-none" placeholder="Um valor por linha" style={inputStyle} />
-                        <button type="button" onClick={() => removeAttribute(index)} className="grid h-10 place-items-center rounded-xl border text-slate-400 transition hover:bg-rose-400/10 hover:text-rose-100" style={{ borderColor: "var(--ch-border)" }}>
-                          <Trash2 className="h-4 w-4" />
-                        </button>
+                      <Block icon={Tags} title="Categorias usadas">
+                        {categories.length > 0 ? (
+                          <div className="flex flex-wrap gap-2">
+                            {categories.slice(0, 28).map((category) => (
+                              <span key={category} className="rounded-lg border px-3 py-2 text-[11px] text-slate-300" style={{ borderColor: "var(--ch-border)" }}>
+                                {category}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="rounded-xl border border-dashed px-3 py-4 text-center text-[12px] text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
+                            As categorias aparecem conforme os produtos forem cadastrados.
+                          </p>
+                        )}
+                      </Block>
+                    </>
+                  ) : null}
+
+                  {activeTab === "products" ? (
+                    <>
+                      <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_150px]">
+                        <Field label="Nome">
+                          <input value={draft.name} onChange={(event) => patchDraft({ name: event.target.value.slice(0, 120) })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" placeholder="Ex.: Mentoria, camiseta preta, pacote digital" style={inputStyle} />
+                        </Field>
+                        <Field label="Valor">
+                          <input value={draft.price} onChange={(event) => patchDraft({ price: event.target.value.slice(0, 60) })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" placeholder="R$ 197,00" style={inputStyle} />
+                        </Field>
                       </div>
-                    ))}
-                  </div>
-                </Block>
 
-                <Block icon={PackagePlus} title="Estoque">
-                  <div className="grid gap-3 md:grid-cols-4">
-                    <Field label="Disponibilidade">
-                      <select value={draft.inventoryStatus} onChange={(event) => patchDraft({ inventoryStatus: event.target.value as SalesCatalogStockStatus })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" style={inputStyle}>
-                        <option value="in_stock">Disponivel</option>
-                        <option value="out_of_stock">Esgotado</option>
-                        <option value="on_backorder">Sob encomenda</option>
-                      </select>
-                    </Field>
-                    <NumberField label="Quantidade" value={draft.stockQuantity} onChange={(value) => patchDraft({ stockQuantity: value })} step="1" allowBlank />
-                    <NumberField label="Alerta baixo" value={draft.lowStockThreshold} onChange={(value) => patchDraft({ lowStockThreshold: value })} step="1" allowBlank />
-                    <label className="mt-[18px] flex h-10 items-center justify-between rounded-xl px-3 text-[12px]" style={inputStyle}>
-                      Aceita encomenda
-                      <input checked={draft.allowBackorder} type="checkbox" onChange={(event) => patchDraft({ allowBackorder: event.target.checked })} />
-                    </label>
-                  </div>
-                  <input value={draft.inventoryNotes} onChange={(event) => patchDraft({ inventoryNotes: event.target.value.slice(0, 240) })} className="mt-3 h-10 w-full rounded-xl px-3 text-[13px] outline-none" placeholder="Observacoes de estoque" style={inputStyle} />
-                </Block>
+                      <Field label="Categoria">
+                        <input list="platform-product-categories" value={draft.category} onChange={(event) => patchDraft({ category: event.target.value.slice(0, 80) })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" placeholder="Produto, servico, curso, roupa" style={inputStyle} />
+                        <datalist id="platform-product-categories">
+                          {categories.map((category) => <option key={category} value={category} />)}
+                        </datalist>
+                      </Field>
 
-                <Block icon={Tags} title="SKUs e variacoes vendaveis">
-                  <div className="mb-3 flex justify-end">
-                    <button type="button" onClick={addSku} className="inline-flex h-9 items-center gap-2 rounded-xl border px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-cyan-100" style={{ borderColor: "var(--ch-border)" }}>
-                      <Plus className="h-3.5 w-3.5" />
-                      Adicionar SKU
-                    </button>
-                  </div>
-                  <div className="grid gap-3">
-                    {skus.length > 0 ? skus.map((sku, index) => (
-                      <div key={`${sku.skuCode}-${index}`} className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-panel)" }}>
-                        <div className="grid gap-2 lg:grid-cols-[150px_minmax(140px,1fr)_minmax(180px,1.2fr)_40px]">
-                          <input value={sku.skuCode} onChange={(event) => updateSku(index, { skuCode: cleanCode(event.target.value) })} className="h-10 rounded-xl px-3 font-mono text-[12px] outline-none" placeholder="SKU" style={inputStyle} />
-                          <input value={sku.title} onChange={(event) => updateSku(index, { title: event.target.value.slice(0, 120) })} className="h-10 rounded-xl px-3 text-[13px] outline-none" placeholder="Nome interno" style={inputStyle} />
-                          <input value={sku.attributesText} onChange={(event) => updateSku(index, { attributesText: event.target.value.slice(0, 220) })} className="h-10 rounded-xl px-3 text-[13px] outline-none" placeholder="Tamanho: M; Cor: Preto" style={inputStyle} />
-                          <button type="button" onClick={() => removeSku(index)} className="grid h-10 place-items-center rounded-xl border text-slate-400 transition hover:bg-rose-400/10 hover:text-rose-100" style={{ borderColor: "var(--ch-border)" }}>
-                            <Trash2 className="h-4 w-4" />
+                      <Field label="Descricao curta para vitrine">
+                        <input value={draft.shortDescription} onChange={(event) => patchDraft({ shortDescription: event.target.value.slice(0, 220) })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" style={inputStyle} />
+                      </Field>
+
+                      <Field label="Descricao comercial">
+                        <textarea value={draft.commercialDescription} onChange={(event) => patchDraft({ commercialDescription: event.target.value.slice(0, 2200) })} className="min-h-28 w-full resize-y rounded-xl px-3 py-3 text-[13px] leading-5 outline-none" placeholder="O que e, para quem serve, beneficios, entrega, garantias e condicoes." style={inputStyle} />
+                      </Field>
+
+                      <Block icon={BadgePercent} title="Oferta e fechamento">
+                        <div className="grid gap-3 md:grid-cols-4">
+                          <Field label="Promocional"><input value={draft.salePrice} onChange={(event) => patchDraft({ salePrice: event.target.value.slice(0, 60) })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" style={inputStyle} /></Field>
+                          <Field label="Cupom"><input value={draft.couponCode} onChange={(event) => patchDraft({ couponCode: cleanCode(event.target.value) })} className="h-10 w-full rounded-xl px-3 font-mono text-[12px] outline-none" style={inputStyle} /></Field>
+                          <Field label="Inicio"><input type="date" value={draft.saleStartsAt} onChange={(event) => patchDraft({ saleStartsAt: event.target.value })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" style={inputStyle} /></Field>
+                          <Field label="Fim"><input type="date" value={draft.saleEndsAt} onChange={(event) => patchDraft({ saleEndsAt: event.target.value })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" style={inputStyle} /></Field>
+                        </div>
+                        <div className="mt-3 grid gap-3">
+                          <input value={draft.couponDescription} onChange={(event) => patchDraft({ couponDescription: event.target.value.slice(0, 160) })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" placeholder="Descricao do cupom" style={inputStyle} />
+                          <input value={draft.callToAction} onChange={(event) => patchDraft({ callToAction: event.target.value.slice(0, 180) })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" placeholder="Chamada que o agente pode usar" style={inputStyle} />
+                          <input value={draft.offerNotes} onChange={(event) => patchDraft({ offerNotes: event.target.value.slice(0, 240) })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" placeholder="Condicoes comerciais" style={inputStyle} />
+                        </div>
+                      </Block>
+
+                      <Block icon={SlidersHorizontal} title="Variacoes deste item">
+                        <div className="mb-3 flex flex-wrap gap-2">
+                          {salesCatalogBusinessTemplates.map((template) => (
+                            <button key={template.value} type="button" onClick={() => applyTemplate(template.value)} className="rounded-lg border px-3 py-2 font-mono text-[10px] uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10" style={{ borderColor: "var(--ch-border)" }}>
+                              {template.label}
+                            </button>
+                          ))}
+                          <button type="button" onClick={addAttribute} className="rounded-lg border px-3 py-2 font-mono text-[10px] uppercase tracking-wide text-slate-300 transition hover:bg-cyan-400/10" style={{ borderColor: "var(--ch-border)" }}>
+                            + variacao
                           </button>
                         </div>
-                        <div className="mt-2 grid gap-2 md:grid-cols-6">
-                          <input value={sku.price} onChange={(event) => updateSku(index, { price: event.target.value.slice(0, 60) })} className="h-10 rounded-xl px-3 text-[13px] outline-none" placeholder="Preco" style={inputStyle} />
-                          <input value={sku.salePrice} onChange={(event) => updateSku(index, { salePrice: event.target.value.slice(0, 60) })} className="h-10 rounded-xl px-3 text-[13px] outline-none" placeholder="Oferta" style={inputStyle} />
-                          <select value={sku.stockStatus} onChange={(event) => updateSku(index, { stockStatus: event.target.value as SalesCatalogStockStatus })} className="h-10 rounded-xl px-3 text-[13px] outline-none" style={inputStyle}>
-                            <option value="in_stock">Disponivel</option>
-                            <option value="out_of_stock">Esgotado</option>
-                            <option value="on_backorder">Encomenda</option>
-                          </select>
-                          <input value={sku.stockQuantity} onChange={(event) => updateSku(index, { stockQuantity: digitsOnly(event.target.value) })} className="h-10 rounded-xl px-3 text-[13px] outline-none" placeholder="Qtd." style={inputStyle} />
-                          <input value={sku.weightGrams} onChange={(event) => updateSku(index, { weightGrams: digitsOnly(event.target.value) })} className="h-10 rounded-xl px-3 text-[13px] outline-none" placeholder="Peso g" style={inputStyle} />
-                          <select value={sku.status} onChange={(event) => updateSku(index, { status: event.target.value as SalesCatalogSkuStatus })} className="h-10 rounded-xl px-3 text-[13px] outline-none" style={inputStyle}>
-                            <option value="active">Ativo</option>
-                            <option value="draft">Rascunho</option>
-                          </select>
+                        <div className="grid gap-3">
+                          {attributes.map((attribute, index) => (
+                            <div key={`${attribute.id}-${index}`} className="grid gap-2 md:grid-cols-[150px_180px_minmax(0,1fr)_40px]">
+                              <input value={attribute.id} onChange={(event) => updateAttribute(index, { id: slugInput(event.target.value) })} className="h-10 rounded-xl px-3 font-mono text-[12px] outline-none" placeholder="id" style={inputStyle} />
+                              <input value={attribute.name} onChange={(event) => updateAttribute(index, { name: event.target.value.slice(0, 80) })} className="h-10 rounded-xl px-3 text-[13px] outline-none" placeholder="Nome" style={inputStyle} />
+                              <textarea value={attribute.valuesText} onChange={(event) => updateAttribute(index, { valuesText: event.target.value.slice(0, 700) })} className="min-h-10 rounded-xl px-3 py-2 text-[13px] outline-none" placeholder="Um valor por linha" style={inputStyle} />
+                              <button type="button" onClick={() => removeAttribute(index)} className="grid h-10 place-items-center rounded-xl border text-slate-400 transition hover:bg-rose-400/10 hover:text-rose-100" style={{ borderColor: "var(--ch-border)" }}>
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </div>
+                          ))}
                         </div>
+                      </Block>
+
+                      <Block icon={PackagePlus} title="Estoque deste item">
+                        <div className="grid gap-3 md:grid-cols-4">
+                          <Field label="Disponibilidade">
+                            <select value={draft.inventoryStatus} onChange={(event) => patchDraft({ inventoryStatus: event.target.value as SalesCatalogStockStatus })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" style={inputStyle}>
+                              <option value="in_stock">Disponivel</option>
+                              <option value="out_of_stock">Esgotado</option>
+                              <option value="on_backorder">Sob encomenda</option>
+                            </select>
+                          </Field>
+                          <NumberField label="Quantidade" value={draft.stockQuantity} onChange={(value) => patchDraft({ stockQuantity: value })} step="1" allowBlank />
+                          <NumberField label="Alerta baixo" value={draft.lowStockThreshold} onChange={(value) => patchDraft({ lowStockThreshold: value })} step="1" allowBlank />
+                          <label className="mt-[18px] flex h-10 items-center justify-between rounded-xl px-3 text-[12px]" style={inputStyle}>
+                            Aceita encomenda
+                            <input checked={draft.allowBackorder} type="checkbox" onChange={(event) => patchDraft({ allowBackorder: event.target.checked })} />
+                          </label>
+                        </div>
+                        <input value={draft.inventoryNotes} onChange={(event) => patchDraft({ inventoryNotes: event.target.value.slice(0, 240) })} className="mt-3 h-10 w-full rounded-xl px-3 text-[13px] outline-none" placeholder="Observacoes de estoque" style={inputStyle} />
+                      </Block>
+
+                      <Block icon={Tags} title="SKUs e variacoes vendaveis">
+                        <div className="mb-3 flex justify-end">
+                          <button type="button" onClick={addSku} className="inline-flex h-9 items-center gap-2 rounded-xl border px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-cyan-100" style={{ borderColor: "var(--ch-border)" }}>
+                            <Plus className="h-3.5 w-3.5" />
+                            Adicionar SKU
+                          </button>
+                        </div>
+                        <div className="grid gap-3">
+                          {skus.length > 0 ? skus.map((sku, index) => (
+                            <div key={`${sku.skuCode}-${index}`} className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-panel)" }}>
+                              <div className="grid gap-2 lg:grid-cols-[150px_minmax(140px,1fr)_minmax(180px,1.2fr)_40px]">
+                                <input value={sku.skuCode} onChange={(event) => updateSku(index, { skuCode: cleanCode(event.target.value) })} className="h-10 rounded-xl px-3 font-mono text-[12px] outline-none" placeholder="SKU" style={inputStyle} />
+                                <input value={sku.title} onChange={(event) => updateSku(index, { title: event.target.value.slice(0, 120) })} className="h-10 rounded-xl px-3 text-[13px] outline-none" placeholder="Nome interno" style={inputStyle} />
+                                <input value={sku.attributesText} onChange={(event) => updateSku(index, { attributesText: event.target.value.slice(0, 220) })} className="h-10 rounded-xl px-3 text-[13px] outline-none" placeholder="Tamanho: M; Cor: Preto" style={inputStyle} />
+                                <button type="button" onClick={() => removeSku(index)} className="grid h-10 place-items-center rounded-xl border text-slate-400 transition hover:bg-rose-400/10 hover:text-rose-100" style={{ borderColor: "var(--ch-border)" }}>
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              </div>
+                              <div className="mt-2 grid gap-2 md:grid-cols-6">
+                                <input value={sku.price} onChange={(event) => updateSku(index, { price: event.target.value.slice(0, 60) })} className="h-10 rounded-xl px-3 text-[13px] outline-none" placeholder="Preco" style={inputStyle} />
+                                <input value={sku.salePrice} onChange={(event) => updateSku(index, { salePrice: event.target.value.slice(0, 60) })} className="h-10 rounded-xl px-3 text-[13px] outline-none" placeholder="Oferta" style={inputStyle} />
+                                <select value={sku.stockStatus} onChange={(event) => updateSku(index, { stockStatus: event.target.value as SalesCatalogStockStatus })} className="h-10 rounded-xl px-3 text-[13px] outline-none" style={inputStyle}>
+                                  <option value="in_stock">Disponivel</option>
+                                  <option value="out_of_stock">Esgotado</option>
+                                  <option value="on_backorder">Encomenda</option>
+                                </select>
+                                <input value={sku.stockQuantity} onChange={(event) => updateSku(index, { stockQuantity: digitsOnly(event.target.value) })} className="h-10 rounded-xl px-3 text-[13px] outline-none" placeholder="Qtd." style={inputStyle} />
+                                <input value={sku.weightGrams} onChange={(event) => updateSku(index, { weightGrams: digitsOnly(event.target.value) })} className="h-10 rounded-xl px-3 text-[13px] outline-none" placeholder="Peso g" style={inputStyle} />
+                                <select value={sku.status} onChange={(event) => updateSku(index, { status: event.target.value as SalesCatalogSkuStatus })} className="h-10 rounded-xl px-3 text-[13px] outline-none" style={inputStyle}>
+                                  <option value="active">Ativo</option>
+                                  <option value="draft">Rascunho</option>
+                                </select>
+                              </div>
+                            </div>
+                          )) : (
+                            <p className="rounded-xl border border-dashed px-3 py-4 text-center text-[12px] text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
+                              Sem SKUs manuais. Na importacao, o sistema cria um SKU principal automaticamente.
+                            </p>
+                          )}
+                        </div>
+                      </Block>
+
+                      <Block icon={Upload} title="Fotos, videos ou arquivos">
+                        <label className="flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed px-3 text-center text-[12px] text-slate-400 transition hover:border-cyan-300/60 hover:text-cyan-200" style={{ borderColor: "var(--ch-border)" }}>
+                          <Upload className="h-4 w-4" />
+                          {files.length > 0 ? `${files.length} arquivo(s)` : "Selecionar arquivos"}
+                          <input multiple accept="image/*,video/*,.pdf,.doc,.docx,.txt,.md,.csv" className="sr-only" type="file" onChange={handleFiles} />
+                        </label>
+                        {editingMedia.length > 0 ? (
+                          <div className="mt-3 grid gap-2">
+                            {editingMedia.map((media) => (
+                              <div key={media.id} className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-[11px]" style={{ borderColor: "var(--ch-border)" }}>
+                                <span className="flex min-w-0 items-center gap-2 text-slate-300"><MediaIcon media={media} /><span className="truncate">{media.fileName}</span></span>
+                                <button type="button" onClick={() => setEditingMedia((current) => current.filter((entry) => entry.id !== media.id))} className="grid h-7 w-7 place-items-center rounded-md border text-slate-400 hover:bg-rose-400/10 hover:text-rose-100" style={{ borderColor: "var(--ch-border)" }}>
+                                  <X className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
+                      </Block>
+
+                      <Block icon={CheckCircle2} title="Agente e venda">
+                        <Field label="Tag">
+                          <input value={draft.agentTag} onChange={(event) => patchDraft({ agentTag: event.target.value.slice(0, 120) })} className="h-10 w-full rounded-xl px-3 font-mono text-[12px] outline-none" placeholder="Automatico se vazio" style={inputStyle} />
+                        </Field>
+                        <div className="mt-3 grid gap-3 md:grid-cols-2">
+                          <Field label="Prompt do agente">
+                            <textarea value={draft.agentPrompt} onChange={(event) => patchDraft({ agentPrompt: event.target.value.slice(0, 1200) })} className="min-h-24 w-full resize-y rounded-xl px-3 py-3 text-[13px] leading-5 outline-none" style={inputStyle} />
+                          </Field>
+                          <Field label="Notas internas de venda">
+                            <textarea value={draft.salesNotes} onChange={(event) => patchDraft({ salesNotes: event.target.value.slice(0, 1200) })} className="min-h-24 w-full resize-y rounded-xl px-3 py-3 text-[13px] leading-5 outline-none" style={inputStyle} />
+                          </Field>
+                        </div>
+                      </Block>
+                    </>
+                  ) : null}
+
+                  {activeTab === "shipping" ? (
+                    <Block icon={Truck} title="Entrega deste item">
+                      <div className="grid gap-3 md:grid-cols-4">
+                        <Field label="Tipo">
+                          <select value={draft.fulfillmentMode} onChange={(event) => patchDraft({ fulfillmentMode: event.target.value as SalesCatalogFulfillmentMode })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" style={inputStyle}>
+                            <option value="physical">Produto fisico</option>
+                            <option value="digital">Digital no WhatsApp</option>
+                            <option value="service">Servico</option>
+                            <option value="subscription">Assinatura</option>
+                          </select>
+                        </Field>
+                        <Field label="Prazo/duracao"><input value={draft.serviceDuration} onChange={(event) => patchDraft({ serviceDuration: event.target.value.slice(0, 80) })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" style={inputStyle} /></Field>
+                        <NumberField label="Peso g" value={draft.weightGrams} onChange={(value) => patchDraft({ weightGrams: value })} step="1" allowBlank />
+                        <Field label="Frete">
+                          <select value={draft.shippingProfile} onChange={(event) => patchDraft({ shippingProfile: event.target.value as SalesCatalogShippingProfile })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" style={inputStyle}>
+                            <option value="default">Tabela por estado</option>
+                            <option value="free">Frete gratis</option>
+                            <option value="custom">Combinar</option>
+                          </select>
+                        </Field>
                       </div>
+                      <div className="mt-3 grid gap-3 md:grid-cols-3">
+                        <NumberField label="Comprimento cm" value={draft.lengthCm} onChange={(value) => patchDraft({ lengthCm: value })} step="0.01" allowBlank />
+                        <NumberField label="Largura cm" value={draft.widthCm} onChange={(value) => patchDraft({ widthCm: value })} step="0.01" allowBlank />
+                        <NumberField label="Altura cm" value={draft.heightCm} onChange={(value) => patchDraft({ heightCm: value })} step="0.01" allowBlank />
+                      </div>
+                      <div className="mt-3 grid gap-3">
+                        <label className="flex h-10 items-center justify-between rounded-xl px-3 text-[12px]" style={inputStyle}>
+                          Precisa agendar
+                          <input checked={draft.schedulingRequired} type="checkbox" onChange={(event) => patchDraft({ schedulingRequired: event.target.checked })} />
+                        </label>
+                        <input value={draft.accessInstructions} onChange={(event) => patchDraft({ accessInstructions: event.target.value.slice(0, 240) })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" placeholder="Acesso/execucao" style={inputStyle} />
+                        <input value={draft.deliveryInstructions} onChange={(event) => patchDraft({ deliveryInstructions: event.target.value.slice(0, 240) })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" placeholder="Instrucao de entrega" style={inputStyle} />
+                        <input value={draft.shippingNotes} onChange={(event) => patchDraft({ shippingNotes: event.target.value.slice(0, 240) })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" placeholder="Observacao de frete" style={inputStyle} />
+                      </div>
+                    </Block>
+                  ) : null}
+
+                  {activeTab === "marketplace" ? (
+                    <>
+                      <Block icon={PackagePlus} title="Produto no marketplace">
+                        <div className="grid gap-3 md:grid-cols-[1fr_1fr_160px_170px]">
+                          <Field label="Codigo">
+                            <input value={draft.productCode} onChange={(event) => patchDraft({ productCode: cleanCode(event.target.value) })} className="h-10 w-full rounded-xl px-3 font-mono text-[12px] outline-none" placeholder="Automatico se vazio" style={inputStyle} />
+                          </Field>
+                          <Field label="Slug">
+                            <input value={draft.slug} onChange={(event) => patchDraft({ slug: slugInput(event.target.value) })} className="h-10 w-full rounded-xl px-3 font-mono text-[12px] outline-none" placeholder="Automatico se vazio" style={inputStyle} />
+                          </Field>
+                          <Field label="Status">
+                            <select value={draft.status} onChange={(event) => patchDraft({ status: event.target.value as PlatformProductStatus })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" style={inputStyle}>
+                              <option value="draft">Rascunho</option>
+                              <option value="active">Ativo</option>
+                              <option value="paused">Pausado</option>
+                              <option value="archived">Arquivado</option>
+                            </select>
+                          </Field>
+                          <Field label="Vitrine usuario">
+                            <select value={draft.marketplaceStatus} onChange={(event) => patchDraft({ marketplaceStatus: event.target.value as PlatformProductMarketplaceStatus })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" style={inputStyle}>
+                              <option value="hidden">Oculto</option>
+                              <option value="visible">Visivel</option>
+                              <option value="featured">Destaque</option>
+                            </select>
+                          </Field>
+                        </div>
+                      </Block>
+
+                      <Block icon={BadgePercent} title="Regra de comissao">
+                        <div className="grid gap-3 md:grid-cols-5">
+                          <NumberField label="% comissao" value={draft.commissionPercentage} onChange={(value) => patchDraft({ commissionPercentage: value })} step="0.01" />
+                          <Field label="Base">
+                            <select value={draft.commissionBase} onChange={(event) => patchDraft({ commissionBase: event.target.value as "gross" | "net" })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" style={inputStyle}>
+                              <option value="gross">Bruto</option>
+                              <option value="net">Liquido</option>
+                            </select>
+                          </Field>
+                          <NumberField label="Repasse dias" value={draft.commissionReleaseDays} onChange={(value) => patchDraft({ commissionReleaseDays: value })} step="1" />
+                          <NumberField label="Recorrencia meses" value={draft.recurringCommissionMonths} onChange={(value) => patchDraft({ recurringCommissionMonths: value })} step="1" />
+                          <NumberField label="Garantia dias" value={draft.refundWindowDays} onChange={(value) => patchDraft({ refundWindowDays: value })} step="1" />
+                        </div>
+                      </Block>
+                    </>
+                  ) : null}
+
+                  <div className="flex flex-wrap items-center gap-3">
+                    <button disabled={saving || !draft.name.trim()} type="submit" className="inline-flex h-11 items-center justify-center gap-2 rounded-xl px-5 text-[12px] font-bold transition disabled:opacity-50" style={{ background: "var(--ch-accent)", color: "#061015" }}>
+                      {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                      {saving ? "Salvando" : "Salvar produto"}
+                    </button>
+                    <button type="button" onClick={resetForm} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl px-4 text-[12px] font-semibold transition hover:opacity-90" style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)", color: "var(--ch-text)" }}>
+                      <Plus className="h-4 w-4" />
+                      Novo
+                    </button>
+                  </div>
+                </form>
+              </Panel>
+
+              <div className="space-y-5">
+                <Panel title="Produtos cadastrados" eyebrow="vitrine / importacao">
+                  <div className="grid gap-3">
+                    {products.length > 0 ? products.map((product) => (
+                      <ProductCard key={product.id} product={product} imports={catalog.imports.filter((item) => item.platformProductId === product.id).length} onCopy={() => copyText(product.agentTag)} onEdit={() => editProduct(product)} />
                     )) : (
-                      <p className="rounded-xl border border-dashed px-3 py-4 text-center text-[12px] text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
-                        Sem SKUs manuais. Na importacao, o sistema cria um SKU principal automaticamente.
-                      </p>
+                      <div className="rounded-xl border border-dashed px-4 py-10 text-center text-[12px] text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
+                        Nenhum produto ConnectyHub cadastrado ainda.
+                      </div>
                     )}
                   </div>
-                </Block>
+                </Panel>
 
-                <Block icon={BadgePercent} title="Oferta e fechamento">
-                  <div className="grid gap-3 md:grid-cols-4">
-                    <Field label="Promocional"><input value={draft.salePrice} onChange={(event) => patchDraft({ salePrice: event.target.value.slice(0, 60) })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" style={inputStyle} /></Field>
-                    <Field label="Cupom"><input value={draft.couponCode} onChange={(event) => patchDraft({ couponCode: cleanCode(event.target.value) })} className="h-10 w-full rounded-xl px-3 font-mono text-[12px] outline-none" style={inputStyle} /></Field>
-                    <Field label="Inicio"><input type="date" value={draft.saleStartsAt} onChange={(event) => patchDraft({ saleStartsAt: event.target.value })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" style={inputStyle} /></Field>
-                    <Field label="Fim"><input type="date" value={draft.saleEndsAt} onChange={(event) => patchDraft({ saleEndsAt: event.target.value })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" style={inputStyle} /></Field>
+                <Panel title="Importacao no painel do usuario" eyebrow="produtos">
+                  <div className="grid gap-2 text-[12px] leading-5 text-slate-400">
+                    <MiniValue label="Origem do dinheiro" value="ConnectyHub" />
+                    <MiniValue label="Cliente importa em" value="/dashboard/produtos" />
+                    <MiniValue label="Venda entra em" value="Catalogo de Vendas" />
                   </div>
-                  <div className="mt-3 grid gap-3">
-                    <input value={draft.couponDescription} onChange={(event) => patchDraft({ couponDescription: event.target.value.slice(0, 160) })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" placeholder="Descricao do cupom" style={inputStyle} />
-                    <input value={draft.callToAction} onChange={(event) => patchDraft({ callToAction: event.target.value.slice(0, 180) })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" placeholder="Chamada que o agente pode usar" style={inputStyle} />
-                    <input value={draft.offerNotes} onChange={(event) => patchDraft({ offerNotes: event.target.value.slice(0, 240) })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" placeholder="Condicoes comerciais" style={inputStyle} />
-                  </div>
-                </Block>
-
-                <Block icon={Truck} title="Entrega deste item">
-                  <div className="grid gap-3 md:grid-cols-4">
-                    <Field label="Tipo">
-                      <select value={draft.fulfillmentMode} onChange={(event) => patchDraft({ fulfillmentMode: event.target.value as SalesCatalogFulfillmentMode })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" style={inputStyle}>
-                        <option value="physical">Produto fisico</option>
-                        <option value="digital">Digital no WhatsApp</option>
-                        <option value="service">Servico</option>
-                        <option value="subscription">Assinatura</option>
-                      </select>
-                    </Field>
-                    <Field label="Prazo/duracao"><input value={draft.serviceDuration} onChange={(event) => patchDraft({ serviceDuration: event.target.value.slice(0, 80) })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" style={inputStyle} /></Field>
-                    <NumberField label="Peso g" value={draft.weightGrams} onChange={(value) => patchDraft({ weightGrams: value })} step="1" allowBlank />
-                    <Field label="Frete">
-                      <select value={draft.shippingProfile} onChange={(event) => patchDraft({ shippingProfile: event.target.value as SalesCatalogShippingProfile })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" style={inputStyle}>
-                        <option value="default">Tabela por estado</option>
-                        <option value="free">Frete gratis</option>
-                        <option value="custom">Combinar</option>
-                      </select>
-                    </Field>
-                  </div>
-                  <div className="mt-3 grid gap-3 md:grid-cols-3">
-                    <NumberField label="Comprimento cm" value={draft.lengthCm} onChange={(value) => patchDraft({ lengthCm: value })} step="0.01" allowBlank />
-                    <NumberField label="Largura cm" value={draft.widthCm} onChange={(value) => patchDraft({ widthCm: value })} step="0.01" allowBlank />
-                    <NumberField label="Altura cm" value={draft.heightCm} onChange={(value) => patchDraft({ heightCm: value })} step="0.01" allowBlank />
-                  </div>
-                  <div className="mt-3 grid gap-3">
-                    <label className="flex h-10 items-center justify-between rounded-xl px-3 text-[12px]" style={inputStyle}>
-                      Precisa agendar
-                      <input checked={draft.schedulingRequired} type="checkbox" onChange={(event) => patchDraft({ schedulingRequired: event.target.checked })} />
-                    </label>
-                    <input value={draft.accessInstructions} onChange={(event) => patchDraft({ accessInstructions: event.target.value.slice(0, 240) })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" placeholder="Acesso/execucao" style={inputStyle} />
-                    <input value={draft.deliveryInstructions} onChange={(event) => patchDraft({ deliveryInstructions: event.target.value.slice(0, 240) })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" placeholder="Instrucao de entrega" style={inputStyle} />
-                    <input value={draft.shippingNotes} onChange={(event) => patchDraft({ shippingNotes: event.target.value.slice(0, 240) })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" placeholder="Observacao de frete" style={inputStyle} />
-                  </div>
-                </Block>
-
-                <Block icon={Upload} title="Fotos, videos ou arquivos">
-                  <label className="flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed px-3 text-center text-[12px] text-slate-400 transition hover:border-cyan-300/60 hover:text-cyan-200" style={{ borderColor: "var(--ch-border)" }}>
-                    <Upload className="h-4 w-4" />
-                    {files.length > 0 ? `${files.length} arquivo(s)` : "Selecionar arquivos"}
-                    <input multiple accept="image/*,video/*,.pdf,.doc,.docx,.txt,.md,.csv" className="sr-only" type="file" onChange={handleFiles} />
-                  </label>
-                  {editingMedia.length > 0 ? (
-                    <div className="mt-3 grid gap-2">
-                      {editingMedia.map((media) => (
-                        <div key={media.id} className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-[11px]" style={{ borderColor: "var(--ch-border)" }}>
-                          <span className="flex min-w-0 items-center gap-2 text-slate-300"><MediaIcon media={media} /><span className="truncate">{media.fileName}</span></span>
-                          <button type="button" onClick={() => setEditingMedia((current) => current.filter((entry) => entry.id !== media.id))} className="grid h-7 w-7 place-items-center rounded-md border text-slate-400 hover:bg-rose-400/10 hover:text-rose-100" style={{ borderColor: "var(--ch-border)" }}>
-                            <X className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  ) : null}
-                </Block>
-
-                <Block icon={CheckCircle2} title="Agente e venda">
-                  <Field label="Tag">
-                    <input value={draft.agentTag} onChange={(event) => patchDraft({ agentTag: event.target.value.slice(0, 120) })} className="h-10 w-full rounded-xl px-3 font-mono text-[12px] outline-none" placeholder="Automatico se vazio" style={inputStyle} />
-                  </Field>
-                  <div className="mt-3 grid gap-3 md:grid-cols-2">
-                    <Field label="Prompt do agente">
-                      <textarea value={draft.agentPrompt} onChange={(event) => patchDraft({ agentPrompt: event.target.value.slice(0, 1200) })} className="min-h-24 w-full resize-y rounded-xl px-3 py-3 text-[13px] leading-5 outline-none" style={inputStyle} />
-                    </Field>
-                    <Field label="Notas internas de venda">
-                      <textarea value={draft.salesNotes} onChange={(event) => patchDraft({ salesNotes: event.target.value.slice(0, 1200) })} className="min-h-24 w-full resize-y rounded-xl px-3 py-3 text-[13px] leading-5 outline-none" style={inputStyle} />
-                    </Field>
-                  </div>
-                </Block>
-
-                <div className="flex flex-wrap items-center gap-3">
-                  <button disabled={saving} type="submit" className="inline-flex h-11 items-center justify-center gap-2 rounded-xl px-5 text-[12px] font-bold transition disabled:opacity-50" style={{ background: "var(--ch-accent)", color: "#061015" }}>
-                    {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                    {saving ? "Salvando" : "Salvar produto"}
-                  </button>
-                  <button type="button" onClick={resetForm} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl px-4 text-[12px] font-semibold transition hover:opacity-90" style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)", color: "var(--ch-text)" }}>
-                    <Plus className="h-4 w-4" />
-                    Novo
-                  </button>
-                </div>
-              </form>
-            </Panel>
-
-            <div className="space-y-5">
-              <Panel title="Produtos cadastrados" eyebrow="vitrine / importacao">
-                <div className="grid gap-3">
-                  {products.length > 0 ? products.map((product) => (
-                    <ProductCard key={product.id} product={product} imports={catalog.imports.filter((item) => item.platformProductId === product.id).length} onCopy={() => copyText(product.agentTag)} onEdit={() => editProduct(product)} />
-                  )) : (
-                    <div className="rounded-xl border border-dashed px-4 py-10 text-center text-[12px] text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
-                      Nenhum produto ConnectyHub cadastrado ainda.
-                    </div>
-                  )}
-                </div>
-              </Panel>
-
-              <Panel title="Comissoes e repasses" eyebrow="vendas marketplace">
-                <div className="grid gap-3">
-                  {commissions.length > 0 ? commissions.map((commission) => (
-                    <CommissionCard
-                      key={commission.id}
-                      commission={commission}
-                      loading={commissionLoadingId === commission.id}
-                      product={products.find((item) => item.id === commission.platformProductId) ?? null}
-                      onStatus={(status) => updateCommissionStatus(commission, status)}
-                    />
-                  )) : (
-                    <div className="rounded-xl border border-dashed px-4 py-10 text-center text-[12px] text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
-                      Nenhuma comissao registrada ainda.
-                    </div>
-                  )}
-                </div>
-              </Panel>
+                </Panel>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       )}
     </ConnectyShell>
@@ -835,6 +906,24 @@ function Block({ icon: Icon, title, children }: { icon: LucideIcon; title: strin
       </div>
       {children}
     </div>
+  );
+}
+
+function CatalogTabButton({ active, icon: Icon, label, onClick }: { active: boolean; icon: LucideIcon; label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex min-h-11 items-center gap-2 rounded-xl border px-4 text-[12px] font-bold transition hover:bg-cyan-400/10"
+      style={{
+        background: active ? "rgba(34,211,238,0.14)" : "rgba(15,23,42,0.36)",
+        borderColor: active ? "rgba(34,211,238,0.75)" : "var(--ch-border)",
+        color: active ? "#cffafe" : "var(--ch-text)",
+      }}
+    >
+      <Icon className="h-4 w-4" />
+      {label}
+    </button>
   );
 }
 
