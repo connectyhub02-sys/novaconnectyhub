@@ -421,11 +421,13 @@ function serializeProductFulfillment(fulfillment: SalesCatalogProductFulfillment
 }
 
 function normalizeProductStatus(value: string | null): PlatformProductStatus {
+  if (!value) return "active";
   if (value === "active" || value === "paused" || value === "archived") return value;
   return "draft";
 }
 
 function normalizeMarketplaceStatus(value: string | null): PlatformProductMarketplaceStatus {
+  if (!value) return "visible";
   if (value === "visible" || value === "featured") return value;
   return "hidden";
 }

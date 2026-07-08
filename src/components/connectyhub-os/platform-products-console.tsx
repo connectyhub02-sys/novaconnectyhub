@@ -123,8 +123,8 @@ const emptyDraft: ProductDraft = {
   category: "",
   price: "",
   currency: "BRL",
-  status: "draft",
-  marketplaceStatus: "hidden",
+  status: "active",
+  marketplaceStatus: "visible",
   commissionPercentage: "0",
   commissionBase: "gross",
   commissionReleaseDays: "15",
@@ -432,6 +432,20 @@ export function PlatformProductsConsole({
 
                   {activeTab === "products" ? (
                     <>
+                      <label className="flex flex-wrap items-center justify-between gap-3 rounded-xl border px-3 py-3 text-[12px]" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+                        <span>
+                          <span className="block font-semibold text-slate-200">Mostrar em Produtos do usuario</span>
+                          <span className="mt-1 block text-slate-500">Quando ativo, o cliente consegue importar este produto para vender no Catalogo de Vendas.</span>
+                        </span>
+                        <input
+                          checked={draft.status === "active" && draft.marketplaceStatus !== "hidden"}
+                          type="checkbox"
+                          onChange={(event) => patchDraft(event.target.checked
+                            ? { status: "active", marketplaceStatus: draft.marketplaceStatus === "featured" ? "featured" : "visible" }
+                            : { status: "draft", marketplaceStatus: "hidden" })}
+                        />
+                      </label>
+
                       <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_150px]">
                         <Field label="Nome">
                           <input value={draft.name} onChange={(event) => patchDraft({ name: event.target.value.slice(0, 120) })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" placeholder="Ex.: Mentoria, camiseta preta, pacote digital" style={inputStyle} />
