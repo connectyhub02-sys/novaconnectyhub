@@ -9,6 +9,8 @@ import {
   Box,
   CheckCircle2,
   Copy,
+  Eye,
+  EyeOff,
   FileText,
   Image as ImageIcon,
   Loader2,
@@ -111,7 +113,7 @@ type Notice = {
   message: string;
 };
 
-type PlatformProductAdminTab = "setup" | "products" | "shipping" | "marketplace" | "commissions";
+type PlatformProductAdminTab = "setup" | "products" | "commissions";
 
 const emptyDraft: ProductDraft = {
   productId: "",
@@ -142,7 +144,7 @@ const emptyDraft: ProductDraft = {
   lowStockThreshold: "",
   allowBackorder: false,
   inventoryNotes: "",
-  fulfillmentMode: "digital",
+  fulfillmentMode: "physical",
   schedulingRequired: false,
   serviceDuration: "",
   deliveryInstructions: "",
@@ -302,6 +304,16 @@ export function PlatformProductsConsole({
     setFiles(Array.from(event.target.files ?? []).slice(0, 12));
   }
 
+  function setUserPanelVisibility(visible: boolean) {
+    setDraft((current) => ({
+      ...current,
+      status: visible ? "active" : current.status === "archived" ? "archived" : "active",
+      marketplaceStatus: visible
+        ? current.marketplaceStatus === "featured" ? "featured" : "visible"
+        : "hidden",
+    }));
+  }
+
   async function updateCommissionStatus(commission: PlatformProductCommission, status: PlatformProductCommissionStatus) {
     setCommissionLoadingId(commission.id);
     setNotice(null);
@@ -376,8 +388,6 @@ export function PlatformProductsConsole({
           <div className="flex flex-wrap gap-2">
             <CatalogTabButton active={activeTab === "setup"} icon={SlidersHorizontal} label="Configuracao" onClick={() => setActiveTab("setup")} />
             <CatalogTabButton active={activeTab === "products"} icon={PackagePlus} label="Produtos" onClick={() => setActiveTab("products")} />
-            <CatalogTabButton active={activeTab === "shipping"} icon={Truck} label="Entrega e Frete" onClick={() => setActiveTab("shipping")} />
-            <CatalogTabButton active={activeTab === "marketplace"} icon={BadgePercent} label="Vitrine / Comissao" onClick={() => setActiveTab("marketplace")} />
             <CatalogTabButton active={activeTab === "commissions"} icon={CheckCircle2} label="Repasses" onClick={() => setActiveTab("commissions")} />
           </div>
 
@@ -403,7 +413,7 @@ export function PlatformProductsConsole({
             <div className="grid gap-5 xl:grid-cols-[minmax(380px,0.82fr)_minmax(0,1fr)]">
               <Panel
                 title={activeTab === "setup" ? "Configuracao do Catalogo" : draft.productId ? "Editar item" : "Novo item"}
-                eyebrow={activeTab === "marketplace" ? "connectyhub marketplace" : activeTab === "shipping" ? "entrega e frete" : "catalogo de produtos"}
+                eyebrow={activeTab === "setup" ? "base do catalogo" : "catalogo de produtos"}
               >
                 <form className="space-y-4" onSubmit={saveProduct}>
                   {activeTab === "setup" ? (
@@ -443,19 +453,40 @@ export function PlatformProductsConsole({
 
                   {activeTab === "products" ? (
                     <>
-                      <label className="flex flex-wrap items-center justify-between gap-3 rounded-xl border px-3 py-3 text-[12px]" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
-                        <span>
-                          <span className="block font-semibold text-slate-200">Mostrar em Produtos do usuario</span>
-                          <span className="mt-1 block text-slate-500">Quando ativo, o cliente consegue importar este produto para vender no Catalogo de Vendas.</span>
-                        </span>
-                        <input
-                          checked={draft.status === "active" && draft.marketplaceStatus !== "hidden"}
-                          type="checkbox"
-                          onChange={(event) => patchDraft(event.target.checked
-                            ? { status: "active", marketplaceStatus: draft.marketplaceStatus === "featured" ? "featured" : "visible" }
-                            : { status: "draft", marketplaceStatus: "hidden" })}
-                        />
-                      </label>
+                      <Block icon={draft.marketplaceStatus !== "hidden" && draft.status === "active" ? Eye : EyeOff} title="Visibilidade no painel do usuario">
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          <button
+                            type="button"
+                            onClick={() => setUserPanelVisibility(true)}
+                            className="flex min-h-20 items-start gap-3 rounded-xl border px-3 py-3 text-left transition hover:bg-cyan-400/10"
+                            style={{
+                              borderColor: draft.status === "active" && draft.marketplaceStatus !== "hidden" ? "rgba(34,211,238,0.52)" : "var(--ch-border)",
+                              background: draft.status === "active" && draft.marketplaceStatus !== "hidden" ? "rgba(6,182,212,0.12)" : "var(--ch-surface-2)",
+                            }}
+                          >
+                            <Eye className="mt-0.5 h-4 w-4 shrink-0 text-cyan-200" />
+                            <span>
+                              <span className="block text-[12px] font-semibold text-slate-100">Aparecer para usuarios</span>
+                              <span className="mt-1 block text-[11px] leading-5 text-slate-500">O cliente ve em Produtos e pode importar para revender.</span>
+                            </span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setUserPanelVisibility(false)}
+                            className="flex min-h-20 items-start gap-3 rounded-xl border px-3 py-3 text-left transition hover:bg-slate-400/10"
+                            style={{
+                              borderColor: draft.marketplaceStatus === "hidden" ? "rgba(148,163,184,0.52)" : "var(--ch-border)",
+                              background: draft.marketplaceStatus === "hidden" ? "rgba(148,163,184,0.10)" : "var(--ch-surface-2)",
+                            }}
+                          >
+                            <EyeOff className="mt-0.5 h-4 w-4 shrink-0 text-slate-300" />
+                            <span>
+                              <span className="block text-[12px] font-semibold text-slate-100">Manter oculto</span>
+                              <span className="mt-1 block text-[11px] leading-5 text-slate-500">Fica cadastrado no admin, mas nao aparece para clientes.</span>
+                            </span>
+                          </button>
+                        </div>
+                      </Block>
 
                       <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_150px]">
                         <Field label="Nome">
@@ -617,7 +648,7 @@ export function PlatformProductsConsole({
                     </>
                   ) : null}
 
-                  {activeTab === "shipping" ? (
+                  {activeTab === "products" ? (
                     <Block icon={Truck} title="Entrega deste item">
                       <div className="grid gap-3 md:grid-cols-4">
                         <Field label="Tipo">
@@ -655,7 +686,7 @@ export function PlatformProductsConsole({
                     </Block>
                   ) : null}
 
-                  {activeTab === "marketplace" ? (
+                  {activeTab === "products" ? (
                     <>
                       <Block icon={PackagePlus} title="Produto no marketplace">
                         <div className="grid gap-3 md:grid-cols-[1fr_1fr_160px_170px]">
