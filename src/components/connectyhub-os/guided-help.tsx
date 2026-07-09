@@ -87,29 +87,6 @@ export function GuidedTour({
       height: Math.min(window.innerHeight - top - 10, targetRect.height + 20),
     };
   }, [targetRect]);
-  const cardStyle = useMemo(() => {
-    if (!targetRect) return null;
-
-    const viewportWidth = window.innerWidth;
-    const viewportHeight = window.innerHeight;
-    const gap = 18;
-    const width = Math.min(430, viewportWidth - 32);
-    const estimatedHeight = 252;
-    const rightSide = targetRect.left + targetRect.width + gap;
-    const leftSide = targetRect.left - width - gap;
-    let left = rightSide + width <= viewportWidth - 16 ? rightSide : leftSide;
-
-    if (left < 16) {
-      left = Math.min(Math.max(16, targetRect.left), viewportWidth - width - 16);
-    }
-
-    let top = targetRect.top;
-    if (top + estimatedHeight > viewportHeight - 16) {
-      top = Math.max(16, viewportHeight - estimatedHeight - 16);
-    }
-
-    return { left, top, width };
-  }, [targetRect]);
 
   const finish = useCallback((done: boolean) => {
     setActive(false);
@@ -211,7 +188,7 @@ export function GuidedTour({
         <div className="pointer-events-none fixed inset-0 z-[90]" aria-live="polite">
           {targetStyle ? (
             <div
-              className="fixed rounded-2xl border-2 border-cyan-300 bg-cyan-300/5 shadow-[0_0_0_9999px_rgba(2,6,23,0.62),0_0_34px_rgba(34,211,238,0.48)]"
+              className="fixed z-[1] rounded-2xl border-2 border-cyan-300 bg-cyan-300/5 shadow-[0_0_0_9999px_rgba(2,6,23,0.62),0_0_34px_rgba(34,211,238,0.48)]"
               style={targetStyle}
             >
               <span className="absolute -top-3 left-4 inline-flex min-h-6 items-center rounded-full border border-cyan-200/60 bg-cyan-300 px-2.5 font-mono text-[9px] font-bold uppercase tracking-wide text-slate-950 shadow-lg">
@@ -222,12 +199,9 @@ export function GuidedTour({
 
           <div
             aria-modal="true"
-            className={cn(
-              "pointer-events-auto fixed rounded-2xl border bg-slate-950 p-4 shadow-2xl",
-              cardStyle ? "" : "bottom-4 left-4 right-4 sm:bottom-6 sm:left-auto sm:right-6 sm:w-[420px]",
-            )}
+            className="pointer-events-auto fixed bottom-4 left-4 right-4 z-[2] rounded-2xl border bg-slate-950 p-4 shadow-2xl sm:bottom-6 sm:left-auto sm:right-6 sm:w-[420px]"
             role="dialog"
-            style={{ ...(cardStyle ?? {}), borderColor: "var(--ch-border-strong)" }}
+            style={{ borderColor: "var(--ch-border-strong)" }}
           >
             <div className="mb-3 flex items-start justify-between gap-3">
               <div>
