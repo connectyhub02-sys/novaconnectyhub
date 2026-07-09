@@ -74,6 +74,42 @@ export function GuidedTour({
   const step = steps[index] ?? steps[0];
   const hasSteps = steps.length > 0;
   const progressLabel = useMemo(() => `${Math.min(index + 1, steps.length)} de ${steps.length}`, [index, steps.length]);
+  const targetStyle = useMemo(() => {
+    if (!targetRect) return null;
+
+    const top = Math.max(10, targetRect.top - 10);
+    const left = Math.max(10, targetRect.left - 10);
+
+    return {
+      top,
+      left,
+      width: Math.min(window.innerWidth - left - 10, targetRect.width + 20),
+      height: Math.min(window.innerHeight - top - 10, targetRect.height + 20),
+    };
+  }, [targetRect]);
+  const cardStyle = useMemo(() => {
+    if (!targetRect) return null;
+
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const gap = 18;
+    const width = Math.min(430, viewportWidth - 32);
+    const estimatedHeight = 252;
+    const rightSide = targetRect.left + targetRect.width + gap;
+    const leftSide = targetRect.left - width - gap;
+    let left = rightSide + width <= viewportWidth - 16 ? rightSide : leftSide;
+
+    if (left < 16) {
+      left = Math.min(Math.max(16, targetRect.left), viewportWidth - width - 16);
+    }
+
+    let top = targetRect.top;
+    if (top + estimatedHeight > viewportHeight - 16) {
+      top = Math.max(16, viewportHeight - estimatedHeight - 16);
+    }
+
+    return { left, top, width };
+  }, [targetRect]);
 
   const finish = useCallback((done: boolean) => {
     setActive(false);
@@ -172,26 +208,26 @@ export function GuidedTour({
       </button>
 
       {active && step ? (
-        <div className="fixed inset-0 z-[90]" aria-live="polite">
-          <div className="absolute inset-0 bg-slate-950/72 backdrop-blur-[2px]" />
-
-          {targetRect ? (
+        <div className="pointer-events-none fixed inset-0 z-[90]" aria-live="polite">
+          {targetStyle ? (
             <div
-              className="pointer-events-none fixed rounded-2xl border border-cyan-300/80 shadow-[0_0_0_9999px_rgba(2,6,23,0.56),0_0_28px_rgba(34,211,238,0.28)]"
-              style={{
-                top: Math.max(8, targetRect.top - 8),
-                left: Math.max(8, targetRect.left - 8),
-                width: Math.min(window.innerWidth - 16, targetRect.width + 16),
-                height: targetRect.height + 16,
-              }}
-            />
+              className="fixed rounded-2xl border-2 border-cyan-300 bg-cyan-300/5 shadow-[0_0_0_9999px_rgba(2,6,23,0.62),0_0_34px_rgba(34,211,238,0.48)]"
+              style={targetStyle}
+            >
+              <span className="absolute -top-3 left-4 inline-flex min-h-6 items-center rounded-full border border-cyan-200/60 bg-cyan-300 px-2.5 font-mono text-[9px] font-bold uppercase tracking-wide text-slate-950 shadow-lg">
+                Olhe aqui
+              </span>
+            </div>
           ) : null}
 
           <div
             aria-modal="true"
-            className="fixed bottom-4 left-4 right-4 rounded-2xl border bg-slate-950 p-4 shadow-2xl sm:bottom-6 sm:left-auto sm:right-6 sm:w-[420px]"
+            className={cn(
+              "pointer-events-auto fixed rounded-2xl border bg-slate-950 p-4 shadow-2xl",
+              cardStyle ? "" : "bottom-4 left-4 right-4 sm:bottom-6 sm:left-auto sm:right-6 sm:w-[420px]",
+            )}
             role="dialog"
-            style={{ borderColor: "var(--ch-border-strong)" }}
+            style={{ ...(cardStyle ?? {}), borderColor: "var(--ch-border-strong)" }}
           >
             <div className="mb-3 flex items-start justify-between gap-3">
               <div>
@@ -209,6 +245,9 @@ export function GuidedTour({
               </button>
             </div>
 
+            <p className="mb-2 inline-flex items-center rounded-full border border-cyan-300/25 bg-cyan-300/10 px-2.5 py-1 font-mono text-[9px] font-bold uppercase tracking-wide text-cyan-100">
+              Area marcada em azul
+            </p>
             <p className="text-[13px] leading-6 text-slate-300">{step.body}</p>
 
             <div className="mt-4 flex items-center justify-between gap-3">
