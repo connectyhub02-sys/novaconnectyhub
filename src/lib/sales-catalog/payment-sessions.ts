@@ -121,15 +121,26 @@ export async function createSalesCatalogPixPaymentSession(input: {
       status: "created",
       amount,
       currency: "BRL",
+      payment_owner_type: paymentOwner.owner === "connectyhub" ? "connectyhub" : "client",
+      commercial_flow_type: paymentOwner.commercialFlowType,
+      revenue_owner_type: paymentOwner.revenueOwnerType,
       payer_email: payerEmail,
       checkout_url: checkoutUrl,
       idempotency_key: idempotencyKey,
       external_reference: externalReference,
+      commission_context: {
+        eligible: paymentOwner.commissionEligible,
+        platform_product_ids: paymentOwner.platformProductIds,
+        catalog_item_ids: paymentOwner.catalogItemIds,
+      },
       metadata: {
         created_from: input.source,
         actor_id: input.actorId ?? null,
         order_item_count: items.length,
         payment_owner: paymentOwner.owner,
+        commercial_flow_type: paymentOwner.commercialFlowType,
+        revenue_owner_type: paymentOwner.revenueOwnerType,
+        commission_eligible: paymentOwner.commissionEligible,
         payment_receiver: connectyHubOwned ? "connectyhub" : "seller",
         platform_product_marketplace: connectyHubOwned,
         platform_product_ids: paymentOwner.platformProductIds,
@@ -138,7 +149,7 @@ export async function createSalesCatalogPixPaymentSession(input: {
       created_at: now,
       updated_at: now,
     })
-    .select("id, organization_id, order_id, integration_id, provider, method, status, amount, currency, payer_email, provider_payment_id, provider_status, provider_status_detail, checkout_url, pix_qr_code, pix_qr_code_base64, pix_ticket_url, external_reference, expires_at, paid_at, failure_reason, metadata, created_at, updated_at")
+    .select("id, organization_id, order_id, integration_id, provider, method, status, amount, currency, payer_email, provider_payment_id, provider_status, provider_status_detail, checkout_url, pix_qr_code, pix_qr_code_base64, pix_ticket_url, external_reference, expires_at, paid_at, failure_reason, payment_owner_type, commercial_flow_type, revenue_owner_type, commission_context, metadata, created_at, updated_at")
     .single<SalesCatalogPaymentSessionRow>();
 
   if (insertError || !inserted) {
@@ -178,7 +189,7 @@ export async function createSalesCatalogPixPaymentSession(input: {
       })
       .eq("id", sessionId)
       .eq("organization_id", input.organizationId)
-      .select("id, organization_id, order_id, integration_id, provider, method, status, amount, currency, payer_email, provider_payment_id, provider_status, provider_status_detail, checkout_url, pix_qr_code, pix_qr_code_base64, pix_ticket_url, external_reference, expires_at, paid_at, failure_reason, metadata, created_at, updated_at")
+      .select("id, organization_id, order_id, integration_id, provider, method, status, amount, currency, payer_email, provider_payment_id, provider_status, provider_status_detail, checkout_url, pix_qr_code, pix_qr_code_base64, pix_ticket_url, external_reference, expires_at, paid_at, failure_reason, payment_owner_type, commercial_flow_type, revenue_owner_type, commission_context, metadata, created_at, updated_at")
       .single<SalesCatalogPaymentSessionRow>();
 
     if (updateError || !updated) {
@@ -200,9 +211,16 @@ export async function createSalesCatalogPixPaymentSession(input: {
           latest_payment_method: "pix",
           latest_provider_payment_id: pixData.providerPaymentId,
           latest_payment_owner: paymentOwner.owner,
+          latest_commercial_flow_type: paymentOwner.commercialFlowType,
+          latest_revenue_owner_type: paymentOwner.revenueOwnerType,
+          latest_commission_eligible: paymentOwner.commissionEligible,
           platform_product_marketplace: connectyHubOwned,
           platform_product_ids: paymentOwner.platformProductIds,
         },
+        commercial_flow_type: paymentOwner.commercialFlowType,
+        revenue_owner_type: paymentOwner.revenueOwnerType,
+        contains_platform_products: connectyHubOwned,
+        commission_eligible: paymentOwner.commissionEligible,
       })
       .eq("id", order.id)
       .eq("organization_id", input.organizationId);
@@ -226,6 +244,9 @@ export async function createSalesCatalogPixPaymentSession(input: {
         amount,
         source: input.source,
         payment_owner: paymentOwner.owner,
+        commercial_flow_type: paymentOwner.commercialFlowType,
+        revenue_owner_type: paymentOwner.revenueOwnerType,
+        commission_eligible: paymentOwner.commissionEligible,
         platform_product_marketplace: connectyHubOwned,
       },
     });

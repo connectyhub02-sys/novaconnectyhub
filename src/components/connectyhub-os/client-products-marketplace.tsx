@@ -50,17 +50,38 @@ export function ClientProductsMarketplace({
   const commissionsForCompany = catalog.commissions.filter((item) => item.organizationId === selectedCompanyId);
   const importedProductIds = new Set(importsForCompany.map((item) => item.platformProductId));
   const featuredProducts = catalog.products.filter((product) => product.marketplaceStatus === "featured");
-  const metrics = useMemo(() => ({
-    available: catalog.products.length,
-    featured: featuredProducts.length,
-    imported: importsForCompany.length,
-    payableCommission: commissionsForCompany
-      .filter((commission) => commission.status === "pending" || commission.status === "available")
-      .reduce((total, commission) => total + commission.commissionAmount, 0),
-    averageCommission: catalog.products.length > 0
-      ? (catalog.products.reduce((total, product) => total + product.commissionPercentage, 0) / catalog.products.length).toFixed(1)
-      : "0",
-  }), [catalog.products, featuredProducts.length, importsForCompany.length, commissionsForCompany]);
+  const metrics = useMemo(() => {
+    const commissionable = catalog.products.filter((product) => product.commissionPolicyType !== "none" && product.commissionPercentage > 0);
+
+    return {
+      available: catalog.products.length,
+      featured: featuredProducts.length,
+      imported: importsForCompany.length,
+      commissionable: commissionable.length,
+      payableCommission: commissionsForCompany
+        .filter((commission) => commission.status === "pending" || commission.status === "available")
+        .reduce((total, commission) => total + commission.commissionAmount, 0),
+      pendingCommission: commissionsForCompany
+        .filter((commission) => commission.status === "pending")
+        .reduce((total, commission) => total + commission.commissionAmount, 0),
+      availableCommission: commissionsForCompany
+        .filter((commission) => commission.status === "available")
+        .reduce((total, commission) => total + commission.commissionAmount, 0),
+      paidCommission: commissionsForCompany
+        .filter((commission) => commission.status === "paid")
+        .reduce((total, commission) => total + commission.commissionAmount, 0),
+      blockedCommission: commissionsForCompany
+        .filter((commission) => commission.status === "blocked" || commission.status === "cancelled" || commission.status === "refunded")
+        .reduce((total, commission) => total + commission.commissionAmount, 0),
+      pendingCount: commissionsForCompany.filter((commission) => commission.status === "pending").length,
+      availableCount: commissionsForCompany.filter((commission) => commission.status === "available").length,
+      paidCount: commissionsForCompany.filter((commission) => commission.status === "paid").length,
+      blockedCount: commissionsForCompany.filter((commission) => commission.status === "blocked" || commission.status === "cancelled" || commission.status === "refunded").length,
+      averageCommission: commissionable.length > 0
+        ? (commissionable.reduce((total, product) => total + product.commissionPercentage, 0) / commissionable.length).toFixed(1)
+        : "0",
+    };
+  }, [catalog.products, featuredProducts.length, importsForCompany.length, commissionsForCompany]);
 
   async function importProduct(product: PlatformProduct) {
     if (!selectedCompanyId) {
@@ -146,7 +167,7 @@ export function ClientProductsMarketplace({
           <div className="grid gap-4 md:grid-cols-4">
             <Metric icon={ShoppingBag} label="Disponiveis" value={String(metrics.available)} detail="produtos ConnectyHub" />
             <Metric icon={CheckCircle2} label="Importados" value={String(metrics.imported)} detail={selectedCompany?.name ?? "empresa selecionada"} />
-            <Metric icon={BadgePercent} label="Comissao media" value={`${metrics.averageCommission}%`} detail="vitrine ativa" />
+            <Metric icon={BadgePercent} label="Comissao media" value={`${metrics.averageCommission}%`} detail={`${metrics.commissionable} comissao ativa`} />
             <Metric icon={BadgePercent} label="A receber" value={formatMoney(metrics.payableCommission)} detail="pendente/liberado" />
           </div>
 
@@ -237,6 +258,12 @@ export function ClientProductsMarketplace({
               </Panel>
 
               <Panel title="Comissoes" eyebrow="repasse ConnectyHub">
+                <div className="mb-3 grid gap-2 sm:grid-cols-2">
+                  <CommissionSummaryTile label="Pendente" value={formatMoney(metrics.pendingCommission)} detail={`${metrics.pendingCount} aguardando prazo`} />
+                  <CommissionSummaryTile label="Liberada" value={formatMoney(metrics.availableCommission)} detail={`${metrics.availableCount} pronta para repasse`} />
+                  <CommissionSummaryTile label="Paga" value={formatMoney(metrics.paidCommission)} detail={`${metrics.paidCount} repasse(s)`} />
+                  <CommissionSummaryTile label="Bloq/estorno" value={formatMoney(metrics.blockedCommission)} detail={`${metrics.blockedCount} ocorrencia(s)`} />
+                </div>
                 <div className="grid gap-3">
                   {commissionsForCompany.length > 0 ? commissionsForCompany.map((commission) => (
                     <CommissionRow
@@ -300,6 +327,7 @@ function MarketplaceProductCard({
         <p className="mt-2 line-clamp-2 text-[12px] leading-5 text-slate-400">{product.shortDescription || product.commercialDescription}</p>
 
         <div className="mt-3 flex flex-wrap gap-1.5">
+          <MiniTag icon={ShoppingBag}>{formatSalesChannel(product.salesChannelType)}</MiniTag>
           <MiniTag icon={BadgePercent}>{product.commissionPercentage}% comissao</MiniTag>
           <MiniTag icon={CheckCircle2}>repasse D+{product.commissionReleaseDays}</MiniTag>
           <MiniTag icon={Tags}>{product.skus.length || 1} SKU</MiniTag>
@@ -330,20 +358,36 @@ function MarketplaceProductCard({
 
 function CommissionRow({ commission, product }: { commission: PlatformProductCommission; product: PlatformProduct | null }) {
   const title = readString(commission.metadata.product_name) ?? product?.name ?? "Produto ConnectyHub";
+  const payoutReference = readString(commission.metadata.payout_reference)
+    ?? readString(readMetadataRecord(commission.metadata.last_status_update).payout_reference);
 
   return (
     <div className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="truncate text-[13px] font-semibold text-slate-100">{title}</p>
-          <p className="mt-1 text-[11px] text-slate-500">Venda {formatMoney(commission.saleAmount)} - libera {formatDate(commission.releaseAt)}</p>
+          <p className="mt-1 text-[11px] text-slate-500">
+            Venda {formatMoney(commission.saleAmount)} - libera {formatDate(commission.releaseAt)}
+          </p>
         </div>
         <NeonBadge tone={commissionStatusTone(commission.status)}>{formatCommissionStatus(commission.status)}</NeonBadge>
       </div>
       <div className="mt-3 flex flex-wrap gap-1.5">
         <MiniTag icon={BadgePercent}>{formatMoney(commission.commissionAmount)}</MiniTag>
         <MiniTag icon={CheckCircle2}>{commission.commissionPercentage}%</MiniTag>
+        {commission.paidAt ? <MiniTag icon={CheckCircle2}>pago {formatDate(commission.paidAt)}</MiniTag> : null}
+        {payoutReference ? <MiniTag icon={Tags}>{payoutReference}</MiniTag> : null}
       </div>
+    </div>
+  );
+}
+
+function CommissionSummaryTile({ label, value, detail }: { label: string; value: string; detail: string }) {
+  return (
+    <div className="rounded-xl border px-3 py-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-panel)" }}>
+      <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-slate-500">{label}</p>
+      <p className="mt-2 truncate font-mono text-[17px] font-bold text-cyan-100">{value}</p>
+      <p className="mt-1 truncate text-[11px] text-slate-500">{detail}</p>
     </div>
   );
 }
@@ -400,6 +444,12 @@ function formatCommissionStatus(status: PlatformProductCommissionStatus) {
   return labels[status];
 }
 
+function formatSalesChannel(value: PlatformProduct["salesChannelType"]) {
+  if (value === "affiliate") return "afiliado";
+  if (value === "marketplace") return "marketplace";
+  return "revenda";
+}
+
 function commissionStatusTone(status: PlatformProductCommissionStatus): "cyan" | "green" | "amber" | "rose" | "zinc" {
   if (status === "available") return "green";
   if (status === "paid") return "cyan";
@@ -410,4 +460,8 @@ function commissionStatusTone(status: PlatformProductCommissionStatus): "cyan" |
 
 function readString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function readMetadataRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }

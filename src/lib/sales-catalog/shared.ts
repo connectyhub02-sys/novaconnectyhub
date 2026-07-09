@@ -18,6 +18,10 @@ export type SalesCatalogPaymentIntegrationStatus = "pending" | "connected" | "di
 export type SalesCatalogPaymentIntegrationMode = "production" | "sandbox";
 export type SalesCatalogPaymentSessionMethod = "pix" | "card" | "checkout_link";
 export type SalesCatalogPaymentSessionStatus = "created" | "pending" | "approved" | "rejected" | "cancelled" | "expired" | "refunded" | "error";
+export type SalesCatalogProductOriginType = "client" | "connectyhub" | "external_provider";
+export type SalesCatalogCommercialFlowType = "client_direct" | "connectyhub_resale" | "connectyhub_direct" | "external_marketplace";
+export type SalesCatalogRevenueOwnerType = "client" | "connectyhub" | "split" | "external_provider";
+export type SalesCatalogCommissionPolicyType = "none" | "percentage" | "fixed" | "custom";
 
 export type SalesCatalogAttribute = {
   id: string;
@@ -169,6 +173,16 @@ export type ClientSalesCatalogItem = {
   offer: SalesCatalogProductOffer;
   fulfillment: SalesCatalogProductFulfillment;
   shipping: SalesCatalogProductShipping;
+  productOriginType: SalesCatalogProductOriginType;
+  commercialFlowType: SalesCatalogCommercialFlowType;
+  revenueOwnerType: SalesCatalogRevenueOwnerType;
+  commissionPolicyType: SalesCatalogCommissionPolicyType;
+  commissionEligible: boolean;
+  platformProductId: string | null;
+  platformProductCode: string | null;
+  platformProductCommissionPercentage: number | null;
+  platformProductCommissionReleaseDays: number | null;
+  platformProductAgentPrompt: string | null;
   source: SalesCatalogSource;
   whatsappCatalogId: string | null;
   whatsappCatalogJid: string | null;
@@ -195,6 +209,14 @@ export type ClientSalesCatalogOrderItem = {
   total: string | null;
   attributes: SalesCatalogItemAttribute[];
   fulfillment: SalesCatalogProductFulfillment;
+  productOriginType: SalesCatalogProductOriginType;
+  commercialFlowType: SalesCatalogCommercialFlowType;
+  revenueOwnerType: SalesCatalogRevenueOwnerType;
+  commissionEligible: boolean;
+  platformProductId: string | null;
+  platformProductCode: string | null;
+  platformProductCommissionPercentage: number | null;
+  platformProductCommissionReleaseDays: number | null;
   createdAt: string | null;
 };
 
@@ -222,6 +244,15 @@ export type ClientSalesCatalogOrder = {
   agentNotes: string | null;
   internalNotes: string | null;
   latestPaymentSessionId: string | null;
+  commercialFlowType: SalesCatalogCommercialFlowType;
+  revenueOwnerType: SalesCatalogRevenueOwnerType;
+  containsPlatformProducts: boolean;
+  commissionEligible: boolean;
+  inventoryDeductedAt: string | null;
+  inventoryRestoredAt: string | null;
+  paymentWhatsappNotifiedAt: string | null;
+  inventoryDeductedItems: number;
+  inventoryRestoredItems: number;
   items: ClientSalesCatalogOrderItem[];
   createdBy: string | null;
   createdAt: string | null;
@@ -270,6 +301,10 @@ export type ClientSalesCatalogPaymentSession = {
   expiresAt: string | null;
   paidAt: string | null;
   failureReason: string | null;
+  paymentOwnerType: SalesCatalogRevenueOwnerType;
+  commercialFlowType: SalesCatalogCommercialFlowType;
+  revenueOwnerType: SalesCatalogRevenueOwnerType;
+  commissionEligible: boolean;
   createdAt: string | null;
   updatedAt: string | null;
 };

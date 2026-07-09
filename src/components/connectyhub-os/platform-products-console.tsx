@@ -17,6 +17,7 @@ import {
   PackagePlus,
   Plus,
   Save,
+  ShoppingBag,
   SlidersHorizontal,
   Tags,
   Trash2,
@@ -29,8 +30,13 @@ import type {
   PlatformProduct,
   PlatformProductCatalog,
   PlatformProductCommission,
+  PlatformProductCommissionPolicyType,
   PlatformProductCommissionStatus,
   PlatformProductMarketplaceStatus,
+  PlatformProductOwnerType,
+  PlatformProductPayoutTargetType,
+  PlatformProductRevenueOwnerType,
+  PlatformProductSalesChannelType,
   PlatformProductSettings,
   PlatformProductStatus,
 } from "@/lib/platform-products";
@@ -60,6 +66,11 @@ type ProductDraft = {
   currency: string;
   status: PlatformProductStatus;
   marketplaceStatus: PlatformProductMarketplaceStatus;
+  ownerType: PlatformProductOwnerType;
+  salesChannelType: PlatformProductSalesChannelType;
+  revenueOwnerType: PlatformProductRevenueOwnerType;
+  commissionPolicyType: PlatformProductCommissionPolicyType;
+  payoutTargetType: PlatformProductPayoutTargetType;
   commissionPercentage: string;
   commissionBase: "gross" | "net";
   commissionReleaseDays: string;
@@ -139,6 +150,11 @@ const emptyDraft: ProductDraft = {
   currency: "BRL",
   status: "active",
   marketplaceStatus: "visible",
+  ownerType: "connectyhub",
+  salesChannelType: "resale",
+  revenueOwnerType: "connectyhub",
+  commissionPolicyType: "percentage",
+  payoutTargetType: "connectyhub",
   commissionPercentage: "0",
   commissionBase: "gross",
   commissionReleaseDays: "15",
@@ -200,9 +216,16 @@ export function PlatformProductsConsole({
   const [savingSettings, setSavingSettings] = useState(false);
   const [publishingProductId, setPublishingProductId] = useState<string | null>(null);
   const [commissionLoadingId, setCommissionLoadingId] = useState<string | null>(null);
+  const [batchPaying, setBatchPaying] = useState(false);
+  const [payoutReference, setPayoutReference] = useState("");
+  const [payoutNote, setPayoutNote] = useState("");
   const [notice, setNotice] = useState<Notice | null>(null);
   const [activeTab, setActiveTab] = useState<PlatformProductAdminTab>("products");
   const metrics = useMemo(() => buildMetrics(products, catalog.imports.length, commissions), [products, catalog.imports.length, commissions]);
+  const commissionSummary = useMemo(() => buildCommissionSummary(commissions), [commissions]);
+  const availableCommissionIds = useMemo(() => (
+    commissions.filter((commission) => commission.status === "available").map((commission) => commission.id)
+  ), [commissions]);
   const categoryRows = useMemo(() => getCategoryRows(settingsDraft.categoriesText), [settingsDraft.categoriesText]);
   const currentBusinessTemplate = salesCatalogBusinessTemplates.find((template) => template.value === settingsDraft.businessType) ?? salesCatalogBusinessTemplates[0];
   const categoryPresetOptions = currentBusinessTemplate.categories.filter((categoryName) => (
@@ -386,7 +409,7 @@ export function PlatformProductsConsole({
     setDraft((current) => ({
       ...current,
       status: visible ? "active" : current.status === "archived" ? "archived" : "active",
-      marketplaceStatus: visible
+      marketplaceStatus: visible && current.salesChannelType !== "direct"
         ? current.marketplaceStatus === "featured" ? "featured" : "visible"
         : "hidden",
     }));
@@ -400,21 +423,62 @@ export function PlatformProductsConsole({
       const response = await fetch("/api/admin/platform-product-commissions", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ commissionId: commission.id, status }),
+        body: JSON.stringify({
+          commissionId: commission.id,
+          status,
+          payoutReference: status === "paid" ? payoutReference : undefined,
+          payoutNote: status === "paid" ? payoutNote : undefined,
+        }),
       });
-      const data = (await response.json().catch(() => null)) as { commission?: PlatformProductCommission; error?: string } | null;
+      const data = (await response.json().catch(() => null)) as { commission?: PlatformProductCommission; commissions?: PlatformProductCommission[]; error?: string } | null;
+      const updatedCommissions = data?.commissions?.length ? data.commissions : data?.commission ? [data.commission] : [];
 
-      if (!response.ok || !data?.commission) {
+      if (!response.ok || updatedCommissions.length === 0) {
         throw new Error(data?.error ?? "Nao foi possivel atualizar a comissao.");
       }
 
-      setCommissions((current) => current.map((item) => item.id === data.commission!.id ? data.commission! : item));
-      setNotice({ tone: "success", message: `Comissao atualizada para ${formatCommissionStatus(data.commission.status)}.` });
+      setCommissions((current) => mergeCommissions(current, updatedCommissions));
+      setNotice({ tone: "success", message: `Comissao atualizada para ${formatCommissionStatus(updatedCommissions[0].status)}.` });
       router.refresh();
     } catch (error) {
       setNotice({ tone: "error", message: error instanceof Error ? error.message : "Falha ao atualizar comissao." });
     } finally {
       setCommissionLoadingId(null);
+    }
+  }
+
+  async function payAvailableCommissions() {
+    if (availableCommissionIds.length === 0 || batchPaying) return;
+
+    setBatchPaying(true);
+    setNotice(null);
+
+    try {
+      const response = await fetch("/api/admin/platform-product-commissions", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          commissionIds: availableCommissionIds,
+          status: "paid",
+          payoutReference,
+          payoutNote,
+        }),
+      });
+      const data = (await response.json().catch(() => null)) as { commissions?: PlatformProductCommission[]; error?: string } | null;
+
+      if (!response.ok || !data?.commissions?.length) {
+        throw new Error(data?.error ?? "Nao foi possivel marcar o lote como pago.");
+      }
+
+      setCommissions((current) => mergeCommissions(current, data.commissions!));
+      setPayoutReference("");
+      setPayoutNote("");
+      setNotice({ tone: "success", message: `${data.commissions.length} comissao(oes) marcadas como pagas.` });
+      router.refresh();
+    } catch (error) {
+      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Falha ao pagar lote de comissoes." });
+    } finally {
+      setBatchPaying(false);
     }
   }
 
@@ -428,6 +492,8 @@ export function PlatformProductsConsole({
           <div className="flex flex-wrap gap-2">
             <NeonBadge tone={catalog.schemaReady ? "green" : "amber"}>{catalog.schemaReady ? "Schema pronto" : "Aguardando SQL"}</NeonBadge>
             <NeonBadge tone="cyan">{metrics.available} na vitrine</NeonBadge>
+            <NeonBadge tone="amber">{metrics.resale} revenda</NeonBadge>
+            <NeonBadge tone="zinc">{metrics.direct} venda direta</NeonBadge>
             <NeonBadge tone="amber">{metrics.imports} importacoes</NeonBadge>
             <NeonBadge tone="green">{formatMoney(metrics.payableCommission)} repasse</NeonBadge>
           </div>
@@ -455,10 +521,11 @@ export function PlatformProductsConsole({
             </div>
           ) : null}
 
-          <div className="grid gap-4 md:grid-cols-5">
+          <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-6">
             <Metric icon={Box} label="Produtos" value={String(products.length)} detail={`${metrics.active} ativos`} />
-            <Metric icon={PackagePlus} label="Vitrine" value={String(metrics.available)} detail={`${metrics.featured} em destaque`} />
-            <Metric icon={BadgePercent} label="Comissao media" value={`${metrics.averageCommission}%`} detail="produtos ativos" />
+            <Metric icon={PackagePlus} label="Revenda" value={String(metrics.resale)} detail={`${metrics.featured} em destaque`} />
+            <Metric icon={ShoppingBag} label="Venda direta" value={String(metrics.direct)} detail="sem repasse afiliado" />
+            <Metric icon={BadgePercent} label="Comissao media" value={`${metrics.averageCommission}%`} detail={`${metrics.commissionable} comissao ativa`} />
             <Metric icon={Tags} label="Importacoes" value={String(metrics.imports)} detail="empresas de clientes" />
             <Metric icon={CheckCircle2} label="Repasses" value={formatMoney(metrics.payableCommission)} detail={`${metrics.pendingCommissions} pendentes`} />
           </div>
@@ -470,23 +537,66 @@ export function PlatformProductsConsole({
           </div>
 
           {activeTab === "commissions" ? (
-            <Panel title="Comissoes e repasses" eyebrow="vendas marketplace">
-              <div className="grid gap-3 lg:grid-cols-2">
-                {commissions.length > 0 ? commissions.map((commission) => (
-                  <CommissionCard
-                    key={commission.id}
-                    commission={commission}
-                    loading={commissionLoadingId === commission.id}
-                    product={products.find((item) => item.id === commission.platformProductId) ?? null}
-                    onStatus={(status) => updateCommissionStatus(commission, status)}
-                  />
-                )) : (
-                  <div className="rounded-xl border border-dashed px-4 py-10 text-center text-[12px] text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
-                    Nenhuma comissao registrada ainda.
-                  </div>
-                )}
-              </div>
-            </Panel>
+            <div className="space-y-5">
+              <Panel title="Resumo de repasses" eyebrow="financeiro marketplace">
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+                  <SettlementMetric label="Gerada" value={formatMoney(commissionSummary.totalAmount)} detail={`${commissionSummary.totalCount} registro(s)`} />
+                  <SettlementMetric label="Pendente" value={formatMoney(commissionSummary.pendingAmount)} detail={`${commissionSummary.pendingCount} aguardando`} />
+                  <SettlementMetric label="Liberada" value={formatMoney(commissionSummary.availableAmount)} detail={`${commissionSummary.availableCount} pronta(s)`} />
+                  <SettlementMetric label="Paga" value={formatMoney(commissionSummary.paidAmount)} detail={`${commissionSummary.paidCount} finalizada(s)`} />
+                  <SettlementMetric label="Bloq/estorno" value={formatMoney(commissionSummary.blockedAmount)} detail={`${commissionSummary.blockedCount} ocorrencia(s)`} />
+                </div>
+
+                <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(180px,240px)_minmax(0,1fr)_auto]">
+                  <Field label="Referencia do repasse">
+                    <input
+                      value={payoutReference}
+                      onChange={(event) => setPayoutReference(event.target.value)}
+                      placeholder="ex: PIX 09/07"
+                      className="h-10 w-full rounded-xl px-3 text-[13px] outline-none"
+                      style={inputStyle}
+                    />
+                  </Field>
+                  <Field label="Observacao interna">
+                    <input
+                      value={payoutNote}
+                      onChange={(event) => setPayoutNote(event.target.value)}
+                      placeholder="opcional"
+                      className="h-10 w-full rounded-xl px-3 text-[13px] outline-none"
+                      style={inputStyle}
+                    />
+                  </Field>
+                  <button
+                    type="button"
+                    disabled={batchPaying || availableCommissionIds.length === 0}
+                    onClick={payAvailableCommissions}
+                    className="inline-flex min-h-10 items-center justify-center gap-2 self-end rounded-xl border px-4 font-mono text-[10px] font-bold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10 disabled:cursor-not-allowed disabled:opacity-50"
+                    style={{ borderColor: "var(--ch-border)" }}
+                  >
+                    {batchPaying ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                    Pagar liberadas
+                  </button>
+                </div>
+              </Panel>
+
+              <Panel title="Comissoes e repasses" eyebrow="vendas marketplace">
+                <div className="grid gap-3 lg:grid-cols-2">
+                  {commissions.length > 0 ? commissions.map((commission) => (
+                    <CommissionCard
+                      key={commission.id}
+                      commission={commission}
+                      loading={commissionLoadingId === commission.id}
+                      product={products.find((item) => item.id === commission.platformProductId) ?? null}
+                      onStatus={(status) => updateCommissionStatus(commission, status)}
+                    />
+                  )) : (
+                    <div className="rounded-xl border border-dashed px-4 py-10 text-center text-[12px] text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
+                      Nenhuma comissao registrada ainda.
+                    </div>
+                  )}
+                </div>
+              </Panel>
+            </div>
           ) : (
             <div className="grid gap-5 xl:grid-cols-[minmax(380px,0.82fr)_minmax(0,1fr)]">
               <Panel
@@ -585,11 +695,17 @@ export function PlatformProductsConsole({
                   {activeTab === "products" ? (
                     <>
                       <Block icon={draft.marketplaceStatus !== "hidden" && draft.status === "active" ? Eye : EyeOff} title="Visibilidade no painel do usuario">
+                        {draft.salesChannelType === "direct" ? (
+                          <div className="mb-3 rounded-xl border border-amber-400/25 bg-amber-400/10 px-3 py-2 text-[11px] leading-5 text-amber-100">
+                            Venda direta ConnectyHub fica fora da importacao dos usuarios e sera vendida por checkout/campanha propria.
+                          </div>
+                        ) : null}
                         <div className="grid gap-2 sm:grid-cols-2">
                           <button
                             type="button"
+                            disabled={draft.salesChannelType === "direct"}
                             onClick={() => setUserPanelVisibility(true)}
-                            className="flex min-h-20 items-start gap-3 rounded-xl border px-3 py-3 text-left transition hover:bg-cyan-400/10"
+                            className="flex min-h-20 items-start gap-3 rounded-xl border px-3 py-3 text-left transition hover:bg-cyan-400/10 disabled:cursor-not-allowed disabled:opacity-50"
                             style={{
                               borderColor: draft.status === "active" && draft.marketplaceStatus !== "hidden" ? "rgba(34,211,238,0.52)" : "var(--ch-border)",
                               background: draft.status === "active" && draft.marketplaceStatus !== "hidden" ? "rgba(6,182,212,0.12)" : "var(--ch-surface-2)",
@@ -893,6 +1009,72 @@ export function PlatformProductsConsole({
                         </div>
                       </Block>
 
+                      <Block icon={ShoppingBag} title="Origem e recebimento">
+                        <div className="grid gap-3 md:grid-cols-5">
+                          <Field label="Dono do produto">
+                            <select value={draft.ownerType} onChange={(event) => patchDraft({ ownerType: event.target.value as PlatformProductOwnerType })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" style={inputStyle}>
+                              <option value="connectyhub">ConnectyHub</option>
+                              <option value="external_provider">Fornecedor externo</option>
+                            </select>
+                          </Field>
+                          <Field label="Tipo de venda">
+                            <select
+                              value={draft.salesChannelType}
+                              onChange={(event) => {
+                                const value = event.target.value as PlatformProductSalesChannelType;
+                                patchDraft(value === "direct"
+                                  ? {
+                                      salesChannelType: value,
+                                      revenueOwnerType: "connectyhub",
+                                      commissionPolicyType: "none",
+                                      payoutTargetType: "connectyhub",
+                                      commissionPercentage: "0",
+                                      marketplaceStatus: "hidden",
+                                    }
+                                  : {
+                                      salesChannelType: value,
+                                      revenueOwnerType: "connectyhub",
+                                      commissionPolicyType: draft.commissionPolicyType === "none" ? "percentage" : draft.commissionPolicyType,
+                                      payoutTargetType: "connectyhub",
+                                    });
+                              }}
+                              className="h-10 w-full rounded-xl px-3 text-[13px] outline-none"
+                              style={inputStyle}
+                            >
+                              <option value="resale">Revenda com comissao</option>
+                              <option value="direct">Venda direta ConnectyHub</option>
+                              <option value="affiliate">Afiliado</option>
+                              <option value="marketplace">Marketplace</option>
+                            </select>
+                          </Field>
+                          <Field label="Receita">
+                            <select value={draft.revenueOwnerType} onChange={(event) => patchDraft({ revenueOwnerType: event.target.value as PlatformProductRevenueOwnerType })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" style={inputStyle}>
+                              <option value="connectyhub">ConnectyHub</option>
+                              <option value="split">Split futuro</option>
+                              <option value="external_provider">Fornecedor</option>
+                            </select>
+                          </Field>
+                          <Field label="Comissao">
+                            <select value={draft.commissionPolicyType} onChange={(event) => patchDraft({ commissionPolicyType: event.target.value as PlatformProductCommissionPolicyType })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" style={inputStyle}>
+                              <option value="percentage">Percentual</option>
+                              <option value="none">Sem comissao</option>
+                              <option value="fixed">Valor fixo futuro</option>
+                              <option value="custom">Personalizada</option>
+                            </select>
+                          </Field>
+                          <Field label="Repasse para">
+                            <select value={draft.payoutTargetType} onChange={(event) => patchDraft({ payoutTargetType: event.target.value as PlatformProductPayoutTargetType })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" style={inputStyle}>
+                              <option value="connectyhub">ConnectyHub</option>
+                              <option value="split">Split futuro</option>
+                              <option value="external_provider">Fornecedor</option>
+                            </select>
+                          </Field>
+                        </div>
+                        <p className="mt-3 text-[11px] leading-5 text-slate-500">
+                          Revenda aparece para importacao no painel do usuario. Venda direta e produto nosso vendido sem repasse de afiliado.
+                        </p>
+                      </Block>
+
                       <Block icon={BadgePercent} title="Regra de comissao">
                         <div className="grid gap-3 md:grid-cols-5">
                           <NumberField label="% comissao" value={draft.commissionPercentage} onChange={(value) => patchDraft({ commissionPercentage: value })} step="0.01" />
@@ -1113,7 +1295,7 @@ function ProductCard({
   onPublish: () => void;
 }) {
   const cover = product.media.find((media) => media.kind === "image");
-  const isVisibleToClients = product.status === "active" && product.marketplaceStatus !== "hidden";
+  const isVisibleToClients = product.status === "active" && product.marketplaceStatus !== "hidden" && product.salesChannelType !== "direct";
 
   return (
     <div className="grid gap-3 rounded-xl border p-3 sm:grid-cols-[96px_minmax(0,1fr)]" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
@@ -1137,14 +1319,15 @@ function ProductCard({
         </div>
         <p className="mt-2 line-clamp-2 text-[12px] leading-5 text-slate-400">{product.shortDescription || product.commercialDescription}</p>
         <div className="mt-3 flex flex-wrap gap-1.5">
-          <MiniTag icon={BadgePercent}>{product.commissionPercentage}%</MiniTag>
+          <MiniTag icon={ShoppingBag}>{formatSalesChannel(product.salesChannelType)}</MiniTag>
+          <MiniTag icon={BadgePercent}>{product.commissionPolicyType === "none" ? "sem comissao" : `${product.commissionPercentage}%`}</MiniTag>
           <MiniTag icon={Truck}>{product.shipping.profile === "free" ? "frete gratis" : product.shipping.profile === "custom" ? "frete combinado" : "tabela por estado"}</MiniTag>
           <MiniTag icon={Tags}>{product.skus.length || 1} SKU</MiniTag>
           <MiniTag icon={PackagePlus}>{imports} import.</MiniTag>
           {product.media.length > 0 ? <MiniTag icon={Upload}>{product.media.length} arq.</MiniTag> : null}
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
-          {!isVisibleToClients ? (
+          {!isVisibleToClients && product.salesChannelType !== "direct" ? (
             <button type="button" disabled={publishing} onClick={onPublish} className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-emerald-100 transition hover:bg-emerald-400/10 disabled:opacity-50" style={{ borderColor: "var(--ch-border)" }}>
               {publishing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
               Publicar
@@ -1176,6 +1359,10 @@ function CommissionCard({
   onStatus: (status: PlatformProductCommissionStatus) => void;
 }) {
   const title = readString(commission.metadata.product_name) ?? product?.name ?? "Produto ConnectyHub";
+  const payoutReference = readString(commission.metadata.payout_reference)
+    ?? readString(readMetadataRecord(commission.metadata.last_status_update).payout_reference);
+  const payoutNote = readString(commission.metadata.payout_note)
+    ?? readString(readMetadataRecord(commission.metadata.last_status_update).payout_note);
 
   return (
     <div className="rounded-xl border p-3" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
@@ -1194,6 +1381,14 @@ function CommissionCard({
         <MiniValue label="Percentual" value={`${commission.commissionPercentage}%`} />
         <MiniValue label="Libera em" value={formatDate(commission.releaseAt)} />
       </div>
+
+      {commission.paidAt || payoutReference || payoutNote ? (
+        <div className="mt-3 rounded-lg border px-3 py-2 text-[11px] leading-5 text-slate-400" style={{ borderColor: "var(--ch-border)", background: "var(--ch-panel)" }}>
+          {commission.paidAt ? <p>Pago em {formatDate(commission.paidAt)}</p> : null}
+          {payoutReference ? <p>Referencia: {payoutReference}</p> : null}
+          {payoutNote ? <p>Obs.: {payoutNote}</p> : null}
+        </div>
+      ) : null}
 
       <div className="mt-3 flex flex-wrap gap-2">
         {commission.status === "pending" ? (
@@ -1214,6 +1409,16 @@ function CommissionCard({
           </button>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+function SettlementMetric({ label, value, detail }: { label: string; value: string; detail: string }) {
+  return (
+    <div className="rounded-xl border px-3 py-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-panel)" }}>
+      <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-slate-500">{label}</p>
+      <p className="mt-2 truncate font-mono text-[18px] font-bold text-cyan-100">{value}</p>
+      <p className="mt-1 truncate text-[11px] text-slate-500">{detail}</p>
     </div>
   );
 }
@@ -1453,6 +1658,11 @@ function createDraft(product: PlatformProduct | null): ProductDraft {
     currency: product.currency,
     status: product.status,
     marketplaceStatus: product.marketplaceStatus,
+    ownerType: product.ownerType,
+    salesChannelType: product.salesChannelType,
+    revenueOwnerType: product.revenueOwnerType,
+    commissionPolicyType: product.commissionPolicyType,
+    payoutTargetType: product.payoutTargetType,
     commissionPercentage: String(product.commissionPercentage),
     commissionBase: product.commissionBase,
     commissionReleaseDays: String(product.commissionReleaseDays),
@@ -1596,16 +1806,74 @@ function parseSkuAttributes(value: string, fallback: SalesCatalogItemAttribute[]
 function buildMetrics(products: PlatformProduct[], imports: number, commissions: PlatformProductCommission[]) {
   const active = products.filter((product) => product.status === "active");
   const available = active.filter((product) => product.marketplaceStatus !== "hidden").length;
+  const resale = active.filter((product) => product.salesChannelType !== "direct" && product.marketplaceStatus !== "hidden").length;
+  const direct = active.filter((product) => product.salesChannelType === "direct").length;
   const featured = active.filter((product) => product.marketplaceStatus === "featured").length;
-  const averageCommission = active.length > 0
-    ? (active.reduce((total, product) => total + product.commissionPercentage, 0) / active.length).toFixed(1)
+  const commissionable = active.filter((product) => product.commissionPolicyType !== "none" && product.commissionPercentage > 0);
+  const averageCommission = commissionable.length > 0
+    ? (commissionable.reduce((total, product) => total + product.commissionPercentage, 0) / commissionable.length).toFixed(1)
     : "0";
   const pendingCommissions = commissions.filter((commission) => commission.status === "pending").length;
   const payableCommission = commissions
     .filter((commission) => commission.status === "pending" || commission.status === "available")
     .reduce((total, commission) => total + commission.commissionAmount, 0);
 
-  return { active: active.length, available, featured, imports, averageCommission, pendingCommissions, payableCommission };
+  return { active: active.length, available, resale, direct, featured, imports, commissionable: commissionable.length, averageCommission, pendingCommissions, payableCommission };
+}
+
+function buildCommissionSummary(commissions: PlatformProductCommission[]) {
+  const summary = {
+    totalCount: commissions.length,
+    totalAmount: 0,
+    pendingCount: 0,
+    pendingAmount: 0,
+    availableCount: 0,
+    availableAmount: 0,
+    paidCount: 0,
+    paidAmount: 0,
+    blockedCount: 0,
+    blockedAmount: 0,
+  };
+
+  for (const commission of commissions) {
+    summary.totalAmount += commission.commissionAmount;
+
+    if (commission.status === "pending") {
+      summary.pendingCount += 1;
+      summary.pendingAmount += commission.commissionAmount;
+    }
+
+    if (commission.status === "available") {
+      summary.availableCount += 1;
+      summary.availableAmount += commission.commissionAmount;
+    }
+
+    if (commission.status === "paid") {
+      summary.paidCount += 1;
+      summary.paidAmount += commission.commissionAmount;
+    }
+
+    if (commission.status === "blocked" || commission.status === "cancelled" || commission.status === "refunded") {
+      summary.blockedCount += 1;
+      summary.blockedAmount += commission.commissionAmount;
+    }
+  }
+
+  return summary;
+}
+
+function mergeCommissions(current: PlatformProductCommission[], updated: PlatformProductCommission[]) {
+  const updatedById = new Map(updated.map((commission) => [commission.id, commission]));
+  const merged = current.map((commission) => updatedById.get(commission.id) ?? commission);
+  const existingIds = new Set(merged.map((commission) => commission.id));
+
+  for (const commission of updated) {
+    if (!existingIds.has(commission.id)) {
+      merged.unshift(commission);
+    }
+  }
+
+  return merged.sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt));
 }
 
 function upsertProduct(products: PlatformProduct[], product: PlatformProduct) {
@@ -1667,6 +1935,13 @@ function formatCommissionStatus(status: PlatformProductCommissionStatus) {
   return labels[status];
 }
 
+function formatSalesChannel(value: PlatformProductSalesChannelType) {
+  if (value === "direct") return "venda direta";
+  if (value === "affiliate") return "afiliado";
+  if (value === "marketplace") return "marketplace";
+  return "revenda";
+}
+
 function commissionStatusTone(status: PlatformProductCommissionStatus): "cyan" | "green" | "amber" | "rose" | "zinc" {
   if (status === "available") return "green";
   if (status === "paid") return "cyan";
@@ -1677,4 +1952,8 @@ function commissionStatusTone(status: PlatformProductCommissionStatus): "cyan" |
 
 function readString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function readMetadataRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }

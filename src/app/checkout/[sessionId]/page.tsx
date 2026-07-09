@@ -1,11 +1,14 @@
 import type { Metadata } from "next";
-import Image from "next/image";
 import type { ReactNode } from "react";
+import { CheckoutPaymentOptions } from "@/components/checkout/checkout-payment-options";
 import { CheckoutStatusPoller } from "@/components/checkout/checkout-status-poller";
-import { MercadoPagoCardBrick } from "@/components/checkout/mercado-pago-card-brick";
 import { createServiceClient } from "@/lib/supabase/service";
 import { loadMercadoPagoPlatformBillingConfig } from "@/lib/sales-catalog/mercado-pago";
-import { formatSalesCatalogPaymentSessionStatus } from "@/lib/sales-catalog/shared";
+import {
+  formatSalesCatalogPaymentSessionStatus,
+  type SalesCatalogCommercialFlowType,
+  type SalesCatalogRevenueOwnerType,
+} from "@/lib/sales-catalog/shared";
 import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -35,6 +38,10 @@ type CheckoutSessionRow = {
   failure_reason: string | null;
   paid_at: string | null;
   updated_at: string | null;
+  payment_owner_type?: string | null;
+  commercial_flow_type?: string | null;
+  revenue_owner_type?: string | null;
+  commission_context?: JsonRecord | null;
   metadata: JsonRecord | null;
 };
 
@@ -48,6 +55,10 @@ type CheckoutOrderRow = {
   shipping_method: string | null;
   status: string | null;
   payment_status: string | null;
+  commercial_flow_type?: string | null;
+  revenue_owner_type?: string | null;
+  contains_platform_products?: boolean | null;
+  commission_eligible?: boolean | null;
   metadata: JsonRecord | null;
 };
 
@@ -61,6 +72,10 @@ type CheckoutOrderItemRow = {
   total: string | null;
   attributes: unknown;
   fulfillment: unknown;
+  product_origin_type?: string | null;
+  commercial_flow_type?: string | null;
+  commission_eligible?: boolean | null;
+  metadata?: JsonRecord | null;
 };
 
 type OrganizationRow = {
@@ -75,6 +90,19 @@ type CheckoutIntegrationRow = {
   status: string | null;
 };
 
+type CheckoutWhatsappRow = {
+  id: string;
+  phone_number: string | null;
+  display_name: string | null;
+  status: string | null;
+};
+
+type CheckoutWhatsappReturn = {
+  href: string;
+  phoneLabel: string;
+  displayName: string | null;
+};
+
 export default async function CheckoutPage({
   params,
 }: {
@@ -82,7 +110,7 @@ export default async function CheckoutPage({
 }) {
   const { sessionId } = await params;
   const client = createServiceClient();
-  const { session, order, items, organization, integration } = await loadCheckoutData(client, sessionId);
+  const { session, order, items, organization, integration, whatsapp } = await loadCheckoutData(client, sessionId);
 
   if (!session || !order || !organization) {
     return (
@@ -109,7 +137,21 @@ export default async function CheckoutPage({
   const shipping = formatCurrency(order.shipping_total);
   const updatedAt = formatDateTime(session.updated_at);
   const shippingBlocked = requiresShippingBeforePayment(order, items) && !paid;
-  const canUseCard = !shippingBlocked && !paid && !failed && amountNumber !== null && integration?.status === "connected" && Boolean(integration.public_key);
+  const canUseCard = session.method !== "card"
+    && !shippingBlocked
+    && !paid
+    && !failed
+    && amountNumber !== null
+    && integration?.status === "connected"
+    && Boolean(integration.public_key);
+  const commercialContext = resolveCheckoutCommercialContext(session, order);
+  const whatsappReturn = buildCheckoutWhatsappReturn({
+    phoneNumber: whatsapp?.phone_number ?? null,
+    displayName: whatsapp?.display_name ?? null,
+    organizationName: organization.name,
+    orderId: order.id,
+    status,
+  });
 
   return (
     <CheckoutShell>
@@ -139,10 +181,11 @@ export default async function CheckoutPage({
               initialOrderStatus={order.status}
             />
 
-            <div className="mt-8 grid gap-3 sm:grid-cols-3">
+            <div className="mt-8 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <CheckoutMetric label="Total" value={amount} />
               <CheckoutMetric label="Pedido" value={`#${order.id.slice(0, 8).toUpperCase()}`} />
               <CheckoutMetric label="Pagamento" value={session.method === "card" ? "Cartao" : "Pix"} />
+              <CheckoutMetric label="Recebedor" value={commercialContext.receiverLabel} />
             </div>
 
             <div className="mt-8">
@@ -151,7 +194,10 @@ export default async function CheckoutPage({
                 {items.length > 0 ? items.map((item) => (
                   <div key={item.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-4">
                     <div>
-                      <p className="text-sm font-semibold text-white">{item.title}</p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-sm font-semibold text-white">{item.title}</p>
+                        <ItemOriginBadge item={item} />
+                      </div>
                       <p className="mt-1 text-xs text-slate-400">
                         {item.sku_code ? `SKU ${item.sku_code}` : "Item do catalogo"} · Qtd. {item.quantity ?? 1}
                       </p>
@@ -169,6 +215,7 @@ export default async function CheckoutPage({
             <CheckoutDetail label="Cliente" value={order.customer_name ?? order.customer_phone ?? "Lead WhatsApp"} />
             <CheckoutDetail label="Subtotal" value={subtotal} />
             <CheckoutDetail label="Frete" value={shipping ?? order.shipping_method ?? "A combinar"} />
+            <CheckoutDetail label="Origem da venda" value={commercialContext.flowLabel} />
             <CheckoutDetail label="Ultima atualizacao" value={updatedAt ?? "Agora"} />
           </dl>
         </section>
@@ -180,6 +227,11 @@ export default async function CheckoutPage({
               <h2 className="mt-2 text-2xl font-semibold text-white">{session.method === "card" ? "Pagamento do pedido" : "Pague com Pix"}</h2>
             </div>
             <span className="rounded-full border border-slate-600 px-3 py-1 text-xs font-semibold text-slate-200">Seguro</span>
+          </div>
+
+          <div className="mt-5 rounded-[8px] border border-slate-700/70 bg-slate-900/70 p-4">
+            <p className="text-sm font-semibold text-white">{commercialContext.flowLabel}</p>
+            <p className="mt-2 text-xs leading-5 text-slate-400">{commercialContext.checkoutNote}</p>
           </div>
 
           {paid ? (
@@ -207,65 +259,23 @@ export default async function CheckoutPage({
               body="A confirmacao pode levar alguns instantes. Volte ao WhatsApp para acompanhar o pedido."
             />
           ) : (
-            <>
-              {session.pix_qr_code_base64 ? (
-                <div className="mt-6 flex justify-center rounded-[8px] border border-slate-700 bg-white p-4">
-                  <Image
-                    src={`data:image/png;base64,${session.pix_qr_code_base64}`}
-                    alt="QR Code Pix"
-                    width={220}
-                    height={220}
-                    unoptimized
-                    className="h-[220px] w-[220px]"
-                  />
-                </div>
-              ) : (
-                <CheckoutState
-                  tone="info"
-                  title="Pix sendo gerado"
-                  body="Aguarde alguns instantes ou solicite um novo link pelo WhatsApp."
-                />
-              )}
-
-              {session.pix_qr_code ? (
-                <div className="mt-5">
-                  <label className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-300" htmlFor="pix-code">
-                    Pix copia e cola
-                  </label>
-                  <textarea
-                    id="pix-code"
-                    readOnly
-                    value={session.pix_qr_code}
-                    className="mt-2 h-32 w-full resize-none rounded-[8px] border border-slate-700 bg-slate-900 p-3 text-xs leading-5 text-cyan-50 outline-none"
-                  />
-                </div>
-              ) : null}
-
-              {session.pix_ticket_url ? (
-                <a
-                  href={session.pix_ticket_url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-[8px] bg-cyan-300 px-4 text-sm font-semibold text-slate-950 transition hover:bg-cyan-200"
-                >
-                  Abrir pagamento no Mercado Pago
-                </a>
-              ) : null}
-            </>
-          )}
-
-          {canUseCard ? (
-            <MercadoPagoCardBrick
-              publicKey={integration!.public_key!}
+            <CheckoutPaymentOptions
               sessionId={session.id}
-              amount={amountNumber}
+              amount={amountNumber ?? 0}
               payerEmail={session.payer_email}
+              canUseCard={canUseCard}
+              cardPublicKey={integration?.public_key ?? null}
+              pixQrCode={session.pix_qr_code}
+              pixQrCodeBase64={session.pix_qr_code_base64}
+              pixTicketUrl={session.pix_ticket_url}
             />
-          ) : null}
+          )}
 
           <p className="mt-5 text-xs leading-5 text-slate-400">
             A confirmacao volta automaticamente para a loja no ConnectyHub. Nao envie comprovantes fora da conversa oficial.
           </p>
+
+          <CheckoutWhatsAppReturn link={whatsappReturn} />
         </aside>
       </main>
     </CheckoutShell>
@@ -299,6 +309,27 @@ function CheckoutDetail({ label, value }: { label: string; value: string | null 
   );
 }
 
+function ItemOriginBadge({ item }: { item: CheckoutOrderItemRow }) {
+  const metadata = readRecord(item.metadata);
+  const flow = normalizeCommercialFlowType(item.commercial_flow_type ?? readString(metadata.commercial_flow_type));
+  const origin = item.product_origin_type ?? readString(metadata.product_origin_type);
+  const label = flow === "connectyhub_resale"
+    ? "ConnectyHub"
+    : flow === "connectyhub_direct"
+      ? "Venda CH"
+      : origin === "external_provider" || flow === "external_marketplace"
+        ? "Parceiro"
+        : null;
+
+  if (!label) return null;
+
+  return (
+    <span className="rounded-full border border-cyan-300/30 bg-cyan-400/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-cyan-100">
+      {label}
+    </span>
+  );
+}
+
 function CheckoutState({
   tone,
   title,
@@ -323,10 +354,40 @@ function CheckoutState({
   );
 }
 
+function CheckoutWhatsAppReturn({ link }: { link: CheckoutWhatsappReturn | null }) {
+  return (
+    <div className="mt-5 rounded-[8px] border border-emerald-300/30 bg-emerald-400/10 p-4">
+      <p className="text-sm font-semibold text-white">Continue pelo WhatsApp</p>
+      <p className="mt-2 text-xs leading-5 text-emerald-50/80">
+        O atendimento do pedido continua na conversa oficial da loja.
+      </p>
+      {link ? (
+        <>
+          <a
+            href={link.href}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-[8px] bg-emerald-300 px-4 text-sm font-semibold text-emerald-950 transition hover:bg-emerald-200"
+          >
+            Voltar ao WhatsApp
+          </a>
+          <p className="mt-2 text-center text-[11px] text-emerald-50/70">
+            {link.displayName ? `${link.displayName} - ` : ""}{link.phoneLabel}
+          </p>
+        </>
+      ) : (
+        <p className="mt-3 rounded-[8px] border border-emerald-300/20 bg-emerald-400/10 px-3 py-2 text-xs leading-5 text-emerald-50/75">
+          Volte para a conversa em que recebeu este checkout para concluir o atendimento.
+        </p>
+      )}
+    </div>
+  );
+}
+
 async function loadCheckoutData(client: ReturnType<typeof createServiceClient>, sessionId: string) {
   const { data: session } = await client
     .from("sales_catalog_payment_sessions")
-    .select("id, organization_id, order_id, integration_id, provider, method, status, amount, currency, payer_email, pix_qr_code, pix_qr_code_base64, pix_ticket_url, provider_status, failure_reason, paid_at, updated_at, metadata")
+    .select("id, organization_id, order_id, integration_id, provider, method, status, amount, currency, payer_email, pix_qr_code, pix_qr_code_base64, pix_ticket_url, provider_status, failure_reason, paid_at, updated_at, payment_owner_type, commercial_flow_type, revenue_owner_type, commission_context, metadata")
     .eq("id", sessionId)
     .maybeSingle<CheckoutSessionRow>();
 
@@ -337,19 +398,20 @@ async function loadCheckoutData(client: ReturnType<typeof createServiceClient>, 
       items: [] as CheckoutOrderItemRow[],
       organization: null,
       integration: null,
+      whatsapp: null,
     };
   }
 
-  const [orderResult, itemsResult, organizationResult, integration] = await Promise.all([
+  const [orderResult, itemsResult, organizationResult, whatsappResult, integration] = await Promise.all([
     client
       .from("sales_catalog_orders")
-      .select("id, customer_name, customer_phone, subtotal, shipping_total, total, shipping_method, status, payment_status, metadata")
+      .select("id, customer_name, customer_phone, subtotal, shipping_total, total, shipping_method, status, payment_status, commercial_flow_type, revenue_owner_type, contains_platform_products, commission_eligible, metadata")
       .eq("id", session.order_id)
       .eq("organization_id", session.organization_id)
       .maybeSingle<CheckoutOrderRow>(),
     client
       .from("sales_catalog_order_items")
-      .select("id, title, sku_code, quantity, unit_price, sale_price, total, attributes, fulfillment")
+      .select("id, title, sku_code, quantity, unit_price, sale_price, total, attributes, fulfillment, product_origin_type, commercial_flow_type, commission_eligible, metadata")
       .eq("order_id", session.order_id)
       .eq("organization_id", session.organization_id)
       .order("created_at", { ascending: true }),
@@ -358,6 +420,15 @@ async function loadCheckoutData(client: ReturnType<typeof createServiceClient>, 
       .select("id, name, slug")
       .eq("id", session.organization_id)
       .maybeSingle<OrganizationRow>(),
+    client
+      .from("whatsapp_instances")
+      .select("id, phone_number, display_name, status")
+      .eq("organization_id", session.organization_id)
+      .eq("status", "connected")
+      .not("phone_number", "is", null)
+      .order("connected_at", { ascending: false, nullsFirst: false })
+      .limit(1)
+      .maybeSingle<CheckoutWhatsappRow>(),
     loadCheckoutIntegration(client, session),
   ]);
 
@@ -367,6 +438,7 @@ async function loadCheckoutData(client: ReturnType<typeof createServiceClient>, 
     items: (itemsResult.data ?? []) as CheckoutOrderItemRow[],
     organization: organizationResult.data ?? null,
     integration,
+    whatsapp: whatsappResult.data ?? null,
   };
 }
 
@@ -383,7 +455,7 @@ async function loadCheckoutIntegration(client: ReturnType<typeof createServiceCl
   }
 
   const metadata = readRecord(session.metadata);
-  if (readString(metadata.payment_owner) !== "connectyhub") {
+  if (session.payment_owner_type !== "connectyhub" && readString(metadata.payment_owner) !== "connectyhub") {
     return null;
   }
 
@@ -442,12 +514,146 @@ function normalizeCurrency(value: string | number | null | undefined) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function buildCheckoutWhatsappReturn(input: {
+  phoneNumber: string | null;
+  displayName: string | null;
+  organizationName: string;
+  orderId: string;
+  status: string;
+}): CheckoutWhatsappReturn | null {
+  const phone = normalizeWhatsappPhone(input.phoneNumber);
+
+  if (!phone) {
+    return null;
+  }
+
+  const orderCode = input.orderId.slice(0, 8).toUpperCase();
+  const statusLine = input.status === "approved"
+    ? "Meu pagamento foi aprovado."
+    : input.status === "rejected" || input.status === "cancelled" || input.status === "expired" || input.status === "error"
+      ? "Tive um problema no pagamento."
+      : "Estou finalizando o pagamento.";
+  const message = [
+    `Ola, vim do checkout ConnectyHub do pedido #${orderCode}.`,
+    statusLine,
+    "Quero continuar o atendimento pelo WhatsApp.",
+  ].join(" ");
+
+  return {
+    href: `https://wa.me/${phone}?text=${encodeURIComponent(message)}`,
+    phoneLabel: formatWhatsappPhone(phone),
+    displayName: input.displayName ?? input.organizationName,
+  };
+}
+
+function normalizeWhatsappPhone(value: string | null) {
+  const digits = value?.replace(/\D/g, "") ?? "";
+
+  return digits.length >= 10 ? digits : null;
+}
+
+function formatWhatsappPhone(value: string) {
+  if (value.length === 13 && value.startsWith("55")) {
+    return `+${value.slice(0, 2)} (${value.slice(2, 4)}) ${value.slice(4, 9)}-${value.slice(9)}`;
+  }
+
+  if (value.length === 12 && value.startsWith("55")) {
+    return `+${value.slice(0, 2)} (${value.slice(2, 4)}) ${value.slice(4, 8)}-${value.slice(8)}`;
+  }
+
+  return `+${value}`;
+}
+
 function readRecord(value: unknown): JsonRecord {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as JsonRecord) : {};
 }
 
 function readString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function readBoolean(value: unknown) {
+  if (typeof value === "boolean") return value;
+  if (value === "true") return true;
+  if (value === "false") return false;
+  return null;
+}
+
+function resolveCheckoutCommercialContext(session: CheckoutSessionRow, order: CheckoutOrderRow) {
+  const sessionMetadata = readRecord(session.metadata);
+  const commissionContext = readRecord(session.commission_context);
+  const orderMetadata = readRecord(order.metadata);
+  const flow = normalizeCommercialFlowType(
+    session.commercial_flow_type
+      ?? order.commercial_flow_type
+      ?? readString(sessionMetadata.commercial_flow_type)
+      ?? readString(orderMetadata.latest_commercial_flow_type)
+      ?? readString(orderMetadata.commercial_flow_type),
+  );
+  const revenueOwner = normalizeRevenueOwnerType(
+    session.revenue_owner_type
+      ?? order.revenue_owner_type
+      ?? readString(sessionMetadata.revenue_owner_type)
+      ?? readString(orderMetadata.latest_revenue_owner_type)
+      ?? readString(orderMetadata.revenue_owner_type),
+  );
+  const commissionEligible = readBoolean(order.commission_eligible)
+    ?? readBoolean(commissionContext.eligible)
+    ?? readBoolean(sessionMetadata.commission_eligible)
+    ?? readBoolean(orderMetadata.latest_commission_eligible)
+    ?? false;
+
+  if (flow === "connectyhub_resale") {
+    return {
+      flow,
+      revenueOwner,
+      commissionEligible,
+      flowLabel: "Produto ConnectyHub via loja parceira",
+      receiverLabel: "ConnectyHub",
+      checkoutNote: "O pagamento e processado pela ConnectyHub e o acompanhamento continua pelo WhatsApp da loja parceira.",
+    };
+  }
+
+  if (flow === "connectyhub_direct") {
+    return {
+      flow,
+      revenueOwner,
+      commissionEligible,
+      flowLabel: "Venda direta ConnectyHub",
+      receiverLabel: "ConnectyHub",
+      checkoutNote: "O pagamento e recebido pela ConnectyHub para este produto. O atendimento continua pelo WhatsApp oficial.",
+    };
+  }
+
+  if (flow === "external_marketplace") {
+    return {
+      flow,
+      revenueOwner,
+      commissionEligible,
+      flowLabel: "Marketplace parceiro",
+      receiverLabel: revenueOwner === "external_provider" ? "Fornecedor" : "ConnectyHub",
+      checkoutNote: "O pedido sera acompanhado no WhatsApp e liquidado conforme a regra comercial do fornecedor parceiro.",
+    };
+  }
+
+  return {
+    flow,
+    revenueOwner,
+    commissionEligible,
+    flowLabel: "Produto da loja",
+    receiverLabel: "Loja parceira",
+    checkoutNote: "O pagamento vai para a conta configurada pela loja. Voce continua acompanhando tudo pelo WhatsApp.",
+  };
+}
+
+function normalizeCommercialFlowType(value: string | null | undefined): SalesCatalogCommercialFlowType {
+  if (value === "connectyhub_resale" || value === "connectyhub_direct" || value === "external_marketplace") return value;
+  return "client_direct";
+}
+
+function normalizeRevenueOwnerType(value: string | null | undefined): SalesCatalogRevenueOwnerType {
+  if (value === "connectyhub" || value === "split" || value === "external_provider") return value;
+  return "client";
 }
 
 function formatDateTime(value: string | null) {

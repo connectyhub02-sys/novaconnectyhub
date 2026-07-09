@@ -8,8 +8,13 @@ import {
   mapPlatformProductRow,
   PLATFORM_PRODUCT_SELECT,
   type PlatformProductCommissionBase,
+  type PlatformProductCommissionPolicyType,
   type PlatformProductMarketplaceStatus,
+  type PlatformProductOwnerType,
+  type PlatformProductPayoutTargetType,
+  type PlatformProductRevenueOwnerType,
   type PlatformProductRow,
+  type PlatformProductSalesChannelType,
   type PlatformProductSettingsRow,
   type PlatformProductStatus,
 } from "@/lib/platform-products";
@@ -198,6 +203,19 @@ async function savePlatformProduct(request: NextRequest, mode: "create" | "updat
     const productCode = normalizeProductCode(readFormString(formData.get("productCode"))) ?? createPlatformProductCode(title, productId);
     const slug = normalizeSlug(readFormString(formData.get("slug"))) ?? createPlatformProductSlug(title, productId);
     const agentTag = normalizeAgentTag(readFormString(formData.get("agentTag"))) ?? createSalesCatalogTag(`connectyhub ${title}`, productId);
+    const ownerType = normalizeOwnerType(readFormString(formData.get("ownerType")));
+    const salesChannelType = normalizeSalesChannelType(readFormString(formData.get("salesChannelType")));
+    const directSale = salesChannelType === "direct";
+    const revenueOwnerType = ownerType === "external_provider" && !directSale
+      ? normalizeRevenueOwnerType(readFormString(formData.get("revenueOwnerType")))
+      : "connectyhub";
+    const commissionPolicyType = directSale ? "none" : normalizeCommissionPolicyType(readFormString(formData.get("commissionPolicyType")));
+    const payoutTargetType = ownerType === "external_provider" && !directSale
+      ? normalizePayoutTargetType(readFormString(formData.get("payoutTargetType")))
+      : "connectyhub";
+    const commissionPercentage = commissionPolicyType === "none"
+      ? 0
+      : normalizeMoneyNumber(formData.get("commissionPercentage"), 0, 100);
     const payload = {
       id: productId,
       product_code: productCode,
@@ -207,7 +225,12 @@ async function savePlatformProduct(request: NextRequest, mode: "create" | "updat
       commercial_description: description,
       category: normalizeOptionalText(readFormString(formData.get("category")), 80),
       status: normalizeProductStatus(readFormString(formData.get("status"))),
-      marketplace_status: normalizeMarketplaceStatus(readFormString(formData.get("marketplaceStatus"))),
+      marketplace_status: directSale ? "hidden" : normalizeMarketplaceStatus(readFormString(formData.get("marketplaceStatus"))),
+      owner_type: ownerType,
+      sales_channel_type: salesChannelType,
+      revenue_owner_type: revenueOwnerType,
+      commission_policy_type: commissionPolicyType,
+      payout_target_type: payoutTargetType,
       price: normalizeOptionalText(readFormString(formData.get("price")), 60),
       currency: normalizeOptionalText(readFormString(formData.get("currency")), 12) ?? "BRL",
       attributes: serializeItemAttributes(readItemAttributesPayload(formData.get("attributes"))),
@@ -220,7 +243,7 @@ async function savePlatformProduct(request: NextRequest, mode: "create" | "updat
       agent_tag: agentTag,
       agent_prompt: normalizeOptionalText(readFormString(formData.get("agentPrompt")), 1200),
       sales_notes: normalizeOptionalText(readFormString(formData.get("salesNotes")), 1200),
-      commission_percentage: normalizeMoneyNumber(formData.get("commissionPercentage"), 0, 100),
+      commission_percentage: commissionPercentage,
       commission_base: normalizeCommissionBase(readFormString(formData.get("commissionBase"))),
       commission_release_days: normalizeInteger(formData.get("commissionReleaseDays"), 0, 365, 15),
       recurring_commission_months: normalizeInteger(formData.get("recurringCommissionMonths"), 0, 120, 0),
@@ -252,6 +275,10 @@ async function savePlatformProduct(request: NextRequest, mode: "create" | "updat
         productCode: data.product_code,
         status: data.status,
         marketplaceStatus: data.marketplace_status,
+        ownerType: data.owner_type,
+        salesChannelType: data.sales_channel_type,
+        revenueOwnerType: data.revenue_owner_type,
+        commissionPolicyType: data.commission_policy_type,
         commissionPercentage: data.commission_percentage,
       },
     });
@@ -562,6 +589,31 @@ function normalizeMarketplaceStatus(value: string | null): PlatformProductMarket
   if (!value) return "visible";
   if (value === "visible" || value === "featured") return value;
   return "hidden";
+}
+
+function normalizeOwnerType(value: string | null): PlatformProductOwnerType {
+  if (value === "client" || value === "external_provider") return value;
+  return "connectyhub";
+}
+
+function normalizeSalesChannelType(value: string | null): PlatformProductSalesChannelType {
+  if (value === "direct" || value === "affiliate" || value === "marketplace") return value;
+  return "resale";
+}
+
+function normalizeRevenueOwnerType(value: string | null): PlatformProductRevenueOwnerType {
+  if (value === "client" || value === "split" || value === "external_provider") return value;
+  return "connectyhub";
+}
+
+function normalizeCommissionPolicyType(value: string | null): PlatformProductCommissionPolicyType {
+  if (value === "none" || value === "fixed" || value === "custom") return value;
+  return "percentage";
+}
+
+function normalizePayoutTargetType(value: string | null): PlatformProductPayoutTargetType {
+  if (value === "client" || value === "split" || value === "external_provider") return value;
+  return "connectyhub";
 }
 
 function normalizeCommissionBase(value: string | null): PlatformProductCommissionBase {

@@ -3643,6 +3643,12 @@ async function recordSalesCatalogOrderIntent(input: {
     const primarySku = resolveRuntimeOrderSku(primaryItem);
     const primaryTotal = primarySku?.salePrice ?? primarySku?.price ?? primaryItem.offer.salePrice ?? primaryItem.price;
     const total = items.length === 1 ? primaryTotal : null;
+    const containsPlatformProducts = items.some((item) => Boolean(item.platformProductId));
+    const commercialFlowType = containsPlatformProducts
+      ? items.some((item) => item.commercialFlowType === "connectyhub_direct") ? "connectyhub_direct" : "connectyhub_resale"
+      : "client_direct";
+    const revenueOwnerType = containsPlatformProducts ? "connectyhub" : "client";
+    const commissionEligible = items.some((item) => item.commissionEligible);
     const now = new Date().toISOString();
     const { data: orderData, error: orderError } = await input.client
       .from("sales_catalog_orders")
@@ -3658,6 +3664,10 @@ async function recordSalesCatalogOrderIntent(input: {
         customer_phone: customerPhone,
         subtotal: total,
         total,
+        commercial_flow_type: commercialFlowType,
+        revenue_owner_type: revenueOwnerType,
+        contains_platform_products: containsPlatformProducts,
+        commission_eligible: commissionEligible,
         agent_notes: preview(input.text, 1000),
         metadata: {
           created_from: "whatsapp_agent_runtime",
@@ -3665,6 +3675,10 @@ async function recordSalesCatalogOrderIntent(input: {
           agent_id: input.context.agent.id,
           selected_catalog_item_ids: items.map((item) => item.id),
           selected_catalog_item_tags: items.map((item) => item.tag),
+          commercial_flow_type: commercialFlowType,
+          revenue_owner_type: revenueOwnerType,
+          commission_eligible: commissionEligible,
+          platform_product_ids: items.map((item) => item.platformProductId).filter(Boolean),
         },
         created_at: now,
         updated_at: now,
@@ -3694,6 +3708,11 @@ async function recordSalesCatalogOrderIntent(input: {
         unit_price: unitPrice,
         sale_price: salePrice,
         total: salePrice ?? unitPrice,
+        product_origin_type: item.productOriginType,
+        commercial_flow_type: item.commercialFlowType,
+        revenue_owner_type: item.revenueOwnerType,
+        commission_eligible: item.commissionEligible,
+        platform_product_id: item.platformProductId,
         attributes: (sku?.attributes.length ? sku.attributes : item.attributes).map((attribute) => ({
           id: attribute.id,
           name: attribute.name,
@@ -3711,6 +3730,15 @@ async function recordSalesCatalogOrderIntent(input: {
           currency: sku?.currency ?? item.currency,
           source: item.source,
           stock_status: sku?.stockStatus ?? item.inventory.status,
+          platform_product_id: item.platformProductId,
+          platform_product_code: item.platformProductCode,
+          commercial_flow_type: item.commercialFlowType,
+          revenue_owner_type: item.revenueOwnerType,
+          commission_policy_type: item.commissionPolicyType,
+          commission_eligible: item.commissionEligible,
+          platform_product_commission_percentage: item.platformProductCommissionPercentage,
+          platform_product_commission_release_days: item.platformProductCommissionReleaseDays,
+          platform_product_agent_prompt: item.platformProductAgentPrompt,
         },
       };
     });

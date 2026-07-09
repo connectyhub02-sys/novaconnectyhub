@@ -41,6 +41,9 @@ import {
   type SalesCatalogMedia,
   type SalesCatalogFulfillmentMode,
   type SalesCatalogOrderStatus,
+  type SalesCatalogCommercialFlowType,
+  type SalesCatalogProductOriginType,
+  type SalesCatalogRevenueOwnerType,
   type SalesCatalogProductFulfillment,
   type SalesCatalogProductShipping,
   type SalesCatalogProductInventory,
@@ -93,6 +96,10 @@ export type SalesCatalogOrderRow = {
   agent_notes: string | null;
   internal_notes: string | null;
   latest_payment_session_id: string | null;
+  commercial_flow_type: string | null;
+  revenue_owner_type: string | null;
+  contains_platform_products: boolean | null;
+  commission_eligible: boolean | null;
   metadata: JsonRecord | null;
   created_by: string | null;
   created_at: string | null;
@@ -114,6 +121,11 @@ export type SalesCatalogOrderItemRow = {
   total: string | null;
   attributes: unknown;
   fulfillment: unknown;
+  product_origin_type: string | null;
+  commercial_flow_type: string | null;
+  revenue_owner_type: string | null;
+  commission_eligible: boolean | null;
+  platform_product_id: string | null;
   metadata: JsonRecord | null;
   created_at: string | null;
 };
@@ -183,6 +195,10 @@ export type SalesCatalogPaymentSessionRow = {
   expires_at: string | null;
   paid_at: string | null;
   failure_reason: string | null;
+  payment_owner_type: string | null;
+  commercial_flow_type: string | null;
+  revenue_owner_type: string | null;
+  commission_context: JsonRecord | null;
   metadata: JsonRecord | null;
   created_at: string | null;
   updated_at: string | null;
@@ -336,6 +352,10 @@ export async function listClientSalesCatalogOrders(input: {
       "agent_notes",
       "internal_notes",
       "latest_payment_session_id",
+      "commercial_flow_type",
+      "revenue_owner_type",
+      "contains_platform_products",
+      "commission_eligible",
       "metadata",
       "created_by",
       "created_at",
@@ -358,7 +378,7 @@ export async function listClientSalesCatalogOrders(input: {
 
   const { data: itemData, error: itemError } = await client
     .from("sales_catalog_order_items")
-    .select("id, order_id, organization_id, catalog_item_id, sku_id, sku_code, title, tag, quantity, unit_price, sale_price, total, attributes, fulfillment, metadata, created_at")
+    .select("id, order_id, organization_id, catalog_item_id, sku_id, sku_code, title, tag, quantity, unit_price, sale_price, total, attributes, fulfillment, product_origin_type, commercial_flow_type, revenue_owner_type, commission_eligible, platform_product_id, metadata, created_at")
     .in("order_id", orderIds)
     .order("created_at", { ascending: true });
 
@@ -419,7 +439,7 @@ export async function listClientSalesCatalogPaymentSessions(input: {
 
   const { data, error } = await client
     .from("sales_catalog_payment_sessions")
-    .select("id, organization_id, order_id, integration_id, provider, method, status, amount, currency, payer_email, provider_payment_id, provider_status, provider_status_detail, checkout_url, pix_qr_code, pix_qr_code_base64, pix_ticket_url, external_reference, expires_at, paid_at, failure_reason, metadata, created_at, updated_at")
+    .select("id, organization_id, order_id, integration_id, provider, method, status, amount, currency, payer_email, provider_payment_id, provider_status, provider_status_detail, checkout_url, pix_qr_code, pix_qr_code_base64, pix_ticket_url, external_reference, expires_at, paid_at, failure_reason, payment_owner_type, commercial_flow_type, revenue_owner_type, commission_context, metadata, created_at, updated_at")
     .in("organization_id", companyIds)
     .order("created_at", { ascending: false })
     .limit(120);
@@ -553,6 +573,16 @@ export function mapSalesCatalogItem(row: SalesCatalogMemoryRow): ClientSalesCata
     offer: readProductOffer(metadata.offer),
     fulfillment: readProductFulfillment(metadata.fulfillment),
     shipping: readProductShipping(metadata.shipping),
+    productOriginType: normalizeProductOriginType(readString(metadata.product_origin_type)),
+    commercialFlowType: normalizeCommercialFlowType(readString(metadata.commercial_flow_type)),
+    revenueOwnerType: normalizeRevenueOwnerType(readString(metadata.revenue_owner_type)),
+    commissionPolicyType: normalizeCommissionPolicyType(readString(metadata.commission_policy_type)),
+    commissionEligible: readBoolean(metadata.commission_eligible) ?? false,
+    platformProductId: readString(metadata.platform_product_id),
+    platformProductCode: readString(metadata.platform_product_code),
+    platformProductCommissionPercentage: readNumber(metadata.platform_product_commission_percentage),
+    platformProductCommissionReleaseDays: readNumber(metadata.platform_product_commission_release_days),
+    platformProductAgentPrompt: readString(metadata.platform_product_agent_prompt),
     source: normalizeSource(readString(metadata.source)),
     whatsappCatalogId: readString(metadata.whatsapp_catalog_id),
     whatsappCatalogJid: readString(metadata.whatsapp_catalog_jid),
@@ -610,6 +640,8 @@ export function mapSalesCatalogOrder(
   row: SalesCatalogOrderRow,
   items: SalesCatalogOrderItemRow[] = [],
 ): ClientSalesCatalogOrder {
+  const metadata = readRecord(row.metadata) ?? {};
+
   return {
     id: row.id,
     companyId: readString(row.organization_id) ?? "",
@@ -634,6 +666,15 @@ export function mapSalesCatalogOrder(
     agentNotes: readString(row.agent_notes),
     internalNotes: readString(row.internal_notes),
     latestPaymentSessionId: readString(row.latest_payment_session_id),
+    commercialFlowType: normalizeCommercialFlowType(readString(row.commercial_flow_type) ?? readString(metadata.commercial_flow_type)),
+    revenueOwnerType: normalizeRevenueOwnerType(readString(row.revenue_owner_type) ?? readString(metadata.revenue_owner_type)),
+    containsPlatformProducts: row.contains_platform_products ?? readBoolean(metadata.contains_platform_products),
+    commissionEligible: row.commission_eligible ?? readBoolean(metadata.commission_eligible),
+    inventoryDeductedAt: readString(metadata.inventory_deducted_at),
+    inventoryRestoredAt: readString(metadata.inventory_restored_at),
+    paymentWhatsappNotifiedAt: readString(metadata.payment_whatsapp_notified_at),
+    inventoryDeductedItems: readArrayLength(metadata.inventory_deducted_items),
+    inventoryRestoredItems: readArrayLength(metadata.inventory_restored_items),
     items: items.map(mapSalesCatalogOrderItem),
     createdBy: readString(row.created_by),
     createdAt: row.created_at,
@@ -642,6 +683,8 @@ export function mapSalesCatalogOrder(
 }
 
 export function mapSalesCatalogOrderItem(row: SalesCatalogOrderItemRow): ClientSalesCatalogOrder["items"][number] {
+  const metadata = readRecord(row.metadata) ?? {};
+
   return {
     id: row.id,
     orderId: row.order_id,
@@ -657,6 +700,14 @@ export function mapSalesCatalogOrderItem(row: SalesCatalogOrderItemRow): ClientS
     total: readString(row.total),
     attributes: readItemAttributes(row.attributes),
     fulfillment: readProductFulfillment(row.fulfillment),
+    productOriginType: normalizeProductOriginType(readString(row.product_origin_type) ?? readString(metadata.product_origin_type)),
+    commercialFlowType: normalizeCommercialFlowType(readString(row.commercial_flow_type) ?? readString(metadata.commercial_flow_type)),
+    revenueOwnerType: normalizeRevenueOwnerType(readString(row.revenue_owner_type) ?? readString(metadata.revenue_owner_type)),
+    commissionEligible: row.commission_eligible ?? readBoolean(metadata.commission_eligible),
+    platformProductId: readString(row.platform_product_id) ?? readString(metadata.platform_product_id),
+    platformProductCode: readString(metadata.platform_product_code),
+    platformProductCommissionPercentage: readNumber(metadata.platform_product_commission_percentage),
+    platformProductCommissionReleaseDays: readNumber(metadata.platform_product_commission_release_days),
     createdAt: row.created_at,
   };
 }
@@ -713,6 +764,9 @@ export function mapSalesCatalogPaymentIntegration(row: SalesCatalogPaymentIntegr
 }
 
 export function mapSalesCatalogPaymentSession(row: SalesCatalogPaymentSessionRow): ClientSalesCatalogPaymentSession {
+  const metadata = readRecord(row.metadata) ?? {};
+  const commissionContext = readRecord(row.commission_context) ?? {};
+
   return {
     id: row.id,
     companyId: readString(row.organization_id) ?? "",
@@ -735,6 +789,12 @@ export function mapSalesCatalogPaymentSession(row: SalesCatalogPaymentSessionRow
     expiresAt: row.expires_at,
     paidAt: row.paid_at,
     failureReason: readString(row.failure_reason),
+    paymentOwnerType: normalizeRevenueOwnerType(readString(row.payment_owner_type) ?? readString(metadata.payment_owner_type) ?? readString(metadata.payment_owner)),
+    commercialFlowType: normalizeCommercialFlowType(readString(row.commercial_flow_type) ?? readString(metadata.commercial_flow_type)),
+    revenueOwnerType: normalizeRevenueOwnerType(readString(row.revenue_owner_type) ?? readString(metadata.revenue_owner_type)),
+    commissionEligible: readBoolean(commissionContext.eligible)
+      || readBoolean(commissionContext.commission_eligible)
+      || readBoolean(metadata.commission_eligible),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -1014,6 +1074,26 @@ function normalizeSource(value: string | null): SalesCatalogSource {
   return "manual";
 }
 
+function normalizeProductOriginType(value: string | null): SalesCatalogProductOriginType {
+  if (value === "connectyhub" || value === "external_provider") return value;
+  return "client";
+}
+
+function normalizeCommercialFlowType(value: string | null): SalesCatalogCommercialFlowType {
+  if (value === "connectyhub_resale" || value === "connectyhub_direct" || value === "external_marketplace") return value;
+  return "client_direct";
+}
+
+function normalizeRevenueOwnerType(value: string | null): SalesCatalogRevenueOwnerType {
+  if (value === "connectyhub" || value === "split" || value === "external_provider") return value;
+  return "client";
+}
+
+function normalizeCommissionPolicyType(value: string | null) {
+  if (value === "percentage" || value === "fixed" || value === "custom") return value;
+  return "none";
+}
+
 function normalizeSkuStatus(value: string | null): SalesCatalogSkuStatus {
   if (value === "draft" || value === "archived") return value;
   return "active";
@@ -1254,6 +1334,10 @@ function readStringList(value: unknown, fallback: string[]) {
     .filter((item): item is string => Boolean(item));
 
   return Array.from(new Set(values));
+}
+
+function readArrayLength(value: unknown) {
+  return Array.isArray(value) ? value.length : 0;
 }
 
 function readRecord(value: unknown): JsonRecord | null {

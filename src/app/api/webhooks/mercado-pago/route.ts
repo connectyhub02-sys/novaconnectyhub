@@ -22,6 +22,11 @@ type PaymentSessionRow = {
   organization_id: string;
   order_id: string;
   integration_id: string | null;
+  method: string | null;
+  payment_owner_type: string | null;
+  commercial_flow_type: string | null;
+  revenue_owner_type: string | null;
+  commission_context: JsonRecord | null;
   metadata: JsonRecord | null;
 };
 
@@ -56,7 +61,7 @@ export async function POST(request: NextRequest) {
 
   const { data: session } = await client
     .from("sales_catalog_payment_sessions")
-    .select("id, organization_id, order_id, integration_id, metadata")
+    .select("id, organization_id, order_id, integration_id, method, payment_owner_type, commercial_flow_type, revenue_owner_type, commission_context, metadata")
     .eq("provider", "mercado_pago")
     .eq("provider_payment_id", dataId)
     .maybeSingle<PaymentSessionRow>();
@@ -78,7 +83,26 @@ export async function POST(request: NextRequest) {
   }
 
   const sessionMetadata = readRecord(session.metadata);
-  const connectyHubOwned = readString(sessionMetadata.payment_owner) === "connectyhub";
+  const commissionContext = readRecord(session.commission_context);
+  const paymentOwnerType = normalizeRevenueOwnerType(
+    session.payment_owner_type
+      ?? readString(sessionMetadata.payment_owner_type)
+      ?? readString(sessionMetadata.payment_owner),
+  );
+  const connectyHubOwned = paymentOwnerType === "connectyhub";
+  const commercialFlowType = normalizeCommercialFlowType(
+    session.commercial_flow_type
+      ?? readString(sessionMetadata.commercial_flow_type),
+  );
+  const revenueOwnerType = normalizeRevenueOwnerType(
+    session.revenue_owner_type
+      ?? readString(sessionMetadata.revenue_owner_type),
+  );
+  const commissionEligible = readBoolean(commissionContext.eligible)
+    ?? readBoolean(commissionContext.commission_eligible)
+    ?? readBoolean(sessionMetadata.commission_eligible)
+    ?? false;
+  const paymentMethodLabel = session.method === "card" ? "Cartao Mercado Pago" : "Pix Mercado Pago";
   const integration = connectyHubOwned
     ? null
     : await ensureMercadoPagoAccessToken({
@@ -155,6 +179,13 @@ export async function POST(request: NextRequest) {
       session.id,
       dataId,
       readRecord(orderMetadataRow?.metadata),
+      {
+        paymentMethodLabel,
+        commercialFlowType,
+        revenueOwnerType,
+        containsPlatformProducts: connectyHubOwned,
+        commissionEligible,
+      },
     );
     const now = new Date().toISOString();
 
@@ -190,7 +221,7 @@ export async function POST(request: NextRequest) {
           orderId: session.order_id,
           paymentSessionId: session.id,
           providerPaymentId: dataId,
-          paymentMethodLabel: "Pix Mercado Pago",
+          paymentMethodLabel,
           source: "mercado_pago_webhook",
         })
       : await markPlatformProductCommissionsForPaymentStatus({
@@ -232,10 +263,14 @@ export async function POST(request: NextRequest) {
         provider_status: pixData.providerStatus,
         status: pixData.status,
         payment_owner: connectyHubOwned ? "connectyhub" : "seller",
+        commercial_flow_type: commercialFlowType,
+        revenue_owner_type: revenueOwnerType,
+        commission_eligible: commissionEligible,
         post_payment: postPayment,
       },
     });
 
+    revalidatePath(`/checkout/${session.id}`);
     revalidatePath("/dashboard/links");
     revalidatePath("/dashboard/whatsapp");
 
@@ -302,18 +337,32 @@ function buildOrderPatchFromPaymentStatus(
   sessionId: string,
   providerPaymentId: string,
   currentMetadata: JsonRecord,
+  ownerContext: {
+    paymentMethodLabel: string;
+    commercialFlowType: string;
+    revenueOwnerType: string;
+    containsPlatformProducts: boolean;
+    commissionEligible: boolean;
+  },
 ) {
   if (status === "approved") {
     return {
       latest_payment_session_id: sessionId,
       status: "paid",
       payment_status: "confirmed",
-      payment_method: "Pix Mercado Pago",
+      payment_method: ownerContext.paymentMethodLabel,
+      commercial_flow_type: ownerContext.commercialFlowType,
+      revenue_owner_type: ownerContext.revenueOwnerType,
+      contains_platform_products: ownerContext.containsPlatformProducts,
+      commission_eligible: ownerContext.commissionEligible,
       metadata: {
         ...currentMetadata,
         payment_gateway_confirmed_at: new Date().toISOString(),
         latest_payment_session_id: sessionId,
         latest_provider_payment_id: providerPaymentId,
+        latest_commercial_flow_type: ownerContext.commercialFlowType,
+        latest_revenue_owner_type: ownerContext.revenueOwnerType,
+        latest_commission_eligible: ownerContext.commissionEligible,
       },
     };
   }
@@ -322,12 +371,19 @@ function buildOrderPatchFromPaymentStatus(
     return {
       latest_payment_session_id: sessionId,
       payment_status: "failed",
-      payment_method: "Pix Mercado Pago",
+      payment_method: ownerContext.paymentMethodLabel,
+      commercial_flow_type: ownerContext.commercialFlowType,
+      revenue_owner_type: ownerContext.revenueOwnerType,
+      contains_platform_products: ownerContext.containsPlatformProducts,
+      commission_eligible: ownerContext.commissionEligible,
       metadata: {
         ...currentMetadata,
         payment_gateway_failed_at: new Date().toISOString(),
         latest_payment_session_id: sessionId,
         latest_provider_payment_id: providerPaymentId,
+        latest_commercial_flow_type: ownerContext.commercialFlowType,
+        latest_revenue_owner_type: ownerContext.revenueOwnerType,
+        latest_commission_eligible: ownerContext.commissionEligible,
       },
     };
   }
@@ -336,12 +392,19 @@ function buildOrderPatchFromPaymentStatus(
     return {
       latest_payment_session_id: sessionId,
       payment_status: "refunded",
-      payment_method: "Pix Mercado Pago",
+      payment_method: ownerContext.paymentMethodLabel,
+      commercial_flow_type: ownerContext.commercialFlowType,
+      revenue_owner_type: ownerContext.revenueOwnerType,
+      contains_platform_products: ownerContext.containsPlatformProducts,
+      commission_eligible: ownerContext.commissionEligible,
       metadata: {
         ...currentMetadata,
         payment_gateway_refunded_at: new Date().toISOString(),
         latest_payment_session_id: sessionId,
         latest_provider_payment_id: providerPaymentId,
+        latest_commercial_flow_type: ownerContext.commercialFlowType,
+        latest_revenue_owner_type: ownerContext.revenueOwnerType,
+        latest_commission_eligible: ownerContext.commissionEligible,
       },
     };
   }
@@ -350,7 +413,19 @@ function buildOrderPatchFromPaymentStatus(
     latest_payment_session_id: sessionId,
     status: "pending_payment",
     payment_status: "pending",
-    payment_method: "Pix Mercado Pago",
+    payment_method: ownerContext.paymentMethodLabel,
+    commercial_flow_type: ownerContext.commercialFlowType,
+    revenue_owner_type: ownerContext.revenueOwnerType,
+    contains_platform_products: ownerContext.containsPlatformProducts,
+    commission_eligible: ownerContext.commissionEligible,
+    metadata: {
+      ...currentMetadata,
+      latest_payment_session_id: sessionId,
+      latest_provider_payment_id: providerPaymentId,
+      latest_commercial_flow_type: ownerContext.commercialFlowType,
+      latest_revenue_owner_type: ownerContext.revenueOwnerType,
+      latest_commission_eligible: ownerContext.commissionEligible,
+    },
   };
 }
 
@@ -360,4 +435,21 @@ function readRecord(value: unknown): JsonRecord {
 
 function readString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function readBoolean(value: unknown) {
+  if (typeof value === "boolean") return value;
+  if (value === "true") return true;
+  if (value === "false") return false;
+  return null;
+}
+
+function normalizeCommercialFlowType(value: string | null) {
+  if (value === "connectyhub_resale" || value === "connectyhub_direct" || value === "external_marketplace") return value;
+  return "client_direct";
+}
+
+function normalizeRevenueOwnerType(value: string | null) {
+  if (value === "connectyhub" || value === "split" || value === "external_provider") return value;
+  return "client";
 }

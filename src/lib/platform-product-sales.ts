@@ -17,6 +17,12 @@ type OrderItemRow = {
   unit_price: string | null;
   sale_price: string | null;
   total: string | null;
+  product_origin_type?: string | null;
+  commercial_flow_type?: string | null;
+  revenue_owner_type?: string | null;
+  commission_eligible?: boolean | null;
+  platform_product_id?: string | null;
+  platform_product_import_id?: string | null;
   metadata: JsonRecord | null;
 };
 
@@ -29,6 +35,9 @@ type PlatformProductSalesRow = {
   id: string;
   product_code: string;
   name: string;
+  sales_channel_type: string | null;
+  revenue_owner_type: string | null;
+  commission_policy_type: string | null;
   commission_percentage: string | number | null;
   commission_base: string | null;
   commission_release_days: string | number | null;
@@ -47,17 +56,44 @@ type ExistingCommissionRow = {
   id: string;
   order_item_id: string | null;
   status: string | null;
+  metadata: JsonRecord | null;
+};
+
+type PaymentCommissionRow = {
+  id: string;
+  status: string | null;
+  metadata: JsonRecord | null;
 };
 
 type PlatformOrderItem = {
   item: OrderItemRow;
   platformProductId: string;
   catalogMetadata: JsonRecord;
+  commercialFlowType: SalesCatalogCommercialFlowType;
+  revenueOwnerType: SalesCatalogRevenueOwnerType;
+  commissionEligible: boolean;
 };
 
+type SalesCatalogCommercialFlowType = "client_direct" | "connectyhub_resale" | "connectyhub_direct" | "external_marketplace";
+type SalesCatalogRevenueOwnerType = "client" | "connectyhub" | "split" | "external_provider";
+
 export type SalesCatalogPaymentOwner =
-  | { owner: "seller"; platformProductIds: string[]; catalogItemIds: string[] }
-  | { owner: "connectyhub"; platformProductIds: string[]; catalogItemIds: string[] };
+  | {
+      owner: "seller";
+      commercialFlowType: "client_direct";
+      revenueOwnerType: "client";
+      commissionEligible: false;
+      platformProductIds: string[];
+      catalogItemIds: string[];
+    }
+  | {
+      owner: "connectyhub";
+      commercialFlowType: "connectyhub_resale" | "connectyhub_direct" | "external_marketplace";
+      revenueOwnerType: Exclude<SalesCatalogRevenueOwnerType, "client">;
+      commissionEligible: boolean;
+      platformProductIds: string[];
+      catalogItemIds: string[];
+    };
 
 export async function resolveSalesCatalogOrderPaymentOwner(input: {
   client: SupabaseClient;
@@ -68,7 +104,14 @@ export async function resolveSalesCatalogOrderPaymentOwner(input: {
   const platformItems = await findPlatformOrderItems(input.client, input.organizationId, items);
 
   if (platformItems.length === 0) {
-    return { owner: "seller", platformProductIds: [], catalogItemIds: [] };
+    return {
+      owner: "seller",
+      commercialFlowType: "client_direct",
+      revenueOwnerType: "client",
+      commissionEligible: false,
+      platformProductIds: [],
+      catalogItemIds: [],
+    };
   }
 
   const platformOrderItemIds = new Set(platformItems.map((entry) => entry.item.id));
@@ -78,8 +121,15 @@ export async function resolveSalesCatalogOrderPaymentOwner(input: {
     throw new Error("Nao misture produtos proprios e produtos ConnectyHub no mesmo checkout. Crie pedidos separados para garantir o recebimento correto.");
   }
 
+  const hasDirect = platformItems.some((entry) => entry.commercialFlowType === "connectyhub_direct");
+  const commercialFlowType = hasDirect ? "connectyhub_direct" : normalizePlatformCommercialFlowType(platformItems[0]?.commercialFlowType);
+  const revenueOwnerType = normalizeConnectyHubRevenueOwner(platformItems[0]?.revenueOwnerType);
+
   return {
     owner: "connectyhub",
+    commercialFlowType,
+    revenueOwnerType,
+    commissionEligible: platformItems.some((entry) => entry.commissionEligible),
     platformProductIds: uniqueStrings(platformItems.map((entry) => entry.platformProductId)),
     catalogItemIds: uniqueStrings(platformItems.map((entry) => entry.item.catalog_item_id)),
   };
@@ -126,6 +176,12 @@ export async function recordPlatformProductCommissionsForApprovedPayment(input: 
     const importRecord = importsByProductId.get(entry.platformProductId);
     const quantity = normalizeQuantity(entry.item.quantity);
     const saleAmount = resolveOrderItemSaleAmount(entry.item);
+    const commissionPolicyType = normalizeCommissionPolicyType(
+      product?.commission_policy_type ?? readString(entry.catalogMetadata.commission_policy_type),
+    );
+    const salesChannelType = normalizeSalesChannelType(
+      product?.sales_channel_type ?? readString(entry.catalogMetadata.sales_channel_type),
+    );
 
     if (!saleAmount || saleAmount <= 0) continue;
 
@@ -133,6 +189,16 @@ export async function recordPlatformProductCommissionsForApprovedPayment(input: 
       readNumber(product?.commission_percentage)
         ?? readNumber(entry.catalogMetadata.platform_product_commission_percentage),
     );
+
+    if (
+      commissionPolicyType === "none"
+      || salesChannelType === "direct"
+      || !entry.commissionEligible
+      || commissionPercentage <= 0
+    ) {
+      continue;
+    }
+
     const releaseDays = Math.max(0, toInteger(
       product?.commission_release_days ?? entry.catalogMetadata.platform_product_commission_release_days,
       15,
@@ -141,6 +207,7 @@ export async function recordPlatformProductCommissionsForApprovedPayment(input: 
     const releaseAt = new Date(now.getTime() + releaseDays * 24 * 60 * 60 * 1000).toISOString();
     const commissionStatus = releaseDays === 0 ? "available" : "pending";
     const existing = existingByOrderItemId.get(entry.item.id);
+    const existingMetadata = readRecord(existing?.metadata);
     const payload = {
       platform_product_id: entry.platformProductId,
       import_id: importRecord?.id ?? null,
@@ -155,11 +222,16 @@ export async function recordPlatformProductCommissionsForApprovedPayment(input: 
       commission_amount: commissionAmount,
       release_at: releaseAt,
       metadata: {
+        ...existingMetadata,
         source: input.source,
         payment_method: input.paymentMethodLabel,
         provider_payment_id: input.providerPaymentId,
         product_code: product?.product_code ?? readString(entry.catalogMetadata.platform_product_code),
         product_name: product?.name ?? entry.item.title,
+        commercial_flow_type: entry.commercialFlowType,
+        revenue_owner_type: product?.revenue_owner_type ?? entry.revenueOwnerType,
+        sales_channel_type: salesChannelType,
+        commission_policy_type: commissionPolicyType,
         order_item_title: entry.item.title,
         order_item_sku_code: entry.item.sku_code,
         commission_base: product?.commission_base ?? "gross",
@@ -236,32 +308,61 @@ export async function markPlatformProductCommissionsForPaymentStatus(input: {
 }) {
   const commissionStatus = resolveCommissionStatusFromPayment(input.status);
   if (!commissionStatus) return { updated: 0 };
+  const updatableStatuses = commissionStatus === "refunded"
+    ? ["pending", "available", "paid"]
+    : ["pending", "available"];
+  const now = new Date().toISOString();
 
-  const { data, error } = await input.client
+  const { data: rows, error } = await input.client
     .from("platform_product_commissions")
-    .update({
-      status: commissionStatus,
-      metadata: {
-        payment_status: input.status,
-        provider_payment_id: input.providerPaymentId,
-        status_updated_from: "payment_gateway",
-        status_updated_at: new Date().toISOString(),
-      },
-      updated_at: new Date().toISOString(),
-    })
+    .select("id, status, metadata")
     .eq("organization_id", input.organizationId)
     .eq("payment_session_id", input.paymentSessionId)
-    .in("status", ["pending", "available"])
-    .select("id");
+    .in("status", updatableStatuses);
 
   if (error) return { updated: 0 };
-  return { updated: (data ?? []).length };
+
+  let updated = 0;
+
+  for (const row of (rows ?? []) as unknown as PaymentCommissionRow[]) {
+    const metadata = readRecord(row.metadata);
+    const statusHistory = Array.isArray(metadata.status_history) ? metadata.status_history : [];
+    const statusEntry = {
+      at: now,
+      from: row.status,
+      to: commissionStatus,
+      payment_status: input.status,
+      provider_payment_id: input.providerPaymentId,
+      source: "payment_gateway",
+    };
+    const { error: updateError } = await input.client
+      .from("platform_product_commissions")
+      .update({
+        status: commissionStatus,
+        metadata: {
+          ...metadata,
+          payment_status: input.status,
+          provider_payment_id: input.providerPaymentId,
+          status_updated_from: "payment_gateway",
+          status_updated_at: now,
+          last_status_update: statusEntry,
+          status_history: [...statusHistory.slice(-19), statusEntry],
+        },
+        updated_at: now,
+      })
+      .eq("id", row.id)
+      .eq("organization_id", input.organizationId);
+
+    if (!updateError) updated += 1;
+  }
+
+  return { updated };
 }
 
 async function loadOrderItems(client: SupabaseClient, organizationId: string, orderId: string) {
   const { data, error } = await client
     .from("sales_catalog_order_items")
-    .select("id, order_id, organization_id, catalog_item_id, sku_id, sku_code, title, quantity, unit_price, sale_price, total, metadata")
+    .select("id, order_id, organization_id, catalog_item_id, sku_id, sku_code, title, quantity, unit_price, sale_price, total, product_origin_type, commercial_flow_type, revenue_owner_type, commission_eligible, platform_product_id, platform_product_import_id, metadata")
     .eq("order_id", orderId)
     .eq("organization_id", organizationId)
     .order("created_at", { ascending: true });
@@ -296,15 +397,32 @@ async function findPlatformOrderItems(client: SupabaseClient, organizationId: st
       const itemMetadata = readRecord(item.metadata);
       const catalogItem = item.catalog_item_id ? catalogById.get(item.catalog_item_id) : null;
       const catalogMetadata = readRecord(catalogItem?.metadata);
-      const platformMetadata = {
+      const platformMetadata: JsonRecord = {
         ...catalogMetadata,
         ...itemMetadata,
+        platform_product_id: item.platform_product_id ?? itemMetadata.platform_product_id ?? catalogMetadata.platform_product_id,
+        commercial_flow_type: item.commercial_flow_type ?? itemMetadata.commercial_flow_type ?? catalogMetadata.commercial_flow_type,
+        revenue_owner_type: item.revenue_owner_type ?? itemMetadata.revenue_owner_type ?? catalogMetadata.revenue_owner_type,
+        commission_eligible: item.commission_eligible ?? itemMetadata.commission_eligible ?? catalogMetadata.commission_eligible,
       };
       const platformProductId = readString(platformMetadata.platform_product_id);
 
       if (!platformProductId) return null;
 
-      return { item, platformProductId, catalogMetadata: platformMetadata };
+      const commercialFlowType = normalizeCommercialFlowType(readString(platformMetadata.commercial_flow_type));
+      const revenueOwnerType = normalizeRevenueOwnerType(readString(platformMetadata.revenue_owner_type));
+      const commissionPolicyType = normalizeCommissionPolicyType(readString(platformMetadata.commission_policy_type));
+      const commissionEligible = readBoolean(platformMetadata.commission_eligible)
+        ?? (commercialFlowType === "connectyhub_resale" && commissionPolicyType !== "none");
+
+      return {
+        item,
+        platformProductId,
+        catalogMetadata: platformMetadata,
+        commercialFlowType,
+        revenueOwnerType,
+        commissionEligible,
+      };
     })
     .filter((item): item is PlatformOrderItem => Boolean(item));
 }
@@ -315,7 +433,7 @@ async function loadPlatformProducts(client: SupabaseClient, productIds: string[]
 
   const { data } = await client
     .from("platform_products")
-    .select("id, product_code, name, commission_percentage, commission_base, commission_release_days, recurring_commission_months, refund_window_days")
+    .select("id, product_code, name, sales_channel_type, revenue_owner_type, commission_policy_type, commission_percentage, commission_base, commission_release_days, recurring_commission_months, refund_window_days")
     .in("id", productIds);
 
   for (const row of (data ?? []) as unknown as PlatformProductSalesRow[]) {
@@ -349,7 +467,7 @@ async function loadExistingCommissions(client: SupabaseClient, paymentSessionId:
 
   const { data } = await client
     .from("platform_product_commissions")
-    .select("id, order_item_id, status")
+    .select("id, order_item_id, status, metadata")
     .eq("payment_session_id", paymentSessionId)
     .in("order_item_id", ids);
 
@@ -377,6 +495,41 @@ function resolveCommissionStatusFromPayment(status: string) {
   }
 
   return null;
+}
+
+function normalizeCommercialFlowType(value: string | null | undefined): SalesCatalogCommercialFlowType {
+  if (value === "connectyhub_direct" || value === "external_marketplace") return value;
+  if (value === "client_direct") return "client_direct";
+  return "connectyhub_resale";
+}
+
+function normalizePlatformCommercialFlowType(value: SalesCatalogCommercialFlowType | null | undefined): "connectyhub_resale" | "connectyhub_direct" | "external_marketplace" {
+  if (value === "connectyhub_direct" || value === "external_marketplace") return value;
+  return "connectyhub_resale";
+}
+
+function normalizeRevenueOwnerType(value: string | null | undefined): SalesCatalogRevenueOwnerType {
+  if (value === "client" || value === "split" || value === "external_provider") return value;
+  return "connectyhub";
+}
+
+function normalizeConnectyHubRevenueOwner(value: SalesCatalogRevenueOwnerType | null | undefined): Exclude<SalesCatalogRevenueOwnerType, "client"> {
+  if (value === "split" || value === "external_provider") return value;
+  return "connectyhub";
+}
+
+function normalizeCommissionPolicyType(value: string | null | undefined) {
+  if (value === "none" || value === "fixed" || value === "custom") return value;
+  return "percentage";
+}
+
+function normalizeSalesChannelType(value: string | null | undefined) {
+  if (value === "direct" || value === "affiliate" || value === "marketplace") return value;
+  return "resale";
+}
+
+function readBoolean(value: unknown) {
+  return typeof value === "boolean" ? value : null;
 }
 
 function uniqueStrings(values: Array<string | null | undefined>) {

@@ -1,7 +1,37 @@
 import "server-only";
 
 import { createClient } from "@/lib/supabase/server";
+import type { SalesCatalogCommercialFlowType, SalesCatalogRevenueOwnerType } from "@/lib/sales-catalog/shared";
 import type { BillingProvider } from "./cost-center";
+
+export type CommerceFlowSummary = {
+  flow: SalesCatalogCommercialFlowType;
+  label: string;
+  orders: number;
+  grossAmount: number;
+  clientRevenue: number;
+  connectyHubRevenue: number;
+  commissionAmount: number;
+  netConnectyHubRevenue: number;
+};
+
+export type CommerceRevenueSummary = {
+  schemaReady: boolean;
+  approvedPayments: number;
+  grossAmount: number;
+  clientDirectGross: number;
+  connectyHubResaleGross: number;
+  connectyHubDirectGross: number;
+  externalMarketplaceGross: number;
+  connectyHubGrossRevenue: number;
+  clientGrossRevenue: number;
+  commissionAccrued: number;
+  commissionPayable: number;
+  commissionPaid: number;
+  netConnectyHubRevenue: number;
+  flows: CommerceFlowSummary[];
+  warnings: string[];
+};
 
 export type BillingProviderSummary = {
   provider: BillingProvider | "unknown";
@@ -28,6 +58,7 @@ export type BillingAdminSummary = {
     activeRates: number;
   };
   providers: BillingProviderSummary[];
+  commerce: CommerceRevenueSummary;
   warnings: string[];
 };
 
@@ -53,6 +84,23 @@ type RateRow = {
   active: boolean | null;
 };
 
+type CommerceSessionRow = {
+  id: string;
+  amount: number | string | null;
+  payment_owner_type?: string | null;
+  commercial_flow_type?: string | null;
+  revenue_owner_type?: string | null;
+  commission_eligible?: boolean | null;
+  commission_context?: Record<string, unknown> | null;
+  metadata: Record<string, unknown> | null;
+};
+
+type CommerceCommissionRow = {
+  status: string | null;
+  commission_amount: number | string | null;
+  metadata: Record<string, unknown> | null;
+};
+
 const providerNames: Record<string, string> = {
   gemini: "Gemini / Google AI Core",
   elevenlabs: "ElevenLabs / Voz",
@@ -75,7 +123,7 @@ export async function getBillingAdminSummary(): Promise<BillingAdminSummary> {
   since.setDate(since.getDate() - 30);
   const sinceIso = since.toISOString();
 
-  const [usageResult, walletResult, costCenterResult, rateResult] = await Promise.all([
+  const [usageResult, walletResult, costCenterResult, rateResult, commerce] = await Promise.all([
     supabase
       .from("usage_events")
       .select("provider, provider_cost, connecty_revenue_estimate, gross_margin_estimate, connecty_charge_credits")
@@ -94,6 +142,7 @@ export async function getBillingAdminSummary(): Promise<BillingAdminSummary> {
       .select("active")
       .eq("active", true)
       .limit(5000),
+    getCommerceRevenueSummary(supabase, sinceIso),
   ]);
 
   const errors = [usageResult.error, walletResult.error, costCenterResult.error, rateResult.error].filter(Boolean);
@@ -102,7 +151,11 @@ export async function getBillingAdminSummary(): Promise<BillingAdminSummary> {
     return emptySummary({
       sinceIso,
       schemaReady: false,
-      warnings: errors.map((error) => error?.message ?? "Erro desconhecido ao carregar billing."),
+      commerce,
+      warnings: [
+        ...errors.map((error) => error?.message ?? "Erro desconhecido ao carregar billing."),
+        ...commerce.warnings,
+      ],
     });
   }
 
@@ -186,17 +239,131 @@ export async function getBillingAdminSummary(): Promise<BillingAdminSummary> {
       walletBalanceCredits: roundCredits(totals.walletBalanceCredits),
     },
     providers,
-    warnings: [],
+    commerce,
+    warnings: commerce.warnings,
+  };
+}
+
+async function getCommerceRevenueSummary(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  sinceIso: string,
+): Promise<CommerceRevenueSummary> {
+  const [sessionsResult, commissionsResult] = await Promise.all([
+    supabase
+      .from("sales_catalog_payment_sessions")
+      .select("id, amount, payment_owner_type, commercial_flow_type, revenue_owner_type, commission_context, metadata")
+      .eq("status", "approved")
+      .gte("created_at", sinceIso)
+      .limit(5000),
+    supabase
+      .from("platform_product_commissions")
+      .select("status, commission_amount, metadata")
+      .gte("created_at", sinceIso)
+      .limit(5000),
+  ]);
+
+  const warnings = [
+    ...(sessionsResult.error ? [sessionsResult.error.message] : []),
+    ...(commissionsResult.error ? [commissionsResult.error.message] : []),
+  ];
+
+  if (sessionsResult.error) {
+    return emptyCommerceSummary(false, warnings);
+  }
+
+  const sessions = (sessionsResult.data ?? []) as CommerceSessionRow[];
+  const commissions = commissionsResult.error ? [] : (commissionsResult.data ?? []) as CommerceCommissionRow[];
+  const flowMap = createCommerceFlowMap();
+  let grossAmount = 0;
+  let clientGrossRevenue = 0;
+  let connectyHubGrossRevenue = 0;
+  let commissionAccrued = 0;
+  let commissionPayable = 0;
+  let commissionPaid = 0;
+
+  for (const session of sessions) {
+    const amount = toNumber(session.amount);
+    const metadata = readRecord(session.metadata);
+    const commercialFlow = normalizeCommercialFlowType(
+      session.commercial_flow_type ?? readString(metadata.commercial_flow_type),
+    );
+    const revenueOwner = normalizeRevenueOwnerType(
+      session.revenue_owner_type ?? readString(metadata.revenue_owner_type),
+    );
+    const flow = flowMap.get(commercialFlow) ?? flowMap.get("client_direct")!;
+
+    grossAmount += amount;
+    flow.orders += 1;
+    flow.grossAmount += amount;
+
+    if (revenueOwner === "client") {
+      clientGrossRevenue += amount;
+      flow.clientRevenue += amount;
+    } else {
+      connectyHubGrossRevenue += amount;
+      flow.connectyHubRevenue += amount;
+    }
+  }
+
+  for (const commission of commissions) {
+    const amount = toNumber(commission.commission_amount);
+    const status = commission.status ?? "pending";
+
+    if (status === "cancelled" || status === "blocked" || status === "refunded") {
+      continue;
+    }
+
+    commissionAccrued += amount;
+    const flow = flowMap.get(normalizeCommercialFlowType(readString(readRecord(commission.metadata).commercial_flow_type)))
+      ?? flowMap.get("connectyhub_resale")!;
+    flow.commissionAmount += amount;
+
+    if (status === "paid") {
+      commissionPaid += amount;
+    } else if (status === "pending" || status === "available") {
+      commissionPayable += amount;
+    }
+  }
+
+  const flows = Array.from(flowMap.values())
+    .map((flow) => ({
+      ...flow,
+      grossAmount: roundMoney(flow.grossAmount),
+      clientRevenue: roundMoney(flow.clientRevenue),
+      connectyHubRevenue: roundMoney(flow.connectyHubRevenue),
+      commissionAmount: roundMoney(flow.commissionAmount),
+      netConnectyHubRevenue: roundMoney(flow.connectyHubRevenue - flow.commissionAmount),
+    }))
+    .filter((flow) => flow.orders > 0 || flow.commissionAmount > 0);
+
+  return {
+    schemaReady: warnings.length === 0,
+    approvedPayments: sessions.length,
+    grossAmount: roundMoney(grossAmount),
+    clientDirectGross: roundMoney(flowMap.get("client_direct")?.grossAmount ?? 0),
+    connectyHubResaleGross: roundMoney(flowMap.get("connectyhub_resale")?.grossAmount ?? 0),
+    connectyHubDirectGross: roundMoney(flowMap.get("connectyhub_direct")?.grossAmount ?? 0),
+    externalMarketplaceGross: roundMoney(flowMap.get("external_marketplace")?.grossAmount ?? 0),
+    connectyHubGrossRevenue: roundMoney(connectyHubGrossRevenue),
+    clientGrossRevenue: roundMoney(clientGrossRevenue),
+    commissionAccrued: roundMoney(commissionAccrued),
+    commissionPayable: roundMoney(commissionPayable),
+    commissionPaid: roundMoney(commissionPaid),
+    netConnectyHubRevenue: roundMoney(connectyHubGrossRevenue - commissionAccrued),
+    flows,
+    warnings,
   };
 }
 
 function emptySummary({
   sinceIso,
   schemaReady,
+  commerce,
   warnings,
 }: {
   sinceIso: string;
   schemaReady: boolean;
+  commerce?: CommerceRevenueSummary;
   warnings: string[];
 }): BillingAdminSummary {
   return {
@@ -214,13 +381,99 @@ function emptySummary({
       activeRates: 0,
     },
     providers: [],
+    commerce: commerce ?? emptyCommerceSummary(false, []),
     warnings,
   };
+}
+
+function emptyCommerceSummary(schemaReady: boolean, warnings: string[]): CommerceRevenueSummary {
+  return {
+    schemaReady,
+    approvedPayments: 0,
+    grossAmount: 0,
+    clientDirectGross: 0,
+    connectyHubResaleGross: 0,
+    connectyHubDirectGross: 0,
+    externalMarketplaceGross: 0,
+    connectyHubGrossRevenue: 0,
+    clientGrossRevenue: 0,
+    commissionAccrued: 0,
+    commissionPayable: 0,
+    commissionPaid: 0,
+    netConnectyHubRevenue: 0,
+    flows: [],
+    warnings,
+  };
+}
+
+function createCommerceFlowMap() {
+  const entries: CommerceFlowSummary[] = [
+    {
+      flow: "client_direct",
+      label: "Venda propria do cliente",
+      orders: 0,
+      grossAmount: 0,
+      clientRevenue: 0,
+      connectyHubRevenue: 0,
+      commissionAmount: 0,
+      netConnectyHubRevenue: 0,
+    },
+    {
+      flow: "connectyhub_resale",
+      label: "Produto ConnectyHub revendido",
+      orders: 0,
+      grossAmount: 0,
+      clientRevenue: 0,
+      connectyHubRevenue: 0,
+      commissionAmount: 0,
+      netConnectyHubRevenue: 0,
+    },
+    {
+      flow: "connectyhub_direct",
+      label: "Venda direta ConnectyHub",
+      orders: 0,
+      grossAmount: 0,
+      clientRevenue: 0,
+      connectyHubRevenue: 0,
+      commissionAmount: 0,
+      netConnectyHubRevenue: 0,
+    },
+    {
+      flow: "external_marketplace",
+      label: "Marketplace externo",
+      orders: 0,
+      grossAmount: 0,
+      clientRevenue: 0,
+      connectyHubRevenue: 0,
+      commissionAmount: 0,
+      netConnectyHubRevenue: 0,
+    },
+  ];
+
+  return new Map(entries.map((entry) => [entry.flow, entry]));
 }
 
 function toNumber(value: number | string | null | undefined) {
   const parsed = typeof value === "number" ? value : Number(value ?? 0);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function readRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function readString(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function normalizeCommercialFlowType(value: string | null | undefined): SalesCatalogCommercialFlowType {
+  if (value === "connectyhub_resale" || value === "connectyhub_direct" || value === "external_marketplace") return value;
+  return "client_direct";
+}
+
+function normalizeRevenueOwnerType(value: string | null | undefined): SalesCatalogRevenueOwnerType {
+  if (value === "connectyhub" || value === "split" || value === "external_provider") return value;
+  return "client";
 }
 
 function roundMoney(value: number) {

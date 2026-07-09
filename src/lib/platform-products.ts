@@ -31,6 +31,11 @@ type JsonRecord = Record<string, unknown>;
 export type PlatformProductStatus = "draft" | "active" | "paused" | "archived";
 export type PlatformProductMarketplaceStatus = "hidden" | "visible" | "featured";
 export type PlatformProductCommissionBase = "gross" | "net";
+export type PlatformProductOwnerType = "connectyhub" | "client" | "external_provider";
+export type PlatformProductSalesChannelType = "direct" | "resale" | "affiliate" | "marketplace";
+export type PlatformProductRevenueOwnerType = "connectyhub" | "client" | "split" | "external_provider";
+export type PlatformProductCommissionPolicyType = "none" | "percentage" | "fixed" | "custom";
+export type PlatformProductPayoutTargetType = "connectyhub" | "client" | "split" | "external_provider";
 export type PlatformProductImportStatus = "active" | "paused" | "removed";
 export type PlatformProductCommissionStatus = "pending" | "available" | "paid" | "cancelled" | "blocked" | "refunded";
 
@@ -56,6 +61,11 @@ export type PlatformProduct = {
   category: string | null;
   status: PlatformProductStatus;
   marketplaceStatus: PlatformProductMarketplaceStatus;
+  ownerType: PlatformProductOwnerType;
+  salesChannelType: PlatformProductSalesChannelType;
+  revenueOwnerType: PlatformProductRevenueOwnerType;
+  commissionPolicyType: PlatformProductCommissionPolicyType;
+  payoutTargetType: PlatformProductPayoutTargetType;
   price: string | null;
   currency: string;
   attributes: SalesCatalogItemAttribute[];
@@ -85,6 +95,9 @@ export type PlatformProductImport = {
   importedBy: string | null;
   localCatalogItemId: string | null;
   status: PlatformProductImportStatus;
+  salesChannelType: Exclude<PlatformProductSalesChannelType, "direct">;
+  revenueOwnerType: Exclude<PlatformProductRevenueOwnerType, "client">;
+  commissionPolicyType: Exclude<PlatformProductCommissionPolicyType, "none">;
   localTitle: string | null;
   localAgentNotes: string | null;
   createdAt: string;
@@ -137,6 +150,11 @@ export type PlatformProductRow = {
   category: string | null;
   status: string | null;
   marketplace_status: string | null;
+  owner_type?: string | null;
+  sales_channel_type?: string | null;
+  revenue_owner_type?: string | null;
+  commission_policy_type?: string | null;
+  payout_target_type?: string | null;
   price: string | null;
   currency: string | null;
   attributes: unknown;
@@ -166,6 +184,9 @@ export type PlatformProductImportRow = {
   imported_by: string | null;
   local_catalog_item_id: string | null;
   status: string | null;
+  sales_channel_type?: string | null;
+  revenue_owner_type?: string | null;
+  commission_policy_type?: string | null;
   local_title: string | null;
   local_agent_notes: string | null;
   created_at: string;
@@ -213,6 +234,11 @@ export const PLATFORM_PRODUCT_SELECT = [
   "category",
   "status",
   "marketplace_status",
+  "owner_type",
+  "sales_channel_type",
+  "revenue_owner_type",
+  "commission_policy_type",
+  "payout_target_type",
   "price",
   "currency",
   "attributes",
@@ -242,6 +268,9 @@ const PLATFORM_PRODUCT_IMPORT_SELECT = [
   "imported_by",
   "local_catalog_item_id",
   "status",
+  "sales_channel_type",
+  "revenue_owner_type",
+  "commission_policy_type",
   "local_title",
   "local_agent_notes",
   "created_at",
@@ -338,6 +367,7 @@ export async function getClientPlatformProductCatalog(input: {
     .from("platform_products")
     .select(PLATFORM_PRODUCT_SELECT)
     .eq("status", "active")
+    .neq("sales_channel_type", "direct")
     .in("marketplace_status", ["visible", "featured"])
     .order("marketplace_status", { ascending: true })
     .order("updated_at", { ascending: false })
@@ -439,6 +469,11 @@ export async function importPlatformProductToCompany(input: {
   }
 
   const product = mapPlatformProductRow(productRow);
+
+  if (!isPlatformProductImportable(product)) {
+    throw new Error("Este produto ConnectyHub esta configurado como venda direta e nao pode ser importado para revenda.");
+  }
+
   const localCatalogItemId = await createOrUpdateImportedCatalogItem({
     client,
     companyId: company.id,
@@ -455,11 +490,27 @@ export async function importPlatformProductToCompany(input: {
         imported_by: input.userId,
         local_catalog_item_id: localCatalogItemId,
         status: "active",
+        sales_channel_type: normalizeImportSalesChannel(product.salesChannelType),
+        revenue_owner_type: normalizeImportRevenueOwner(product.revenueOwnerType),
+        commission_policy_type: normalizeImportCommissionPolicy(product.commissionPolicyType),
         local_title: product.name,
+        commission_snapshot: {
+          percentage: product.commissionPercentage,
+          base: product.commissionBase,
+          release_days: product.commissionReleaseDays,
+          policy_type: product.commissionPolicyType,
+        },
         metadata: {
           source: "connectyhub_marketplace",
           product_code: product.productCode,
           agent_tag: product.agentTag,
+          owner_type: product.ownerType,
+          sales_channel_type: product.salesChannelType,
+          revenue_owner_type: product.revenueOwnerType,
+          commission_policy_type: product.commissionPolicyType,
+          payout_target_type: product.payoutTargetType,
+          commercial_flow_type: resolvePlatformProductCommercialFlow(product),
+          commission_eligible: isPlatformProductCommissionEligible(product),
           commission_percentage: product.commissionPercentage,
           commission_release_days: product.commissionReleaseDays,
         },
@@ -487,6 +538,12 @@ export async function importPlatformProductToCompany(input: {
     payload: {
       product_id: product.id,
       catalog_item_id: localCatalogItemId,
+      owner_type: product.ownerType,
+      sales_channel_type: product.salesChannelType,
+      commercial_flow_type: resolvePlatformProductCommercialFlow(product),
+      revenue_owner_type: product.revenueOwnerType,
+      commission_policy_type: product.commissionPolicyType,
+      commission_eligible: isPlatformProductCommissionEligible(product),
       commission_percentage: product.commissionPercentage,
       commission_release_days: product.commissionReleaseDays,
       actor_id: input.userId,
@@ -516,6 +573,11 @@ export function mapPlatformProductRow(row: PlatformProductRow): PlatformProduct 
     category: readString(row.category),
     status: normalizeProductStatus(row.status),
     marketplaceStatus: normalizeMarketplaceStatus(row.marketplace_status),
+    ownerType: normalizeOwnerType(row.owner_type),
+    salesChannelType: normalizeSalesChannelType(row.sales_channel_type),
+    revenueOwnerType: normalizeRevenueOwnerType(row.revenue_owner_type),
+    commissionPolicyType: normalizeCommissionPolicyType(row.commission_policy_type),
+    payoutTargetType: normalizePayoutTargetType(row.payout_target_type),
     price: readString(row.price),
     currency: readString(row.currency) ?? "BRL",
     attributes: readItemAttributes(row.attributes),
@@ -547,6 +609,9 @@ export function mapPlatformProductImportRow(row: PlatformProductImportRow): Plat
     importedBy: row.imported_by,
     localCatalogItemId: row.local_catalog_item_id,
     status: normalizeImportStatus(row.status),
+    salesChannelType: normalizeImportSalesChannel(row.sales_channel_type),
+    revenueOwnerType: normalizeImportRevenueOwner(row.revenue_owner_type),
+    commissionPolicyType: normalizeImportCommissionPolicy(row.commission_policy_type),
     localTitle: row.local_title,
     localAgentNotes: row.local_agent_notes,
     createdAt: row.created_at,
@@ -622,6 +687,22 @@ export function createPlatformProductSlug(name: string, id: string) {
   return `${createSalesCatalogSlug(name).replace(/_/g, "-")}-${id.slice(0, 8)}`;
 }
 
+export function isPlatformProductImportable(product: PlatformProduct) {
+  return product.ownerType === "connectyhub" && product.salesChannelType !== "direct";
+}
+
+export function isPlatformProductCommissionEligible(product: PlatformProduct) {
+  return isPlatformProductImportable(product)
+    && product.commissionPolicyType !== "none"
+    && product.commissionPercentage > 0;
+}
+
+export function resolvePlatformProductCommercialFlow(product: PlatformProduct) {
+  if (product.ownerType === "external_provider") return "external_marketplace";
+  if (product.ownerType === "client") return "client_direct";
+  return product.salesChannelType === "direct" ? "connectyhub_direct" : "connectyhub_resale";
+}
+
 async function createOrUpdateImportedCatalogItem(input: {
   client: SupabaseClient;
   companyId: string;
@@ -663,6 +744,13 @@ async function createOrUpdateImportedCatalogItem(input: {
     source: "manual",
     platform_product_id: product.id,
     platform_product_code: product.productCode,
+    product_origin_type: product.ownerType,
+    sales_channel_type: product.salesChannelType,
+    commercial_flow_type: resolvePlatformProductCommercialFlow(product),
+    revenue_owner_type: product.revenueOwnerType,
+    commission_policy_type: product.commissionPolicyType,
+    commission_eligible: isPlatformProductCommissionEligible(product),
+    payout_target_type: product.payoutTargetType,
     platform_product_commission_percentage: product.commissionPercentage,
     platform_product_commission_release_days: product.commissionReleaseDays,
     platform_product_agent_prompt: product.agentPrompt,
@@ -794,6 +882,13 @@ async function persistImportedSkus(input: {
       source: "connectyhub_marketplace",
       platform_product_id: input.product.id,
       platform_product_code: input.product.productCode,
+      product_origin_type: input.product.ownerType,
+      sales_channel_type: input.product.salesChannelType,
+      commercial_flow_type: resolvePlatformProductCommercialFlow(input.product),
+      revenue_owner_type: input.product.revenueOwnerType,
+      commission_policy_type: input.product.commissionPolicyType,
+      commission_eligible: isPlatformProductCommissionEligible(input.product),
+      payout_target_type: input.product.payoutTargetType,
     },
     updated_at: now,
   }));
@@ -1087,6 +1182,46 @@ function normalizeProductStatus(value: string | null): PlatformProductStatus {
 function normalizeMarketplaceStatus(value: string | null): PlatformProductMarketplaceStatus {
   if (value === "visible" || value === "featured") return value;
   return "hidden";
+}
+
+function normalizeOwnerType(value: string | null | undefined): PlatformProductOwnerType {
+  if (value === "client" || value === "external_provider") return value;
+  return "connectyhub";
+}
+
+function normalizeSalesChannelType(value: string | null | undefined): PlatformProductSalesChannelType {
+  if (value === "direct" || value === "affiliate" || value === "marketplace") return value;
+  return "resale";
+}
+
+function normalizeRevenueOwnerType(value: string | null | undefined): PlatformProductRevenueOwnerType {
+  if (value === "client" || value === "split" || value === "external_provider") return value;
+  return "connectyhub";
+}
+
+function normalizeCommissionPolicyType(value: string | null | undefined): PlatformProductCommissionPolicyType {
+  if (value === "none" || value === "fixed" || value === "custom") return value;
+  return "percentage";
+}
+
+function normalizePayoutTargetType(value: string | null | undefined): PlatformProductPayoutTargetType {
+  if (value === "client" || value === "split" || value === "external_provider") return value;
+  return "connectyhub";
+}
+
+function normalizeImportSalesChannel(value: string | null | undefined): Exclude<PlatformProductSalesChannelType, "direct"> {
+  if (value === "affiliate" || value === "marketplace") return value;
+  return "resale";
+}
+
+function normalizeImportRevenueOwner(value: string | null | undefined): Exclude<PlatformProductRevenueOwnerType, "client"> {
+  if (value === "split" || value === "external_provider") return value;
+  return "connectyhub";
+}
+
+function normalizeImportCommissionPolicy(value: string | null | undefined): Exclude<PlatformProductCommissionPolicyType, "none"> {
+  if (value === "fixed" || value === "custom") return value;
+  return "percentage";
 }
 
 function normalizeImportStatus(value: string | null): PlatformProductImportStatus {

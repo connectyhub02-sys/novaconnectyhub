@@ -1074,6 +1074,18 @@ async function createSalesCatalogOrder(input: {
   const platformCommissionPercentage = normalizeNumber(itemMetadata.platform_product_commission_percentage);
   const platformCommissionReleaseDays = normalizeNumber(itemMetadata.platform_product_commission_release_days);
   const platformAgentPrompt = readFormString(itemMetadata.platform_product_agent_prompt);
+  const commercialFlowType = normalizeCommercialFlowType(readFormString(skuMetadata.commercial_flow_type)
+    ?? readFormString(itemMetadata.commercial_flow_type)
+    ?? (platformProductId ? "connectyhub_resale" : "client_direct"));
+  const revenueOwnerType = normalizeRevenueOwnerType(readFormString(skuMetadata.revenue_owner_type)
+    ?? readFormString(itemMetadata.revenue_owner_type)
+    ?? (platformProductId ? "connectyhub" : "client"));
+  const commissionPolicyType = normalizeCommissionPolicyType(readFormString(skuMetadata.commission_policy_type)
+    ?? readFormString(itemMetadata.commission_policy_type)
+    ?? (platformProductId ? "percentage" : "none"));
+  const commissionEligible = readBoolean(skuMetadata.commission_eligible)
+    ?? readBoolean(itemMetadata.commission_eligible)
+    ?? Boolean(platformProductId && commissionPolicyType !== "none" && platformCommissionPercentage && platformCommissionPercentage > 0);
   const now = new Date().toISOString();
 
   const { data: orderRow, error: orderError } = await input.client
@@ -1100,6 +1112,10 @@ async function createSalesCatalogOrder(input: {
       shipping_method: shippingMethod,
       agent_notes: agentNotes,
       internal_notes: internalNotes,
+      commercial_flow_type: commercialFlowType,
+      revenue_owner_type: revenueOwnerType,
+      contains_platform_products: Boolean(platformProductId),
+      commission_eligible: commissionEligible,
       metadata: {
         created_from: "sales_catalog_dashboard",
         catalog_item_id: item.id,
@@ -1107,6 +1123,10 @@ async function createSalesCatalogOrder(input: {
         currency: item.currency,
         platform_product_id: platformProductId,
         platform_product_code: platformProductCode,
+        commercial_flow_type: commercialFlowType,
+        revenue_owner_type: revenueOwnerType,
+        commission_policy_type: commissionPolicyType,
+        commission_eligible: commissionEligible,
         platform_product_marketplace: Boolean(platformProductId),
       },
       created_by: input.userId,
@@ -1134,6 +1154,11 @@ async function createSalesCatalogOrder(input: {
       unit_price: unitPrice,
       sale_price: salePrice,
       total,
+      product_origin_type: platformProductId ? "connectyhub" : "client",
+      commercial_flow_type: commercialFlowType,
+      revenue_owner_type: revenueOwnerType,
+      commission_eligible: commissionEligible,
+      platform_product_id: platformProductId ?? null,
       attributes: serializeItemAttributes(selectedAttributes),
       fulfillment: serializeProductFulfillment(item.fulfillment),
       metadata: {
@@ -1144,6 +1169,10 @@ async function createSalesCatalogOrder(input: {
         source: item.source,
         platform_product_id: platformProductId,
         platform_product_code: platformProductCode,
+        commercial_flow_type: commercialFlowType,
+        revenue_owner_type: revenueOwnerType,
+        commission_policy_type: commissionPolicyType,
+        commission_eligible: commissionEligible,
         platform_product_commission_percentage: platformCommissionPercentage,
         platform_product_commission_release_days: platformCommissionReleaseDays,
         platform_product_agent_prompt: platformAgentPrompt,
@@ -1308,42 +1337,89 @@ async function maybeDeductSalesCatalogOrderInventory(input: {
 
   if (alreadyDeductedAt || !shouldDeduct || input.order.status === "cancelled") return [];
 
+  const quantitiesBySku = new Map<string, number>();
   const quantitiesByProduct = new Map<string, number>();
 
   for (const item of input.items) {
-    const productId = readFormString(item.catalog_item_id);
-    if (!productId) continue;
-
     const quantity = normalizeNullableInteger(item.quantity, 1, 100000) ?? 1;
-    quantitiesByProduct.set(productId, (quantitiesByProduct.get(productId) ?? 0) + quantity);
+    const skuId = readFormString(item.sku_id);
+    const productId = readFormString(item.catalog_item_id);
+
+    if (skuId) {
+      quantitiesBySku.set(skuId, (quantitiesBySku.get(skuId) ?? 0) + quantity);
+    } else if (productId) {
+      quantitiesByProduct.set(productId, (quantitiesByProduct.get(productId) ?? 0) + quantity);
+    }
   }
 
+  const skuIds = Array.from(quantitiesBySku.keys());
   const productIds = Array.from(quantitiesByProduct.keys());
-  if (productIds.length === 0) return [];
+  if (skuIds.length === 0 && productIds.length === 0) return [];
 
-  const { data: productRows, error: productsError } = await input.client
-    .from("intelligence_memory")
-    .select("id, organization_id, title, content, metadata, created_at, updated_at")
-    .eq("scope", "organization")
-    .eq("organization_id", input.companyId)
-    .eq("memory_type", "sales_catalog_item")
-    .in("id", productIds)
-    .returns<SalesCatalogMemoryRow[]>();
+  const [skuResult, productResult] = await Promise.all([
+    skuIds.length > 0
+      ? input.client
+          .from("sales_catalog_skus")
+          .select("id, organization_id, catalog_item_id, sku_code, title, attributes, price, sale_price, currency, stock_status, stock_quantity, low_stock_threshold, weight_grams, dimensions, media_ids, status, metadata, created_at, updated_at")
+          .eq("organization_id", input.companyId)
+          .in("id", skuIds)
+          .returns<SalesCatalogSkuRow[]>()
+      : Promise.resolve({ data: [] as SalesCatalogSkuRow[], error: null }),
+    productIds.length > 0
+      ? input.client
+          .from("intelligence_memory")
+          .select("id, organization_id, title, content, metadata, created_at, updated_at")
+          .eq("scope", "organization")
+          .eq("organization_id", input.companyId)
+          .eq("memory_type", "sales_catalog_item")
+          .in("id", productIds)
+          .returns<SalesCatalogMemoryRow[]>()
+      : Promise.resolve({ data: [] as SalesCatalogMemoryRow[], error: null }),
+  ]);
 
-  if (productsError || !productRows) return [];
+  if (skuResult.error || productResult.error) return [];
 
   const now = new Date().toISOString();
   const updatedItems: Array<ReturnType<typeof mapSalesCatalogItem>> = [];
-  const deductions: Array<{
-    product_id: string;
-    title: string;
-    deducted_quantity: number;
-    previous_quantity: number;
-    next_quantity: number;
-    next_status: SalesCatalogStockStatus;
-  }> = [];
+  const deductions: JsonRecord[] = [];
 
-  for (const productRow of productRows) {
+  for (const skuRow of skuResult.data ?? []) {
+    const deductedQuantity = quantitiesBySku.get(skuRow.id);
+    if (!deductedQuantity || skuRow.stock_quantity === null) continue;
+
+    const nextQuantity = Math.max(0, skuRow.stock_quantity - deductedQuantity);
+    const nextStatus = resolveNextStockStatus(nextQuantity, skuRow.stock_status);
+    const metadata = readRecord(skuRow.metadata) ?? {};
+
+    await input.client
+      .from("sales_catalog_skus")
+      .update({
+        stock_quantity: nextQuantity,
+        stock_status: nextStatus,
+        metadata: {
+          ...metadata,
+          inventory_updated_at: now,
+          inventory_updated_from_order_id: input.order.id,
+          inventory_update_reason: "order_confirmed",
+        },
+      })
+      .eq("id", skuRow.id)
+      .eq("organization_id", input.companyId);
+
+    deductions.push({
+      kind: "sku",
+      sku_id: skuRow.id,
+      product_id: skuRow.catalog_item_id,
+      sku_code: skuRow.sku_code,
+      title: skuRow.title,
+      deducted_quantity: deductedQuantity,
+      previous_quantity: skuRow.stock_quantity,
+      next_quantity: nextQuantity,
+      next_status: nextStatus,
+    });
+  }
+
+  for (const productRow of productResult.data ?? []) {
     const deductedQuantity = quantitiesByProduct.get(productRow.id);
     if (!deductedQuantity) continue;
 
@@ -1371,6 +1447,7 @@ async function maybeDeductSalesCatalogOrderInventory(input: {
     if (!refreshedItem) continue;
 
     deductions.push({
+      kind: "product",
       product_id: productRow.id,
       title: refreshedItem.title,
       deducted_quantity: deductedQuantity,
@@ -1433,44 +1510,90 @@ async function maybeRestoreSalesCatalogOrderInventory(input: {
 
   if (!alreadyDeductedAt || alreadyRestoredAt || !shouldRestore) return [];
 
-  const quantitiesByProduct = readInventoryQuantitiesFromDeductions(orderMetadata.inventory_deducted_items);
+  const { quantitiesByProduct, quantitiesBySku } = readInventoryQuantitiesFromDeductions(orderMetadata.inventory_deducted_items);
 
-  if (quantitiesByProduct.size === 0) {
+  if (quantitiesByProduct.size === 0 && quantitiesBySku.size === 0) {
     for (const item of input.items) {
-      const productId = readFormString(item.catalog_item_id);
-      if (!productId) continue;
-
       const quantity = normalizeNullableInteger(item.quantity, 1, 100000) ?? 1;
-      quantitiesByProduct.set(productId, (quantitiesByProduct.get(productId) ?? 0) + quantity);
+      const skuId = readFormString(item.sku_id);
+      const productId = readFormString(item.catalog_item_id);
+
+      if (skuId) {
+        quantitiesBySku.set(skuId, (quantitiesBySku.get(skuId) ?? 0) + quantity);
+      } else if (productId) {
+        quantitiesByProduct.set(productId, (quantitiesByProduct.get(productId) ?? 0) + quantity);
+      }
     }
   }
 
+  const skuIds = Array.from(quantitiesBySku.keys());
   const productIds = Array.from(quantitiesByProduct.keys());
-  if (productIds.length === 0) return [];
+  if (skuIds.length === 0 && productIds.length === 0) return [];
 
-  const { data: productRows, error: productsError } = await input.client
-    .from("intelligence_memory")
-    .select("id, organization_id, title, content, metadata, created_at, updated_at")
-    .eq("scope", "organization")
-    .eq("organization_id", input.companyId)
-    .eq("memory_type", "sales_catalog_item")
-    .in("id", productIds)
-    .returns<SalesCatalogMemoryRow[]>();
+  const [skuResult, productResult] = await Promise.all([
+    skuIds.length > 0
+      ? input.client
+          .from("sales_catalog_skus")
+          .select("id, organization_id, catalog_item_id, sku_code, title, attributes, price, sale_price, currency, stock_status, stock_quantity, low_stock_threshold, weight_grams, dimensions, media_ids, status, metadata, created_at, updated_at")
+          .eq("organization_id", input.companyId)
+          .in("id", skuIds)
+          .returns<SalesCatalogSkuRow[]>()
+      : Promise.resolve({ data: [] as SalesCatalogSkuRow[], error: null }),
+    productIds.length > 0
+      ? input.client
+          .from("intelligence_memory")
+          .select("id, organization_id, title, content, metadata, created_at, updated_at")
+          .eq("scope", "organization")
+          .eq("organization_id", input.companyId)
+          .eq("memory_type", "sales_catalog_item")
+          .in("id", productIds)
+          .returns<SalesCatalogMemoryRow[]>()
+      : Promise.resolve({ data: [] as SalesCatalogMemoryRow[], error: null }),
+  ]);
 
-  if (productsError || !productRows) return [];
+  if (skuResult.error || productResult.error) return [];
 
   const now = new Date().toISOString();
   const updatedItems: Array<ReturnType<typeof mapSalesCatalogItem>> = [];
-  const restorations: Array<{
-    product_id: string;
-    title: string;
-    restored_quantity: number;
-    previous_quantity: number;
-    next_quantity: number;
-    next_status: SalesCatalogStockStatus;
-  }> = [];
+  const restorations: JsonRecord[] = [];
 
-  for (const productRow of productRows) {
+  for (const skuRow of skuResult.data ?? []) {
+    const restoredQuantity = quantitiesBySku.get(skuRow.id);
+    if (!restoredQuantity || skuRow.stock_quantity === null) continue;
+
+    const nextQuantity = Math.min(1000000, skuRow.stock_quantity + restoredQuantity);
+    const nextStatus = resolveNextStockStatus(nextQuantity, skuRow.stock_status);
+    const metadata = readRecord(skuRow.metadata) ?? {};
+
+    await input.client
+      .from("sales_catalog_skus")
+      .update({
+        stock_quantity: nextQuantity,
+        stock_status: nextStatus,
+        metadata: {
+          ...metadata,
+          inventory_updated_at: now,
+          inventory_updated_from_order_id: input.order.id,
+          inventory_update_reason: "order_restored",
+        },
+      })
+      .eq("id", skuRow.id)
+      .eq("organization_id", input.companyId);
+
+    restorations.push({
+      kind: "sku",
+      sku_id: skuRow.id,
+      product_id: skuRow.catalog_item_id,
+      sku_code: skuRow.sku_code,
+      title: skuRow.title,
+      restored_quantity: restoredQuantity,
+      previous_quantity: skuRow.stock_quantity,
+      next_quantity: nextQuantity,
+      next_status: nextStatus,
+    });
+  }
+
+  for (const productRow of productResult.data ?? []) {
     const restoredQuantity = quantitiesByProduct.get(productRow.id);
     if (!restoredQuantity) continue;
 
@@ -1498,6 +1621,7 @@ async function maybeRestoreSalesCatalogOrderInventory(input: {
     if (!refreshedItem) continue;
 
     restorations.push({
+      kind: "product",
       product_id: productRow.id,
       title: refreshedItem.title,
       restored_quantity: restoredQuantity,
@@ -1603,21 +1727,32 @@ function mergeSalesCatalogUpdatedItems(...itemGroups: Array<Array<ReturnType<typ
 }
 
 function readInventoryQuantitiesFromDeductions(value: unknown) {
-  const quantities = new Map<string, number>();
+  const quantitiesByProduct = new Map<string, number>();
+  const quantitiesBySku = new Map<string, number>();
   const source = Array.isArray(value) ? value : [];
 
   for (const item of source) {
     const record = readRecord(item);
     if (!record) continue;
 
+    const skuId = readFormString(record.sku_id);
     const productId = readFormString(record.product_id);
     const quantity = normalizeNullableInteger(record.deducted_quantity, 1, 100000);
-    if (!productId || !quantity) continue;
+    if (!quantity) continue;
 
-    quantities.set(productId, (quantities.get(productId) ?? 0) + quantity);
+    if (skuId) {
+      quantitiesBySku.set(skuId, (quantitiesBySku.get(skuId) ?? 0) + quantity);
+    } else if (productId) {
+      quantitiesByProduct.set(productId, (quantitiesByProduct.get(productId) ?? 0) + quantity);
+    }
   }
 
-  return quantities;
+  return { quantitiesByProduct, quantitiesBySku };
+}
+
+function resolveNextStockStatus(nextQuantity: number, currentStatus: string | null): SalesCatalogStockStatus {
+  if (nextQuantity > 0) return "in_stock";
+  return currentStatus === "on_backorder" ? "on_backorder" : "out_of_stock";
 }
 
 async function maybeScheduleSalesCatalogPostSaleFollowUp(input: {
@@ -2671,6 +2806,21 @@ function normalizeNullableSalesCatalogFulfillmentStatus(value: string | null): S
   }
 
   return null;
+}
+
+function normalizeCommercialFlowType(value: string | null) {
+  if (value === "connectyhub_resale" || value === "connectyhub_direct" || value === "external_marketplace") return value;
+  return "client_direct";
+}
+
+function normalizeRevenueOwnerType(value: string | null) {
+  if (value === "connectyhub" || value === "split" || value === "external_provider") return value;
+  return "client";
+}
+
+function normalizeCommissionPolicyType(value: string | null) {
+  if (value === "percentage" || value === "fixed" || value === "custom") return value;
+  return "none";
 }
 
 function normalizeUf(value: string | null) {

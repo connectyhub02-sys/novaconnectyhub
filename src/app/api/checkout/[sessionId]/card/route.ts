@@ -27,6 +27,10 @@ type PaymentSessionRow = {
   amount: string | number | null;
   currency: string | null;
   payer_email: string | null;
+  payment_owner_type?: string | null;
+  commercial_flow_type?: string | null;
+  revenue_owner_type?: string | null;
+  commission_context?: JsonRecord | null;
   metadata: JsonRecord | null;
 };
 
@@ -56,7 +60,7 @@ export async function POST(
   const client = createServiceClient();
   const { data: sourceSession, error: sessionError } = await client
     .from("sales_catalog_payment_sessions")
-    .select("id, organization_id, order_id, integration_id, amount, currency, payer_email, metadata")
+    .select("id, organization_id, order_id, integration_id, amount, currency, payer_email, payment_owner_type, commercial_flow_type, revenue_owner_type, commission_context, metadata")
     .eq("id", sessionId)
     .maybeSingle<PaymentSessionRow>();
 
@@ -106,6 +110,13 @@ export async function POST(
     const connectyHubOwned = sourceOwner === "connectyhub" || (!sourceOwner && resolvedOwner.owner === "connectyhub");
     const platformProductIds = readStringList(sourceMetadata.platform_product_ids, resolvedOwner.platformProductIds);
     const platformCatalogItemIds = readStringList(sourceMetadata.platform_catalog_item_ids, resolvedOwner.catalogItemIds);
+    const commercialFlowType = normalizeCommercialFlowType(readString(sourceSession.commercial_flow_type)
+      ?? readString(sourceMetadata.commercial_flow_type)
+      ?? resolvedOwner.commercialFlowType);
+    const revenueOwnerType = normalizeRevenueOwnerType(readString(sourceSession.revenue_owner_type)
+      ?? readString(sourceMetadata.revenue_owner_type)
+      ?? resolvedOwner.revenueOwnerType);
+    const commissionEligible = readBoolean(sourceMetadata.commission_eligible) ?? resolvedOwner.commissionEligible;
     const integration = connectyHubOwned
       ? null
       : await ensureMercadoPagoAccessToken({
@@ -139,6 +150,15 @@ export async function POST(
         status: "created",
         amount,
         currency: sourceSession.currency ?? "BRL",
+        payment_owner_type: connectyHubOwned ? "connectyhub" : "client",
+        commercial_flow_type: commercialFlowType,
+        revenue_owner_type: revenueOwnerType,
+        commission_context: {
+          ...(readRecord(sourceSession.commission_context) ?? {}),
+          eligible: commissionEligible,
+          platform_product_ids: platformProductIds,
+          catalog_item_ids: platformCatalogItemIds,
+        },
         payer_email: payerEmail,
         checkout_url: checkoutUrl,
         idempotency_key: idempotencyKey,
@@ -149,6 +169,9 @@ export async function POST(
           payment_method_id: paymentMethodId,
           installments,
           payment_owner: connectyHubOwned ? "connectyhub" : "seller",
+          commercial_flow_type: commercialFlowType,
+          revenue_owner_type: revenueOwnerType,
+          commission_eligible: commissionEligible,
           payment_receiver: connectyHubOwned ? "connectyhub" : "seller",
           platform_product_marketplace: connectyHubOwned,
           platform_product_ids: platformProductIds,
@@ -198,6 +221,9 @@ export async function POST(
           payment_method_id: paymentMethodId,
           installments,
           payment_owner: connectyHubOwned ? "connectyhub" : "seller",
+          commercial_flow_type: commercialFlowType,
+          revenue_owner_type: revenueOwnerType,
+          commission_eligible: commissionEligible,
           payment_receiver: connectyHubOwned ? "connectyhub" : "seller",
           platform_product_marketplace: connectyHubOwned,
           platform_product_ids: platformProductIds,
@@ -211,7 +237,12 @@ export async function POST(
 
     await client
       .from("sales_catalog_orders")
-      .update(buildOrderPatch(paymentData.status, cardSessionId, paymentData.providerPaymentId, readRecord(order.metadata) ?? {}))
+      .update(buildOrderPatch(paymentData.status, cardSessionId, paymentData.providerPaymentId, readRecord(order.metadata) ?? {}, {
+        commercialFlowType,
+        revenueOwnerType,
+        containsPlatformProducts: connectyHubOwned,
+        commissionEligible,
+      }))
       .eq("id", order.id)
       .eq("organization_id", sourceSession.organization_id);
 
@@ -246,6 +277,9 @@ export async function POST(
         provider_status: paymentData.providerStatus,
         status: paymentData.status,
         payment_owner: connectyHubOwned ? "connectyhub" : "seller",
+        commercial_flow_type: commercialFlowType,
+        revenue_owner_type: revenueOwnerType,
+        commission_eligible: commissionEligible,
         post_payment: postPayment,
       },
     });
@@ -303,6 +337,12 @@ function buildOrderPatch(
   sessionId: string,
   providerPaymentId: string | null,
   currentMetadata: JsonRecord,
+  ownerContext: {
+    commercialFlowType: string;
+    revenueOwnerType: string;
+    containsPlatformProducts: boolean;
+    commissionEligible: boolean;
+  },
 ) {
   if (status === "approved") {
     return {
@@ -310,11 +350,18 @@ function buildOrderPatch(
       status: "paid",
       payment_status: "confirmed",
       payment_method: "Cartao Mercado Pago",
+      commercial_flow_type: ownerContext.commercialFlowType,
+      revenue_owner_type: ownerContext.revenueOwnerType,
+      contains_platform_products: ownerContext.containsPlatformProducts,
+      commission_eligible: ownerContext.commissionEligible,
       metadata: {
         ...currentMetadata,
         payment_gateway_confirmed_at: new Date().toISOString(),
         latest_payment_session_id: sessionId,
         latest_provider_payment_id: providerPaymentId,
+        latest_commercial_flow_type: ownerContext.commercialFlowType,
+        latest_revenue_owner_type: ownerContext.revenueOwnerType,
+        latest_commission_eligible: ownerContext.commissionEligible,
       },
     };
   }
@@ -324,11 +371,18 @@ function buildOrderPatch(
       latest_payment_session_id: sessionId,
       payment_status: "failed",
       payment_method: "Cartao Mercado Pago",
+      commercial_flow_type: ownerContext.commercialFlowType,
+      revenue_owner_type: ownerContext.revenueOwnerType,
+      contains_platform_products: ownerContext.containsPlatformProducts,
+      commission_eligible: ownerContext.commissionEligible,
       metadata: {
         ...currentMetadata,
         payment_gateway_failed_at: new Date().toISOString(),
         latest_payment_session_id: sessionId,
         latest_provider_payment_id: providerPaymentId,
+        latest_commercial_flow_type: ownerContext.commercialFlowType,
+        latest_revenue_owner_type: ownerContext.revenueOwnerType,
+        latest_commission_eligible: ownerContext.commissionEligible,
       },
     };
   }
@@ -338,10 +392,17 @@ function buildOrderPatch(
     status: "pending_payment",
     payment_status: "pending",
     payment_method: "Cartao Mercado Pago",
+    commercial_flow_type: ownerContext.commercialFlowType,
+    revenue_owner_type: ownerContext.revenueOwnerType,
+    contains_platform_products: ownerContext.containsPlatformProducts,
+    commission_eligible: ownerContext.commissionEligible,
     metadata: {
       ...currentMetadata,
       latest_payment_session_id: sessionId,
       latest_provider_payment_id: providerPaymentId,
+      latest_commercial_flow_type: ownerContext.commercialFlowType,
+      latest_revenue_owner_type: ownerContext.revenueOwnerType,
+      latest_commission_eligible: ownerContext.commissionEligible,
     },
   };
 }
@@ -368,6 +429,20 @@ function readString(value: unknown) {
 
 function readNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function readBoolean(value: unknown) {
+  return typeof value === "boolean" ? value : null;
+}
+
+function normalizeCommercialFlowType(value: string | null) {
+  if (value === "connectyhub_resale" || value === "connectyhub_direct" || value === "external_marketplace") return value;
+  return "client_direct";
+}
+
+function normalizeRevenueOwnerType(value: string | null) {
+  if (value === "connectyhub" || value === "split" || value === "external_provider") return value;
+  return "client";
 }
 
 function readStringList(value: unknown, fallback: string[]) {

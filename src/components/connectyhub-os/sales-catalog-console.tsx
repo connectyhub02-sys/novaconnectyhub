@@ -57,6 +57,7 @@ import {
   type ClientSalesCatalogShippingSettings,
   type SalesCatalogAttribute,
   type SalesCatalogBusinessType,
+  type SalesCatalogCommercialFlowType,
   type SalesCatalogFulfillmentStatus,
   type SalesCatalogItemAttribute,
   type SalesCatalogItemStatus,
@@ -68,6 +69,7 @@ import {
   type SalesCatalogPaymentMethod,
   type SalesCatalogPaymentStatus,
   type SalesCatalogPaymentSessionStatus,
+  type SalesCatalogRevenueOwnerType,
   type SalesCatalogReservationPolicy,
   type SalesCatalogSku,
   type SalesCatalogSkuStatus,
@@ -98,6 +100,7 @@ type SalesCatalogConsoleProps = {
 };
 
 type CatalogTab = "setup" | "shipping" | "products" | "orders" | "payments" | "whatsapp";
+type CommercialFlowFilter = "all" | SalesCatalogCommercialFlowType;
 
 type SettingsDraft = {
   businessType: SalesCatalogBusinessType;
@@ -148,6 +151,39 @@ type SkuDraft = {
   status: SalesCatalogSkuStatus;
 };
 
+type SalesCatalogTone = "green" | "cyan" | "amber" | "rose" | "violet" | "zinc";
+
+type CommerceFlowSummary = {
+  flow: SalesCatalogCommercialFlowType;
+  orders: number;
+  orderAmount: number;
+  approvedPayments: number;
+  approvedAmount: number;
+  pendingPayments: number;
+  pendingAmount: number;
+  failedPayments: number;
+  commissionOrders: number;
+  commissionApprovedAmount: number;
+  paymentOwnerType: SalesCatalogRevenueOwnerType;
+};
+
+type CommerceSummary = {
+  orderCount: number;
+  orderAmount: number;
+  approvedPayments: number;
+  approvedAmount: number;
+  pendingPayments: number;
+  pendingAmount: number;
+  failedPayments: number;
+  clientApprovedAmount: number;
+  connectyHubApprovedAmount: number;
+  splitApprovedAmount: number;
+  externalApprovedAmount: number;
+  commissionOrders: number;
+  commissionApprovedAmount: number;
+  flows: CommerceFlowSummary[];
+};
+
 const statusOptions: Array<{ value: SalesCatalogItemStatus; label: string }> = [
   { value: "active", label: "Ativo" },
   { value: "draft", label: "Rascunho" },
@@ -180,6 +216,14 @@ const fulfillmentStatusOptions: SalesCatalogFulfillmentStatus[] = [
   "cancelled",
 ];
 
+const commercialFlowFilterOptions: Array<{ value: CommercialFlowFilter; label: string }> = [
+  { value: "all", label: "Todos" },
+  { value: "client_direct", label: "Venda propria" },
+  { value: "connectyhub_resale", label: "Revenda CH" },
+  { value: "connectyhub_direct", label: "Venda direta CH" },
+  { value: "external_marketplace", label: "Marketplace externo" },
+];
+
 export function SalesCatalogConsole({
   initialCompanies,
   initialItems,
@@ -202,6 +246,8 @@ export function SalesCatalogConsole({
   const [shippingSettings, setShippingSettings] = useState(initialShippingSettings);
   const [selectedCompanyId, setSelectedCompanyId] = useState(initialSelectedCompanyId);
   const [activeTab, setActiveTab] = useState<CatalogTab>(initialSelectedSettings?.configured ? "products" : "setup");
+  const [orderFlowFilter, setOrderFlowFilter] = useState<CommercialFlowFilter>("all");
+  const [paymentFlowFilter, setPaymentFlowFilter] = useState<CommercialFlowFilter>("all");
   const [settingsDraft, setSettingsDraft] = useState<SettingsDraft>(() => buildSettingsDraft(initialSelectedSettings));
   const [shippingDraft, setShippingDraft] = useState<ShippingDraft>(() => buildShippingDraft(initialSelectedShippingSettings));
   const [selectedShippingUf, setSelectedShippingUf] = useState(() => initialSelectedShippingSettings?.rules.find((rule) => rule.active)?.uf ?? "SP");
@@ -286,15 +332,31 @@ export function SalesCatalogConsole({
     () => paymentSessions.filter((session) => !selectedCompanyId || session.companyId === selectedCompanyId),
     [paymentSessions, selectedCompanyId],
   );
+  const filteredOrders = useMemo(
+    () => orderFlowFilter === "all" ? visibleOrders : visibleOrders.filter((order) => order.commercialFlowType === orderFlowFilter),
+    [orderFlowFilter, visibleOrders],
+  );
+  const filteredPaymentSessions = useMemo(
+    () => paymentFlowFilter === "all" ? visiblePaymentSessions : visiblePaymentSessions.filter((session) => session.commercialFlowType === paymentFlowFilter),
+    [paymentFlowFilter, visiblePaymentSessions],
+  );
   const stats = useMemo(() => {
     const active = visibleItems.filter((item) => item.status === "active").length;
     const ready = visibleItems.filter((item) => item.readiness === "ready").length;
     const media = visibleItems.reduce((total, item) => total + item.media.length, 0);
     const whatsapp = visibleItems.filter((item) => item.source === "whatsapp_catalog").length;
     const orderCount = visibleOrders.length;
+    const clientDirectOrders = visibleOrders.filter((order) => order.commercialFlowType === "client_direct").length;
+    const connectyHubResaleOrders = visibleOrders.filter((order) => order.commercialFlowType === "connectyhub_resale").length;
+    const connectyHubDirectOrders = visibleOrders.filter((order) => order.commercialFlowType === "connectyhub_direct").length;
+    const commissionOrders = visibleOrders.filter((order) => order.commissionEligible).length;
 
-    return { active, ready, media, whatsapp, orderCount };
+    return { active, ready, media, whatsapp, orderCount, clientDirectOrders, connectyHubResaleOrders, connectyHubDirectOrders, commissionOrders };
   }, [visibleItems, visibleOrders]);
+  const commerceSummary = useMemo(
+    () => buildCommerceSummary(visibleOrders, visiblePaymentSessions),
+    [visibleOrders, visiblePaymentSessions],
+  );
   const selectedCompany = companies.find((company) => company.id === selectedCompanyId) ?? null;
   const selectedSettings = useMemo(
     () => settings.find((entry) => entry.companyId === selectedCompanyId) ?? null,
@@ -1371,6 +1433,13 @@ export function SalesCatalogConsole({
         <StatTile icon={ClipboardList} label="Pedidos" value={String(stats.orderCount)} />
       </div>
 
+      <div className="mb-4 grid gap-3 lg:grid-cols-4">
+        <CommerceTile label="Venda propria" value={String(stats.clientDirectOrders)} tone="green" />
+        <CommerceTile label="Revenda CH" value={String(stats.connectyHubResaleOrders)} tone="cyan" />
+        <CommerceTile label="Venda direta CH" value={String(stats.connectyHubDirectOrders)} tone="violet" />
+        <CommerceTile label="Comissao" value={String(stats.commissionOrders)} tone="amber" />
+      </div>
+
       <div className="mb-4 flex flex-wrap gap-2">
         <TabButton active={activeTab === "setup"} icon={Settings2} label="Configuracao" onClick={() => setActiveTab("setup")} />
         <TabButton active={activeTab === "shipping"} icon={Truck} label="Entrega e Frete" onClick={() => setActiveTab("shipping")} />
@@ -2254,15 +2323,22 @@ export function SalesCatalogConsole({
           </Panel>
 
           <Panel title="Sessoes de pagamento" eyebrow={selectedCompany?.name ?? "checkout"}>
-            {visiblePaymentSessions.length > 0 ? (
-              <div className="grid gap-3">
-                {visiblePaymentSessions.slice(0, 12).map((session) => (
+            <CommerceRevenueOverview summary={commerceSummary} />
+            <CommercialFlowFilterBar
+              className="mt-4"
+              value={paymentFlowFilter}
+              onChange={setPaymentFlowFilter}
+            />
+
+            {filteredPaymentSessions.length > 0 ? (
+              <div className="mt-4 grid gap-3">
+                {filteredPaymentSessions.slice(0, 12).map((session) => (
                   <PaymentSessionCard key={session.id} session={session} />
                 ))}
               </div>
             ) : (
-              <div className="rounded-xl border border-dashed px-4 py-10 text-center text-[12px] text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
-                Nenhum Pix gerado para esta empresa.
+              <div className="mt-4 rounded-xl border border-dashed px-4 py-10 text-center text-[12px] text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
+                Nenhum checkout encontrado neste filtro.
               </div>
             )}
           </Panel>
@@ -2493,9 +2569,16 @@ export function SalesCatalogConsole({
           </Panel>
 
           <Panel title="Pedidos WhatsApp" eyebrow={selectedCompany?.name ?? "acompanhamento"}>
-            {visibleOrders.length > 0 ? (
-              <div className="grid gap-3">
-                {visibleOrders.map((order) => (
+            <CommerceRevenueOverview summary={commerceSummary} />
+            <CommercialFlowFilterBar
+              className="mt-4"
+              value={orderFlowFilter}
+              onChange={setOrderFlowFilter}
+            />
+
+            {filteredOrders.length > 0 ? (
+              <div className="mt-4 grid gap-3">
+                {filteredOrders.map((order) => (
                   <OrderCard
                     key={order.id}
                     paymentSession={visiblePaymentSessions.find((session) => session.id === order.latestPaymentSessionId || session.orderId === order.id) ?? null}
@@ -2508,8 +2591,8 @@ export function SalesCatalogConsole({
                 ))}
               </div>
             ) : (
-              <div className="rounded-xl border border-dashed px-4 py-10 text-center text-[12px] text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
-                Nenhum pedido registrado para esta empresa.
+              <div className="mt-4 rounded-xl border border-dashed px-4 py-10 text-center text-[12px] text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
+                Nenhum pedido encontrado neste filtro.
               </div>
             )}
           </Panel>
@@ -3210,6 +3293,9 @@ function OrderCard({
           </p>
         </div>
         <div className="flex flex-wrap justify-end gap-1.5">
+          <NeonBadge tone={commercialFlowTone(order.commercialFlowType)}>{formatCommercialFlowLabel(order.commercialFlowType)}</NeonBadge>
+          <NeonBadge tone={revenueOwnerTone(order.revenueOwnerType)}>{formatRevenueOwnerLabel(order.revenueOwnerType)}</NeonBadge>
+          {order.commissionEligible ? <NeonBadge tone="amber">comissao</NeonBadge> : null}
           <NeonBadge tone={orderStatusTone(order.status)}>{formatSalesCatalogOrderStatus(order.status)}</NeonBadge>
           <NeonBadge tone={paymentStatusTone(order.paymentStatus)}>{formatSalesCatalogPaymentStatus(order.paymentStatus)}</NeonBadge>
           <NeonBadge tone={fulfillmentStatusTone(order.fulfillmentStatus)}>{formatSalesCatalogFulfillmentStatus(order.fulfillmentStatus)}</NeonBadge>
@@ -3224,6 +3310,19 @@ function OrderCard({
           {order.paymentMethod ? <span>{order.paymentMethod}</span> : null}
           {order.shippingMethod ? <span>{order.shippingMethod}</span> : null}
         </p>
+        {order.items.some((item) => item.productOriginType !== "client" || item.commissionEligible) ? (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {order.items.map((item) => (
+              <span key={item.id} className="inline-flex max-w-full items-center gap-1 rounded-md border px-2 py-1 text-[10px] text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
+                <BadgePercent className="h-3 w-3 shrink-0" />
+                <span className="truncate">
+                  {item.title}: {formatCommercialFlowLabel(item.commercialFlowType)}
+                  {item.commissionEligible ? " com comissao" : ""}
+                </span>
+              </span>
+            ))}
+          </div>
+        ) : null}
       </div>
 
       <div className="mt-3 rounded-lg border px-3 py-2" style={{ borderColor: "var(--ch-border)", background: "var(--ch-panel)" }}>
@@ -3271,10 +3370,12 @@ function OrderCard({
             )}
           </div>
         </div>
-        {paymentSession?.pixQrCode ? (
-          <p className="mt-2 line-clamp-2 break-all font-mono text-[10px] text-slate-500">{paymentSession.pixQrCode}</p>
-        ) : null}
+      {paymentSession?.pixQrCode ? (
+        <p className="mt-2 line-clamp-2 break-all font-mono text-[10px] text-slate-500">{paymentSession.pixQrCode}</p>
+      ) : null}
       </div>
+
+      <OrderOperationalChecklist order={order} paymentSession={paymentSession} />
 
       {order.items.some((item) => item.attributes.length > 0) ? (
         <div className="mt-3 flex flex-wrap gap-1.5">
@@ -3348,6 +3449,71 @@ function OrderCard({
   );
 }
 
+function OrderOperationalChecklist({
+  order,
+  paymentSession,
+}: {
+  order: ClientSalesCatalogOrder;
+  paymentSession: ClientSalesCatalogPaymentSession | null;
+}) {
+  const paymentStep = buildPaymentOperationStep(order, paymentSession);
+  const inventoryStep = buildInventoryOperationStep(order);
+  const whatsappStep = buildWhatsappOperationStep(order);
+  const fulfillmentStep = buildFulfillmentOperationStep(order);
+  const nextStep = buildOrderNextStep(order, paymentSession);
+
+  return (
+    <div className="mt-3 rounded-lg border px-3 py-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-panel)" }}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-[12px] font-semibold text-slate-200">Pos-venda operacional</p>
+          <p className="mt-1 text-[11px] text-slate-500">{nextStep}</p>
+        </div>
+        {order.inventoryDeductedAt || order.inventoryRestoredAt || order.paymentWhatsappNotifiedAt ? (
+          <NeonBadge tone="green">rastreado</NeonBadge>
+        ) : (
+          <NeonBadge tone="amber">em aberto</NeonBadge>
+        )}
+      </div>
+
+      <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        <OperationStep icon={CreditCard} {...paymentStep} />
+        <OperationStep icon={PackagePlus} {...inventoryStep} />
+        <OperationStep icon={MessageSquareText} {...whatsappStep} />
+        <OperationStep icon={ShieldCheck} {...fulfillmentStep} />
+      </div>
+    </div>
+  );
+}
+
+function OperationStep({
+  icon: Icon,
+  label,
+  value,
+  hint,
+  tone,
+}: {
+  icon: typeof PackagePlus;
+  label: string;
+  value: string;
+  hint: string;
+  tone: SalesCatalogTone;
+}) {
+  return (
+    <div className="rounded-lg border px-3 py-2" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+      <div className="flex items-center justify-between gap-2">
+        <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">{label}</p>
+        <Icon className="h-3.5 w-3.5 text-cyan-300" />
+      </div>
+      <p className="mt-2 text-[12px] font-semibold text-slate-100">{value}</p>
+      <p className="mt-1 line-clamp-2 text-[10px] leading-4 text-slate-500">{hint}</p>
+      <div className="mt-2">
+        <NeonBadge tone={tone}>{operationToneLabel(tone)}</NeonBadge>
+      </div>
+    </div>
+  );
+}
+
 function PaymentSessionCard({ session }: { session: ClientSalesCatalogPaymentSession }) {
   return (
     <div className="rounded-xl border p-3" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
@@ -3360,7 +3526,12 @@ function PaymentSessionCard({ session }: { session: ClientSalesCatalogPaymentSes
             {session.createdAt ? <span>{formatDateTime(session.createdAt)}</span> : null}
           </p>
         </div>
-        <NeonBadge tone={paymentSessionTone(session.status)}>{formatSalesCatalogPaymentSessionStatus(session.status)}</NeonBadge>
+        <div className="flex flex-wrap justify-end gap-1.5">
+          <NeonBadge tone={commercialFlowTone(session.commercialFlowType)}>{formatCommercialFlowLabel(session.commercialFlowType)}</NeonBadge>
+          <NeonBadge tone={revenueOwnerTone(session.paymentOwnerType)}>{formatRevenueOwnerLabel(session.paymentOwnerType)}</NeonBadge>
+          {session.commissionEligible ? <NeonBadge tone="amber">comissao</NeonBadge> : null}
+          <NeonBadge tone={paymentSessionTone(session.status)}>{formatSalesCatalogPaymentSessionStatus(session.status)}</NeonBadge>
+        </div>
       </div>
 
       {session.checkoutUrl ? (
@@ -3638,6 +3809,179 @@ function StatTile({ icon: Icon, label, value }: { icon: typeof PackagePlus; labe
         <Icon className="h-4 w-4 text-cyan-300" />
       </div>
       <p className="mt-3 font-mono text-[24px] font-bold text-cyan-200">{value}</p>
+    </div>
+  );
+}
+
+function CommerceTile({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone: SalesCatalogTone;
+}) {
+  return (
+    <div className="rounded-xl border px-4 py-3" style={{ background: "var(--ch-panel)", borderColor: "var(--ch-border)" }}>
+      <div className="flex items-center justify-between gap-3">
+        <p className="font-mono text-[10px] uppercase tracking-widest text-slate-500">{label}</p>
+        <NeonBadge tone={tone}>{value}</NeonBadge>
+      </div>
+    </div>
+  );
+}
+
+function CommercialFlowFilterBar({
+  value,
+  onChange,
+  className,
+}: {
+  value: CommercialFlowFilter;
+  onChange: (value: CommercialFlowFilter) => void;
+  className?: string;
+}) {
+  return (
+    <div className={cn("flex flex-wrap gap-2", className)}>
+      {commercialFlowFilterOptions.map((option) => {
+        const active = value === option.value;
+
+        return (
+          <button
+            key={option.value}
+            type="button"
+            onClick={() => onChange(option.value)}
+            className={cn(
+              "inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide transition",
+              active ? "border-cyan-300/50 bg-cyan-300/15 text-cyan-100" : "text-slate-400 hover:bg-cyan-400/10 hover:text-cyan-100",
+            )}
+            style={{ borderColor: active ? undefined : "var(--ch-border)" }}
+          >
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function CommerceRevenueOverview({ summary }: { summary: CommerceSummary }) {
+  return (
+    <div className="space-y-3">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <RevenueMetric label="Pedidos criados" value={formatCurrency(summary.orderAmount)} hint={`${summary.orderCount} pedido(s)`} tone="cyan" />
+        <RevenueMetric label="Pagamentos aprovados" value={formatCurrency(summary.approvedAmount)} hint={`${summary.approvedPayments} checkout(s)`} tone="green" />
+        <RevenueMetric label="Aguardando pagamento" value={formatCurrency(summary.pendingAmount)} hint={`${summary.pendingPayments} pendente(s)`} tone="amber" />
+        <RevenueMetric label="Base com comissao" value={formatCurrency(summary.commissionApprovedAmount)} hint={`${summary.commissionOrders} pedido(s)`} tone="violet" />
+      </div>
+
+      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        {summary.flows.map((flow) => (
+          <CommerceFlowCard key={flow.flow} flow={flow} />
+        ))}
+      </div>
+
+      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        <RevenueSplitRow
+          label="Valores aprovados do cliente"
+          value={formatCurrency(summary.clientApprovedAmount)}
+          hint="Venda propria cai na conta conectada do cliente"
+          tone="green"
+        />
+        <RevenueSplitRow
+          label="Valores aprovados ConnectyHub"
+          value={formatCurrency(summary.connectyHubApprovedAmount)}
+          hint="Revenda ou venda direta com recebimento ConnectyHub"
+          tone="cyan"
+        />
+        <RevenueSplitRow
+          label="Valores aprovados em split"
+          value={formatCurrency(summary.splitApprovedAmount)}
+          hint="Recebimento dividido entre as partes"
+          tone="amber"
+        />
+        <RevenueSplitRow
+          label="Valores aprovados parceiros"
+          value={formatCurrency(summary.externalApprovedAmount)}
+          hint="Produto ou provedor externo"
+          tone="violet"
+        />
+      </div>
+    </div>
+  );
+}
+
+function RevenueMetric({
+  label,
+  value,
+  hint,
+  tone,
+}: {
+  label: string;
+  value: string;
+  hint: string;
+  tone: SalesCatalogTone;
+}) {
+  return (
+    <div className="rounded-xl border px-3 py-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-panel)" }}>
+      <div className="flex items-center justify-between gap-3">
+        <p className="font-mono text-[10px] uppercase tracking-widest text-slate-500">{label}</p>
+        <NeonBadge tone={tone}>{hint}</NeonBadge>
+      </div>
+      <p className="mt-3 font-mono text-[20px] font-bold text-slate-100">{value}</p>
+    </div>
+  );
+}
+
+function CommerceFlowCard({ flow }: { flow: CommerceFlowSummary }) {
+  return (
+    <div className="rounded-xl border px-3 py-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-panel)" }}>
+      <div className="flex items-center justify-between gap-2">
+        <NeonBadge tone={commercialFlowTone(flow.flow)}>{formatCommercialFlowLabel(flow.flow)}</NeonBadge>
+        <span className="font-mono text-[10px] uppercase tracking-widest text-slate-500">{flow.orders} pedido(s)</span>
+      </div>
+      <p className="mt-3 font-mono text-[18px] font-bold text-slate-100">{formatCurrency(flow.approvedAmount)}</p>
+      <p className="mt-1 text-[11px] text-slate-500">{formatCommercialFlowDescription(flow.flow)}</p>
+      <div className="mt-3 grid gap-1.5 text-[11px] text-slate-400">
+        <SummaryLine label="Pedidos" value={formatCurrency(flow.orderAmount)} />
+        <SummaryLine label="Pendentes" value={`${flow.pendingPayments} / ${formatCurrency(flow.pendingAmount)}`} />
+        <SummaryLine label="Falhas" value={String(flow.failedPayments)} />
+        <SummaryLine label="Recebedor" value={formatRevenueOwnerLabel(flow.paymentOwnerType)} />
+        {flow.commissionApprovedAmount > 0 ? <SummaryLine label="Base comissao" value={formatCurrency(flow.commissionApprovedAmount)} /> : null}
+      </div>
+    </div>
+  );
+}
+
+function RevenueSplitRow({
+  label,
+  value,
+  hint,
+  tone,
+}: {
+  label: string;
+  value: string;
+  hint: string;
+  tone: SalesCatalogTone;
+}) {
+  return (
+    <div className="rounded-lg border px-3 py-2" style={{ borderColor: "var(--ch-border)", background: "var(--ch-panel)" }}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-[12px] font-semibold text-slate-100">{label}</p>
+          <p className="mt-1 text-[11px] text-slate-500">{hint}</p>
+        </div>
+        <NeonBadge tone={tone}>{value}</NeonBadge>
+      </div>
+    </div>
+  );
+}
+
+function SummaryLine({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className="text-slate-500">{label}</span>
+      <span className="min-w-0 truncate text-right font-mono text-slate-300">{value}</span>
     </div>
   );
 }
@@ -4164,7 +4508,379 @@ function formatOfferWindow(item: ClientSalesCatalogItem) {
   return null;
 }
 
-function orderStatusTone(status: SalesCatalogOrderStatus): "green" | "cyan" | "amber" | "rose" | "violet" | "zinc" {
+function buildPaymentOperationStep(order: ClientSalesCatalogOrder, paymentSession: ClientSalesCatalogPaymentSession | null) {
+  const status = paymentSession?.status;
+
+  if (order.paymentStatus === "confirmed" || order.status === "paid" || status === "approved") {
+    return {
+      label: "Pagamento",
+      value: "Confirmado",
+      hint: paymentSession?.paidAt ? `Pago em ${formatDateTime(paymentSession.paidAt)}` : order.paymentMethod ?? "Pagamento confirmado",
+      tone: "green" as SalesCatalogTone,
+    };
+  }
+
+  if (order.paymentStatus === "failed" || status === "rejected" || status === "cancelled" || status === "expired" || status === "error") {
+    return {
+      label: "Pagamento",
+      value: "Falhou",
+      hint: paymentSession?.failureReason ?? "Gerar novo checkout ou ajustar com o lead",
+      tone: "rose" as SalesCatalogTone,
+    };
+  }
+
+  if (order.paymentStatus === "refunded" || status === "refunded") {
+    return {
+      label: "Pagamento",
+      value: "Reembolsado",
+      hint: "Verificar devolucao de estoque e atendimento",
+      tone: "violet" as SalesCatalogTone,
+    };
+  }
+
+  return {
+    label: "Pagamento",
+    value: paymentSession ? "Aguardando" : "Sem checkout",
+    hint: paymentSession ? formatSalesCatalogPaymentSessionStatus(paymentSession.status) : "Gere Pix ou combine pagamento",
+    tone: paymentSession ? "cyan" as SalesCatalogTone : "amber" as SalesCatalogTone,
+  };
+}
+
+function buildInventoryOperationStep(order: ClientSalesCatalogOrder) {
+  if (order.inventoryRestoredAt) {
+    return {
+      label: "Estoque",
+      value: "Devolvido",
+      hint: `${order.inventoryRestoredItems || 1} item(ns) em ${formatDateTime(order.inventoryRestoredAt)}`,
+      tone: "violet" as SalesCatalogTone,
+    };
+  }
+
+  if (order.inventoryDeductedAt) {
+    return {
+      label: "Estoque",
+      value: "Baixado",
+      hint: `${order.inventoryDeductedItems || 1} item(ns) em ${formatDateTime(order.inventoryDeductedAt)}`,
+      tone: "green" as SalesCatalogTone,
+    };
+  }
+
+  if (order.paymentStatus === "confirmed" || order.status === "paid") {
+    return {
+      label: "Estoque",
+      value: "Verificar",
+      hint: "Produto sem quantidade rastreada ou baixa pendente",
+      tone: "amber" as SalesCatalogTone,
+    };
+  }
+
+  return {
+    label: "Estoque",
+    value: "Aguardando",
+    hint: "Baixa automatica apos pagamento confirmado",
+    tone: "zinc" as SalesCatalogTone,
+  };
+}
+
+function buildWhatsappOperationStep(order: ClientSalesCatalogOrder) {
+  if (order.paymentWhatsappNotifiedAt) {
+    return {
+      label: "WhatsApp",
+      value: "Cliente avisado",
+      hint: `Confirmacao enviada em ${formatDateTime(order.paymentWhatsappNotifiedAt)}`,
+      tone: "green" as SalesCatalogTone,
+    };
+  }
+
+  if (order.paymentStatus === "confirmed" || order.status === "paid") {
+    return {
+      label: "WhatsApp",
+      value: "Acompanhar",
+      hint: order.conversationId ? "Confirmacao automatica pendente" : "Pedido sem conversa vinculada",
+      tone: "amber" as SalesCatalogTone,
+    };
+  }
+
+  return {
+    label: "WhatsApp",
+    value: "Aguardando",
+    hint: "O lead volta pelo checkout ou conversa original",
+    tone: "zinc" as SalesCatalogTone,
+  };
+}
+
+function buildFulfillmentOperationStep(order: ClientSalesCatalogOrder) {
+  if (order.fulfillmentStatus === "fulfilled") {
+    return {
+      label: "Execucao",
+      value: "Concluida",
+      hint: "Pedido finalizado",
+      tone: "green" as SalesCatalogTone,
+    };
+  }
+
+  if (order.fulfillmentStatus === "scheduled" || order.fulfillmentStatus === "in_progress") {
+    return {
+      label: "Execucao",
+      value: formatSalesCatalogFulfillmentStatus(order.fulfillmentStatus),
+      hint: "Separacao, entrega ou atendimento em andamento",
+      tone: "cyan" as SalesCatalogTone,
+    };
+  }
+
+  if (order.fulfillmentStatus === "cancelled" || order.status === "cancelled") {
+    return {
+      label: "Execucao",
+      value: "Cancelada",
+      hint: "Verificar estoque, pagamento e repasse",
+      tone: "rose" as SalesCatalogTone,
+    };
+  }
+
+  return {
+    label: "Execucao",
+    value: order.paymentStatus === "confirmed" || order.status === "paid" ? "Separar" : "Pendente",
+    hint: order.paymentStatus === "confirmed" || order.status === "paid" ? "Iniciar preparo do pedido" : "Aguardar pagamento",
+    tone: order.paymentStatus === "confirmed" || order.status === "paid" ? "amber" as SalesCatalogTone : "zinc" as SalesCatalogTone,
+  };
+}
+
+function buildOrderNextStep(order: ClientSalesCatalogOrder, paymentSession: ClientSalesCatalogPaymentSession | null) {
+  if (order.status === "cancelled") return "Pedido cancelado. Confira se estoque, pagamento e repasse foram ajustados.";
+  if (order.paymentStatus === "failed" || paymentSession?.status === "rejected" || paymentSession?.status === "error") return "Pagamento falhou. Gere novo checkout ou continue o atendimento no WhatsApp.";
+  if (order.paymentStatus === "refunded" || paymentSession?.status === "refunded") return "Pagamento reembolsado. Confira devolucao de estoque e comissao.";
+  if (order.paymentStatus !== "confirmed" && order.status !== "paid") return paymentSession ? "Aguardando confirmacao do pagamento." : "Gere um checkout ou registre pagamento combinado.";
+  if (!order.inventoryDeductedAt && !order.inventoryRestoredAt) return "Pagamento confirmado. Verifique estoque ou produto sem quantidade rastreada.";
+  if (!order.paymentWhatsappNotifiedAt) return "Pagamento confirmado. Continue o acompanhamento com o lead no WhatsApp.";
+  if (order.fulfillmentStatus === "pending") return "Pedido pronto para separacao, entrega ou execucao.";
+  if (order.fulfillmentStatus === "fulfilled") return "Pedido finalizado.";
+  return "Pedido em andamento.";
+}
+
+function operationToneLabel(tone: SalesCatalogTone) {
+  if (tone === "green") return "ok";
+  if (tone === "cyan") return "andamento";
+  if (tone === "amber") return "acao";
+  if (tone === "rose") return "atencao";
+  if (tone === "violet") return "ajustado";
+  return "pendente";
+}
+
+function buildCommerceSummary(
+  orders: ClientSalesCatalogOrder[],
+  paymentSessions: ClientSalesCatalogPaymentSession[],
+): CommerceSummary {
+  const flows = createEmptyCommerceFlowSummaries();
+  const flowMap = new Map(flows.map((flow) => [flow.flow, flow]));
+  const summary: CommerceSummary = {
+    orderCount: orders.length,
+    orderAmount: 0,
+    approvedPayments: 0,
+    approvedAmount: 0,
+    pendingPayments: 0,
+    pendingAmount: 0,
+    failedPayments: 0,
+    clientApprovedAmount: 0,
+    connectyHubApprovedAmount: 0,
+    splitApprovedAmount: 0,
+    externalApprovedAmount: 0,
+    commissionOrders: 0,
+    commissionApprovedAmount: 0,
+    flows,
+  };
+
+  for (const order of orders) {
+    const orderAmount = parseCurrency(order.total);
+    const flow = flowMap.get(order.commercialFlowType);
+
+    summary.orderAmount += orderAmount;
+
+    if (order.commissionEligible) {
+      summary.commissionOrders += 1;
+    }
+
+    if (flow) {
+      flow.orders += 1;
+      flow.orderAmount += orderAmount;
+
+      if (order.commissionEligible) {
+        flow.commissionOrders += 1;
+      }
+
+      flow.paymentOwnerType = resolveDominantRevenueOwner(flow.paymentOwnerType, order.revenueOwnerType);
+    }
+  }
+
+  for (const session of paymentSessions) {
+    const amount = parseCurrency(session.amount);
+    const flow = flowMap.get(session.commercialFlowType);
+
+    if (isApprovedPaymentSession(session.status)) {
+      summary.approvedPayments += 1;
+      summary.approvedAmount += amount;
+
+      if (session.paymentOwnerType === "client") {
+        summary.clientApprovedAmount += amount;
+      } else if (session.paymentOwnerType === "connectyhub") {
+        summary.connectyHubApprovedAmount += amount;
+      } else if (session.paymentOwnerType === "split") {
+        summary.splitApprovedAmount += amount;
+      } else {
+        summary.externalApprovedAmount += amount;
+      }
+
+      if (session.commissionEligible) {
+        summary.commissionApprovedAmount += amount;
+      }
+
+      if (flow) {
+        flow.approvedPayments += 1;
+        flow.approvedAmount += amount;
+
+        if (session.commissionEligible) {
+          flow.commissionApprovedAmount += amount;
+        }
+      }
+    }
+
+    if (isPendingPaymentSession(session.status)) {
+      summary.pendingPayments += 1;
+      summary.pendingAmount += amount;
+
+      if (flow) {
+        flow.pendingPayments += 1;
+        flow.pendingAmount += amount;
+      }
+    }
+
+    if (isFailedPaymentSession(session.status)) {
+      summary.failedPayments += 1;
+
+      if (flow) {
+        flow.failedPayments += 1;
+      }
+    }
+
+    if (flow) {
+      flow.paymentOwnerType = resolveDominantRevenueOwner(flow.paymentOwnerType, session.paymentOwnerType);
+    }
+  }
+
+  return summary;
+}
+
+function createEmptyCommerceFlowSummaries(): CommerceFlowSummary[] {
+  return (["client_direct", "connectyhub_resale", "connectyhub_direct", "external_marketplace"] as SalesCatalogCommercialFlowType[]).map((flow) => ({
+    flow,
+    orders: 0,
+    orderAmount: 0,
+    approvedPayments: 0,
+    approvedAmount: 0,
+    pendingPayments: 0,
+    pendingAmount: 0,
+    failedPayments: 0,
+    commissionOrders: 0,
+    commissionApprovedAmount: 0,
+    paymentOwnerType: getDefaultPaymentOwner(flow),
+  }));
+}
+
+function getDefaultPaymentOwner(flow: SalesCatalogCommercialFlowType): SalesCatalogRevenueOwnerType {
+  if (flow === "client_direct") return "client";
+  if (flow === "external_marketplace") return "external_provider";
+  return "connectyhub";
+}
+
+function resolveDominantRevenueOwner(
+  current: SalesCatalogRevenueOwnerType,
+  next: SalesCatalogRevenueOwnerType,
+): SalesCatalogRevenueOwnerType {
+  if (current === next) return current;
+  if (current === "split" || next === "split") return "split";
+  if (current === "connectyhub" || next === "connectyhub") return "connectyhub";
+  if (current === "external_provider" || next === "external_provider") return "external_provider";
+  return next;
+}
+
+function parseCurrency(value: string | null | undefined) {
+  if (!value) return 0;
+
+  const stripped = value.replace(/[^\d,.-]/g, "").trim();
+  if (!stripped) return 0;
+
+  const hasComma = stripped.includes(",");
+  const hasDot = stripped.includes(".");
+  const lastComma = stripped.lastIndexOf(",");
+  const lastDot = stripped.lastIndexOf(".");
+  let normalized = stripped;
+
+  if (hasComma && hasDot) {
+    normalized = lastComma > lastDot
+      ? stripped.replace(/\./g, "").replace(",", ".")
+      : stripped.replace(/,/g, "");
+  } else if (hasComma) {
+    normalized = stripped.replace(",", ".");
+  }
+
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function formatCurrency(value: number) {
+  return new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  }).format(value);
+}
+
+function isApprovedPaymentSession(status: ClientSalesCatalogPaymentSession["status"]) {
+  return status === "approved";
+}
+
+function isPendingPaymentSession(status: ClientSalesCatalogPaymentSession["status"]) {
+  return status === "created" || status === "pending";
+}
+
+function isFailedPaymentSession(status: ClientSalesCatalogPaymentSession["status"]) {
+  return status === "rejected" || status === "cancelled" || status === "expired" || status === "error";
+}
+
+function formatCommercialFlowLabel(flow: SalesCatalogCommercialFlowType) {
+  if (flow === "connectyhub_resale") return "Revenda CH";
+  if (flow === "connectyhub_direct") return "Venda direta CH";
+  if (flow === "external_marketplace") return "Marketplace externo";
+  return "Venda propria";
+}
+
+function formatCommercialFlowDescription(flow: SalesCatalogCommercialFlowType) {
+  if (flow === "connectyhub_resale") return "Produto ConnectyHub vendido pelo cliente";
+  if (flow === "connectyhub_direct") return "Produto ConnectyHub vendido sem afiliado";
+  if (flow === "external_marketplace") return "Produto de parceiro externo";
+  return "Produto proprio do cliente";
+}
+
+function commercialFlowTone(flow: SalesCatalogCommercialFlowType): SalesCatalogTone {
+  if (flow === "connectyhub_resale") return "cyan";
+  if (flow === "connectyhub_direct") return "violet";
+  if (flow === "external_marketplace") return "amber";
+  return "green";
+}
+
+function formatRevenueOwnerLabel(owner: SalesCatalogRevenueOwnerType) {
+  if (owner === "connectyhub") return "Recebe CH";
+  if (owner === "split") return "Repasse dividido";
+  if (owner === "external_provider") return "Recebe parceiro";
+  return "Recebe cliente";
+}
+
+function revenueOwnerTone(owner: SalesCatalogRevenueOwnerType): SalesCatalogTone {
+  if (owner === "connectyhub") return "cyan";
+  if (owner === "split") return "amber";
+  if (owner === "external_provider") return "violet";
+  return "green";
+}
+
+function orderStatusTone(status: SalesCatalogOrderStatus): SalesCatalogTone {
   if (status === "paid" || status === "delivered") return "green";
   if (status === "pending_payment" || status === "in_preparation" || status === "shipped") return "cyan";
   if (status === "needs_human" || status === "draft") return "amber";
@@ -4172,21 +4888,21 @@ function orderStatusTone(status: SalesCatalogOrderStatus): "green" | "cyan" | "a
   return "zinc";
 }
 
-function paymentStatusTone(status: SalesCatalogPaymentStatus): "green" | "cyan" | "amber" | "rose" | "violet" | "zinc" {
+function paymentStatusTone(status: SalesCatalogPaymentStatus): SalesCatalogTone {
   if (status === "confirmed") return "green";
   if (status === "proof_sent") return "cyan";
   if (status === "failed" || status === "refunded") return "rose";
   return "amber";
 }
 
-function fulfillmentStatusTone(status: SalesCatalogFulfillmentStatus): "green" | "cyan" | "amber" | "rose" | "violet" | "zinc" {
+function fulfillmentStatusTone(status: SalesCatalogFulfillmentStatus): SalesCatalogTone {
   if (status === "fulfilled") return "green";
   if (status === "scheduled" || status === "in_progress") return "cyan";
   if (status === "cancelled") return "rose";
   return "amber";
 }
 
-function paymentSessionTone(status: SalesCatalogPaymentSessionStatus): "green" | "cyan" | "amber" | "rose" | "violet" | "zinc" {
+function paymentSessionTone(status: SalesCatalogPaymentSessionStatus): SalesCatalogTone {
   if (status === "approved") return "green";
   if (status === "pending" || status === "created") return "cyan";
   if (status === "rejected" || status === "cancelled" || status === "expired" || status === "error") return "rose";
