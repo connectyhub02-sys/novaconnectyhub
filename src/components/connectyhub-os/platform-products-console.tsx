@@ -1314,14 +1314,6 @@ export function PlatformProductsConsole({
                     )}
                   </div>
                 </Panel>
-
-                <Panel title="Importacao no painel do usuario" eyebrow="produtos" tone="violet" compact collapsible>
-                  <div className="grid gap-2 text-[12px] leading-5 text-slate-400">
-                    <MiniValue label="Origem do dinheiro" value="ConnectyHub" />
-                    <MiniValue label="Cliente importa em" value="/dashboard/produtos" />
-                    <MiniValue label="Venda entra em" value="Catalogo de Vendas" />
-                  </div>
-                </Panel>
               </div>
             </div>
           )}
