@@ -8,6 +8,7 @@ import {
   BadgePercent,
   Box,
   CheckCircle2,
+  ChevronDown,
   Copy,
   Eye,
   EyeOff,
@@ -139,6 +140,16 @@ type Notice = {
 };
 
 type PlatformProductAdminTab = "setup" | "products" | "commissions";
+type PlatformUiTone = "green" | "cyan" | "amber" | "rose" | "violet" | "zinc";
+
+const platformUiToneStyles: Record<PlatformUiTone, { rgb: string; fill: string; text: string; label: string }> = {
+  green: { rgb: "52,211,153", fill: "#34d399", text: "text-emerald-200", label: "text-emerald-300" },
+  cyan: { rgb: "34,211,238", fill: "#22d3ee", text: "text-cyan-200", label: "text-cyan-300" },
+  amber: { rgb: "251,191,36", fill: "#fbbf24", text: "text-amber-200", label: "text-amber-300" },
+  rose: { rgb: "251,113,133", fill: "#fb7185", text: "text-rose-200", label: "text-rose-300" },
+  violet: { rgb: "167,139,250", fill: "#a78bfa", text: "text-violet-200", label: "text-violet-300" },
+  zinc: { rgb: "148,163,184", fill: "#94a3b8", text: "text-slate-200", label: "text-slate-300" },
+};
 
 const emptyDraft: ProductDraft = {
   productId: "",
@@ -690,12 +701,12 @@ export function PlatformProductsConsole({
           ) : null}
 
           <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-6">
-            <Metric icon={Box} label="Produtos" value={String(products.length)} detail={`${metrics.active} ativos`} />
-            <Metric icon={PackagePlus} label="Revenda" value={String(metrics.resale)} detail={`${metrics.featured} em destaque`} />
-            <Metric icon={ShoppingBag} label="Venda direta" value={String(metrics.direct)} detail="sem repasse afiliado" />
-            <Metric icon={BadgePercent} label="Comissao media" value={`${metrics.averageCommission}%`} detail={`${metrics.commissionable} comissao ativa`} />
-            <Metric icon={Tags} label="Importacoes" value={String(metrics.imports)} detail="empresas de clientes" />
-            <Metric icon={CheckCircle2} label="Repasses" value={formatMoney(metrics.payableCommission)} detail={`${metrics.pendingCommissions} pendentes`} />
+            <Metric icon={Box} label="Produtos" value={String(products.length)} detail={`${metrics.active} ativos`} tone="cyan" />
+            <Metric icon={PackagePlus} label="Revenda" value={String(metrics.resale)} detail={`${metrics.featured} em destaque`} tone="green" />
+            <Metric icon={ShoppingBag} label="Venda direta" value={String(metrics.direct)} detail="sem repasse afiliado" tone="violet" />
+            <Metric icon={BadgePercent} label="Comissao media" value={`${metrics.averageCommission}%`} detail={`${metrics.commissionable} comissao ativa`} tone="amber" />
+            <Metric icon={Tags} label="Importacoes" value={String(metrics.imports)} detail="empresas de clientes" tone="rose" />
+            <Metric icon={CheckCircle2} label="Repasses" value={formatMoney(metrics.payableCommission)} detail={`${metrics.pendingCommissions} pendentes`} tone="green" />
           </div>
 
           <div className="flex flex-wrap gap-2">
@@ -706,13 +717,13 @@ export function PlatformProductsConsole({
 
           {activeTab === "commissions" ? (
             <div className="space-y-5">
-              <Panel id="platform-products-tour-payouts" title="Resumo de repasses" eyebrow="financeiro marketplace">
+              <Panel id="platform-products-tour-payouts" title="Resumo de repasses" eyebrow="financeiro marketplace" tone="green" compact>
                 <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-                  <SettlementMetric label="Gerada" value={formatMoney(commissionSummary.totalAmount)} detail={`${commissionSummary.totalCount} registro(s)`} />
-                  <SettlementMetric label="Pendente" value={formatMoney(commissionSummary.pendingAmount)} detail={`${commissionSummary.pendingCount} aguardando`} />
-                  <SettlementMetric label="Liberada" value={formatMoney(commissionSummary.availableAmount)} detail={`${commissionSummary.availableCount} pronta(s)`} />
-                  <SettlementMetric label="Paga" value={formatMoney(commissionSummary.paidAmount)} detail={`${commissionSummary.paidCount} finalizada(s)`} />
-                  <SettlementMetric label="Bloq/estorno" value={formatMoney(commissionSummary.blockedAmount)} detail={`${commissionSummary.blockedCount} ocorrencia(s)`} />
+                  <SettlementMetric label="Gerada" value={formatMoney(commissionSummary.totalAmount)} detail={`${commissionSummary.totalCount} registro(s)`} tone="cyan" />
+                  <SettlementMetric label="Pendente" value={formatMoney(commissionSummary.pendingAmount)} detail={`${commissionSummary.pendingCount} aguardando`} tone="amber" />
+                  <SettlementMetric label="Liberada" value={formatMoney(commissionSummary.availableAmount)} detail={`${commissionSummary.availableCount} pronta(s)`} tone="green" />
+                  <SettlementMetric label="Paga" value={formatMoney(commissionSummary.paidAmount)} detail={`${commissionSummary.paidCount} finalizada(s)`} tone="green" />
+                  <SettlementMetric label="Bloq/estorno" value={formatMoney(commissionSummary.blockedAmount)} detail={`${commissionSummary.blockedCount} ocorrencia(s)`} tone="rose" />
                 </div>
 
                 <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(180px,240px)_minmax(0,1fr)_auto]">
@@ -747,7 +758,7 @@ export function PlatformProductsConsole({
                 </div>
               </Panel>
 
-              <Panel title="Comissoes e repasses" eyebrow="vendas marketplace">
+              <Panel title="Comissoes e repasses" eyebrow="vendas marketplace" tone="amber" compact>
                 <div className="grid gap-3 lg:grid-cols-2">
                   {commissions.length > 0 ? commissions.map((commission) => (
                     <CommissionCard
@@ -771,11 +782,13 @@ export function PlatformProductsConsole({
                 id={activeTab === "setup" ? "platform-products-tour-setup" : "platform-products-tour-product-form"}
                 title={activeTab === "setup" ? "Configuracao do Catalogo" : draft.productId ? "Editar item" : "Novo item"}
                 eyebrow={activeTab === "setup" ? "base do catalogo" : "catalogo de produtos"}
+                tone={activeTab === "setup" ? "cyan" : "green"}
+                compact
               >
                 <form className="space-y-4" onSubmit={activeTab === "products" ? saveProduct : (event) => event.preventDefault()}>
                   {activeTab === "setup" ? (
                     <>
-                      <Block icon={SlidersHorizontal} title="Base do catalogo ConnectyHub">
+                      <Block icon={SlidersHorizontal} title="Base do catalogo ConnectyHub" tone="cyan" defaultOpen>
                         <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_160px_160px]">
                           <Field label="Tipo de venda">
                             <select value={settingsDraft.businessType} onChange={(event) => applyBusinessTemplate(event.target.value as SalesCatalogBusinessType)} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" style={inputStyle}>
@@ -801,7 +814,7 @@ export function PlatformProductsConsole({
                         </div>
                       </Block>
 
-                      <Block id="platform-products-tour-categories" icon={Tags} title="Categorias">
+                      <Block id="platform-products-tour-categories" icon={Tags} title="Categorias" tone="green" defaultOpen>
                         <div className="mb-3 flex justify-end">
                           <button type="button" onClick={() => addCategoryRow()} className="inline-flex h-9 items-center gap-2 rounded-xl border px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-cyan-100" style={{ borderColor: "var(--ch-border)" }}>
                             <Plus className="h-3.5 w-3.5" />
@@ -820,7 +833,7 @@ export function PlatformProductsConsole({
                         </div>
                       </Block>
 
-                      <Block icon={SlidersHorizontal} title="Variacoes do catalogo">
+                      <Block icon={SlidersHorizontal} title="Variacoes do catalogo" tone="violet">
                         <div className="mb-3 flex flex-wrap justify-end gap-2">
                           <button type="button" onClick={addSettingsAttribute} className="inline-flex h-9 items-center gap-2 rounded-xl border px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-cyan-100" style={{ borderColor: "var(--ch-border)" }}>
                             <Plus className="h-3.5 w-3.5" />
@@ -850,7 +863,7 @@ export function PlatformProductsConsole({
 
                   {activeTab === "products" ? (
                     <>
-                      <Block id="platform-products-tour-visibility" icon={draft.marketplaceStatus !== "hidden" && draft.status === "active" ? Eye : EyeOff} title="Visibilidade no painel do usuario">
+                      <Block id="platform-products-tour-visibility" icon={draft.marketplaceStatus !== "hidden" && draft.status === "active" ? Eye : EyeOff} title="Visibilidade no painel do usuario" tone="cyan" defaultOpen>
                         {draft.salesChannelType === "direct" ? (
                           <div className="mb-3 rounded-xl border border-amber-400/25 bg-amber-400/10 px-3 py-2 text-[11px] leading-5 text-amber-100">
                             Venda direta ConnectyHub fica fora da importacao dos usuarios e sera vendida por checkout/campanha propria.
@@ -919,7 +932,7 @@ export function PlatformProductsConsole({
                         <textarea value={draft.commercialDescription} onChange={(event) => patchDraft({ commercialDescription: event.target.value.slice(0, 2200) })} className="min-h-28 w-full resize-y rounded-xl px-3 py-3 text-[13px] leading-5 outline-none" placeholder="O que e, para quem serve, beneficios, entrega, garantias e condicoes." style={inputStyle} />
                       </Field>
 
-                      <Block icon={BadgePercent} title="Oferta e fechamento">
+                      <Block icon={BadgePercent} title="Oferta e fechamento" tone="amber">
                         <div className="grid gap-3 md:grid-cols-4">
                           <Field label="Promocional"><input value={draft.salePrice} onChange={(event) => patchDraft({ salePrice: event.target.value.slice(0, 60) })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" style={inputStyle} /></Field>
                           <Field label="Cupom"><input value={draft.couponCode} onChange={(event) => patchDraft({ couponCode: cleanCode(event.target.value) })} className="h-10 w-full rounded-xl px-3 font-mono text-[12px] outline-none" style={inputStyle} /></Field>
@@ -933,7 +946,7 @@ export function PlatformProductsConsole({
                         </div>
                       </Block>
 
-                      <Block icon={SlidersHorizontal} title="Variacoes deste item">
+                      <Block icon={SlidersHorizontal} title="Variacoes deste item" tone="violet">
                         {productAttributes.length > 0 ? (
                           <div className="space-y-3">
                             {productAttributes.map((attribute) => (
@@ -986,7 +999,7 @@ export function PlatformProductsConsole({
                         )}
                       </Block>
 
-                      <Block icon={PackagePlus} title="Estoque deste item">
+                      <Block icon={PackagePlus} title="Estoque deste item" tone="green">
                         <div className="grid gap-3 md:grid-cols-4">
                           <Field label="Disponibilidade">
                             <select value={draft.inventoryStatus} onChange={(event) => patchDraft({ inventoryStatus: event.target.value as SalesCatalogStockStatus })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" style={inputStyle}>
@@ -1008,7 +1021,7 @@ export function PlatformProductsConsole({
                         <input value={draft.inventoryNotes} onChange={(event) => patchDraft({ inventoryNotes: event.target.value.slice(0, 240) })} className="mt-3 h-10 w-full rounded-xl px-3 text-[13px] outline-none" placeholder="Observacoes de estoque" style={inputStyle} />
                       </Block>
 
-                      <Block icon={Tags} title="SKUs e variacoes vendaveis">
+                      <Block icon={Tags} title="SKUs e variacoes vendaveis" tone="violet">
                         <div className="mb-3 flex justify-end">
                           <button type="button" onClick={addSku} className="inline-flex h-9 items-center gap-2 rounded-xl border px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-cyan-100" style={{ borderColor: "var(--ch-border)" }}>
                             <Plus className="h-3.5 w-3.5" />
@@ -1050,7 +1063,7 @@ export function PlatformProductsConsole({
                         </div>
                       </Block>
 
-                      <Block icon={Upload} title="Fotos, videos ou arquivos">
+                      <Block icon={Upload} title="Fotos, videos ou arquivos" tone="cyan">
                         <label className="flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed px-3 text-center text-[12px] text-slate-400 transition hover:border-cyan-300/60 hover:text-cyan-200" style={{ borderColor: "var(--ch-border)" }}>
                           <Upload className="h-4 w-4" />
                           {files.length > 0 ? `${files.length} arquivo(s)` : "Selecionar arquivos"}
@@ -1086,7 +1099,7 @@ export function PlatformProductsConsole({
                         ) : null}
                       </Block>
 
-                      <Block icon={CheckCircle2} title="Agente e venda">
+                      <Block icon={CheckCircle2} title="Agente e venda" tone="cyan">
                         <Field label="Tag">
                           <input value={draft.agentTag} onChange={(event) => patchDraft({ agentTag: event.target.value.slice(0, 120) })} className="h-10 w-full rounded-xl px-3 font-mono text-[12px] outline-none" placeholder="Automatico se vazio" style={inputStyle} />
                         </Field>
@@ -1103,7 +1116,7 @@ export function PlatformProductsConsole({
                   ) : null}
 
                   {activeTab === "products" ? (
-                    <Block icon={Truck} title="Entrega deste item">
+                    <Block icon={Truck} title="Entrega deste item" tone="green">
                       <div className="grid gap-3 md:grid-cols-4">
                         <Field label="Tipo">
                           <select value={draft.fulfillmentMode} onChange={(event) => patchDraft({ fulfillmentMode: event.target.value as SalesCatalogFulfillmentMode })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" style={inputStyle}>
@@ -1145,7 +1158,7 @@ export function PlatformProductsConsole({
 
                   {activeTab === "products" ? (
                     <>
-                      <Block id="platform-products-tour-marketplace" icon={PackagePlus} title="Produto no marketplace">
+                      <Block id="platform-products-tour-marketplace" icon={PackagePlus} title="Produto no marketplace" tone="cyan">
                         <div className="grid gap-3 md:grid-cols-[1fr_1fr_160px_170px]">
                           <Field label="Codigo">
                             <input value={draft.productCode} onChange={(event) => patchDraft({ productCode: cleanCode(event.target.value) })} className="h-10 w-full rounded-xl px-3 font-mono text-[12px] outline-none" placeholder="Automatico se vazio" style={inputStyle} />
@@ -1171,7 +1184,7 @@ export function PlatformProductsConsole({
                         </div>
                       </Block>
 
-                      <Block id="platform-products-tour-revenue" icon={ShoppingBag} title="Origem e recebimento">
+                      <Block id="platform-products-tour-revenue" icon={ShoppingBag} title="Origem e recebimento" tone="amber">
                         <div className="grid gap-3 md:grid-cols-5">
                           <Field label="Dono do produto">
                             <select value={draft.ownerType} onChange={(event) => patchDraft({ ownerType: event.target.value as PlatformProductOwnerType })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" style={inputStyle}>
@@ -1237,7 +1250,7 @@ export function PlatformProductsConsole({
                         </p>
                       </Block>
 
-                      <Block id="platform-products-tour-commission" icon={BadgePercent} title="Regra de comissao">
+                      <Block id="platform-products-tour-commission" icon={BadgePercent} title="Regra de comissao" tone="violet">
                         <div className="grid gap-3 md:grid-cols-5">
                           <NumberField label="% comissao" value={draft.commissionPercentage} onChange={(value) => patchDraft({ commissionPercentage: value })} step="0.01" />
                           <Field label="Base">
@@ -1279,7 +1292,7 @@ export function PlatformProductsConsole({
               </Panel>
 
               <div className="space-y-5">
-                <Panel title="Produtos cadastrados" eyebrow="vitrine / importacao">
+                <Panel title="Produtos cadastrados" eyebrow="vitrine / importacao" tone="green" compact>
                   <div className="grid gap-3">
                     {products.length > 0 ? products.map((product) => (
                       <ProductCard
@@ -1302,7 +1315,7 @@ export function PlatformProductsConsole({
                   </div>
                 </Panel>
 
-                <Panel title="Importacao no painel do usuario" eyebrow="produtos">
+                <Panel title="Importacao no painel do usuario" eyebrow="produtos" tone="violet" compact collapsible>
                   <div className="grid gap-2 text-[12px] leading-5 text-slate-400">
                     <MiniValue label="Origem do dinheiro" value="ConnectyHub" />
                     <MiniValue label="Cliente importa em" value="/dashboard/produtos" />
@@ -1584,26 +1597,46 @@ function CommissionCard({
   );
 }
 
-function SettlementMetric({ label, value, detail }: { label: string; value: string; detail: string }) {
+function SettlementMetric({ label, value, detail, tone = "cyan" }: { label: string; value: string; detail: string; tone?: PlatformUiTone }) {
+  const toneStyle = platformUiToneStyles[tone];
+
   return (
-    <div className="rounded-xl border px-3 py-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-panel)" }}>
+    <div
+      className="rounded-xl border px-3 py-3"
+      style={{
+        borderColor: `rgba(${toneStyle.rgb},0.34)`,
+        background: `linear-gradient(135deg, rgba(${toneStyle.rgb},0.11), rgba(255,255,255,0.020)), var(--ch-panel)`,
+      }}
+    >
       <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-slate-500">{label}</p>
-      <p className="mt-2 truncate font-mono text-[18px] font-bold text-cyan-100">{value}</p>
+      <p className={cn("mt-2 truncate font-mono text-[18px] font-bold", toneStyle.text)}>{value}</p>
       <p className="mt-1 truncate text-[11px] text-slate-500">{detail}</p>
     </div>
   );
 }
 
-function Metric({ icon: Icon, label, value, detail }: { icon: LucideIcon; label: string; value: string; detail: string }) {
+function Metric({ icon: Icon, label, value, detail, tone = "cyan" }: { icon: LucideIcon; label: string; value: string; detail: string; tone?: PlatformUiTone }) {
+  const toneStyle = platformUiToneStyles[tone];
+
   return (
-    <div className="rounded-2xl p-5" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}>
+    <div
+      className="rounded-2xl p-4"
+      style={{
+        background: `linear-gradient(135deg, rgba(${toneStyle.rgb},0.13), rgba(255,255,255,0.025)), var(--ch-surface)`,
+        border: `1px solid rgba(${toneStyle.rgb},0.34)`,
+        boxShadow: `inset 0 1px 0 rgba(255,255,255,0.055), 0 12px 28px rgba(${toneStyle.rgb},0.045)`,
+      }}
+    >
       <div className="flex items-start justify-between gap-3">
         <p className="font-mono text-[10px] uppercase tracking-widest text-slate-500">{label}</p>
-        <div className="flex h-9 w-9 items-center justify-center rounded-xl" style={{ background: "rgba(6,182,212,0.14)", color: "#22d3ee" }}>
+        <div
+          className="flex h-9 w-9 items-center justify-center rounded-xl"
+          style={{ background: `rgba(${toneStyle.rgb},0.14)`, color: toneStyle.fill }}
+        >
           <Icon className="h-4 w-4" />
         </div>
       </div>
-      <p className="mt-4 font-mono text-[26px] font-bold leading-none" style={{ color: "var(--ch-text)" }}>{value}</p>
+      <p className={cn("mt-4 font-mono text-[26px] font-bold leading-none", toneStyle.text)}>{value}</p>
       <p className="mt-3 text-[12px] text-slate-500">{detail}</p>
     </div>
   );
@@ -1640,20 +1673,66 @@ function NumberField({ label, value, onChange, step, allowBlank = false, help }:
   );
 }
 
-function Block({ icon: Icon, title, children, id, help }: { icon: LucideIcon; title: string; children: ReactNode; id?: string; help?: string }) {
+function Block({
+  icon: Icon,
+  title,
+  children,
+  id,
+  help,
+  defaultOpen = false,
+  tone = "cyan",
+}: {
+  icon: LucideIcon;
+  title: string;
+  children: ReactNode;
+  id?: string;
+  help?: string;
+  defaultOpen?: boolean;
+  tone?: PlatformUiTone;
+}) {
   const helpText = help ?? platformProductHelpText[title];
+  const [open, setOpen] = useState(defaultOpen);
+  const toneStyle = platformUiToneStyles[tone];
 
   return (
-    <div id={id} className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
-      <div className="mb-3 flex items-center gap-2">
-        <Icon className="h-4 w-4 text-cyan-300" />
-        <p className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">
-          {title}
-          {helpText ? <HelpHint title={title}>{helpText}</HelpHint> : null}
-        </p>
+    <section
+      id={id}
+      className="overflow-hidden rounded-xl border"
+      style={{
+        borderColor: `rgba(${toneStyle.rgb},0.34)`,
+        background: `linear-gradient(180deg, rgba(${toneStyle.rgb},0.070), rgba(255,255,255,0.020)), var(--ch-surface-2)`,
+        boxShadow: `inset 0 1px 0 rgba(255,255,255,0.050), 0 14px 34px rgba(${toneStyle.rgb},0.045)`,
+      }}
+    >
+      <div className="flex min-h-11 w-full items-center justify-between gap-3 px-3 py-2.5">
+        <span className="flex min-w-0 items-center gap-2">
+          <span
+            className="grid h-7 w-7 shrink-0 place-items-center rounded-lg border"
+            style={{ borderColor: `rgba(${toneStyle.rgb},0.30)`, background: `rgba(${toneStyle.rgb},0.12)`, color: toneStyle.fill }}
+          >
+            <Icon className="h-3.5 w-3.5" />
+          </span>
+          <span className="flex min-w-0 items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.18em] text-slate-400">
+            <span className="truncate">{title}</span>
+            {helpText ? <HelpHint title={title}>{helpText}</HelpHint> : null}
+          </span>
+        </span>
+        <button
+          type="button"
+          aria-expanded={open}
+          onClick={() => setOpen((current) => !current)}
+          className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border transition hover:bg-white/[0.035]"
+          style={{ borderColor: `rgba(${toneStyle.rgb},0.30)`, background: `rgba(${toneStyle.rgb},0.08)` }}
+        >
+          <ChevronDown className={cn("h-4 w-4 transition", open ? "rotate-180" : "", toneStyle.label)} />
+        </button>
       </div>
-      {children}
-    </div>
+      {open ? (
+        <div className="border-t p-3" style={{ borderColor: `rgba(${toneStyle.rgb},0.22)` }}>
+          {children}
+        </div>
+      ) : null}
+    </section>
   );
 }
 

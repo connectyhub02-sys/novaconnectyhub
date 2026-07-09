@@ -3,6 +3,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   ArrowUpRight,
   CheckCircle2,
+  ChevronDown,
   CircleAlert,
   CircleDot,
   Loader2,
@@ -21,6 +22,15 @@ const toneMap: Record<Tone, { text: string; border: string; bg: string; fill: st
   rose:   { text: "text-rose-400",    border: "border-rose-500/25",    bg: "bg-rose-500/10",    fill: "#fb7185", dot: "bg-rose-400"   },
   violet: { text: "text-violet-400",  border: "border-violet-500/25",  bg: "bg-violet-500/10",  fill: "#a78bfa", dot: "bg-violet-400" },
   zinc:   { text: "text-slate-500",   border: "border-slate-300",      bg: "bg-slate-100",      fill: "#64748b", dot: "bg-slate-400"  },
+};
+
+const panelToneMap: Record<Tone, { rgb: string; fill: string }> = {
+  green:  { rgb: "52,211,153", fill: "#34d399" },
+  cyan:   { rgb: "34,211,238", fill: "#22d3ee" },
+  amber:  { rgb: "251,191,36", fill: "#fbbf24" },
+  rose:   { rgb: "251,113,133", fill: "#fb7185" },
+  violet: { rgb: "167,139,250", fill: "#a78bfa" },
+  zinc:   { rgb: "148,163,184", fill: "#94a3b8" },
 };
 
 const statusMap: Record<StatusTone, { label: string; tone: Tone; icon: LucideIcon }> = {
@@ -66,36 +76,99 @@ export function SectionHeader({ eyebrow, title, description }: { eyebrow: string
 // ─── Panel ────────────────────────────────────────────────────────────────────
 
 export function Panel({
-  id, title, eyebrow, action, children, className,
+  id,
+  title,
+  eyebrow,
+  action,
+  children,
+  className,
+  tone = "cyan",
+  compact = false,
+  collapsible = false,
+  defaultOpen = false,
 }: {
-  id?: string; title: string; eyebrow?: string; action?: ReactNode; children: ReactNode; className?: string;
+  id?: string;
+  title: string;
+  eyebrow?: string;
+  action?: ReactNode;
+  children: ReactNode;
+  className?: string;
+  tone?: Tone;
+  compact?: boolean;
+  collapsible?: boolean;
+  defaultOpen?: boolean;
 }) {
-  return (
-    <div
-      id={id}
-      className={cn("rounded-2xl", className)}
-      style={{
-        background: "var(--ch-panel)",
-        border: "1px solid var(--ch-border-strong)",
-        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.045)",
-      }}
-    >
+  const toneStyle = panelToneMap[tone];
+  const chromeStyle = {
+    background: `linear-gradient(180deg, rgba(${toneStyle.rgb},0.075), rgba(var(--ch-accent-2-rgb),0.025)), var(--ch-panel)`,
+    border: `1px solid rgba(${toneStyle.rgb},0.36)`,
+    boxShadow: `inset 0 1px 0 rgba(255,255,255,0.06), 0 16px 44px rgba(${toneStyle.rgb},0.055)`,
+  };
+  const headerStyle = {
+    background: `linear-gradient(90deg, rgba(${toneStyle.rgb},0.13), transparent 72%)`,
+    borderBottom: "1px solid var(--ch-border-strong)",
+  };
+  const headerContent = (
+    <>
       <div
-        className="flex flex-col items-start justify-between gap-3 px-3 py-3 sm:flex-row sm:items-center sm:px-5 sm:py-4"
-        style={{
-          background: "linear-gradient(90deg, rgba(var(--ch-accent-rgb),0.08), transparent 70%)",
-          borderBottom: "1px solid var(--ch-border-strong)",
-        }}
-      >
-        <div>
-          {eyebrow && (
-            <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">{eyebrow}</p>
-          )}
-          <p className="text-[14px] font-semibold" style={{ color: "var(--ch-text)" }}>{title}</p>
-        </div>
-        {action && <div className="w-full shrink-0 sm:w-auto">{action}</div>}
+        className="pointer-events-none absolute left-0 top-0 h-full w-1"
+        style={{ background: toneStyle.fill, boxShadow: `0 0 18px rgba(${toneStyle.rgb},0.55)` }}
+      />
+      <div className="min-w-0">
+        {eyebrow && (
+          <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">{eyebrow}</p>
+        )}
+        <p className="truncate text-[14px] font-semibold" style={{ color: "var(--ch-text)" }}>{title}</p>
       </div>
-      <div className="p-3 sm:p-5">{children}</div>
+      {action && <div className="w-full shrink-0 sm:w-auto">{action}</div>}
+    </>
+  );
+
+  if (collapsible) {
+    return (
+      <details
+        id={id}
+        className={cn("group overflow-hidden rounded-2xl", className)}
+        style={chromeStyle}
+        {...(defaultOpen ? { open: true } : {})}
+      >
+        <summary
+          className="relative flex cursor-pointer list-none flex-col items-start justify-between gap-3 px-3 py-3 transition hover:bg-white/[0.025] marker:hidden sm:flex-row sm:items-center sm:px-4 sm:py-3 [&::-webkit-details-marker]:hidden"
+          style={headerStyle}
+        >
+          <div className="flex min-w-0 flex-1 items-center gap-3">
+            <span className="h-8 w-1 shrink-0 rounded-full" style={{ background: toneStyle.fill, boxShadow: `0 0 18px rgba(${toneStyle.rgb},0.45)` }} />
+            <div className="min-w-0">
+              {eyebrow && (
+                <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">{eyebrow}</p>
+              )}
+              <p className="truncate text-[14px] font-semibold" style={{ color: "var(--ch-text)" }}>{title}</p>
+            </div>
+          </div>
+          <div className="flex w-full shrink-0 items-center justify-between gap-2 sm:w-auto">
+            {action ? <div className="min-w-0 flex-1 sm:flex-none">{action}</div> : null}
+            <span
+              className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border transition group-open:rotate-180"
+              style={{ borderColor: `rgba(${toneStyle.rgb},0.32)`, background: `rgba(${toneStyle.rgb},0.10)`, color: toneStyle.fill }}
+            >
+              <ChevronDown className="h-4 w-4" />
+            </span>
+          </div>
+        </summary>
+        <div className={compact ? "p-3" : "p-3 sm:p-4"}>{children}</div>
+      </details>
+    );
+  }
+
+  return (
+    <div id={id} className={cn("overflow-hidden rounded-2xl", className)} style={chromeStyle}>
+      <div
+        className="relative flex flex-col items-start justify-between gap-3 px-3 py-3 sm:flex-row sm:items-center sm:px-4 sm:py-3"
+        style={headerStyle}
+      >
+        {headerContent}
+      </div>
+      <div className={compact ? "p-3" : "p-3 sm:p-4"}>{children}</div>
     </div>
   );
 }

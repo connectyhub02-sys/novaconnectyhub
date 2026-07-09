@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ChangeEvent, type MouseEvent } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent, type MouseEvent, type ReactNode } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import type { LucideIcon } from "lucide-react";
 import {
   BadgePercent,
   CheckCircle2,
+  ChevronDown,
   ClipboardList,
   CloudDownload,
   Copy,
@@ -153,6 +155,15 @@ type SkuDraft = {
 };
 
 type SalesCatalogTone = "green" | "cyan" | "amber" | "rose" | "violet" | "zinc";
+
+const salesCatalogToneStyles: Record<SalesCatalogTone, { rgb: string; fill: string; text: string; label: string }> = {
+  green: { rgb: "52,211,153", fill: "#34d399", text: "text-emerald-200", label: "text-emerald-300" },
+  cyan: { rgb: "34,211,238", fill: "#22d3ee", text: "text-cyan-200", label: "text-cyan-300" },
+  amber: { rgb: "251,191,36", fill: "#fbbf24", text: "text-amber-200", label: "text-amber-300" },
+  rose: { rgb: "251,113,133", fill: "#fb7185", text: "text-rose-200", label: "text-rose-300" },
+  violet: { rgb: "167,139,250", fill: "#a78bfa", text: "text-violet-200", label: "text-violet-300" },
+  zinc: { rgb: "148,163,184", fill: "#94a3b8", text: "text-slate-200", label: "text-slate-300" },
+};
 
 type CommerceFlowSummary = {
   flow: SalesCatalogCommercialFlowType;
@@ -1526,11 +1537,11 @@ export function SalesCatalogConsole({
       ) : null}
 
       <div className="mb-4 grid gap-3 md:grid-cols-5">
-        <StatTile icon={PackagePlus} label="Ativos" value={String(stats.active)} />
-        <StatTile icon={CheckCircle2} label="Prontos" value={String(stats.ready)} />
-        <StatTile icon={Upload} label="Arquivos" value={String(stats.media)} />
-        <StatTile icon={CloudDownload} label="WhatsApp" value={String(stats.whatsapp)} />
-        <StatTile icon={ClipboardList} label="Pedidos" value={String(stats.orderCount)} />
+        <StatTile icon={PackagePlus} label="Ativos" value={String(stats.active)} tone="green" />
+        <StatTile icon={CheckCircle2} label="Prontos" value={String(stats.ready)} tone="cyan" />
+        <StatTile icon={Upload} label="Arquivos" value={String(stats.media)} tone="amber" />
+        <StatTile icon={CloudDownload} label="WhatsApp" value={String(stats.whatsapp)} tone="violet" />
+        <StatTile icon={ClipboardList} label="Pedidos" value={String(stats.orderCount)} tone="rose" />
       </div>
 
       <div className="mb-4 grid gap-3 lg:grid-cols-4">
@@ -1550,7 +1561,7 @@ export function SalesCatalogConsole({
       </div>
 
       {activeTab === "setup" ? (
-        <Panel id="sales-catalog-tour-setup" title="Configuracao do Catalogo" eyebrow={selectedCompany?.name ?? "empresa"}>
+        <Panel id="sales-catalog-tour-setup" title="Configuracao do Catalogo" eyebrow={selectedCompany?.name ?? "empresa"} tone="cyan" compact>
           <div className="grid gap-4 xl:grid-cols-[minmax(260px,0.42fr)_minmax(0,1fr)]">
             <div className="space-y-3">
               <label className="block">
@@ -1581,7 +1592,7 @@ export function SalesCatalogConsole({
                 </select>
               </label>
 
-              <div id="sales-catalog-tour-categories" className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+              <AccordionSection id="sales-catalog-tour-categories" icon={Tags} title="Categorias" tone="green" defaultOpen>
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                   <FieldLabel>Categorias</FieldLabel>
                   <button
@@ -1618,7 +1629,7 @@ export function SalesCatalogConsole({
                   ))}
                 </div>
 
-              </div>
+              </AccordionSection>
 
               <div className="grid gap-2">
                 <label className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-[12px]" style={{ borderColor: "var(--ch-border)" }}>
@@ -1702,11 +1713,7 @@ export function SalesCatalogConsole({
                 ))}
               </div>
 
-              <div id="sales-catalog-tour-payments" className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
-                <div className="mb-3 flex items-center gap-2">
-                  <CreditCard className="h-4 w-4 text-cyan-300" />
-                  <FieldLabel>Pagamentos no WhatsApp</FieldLabel>
-                </div>
+              <AccordionSection id="sales-catalog-tour-payments" icon={CreditCard} title="Pagamentos no WhatsApp" tone="amber">
                 <div className="divide-y" style={{ borderColor: "var(--ch-border)" }}>
                   {settingsDraft.paymentMethods.map((method) => (
                     <div key={method.id} className="grid gap-2 py-3 first:pt-0 last:pb-0" style={{ borderColor: "var(--ch-border)" }}>
@@ -1738,13 +1745,9 @@ export function SalesCatalogConsole({
                     </div>
                   ))}
                 </div>
-              </div>
+              </AccordionSection>
 
-              <div className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
-                <div className="mb-3 flex items-center gap-2">
-                  <ClipboardList className="h-4 w-4 text-cyan-300" />
-                  <FieldLabel>Pedido e dados do lead</FieldLabel>
-                </div>
+              <AccordionSection icon={ClipboardList} title="Pedido e dados do lead" tone="violet" defaultOpen>
                 <div className="grid gap-3 lg:grid-cols-2">
                   <label className="block">
                     <FieldLabel>Pedido minimo</FieldLabel>
@@ -1871,13 +1874,9 @@ export function SalesCatalogConsole({
                     style={{ borderColor: "var(--ch-border)" }}
                   />
                 </label>
-              </div>
+              </AccordionSection>
 
-              <div className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
-                <div className="mb-3 flex items-center gap-2">
-                  <MessageSquareText className="h-4 w-4 text-cyan-300" />
-                  <FieldLabel>Mensagens automaticas</FieldLabel>
-                </div>
+              <AccordionSection icon={MessageSquareText} title="Mensagens automaticas" tone="cyan">
                 <div className="grid gap-3 lg:grid-cols-2">
                   <label className="block">
                     <FieldLabel>Resumo do pedido</FieldLabel>
@@ -1925,7 +1924,7 @@ export function SalesCatalogConsole({
                     />
                   </label>
                 </div>
-              </div>
+              </AccordionSection>
 
               <button
                 type="button"
@@ -1940,7 +1939,7 @@ export function SalesCatalogConsole({
           </div>
         </Panel>
       ) : activeTab === "shipping" ? (
-        <Panel id="sales-catalog-tour-shipping" title="Entrega e Frete" eyebrow={selectedCompany?.name ?? "empresa"}>
+        <Panel id="sales-catalog-tour-shipping" title="Entrega e Frete" eyebrow={selectedCompany?.name ?? "empresa"} tone="green" compact>
           <div className="grid gap-4 xl:grid-cols-[minmax(260px,0.34fr)_minmax(0,1fr)]">
             <div className="space-y-3">
               <label className="block">
@@ -2113,7 +2112,7 @@ export function SalesCatalogConsole({
             </div>
 
             {selectedShippingRule ? (
-              <div className="rounded-xl border p-3 xl:col-span-2" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+              <AccordionSection icon={Truck} title="Servicos e faixas" tone="green" className="xl:col-span-2" defaultOpen>
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <FieldLabel>Servicos e faixas</FieldLabel>
@@ -2236,14 +2235,10 @@ export function SalesCatalogConsole({
                     </div>
                   ))}
                 </div>
-              </div>
+              </AccordionSection>
             ) : null}
 
-            <div className="rounded-xl border p-3 xl:col-span-2" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
-              <div className="mb-3 flex items-center gap-2">
-                <Truck className="h-4 w-4 text-cyan-300" />
-                <FieldLabel>Calculo por CEP</FieldLabel>
-              </div>
+            <AccordionSection icon={Truck} title="Calculo por CEP" tone="cyan" className="xl:col-span-2">
               <div className="grid gap-3 lg:grid-cols-[minmax(180px,1fr)_140px_150px]">
                 <select
                   value={quoteItemId}
@@ -2311,12 +2306,12 @@ export function SalesCatalogConsole({
                   ) : null}
                 </div>
               ) : null}
-            </div>
+            </AccordionSection>
           </div>
         </Panel>
       ) : activeTab === "payments" ? (
         <div className="grid gap-4 xl:grid-cols-[minmax(320px,0.58fr)_minmax(0,1fr)]">
-          <Panel title="Mercado Pago" eyebrow={selectedCompany?.name ?? "gateway"}>
+          <Panel title="Mercado Pago" eyebrow={selectedCompany?.name ?? "gateway"} tone="green" compact>
             <div className="space-y-3">
               <div className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
                 <div className="flex flex-wrap items-start justify-between gap-3">
@@ -2409,7 +2404,7 @@ export function SalesCatalogConsole({
             </div>
           </Panel>
 
-          <Panel title="Sessoes de pagamento" eyebrow={selectedCompany?.name ?? "checkout"}>
+          <Panel title="Sessoes de pagamento" eyebrow={selectedCompany?.name ?? "checkout"} tone="amber" compact>
             <CommerceRevenueOverview summary={commerceSummary} />
             <CommercialFlowFilterBar
               className="mt-4"
@@ -2432,7 +2427,7 @@ export function SalesCatalogConsole({
         </div>
       ) : activeTab === "orders" ? (
         <div className="grid gap-4 xl:grid-cols-[minmax(320px,0.58fr)_minmax(0,1fr)]">
-          <Panel id="sales-catalog-tour-orders" title="Novo pedido WhatsApp" eyebrow={selectedCompany?.name ?? "empresa"}>
+          <Panel id="sales-catalog-tour-orders" title="Novo pedido WhatsApp" eyebrow={selectedCompany?.name ?? "empresa"} tone="violet" compact>
             <div className="space-y-3">
               <label className="block">
                 <FieldLabel>Empresa</FieldLabel>
@@ -2511,11 +2506,7 @@ export function SalesCatalogConsole({
                 </label>
               </div>
 
-              <div className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
-                <div className="mb-3 flex items-center gap-2">
-                  <MessageSquareText className="h-4 w-4 text-cyan-300" />
-                  <FieldLabel>Lead no WhatsApp</FieldLabel>
-                </div>
+              <AccordionSection icon={MessageSquareText} title="Lead no WhatsApp" tone="cyan" defaultOpen>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <input
                     value={orderCustomerName}
@@ -2546,13 +2537,9 @@ export function SalesCatalogConsole({
                     style={{ borderColor: "var(--ch-border)" }}
                   />
                 </div>
-              </div>
+              </AccordionSection>
 
-              <div className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
-                <div className="mb-3 flex items-center gap-2">
-                  <Truck className="h-4 w-4 text-cyan-300" />
-                  <FieldLabel>Entrega e pagamento</FieldLabel>
-                </div>
+              <AccordionSection icon={Truck} title="Entrega e pagamento" tone="green">
                 <div className="grid gap-3 sm:grid-cols-2">
                   <input
                     value={orderDestinationCep}
@@ -2591,7 +2578,7 @@ export function SalesCatalogConsole({
                   placeholder="Endereco de entrega"
                   style={{ borderColor: "var(--ch-border)" }}
                 />
-              </div>
+              </AccordionSection>
 
               <div className="grid gap-3 sm:grid-cols-3">
                 <label className="block">
@@ -2655,7 +2642,7 @@ export function SalesCatalogConsole({
             </div>
           </Panel>
 
-          <Panel title="Pedidos WhatsApp" eyebrow={selectedCompany?.name ?? "acompanhamento"}>
+          <Panel title="Pedidos WhatsApp" eyebrow={selectedCompany?.name ?? "acompanhamento"} tone="amber" compact>
             <CommerceRevenueOverview summary={commerceSummary} />
             <CommercialFlowFilterBar
               className="mt-4"
@@ -2688,7 +2675,7 @@ export function SalesCatalogConsole({
         <div className="grid gap-4 xl:grid-cols-[minmax(320px,0.72fr)_minmax(0,1fr)]">
         <div className="space-y-4">
           {activeTab === "products" ? (
-          <Panel id="sales-catalog-tour-products" title={editingItemId ? "Editar item" : "Novo item"} eyebrow={selectedCompany?.name ?? "empresa"}>
+          <Panel id="sales-catalog-tour-products" title={editingItemId ? "Editar item" : "Novo item"} eyebrow={selectedCompany?.name ?? "empresa"} tone="cyan" compact>
             <div className="space-y-3">
             <label className="block">
               <FieldLabel>Empresa</FieldLabel>
@@ -3279,7 +3266,7 @@ export function SalesCatalogConsole({
             </div>
           </Panel>
           ) : (
-          <Panel title="Catalogo WhatsApp" eyebrow={selectedCompany?.name ?? "sincronizacao"}>
+          <Panel title="Catalogo WhatsApp" eyebrow={selectedCompany?.name ?? "sincronizacao"} tone="violet" compact>
             <div className="space-y-3">
               <label className="block">
                 <FieldLabel>Empresa</FieldLabel>
@@ -3319,7 +3306,7 @@ export function SalesCatalogConsole({
           )}
         </div>
 
-        <Panel title="Itens cadastrados" eyebrow={selectedCompany?.name ?? "catalogo"}>
+        <Panel title="Itens cadastrados" eyebrow={selectedCompany?.name ?? "catalogo"} tone="green" compact>
           {visibleItems.length > 0 ? (
             <div className="grid gap-3">
               {visibleItems.map((item) => (
@@ -3888,14 +3875,84 @@ function CatalogItemCard({
   );
 }
 
-function StatTile({ icon: Icon, label, value }: { icon: typeof PackagePlus; label: string; value: string }) {
+function AccordionSection({
+  icon: Icon,
+  title,
+  children,
+  className,
+  defaultOpen = false,
+  id,
+  tone = "cyan",
+}: {
+  icon: LucideIcon;
+  title: string;
+  children: ReactNode;
+  className?: string;
+  defaultOpen?: boolean;
+  id?: string;
+  tone?: SalesCatalogTone;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  const toneStyle = salesCatalogToneStyles[tone];
+
   return (
-    <div className="rounded-xl border p-4" style={{ background: "var(--ch-panel)", borderColor: "var(--ch-border)" }}>
+    <section
+      id={id}
+      className={cn("overflow-hidden rounded-xl border", className)}
+      style={{
+        borderColor: `rgba(${toneStyle.rgb},0.34)`,
+        background: `linear-gradient(180deg, rgba(${toneStyle.rgb},0.070), rgba(255,255,255,0.020)), var(--ch-surface-2)`,
+        boxShadow: `inset 0 1px 0 rgba(255,255,255,0.050), 0 14px 34px rgba(${toneStyle.rgb},0.045)`,
+      }}
+    >
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+        className="flex min-h-11 w-full items-center justify-between gap-3 px-3 py-2.5 text-left transition hover:bg-white/[0.025]"
+      >
+        <span className="flex min-w-0 items-center gap-2">
+          <span
+            className="grid h-7 w-7 shrink-0 place-items-center rounded-lg border"
+            style={{ borderColor: `rgba(${toneStyle.rgb},0.30)`, background: `rgba(${toneStyle.rgb},0.12)`, color: toneStyle.fill }}
+          >
+            <Icon className="h-3.5 w-3.5" />
+          </span>
+          <span className="truncate font-mono text-[9px] uppercase tracking-[0.18em] text-slate-400">{title}</span>
+        </span>
+        <ChevronDown className={cn("h-4 w-4 shrink-0 transition", open ? "rotate-180" : "", toneStyle.label)} />
+      </button>
+      {open ? (
+        <div className="border-t p-3" style={{ borderColor: `rgba(${toneStyle.rgb},0.22)` }}>
+          {children}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function StatTile({ icon: Icon, label, value, tone = "cyan" }: { icon: typeof PackagePlus; label: string; value: string; tone?: SalesCatalogTone }) {
+  const toneStyle = salesCatalogToneStyles[tone];
+
+  return (
+    <div
+      className="rounded-xl border p-3"
+      style={{
+        background: `linear-gradient(135deg, rgba(${toneStyle.rgb},0.13), rgba(255,255,255,0.025)), var(--ch-panel)`,
+        borderColor: `rgba(${toneStyle.rgb},0.35)`,
+        boxShadow: `inset 0 1px 0 rgba(255,255,255,0.055), 0 12px 28px rgba(${toneStyle.rgb},0.045)`,
+      }}
+    >
       <div className="flex items-center justify-between gap-3">
         <p className="font-mono text-[10px] uppercase tracking-widest text-slate-500">{label}</p>
-        <Icon className="h-4 w-4 text-cyan-300" />
+        <span
+          className="grid h-7 w-7 place-items-center rounded-lg"
+          style={{ background: `rgba(${toneStyle.rgb},0.14)`, color: toneStyle.fill }}
+        >
+          <Icon className="h-4 w-4" />
+        </span>
       </div>
-      <p className="mt-3 font-mono text-[24px] font-bold text-cyan-200">{value}</p>
+      <p className={cn("mt-3 font-mono text-[24px] font-bold", toneStyle.text)}>{value}</p>
     </div>
   );
 }
@@ -3909,8 +3966,16 @@ function CommerceTile({
   value: string;
   tone: SalesCatalogTone;
 }) {
+  const toneStyle = salesCatalogToneStyles[tone];
+
   return (
-    <div className="rounded-xl border px-4 py-3" style={{ background: "var(--ch-panel)", borderColor: "var(--ch-border)" }}>
+    <div
+      className="rounded-xl border px-3 py-3"
+      style={{
+        background: `linear-gradient(90deg, rgba(${toneStyle.rgb},0.11), rgba(255,255,255,0.020)), var(--ch-panel)`,
+        borderColor: `rgba(${toneStyle.rgb},0.34)`,
+      }}
+    >
       <div className="flex items-center justify-between gap-3">
         <p className="font-mono text-[10px] uppercase tracking-widest text-slate-500">{label}</p>
         <NeonBadge tone={tone}>{value}</NeonBadge>
