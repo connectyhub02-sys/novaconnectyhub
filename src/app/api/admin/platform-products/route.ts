@@ -62,6 +62,98 @@ export async function PATCH(request: NextRequest) {
   return savePlatformProduct(request, "update");
 }
 
+export async function DELETE(request: NextRequest) {
+  const auth = await requirePlatformAdmin();
+
+  if (auth instanceof NextResponse) {
+    return auth;
+  }
+
+  const body = readRecord(await request.json().catch(() => null));
+  const productId = normalizeUuid(readFormString(body?.productId));
+
+  if (!productId) {
+    return NextResponse.json({ error: "Informe o produto ConnectyHub para excluir." }, { status: 422 });
+  }
+
+  const service = createServiceClient();
+
+  try {
+    const { data: existing, error: existingError } = await service
+      .from("platform_products")
+      .select(PLATFORM_PRODUCT_SELECT)
+      .eq("id", productId)
+      .maybeSingle<PlatformProductRow>();
+
+    if (existingError) {
+      return NextResponse.json({ error: existingError.message }, { status: 500 });
+    }
+
+    if (!existing) {
+      return NextResponse.json({ error: "Produto ConnectyHub nao encontrado." }, { status: 404 });
+    }
+
+    const { data: deletedCommissions, error: commissionsError } = await service
+      .from("platform_product_commissions")
+      .delete()
+      .eq("platform_product_id", productId)
+      .select("id");
+
+    if (commissionsError) {
+      return NextResponse.json({ error: `Nao foi possivel excluir as comissoes vinculadas: ${commissionsError.message}` }, { status: 500 });
+    }
+
+    const { data: deletedImports, error: importsError } = await service
+      .from("platform_product_imports")
+      .delete()
+      .eq("platform_product_id", productId)
+      .select("id, local_catalog_item_id");
+
+    if (importsError) {
+      return NextResponse.json({ error: `Nao foi possivel excluir as importacoes vinculadas: ${importsError.message}` }, { status: 500 });
+    }
+
+    const { data: deletedProduct, error: productError } = await service
+      .from("platform_products")
+      .delete()
+      .eq("id", productId)
+      .select(PLATFORM_PRODUCT_SELECT)
+      .maybeSingle<PlatformProductRow>();
+
+    if (productError) {
+      return NextResponse.json({ error: productError.message }, { status: 500 });
+    }
+
+    if (!deletedProduct) {
+      return NextResponse.json({ error: "Produto ConnectyHub nao foi excluido." }, { status: 500 });
+    }
+
+    await service.from("maintenance_audit_logs").insert({
+      actor_id: auth.userId,
+      event_type: "platform_product.deleted",
+      target_table: "platform_products",
+      target_id: deletedProduct.id,
+      metadata: {
+        productCode: deletedProduct.product_code,
+        name: deletedProduct.name,
+        deletedImports: deletedImports?.length ?? 0,
+        deletedCommissions: deletedCommissions?.length ?? 0,
+      },
+    });
+
+    revalidatePath("/admin/produtos-connectyhub");
+    revalidatePath("/dashboard/produtos");
+
+    return NextResponse.json({
+      deletedProductId: deletedProduct.id,
+      deletedImports: deletedImports?.length ?? 0,
+      deletedCommissions: deletedCommissions?.length ?? 0,
+    });
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Erro ao excluir produto ConnectyHub." }, { status: 500 });
+  }
+}
+
 async function handleJsonPost(request: NextRequest) {
   const auth = await requirePlatformAdmin();
 

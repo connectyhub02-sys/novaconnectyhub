@@ -51,6 +51,7 @@ import {
   type SalesCatalogSkuStatus,
   type SalesCatalogStockStatus,
 } from "@/lib/sales-catalog/shared";
+import { cn } from "@/lib/utils";
 import { ConnectyShell } from "./connecty-shell";
 import { GuidedTour, HelpHint, type GuidedTourStep } from "./guided-help";
 import { NeonBadge, PageHeader, Panel, StatusBadge } from "./panel-primitives";
@@ -133,7 +134,7 @@ type SkuDraft = {
 };
 
 type Notice = {
-  tone: "success" | "error";
+  tone: "success" | "warning" | "error";
   message: string;
 };
 
@@ -322,6 +323,8 @@ export function PlatformProductsConsole({
   const [saving, setSaving] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
   const [publishingProductId, setPublishingProductId] = useState<string | null>(null);
+  const [deletingProductId, setDeletingProductId] = useState<string | null>(null);
+  const [confirmDeleteProductId, setConfirmDeleteProductId] = useState<string | null>(null);
   const [commissionLoadingId, setCommissionLoadingId] = useState<string | null>(null);
   const [batchPaying, setBatchPaying] = useState(false);
   const [payoutReference, setPayoutReference] = useState("");
@@ -362,6 +365,7 @@ export function PlatformProductsConsole({
 
       setProducts((current) => upsertProduct(current, data.product!));
       resetForm();
+      setConfirmDeleteProductId(null);
       setNotice({ tone: "success", message: "Produto ConnectyHub salvo e pronto para aparecer na vitrine conforme a visibilidade." });
       router.refresh();
     } catch (error) {
@@ -439,6 +443,7 @@ export function PlatformProductsConsole({
     setSkus(productSkusToDrafts(product));
     setEditingMedia(product.media);
     setFiles([]);
+    setConfirmDeleteProductId(null);
     setNotice(null);
     setActiveTab("products");
   }
@@ -469,6 +474,7 @@ export function PlatformProductsConsole({
       }
 
       setProducts((current) => upsertProduct(current, data.product!));
+      setConfirmDeleteProductId(null);
       setNotice({ tone: "success", message: "Produto publicado. Ele ja pode aparecer em Produtos no painel do usuario apos atualizar a pagina." });
       router.refresh();
     } catch (error) {
@@ -485,7 +491,56 @@ export function PlatformProductsConsole({
     setSkus([]);
     setFiles([]);
     setEditingMedia([]);
+    setConfirmDeleteProductId(null);
     setActiveTab("products");
+  }
+
+  async function deleteProduct(product: PlatformProduct) {
+    setNotice(null);
+
+    if (confirmDeleteProductId !== product.id) {
+      setConfirmDeleteProductId(product.id);
+      setNotice({ tone: "warning", message: `Clique em Confirmar excluir para apagar "${product.name}" do catalogo ConnectyHub.` });
+      return;
+    }
+
+    setDeletingProductId(product.id);
+
+    try {
+      const response = await fetch("/api/admin/platform-products", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ productId: product.id }),
+      });
+      const data = (await response.json().catch(() => null)) as {
+        deletedProductId?: string;
+        deletedImports?: number;
+        deletedCommissions?: number;
+        error?: string;
+      } | null;
+
+      if (!response.ok || data?.deletedProductId !== product.id) {
+        throw new Error(data?.error ?? "Nao foi possivel excluir o produto ConnectyHub.");
+      }
+
+      setProducts((current) => current.filter((item) => item.id !== product.id));
+      setCommissions((current) => current.filter((commission) => commission.platformProductId !== product.id));
+      setConfirmDeleteProductId(null);
+
+      if (draft.productId === product.id) {
+        resetForm();
+      }
+
+      setNotice({
+        tone: "success",
+        message: `Produto excluido. Vinculos removidos: ${data.deletedImports ?? 0} importacao(oes), ${data.deletedCommissions ?? 0} comissao(oes).`,
+      });
+      router.refresh();
+    } catch (error) {
+      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao excluir produto." });
+    } finally {
+      setDeletingProductId(null);
+    }
   }
 
   function applyBusinessTemplate(templateValue: SalesCatalogBusinessType) {
@@ -617,9 +672,17 @@ export function PlatformProductsConsole({
             <div
               className="rounded-2xl px-4 py-3 text-[13px] font-medium"
               style={{
-                background: notice.tone === "success" ? "rgba(16,185,129,0.10)" : "rgba(244,63,94,0.08)",
-                border: notice.tone === "success" ? "1px solid rgba(16,185,129,0.24)" : "1px solid rgba(244,63,94,0.22)",
-                color: notice.tone === "success" ? "#86efac" : "#fda4af",
+                background: notice.tone === "success"
+                  ? "rgba(16,185,129,0.10)"
+                  : notice.tone === "warning"
+                    ? "rgba(245,158,11,0.10)"
+                    : "rgba(244,63,94,0.08)",
+                border: notice.tone === "success"
+                  ? "1px solid rgba(16,185,129,0.24)"
+                  : notice.tone === "warning"
+                    ? "1px solid rgba(245,158,11,0.28)"
+                    : "1px solid rgba(244,63,94,0.22)",
+                color: notice.tone === "success" ? "#86efac" : notice.tone === "warning" ? "#fde68a" : "#fda4af",
               }}
             >
               {notice.message}
@@ -1223,8 +1286,11 @@ export function PlatformProductsConsole({
                         key={product.id}
                         product={product}
                         imports={catalog.imports.filter((item) => item.platformProductId === product.id).length}
+                        confirmDelete={confirmDeleteProductId === product.id}
+                        deleting={deletingProductId === product.id}
                         publishing={publishingProductId === product.id}
                         onCopy={() => copyText(product.agentTag)}
+                        onDelete={() => deleteProduct(product)}
                         onEdit={() => editProduct(product)}
                         onPublish={() => publishProduct(product)}
                       />
@@ -1367,15 +1433,21 @@ export function PlatformProductsConsole({
 function ProductCard({
   product,
   imports,
+  confirmDelete,
+  deleting,
   publishing,
   onCopy,
+  onDelete,
   onEdit,
   onPublish,
 }: {
   product: PlatformProduct;
   imports: number;
+  confirmDelete: boolean;
+  deleting: boolean;
   publishing: boolean;
   onCopy: () => void;
+  onDelete: () => void;
   onEdit: () => void;
   onPublish: () => void;
 }) {
@@ -1425,6 +1497,20 @@ function ProductCard({
           <button type="button" onClick={onCopy} className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-slate-300 transition hover:bg-cyan-400/10 hover:text-cyan-100" style={{ borderColor: "var(--ch-border)" }}>
             <Copy className="h-3.5 w-3.5" />
             Copiar tag
+          </button>
+          <button
+            type="button"
+            disabled={deleting}
+            onClick={onDelete}
+            className={cn(
+              "inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide transition disabled:cursor-not-allowed disabled:opacity-60",
+              confirmDelete
+                ? "border-rose-400/45 bg-rose-400/15 text-rose-100"
+                : "border-rose-400/25 bg-rose-400/10 text-rose-200 hover:bg-rose-400/15",
+            )}
+          >
+            {deleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+            {confirmDelete ? "Confirmar excluir" : "Excluir"}
           </button>
         </div>
       </div>
