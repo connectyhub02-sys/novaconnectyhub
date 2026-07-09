@@ -3297,6 +3297,10 @@ async function readIdempotentGatewayResponse(
     .maybeSingle<{ request_hash: string; response_body: JsonRecord | null; status_code: number; expires_at: string | null }>();
 
   if (error) {
+    if (isIdempotencyStoreUnavailableError(error)) {
+      return null;
+    }
+
     throw new GatewayHttpError(500, "idempotency_lookup_failed", error.message);
   }
 
@@ -3351,6 +3355,17 @@ async function saveIdempotentGatewayResponse(
     unit_type: input.unitType ?? null,
     expires_at: expiresAt,
   });
+}
+
+function isIdempotencyStoreUnavailableError(error: unknown) {
+  const details = typeof error === "object" && error ? Object.values(error).join(" ") : "";
+  const normalized = `${error instanceof Error ? error.message : String(error || "")} ${details}`.toLowerCase();
+
+  return (
+    normalized.includes("connectyhub_api_idempotency_keys") ||
+    normalized.includes("idempotency_lookup_failed") ||
+    (normalized.includes("schema cache") && normalized.includes("idempotency"))
+  );
 }
 
 async function requireGatewayInstance(auth: GatewayAuthContext, publicInstanceId: string) {
