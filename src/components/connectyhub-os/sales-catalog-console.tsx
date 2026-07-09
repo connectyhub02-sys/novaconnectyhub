@@ -33,6 +33,7 @@ import {
   Video,
   X,
 } from "lucide-react";
+import { GuidedTour, HelpHint, type GuidedTourStep } from "./guided-help";
 import { NeonBadge, PageHeader, Panel } from "./panel-primitives";
 import type { ClientCompany } from "@/lib/client-os/companies";
 import {
@@ -223,6 +224,117 @@ const commercialFlowFilterOptions: Array<{ value: CommercialFlowFilter; label: s
   { value: "connectyhub_direct", label: "Venda direta CH" },
   { value: "external_marketplace", label: "Marketplace externo" },
 ];
+
+const salesCatalogTourSteps: GuidedTourStep[] = [
+  {
+    id: "setup",
+    targetId: "sales-catalog-tour-setup",
+    title: "Comece pela configuracao",
+    body: "Monte a base do catalogo antes de cadastrar produtos: empresa, tipo de venda, categorias, variacoes, pagamentos, dados do lead e mensagens.",
+  },
+  {
+    id: "categories",
+    targetId: "sales-catalog-tour-categories",
+    title: "Crie suas categorias",
+    body: "O catalogo comeca zerado. Cadastre as categorias que fazem sentido para a operacao do cliente, como roupas, cursos, servicos ou kits.",
+  },
+  {
+    id: "attributes",
+    targetId: "sales-catalog-tour-attributes",
+    title: "Defina variacoes livres",
+    body: "Use variacoes para cor, tamanho, material, publico, voltagem ou qualquer escolha que o agente precisa confirmar no WhatsApp.",
+  },
+  {
+    id: "payments",
+    targetId: "sales-catalog-tour-payments",
+    title: "Configure o pagamento no WhatsApp",
+    body: "Ative somente os metodos aceitos pela empresa e escreva a regra que o agente deve seguir para cobrar ou pedir comprovante.",
+  },
+  {
+    id: "shipping",
+    targetId: "sales-catalog-tour-shipping",
+    title: "Depois configure frete",
+    body: "Informe origem, prazos e regioes atendidas para o agente calcular entrega antes de fechar o pedido.",
+  },
+  {
+    id: "products",
+    targetId: "sales-catalog-tour-products",
+    title: "Cadastre os produtos",
+    body: "Com a base pronta, cadastre nome, preco, descricao comercial, midias, estoque e status de cada item.",
+  },
+  {
+    id: "orders",
+    targetId: "sales-catalog-tour-orders",
+    title: "Acompanhe pedidos e pagamentos",
+    body: "Use as abas de pedidos e pagamentos para ver o funil de venda, status de recebimento e o que precisa de acao humana.",
+  },
+];
+
+const salesCatalogHelpText: Record<string, string> = {
+  Empresa: "Escolha em qual empresa esta configuracao, produto ou pedido sera aplicado.",
+  "Tipo de venda": "Defina o modelo principal do catalogo. Ele serve como base, mas categorias e variacoes continuam livres para voce criar.",
+  Categorias: "Cadastre as familias de produtos que o agente usara para organizar e filtrar o catalogo.",
+  Variacoes: "Crie atributos como tamanho, cor, material, publico ou qualquer escolha que o cliente precisa confirmar.",
+  "Pagamentos no WhatsApp": "Ative somente os metodos que a empresa aceita e escreva como o agente deve orientar o pagamento.",
+  "Pedido e dados do lead": "Defina valor minimo, reserva, dados obrigatorios e quando uma pessoa precisa confirmar o pedido.",
+  "Pedido minimo": "Informe um valor minimo quando a empresa so aceitar pedidos acima de uma faixa.",
+  Reserva: "Escolha em que momento o estoque fica reservado para evitar venda duplicada.",
+  "Carrinho parado": "Tempo em minutos para o agente retomar um pedido iniciado e ainda nao concluido.",
+  "Pos-venda": "Quantidade de dias para o agente acompanhar o cliente depois da compra.",
+  Retencao: "Prazo em dias para manter os dados do lead registrados no catalogo.",
+  Consentimento: "Mensagem curta que autoriza o uso dos dados do lead para montar e acompanhar o pedido.",
+  "Mensagens automaticas": "Edite os textos que o agente pode usar em cada etapa da venda pelo WhatsApp.",
+  "Resumo do pedido": "Modelo enviado quando o agente resume itens, entrega e total do pedido.",
+  "Pedido de pagamento": "Mensagem usada para orientar pagamento, comprovante ou link de checkout.",
+  "Pagamento confirmado": "Texto enviado quando o pagamento ja foi conferido.",
+  "Item indisponivel": "Resposta para quando um produto, SKU ou variacao nao puder ser vendido.",
+  "Transferencia humana": "Mensagem usada quando o atendimento precisa sair do agente e ir para uma pessoa.",
+  "CEP de origem": "CEP usado como base para calcular frete, retirada e prazos.",
+  Separacao: "Prazo interno, em dias, antes do produto ficar pronto para envio ou retirada.",
+  "Servicos e faixas": "Configure transportadoras, tipos de entrega, prazos e faixas por peso.",
+  "Calculo por CEP": "Teste um CEP real para conferir se as regras de frete retornam valor e prazo corretos.",
+  "Produto do pedido": "Selecione o item que sera registrado como pedido vindo do WhatsApp.",
+  "SKU / variacao": "Escolha a combinacao vendavel quando o produto tiver estoque ou preco por variacao.",
+  "Telefone ou JID opcional": "Informe um contato quando quiser vincular o pedido a um lead especifico do WhatsApp.",
+  "Lead no WhatsApp": "Dados do lead usados para localizar a conversa e continuar o atendimento.",
+  Pedido: "Dados principais do pedido registrado a partir do WhatsApp.",
+  Total: "Valor total do pedido, incluindo produto, frete ou ajustes manuais.",
+  Pagamento: "Metodo ou status de pagamento associado ao pedido.",
+  "Entrega e pagamento": "Regras de entrega, frete e recebimento usadas para concluir a venda.",
+  Nome: "Nome publico do produto como o cliente vera no catalogo e no WhatsApp.",
+  Categoria: "Escolha uma categoria criada na configuracao ou digite uma nova quando ainda nao existir.",
+  Valor: "Preco principal usado pelo agente para apresentar e fechar a venda.",
+  "Valor promocional": "Preco de oferta exibido quando houver promocao ativa.",
+  "Descricao comercial": "Explique o que e, beneficios, condicoes, entrega, garantia e objeccoes comuns.",
+  "Oferta e fechamento": "Configure preco promocional, cupom, validade e chamada de venda.",
+  Promocional: "Preco de oferta que pode substituir o valor principal durante uma campanha.",
+  Cupom: "Codigo curto que o agente pode informar ao cliente.",
+  Inicio: "Data em que a oferta passa a valer.",
+  Fim: "Data final da oferta ou cupom.",
+  "Variacoes deste item": "Selecione as variacoes realmente disponiveis neste produto.",
+  "Estoque deste item": "Controle disponibilidade, quantidade, alerta e regra de encomenda.",
+  Disponibilidade: "Status de estoque apresentado ao agente durante a venda.",
+  Quantidade: "Quantidade disponivel para venda quando o estoque for controlado.",
+  "Alerta baixo": "Quantidade minima para sinalizar reposicao.",
+  "SKUs e variacoes vendaveis": "Cadastre combinacoes vendaveis com preco, estoque e peso proprios.",
+  "Entrega deste item": "Defina se o item e fisico, digital, servico ou assinatura e como sera entregue.",
+  Tipo: "Escolha a natureza do item para orientar entrega, frete e mensagens do agente.",
+  "Duracao ou prazo": "Informe prazo de servico, tempo de acesso ou duracao do atendimento.",
+  "Peso g": "Peso em gramas usado para calculo de frete quando for produto fisico.",
+  Peso: "Peso usado para frete quando o produto for fisico.",
+  "Qtd.": "Quantidade de estoque do SKU ou variacao.",
+  Frete: "Escolha se usa tabela padrao, frete gratis ou combinacao manual.",
+  "Comprimento cm": "Dimensao usada para cotacao de envio quando aplicavel.",
+  "Largura cm": "Dimensao usada para cotacao de envio quando aplicavel.",
+  "Altura cm": "Dimensao usada para cotacao de envio quando aplicavel.",
+  Comprimento: "Comprimento do pacote usado para calcular frete.",
+  Largura: "Largura do pacote usada para calcular frete.",
+  Altura: "Altura do pacote usada para calcular frete.",
+  "Fotos, videos ou arquivos": "Envie midias e materiais que o agente pode apresentar ao lead.",
+  Execucao: "Instrucoes para entrega digital, acesso, agendamento ou execucao do servico.",
+  "Observacao de frete": "Detalhes que o agente deve considerar antes de prometer envio ou prazo.",
+  Status: "Controle se o produto fica ativo, rascunho ou arquivado.",
+};
 
 export function SalesCatalogConsole({
   initialCompanies,
@@ -1382,7 +1494,22 @@ export function SalesCatalogConsole({
         eyebrow="Workspace / Vendas"
         title="Catalogo de Vendas"
         description="Itens que o agente pode apresentar e enviar no WhatsApp."
-        actions={<NeonBadge tone="cyan">{visibleItems.length} itens</NeonBadge>}
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <GuidedTour
+              storageKey="connectyhub.sales-catalog-tour.v1"
+              steps={salesCatalogTourSteps}
+              launcherLabel="Tour guiado"
+              onStepChange={(step) => {
+                if (["setup", "categories", "attributes", "payments"].includes(step.id)) setActiveTab("setup");
+                if (step.id === "shipping") setActiveTab("shipping");
+                if (step.id === "products") setActiveTab("products");
+                if (step.id === "orders") setActiveTab("orders");
+              }}
+            />
+            <NeonBadge tone="cyan">{visibleItems.length} itens</NeonBadge>
+          </div>
+        }
       />
 
       {notice ? (
@@ -1413,7 +1540,7 @@ export function SalesCatalogConsole({
         <CommerceTile label="Comissao" value={String(stats.commissionOrders)} tone="amber" />
       </div>
 
-      <div className="mb-4 flex flex-wrap gap-2">
+      <div id="sales-catalog-tour-tabs" className="mb-4 flex flex-wrap gap-2">
         <TabButton active={activeTab === "setup"} icon={Settings2} label="Configuracao" onClick={() => setActiveTab("setup")} />
         <TabButton active={activeTab === "shipping"} icon={Truck} label="Entrega e Frete" onClick={() => setActiveTab("shipping")} />
         <TabButton active={activeTab === "products"} disabled={!hasConfiguredSettings} icon={PackagePlus} label="Produtos" onClick={() => setActiveTab("products")} />
@@ -1423,7 +1550,7 @@ export function SalesCatalogConsole({
       </div>
 
       {activeTab === "setup" ? (
-        <Panel title="Configuracao do Catalogo" eyebrow={selectedCompany?.name ?? "empresa"}>
+        <Panel id="sales-catalog-tour-setup" title="Configuracao do Catalogo" eyebrow={selectedCompany?.name ?? "empresa"}>
           <div className="grid gap-4 xl:grid-cols-[minmax(260px,0.42fr)_minmax(0,1fr)]">
             <div className="space-y-3">
               <label className="block">
@@ -1454,7 +1581,7 @@ export function SalesCatalogConsole({
                 </select>
               </label>
 
-              <div className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+              <div id="sales-catalog-tour-categories" className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                   <FieldLabel>Categorias</FieldLabel>
                   <button
@@ -1495,7 +1622,10 @@ export function SalesCatalogConsole({
 
               <div className="grid gap-2">
                 <label className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-[12px]" style={{ borderColor: "var(--ch-border)" }}>
-                  <span className="text-slate-300">Estoque por variacao</span>
+                  <span className="flex items-center gap-1.5 text-slate-300">
+                    Estoque por variacao
+                    <HelpHint title="Estoque por variacao">Ative quando cada tamanho, cor ou SKU precisa ter quantidade propria.</HelpHint>
+                  </span>
                   <input
                     checked={settingsDraft.trackInventory}
                     type="checkbox"
@@ -1503,7 +1633,10 @@ export function SalesCatalogConsole({
                   />
                 </label>
                 <label className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-[12px]" style={{ borderColor: "var(--ch-border)" }}>
-                  <span className="text-slate-300">Fotos por variacao</span>
+                  <span className="flex items-center gap-1.5 text-slate-300">
+                    Fotos por variacao
+                    <HelpHint title="Fotos por variacao">Ative quando cada cor, modelo ou variacao deve ter midias diferentes.</HelpHint>
+                  </span>
                   <input
                     checked={settingsDraft.variationMedia}
                     type="checkbox"
@@ -1513,7 +1646,7 @@ export function SalesCatalogConsole({
               </div>
             </div>
 
-            <div className="space-y-3">
+            <div id="sales-catalog-tour-attributes" className="space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <FieldLabel>Variacoes</FieldLabel>
                 <div className="flex flex-wrap gap-2">
@@ -1569,7 +1702,7 @@ export function SalesCatalogConsole({
                 ))}
               </div>
 
-              <div className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+              <div id="sales-catalog-tour-payments" className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
                 <div className="mb-3 flex items-center gap-2">
                   <CreditCard className="h-4 w-4 text-cyan-300" />
                   <FieldLabel>Pagamentos no WhatsApp</FieldLabel>
@@ -1661,7 +1794,10 @@ export function SalesCatalogConsole({
                 </div>
                 <div className="mt-3 grid gap-2 sm:grid-cols-2">
                   <label className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-[12px]" style={{ borderColor: "var(--ch-border)" }}>
-                    <span className="text-slate-300">Fechar sem pagamento</span>
+                    <span className="flex items-center gap-1.5 text-slate-300">
+                      Fechar sem pagamento
+                      <HelpHint title="Fechar sem pagamento">Permite registrar o pedido antes do pagamento, quando a operacao confirmar depois.</HelpHint>
+                    </span>
                     <input
                       checked={settingsDraft.orderPolicy.allowOrderWithoutPayment}
                       type="checkbox"
@@ -1669,7 +1805,10 @@ export function SalesCatalogConsole({
                     />
                   </label>
                   <label className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-[12px]" style={{ borderColor: "var(--ch-border)" }}>
-                    <span className="text-slate-300">Confirmacao humana</span>
+                    <span className="flex items-center gap-1.5 text-slate-300">
+                      Confirmacao humana
+                      <HelpHint title="Confirmacao humana">Exige revisao de uma pessoa antes do pedido avancar.</HelpHint>
+                    </span>
                     <input
                       checked={settingsDraft.orderPolicy.requireHumanConfirmation}
                       type="checkbox"
@@ -1677,7 +1816,10 @@ export function SalesCatalogConsole({
                     />
                   </label>
                   <label className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-[12px]" style={{ borderColor: "var(--ch-border)" }}>
-                    <span className="text-slate-300">Pedir CEP antes do frete</span>
+                    <span className="flex items-center gap-1.5 text-slate-300">
+                      Pedir CEP antes do frete
+                      <HelpHint title="Pedir CEP antes do frete">Orienta o agente a coletar o CEP antes de prometer prazo ou valor de entrega.</HelpHint>
+                    </span>
                     <input
                       checked={settingsDraft.orderPolicy.askCepBeforeQuote}
                       type="checkbox"
@@ -1798,7 +1940,7 @@ export function SalesCatalogConsole({
           </div>
         </Panel>
       ) : activeTab === "shipping" ? (
-        <Panel title="Entrega e Frete" eyebrow={selectedCompany?.name ?? "empresa"}>
+        <Panel id="sales-catalog-tour-shipping" title="Entrega e Frete" eyebrow={selectedCompany?.name ?? "empresa"}>
           <div className="grid gap-4 xl:grid-cols-[minmax(260px,0.34fr)_minmax(0,1fr)]">
             <div className="space-y-3">
               <label className="block">
@@ -1851,7 +1993,10 @@ export function SalesCatalogConsole({
               </label>
 
               <label className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-[12px]" style={{ borderColor: "var(--ch-border)" }}>
-                <span className="text-slate-300">Retirada local</span>
+                <span className="flex items-center gap-1.5 text-slate-300">
+                  Retirada local
+                  <HelpHint title="Retirada local">Ative quando o cliente puder retirar o pedido no endereco combinado.</HelpHint>
+                </span>
                 <input
                   checked={shippingDraft.localPickup}
                   type="checkbox"
@@ -2287,7 +2432,7 @@ export function SalesCatalogConsole({
         </div>
       ) : activeTab === "orders" ? (
         <div className="grid gap-4 xl:grid-cols-[minmax(320px,0.58fr)_minmax(0,1fr)]">
-          <Panel title="Novo pedido WhatsApp" eyebrow={selectedCompany?.name ?? "empresa"}>
+          <Panel id="sales-catalog-tour-orders" title="Novo pedido WhatsApp" eyebrow={selectedCompany?.name ?? "empresa"}>
             <div className="space-y-3">
               <label className="block">
                 <FieldLabel>Empresa</FieldLabel>
@@ -2543,7 +2688,7 @@ export function SalesCatalogConsole({
         <div className="grid gap-4 xl:grid-cols-[minmax(320px,0.72fr)_minmax(0,1fr)]">
         <div className="space-y-4">
           {activeTab === "products" ? (
-          <Panel title={editingItemId ? "Editar item" : "Novo item"} eyebrow={selectedCompany?.name ?? "empresa"}>
+          <Panel id="sales-catalog-tour-products" title={editingItemId ? "Editar item" : "Novo item"} eyebrow={selectedCompany?.name ?? "empresa"}>
             <div className="space-y-3">
             <label className="block">
               <FieldLabel>Empresa</FieldLabel>
@@ -4017,8 +4162,15 @@ function TabButton({
   );
 }
 
-function FieldLabel({ children }: { children: string }) {
-  return <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">{children}</span>;
+function FieldLabel({ children, help }: { children: string; help?: string }) {
+  const helpText = help ?? salesCatalogHelpText[children];
+
+  return (
+    <span className="mb-1.5 flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
+      {children}
+      {helpText ? <HelpHint title={children}>{helpText}</HelpHint> : null}
+    </span>
+  );
 }
 
 function MediaIcon({ media }: { media: SalesCatalogMedia }) {

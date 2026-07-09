@@ -52,6 +52,7 @@ import {
   type SalesCatalogStockStatus,
 } from "@/lib/sales-catalog/shared";
 import { ConnectyShell } from "./connecty-shell";
+import { GuidedTour, HelpHint, type GuidedTourStep } from "./guided-help";
 import { NeonBadge, PageHeader, Panel, StatusBadge } from "./panel-primitives";
 
 type ProductDraft = {
@@ -192,6 +193,112 @@ const inputStyle = {
   background: "var(--ch-surface)",
   border: "1px solid var(--ch-border)",
   color: "var(--ch-text)",
+};
+
+const platformProductTourSteps: GuidedTourStep[] = [
+  {
+    id: "setup",
+    targetId: "platform-products-tour-setup",
+    title: "Configure a base do admin",
+    body: "Comece com tipo de venda, categorias e variacoes globais. O admin tambem deve nascer zerado e ser controlado por voce.",
+  },
+  {
+    id: "categories",
+    targetId: "platform-products-tour-categories",
+    title: "Crie categorias proprias",
+    body: "As categorias ConnectyHub devem ser criadas manualmente pelo admin, sem depender de lista pronta.",
+  },
+  {
+    id: "product",
+    targetId: "platform-products-tour-product-form",
+    title: "Cadastre o produto",
+    body: "No cadastro, informe nome, preco, descricao, midias, estoque, entrega e regras comerciais seguindo o modelo de e-commerce.",
+  },
+  {
+    id: "visibility",
+    targetId: "platform-products-tour-visibility",
+    title: "Decida se aparece para usuarios",
+    body: "Aqui voce escolhe se o produto entra na vitrine do painel do usuario para importacao ou se fica oculto no admin.",
+  },
+  {
+    id: "marketplace",
+    targetId: "platform-products-tour-marketplace",
+    title: "Controle marketplace e status",
+    body: "Defina codigo, slug, status e vitrine para separar rascunho, produto ativo, destaque e item oculto.",
+  },
+  {
+    id: "revenue",
+    targetId: "platform-products-tour-revenue",
+    title: "Separe origem e recebimento",
+    body: "Marque se e produto ConnectyHub, venda direta, revenda com comissao ou marketplace para o financeiro ficar rastreavel.",
+  },
+  {
+    id: "commission",
+    targetId: "platform-products-tour-commission",
+    title: "Configure comissao e repasse",
+    body: "Defina percentual, base, prazo de liberacao, recorrencia e garantia para calcular o que deve ser pago ao cliente.",
+  },
+  {
+    id: "payouts",
+    targetId: "platform-products-tour-payouts",
+    title: "Acompanhe repasses",
+    body: "Use esta aba para revisar comissoes pendentes, liberadas e pagas antes de fechar o financeiro.",
+  },
+];
+
+const platformProductHelpText: Record<string, string> = {
+  "Tipo de venda": "Define o modelo principal do catalogo ConnectyHub e ajuda a orientar os defaults de cadastro.",
+  "Base do catalogo ConnectyHub": "Configuracao global do admin: tipo de venda, estoque por variacao, midia por variacao, categorias e atributos.",
+  Categorias: "Crie manualmente as categorias que vao organizar os produtos ConnectyHub.",
+  "Variacoes do catalogo": "Cadastre atributos globais como tamanho, cor, material, publico ou qualquer variavel do produto.",
+  "Visibilidade no painel do usuario": "Escolha se o produto aparece para clientes importarem ou fica oculto apenas no admin.",
+  Nome: "Nome publico do produto que sera visto no admin, vitrine e importacao.",
+  Valor: "Preco principal usado para venda, repasse e apresentacao ao usuario.",
+  Categoria: "Selecione ou crie a categoria que melhor organiza esse produto.",
+  "Descricao curta para vitrine": "Resumo rapido para cards, listas e importacao do usuario.",
+  "Descricao comercial": "Texto completo para venda no WhatsApp: beneficios, condicoes, entrega, garantia e objeccoes.",
+  "Oferta e fechamento": "Configure preco promocional, cupom, periodo da oferta e chamada comercial.",
+  Promocional: "Preco promocional exibido quando houver campanha ativa.",
+  Cupom: "Codigo que o agente ou cliente pode usar na venda.",
+  Inicio: "Data em que a oferta passa a valer.",
+  Fim: "Data final da oferta.",
+  "Variacoes deste item": "Escolha quais atributos e opcoes existem nesse produto especifico.",
+  "Estoque deste item": "Controle disponibilidade, quantidade, alerta de estoque e encomenda.",
+  Disponibilidade: "Status de estoque apresentado para venda ou importacao.",
+  Quantidade: "Quantidade disponivel quando o estoque e controlado.",
+  "Alerta baixo": "Ponto em que o sistema deve sinalizar estoque baixo.",
+  "SKUs e variacoes vendaveis": "Cadastre combinacoes vendaveis com preco, estoque e peso proprios.",
+  "Fotos, videos ou arquivos": "Envie midias e arquivos para R2 e vincule ao produto.",
+  "Agente e venda": "Defina tag, prompt e notas internas usadas pelo agente no atendimento.",
+  Tag: "Identificador curto para o agente reconhecer ou acionar o produto.",
+  "Prompt do agente": "Orientacoes especificas que o agente deve seguir ao vender esse item.",
+  "Notas internas de venda": "Informacoes para o time, nao necessariamente exibidas ao cliente.",
+  "Entrega deste item": "Configure tipo de produto, frete, dimensoes e instrucoes de acesso ou entrega.",
+  Tipo: "Escolha se o item e fisico, digital, servico ou assinatura.",
+  "Prazo/duracao": "Prazo de entrega, execucao, acesso ou duracao do servico.",
+  "Peso g": "Peso em gramas usado para calculo de frete.",
+  Frete: "Escolha a regra de envio aplicada ao produto.",
+  "Comprimento cm": "Dimensao usada em cotacoes de entrega quando necessario.",
+  "Largura cm": "Dimensao usada em cotacoes de entrega quando necessario.",
+  "Altura cm": "Dimensao usada em cotacoes de entrega quando necessario.",
+  "Produto no marketplace": "Controle identificacao, status e se o item aparece ou nao na vitrine do usuario.",
+  Codigo: "Codigo interno do produto. Se ficar vazio, o sistema gera automaticamente.",
+  Slug: "Endereco amigavel usado em links e futuras paginas de produto.",
+  Status: "Define se o produto esta ativo, pausado, arquivado ou em rascunho.",
+  "Vitrine usuario": "Define se o produto fica oculto, visivel ou em destaque para usuarios importarem.",
+  "Origem e recebimento": "Separa produto ConnectyHub, fornecedor, venda direta, revenda, receita e destino do repasse.",
+  "Dono do produto": "Indica quem controla a origem do produto.",
+  Receita: "Define quem deve receber a receita principal da venda.",
+  Comissao: "Escolha se havera comissao, percentual, valor fixo futuro ou regra personalizada.",
+  "Repasse para": "Define para onde o repasse financeiro deve ir.",
+  "Regra de comissao": "Configure percentual, base de calculo, prazo de liberacao, recorrencia e garantia.",
+  "% comissao": "Percentual pago ao cliente quando ele vender produto ConnectyHub por comissao.",
+  Base: "Define se o calculo da comissao usa valor bruto ou liquido.",
+  "Repasse dias": "Quantidade de dias apos a venda para liberar a comissao.",
+  "Recorrencia meses": "Quantidade de meses em que a comissao continua em vendas recorrentes.",
+  "Garantia dias": "Prazo de seguranca para estorno ou bloqueio antes de liberar comissao.",
+  "Referencia do repasse": "Identificador interno do pagamento em lote, como PIX ou data.",
+  "Observacao interna": "Nota administrativa sobre o pagamento de repasse.",
 };
 
 export function PlatformProductsConsole({
@@ -478,6 +585,16 @@ export function PlatformProductsConsole({
         description="Cadastre os produtos globais que podem aparecer no painel do usuario para importacao e venda por comissao."
         actions={
           <div className="flex flex-wrap gap-2">
+            <GuidedTour
+              storageKey="connectyhub.platform-products-tour.v1"
+              steps={platformProductTourSteps}
+              launcherLabel="Tour guiado"
+              onStepChange={(step) => {
+                if (["setup", "categories"].includes(step.id)) setActiveTab("setup");
+                if (["product", "visibility", "marketplace", "revenue", "commission"].includes(step.id)) setActiveTab("products");
+                if (step.id === "payouts") setActiveTab("commissions");
+              }}
+            />
             <NeonBadge tone={catalog.schemaReady ? "green" : "amber"}>{catalog.schemaReady ? "Schema pronto" : "Aguardando SQL"}</NeonBadge>
             <NeonBadge tone="cyan">{metrics.available} na vitrine</NeonBadge>
             <NeonBadge tone="amber">{metrics.resale} revenda</NeonBadge>
@@ -526,7 +643,7 @@ export function PlatformProductsConsole({
 
           {activeTab === "commissions" ? (
             <div className="space-y-5">
-              <Panel title="Resumo de repasses" eyebrow="financeiro marketplace">
+              <Panel id="platform-products-tour-payouts" title="Resumo de repasses" eyebrow="financeiro marketplace">
                 <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
                   <SettlementMetric label="Gerada" value={formatMoney(commissionSummary.totalAmount)} detail={`${commissionSummary.totalCount} registro(s)`} />
                   <SettlementMetric label="Pendente" value={formatMoney(commissionSummary.pendingAmount)} detail={`${commissionSummary.pendingCount} aguardando`} />
@@ -588,6 +705,7 @@ export function PlatformProductsConsole({
           ) : (
             <div className="grid gap-5 xl:grid-cols-[minmax(380px,0.82fr)_minmax(0,1fr)]">
               <Panel
+                id={activeTab === "setup" ? "platform-products-tour-setup" : "platform-products-tour-product-form"}
                 title={activeTab === "setup" ? "Configuracao do Catalogo" : draft.productId ? "Editar item" : "Novo item"}
                 eyebrow={activeTab === "setup" ? "base do catalogo" : "catalogo de produtos"}
               >
@@ -604,17 +722,23 @@ export function PlatformProductsConsole({
                             </select>
                           </Field>
                           <label className="mt-[18px] flex h-10 items-center justify-between rounded-xl px-3 text-[12px]" style={inputStyle}>
-                            Estoque por variacao
+                            <span className="flex items-center gap-1.5">
+                              Estoque por variacao
+                              <HelpHint title="Estoque por variacao">Ative quando cada SKU, tamanho ou cor precisar ter estoque proprio.</HelpHint>
+                            </span>
                             <input checked={settingsDraft.trackInventory} type="checkbox" onChange={(event) => setSettingsDraft((current) => ({ ...current, trackInventory: event.target.checked }))} />
                           </label>
                           <label className="mt-[18px] flex h-10 items-center justify-between rounded-xl px-3 text-[12px]" style={inputStyle}>
-                            Midia por variacao
+                            <span className="flex items-center gap-1.5">
+                              Midia por variacao
+                              <HelpHint title="Midia por variacao">Ative quando cada variacao precisar de foto, video ou arquivo proprio.</HelpHint>
+                            </span>
                             <input checked={settingsDraft.variationMedia} type="checkbox" onChange={(event) => setSettingsDraft((current) => ({ ...current, variationMedia: event.target.checked }))} />
                           </label>
                         </div>
                       </Block>
 
-                      <Block icon={Tags} title="Categorias">
+                      <Block id="platform-products-tour-categories" icon={Tags} title="Categorias">
                         <div className="mb-3 flex justify-end">
                           <button type="button" onClick={() => addCategoryRow()} className="inline-flex h-9 items-center gap-2 rounded-xl border px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-cyan-100" style={{ borderColor: "var(--ch-border)" }}>
                             <Plus className="h-3.5 w-3.5" />
@@ -663,7 +787,7 @@ export function PlatformProductsConsole({
 
                   {activeTab === "products" ? (
                     <>
-                      <Block icon={draft.marketplaceStatus !== "hidden" && draft.status === "active" ? Eye : EyeOff} title="Visibilidade no painel do usuario">
+                      <Block id="platform-products-tour-visibility" icon={draft.marketplaceStatus !== "hidden" && draft.status === "active" ? Eye : EyeOff} title="Visibilidade no painel do usuario">
                         {draft.salesChannelType === "direct" ? (
                           <div className="mb-3 rounded-xl border border-amber-400/25 bg-amber-400/10 px-3 py-2 text-[11px] leading-5 text-amber-100">
                             Venda direta ConnectyHub fica fora da importacao dos usuarios e sera vendida por checkout/campanha propria.
@@ -811,7 +935,10 @@ export function PlatformProductsConsole({
                           <NumberField label="Quantidade" value={draft.stockQuantity} onChange={(value) => patchDraft({ stockQuantity: value })} step="1" allowBlank />
                           <NumberField label="Alerta baixo" value={draft.lowStockThreshold} onChange={(value) => patchDraft({ lowStockThreshold: value })} step="1" allowBlank />
                           <label className="mt-[18px] flex h-10 items-center justify-between rounded-xl px-3 text-[12px]" style={inputStyle}>
-                            Aceita encomenda
+                            <span className="flex items-center gap-1.5">
+                              Aceita encomenda
+                              <HelpHint title="Aceita encomenda">Permite vender mesmo sem estoque imediato, combinando prazo com o cliente.</HelpHint>
+                            </span>
                             <input checked={draft.allowBackorder} type="checkbox" onChange={(event) => patchDraft({ allowBackorder: event.target.checked })} />
                           </label>
                         </div>
@@ -940,7 +1067,10 @@ export function PlatformProductsConsole({
                       </div>
                       <div className="mt-3 grid gap-3">
                         <label className="flex h-10 items-center justify-between rounded-xl px-3 text-[12px]" style={inputStyle}>
-                          Precisa agendar
+                          <span className="flex items-center gap-1.5">
+                            Precisa agendar
+                            <HelpHint title="Precisa agendar">Ative para servicos ou entregas que exigem confirmacao de data e horario.</HelpHint>
+                          </span>
                           <input checked={draft.schedulingRequired} type="checkbox" onChange={(event) => patchDraft({ schedulingRequired: event.target.checked })} />
                         </label>
                         <input value={draft.accessInstructions} onChange={(event) => patchDraft({ accessInstructions: event.target.value.slice(0, 240) })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" placeholder="Acesso/execucao" style={inputStyle} />
@@ -952,7 +1082,7 @@ export function PlatformProductsConsole({
 
                   {activeTab === "products" ? (
                     <>
-                      <Block icon={PackagePlus} title="Produto no marketplace">
+                      <Block id="platform-products-tour-marketplace" icon={PackagePlus} title="Produto no marketplace">
                         <div className="grid gap-3 md:grid-cols-[1fr_1fr_160px_170px]">
                           <Field label="Codigo">
                             <input value={draft.productCode} onChange={(event) => patchDraft({ productCode: cleanCode(event.target.value) })} className="h-10 w-full rounded-xl px-3 font-mono text-[12px] outline-none" placeholder="Automatico se vazio" style={inputStyle} />
@@ -978,7 +1108,7 @@ export function PlatformProductsConsole({
                         </div>
                       </Block>
 
-                      <Block icon={ShoppingBag} title="Origem e recebimento">
+                      <Block id="platform-products-tour-revenue" icon={ShoppingBag} title="Origem e recebimento">
                         <div className="grid gap-3 md:grid-cols-5">
                           <Field label="Dono do produto">
                             <select value={draft.ownerType} onChange={(event) => patchDraft({ ownerType: event.target.value as PlatformProductOwnerType })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" style={inputStyle}>
@@ -1044,7 +1174,7 @@ export function PlatformProductsConsole({
                         </p>
                       </Block>
 
-                      <Block icon={BadgePercent} title="Regra de comissao">
+                      <Block id="platform-products-tour-commission" icon={BadgePercent} title="Regra de comissao">
                         <div className="grid gap-3 md:grid-cols-5">
                           <NumberField label="% comissao" value={draft.commissionPercentage} onChange={(value) => patchDraft({ commissionPercentage: value })} step="0.01" />
                           <Field label="Base">
@@ -1402,29 +1532,39 @@ function MiniValue({ label, value }: { label: string; value: string }) {
   );
 }
 
-function Field({ label, children }: { label: string; children: ReactNode }) {
+function Field({ label, children, help }: { label: string; children: ReactNode; help?: string }) {
+  const helpText = help ?? platformProductHelpText[label];
+
   return (
     <label className="block">
-      <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">{label}</span>
+      <span className="mb-1.5 flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">
+        {label}
+        {helpText ? <HelpHint title={label}>{helpText}</HelpHint> : null}
+      </span>
       {children}
     </label>
   );
 }
 
-function NumberField({ label, value, onChange, step, allowBlank = false }: { label: string; value: string; onChange: (value: string) => void; step: string; allowBlank?: boolean }) {
+function NumberField({ label, value, onChange, step, allowBlank = false, help }: { label: string; value: string; onChange: (value: string) => void; step: string; allowBlank?: boolean; help?: string }) {
   return (
-    <Field label={label}>
+    <Field label={label} help={help}>
       <input type="number" min="0" step={step} value={value} onChange={(event) => onChange(allowBlank && event.target.value === "" ? "" : event.target.value)} className="h-10 w-full rounded-xl px-3 font-mono text-[13px] outline-none" style={inputStyle} />
     </Field>
   );
 }
 
-function Block({ icon: Icon, title, children }: { icon: LucideIcon; title: string; children: ReactNode }) {
+function Block({ icon: Icon, title, children, id, help }: { icon: LucideIcon; title: string; children: ReactNode; id?: string; help?: string }) {
+  const helpText = help ?? platformProductHelpText[title];
+
   return (
-    <div className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+    <div id={id} className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
       <div className="mb-3 flex items-center gap-2">
         <Icon className="h-4 w-4 text-cyan-300" />
-        <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">{title}</p>
+        <p className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">
+          {title}
+          {helpText ? <HelpHint title={title}>{helpText}</HelpHint> : null}
+        </p>
       </div>
       {children}
     </div>
