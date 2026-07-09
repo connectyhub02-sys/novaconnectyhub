@@ -428,36 +428,41 @@ export const salesCatalogLeadDataFields: Array<{ value: SalesCatalogLeadDataFiel
 export function createDefaultSalesCatalogOrderPolicy(): SalesCatalogOrderPolicy {
   return {
     minimumOrderValue: null,
-    reservationPolicy: "after_payment",
+    reservationPolicy: "manual_approval",
     allowOrderWithoutPayment: false,
     requireHumanConfirmation: false,
-    askCepBeforeQuote: true,
-    abandonedCartMinutes: 45,
-    followUpDays: 2,
+    askCepBeforeQuote: false,
+    abandonedCartMinutes: null,
+    followUpDays: null,
   };
 }
 
 export function createDefaultSalesCatalogLeadDataPolicy(): SalesCatalogLeadDataPolicy {
   return {
-    requiredFields: ["name", "phone", "cep", "address"],
-    consentMessage: "Posso registrar seus dados para montar e acompanhar este pedido pelo WhatsApp?",
-    retentionDays: 365,
+    requiredFields: [],
+    consentMessage: null,
+    retentionDays: null,
   };
 }
 
 export function createDefaultSalesCatalogMessageTemplates(): SalesCatalogWhatsAppMessageTemplates {
   return {
-    orderSummary: "Resumo do pedido: {{itens}}, entrega {{frete}}, total {{total}}.",
-    paymentRequest: "Para confirmar, o pagamento pode ser feito por {{metodo_pagamento}}. Assim que fizer, me envie o comprovante por aqui.",
-    paymentConfirmed: "Pagamento confirmado. Vou acompanhar a separacao e te aviso por aqui.",
-    unavailableItem: "Esse item nao esta disponivel agora. Posso te mandar uma opcao parecida?",
-    humanHandoff: "Vou chamar uma pessoa do time para fechar esse ponto com voce.",
+    orderSummary: "",
+    paymentRequest: "",
+    paymentConfirmed: "",
+    unavailableItem: "",
+    humanHandoff: "",
   };
 }
 
 export function createDefaultSalesCatalogCommerceSettings(): SalesCatalogCommerceSettings {
   return {
-    paymentMethods: salesCatalogPaymentMethodTemplates.map((method) => ({ ...method })),
+    paymentMethods: salesCatalogPaymentMethodTemplates.map((method) => ({
+      ...method,
+      enabled: false,
+      instructions: null,
+      requiresProof: false,
+    })),
     orderPolicy: createDefaultSalesCatalogOrderPolicy(),
     leadDataPolicy: createDefaultSalesCatalogLeadDataPolicy(),
     messageTemplates: createDefaultSalesCatalogMessageTemplates(),

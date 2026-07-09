@@ -16,7 +16,6 @@ import {
   resolveSalesCatalogMediaKind,
   salesCatalogLeadDataFields,
   salesCatalogPaymentMethodTemplates,
-  salesCatalogBusinessTemplates,
   type ClientSalesCatalogPaymentIntegration,
   type ClientSalesCatalogPaymentSession,
   type ClientSalesCatalogSettings,
@@ -614,8 +613,6 @@ export function mapSalesCatalogShippingSettings(row: SalesCatalogMemoryRow): Cli
 export function mapSalesCatalogSettings(row: SalesCatalogMemoryRow): ClientSalesCatalogSettings {
   const metadata = readRecord(row.metadata) ?? {};
   const businessType = normalizeBusinessType(readString(metadata.business_type));
-  const fallback = salesCatalogBusinessTemplates.find((template) => template.value === businessType)
-    ?? salesCatalogBusinessTemplates[salesCatalogBusinessTemplates.length - 1];
   const commerceDefaults = createDefaultSalesCatalogCommerceSettings();
 
   return {
@@ -623,10 +620,10 @@ export function mapSalesCatalogSettings(row: SalesCatalogMemoryRow): ClientSales
     companyId: readString(row.organization_id) ?? "",
     configured: readBoolean(metadata.configured),
     businessType,
-    categories: readStringList(metadata.categories, fallback.categories),
-    attributes: readAttributeList(metadata.attributes, fallback.attributes),
-    trackInventory: readNullableBoolean(metadata.track_inventory) ?? fallback.trackInventory,
-    variationMedia: readNullableBoolean(metadata.variation_media) ?? fallback.variationMedia,
+    categories: readStringList(metadata.categories, []),
+    attributes: readAttributeList(metadata.attributes, []),
+    trackInventory: readNullableBoolean(metadata.track_inventory) ?? false,
+    variationMedia: readNullableBoolean(metadata.variation_media) ?? false,
     paymentMethods: readPaymentMethods(metadata.payment_methods, commerceDefaults.paymentMethods),
     orderPolicy: readOrderPolicy(metadata.order_policy, commerceDefaults.orderPolicy),
     leadDataPolicy: readLeadDataPolicy(metadata.lead_data_policy, commerceDefaults.leadDataPolicy),
@@ -1284,10 +1281,11 @@ function readPaymentMethods(value: unknown, fallback: SalesCatalogPaymentMethod[
 function readOrderPolicy(value: unknown, fallback: ClientSalesCatalogSettings["orderPolicy"]) {
   const record = readRecord(value);
   if (!record) return fallback;
+  const reservationPolicy = readString(record.reservation_policy) ?? readString(record.reservationPolicy);
 
   return {
     minimumOrderValue: readString(record.minimum_order_value) ?? readString(record.minimumOrderValue) ?? fallback.minimumOrderValue,
-    reservationPolicy: normalizeReservationPolicy(readString(record.reservation_policy) ?? readString(record.reservationPolicy)),
+    reservationPolicy: reservationPolicy ? normalizeReservationPolicy(reservationPolicy) : fallback.reservationPolicy,
     allowOrderWithoutPayment: readNullableBoolean(record.allow_order_without_payment) ?? readNullableBoolean(record.allowOrderWithoutPayment) ?? fallback.allowOrderWithoutPayment,
     requireHumanConfirmation: readNullableBoolean(record.require_human_confirmation) ?? readNullableBoolean(record.requireHumanConfirmation) ?? fallback.requireHumanConfirmation,
     askCepBeforeQuote: readNullableBoolean(record.ask_cep_before_quote) ?? readNullableBoolean(record.askCepBeforeQuote) ?? fallback.askCepBeforeQuote,

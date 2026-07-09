@@ -300,10 +300,10 @@ async function savePlatformProductSettings(input: {
   const businessType = normalizeBusinessType(readFormString(input.body?.businessType));
   const template = salesCatalogBusinessTemplates.find((item) => item.value === businessType)
     ?? salesCatalogBusinessTemplates[salesCatalogBusinessTemplates.length - 1];
-  const categories = normalizeSettingsStringList(input.body?.categories, template.categories, 30, 80);
-  const attributes = normalizeSettingsAttributes(input.body?.attributes, template.attributes);
-  const trackInventory = readBoolean(input.body?.trackInventory) ?? template.trackInventory;
-  const variationMedia = readBoolean(input.body?.variationMedia) ?? template.variationMedia;
+  const categories = normalizeSettingsStringList(input.body?.categories, [], 30, 80);
+  const attributes = normalizeSettingsAttributes(input.body?.attributes, []);
+  const trackInventory = readBoolean(input.body?.trackInventory) ?? false;
+  const variationMedia = readBoolean(input.body?.variationMedia) ?? false;
   const now = new Date().toISOString();
   const metadata = {
     configured: true,

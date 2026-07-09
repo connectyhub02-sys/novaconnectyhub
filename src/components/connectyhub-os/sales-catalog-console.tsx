@@ -380,11 +380,6 @@ export function SalesCatalogConsole({
     [selectedSettings, settingsDraft.attributes],
   );
   const categoryRows = useMemo(() => getCategoryRows(settingsDraft.categoriesText), [settingsDraft.categoriesText]);
-  const currentBusinessTemplate = salesCatalogBusinessTemplates.find((template) => template.value === settingsDraft.businessType) ?? salesCatalogBusinessTemplates[0];
-  const categoryPresetOptions = currentBusinessTemplate.categories.filter((categoryName) => (
-    !parseLines(settingsDraft.categoriesText).some((current) => current.toLowerCase() === categoryName.toLowerCase())
-  ));
-  const attributePresetOptions = buildAttributePresetOptions(settingsDraft.attributes);
   const categoryOptions = selectedSettings?.configured ? selectedSettings.categories : parseLines(settingsDraft.categoriesText);
   const inventoryEnabled = selectedSettings?.trackInventory ?? settingsDraft.trackInventory;
   const selectedShippingRule = shippingDraft.rules.find((rule) => rule.uf === selectedShippingUf) ?? shippingDraft.rules[0] ?? null;
@@ -443,17 +438,9 @@ export function SalesCatalogConsole({
   }
 
   function applyBusinessTemplate(value: SalesCatalogBusinessType) {
-    const template = salesCatalogBusinessTemplates.find((item) => item.value === value) ?? salesCatalogBusinessTemplates[salesCatalogBusinessTemplates.length - 1];
     setSettingsDraft((current) => ({
-      businessType: template.value,
-      categoriesText: template.categories.join("\n"),
-      attributes: cloneAttributes(template.attributes),
-      trackInventory: template.trackInventory,
-      variationMedia: template.variationMedia,
-      paymentMethods: current.paymentMethods,
-      orderPolicy: current.orderPolicy,
-      leadDataPolicy: current.leadDataPolicy,
-      messageTemplates: current.messageTemplates,
+      ...current,
+      businessType: value,
     }));
   }
 
@@ -513,20 +500,6 @@ export function SalesCatalogConsole({
   function removeCategoryRow(index: number) {
     const rows = categoryRows.filter((_, rowIndex) => rowIndex !== index);
     setCategoryRows(rows.length > 0 ? rows : [""]);
-  }
-
-  function addAttributePreset(attribute: SalesCatalogAttribute) {
-    setSettingsDraft((current) => ({
-      ...current,
-      attributes: [
-        ...current.attributes,
-        {
-          ...attribute,
-          id: createUniqueAttributeId(attribute.name, current.attributes),
-          values: [...attribute.values],
-        },
-      ],
-    }));
   }
 
   function updatePaymentMethod(methodId: SalesCatalogPaymentMethod["id"], patch: Partial<SalesCatalogPaymentMethod>) {
@@ -1518,21 +1491,6 @@ export function SalesCatalogConsole({
                   ))}
                 </div>
 
-                {categoryPresetOptions.length > 0 ? (
-                  <select
-                    value=""
-                    onChange={(event) => {
-                      if (event.target.value) addCategoryRow(event.target.value);
-                    }}
-                    className="mt-3 h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
-                    style={{ borderColor: "var(--ch-border)" }}
-                  >
-                    <option value="">Adicionar categoria pronta</option>
-                    {categoryPresetOptions.map((categoryName) => (
-                      <option key={categoryName} value={categoryName}>{categoryName}</option>
-                    ))}
-                  </select>
-                ) : null}
               </div>
 
               <div className="grid gap-2">
@@ -1559,22 +1517,6 @@ export function SalesCatalogConsole({
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <FieldLabel>Variacoes</FieldLabel>
                 <div className="flex flex-wrap gap-2">
-                  {attributePresetOptions.length > 0 ? (
-                    <select
-                      value=""
-                      onChange={(event) => {
-                        const preset = attributePresetOptions.find((attribute) => attribute.id === event.target.value);
-                        if (preset) addAttributePreset(preset);
-                      }}
-                      className="h-8 rounded-lg border bg-transparent px-3 text-[11px] outline-none"
-                      style={{ borderColor: "var(--ch-border)" }}
-                    >
-                      <option value="">Adicionar variacao pronta</option>
-                      {attributePresetOptions.map((attribute) => (
-                        <option key={attribute.id} value={attribute.id}>{attribute.name}</option>
-                      ))}
-                    </select>
-                  ) : null}
                   <button
                     type="button"
                     onClick={addAttribute}
@@ -1677,7 +1619,7 @@ export function SalesCatalogConsole({
                       value={settingsDraft.orderPolicy.minimumOrderValue ?? ""}
                       onChange={(event) => updateOrderPolicy({ minimumOrderValue: event.target.value.slice(0, 40) })}
                       className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
-                      placeholder="R$ 100,00"
+                      placeholder="Opcional"
                       style={{ borderColor: "var(--ch-border)" }}
                     />
                   </label>
@@ -2887,7 +2829,7 @@ export function SalesCatalogConsole({
                           value={sku.attributesText}
                           onChange={(event) => updateSkuDraft(index, { attributesText: event.target.value.slice(0, 220) })}
                           className="h-10 rounded-lg border bg-transparent px-3 text-[12px] outline-none"
-                          placeholder="Tamanho: M; Cor: Preto"
+                          placeholder="Atributo: opcao; atributo: opcao"
                           style={{ borderColor: "var(--ch-border)" }}
                         />
                         <button
@@ -4118,18 +4060,14 @@ function formatBytes(value: number) {
 }
 
 function buildSettingsDraft(settings: ClientSalesCatalogSettings | null): SettingsDraft {
-  const template = settings
-    ? salesCatalogBusinessTemplates.find((item) => item.value === settings.businessType)
-    : salesCatalogBusinessTemplates.find((item) => item.value === "fashion");
-  const fallback = template ?? salesCatalogBusinessTemplates[0];
   const commerceDefaults = createDefaultSalesCatalogCommerceSettings();
 
   return {
-    businessType: settings?.businessType ?? fallback.value,
-    categoriesText: (settings?.categories.length ? settings.categories : fallback.categories).join("\n"),
-    attributes: cloneAttributes(settings?.attributes.length ? settings.attributes : fallback.attributes),
-    trackInventory: settings?.trackInventory ?? fallback.trackInventory,
-    variationMedia: settings?.variationMedia ?? fallback.variationMedia,
+    businessType: settings?.businessType ?? "simple",
+    categoriesText: (settings?.categories ?? []).join("\n"),
+    attributes: cloneAttributes(settings?.attributes ?? []),
+    trackInventory: settings?.trackInventory ?? false,
+    variationMedia: settings?.variationMedia ?? false,
     paymentMethods: clonePaymentMethods(settings?.paymentMethods.length ? settings.paymentMethods : commerceDefaults.paymentMethods),
     orderPolicy: { ...(settings?.orderPolicy ?? commerceDefaults.orderPolicy) },
     leadDataPolicy: {
@@ -4177,28 +4115,6 @@ function buildShippingDraft(settings: ClientSalesCatalogShippingSettings | null)
 function getCategoryRows(value: string) {
   const rows = value.split("\n").map((row) => row.replace(/\s+/g, " ").trim());
   return rows.length > 0 ? rows : [""];
-}
-
-function buildAttributePresetOptions(currentAttributes: SalesCatalogAttribute[]) {
-  const usedNames = new Set(currentAttributes.map((attribute) => attribute.name.trim().toLowerCase()));
-  const seen = new Set<string>();
-  const output: SalesCatalogAttribute[] = [];
-
-  for (const template of salesCatalogBusinessTemplates) {
-    for (const attribute of template.attributes) {
-      const key = attribute.name.trim().toLowerCase();
-      if (usedNames.has(key) || seen.has(key)) continue;
-
-      seen.add(key);
-      output.push({
-        ...attribute,
-        id: `${template.value}_${attribute.id}`,
-        values: [...attribute.values],
-      });
-    }
-  }
-
-  return output;
 }
 
 function cloneAttributes(attributes: SalesCatalogAttribute[]) {
@@ -4423,20 +4339,6 @@ function createAttributeId(value: string) {
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "")
     .slice(0, 40) || "atributo";
-}
-
-function createUniqueAttributeId(value: string, attributes: SalesCatalogAttribute[]) {
-  const base = createAttributeId(value);
-  const existing = new Set(attributes.map((attribute) => attribute.id));
-
-  if (!existing.has(base)) return base;
-
-  let index = 2;
-  while (existing.has(`${base}_${index}`)) {
-    index += 1;
-  }
-
-  return `${base}_${index}`;
 }
 
 function buildSelectedItemAttributes(

@@ -227,11 +227,6 @@ export function PlatformProductsConsole({
     commissions.filter((commission) => commission.status === "available").map((commission) => commission.id)
   ), [commissions]);
   const categoryRows = useMemo(() => getCategoryRows(settingsDraft.categoriesText), [settingsDraft.categoriesText]);
-  const currentBusinessTemplate = salesCatalogBusinessTemplates.find((template) => template.value === settingsDraft.businessType) ?? salesCatalogBusinessTemplates[0];
-  const categoryPresetOptions = currentBusinessTemplate.categories.filter((categoryName) => (
-    !parseLines(settingsDraft.categoriesText).some((current) => current.toLowerCase() === categoryName.toLowerCase())
-  ));
-  const attributePresetOptions = buildAttributePresetOptions(settingsDraft.attributes);
   const productAttributes = useMemo(
     () => (settings.configured ? settings.attributes : settingsDraft.attributes).filter((attribute) => attribute.values.length > 0),
     [settings, settingsDraft.attributes],
@@ -387,16 +382,9 @@ export function PlatformProductsConsole({
   }
 
   function applyBusinessTemplate(templateValue: SalesCatalogBusinessType) {
-    const template = salesCatalogBusinessTemplates.find((item) => item.value === templateValue);
-    if (!template) return;
-
     setSettingsDraft((current) => ({
       ...current,
-      businessType: template.value,
-      categoriesText: template.categories.join("\n"),
-      attributes: cloneAttributes(template.attributes),
-      trackInventory: template.trackInventory,
-      variationMedia: template.variationMedia,
+      businessType: templateValue,
     }));
   }
 
@@ -643,29 +631,10 @@ export function PlatformProductsConsole({
                             </div>
                           ))}
                         </div>
-                        {categoryPresetOptions.length > 0 ? (
-                          <select value="" onChange={(event) => { if (event.target.value) addCategoryRow(event.target.value); }} className="mt-3 h-10 w-full rounded-xl px-3 text-[13px] outline-none" style={inputStyle}>
-                            <option value="">Adicionar categoria pronta</option>
-                            {categoryPresetOptions.map((categoryName) => (
-                              <option key={categoryName} value={categoryName}>{categoryName}</option>
-                            ))}
-                          </select>
-                        ) : null}
                       </Block>
 
                       <Block icon={SlidersHorizontal} title="Variacoes do catalogo">
                         <div className="mb-3 flex flex-wrap justify-end gap-2">
-                          {attributePresetOptions.length > 0 ? (
-                            <select value="" onChange={(event) => {
-                              const preset = attributePresetOptions.find((attribute) => attribute.id === event.target.value);
-                              if (preset) addAttributePreset(preset);
-                            }} className="h-9 rounded-xl px-3 text-[12px] outline-none" style={inputStyle}>
-                              <option value="">Adicionar variacao pronta</option>
-                              {attributePresetOptions.map((attribute) => (
-                                <option key={attribute.id} value={attribute.id}>{attribute.name}</option>
-                              ))}
-                            </select>
-                          ) : null}
                           <button type="button" onClick={addSettingsAttribute} className="inline-flex h-9 items-center gap-2 rounded-xl border px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-cyan-100" style={{ borderColor: "var(--ch-border)" }}>
                             <Plus className="h-3.5 w-3.5" />
                             Manual
@@ -862,7 +831,7 @@ export function PlatformProductsConsole({
                               <div className="grid gap-2 lg:grid-cols-[150px_minmax(140px,1fr)_minmax(180px,1.2fr)_40px]">
                                 <input value={sku.skuCode} onChange={(event) => updateSku(index, { skuCode: cleanCode(event.target.value) })} className="h-10 rounded-xl px-3 font-mono text-[12px] outline-none" placeholder="SKU" style={inputStyle} />
                                 <input value={sku.title} onChange={(event) => updateSku(index, { title: event.target.value.slice(0, 120) })} className="h-10 rounded-xl px-3 text-[13px] outline-none" placeholder="Nome interno" style={inputStyle} />
-                                <input value={sku.attributesText} onChange={(event) => updateSku(index, { attributesText: event.target.value.slice(0, 220) })} className="h-10 rounded-xl px-3 text-[13px] outline-none" placeholder="Tamanho: M; Cor: Preto" style={inputStyle} />
+                                <input value={sku.attributesText} onChange={(event) => updateSku(index, { attributesText: event.target.value.slice(0, 220) })} className="h-10 rounded-xl px-3 text-[13px] outline-none" placeholder="Atributo: opcao; atributo: opcao" style={inputStyle} />
                                 <button type="button" onClick={() => removeSku(index)} className="grid h-10 place-items-center rounded-xl border text-slate-400 transition hover:bg-rose-400/10 hover:text-rose-100" style={{ borderColor: "var(--ch-border)" }}>
                                   <Trash2 className="h-4 w-4" />
                                 </button>
@@ -1214,20 +1183,6 @@ export function PlatformProductsConsole({
     setCategoryRows(rows.length > 0 ? rows : [""]);
   }
 
-  function addAttributePreset(attribute: SalesCatalogAttribute) {
-    setSettingsDraft((current) => ({
-      ...current,
-      attributes: [
-        ...current.attributes,
-        {
-          ...attribute,
-          id: createUniqueAttributeId(attribute.name, current.attributes),
-          values: [...attribute.values],
-        },
-      ],
-    }));
-  }
-
   function toggleSelectedAttribute(attribute: SalesCatalogAttribute, value: string) {
     setSelectedAttributes((current) => {
       const currentValues = current[attribute.id] ?? [];
@@ -1524,39 +1479,13 @@ function formatBytes(value: number) {
 }
 
 function buildSettingsDraft(settings: PlatformProductSettings): SettingsDraft {
-  const fallback = salesCatalogBusinessTemplates.find((template) => template.value === settings.businessType)
-    ?? salesCatalogBusinessTemplates.find((template) => template.value === "fashion")
-    ?? salesCatalogBusinessTemplates[0];
-
   return {
-    businessType: settings.businessType ?? fallback.value,
-    categoriesText: (settings.categories.length ? settings.categories : fallback.categories).join("\n"),
-    attributes: cloneAttributes(settings.attributes.length ? settings.attributes : fallback.attributes),
-    trackInventory: settings.trackInventory ?? fallback.trackInventory,
-    variationMedia: settings.variationMedia ?? fallback.variationMedia,
+    businessType: settings.businessType ?? "simple",
+    categoriesText: settings.categories.join("\n"),
+    attributes: cloneAttributes(settings.attributes),
+    trackInventory: settings.trackInventory ?? false,
+    variationMedia: settings.variationMedia ?? false,
   };
-}
-
-function buildAttributePresetOptions(currentAttributes: SalesCatalogAttribute[]) {
-  const usedNames = new Set(currentAttributes.map((attribute) => attribute.name.trim().toLowerCase()));
-  const seen = new Set<string>();
-  const output: SalesCatalogAttribute[] = [];
-
-  for (const template of salesCatalogBusinessTemplates) {
-    for (const attribute of template.attributes) {
-      const key = attribute.name.trim().toLowerCase();
-      if (usedNames.has(key) || seen.has(key)) continue;
-
-      seen.add(key);
-      output.push({
-        ...attribute,
-        id: `${template.value}_${attribute.id}`,
-        values: [...attribute.values],
-      });
-    }
-  }
-
-  return output;
 }
 
 function cloneAttributes(attributes: SalesCatalogAttribute[]) {
@@ -1627,20 +1556,6 @@ function createAttributeId(value: string) {
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "")
     .slice(0, 40) || "atributo";
-}
-
-function createUniqueAttributeId(value: string, attributes: SalesCatalogAttribute[]) {
-  const base = createAttributeId(value);
-  const existing = new Set(attributes.map((attribute) => attribute.id));
-
-  if (!existing.has(base)) return base;
-
-  let index = 2;
-  while (existing.has(`${base}_${index}`)) {
-    index += 1;
-  }
-
-  return `${base}_${index}`;
 }
 
 function createDraft(product: PlatformProduct | null): ProductDraft {

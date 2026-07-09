@@ -542,10 +542,10 @@ async function saveCatalogSettings(input: {
   const businessType = normalizeBusinessType(readFormString(input.body?.businessType));
   const template = salesCatalogBusinessTemplates.find((item) => item.value === businessType)
     ?? salesCatalogBusinessTemplates[salesCatalogBusinessTemplates.length - 1];
-  const categories = normalizeStringList(input.body?.categories, template.categories, 30, 80);
-  const attributes = normalizeSettingsAttributes(input.body?.attributes, template.attributes);
-  const trackInventory = readBoolean(input.body?.trackInventory) ?? template.trackInventory;
-  const variationMedia = readBoolean(input.body?.variationMedia) ?? template.variationMedia;
+  const categories = normalizeStringList(input.body?.categories, [], 30, 80);
+  const attributes = normalizeSettingsAttributes(input.body?.attributes, []);
+  const trackInventory = readBoolean(input.body?.trackInventory) ?? false;
+  const variationMedia = readBoolean(input.body?.variationMedia) ?? false;
   const commerceDefaults = createDefaultSalesCatalogCommerceSettings();
   const paymentMethods = normalizePaymentMethods(input.body?.paymentMethods, commerceDefaults.paymentMethods);
   const orderPolicy = normalizeOrderPolicy(input.body?.orderPolicy, commerceDefaults.orderPolicy);
@@ -2187,10 +2187,11 @@ function normalizeOrderPolicy(value: unknown, fallback: ReturnType<typeof create
 
   const abandonedCartMinutes = normalizeNullableInteger(record.abandonedCartMinutes ?? record.abandoned_cart_minutes, 0, 10080);
   const followUpDays = normalizeNullableInteger(record.followUpDays ?? record.follow_up_days, 0, 365);
+  const reservationPolicy = readFormString(record.reservationPolicy ?? record.reservation_policy);
 
   return {
     minimumOrderValue: normalizeOptionalText(readFormString(record.minimumOrderValue ?? record.minimum_order_value), 40) ?? fallback.minimumOrderValue,
-    reservationPolicy: normalizeReservationPolicy(readFormString(record.reservationPolicy ?? record.reservation_policy)),
+    reservationPolicy: reservationPolicy ? normalizeReservationPolicy(reservationPolicy) : fallback.reservationPolicy,
     allowOrderWithoutPayment: readBoolean(record.allowOrderWithoutPayment ?? record.allow_order_without_payment) ?? fallback.allowOrderWithoutPayment,
     requireHumanConfirmation: readBoolean(record.requireHumanConfirmation ?? record.require_human_confirmation) ?? fallback.requireHumanConfirmation,
     askCepBeforeQuote: readBoolean(record.askCepBeforeQuote ?? record.ask_cep_before_quote) ?? fallback.askCepBeforeQuote,

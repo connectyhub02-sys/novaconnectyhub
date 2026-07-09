@@ -11,7 +11,6 @@ import {
   emptySalesCatalogProductInventory,
   emptySalesCatalogProductOffer,
   getSalesCatalogReadiness,
-  salesCatalogBusinessTemplates,
   type SalesCatalogAttribute,
   type SalesCatalogBusinessType,
   type SalesCatalogItemAttribute,
@@ -645,34 +644,29 @@ export function mapPlatformProductCommissionRow(row: PlatformProductCommissionRo
 export function mapPlatformProductSettingsRow(row: PlatformProductSettingsRow): PlatformProductSettings {
   const metadata = readRecord(row.metadata) ?? {};
   const businessType = normalizeBusinessType(readString(metadata.business_type));
-  const fallback = salesCatalogBusinessTemplates.find((template) => template.value === businessType)
-    ?? salesCatalogBusinessTemplates[salesCatalogBusinessTemplates.length - 1];
 
   return {
     id: row.id,
     configured: readBoolean(metadata.configured) ?? false,
     businessType,
-    categories: readStringList(metadata.categories, fallback.categories),
-    attributes: readSettingsAttributes(metadata.attributes, fallback.attributes),
-    trackInventory: readBoolean(metadata.track_inventory) ?? fallback.trackInventory,
-    variationMedia: readBoolean(metadata.variation_media) ?? fallback.variationMedia,
+    categories: readStringList(metadata.categories, []),
+    attributes: readSettingsAttributes(metadata.attributes, []),
+    trackInventory: readBoolean(metadata.track_inventory) ?? false,
+    variationMedia: readBoolean(metadata.variation_media) ?? false,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
 }
 
 export function getDefaultPlatformProductSettings(): PlatformProductSettings {
-  const fallback = salesCatalogBusinessTemplates.find((template) => template.value === "fashion")
-    ?? salesCatalogBusinessTemplates[0];
-
   return {
     id: null,
     configured: false,
-    businessType: fallback.value,
-    categories: [...fallback.categories],
-    attributes: fallback.attributes.map((attribute) => ({ ...attribute, values: [...attribute.values] })),
-    trackInventory: fallback.trackInventory,
-    variationMedia: fallback.variationMedia,
+    businessType: "simple",
+    categories: [],
+    attributes: [],
+    trackInventory: false,
+    variationMedia: false,
     createdAt: null,
     updatedAt: null,
   };
