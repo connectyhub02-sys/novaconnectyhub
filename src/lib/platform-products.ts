@@ -11,6 +11,9 @@ import {
   emptySalesCatalogProductInventory,
   emptySalesCatalogProductOffer,
   getSalesCatalogReadiness,
+  salesCatalogBusinessTemplates,
+  type SalesCatalogAttribute,
+  type SalesCatalogBusinessType,
   type SalesCatalogItemAttribute,
   type SalesCatalogMedia,
   type SalesCatalogProductFulfillment,
@@ -30,6 +33,18 @@ export type PlatformProductMarketplaceStatus = "hidden" | "visible" | "featured"
 export type PlatformProductCommissionBase = "gross" | "net";
 export type PlatformProductImportStatus = "active" | "paused" | "removed";
 export type PlatformProductCommissionStatus = "pending" | "available" | "paid" | "cancelled" | "blocked" | "refunded";
+
+export type PlatformProductSettings = {
+  id: string | null;
+  configured: boolean;
+  businessType: SalesCatalogBusinessType;
+  categories: string[];
+  attributes: SalesCatalogAttribute[];
+  trackInventory: boolean;
+  variationMedia: boolean;
+  createdAt: string | null;
+  updatedAt: string | null;
+};
 
 export type PlatformProduct = {
   id: string;
@@ -99,6 +114,7 @@ export type PlatformProductCommission = {
 
 export type PlatformProductCatalog = {
   schemaReady: boolean;
+  settings: PlatformProductSettings;
   products: PlatformProduct[];
   imports: PlatformProductImport[];
   commissions: PlatformProductCommission[];
@@ -175,6 +191,16 @@ export type PlatformProductCommissionRow = {
   metadata: unknown;
   created_at: string;
   updated_at: string;
+};
+
+export type PlatformProductSettingsRow = {
+  id: string;
+  organization_id: string | null;
+  title: string;
+  content: string;
+  metadata: unknown;
+  created_at: string | null;
+  updated_at: string | null;
 };
 
 export const PLATFORM_PRODUCT_SELECT = [
@@ -269,6 +295,7 @@ export async function getAdminPlatformProductCatalog(
   if (productsResult.error) {
     return {
       schemaReady: false,
+      settings: getDefaultPlatformProductSettings(),
       products: [],
       imports: [],
       commissions: [],
@@ -280,9 +307,14 @@ export async function getAdminPlatformProductCatalog(
     ...(importsResult.error ? [importsResult.error.message] : []),
     ...(commissionsResult.error ? [commissionsResult.error.message] : []),
   ];
+  const settings = await getPlatformProductSettings(client).catch((error) => {
+    warnings.push(error instanceof Error ? error.message : "Nao foi possivel carregar a configuracao global de produtos.");
+    return getDefaultPlatformProductSettings();
+  });
 
   return {
     schemaReady: true,
+    settings,
     products: ((productsResult.data ?? []) as unknown as PlatformProductRow[]).map(mapPlatformProductRow),
     imports: importsResult.error
       ? []
@@ -314,6 +346,7 @@ export async function getClientPlatformProductCatalog(input: {
   if (productsResult.error) {
     return {
       schemaReady: false,
+      settings: getDefaultPlatformProductSettings(),
       products: [],
       imports: [],
       commissions: [],
@@ -344,6 +377,7 @@ export async function getClientPlatformProductCatalog(input: {
 
   return {
     schemaReady: true,
+    settings: getDefaultPlatformProductSettings(),
     products: ((productsResult.data ?? []) as unknown as PlatformProductRow[]).map(mapPlatformProductRow),
     imports: importsResult.error
       ? []
@@ -353,6 +387,26 @@ export async function getClientPlatformProductCatalog(input: {
       : ((commissionsResult.data ?? []) as unknown as PlatformProductCommissionRow[]).map(mapPlatformProductCommissionRow),
     warnings,
   };
+}
+
+export async function getPlatformProductSettings(
+  client: SupabaseClient = createServiceClient(),
+): Promise<PlatformProductSettings> {
+  const { data, error } = await client
+    .from("intelligence_memory")
+    .select("id, organization_id, title, content, metadata, created_at, updated_at")
+    .eq("scope", "platform")
+    .is("organization_id", null)
+    .eq("memory_type", "platform_product_settings")
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<PlatformProductSettingsRow>();
+
+  if (error) {
+    throw new Error(`Nao foi possivel carregar a configuracao global de produtos: ${error.message}`);
+  }
+
+  return data ? mapPlatformProductSettingsRow(data) : getDefaultPlatformProductSettings();
 }
 
 export async function importPlatformProductToCompany(input: {
@@ -520,6 +574,42 @@ export function mapPlatformProductCommissionRow(row: PlatformProductCommissionRo
     metadata: readRecord(row.metadata) ?? {},
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  };
+}
+
+export function mapPlatformProductSettingsRow(row: PlatformProductSettingsRow): PlatformProductSettings {
+  const metadata = readRecord(row.metadata) ?? {};
+  const businessType = normalizeBusinessType(readString(metadata.business_type));
+  const fallback = salesCatalogBusinessTemplates.find((template) => template.value === businessType)
+    ?? salesCatalogBusinessTemplates[salesCatalogBusinessTemplates.length - 1];
+
+  return {
+    id: row.id,
+    configured: readBoolean(metadata.configured) ?? false,
+    businessType,
+    categories: readStringList(metadata.categories, fallback.categories),
+    attributes: readSettingsAttributes(metadata.attributes, fallback.attributes),
+    trackInventory: readBoolean(metadata.track_inventory) ?? fallback.trackInventory,
+    variationMedia: readBoolean(metadata.variation_media) ?? fallback.variationMedia,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function getDefaultPlatformProductSettings(): PlatformProductSettings {
+  const fallback = salesCatalogBusinessTemplates.find((template) => template.value === "fashion")
+    ?? salesCatalogBusinessTemplates[0];
+
+  return {
+    id: null,
+    configured: false,
+    businessType: fallback.value,
+    categories: [...fallback.categories],
+    attributes: fallback.attributes.map((attribute) => ({ ...attribute, values: [...attribute.values] })),
+    trackInventory: fallback.trackInventory,
+    variationMedia: fallback.variationMedia,
+    createdAt: null,
+    updatedAt: null,
   };
 }
 
@@ -734,6 +824,40 @@ function readItemAttributes(value: unknown): SalesCatalogItemAttribute[] {
     })
     .filter((item): item is SalesCatalogItemAttribute => Boolean(item))
     .slice(0, 20);
+}
+
+function readSettingsAttributes(value: unknown, fallback: SalesCatalogAttribute[]): SalesCatalogAttribute[] {
+  if (!Array.isArray(value)) {
+    return fallback.map((attribute) => ({ ...attribute, values: [...attribute.values] }));
+  }
+
+  const attributes: SalesCatalogAttribute[] = [];
+  const seen = new Set<string>();
+
+  for (const item of value) {
+    const record = readRecord(item);
+    const name = readString(record?.name);
+    if (!name) continue;
+
+    const id = readString(record?.id) ?? createAttributeId(name);
+    const key = id.toLowerCase();
+    const values = readStringList(record?.values, []);
+    if (seen.has(key) || values.length === 0) continue;
+
+    seen.add(key);
+    attributes.push({
+      id,
+      name: name.slice(0, 50),
+      values: values.slice(0, 40),
+      required: readBoolean(record?.required) ?? false,
+    });
+
+    if (attributes.length >= 12) break;
+  }
+
+  return attributes.length > 0
+    ? attributes
+    : fallback.map((attribute) => ({ ...attribute, values: [...attribute.values] }));
 }
 
 function readMediaList(value: unknown): SalesCatalogMedia[] {
@@ -992,6 +1116,25 @@ function normalizeStockStatus(value: string | null): SalesCatalogStockStatus {
 function normalizeSkuStatus(value: string | null): SalesCatalogSkuStatus {
   if (value === "draft" || value === "archived") return value;
   return "active";
+}
+
+function normalizeBusinessType(value: string | null): SalesCatalogBusinessType {
+  if (value === "fashion" || value === "physical" || value === "services" || value === "digital" || value === "food") {
+    return value;
+  }
+
+  return "simple";
+}
+
+function createAttributeId(value: string) {
+  return value
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 40) || "atributo";
 }
 
 function readRecord(value: unknown): JsonRecord | null {

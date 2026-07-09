@@ -4,11 +4,13 @@ import { NextResponse, type NextRequest } from "next/server";
 import {
   createPlatformProductCode,
   createPlatformProductSlug,
+  mapPlatformProductSettingsRow,
   mapPlatformProductRow,
   PLATFORM_PRODUCT_SELECT,
   type PlatformProductCommissionBase,
   type PlatformProductMarketplaceStatus,
   type PlatformProductRow,
+  type PlatformProductSettingsRow,
   type PlatformProductStatus,
 } from "@/lib/platform-products";
 import {
@@ -17,6 +19,9 @@ import {
   emptySalesCatalogProductInventory,
   emptySalesCatalogProductOffer,
   resolveSalesCatalogMediaKind,
+  salesCatalogBusinessTemplates,
+  type SalesCatalogAttribute,
+  type SalesCatalogBusinessType,
   type SalesCatalogFulfillmentMode,
   type SalesCatalogItemAttribute,
   type SalesCatalogMedia,
@@ -41,11 +46,45 @@ const maxProductFileBytes = 25 * 1024 * 1024;
 const maxProductTotalBytes = 100 * 1024 * 1024;
 
 export async function POST(request: NextRequest) {
+  if ((request.headers.get("content-type") ?? "").includes("application/json")) {
+    return handleJsonPost(request);
+  }
+
   return savePlatformProduct(request, "create");
 }
 
 export async function PATCH(request: NextRequest) {
   return savePlatformProduct(request, "update");
+}
+
+async function handleJsonPost(request: NextRequest) {
+  const auth = await requirePlatformAdmin();
+
+  if (auth instanceof NextResponse) {
+    return auth;
+  }
+
+  const body = readRecord(await request.json().catch(() => null));
+  const action = readFormString(body?.action);
+
+  try {
+    if (action === "save_catalog_settings") {
+      const settings = await savePlatformProductSettings({
+        body,
+        client: createServiceClient(),
+        userId: auth.userId,
+      });
+
+      revalidatePath("/admin/produtos-connectyhub");
+      revalidatePath("/dashboard/produtos");
+
+      return NextResponse.json({ settings });
+    }
+
+    return NextResponse.json({ error: "Acao de produtos ConnectyHub nao reconhecida." }, { status: 422 });
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Erro ao salvar configuracao de produtos." }, { status: 500 });
+  }
 }
 
 async function savePlatformProduct(request: NextRequest, mode: "create" | "update") {
@@ -224,6 +263,91 @@ async function savePlatformProduct(request: NextRequest, mode: "create" | "updat
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Erro ao salvar produto ConnectyHub." }, { status: 500 });
   }
+}
+
+async function savePlatformProductSettings(input: {
+  body: Record<string, unknown> | null;
+  client: ReturnType<typeof createServiceClient>;
+  userId: string;
+}) {
+  const businessType = normalizeBusinessType(readFormString(input.body?.businessType));
+  const template = salesCatalogBusinessTemplates.find((item) => item.value === businessType)
+    ?? salesCatalogBusinessTemplates[salesCatalogBusinessTemplates.length - 1];
+  const categories = normalizeSettingsStringList(input.body?.categories, template.categories, 30, 80);
+  const attributes = normalizeSettingsAttributes(input.body?.attributes, template.attributes);
+  const trackInventory = readBoolean(input.body?.trackInventory) ?? template.trackInventory;
+  const variationMedia = readBoolean(input.body?.variationMedia) ?? template.variationMedia;
+  const now = new Date().toISOString();
+  const metadata = {
+    configured: true,
+    business_type: businessType,
+    categories,
+    attributes: attributes.map(serializeSettingsAttribute),
+    track_inventory: trackInventory,
+    variation_media: variationMedia,
+    updated_by: input.userId,
+    updated_from: "platform_product_catalog_setup",
+  };
+  const content = [
+    `Tipo: ${template.label}`,
+    categories.length ? `Categorias: ${categories.join(", ")}` : "",
+    attributes.length ? "Variacoes:" : "",
+    ...attributes.map((attribute) => `- ${attribute.name}: ${attribute.values.join(", ")}`),
+    trackInventory ? "Controle de estoque por variacao: sim" : "Controle de estoque por variacao: nao",
+    variationMedia ? "Midia por variacao: sim" : "Midia por variacao: nao",
+  ].filter(Boolean).join("\n");
+  const { data: existing, error: existingError } = await input.client
+    .from("intelligence_memory")
+    .select("id")
+    .eq("scope", "platform")
+    .is("organization_id", null)
+    .eq("memory_type", "platform_product_settings")
+    .limit(1)
+    .maybeSingle<{ id: string }>();
+
+  if (existingError) {
+    throw new Error(`Nao foi possivel verificar a configuracao atual: ${existingError.message}`);
+  }
+
+  const settingsId = existing?.id ?? randomUUID();
+  const payload = {
+    id: settingsId,
+    scope: "platform",
+    organization_id: null,
+    memory_type: "platform_product_settings",
+    title: "Configuracao global do Catalogo ConnectyHub",
+    content,
+    importance: 0.78,
+    tags: ["platform_product", "connectyhub_marketplace", "sales_catalog_settings"],
+    metadata,
+    updated_at: now,
+  };
+  const query = existing
+    ? input.client.from("intelligence_memory").update(payload).eq("id", existing.id)
+    : input.client.from("intelligence_memory").insert({ ...payload, created_at: now });
+  const { data, error } = await query
+    .select("id, organization_id, title, content, metadata, created_at, updated_at")
+    .single<PlatformProductSettingsRow>();
+
+  if (error || !data) {
+    throw new Error(error?.message ?? "Nao foi possivel salvar a configuracao global de produtos.");
+  }
+
+  await input.client.from("maintenance_audit_logs").insert({
+    actor_id: input.userId,
+    event_type: "platform_product.settings_saved",
+    target_table: "intelligence_memory",
+    target_id: data.id,
+    metadata: {
+      businessType,
+      categoriesCount: categories.length,
+      attributesCount: attributes.length,
+      trackInventory,
+      variationMedia,
+    },
+  });
+
+  return mapPlatformProductSettingsRow(data);
 }
 
 function readProductShippingPayload(formData: FormData): SalesCatalogProductShipping {
@@ -426,6 +550,14 @@ function normalizeProductStatus(value: string | null): PlatformProductStatus {
   return "draft";
 }
 
+function normalizeBusinessType(value: string | null): SalesCatalogBusinessType {
+  if (value === "fashion" || value === "physical" || value === "services" || value === "digital" || value === "food") {
+    return value;
+  }
+
+  return "simple";
+}
+
 function normalizeMarketplaceStatus(value: string | null): PlatformProductMarketplaceStatus {
   if (!value) return "visible";
   if (value === "visible" || value === "featured") return value;
@@ -585,6 +717,80 @@ function normalizeStringList(value: unknown, fallback: string[], maxItems: numbe
     .slice(0, maxItems);
 }
 
+function normalizeSettingsStringList(value: unknown, fallback: string[], maxItems: number, maxLength: number) {
+  const source = Array.isArray(value) ? value : fallback;
+  const seen = new Set<string>();
+  const output: string[] = [];
+
+  for (const item of source) {
+    const normalized = normalizeOptionalText(readFormString(item), maxLength);
+    if (!normalized) continue;
+
+    const key = normalized.toLowerCase();
+    if (seen.has(key)) continue;
+
+    seen.add(key);
+    output.push(normalized);
+
+    if (output.length >= maxItems) break;
+  }
+
+  return output.length > 0 ? output : fallback.slice(0, maxItems);
+}
+
+function normalizeSettingsAttributes(value: unknown, fallback: SalesCatalogAttribute[]) {
+  const source = Array.isArray(value) ? value : fallback;
+  const seen = new Set<string>();
+  const attributes: SalesCatalogAttribute[] = [];
+
+  for (const item of source) {
+    const record = readRecord(item);
+    if (!record) continue;
+
+    const name = normalizeOptionalText(readFormString(record.name), 50);
+    if (!name) continue;
+
+    const id = normalizeOptionalText(readFormString(record.id), 50) ?? createAttributeId(name);
+    const key = id.toLowerCase();
+    const values = normalizeSettingsStringList(record.values, [], 40, 50);
+    if (seen.has(key) || values.length === 0) continue;
+
+    seen.add(key);
+    attributes.push({
+      id,
+      name,
+      values,
+      required: readBoolean(record.required) ?? false,
+    });
+
+    if (attributes.length >= 12) break;
+  }
+
+  return attributes.length > 0
+    ? attributes
+    : fallback.map((attribute) => ({ ...attribute, values: [...attribute.values] }));
+}
+
+function serializeSettingsAttribute(attribute: SalesCatalogAttribute) {
+  return {
+    id: attribute.id,
+    name: attribute.name,
+    values: attribute.values,
+    required: attribute.required,
+  };
+}
+
+function createAttributeId(value: string) {
+  return value
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 40) || "atributo";
+}
+
 function readKeepMediaIds(value: FormDataEntryValue | null) {
   const parsed = typeof value === "string" ? parseJson(value) : null;
   if (!Array.isArray(parsed)) return null;
@@ -599,6 +805,10 @@ function readFormBoolean(value: unknown) {
   if (value === "true") return true;
   if (value === "false") return false;
   return null;
+}
+
+function readBoolean(value: unknown) {
+  return typeof value === "boolean" ? value : null;
 }
 
 function readRecord(value: unknown): Record<string, unknown> | null {

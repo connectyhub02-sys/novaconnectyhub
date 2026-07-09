@@ -31,10 +31,14 @@ import type {
   PlatformProductCommission,
   PlatformProductCommissionStatus,
   PlatformProductMarketplaceStatus,
+  PlatformProductSettings,
   PlatformProductStatus,
 } from "@/lib/platform-products";
 import {
   salesCatalogBusinessTemplates,
+  type SalesCatalogAttribute,
+  type SalesCatalogBusinessType,
+  type SalesCatalogItemAttribute,
   type SalesCatalogFulfillmentMode,
   type SalesCatalogMedia,
   type SalesCatalogShippingProfile,
@@ -93,6 +97,14 @@ type AttributeDraft = {
   id: string;
   name: string;
   valuesText: string;
+};
+
+type SettingsDraft = {
+  businessType: SalesCatalogBusinessType;
+  categoriesText: string;
+  attributes: SalesCatalogAttribute[];
+  trackInventory: boolean;
+  variationMedia: boolean;
 };
 
 type SkuDraft = {
@@ -175,22 +187,36 @@ export function PlatformProductsConsole({
 }) {
   const router = useRouter();
   const [products, setProducts] = useState(catalog.products);
+  const [settings, setSettings] = useState(catalog.settings);
+  const [settingsDraft, setSettingsDraft] = useState<SettingsDraft>(() => buildSettingsDraft(catalog.settings));
   const [draft, setDraft] = useState<ProductDraft>(() => createDraft(null));
   const [attributes, setAttributes] = useState<AttributeDraft[]>([]);
+  const [selectedAttributes, setSelectedAttributes] = useState<Record<string, string[]>>({});
   const [skus, setSkus] = useState<SkuDraft[]>([]);
   const [files, setFiles] = useState<File[]>([]);
   const [editingMedia, setEditingMedia] = useState<SalesCatalogMedia[]>([]);
   const [commissions, setCommissions] = useState(catalog.commissions);
   const [saving, setSaving] = useState(false);
+  const [savingSettings, setSavingSettings] = useState(false);
   const [publishingProductId, setPublishingProductId] = useState<string | null>(null);
   const [commissionLoadingId, setCommissionLoadingId] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [activeTab, setActiveTab] = useState<PlatformProductAdminTab>("products");
   const metrics = useMemo(() => buildMetrics(products, catalog.imports.length, commissions), [products, catalog.imports.length, commissions]);
+  const categoryRows = useMemo(() => getCategoryRows(settingsDraft.categoriesText), [settingsDraft.categoriesText]);
+  const currentBusinessTemplate = salesCatalogBusinessTemplates.find((template) => template.value === settingsDraft.businessType) ?? salesCatalogBusinessTemplates[0];
+  const categoryPresetOptions = currentBusinessTemplate.categories.filter((categoryName) => (
+    !parseLines(settingsDraft.categoriesText).some((current) => current.toLowerCase() === categoryName.toLowerCase())
+  ));
+  const attributePresetOptions = buildAttributePresetOptions(settingsDraft.attributes);
+  const productAttributes = useMemo(
+    () => (settings.configured ? settings.attributes : settingsDraft.attributes).filter((attribute) => attribute.values.length > 0),
+    [settings, settingsDraft.attributes],
+  );
   const categories = useMemo(() => Array.from(new Set([
-    ...salesCatalogBusinessTemplates.flatMap((template) => template.categories),
+    ...(settings.configured ? settings.categories : parseLines(settingsDraft.categoriesText)),
     ...products.map((product) => product.category).filter((item): item is string => Boolean(item)),
-  ])).sort((left, right) => left.localeCompare(right)), [products]);
+  ])).sort((left, right) => left.localeCompare(right)), [products, settings, settingsDraft.categoriesText]);
 
   async function saveProduct(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -222,7 +248,7 @@ export function PlatformProductsConsole({
 
   function buildFormData() {
     return buildProductFormData({
-      attributes,
+      attributes: getCurrentItemAttributes(),
       draft,
       files,
       keepMediaIds: editingMedia.map((media) => media.id),
@@ -230,9 +256,61 @@ export function PlatformProductsConsole({
     });
   }
 
+  function getCurrentItemAttributes() {
+    const configuredAttributes = buildSelectedItemAttributes(productAttributes, selectedAttributes);
+
+    if (productAttributes.length > 0) {
+      return configuredAttributes;
+    }
+
+    return attributesToPayload(attributes);
+  }
+
+  async function saveSettings() {
+    setSavingSettings(true);
+    setNotice(null);
+
+    try {
+      const categoriesPayload = parseLines(settingsDraft.categoriesText);
+      const response = await fetch("/api/admin/platform-products", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "save_catalog_settings",
+          businessType: settingsDraft.businessType,
+          categories: categoriesPayload,
+          attributes: settingsDraft.attributes.map((attribute) => ({
+            id: attribute.id,
+            name: attribute.name,
+            values: attribute.values,
+            required: attribute.required,
+          })),
+          trackInventory: settingsDraft.trackInventory,
+          variationMedia: settingsDraft.variationMedia,
+        }),
+      });
+      const data = (await response.json().catch(() => null)) as { settings?: PlatformProductSettings; error?: string } | null;
+
+      if (!response.ok || !data?.settings) {
+        throw new Error(data?.error ?? "Nao foi possivel salvar a configuracao do catalogo ConnectyHub.");
+      }
+
+      setSettings(data.settings);
+      setSettingsDraft(buildSettingsDraft(data.settings));
+      setNotice({ tone: "success", message: "Configuracao global do catalogo salva. Novos produtos passam a usar essas categorias e variacoes." });
+      setActiveTab("products");
+      router.refresh();
+    } catch (error) {
+      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Falha ao salvar configuracao." });
+    } finally {
+      setSavingSettings(false);
+    }
+  }
+
   function editProduct(product: PlatformProduct) {
     setDraft(createDraft(product));
     setAttributes(productAttributesToDrafts(product));
+    setSelectedAttributes(Object.fromEntries(product.attributes.map((attribute) => [attribute.id, attribute.values])));
     setSkus(productSkusToDrafts(product));
     setEditingMedia(product.media);
     setFiles([]);
@@ -246,7 +324,7 @@ export function PlatformProductsConsole({
 
     try {
       const formData = buildProductFormData({
-        attributes: productAttributesToDrafts(product),
+        attributes: product.attributes,
         draft: {
           ...createDraft(product),
           status: "active",
@@ -278,25 +356,24 @@ export function PlatformProductsConsole({
   function resetForm() {
     setDraft(createDraft(null));
     setAttributes([]);
+    setSelectedAttributes({});
     setSkus([]);
     setFiles([]);
     setEditingMedia([]);
     setActiveTab("products");
   }
 
-  function applyTemplate(templateValue: string) {
+  function applyBusinessTemplate(templateValue: SalesCatalogBusinessType) {
     const template = salesCatalogBusinessTemplates.find((item) => item.value === templateValue);
     if (!template) return;
 
-    setAttributes(template.attributes.map((attribute) => ({
-      id: attribute.id,
-      name: attribute.name,
-      valuesText: attribute.values.join("\n"),
-    })));
-    setDraft((current) => ({
+    setSettingsDraft((current) => ({
       ...current,
-      category: current.category || template.categories[0] || "",
-      fulfillmentMode: template.value === "services" ? "service" : template.value === "digital" ? "digital" : "physical",
+      businessType: template.value,
+      categoriesText: template.categories.join("\n"),
+      attributes: cloneAttributes(template.attributes),
+      trackInventory: template.trackInventory,
+      variationMedia: template.variationMedia,
     }));
   }
 
@@ -415,38 +492,91 @@ export function PlatformProductsConsole({
                 title={activeTab === "setup" ? "Configuracao do Catalogo" : draft.productId ? "Editar item" : "Novo item"}
                 eyebrow={activeTab === "setup" ? "base do catalogo" : "catalogo de produtos"}
               >
-                <form className="space-y-4" onSubmit={saveProduct}>
+                <form className="space-y-4" onSubmit={activeTab === "products" ? saveProduct : (event) => event.preventDefault()}>
                   {activeTab === "setup" ? (
                     <>
                       <Block icon={SlidersHorizontal} title="Base do catalogo ConnectyHub">
-                        <div className="grid gap-3 md:grid-cols-3">
-                          <MiniValue label="Origem" value="Produtos CH" />
-                          <MiniValue label="Destino" value="Painel do usuario" />
-                          <MiniValue label="Venda" value="Comissao" />
-                        </div>
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          {salesCatalogBusinessTemplates.map((template) => (
-                            <button key={template.value} type="button" onClick={() => applyTemplate(template.value)} className="rounded-lg border px-3 py-2 font-mono text-[10px] uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10" style={{ borderColor: "var(--ch-border)" }}>
-                              {template.label}
-                            </button>
-                          ))}
+                        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_160px_160px]">
+                          <Field label="Tipo de venda">
+                            <select value={settingsDraft.businessType} onChange={(event) => applyBusinessTemplate(event.target.value as SalesCatalogBusinessType)} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" style={inputStyle}>
+                              {salesCatalogBusinessTemplates.map((template) => (
+                                <option key={template.value} value={template.value}>{template.label}</option>
+                              ))}
+                            </select>
+                          </Field>
+                          <label className="mt-[18px] flex h-10 items-center justify-between rounded-xl px-3 text-[12px]" style={inputStyle}>
+                            Estoque por variacao
+                            <input checked={settingsDraft.trackInventory} type="checkbox" onChange={(event) => setSettingsDraft((current) => ({ ...current, trackInventory: event.target.checked }))} />
+                          </label>
+                          <label className="mt-[18px] flex h-10 items-center justify-between rounded-xl px-3 text-[12px]" style={inputStyle}>
+                            Midia por variacao
+                            <input checked={settingsDraft.variationMedia} type="checkbox" onChange={(event) => setSettingsDraft((current) => ({ ...current, variationMedia: event.target.checked }))} />
+                          </label>
                         </div>
                       </Block>
 
-                      <Block icon={Tags} title="Categorias usadas">
-                        {categories.length > 0 ? (
-                          <div className="flex flex-wrap gap-2">
-                            {categories.slice(0, 28).map((category) => (
-                              <span key={category} className="rounded-lg border px-3 py-2 text-[11px] text-slate-300" style={{ borderColor: "var(--ch-border)" }}>
-                                {category}
-                              </span>
+                      <Block icon={Tags} title="Categorias">
+                        <div className="mb-3 flex justify-end">
+                          <button type="button" onClick={() => addCategoryRow()} className="inline-flex h-9 items-center gap-2 rounded-xl border px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-cyan-100" style={{ borderColor: "var(--ch-border)" }}>
+                            <Plus className="h-3.5 w-3.5" />
+                            Nova categoria
+                          </button>
+                        </div>
+                        <div className="grid gap-2">
+                          {categoryRows.map((categoryName, index) => (
+                            <div key={index} className="grid grid-cols-[minmax(0,1fr)_40px] gap-2">
+                              <input value={categoryName} onChange={(event) => updateCategoryRow(index, event.target.value)} className="h-10 min-w-0 rounded-xl px-3 text-[13px] outline-none" placeholder="Nome da categoria" style={inputStyle} />
+                              <button type="button" onClick={() => removeCategoryRow(index)} className="grid h-10 place-items-center rounded-xl border text-slate-400 transition hover:bg-rose-400/10 hover:text-rose-100" style={{ borderColor: "var(--ch-border)" }}>
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                        {categoryPresetOptions.length > 0 ? (
+                          <select value="" onChange={(event) => { if (event.target.value) addCategoryRow(event.target.value); }} className="mt-3 h-10 w-full rounded-xl px-3 text-[13px] outline-none" style={inputStyle}>
+                            <option value="">Adicionar categoria pronta</option>
+                            {categoryPresetOptions.map((categoryName) => (
+                              <option key={categoryName} value={categoryName}>{categoryName}</option>
                             ))}
-                          </div>
-                        ) : (
-                          <p className="rounded-xl border border-dashed px-3 py-4 text-center text-[12px] text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
-                            As categorias aparecem conforme os produtos forem cadastrados.
-                          </p>
-                        )}
+                          </select>
+                        ) : null}
+                      </Block>
+
+                      <Block icon={SlidersHorizontal} title="Variacoes do catalogo">
+                        <div className="mb-3 flex flex-wrap justify-end gap-2">
+                          {attributePresetOptions.length > 0 ? (
+                            <select value="" onChange={(event) => {
+                              const preset = attributePresetOptions.find((attribute) => attribute.id === event.target.value);
+                              if (preset) addAttributePreset(preset);
+                            }} className="h-9 rounded-xl px-3 text-[12px] outline-none" style={inputStyle}>
+                              <option value="">Adicionar variacao pronta</option>
+                              {attributePresetOptions.map((attribute) => (
+                                <option key={attribute.id} value={attribute.id}>{attribute.name}</option>
+                              ))}
+                            </select>
+                          ) : null}
+                          <button type="button" onClick={addSettingsAttribute} className="inline-flex h-9 items-center gap-2 rounded-xl border px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-cyan-100" style={{ borderColor: "var(--ch-border)" }}>
+                            <Plus className="h-3.5 w-3.5" />
+                            Manual
+                          </button>
+                        </div>
+                        <div className="grid gap-3 lg:grid-cols-2">
+                          {settingsDraft.attributes.map((attribute) => (
+                            <div key={attribute.id} className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+                              <div className="flex items-start gap-2">
+                                <input value={attribute.name} onChange={(event) => updateSettingsAttribute(attribute.id, { name: event.target.value.slice(0, 50) })} className="h-10 min-w-0 flex-1 rounded-xl px-3 text-[13px] outline-none" placeholder="Nome da variacao" style={inputStyle} />
+                                <button type="button" onClick={() => removeSettingsAttribute(attribute.id)} className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border text-slate-400 transition hover:bg-rose-400/10 hover:text-rose-100" style={{ borderColor: "var(--ch-border)" }}>
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              </div>
+                              <textarea value={attribute.values.join("\n")} onChange={(event) => updateSettingsAttribute(attribute.id, { values: parseLines(event.target.value).slice(0, 40) })} className="mt-2 min-h-24 w-full resize-y rounded-xl px-3 py-2 text-[13px] leading-5 outline-none" placeholder="Uma opcao por linha" style={inputStyle} />
+                              <label className="mt-2 flex items-center gap-2 text-[11px] text-slate-400">
+                                <input checked={attribute.required} type="checkbox" onChange={(event) => updateSettingsAttribute(attribute.id, { required: event.target.checked })} />
+                                Obrigatoria no atendimento/importacao
+                              </label>
+                            </div>
+                          ))}
+                        </div>
                       </Block>
                     </>
                   ) : null}
@@ -498,10 +628,14 @@ export function PlatformProductsConsole({
                       </div>
 
                       <Field label="Categoria">
-                        <input list="platform-product-categories" value={draft.category} onChange={(event) => patchDraft({ category: event.target.value.slice(0, 80) })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" placeholder="Produto, servico, curso, roupa" style={inputStyle} />
-                        <datalist id="platform-product-categories">
-                          {categories.map((category) => <option key={category} value={category} />)}
-                        </datalist>
+                        {categories.length > 0 ? (
+                          <select value={draft.category} onChange={(event) => patchDraft({ category: event.target.value })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" style={inputStyle}>
+                            <option value="">Selecionar categoria</option>
+                            {categories.map((category) => <option key={category} value={category}>{category}</option>)}
+                          </select>
+                        ) : (
+                          <input value={draft.category} onChange={(event) => patchDraft({ category: event.target.value.slice(0, 80) })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" placeholder="Produto, servico, curso, roupa" style={inputStyle} />
+                        )}
                       </Field>
 
                       <Field label="Descricao curta para vitrine">
@@ -527,28 +661,56 @@ export function PlatformProductsConsole({
                       </Block>
 
                       <Block icon={SlidersHorizontal} title="Variacoes deste item">
-                        <div className="mb-3 flex flex-wrap gap-2">
-                          {salesCatalogBusinessTemplates.map((template) => (
-                            <button key={template.value} type="button" onClick={() => applyTemplate(template.value)} className="rounded-lg border px-3 py-2 font-mono text-[10px] uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10" style={{ borderColor: "var(--ch-border)" }}>
-                              {template.label}
-                            </button>
-                          ))}
-                          <button type="button" onClick={addAttribute} className="rounded-lg border px-3 py-2 font-mono text-[10px] uppercase tracking-wide text-slate-300 transition hover:bg-cyan-400/10" style={{ borderColor: "var(--ch-border)" }}>
-                            + variacao
-                          </button>
-                        </div>
-                        <div className="grid gap-3">
-                          {attributes.map((attribute, index) => (
-                            <div key={`${attribute.id}-${index}`} className="grid gap-2 md:grid-cols-[150px_180px_minmax(0,1fr)_40px]">
-                              <input value={attribute.id} onChange={(event) => updateAttribute(index, { id: slugInput(event.target.value) })} className="h-10 rounded-xl px-3 font-mono text-[12px] outline-none" placeholder="id" style={inputStyle} />
-                              <input value={attribute.name} onChange={(event) => updateAttribute(index, { name: event.target.value.slice(0, 80) })} className="h-10 rounded-xl px-3 text-[13px] outline-none" placeholder="Nome" style={inputStyle} />
-                              <textarea value={attribute.valuesText} onChange={(event) => updateAttribute(index, { valuesText: event.target.value.slice(0, 700) })} className="min-h-10 rounded-xl px-3 py-2 text-[13px] outline-none" placeholder="Um valor por linha" style={inputStyle} />
-                              <button type="button" onClick={() => removeAttribute(index)} className="grid h-10 place-items-center rounded-xl border text-slate-400 transition hover:bg-rose-400/10 hover:text-rose-100" style={{ borderColor: "var(--ch-border)" }}>
-                                <Trash2 className="h-4 w-4" />
+                        {productAttributes.length > 0 ? (
+                          <div className="space-y-3">
+                            {productAttributes.map((attribute) => (
+                              <div key={attribute.id}>
+                                <p className="mb-2 text-[11px] font-semibold text-slate-300">{attribute.name}</p>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {attribute.values.map((value) => {
+                                    const checked = (selectedAttributes[attribute.id] ?? []).includes(value);
+                                    return (
+                                      <button
+                                        key={`${attribute.id}-${value}`}
+                                        type="button"
+                                        onClick={() => toggleSelectedAttribute(attribute, value)}
+                                        className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border px-2.5 text-[11px] transition hover:bg-cyan-400/10 hover:text-cyan-100"
+                                        style={{
+                                          borderColor: checked ? "rgba(34,211,238,0.60)" : "var(--ch-border)",
+                                          background: checked ? "rgba(34,211,238,0.15)" : "transparent",
+                                          color: checked ? "#cffafe" : "#94a3b8",
+                                        }}
+                                      >
+                                        {checked ? <CheckCircle2 className="h-3.5 w-3.5" /> : null}
+                                        {value}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <>
+                            <div className="mb-3 flex flex-wrap gap-2">
+                              <button type="button" onClick={addAttribute} className="rounded-lg border px-3 py-2 font-mono text-[10px] uppercase tracking-wide text-slate-300 transition hover:bg-cyan-400/10" style={{ borderColor: "var(--ch-border)" }}>
+                                + variacao
                               </button>
                             </div>
-                          ))}
-                        </div>
+                            <div className="grid gap-3">
+                              {attributes.map((attribute, index) => (
+                                <div key={`${attribute.id}-${index}`} className="grid gap-2 md:grid-cols-[150px_180px_minmax(0,1fr)_40px]">
+                                  <input value={attribute.id} onChange={(event) => updateAttribute(index, { id: slugInput(event.target.value) })} className="h-10 rounded-xl px-3 font-mono text-[12px] outline-none" placeholder="id" style={inputStyle} />
+                                  <input value={attribute.name} onChange={(event) => updateAttribute(index, { name: event.target.value.slice(0, 80) })} className="h-10 rounded-xl px-3 text-[13px] outline-none" placeholder="Nome" style={inputStyle} />
+                                  <textarea value={attribute.valuesText} onChange={(event) => updateAttribute(index, { valuesText: event.target.value.slice(0, 700) })} className="min-h-10 rounded-xl px-3 py-2 text-[13px] outline-none" placeholder="Um valor por linha" style={inputStyle} />
+                                  <button type="button" onClick={() => removeAttribute(index)} className="grid h-10 place-items-center rounded-xl border text-slate-400 transition hover:bg-rose-400/10 hover:text-rose-100" style={{ borderColor: "var(--ch-border)" }}>
+                                    <Trash2 className="h-4 w-4" />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          </>
+                        )}
                       </Block>
 
                       <Block icon={PackagePlus} title="Estoque deste item">
@@ -731,16 +893,27 @@ export function PlatformProductsConsole({
                     </>
                   ) : null}
 
-                  <div className="flex flex-wrap items-center gap-3">
-                    <button disabled={saving || !draft.name.trim()} type="submit" className="inline-flex h-11 items-center justify-center gap-2 rounded-xl px-5 text-[12px] font-bold transition disabled:opacity-50" style={{ background: "var(--ch-accent)", color: "#061015" }}>
-                      {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                      {saving ? "Salvando" : "Salvar produto"}
-                    </button>
-                    <button type="button" onClick={resetForm} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl px-4 text-[12px] font-semibold transition hover:opacity-90" style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)", color: "var(--ch-text)" }}>
-                      <Plus className="h-4 w-4" />
-                      Novo
-                    </button>
-                  </div>
+                  {activeTab === "setup" ? (
+                    <div className="flex flex-wrap items-center gap-3">
+                      <button disabled={savingSettings} type="button" onClick={saveSettings} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl px-5 text-[12px] font-bold transition disabled:opacity-50" style={{ background: "var(--ch-accent)", color: "#061015" }}>
+                        {savingSettings ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                        {savingSettings ? "Salvando" : "Salvar configuracao"}
+                      </button>
+                    </div>
+                  ) : null}
+
+                  {activeTab === "products" ? (
+                    <div className="flex flex-wrap items-center gap-3">
+                      <button disabled={saving || !draft.name.trim()} type="submit" className="inline-flex h-11 items-center justify-center gap-2 rounded-xl px-5 text-[12px] font-bold transition disabled:opacity-50" style={{ background: "var(--ch-accent)", color: "#061015" }}>
+                        {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                        {saving ? "Salvando" : "Salvar produto"}
+                      </button>
+                      <button type="button" onClick={resetForm} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl px-4 text-[12px] font-semibold transition hover:opacity-90" style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)", color: "var(--ch-text)" }}>
+                        <Plus className="h-4 w-4" />
+                        Novo
+                      </button>
+                    </div>
+                  ) : null}
                 </form>
               </Panel>
 
@@ -784,6 +957,93 @@ export function PlatformProductsConsole({
     setDraft((current) => ({ ...current, ...patch }));
   }
 
+  function updateSettingsAttribute(attributeId: string, patch: Partial<SalesCatalogAttribute>) {
+    setSettingsDraft((current) => ({
+      ...current,
+      attributes: current.attributes.map((attribute) => (
+        attribute.id === attributeId
+          ? {
+              ...attribute,
+              ...patch,
+              id: patch.name ? createAttributeId(patch.name) : attribute.id,
+            }
+          : attribute
+      )),
+    }));
+  }
+
+  function addSettingsAttribute() {
+    setSettingsDraft((current) => {
+      const index = current.attributes.length + 1;
+      return {
+        ...current,
+        attributes: [
+          ...current.attributes,
+          { id: `atributo_${index}`, name: `Variacao ${index}`, values: ["Opcao 1"], required: false },
+        ],
+      };
+    });
+  }
+
+  function removeSettingsAttribute(attributeId: string) {
+    setSettingsDraft((current) => ({
+      ...current,
+      attributes: current.attributes.filter((attribute) => attribute.id !== attributeId),
+    }));
+  }
+
+  function setCategoryRows(rows: string[]) {
+    setSettingsDraft((current) => ({
+      ...current,
+      categoriesText: rows.map((row) => row.replace(/\s+/g, " ").slice(0, 80)).join("\n").slice(0, 1400),
+    }));
+  }
+
+  function updateCategoryRow(index: number, value: string) {
+    const rows = [...categoryRows];
+    rows[index] = value;
+    setCategoryRows(rows);
+  }
+
+  function addCategoryRow(value = "") {
+    const nextValue = value || `Categoria ${categoryRows.length + 1}`;
+    setCategoryRows([...categoryRows, nextValue]);
+  }
+
+  function removeCategoryRow(index: number) {
+    const rows = categoryRows.filter((_, rowIndex) => rowIndex !== index);
+    setCategoryRows(rows.length > 0 ? rows : [""]);
+  }
+
+  function addAttributePreset(attribute: SalesCatalogAttribute) {
+    setSettingsDraft((current) => ({
+      ...current,
+      attributes: [
+        ...current.attributes,
+        {
+          ...attribute,
+          id: createUniqueAttributeId(attribute.name, current.attributes),
+          values: [...attribute.values],
+        },
+      ],
+    }));
+  }
+
+  function toggleSelectedAttribute(attribute: SalesCatalogAttribute, value: string) {
+    setSelectedAttributes((current) => {
+      const currentValues = current[attribute.id] ?? [];
+      const exists = currentValues.includes(value);
+      const nextValues = exists
+        ? currentValues.filter((item) => item !== value)
+        : [...currentValues, value];
+
+      return {
+        ...current,
+        [attribute.id]: nextValues,
+      };
+    });
+  }
+
   function addAttribute() {
     setAttributes((current) => [...current, { id: "", name: "", valuesText: "" }]);
   }
@@ -800,7 +1060,7 @@ export function PlatformProductsConsole({
     setSkus((current) => [...current, {
       skuCode: "",
       title: "",
-      attributesText: "",
+      attributesText: formatItemAttributes(getCurrentItemAttributes()),
       price: "",
       salePrice: "",
       stockStatus: "in_stock",
@@ -1027,6 +1287,126 @@ function MediaIcon({ media }: { media: SalesCatalogMedia }) {
   return <FileText className="h-3 w-3" />;
 }
 
+function buildSettingsDraft(settings: PlatformProductSettings): SettingsDraft {
+  const fallback = salesCatalogBusinessTemplates.find((template) => template.value === settings.businessType)
+    ?? salesCatalogBusinessTemplates.find((template) => template.value === "fashion")
+    ?? salesCatalogBusinessTemplates[0];
+
+  return {
+    businessType: settings.businessType ?? fallback.value,
+    categoriesText: (settings.categories.length ? settings.categories : fallback.categories).join("\n"),
+    attributes: cloneAttributes(settings.attributes.length ? settings.attributes : fallback.attributes),
+    trackInventory: settings.trackInventory ?? fallback.trackInventory,
+    variationMedia: settings.variationMedia ?? fallback.variationMedia,
+  };
+}
+
+function buildAttributePresetOptions(currentAttributes: SalesCatalogAttribute[]) {
+  const usedNames = new Set(currentAttributes.map((attribute) => attribute.name.trim().toLowerCase()));
+  const seen = new Set<string>();
+  const output: SalesCatalogAttribute[] = [];
+
+  for (const template of salesCatalogBusinessTemplates) {
+    for (const attribute of template.attributes) {
+      const key = attribute.name.trim().toLowerCase();
+      if (usedNames.has(key) || seen.has(key)) continue;
+
+      seen.add(key);
+      output.push({
+        ...attribute,
+        id: `${template.value}_${attribute.id}`,
+        values: [...attribute.values],
+      });
+    }
+  }
+
+  return output;
+}
+
+function cloneAttributes(attributes: SalesCatalogAttribute[]) {
+  return attributes.map((attribute) => ({
+    ...attribute,
+    values: [...attribute.values],
+  }));
+}
+
+function getCategoryRows(value: string) {
+  const rows = value.split("\n").map((row) => row.replace(/\s+/g, " ").trim());
+  return rows.length > 0 ? rows : [""];
+}
+
+function parseLines(value: string) {
+  return sanitizeList(value.split(/[\n,;]/g));
+}
+
+function sanitizeList(values: string[]) {
+  const seen = new Set<string>();
+  const output: string[] = [];
+
+  for (const value of values) {
+    const normalized = value.replace(/\s+/g, " ").trim().slice(0, 80);
+    if (!normalized) continue;
+
+    const key = normalized.toLowerCase();
+    if (seen.has(key)) continue;
+
+    seen.add(key);
+    output.push(normalized);
+  }
+
+  return output;
+}
+
+function buildSelectedItemAttributes(
+  attributes: SalesCatalogAttribute[],
+  selected: Record<string, string[]>,
+): SalesCatalogItemAttribute[] {
+  return attributes
+    .map((attribute): SalesCatalogItemAttribute | null => {
+      const values = sanitizeList(selected[attribute.id] ?? []);
+      if (values.length === 0) return null;
+
+      return {
+        id: attribute.id,
+        name: attribute.name,
+        values,
+      };
+    })
+    .filter((item): item is SalesCatalogItemAttribute => Boolean(item));
+}
+
+function formatItemAttributes(attributes: SalesCatalogItemAttribute[]) {
+  return attributes
+    .filter((attribute) => attribute.values.length > 0)
+    .map((attribute) => `${attribute.name}: ${attribute.values.join(", ")}`)
+    .join("; ");
+}
+
+function createAttributeId(value: string) {
+  return value
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 40) || "atributo";
+}
+
+function createUniqueAttributeId(value: string, attributes: SalesCatalogAttribute[]) {
+  const base = createAttributeId(value);
+  const existing = new Set(attributes.map((attribute) => attribute.id));
+
+  if (!existing.has(base)) return base;
+
+  let index = 2;
+  while (existing.has(`${base}_${index}`)) {
+    index += 1;
+  }
+
+  return `${base}_${index}`;
+}
+
 function createDraft(product: PlatformProduct | null): ProductDraft {
   if (!product) return { ...emptyDraft };
 
@@ -1106,14 +1486,14 @@ function buildProductFormData({
   keepMediaIds,
   skus,
 }: {
-  attributes: AttributeDraft[];
+  attributes: SalesCatalogItemAttribute[];
   draft: ProductDraft;
   files?: File[];
   keepMediaIds: string[];
   skus: SkuDraft[];
 }) {
   const formData = new FormData();
-  const attributesPayload = attributesToPayload(attributes);
+  const attributesPayload = attributes;
   const skusPayload = skusToPayload(skus, draft, attributesPayload);
 
   for (const [key, value] of Object.entries(draft)) {
@@ -1131,7 +1511,7 @@ function buildProductFormData({
   return formData;
 }
 
-function attributesToPayload(attributes: AttributeDraft[]) {
+function attributesToPayload(attributes: AttributeDraft[]): SalesCatalogItemAttribute[] {
   return attributes
     .map((attribute) => ({
       id: slugInput(attribute.id || attribute.name),
@@ -1141,7 +1521,7 @@ function attributesToPayload(attributes: AttributeDraft[]) {
     .filter((attribute) => attribute.id && attribute.name && attribute.values.length > 0);
 }
 
-function skusToPayload(skus: SkuDraft[], draft: ProductDraft, attributes: ReturnType<typeof attributesToPayload>) {
+function skusToPayload(skus: SkuDraft[], draft: ProductDraft, attributes: SalesCatalogItemAttribute[]) {
   return skus
     .map((sku) => ({
       skuCode: cleanCode(sku.skuCode),
@@ -1165,7 +1545,7 @@ function skusToPayload(skus: SkuDraft[], draft: ProductDraft, attributes: Return
     .filter((sku) => sku.skuCode);
 }
 
-function parseSkuAttributes(value: string, fallback: ReturnType<typeof attributesToPayload>) {
+function parseSkuAttributes(value: string, fallback: SalesCatalogItemAttribute[]) {
   if (!value.trim()) return fallback;
 
   return value
