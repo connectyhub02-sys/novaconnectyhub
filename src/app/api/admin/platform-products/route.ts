@@ -591,15 +591,36 @@ function normalizeFulfillmentMode(value: string | null): SalesCatalogFulfillment
 function validateFiles(files: File[]) {
   if (files.length > maxProductFiles) return `Envie no maximo ${maxProductFiles} arquivos.`;
   for (const file of files) {
-    if (file.size > maxProductFileBytes) return `O arquivo ${file.name} precisa ter ate 25 MB.`;
+    if (file.size <= 0 || file.size > maxProductFileBytes) return `O arquivo ${file.name} precisa ter ate 25 MB.`;
+
+    const contentType = normalizeContentType(file);
+    if (!isAllowedProductFile(contentType, file.name)) {
+      return "Use imagens, videos, PDF, DOC, DOCX ou arquivos de texto.";
+    }
   }
   return null;
+}
+
+function isAllowedProductFile(contentType: string, fileName: string) {
+  if (contentType.startsWith("image/") || contentType.startsWith("video/") || contentType.startsWith("text/")) return true;
+
+  return new Set([
+    "application/json",
+    "application/msword",
+    "application/pdf",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ]).has(contentType) || /\.(pdf|doc|docx|txt|md|csv)$/i.test(fileName);
 }
 
 function normalizeContentType(file: File) {
   if (file.type) return file.type;
   const lower = file.name.toLowerCase();
   if (lower.endsWith(".pdf")) return "application/pdf";
+  if (lower.endsWith(".doc")) return "application/msword";
+  if (lower.endsWith(".docx")) return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  if (lower.endsWith(".md")) return "text/markdown";
+  if (lower.endsWith(".csv")) return "text/csv";
+  if (lower.endsWith(".json")) return "application/json";
   if (lower.endsWith(".mp4")) return "video/mp4";
   if (lower.endsWith(".webm")) return "video/webm";
   if (lower.endsWith(".png")) return "image/png";
@@ -824,7 +845,12 @@ function parseJson(value: string) {
 }
 
 function isFormFile(value: FormDataEntryValue): value is File {
-  return typeof value === "object" && "arrayBuffer" in value && "size" in value;
+  return typeof value === "object"
+    && "arrayBuffer" in value
+    && "size" in value
+    && "name" in value
+    && typeof value.name === "string"
+    && value.name.trim().length > 0;
 }
 
 function normalizeUuid(value: string | null) {

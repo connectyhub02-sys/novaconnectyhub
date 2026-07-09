@@ -379,6 +379,7 @@ export function PlatformProductsConsole({
 
   function handleFiles(event: ChangeEvent<HTMLInputElement>) {
     setFiles(Array.from(event.target.files ?? []).slice(0, 12));
+    event.target.value = "";
   }
 
   function setUserPanelVisibility(visible: boolean) {
@@ -778,8 +779,24 @@ export function PlatformProductsConsole({
                         <label className="flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed px-3 text-center text-[12px] text-slate-400 transition hover:border-cyan-300/60 hover:text-cyan-200" style={{ borderColor: "var(--ch-border)" }}>
                           <Upload className="h-4 w-4" />
                           {files.length > 0 ? `${files.length} arquivo(s)` : "Selecionar arquivos"}
-                          <input multiple accept="image/*,video/*,.pdf,.doc,.docx,.txt,.md,.csv" className="sr-only" type="file" onChange={handleFiles} />
+                          <input multiple accept="image/*,video/*,.pdf,.doc,.docx,.txt,.md,.csv,.json,application/json" className="sr-only" type="file" onChange={handleFiles} />
                         </label>
+                        {files.length > 0 ? (
+                          <div className="mt-3 grid gap-2">
+                            {files.map((file, index) => (
+                              <div key={`${file.name}-${file.size}-${index}`} className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-[11px]" style={{ borderColor: "var(--ch-border)" }}>
+                                <span className="flex min-w-0 items-center gap-2 text-slate-300">
+                                  <FileIcon contentType={file.type} fileName={file.name} />
+                                  <span className="truncate">{file.name}</span>
+                                </span>
+                                <span className="ml-auto shrink-0 font-mono text-slate-500">{formatBytes(file.size)}</span>
+                                <button type="button" onClick={() => setFiles((current) => current.filter((_, fileIndex) => fileIndex !== index))} className="grid h-7 w-7 shrink-0 place-items-center rounded-md border text-slate-400 hover:bg-rose-400/10 hover:text-rose-100" style={{ borderColor: "var(--ch-border)" }}>
+                                  <X className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
                         {editingMedia.length > 0 ? (
                           <div className="mt-3 grid gap-2">
                             {editingMedia.map((media) => (
@@ -1285,6 +1302,20 @@ function MediaIcon({ media }: { media: SalesCatalogMedia }) {
   if (media.kind === "image") return <ImageIcon className="h-3 w-3" />;
   if (media.kind === "video") return <Video className="h-3 w-3" />;
   return <FileText className="h-3 w-3" />;
+}
+
+function FileIcon({ contentType, fileName }: { contentType: string; fileName: string }) {
+  const lowerType = contentType.toLowerCase();
+  const lowerName = fileName.toLowerCase();
+
+  if (lowerType.startsWith("image/") || /\.(png|jpe?g|webp|gif)$/i.test(lowerName)) return <ImageIcon className="h-3 w-3" />;
+  if (lowerType.startsWith("video/") || /\.(mp4|webm|mov)$/i.test(lowerName)) return <Video className="h-3 w-3" />;
+  return <FileText className="h-3 w-3" />;
+}
+
+function formatBytes(value: number) {
+  if (value < 1024 * 1024) return `${Math.max(1, Math.round(value / 1024))} KB`;
+  return `${(value / 1024 / 1024).toFixed(1)} MB`;
 }
 
 function buildSettingsDraft(settings: PlatformProductSettings): SettingsDraft {

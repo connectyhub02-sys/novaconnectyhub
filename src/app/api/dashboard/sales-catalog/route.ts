@@ -2720,7 +2720,7 @@ function sanitizeFileName(value: string) {
 }
 
 function isFormFile(value: FormDataEntryValue): value is File {
-  return value instanceof File && value.size > 0;
+  return value instanceof File && value.name.trim().length > 0;
 }
 
 function readFormString(value: unknown) {

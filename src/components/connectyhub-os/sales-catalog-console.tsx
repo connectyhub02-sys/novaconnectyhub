@@ -1261,6 +1261,7 @@ export function SalesCatalogConsole({
 
   function handleFiles(event: ChangeEvent<HTMLInputElement>) {
     setFiles(Array.from(event.target.files ?? []).slice(0, 8));
+    event.target.value = "";
   }
 
   function resetForm() {
@@ -3016,7 +3017,7 @@ export function SalesCatalogConsole({
                   {files.length > 0 ? `${files.length} arquivo(s)` : "Selecionar arquivos"}
                   <input
                     multiple
-                    accept="image/*,video/*,.pdf,.doc,.docx,.txt,.md,.csv"
+                    accept="image/*,video/*,.pdf,.doc,.docx,.txt,.md,.csv,.json,application/json"
                     className="sr-only"
                     type="file"
                     onChange={handleFiles}
@@ -3062,10 +3063,22 @@ export function SalesCatalogConsole({
 
             {files.length > 0 ? (
               <div className="grid gap-2">
-                {files.map((file) => (
-                  <div key={`${file.name}-${file.size}`} className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-[11px]" style={{ borderColor: "var(--ch-border)" }}>
-                    <span className="min-w-0 truncate text-slate-300">{file.name}</span>
-                    <span className="shrink-0 font-mono text-slate-500">{formatBytes(file.size)}</span>
+                {files.map((file, index) => (
+                  <div key={`${file.name}-${file.size}-${index}`} className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-[11px]" style={{ borderColor: "var(--ch-border)" }}>
+                    <span className="flex min-w-0 items-center gap-2 text-slate-300">
+                      <FileIcon contentType={file.type} fileName={file.name} />
+                      <span className="truncate">{file.name}</span>
+                    </span>
+                    <span className="ml-auto shrink-0 font-mono text-slate-500">{formatBytes(file.size)}</span>
+                    <button
+                      type="button"
+                      onClick={() => setFiles((current) => current.filter((_, fileIndex) => fileIndex !== index))}
+                      className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border text-slate-400 transition hover:bg-rose-400/10 hover:text-rose-100"
+                      style={{ borderColor: "var(--ch-border)" }}
+                      title="Remover arquivo"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
                   </div>
                 ))}
               </div>
@@ -3725,6 +3738,15 @@ function FieldLabel({ children }: { children: string }) {
 function MediaIcon({ media }: { media: SalesCatalogMedia }) {
   if (media.kind === "image") return <ImageIcon className="h-3 w-3" />;
   if (media.kind === "video") return <Video className="h-3 w-3" />;
+  return <FileText className="h-3 w-3" />;
+}
+
+function FileIcon({ contentType, fileName }: { contentType: string; fileName: string }) {
+  const lowerType = contentType.toLowerCase();
+  const lowerName = fileName.toLowerCase();
+
+  if (lowerType.startsWith("image/") || /\.(png|jpe?g|webp|gif)$/i.test(lowerName)) return <ImageIcon className="h-3 w-3" />;
+  if (lowerType.startsWith("video/") || /\.(mp4|webm|mov)$/i.test(lowerName)) return <Video className="h-3 w-3" />;
   return <FileText className="h-3 w-3" />;
 }
 
