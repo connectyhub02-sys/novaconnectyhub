@@ -3,7 +3,7 @@
   "info": {
     "title": "ConnectyHub WhatsApp API",
     "version": "1.0.0",
-    "description": "API publica da ConnectyHub para instancias WhatsApp, envio de mensagens, consultas, webhooks assinados e recursos avancados controlados."
+    "description": "API publica da ConnectyHub para instancias WhatsApp, envio de mensagens, consultas, webhooks assinados e recursos avancados controlados.\n\n## Cobertura Uazapi\n\nA ConnectyHub usa a documentacao Uazapi 2.1.1 como uma das bases do gateway WhatsApp, mas entrega uma fronteira propria de produto: autenticacao por chave ConnectyHub, isolamento por cliente, auditoria de uso, webhooks por tenant e sanitizacao de dados sensiveis.\n\nCobertura atual: 132 paths Uazapi analisados, 125 paths expostos em /provider/*, 17 paths nativos ConnectyHub e 7 paths bloqueados por seguranca/administracao.\n\nUse as rotas nativas sempre que existirem. Use /provider/* para recursos avancados ainda nao promovidos para contrato ConnectyHub estavel. Rotas de admintoken, webhook global e controle de processo do provedor nao sao expostas a clientes."
   },
   "servers": [
     {
@@ -23604,5 +23604,155 @@
         "operationId": "providerPostBusinessCatalogHide"
       }
     }
+  },
+  "x-connectyhub-uazapi-coverage": {
+    "source": {
+      "title": "uazapiGO - WhatsApp API",
+      "version": "2.1.1"
+    },
+    "counts": {
+      "sourcePaths": 132,
+      "nativePaths": 17,
+      "providerProxyPaths": 125,
+      "intentionallyBlockedPaths": 7,
+      "unexpectedMissingPaths": 0,
+      "providerMethodGaps": 0
+    },
+    "nativePromotionRoadmap": [
+      {
+        "group": "message-actions",
+        "priority": "P1",
+        "sourcePaths": [
+          "/message/history-sync",
+          "/message/download",
+          "/message/markread",
+          "/message/react",
+          "/message/delete",
+          "/message/edit",
+          "/message/pin"
+        ],
+        "reason": "High-value customer workflows currently require provider proxy payloads instead of stable ConnectyHub contracts."
+      },
+      {
+        "group": "chat-operations",
+        "priority": "P1",
+        "sourcePaths": [
+          "/chat/read",
+          "/chat/archive",
+          "/chat/mute",
+          "/chat/pin",
+          "/chat/block",
+          "/chat/labels",
+          "/chat/notes",
+          "/chat/notes/edit"
+        ],
+        "reason": "Common inbox and CRM operations should be first-class ConnectyHub resources."
+      },
+      {
+        "group": "groups",
+        "priority": "P2",
+        "sourcePaths": [
+          "/group/create",
+          "/group/list",
+          "/group/info",
+          "/group/updateParticipants",
+          "/group/updateDescription",
+          "/group/updateImage"
+        ],
+        "reason": "Group support unlocks communities and team operations while preserving tenant permissions."
+      },
+      {
+        "group": "sender-campaigns",
+        "priority": "P2",
+        "sourcePaths": [
+          "/sender/simple",
+          "/sender/advanced",
+          "/sender/listfolders",
+          "/sender/listmessages",
+          "/sender/cleardone"
+        ],
+        "reason": "Campaign execution needs ConnectyHub billing, rate limits, audit logs and safer UX."
+      },
+      {
+        "group": "newsletters",
+        "priority": "P3",
+        "sourcePaths": [
+          "/newsletter/list",
+          "/newsletter/messages",
+          "/newsletter/updates",
+          "/newsletter/search",
+          "/newsletter/follow",
+          "/newsletter/mute"
+        ],
+        "reason": "Channels are valuable after core inbox and campaign operations are stable."
+      },
+      {
+        "group": "business-catalog",
+        "priority": "P3",
+        "sourcePaths": [
+          "/business/get/profile",
+          "/business/update/profile",
+          "/business/catalog/list",
+          "/business/catalog/info",
+          "/business/catalog/show",
+          "/business/catalog/hide"
+        ],
+        "reason": "Catalog APIs should be aligned with ConnectyHub product/catalog data before broad exposure."
+      }
+    ],
+    "intentionallyBlockedPaths": [
+      {
+        "path": "/instance/create",
+        "methods": [
+          "POST"
+        ],
+        "reason": "Use POST /instances. Raw provider creation requires admintoken and bypasses ConnectyHub ownership, billing and webhook setup."
+      },
+      {
+        "path": "/instance/all",
+        "methods": [
+          "GET"
+        ],
+        "reason": "Use GET /instances or admin-only internal inventory. Raw provider listing exposes instances across tenants."
+      },
+      {
+        "path": "/instance/updateAdminFields",
+        "methods": [
+          "POST"
+        ],
+        "reason": "Provider admin metadata is platform-owned and must not be writable by customer API keys."
+      },
+      {
+        "path": "/globalwebhook",
+        "methods": [
+          "GET",
+          "POST"
+        ],
+        "reason": "ConnectyHub exposes tenant-scoped /webhooks instead of provider-global webhooks."
+      },
+      {
+        "path": "/globalwebhook/errors",
+        "methods": [
+          "GET"
+        ],
+        "reason": "Use /webhooks/deliveries for tenant-scoped delivery diagnostics."
+      },
+      {
+        "path": "/admin/restart",
+        "methods": [
+          "POST"
+        ],
+        "reason": "Provider process control is platform-only."
+      },
+      {
+        "path": "/admin/token/rotate",
+        "methods": [
+          "POST"
+        ],
+        "reason": "Provider admin-token rotation is platform-only."
+      }
+    ],
+    "unexpectedMissingPaths": [],
+    "providerMethodGaps": []
   }
 }

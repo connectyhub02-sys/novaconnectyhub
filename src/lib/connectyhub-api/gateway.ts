@@ -5286,7 +5286,7 @@ function normalizeIdempotencyKey(value: string | null | undefined) {
 
 function isProxyPathAllowed(path: string) {
   const normalized = path.toLowerCase();
-  const blockedPrefixes = ["/admin", "/globalwebhook", "/instance/all", "/instance/create", "/instance/delete"];
+  const blockedPrefixes = ["/admin", "/globalwebhook", "/instance/all", "/instance/create", "/instance/delete", "/instance/updateadminfields"];
   return normalized.startsWith("/") && !normalized.includes("..") && !blockedPrefixes.some((prefix) => normalized.startsWith(prefix));
 }
 

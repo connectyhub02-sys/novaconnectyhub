@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "api:docs": "node scripts/generate-connectyhub-openapi.mjs",
+    "api:audit": "node scripts/audit-uazapi-coverage.mjs --write-doc"
   },
   "dependencies": {
     "@elevenlabs/elevenlabs-js": "^2.51.0",

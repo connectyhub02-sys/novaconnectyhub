@@ -31,6 +31,55 @@ const CONNECTYHUB_WEBHOOK_EVENTS = [
   "sender",
 ];
 
+const INTENTIONALLY_BLOCKED_PROVIDER_PATHS = {
+  "/instance/create": "Use POST /instances. Raw provider creation requires admintoken and bypasses ConnectyHub ownership, billing and webhook setup.",
+  "/instance/all": "Use GET /instances or admin-only internal inventory. Raw provider listing exposes instances across tenants.",
+  "/instance/updateAdminFields": "Provider admin metadata is platform-owned and must not be writable by customer API keys.",
+  "/globalwebhook": "ConnectyHub exposes tenant-scoped /webhooks instead of provider-global webhooks.",
+  "/globalwebhook/errors": "Use /webhooks/deliveries for tenant-scoped delivery diagnostics.",
+  "/admin/restart": "Provider process control is platform-only.",
+  "/admin/token/rotate": "Provider admin-token rotation is platform-only.",
+};
+
+const NATIVE_PROMOTION_ROADMAP = [
+  {
+    group: "message-actions",
+    priority: "P1",
+    sourcePaths: ["/message/history-sync", "/message/download", "/message/markread", "/message/react", "/message/delete", "/message/edit", "/message/pin"],
+    reason: "High-value customer workflows currently require provider proxy payloads instead of stable ConnectyHub contracts.",
+  },
+  {
+    group: "chat-operations",
+    priority: "P1",
+    sourcePaths: ["/chat/read", "/chat/archive", "/chat/mute", "/chat/pin", "/chat/block", "/chat/labels", "/chat/notes", "/chat/notes/edit"],
+    reason: "Common inbox and CRM operations should be first-class ConnectyHub resources.",
+  },
+  {
+    group: "groups",
+    priority: "P2",
+    sourcePaths: ["/group/create", "/group/list", "/group/info", "/group/updateParticipants", "/group/updateDescription", "/group/updateImage"],
+    reason: "Group support unlocks communities and team operations while preserving tenant permissions.",
+  },
+  {
+    group: "sender-campaigns",
+    priority: "P2",
+    sourcePaths: ["/sender/simple", "/sender/advanced", "/sender/listfolders", "/sender/listmessages", "/sender/cleardone"],
+    reason: "Campaign execution needs ConnectyHub billing, rate limits, audit logs and safer UX.",
+  },
+  {
+    group: "newsletters",
+    priority: "P3",
+    sourcePaths: ["/newsletter/list", "/newsletter/messages", "/newsletter/updates", "/newsletter/search", "/newsletter/follow", "/newsletter/mute"],
+    reason: "Channels are valuable after core inbox and campaign operations are stable.",
+  },
+  {
+    group: "business-catalog",
+    priority: "P3",
+    sourcePaths: ["/business/get/profile", "/business/update/profile", "/business/catalog/list", "/business/catalog/info", "/business/catalog/show", "/business/catalog/hide"],
+    reason: "Catalog APIs should be aligned with ConnectyHub product/catalog data before broad exposure.",
+  },
+];
+
 const PASSKEY_PAIRING_GUIDE = [
   "## Contas com chave de acesso/passkey",
   "",
@@ -453,14 +502,14 @@ const nativePaths = {
 const sourceSchemas = sanitizeSchemas(rawSpec.components?.schemas || {});
 const providerPaths = buildProviderPaths(rawSpec.paths || {});
 const tags = buildTags(nativePaths, providerPaths);
+const coverageSummary = buildCoverageSummary(rawSpec.paths || {}, nativePaths, providerPaths);
 
 const publicSpec = {
   openapi: "3.1.0",
   info: {
     title: "ConnectyHub WhatsApp API",
     version: "1.0.0",
-    description:
-      "API publica da ConnectyHub para instancias WhatsApp, envio de mensagens, consultas, webhooks assinados e recursos avancados controlados.",
+    description: buildInfoDescription(coverageSummary),
   },
   servers: [
     {
@@ -609,6 +658,7 @@ const publicSpec = {
     ...nativePaths,
     ...providerPaths,
   },
+  "x-connectyhub-uazapi-coverage": coverageSummary,
 };
 
 fs.mkdirSync(path.dirname(outputPath), { recursive: true });
@@ -630,6 +680,86 @@ const endpointCount = Object.values(publicSpec.paths).reduce((total, item) => {
 console.log(`Generated ${outputPath}`);
 console.log(`Generated ${yamlOutputPath}`);
 console.log(`${endpointCount} public endpoints, ${Object.keys(publicSpec.components.schemas).length} schemas`);
+
+function buildInfoDescription(coverage) {
+  return [
+    "API publica da ConnectyHub para instancias WhatsApp, envio de mensagens, consultas, webhooks assinados e recursos avancados controlados.",
+    "",
+    "## Cobertura Uazapi",
+    "",
+    `A ConnectyHub usa a documentacao Uazapi ${coverage.source.version} como uma das bases do gateway WhatsApp, mas entrega uma fronteira propria de produto: autenticacao por chave ConnectyHub, isolamento por cliente, auditoria de uso, webhooks por tenant e sanitizacao de dados sensiveis.`,
+    "",
+    `Cobertura atual: ${coverage.counts.sourcePaths} paths Uazapi analisados, ${coverage.counts.providerProxyPaths} paths expostos em /provider/*, ${coverage.counts.nativePaths} paths nativos ConnectyHub e ${coverage.counts.intentionallyBlockedPaths} paths bloqueados por seguranca/administracao.`,
+    "",
+    "Use as rotas nativas sempre que existirem. Use /provider/* para recursos avancados ainda nao promovidos para contrato ConnectyHub estavel. Rotas de admintoken, webhook global e controle de processo do provedor nao sao expostas a clientes.",
+  ].join("\n");
+}
+
+function buildCoverageSummary(sourcePaths, nativePathMap, providerPathMap) {
+  const providerSourcePaths = new Set(
+    Object.keys(providerPathMap)
+      .filter((item) => item.startsWith(PROVIDER_PREFIX))
+      .map((item) => item.slice(PROVIDER_PREFIX.length)),
+  );
+  const missingBlocked = [];
+  const missingUnexpected = [];
+  const providerMethodGaps = [];
+
+  for (const [sourcePath, pathItem] of Object.entries(sourcePaths)) {
+    const sourceMethods = collectPathMethods(pathItem);
+    const exposedPath = providerSourcePaths.has(sourcePath);
+
+    if (!exposedPath) {
+      const reason = INTENTIONALLY_BLOCKED_PROVIDER_PATHS[sourcePath];
+      const item = {
+        path: sourcePath,
+        methods: sourceMethods,
+        reason: reason || "Missing from ConnectyHub provider proxy.",
+      };
+
+      if (reason) {
+        missingBlocked.push(item);
+      } else {
+        missingUnexpected.push(item);
+      }
+      continue;
+    }
+
+    const providerMethods = collectPathMethods(providerPathMap[`${PROVIDER_PREFIX}${sourcePath}`] || {});
+    const missingMethods = sourceMethods.filter((method) => !providerMethods.includes(method));
+    if (missingMethods.length) {
+      providerMethodGaps.push({
+        path: sourcePath,
+        missingMethods,
+        sourceMethods,
+        connectyHubMethods: providerMethods,
+      });
+    }
+  }
+
+  return {
+    source: {
+      title: rawSpec.info?.title ?? "Uazapi OpenAPI",
+      version: rawSpec.info?.version ?? "unknown",
+    },
+    counts: {
+      sourcePaths: Object.keys(sourcePaths).length,
+      nativePaths: Object.keys(nativePathMap).length,
+      providerProxyPaths: Object.keys(providerPathMap).length,
+      intentionallyBlockedPaths: missingBlocked.length,
+      unexpectedMissingPaths: missingUnexpected.length,
+      providerMethodGaps: providerMethodGaps.length,
+    },
+    nativePromotionRoadmap: NATIVE_PROMOTION_ROADMAP,
+    intentionallyBlockedPaths: missingBlocked,
+    unexpectedMissingPaths: missingUnexpected,
+    providerMethodGaps,
+  };
+}
+
+function collectPathMethods(pathItem) {
+  return HTTP_METHODS.filter((method) => Boolean(pathItem?.[method])).map((method) => method.toUpperCase());
+}
 
 function buildProviderPaths(paths) {
   const result = {};
