@@ -187,25 +187,25 @@ export function MetricCard({
 
   return (
     <div
-      className="rounded-2xl p-4 sm:p-5"
+      className="min-w-0 rounded-xl p-2 sm:rounded-2xl sm:p-5"
       style={{
-        background: "var(--ch-panel)",
-        border: "1px solid var(--ch-border-strong)",
-        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.045)",
+        background: `linear-gradient(90deg, rgba(${t.fill === "#34d399" ? "52,211,153" : t.fill === "#22d3ee" ? "34,211,238" : t.fill === "#fbbf24" ? "251,191,36" : t.fill === "#fb7185" ? "251,113,133" : t.fill === "#a78bfa" ? "167,139,250" : "148,163,184"},0.10), rgba(255,255,255,0.018)), var(--ch-panel)`,
+        border: `1px solid rgba(${t.fill === "#34d399" ? "52,211,153" : t.fill === "#22d3ee" ? "34,211,238" : t.fill === "#fbbf24" ? "251,191,36" : t.fill === "#fb7185" ? "251,113,133" : t.fill === "#a78bfa" ? "167,139,250" : "148,163,184"},0.34)`,
+        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.045), 0 8px 20px rgba(0,0,0,0.08)",
       }}
     >
-      <div className="flex items-start justify-between gap-3">
-        <p className="font-mono text-[10px] uppercase tracking-widest text-slate-500">{label}</p>
-        <div className={cn("flex h-8 w-8 items-center justify-center rounded-xl", t.bg)}>
+      <div className="flex min-w-0 items-start justify-between gap-1.5 sm:gap-3">
+        <p className="min-w-0 truncate font-mono text-[8px] uppercase tracking-[0.11em] text-slate-500 sm:text-[10px] sm:tracking-widest">{label}</p>
+        <div className={cn("hidden h-8 w-8 shrink-0 items-center justify-center rounded-xl sm:flex", t.bg)}>
           <Icon className={cn("h-4 w-4", t.text)} />
         </div>
       </div>
-      <p className={cn("mt-3 font-mono text-[28px] font-bold leading-none", t.text)}>{value}</p>
-      <MiniSparkline className="mt-4" color={t.fill} data={series} />
-      <div className="mt-3 flex items-center justify-between">
-        <span className="text-[11px] text-slate-500">{detail}</span>
+      <p className={cn("mt-1 truncate font-mono text-[16px] font-bold leading-none sm:mt-3 sm:text-[28px]", t.text)}>{value}</p>
+      <MiniSparkline className="mt-4 hidden sm:block" color={t.fill} data={series} />
+      <div className="mt-1 flex items-center justify-between gap-1 sm:mt-3">
+        <span className="hidden truncate text-[11px] text-slate-500 sm:block">{detail}</span>
         <span className={cn(
-          "flex items-center gap-1 rounded-md px-2 py-0.5 font-mono text-[10px]",
+          "flex min-w-0 items-center gap-1 truncate rounded-md px-1 py-0.5 font-mono text-[8px] sm:px-2 sm:text-[10px]",
           isUp ? "bg-emerald-500/10 text-emerald-600" : isDn ? "bg-rose-500/10 text-rose-500" : "text-slate-500",
         )}>
           {isUp && <TrendingUp className="h-2.5 w-2.5" />}
@@ -231,7 +231,7 @@ export function HeroMetricCard({
 
   return (
     <div
-      className="relative overflow-hidden rounded-2xl p-4 sm:p-5"
+      className="relative overflow-hidden rounded-xl p-3 sm:rounded-2xl sm:p-5"
       style={{
         background: `linear-gradient(135deg, ${colorB} 0%, rgba(13,17,23,0.6) 100%)`,
         border:     `1px solid rgba(${accent === "cyan" ? "34,211,238" : "52,211,153"},0.3)`,
@@ -243,22 +243,22 @@ export function HeroMetricCard({
         style={{ background: color, filter: "blur(32px)" }}
       />
       <div className="relative">
-        <div className="flex items-start justify-between gap-3">
-          <p className="font-mono text-[10px] uppercase tracking-widest text-white/60">{label}</p>
-          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-white/10">
+        <div className="flex min-w-0 items-start justify-between gap-2 sm:gap-3">
+          <p className="min-w-0 truncate font-mono text-[9px] uppercase tracking-[0.14em] text-white/60 sm:text-[10px] sm:tracking-widest">{label}</p>
+          <div className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-white/10 sm:flex">
             <Icon className="h-4 w-4 text-white" />
           </div>
         </div>
-        <p className="mt-3 font-mono text-[32px] font-bold leading-none text-white">{value}</p>
-        <MiniSparkline className="mt-4" color="#ffffff" data={series} opacity={0.5} />
-        <div className="mt-3 flex gap-4">
+        <p className="mt-2 truncate font-mono text-[22px] font-bold leading-none text-white sm:mt-3 sm:text-[32px]">{value}</p>
+        <MiniSparkline className="mt-4 hidden sm:block" color="#ffffff" data={series} opacity={0.5} />
+        <div className="mt-2 grid grid-cols-2 gap-2 sm:mt-3 sm:flex sm:gap-4">
           <div>
-            <p className="font-mono text-[9px] uppercase tracking-wider text-white/50">{sub1Label}</p>
-            <p className="font-mono text-[14px] font-semibold text-white">{sub1Value}</p>
+            <p className="truncate font-mono text-[8px] uppercase tracking-wider text-white/50 sm:text-[9px]">{sub1Label}</p>
+            <p className="truncate font-mono text-[12px] font-semibold text-white sm:text-[14px]">{sub1Value}</p>
           </div>
           <div>
-            <p className="font-mono text-[9px] uppercase tracking-wider text-white/50">{sub2Label}</p>
-            <p className="font-mono text-[14px] font-semibold text-white">{sub2Value}</p>
+            <p className="truncate font-mono text-[8px] uppercase tracking-wider text-white/50 sm:text-[9px]">{sub2Label}</p>
+            <p className="truncate font-mono text-[12px] font-semibold text-white sm:text-[14px]">{sub2Value}</p>
           </div>
         </div>
       </div>
@@ -269,7 +269,7 @@ export function HeroMetricCard({
 // ─── MetricRow ────────────────────────────────────────────────────────────────
 
 export function MetricRow({ children }: { children: ReactNode }) {
-  return <div className="mb-5 grid grid-cols-2 gap-4 md:grid-cols-4">{children}</div>;
+  return <div className="mb-5 grid grid-cols-4 gap-1.5 sm:gap-2 md:gap-4">{children}</div>;
 }
 
 // AreaChartPanel and BarChartPanel live in ./charts.tsx ("use client")
@@ -446,11 +446,11 @@ export function KpiStat({ label, value, tone = "zinc" }: { label: string; value:
   const t = toneMap[tone];
   return (
     <div
-      className="rounded-xl px-3 py-2.5"
-      style={{ background: "var(--ch-panel-2)", border: "1px solid var(--ch-border)" }}
+      className="min-w-0 rounded-xl px-2 py-2 sm:px-3 sm:py-2.5"
+      style={{ background: `linear-gradient(90deg, ${t.fill}18, rgba(255,255,255,0.018)), var(--ch-panel-2)`, border: `1px solid ${t.fill}55` }}
     >
-      <div className="font-mono text-[9px] uppercase tracking-widest text-slate-600">{label}</div>
-      <div className={cn("mt-1 font-mono text-[16px] font-bold", t.text)}>{value}</div>
+      <div className="truncate font-mono text-[8px] uppercase tracking-[0.11em] text-slate-600 sm:text-[9px] sm:tracking-widest">{label}</div>
+      <div className={cn("mt-1 truncate font-mono text-[15px] font-bold leading-none sm:text-[16px]", t.text)}>{value}</div>
     </div>
   );
 }

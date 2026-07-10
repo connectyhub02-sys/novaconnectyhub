@@ -149,7 +149,7 @@ export function BillingPlansConsole({
             </div>
           ) : null}
 
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-4 gap-1.5 sm:gap-2 xl:gap-4">
             <PlanMetric icon={Layers3} label="Planos" value={String(metrics.total)} detail={`${metrics.active} ativos`} />
             <PlanMetric icon={WalletCards} label="Creditos inclusos" value={formatCredits(metrics.includedCredits)} detail="somando planos ativos" />
             <PlanMetric icon={CreditCard} label="Excedente medio" value={formatMoney(metrics.averageOveragePrice)} detail="por credito extra" />
@@ -444,17 +444,17 @@ function PlanMetric({
   detail: string;
 }) {
   return (
-    <div className="rounded-2xl p-5" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}>
-      <div className="flex items-start justify-between gap-3">
-        <p className="font-mono text-[10px] uppercase tracking-widest text-slate-500">{label}</p>
-        <div className="flex h-9 w-9 items-center justify-center rounded-xl" style={{ background: "rgba(6,182,212,0.14)", color: "#22d3ee" }}>
+    <div className="min-w-0 rounded-xl p-2 sm:rounded-2xl sm:p-5" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}>
+      <div className="flex min-w-0 items-start justify-between gap-1.5 sm:gap-3">
+        <p className="min-w-0 truncate font-mono text-[8px] uppercase tracking-[0.11em] text-slate-500 sm:text-[10px] sm:tracking-widest">{label}</p>
+        <div className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-xl sm:flex" style={{ background: "rgba(6,182,212,0.14)", color: "#22d3ee" }}>
           <Icon className="h-4 w-4" />
         </div>
       </div>
-      <p className="mt-4 font-mono text-[26px] font-bold leading-none" style={{ color: "var(--ch-text)" }}>
+      <p className="mt-1 truncate font-mono text-[15px] font-bold leading-none sm:mt-4 sm:text-[26px]" style={{ color: "var(--ch-text)" }}>
         {value}
       </p>
-      <p className="mt-3 text-[12px] text-slate-500">{detail}</p>
+      <p className="mt-1 hidden truncate text-[12px] text-slate-500 sm:mt-3 sm:block">{detail}</p>
     </div>
   );
 }

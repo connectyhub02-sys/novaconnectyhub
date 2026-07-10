@@ -258,7 +258,7 @@ export function ClientProductsMarketplace({
               </Panel>
 
               <Panel title="Comissoes" eyebrow="repasse ConnectyHub">
-                <div className="mb-3 grid grid-cols-2 gap-2">
+                <div className="mb-3 grid grid-cols-4 gap-1.5 sm:gap-2">
                   <CommissionSummaryTile label="Pendente" value={formatMoney(metrics.pendingCommission)} detail={`${metrics.pendingCount} aguardando prazo`} />
                   <CommissionSummaryTile label="Liberada" value={formatMoney(metrics.availableCommission)} detail={`${metrics.availableCount} pronta para repasse`} />
                   <CommissionSummaryTile label="Paga" value={formatMoney(metrics.paidCommission)} detail={`${metrics.paidCount} repasse(s)`} />

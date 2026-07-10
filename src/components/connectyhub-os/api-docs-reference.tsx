@@ -200,7 +200,7 @@ function Overview({ catalog }: { catalog: ApiDocsCatalog }) {
         </p>
       </header>
 
-      <div className="grid gap-3 md:grid-cols-5">
+      <div className="grid grid-cols-5 gap-1.5 sm:gap-2 md:gap-3">
         <MetricCard label="Endpoints" value={catalog.stats.endpoints} tone="cyan" />
         <MetricCard label="Rotas nativas" value={catalog.stats.nativeEndpoints} tone="emerald" />
         <MetricCard label="Avancados" value={catalog.stats.advancedEndpoints} tone="violet" />
@@ -606,9 +606,9 @@ function MetricCard({ label, tone, value }: { label: string; tone: "cyan" | "eme
   };
 
   return (
-    <div className={`rounded-lg border p-4 ${tones[tone]}`}>
-      <div className="font-mono text-3xl font-black">{value}</div>
-      <div className="mt-2 font-mono text-[10px] uppercase tracking-[0.16em] text-slate-400">{label}</div>
+    <div className={`min-w-0 rounded-lg border px-2 py-2 sm:p-4 ${tones[tone]}`}>
+      <div className="truncate font-mono text-[16px] font-black sm:text-3xl">{value}</div>
+      <div className="mt-1 truncate font-mono text-[8px] uppercase tracking-[0.11em] text-slate-400 sm:mt-2 sm:text-[10px] sm:tracking-[0.16em]">{label}</div>
     </div>
   );
 }

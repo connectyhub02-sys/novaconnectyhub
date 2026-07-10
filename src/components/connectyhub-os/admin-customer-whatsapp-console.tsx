@@ -64,7 +64,7 @@ export function AdminCustomerWhatsappConsole({
         </Panel>
       )}
 
-      <div className="mb-5 grid gap-4 md:grid-cols-2 xl:grid-cols-6">
+      <div className="mb-5 grid grid-cols-3 gap-1.5 sm:gap-2 xl:grid-cols-6 xl:gap-4">
         <MetricTile
           icon={MessageCircle}
           label="Instancias"
@@ -110,7 +110,7 @@ export function AdminCustomerWhatsappConsole({
       </div>
 
       <Panel className="mb-5" title="Telemetria WhatsApp" eyebrow="mensagens / midia / agentes">
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+        <div className="grid grid-cols-5 gap-1.5 sm:gap-2 xl:gap-3">
           <KpiStat label="mensagens" value={String(workspace.summary.messagesTotal)} tone="cyan" />
           <KpiStat label="recebidas" value={String(workspace.summary.inboundMessages)} tone="green" />
           <KpiStat label="enviadas" value={String(workspace.summary.outboundMessages)} tone="violet" />
@@ -200,19 +200,19 @@ function MetricTile({
 }) {
   return (
     <div
-      className="rounded-2xl p-4"
+      className="min-w-0 rounded-xl p-2 sm:rounded-2xl sm:p-4"
       style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}
     >
-      <div className="flex items-start justify-between gap-3">
-        <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">{label}</p>
-        <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-cyan-500/10">
+      <div className="flex min-w-0 items-start justify-between gap-1.5 sm:gap-3">
+        <p className="min-w-0 truncate font-mono text-[8px] uppercase tracking-[0.11em] text-slate-500 sm:text-[9px] sm:tracking-widest">{label}</p>
+        <div className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-cyan-500/10 sm:flex">
           <Icon className="h-4 w-4 text-cyan-300" />
         </div>
       </div>
-      <p className="mt-3 font-mono text-[26px] font-bold leading-none" style={{ color: "var(--ch-text)" }}>
+      <p className="mt-1 truncate font-mono text-[16px] font-bold leading-none sm:mt-3 sm:text-[26px]" style={{ color: "var(--ch-text)" }}>
         {value}
       </p>
-      <div className="mt-3">
+      <div className="mt-1 hidden sm:mt-3 sm:block">
         <NeonBadge tone={tone}>{detail}</NeonBadge>
       </div>
     </div>

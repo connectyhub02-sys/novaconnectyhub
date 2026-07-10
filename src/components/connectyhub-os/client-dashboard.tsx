@@ -190,7 +190,7 @@ export function ClientDashboard({
       </div>
 
       {/* ── Metric cards ── */}
-      <div className="mb-4 grid grid-cols-2 gap-4 md:grid-cols-4">
+      <div className="mb-4 grid grid-cols-4 gap-1.5 sm:gap-2 md:gap-4">
         {clientMetrics.map((metric, i) => (
           <MetricCard key={metric.label} icon={metricIcons[i]} {...metric} />
         ))}

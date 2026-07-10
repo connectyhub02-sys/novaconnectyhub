@@ -3969,7 +3969,7 @@ function CommercialFlowFilterBar({
 function CommerceRevenueOverview({ summary }: { summary: CommerceSummary }) {
   return (
     <div className="space-y-3">
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-4 gap-1.5 sm:gap-2 xl:gap-3">
         <RevenueMetric label="Pedidos criados" value={formatCurrency(summary.orderAmount)} hint={`${summary.orderCount} pedido(s)`} tone="cyan" />
         <RevenueMetric label="Pagamentos aprovados" value={formatCurrency(summary.approvedAmount)} hint={`${summary.approvedPayments} checkout(s)`} tone="green" />
         <RevenueMetric label="Aguardando pagamento" value={formatCurrency(summary.pendingAmount)} hint={`${summary.pendingPayments} pendente(s)`} tone="amber" />
@@ -4024,12 +4024,12 @@ function RevenueMetric({
   tone: SalesCatalogTone;
 }) {
   return (
-    <div className="rounded-xl border px-3 py-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-panel)" }}>
-      <div className="flex items-center justify-between gap-3">
-        <p className="font-mono text-[10px] uppercase tracking-widest text-slate-500">{label}</p>
-        <NeonBadge tone={tone}>{hint}</NeonBadge>
+    <div className="min-w-0 rounded-xl border px-2 py-2 sm:px-3 sm:py-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-panel)" }}>
+      <div className="flex min-w-0 items-center justify-between gap-1.5 sm:gap-3">
+        <p className="min-w-0 truncate font-mono text-[8px] uppercase tracking-[0.11em] text-slate-500 sm:text-[10px] sm:tracking-widest">{label}</p>
+        <span className="hidden sm:inline-flex"><NeonBadge tone={tone}>{hint}</NeonBadge></span>
       </div>
-      <p className="mt-3 font-mono text-[20px] font-bold text-slate-100">{value}</p>
+      <p className="mt-1 truncate font-mono text-[13px] font-bold text-slate-100 sm:mt-3 sm:text-[20px]">{value}</p>
     </div>
   );
 }

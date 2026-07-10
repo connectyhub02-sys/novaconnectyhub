@@ -214,7 +214,7 @@ function LeadWorkspaceWarning({ warnings }: { warnings: string[] }) {
 
 function LeadStats({ workspace }: { workspace: ClientLeadCrmWorkspace }) {
   return (
-    <div className="mb-5 grid gap-3 md:grid-cols-3 xl:grid-cols-6">
+    <div className="mb-5 grid grid-cols-3 gap-1.5 sm:gap-2 xl:grid-cols-6">
       <KpiStat label="Total" value={String(workspace.stats.total)} tone="cyan" />
       <KpiStat label="Novos" value={String(workspace.stats.new)} tone="violet" />
       <KpiStat label="Ativos" value={String(workspace.stats.active)} tone="cyan" />

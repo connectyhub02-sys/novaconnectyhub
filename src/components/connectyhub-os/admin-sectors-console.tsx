@@ -181,7 +181,7 @@ export function AdminSectorsConsole() {
 
       {notice && <NoticeBar notice={notice} />}
 
-      <div className="mb-5 grid gap-4 md:grid-cols-3">
+      <div className="mb-5 grid grid-cols-3 gap-1.5 sm:gap-2 md:gap-4">
         <KpiStat label="setores internos" value={String(sectors.length)} tone="cyan" />
         <KpiStat label="com agente" value={String(sectors.filter((sector) => sectorAgentCount(sector, agentCountBySector) > 0).length)} tone="green" />
         <KpiStat label="sem agente" value={String(sectors.filter((sector) => sectorAgentCount(sector, agentCountBySector) === 0).length)} tone="amber" />

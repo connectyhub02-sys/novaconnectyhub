@@ -158,7 +158,7 @@ export function AdminConsole({
       </div>
 
       {/* Metrics row */}
-      <div className="mb-4 grid grid-cols-2 gap-4 md:grid-cols-4">
+      <div className="mb-4 grid grid-cols-4 gap-1.5 sm:gap-2 md:gap-4">
         {adminMetrics.map((metric, i) => (
           <MetricCard key={metric.label} icon={metricIcons[i]} {...metric} />
         ))}
@@ -187,7 +187,7 @@ export function AdminConsole({
               </button>
             ))}
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-4 gap-1.5 sm:gap-2">
             {[
               ["Ativos",    "128", "green"],
               ["Em setup",  "14",  "amber"],
@@ -196,12 +196,12 @@ export function AdminConsole({
             ].map(([label, value, tone]) => (
               <div
                 key={label}
-                className="rounded-xl p-3"
+                className="min-w-0 rounded-xl px-2 py-2 sm:p-3"
                 style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
               >
-                <div className="font-mono text-[9px] text-slate-500">{label}</div>
+                <div className="truncate font-mono text-[8px] uppercase tracking-[0.11em] text-slate-500 sm:text-[9px]">{label}</div>
                 <div className={cn(
-                  "mt-1 font-mono text-[20px] font-bold",
+                  "mt-1 truncate font-mono text-[15px] font-bold leading-none sm:text-[20px]",
                   tone === "green" ? "text-emerald-400" :
                   tone === "amber" ? "text-amber-400" :
                   tone === "cyan"  ? "text-cyan-400" : "text-slate-400"
@@ -424,7 +424,7 @@ function AdminMarketingPanel({ marketing }: { marketing: AdminMarketingOverview 
       className="mb-4"
     >
       <div className="grid gap-4 xl:grid-cols-[1.2fr_0.9fr]">
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+        <div className="grid grid-cols-3 gap-1.5 sm:gap-2 md:grid-cols-3">
           <MarketingStat icon={Globe2} label="Visitantes ConnectyHub" value={marketing.platformVisitors} tone="cyan" />
           <MarketingStat icon={Users} label="Usuarios no painel" value={marketing.dashboardUsers} tone="green" />
           <MarketingStat icon={Activity} label="Eventos coletados" value={marketing.totalEvents} tone="zinc" />
@@ -475,14 +475,14 @@ function AdminMarketingPanel({ marketing }: { marketing: AdminMarketingOverview 
           </div>
         </div>
 
-        <div className="space-y-3">
+        <div className="grid grid-cols-3 gap-1.5 sm:gap-2 lg:block lg:space-y-3">
           <KpiStat label="Eventos clientes" value={formatNumber(marketing.clientLeadEvents)} tone="cyan" />
           <KpiStat label="Push conhecido" value={formatNumber(marketing.pushKnown)} tone="amber" />
           <KpiStat label="GPS negado" value={formatNumber(marketing.gpsDenied)} tone="rose" />
           {marketing.warnings.map((warning) => (
             <div
               key={warning}
-              className="rounded-xl p-3 text-[11px] leading-4 text-amber-300"
+              className="col-span-3 rounded-xl p-3 text-[11px] leading-4 text-amber-300 lg:col-auto"
               style={{ background: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.22)" }}
             >
               {warning}
@@ -508,16 +508,16 @@ function MarketingStat({
   const colors = toneClass(tone);
   return (
     <div
-      className="rounded-xl p-3"
+      className="min-w-0 rounded-xl px-2 py-2 sm:p-3"
       style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
     >
-      <div className="mb-2 flex items-center justify-between gap-3">
-        <p className="font-mono text-[9px] uppercase tracking-wide text-slate-500">{label}</p>
-        <div className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-lg", colors.bg)}>
+      <div className="mb-1 flex min-w-0 items-center justify-between gap-1.5 sm:mb-2 sm:gap-3">
+        <p className="min-w-0 truncate font-mono text-[8px] uppercase tracking-[0.11em] text-slate-500 sm:text-[9px] sm:tracking-wide">{label}</p>
+        <div className={cn("hidden h-7 w-7 shrink-0 items-center justify-center rounded-lg sm:flex", colors.bg)}>
           <Icon className={cn("h-3.5 w-3.5", colors.text)} />
         </div>
       </div>
-      <p className={cn("font-mono text-[22px] font-bold leading-none", colors.text)}>{formatNumber(value)}</p>
+      <p className={cn("truncate font-mono text-[15px] font-bold leading-none sm:text-[22px]", colors.text)}>{formatNumber(value)}</p>
     </div>
   );
 }

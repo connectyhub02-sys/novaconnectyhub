@@ -656,7 +656,7 @@ export function PlatformProductsConsole({
           {activeTab === "commissions" ? (
             <div className="space-y-5">
               <Panel id="platform-products-tour-payouts" title="Resumo de repasses" eyebrow="financeiro marketplace" tone="green" compact>
-                <div className="-mx-3 flex snap-x gap-3 overflow-x-auto px-3 pb-1 md:mx-0 md:grid md:grid-cols-2 md:overflow-visible md:px-0 md:pb-0 xl:grid-cols-5">
+                <div className="grid grid-cols-5 gap-1.5 sm:gap-2 xl:gap-3">
                   <SettlementMetric label="Gerada" value={formatMoney(commissionSummary.totalAmount)} detail={`${commissionSummary.totalCount} registro(s)`} tone="cyan" />
                   <SettlementMetric label="Pendente" value={formatMoney(commissionSummary.pendingAmount)} detail={`${commissionSummary.pendingCount} aguardando`} tone="amber" />
                   <SettlementMetric label="Liberada" value={formatMoney(commissionSummary.availableAmount)} detail={`${commissionSummary.availableCount} pronta(s)`} tone="green" />
@@ -1532,15 +1532,15 @@ function SettlementMetric({ label, value, detail, tone = "cyan" }: { label: stri
 
   return (
     <div
-      className="min-w-[154px] snap-start rounded-xl border px-3 py-3 md:min-w-0"
+      className="min-w-0 rounded-xl border px-2 py-2 sm:px-3 sm:py-3"
       style={{
         borderColor: `rgba(${toneStyle.rgb},0.34)`,
         background: `linear-gradient(135deg, rgba(${toneStyle.rgb},0.11), rgba(255,255,255,0.020)), var(--ch-panel)`,
       }}
     >
-      <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-slate-500">{label}</p>
-      <p className={cn("mt-2 truncate font-mono text-[18px] font-bold", toneStyle.text)}>{value}</p>
-      <p className="mt-1 truncate text-[11px] text-slate-500">{detail}</p>
+      <p className="truncate font-mono text-[8px] uppercase tracking-[0.11em] text-slate-500 sm:text-[9px] sm:tracking-[0.16em]">{label}</p>
+      <p className={cn("mt-1 truncate font-mono text-[13px] font-bold sm:mt-2 sm:text-[18px]", toneStyle.text)}>{value}</p>
+      <p className="mt-1 hidden truncate text-[11px] text-slate-500 sm:block">{detail}</p>
     </div>
   );
 }
