@@ -97,6 +97,72 @@ body {
   color: var(--ch-text);
 }
 
+.connecty-shell-content {
+  padding-bottom: calc(5.75rem + env(safe-area-inset-bottom));
+}
+
+.connecty-mobile-dock {
+  padding-bottom: max(0.25rem, env(safe-area-inset-bottom));
+}
+
+[data-mobile-data-card] {
+  overflow-wrap: anywhere;
+}
+
+[data-mobile-data-card] [class*="min-w-"] {
+  min-width: 0 !important;
+}
+
+[data-mobile-data-card] [class*="max-w-"] {
+  max-width: 100% !important;
+}
+
+[data-mobile-data-card] pre,
+[data-mobile-data-card] code {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.connecty-shell-content img,
+.connecty-shell-content video,
+.connecty-shell-content canvas {
+  max-width: 100%;
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  touch-action: manipulation;
+}
+
+@media (max-width: 640px) {
+  .connecty-shell-content {
+    overflow-x: clip;
+  }
+
+  .connecty-shell-content input:not([type="checkbox"]):not([type="radio"]),
+  .connecty-shell-content select,
+  .connecty-shell-content textarea {
+    font-size: 16px !important;
+  }
+
+  .connecty-shell-content .overflow-x-auto {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .connecty-shell-content [data-mobile-data-card] {
+    scroll-margin-bottom: calc(6.5rem + env(safe-area-inset-bottom));
+  }
+}
+
+@media (min-width: 1024px) {
+  .connecty-shell-content {
+    padding-bottom: 1.5rem;
+  }
+}
+
 [data-connecty-mode] {
   scrollbar-color: rgba(var(--ch-accent-rgb), 0.45) var(--ch-surface);
 }

@@ -54,7 +54,7 @@ import {
 } from "@/lib/sales-catalog/shared";
 import { cn } from "@/lib/utils";
 import { ConnectyShell } from "./connecty-shell";
-import { GuidedTour, HelpHint, type GuidedTourStep } from "./guided-help";
+import { HelpHint } from "./guided-help";
 import { NeonBadge, PageHeader, Panel, StatusBadge } from "./panel-primitives";
 
 type ProductDraft = {
@@ -206,57 +206,6 @@ const inputStyle = {
   border: "1px solid var(--ch-border)",
   color: "var(--ch-text)",
 };
-
-const platformProductTourSteps: GuidedTourStep[] = [
-  {
-    id: "setup",
-    targetId: "platform-products-tour-setup",
-    title: "Configure a base do admin",
-    body: "Comece com tipo de venda, categorias e variacoes globais. O admin tambem deve nascer zerado e ser controlado por voce.",
-  },
-  {
-    id: "categories",
-    targetId: "platform-products-tour-categories",
-    title: "Crie categorias proprias",
-    body: "As categorias ConnectyHub devem ser criadas manualmente pelo admin, sem depender de lista pronta.",
-  },
-  {
-    id: "product",
-    targetId: "platform-products-tour-product-form",
-    title: "Cadastre o produto",
-    body: "No cadastro, informe nome, preco, descricao, midias, estoque, entrega e regras comerciais seguindo o modelo de e-commerce.",
-  },
-  {
-    id: "visibility",
-    targetId: "platform-products-tour-visibility",
-    title: "Decida se aparece para usuarios",
-    body: "Aqui voce escolhe se o produto entra na vitrine do painel do usuario para importacao ou se fica oculto no admin.",
-  },
-  {
-    id: "marketplace",
-    targetId: "platform-products-tour-marketplace",
-    title: "Controle marketplace e status",
-    body: "Defina codigo, slug, status e vitrine para separar rascunho, produto ativo, destaque e item oculto.",
-  },
-  {
-    id: "revenue",
-    targetId: "platform-products-tour-revenue",
-    title: "Separe origem e recebimento",
-    body: "Marque se e produto ConnectyHub, venda direta, revenda com comissao ou marketplace para o financeiro ficar rastreavel.",
-  },
-  {
-    id: "commission",
-    targetId: "platform-products-tour-commission",
-    title: "Configure comissao e repasse",
-    body: "Defina percentual, base, prazo de liberacao, recorrencia e garantia para calcular o que deve ser pago ao cliente.",
-  },
-  {
-    id: "payouts",
-    targetId: "platform-products-tour-payouts",
-    title: "Acompanhe repasses",
-    body: "Use esta aba para revisar comissoes pendentes, liberadas e pagas antes de fechar o financeiro.",
-  },
-];
 
 const platformProductHelpText: Record<string, string> = {
   "Tipo de venda": "Define o modelo principal do catalogo ConnectyHub e ajuda a orientar os defaults de cadastro.",
@@ -649,26 +598,6 @@ export function PlatformProductsConsole({
         eyebrow="Admin OS / Marketplace"
         title="Produtos ConnectyHub"
         description="Cadastre os produtos globais que podem aparecer no painel do usuario para importacao e venda por comissao."
-        actions={
-          <div className="flex flex-wrap gap-2">
-            <GuidedTour
-              storageKey="connectyhub.platform-products-tour.v1"
-              steps={platformProductTourSteps}
-              launcherLabel="Tour guiado"
-              onStepChange={(step) => {
-                if (["setup", "categories"].includes(step.id)) setActiveTab("setup");
-                if (["product", "visibility", "marketplace", "revenue", "commission"].includes(step.id)) setActiveTab("products");
-                if (step.id === "payouts") setActiveTab("commissions");
-              }}
-            />
-            <NeonBadge tone={catalog.schemaReady ? "green" : "amber"}>{catalog.schemaReady ? "Schema pronto" : "Aguardando SQL"}</NeonBadge>
-            <NeonBadge tone="cyan">{metrics.available} na vitrine</NeonBadge>
-            <NeonBadge tone="amber">{metrics.resale} revenda</NeonBadge>
-            <NeonBadge tone="zinc">{metrics.direct} venda direta</NeonBadge>
-            <NeonBadge tone="amber">{metrics.imports} importacoes</NeonBadge>
-            <NeonBadge tone="green">{formatMoney(metrics.payableCommission)} repasse</NeonBadge>
-          </div>
-        }
       />
 
       {!catalog.schemaReady ? (
@@ -700,25 +629,34 @@ export function PlatformProductsConsole({
             </div>
           ) : null}
 
-          <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-6">
+          <div className="grid grid-cols-3 gap-2 md:grid-cols-3 md:gap-4 xl:grid-cols-6">
             <Metric icon={Box} label="Produtos" value={String(products.length)} detail={`${metrics.active} ativos`} tone="cyan" />
             <Metric icon={PackagePlus} label="Revenda" value={String(metrics.resale)} detail={`${metrics.featured} em destaque`} tone="green" />
-            <Metric icon={ShoppingBag} label="Venda direta" value={String(metrics.direct)} detail="sem repasse afiliado" tone="violet" />
-            <Metric icon={BadgePercent} label="Comissao media" value={`${metrics.averageCommission}%`} detail={`${metrics.commissionable} comissao ativa`} tone="amber" />
-            <Metric icon={Tags} label="Importacoes" value={String(metrics.imports)} detail="empresas de clientes" tone="rose" />
-            <Metric icon={CheckCircle2} label="Repasses" value={formatMoney(metrics.payableCommission)} detail={`${metrics.pendingCommissions} pendentes`} tone="green" />
+            <Metric icon={ShoppingBag} label="Venda" value={String(metrics.direct)} detail="sem repasse afiliado" tone="violet" />
+            <Metric icon={BadgePercent} label="Comissao" value={`${metrics.averageCommission}%`} detail={`${metrics.commissionable} comissao ativa`} tone="amber" />
+            <Metric icon={Tags} label="Import." value={String(metrics.imports)} detail="empresas de clientes" tone="rose" />
+            <Metric
+              icon={CheckCircle2}
+              label="Repasse"
+              mobileValue={formatCompactMoney(metrics.payableCommission)}
+              value={formatMoney(metrics.payableCommission)}
+              detail={`${metrics.pendingCommissions} pendentes`}
+              tone="green"
+            />
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            <CatalogTabButton active={activeTab === "setup"} icon={SlidersHorizontal} label="Configuracao" onClick={() => setActiveTab("setup")} />
-            <CatalogTabButton active={activeTab === "products"} icon={PackagePlus} label="Produtos" onClick={() => setActiveTab("products")} />
-            <CatalogTabButton active={activeTab === "commissions"} icon={CheckCircle2} label="Repasses" onClick={() => setActiveTab("commissions")} />
+          <div className="sticky top-[60px] z-20 -mx-3 px-3 py-2 backdrop-blur md:static md:mx-0 md:px-0 md:py-0 md:backdrop-blur-none" style={{ background: "color-mix(in srgb, var(--ch-bg) 88%, transparent)" }}>
+            <div className="grid grid-cols-3 gap-1 rounded-2xl border p-1" style={{ background: "var(--ch-surface)", borderColor: "var(--ch-border-strong)" }}>
+              <CatalogTabButton active={activeTab === "setup"} icon={SlidersHorizontal} label="Configuracao" onClick={() => setActiveTab("setup")} />
+              <CatalogTabButton active={activeTab === "products"} icon={PackagePlus} label="Produtos" onClick={() => setActiveTab("products")} />
+              <CatalogTabButton active={activeTab === "commissions"} icon={CheckCircle2} label="Repasses" onClick={() => setActiveTab("commissions")} />
+            </div>
           </div>
 
           {activeTab === "commissions" ? (
             <div className="space-y-5">
               <Panel id="platform-products-tour-payouts" title="Resumo de repasses" eyebrow="financeiro marketplace" tone="green" compact>
-                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+                <div className="-mx-3 flex snap-x gap-3 overflow-x-auto px-3 pb-1 md:mx-0 md:grid md:grid-cols-2 md:overflow-visible md:px-0 md:pb-0 xl:grid-cols-5">
                   <SettlementMetric label="Gerada" value={formatMoney(commissionSummary.totalAmount)} detail={`${commissionSummary.totalCount} registro(s)`} tone="cyan" />
                   <SettlementMetric label="Pendente" value={formatMoney(commissionSummary.pendingAmount)} detail={`${commissionSummary.pendingCount} aguardando`} tone="amber" />
                   <SettlementMetric label="Liberada" value={formatMoney(commissionSummary.availableAmount)} detail={`${commissionSummary.availableCount} pronta(s)`} tone="green" />
@@ -1594,7 +1532,7 @@ function SettlementMetric({ label, value, detail, tone = "cyan" }: { label: stri
 
   return (
     <div
-      className="rounded-xl border px-3 py-3"
+      className="min-w-[154px] snap-start rounded-xl border px-3 py-3 md:min-w-0"
       style={{
         borderColor: `rgba(${toneStyle.rgb},0.34)`,
         background: `linear-gradient(135deg, rgba(${toneStyle.rgb},0.11), rgba(255,255,255,0.020)), var(--ch-panel)`,
@@ -1607,29 +1545,46 @@ function SettlementMetric({ label, value, detail, tone = "cyan" }: { label: stri
   );
 }
 
-function Metric({ icon: Icon, label, value, detail, tone = "cyan" }: { icon: LucideIcon; label: string; value: string; detail: string; tone?: PlatformUiTone }) {
+function Metric({
+  icon: Icon,
+  label,
+  mobileValue,
+  value,
+  detail,
+  tone = "cyan",
+}: {
+  icon: LucideIcon;
+  label: string;
+  mobileValue?: string;
+  value: string;
+  detail: string;
+  tone?: PlatformUiTone;
+}) {
   const toneStyle = platformUiToneStyles[tone];
 
   return (
     <div
-      className="rounded-2xl p-4"
+      className="min-w-0 rounded-2xl p-2.5 md:p-4"
       style={{
         background: `linear-gradient(135deg, rgba(${toneStyle.rgb},0.13), rgba(255,255,255,0.025)), var(--ch-surface)`,
         border: `1px solid rgba(${toneStyle.rgb},0.34)`,
         boxShadow: `inset 0 1px 0 rgba(255,255,255,0.055), 0 12px 28px rgba(${toneStyle.rgb},0.045)`,
       }}
     >
-      <div className="flex items-start justify-between gap-3">
-        <p className="font-mono text-[10px] uppercase tracking-widest text-slate-500">{label}</p>
+      <div className="flex items-start justify-between gap-2">
+        <p className="truncate font-mono text-[8px] uppercase tracking-wide text-slate-500 md:text-[10px] md:tracking-widest">{label}</p>
         <div
-          className="flex h-9 w-9 items-center justify-center rounded-xl"
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl md:h-9 md:w-9"
           style={{ background: `rgba(${toneStyle.rgb},0.14)`, color: toneStyle.fill }}
         >
-          <Icon className="h-4 w-4" />
+          <Icon className="h-3.5 w-3.5 md:h-4 md:w-4" />
         </div>
       </div>
-      <p className={cn("mt-4 font-mono text-[26px] font-bold leading-none", toneStyle.text)}>{value}</p>
-      <p className="mt-3 text-[12px] text-slate-500">{detail}</p>
+      <p className={cn("mt-2 truncate font-mono text-[18px] font-bold leading-none md:mt-4 md:text-[26px]", toneStyle.text)}>
+        <span className="md:hidden">{mobileValue ?? value}</span>
+        <span className="hidden md:inline">{value}</span>
+      </p>
+      <p className="mt-2 hidden truncate text-[12px] text-slate-500 md:block">{detail}</p>
     </div>
   );
 }
@@ -1733,15 +1688,15 @@ function CatalogTabButton({ active, icon: Icon, label, onClick }: { active: bool
     <button
       type="button"
       onClick={onClick}
-      className="inline-flex min-h-11 items-center gap-2 rounded-xl border px-4 text-[12px] font-bold transition hover:bg-cyan-400/10"
+      className="inline-flex min-h-10 min-w-0 items-center justify-center gap-1.5 rounded-xl border px-2 text-[11px] font-bold transition hover:bg-cyan-400/10 sm:gap-2 sm:px-4 sm:text-[12px]"
       style={{
-        background: active ? "rgba(34,211,238,0.14)" : "rgba(15,23,42,0.36)",
-        borderColor: active ? "rgba(34,211,238,0.75)" : "var(--ch-border)",
+        background: active ? "linear-gradient(135deg, rgba(34,211,238,0.24), rgba(14,165,233,0.12))" : "transparent",
+        borderColor: active ? "rgba(34,211,238,0.75)" : "transparent",
         color: active ? "#cffafe" : "var(--ch-text)",
       }}
     >
-      <Icon className="h-4 w-4" />
-      {label}
+      <Icon className="h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4" />
+      <span className="min-w-0 truncate">{label}</span>
     </button>
   );
 }
@@ -2125,6 +2080,14 @@ function copyText(value: string) {
 
 function formatMoney(value: number) {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
+}
+
+function formatCompactMoney(value: number) {
+  if (Math.abs(value) >= 1000) {
+    return `R$${new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 }).format(value / 1000)}k`;
+  }
+
+  return `R$${new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 }).format(value)}`;
 }
 
 function formatDate(value: string | null) {

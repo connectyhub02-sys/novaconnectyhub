@@ -2433,7 +2433,7 @@ function WhatsappConsoleCommandBar({
 
   return (
     <div
-      className="sticky top-[72px] z-20 mb-3 rounded-xl border px-2.5 py-2.5 shadow-2xl shadow-slate-950/20 backdrop-blur sm:top-3 sm:mb-4 sm:px-3 sm:py-3"
+      className="sticky top-[68px] z-20 mb-3 rounded-xl border px-2.5 py-2.5 shadow-2xl shadow-slate-950/20 backdrop-blur sm:top-3 sm:mb-4 sm:px-3 sm:py-3"
       style={{
         background: "linear-gradient(180deg, rgba(var(--ch-accent-rgb),0.07), rgba(16,23,34,0.94))",
         borderColor: "var(--ch-border-strong)",
@@ -2441,7 +2441,7 @@ function WhatsappConsoleCommandBar({
       }}
     >
       <div className="grid gap-2 sm:gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
-        <div className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+        <div className="-mx-1 flex min-w-0 gap-2 overflow-x-auto px-1 pb-1 sm:mx-0 sm:grid sm:grid-cols-3 sm:overflow-visible sm:px-0 sm:pb-0 lg:grid-cols-5">
           <SummaryPill label="Agente" value={agent.name} />
           <SummaryPill label={entityLabel} value={company?.name ?? `${entityLabel} nao informado`} />
           <SummaryPill label="WhatsApp" value={statusMeta.label} tone={instance?.status === "connected" ? "green" : "amber"} />
@@ -2470,12 +2470,12 @@ function WhatsappConsoleTabs({
 }) {
   return (
     <div
-      className="mb-3 overflow-visible rounded-xl border p-1 sm:mb-4"
+      className="mb-3 overflow-hidden rounded-xl border p-1 sm:mb-4 sm:overflow-visible"
       role="tablist"
       aria-label="Secoes do painel WhatsApp"
       style={{ background: "var(--ch-panel)", borderColor: "var(--ch-border-strong)" }}
     >
-      <div className="grid min-w-0 grid-cols-3 gap-1 sm:grid-cols-6">
+      <div className="flex min-w-max gap-1 overflow-x-auto pb-1 sm:grid sm:min-w-0 sm:grid-cols-6 sm:overflow-visible sm:pb-0">
         {whatsappConsoleTabs.map((tab) => {
           const active = tab.id === activeTab;
           const Icon = tab.icon;
@@ -2488,7 +2488,7 @@ function WhatsappConsoleTabs({
               aria-selected={active}
               aria-current={active ? "page" : undefined}
               className={cn(
-                "grid min-h-[52px] grid-cols-[18px_minmax(0,1fr)] items-center gap-1.5 rounded-lg px-2 text-left transition sm:min-h-[58px] sm:gap-2 sm:px-3",
+                "grid min-h-[52px] min-w-[132px] grid-cols-[18px_minmax(0,1fr)] items-center gap-1.5 rounded-lg px-2 text-left transition sm:min-h-[58px] sm:min-w-0 sm:gap-2 sm:px-3",
                 active
                   ? "text-slate-950 shadow-[0_0_24px_rgba(var(--ch-accent-rgb),0.18)] ring-1 ring-white/20"
                   : "text-slate-200 hover:bg-white/10 hover:text-white",
@@ -2519,7 +2519,7 @@ function SummaryPill({
   tone?: "default" | "green" | "amber";
 }) {
   return (
-    <div className="min-w-0 rounded-lg border px-3 py-2" style={{ background: "var(--ch-panel-2)", borderColor: "var(--ch-border)" }}>
+    <div className="min-w-[150px] rounded-lg border px-3 py-2 sm:min-w-0" style={{ background: "var(--ch-panel-2)", borderColor: "var(--ch-border)" }}>
       <p className="truncate font-mono text-[8px] uppercase tracking-widest text-slate-500">{label}</p>
       <p
         className={cn(

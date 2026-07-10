@@ -219,6 +219,7 @@ export function ConnectyShell({
   const switchLbl = mode === "admin" ? "Client OS" : "Admin OS";
   const canSwitch = mode === "admin" || isPlatformAdmin;
   const pageLabel = activeItem?.label ?? "Dashboard";
+  const mobileDockItems = getMobileDockItems(sections, mode);
   const logoTone  = "white";
   const [avatarUrl, setAvatarUrl] = useState(userAvatarUrl ?? null);
   const [avatarUploading, setAvatarUploading] = useState(false);
@@ -515,24 +516,6 @@ export function ConnectyShell({
           </div>
 
           <div className="ml-auto flex items-center gap-2.5">
-            <button
-              type="button"
-              aria-controls="connecty-mobile-menu"
-              aria-expanded={mobileMenuOpen}
-              aria-label={mobileMenuOpen ? "Fechar menu" : "Abrir menu"}
-              className="flex h-8 w-8 items-center justify-center rounded-lg transition lg:hidden"
-              onClick={() => setMobileMenuOpen((current) => !current)}
-              onMouseEnter={e => (e.currentTarget.style.background = "var(--ch-hover)")}
-              onMouseLeave={e => (e.currentTarget.style.background = "var(--ch-surface-2)")}
-              style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
-            >
-              {mobileMenuOpen ? (
-                <X className="h-4 w-4" style={{ color: "var(--ch-text)" }} />
-              ) : (
-                <Menu className="h-4 w-4" style={{ color: "var(--ch-text)" }} />
-              )}
-            </button>
-
             {/* Search */}
             <div className="relative hidden lg:block">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2" style={{ color: "var(--ch-muted)" }} />
@@ -752,72 +735,32 @@ export function ConnectyShell({
         </header>
 
         {mobileMenuOpen ? (
-          <>
-            <button
-              type="button"
-              aria-label="Fechar menu"
-              className="fixed inset-0 z-30 bg-black/55 backdrop-blur-[2px] lg:hidden"
-              onClick={() => setMobileMenuOpen(false)}
-            />
-            <div
-              id="connecty-mobile-menu"
-              className="fixed left-3 right-3 top-[68px] z-50 max-h-[calc(100svh-84px)] overflow-y-auto rounded-2xl p-3 shadow-2xl lg:hidden"
-              style={{
-                background: "linear-gradient(180deg, rgba(var(--ch-accent-rgb),0.08), rgba(var(--ch-accent-2-rgb),0.035)), var(--ch-dropdown-bg)",
-                border: "1px solid var(--ch-border-strong)",
-                boxShadow: "0 24px 70px rgba(0,0,0,0.46)",
-              }}
-            >
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="truncate text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>
-                    Menu principal
-                  </div>
-                  <div className="font-mono text-[9px] uppercase tracking-[0.2em]" style={{ color: "var(--ch-muted)" }}>
-                    {mode === "admin" ? "Admin OS" : "Client OS"}
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  aria-label="Fechar menu"
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition"
-                  onClick={() => setMobileMenuOpen(false)}
-                  style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
-                >
-                  <X className="h-4 w-4" style={{ color: "var(--ch-text)" }} />
-                </button>
-              </div>
+          <MobileAppMenu
+            active={active}
+            activeItem={activeItem}
+            logoTone={logoTone}
+            mode={mode}
+            name={name}
+            pageLabel={pageLabel}
+            role={role}
+            sections={sections}
+            onClose={() => setMobileMenuOpen(false)}
+          />
+        ) : null}
 
-              <nav className="grid gap-4">
-                {sections.map((section) => (
-                  <div key={section.label}>
-                    <div
-                      className="mb-2 px-1 font-mono text-[9px] uppercase tracking-[0.2em]"
-                      style={{ color: "var(--ch-subtle)" }}
-                    >
-                      {section.label}
-                    </div>
-                    <div className="grid gap-1.5">
-                      {section.items.map((item) => (
-                        <MobileMenuLink
-                          key={item.href}
-                          item={item}
-                          isActive={item.href === activeItem?.href}
-                          onClick={() => setMobileMenuOpen(false)}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </nav>
-            </div>
-          </>
+        {!mobileMenuOpen ? (
+          <MobileDock
+            active={active}
+            items={mobileDockItems}
+            mode={mode}
+            onMenuClick={() => setMobileMenuOpen(true)}
+          />
         ) : null}
 
         {/* Content */}
         <main className="flex-1 overflow-auto">
           {mode === "client" ? <AdminImpersonationBanner /> : null}
-          <div className="mx-auto w-full max-w-[1680px] px-3 py-4 sm:px-4 sm:py-5 lg:px-8 lg:py-6">
+          <div className="connecty-shell-content mx-auto w-full max-w-[1680px] px-3 pt-4 sm:px-4 sm:pt-5 lg:px-8 lg:py-6">
             {children}
           </div>
         </main>
@@ -1044,6 +987,200 @@ function SidebarLink({
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
+function MobileAppMenu({
+  active,
+  activeItem,
+  logoTone,
+  mode,
+  name,
+  pageLabel,
+  role,
+  sections,
+  onClose,
+}: {
+  active: string;
+  activeItem?: NavItem;
+  logoTone: "white";
+  mode: "admin" | "client";
+  name: string;
+  pageLabel: string;
+  role: string;
+  sections: NavSection[];
+  onClose: () => void;
+}) {
+  const [query, setQuery] = useState("");
+  const normalizedQuery = query.trim().toLowerCase();
+  const quickItems = getMobileDockItems(sections, mode);
+  const filteredSections = useMemo(() => {
+    if (!normalizedQuery) {
+      return sections;
+    }
+
+    return sections
+      .map((section) => ({
+        ...section,
+        items: section.items.filter((item) =>
+          `${section.label} ${item.label} ${item.href}`.toLowerCase().includes(normalizedQuery),
+        ),
+      }))
+      .filter((section) => section.items.length > 0);
+  }, [normalizedQuery, sections]);
+
+  return (
+    <div
+      id="connecty-mobile-menu"
+      className="fixed inset-x-0 bottom-0 top-[60px] z-50 overflow-y-auto px-3 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-3 lg:hidden"
+      style={{
+        background:
+          "linear-gradient(180deg, color-mix(in srgb, var(--ch-bg) 92%, var(--ch-surface-2) 8%), var(--ch-bg))",
+      }}
+    >
+      <div className="mx-auto grid max-w-[430px] gap-3">
+        <div
+          className="rounded-3xl p-3"
+          style={{
+            background: "linear-gradient(135deg, rgba(var(--ch-accent-rgb),0.14), rgba(var(--ch-accent-2-rgb),0.06)), var(--ch-surface)",
+            border: "1px solid var(--ch-border-strong)",
+          }}
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-3">
+              <span
+                className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl"
+                style={{ background: "rgba(var(--ch-accent-rgb),0.14)", border: "1px solid rgba(var(--ch-accent-rgb),0.28)" }}
+              >
+                <ConnectyLogo className="h-7 w-7" tone={logoTone} type="mark" />
+              </span>
+              <div className="min-w-0">
+                <p className="truncate text-[15px] font-bold leading-5" style={{ color: "var(--ch-text)" }}>{name}</p>
+                <p className="truncate font-mono text-[9px] uppercase tracking-[0.18em]" style={{ color: "var(--ch-muted)" }}>
+                  {role} / {mode === "admin" ? "Admin OS" : "Client OS"}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              aria-label="Fechar menu"
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl transition"
+              onClick={onClose}
+              style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
+            >
+              <X className="h-4 w-4" style={{ color: "var(--ch-text)" }} />
+            </button>
+          </div>
+
+          <div className="mt-3 rounded-2xl p-3" style={{ background: "rgba(255,255,255,0.045)", border: "1px solid var(--ch-border)" }}>
+            <p className="font-mono text-[9px] uppercase tracking-[0.18em]" style={{ color: "var(--ch-subtle)" }}>Tela atual</p>
+            <p className="mt-1 truncate text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>{pageLabel}</p>
+            {activeItem ? (
+              <Link
+                href={activeItem.href}
+                className="mt-2 inline-flex h-8 items-center gap-2 rounded-xl px-3 font-mono text-[9px] font-bold uppercase tracking-wide"
+                onClick={onClose}
+                style={{ background: "rgba(var(--ch-accent-rgb),0.16)", color: "var(--ch-accent)", border: "1px solid rgba(var(--ch-accent-rgb),0.28)" }}
+              >
+                Abrir novamente
+              </Link>
+            ) : null}
+          </div>
+        </div>
+
+        <label className="relative block">
+          <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2" style={{ color: "var(--ch-muted)" }} />
+          <input
+            className="h-12 w-full rounded-2xl pl-11 pr-4 text-[16px] outline-none"
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Buscar no menu..."
+            type="search"
+            value={query}
+            style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border-strong)", color: "var(--ch-text)" }}
+          />
+        </label>
+
+        {!normalizedQuery ? (
+          <div className="grid grid-cols-2 gap-2">
+            {quickItems.map((item) => (
+              <MobileMenuQuickLink
+                key={item.href}
+                active={isActive(item.href, active)}
+                item={item}
+                label={dockLabel(item, mode)}
+                onClick={onClose}
+              />
+            ))}
+          </div>
+        ) : null}
+
+        <nav className="grid gap-3" aria-label="Menu principal">
+          {filteredSections.length > 0 ? filteredSections.map((section) => (
+            <div key={section.label} className="rounded-3xl p-3" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}>
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <p className="font-mono text-[9px] uppercase tracking-[0.2em]" style={{ color: "var(--ch-subtle)" }}>{section.label}</p>
+                <span className="font-mono text-[9px]" style={{ color: "var(--ch-muted)" }}>{section.items.length}</span>
+              </div>
+              <div className="grid gap-1.5">
+                {section.items.map((item) => (
+                  <MobileMenuLink
+                    key={item.href}
+                    item={item}
+                    isActive={item.href === activeItem?.href}
+                    onClick={onClose}
+                  />
+                ))}
+              </div>
+            </div>
+          )) : (
+            <div className="rounded-3xl px-4 py-8 text-center text-[13px]" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)", color: "var(--ch-muted)" }}>
+              Nenhum item encontrado.
+            </div>
+          )}
+        </nav>
+      </div>
+    </div>
+  );
+}
+
+function MobileMenuQuickLink({
+  active,
+  item,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  item: NavItem;
+  label: string;
+  onClick: () => void;
+}) {
+  const Icon = item.icon;
+  const itemPalette = accentPalettes[item.tone ?? "slate"];
+
+  return (
+    <Link
+      href={item.href}
+      aria-current={active ? "page" : undefined}
+      className="grid min-h-[92px] gap-2 rounded-3xl p-3 transition"
+      onClick={onClick}
+      style={active ? {
+        background: "linear-gradient(135deg, rgba(var(--ch-accent-rgb),0.26), rgba(var(--ch-accent-2-rgb),0.12))",
+        border: "1px solid rgba(var(--ch-accent-rgb),0.48)",
+        color: "var(--ch-text)",
+      } : {
+        background: "linear-gradient(135deg, rgba(255,255,255,0.055), rgba(255,255,255,0.020)), var(--ch-surface)",
+        border: `1px solid rgba(${itemPalette.accentRgb},0.26)`,
+        color: "var(--ch-text)",
+      }}
+    >
+      <span
+        className="grid h-9 w-9 place-items-center rounded-2xl"
+        style={{ background: active ? "rgba(var(--ch-accent-rgb),0.16)" : `rgba(${itemPalette.accentRgb},0.14)`, color: active ? "var(--ch-accent)" : itemPalette.accent }}
+      >
+        <Icon className="h-4 w-4" />
+      </span>
+      <span className="self-end truncate text-[13px] font-semibold">{label}</span>
+    </Link>
+  );
+}
+
 function MobileMenuLink({
   item,
   isActive: active,
@@ -1061,7 +1198,7 @@ function MobileMenuLink({
       href={item.href}
       aria-current={active ? "page" : undefined}
       onClick={onClick}
-      className="grid min-h-11 grid-cols-[24px_minmax(0,1fr)_auto] items-center gap-2 rounded-xl px-3 py-2 text-[12.5px] transition-all"
+      className="grid min-h-10 grid-cols-[24px_minmax(0,1fr)_auto] items-center gap-2 rounded-2xl px-3 py-2 text-[12.5px] transition-all"
       style={active ? {
         background: "linear-gradient(135deg, rgba(var(--ch-accent-rgb),0.26), rgba(var(--ch-accent-2-rgb),0.12))",
         border:     `1px solid rgba(var(--ch-accent-rgb),0.54)`,
@@ -1074,7 +1211,7 @@ function MobileMenuLink({
       }}
     >
       <span
-        className="flex h-6 w-6 items-center justify-center rounded-lg"
+        className="flex h-6 w-6 items-center justify-center rounded-xl"
         style={{
           background: active ? `rgba(var(--ch-accent-rgb),0.18)` : `rgba(${itemPalette.accentRgb},0.12)`,
           color: active ? "var(--ch-accent)" : itemPalette.accent,
@@ -1100,6 +1237,102 @@ function MobileMenuLink({
       )}
     </Link>
   );
+}
+
+function MobileDock({
+  active,
+  items,
+  mode,
+  onMenuClick,
+}: {
+  active: string;
+  items: NavItem[];
+  mode: "admin" | "client";
+  onMenuClick: () => void;
+}) {
+  return (
+    <nav className="connecty-mobile-dock fixed inset-x-0 bottom-0 z-40 lg:hidden" aria-label="Navegacao principal">
+      <div
+        className="mx-3 mb-2 grid grid-cols-5 gap-1 rounded-2xl p-1.5 shadow-2xl"
+        style={{
+          background: "color-mix(in srgb, var(--ch-bg) 82%, var(--ch-surface-2) 18%)",
+          border: "1px solid var(--ch-border-strong)",
+          boxShadow: "0 -18px 50px rgba(0,0,0,0.38)",
+        }}
+      >
+        {items.map((item) => (
+          <MobileDockLink key={item.href} active={isActive(item.href, active)} item={item} label={dockLabel(item, mode)} />
+        ))}
+        <button
+          type="button"
+          className="grid min-h-[56px] min-w-0 place-items-center gap-0.5 rounded-xl px-1.5 text-center transition"
+          onClick={onMenuClick}
+          style={{
+            background: "var(--ch-surface-2)",
+            border: "1px solid var(--ch-border)",
+            color: "var(--ch-muted)",
+          }}
+        >
+          <Menu className="h-4 w-4" />
+          <span className="max-w-full truncate font-mono text-[9px] font-semibold uppercase tracking-wide">Menu</span>
+        </button>
+      </div>
+    </nav>
+  );
+}
+
+function MobileDockLink({ active, item, label }: { active: boolean; item: NavItem; label: string }) {
+  const Icon = item.icon;
+
+  return (
+    <Link
+      href={item.href}
+      aria-current={active ? "page" : undefined}
+      className="grid min-h-[56px] min-w-0 place-items-center gap-0.5 rounded-xl px-1.5 text-center transition"
+      style={active ? {
+        background: "linear-gradient(135deg, rgba(var(--ch-accent-rgb),0.96), rgba(var(--ch-accent-2-rgb),0.86))",
+        border: "1px solid rgba(255,255,255,0.24)",
+        color: "#061015",
+        boxShadow: "0 10px 28px rgba(var(--ch-accent-rgb),0.20)",
+      } : {
+        background: "transparent",
+        border: "1px solid transparent",
+        color: "var(--ch-muted)",
+      }}
+    >
+      <Icon className="h-4 w-4" />
+      <span className="max-w-full truncate font-mono text-[9px] font-semibold uppercase tracking-wide">{label}</span>
+    </Link>
+  );
+}
+
+function getMobileDockItems(sections: NavSection[], mode: "admin" | "client") {
+  const dockHrefs = mode === "admin"
+    ? ["/admin", "/admin/whatsapp/atendimento", "/admin/clientes", "/admin/leads"]
+    : ["/dashboard", "/dashboard/conversas", "/dashboard/whatsapp", "/dashboard/links"];
+  const items = sections.flatMap((section) => section.items);
+
+  return dockHrefs
+    .map((href) => items.find((item) => item.href === href))
+    .filter((item): item is NavItem => Boolean(item));
+}
+
+function dockLabel(item: NavItem, mode: "admin" | "client") {
+  if (item.href === "/admin" || item.href === "/dashboard") {
+    return "Inicio";
+  }
+
+  if (mode === "admin") {
+    if (item.href === "/admin/whatsapp/atendimento") return "WhatsApp";
+    if (item.href === "/admin/clientes") return "Clientes";
+    if (item.href === "/admin/leads") return "Leads";
+  }
+
+  if (item.href === "/dashboard/conversas") return "Conversas";
+  if (item.href === "/dashboard/whatsapp") return "Agentes";
+  if (item.href === "/dashboard/links") return "Vendas";
+
+  return item.label;
 }
 
 function isActive(href: string, current: string) {

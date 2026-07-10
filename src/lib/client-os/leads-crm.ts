@@ -223,6 +223,7 @@ export type ClientLeadCrmWorkspace = {
     converted: number;
     archived: number;
   };
+  warnings?: string[];
 };
 
 export async function getClientLeadCrmWorkspace(input: {
@@ -230,7 +231,14 @@ export async function getClientLeadCrmWorkspace(input: {
   client?: SupabaseClient;
 }): Promise<ClientLeadCrmWorkspace> {
   const client = input.client ?? createServiceClient();
-  const companies = await listClientCompanies(input.userId, client);
+  let companies: ClientCompany[];
+
+  try {
+    companies = await listClientCompanies(input.userId, client);
+  } catch (error) {
+    return buildEmptyWorkspace([], [toLoadWarning("empresas", error)]);
+  }
+
   return getLeadCrmWorkspaceForCompanies({
     client,
     companies,
@@ -242,17 +250,25 @@ export async function getAdminLeadCrmWorkspace(input: {
   limit?: number;
 } = {}): Promise<ClientLeadCrmWorkspace> {
   const client = input.client ?? createServiceClient();
-  const { data, error } = await client
-    .from("organizations")
-    .select("id, name, slug, plan_code, status, created_at")
-    .order("created_at", { ascending: false })
-    .limit(500);
+  let organizationRows: OrganizationRow[] = [];
 
-  if (error) {
-    throw new Error(`Nao foi possivel carregar as organizacoes: ${error.message}`);
+  try {
+    const organizationsResult = await client
+      .from("organizations")
+      .select("id, name, slug, plan_code, status, created_at")
+      .order("created_at", { ascending: false })
+      .limit(500);
+
+    if (organizationsResult.error) {
+      return buildEmptyWorkspace([], [toLoadWarning("organizacoes", organizationsResult.error)]);
+    }
+
+    organizationRows = (organizationsResult.data ?? []) as OrganizationRow[];
+  } catch (error) {
+    return buildEmptyWorkspace([], [toLoadWarning("organizacoes", error)]);
   }
 
-  const companies = ((data ?? []) as OrganizationRow[]).map((organization) => ({
+  const companies = organizationRows.map((organization) => ({
     id: organization.id,
     name: organization.name,
     slug: organization.slug,
@@ -269,7 +285,7 @@ export async function getAdminLeadCrmWorkspace(input: {
   });
 }
 
-function buildEmptyWorkspace(companies: ClientCompany[]): ClientLeadCrmWorkspace {
+function buildEmptyWorkspace(companies: ClientCompany[], warnings: string[] = []): ClientLeadCrmWorkspace {
   return {
     companies,
     leads: [],
@@ -281,6 +297,7 @@ function buildEmptyWorkspace(companies: ClientCompany[]): ClientLeadCrmWorkspace
       converted: 0,
       archived: 0,
     },
+    ...(warnings.length ? { warnings } : {}),
   };
 }
 
@@ -295,94 +312,128 @@ async function getLeadCrmWorkspaceForCompanies(input: {
     return buildEmptyWorkspace(input.companies);
   }
 
-  const { data: leadsData, error: leadsError } = await input.client
-    .from("leads")
-    .select("id, organization_id, channel, phone_number, display_name, status, score, source, last_event_summary, last_message_at, metadata, created_at, updated_at")
-    .in("organization_id", companyIds)
-    .order("updated_at", { ascending: false })
-    .limit(input.leadLimit ?? 160);
+  const warnings: string[] = [];
+  let leadRows: LeadRow[] = [];
 
-  if (leadsError) {
-    throw new Error(`Nao foi possivel carregar os leads: ${leadsError.message}`);
-  }
-
-  const leadRows = (leadsData ?? []) as LeadRow[];
-  const leadIds = leadRows.map((lead) => lead.id);
-
-  const [conversationsResult, agentsResult, eventsResult] = await Promise.all([
-    leadIds.length
-      ? input.client
-          .from("conversations")
-          .select("id, organization_id, lead_id, whatsapp_instance_id, channel, provider, provider_chat_id, status, last_message_preview, last_message_at, metadata, created_at, updated_at")
-          .in("lead_id", leadIds)
-          .order("updated_at", { ascending: false })
-          .limit(Math.max(240, (input.leadLimit ?? 160) * 2))
-      : Promise.resolve({ data: [], error: null }),
-    input.client
-      .from("agent_registry")
-      .select("id, organization_id, name, persona_name, avatar_url, metadata")
-      .eq("scope", "organization")
+  try {
+    const leadsResult = await input.client
+      .from("leads")
+      .select("id, organization_id, channel, phone_number, display_name, status, score, source, last_event_summary, last_message_at, metadata, created_at, updated_at")
       .in("organization_id", companyIds)
-      .contains("metadata", { client_created: true, agent_kind: "whatsapp" })
       .order("updated_at", { ascending: false })
-      .limit(240),
-    input.client
-      .from("intelligence_events")
-      .select("id, organization_id, source_type, source_id, event_type, title, summary, tags, payload, occurred_at")
-      .in("organization_id", companyIds)
-      .order("occurred_at", { ascending: false })
-      .limit(1200),
-  ]);
+      .limit(input.leadLimit ?? 160);
 
-  if (conversationsResult.error) {
-    throw new Error(`Nao foi possivel carregar conversas: ${conversationsResult.error.message}`);
+    if (leadsResult.error) {
+      return buildEmptyWorkspace(input.companies, [toLoadWarning("leads", leadsResult.error)]);
+    }
+
+    leadRows = (leadsResult.data ?? []) as LeadRow[];
+  } catch (error) {
+    return buildEmptyWorkspace(input.companies, [toLoadWarning("leads", error)]);
   }
 
-  if (agentsResult.error) {
-    throw new Error(`Nao foi possivel carregar agentes: ${agentsResult.error.message}`);
+  const leadIds = leadRows.map((lead) => lead.id);
+  let conversationRows: ConversationRow[] = [];
+  let agentRows: AgentRow[] = [];
+  let eventRows: IntelligenceEventRow[] = [];
+
+  try {
+    const [conversationsResult, agentsResult, eventsResult] = await Promise.all([
+      leadIds.length
+        ? input.client
+            .from("conversations")
+            .select("id, organization_id, lead_id, whatsapp_instance_id, channel, provider, provider_chat_id, status, last_message_preview, last_message_at, metadata, created_at, updated_at")
+            .in("lead_id", leadIds)
+            .order("updated_at", { ascending: false })
+            .limit(Math.max(240, (input.leadLimit ?? 160) * 2))
+        : Promise.resolve({ data: [], error: null }),
+      input.client
+        .from("agent_registry")
+        .select("id, organization_id, name, persona_name, avatar_url, metadata")
+        .eq("scope", "organization")
+        .in("organization_id", companyIds)
+        .contains("metadata", { client_created: true, agent_kind: "whatsapp" })
+        .order("updated_at", { ascending: false })
+        .limit(240),
+      input.client
+        .from("intelligence_events")
+        .select("id, organization_id, source_type, source_id, event_type, title, summary, tags, payload, occurred_at")
+        .in("organization_id", companyIds)
+        .order("occurred_at", { ascending: false })
+        .limit(1200),
+    ]);
+
+    if (conversationsResult.error) {
+      warnings.push(toLoadWarning("conversas", conversationsResult.error));
+    } else {
+      conversationRows = (conversationsResult.data ?? []) as ConversationRow[];
+    }
+
+    if (agentsResult.error) {
+      warnings.push(toLoadWarning("agentes", agentsResult.error));
+    } else {
+      agentRows = (agentsResult.data ?? []) as AgentRow[];
+    }
+
+    if (eventsResult.error) {
+      warnings.push(toLoadWarning("eventos dos leads", eventsResult.error));
+    } else {
+      eventRows = (eventsResult.data ?? []) as IntelligenceEventRow[];
+    }
+  } catch (error) {
+    warnings.push(toLoadWarning("dados complementares dos leads", error));
   }
 
-  if (eventsResult.error) {
-    throw new Error(`Nao foi possivel carregar eventos dos leads: ${eventsResult.error.message}`);
-  }
-
-  const conversationRows = (conversationsResult.data ?? []) as ConversationRow[];
   const conversationIds = conversationRows.map((conversation) => conversation.id);
-  const messagesResult = conversationIds.length
-    ? await input.client
+  let messageRows: MessageRow[] = [];
+
+  try {
+    if (conversationIds.length) {
+      const messagesResult = await input.client
         .from("conversation_messages")
         .select("id, organization_id, conversation_id, lead_id, whatsapp_instance_id, provider, provider_message_id, provider_chat_id, direction, message_type, text_content, payload, occurred_at, created_at")
         .in("conversation_id", conversationIds)
         .order("occurred_at", { ascending: true })
-        .limit(Math.max(1200, conversationIds.length * 30))
-    : { data: [], error: null };
+        .limit(Math.max(1200, conversationIds.length * 30));
 
-  if (messagesResult.error) {
-    throw new Error(`Nao foi possivel carregar mensagens: ${messagesResult.error.message}`);
+      if (messagesResult.error) {
+        warnings.push(toLoadWarning("mensagens", messagesResult.error));
+      } else {
+        messageRows = (messagesResult.data ?? []) as MessageRow[];
+      }
+    }
+  } catch (error) {
+    warnings.push(toLoadWarning("mensagens", error));
   }
 
   const companyById = new Map(input.companies.map((company) => [company.id, company]));
   const agentByOrgId = new Map<string, AgentRow>();
-  const syncedAvatarMetadata = await syncMissingLeadAvatarsForCrm({
-    client: input.client,
-    leads: leadRows,
-    conversations: conversationRows,
-  });
+  let syncedAvatarMetadata = new Map<string, JsonRecord>();
+
+  try {
+    syncedAvatarMetadata = await syncMissingLeadAvatarsForCrm({
+      client: input.client,
+      leads: leadRows,
+      conversations: conversationRows,
+    });
+  } catch (error) {
+    warnings.push(toLoadWarning("fotos dos leads", error));
+  }
+
   const hydratedLeadRows = leadRows.map((lead) => {
     const metadata = syncedAvatarMetadata.get(lead.id);
 
     return metadata ? { ...lead, metadata } : lead;
   });
 
-  for (const agent of (agentsResult.data ?? []) as AgentRow[]) {
+  for (const agent of agentRows) {
     if (agent.organization_id && !agentByOrgId.has(agent.organization_id)) {
       agentByOrgId.set(agent.organization_id, agent);
     }
   }
 
   const conversationsByLead = groupBy(conversationRows, (conversation) => conversation.lead_id ?? "none");
-  const messagesByConversation = groupBy((messagesResult.data ?? []) as MessageRow[], (message) => message.conversation_id ?? "none");
-  const eventRows = (eventsResult.data ?? []) as IntelligenceEventRow[];
+  const messagesByConversation = groupBy(messageRows, (message) => message.conversation_id ?? "none");
   const leads = hydratedLeadRows.map((lead) => {
     const company = companyById.get(lead.organization_id);
     const conversations = conversationsByLead.get(lead.id) ?? [];
@@ -403,7 +454,17 @@ async function getLeadCrmWorkspaceForCompanies(input: {
     companies: input.companies,
     leads,
     stats: buildStats(leads),
+    ...(warnings.length ? { warnings } : {}),
   };
+}
+
+function toLoadWarning(scope: string, error: unknown) {
+  logLeadCrmLoadError(scope, error);
+  return `Nao foi possivel atualizar ${scope} agora. Tente novamente em instantes.`;
+}
+
+function logLeadCrmLoadError(scope: string, error: unknown) {
+  console.error(`[LeadCRM] Falha ao carregar ${scope}`, error);
 }
 
 async function syncMissingLeadAvatarsForCrm(input: {

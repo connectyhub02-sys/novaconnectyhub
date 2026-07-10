@@ -25,6 +25,7 @@ import type {
   PlatformProductImport,
 } from "@/lib/platform-products";
 import { formatSalesCatalogFulfillmentMode, formatSalesCatalogWeight } from "@/lib/sales-catalog/shared";
+import { cn } from "@/lib/utils";
 import { NeonBadge, PageHeader, Panel, StatusBadge } from "./panel-primitives";
 
 type Notice = {
@@ -135,18 +136,17 @@ export function ClientProductsMarketplace({
         title="Produtos"
         description="Importe produtos da ConnectyHub para vender por comissao no WhatsApp. Produtos proprios continuam no Catalogo de Vendas."
         actions={
-          <div className="flex flex-wrap gap-2">
-            <NeonBadge tone={catalog.schemaReady ? "green" : "amber"}>{catalog.schemaReady ? "Vitrine ativa" : "Aguardando SQL"}</NeonBadge>
-            <NeonBadge tone="cyan">{metrics.available} disponiveis</NeonBadge>
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+            <NeonBadge tone="cyan">{metrics.available} produtos</NeonBadge>
             <NeonBadge tone="amber">{metrics.imported} importados</NeonBadge>
           </div>
         }
       />
 
       {!catalog.schemaReady ? (
-        <Panel title="Vitrine indisponivel" eyebrow="connectyhub">
+        <Panel title="Produtos indisponiveis" eyebrow="vitrine">
           <div className="rounded-xl border border-amber-400/25 bg-amber-400/10 px-4 py-3 text-[13px] leading-6 text-amber-100">
-            A area de produtos ConnectyHub ainda depende da migration de marketplace no Supabase.
+            A vitrine de produtos esta temporariamente indisponivel. Tente novamente em instantes.
           </div>
         </Panel>
       ) : (
@@ -164,18 +164,18 @@ export function ClientProductsMarketplace({
             </div>
           ) : null}
 
-          <div className="grid gap-4 md:grid-cols-4">
+          <div className="grid grid-cols-4 gap-2 md:gap-4">
             <Metric icon={ShoppingBag} label="Disponiveis" value={String(metrics.available)} detail="produtos ConnectyHub" />
             <Metric icon={CheckCircle2} label="Importados" value={String(metrics.imported)} detail={selectedCompany?.name ?? "empresa selecionada"} />
             <Metric icon={BadgePercent} label="Comissao media" value={`${metrics.averageCommission}%`} detail={`${metrics.commissionable} comissao ativa`} />
-            <Metric icon={BadgePercent} label="A receber" value={formatMoney(metrics.payableCommission)} detail="pendente/liberado" />
+            <Metric icon={BadgePercent} label="A receber" mobileValue={formatCompactMoney(metrics.payableCommission)} value={formatMoney(metrics.payableCommission)} detail="pendente/liberado" />
           </div>
 
           <Panel
             title="Empresa de venda"
             eyebrow="separacao por agente/operacao"
             action={
-              <Link href="/dashboard/links" className="inline-flex h-9 items-center gap-2 rounded-xl border px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-cyan-100" style={{ borderColor: "var(--ch-border)" }}>
+              <Link href="/dashboard/links" className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-xl border px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-cyan-100 sm:w-auto" style={{ borderColor: "var(--ch-border)" }}>
                 <ExternalLink className="h-3.5 w-3.5" />
                 Catalogo de Vendas
               </Link>
@@ -258,7 +258,7 @@ export function ClientProductsMarketplace({
               </Panel>
 
               <Panel title="Comissoes" eyebrow="repasse ConnectyHub">
-                <div className="mb-3 grid gap-2 sm:grid-cols-2">
+                <div className="mb-3 grid grid-cols-2 gap-2">
                   <CommissionSummaryTile label="Pendente" value={formatMoney(metrics.pendingCommission)} detail={`${metrics.pendingCount} aguardando prazo`} />
                   <CommissionSummaryTile label="Liberada" value={formatMoney(metrics.availableCommission)} detail={`${metrics.availableCount} pronta para repasse`} />
                   <CommissionSummaryTile label="Paga" value={formatMoney(metrics.paidCommission)} detail={`${metrics.paidCount} repasse(s)`} />
@@ -304,9 +304,9 @@ function MarketplaceProductCard({
   const cover = product.media.find((media) => media.kind === "image");
 
   return (
-    <div className="grid gap-3 rounded-xl border p-3 md:grid-cols-[104px_minmax(0,1fr)]" style={{ background: "var(--ch-surface-2)", borderColor: product.marketplaceStatus === "featured" ? "rgba(251,191,36,0.42)" : "var(--ch-border)" }}>
-      <div className="relative grid aspect-square place-items-center overflow-hidden rounded-lg border" style={{ borderColor: "var(--ch-border)", background: "var(--ch-panel)" }}>
-        {cover ? <Image alt={product.name} className="object-cover" fill sizes="104px" src={cover.storageUrl} unoptimized /> : <PackagePlus className="h-9 w-9 text-slate-600" />}
+    <div className="grid grid-cols-[76px_minmax(0,1fr)] gap-3 rounded-xl border p-2.5 md:grid-cols-[104px_minmax(0,1fr)] md:p-3" style={{ background: "var(--ch-surface-2)", borderColor: product.marketplaceStatus === "featured" ? "rgba(251,191,36,0.42)" : "var(--ch-border)" }}>
+      <div className="relative grid h-[76px] w-[76px] place-items-center overflow-hidden rounded-lg border md:aspect-square md:h-auto md:w-auto" style={{ borderColor: "var(--ch-border)", background: "var(--ch-panel)" }}>
+        {cover ? <Image alt={product.name} className="object-cover" fill sizes="(max-width: 767px) 76px, 104px" src={cover.storageUrl} unoptimized /> : <PackagePlus className="h-8 w-8 text-slate-600 md:h-9 md:w-9" />}
       </div>
       <div className="min-w-0">
         <div className="flex flex-wrap items-start justify-between gap-2">
@@ -330,23 +330,23 @@ function MarketplaceProductCard({
           <MiniTag icon={ShoppingBag}>{formatSalesChannel(product.salesChannelType)}</MiniTag>
           <MiniTag icon={BadgePercent}>{product.commissionPercentage}% comissao</MiniTag>
           <MiniTag icon={CheckCircle2}>repasse D+{product.commissionReleaseDays}</MiniTag>
-          <MiniTag icon={Tags}>{product.skus.length || 1} SKU</MiniTag>
-          {product.shipping.weightGrams ? <MiniTag icon={Truck}>{formatSalesCatalogWeight(product.shipping.weightGrams)}</MiniTag> : null}
-          {product.media.length > 0 ? <MiniTag icon={Upload}>{product.media.length} arq.</MiniTag> : null}
+          <MiniTag className="hidden sm:inline-flex" icon={Tags}>{product.skus.length || 1} SKU</MiniTag>
+          {product.shipping.weightGrams ? <MiniTag className="hidden sm:inline-flex" icon={Truck}>{formatSalesCatalogWeight(product.shipping.weightGrams)}</MiniTag> : null}
+          {product.media.length > 0 ? <MiniTag className="hidden sm:inline-flex" icon={Upload}>{product.media.length} arq.</MiniTag> : null}
         </div>
 
-        <div className="mt-3 flex flex-wrap gap-2">
+        <div className="mt-3 grid grid-cols-[minmax(0,1fr)_72px] gap-2 sm:flex sm:flex-wrap">
           <button
             type="button"
             disabled={loading || disabled}
             onClick={onImport}
-            className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex min-h-9 w-full items-center justify-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
             style={{ borderColor: "var(--ch-border)" }}
           >
             {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PackagePlus className="h-3.5 w-3.5" />}
             {imported ? "Atualizar importacao" : "Importar"}
           </button>
-          <button type="button" onClick={onCopy} className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-slate-300 transition hover:bg-cyan-400/10 hover:text-cyan-100" style={{ borderColor: "var(--ch-border)" }}>
+          <button type="button" onClick={onCopy} className="inline-flex min-h-9 w-full items-center justify-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-slate-300 transition hover:bg-cyan-400/10 hover:text-cyan-100 sm:w-auto" style={{ borderColor: "var(--ch-border)" }}>
             <Copy className="h-3.5 w-3.5" />
             Tag
           </button>
@@ -384,32 +384,44 @@ function CommissionRow({ commission, product }: { commission: PlatformProductCom
 
 function CommissionSummaryTile({ label, value, detail }: { label: string; value: string; detail: string }) {
   return (
-    <div className="rounded-xl border px-3 py-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-panel)" }}>
-      <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-slate-500">{label}</p>
-      <p className="mt-2 truncate font-mono text-[17px] font-bold text-cyan-100">{value}</p>
-      <p className="mt-1 truncate text-[11px] text-slate-500">{detail}</p>
+    <div className="rounded-xl border px-2.5 py-3 sm:px-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-panel)" }}>
+      <p className="truncate font-mono text-[8px] uppercase tracking-[0.13em] text-slate-500 sm:text-[9px] sm:tracking-[0.16em]">{label}</p>
+      <p className="mt-2 truncate font-mono text-[14px] font-bold text-cyan-100 sm:text-[17px]">{value}</p>
+      <p className="mt-1 truncate text-[10px] text-slate-500 sm:text-[11px]">{detail}</p>
     </div>
   );
 }
 
-function Metric({ icon: Icon, label, value, detail }: { icon: LucideIcon; label: string; value: string; detail: string }) {
+function Metric({
+  icon: Icon,
+  label,
+  mobileValue,
+  value,
+  detail,
+}: {
+  icon: LucideIcon;
+  label: string;
+  mobileValue?: string;
+  value: string;
+  detail: string;
+}) {
   return (
-    <div className="rounded-2xl p-5" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}>
-      <div className="flex items-start justify-between gap-3">
-        <p className="font-mono text-[10px] uppercase tracking-widest text-slate-500">{label}</p>
-        <div className="flex h-9 w-9 items-center justify-center rounded-xl" style={{ background: "rgba(6,182,212,0.14)", color: "#22d3ee" }}>
+    <div className="min-w-0 rounded-2xl p-2.5 sm:p-5" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}>
+      <div className="flex items-start justify-between gap-2">
+        <p className="truncate font-mono text-[8px] uppercase tracking-[0.12em] text-slate-500 sm:text-[10px] sm:tracking-widest">{label}</p>
+        <div className="hidden h-9 w-9 items-center justify-center rounded-xl sm:flex" style={{ background: "rgba(6,182,212,0.14)", color: "#22d3ee" }}>
           <Icon className="h-4 w-4" />
         </div>
       </div>
-      <p className="mt-4 font-mono text-[26px] font-bold leading-none" style={{ color: "var(--ch-text)" }}>{value}</p>
-      <p className="mt-3 text-[12px] text-slate-500">{detail}</p>
+      <p className="mt-2 truncate font-mono text-[17px] font-bold leading-none sm:mt-4 sm:text-[26px]" style={{ color: "var(--ch-text)" }}>{mobileValue ?? value}</p>
+      <p className="mt-1 truncate text-[10px] text-slate-500 sm:mt-3 sm:text-[12px]">{detail}</p>
     </div>
   );
 }
 
-function MiniTag({ icon: Icon, children }: { icon: LucideIcon; children: ReactNode }) {
+function MiniTag({ icon: Icon, children, className }: { icon: LucideIcon; children: ReactNode; className?: string }) {
   return (
-    <span className="inline-flex max-w-full items-center gap-1 rounded-md border px-2 py-1 text-[10px] text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
+    <span className={cn("inline-flex max-w-full items-center gap-1 rounded-md border px-2 py-1 text-[10px] text-slate-400", className)} style={{ borderColor: "var(--ch-border)" }}>
       <Icon className="h-3 w-3 shrink-0" />
       <span className="truncate">{children}</span>
     </span>
@@ -422,6 +434,14 @@ function copyText(value: string) {
 
 function formatMoney(value: number) {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
+}
+
+function formatCompactMoney(value: number) {
+  if (Math.abs(value) >= 1000) {
+    return new Intl.NumberFormat("pt-BR", { notation: "compact", maximumFractionDigits: 1, style: "currency", currency: "BRL" }).format(value);
+  }
+
+  return new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0, style: "currency", currency: "BRL" }).format(value);
 }
 
 function formatDate(value: string | null) {

@@ -35,7 +35,7 @@ import {
   Video,
   X,
 } from "lucide-react";
-import { GuidedTour, HelpHint, type GuidedTourStep } from "./guided-help";
+import { HelpHint } from "./guided-help";
 import { NeonBadge, PageHeader, Panel } from "./panel-primitives";
 import type { ClientCompany } from "@/lib/client-os/companies";
 import {
@@ -234,51 +234,6 @@ const commercialFlowFilterOptions: Array<{ value: CommercialFlowFilter; label: s
   { value: "connectyhub_resale", label: "Revenda CH" },
   { value: "connectyhub_direct", label: "Venda direta CH" },
   { value: "external_marketplace", label: "Marketplace externo" },
-];
-
-const salesCatalogTourSteps: GuidedTourStep[] = [
-  {
-    id: "setup",
-    targetId: "sales-catalog-tour-setup",
-    title: "Comece pela configuracao",
-    body: "Monte a base do catalogo antes de cadastrar produtos: empresa, tipo de venda, categorias, variacoes, pagamentos, dados do lead e mensagens.",
-  },
-  {
-    id: "categories",
-    targetId: "sales-catalog-tour-categories",
-    title: "Crie suas categorias",
-    body: "O catalogo comeca zerado. Cadastre as categorias que fazem sentido para a operacao do cliente, como roupas, cursos, servicos ou kits.",
-  },
-  {
-    id: "attributes",
-    targetId: "sales-catalog-tour-attributes",
-    title: "Defina variacoes livres",
-    body: "Use variacoes para cor, tamanho, material, publico, voltagem ou qualquer escolha que o agente precisa confirmar no WhatsApp.",
-  },
-  {
-    id: "payments",
-    targetId: "sales-catalog-tour-payments",
-    title: "Configure o pagamento no WhatsApp",
-    body: "Ative somente os metodos aceitos pela empresa e escreva a regra que o agente deve seguir para cobrar ou pedir comprovante.",
-  },
-  {
-    id: "shipping",
-    targetId: "sales-catalog-tour-shipping",
-    title: "Depois configure frete",
-    body: "Informe origem, prazos e regioes atendidas para o agente calcular entrega antes de fechar o pedido.",
-  },
-  {
-    id: "products",
-    targetId: "sales-catalog-tour-products",
-    title: "Cadastre os produtos",
-    body: "Com a base pronta, cadastre nome, preco, descricao comercial, midias, estoque e status de cada item.",
-  },
-  {
-    id: "orders",
-    targetId: "sales-catalog-tour-orders",
-    title: "Acompanhe pedidos e pagamentos",
-    body: "Use as abas de pedidos e pagamentos para ver o funil de venda, status de recebimento e o que precisa de acao humana.",
-  },
 ];
 
 const salesCatalogHelpText: Record<string, string> = {
@@ -1507,17 +1462,6 @@ export function SalesCatalogConsole({
         description="Itens que o agente pode apresentar e enviar no WhatsApp."
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <GuidedTour
-              storageKey="connectyhub.sales-catalog-tour.v1"
-              steps={salesCatalogTourSteps}
-              launcherLabel="Tour guiado"
-              onStepChange={(step) => {
-                if (["setup", "categories", "attributes", "payments"].includes(step.id)) setActiveTab("setup");
-                if (step.id === "shipping") setActiveTab("shipping");
-                if (step.id === "products") setActiveTab("products");
-                if (step.id === "orders") setActiveTab("orders");
-              }}
-            />
             <NeonBadge tone="cyan">{visibleItems.length} itens</NeonBadge>
           </div>
         }
@@ -1536,7 +1480,7 @@ export function SalesCatalogConsole({
         </div>
       ) : null}
 
-      <div className="mb-4 grid gap-3 md:grid-cols-5">
+      <div className="mb-2 grid grid-cols-5 gap-1.5 sm:gap-2">
         <StatTile icon={PackagePlus} label="Ativos" value={String(stats.active)} tone="green" />
         <StatTile icon={CheckCircle2} label="Prontos" value={String(stats.ready)} tone="cyan" />
         <StatTile icon={Upload} label="Arquivos" value={String(stats.media)} tone="amber" />
@@ -1544,10 +1488,10 @@ export function SalesCatalogConsole({
         <StatTile icon={ClipboardList} label="Pedidos" value={String(stats.orderCount)} tone="rose" />
       </div>
 
-      <div className="mb-4 grid gap-3 lg:grid-cols-4">
+      <div className="mb-4 grid grid-cols-4 gap-1.5 sm:gap-2">
         <CommerceTile label="Venda propria" value={String(stats.clientDirectOrders)} tone="green" />
         <CommerceTile label="Revenda CH" value={String(stats.connectyHubResaleOrders)} tone="cyan" />
-        <CommerceTile label="Venda direta CH" value={String(stats.connectyHubDirectOrders)} tone="violet" />
+        <CommerceTile label="Direta CH" value={String(stats.connectyHubDirectOrders)} tone="violet" />
         <CommerceTile label="Comissao" value={String(stats.commissionOrders)} tone="amber" />
       </div>
 
@@ -2015,9 +1959,9 @@ export function SalesCatalogConsole({
             </div>
 
             <div className="overflow-hidden rounded-xl border" style={{ borderColor: "var(--ch-border)" }}>
-              <div className="overflow-x-auto">
-                <div className="min-w-[1120px]">
-                  <div className="grid grid-cols-[72px_minmax(150px,1fr)_112px_112px_110px_100px_100px_130px_88px] gap-2 border-b px-3 py-2 font-mono text-[9px] uppercase tracking-widest text-slate-500" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+              <div className="overflow-visible md:overflow-x-auto">
+                <div className="min-w-0 md:min-w-[1120px]">
+                  <div className="hidden grid-cols-[72px_minmax(150px,1fr)_112px_112px_110px_100px_100px_130px_88px] gap-2 border-b px-3 py-2 font-mono text-[9px] uppercase tracking-widest text-slate-500 md:grid" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
                     <span>Estado</span>
                     <span>Atendimento</span>
                     <span>CEP ini.</span>
@@ -2032,7 +1976,7 @@ export function SalesCatalogConsole({
                     {shippingDraft.rules.map((rule) => (
                       <div
                         key={rule.uf}
-                        className="grid grid-cols-[72px_minmax(150px,1fr)_112px_112px_110px_100px_100px_130px_88px] items-center gap-2 border-b px-3 py-2 last:border-b-0"
+                        className="grid gap-2 border-b px-3 py-3 last:border-b-0 md:grid-cols-[72px_minmax(150px,1fr)_112px_112px_110px_100px_100px_130px_88px] md:items-center md:py-2"
                         style={{ borderColor: "var(--ch-border)" }}
                       >
                         <div>
@@ -2050,7 +1994,7 @@ export function SalesCatalogConsole({
                         <input
                           value={rule.cepStart ?? ""}
                           onChange={(event) => updateShippingRule(rule.uf, { cepStart: cepInput(event.target.value) })}
-                          className="h-10 rounded-lg border bg-transparent px-2 text-[12px] outline-none"
+                          className="h-10 min-w-0 rounded-lg border bg-transparent px-2 text-[12px] outline-none"
                           inputMode="numeric"
                           placeholder="00000-000"
                           style={{ borderColor: "var(--ch-border)" }}
@@ -2058,7 +2002,7 @@ export function SalesCatalogConsole({
                         <input
                           value={rule.cepEnd ?? ""}
                           onChange={(event) => updateShippingRule(rule.uf, { cepEnd: cepInput(event.target.value) })}
-                          className="h-10 rounded-lg border bg-transparent px-2 text-[12px] outline-none"
+                          className="h-10 min-w-0 rounded-lg border bg-transparent px-2 text-[12px] outline-none"
                           inputMode="numeric"
                           placeholder="99999-999"
                           style={{ borderColor: "var(--ch-border)" }}
@@ -2066,14 +2010,14 @@ export function SalesCatalogConsole({
                         <input
                           value={rule.price ?? ""}
                           onChange={(event) => updateShippingRule(rule.uf, { price: event.target.value.slice(0, 40) })}
-                          className="h-10 rounded-lg border bg-transparent px-2 text-[12px] outline-none"
+                          className="h-10 min-w-0 rounded-lg border bg-transparent px-2 text-[12px] outline-none"
                           placeholder="R$ 29,90"
                           style={{ borderColor: "var(--ch-border)" }}
                         />
                         <input
                           value={rule.minDays ?? ""}
                           onChange={(event) => updateShippingRule(rule.uf, { minDays: parseOptionalNumber(event.target.value) })}
-                          className="h-10 rounded-lg border bg-transparent px-2 text-[12px] outline-none"
+                          className="h-10 min-w-0 rounded-lg border bg-transparent px-2 text-[12px] outline-none"
                           inputMode="numeric"
                           placeholder="2"
                           style={{ borderColor: "var(--ch-border)" }}
@@ -2081,7 +2025,7 @@ export function SalesCatalogConsole({
                         <input
                           value={rule.maxDays ?? ""}
                           onChange={(event) => updateShippingRule(rule.uf, { maxDays: parseOptionalNumber(event.target.value) })}
-                          className="h-10 rounded-lg border bg-transparent px-2 text-[12px] outline-none"
+                          className="h-10 min-w-0 rounded-lg border bg-transparent px-2 text-[12px] outline-none"
                           inputMode="numeric"
                           placeholder="5"
                           style={{ borderColor: "var(--ch-border)" }}
@@ -2089,7 +2033,7 @@ export function SalesCatalogConsole({
                         <input
                           value={rule.freeShippingThreshold ?? ""}
                           onChange={(event) => updateShippingRule(rule.uf, { freeShippingThreshold: event.target.value.slice(0, 40) })}
-                          className="h-10 rounded-lg border bg-transparent px-2 text-[12px] outline-none"
+                          className="h-10 min-w-0 rounded-lg border bg-transparent px-2 text-[12px] outline-none"
                           placeholder="R$ 300,00"
                           style={{ borderColor: "var(--ch-border)" }}
                         />
@@ -2097,7 +2041,7 @@ export function SalesCatalogConsole({
                           type="button"
                           onClick={() => setSelectedShippingUf(rule.uf)}
                           className={cn(
-                            "h-10 rounded-lg border px-2 font-mono text-[10px] font-semibold uppercase tracking-wide transition",
+                            "h-10 min-w-0 rounded-lg border px-2 font-mono text-[10px] font-semibold uppercase tracking-wide transition",
                             selectedShippingUf === rule.uf ? "border-cyan-300/60 bg-cyan-300/15 text-cyan-100" : "text-slate-400 hover:bg-cyan-400/10 hover:text-cyan-100",
                           )}
                           style={{ borderColor: selectedShippingUf === rule.uf ? undefined : "var(--ch-border)" }}
@@ -2153,9 +2097,9 @@ export function SalesCatalogConsole({
                         style={{ borderColor: "var(--ch-border)" }}
                       />
 
-                      <div className="mt-3 overflow-x-auto">
-                        <div className="grid min-w-[520px] gap-2">
-                          <div className="grid grid-cols-[22px_minmax(120px,1.4fr)_92px_106px_58px_58px_34px] gap-2 px-1 font-mono text-[8px] uppercase tracking-widest text-slate-500">
+                      <div className="mt-3 overflow-visible md:overflow-x-auto">
+                        <div className="grid min-w-0 gap-2 md:min-w-[520px]">
+                          <div className="hidden grid-cols-[22px_minmax(120px,1.4fr)_92px_106px_58px_58px_34px] gap-2 px-1 font-mono text-[8px] uppercase tracking-widest text-slate-500 md:grid">
                             <span></span>
                             <span>Faixa</span>
                             <span>Peso</span>
@@ -2165,7 +2109,7 @@ export function SalesCatalogConsole({
                             <span></span>
                           </div>
                           {service.tiers.map((tier) => (
-                            <div key={tier.id} className="grid grid-cols-[22px_minmax(120px,1.4fr)_92px_106px_58px_58px_34px] items-center gap-2">
+                            <div key={tier.id} className="grid gap-2 rounded-lg border border-white/10 p-2 md:grid-cols-[22px_minmax(120px,1.4fr)_92px_106px_58px_58px_34px] md:items-center md:border-0 md:p-0">
                               <input
                                 checked={tier.active}
                                 type="checkbox"
@@ -3936,23 +3880,23 @@ function StatTile({ icon: Icon, label, value, tone = "cyan" }: { icon: typeof Pa
 
   return (
     <div
-      className="rounded-xl border p-3"
+      className="min-w-0 rounded-xl border px-2 py-2 sm:px-3 sm:py-2.5"
       style={{
-        background: `linear-gradient(135deg, rgba(${toneStyle.rgb},0.13), rgba(255,255,255,0.025)), var(--ch-panel)`,
+        background: `linear-gradient(90deg, rgba(${toneStyle.rgb},0.13), rgba(255,255,255,0.022)), var(--ch-panel)`,
         borderColor: `rgba(${toneStyle.rgb},0.35)`,
-        boxShadow: `inset 0 1px 0 rgba(255,255,255,0.055), 0 12px 28px rgba(${toneStyle.rgb},0.045)`,
+        boxShadow: `inset 0 1px 0 rgba(255,255,255,0.055), 0 8px 20px rgba(${toneStyle.rgb},0.035)`,
       }}
     >
-      <div className="flex items-center justify-between gap-3">
-        <p className="font-mono text-[10px] uppercase tracking-widest text-slate-500">{label}</p>
+      <div className="flex min-w-0 items-center justify-between gap-1.5">
+        <p className="min-w-0 truncate font-mono text-[8px] uppercase tracking-[0.11em] text-slate-500 sm:text-[9px] sm:tracking-[0.16em]">{label}</p>
         <span
-          className="grid h-7 w-7 place-items-center rounded-lg"
+          className="hidden h-6 w-6 shrink-0 place-items-center rounded-lg sm:grid"
           style={{ background: `rgba(${toneStyle.rgb},0.14)`, color: toneStyle.fill }}
         >
-          <Icon className="h-4 w-4" />
+          <Icon className="h-3.5 w-3.5" />
         </span>
       </div>
-      <p className={cn("mt-3 font-mono text-[24px] font-bold", toneStyle.text)}>{value}</p>
+      <p className={cn("mt-1 truncate font-mono text-[16px] font-bold leading-none sm:text-[18px]", toneStyle.text)}>{value}</p>
     </div>
   );
 }
@@ -3970,15 +3914,20 @@ function CommerceTile({
 
   return (
     <div
-      className="rounded-xl border px-3 py-3"
+      className="min-w-0 rounded-xl border px-2 py-2 sm:px-3 sm:py-2.5"
       style={{
         background: `linear-gradient(90deg, rgba(${toneStyle.rgb},0.11), rgba(255,255,255,0.020)), var(--ch-panel)`,
         borderColor: `rgba(${toneStyle.rgb},0.34)`,
       }}
     >
-      <div className="flex items-center justify-between gap-3">
-        <p className="font-mono text-[10px] uppercase tracking-widest text-slate-500">{label}</p>
-        <NeonBadge tone={tone}>{value}</NeonBadge>
+      <div className="flex min-w-0 items-center justify-between gap-1.5">
+        <p className="min-w-0 truncate font-mono text-[8px] uppercase tracking-[0.10em] text-slate-500 sm:text-[9px] sm:tracking-[0.16em]">{label}</p>
+        <span
+          className="grid h-5 min-w-5 shrink-0 place-items-center rounded-full px-1.5 font-mono text-[9px] font-bold"
+          style={{ background: `rgba(${toneStyle.rgb},0.15)`, color: toneStyle.fill }}
+        >
+          {value}
+        </span>
       </div>
     </div>
   );

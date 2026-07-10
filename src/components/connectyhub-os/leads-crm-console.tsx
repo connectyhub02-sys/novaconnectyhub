@@ -65,6 +65,7 @@ export function LeadCrmConsole({ mode, workspace }: LeadCrmConsoleProps) {
   const [status, setStatus] = useState<"all" | ClientLeadStatus>("all");
   const [expandedLeadId, setExpandedLeadId] = useState<string | null>(workspace.leads[0]?.id ?? null);
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(workspace.leads[0]?.id ?? null);
+  const [conversationPane, setConversationPane] = useState<"inbox" | "chat">("inbox");
   const [detailsLeadId, setDetailsLeadId] = useState<string | null>(null);
 
   const filteredLeads = useMemo(() => {
@@ -95,30 +96,41 @@ export function LeadCrmConsole({ mode, workspace }: LeadCrmConsoleProps) {
   const selectedLead = workspace.leads.find((lead) => lead.id === selectedLeadId) ?? filteredLeads[0] ?? workspace.leads[0] ?? null;
   const detailsLead = workspace.leads.find((lead) => lead.id === detailsLeadId) ?? null;
   const header = getHeaderCopy(mode);
+  const warnings = workspace.warnings ?? [];
 
   if (!workspace.companies.length) {
+    const hasLoadWarning = warnings.length > 0;
+
     return (
       <section>
-        <PageHeader eyebrow={header.eyebrow} title={header.title} description="Cadastre uma empresa para liberar leads, conversas e CRM." />
-        <Panel eyebrow="Workspace" title="Nenhuma empresa cadastrada">
-          <div className="flex min-h-[260px] flex-col items-center justify-center gap-4 text-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-500/10 text-cyan-300">
-              <Building2 className="h-5 w-5" />
+        <PageHeader
+          eyebrow={header.eyebrow}
+          title={header.title}
+          description={hasLoadWarning ? "Nao conseguimos carregar os dados do CRM agora." : "Cadastre uma empresa para liberar leads, conversas e CRM."}
+        />
+        {hasLoadWarning ? (
+          <LeadWorkspaceWarning warnings={warnings} />
+        ) : (
+          <Panel eyebrow="Workspace" title="Nenhuma empresa cadastrada">
+            <div className="flex min-h-[260px] flex-col items-center justify-center gap-4 text-center">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-500/10 text-cyan-300">
+                <Building2 className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-[15px] font-semibold text-white">Crie sua primeira empresa</p>
+                <p className="mt-1 max-w-[440px] text-[12px] leading-5 text-slate-400">
+                  Depois disso, o WhatsApp, os agentes e os leads ficam vinculados a empresa correta.
+                </p>
+              </div>
+              <Link
+                className="inline-flex h-10 items-center rounded-xl bg-cyan-300 px-4 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-950 transition hover:bg-cyan-200"
+                href="/dashboard/empresa"
+              >
+                Nova empresa
+              </Link>
             </div>
-            <div>
-              <p className="text-[15px] font-semibold text-white">Crie sua primeira empresa</p>
-              <p className="mt-1 max-w-[440px] text-[12px] leading-5 text-slate-400">
-                Depois disso, o WhatsApp, os agentes e os leads ficam vinculados a empresa correta.
-              </p>
-            </div>
-            <Link
-              className="inline-flex h-10 items-center rounded-xl bg-cyan-300 px-4 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-950 transition hover:bg-cyan-200"
-              href="/dashboard/empresa"
-            >
-              Nova empresa
-            </Link>
-          </div>
-        </Panel>
+          </Panel>
+        )}
       </section>
     );
   }
@@ -126,6 +138,7 @@ export function LeadCrmConsole({ mode, workspace }: LeadCrmConsoleProps) {
   return (
     <section>
       <PageHeader eyebrow={header.eyebrow} title={header.title} description={header.description} />
+      {warnings.length ? <LeadWorkspaceWarning warnings={warnings} /> : null}
 
       {mode !== "conversas" ? <LeadStats workspace={workspace} /> : null}
 
@@ -155,10 +168,12 @@ export function LeadCrmConsole({ mode, workspace }: LeadCrmConsoleProps) {
 
       {mode === "conversas" ? (
         <ConversationsView
+          conversationPane={conversationPane}
           filteredLeads={filteredLeads}
           search={search}
           selectedLead={selectedLead}
           selectedLeadId={selectedLead?.id ?? null}
+          setConversationPane={setConversationPane}
           setDetailsLeadId={setDetailsLeadId}
           setSearch={setSearch}
           setSelectedLeadId={setSelectedLeadId}
@@ -170,6 +185,30 @@ export function LeadCrmConsole({ mode, workspace }: LeadCrmConsoleProps) {
 
       {detailsLead ? <LeadDetailsModal lead={detailsLead} onClose={() => setDetailsLeadId(null)} /> : null}
     </section>
+  );
+}
+
+function LeadWorkspaceWarning({ warnings }: { warnings: string[] }) {
+  const visibleWarnings = Array.from(new Set(warnings)).slice(0, 3);
+
+  return (
+    <div className="mb-5">
+      <Panel
+        compact
+        eyebrow="Sincronizacao"
+        title="Dados temporariamente indisponiveis"
+        tone="amber"
+      >
+        <div className="space-y-2 text-[12px] leading-5 text-amber-100/90">
+          <p>O CRM continua acessivel, mas uma parte dos dados nao atualizou nesta tentativa.</p>
+          <ul className="space-y-1">
+            {visibleWarnings.map((warning) => (
+              <li key={warning}>{warning}</li>
+            ))}
+          </ul>
+        </div>
+      </Panel>
+    </div>
   );
 }
 
@@ -208,7 +247,48 @@ function LeadsView({
       action={<NeonBadge tone="cyan">{filteredLeads.length} registros</NeonBadge>}
     >
       <LeadFilters search={search} setSearch={setSearch} setStatus={setStatus} status={status} />
-      <div className="mt-4 overflow-x-auto">
+      <div className="mt-4 grid gap-2 md:hidden">
+        {filteredLeads.map((lead) => {
+          const temperature = getTemperatureMeta(lead.qualification.temperature);
+
+          return (
+            <button
+              key={lead.id}
+              className="grid gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3 text-left transition hover:border-cyan-400/30 hover:bg-cyan-400/5"
+              onClick={() => setDetailsLeadId(lead.id)}
+              type="button"
+            >
+              <div className="flex items-start gap-3">
+                <LeadAvatar lead={lead} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="truncate text-[13px] font-semibold text-white">{lead.name}</p>
+                      <p className="mt-1 truncate text-[12px] text-slate-400">{lead.phone ?? lead.email ?? "Sem contato"}</p>
+                    </div>
+                    <StatusPill status={lead.status} />
+                  </div>
+                  <p className="mt-2 line-clamp-2 text-[12px] leading-5 text-slate-400">{lead.summary}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <InfoMini label="Score" value={`${lead.score}/100`} />
+                <InfoMini label="Perfil" value={temperature.label} />
+                <InfoMini label="Origem" value={lead.source} />
+                <InfoMini label="Ultimo sinal" value={formatTime(lead.lastMessageAt ?? lead.updatedAt)} />
+              </div>
+
+              <span className={cn("inline-flex w-full items-center justify-center rounded-xl border px-3 py-2 font-mono text-[9px] font-bold uppercase tracking-wide", temperature.className)}>
+                Ver arquivo do lead
+              </span>
+            </button>
+          );
+        })}
+        {!filteredLeads.length ? <EmptyState title="Nenhum lead encontrado" detail="Quando o WhatsApp receber mensagens, os leads aparecem aqui." /> : null}
+      </div>
+
+      <div className="mt-4 hidden overflow-x-auto md:block">
         <div className="min-w-[1320px]">
           <div className="grid grid-cols-[1.2fr_150px_170px_150px_130px_170px_140px_130px_110px] gap-3 border-b border-white/10 px-3 pb-3 font-mono text-[9px] uppercase tracking-widest text-slate-500">
             <span>Nome</span>
@@ -344,10 +424,12 @@ function CrmView({
 }
 
 function ConversationsView({
+  conversationPane,
   filteredLeads,
   search,
   selectedLead,
   selectedLeadId,
+  setConversationPane,
   setDetailsLeadId,
   setSearch,
   setSelectedLeadId,
@@ -355,10 +437,12 @@ function ConversationsView({
   status,
   totalLeads,
 }: {
+  conversationPane: "inbox" | "chat";
   filteredLeads: ClientLeadRecord[];
   search: string;
   selectedLead: ClientLeadRecord | null;
   selectedLeadId: string | null;
+  setConversationPane: (pane: "inbox" | "chat") => void;
   setDetailsLeadId: (id: string) => void;
   setSearch: (value: string) => void;
   setSelectedLeadId: (id: string) => void;
@@ -368,7 +452,12 @@ function ConversationsView({
 }) {
   return (
     <div className="grid gap-5 xl:grid-cols-[390px_minmax(0,1fr)]">
-      <Panel eyebrow="Inbox" title="Conversas" action={<NeonBadge tone="cyan">{totalLeads} leads</NeonBadge>}>
+      <Panel
+        className={cn(conversationPane === "chat" && "hidden xl:block")}
+        eyebrow="Inbox"
+        title="Conversas"
+        action={<NeonBadge tone="cyan">{totalLeads} leads</NeonBadge>}
+      >
         <LeadFilters compact search={search} setSearch={setSearch} setStatus={setStatus} status={status} />
         <div className="mt-4 max-h-[720px] space-y-2 overflow-y-auto pr-1">
           {filteredLeads.map((lead) => (
@@ -380,7 +469,10 @@ function ConversationsView({
                   ? "border-cyan-400/45 bg-cyan-400/10"
                   : "border-white/10 bg-white/[0.02] hover:border-cyan-400/25 hover:bg-cyan-400/5",
               )}
-              onClick={() => setSelectedLeadId(lead.id)}
+              onClick={() => {
+                setSelectedLeadId(lead.id);
+                setConversationPane("chat");
+              }}
               type="button"
             >
               <div className="flex items-start gap-3">
@@ -406,19 +498,45 @@ function ConversationsView({
       </Panel>
 
       <Panel
+        className={cn(conversationPane === "inbox" && "hidden xl:block")}
         eyebrow="WhatsApp / Atendimento"
         title={selectedLead ? selectedLead.name : "Selecione uma conversa"}
-        action={selectedLead ? <StatusPill status={selectedLead.status} /> : null}
+        action={
+          selectedLead ? (
+            <div className="flex items-center gap-2">
+              <button
+                className="inline-flex h-9 items-center gap-2 rounded-xl border border-white/10 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-300 transition hover:bg-white/10 xl:hidden"
+                onClick={() => setConversationPane("inbox")}
+                type="button"
+              >
+                <ChevronDown className="h-3.5 w-3.5 rotate-90" />
+                Voltar
+              </button>
+              <StatusPill status={selectedLead.status} />
+            </div>
+          ) : null
+        }
       >
         {selectedLead ? (
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
-            <div className="min-h-[620px] rounded-2xl border border-white/10 bg-slate-950/30 p-4">
+            <div className="min-h-[calc(100svh-280px)] rounded-2xl border border-white/10 bg-slate-950/30 p-3 sm:p-4 lg:min-h-[620px]">
               <ConversationHeader lead={selectedLead} />
-              <div className="mt-4 h-[520px] overflow-y-auto rounded-2xl border border-white/10 bg-slate-950/40 p-4">
+              <div className="mt-3 h-[min(520px,calc(100svh-390px))] min-h-[340px] overflow-y-auto rounded-2xl border border-white/10 bg-slate-950/40 p-3 sm:mt-4 sm:p-4">
                 <ChatMessages messages={selectedLead.conversation.messages} />
               </div>
+              <div className="mt-3 grid gap-2 sm:hidden">
+                <OpenWhatsAppButton phone={selectedLead.phone} />
+                <button
+                  className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-cyan-400/25 bg-cyan-400/10 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-cyan-200 transition hover:bg-cyan-400/15"
+                  onClick={() => setDetailsLeadId(selectedLead.id)}
+                  type="button"
+                >
+                  Abrir arquivo do lead
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </button>
+              </div>
             </div>
-            <LeadSideFile lead={selectedLead} onDetails={() => setDetailsLeadId(selectedLead.id)} />
+            <LeadSideFile className="hidden lg:block" lead={selectedLead} onDetails={() => setDetailsLeadId(selectedLead.id)} />
           </div>
         ) : (
           <EmptyState title="Sem conversa selecionada" detail="Escolha um lead para ver o historico completo." />
@@ -442,14 +560,14 @@ function LeadDetailsModal({ lead, onClose }: { lead: ClientLeadRecord; onClose: 
     ?? null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 p-4 backdrop-blur-sm">
-      <div className="flex max-h-[92svh] w-full max-w-[1280px] flex-col overflow-hidden rounded-2xl border border-white/15 bg-[#11151d] shadow-2xl">
-        <div className="flex items-center justify-between gap-4 border-b border-white/10 px-5 py-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 p-0 backdrop-blur-sm sm:p-4">
+      <div className="flex h-[100svh] max-h-[100svh] w-full max-w-[1280px] flex-col overflow-hidden border border-white/15 bg-[#11151d] shadow-2xl sm:h-auto sm:max-h-[92svh] sm:rounded-2xl">
+        <div className="flex items-center justify-between gap-3 border-b border-white/10 px-3 py-3 sm:gap-4 sm:px-5 sm:py-4">
           <div className="flex min-w-0 items-center gap-3">
             <LeadAvatar lead={lead} size="lg" />
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <h2 className="truncate text-[18px] font-bold text-white">Arquivo inteligente do lead</h2>
+                <h2 className="truncate text-[16px] font-bold text-white sm:text-[18px]">Arquivo inteligente do lead</h2>
                 <StatusPill status={lead.status} />
               </div>
               <div className="mt-1 flex flex-wrap gap-3 text-[12px] text-slate-400">
@@ -477,8 +595,8 @@ function LeadDetailsModal({ lead, onClose }: { lead: ClientLeadRecord; onClose: 
           </button>
         </div>
 
-        <div className="grid min-h-0 flex-1 overflow-hidden lg:grid-cols-[370px_minmax(0,1fr)]">
-          <aside className="min-h-0 overflow-y-auto border-r border-white/10 bg-slate-950/25 p-4">
+        <div className="grid min-h-0 flex-1 overflow-y-auto lg:grid-cols-[370px_minmax(0,1fr)] lg:overflow-hidden">
+          <aside className="min-h-0 border-b border-white/10 bg-slate-950/25 p-3 sm:p-4 lg:overflow-y-auto lg:border-b-0 lg:border-r">
             <div className="space-y-3">
               <InfoPanel title="Resumo inteligente" text={lead.summary} />
               <QualificationGrid lead={lead} />
@@ -489,11 +607,11 @@ function LeadDetailsModal({ lead, onClose }: { lead: ClientLeadRecord; onClose: 
               <OpenWhatsAppButton phone={lead.phone} />
             </div>
           </aside>
-          <main className="min-h-0 overflow-hidden p-4">
-            <div className="flex h-full min-h-[640px] flex-col overflow-hidden rounded-2xl border border-white/10 bg-slate-950/70">
+          <main className="min-h-0 p-3 sm:p-4 lg:overflow-hidden">
+            <div className="flex min-h-[560px] flex-col overflow-hidden rounded-2xl border border-white/10 bg-slate-950/70 lg:h-full lg:min-h-[640px]">
               <ConversationHeader lead={lead} conversation={selectedConversation} />
               <div
-                className="min-h-0 flex-1 overflow-y-auto border-t border-white/10 p-5"
+                className="min-h-0 flex-1 overflow-y-auto border-t border-white/10 p-3 sm:p-5"
                 style={{
                   backgroundColor: "#0b1117",
                   backgroundImage:
@@ -941,7 +1059,7 @@ function ConversationHeader({
   const messageCount = conversation?.messageCount ?? lead.conversation.messageCount;
 
   return (
-    <div className="flex items-center justify-between gap-3 bg-slate-900/90 p-4">
+    <div className="flex flex-col gap-3 bg-slate-900/90 p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4">
       <div className="flex min-w-0 items-center gap-3">
         <LeadAvatar lead={lead} />
         <div className="min-w-0">
@@ -949,7 +1067,7 @@ function ConversationHeader({
           <p className="truncate text-[11px] text-slate-400">{lead.phone ?? lead.companyName}</p>
         </div>
       </div>
-      <div className="flex flex-wrap justify-end gap-2">
+      <div className="flex flex-wrap gap-2 sm:justify-end">
         {conversation ? <NeonBadge tone="zinc">{conversation.status ?? "sem status"}</NeonBadge> : null}
         <NeonBadge tone="cyan">{messageCount} mensagens</NeonBadge>
       </div>
@@ -975,7 +1093,7 @@ function ChatMessages({ messages }: { messages: ClientLeadMessage[] }) {
           <div key={message.id} className={cn("flex", isLead ? "justify-end" : "justify-start")}>
             <div
               className={cn(
-                "max-w-[72%] rounded-xl border px-4 py-3 text-[13px] leading-5 shadow-lg shadow-black/15",
+                "max-w-[88%] rounded-xl border px-3 py-3 text-[13px] leading-5 shadow-lg shadow-black/15 sm:max-w-[72%] sm:px-4",
                 isLead && "border-emerald-300/25 bg-emerald-300/15 text-emerald-50",
                 isAi && !isLead && "border-cyan-300/20 bg-slate-900/95 text-slate-100",
                 isHuman && !isLead && "border-sky-300/25 bg-sky-300/10 text-sky-50",
@@ -1023,9 +1141,9 @@ function MiniChat({ lead, messages }: { lead: ClientLeadRecord; messages: Client
   );
 }
 
-function LeadSideFile({ lead, onDetails }: { lead: ClientLeadRecord; onDetails: () => void }) {
+function LeadSideFile({ className, lead, onDetails }: { className?: string; lead: ClientLeadRecord; onDetails: () => void }) {
   return (
-    <aside className="space-y-3">
+    <aside className={cn("space-y-3", className)}>
       <InfoPanel title="Resumo" text={lead.summary} />
       <LeadQualificationSnapshot lead={lead} />
       <LeadTechnicalFile lead={lead} />

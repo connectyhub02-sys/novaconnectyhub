@@ -120,7 +120,7 @@ export function Panel({
         )}
         <p className="truncate text-[14px] font-semibold" style={{ color: "var(--ch-text)" }}>{title}</p>
       </div>
-      {action && <div className="w-full shrink-0 sm:w-auto">{action}</div>}
+      {action && <div className="min-w-0 w-full shrink-0 overflow-x-auto pb-1 sm:w-auto sm:overflow-visible sm:pb-0">{action}</div>}
     </>
   );
 
@@ -459,27 +459,54 @@ export function KpiStat({ label, value, tone = "zinc" }: { label: string; value:
 
 export function DataTable({ columns, rows }: { columns: string[]; rows: ReactNode[][] }) {
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-left">
-        <thead>
-          <tr style={{ borderBottom: "1px solid var(--ch-border)" }}>
-            {columns.map((col) => (
-              <th key={col} className="pb-3 pr-5 font-mono text-[9px] uppercase tracking-widest text-slate-600 last:pr-0">
-                {col}
-              </th>
+    <div className="grid gap-3">
+      <div className="grid gap-2 md:hidden">
+        {rows.map((row, rowIndex) => (
+          <div
+            key={rowIndex}
+            data-mobile-data-card
+            className="grid gap-2 rounded-2xl p-3"
+            style={{ background: "var(--ch-panel-2)", border: "1px solid var(--ch-border)" }}
+          >
+            {row.map((cell, cellIndex) => (
+              <div
+                key={`${rowIndex}-${columns[cellIndex] ?? cellIndex}`}
+                data-mobile-data-cell
+                className="grid min-w-0 gap-1 rounded-xl px-2 py-2"
+                style={{ background: "rgba(255,255,255,0.030)" }}
+              >
+                <div className="font-mono text-[8px] uppercase tracking-widest text-slate-600">
+                  {columns[cellIndex] ?? `Campo ${cellIndex + 1}`}
+                </div>
+                <div className="min-w-0 text-[12px] leading-5 text-slate-200">{cell}</div>
+              </div>
             ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, i) => (
-            <tr key={i} className="group border-b transition" style={{ borderColor: "var(--ch-border)" }}>
-              {row.map((cell, j) => (
-                <td key={j} className="py-3 pr-5 text-[12px] last:pr-0">{cell}</td>
+          </div>
+        ))}
+      </div>
+
+      <div className="hidden overflow-x-auto md:block">
+        <table className="w-full text-left">
+          <thead>
+            <tr style={{ borderBottom: "1px solid var(--ch-border)" }}>
+              {columns.map((col) => (
+                <th key={col} className="pb-3 pr-5 font-mono text-[9px] uppercase tracking-widest text-slate-600 last:pr-0">
+                  {col}
+                </th>
               ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {rows.map((row, i) => (
+              <tr key={i} className="group border-b transition" style={{ borderColor: "var(--ch-border)" }}>
+                {row.map((cell, j) => (
+                  <td key={j} className="py-3 pr-5 text-[12px] last:pr-0">{cell}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
