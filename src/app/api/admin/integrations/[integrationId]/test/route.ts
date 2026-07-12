@@ -28,6 +28,7 @@ type ConnectionTestResult = {
 };
 
 const defaultGeminiModel = "gemini-2.5-flash";
+const googleAdsApiVersion = "v24";
 
 export async function POST(
   _request: Request,
@@ -268,6 +269,7 @@ async function testElevenLabs(credentials: CredentialBag): Promise<ConnectionTes
 async function testMeta(credentials: CredentialBag): Promise<ConnectionTestResult> {
   const accessToken = getCredential(credentials, ["META_ACCESS_TOKEN"]);
   const appSecret = getCredential(credentials, ["META_APP_SECRET"]);
+  const adAccountId = normalizeMetaAdAccountId(getCredential(credentials, ["META_AD_ACCOUNT_ID"]));
 
   if (!accessToken) {
     return offline("Preencha o Access token da Meta antes de testar.");
@@ -287,7 +289,32 @@ async function testMeta(credentials: CredentialBag): Promise<ConnectionTestResul
     return offline(resolveProviderErrorMessage(result.data) || "Meta Graph API nao aceitou o token informado.", { httpStatus: result.httpStatus });
   }
 
-  return online("Meta online. Access token validado na Graph API.", { httpStatus: result.httpStatus });
+  const details = ["Access token validado em /me."];
+
+  if (adAccountId) {
+    const accountUrl = new URL(`https://graph.facebook.com/${encodeURIComponent(adAccountId)}`);
+    accountUrl.searchParams.set("fields", "id,name,account_status,currency");
+    accountUrl.searchParams.set("access_token", accessToken);
+
+    if (appSecret) {
+      accountUrl.searchParams.set("appsecret_proof", createHmac("sha256", appSecret).update(accessToken).digest("hex"));
+    }
+
+    const accountResult = await fetchJson(accountUrl.toString(), { headers: { Accept: "application/json" } });
+
+    if (!accountResult.ok) {
+      return offline(resolveProviderErrorMessage(accountResult.data) || "Meta validou o token, mas nao conseguiu acessar a conta de anuncios informada.", {
+        httpStatus: accountResult.httpStatus,
+        details,
+      });
+    }
+
+    details.push(`Conta de anuncios ${adAccountId} acessivel.`);
+  } else {
+    details.push("Ad Account ID ausente; leitura de conta de anuncios ainda nao foi testada.");
+  }
+
+  return online("Meta online. Graph API validada para leitura inicial.", { httpStatus: result.httpStatus, details });
 }
 
 async function testGoogleAds(credentials: CredentialBag): Promise<ConnectionTestResult> {
@@ -296,8 +323,8 @@ async function testGoogleAds(credentials: CredentialBag): Promise<ConnectionTest
   const refreshToken = getCredential(credentials, ["GOOGLE_ADS_REFRESH_TOKEN"]);
   const developerToken = getCredential(credentials, ["GOOGLE_ADS_DEVELOPER_TOKEN"]);
 
-  if (!clientId || !clientSecret || !refreshToken) {
-    return offline("Preencha Client ID, Client secret e Refresh token do Google Ads antes de testar OAuth.");
+  if (!clientId || !clientSecret || !refreshToken || !developerToken) {
+    return offline("Preencha Developer token, Client ID, Client secret e Refresh token do Google Ads antes de testar.");
   }
 
   const body = new URLSearchParams({
@@ -316,9 +343,32 @@ async function testGoogleAds(credentials: CredentialBag): Promise<ConnectionTest
     return offline(resolveProviderErrorMessage(result.data) || "Google OAuth nao aceitou as credenciais informadas.", { httpStatus: result.httpStatus });
   }
 
-  return online("Google Ads online. OAuth validado; Developer token sera usado nas chamadas Google Ads.", {
-    httpStatus: result.httpStatus,
-    details: developerToken ? ["Developer token presente."] : ["Developer token ainda ausente."],
+  const accessToken = readAccessToken(result.data);
+
+  if (!accessToken) {
+    return offline("Google OAuth respondeu, mas nao retornou access_token para testar o Google Ads.", { httpStatus: result.httpStatus });
+  }
+
+  const customersResult = await fetchJson(`https://googleads.googleapis.com/${googleAdsApiVersion}/customers:listAccessibleCustomers`, {
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${accessToken}`,
+      "developer-token": developerToken,
+    },
+  });
+
+  if (!customersResult.ok) {
+    return offline(resolveProviderErrorMessage(customersResult.data) || "Google Ads OAuth funcionou, mas o Developer token nao liberou listAccessibleCustomers.", {
+      httpStatus: customersResult.httpStatus,
+      details: ["OAuth validado antes da chamada Google Ads."],
+    });
+  }
+
+  const accessibleCustomers = readGoogleAdsAccessibleCustomers(customersResult.data);
+
+  return online("Google Ads online. OAuth, Developer token e listagem de contas acessiveis validados.", {
+    httpStatus: customersResult.httpStatus,
+    details: [`${accessibleCustomers.length} conta(s) acessivel(is) retornada(s).`],
   });
 }
 
@@ -493,6 +543,36 @@ function getCredential(credentials: CredentialBag, envNames: string[]) {
   }
 
   return "";
+}
+
+function normalizeMetaAdAccountId(value: string) {
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return "";
+  }
+
+  return trimmed.startsWith("act_") ? trimmed : `act_${trimmed.replace(/^act_/, "")}`;
+}
+
+function readAccessToken(data: unknown) {
+  if (!data || typeof data !== "object") {
+    return "";
+  }
+
+  const token = (data as Record<string, unknown>).access_token;
+  return typeof token === "string" ? token : "";
+}
+
+function readGoogleAdsAccessibleCustomers(data: unknown) {
+  if (!data || typeof data !== "object") {
+    return [];
+  }
+
+  const resourceNames = (data as Record<string, unknown>).resourceNames;
+  return Array.isArray(resourceNames)
+    ? resourceNames.filter((item): item is string => typeof item === "string")
+    : [];
 }
 
 function normalizeBaseUrl(value?: string) {

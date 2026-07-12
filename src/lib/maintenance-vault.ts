@@ -505,7 +505,9 @@ export const maintenanceIntegrations: IntegrationDefinition[] = [
 
 export function getMaintenanceVaultSnapshot(options: { storedCredentials?: MaintenanceStoredCredential[] } = {}): MaintenanceVaultSnapshot {
   const storedCredentials = buildStoredCredentialMap(options.storedCredentials ?? []);
-  const integrations = maintenanceIntegrations.map((integration) => buildIntegrationSnapshot(integration, storedCredentials));
+  const integrations = sortMaintenanceIntegrations(
+    maintenanceIntegrations.map((integration) => buildIntegrationSnapshot(integration, storedCredentials)),
+  );
   const fields = integrations.flatMap((integration) => integration.fields);
   const uazapiConfig = getUazapiConfig();
 
@@ -557,6 +559,25 @@ export function getMaintenanceVaultSnapshot(options: { storedCredentials?: Maint
       },
     ],
   };
+}
+
+function sortMaintenanceIntegrations(integrations: IntegrationSnapshot[]) {
+  const priority = new Map([
+    ["meta", 0],
+    ["google-ads", 1],
+  ]);
+
+  return [...integrations].sort((left, right) => {
+    const leftPriority = priority.get(left.id) ?? 100;
+    const rightPriority = priority.get(right.id) ?? 100;
+
+    if (leftPriority !== rightPriority) {
+      return leftPriority - rightPriority;
+    }
+
+    return maintenanceIntegrations.findIndex((integration) => integration.id === left.id)
+      - maintenanceIntegrations.findIndex((integration) => integration.id === right.id);
+  });
 }
 
 function buildIntegrationSnapshot(integration: IntegrationDefinition, storedCredentials: StoredCredentialMap): IntegrationSnapshot {
