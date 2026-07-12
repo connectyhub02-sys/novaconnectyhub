@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type MouseEvent } from "react";
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
 import {
@@ -79,6 +79,9 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
     () => new Map(selectedConnections.map((connection) => [connection.providerId, connection])),
     [selectedConnections],
   );
+  const mercadoPagoConnection = connectionByProvider.get("mercado-pago");
+  const mercadoPagoConnected = mercadoPagoConnection?.status === "connected";
+  const webhookConnection = connectionByProvider.get("webhook-universal");
   const metrics = useMemo(() => {
     const connected = selectedConnections.filter((connection) => connection.status === "connected").length;
     const active = state.providers.filter((provider) => provider.status === "active" || provider.status === "built_in").length;
@@ -92,6 +95,35 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
       endpoints: selectedEndpoints.length,
     };
   }, [selectedConnections, selectedEndpoints.length, state.providers]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const payment = params.get("payment");
+
+    if (!payment) return;
+
+    const reason = params.get("reason");
+    const timeoutId = window.setTimeout(() => {
+      if (payment === "mercado_pago_connected") {
+        setNotice({
+          tone: "success",
+          message: "Mercado Pago conectado. Agora esta empresa pode receber Pix e cartao no Catalogo de Vendas.",
+        });
+      }
+
+      if (payment === "mercado_pago_error") {
+        setNotice({ tone: "error", message: getMercadoPagoConnectionErrorMessage(reason) });
+      }
+    }, 0);
+
+    params.delete("payment");
+    params.delete("reason");
+    const nextSearch = params.toString();
+    const nextUrl = `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ""}${window.location.hash}`;
+    window.history.replaceState(null, "", nextUrl);
+
+    return () => window.clearTimeout(timeoutId);
+  }, []);
 
   async function createUniversalWebhook() {
     if (!selectedCompanyId || creatingWebhook) return;
@@ -130,6 +162,16 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
     } finally {
       setCreatingWebhook(false);
     }
+  }
+
+  function handleMercadoPagoConnectClick(event: MouseEvent<HTMLAnchorElement>) {
+    if (!selectedCompanyId) {
+      event.preventDefault();
+      setNotice({ tone: "warning", message: "Escolha uma empresa antes de conectar o Mercado Pago." });
+      return;
+    }
+
+    setNotice({ tone: "warning", message: "Abrindo a autorizacao oficial do Mercado Pago..." });
   }
 
   return (
@@ -195,6 +237,73 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
         </div>
       </div>
 
+      {state.companies.length > 0 ? (
+        <div className="mb-5 grid gap-3 lg:grid-cols-2">
+          <div className="rounded-2xl p-4" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">pagamento real</p>
+                <h2 className="mt-1 text-[16px] font-semibold text-slate-100">Mercado Pago</h2>
+                <p className="mt-2 text-[12px] leading-5 text-slate-400">
+                  Conecte a conta do cliente para receber Pix e cartao nos links e pedidos do Catalogo de Vendas.
+                </p>
+              </div>
+              <WalletCards className="h-5 w-5 text-emerald-300" />
+            </div>
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <Link
+                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border px-4 font-mono text-[10px] font-bold uppercase tracking-wide text-emerald-100 hover:bg-emerald-400/10"
+                href={buildMercadoPagoConnectUrl(selectedCompanyId)}
+                onClick={handleMercadoPagoConnectClick}
+                style={{ borderColor: "var(--ch-border)" }}
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+                {mercadoPagoConnected ? "Reconectar Mercado Pago" : "Conectar Mercado Pago"}
+              </Link>
+              <StatusBadge
+                status={mercadoPagoConnected ? "online" : "warning"}
+                label={mercadoPagoConnected ? "conectado" : "pendente"}
+              />
+            </div>
+            {mercadoPagoConnection?.accountLabel ? (
+              <p className="mt-3 text-[11px] text-slate-500">Conta: {mercadoPagoConnection.accountLabel}</p>
+            ) : null}
+          </div>
+
+          <div className="rounded-2xl p-4" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">entrada externa</p>
+                <h2 className="mt-1 text-[16px] font-semibold text-slate-100">Webhook Universal</h2>
+                <p className="mt-2 text-[12px] leading-5 text-slate-400">
+                  Crie uma URL assinada para receber leads e eventos de qualquer sistema que ainda nao tem integracao nativa.
+                </p>
+              </div>
+              <PlugZap className="h-5 w-5 text-cyan-300" />
+            </div>
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <button
+                className={cn(
+                  "inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border px-4 font-mono text-[10px] font-bold uppercase tracking-wide",
+                  state.schemaReady ? "text-cyan-100 hover:bg-cyan-400/10" : "cursor-not-allowed text-amber-200 opacity-70",
+                )}
+                disabled={!state.schemaReady || creatingWebhook}
+                onClick={createUniversalWebhook}
+                style={{ borderColor: "var(--ch-border)" }}
+                type="button"
+              >
+                {creatingWebhook ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                Criar Webhook Universal
+              </button>
+              <StatusBadge
+                status={webhookConnection?.status === "connected" ? "online" : "warning"}
+                label={selectedEndpoints.length > 0 ? `${selectedEndpoints.length} endpoint(s)` : "nenhum endpoint"}
+              />
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {state.companies.length === 0 ? (
         <div
           className="rounded-2xl px-4 py-8 text-center text-[13px] text-slate-400"
@@ -212,6 +321,8 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
                 creatingWebhook={creatingWebhook}
                 provider={provider}
                 schemaReady={state.schemaReady}
+                selectedCompanyId={selectedCompanyId}
+                onMercadoPagoConnect={handleMercadoPagoConnectClick}
                 onCreateWebhook={createUniversalWebhook}
               />
             ))}
@@ -227,7 +338,16 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
                 <ShieldCheck className="h-5 w-5 text-emerald-300" />
               </div>
               <div className="space-y-2 text-[12px] leading-5 text-slate-400">
-                <p>A Central apenas le o status atual. OAuth, callback, tokens, webhook e checkout seguem no Catalogo de Vendas.</p>
+                <p>A Central inicia a autorizacao por aqui. OAuth, callback, tokens, webhook e checkout seguem protegidos no Catalogo de Vendas.</p>
+                <Link
+                  className="inline-flex h-9 items-center gap-2 rounded-xl border px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-emerald-100"
+                  href={buildMercadoPagoConnectUrl(selectedCompanyId)}
+                  onClick={handleMercadoPagoConnectClick}
+                  style={{ borderColor: "var(--ch-border)" }}
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  {mercadoPagoConnected ? "Reconectar" : "Conectar"}
+                </Link>
                 <Link
                   className="inline-flex h-9 items-center gap-2 rounded-xl border px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-cyan-100"
                   href="/dashboard/links"
@@ -271,13 +391,17 @@ function IntegrationCard({
   provider,
   connection,
   schemaReady,
+  selectedCompanyId,
   creatingWebhook,
+  onMercadoPagoConnect,
   onCreateWebhook,
 }: {
   provider: ClientIntegrationProvider;
   connection?: ClientIntegrationConnection;
   schemaReady: boolean;
+  selectedCompanyId: string;
   creatingWebhook: boolean;
+  onMercadoPagoConnect: (event: MouseEvent<HTMLAnchorElement>) => void;
   onCreateWebhook: () => void;
 }) {
   const Icon = categoryIcons[provider.category];
@@ -333,8 +457,10 @@ function IntegrationCard({
         <p className="text-[11px] leading-4 text-slate-500">{connection?.detail ?? provider.primaryUse}</p>
         <ProviderAction
           creatingWebhook={creatingWebhook}
+          selectedCompanyId={selectedCompanyId}
           provider={provider}
           schemaReady={schemaReady}
+          onMercadoPagoConnect={onMercadoPagoConnect}
           onCreateWebhook={onCreateWebhook}
         />
       </div>
@@ -344,16 +470,48 @@ function IntegrationCard({
 
 function ProviderAction({
   provider,
+  selectedCompanyId,
   schemaReady,
   creatingWebhook,
+  onMercadoPagoConnect,
   onCreateWebhook,
 }: {
   provider: ClientIntegrationProvider;
+  selectedCompanyId: string;
   schemaReady: boolean;
   creatingWebhook: boolean;
+  onMercadoPagoConnect: (event: MouseEvent<HTMLAnchorElement>) => void;
   onCreateWebhook: () => void;
 }) {
   const className = "inline-flex min-h-9 w-full items-center justify-center gap-2 rounded-xl border px-3 font-mono text-[10px] font-bold uppercase tracking-wide transition";
+
+  if (provider.id === "mercado-pago") {
+    if (!selectedCompanyId) {
+      return (
+        <button
+          className={cn(className, "cursor-not-allowed text-slate-500 opacity-70")}
+          disabled
+          style={{ borderColor: "var(--ch-border)" }}
+          type="button"
+        >
+          <ExternalLink className="h-3.5 w-3.5" />
+          Escolha uma empresa
+        </button>
+      );
+    }
+
+    return (
+      <Link
+        className={cn(className, "text-emerald-100 hover:bg-emerald-400/10")}
+        href={buildMercadoPagoConnectUrl(selectedCompanyId)}
+        onClick={onMercadoPagoConnect}
+        style={{ borderColor: "var(--ch-border)" }}
+      >
+        <ExternalLink className="h-3.5 w-3.5" />
+        {provider.actionLabel}
+      </Link>
+    );
+  }
 
   if (provider.actionHref) {
     return (
@@ -539,6 +697,37 @@ function upsertWebhookConnection(
     nextConnection,
     ...current.filter((item) => !(item.companyId === endpoint.companyId && item.providerId === "webhook-universal")),
   ];
+}
+
+function buildMercadoPagoConnectUrl(companyId: string) {
+  if (!companyId) return "#";
+
+  const params = new URLSearchParams({
+    companyId,
+    returnTo: "integrations",
+  });
+
+  return `/api/dashboard/sales-catalog/payments/mercado-pago/connect?${params.toString()}`;
+}
+
+function getMercadoPagoConnectionErrorMessage(reason: string | null) {
+  if (reason === "config") {
+    return "Mercado Pago ainda precisa ser configurado no painel admin da ConnectyHub. Depois disso, este botao abre a autorizacao oficial.";
+  }
+
+  if (reason === "missing_company") {
+    return "Escolha uma empresa antes de conectar o Mercado Pago.";
+  }
+
+  if (reason === "invalid_state") {
+    return "Nao conseguimos validar o retorno do Mercado Pago. Tente conectar novamente.";
+  }
+
+  if (reason === "token_exchange") {
+    return "Mercado Pago retornou a autorizacao, mas nao conseguimos concluir a conexao. Tente novamente ou chame o suporte.";
+  }
+
+  return "Nao foi possivel abrir a conexao com Mercado Pago agora. Tente novamente ou chame o suporte.";
 }
 
 function copyText(value: string) {

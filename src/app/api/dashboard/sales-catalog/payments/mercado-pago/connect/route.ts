@@ -15,21 +15,23 @@ export const runtime = "nodejs";
 
 export async function GET(request: NextRequest) {
   const baseUrl = getAppBaseUrl();
-  const linksUrl = new URL("/dashboard/links", baseUrl);
+  const returnTo = normalizeMercadoPagoReturnTo(request.nextUrl.searchParams.get("returnTo"));
+  const returnPath = returnTo === "integrations" ? "/dashboard/integracoes" : "/dashboard/links";
+  const returnUrl = new URL(returnPath, baseUrl);
   const workspace = await getCurrentWorkspace();
 
   if (!workspace) {
     const loginUrl = new URL("/login", baseUrl);
-    loginUrl.searchParams.set("next", "/dashboard/links");
+    loginUrl.searchParams.set("next", returnPath);
     return NextResponse.redirect(loginUrl);
   }
 
   const companyId = request.nextUrl.searchParams.get("companyId")?.trim();
 
   if (!companyId) {
-    linksUrl.searchParams.set("payment", "mercado_pago_error");
-    linksUrl.searchParams.set("reason", "missing_company");
-    return NextResponse.redirect(linksUrl);
+    returnUrl.searchParams.set("payment", "mercado_pago_error");
+    returnUrl.searchParams.set("reason", "missing_company");
+    return NextResponse.redirect(returnUrl);
   }
 
   try {
@@ -55,9 +57,10 @@ export async function GET(request: NextRequest) {
         last_error: null,
         metadata: {
           oauth_state: state,
+          oauth_return_to: returnTo,
           oauth_requested_by: workspace.user.id,
           oauth_requested_at: now,
-          oauth_started_from: "guided_connect_route",
+          oauth_started_from: returnTo === "integrations" ? "integrations_hub" : "guided_connect_route",
         },
         updated_at: now,
       }, { onConflict: "organization_id,provider" });
@@ -69,10 +72,14 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(authorizationUrl);
   } catch (error) {
     console.error("[sales-catalog] mercado pago connect failed", error);
-    linksUrl.searchParams.set("payment", "mercado_pago_error");
-    linksUrl.searchParams.set("reason", getMercadoPagoConnectErrorReason(error));
-    return NextResponse.redirect(linksUrl);
+    returnUrl.searchParams.set("payment", "mercado_pago_error");
+    returnUrl.searchParams.set("reason", getMercadoPagoConnectErrorReason(error));
+    return NextResponse.redirect(returnUrl);
   }
+}
+
+function normalizeMercadoPagoReturnTo(value: string | null) {
+  return value === "integrations" ? "integrations" : "links";
 }
 
 function getMercadoPagoConnectErrorReason(error: unknown) {

@@ -26,7 +26,7 @@ type IntegrationRow = {
 export async function GET(request: NextRequest) {
   const workspace = await getCurrentWorkspace();
   const baseUrl = getAppBaseUrl();
-  const linksUrl = new URL("/dashboard/links", baseUrl);
+  let returnUrl = new URL("/dashboard/links", baseUrl);
 
   if (!workspace) {
     const loginUrl = new URL("/login", baseUrl);
@@ -38,9 +38,9 @@ export async function GET(request: NextRequest) {
   const state = request.nextUrl.searchParams.get("state")?.trim();
 
   if (!code || !state) {
-    linksUrl.searchParams.set("payment", "mercado_pago_error");
-    linksUrl.searchParams.set("reason", "missing_code");
-    return NextResponse.redirect(linksUrl);
+    returnUrl.searchParams.set("payment", "mercado_pago_error");
+    returnUrl.searchParams.set("reason", "missing_code");
+    return NextResponse.redirect(returnUrl);
   }
 
   const client = createServiceClient();
@@ -52,10 +52,12 @@ export async function GET(request: NextRequest) {
     .maybeSingle<IntegrationRow>();
 
   if (integrationError || !integration) {
-    linksUrl.searchParams.set("payment", "mercado_pago_error");
-    linksUrl.searchParams.set("reason", "invalid_state");
-    return NextResponse.redirect(linksUrl);
+    returnUrl.searchParams.set("payment", "mercado_pago_error");
+    returnUrl.searchParams.set("reason", "invalid_state");
+    return NextResponse.redirect(returnUrl);
   }
+
+  returnUrl = buildMercadoPagoReturnUrl(baseUrl, integration.metadata);
 
   try {
     const company = await requireClientCompanyAccess({
@@ -94,10 +96,11 @@ export async function GET(request: NextRequest) {
       .eq("organization_id", company.id);
 
     revalidatePath("/dashboard/links");
+    revalidatePath("/dashboard/integracoes");
     revalidatePath("/dashboard/whatsapp");
 
-    linksUrl.searchParams.set("payment", "mercado_pago_connected");
-    return NextResponse.redirect(linksUrl);
+    returnUrl.searchParams.set("payment", "mercado_pago_connected");
+    return NextResponse.redirect(returnUrl);
   } catch (error) {
     await client
       .from("sales_catalog_payment_integrations")
@@ -108,12 +111,19 @@ export async function GET(request: NextRequest) {
       .eq("id", integration.id)
       .eq("organization_id", integration.organization_id);
 
-    linksUrl.searchParams.set("payment", "mercado_pago_error");
-    linksUrl.searchParams.set("reason", "token_exchange");
-    return NextResponse.redirect(linksUrl);
+    returnUrl.searchParams.set("payment", "mercado_pago_error");
+    returnUrl.searchParams.set("reason", "token_exchange");
+    return NextResponse.redirect(returnUrl);
   }
 }
 
 function readRecord(value: unknown): JsonRecord {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as JsonRecord) : {};
+}
+
+function buildMercadoPagoReturnUrl(baseUrl: string, metadata: JsonRecord | null) {
+  const record = readRecord(metadata);
+  const path = record.oauth_return_to === "integrations" ? "/dashboard/integracoes" : "/dashboard/links";
+
+  return new URL(path, baseUrl);
 }
