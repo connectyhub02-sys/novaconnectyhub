@@ -171,6 +171,13 @@ export const maintenanceIntegrations: IntegrationDefinition[] = [
         help: "Segredo do aplicativo Meta.",
       },
       {
+        label: "Graph API version",
+        env: "META_GRAPH_API_VERSION",
+        kind: "identifier",
+        requirement: "optional",
+        help: "Versao usada nas chamadas Graph API, por exemplo v23.0. Se ficar vazio, usamos o padrao do sistema.",
+      },
+      {
         label: "Access token",
         env: "META_ACCESS_TOKEN",
         kind: "secret",
@@ -251,6 +258,13 @@ export const maintenanceIntegrations: IntegrationDefinition[] = [
         kind: "identifier",
         requirement: "optional",
         help: "Conta de anuncios padrao usada pelos agentes.",
+      },
+      {
+        label: "Login Customer ID",
+        env: "GOOGLE_ADS_LOGIN_CUSTOMER_ID",
+        kind: "identifier",
+        requirement: "optional",
+        help: "Conta gerente MCC usada no cabecalho login-customer-id quando o Customer ID estiver abaixo de uma conta gerente.",
       },
       {
         label: "Search Console site",
