@@ -30,12 +30,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Muitas requisicoes. Tente novamente em 1 minuto." }, { status: 429 });
   }
 
-  const body = await request.json().catch(() => null) as { userId?: string } | null;
+  const body = await request.json().catch(() => null) as { userId?: string; next?: string } | null;
 
   if (!body?.userId) {
     return NextResponse.json({ error: "userId obrigatorio." }, { status: 400 });
   }
 
+  const nextPath = normalizeAccessLinkNext(body.next);
   const service = createServiceClient();
 
   const { data: targetData, error: targetError } = await service.auth.admin.getUserById(body.userId);
@@ -45,7 +46,7 @@ export async function POST(request: NextRequest) {
   }
 
   const redirectTo = new URL("/auth/callback", request.url);
-  redirectTo.searchParams.set("next", "/dashboard");
+  redirectTo.searchParams.set("next", nextPath);
 
   const { data, error } = await service.auth.admin.generateLink({
     type: "magiclink",
@@ -66,4 +67,18 @@ export async function POST(request: NextRequest) {
   }
 
   return NextResponse.json({ actionLink });
+}
+
+function normalizeAccessLinkNext(value: unknown) {
+  if (typeof value !== "string") {
+    return "/dashboard";
+  }
+
+  const trimmed = value.trim();
+
+  if (trimmed === "/dashboard" || trimmed.startsWith("/dashboard/")) {
+    return trimmed;
+  }
+
+  return "/dashboard";
 }
