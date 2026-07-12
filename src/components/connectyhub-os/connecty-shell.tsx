@@ -146,6 +146,7 @@ const adminSections: NavSection[] = [
   {
     label: "Sistema",
     items: [
+      { label: "Integrações",    href: "/admin/integracoes",  icon: PlugZap, tone: "teal" },
       { label: "Manutenção",    href: "/admin/maintenance",  icon: Wrench, tone: "rose", badge: "!", badgeTone: "rose" },
       { label: "Auditoria",     href: "/admin/auditoria",    icon: FileCode2, tone: "slate" },
       { label: "Financeiro",    href: "/admin/financeiro",   icon: CircleDollarSign, tone: "amber" },
