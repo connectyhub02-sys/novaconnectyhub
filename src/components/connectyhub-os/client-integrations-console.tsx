@@ -19,6 +19,7 @@ import {
   ShoppingBag,
   Truck,
   WalletCards,
+  X,
 } from "lucide-react";
 import type {
   ClientIntegrationConnection,
@@ -76,6 +77,8 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
   const [savingProviderId, setSavingProviderId] = useState<string | null>(null);
   const [webhookEndpoints, setWebhookEndpoints] = useState(state.webhookEndpoints);
   const [creatingWebhook, setCreatingWebhook] = useState(false);
+  const [connectingMercadoPago, setConnectingMercadoPago] = useState(false);
+  const [disconnectingMercadoPago, setDisconnectingMercadoPago] = useState(false);
   const [newWebhookSecret, setNewWebhookSecret] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   const selectedCompany = state.companies.find((company) => company.id === selectedCompanyId) ?? null;
@@ -262,13 +265,67 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
   }
 
   function handleMercadoPagoConnectClick(event: MouseEvent<HTMLAnchorElement>) {
-    if (!selectedCompanyId) {
+    if (!selectedCompanyId || connectingMercadoPago) {
       event.preventDefault();
-      setNotice({ tone: "warning", message: "Escolha uma empresa antes de conectar o Mercado Pago." });
+      if (!selectedCompanyId) {
+        setNotice({ tone: "warning", message: "Escolha uma empresa antes de conectar o Mercado Pago." });
+      }
       return;
     }
 
-    setNotice({ tone: "warning", message: "Abrindo a autorizacao oficial do Mercado Pago..." });
+    setConnectingMercadoPago(true);
+    setNotice({ tone: "warning", message: "Abrindo Mercado Pago em uma nova aba para login e autorizacao..." });
+    window.setTimeout(() => setConnectingMercadoPago(false), 1500);
+  }
+
+  async function disconnectMercadoPago() {
+    if (!selectedCompanyId || disconnectingMercadoPago) return;
+
+    setDisconnectingMercadoPago(true);
+    setNotice(null);
+
+    try {
+      const response = await fetch("/api/dashboard/sales-catalog", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "disconnect_mercado_pago",
+          companyId: selectedCompanyId,
+        }),
+      });
+      const data = await response.json().catch(() => null) as { error?: string } | null;
+
+      if (!response.ok) {
+        throw new Error(data?.error ?? "Nao foi possivel desconectar Mercado Pago.");
+      }
+
+      setConnections((current) => {
+        const existing = current.find((connection) => connection.companyId === selectedCompanyId && connection.providerId === "mercado-pago");
+        const nextConnection: ClientIntegrationConnection = {
+          providerId: "mercado-pago",
+          companyId: selectedCompanyId,
+          companyName: selectedCompany?.name ?? existing?.companyName ?? "Empresa",
+          status: "disabled",
+          label: "Desativado",
+          detail: "Mercado Pago desconectado desta empresa.",
+          accountLabel: null,
+          lastSyncAt: new Date().toISOString(),
+          lastError: null,
+          managementHref: "/dashboard/links",
+          metadata: {},
+        };
+
+        return [
+          nextConnection,
+          ...current.filter((connection) => !(connection.companyId === selectedCompanyId && connection.providerId === "mercado-pago")),
+        ];
+      });
+      setNotice({ tone: "success", message: "Mercado Pago desconectado desta empresa." });
+    } catch (error) {
+      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao desconectar Mercado Pago." });
+    } finally {
+      setDisconnectingMercadoPago(false);
+    }
   }
 
   return (
@@ -330,42 +387,23 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
           className="rounded-xl px-4 py-3 text-[12px] leading-5 text-slate-400"
           style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
         >
-          A Central organiza as conexoes por empresa. Mercado Pago continua no fluxo do Catalogo de Vendas; as novas integracoes entram aqui com status, logs e webhooks.
+          A Central organiza as conexoes por empresa. Mercado Pago usa autorizacao guiada oficial; Meta e Google usam credenciais de leitura da empresa.
         </div>
       </div>
 
       {state.companies.length > 0 ? (
         <div className="mb-5 grid gap-3 lg:grid-cols-2">
-          <div className="rounded-2xl p-4" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}>
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">pagamento real</p>
-                <h2 className="mt-1 text-[16px] font-semibold text-slate-100">Mercado Pago</h2>
-                <p className="mt-2 text-[12px] leading-5 text-slate-400">
-                  Conecte a conta do cliente para receber Pix e cartao nos links e pedidos do Catalogo de Vendas.
-                </p>
-              </div>
-              <WalletCards className="h-5 w-5 text-emerald-300" />
-            </div>
-            <div className="mt-4 flex flex-wrap items-center gap-2">
-              <Link
-                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border px-4 font-mono text-[10px] font-bold uppercase tracking-wide text-emerald-100 hover:bg-emerald-400/10"
-                href={buildMercadoPagoConnectUrl(selectedCompanyId)}
-                onClick={handleMercadoPagoConnectClick}
-                style={{ borderColor: "var(--ch-border)" }}
-              >
-                <ExternalLink className="h-3.5 w-3.5" />
-                {mercadoPagoConnected ? "Reconectar Mercado Pago" : "Conectar Mercado Pago"}
-              </Link>
-              <StatusBadge
-                status={mercadoPagoConnected ? "online" : "warning"}
-                label={mercadoPagoConnected ? "conectado" : "pendente"}
-              />
-            </div>
-            {mercadoPagoConnection?.accountLabel ? (
-              <p className="mt-3 text-[11px] text-slate-500">Conta: {mercadoPagoConnection.accountLabel}</p>
-            ) : null}
-          </div>
+          <MercadoPagoGuidedCard
+            accountLabel={mercadoPagoConnection?.accountLabel ?? null}
+            connected={mercadoPagoConnected}
+            connecting={connectingMercadoPago}
+            disconnecting={disconnectingMercadoPago}
+            lastError={mercadoPagoConnection?.lastError ?? null}
+            selectedCompanyId={selectedCompanyId}
+            selectedCompanyName={selectedCompany?.name ?? null}
+            onConnect={handleMercadoPagoConnectClick}
+            onDisconnect={disconnectMercadoPago}
+          />
 
           <div className="rounded-2xl p-4" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}>
             <div className="flex items-start justify-between gap-3">
@@ -429,7 +467,6 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
                     [credentialKey(selectedCompanyId, provider.id, envName)]: value,
                   }));
                 }}
-                onMercadoPagoConnect={handleMercadoPagoConnectClick}
                 onCreateWebhook={createUniversalWebhook}
                 onSaveCredentials={() => saveProviderCredentials(provider)}
               />
@@ -446,16 +483,15 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
                 <ShieldCheck className="h-5 w-5 text-emerald-300" />
               </div>
               <div className="space-y-2 text-[12px] leading-5 text-slate-400">
-                <p>A Central inicia a autorizacao por aqui. OAuth, callback, tokens, webhook e checkout seguem protegidos no Catalogo de Vendas.</p>
-                <Link
+                <p>Use o guia principal para autorizar a conta sem token manual. OAuth, callback, tokens, webhook e checkout seguem protegidos no Catalogo de Vendas.</p>
+                <a
                   className="inline-flex h-9 items-center gap-2 rounded-xl border px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-emerald-100"
-                  href={buildMercadoPagoConnectUrl(selectedCompanyId)}
-                  onClick={handleMercadoPagoConnectClick}
+                  href="#mercado-pago-guiado"
                   style={{ borderColor: "var(--ch-border)" }}
                 >
                   <ExternalLink className="h-3.5 w-3.5" />
-                  {mercadoPagoConnected ? "Reconectar" : "Conectar"}
-                </Link>
+                  Abrir guia
+                </a>
                 <Link
                   className="inline-flex h-9 items-center gap-2 rounded-xl border px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-cyan-100"
                   href="/dashboard/links"
@@ -506,7 +542,6 @@ function IntegrationCard({
   creatingWebhook,
   isSavingCredentials,
   onCredentialChange,
-  onMercadoPagoConnect,
   onCreateWebhook,
   onSaveCredentials,
 }: {
@@ -520,7 +555,6 @@ function IntegrationCard({
   creatingWebhook: boolean;
   isSavingCredentials: boolean;
   onCredentialChange: (envName: string, value: string) => void;
-  onMercadoPagoConnect: (event: MouseEvent<HTMLAnchorElement>) => void;
   onCreateWebhook: () => void;
   onSaveCredentials: () => void;
 }) {
@@ -597,7 +631,6 @@ function IntegrationCard({
           selectedCompanyId={selectedCompanyId}
           provider={provider}
           schemaReady={schemaReady}
-          onMercadoPagoConnect={onMercadoPagoConnect}
           onCreateWebhook={onCreateWebhook}
         />
       </div>
@@ -610,14 +643,12 @@ function ProviderAction({
   selectedCompanyId,
   schemaReady,
   creatingWebhook,
-  onMercadoPagoConnect,
   onCreateWebhook,
 }: {
   provider: ClientIntegrationProvider;
   selectedCompanyId: string;
   schemaReady: boolean;
   creatingWebhook: boolean;
-  onMercadoPagoConnect: (event: MouseEvent<HTMLAnchorElement>) => void;
   onCreateWebhook: () => void;
 }) {
   const className = "inline-flex min-h-9 w-full items-center justify-center gap-2 rounded-xl border px-3 font-mono text-[10px] font-bold uppercase tracking-wide transition";
@@ -649,15 +680,14 @@ function ProviderAction({
     }
 
     return (
-      <Link
+      <a
         className={cn(className, "text-emerald-100 hover:bg-emerald-400/10")}
-        href={buildMercadoPagoConnectUrl(selectedCompanyId)}
-        onClick={onMercadoPagoConnect}
+        href="#mercado-pago-guiado"
         style={{ borderColor: "var(--ch-border)" }}
       >
         <ExternalLink className="h-3.5 w-3.5" />
-        {provider.actionLabel}
-      </Link>
+        Abrir guia Mercado Pago
+      </a>
     );
   }
 
@@ -835,6 +865,124 @@ function NoticeBar({ notice }: { notice: Notice }) {
       : { background: "rgba(244,63,94,0.08)", border: "1px solid rgba(244,63,94,0.22)", color: "#fda4af" };
 
   return <div className="mb-4 rounded-2xl px-4 py-3 text-[13px] font-medium" style={style}>{notice.message}</div>;
+}
+
+function MercadoPagoGuidedCard({
+  accountLabel,
+  connected,
+  connecting,
+  disconnecting,
+  lastError,
+  selectedCompanyId,
+  selectedCompanyName,
+  onConnect,
+  onDisconnect,
+}: {
+  accountLabel: string | null;
+  connected: boolean;
+  connecting: boolean;
+  disconnecting: boolean;
+  lastError: string | null;
+  selectedCompanyId: string;
+  selectedCompanyName: string | null;
+  onConnect: (event: MouseEvent<HTMLAnchorElement>) => void;
+  onDisconnect: () => void;
+}) {
+  return (
+    <section id="mercado-pago-guiado" className="rounded-2xl p-4" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">integracao guiada</p>
+          <h2 className="mt-1 text-[16px] font-semibold text-slate-100">Mercado Pago</h2>
+          <p className="mt-2 text-[12px] leading-5 text-slate-400">
+            O cliente conecta pela autorizacao oficial do Mercado Pago. A ConnectyHub nao pede token manual, senha, callback ou webhook.
+          </p>
+        </div>
+        <WalletCards className="h-5 w-5 shrink-0 text-emerald-300" />
+      </div>
+
+      <div className="mt-4 grid gap-2 sm:grid-cols-4">
+        <PaymentGuideStep done={Boolean(selectedCompanyId)} index="1" title="Empresa" body={selectedCompanyName ?? "Escolha a empresa"} />
+        <PaymentGuideStep done={connected} index="2" title="Autorizar" body="Aba oficial" />
+        <PaymentGuideStep done={connected} index="3" title="Retorno" body="Conta conectada" />
+        <PaymentGuideStep done={connected} index="4" title="Checkout" body="Pix e cartao" />
+      </div>
+
+      <div className="mt-4 rounded-xl border p-3" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[13px] font-semibold text-slate-100">Conta Mercado Pago</p>
+            <p className="mt-1 truncate text-[11px] text-slate-500">{accountLabel ? `Conta: ${accountLabel}` : "Nenhuma conta conectada"}</p>
+          </div>
+          <NeonBadge tone={connected ? "green" : "amber"}>{connected ? "pronto para vender" : "pendente"}</NeonBadge>
+        </div>
+
+        {lastError ? (
+          <p className="mt-3 rounded-lg border border-rose-400/25 bg-rose-400/10 px-3 py-2 text-[11px] text-rose-100">
+            {lastError}
+          </p>
+        ) : null}
+
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          <a
+            href={buildMercadoPagoConnectUrl(selectedCompanyId)}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-disabled={!selectedCompanyId || connecting}
+            onClick={onConnect}
+            className={cn(
+              "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-cyan-300 px-4 text-[12px] font-bold text-slate-950 transition hover:bg-cyan-200",
+              !selectedCompanyId || connecting ? "cursor-not-allowed opacity-50" : "",
+            )}
+          >
+            {connecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}
+            {connected ? "Reconectar no Mercado Pago" : "Conectar com Mercado Pago"}
+          </a>
+          <button
+            type="button"
+            disabled={!connected || disconnecting}
+            onClick={onDisconnect}
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border px-4 text-[12px] font-bold text-slate-300 transition hover:bg-rose-400/10 hover:text-rose-100 disabled:cursor-not-allowed disabled:opacity-50"
+            style={{ borderColor: "var(--ch-border)" }}
+          >
+            {disconnecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
+            Desconectar
+          </button>
+        </div>
+
+        <p className="mt-3 rounded-lg border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-[11px] leading-5 text-cyan-100">
+          Se o usuario ja estiver logado, ele so confirma a autorizacao. Se nao estiver, o login acontece no proprio Mercado Pago.
+        </p>
+      </div>
+    </section>
+  );
+}
+
+function PaymentGuideStep({
+  body,
+  done,
+  index,
+  title,
+}: {
+  body: string;
+  done: boolean;
+  index: string;
+  title: string;
+}) {
+  return (
+    <div className="rounded-xl border px-3 py-2" style={{ borderColor: "var(--ch-border)", background: "var(--ch-panel)" }}>
+      <div className="flex items-center gap-2">
+        <span className={cn(
+          "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border font-mono text-[10px] font-bold",
+          done ? "border-emerald-300/50 bg-emerald-300/15 text-emerald-100" : "border-cyan-300/40 bg-cyan-300/10 text-cyan-100",
+        )}>
+          {done ? <CheckCircle2 className="h-3.5 w-3.5" /> : index}
+        </span>
+        <p className="truncate text-[12px] font-semibold text-slate-100">{title}</p>
+      </div>
+      <p className="mt-1 truncate pl-8 text-[10px] leading-4 text-slate-500">{body}</p>
+    </div>
+  );
 }
 
 function Metric({
