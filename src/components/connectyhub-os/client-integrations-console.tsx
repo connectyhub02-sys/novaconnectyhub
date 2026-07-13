@@ -435,6 +435,14 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
                 label={selectedEndpoints.length > 0 ? `${selectedEndpoints.length} endpoint(s)` : "nenhum endpoint"}
               />
             </div>
+            {newWebhookSecret || selectedEndpoints.length > 0 ? (
+              <div className="mt-4 grid gap-2">
+                {newWebhookSecret ? <SecretBox secret={newWebhookSecret} /> : null}
+                {selectedEndpoints.map((endpoint) => (
+                  <WebhookEndpointCard key={endpoint.id} endpoint={endpoint} />
+                ))}
+              </div>
+            ) : null}
           </div>
         </div>
       ) : null}
@@ -447,7 +455,7 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
           Crie uma empresa em Minha Empresa antes de conectar integracoes.
         </div>
       ) : (
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="grid gap-4">
           <div className="grid gap-3 md:grid-cols-2">
             {state.providers.map((provider) => (
               <IntegrationCard
@@ -472,30 +480,6 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
               />
             ))}
           </div>
-
-          <aside className="space-y-4">
-            <div className="rounded-2xl p-4" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}>
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <div>
-                  <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">Webhook Universal</p>
-                  <p className="mt-1 text-[14px] font-semibold text-slate-100">Endpoints da empresa</p>
-                </div>
-                <PlugZap className="h-5 w-5 text-cyan-300" />
-              </div>
-              <div className="grid gap-2">
-                {selectedEndpoints.length > 0 ? selectedEndpoints.map((endpoint) => (
-                  <WebhookEndpointCard key={endpoint.id} endpoint={endpoint} />
-                )) : (
-                  <div className="rounded-xl border border-dashed px-3 py-5 text-center text-[12px] text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
-                    Nenhum endpoint criado para esta empresa.
-                  </div>
-                )}
-              </div>
-              {newWebhookSecret ? (
-                <SecretBox secret={newWebhookSecret} />
-              ) : null}
-            </div>
-          </aside>
         </div>
       )}
     </div>
@@ -777,7 +761,7 @@ function WebhookEndpointCard({ endpoint }: { endpoint: ClientIntegrationWebhookE
 
 function SecretBox({ secret }: { secret: string }) {
   return (
-    <div className="mt-3 rounded-xl border border-amber-400/25 bg-amber-400/10 p-3">
+    <div className="rounded-xl border border-amber-400/25 bg-amber-400/10 p-3">
       <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-amber-200">segredo exibido uma vez</p>
       <div className="mt-2 grid grid-cols-[minmax(0,1fr)_36px] gap-2">
         <code className="min-w-0 truncate rounded-lg px-2 py-2 font-mono text-[11px] text-amber-100" style={{ background: "rgba(0,0,0,0.22)" }}>
