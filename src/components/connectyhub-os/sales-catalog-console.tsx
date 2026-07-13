@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ChangeEvent, type MouseEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent, type ReactNode } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
@@ -46,7 +46,6 @@ import {
   formatSalesCatalogFulfillmentMode,
   formatSalesCatalogOrderStatus,
   formatSalesCatalogPaymentStatus,
-  formatSalesCatalogPaymentIntegrationStatus,
   formatSalesCatalogPaymentSessionStatus,
   formatSalesCatalogStockStatus,
   formatSalesCatalogWeight,
@@ -306,7 +305,6 @@ export function SalesCatalogConsole({
   initialCompanies,
   initialItems,
   initialOrders,
-  initialPaymentIntegrations,
   initialPaymentSessions,
   initialSettings,
   initialShippingSettings,
@@ -318,7 +316,6 @@ export function SalesCatalogConsole({
   const [companies] = useState(initialCompanies);
   const [items, setItems] = useState(initialItems);
   const [orders, setOrders] = useState(initialOrders);
-  const [paymentIntegrations, setPaymentIntegrations] = useState(initialPaymentIntegrations);
   const [paymentSessions, setPaymentSessions] = useState(initialPaymentSessions);
   const [settings, setSettings] = useState(initialSettings);
   const [shippingSettings, setShippingSettings] = useState(initialShippingSettings);
@@ -388,8 +385,6 @@ export function SalesCatalogConsole({
   const [orderFulfillmentStatus, setOrderFulfillmentStatus] = useState<SalesCatalogFulfillmentStatus>("pending");
   const [creating, setCreating] = useState(false);
   const [creatingOrder, setCreatingOrder] = useState(false);
-  const [connectingPayment, setConnectingPayment] = useState(false);
-  const [disconnectingPayment, setDisconnectingPayment] = useState(false);
   const [creatingPaymentSessionId, setCreatingPaymentSessionId] = useState<string | null>(null);
   const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
@@ -444,14 +439,6 @@ export function SalesCatalogConsole({
     () => shippingSettings.find((entry) => entry.companyId === selectedCompanyId) ?? null,
     [shippingSettings, selectedCompanyId],
   );
-  const selectedPaymentIntegration = useMemo(
-    () => paymentIntegrations.find((entry) => entry.companyId === selectedCompanyId && entry.provider === "mercado_pago") ?? null,
-    [paymentIntegrations, selectedCompanyId],
-  );
-  const paymentConnected = selectedPaymentIntegration?.status === "connected";
-  const mercadoPagoConnectUrl = selectedCompanyId
-    ? `/api/dashboard/sales-catalog/payments/mercado-pago/connect?companyId=${encodeURIComponent(selectedCompanyId)}`
-    : "#";
   const hasConfiguredSettings = Boolean(selectedSettings?.configured);
   const productAttributes = useMemo(
     () => (selectedSettings?.configured ? selectedSettings.attributes : settingsDraft.attributes).filter((attribute) => attribute.values.length > 0),
@@ -665,49 +652,6 @@ export function SalesCatalogConsole({
 
   function removeSkuDraft(index: number) {
     setSkuDrafts((current) => current.filter((_, skuIndex) => skuIndex !== index));
-  }
-
-  function handleMercadoPagoConnectClick(event: MouseEvent<HTMLAnchorElement>) {
-    if (!selectedCompanyId || connectingPayment) {
-      event.preventDefault();
-      return;
-    }
-    setConnectingPayment(true);
-    setNotice({ tone: "warning", message: "Abrindo Mercado Pago em uma nova aba para login e autorizacao..." });
-    window.setTimeout(() => setConnectingPayment(false), 1500);
-  }
-
-  async function disconnectMercadoPago() {
-    if (!selectedCompanyId || disconnectingPayment) return;
-
-    setDisconnectingPayment(true);
-    setNotice(null);
-
-    try {
-      const response = await fetch("/api/dashboard/sales-catalog", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "disconnect_mercado_pago",
-          companyId: selectedCompanyId,
-        }),
-      });
-      const data = await response.json().catch(() => null) as {
-        integration?: ClientSalesCatalogPaymentIntegration;
-        error?: string;
-      } | null;
-
-      if (!response.ok || !data?.integration) {
-        throw new Error(data?.error ?? "Nao foi possivel desconectar Mercado Pago.");
-      }
-
-      setPaymentIntegrations((current) => [data.integration!, ...current.filter((entry) => entry.id !== data.integration!.id)]);
-      setNotice({ tone: "success", message: "Mercado Pago desconectado deste catalogo." });
-    } catch (error) {
-      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao desconectar Mercado Pago." });
-    } finally {
-      setDisconnectingPayment(false);
-    }
   }
 
   async function createOrderPaymentSession(order: ClientSalesCatalogOrder) {
@@ -2254,100 +2198,7 @@ export function SalesCatalogConsole({
           </div>
         </Panel>
       ) : activeTab === "payments" ? (
-        <div className="grid gap-4 xl:grid-cols-[minmax(320px,0.58fr)_minmax(0,1fr)]">
-          <Panel title="Mercado Pago" eyebrow={selectedCompany?.name ?? "gateway"} tone="green" compact>
-            <div className="space-y-3">
-              <div className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="text-[13px] font-semibold text-slate-100">Conectar conta Mercado Pago</p>
-                    <p className="mt-1 max-w-xl text-[11px] leading-5 text-slate-500">
-                      O usuario clica em conectar, uma nova aba oficial do Mercado Pago abre, ele faz login se precisar, autoriza a conta e volta para o ConnectyHub.
-                    </p>
-                  </div>
-                  <NeonBadge tone={paymentConnected ? "green" : "cyan"}>
-                    {paymentConnected ? "pronto para vender" : "nova aba oficial"}
-                  </NeonBadge>
-                </div>
-
-                <div className="mt-3 grid gap-2 sm:grid-cols-4">
-                  <PaymentGuideStep done={Boolean(selectedCompanyId)} index="1" title="Empresa" body="Escolha o catalogo" />
-                  <PaymentGuideStep done={paymentConnected} index="2" title="Autorizar" body="Aba Mercado Pago" />
-                  <PaymentGuideStep done={paymentConnected} index="3" title="Retorno" body="Conta conectada" />
-                  <PaymentGuideStep done={paymentConnected} index="4" title="Confirmar" body="Checkout liberado" />
-                </div>
-
-                <p className="mt-3 rounded-lg border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-[11px] leading-5 text-cyan-100">
-                  Se o usuario ja estiver logado no Mercado Pago neste navegador, ele so confirma a autorizacao. Se nao estiver, o Mercado Pago pede login na propria pagina oficial.
-                </p>
-              </div>
-
-              <label className="block">
-                <FieldLabel>Empresa</FieldLabel>
-                <select
-                  value={selectedCompanyId}
-                  onChange={(event) => changeCompany(event.target.value)}
-                  className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
-                  style={{ borderColor: "var(--ch-border)" }}
-                >
-                  {companies.map((company) => (
-                    <option key={company.id} value={company.id}>{company.name}</option>
-                  ))}
-                </select>
-              </label>
-
-              <div className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <p className="text-[13px] font-semibold text-slate-100">Conta Mercado Pago</p>
-                    <p className="mt-1 text-[11px] text-slate-500">
-                      {selectedPaymentIntegration?.providerAccountId ? `ID ${selectedPaymentIntegration.providerAccountId}` : "Nenhuma conta conectada"}
-                    </p>
-                  </div>
-                  <NeonBadge tone={selectedPaymentIntegration?.status === "connected" ? "green" : selectedPaymentIntegration?.status === "error" ? "rose" : "amber"}>
-                    {formatSalesCatalogPaymentIntegrationStatus(selectedPaymentIntegration?.status ?? "pending")}
-                  </NeonBadge>
-                </div>
-
-                {selectedPaymentIntegration?.lastError ? (
-                  <p className="mt-3 rounded-lg border border-rose-400/25 bg-rose-400/10 px-3 py-2 text-[11px] text-rose-100">
-                    {formatMercadoPagoUserFacingError(selectedPaymentIntegration.lastError)}
-                  </p>
-                ) : null}
-
-                <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                  <a
-                    href={mercadoPagoConnectUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    aria-disabled={!selectedCompanyId || connectingPayment}
-                    onClick={handleMercadoPagoConnectClick}
-                    className={cn(
-                      "inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-cyan-300 px-4 text-[12px] font-bold text-slate-950 transition hover:bg-cyan-200",
-                      !selectedCompanyId || connectingPayment ? "cursor-not-allowed opacity-50" : "",
-                    )}
-                  >
-                    {connectingPayment ? <Loader2 className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}
-                    {selectedPaymentIntegration?.status === "connected" ? "Reconectar no Mercado Pago" : "Conectar com Mercado Pago"}
-                  </a>
-                  <button
-                    type="button"
-                    disabled={!selectedPaymentIntegration || disconnectingPayment}
-                    onClick={disconnectMercadoPago}
-                    className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border px-4 text-[12px] font-bold text-slate-300 transition hover:bg-rose-400/10 hover:text-rose-100 disabled:cursor-not-allowed disabled:opacity-50"
-                    style={{ borderColor: "var(--ch-border)" }}
-                  >
-                    {disconnectingPayment ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
-                    Desconectar
-                  </button>
-                </div>
-                <p className="mt-2 text-[11px] leading-5 text-slate-500">
-                  A autorizacao acontece no ambiente oficial do Mercado Pago. O ConnectyHub nao pede senha, token manual, callback ou webhook do cliente.
-                </p>
-              </div>
-            </div>
-          </Panel>
-
+        <div className="grid gap-4">
           <Panel title="Sessoes de pagamento" eyebrow={selectedCompany?.name ?? "checkout"} tone="amber" compact>
             <CommerceRevenueOverview summary={commerceSummary} />
             <CommercialFlowFilterBar
@@ -4089,7 +3940,7 @@ function SummaryLine({ label, value }: { label: string; value: string }) {
 
 function getMercadoPagoConnectionErrorMessage(reason: string | null) {
   if (reason === "config") {
-    return "Mercado Pago ainda precisa ser configurado no painel admin da ConnectyHub. Depois disso, este botao abre a autorizacao oficial.";
+    return "Mercado Pago ainda precisa ser configurado no painel admin da ConnectyHub. Depois disso, conecte pela secao Integracoes.";
   }
 
   if (reason === "missing_company") {
@@ -4105,45 +3956,6 @@ function getMercadoPagoConnectionErrorMessage(reason: string | null) {
   }
 
   return "Nao foi possivel abrir a conexao com Mercado Pago agora. Tente novamente ou chame o suporte.";
-}
-
-function formatMercadoPagoUserFacingError(message: string) {
-  if (
-    message.includes("MERCADO_PAGO_CLIENT_ID")
-    || message.includes("MERCADO_PAGO_CLIENT_SECRET")
-    || message.includes("painel admin")
-  ) {
-    return "Mercado Pago ainda precisa ser configurado no painel admin da ConnectyHub.";
-  }
-
-  return message;
-}
-
-function PaymentGuideStep({
-  done,
-  index,
-  title,
-  body,
-}: {
-  done: boolean;
-  index: string;
-  title: string;
-  body: string;
-}) {
-  return (
-    <div className="rounded-lg border px-3 py-2" style={{ borderColor: "var(--ch-border)", background: "var(--ch-panel)" }}>
-      <div className="flex items-center gap-2">
-        <span className={cn(
-          "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border font-mono text-[10px] font-bold",
-          done ? "border-emerald-300/50 bg-emerald-300/15 text-emerald-100" : "border-cyan-300/40 bg-cyan-300/10 text-cyan-100",
-        )}>
-          {done ? <CheckCircle2 className="h-3.5 w-3.5" /> : index}
-        </span>
-        <p className="text-[12px] font-semibold text-slate-100">{title}</p>
-      </div>
-      <p className="mt-1 pl-8 text-[10px] leading-4 text-slate-500">{body}</p>
-    </div>
-  );
 }
 
 function TabButton({
