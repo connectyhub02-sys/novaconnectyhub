@@ -477,35 +477,6 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
             <div className="rounded-2xl p-4" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}>
               <div className="mb-3 flex items-center justify-between gap-3">
                 <div>
-                  <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">Mercado Pago</p>
-                  <p className="mt-1 text-[14px] font-semibold text-slate-100">Fluxo protegido</p>
-                </div>
-                <ShieldCheck className="h-5 w-5 text-emerald-300" />
-              </div>
-              <div className="space-y-2 text-[12px] leading-5 text-slate-400">
-                <p>Use o guia principal para autorizar a conta sem token manual. OAuth, callback, tokens, webhook e checkout seguem protegidos no Catalogo de Vendas.</p>
-                <a
-                  className="inline-flex h-9 items-center gap-2 rounded-xl border px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-emerald-100"
-                  href="#mercado-pago-guiado"
-                  style={{ borderColor: "var(--ch-border)" }}
-                >
-                  <ExternalLink className="h-3.5 w-3.5" />
-                  Abrir guia
-                </a>
-                <Link
-                  className="inline-flex h-9 items-center gap-2 rounded-xl border px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-cyan-100"
-                  href="/dashboard/links"
-                  style={{ borderColor: "var(--ch-border)" }}
-                >
-                  <ExternalLink className="h-3.5 w-3.5" />
-                  Abrir Catalogo
-                </Link>
-              </div>
-            </div>
-
-            <div className="rounded-2xl p-4" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}>
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <div>
                   <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">Webhook Universal</p>
                   <p className="mt-1 text-[14px] font-semibold text-slate-100">Endpoints da empresa</p>
                 </div>
@@ -579,7 +550,6 @@ function IntegrationCard({
               <Icon className="h-4 w-4" />
             </span>
             <NeonBadge tone={categoryTone(provider.category)}>{categoryLabels[provider.category]}</NeonBadge>
-            {provider.protectedFlow ? <NeonBadge tone="green">protegido</NeonBadge> : null}
           </div>
           <h2 className="mt-3 text-[15px] font-semibold leading-5 text-slate-100">{provider.name}</h2>
           <p className="mt-1 text-[12px] leading-5 text-slate-500">{provider.headline}</p>
@@ -628,7 +598,6 @@ function IntegrationCard({
         <p className="text-[11px] leading-4 text-slate-500">{connection?.detail ?? provider.primaryUse}</p>
         <ProviderAction
           creatingWebhook={creatingWebhook}
-          selectedCompanyId={selectedCompanyId}
           provider={provider}
           schemaReady={schemaReady}
           onCreateWebhook={onCreateWebhook}
@@ -640,13 +609,11 @@ function IntegrationCard({
 
 function ProviderAction({
   provider,
-  selectedCompanyId,
   schemaReady,
   creatingWebhook,
   onCreateWebhook,
 }: {
   provider: ClientIntegrationProvider;
-  selectedCompanyId: string;
   schemaReady: boolean;
   creatingWebhook: boolean;
   onCreateWebhook: () => void;
@@ -661,33 +628,6 @@ function ProviderAction({
         <BarChart3 className="h-3.5 w-3.5" />
         Abrir dashboard
       </Link>
-    );
-  }
-
-  if (provider.id === "mercado-pago") {
-    if (!selectedCompanyId) {
-      return (
-        <button
-          className={cn(className, "cursor-not-allowed text-slate-500 opacity-70")}
-          disabled
-          style={{ borderColor: "var(--ch-border)" }}
-          type="button"
-        >
-          <ExternalLink className="h-3.5 w-3.5" />
-          Escolha uma empresa
-        </button>
-      );
-    }
-
-    return (
-      <a
-        className={cn(className, "text-emerald-100 hover:bg-emerald-400/10")}
-        href="#mercado-pago-guiado"
-        style={{ borderColor: "var(--ch-border)" }}
-      >
-        <ExternalLink className="h-3.5 w-3.5" />
-        Abrir guia Mercado Pago
-      </a>
     );
   }
 

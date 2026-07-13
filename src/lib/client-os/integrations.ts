@@ -39,7 +39,6 @@ export type ClientIntegrationProvider = {
   primaryUse: string;
   actionLabel: string;
   actionHref: string | null;
-  protectedFlow?: boolean;
   items: string[];
   metrics: string[];
 };
@@ -159,22 +158,6 @@ const clientCredentialProviderMap: Record<string, string> = {
 const clientCredentialDefinitions = buildClientCredentialDefinitions();
 
 const integrationProviders: ClientIntegrationProvider[] = [
-  {
-    id: "mercado-pago",
-    name: "Mercado Pago",
-    category: "payments",
-    status: "active",
-    mode: "external",
-    headline: "Recebimento por Pix e cartao no catalogo",
-    summary: "Gateway unico nesta etapa. A Central abre o OAuth oficial e continua usando o fluxo protegido do Catalogo de Vendas.",
-    phase: "Fase 1 - protegido",
-    primaryUse: "Checkout, Pix, cartao, webhook de pagamento e status de pedido.",
-    actionLabel: "Conectar Mercado Pago",
-    actionHref: null,
-    protectedFlow: true,
-    items: ["OAuth existente", "Pix e cartao", "Webhook ja criado"],
-    metrics: ["pagamentos", "pedidos", "receita"],
-  },
   {
     id: "meta-ads",
     name: "Meta Ads / Instagram / Facebook",
