@@ -70,13 +70,29 @@ const platformConfig = {
 } as const;
 
 export function AdminAdsPlatformDashboard({
+  activeHref,
+  credentialHref = "/admin/maintenance#credenciais-do-sistema",
+  credentialPrimaryLabel = "Abrir conexoes",
+  credentialSecondaryLabel = "Salvar na manutencao",
+  isPlatformAdmin = true,
   overview,
   platform,
+  shellMode = "admin",
+  userAvatarUrl,
   userLabel = "CEO_HUMAN_ADM",
+  workspaceName,
 }: {
+  activeHref?: string;
+  credentialHref?: string;
+  credentialPrimaryLabel?: string;
+  credentialSecondaryLabel?: string;
+  isPlatformAdmin?: boolean;
   overview: AdminTrafficOverview;
   platform: AdsDashboardPlatform;
+  shellMode?: "admin" | "client";
+  userAvatarUrl?: string | null;
   userLabel?: string;
+  workspaceName?: string;
 }) {
   const config = platformConfig[platform];
   const paidProvider = getPaidProvider(overview, platform);
@@ -97,7 +113,14 @@ export function AdminAdsPlatformDashboard({
   const platformWarnings = filterPlatformWarnings(overview.warnings, platform);
 
   return (
-    <ConnectyShell activeHref={config.activeHref} mode="admin" isPlatformAdmin userLabel={userLabel}>
+    <ConnectyShell
+      activeHref={activeHref ?? config.activeHref}
+      mode={shellMode}
+      isPlatformAdmin={isPlatformAdmin}
+      userAvatarUrl={userAvatarUrl}
+      userLabel={userLabel}
+      workspaceName={workspaceName}
+    >
       <PageHeader
         eyebrow={config.eyebrow}
         title={config.title}
@@ -145,8 +168,8 @@ export function AdminAdsPlatformDashboard({
               <p className="mt-2 text-[11px] leading-4 text-slate-500">{paidProvider.detail}</p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <LinkButton href="/admin/maintenance#credenciais-do-sistema" icon={ExternalLink} label="Abrir conexoes" tone={config.tone} />
-              <LinkButton href="/admin/maintenance#credenciais-do-sistema" icon={Save} label="Salvar na manutencao" tone="cyan" />
+              <LinkButton href={credentialHref} icon={ExternalLink} label={credentialPrimaryLabel} tone={config.tone} />
+              <LinkButton href={credentialHref} icon={Save} label={credentialSecondaryLabel} tone="cyan" />
             </div>
           </div>
         </div>

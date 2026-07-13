@@ -7,6 +7,8 @@ import { createServiceClient } from "@/lib/supabase/service";
 type JsonRecord = Record<string, unknown>;
 
 type CredentialRow = {
+  scope: string | null;
+  organization_id: string | null;
   integration_id: string | null;
   env_name: string | null;
   encrypted_value: string | null;
@@ -25,6 +27,10 @@ type TrafficRange = {
   until: string;
   label: string;
 };
+
+type TrafficCredentialScope =
+  | { scope: "platform"; organizationId?: null }
+  | { scope: "organization"; organizationId: string };
 
 export type TrafficProviderStatus = "online" | "warning" | "offline";
 export type TrafficProviderKind = "paid" | "organic";
@@ -184,9 +190,17 @@ const emptyGoogleOrganic = buildEmptyProvider({
 });
 
 export async function getAdminTrafficOverview(): Promise<AdminTrafficOverview> {
+  return getTrafficOverview({ scope: "platform" });
+}
+
+export async function getClientTrafficOverview(organizationId: string): Promise<AdminTrafficOverview> {
+  return getTrafficOverview({ scope: "organization", organizationId });
+}
+
+async function getTrafficOverview(credentialScope: TrafficCredentialScope): Promise<AdminTrafficOverview> {
   const range = buildTrafficRange();
   const warnings: string[] = [];
-  const credentials = await loadTrafficCredentials(warnings);
+  const credentials = await loadTrafficCredentials(warnings, credentialScope);
   const googleAccessToken = await exchangeGoogleRefreshToken(credentials, warnings);
 
   const [metaPaid, googlePaid, metaOrganic, googleOrganic, leadAttribution] = await Promise.all([
@@ -194,7 +208,7 @@ export async function getAdminTrafficOverview(): Promise<AdminTrafficOverview> {
     fetchGooglePaidTraffic(credentials, range, googleAccessToken),
     fetchMetaOrganicTraffic(credentials, range),
     fetchGoogleOrganicTraffic(credentials, range, googleAccessToken),
-    loadTrafficLeadAttribution(range, warnings),
+    loadTrafficLeadAttribution(range, warnings, credentialScope.scope === "organization" ? credentialScope.organizationId : null),
   ]);
 
   const paidProviders = [metaPaid.provider, googlePaid.provider];
@@ -247,28 +261,45 @@ export async function getAdminTrafficOverview(): Promise<AdminTrafficOverview> {
   };
 }
 
-async function loadTrafficCredentials(warnings: string[]) {
+async function loadTrafficCredentials(warnings: string[], credentialScope: TrafficCredentialScope) {
   const values: CredentialMap = new Map();
+  const scopedValues = credentialScope.scope === "organization" ? new Map<string, string>() : values;
 
   try {
     const client = createServiceClient();
-    const { data, error } = await client
+    let query = client
       .from("integration_credentials")
-      .select("integration_id, env_name, encrypted_value")
-      .eq("scope", "platform")
-      .is("organization_id", null)
+      .select("scope, organization_id, integration_id, env_name, encrypted_value")
       .in("env_name", credentialEnvNames);
+
+    if (credentialScope.scope === "organization") {
+      query = query.or(`and(scope.eq.platform,organization_id.is.null),and(scope.eq.organization,organization_id.eq.${credentialScope.organizationId})`);
+    } else {
+      query = query.eq("scope", "platform").is("organization_id", null);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       warnings.push(`Nao foi possivel carregar credenciais do cofre: ${error.message}`);
     } else {
       for (const row of (data ?? []) as CredentialRow[]) {
-        if (!row.env_name || !row.encrypted_value || values.has(row.env_name)) {
+        if (!row.env_name || !row.encrypted_value) {
           continue;
         }
 
         try {
-          values.set(row.env_name, decryptCredentialValue(row.encrypted_value));
+          const decrypted = decryptCredentialValue(row.encrypted_value);
+
+          if (
+            credentialScope.scope === "organization"
+            && row.scope === "organization"
+            && row.organization_id === credentialScope.organizationId
+          ) {
+            scopedValues.set(row.env_name, decrypted);
+          } else if (!values.has(row.env_name)) {
+            values.set(row.env_name, decrypted);
+          }
         } catch {
           warnings.push(`Credencial ${row.env_name} existe, mas nao pode ser descriptografada.`);
         }
@@ -285,10 +316,20 @@ async function loadTrafficCredentials(warnings: string[]) {
     }
   }
 
+  if (credentialScope.scope === "organization") {
+    for (const [envName, value] of scopedValues) {
+      values.set(envName, value);
+    }
+  }
+
   return values;
 }
 
-async function loadTrafficLeadAttribution(range: TrafficRange, warnings: string[]): Promise<TrafficLeadAttribution> {
+async function loadTrafficLeadAttribution(
+  range: TrafficRange,
+  warnings: string[],
+  organizationId: string | null,
+): Promise<TrafficLeadAttribution> {
   const attribution: TrafficLeadAttribution = {
     meta: 0,
     google: 0,
@@ -302,13 +343,19 @@ async function loadTrafficLeadAttribution(range: TrafficRange, warnings: string[
 
   try {
     const client = createServiceClient();
-    const { data, error } = await client
+    let query = client
       .from("leads")
       .select("source, metadata, created_at")
       .gte("created_at", `${range.since}T00:00:00.000Z`)
       .lte("created_at", `${range.until}T23:59:59.999Z`)
       .order("created_at", { ascending: false })
       .limit(5000);
+
+    if (organizationId) {
+      query = query.eq("organization_id", organizationId);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       warnings.push(`Nao foi possivel carregar leads internos por origem: ${error.message}`);

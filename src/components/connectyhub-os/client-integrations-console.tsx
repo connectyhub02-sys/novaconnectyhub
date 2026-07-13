@@ -13,6 +13,7 @@ import {
   Loader2,
   PackageCheck,
   PlugZap,
+  Save,
   Send,
   ShieldCheck,
   ShoppingBag,
@@ -21,6 +22,8 @@ import {
 } from "lucide-react";
 import type {
   ClientIntegrationConnection,
+  ClientIntegrationCredentialDefinition,
+  ClientIntegrationCredentialSnapshot,
   ClientIntegrationHubState,
   ClientIntegrationProvider,
   ClientIntegrationWebhookEndpoint,
@@ -38,6 +41,12 @@ type Notice = {
 type CreatedWebhookResponse = {
   endpoint?: ClientIntegrationWebhookEndpoint;
   secret?: string;
+  error?: string;
+};
+
+type SavedCredentialsResponse = {
+  credentials?: ClientIntegrationCredentialSnapshot[];
+  connection?: ClientIntegrationConnection;
   error?: string;
 };
 
@@ -62,6 +71,9 @@ const categoryLabels: Record<IntegrationCategory, string> = {
 export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationHubState }) {
   const [selectedCompanyId, setSelectedCompanyId] = useState(state.selectedCompanyId ?? state.companies[0]?.id ?? "");
   const [connections, setConnections] = useState(state.connections);
+  const [credentialSnapshots, setCredentialSnapshots] = useState(state.credentialSnapshots);
+  const [credentialDrafts, setCredentialDrafts] = useState<Record<string, string>>({});
+  const [savingProviderId, setSavingProviderId] = useState<string | null>(null);
   const [webhookEndpoints, setWebhookEndpoints] = useState(state.webhookEndpoints);
   const [creatingWebhook, setCreatingWebhook] = useState(false);
   const [newWebhookSecret, setNewWebhookSecret] = useState<string | null>(null);
@@ -79,6 +91,24 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
     () => new Map(selectedConnections.map((connection) => [connection.providerId, connection])),
     [selectedConnections],
   );
+  const credentialDefinitionsByProvider = useMemo(() => {
+    const map = new Map<string, ClientIntegrationCredentialDefinition[]>();
+
+    for (const definition of state.credentialDefinitions) {
+      map.set(definition.providerId, [...(map.get(definition.providerId) ?? []), definition]);
+    }
+
+    return map;
+  }, [state.credentialDefinitions]);
+  const credentialSnapshotByField = useMemo(() => {
+    const map = new Map<string, ClientIntegrationCredentialSnapshot>();
+
+    for (const credential of credentialSnapshots) {
+      map.set(credentialKey(credential.companyId, credential.providerId, credential.envName), credential);
+    }
+
+    return map;
+  }, [credentialSnapshots]);
   const mercadoPagoConnection = connectionByProvider.get("mercado-pago");
   const mercadoPagoConnected = mercadoPagoConnection?.status === "connected";
   const webhookConnection = connectionByProvider.get("webhook-universal");
@@ -161,6 +191,73 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
       });
     } finally {
       setCreatingWebhook(false);
+    }
+  }
+
+  async function saveProviderCredentials(provider: ClientIntegrationProvider) {
+    if (!selectedCompanyId || savingProviderId) return;
+
+    const definitions = credentialDefinitionsByProvider.get(provider.id) ?? [];
+    const credentials = definitions
+      .map((definition) => ({
+        envName: definition.envName,
+        value: credentialDrafts[credentialKey(selectedCompanyId, provider.id, definition.envName)]?.trim() ?? "",
+      }))
+      .filter((credential) => credential.value.length > 0);
+
+    if (!credentials.length) {
+      setNotice({ tone: "warning", message: "Preencha pelo menos uma credencial antes de salvar." });
+      return;
+    }
+
+    setSavingProviderId(provider.id);
+    setNotice(null);
+
+    try {
+      const response = await fetch("/api/dashboard/integrations/credentials", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyId: selectedCompanyId,
+          providerId: provider.id,
+          credentials,
+        }),
+      });
+      const data = (await response.json().catch(() => ({}))) as SavedCredentialsResponse;
+
+      if (!response.ok || !data.credentials?.length || !data.connection) {
+        throw new Error(data.error ?? "Nao foi possivel salvar as credenciais.");
+      }
+
+      setCredentialSnapshots((current) => {
+        const savedKeys = new Set(data.credentials!.map((credential) => credentialKey(credential.companyId, credential.providerId, credential.envName)));
+        return [
+          ...data.credentials!,
+          ...current.filter((credential) => !savedKeys.has(credentialKey(credential.companyId, credential.providerId, credential.envName))),
+        ];
+      });
+      setConnections((current) => [
+        data.connection!,
+        ...current.filter((connection) => !(connection.companyId === data.connection!.companyId && connection.providerId === data.connection!.providerId)),
+      ]);
+      setCredentialDrafts((current) => {
+        const next = { ...current };
+        credentials.forEach((credential) => {
+          delete next[credentialKey(selectedCompanyId, provider.id, credential.envName)];
+        });
+        return next;
+      });
+      setNotice({
+        tone: "success",
+        message: `${provider.name} conectado para ${selectedCompany?.name ?? "esta empresa"}.`,
+      });
+    } catch (error) {
+      setNotice({
+        tone: "error",
+        message: error instanceof Error ? error.message : "Erro ao salvar credenciais.",
+      });
+    } finally {
+      setSavingProviderId(null);
     }
   }
 
@@ -318,12 +415,23 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
               <IntegrationCard
                 key={provider.id}
                 connection={connectionByProvider.get(provider.id)}
+                credentialDefinitions={credentialDefinitionsByProvider.get(provider.id) ?? []}
+                credentialDrafts={credentialDrafts}
+                credentialSnapshotByField={credentialSnapshotByField}
                 creatingWebhook={creatingWebhook}
+                isSavingCredentials={savingProviderId === provider.id}
                 provider={provider}
                 schemaReady={state.schemaReady}
                 selectedCompanyId={selectedCompanyId}
+                onCredentialChange={(envName, value) => {
+                  setCredentialDrafts((current) => ({
+                    ...current,
+                    [credentialKey(selectedCompanyId, provider.id, envName)]: value,
+                  }));
+                }}
                 onMercadoPagoConnect={handleMercadoPagoConnectClick}
                 onCreateWebhook={createUniversalWebhook}
+                onSaveCredentials={() => saveProviderCredentials(provider)}
               />
             ))}
           </div>
@@ -390,22 +498,37 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
 function IntegrationCard({
   provider,
   connection,
+  credentialDefinitions,
+  credentialDrafts,
+  credentialSnapshotByField,
   schemaReady,
   selectedCompanyId,
   creatingWebhook,
+  isSavingCredentials,
+  onCredentialChange,
   onMercadoPagoConnect,
   onCreateWebhook,
+  onSaveCredentials,
 }: {
   provider: ClientIntegrationProvider;
   connection?: ClientIntegrationConnection;
+  credentialDefinitions: ClientIntegrationCredentialDefinition[];
+  credentialDrafts: Record<string, string>;
+  credentialSnapshotByField: Map<string, ClientIntegrationCredentialSnapshot>;
   schemaReady: boolean;
   selectedCompanyId: string;
   creatingWebhook: boolean;
+  isSavingCredentials: boolean;
+  onCredentialChange: (envName: string, value: string) => void;
   onMercadoPagoConnect: (event: MouseEvent<HTMLAnchorElement>) => void;
   onCreateWebhook: () => void;
+  onSaveCredentials: () => void;
 }) {
   const Icon = categoryIcons[provider.category];
   const tone = statusTone(connection?.status ?? (provider.status === "active" ? "available" : "planned"));
+  const configuredCredentials = credentialDefinitions.filter((definition) =>
+    credentialSnapshotByField.has(credentialKey(selectedCompanyId, provider.id, definition.envName)),
+  ).length;
 
   return (
     <article
@@ -431,6 +554,20 @@ function IntegrationCard({
       </div>
 
       <p className="text-[12px] leading-5 text-slate-400">{provider.summary}</p>
+
+      {credentialDefinitions.length > 0 ? (
+        <CredentialFields
+          configuredCount={configuredCredentials}
+          credentialDrafts={credentialDrafts}
+          credentialSnapshotByField={credentialSnapshotByField}
+          definitions={credentialDefinitions}
+          isSaving={isSavingCredentials}
+          providerId={provider.id}
+          selectedCompanyId={selectedCompanyId}
+          onChange={onCredentialChange}
+          onSave={onSaveCredentials}
+        />
+      ) : null}
 
       <div className="flex flex-wrap gap-1.5">
         {provider.items.map((item) => (
@@ -484,6 +621,17 @@ function ProviderAction({
   onCreateWebhook: () => void;
 }) {
   const className = "inline-flex min-h-9 w-full items-center justify-center gap-2 rounded-xl border px-3 font-mono text-[10px] font-bold uppercase tracking-wide transition";
+
+  if (provider.id === "meta-ads" || provider.id === "google-growth") {
+    const href = provider.id === "meta-ads" ? "/dashboard/trafego/meta-ads" : "/dashboard/trafego/google-ads";
+
+    return (
+      <Link className={cn(className, "text-cyan-100 hover:bg-cyan-400/10")} href={href} style={{ borderColor: "var(--ch-border)" }}>
+        <BarChart3 className="h-3.5 w-3.5" />
+        Abrir dashboard
+      </Link>
+    );
+  }
 
   if (provider.id === "mercado-pago") {
     if (!selectedCompanyId) {
@@ -547,6 +695,79 @@ function ProviderAction({
       <PackageCheck className="h-3.5 w-3.5" />
       {provider.actionLabel}
     </button>
+  );
+}
+
+function CredentialFields({
+  configuredCount,
+  credentialDrafts,
+  credentialSnapshotByField,
+  definitions,
+  isSaving,
+  providerId,
+  selectedCompanyId,
+  onChange,
+  onSave,
+}: {
+  configuredCount: number;
+  credentialDrafts: Record<string, string>;
+  credentialSnapshotByField: Map<string, ClientIntegrationCredentialSnapshot>;
+  definitions: ClientIntegrationCredentialDefinition[];
+  isSaving: boolean;
+  providerId: string;
+  selectedCompanyId: string;
+  onChange: (envName: string, value: string) => void;
+  onSave: () => void;
+}) {
+  return (
+    <div className="rounded-2xl p-3" style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}>
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-slate-500">credenciais da empresa</p>
+          <p className="mt-1 text-[12px] text-slate-400">{configuredCount}/{definitions.length} campo(s) configurado(s)</p>
+        </div>
+        <StatusBadge status={configuredCount > 0 ? "online" : "warning"} label={configuredCount > 0 ? "com dados" : "pendente"} />
+      </div>
+
+      <div className="grid gap-2">
+        {definitions.map((definition) => {
+          const key = credentialKey(selectedCompanyId, providerId, definition.envName);
+          const snapshot = credentialSnapshotByField.get(key);
+          const draftValue = credentialDrafts[key] ?? "";
+
+          return (
+            <label key={definition.envName} className="block">
+              <span className="mb-1 flex items-center justify-between gap-2">
+                <span className="truncate font-mono text-[9px] uppercase tracking-[0.12em] text-slate-500">{definition.label}</span>
+                <span className="shrink-0 rounded-md border px-1.5 py-0.5 font-mono text-[8px] uppercase text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
+                  {definition.requirement}
+                </span>
+              </span>
+              <input
+                className="h-10 w-full rounded-xl px-3 font-mono text-[12px] outline-none"
+                onChange={(event) => onChange(definition.envName, event.target.value)}
+                placeholder={snapshot ? `Configurado: ${snapshot.displayValue}` : definition.envName}
+                type={definition.kind === "secret" ? "password" : "text"}
+                value={draftValue}
+                style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)", color: "var(--ch-text)" }}
+              />
+              <span className="mt-1 block text-[10px] leading-4 text-slate-600">{definition.help}</span>
+            </label>
+          );
+        })}
+      </div>
+
+      <button
+        className="mt-3 inline-flex min-h-9 w-full items-center justify-center gap-2 rounded-xl border px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-emerald-100 transition hover:bg-emerald-400/10 disabled:cursor-not-allowed disabled:opacity-60"
+        disabled={isSaving}
+        onClick={onSave}
+        style={{ borderColor: "var(--ch-border)" }}
+        type="button"
+      >
+        {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+        Salvar credenciais
+      </button>
+    </div>
   );
 }
 
@@ -708,6 +929,10 @@ function buildMercadoPagoConnectUrl(companyId: string) {
   });
 
   return `/api/dashboard/sales-catalog/payments/mercado-pago/connect?${params.toString()}`;
+}
+
+function credentialKey(companyId: string, providerId: string, envName: string) {
+  return `${companyId}:${providerId}:${envName}`;
 }
 
 function getMercadoPagoConnectionErrorMessage(reason: string | null) {

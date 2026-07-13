@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ClientCompany } from "@/lib/client-os/companies";
 import { listClientCompanies } from "@/lib/client-os/companies";
 import { listClientSalesCatalogPaymentIntegrations } from "@/lib/client-os/sales-catalog";
+import { maintenanceIntegrations, type CredentialKind, type CredentialRequirement } from "@/lib/maintenance-vault";
 import type { ClientSalesCatalogPaymentIntegration } from "@/lib/sales-catalog/shared";
 import { createServiceClient } from "@/lib/supabase/service";
 
@@ -73,6 +74,30 @@ export type ClientIntegrationWebhookEndpoint = {
   updatedAt: string | null;
 };
 
+export type ClientIntegrationCredentialDefinition = {
+  providerId: string;
+  integrationId: string;
+  envName: string;
+  label: string;
+  kind: CredentialKind;
+  requirement: CredentialRequirement;
+  help: string;
+};
+
+export type ClientIntegrationCredentialSnapshot = {
+  id: string;
+  companyId: string;
+  providerId: string;
+  integrationId: string;
+  envName: string;
+  label: string;
+  kind: CredentialKind;
+  requirement: CredentialRequirement;
+  displayValue: string;
+  configured: boolean;
+  updatedAt: string | null;
+};
+
 export type ClientIntegrationHubState = {
   schemaReady: boolean;
   schemaMessage: string | null;
@@ -81,6 +106,8 @@ export type ClientIntegrationHubState = {
   selectedCompanyId: string | null;
   providers: ClientIntegrationProvider[];
   connections: ClientIntegrationConnection[];
+  credentialDefinitions: ClientIntegrationCredentialDefinition[];
+  credentialSnapshots: ClientIntegrationCredentialSnapshot[];
   webhookEndpoints: ClientIntegrationWebhookEndpoint[];
 };
 
@@ -112,6 +139,25 @@ type WebhookEndpointRow = {
   updated_at: string | null;
 };
 
+type CredentialRow = {
+  id: string;
+  organization_id: string;
+  integration_id: string;
+  env_name: string;
+  label: string;
+  kind: CredentialKind;
+  requirement: CredentialRequirement;
+  value_preview: string;
+  updated_at: string | null;
+};
+
+const clientCredentialProviderMap: Record<string, string> = {
+  meta: "meta-ads",
+  "google-ads": "google-growth",
+};
+
+const clientCredentialDefinitions = buildClientCredentialDefinitions();
+
 const integrationProviders: ClientIntegrationProvider[] = [
   {
     id: "mercado-pago",
@@ -133,13 +179,13 @@ const integrationProviders: ClientIntegrationProvider[] = [
     id: "meta-ads",
     name: "Meta Ads / Instagram / Facebook",
     category: "ads",
-    status: "next",
+    status: "active",
     mode: "external",
     headline: "Acompanhamento de campanhas e leads",
-    summary: "Primeiro entra em modo leitura para gasto, leads, CTR, CPL e alertas. Execucao com IA fica para fase futura.",
-    phase: "Fase 3 - leitura",
+    summary: "Conecte as credenciais da empresa para ler gasto, leads, CTR, CPL, criativos e alertas.",
+    phase: "Fase 3 - leitura ativa",
     primaryUse: "Monitorar campanhas, criativos, formularios, direct e comentarios.",
-    actionLabel: "Planejado",
+    actionLabel: "Configurar Meta Ads",
     actionHref: null,
     items: ["Campanhas", "Leads", "Criativos", "Alertas IA"],
     metrics: ["gasto", "CPL", "leads", "CTR"],
@@ -148,13 +194,13 @@ const integrationProviders: ClientIntegrationProvider[] = [
     id: "google-growth",
     name: "Google Ads / Business / Search Console",
     category: "ads",
-    status: "next",
+    status: "active",
     mode: "external",
     headline: "Painel de aquisicao e presenca Google",
-    summary: "Primeiro acompanha campanhas, conversoes, palavras-chave, avaliacoes e presenca local.",
-    phase: "Fase 3 - leitura",
+    summary: "Conecte Google Ads, conversoes, GA4 e Search Console para acompanhar aquisicao e presenca.",
+    phase: "Fase 3 - leitura ativa",
     primaryUse: "Unir anuncios, busca organica, Google Business e recomendacoes da IA.",
-    actionLabel: "Planejado",
+    actionLabel: "Configurar Google Ads",
     actionHref: null,
     items: ["Google Ads", "Business Profile", "Search Console"],
     metrics: ["cliques", "CPC", "conversoes", "avaliacoes"],
@@ -231,10 +277,11 @@ export async function getClientIntegrationHub(input: {
   const selectedCompanyId = resolveSelectedCompanyId(companies, input.preferredCompanyId);
   const companyIds = companies.map((company) => company.id);
 
-  const [paymentIntegrations, genericResult, webhookResult] = await Promise.all([
+  const [paymentIntegrations, genericResult, webhookResult, credentialResult] = await Promise.all([
     listClientSalesCatalogPaymentIntegrations({ userId: input.userId, client }).catch(() => []),
     loadOrganizationIntegrations(client, companyIds),
     loadWebhookEndpoints(client, companyIds),
+    loadOrganizationCredentials(client, companyIds),
   ]);
 
   const connections = [
@@ -252,12 +299,18 @@ export async function getClientIntegrationHub(input: {
     selectedCompanyId,
     providers: integrationProviders,
     connections,
+    credentialDefinitions: clientCredentialDefinitions,
+    credentialSnapshots: credentialResult.rows.map((row) => mapCredentialSnapshot(row)),
     webhookEndpoints: webhookResult.rows.map((row) => mapWebhookEndpoint(row)),
   };
 }
 
 export function getIntegrationProviders() {
   return integrationProviders;
+}
+
+export function getClientIntegrationCredentialDefinitions() {
+  return clientCredentialDefinitions;
 }
 
 function resolveSelectedCompanyId(companies: ClientCompany[], preferred?: string | null) {
@@ -412,6 +465,30 @@ async function loadWebhookEndpoints(client: SupabaseClient, companyIds: string[]
   return { ready: true, rows: (data ?? []) as WebhookEndpointRow[] };
 }
 
+async function loadOrganizationCredentials(client: SupabaseClient, companyIds: string[]) {
+  if (companyIds.length === 0) {
+    return { ready: true, rows: [] as CredentialRow[] };
+  }
+
+  const integrationIds = Array.from(new Set(clientCredentialDefinitions.map((field) => field.integrationId)));
+  const envNames = Array.from(new Set(clientCredentialDefinitions.map((field) => field.envName)));
+
+  const { data, error } = await client
+    .from("integration_credentials")
+    .select("id, organization_id, integration_id, env_name, label, kind, requirement, value_preview, updated_at")
+    .eq("scope", "organization")
+    .in("organization_id", companyIds)
+    .in("integration_id", integrationIds)
+    .in("env_name", envNames)
+    .order("updated_at", { ascending: false });
+
+  if (error) {
+    return { ready: false, rows: [] as CredentialRow[] };
+  }
+
+  return { ready: true, rows: (data ?? []) as CredentialRow[] };
+}
+
 function mapWebhookEndpoint(row: WebhookEndpointRow): ClientIntegrationWebhookEndpoint {
   const urlPath = row.url_path ?? `/api/webhooks/universal/${row.id}`;
   const appBaseUrl = resolveAppBaseUrl();
@@ -431,6 +508,76 @@ function mapWebhookEndpoint(row: WebhookEndpointRow): ClientIntegrationWebhookEn
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+function mapCredentialSnapshot(row: CredentialRow): ClientIntegrationCredentialSnapshot {
+  return {
+    id: row.id,
+    companyId: row.organization_id,
+    providerId: clientCredentialProviderMap[row.integration_id] ?? row.integration_id,
+    integrationId: row.integration_id,
+    envName: row.env_name,
+    label: row.label,
+    kind: row.kind,
+    requirement: row.requirement,
+    displayValue: row.value_preview,
+    configured: true,
+    updatedAt: row.updated_at,
+  };
+}
+
+function buildClientCredentialDefinitions(): ClientIntegrationCredentialDefinition[] {
+  const catalog = [
+    {
+      providerId: "meta-ads",
+      integrationId: "meta",
+      envNames: [
+        "META_ACCESS_TOKEN",
+        "META_AD_ACCOUNT_ID",
+        "META_PIXEL_ID",
+        "INSTAGRAM_BUSINESS_ACCOUNT_ID",
+        "FACEBOOK_PAGE_ID",
+        "META_GRAPH_API_VERSION",
+      ],
+    },
+    {
+      providerId: "google-growth",
+      integrationId: "google-ads",
+      envNames: [
+        "GOOGLE_ADS_DEVELOPER_TOKEN",
+        "GOOGLE_ADS_CLIENT_ID",
+        "GOOGLE_ADS_CLIENT_SECRET",
+        "GOOGLE_ADS_REFRESH_TOKEN",
+        "GOOGLE_ADS_CUSTOMER_ID",
+        "GOOGLE_ADS_LOGIN_CUSTOMER_ID",
+        "GOOGLE_ADS_CONVERSION_ID",
+        "GOOGLE_ANALYTICS_MEASUREMENT_ID",
+        "GOOGLE_SEARCH_CONSOLE_SITE_URL",
+      ],
+    },
+  ];
+
+  return catalog.flatMap((entry) => {
+    const integration = maintenanceIntegrations.find((item) => item.id === entry.integrationId);
+
+    return entry.envNames.flatMap((envName) => {
+      const field = integration?.fields.find((item) => item.env === envName);
+
+      if (!field) {
+        return [];
+      }
+
+      return [{
+        providerId: entry.providerId,
+        integrationId: entry.integrationId,
+        envName: field.env,
+        label: field.label,
+        kind: field.kind,
+        requirement: field.requirement,
+        help: field.help,
+      }];
+    });
+  });
 }
 
 function mapPaymentStatus(status: ClientSalesCatalogPaymentIntegration["status"]): IntegrationConnectionStatus {
