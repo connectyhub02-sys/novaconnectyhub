@@ -127,10 +127,17 @@ const adminSections: NavSection[] = [
       { label: "WhatsApp Interno", href: "/admin/whatsapp/atendimento", icon: MessageCircle, tone: "emerald" },
       { label: "Inteligencia",href: "/admin/inteligencia", icon: BrainCircuit, tone: "violet" },
       { label: "Conteudo",    href: "/admin/conteudo",     icon: Globe2, tone: "sky" },
-      { label: "Trafego",     href: "/admin/trafego",      icon: Megaphone, tone: "sky" },
       { label: "Setores",     href: "/admin/setores",      icon: GitBranch, tone: "teal" },
       { label: "CEO IA",      href: "/admin/ceo",          icon: Wand2, tone: "fuchsia" },
       { label: "Aprovações",  href: "/admin/aprovacoes",   icon: ShieldCheck, tone: "amber", badge: "17", badgeTone: "amber" },
+    ],
+  },
+  {
+    label: "Trafego IA",
+    items: [
+      { label: "Meta Ads",    href: "/admin/trafego/meta-ads",   icon: Megaphone, tone: "fuchsia" },
+      { label: "Google Ads",  href: "/admin/trafego/google-ads", icon: Search, tone: "blue" },
+      { label: "Visao Geral", href: "/admin/trafego",            icon: BarChart3, tone: "sky" },
     ],
   },
   {

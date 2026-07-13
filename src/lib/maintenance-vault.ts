@@ -199,6 +199,13 @@ export const maintenanceIntegrations: IntegrationDefinition[] = [
         help: "Conta de anuncios usada pelo agente de trafego pago.",
       },
       {
+        label: "Meta Pixel ID",
+        env: "META_PIXEL_ID",
+        kind: "identifier",
+        requirement: "optional",
+        help: "Pixel usado para rastrear campanhas, conversoes e eventos enviados pelos clientes.",
+      },
+      {
         label: "Instagram Business ID",
         env: "INSTAGRAM_BUSINESS_ACCOUNT_ID",
         kind: "identifier",
@@ -258,6 +265,20 @@ export const maintenanceIntegrations: IntegrationDefinition[] = [
         kind: "identifier",
         requirement: "optional",
         help: "Conta de anuncios padrao usada pelos agentes.",
+      },
+      {
+        label: "Google Ads Conversion ID",
+        env: "GOOGLE_ADS_CONVERSION_ID",
+        kind: "identifier",
+        requirement: "optional",
+        help: "ID AW usado pelas tags de conversao das campanhas Google Ads.",
+      },
+      {
+        label: "GA4 Measurement ID",
+        env: "GOOGLE_ANALYTICS_MEASUREMENT_ID",
+        kind: "identifier",
+        requirement: "optional",
+        help: "ID G- do GA4 para leitura futura de Analytics e cruzamento com campanhas.",
       },
       {
         label: "Login Customer ID",

@@ -12,6 +12,12 @@ type CredentialRow = {
   encrypted_value: string | null;
 };
 
+type LeadAttributionRow = {
+  source: string | null;
+  metadata: JsonRecord | null;
+  created_at: string | null;
+};
+
 type CredentialMap = Map<string, string>;
 
 type TrafficRange = {
@@ -66,6 +72,28 @@ export type TrafficSourceStatus = {
   detail: string;
 };
 
+export type TrafficTrackingSnapshot = {
+  metaPixelId: string | null;
+  metaAdAccountId: string | null;
+  instagramBusinessId: string | null;
+  facebookPageId: string | null;
+  googleAdsCustomerId: string | null;
+  googleAdsConversionId: string | null;
+  googleAnalyticsMeasurementId: string | null;
+  googleSearchConsoleSiteUrl: string | null;
+};
+
+export type TrafficLeadAttribution = {
+  meta: number;
+  google: number;
+  total: number;
+  latestReceivedAt: {
+    meta: string | null;
+    google: string | null;
+    any: string | null;
+  };
+};
+
 export type AdminTrafficOverview = {
   generatedAt: string;
   range: TrafficRange;
@@ -81,6 +109,14 @@ export type AdminTrafficOverview = {
   paidProviders: TrafficProviderSummary[];
   organicProviders: TrafficProviderSummary[];
   campaigns: TrafficCampaign[];
+  platformSeries: {
+    metaPaidClicks: TrafficSeriesPoint[];
+    googlePaidClicks: TrafficSeriesPoint[];
+    metaOrganicClicks: TrafficSeriesPoint[];
+    googleOrganicClicks: TrafficSeriesPoint[];
+  };
+  tracking: TrafficTrackingSnapshot;
+  leadAttribution: TrafficLeadAttribution;
   paidClickSeries: TrafficSeriesPoint[];
   organicClickSeries: TrafficSeriesPoint[];
   sourceStatus: TrafficSourceStatus[];
@@ -98,6 +134,7 @@ const credentialEnvNames = [
   "META_ACCESS_TOKEN",
   "META_APP_SECRET",
   "META_AD_ACCOUNT_ID",
+  "META_PIXEL_ID",
   "INSTAGRAM_BUSINESS_ACCOUNT_ID",
   "FACEBOOK_PAGE_ID",
   "META_GRAPH_API_VERSION",
@@ -106,7 +143,9 @@ const credentialEnvNames = [
   "GOOGLE_ADS_CLIENT_SECRET",
   "GOOGLE_ADS_REFRESH_TOKEN",
   "GOOGLE_ADS_CUSTOMER_ID",
+  "GOOGLE_ADS_CONVERSION_ID",
   "GOOGLE_ADS_LOGIN_CUSTOMER_ID",
+  "GOOGLE_ANALYTICS_MEASUREMENT_ID",
   "GOOGLE_SEARCH_CONSOLE_SITE_URL",
 ];
 
@@ -150,18 +189,19 @@ export async function getAdminTrafficOverview(): Promise<AdminTrafficOverview> {
   const credentials = await loadTrafficCredentials(warnings);
   const googleAccessToken = await exchangeGoogleRefreshToken(credentials, warnings);
 
-  const [metaPaid, googlePaid, metaOrganic, googleOrganic] = await Promise.all([
+  const [metaPaid, googlePaid, metaOrganic, googleOrganic, leadAttribution] = await Promise.all([
     fetchMetaPaidTraffic(credentials, range),
     fetchGooglePaidTraffic(credentials, range, googleAccessToken),
     fetchMetaOrganicTraffic(credentials, range),
     fetchGoogleOrganicTraffic(credentials, range, googleAccessToken),
+    loadTrafficLeadAttribution(range, warnings),
   ]);
 
   const paidProviders = [metaPaid.provider, googlePaid.provider];
   const organicProviders = [metaOrganic.provider, googleOrganic.provider];
   const campaigns = [...(metaPaid.campaigns ?? []), ...(googlePaid.campaigns ?? [])]
     .sort((left, right) => right.spend - left.spend)
-    .slice(0, 12);
+    .slice(0, 50);
   const paidClickSeries = mergeSeries([metaPaid.series ?? [], googlePaid.series ?? []]);
   const organicClickSeries = mergeSeries([metaOrganic.series ?? [], googleOrganic.series ?? []]);
 
@@ -187,6 +227,14 @@ export async function getAdminTrafficOverview(): Promise<AdminTrafficOverview> {
     paidProviders,
     organicProviders,
     campaigns,
+    platformSeries: {
+      metaPaidClicks: metaPaid.series ?? [],
+      googlePaidClicks: googlePaid.series ?? [],
+      metaOrganicClicks: metaOrganic.series ?? [],
+      googleOrganicClicks: googleOrganic.series ?? [],
+    },
+    tracking: buildTrafficTrackingSnapshot(credentials),
+    leadAttribution,
     paidClickSeries,
     organicClickSeries,
     sourceStatus: [
@@ -238,6 +286,70 @@ async function loadTrafficCredentials(warnings: string[]) {
   }
 
   return values;
+}
+
+async function loadTrafficLeadAttribution(range: TrafficRange, warnings: string[]): Promise<TrafficLeadAttribution> {
+  const attribution: TrafficLeadAttribution = {
+    meta: 0,
+    google: 0,
+    total: 0,
+    latestReceivedAt: {
+      meta: null,
+      google: null,
+      any: null,
+    },
+  };
+
+  try {
+    const client = createServiceClient();
+    const { data, error } = await client
+      .from("leads")
+      .select("source, metadata, created_at")
+      .gte("created_at", `${range.since}T00:00:00.000Z`)
+      .lte("created_at", `${range.until}T23:59:59.999Z`)
+      .order("created_at", { ascending: false })
+      .limit(5000);
+
+    if (error) {
+      warnings.push(`Nao foi possivel carregar leads internos por origem: ${error.message}`);
+      return attribution;
+    }
+
+    const rows = (data ?? []) as LeadAttributionRow[];
+    attribution.total = rows.length;
+    attribution.latestReceivedAt.any = rows.find((row) => row.created_at)?.created_at ?? null;
+
+    for (const row of rows) {
+      const platform = classifyLeadPlatform(row);
+
+      if (platform === "meta") {
+        attribution.meta += 1;
+        attribution.latestReceivedAt.meta ??= row.created_at;
+      }
+
+      if (platform === "google") {
+        attribution.google += 1;
+        attribution.latestReceivedAt.google ??= row.created_at;
+      }
+    }
+  } catch (error) {
+    warnings.push(error instanceof Error ? error.message : "Nao foi possivel carregar leads internos por origem.");
+  }
+
+  return attribution;
+}
+
+function buildTrafficTrackingSnapshot(credentials: CredentialMap): TrafficTrackingSnapshot {
+  return {
+    metaPixelId: nullableCredential(getCredential(credentials, ["META_PIXEL_ID"])),
+    metaAdAccountId: nullableCredential(getCredential(credentials, ["META_AD_ACCOUNT_ID"])),
+    instagramBusinessId: nullableCredential(getCredential(credentials, ["INSTAGRAM_BUSINESS_ACCOUNT_ID"])),
+    facebookPageId: nullableCredential(getCredential(credentials, ["FACEBOOK_PAGE_ID"])),
+    googleAdsCustomerId: nullableCredential(getCredential(credentials, ["GOOGLE_ADS_CUSTOMER_ID"])),
+    googleAdsConversionId: nullableCredential(getCredential(credentials, ["GOOGLE_ADS_CONVERSION_ID"])),
+    googleAnalyticsMeasurementId: nullableCredential(getCredential(credentials, ["GOOGLE_ANALYTICS_MEASUREMENT_ID"])),
+    googleSearchConsoleSiteUrl: nullableCredential(getCredential(credentials, ["GOOGLE_SEARCH_CONSOLE_SITE_URL"])),
+  };
 }
 
 async function fetchMetaPaidTraffic(credentials: CredentialMap, range: TrafficRange): Promise<ProviderFetchResult> {
@@ -826,6 +938,26 @@ function getCredential(credentials: CredentialMap, names: string[]) {
   }
 
   return "";
+}
+
+function nullableCredential(value: string) {
+  return value.trim() ? value.trim() : null;
+}
+
+function classifyLeadPlatform(row: LeadAttributionRow): "meta" | "google" | null {
+  const source = row.source ?? "";
+  const metadataText = row.metadata ? JSON.stringify(row.metadata) : "";
+  const text = `${source} ${metadataText}`.toLowerCase();
+
+  if (/\b(gclid|gbraid|wbraid|google|adwords|google_ads)\b/.test(text)) {
+    return "google";
+  }
+
+  if (/\b(meta|facebook|instagram|fbclid|igclid|meta_ads)\b/.test(text)) {
+    return "meta";
+  }
+
+  return null;
 }
 
 function readMetaInsightValues(data: unknown) {
