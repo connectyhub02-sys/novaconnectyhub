@@ -286,8 +286,8 @@ function readString(value: unknown) {
 
 function resolveAccountLabel(credentials: CredentialRow[], providerId: string) {
   const priority = providerId === "meta-ads"
-    ? ["META_AD_ACCOUNT_ID", "META_PIXEL_ID", "INSTAGRAM_BUSINESS_ACCOUNT_ID"]
-    : ["GOOGLE_ADS_CUSTOMER_ID", "GOOGLE_ADS_CONVERSION_ID", "GOOGLE_ANALYTICS_MEASUREMENT_ID"];
+    ? ["META_AD_ACCOUNT_ID", "INSTAGRAM_BUSINESS_ACCOUNT_ID", "FACEBOOK_PAGE_ID"]
+    : ["GOOGLE_ADS_CUSTOMER_ID", "GOOGLE_SEARCH_CONSOLE_SITE_URL"];
 
   for (const envName of priority) {
     const credential = credentials.find((item) => item.env_name === envName);

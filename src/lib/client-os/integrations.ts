@@ -182,12 +182,12 @@ const integrationProviders: ClientIntegrationProvider[] = [
     status: "active",
     mode: "external",
     headline: "Acompanhamento de campanhas e leads",
-    summary: "Conecte as credenciais da empresa para ler gasto, leads, CTR, CPL, criativos e alertas.",
+    summary: "Conecte a conta de anuncios e, se houver, as contas sociais para leitura de trafego pago e organico.",
     phase: "Fase 3 - leitura ativa",
-    primaryUse: "Monitorar campanhas, criativos, formularios, direct e comentarios.",
+    primaryUse: "Monitorar gasto, cliques, CTR, leads reportados e sinais organicos de Instagram/Facebook.",
     actionLabel: "Configurar Meta Ads",
     actionHref: null,
-    items: ["Campanhas", "Leads", "Criativos", "Alertas IA"],
+    items: ["Campanhas", "Leads", "Instagram", "Facebook"],
     metrics: ["gasto", "CPL", "leads", "CTR"],
   },
   {
@@ -197,13 +197,13 @@ const integrationProviders: ClientIntegrationProvider[] = [
     status: "active",
     mode: "external",
     headline: "Painel de aquisicao e presenca Google",
-    summary: "Conecte Google Ads, conversoes, GA4 e Search Console para acompanhar aquisicao e presenca.",
+    summary: "Conecte Google Ads e Search Console para acompanhar campanhas pagas e busca organica.",
     phase: "Fase 3 - leitura ativa",
-    primaryUse: "Unir anuncios, busca organica, Google Business e recomendacoes da IA.",
+    primaryUse: "Unir anuncios, custo, cliques, conversoes reportadas e busca organica.",
     actionLabel: "Configurar Google Ads",
     actionHref: null,
-    items: ["Google Ads", "Business Profile", "Search Console"],
-    metrics: ["cliques", "CPC", "conversoes", "avaliacoes"],
+    items: ["Google Ads", "Search Console", "OAuth"],
+    metrics: ["cliques", "CPC", "conversoes", "organico"],
   },
   {
     id: "ecommerce-hub",
@@ -531,28 +531,48 @@ function buildClientCredentialDefinitions(): ClientIntegrationCredentialDefiniti
     {
       providerId: "meta-ads",
       integrationId: "meta",
-      envNames: [
-        "META_ACCESS_TOKEN",
-        "META_AD_ACCOUNT_ID",
-        "META_PIXEL_ID",
-        "INSTAGRAM_BUSINESS_ACCOUNT_ID",
-        "FACEBOOK_PAGE_ID",
-        "META_GRAPH_API_VERSION",
+      fields: [
+        {
+          envName: "META_ACCESS_TOKEN",
+          requirement: "recommended" as const,
+          help: "Token de acesso com permissao para ler a conta de anuncios e insights Meta da empresa.",
+        },
+        {
+          envName: "META_AD_ACCOUNT_ID",
+          requirement: "recommended" as const,
+          help: "Conta de anuncios que sera lida no dashboard Meta Ads.",
+        },
+        {
+          envName: "INSTAGRAM_BUSINESS_ACCOUNT_ID",
+          requirement: "optional" as const,
+          help: "Opcional: conta Instagram Business para leitura organica quando houver acesso.",
+        },
+        {
+          envName: "FACEBOOK_PAGE_ID",
+          requirement: "optional" as const,
+          help: "Opcional: pagina Facebook para leitura organica quando houver acesso.",
+        },
       ],
     },
     {
       providerId: "google-growth",
       integrationId: "google-ads",
-      envNames: [
-        "GOOGLE_ADS_DEVELOPER_TOKEN",
-        "GOOGLE_ADS_CLIENT_ID",
-        "GOOGLE_ADS_CLIENT_SECRET",
-        "GOOGLE_ADS_REFRESH_TOKEN",
-        "GOOGLE_ADS_CUSTOMER_ID",
-        "GOOGLE_ADS_LOGIN_CUSTOMER_ID",
-        "GOOGLE_ADS_CONVERSION_ID",
-        "GOOGLE_ANALYTICS_MEASUREMENT_ID",
-        "GOOGLE_SEARCH_CONSOLE_SITE_URL",
+      fields: [
+        {
+          envName: "GOOGLE_ADS_REFRESH_TOKEN",
+          requirement: "recommended" as const,
+          help: "Token OAuth autorizado para a empresa. Client ID, Client secret e Developer token ficam na manutencao da plataforma.",
+        },
+        {
+          envName: "GOOGLE_ADS_CUSTOMER_ID",
+          requirement: "recommended" as const,
+          help: "Conta Google Ads que sera lida no dashboard. Use apenas numeros; hifens sao aceitos.",
+        },
+        {
+          envName: "GOOGLE_SEARCH_CONSOLE_SITE_URL",
+          requirement: "optional" as const,
+          help: "Opcional: propriedade do Search Console para leitura de trafego organico.",
+        },
       ],
     },
   ];
@@ -560,8 +580,8 @@ function buildClientCredentialDefinitions(): ClientIntegrationCredentialDefiniti
   return catalog.flatMap((entry) => {
     const integration = maintenanceIntegrations.find((item) => item.id === entry.integrationId);
 
-    return entry.envNames.flatMap((envName) => {
-      const field = integration?.fields.find((item) => item.env === envName);
+    return entry.fields.flatMap((clientField) => {
+      const field = integration?.fields.find((item) => item.env === clientField.envName);
 
       if (!field) {
         return [];
@@ -573,8 +593,8 @@ function buildClientCredentialDefinitions(): ClientIntegrationCredentialDefiniti
         envName: field.env,
         label: field.label,
         kind: field.kind,
-        requirement: field.requirement,
-        help: field.help,
+        requirement: clientField.requirement,
+        help: clientField.help,
       }];
     });
   });
