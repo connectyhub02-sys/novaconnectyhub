@@ -149,12 +149,12 @@ export const maintenanceIntegrations: IntegrationDefinition[] = [
   {
     id: "meta",
     name: "Meta Ads / Instagram / Facebook",
-    sector: "Trafego pago, direct e comentarios",
-    owner: "Setor de Trafego e Social",
+    sector: "Conexao Meta",
+    owner: "Manutencao de Credenciais",
     description:
-      "Credenciais para campanhas Meta Ads, paginas Facebook, Instagram Business, direct e captura de comentarios.",
+      "Credenciais de conexao com o app Meta, conta de anuncios, paginas Facebook, Instagram Business e webhooks.",
     tone: "amber",
-    modules: ["Meta Ads", "Instagram Direct", "Responder comentarios", "Lead tracking"],
+    modules: ["App Meta", "Graph API", "Webhooks", "Contas conectadas"],
     fields: [
       {
         label: "App ID",
@@ -196,21 +196,21 @@ export const maintenanceIntegrations: IntegrationDefinition[] = [
         env: "META_AD_ACCOUNT_ID",
         kind: "identifier",
         requirement: "optional",
-        help: "Conta de anuncios usada pelo agente de trafego pago.",
+        help: "Conta de anuncios usada para leitura autorizada via API Meta.",
       },
       {
         label: "Meta Pixel ID",
         env: "META_PIXEL_ID",
         kind: "identifier",
         requirement: "optional",
-        help: "Pixel usado para rastrear campanhas, conversoes e eventos enviados pelos clientes.",
+        help: "Pixel usado para associar eventos e conversoes quando a integracao precisar desse identificador.",
       },
       {
         label: "Instagram Business ID",
         env: "INSTAGRAM_BUSINESS_ACCOUNT_ID",
         kind: "identifier",
         requirement: "optional",
-        help: "Conta Instagram Business para direct, comentarios e metricas.",
+        help: "Conta Instagram Business autorizada na integracao Meta.",
       },
       {
         label: "Facebook Page ID",
@@ -224,12 +224,12 @@ export const maintenanceIntegrations: IntegrationDefinition[] = [
   {
     id: "google-ads",
     name: "Google Ads / Search Console",
-    sector: "Aquisicao e pesquisa",
-    owner: "Setor de Trafego Pago",
+    sector: "Conexao Google",
+    owner: "Manutencao de Credenciais",
     description:
-      "Base para agentes que criam campanhas, analisam termos, medem conversoes e geram relatorios de aquisicao.",
+      "Credenciais de conexao com Google Ads, OAuth, conta de cliente e propriedades usadas pelas APIs Google.",
     tone: "cyan",
-    modules: ["Google Ads", "Search Console", "Pesquisa de temas", "Relatorios de CPA"],
+    modules: ["OAuth Google", "Google Ads API", "Search Console", "Contas conectadas"],
     fields: [
       {
         label: "Developer token",
@@ -264,7 +264,7 @@ export const maintenanceIntegrations: IntegrationDefinition[] = [
         env: "GOOGLE_ADS_CUSTOMER_ID",
         kind: "identifier",
         requirement: "optional",
-        help: "Conta de anuncios padrao usada pelos agentes.",
+        help: "Conta de anuncios padrao usada para chamadas autorizadas na API Google Ads.",
       },
       {
         label: "Google Ads Conversion ID",
@@ -278,7 +278,7 @@ export const maintenanceIntegrations: IntegrationDefinition[] = [
         env: "GOOGLE_ANALYTICS_MEASUREMENT_ID",
         kind: "identifier",
         requirement: "optional",
-        help: "ID G- do GA4 para leitura futura de Analytics e cruzamento com campanhas.",
+        help: "ID G- do GA4 quando a conexao precisar associar eventos e propriedades.",
       },
       {
         label: "Login Customer ID",
@@ -292,7 +292,7 @@ export const maintenanceIntegrations: IntegrationDefinition[] = [
         env: "GOOGLE_SEARCH_CONSOLE_SITE_URL",
         kind: "endpoint",
         requirement: "optional",
-        help: "Propriedade usada para dados organicos e pesquisa.",
+        help: "Propriedade autorizada do Search Console.",
       },
     ],
   },
