@@ -267,12 +267,42 @@ async function testElevenLabs(credentials: CredentialBag): Promise<ConnectionTes
 }
 
 async function testMeta(credentials: CredentialBag): Promise<ConnectionTestResult> {
-  const accessToken = getCredential(credentials, ["META_ACCESS_TOKEN"]);
+  const appId = getCredential(credentials, ["META_APP_ID"]);
   const appSecret = getCredential(credentials, ["META_APP_SECRET"]);
+  const graphVersion = normalizeMetaGraphVersion(getCredential(credentials, ["META_GRAPH_API_VERSION"]));
+  const loginConfigId = getCredential(credentials, ["META_LOGIN_CONFIG_ID"]);
+  const enabledPermissions = getCredential(credentials, ["META_ENABLED_PERMISSIONS"]);
+  const accessToken = getCredential(credentials, ["META_ACCESS_TOKEN"]);
   const adAccountId = normalizeMetaAdAccountId(getCredential(credentials, ["META_AD_ACCOUNT_ID"]));
 
+  if (!appId || !appSecret) {
+    return offline("Preencha Meta App ID e Meta App Secret do app oficial ConnectyHub antes de testar.");
+  }
+
+  const appAccessToken = `${appId}|${appSecret}`;
+  const appUrl = new URL(`https://graph.facebook.com/${graphVersion}/${encodeURIComponent(appId)}`);
+  appUrl.searchParams.set("fields", "id,name");
+  appUrl.searchParams.set("access_token", appAccessToken);
+
+  const appResult = await fetchJson(appUrl.toString(), { headers: { Accept: "application/json" } });
+
+  if (!appResult.ok) {
+    return offline(resolveProviderErrorMessage(appResult.data) || "Meta Graph API nao aceitou App ID e App Secret do app oficial.", {
+      httpStatus: appResult.httpStatus,
+    });
+  }
+
+  const details = [
+    "App ID e App Secret validados com app access token.",
+    loginConfigId ? "Login Configuration ID presente para o fluxo guiado." : "Login Configuration ID ainda nao informado.",
+    enabledPermissions ? "Lista de permissoes Meta registrada no cofre." : "Lista de permissoes Meta ainda nao registrada.",
+  ];
+
   if (!accessToken) {
-    return offline("Preencha o Access token da Meta antes de testar.");
+    return online("Meta pronto para OAuth guiado. Token de cliente sera criado quando o usuario autorizar pelo painel.", {
+      httpStatus: appResult.httpStatus,
+      details,
+    });
   }
 
   const url = new URL("https://graph.facebook.com/me");
@@ -289,7 +319,7 @@ async function testMeta(credentials: CredentialBag): Promise<ConnectionTestResul
     return offline(resolveProviderErrorMessage(result.data) || "Meta Graph API nao aceitou o token informado.", { httpStatus: result.httpStatus });
   }
 
-  const details = ["Access token validado em /me."];
+  details.push("Access token tecnico validado em /me.");
 
   if (adAccountId) {
     const accountUrl = new URL(`https://graph.facebook.com/${encodeURIComponent(adAccountId)}`);
@@ -314,7 +344,7 @@ async function testMeta(credentials: CredentialBag): Promise<ConnectionTestResul
     details.push("Ad Account ID ausente; leitura de conta de anuncios ainda nao foi testada.");
   }
 
-  return online("Meta online. Graph API validada para leitura inicial.", { httpStatus: result.httpStatus, details });
+  return online("Meta online. App oficial e token tecnico validados para leitura inicial.", { httpStatus: result.httpStatus, details });
 }
 
 async function testGoogleAds(credentials: CredentialBag): Promise<ConnectionTestResult> {
@@ -322,9 +352,28 @@ async function testGoogleAds(credentials: CredentialBag): Promise<ConnectionTest
   const clientSecret = getCredential(credentials, ["GOOGLE_ADS_CLIENT_SECRET"]);
   const refreshToken = getCredential(credentials, ["GOOGLE_ADS_REFRESH_TOKEN"]);
   const developerToken = getCredential(credentials, ["GOOGLE_ADS_DEVELOPER_TOKEN"]);
+  const redirectUri = getCredential(credentials, ["GOOGLE_OAUTH_REDIRECT_URI"]);
+  const enabledScopes = getCredential(credentials, ["GOOGLE_ENABLED_SCOPES"]);
+  const apiVersion = normalizeGoogleAdsApiVersion(getCredential(credentials, ["GOOGLE_ADS_API_VERSION"])) || googleAdsApiVersion;
 
-  if (!clientId || !clientSecret || !refreshToken || !developerToken) {
-    return offline("Preencha Developer token, Client ID, Client secret e Refresh token do Google Ads antes de testar.");
+  if (!clientId || !clientSecret || !developerToken) {
+    return offline("Preencha Google Ads Developer Token, OAuth Client ID e OAuth Client Secret do app oficial ConnectyHub antes de testar.");
+  }
+
+  if (redirectUri && !isValidHttpUrl(redirectUri)) {
+    return offline("OAuth Redirect URI do Google precisa ser uma URL http ou https valida.");
+  }
+
+  const details = [
+    "Client ID, Client Secret e Developer Token estao presentes.",
+    redirectUri ? "OAuth Redirect URI registrada no cofre." : "OAuth Redirect URI ainda nao registrada.",
+    enabledScopes ? "Lista de scopes Google registrada no cofre." : "Lista de scopes Google ainda nao registrada.",
+  ];
+
+  if (!refreshToken) {
+    return online("Google pronto para OAuth guiado. O refresh token sera criado por empresa quando o cliente autorizar pelo painel.", {
+      details,
+    });
   }
 
   const body = new URLSearchParams({
@@ -349,7 +398,7 @@ async function testGoogleAds(credentials: CredentialBag): Promise<ConnectionTest
     return offline("Google OAuth respondeu, mas nao retornou access_token para testar o Google Ads.", { httpStatus: result.httpStatus });
   }
 
-  const customersResult = await fetchJson(`https://googleads.googleapis.com/${googleAdsApiVersion}/customers:listAccessibleCustomers`, {
+  const customersResult = await fetchJson(`https://googleads.googleapis.com/${apiVersion}/customers:listAccessibleCustomers`, {
     headers: {
       Accept: "application/json",
       Authorization: `Bearer ${accessToken}`,
@@ -360,7 +409,7 @@ async function testGoogleAds(credentials: CredentialBag): Promise<ConnectionTest
   if (!customersResult.ok) {
     return offline(resolveProviderErrorMessage(customersResult.data) || "Google Ads OAuth funcionou, mas o Developer token nao liberou listAccessibleCustomers.", {
       httpStatus: customersResult.httpStatus,
-      details: ["OAuth validado antes da chamada Google Ads."],
+      details: [...details, "OAuth validado antes da chamada Google Ads."],
     });
   }
 
@@ -368,7 +417,7 @@ async function testGoogleAds(credentials: CredentialBag): Promise<ConnectionTest
 
   return online("Google Ads online. OAuth, Developer token e listagem de contas acessiveis validados.", {
     httpStatus: customersResult.httpStatus,
-    details: [`${accessibleCustomers.length} conta(s) acessivel(is) retornada(s).`],
+    details: [...details, `${accessibleCustomers.length} conta(s) acessivel(is) retornada(s).`],
   });
 }
 
@@ -591,6 +640,35 @@ function normalizeBaseUrl(value?: string) {
   } catch {
     return "";
   }
+}
+
+function isValidHttpUrl(value: string) {
+  try {
+    const url = new URL(value.trim());
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function normalizeMetaGraphVersion(value: string) {
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return "v23.0";
+  }
+
+  return trimmed.startsWith("v") ? trimmed : `v${trimmed}`;
+}
+
+function normalizeGoogleAdsApiVersion(value: string) {
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return "";
+  }
+
+  return trimmed.startsWith("v") ? trimmed : `v${trimmed}`;
 }
 
 function resolveAppBaseUrlForTest() {

@@ -27,7 +27,7 @@ export default async function ClientGoogleAdsPage() {
   return (
     <AdminAdsPlatformDashboard
       activeHref="/dashboard/trafego/google-ads"
-      credentialHref="/dashboard/integracoes#google-growth"
+      credentialHref="/dashboard/integracoes#google-ads-guiado"
       credentialPrimaryLabel="Abrir integracoes"
       credentialSecondaryLabel="Salvar em integracoes"
       isPlatformAdmin={workspace.profile.isPlatformAdmin}

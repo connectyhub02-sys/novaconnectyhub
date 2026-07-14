@@ -51,6 +51,31 @@ type SavedCredentialsResponse = {
   error?: string;
 };
 
+type GuidedSelectionDraft = {
+  customerId?: string;
+  adAccountId?: string;
+  pageId?: string;
+  instagramBusinessId?: string;
+};
+
+type GuidedSelectionResponse = {
+  connection?: ClientIntegrationConnection;
+  error?: string;
+};
+
+type GuidedSelectionOption = {
+  id: string;
+  label: string;
+};
+
+type GuidedSelectionGroup = {
+  field: keyof GuidedSelectionDraft;
+  label: string;
+  optional: boolean;
+  options: GuidedSelectionOption[];
+  value: string;
+};
+
 const categoryIcons: Record<IntegrationCategory, LucideIcon> = {
   ads: BarChart3,
   calendar: CalendarDays,
@@ -79,6 +104,10 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
   const [creatingWebhook, setCreatingWebhook] = useState(false);
   const [connectingMercadoPago, setConnectingMercadoPago] = useState(false);
   const [disconnectingMercadoPago, setDisconnectingMercadoPago] = useState(false);
+  const [connectingGuidedProvider, setConnectingGuidedProvider] = useState<string | null>(null);
+  const [disconnectingGuidedProvider, setDisconnectingGuidedProvider] = useState<string | null>(null);
+  const [savingSelectionProvider, setSavingSelectionProvider] = useState<string | null>(null);
+  const [guidedSelectionDrafts, setGuidedSelectionDrafts] = useState<Record<string, GuidedSelectionDraft>>({});
   const [newWebhookSecret, setNewWebhookSecret] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   const selectedCompany = state.companies.find((company) => company.id === selectedCompanyId) ?? null;
@@ -114,7 +143,13 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
   }, [credentialSnapshots]);
   const mercadoPagoConnection = connectionByProvider.get("mercado-pago");
   const mercadoPagoConnected = mercadoPagoConnection?.status === "connected";
+  const metaConnection = connectionByProvider.get("meta-ads");
+  const googleConnection = connectionByProvider.get("google-growth");
   const webhookConnection = connectionByProvider.get("webhook-universal");
+  const visibleProviders = useMemo(
+    () => state.providers.filter((provider) => !isTopGuidedProvider(provider.id)),
+    [state.providers],
+  );
   const metrics = useMemo(() => {
     const connected = selectedConnections.filter((connection) => connection.status === "connected").length;
     const active = state.providers.filter((provider) => provider.status === "active" || provider.status === "built_in").length;
@@ -132,8 +167,9 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const payment = params.get("payment");
+    const integration = params.get("integration");
 
-    if (!payment) return;
+    if (!payment && !integration) return;
 
     const reason = params.get("reason");
     const timeoutId = window.setTimeout(() => {
@@ -147,9 +183,23 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
       if (payment === "mercado_pago_error") {
         setNotice({ tone: "error", message: getMercadoPagoConnectionErrorMessage(reason) });
       }
+
+      if (integration === "meta_connected" || integration === "google_connected") {
+        setNotice({
+          tone: "success",
+          message: integration === "meta_connected"
+            ? "Meta conectado. Agora esta empresa pode acompanhar trafego pago e sinais organicos conforme as permissoes aprovadas."
+            : "Google conectado. Agora esta empresa pode acompanhar Google Ads e dados organicos conforme as permissoes aprovadas.",
+        });
+      }
+
+      if (integration === "meta_error" || integration === "google_error") {
+        setNotice({ tone: "error", message: getGuidedOAuthErrorMessage(integration, reason) });
+      }
     }, 0);
 
     params.delete("payment");
+    params.delete("integration");
     params.delete("reason");
     const nextSearch = params.toString();
     const nextUrl = `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ""}${window.location.hash}`;
@@ -278,6 +328,104 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
     window.setTimeout(() => setConnectingMercadoPago(false), 1500);
   }
 
+  function handleGuidedOAuthConnectClick(providerId: "meta-ads" | "google-growth", event: MouseEvent<HTMLAnchorElement>) {
+    if (!selectedCompanyId || connectingGuidedProvider) {
+      event.preventDefault();
+      if (!selectedCompanyId) {
+        setNotice({ tone: "warning", message: "Escolha uma empresa antes de conectar a integracao." });
+      }
+      return;
+    }
+
+    setConnectingGuidedProvider(providerId);
+    setNotice({
+      tone: "warning",
+      message: providerId === "meta-ads"
+        ? "Abrindo Meta para login e autorizacao oficial..."
+        : "Abrindo Google para login e autorizacao oficial...",
+    });
+    window.setTimeout(() => setConnectingGuidedProvider(null), 1500);
+  }
+
+  async function disconnectGuidedOAuth(providerId: "meta-ads" | "google-growth") {
+    if (!selectedCompanyId || disconnectingGuidedProvider) return;
+
+    setDisconnectingGuidedProvider(providerId);
+    setNotice(null);
+
+    try {
+      const response = await fetch("/api/dashboard/integrations/oauth/disconnect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyId: selectedCompanyId,
+          providerId,
+        }),
+      });
+      const data = await response.json().catch(() => null) as { connection?: ClientIntegrationConnection; error?: string } | null;
+
+      if (!response.ok || !data?.connection) {
+        throw new Error(data?.error ?? "Nao foi possivel desconectar a integracao.");
+      }
+
+      setConnections((current) => [
+        data.connection!,
+        ...current.filter((connection) => !(connection.companyId === selectedCompanyId && connection.providerId === providerId)),
+      ]);
+      setCredentialSnapshots((current) => current.filter((credential) => !(credential.companyId === selectedCompanyId && credential.providerId === providerId)));
+      setNotice({
+        tone: "success",
+        message: providerId === "meta-ads" ? "Meta desconectado desta empresa." : "Google desconectado desta empresa.",
+      });
+    } catch (error) {
+      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao desconectar a integracao." });
+    } finally {
+      setDisconnectingGuidedProvider(null);
+    }
+  }
+
+  async function saveGuidedSelection(providerId: "meta-ads" | "google-growth", selection: GuidedSelectionDraft) {
+    if (!selectedCompanyId || savingSelectionProvider) return;
+
+    setSavingSelectionProvider(providerId);
+    setNotice(null);
+
+    try {
+      const response = await fetch("/api/dashboard/integrations/oauth/select", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyId: selectedCompanyId,
+          providerId,
+          selection,
+        }),
+      });
+      const data = await response.json().catch(() => null) as GuidedSelectionResponse | null;
+
+      if (!response.ok || !data?.connection) {
+        throw new Error(data?.error ?? "Nao foi possivel salvar a selecao.");
+      }
+
+      setConnections((current) => [
+        data.connection!,
+        ...current.filter((connection) => !(connection.companyId === selectedCompanyId && connection.providerId === providerId)),
+      ]);
+      setGuidedSelectionDrafts((current) => {
+        const next = { ...current };
+        delete next[guidedSelectionKey(selectedCompanyId, providerId)];
+        return next;
+      });
+      setNotice({
+        tone: "success",
+        message: providerId === "meta-ads" ? "Conta Meta selecionada para os dashboards." : "Conta Google selecionada para os dashboards.",
+      });
+    } catch (error) {
+      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao salvar selecao." });
+    } finally {
+      setSavingSelectionProvider(null);
+    }
+  }
+
   async function disconnectMercadoPago() {
     if (!selectedCompanyId || disconnectingMercadoPago) return;
 
@@ -374,6 +522,7 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
               setSelectedCompanyId(event.target.value);
               setNotice(null);
               setNewWebhookSecret(null);
+              setGuidedSelectionDrafts({});
             }}
             className="h-11 w-full rounded-xl px-3 text-[13px] outline-none"
             style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)", color: "var(--ch-text)" }}
@@ -387,12 +536,12 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
           className="rounded-xl px-4 py-3 text-[12px] leading-5 text-slate-400"
           style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
         >
-          A Central organiza as conexoes por empresa. Mercado Pago usa autorizacao guiada oficial; Meta e Google usam credenciais de leitura da empresa.
+          A Central organiza as conexoes por empresa. Mercado Pago, Meta e Google usam autorizacao guiada oficial; segredos tecnicos ficam somente na ConnectyHub.
         </div>
       </div>
 
       {state.companies.length > 0 ? (
-        <div className="mb-5 grid gap-3 lg:grid-cols-2">
+        <div className="mb-5 grid gap-3 xl:grid-cols-2">
           <MercadoPagoGuidedCard
             accountLabel={mercadoPagoConnection?.accountLabel ?? null}
             connected={mercadoPagoConnected}
@@ -403,6 +552,50 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
             selectedCompanyName={selectedCompany?.name ?? null}
             onConnect={handleMercadoPagoConnectClick}
             onDisconnect={disconnectMercadoPago}
+          />
+
+          <GuidedOAuthCard
+            accountLabel={metaConnection?.accountLabel ?? null}
+            connected={metaConnection?.status === "connected"}
+            connection={metaConnection}
+            connecting={connectingGuidedProvider === "meta-ads"}
+            disconnecting={disconnectingGuidedProvider === "meta-ads"}
+            kind="meta"
+            savingSelection={savingSelectionProvider === "meta-ads"}
+            selectionDraft={guidedSelectionDrafts[guidedSelectionKey(selectedCompanyId, "meta-ads")] ?? {}}
+            selectedCompanyId={selectedCompanyId}
+            selectedCompanyName={selectedCompany?.name ?? null}
+            onConnect={(event) => handleGuidedOAuthConnectClick("meta-ads", event)}
+            onDisconnect={() => disconnectGuidedOAuth("meta-ads")}
+            onSaveSelection={(selection) => saveGuidedSelection("meta-ads", selection)}
+            onSelectionChange={(selection) => {
+              setGuidedSelectionDrafts((current) => ({
+                ...current,
+                [guidedSelectionKey(selectedCompanyId, "meta-ads")]: selection,
+              }));
+            }}
+          />
+
+          <GuidedOAuthCard
+            accountLabel={googleConnection?.accountLabel ?? null}
+            connected={googleConnection?.status === "connected"}
+            connection={googleConnection}
+            connecting={connectingGuidedProvider === "google-growth"}
+            disconnecting={disconnectingGuidedProvider === "google-growth"}
+            kind="google"
+            savingSelection={savingSelectionProvider === "google-growth"}
+            selectionDraft={guidedSelectionDrafts[guidedSelectionKey(selectedCompanyId, "google-growth")] ?? {}}
+            selectedCompanyId={selectedCompanyId}
+            selectedCompanyName={selectedCompany?.name ?? null}
+            onConnect={(event) => handleGuidedOAuthConnectClick("google-growth", event)}
+            onDisconnect={() => disconnectGuidedOAuth("google-growth")}
+            onSaveSelection={(selection) => saveGuidedSelection("google-growth", selection)}
+            onSelectionChange={(selection) => {
+              setGuidedSelectionDrafts((current) => ({
+                ...current,
+                [guidedSelectionKey(selectedCompanyId, "google-growth")]: selection,
+              }));
+            }}
           />
 
           <div className="rounded-2xl p-4" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}>
@@ -457,7 +650,7 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
       ) : (
         <div className="grid gap-4">
           <div className="grid gap-3 md:grid-cols-2">
-            {state.providers.map((provider) => (
+            {visibleProviders.map((provider) => (
               <IntegrationCard
                 key={provider.id}
                 connection={connectionByProvider.get(provider.id)}
@@ -882,6 +1075,202 @@ function MercadoPagoGuidedCard({
   );
 }
 
+function GuidedOAuthCard({
+  accountLabel,
+  connected,
+  connection,
+  connecting,
+  disconnecting,
+  kind,
+  savingSelection,
+  selectionDraft,
+  selectedCompanyId,
+  selectedCompanyName,
+  onConnect,
+  onDisconnect,
+  onSaveSelection,
+  onSelectionChange,
+}: {
+  accountLabel: string | null;
+  connected: boolean;
+  connection?: ClientIntegrationConnection;
+  connecting: boolean;
+  disconnecting: boolean;
+  kind: "meta" | "google";
+  savingSelection: boolean;
+  selectionDraft: GuidedSelectionDraft;
+  selectedCompanyId: string;
+  selectedCompanyName: string | null;
+  onConnect: (event: MouseEvent<HTMLAnchorElement>) => void;
+  onDisconnect: () => void;
+  onSaveSelection: (selection: GuidedSelectionDraft) => void;
+  onSelectionChange: (selection: GuidedSelectionDraft) => void;
+}) {
+  const config = kind === "meta"
+    ? {
+        id: "meta-ads-guiado",
+        eyebrow: "integracao guiada",
+        title: "Meta Ads / Instagram",
+        body: "Conecte a conta Meta pela autorizacao oficial. A ConnectyHub recebe permissao para ler campanhas, leads e sinais organicos aprovados.",
+        icon: BarChart3,
+        iconColor: "text-sky-300",
+        connectLabel: connected ? "Reconectar Meta" : "Conectar Meta",
+        dashboardHref: "/dashboard/trafego/meta-ads",
+        providerLabel: "Meta",
+        stepTwo: "Autorizar Meta",
+        stepFour: "Dashboard Meta",
+      }
+    : {
+        id: "google-ads-guiado",
+        eyebrow: "integracao guiada",
+        title: "Google Ads / Search",
+        body: "Conecte o Google pela autorizacao oficial. A ConnectyHub salva o refresh token da empresa e usa o app tecnico configurado na manutencao.",
+        icon: BarChart3,
+        iconColor: "text-cyan-300",
+        connectLabel: connected ? "Reconectar Google" : "Conectar Google",
+        dashboardHref: "/dashboard/trafego/google-ads",
+        providerLabel: "Google",
+        stepTwo: "Autorizar Google",
+        stepFour: "Dashboard Google",
+      };
+  const Icon = config.icon;
+  const selectionGroups = buildGuidedSelectionGroups(kind, connection, selectionDraft);
+  const primaryAccountReady = hasGuidedPrimaryAccount(kind, connection);
+  const hasRequiredSelectionGroup = selectionGroups.some((group) => !group.optional);
+  const requiredSelectionReady = selectionGroups.filter((group) => !group.optional).every((group) => Boolean(group.value));
+  const accountLine = buildGuidedAccountLine(kind, connected, primaryAccountReady, accountLabel);
+  const readinessText = buildGuidedReadinessText(kind, connected, primaryAccountReady, selectionGroups.length, hasRequiredSelectionGroup);
+  const currentSelection = selectionGroups.reduce<GuidedSelectionDraft>((current, group) => ({
+    ...current,
+    [group.field]: group.value,
+  }), {});
+
+  return (
+    <section id={config.id} className="rounded-2xl p-4" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">{config.eyebrow}</p>
+          <h2 className="mt-1 text-[16px] font-semibold text-slate-100">{config.title}</h2>
+          <p className="mt-2 text-[12px] leading-5 text-slate-400">{config.body}</p>
+        </div>
+        <Icon className={cn("h-5 w-5 shrink-0", config.iconColor)} />
+      </div>
+
+      <div className="mt-4 grid gap-2 sm:grid-cols-4">
+        <PaymentGuideStep done={Boolean(selectedCompanyId)} index="1" title="Empresa" body={selectedCompanyName ?? "Escolha a empresa"} />
+        <PaymentGuideStep done={connected} index="2" title="Autorizar" body={config.stepTwo} />
+        <PaymentGuideStep done={primaryAccountReady} index="3" title="Conta" body={primaryAccountReady ? accountLabel ?? "Conta selecionada" : "Selecionar acesso"} />
+        <PaymentGuideStep done={connected && primaryAccountReady} index="4" title="Dados" body={primaryAccountReady ? config.stepFour : "Aguardando conta"} />
+      </div>
+
+      <div className="mt-4 rounded-xl border p-3" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[13px] font-semibold text-slate-100">Conta {config.providerLabel}</p>
+            <p className="mt-1 truncate text-[11px] text-slate-500">{accountLine}</p>
+          </div>
+          <NeonBadge tone={primaryAccountReady ? "green" : "amber"}>{primaryAccountReady ? "conectado" : connected ? "autorizado" : "pendente"}</NeonBadge>
+        </div>
+
+        {connection?.lastError ? (
+          <p className="mt-3 rounded-lg border border-rose-400/25 bg-rose-400/10 px-3 py-2 text-[11px] text-rose-100">
+            {connection.lastError}
+          </p>
+        ) : null}
+
+        <div className="mt-3 grid gap-2 sm:grid-cols-3">
+          <a
+            href={buildGuidedOAuthConnectUrl(kind, selectedCompanyId)}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-disabled={!selectedCompanyId || connecting}
+            onClick={onConnect}
+            className={cn(
+              "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-cyan-300 px-4 text-[12px] font-bold text-slate-950 transition hover:bg-cyan-200 sm:col-span-2",
+              !selectedCompanyId || connecting ? "cursor-not-allowed opacity-50" : "",
+            )}
+          >
+            {connecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}
+            {config.connectLabel}
+          </a>
+          <button
+            type="button"
+            disabled={!connected || disconnecting}
+            onClick={onDisconnect}
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border px-4 text-[12px] font-bold text-slate-300 transition hover:bg-rose-400/10 hover:text-rose-100 disabled:cursor-not-allowed disabled:opacity-50"
+            style={{ borderColor: "var(--ch-border)" }}
+          >
+            {disconnecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
+            Desconectar
+          </button>
+        </div>
+
+        <Link
+          href={config.dashboardHref}
+          className="mt-2 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border px-4 font-mono text-[10px] font-bold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10"
+          style={{ borderColor: "var(--ch-border)" }}
+        >
+          <BarChart3 className="h-3.5 w-3.5" />
+          {primaryAccountReady ? "Abrir dashboard" : "Ver status do dashboard"}
+        </Link>
+
+        <p
+          className={cn(
+            "mt-3 rounded-lg border px-3 py-2 text-[11px] leading-5",
+            primaryAccountReady
+              ? "border-emerald-300/20 bg-emerald-300/10 text-emerald-100"
+              : "border-amber-300/20 bg-amber-300/10 text-amber-100",
+          )}
+        >
+          {readinessText}
+        </p>
+
+        {connected && selectionGroups.length > 0 ? (
+          <div className="mt-3 rounded-xl border p-3" style={{ background: "var(--ch-surface)", borderColor: "var(--ch-border)" }}>
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-slate-500">conta usada nos dashboards</p>
+                <p className="mt-1 text-[11px] leading-4 text-slate-500">Escolha qual ativo desta empresa alimenta os mostradores.</p>
+              </div>
+              <NeonBadge tone="cyan">{selectionGroups.length} seletor(es)</NeonBadge>
+            </div>
+
+            <div className="grid gap-2">
+              {selectionGroups.map((group) => (
+                <label key={group.field} className="block">
+                  <span className="mb-1 block font-mono text-[9px] uppercase tracking-[0.12em] text-slate-500">{group.label}</span>
+                  <select
+                    value={group.value}
+                    onChange={(event) => onSelectionChange({ ...currentSelection, [group.field]: event.target.value })}
+                    className="h-10 w-full rounded-xl px-3 text-[12px] outline-none"
+                    style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)", color: "var(--ch-text)" }}
+                  >
+                    {group.optional ? <option value="">Nao usar agora</option> : null}
+                    {group.options.map((option) => (
+                      <option key={option.id} value={option.id}>{option.label}</option>
+                    ))}
+                  </select>
+                </label>
+              ))}
+            </div>
+
+            <button
+              type="button"
+              disabled={savingSelection || !requiredSelectionReady}
+              onClick={() => onSaveSelection(currentSelection)}
+              className="mt-3 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border px-4 font-mono text-[10px] font-bold uppercase tracking-wide text-emerald-100 transition hover:bg-emerald-400/10 disabled:cursor-not-allowed disabled:opacity-60"
+              style={{ borderColor: "var(--ch-border)" }}
+            >
+              {savingSelection ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+              Salvar escolha
+            </button>
+          </div>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
 function PaymentGuideStep({
   body,
   done,
@@ -1003,8 +1392,212 @@ function buildMercadoPagoConnectUrl(companyId: string) {
   return `/api/dashboard/sales-catalog/payments/mercado-pago/connect?${params.toString()}`;
 }
 
+function buildGuidedOAuthConnectUrl(kind: "meta" | "google", companyId: string) {
+  if (!companyId) return "#";
+
+  const params = new URLSearchParams({ companyId });
+  return `/api/dashboard/integrations/${kind}/connect?${params.toString()}`;
+}
+
+function buildGuidedSelectionGroups(
+  kind: "meta" | "google",
+  connection: ClientIntegrationConnection | undefined,
+  draft: GuidedSelectionDraft,
+): GuidedSelectionGroup[] {
+  const metadata = connection?.metadata ?? {};
+
+  if (!connection || connection.status !== "connected") {
+    return [];
+  }
+
+  if (kind === "google") {
+    const options = readMetadataStringArray(metadata.accessible_customers)
+      .map((customerId) => normalizeGoogleCustomerId(customerId))
+      .filter(Boolean)
+      .map((customerId) => ({ id: customerId, label: `Google Ads ${customerId}` }));
+
+    if (options.length === 0) {
+      return [];
+    }
+
+    const current = draft.customerId
+      ?? normalizeGoogleCustomerId(readMetadataString(metadata.selected_customer_id));
+
+    return [{
+      field: "customerId",
+      label: "Conta Google Ads",
+      optional: false,
+      options,
+      value: current || options[0]?.id || "",
+    }];
+  }
+
+  const adOptions = readMetadataOptions(metadata.ad_accounts)
+    .map((option) => ({ ...option, id: normalizeMetaAdAccountId(option.id) }))
+    .filter((option) => option.id);
+  const pageOptions = readMetadataOptions(metadata.facebook_pages);
+  const instagramOptions = readMetadataOptions(metadata.instagram_accounts);
+  const groups: GuidedSelectionGroup[] = [];
+
+  if (adOptions.length > 0) {
+    groups.push({
+      field: "adAccountId",
+      label: "Conta de anuncios Meta",
+      optional: false,
+      options: adOptions,
+      value: (draft.adAccountId
+        ?? normalizeMetaAdAccountId(readMetadataString(metadata.selected_ad_account_id) || readMetadataString(metadata.ad_account_id)))
+        || adOptions[0]?.id
+        || "",
+    });
+  }
+
+  if (pageOptions.length > 0) {
+    groups.push({
+      field: "pageId",
+      label: "Pagina Facebook",
+      optional: true,
+      options: pageOptions,
+      value: draft.pageId
+        ?? readMetadataString(metadata.selected_facebook_page_id)
+        ?? readMetadataString(metadata.facebook_page_id)
+        ?? "",
+    });
+  }
+
+  if (instagramOptions.length > 0) {
+    groups.push({
+      field: "instagramBusinessId",
+      label: "Instagram Business",
+      optional: true,
+      options: instagramOptions,
+      value: draft.instagramBusinessId
+        ?? readMetadataString(metadata.selected_instagram_business_id)
+        ?? readMetadataString(metadata.instagram_business_id)
+        ?? "",
+    });
+  }
+
+  return groups;
+}
+
+function hasGuidedPrimaryAccount(kind: "meta" | "google", connection: ClientIntegrationConnection | undefined) {
+  if (!connection || connection.status !== "connected") {
+    return false;
+  }
+
+  const metadata = connection.metadata ?? {};
+
+  if (kind === "google") {
+    return Boolean(
+      normalizeGoogleCustomerId(readMetadataString(metadata.selected_customer_id))
+      || normalizeGoogleCustomerId(readMetadataString(metadata.customer_id))
+      || normalizeGoogleCustomerId(readMetadataString(metadata.external_account_id)),
+    );
+  }
+
+  return Boolean(
+    normalizeMetaAdAccountId(readMetadataString(metadata.selected_ad_account_id))
+    || normalizeMetaAdAccountId(readMetadataString(metadata.ad_account_id)),
+  );
+}
+
+function buildGuidedAccountLine(
+  kind: "meta" | "google",
+  connected: boolean,
+  primaryAccountReady: boolean,
+  accountLabel: string | null,
+) {
+  if (primaryAccountReady) {
+    return accountLabel
+      ? `Conta: ${accountLabel}`
+      : kind === "meta"
+        ? "Conta de anuncios Meta selecionada"
+        : "Conta Google Ads selecionada";
+  }
+
+  if (connected) {
+    return kind === "meta"
+      ? "Meta autorizado; selecione uma conta de anuncios."
+      : "Google autorizado; selecione uma conta Google Ads.";
+  }
+
+  return "Nenhuma conta conectada";
+}
+
+function buildGuidedReadinessText(
+  kind: "meta" | "google",
+  connected: boolean,
+  primaryAccountReady: boolean,
+  selectionGroupCount: number,
+  hasRequiredSelectionGroup: boolean,
+) {
+  const provider = kind === "meta" ? "Meta" : "Google";
+  const account = kind === "meta" ? "conta de anuncios Meta" : "conta Google Ads";
+
+  if (!connected) {
+    return `Conecte ${provider} pelo fluxo oficial. Depois da autorizacao, os dashboards usam a ${account} salva aqui.`;
+  }
+
+  if (primaryAccountReady) {
+    return `Pronto para leitura: a ${account} ja esta salva para alimentar o dashboard.`;
+  }
+
+  if (selectionGroupCount > 0 && hasRequiredSelectionGroup) {
+    return `Autorizacao concluida. Escolha e salve a ${account} antes de analisar os dados.`;
+  }
+
+  if (selectionGroupCount > 0) {
+    return `Autorizacao concluida, mas nenhuma ${account} foi encontrada. Salve os ativos opcionais se quiser leitura organica e confira o acesso a conta de anuncios.`;
+  }
+
+  return `Autorizacao concluida, mas nenhuma ${account} foi encontrada pelo OAuth. Confirme se o usuario autorizado tem acesso administrativo a essa conta.`;
+}
+
+function isTopGuidedProvider(providerId: string) {
+  return providerId === "meta-ads" || providerId === "google-growth" || providerId === "webhook-universal";
+}
+
+function guidedSelectionKey(companyId: string, providerId: string) {
+  return `${companyId}:${providerId}:selection`;
+}
+
 function credentialKey(companyId: string, providerId: string, envName: string) {
   return `${companyId}:${providerId}:${envName}`;
+}
+
+function getGuidedOAuthErrorMessage(integration: string, reason: string | null) {
+  const provider = integration === "meta_error" ? "Meta" : "Google";
+
+  if (reason === "config") {
+    return `${provider} ainda precisa das credenciais do app oficial na sala de manutencao.`;
+  }
+
+  if (reason === "missing_company") {
+    return `Escolha uma empresa antes de conectar ${provider}.`;
+  }
+
+  if (reason === "permission") {
+    return `Somente dono ou admin da empresa pode conectar ${provider}.`;
+  }
+
+  if (reason === "invalid_state") {
+    return `Nao conseguimos validar o retorno do ${provider}. Tente conectar novamente.`;
+  }
+
+  if (reason === "refresh_token") {
+    return "Google autorizou, mas nao retornou refresh token. Reconecte confirmando o consentimento.";
+  }
+
+  if (reason === "encryption") {
+    return "O cofre de credenciais precisa da CREDENTIAL_ENCRYPTION_KEY para salvar essa conexao.";
+  }
+
+  if (reason === "schema") {
+    return "A migration da Central de Integracoes precisa estar aplicada no Supabase.";
+  }
+
+  return `Nao foi possivel concluir a conexao com ${provider}. Tente novamente ou chame o suporte.`;
 }
 
 function getMercadoPagoConnectionErrorMessage(reason: string | null) {
@@ -1029,6 +1622,54 @@ function getMercadoPagoConnectionErrorMessage(reason: string | null) {
 
 function copyText(value: string) {
   void navigator.clipboard.writeText(value);
+}
+
+function readMetadataString(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function readMetadataStringArray(value: unknown) {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+    : [];
+}
+
+function readMetadataOptions(value: unknown): GuidedSelectionOption[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      return [];
+    }
+
+    const record = item as Record<string, unknown>;
+    const id = readMetadataString(record.id);
+
+    if (!id) {
+      return [];
+    }
+
+    return [{
+      id,
+      label: readMetadataString(record.label) ?? id,
+    }];
+  });
+}
+
+function normalizeGoogleCustomerId(value: string | null) {
+  return value?.replace(/^customers\//, "").replace(/\D/g, "") || "";
+}
+
+function normalizeMetaAdAccountId(value: string | null) {
+  const trimmed = value?.trim() ?? "";
+
+  if (!trimmed) {
+    return "";
+  }
+
+  return trimmed.startsWith("act_") ? trimmed : `act_${trimmed.replace(/^act_/, "")}`;
 }
 
 function formatShortDate(value: string) {

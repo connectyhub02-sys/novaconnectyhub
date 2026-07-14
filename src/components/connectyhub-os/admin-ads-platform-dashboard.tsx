@@ -36,6 +36,13 @@ import { DataTable, NeonBadge, PageHeader, Panel, StatusBadge, toneClass } from 
 
 export type AdsDashboardPlatform = "meta" | "google";
 
+type ConnectionGuidance = {
+  detail: string;
+  items: string[];
+  title: string;
+  tone: Tone;
+};
+
 const platformConfig = {
   meta: {
     activeHref: "/admin/trafego/meta-ads",
@@ -111,6 +118,15 @@ export function AdminAdsPlatformDashboard({
   const cpa = ratio(paidProvider.spend, paidProvider.conversions);
   const risk = resolveRisk(paidProvider, trackingConfigured);
   const platformWarnings = filterPlatformWarnings(overview.warnings, platform);
+  const trackingStatus = resolveTrackingStatus(paidProvider, trackingConfigured);
+  const connectionGuidance = buildConnectionGuidance({
+    isClient: shellMode === "client",
+    organicProvider,
+    paidProvider,
+    platform,
+    trackingConfigured,
+    warnings: platformWarnings,
+  });
 
   return (
     <ConnectyShell
@@ -139,7 +155,7 @@ export function AdminAdsPlatformDashboard({
       <Panel
         title={config.trackingTitle}
         eyebrow={config.trackingEyebrow}
-        action={<StatusBadge status={trackingConfigured ? "online" : "warning"} label={trackingConfigured ? "configurado" : "pendente"} />}
+        action={<StatusBadge status={statusToTone(trackingStatus)} label={trackingStatusLabel(trackingStatus, trackingConfigured)} />}
         tone={config.tone}
       >
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_220px]">
@@ -174,6 +190,16 @@ export function AdminAdsPlatformDashboard({
           </div>
         </div>
       </Panel>
+
+      {connectionGuidance ? (
+        <ConnectionGuidanceCard
+          guidance={connectionGuidance}
+          href={credentialHref}
+          primaryLabel={credentialPrimaryLabel}
+          secondaryLabel={credentialSecondaryLabel}
+          tone={config.tone}
+        />
+      ) : null}
 
       <div className="my-4 grid gap-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(280px,0.8fr)]">
         <NoticeCard
@@ -352,6 +378,52 @@ function LinkButton({ href, icon: Icon, label, tone }: { href: string; icon: Luc
   );
 }
 
+function ConnectionGuidanceCard({
+  guidance,
+  href,
+  primaryLabel,
+  secondaryLabel,
+  tone,
+}: {
+  guidance: ConnectionGuidance;
+  href: string;
+  primaryLabel: string;
+  secondaryLabel: string;
+  tone: Tone;
+}) {
+  const t = toneClass(guidance.tone);
+
+  return (
+    <div className="my-4 rounded-2xl p-4" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex min-w-0 gap-3">
+          <span className={cn("grid h-10 w-10 shrink-0 place-items-center rounded-xl", t.bg)}>
+            <AlertTriangle className={cn("h-5 w-5", t.text)} />
+          </span>
+          <div className="min-w-0">
+            <p className={cn("font-mono text-[10px] uppercase tracking-[0.16em]", t.text)}>status da conexao</p>
+            <h2 className="mt-1 text-[15px] font-semibold text-white">{guidance.title}</h2>
+            <p className="mt-1 max-w-3xl text-[12px] leading-5 text-slate-500">{guidance.detail}</p>
+          </div>
+        </div>
+
+        <div className="flex shrink-0 flex-wrap gap-2">
+          <LinkButton href={href} icon={ExternalLink} label={primaryLabel} tone={tone} />
+          <LinkButton href={href} icon={Save} label={secondaryLabel} tone="cyan" />
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-2 md:grid-cols-3">
+        {guidance.items.map((item) => (
+          <div key={item} className="rounded-xl px-3 py-2 text-[11px] leading-4 text-slate-300" style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}>
+            {item}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function NoticeCard({
   detail,
   icon: Icon,
@@ -502,6 +574,77 @@ function getTrackingFields(overview: AdminTrafficOverview, platform: AdsDashboar
     { label: "Google Ads Customer ID", value: overview.tracking.googleAdsCustomerId },
     { label: "Search Console Site", value: overview.tracking.googleSearchConsoleSiteUrl },
   ];
+}
+
+function resolveTrackingStatus(provider: TrafficProviderSummary, trackingConfigured: boolean): TrafficProviderStatus {
+  if (provider.status === "offline") return "offline";
+  if (provider.status === "online" && trackingConfigured) return "online";
+  return "warning";
+}
+
+function trackingStatusLabel(status: TrafficProviderStatus, trackingConfigured: boolean) {
+  if (status === "offline") return "erro";
+  if (status === "online") return "configurado";
+  return trackingConfigured ? "parcial" : "pendente";
+}
+
+function buildConnectionGuidance({
+  isClient,
+  organicProvider,
+  paidProvider,
+  platform,
+  trackingConfigured,
+  warnings,
+}: {
+  isClient: boolean;
+  organicProvider: TrafficProviderSummary;
+  paidProvider: TrafficProviderSummary;
+  platform: AdsDashboardPlatform;
+  trackingConfigured: boolean;
+  warnings: string[];
+}): ConnectionGuidance | null {
+  if (paidProvider.status === "online" && trackingConfigured && warnings.length === 0) {
+    return null;
+  }
+
+  const config = platformConfig[platform];
+  const tone: Tone = paidProvider.status === "offline" ? "rose" : "amber";
+  const platformLabel = config.platformName;
+  const requiredAccount = platform === "meta" ? "conta de anuncios Meta" : "conta Google Ads";
+  const paidBlocked = paidProvider.status !== "online" || !trackingConfigured;
+  const optionalOrganic = platform === "meta"
+    ? "Instagram Business ou pagina Facebook para trafego organico"
+    : "Search Console ou GA4 para leitura organica";
+  const detail = warnings[0] ?? paidProvider.detail;
+
+  return {
+    title: isClient
+      ? paidBlocked
+        ? `${platformLabel} ainda nao esta pronto para os mostradores`
+        : `${platformLabel} com leitura parcial nos mostradores`
+      : paidBlocked
+        ? `Credenciais ${platformLabel} precisam de revisao`
+        : `${platformLabel} com aviso de leitura parcial`,
+    detail: isClient
+      ? paidBlocked
+        ? `Abra Integracoes, conecte ${platformLabel} pelo fluxo guiado e selecione a ${requiredAccount}. ${detail}`
+        : `A leitura paga esta ativa, mas existe um aviso complementar. ${detail}`
+      : paidBlocked
+        ? `Revise o app tecnico e as credenciais de teste na manutencao. ${detail}`
+        : `A leitura paga esta ativa, mas existe um aviso complementar. ${detail}`,
+    items: [
+      paidProvider.status === "online"
+        ? `Leitura paga ${platformLabel} respondendo`
+        : paidProvider.detail,
+      trackingConfigured
+        ? `${requiredAccount} selecionada`
+        : `Selecione uma ${requiredAccount}`,
+      organicProvider.status === "online"
+        ? "Leitura organica respondendo"
+        : `Opcional: ${optionalOrganic}`,
+    ],
+    tone,
+  };
 }
 
 function resolveRisk(provider: TrafficProviderSummary, trackingConfigured: boolean): { label: string; tone: Tone; detail: string } {

@@ -41,6 +41,8 @@ export function MaintenanceRoom({
               aliases: field.aliases,
               kind: field.kind,
               requirement: field.requirement,
+              section: field.section,
+              multiline: field.multiline,
               help: field.help,
             })),
           }))}

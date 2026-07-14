@@ -157,38 +157,6 @@ const credentialEnvNames = [
 
 const googleAdsApiVersion = "v24";
 
-const emptyMetaPaid = buildEmptyProvider({
-  id: "meta-paid",
-  name: "Meta Ads",
-  platform: "Meta",
-  kind: "paid",
-  detail: "Configure Access token e Ad Account ID na Sala de Manutencao.",
-});
-
-const emptyGooglePaid = buildEmptyProvider({
-  id: "google-paid",
-  name: "Google Ads",
-  platform: "Google",
-  kind: "paid",
-  detail: "Configure OAuth, Developer token e Customer ID na Sala de Manutencao.",
-});
-
-const emptyMetaOrganic = buildEmptyProvider({
-  id: "meta-organic",
-  name: "Instagram / Facebook organico",
-  platform: "Meta",
-  kind: "organic",
-  detail: "Configure Instagram Business ID ou Facebook Page ID para leitura organica.",
-});
-
-const emptyGoogleOrganic = buildEmptyProvider({
-  id: "google-organic",
-  name: "Google Search Console",
-  platform: "Google",
-  kind: "organic",
-  detail: "Configure a propriedade do Search Console e OAuth com escopo de leitura.",
-});
-
 export async function getAdminTrafficOverview(): Promise<AdminTrafficOverview> {
   return getTrafficOverview({ scope: "platform" });
 }
@@ -201,13 +169,13 @@ async function getTrafficOverview(credentialScope: TrafficCredentialScope): Prom
   const range = buildTrafficRange();
   const warnings: string[] = [];
   const credentials = await loadTrafficCredentials(warnings, credentialScope);
-  const googleAccessToken = await exchangeGoogleRefreshToken(credentials, warnings);
+  const googleAccessToken = await exchangeGoogleRefreshToken(credentials, warnings, credentialScope);
 
   const [metaPaid, googlePaid, metaOrganic, googleOrganic, leadAttribution] = await Promise.all([
-    fetchMetaPaidTraffic(credentials, range),
-    fetchGooglePaidTraffic(credentials, range, googleAccessToken),
-    fetchMetaOrganicTraffic(credentials, range),
-    fetchGoogleOrganicTraffic(credentials, range, googleAccessToken),
+    fetchMetaPaidTraffic(credentials, range, credentialScope),
+    fetchGooglePaidTraffic(credentials, range, googleAccessToken, credentialScope),
+    fetchMetaOrganicTraffic(credentials, range, credentialScope),
+    fetchGoogleOrganicTraffic(credentials, range, googleAccessToken, credentialScope),
     loadTrafficLeadAttribution(range, warnings, credentialScope.scope === "organization" ? credentialScope.organizationId : null),
   ]);
 
@@ -399,7 +367,12 @@ function buildTrafficTrackingSnapshot(credentials: CredentialMap): TrafficTracki
   };
 }
 
-async function fetchMetaPaidTraffic(credentials: CredentialMap, range: TrafficRange): Promise<ProviderFetchResult> {
+async function fetchMetaPaidTraffic(
+  credentials: CredentialMap,
+  range: TrafficRange,
+  credentialScope: TrafficCredentialScope,
+): Promise<ProviderFetchResult> {
+  const emptyMetaPaid = buildEmptyMetaPaidProvider(credentialScope);
   const accessToken = getCredential(credentials, ["META_ACCESS_TOKEN"]);
   const adAccountId = normalizeMetaAdAccountId(getCredential(credentials, ["META_AD_ACCOUNT_ID"]));
 
@@ -492,7 +465,9 @@ async function fetchGooglePaidTraffic(
   credentials: CredentialMap,
   range: TrafficRange,
   accessToken: string | null,
+  credentialScope: TrafficCredentialScope,
 ): Promise<ProviderFetchResult> {
+  const emptyGooglePaid = buildEmptyGooglePaidProvider(credentialScope);
   const developerToken = getCredential(credentials, ["GOOGLE_ADS_DEVELOPER_TOKEN"]);
 
   if (!developerToken || !accessToken) {
@@ -606,7 +581,12 @@ async function fetchGooglePaidTraffic(
   };
 }
 
-async function fetchMetaOrganicTraffic(credentials: CredentialMap, range: TrafficRange): Promise<ProviderFetchResult> {
+async function fetchMetaOrganicTraffic(
+  credentials: CredentialMap,
+  range: TrafficRange,
+  credentialScope: TrafficCredentialScope,
+): Promise<ProviderFetchResult> {
+  const emptyMetaOrganic = buildEmptyMetaOrganicProvider(credentialScope);
   const accessToken = getCredential(credentials, ["META_ACCESS_TOKEN"]);
   const instagramId = getCredential(credentials, ["INSTAGRAM_BUSINESS_ACCOUNT_ID"]);
   const pageId = getCredential(credentials, ["FACEBOOK_PAGE_ID"]);
@@ -688,7 +668,9 @@ async function fetchGoogleOrganicTraffic(
   credentials: CredentialMap,
   range: TrafficRange,
   accessToken: string | null,
+  credentialScope: TrafficCredentialScope,
 ): Promise<ProviderFetchResult> {
+  const emptyGoogleOrganic = buildEmptyGoogleOrganicProvider(credentialScope);
   const siteUrl = getCredential(credentials, ["GOOGLE_SEARCH_CONSOLE_SITE_URL"]);
 
   if (!siteUrl || !accessToken) {
@@ -772,13 +754,19 @@ async function fetchGoogleOrganicTraffic(
   };
 }
 
-async function exchangeGoogleRefreshToken(credentials: CredentialMap, warnings: string[]) {
+async function exchangeGoogleRefreshToken(
+  credentials: CredentialMap,
+  warnings: string[],
+  credentialScope: TrafficCredentialScope,
+) {
   const clientId = getCredential(credentials, ["GOOGLE_ADS_CLIENT_ID"]);
   const clientSecret = getCredential(credentials, ["GOOGLE_ADS_CLIENT_SECRET"]);
   const refreshToken = getCredential(credentials, ["GOOGLE_ADS_REFRESH_TOKEN"]);
 
   if (!clientId || !clientSecret || !refreshToken) {
-    warnings.push("Google OAuth ainda nao tem Client ID, Client secret e Refresh token completos.");
+    warnings.push(credentialScope.scope === "organization"
+      ? "Google Ads ainda nao esta conectado em Integracoes para esta empresa."
+      : "Google OAuth ainda nao tem Client ID, Client secret e Refresh token completos na Sala de Manutencao.");
     return null;
   }
 
@@ -912,6 +900,54 @@ function providerFromCampaigns(base: TrafficProviderSummary, campaigns: TrafficC
     cpc: ratio(spend, clicks),
     cpm: impressions > 0 ? (spend / impressions) * 1000 : 0,
   };
+}
+
+function buildEmptyMetaPaidProvider(credentialScope: TrafficCredentialScope) {
+  return buildEmptyProvider({
+    id: "meta-paid",
+    name: "Meta Ads",
+    platform: "Meta",
+    kind: "paid",
+    detail: credentialScope.scope === "organization"
+      ? "Conecte Meta em Integracoes e selecione a conta de anuncios que alimenta este dashboard."
+      : "Configure o app ConnectyHub Meta e as credenciais de teste na Sala de Manutencao.",
+  });
+}
+
+function buildEmptyGooglePaidProvider(credentialScope: TrafficCredentialScope) {
+  return buildEmptyProvider({
+    id: "google-paid",
+    name: "Google Ads",
+    platform: "Google",
+    kind: "paid",
+    detail: credentialScope.scope === "organization"
+      ? "Conecte Google em Integracoes e selecione a conta Google Ads que alimenta este dashboard."
+      : "Configure o app ConnectyHub Google, Developer Token e credenciais de teste na Sala de Manutencao.",
+  });
+}
+
+function buildEmptyMetaOrganicProvider(credentialScope: TrafficCredentialScope) {
+  return buildEmptyProvider({
+    id: "meta-organic",
+    name: "Instagram / Facebook organico",
+    platform: "Meta",
+    kind: "organic",
+    detail: credentialScope.scope === "organization"
+      ? "Opcional: selecione Instagram Business ou pagina Facebook em Integracoes para leitura organica."
+      : "Configure Instagram Business ID ou Facebook Page ID para leitura organica.",
+  });
+}
+
+function buildEmptyGoogleOrganicProvider(credentialScope: TrafficCredentialScope) {
+  return buildEmptyProvider({
+    id: "google-organic",
+    name: "Google Search Console",
+    platform: "Google",
+    kind: "organic",
+    detail: credentialScope.scope === "organization"
+      ? "Opcional: vincule Search Console ou GA4 em Integracoes quando esse recurso estiver liberado."
+      : "Configure a propriedade do Search Console e OAuth com escopo de leitura.",
+  });
 }
 
 function buildEmptyProvider(input: {

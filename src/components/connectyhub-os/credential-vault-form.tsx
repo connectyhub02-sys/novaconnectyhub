@@ -26,6 +26,8 @@ type VaultField = {
   aliases?: string[];
   kind: CredentialKind;
   requirement: CredentialRequirement;
+  section?: string;
+  multiline?: boolean;
   help?: string;
 };
 
@@ -525,6 +527,10 @@ export function CredentialVaultForm({ integrations }: { integrations: VaultInteg
                   </div>
                 )}
 
+                {isOAuthAppIntegration(integration.id) && (
+                  <OAuthAppNotice integrationId={integration.id} />
+                )}
+
                 {/* Fields grid */}
                 <div className={fieldGridClass}>
                   {integration.fields.map((field) => {
@@ -545,6 +551,11 @@ export function CredentialVaultForm({ integrations }: { integrations: VaultInteg
                         style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
                       >
                         {/* Field header */}
+                        {field.section && (
+                          <p className="mb-2 font-mono text-[9px] uppercase tracking-[0.14em] text-slate-500">
+                            {field.section}
+                          </p>
+                        )}
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
                             <label
@@ -605,6 +616,40 @@ export function CredentialVaultForm({ integrations }: { integrations: VaultInteg
                                   }}
                                 />
                               </div>
+                            )}
+                          </div>
+                        ) : field.multiline ? (
+                          <div className="mt-3 flex gap-2">
+                            <textarea
+                              id={fieldKey}
+                              autoComplete="off"
+                              value={value}
+                              onFocus={() => beginEdit(fieldKey, saved)}
+                              onBlur={() => resetEmptyEdit(fieldKey)}
+                              onChange={(e) => updateField(fieldKey, e.target.value)}
+                              placeholder={getPlaceholder(field)}
+                              rows={4}
+                              className="min-h-24 w-full resize-y rounded-lg px-3 py-2 font-mono text-[11px] leading-5 outline-none transition"
+                              style={{
+                                background: "var(--ch-surface)",
+                                border: "1px solid var(--ch-border)",
+                                color: "var(--ch-text)",
+                              }}
+                            />
+
+                            {saved && (
+                              <button
+                                type="button"
+                                aria-label={`Remover ${field.label}`}
+                                disabled={deletingId === saved.id}
+                                onClick={() => void handleDelete(saved)}
+                                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition disabled:opacity-50"
+                                style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)", color: "#ef4444" }}
+                              >
+                                {deletingId === saved.id
+                                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  : <Trash2 className="h-3.5 w-3.5" />}
+                              </button>
                             )}
                           </div>
                         ) : (
@@ -801,6 +846,48 @@ function RequirementBadge({ requirement }: { requirement: CredentialRequirement 
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+function OAuthAppNotice({ integrationId }: { integrationId: string }) {
+  const config = integrationId === "meta"
+    ? {
+        title: "App oficial Meta para conexao guiada",
+        text: "Aqui ficam as credenciais do app ConnectyHub. O cliente nao informa token manual: ele clica em Conectar Meta, autoriza o app e a empresa dele recebe os tokens proprios.",
+        items: ["OAuth", "Marketing API", "App Review", "Webhooks"],
+        tone: "amber" as const,
+      }
+    : {
+        title: "Projeto Google para conexao guiada",
+        text: "Aqui ficam Client ID, Client Secret e Developer Token da ConnectyHub. O cliente clica em Conectar Google e o refresh token nasce no callback da empresa dele.",
+        items: ["OAuth", "Google Ads API", "GA4", "Search Console"],
+        tone: "cyan" as const,
+      };
+  const styles = config.tone === "amber"
+    ? { background: "rgba(245,158,11,0.07)", border: "1px solid rgba(245,158,11,0.22)", color: "#f59e0b" }
+    : { background: "rgba(6,182,212,0.07)", border: "1px solid rgba(6,182,212,0.22)", color: "#06b6d4" };
+
+  return (
+    <div className="mx-5 mt-4 rounded-xl px-4 py-3" style={styles}>
+      <div className="flex items-start gap-3">
+        <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+        <div className="min-w-0">
+          <p className="text-[12px] font-semibold" style={{ color: styles.color }}>{config.title}</p>
+          <p className="mt-0.5 text-[11px] leading-4 text-slate-500">{config.text}</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {config.items.map((item) => (
+              <span
+                key={item}
+                className="rounded-lg px-2.5 py-1 font-mono text-[9px] uppercase tracking-wide"
+                style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)", color: "var(--ch-muted)" }}
+              >
+                {item}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function GeminiModelAvailabilityPanel({ models }: { models: GeminiApiModel[] }) {
   const available = models.filter((model) => model.supportsGenerateContent).length;
   const unavailable = models.length - available;
@@ -901,6 +988,10 @@ function findSavedCredential(
   }
 
   return undefined;
+}
+
+function isOAuthAppIntegration(integrationId: string) {
+  return integrationId === "meta" || integrationId === "google-ads";
 }
 
 function getSavedDisplay(saved: StoredCredential) {
@@ -1024,6 +1115,9 @@ function getInputType(field: VaultField) {
 }
 
 function getPlaceholder(field: VaultField) {
+  if (field.multiline) return "Cole uma lista separada por virgulas ou uma permissao por linha.";
+  if (field.env.includes("STATUS")) return "Ex: teste, em revisao, aprovado.";
+  if (field.env.includes("VERSION")) return "Ex: v23.0 ou v24.";
   if (field.kind === "endpoint")    return "Cole a URL completa, com https://.";
   if (field.env.includes("EMAIL"))  return "Digite o email da conta.";
   if (field.kind === "secret")      return "Cole a chave, senha ou token.";

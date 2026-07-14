@@ -27,7 +27,7 @@ export default async function ClientMetaAdsPage() {
   return (
     <AdminAdsPlatformDashboard
       activeHref="/dashboard/trafego/meta-ads"
-      credentialHref="/dashboard/integracoes#meta-ads"
+      credentialHref="/dashboard/integracoes#meta-ads-guiado"
       credentialPrimaryLabel="Abrir integracoes"
       credentialSecondaryLabel="Salvar em integracoes"
       isPlatformAdmin={workspace.profile.isPlatformAdmin}
