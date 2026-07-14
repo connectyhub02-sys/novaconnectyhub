@@ -219,10 +219,13 @@ export function buildMetaAuthorizationUrl(input: {
   url.searchParams.set("redirect_uri", input.config.redirectUri);
   url.searchParams.set("state", input.state);
   url.searchParams.set("response_type", "code");
-  url.searchParams.set("scope", input.config.permissions.join(","));
 
   if (input.config.loginConfigId) {
     url.searchParams.set("config_id", input.config.loginConfigId);
+    url.searchParams.set("override_default_response_type", "true");
+    url.searchParams.set("auth_type", "rerequest");
+  } else {
+    url.searchParams.set("scope", input.config.permissions.join(","));
   }
 
   return url.toString();
