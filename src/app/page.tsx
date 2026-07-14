@@ -864,8 +864,8 @@ export default function Home() {
         <div className="mx-auto flex max-w-[1760px] flex-col items-center gap-4 sm:flex-row sm:justify-between">
           <ConnectyLogo className="h-5 w-[160px]" tone="white" type="full" />
           <div className="flex gap-6 font-mono text-xs text-zinc-400">
-            <a href="#" className="transition-colors hover:text-zinc-300">Termos de uso</a>
-            <a href="#" className="transition-colors hover:text-zinc-300">Privacidade</a>
+            <a href="/termos" className="transition-colors hover:text-zinc-300">Termos de uso</a>
+            <a href="/privacidade" className="transition-colors hover:text-zinc-300">Privacidade</a>
           </div>
           <p className="font-mono text-[11px] text-zinc-500">
             &copy; {new Date().getFullYear()} ConnectyHub
