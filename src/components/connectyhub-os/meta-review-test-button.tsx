@@ -34,6 +34,7 @@ export function MetaReviewTestButton({
 }) {
   const [state, setState] = useState<ButtonState>("idle");
   const [message, setMessage] = useState<string | null>(null);
+  const [detail, setDetail] = useState<string | null>(null);
   const t = toneClass(resolveTone(state, tone));
   const loading = state === "loading";
   const displayLabel = getDisplayLabel(state, label, message);
@@ -41,6 +42,7 @@ export function MetaReviewTestButton({
   async function handleClick() {
     setState("loading");
     setMessage(null);
+    setDetail(null);
 
     try {
       const response = await fetch("/api/dashboard/integrations/meta/review-test", {
@@ -60,13 +62,18 @@ export function MetaReviewTestButton({
       if (body?.ok) {
         setState("success");
         setMessage(`${successCount}/${total} OK`);
+        setDetail(body.summary ?? "Todas as chamadas de revisao Meta foram aceitas.");
       } else {
+        const failed = results.filter((result) => !result.ok);
         setState("warning");
-        setMessage(`${successCount}/${total} OK`);
+        setMessage(`${successCount}/${total} OK: ${formatFailedLabel(failed)}`);
+        setDetail(formatFailedDetail(failed, body?.summary));
       }
     } catch (error) {
       setState("error");
-      setMessage(error instanceof Error ? error.message : "Teste Meta falhou.");
+      const errorMessage = error instanceof Error ? error.message : "Teste Meta falhou.";
+      setMessage(errorMessage);
+      setDetail(errorMessage);
     }
   }
 
@@ -75,7 +82,7 @@ export function MetaReviewTestButton({
       type="button"
       onClick={handleClick}
       disabled={loading}
-      title={message ?? "Executa chamadas reais na Graph API para validar a conexao Meta."}
+      title={detail ?? message ?? "Executa chamadas reais na Graph API para validar a conexao Meta."}
       aria-live="polite"
       className={cn(
         "inline-flex h-9 shrink-0 items-center gap-2 rounded-xl border px-3 text-[12px] font-semibold transition disabled:cursor-wait disabled:opacity-80",
@@ -113,6 +120,31 @@ function getDisplayLabel(state: ButtonState, fallback: string, message: string |
   if (state === "error") return "Falhou";
 
   return fallback;
+}
+
+function formatFailedLabel(results: ReviewTestResult[]) {
+  if (!results.length) return "Meta";
+  if (results.length > 1) return `${results.length} pendencias`;
+
+  return shortPermissionName(results[0]?.permission);
+}
+
+function formatFailedDetail(results: ReviewTestResult[], fallback?: string) {
+  if (!results.length) {
+    return fallback ?? "A Meta retornou pendencia sem detalhar a permissao.";
+  }
+
+  return results
+    .map((result) => `${result.permission}: ${result.detail}`)
+    .join(" | ");
+}
+
+function shortPermissionName(permission: string) {
+  if (permission === "business_management") return "Business";
+  if (permission === "ads_read") return "Ads";
+  if (permission === "pages_read_engagement") return "Pagina";
+
+  return permission;
 }
 
 function resolveTone(state: ButtonState, fallback: Tone): Tone {
