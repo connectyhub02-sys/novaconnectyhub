@@ -32,6 +32,7 @@ import { cn } from "@/lib/utils";
 import { AdsDashboardSyncButton } from "./ads-dashboard-sync-button";
 import { AreaChartPanel, BarChartPanel } from "./charts";
 import { ConnectyShell } from "./connecty-shell";
+import { MetaReviewTestButton } from "./meta-review-test-button";
 import { DataTable, NeonBadge, PageHeader, Panel, StatusBadge, toneClass } from "./panel-primitives";
 
 export type AdsDashboardPlatform = "meta" | "google";
@@ -145,6 +146,7 @@ export function AdminAdsPlatformDashboard({
           <div className="flex min-w-max items-center gap-2">
             <ToolbarButton icon={CalendarDays} label="Hoje" />
             <AdsDashboardSyncButton />
+            {platform === "meta" ? <MetaReviewTestButton /> : null}
             <ToolbarButton icon={BrainCircuit} label="Analisar com IA" tone="violet" />
             <ToolbarButton icon={Activity} label="Gestor IA" tone="amber" />
             <ToolbarButton icon={Plus} label="Nova campanha" tone="amber" disabled />
