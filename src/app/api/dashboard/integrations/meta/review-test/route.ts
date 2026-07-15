@@ -1,6 +1,11 @@
 import { createHmac } from "node:crypto";
 import { NextResponse } from "next/server";
-import { loadMetaGuidedOAuthConfig, normalizeMetaAdAccountId } from "@/lib/client-os/guided-oauth";
+import {
+  fetchMetaPageAccessToken,
+  loadMetaGuidedOAuthConfig,
+  normalizeMetaAdAccountId,
+  saveOAuthCredentials,
+} from "@/lib/client-os/guided-oauth";
 import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
@@ -32,6 +37,7 @@ const metaCredentialEnvNames = [
   "META_ACCESS_TOKEN",
   "META_AD_ACCOUNT_ID",
   "FACEBOOK_PAGE_ID",
+  "FACEBOOK_PAGE_ACCESS_TOKEN",
 ];
 
 export async function POST() {
@@ -53,13 +59,35 @@ export async function POST() {
   const accessToken = credentials.get("META_ACCESS_TOKEN");
   const adAccountId = normalizeMetaAdAccountId(credentials.get("META_AD_ACCOUNT_ID"));
   const pageId = credentials.get("FACEBOOK_PAGE_ID")?.trim() ?? "";
+  let pageAccessToken = credentials.get("FACEBOOK_PAGE_ACCESS_TOKEN")?.trim() ?? "";
   const ranAt = new Date().toISOString();
 
   if (!accessToken) {
     return NextResponse.json({ error: "Conecte a conta Meta antes de rodar o teste." }, { status: 400 });
   }
 
-  const appsecretProof = createHmac("sha256", config.appSecret).update(accessToken).digest("hex");
+  if (pageId && !pageAccessToken) {
+    pageAccessToken = await fetchMetaPageAccessToken({ accessToken, config, pageId }) ?? "";
+
+    if (pageAccessToken) {
+      await saveOAuthCredentials({
+        client,
+        organizationId,
+        actorId: workspace.user.id,
+        credentials: [{
+          integrationId: "meta",
+          envName: "FACEBOOK_PAGE_ACCESS_TOKEN",
+          label: "Facebook Page access token",
+          kind: "secret",
+          requirement: "optional",
+          value: pageAccessToken,
+        }],
+      });
+    }
+  }
+
+  const appsecretProof = buildMetaAppSecretProof(accessToken, config.appSecret);
+  const pageToken = pageAccessToken || accessToken;
   const results = await Promise.all([
     runGraphTest({
       accessToken,
@@ -92,16 +120,19 @@ export async function POST() {
       },
     }),
     runGraphTest({
-      accessToken,
-      appsecretProof,
+      accessToken: pageToken,
+      appsecretProof: buildMetaAppSecretProof(pageToken, config.appSecret),
       config,
-      endpointPath: pageId ? `/${pageId}` : null,
+      endpointPath: pageId && pageAccessToken ? `/${pageId}/posts` : null,
       id: "pages_read_engagement",
-      label: "Facebook Page leitura",
-      missingDetail: "Pagina do Facebook nao selecionada.",
+      label: "Facebook Page posts",
+      missingDetail: pageId
+        ? "Token da pagina nao retornado pela Meta. Reconecte a integracao e selecione uma Pagina administrada."
+        : "Pagina do Facebook nao selecionada.",
       permission: "pages_read_engagement",
       params: {
-        fields: "id,name,fan_count,followers_count,posts.limit(1){id,message,created_time}",
+        fields: "id,created_time,message,permalink_url",
+        limit: "1",
       },
     }),
   ]);
@@ -127,6 +158,10 @@ export async function POST() {
     summary,
     results,
   });
+}
+
+function buildMetaAppSecretProof(accessToken: string, appSecret: string) {
+  return createHmac("sha256", appSecret).update(accessToken).digest("hex");
 }
 
 async function loadOrganizationMetaCredentials(

@@ -105,6 +105,14 @@ export async function GET(request: NextRequest) {
       },
       {
         integrationId: "meta" as const,
+        envName: "FACEBOOK_PAGE_ACCESS_TOKEN",
+        label: "Facebook Page access token",
+        kind: "secret" as const,
+        requirement: "optional" as const,
+        value: assets.pageAccessToken ?? "",
+      },
+      {
+        integrationId: "meta" as const,
         envName: "INSTAGRAM_BUSINESS_ACCOUNT_ID",
         label: "Instagram Business ID",
         kind: "identifier" as const,

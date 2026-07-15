@@ -143,6 +143,7 @@ const credentialEnvNames = [
   "META_PIXEL_ID",
   "INSTAGRAM_BUSINESS_ACCOUNT_ID",
   "FACEBOOK_PAGE_ID",
+  "FACEBOOK_PAGE_ACCESS_TOKEN",
   "META_GRAPH_API_VERSION",
   "GOOGLE_ADS_DEVELOPER_TOKEN",
   "GOOGLE_ADS_CLIENT_ID",
@@ -590,6 +591,7 @@ async function fetchMetaOrganicTraffic(
   const accessToken = getCredential(credentials, ["META_ACCESS_TOKEN"]);
   const instagramId = getCredential(credentials, ["INSTAGRAM_BUSINESS_ACCOUNT_ID"]);
   const pageId = getCredential(credentials, ["FACEBOOK_PAGE_ID"]);
+  const pageAccessToken = getCredential(credentials, ["FACEBOOK_PAGE_ACCESS_TOKEN"]) || accessToken;
 
   if (!accessToken || (!instagramId && !pageId)) {
     return {
@@ -612,7 +614,7 @@ async function fetchMetaOrganicTraffic(
     url.searchParams.set("period", "day");
     url.searchParams.set("since", String(toUnixSeconds(range.since)));
     url.searchParams.set("until", String(toUnixSeconds(range.until)));
-    appendMetaAuth(url, credentials);
+    appendMetaAuth(url, credentials, pageAccessToken);
 
     const result = await fetchJson(url.toString());
     if (result.ok) {
@@ -841,8 +843,8 @@ function buildMetaGraphUrl(credentials: CredentialMap, path: string) {
   return new URL(`https://graph.facebook.com/${version}${path}`);
 }
 
-function appendMetaAuth(url: URL, credentials: CredentialMap) {
-  const accessToken = getCredential(credentials, ["META_ACCESS_TOKEN"]);
+function appendMetaAuth(url: URL, credentials: CredentialMap, accessTokenOverride?: string) {
+  const accessToken = accessTokenOverride || getCredential(credentials, ["META_ACCESS_TOKEN"]);
   const appSecret = getCredential(credentials, ["META_APP_SECRET"]);
 
   url.searchParams.set("access_token", accessToken);

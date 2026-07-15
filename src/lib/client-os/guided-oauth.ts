@@ -108,6 +108,7 @@ export const metaOrganizationCredentialNames = [
   "META_AD_ACCOUNT_ID",
   "INSTAGRAM_BUSINESS_ACCOUNT_ID",
   "FACEBOOK_PAGE_ID",
+  "FACEBOOK_PAGE_ACCESS_TOKEN",
 ];
 
 const defaultGoogleScopes = [
@@ -338,7 +339,7 @@ export async function listMetaConnectionAssets(input: {
   accountUrl.searchParams.set("appsecret_proof", appsecretProof);
 
   const pagesUrl = new URL(`https://graph.facebook.com/${input.config.graphVersion}/me/accounts`);
-  pagesUrl.searchParams.set("fields", "id,name,instagram_business_account{id,username}");
+  pagesUrl.searchParams.set("fields", "id,name,access_token,instagram_business_account{id,username}");
   pagesUrl.searchParams.set("limit", "50");
   pagesUrl.searchParams.set("access_token", input.accessToken);
   pagesUrl.searchParams.set("appsecret_proof", appsecretProof);
@@ -394,12 +395,41 @@ export async function listMetaConnectionAssets(input: {
     adAccountLabel: readString(firstAdAccount?.name) || normalizeMetaAdAccountId(readString(firstAdAccount?.id) || readString(firstAdAccount?.account_id)),
     pageId: readString(firstPage?.id),
     pageLabel: readString(firstPage?.name),
+    pageAccessToken: readString(firstPage?.access_token),
     instagramBusinessId: readString(instagramAccount?.id),
     instagramLabel: readString(instagramAccount?.username),
     adAccounts: adAccountOptions,
     pages: pageOptions,
     instagramAccounts: instagramOptions,
   };
+}
+
+export async function fetchMetaPageAccessToken(input: {
+  accessToken: string;
+  config: MetaGuidedOAuthConfig;
+  pageId: string;
+}) {
+  const pageId = input.pageId.trim();
+
+  if (!pageId) {
+    return null;
+  }
+
+  const appsecretProof = buildMetaAppSecretProof(input.accessToken, input.config.appSecret);
+  const pagesUrl = new URL(`https://graph.facebook.com/${input.config.graphVersion}/me/accounts`);
+  pagesUrl.searchParams.set("fields", "id,name,access_token");
+  pagesUrl.searchParams.set("limit", "100");
+  pagesUrl.searchParams.set("access_token", input.accessToken);
+  pagesUrl.searchParams.set("appsecret_proof", appsecretProof);
+
+  const result = await fetchJson(pagesUrl.toString(), { headers: { Accept: "application/json" } }).catch(() => ({ ok: false, data: null }));
+
+  if (!result.ok) {
+    return null;
+  }
+
+  const page = readMetaDataArray(result.data).find((item) => readString(item.id) === pageId);
+  return readString(page?.access_token);
 }
 
 export async function ensureGuidedOAuthProvider(input: {

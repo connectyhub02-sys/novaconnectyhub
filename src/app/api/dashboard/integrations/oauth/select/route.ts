@@ -2,6 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { requireClientCompanyAccess } from "@/lib/client-os/companies";
 import {
   deleteOAuthCredentials,
+  fetchMetaPageAccessToken,
+  loadMetaGuidedOAuthConfig,
   logIntegrationAction,
   normalizeGoogleCustomerId,
   normalizeMetaAdAccountId,
@@ -9,6 +11,7 @@ import {
   upsertGuidedOAuthConnection,
   type GuidedOAuthProviderId,
 } from "@/lib/client-os/guided-oauth";
+import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
 
@@ -28,6 +31,10 @@ type Option = {
   id: string;
   label: string;
   parentId?: string | null;
+};
+
+type CredentialSecretRow = {
+  encrypted_value: string | null;
 };
 
 export async function POST(request: NextRequest) {
@@ -207,6 +214,13 @@ async function saveMetaSelection(input: {
   assertKnownOption(pageId, pageOptions, "pagina Facebook");
   assertKnownOption(instagramBusinessId, instagramOptions, "Instagram Business");
 
+  const pageAccessToken = pageId
+    ? await resolveSelectedMetaPageAccessToken({
+        client: input.client,
+        companyId: input.companyId,
+        pageId,
+      })
+    : null;
   const credentials = [
     {
       integrationId: "meta" as const,
@@ -226,6 +240,14 @@ async function saveMetaSelection(input: {
     },
     {
       integrationId: "meta" as const,
+      envName: "FACEBOOK_PAGE_ACCESS_TOKEN",
+      label: "Facebook Page access token",
+      kind: "secret" as const,
+      requirement: "optional" as const,
+      value: pageAccessToken ?? "",
+    },
+    {
+      integrationId: "meta" as const,
       envName: "INSTAGRAM_BUSINESS_ACCOUNT_ID",
       label: "Instagram Business ID",
       kind: "identifier" as const,
@@ -241,6 +263,7 @@ async function saveMetaSelection(input: {
   });
   const envsToDelete = [
     pageId ? "" : "FACEBOOK_PAGE_ID",
+    pageId && pageAccessToken ? "" : "FACEBOOK_PAGE_ACCESS_TOKEN",
     instagramBusinessId ? "" : "INSTAGRAM_BUSINESS_ACCOUNT_ID",
   ].filter(Boolean);
 
@@ -308,6 +331,53 @@ async function saveMetaSelection(input: {
       lastSyncAt: now,
     }),
   };
+}
+
+async function resolveSelectedMetaPageAccessToken(input: {
+  client: ReturnType<typeof createServiceClient>;
+  companyId: string;
+  pageId: string;
+}) {
+  const accessToken = await loadOrganizationSecret({
+    client: input.client,
+    companyId: input.companyId,
+    integrationId: "meta",
+    envName: "META_ACCESS_TOKEN",
+  });
+
+  if (!accessToken) {
+    return null;
+  }
+
+  const config = await loadMetaGuidedOAuthConfig({ client: input.client });
+
+  return fetchMetaPageAccessToken({
+    accessToken,
+    config,
+    pageId: input.pageId,
+  });
+}
+
+async function loadOrganizationSecret(input: {
+  client: ReturnType<typeof createServiceClient>;
+  companyId: string;
+  integrationId: string;
+  envName: string;
+}) {
+  const { data, error } = await input.client
+    .from("integration_credentials")
+    .select("encrypted_value")
+    .eq("scope", "organization")
+    .eq("organization_id", input.companyId)
+    .eq("integration_id", input.integrationId)
+    .eq("env_name", input.envName)
+    .maybeSingle<CredentialSecretRow>();
+
+  if (error || !data?.encrypted_value) {
+    return null;
+  }
+
+  return decryptCredentialValue(data.encrypted_value);
 }
 
 function buildConnection(input: {
