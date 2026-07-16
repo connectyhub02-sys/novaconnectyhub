@@ -145,7 +145,7 @@ export function AdminAdsPlatformDashboard({
         actions={
           <div className="flex min-w-max items-center gap-2">
             <ToolbarButton icon={CalendarDays} label="Hoje" />
-            <AdsDashboardSyncButton />
+            <AdsDashboardSyncButton provider={platform} />
             {platform === "meta" ? <MetaReviewTestButton /> : null}
             <ToolbarButton icon={BrainCircuit} label="Analisar com IA" tone="violet" />
             <ToolbarButton icon={Activity} label="Gestor IA" tone="amber" />
