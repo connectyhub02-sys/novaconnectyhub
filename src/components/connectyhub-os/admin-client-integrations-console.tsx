@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AlertTriangle, ArrowUpRight, BellRing, CheckCircle2, Eye, Filter, History, ListChecks, PlugZap, RefreshCw, ShieldCheck } from "lucide-react";
+import { AlertTriangle, ArrowUpRight, BellRing, CheckCircle2, ClipboardList, Eye, Filter, History, ListChecks, MessageSquareText, PlugZap, RefreshCw, ShieldCheck } from "lucide-react";
 import {
   DataTable,
   KpiStat,
@@ -20,6 +20,7 @@ import type {
   AdminClientIntegrationsOverview,
   AdminClientProviderStatus,
   AdminClientProviderSummary,
+  AdminClientSupportAction,
 } from "@/lib/admin/client-integrations";
 import { registerClientIntegrationAdminAction } from "@/lib/admin/client-integration-actions";
 import type { StatusTone, Tone } from "@/lib/connectyhub-os-data";
@@ -246,6 +247,7 @@ function OperationalAlertCard({
         </Link>
       </div>
       <p className="mt-3 line-clamp-2 text-[12px] leading-5 text-slate-400">{alert.detail}</p>
+      <SupportActionCard action={alert.supportAction} compact />
       <p className="mt-3 font-mono text-[9px] uppercase tracking-wide text-slate-600">
         Ultima atividade: {formatDateShort(alert.lastActivityAt)}
       </p>
@@ -525,6 +527,7 @@ function ProviderDetailCard({
         </p>
       )}
       <ProviderSelectionBlock provider={provider} />
+      <SupportActionCard action={provider.supportAction} />
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <Link
           href={filterHref(filters, { provider: provider.providerId, companyId })}
@@ -592,6 +595,46 @@ function ProviderSelectionBlock({ provider }: { provider: AdminClientProviderSta
             </div>
           ))}
         </div>
+      )}
+    </div>
+  );
+}
+
+function SupportActionCard({ action, compact = false }: { action: AdminClientSupportAction; compact?: boolean }) {
+  const tone = alertSeverityTone(action.priority);
+
+  return (
+    <div
+      className="mt-3 rounded-xl p-3"
+      style={{ background: "rgba(15,23,42,0.42)", border: "1px solid var(--ch-border)" }}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-slate-500">proxima acao</p>
+          <p className={`mt-1 text-[12px] font-semibold ${toneText(tone)}`}>{action.title}</p>
+        </div>
+        <ClipboardList className={`h-4 w-4 shrink-0 ${toneText(tone)}`} />
+      </div>
+
+      <p className={`${compact ? "line-clamp-2" : ""} mt-2 text-[11px] leading-5 text-slate-400`}>{action.detail}</p>
+
+      <div className="mt-3 rounded-lg px-3 py-2" style={{ background: "rgba(255,255,255,0.035)" }}>
+        <div className="mb-1 flex items-center gap-2">
+          <MessageSquareText className="h-3.5 w-3.5 text-cyan-300" />
+          <p className="font-mono text-[9px] uppercase tracking-wide text-slate-500">mensagem ao cliente</p>
+        </div>
+        <p className={`${compact ? "line-clamp-2" : ""} select-all text-[11px] leading-5 text-slate-300`}>{action.customerMessage}</p>
+      </div>
+
+      {action.href && (
+        <Link
+          href={action.href}
+          className="mt-3 inline-flex h-8 items-center gap-1.5 rounded-lg border px-2 font-mono text-[9px] uppercase tracking-wide text-cyan-300 transition hover:bg-cyan-400/10"
+          style={{ borderColor: "rgba(34,211,238,0.24)" }}
+        >
+          <ArrowUpRight className="h-3 w-3" />
+          {action.hrefLabel ?? "Abrir rota"}
+        </Link>
       )}
     </div>
   );

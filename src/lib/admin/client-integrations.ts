@@ -10,6 +10,7 @@ export type AdminClientProviderSelectionStatus = "complete" | "partial" | "not_a
 export type AdminClientIntegrationFilterStatus = AdminClientIntegrationStatus | "selection_pending" | "all";
 export type AdminClientIntegrationEventStatus = "success" | "warning" | "error";
 export type AdminClientIntegrationAlertSeverity = "critical" | "warning" | "info";
+export type AdminClientSupportActionKind = "connect" | "select_assets" | "fix_error" | "sync" | "monitor";
 
 export type AdminClientIntegrationFilters = {
   provider: AdminClientIntegrationProviderId | "all";
@@ -34,6 +35,7 @@ export type AdminClientProviderStatus = {
   selectionStatus: AdminClientProviderSelectionStatus;
   selectionLabel: string;
   selectedAssets: AdminClientProviderSelectedAsset[];
+  supportAction: AdminClientSupportAction;
 };
 
 export type AdminClientProviderSelectedAsset = {
@@ -41,6 +43,16 @@ export type AdminClientProviderSelectedAsset = {
   value: string | null;
   required: boolean;
   ready: boolean;
+};
+
+export type AdminClientSupportAction = {
+  kind: AdminClientSupportActionKind;
+  title: string;
+  detail: string;
+  href: string | null;
+  hrefLabel: string | null;
+  priority: AdminClientIntegrationAlertSeverity;
+  customerMessage: string;
 };
 
 export type AdminClientIntegrationCompany = {
@@ -91,6 +103,7 @@ export type AdminClientIntegrationAlert = {
   title: string;
   detail: string;
   lastActivityAt: string | null;
+  supportAction: AdminClientSupportAction;
 };
 
 export type AdminClientIntegrationsOverview = {
@@ -203,6 +216,18 @@ const providerLabels: Record<AdminClientIntegrationProviderId, string> = {
   "google-growth": "Google Ads",
   "mercado-pago": "Mercado Pago",
   "webhook-universal": "Webhook Universal",
+};
+
+const providerCustomerRoutes: Record<AdminClientIntegrationProviderId, { href: string; label: string }> = {
+  "meta-ads": { href: "/dashboard/integracoes", label: "Rota do cliente" },
+  "google-growth": { href: "/dashboard/integracoes", label: "Rota do cliente" },
+  "mercado-pago": { href: "/dashboard/integracoes", label: "Rota do cliente" },
+  "webhook-universal": { href: "/dashboard/integracoes", label: "Rota do cliente" },
+};
+
+const providerDashboardRoutes: Partial<Record<AdminClientIntegrationProviderId, { href: string; label: string }>> = {
+  "meta-ads": { href: "/dashboard/trafego/meta-ads", label: "Dashboard cliente" },
+  "google-growth": { href: "/dashboard/trafego/google-ads", label: "Dashboard cliente" },
 };
 
 const defaultFilters: AdminClientIntegrationFilters = {
@@ -808,7 +833,7 @@ function providerStatus(
   lastActivityAt: string | null = null,
   selection: Partial<Pick<AdminClientProviderStatus, "selectionStatus" | "selectionLabel" | "selectedAssets">> = {},
 ): AdminClientProviderStatus {
-  return {
+  const provider = {
     providerId,
     label: providerLabels[providerId],
     status,
@@ -821,6 +846,108 @@ function providerStatus(
     selectionLabel: selection.selectionLabel ?? "Nao exige selecao guiada.",
     selectedAssets: selection.selectedAssets ?? [],
   };
+
+  return {
+    ...provider,
+    supportAction: buildSupportAction(provider),
+  };
+}
+
+function buildSupportAction(provider: Omit<AdminClientProviderStatus, "supportAction">): AdminClientSupportAction {
+  const customerRoute = providerCustomerRoutes[provider.providerId];
+  const dashboardRoute = providerDashboardRoutes[provider.providerId] ?? customerRoute;
+  const missingRequiredAssets = missingAssetLabels(provider);
+  const missingAssetsText = missingRequiredAssets.length > 0 ? missingRequiredAssets.join(", ") : "ativos obrigatorios";
+
+  if (provider.status === "error") {
+    return {
+      kind: "fix_error",
+      title: "Corrigir erro antes do reteste",
+      detail: "Abra os logs, valide se a conta ainda esta autorizada e peca ao cliente para reconectar se a falha for de OAuth ou permissao.",
+      href: customerRoute.href,
+      hrefLabel: customerRoute.label,
+      priority: "critical",
+      customerMessage: `Identificamos uma falha na integracao ${provider.label}. Acesse Integracoes na ConnectyHub, reconecte a conta se for solicitado e nos avise para retestarmos.`,
+    };
+  }
+
+  if (provider.selectionStatus === "partial") {
+    return {
+      kind: "select_assets",
+      title: "Completar selecao guiada",
+      detail: `A conexao existe, mas ainda falta selecionar ${missingAssetsText}. O cliente precisa voltar em Integracoes e salvar a escolha guiada.`,
+      href: customerRoute.href,
+      hrefLabel: customerRoute.label,
+      priority: "warning",
+      customerMessage: `A conexao com ${provider.label} foi autorizada, mas ainda falta selecionar ${missingAssetsText}. Acesse Integracoes, abra ${provider.label} e salve a selecao guiada.`,
+    };
+  }
+
+  if (provider.status === "warning") {
+    return {
+      kind: "connect",
+      title: "Resolver pendencia de conexao",
+      detail: "Oriente o cliente a revisar a integracao no painel dele e salve um reteste no admin depois da correcao.",
+      href: customerRoute.href,
+      hrefLabel: customerRoute.label,
+      priority: "warning",
+      customerMessage: `A integracao ${provider.label} esta pendente. Acesse Integracoes na ConnectyHub, revise a conexao e nos avise quando finalizar para validarmos.`,
+    };
+  }
+
+  if (provider.status === "not_configured") {
+    return {
+      kind: "connect",
+      title: "Pedir conexao ao cliente",
+      detail: "Esse cliente ainda nao conectou o provedor. A proxima acao e orientar a conexao no painel do usuario.",
+      href: customerRoute.href,
+      hrefLabel: customerRoute.label,
+      priority: "warning",
+      customerMessage: `Para liberar os dados de ${provider.label}, acesse Integracoes na ConnectyHub e conecte sua conta. Depois da autorizacao, selecione os ativos solicitados e nos avise.`,
+    };
+  }
+
+  if (!provider.lastActivityAt) {
+    return {
+      kind: "sync",
+      title: "Rodar primeira sincronizacao",
+      detail: "A conexao esta pronta, mas ainda nao ha evento, teste ou sincronizacao registrada para acompanhamento.",
+      href: dashboardRoute.href,
+      hrefLabel: dashboardRoute.label,
+      priority: "info",
+      customerMessage: `A integracao ${provider.label} esta conectada. Abra o dashboard do provedor na ConnectyHub e clique em Sincronizar para atualizar a primeira leitura.`,
+    };
+  }
+
+  const days = daysSince(provider.lastActivityAt);
+
+  if (days >= staleActivityDays) {
+    return {
+      kind: "sync",
+      title: "Revisar sincronizacao",
+      detail: `Ultima atividade ha ${days} dia(s). Vale sincronizar e confirmar se a leitura continua retornando dados.`,
+      href: dashboardRoute.href,
+      hrefLabel: dashboardRoute.label,
+      priority: "info",
+      customerMessage: `A integracao ${provider.label} esta conectada, mas esta sem atualizacao recente. Abra o dashboard do provedor na ConnectyHub e clique em Sincronizar.`,
+    };
+  }
+
+  return {
+    kind: "monitor",
+    title: "Monitorar normalmente",
+    detail: "Conexao ativa, selecao resolvida e atividade recente dentro da janela esperada.",
+    href: dashboardRoute.href,
+    hrefLabel: dashboardRoute.label,
+    priority: "info",
+    customerMessage: `A integracao ${provider.label} esta conectada e sem pendencias no momento.`,
+  };
+}
+
+function missingAssetLabels(provider: Pick<AdminClientProviderStatus, "selectedAssets">) {
+  return provider.selectedAssets
+    .filter((asset) => asset.required && !asset.ready)
+    .map((asset) => asset.label);
 }
 
 function buildCompanyAlerts(
@@ -914,6 +1041,7 @@ function integrationAlert(
     title,
     detail,
     lastActivityAt: provider.lastActivityAt,
+    supportAction: provider.supportAction,
   };
 }
 
