@@ -6,7 +6,8 @@ const providerIds = ["meta-ads", "google-growth", "mercado-pago", "webhook-unive
 
 export type AdminClientIntegrationProviderId = (typeof providerIds)[number];
 export type AdminClientIntegrationStatus = "connected" | "warning" | "error" | "not_configured";
-export type AdminClientIntegrationFilterStatus = AdminClientIntegrationStatus | "all";
+export type AdminClientProviderSelectionStatus = "complete" | "partial" | "not_available" | "not_required";
+export type AdminClientIntegrationFilterStatus = AdminClientIntegrationStatus | "selection_pending" | "all";
 export type AdminClientIntegrationEventStatus = "success" | "warning" | "error";
 export type AdminClientIntegrationAlertSeverity = "critical" | "warning" | "info";
 
@@ -30,6 +31,16 @@ export type AdminClientProviderStatus = {
   detail: string;
   lastActivityAt: string | null;
   issue: string | null;
+  selectionStatus: AdminClientProviderSelectionStatus;
+  selectionLabel: string;
+  selectedAssets: AdminClientProviderSelectedAsset[];
+};
+
+export type AdminClientProviderSelectedAsset = {
+  label: string;
+  value: string | null;
+  required: boolean;
+  ready: boolean;
 };
 
 export type AdminClientIntegrationCompany = {
@@ -53,6 +64,7 @@ export type AdminClientProviderSummary = {
   warning: number;
   error: number;
   notConfigured: number;
+  selectionPending: number;
   total: number;
 };
 
@@ -94,6 +106,7 @@ export type AdminClientIntegrationsOverview = {
   warningLinks: number;
   errorLinks: number;
   notConfiguredLinks: number;
+  selectionPendingLinks: number;
   criticalAlerts: number;
   warningAlerts: number;
   infoAlerts: number;
@@ -208,6 +221,7 @@ const providerFilterOptions: Array<AdminClientIntegrationFilterOption<AdminClien
 const statusFilterOptions: Array<AdminClientIntegrationFilterOption<AdminClientIntegrationFilterStatus>> = [
   { id: "all", label: "Todos" },
   { id: "connected", label: "Conectados" },
+  { id: "selection_pending", label: "Selecao pendente" },
   { id: "warning", label: "Pendencias" },
   { id: "error", label: "Erros" },
   { id: "not_configured", label: "Sem conexao" },
@@ -307,6 +321,10 @@ export async function getAdminClientIntegrationsOverview(
       warning: statuses.filter((status) => status === "warning").length,
       error: statuses.filter((status) => status === "error").length,
       notConfigured: statuses.filter((status) => status === "not_configured").length,
+      selectionPending: companies.filter((company) => {
+        const provider = company.providers.find((item) => item.providerId === providerId);
+        return provider?.selectionStatus === "partial";
+      }).length,
       total: statuses.length,
     };
   });
@@ -336,6 +354,7 @@ export async function getAdminClientIntegrationsOverview(
     warningLinks: countProviderStatuses(companies, "warning"),
     errorLinks: countProviderStatuses(companies, "error"),
     notConfiguredLinks: countProviderStatuses(companies, "not_configured"),
+    selectionPendingLinks: countSelectionPending(companies),
     criticalAlerts: alerts.filter((alert) => alert.severity === "critical").length,
     warningAlerts: alerts.filter((alert) => alert.severity === "warning").length,
     infoAlerts: alerts.filter((alert) => alert.severity === "info").length,
@@ -365,6 +384,7 @@ function buildEmptyOverview(
     warningLinks: 0,
     errorLinks: 0,
     notConfiguredLinks: 0,
+    selectionPendingLinks: 0,
     criticalAlerts: 0,
     warningAlerts: 0,
     infoAlerts: 0,
@@ -376,6 +396,7 @@ function buildEmptyOverview(
       warning: 0,
       error: 0,
       notConfigured: 0,
+      selectionPending: 0,
       total: 0,
     })),
     companies: [],
@@ -548,14 +569,25 @@ function buildMetaStatus(integrations: OrganizationIntegrationRow[], credentials
     credential(credentials, "meta", "META_AD_ACCOUNT_ID")?.updated_at ?? null,
     credential(credentials, "meta", "FACEBOOK_PAGE_ID")?.updated_at ?? null,
   ]);
+  const hasConnection = Boolean(integration || token || adAccount || pageId || instagramId);
+  const selection = resolveGuidedSelection(
+    hasConnection,
+    [
+      guidedAsset("Conta de anuncios", adAccount, true),
+      guidedAsset("Pagina Facebook", pageId, true),
+      guidedAsset("Instagram Business", instagramId, false),
+    ],
+    "Ativos obrigatorios selecionados.",
+    "Selecao guiada pendente",
+  );
 
   if (error || integration?.status === "error") {
-    return providerStatus("meta-ads", "error", integration?.external_account_label ?? adAccount, error ?? "Meta Ads retornou erro.", lastActivityAt);
+    return providerStatus("meta-ads", "error", integration?.external_account_label ?? adAccount, error ?? "Meta Ads retornou erro.", lastActivityAt, selection);
   }
 
   if ((integration?.status === "connected" || token) && adAccount && pageId) {
     const detail = instagramId ? "Conta de anuncios, pagina e Instagram mapeados." : "Conta e pagina mapeadas. Instagram opcional ausente.";
-    return providerStatus("meta-ads", "connected", integration?.external_account_label ?? adAccount, detail, lastActivityAt);
+    return providerStatus("meta-ads", "connected", integration?.external_account_label ?? adAccount, detail, lastActivityAt, selection);
   }
 
   if (integration || token || adAccount || pageId || instagramId) {
@@ -565,10 +597,10 @@ function buildMetaStatus(integrations: OrganizationIntegrationRow[], credentials
       pageId ? null : "pagina Facebook",
     ].filter(Boolean).join(", ");
 
-    return providerStatus("meta-ads", "warning", integration?.external_account_label ?? adAccount, `Pendente: ${missing || "selecionar ativos"}.`, lastActivityAt);
+    return providerStatus("meta-ads", "warning", integration?.external_account_label ?? adAccount, `Pendente: ${missing || "selecionar ativos"}.`, lastActivityAt, selection);
   }
 
-  return providerStatus("meta-ads", "not_configured", null, "Sem OAuth ou credenciais Meta.");
+  return providerStatus("meta-ads", "not_configured", null, "Sem OAuth ou credenciais Meta.", null, selection);
 }
 
 function buildGoogleStatus(integrations: OrganizationIntegrationRow[], credentials: IntegrationCredentialRow[]): AdminClientProviderStatus {
@@ -590,14 +622,24 @@ function buildGoogleStatus(integrations: OrganizationIntegrationRow[], credentia
     refreshToken?.updated_at ?? null,
     credential(credentials, "google-ads", "GOOGLE_ADS_CUSTOMER_ID")?.updated_at ?? null,
   ]);
+  const hasConnection = Boolean(integration || refreshToken || customerId || searchConsoleSite);
+  const selection = resolveGuidedSelection(
+    hasConnection,
+    [
+      guidedAsset("Conta Google Ads", customerId, true),
+      guidedAsset("Search Console", searchConsoleSite, false),
+    ],
+    "Conta Google Ads selecionada.",
+    "Selecao guiada pendente",
+  );
 
   if (error || integration?.status === "error") {
-    return providerStatus("google-growth", "error", integration?.external_account_label ?? customerId, error ?? "Google Ads retornou erro.", lastActivityAt);
+    return providerStatus("google-growth", "error", integration?.external_account_label ?? customerId, error ?? "Google Ads retornou erro.", lastActivityAt, selection);
   }
 
   if ((integration?.status === "connected" || refreshToken) && customerId) {
     const detail = searchConsoleSite ? "Google Ads e Search Console mapeados." : "Google Ads mapeado. Search Console opcional ausente.";
-    return providerStatus("google-growth", "connected", integration?.external_account_label ?? customerId, detail, lastActivityAt);
+    return providerStatus("google-growth", "connected", integration?.external_account_label ?? customerId, detail, lastActivityAt, selection);
   }
 
   if (integration || refreshToken || customerId) {
@@ -606,10 +648,10 @@ function buildGoogleStatus(integrations: OrganizationIntegrationRow[], credentia
       customerId ? null : "customer ID",
     ].filter(Boolean).join(", ");
 
-    return providerStatus("google-growth", "warning", integration?.external_account_label ?? customerId, `Pendente: ${missing || "selecionar conta"}.`, lastActivityAt);
+    return providerStatus("google-growth", "warning", integration?.external_account_label ?? customerId, `Pendente: ${missing || "selecionar conta"}.`, lastActivityAt, selection);
   }
 
-  return providerStatus("google-growth", "not_configured", null, "Sem OAuth ou credenciais Google.");
+  return providerStatus("google-growth", "not_configured", null, "Sem OAuth ou credenciais Google.", null, selection);
 }
 
 function buildMercadoPagoStatus(payments: PaymentIntegrationRow[]): AdminClientProviderStatus {
@@ -697,12 +739,74 @@ function buildIntegrationEvent(
   };
 }
 
+function guidedAsset(
+  label: string,
+  value: string | null | undefined,
+  required: boolean,
+): AdminClientProviderSelectedAsset {
+  const normalizedValue = typeof value === "string" && value.trim() ? value.trim() : null;
+
+  return {
+    label,
+    value: normalizedValue,
+    required,
+    ready: Boolean(normalizedValue),
+  };
+}
+
+function resolveGuidedSelection(
+  hasConnection: boolean,
+  selectedAssets: AdminClientProviderSelectedAsset[],
+  completeLabel: string,
+  pendingLabel: string,
+): Pick<AdminClientProviderStatus, "selectionStatus" | "selectionLabel" | "selectedAssets"> {
+  if (!hasConnection) {
+    return {
+      selectionStatus: "not_available",
+      selectionLabel: "Aguardando OAuth ou credenciais.",
+      selectedAssets,
+    };
+  }
+
+  const requiredAssets = selectedAssets.filter((asset) => asset.required);
+  const missingRequiredAssets = requiredAssets.filter((asset) => !asset.ready);
+
+  if (requiredAssets.length === 0) {
+    return {
+      selectionStatus: "not_required",
+      selectionLabel: "Nao exige selecao guiada.",
+      selectedAssets,
+    };
+  }
+
+  if (missingRequiredAssets.length === 0) {
+    const missingOptionalAssets = selectedAssets
+      .filter((asset) => !asset.required && !asset.ready)
+      .map((asset) => asset.label);
+
+    return {
+      selectionStatus: "complete",
+      selectionLabel: missingOptionalAssets.length > 0
+        ? `${completeLabel} Opcional ausente: ${missingOptionalAssets.join(", ")}.`
+        : completeLabel,
+      selectedAssets,
+    };
+  }
+
+  return {
+    selectionStatus: "partial",
+    selectionLabel: `${pendingLabel}: ${missingRequiredAssets.map((asset) => asset.label).join(", ")}.`,
+    selectedAssets,
+  };
+}
+
 function providerStatus(
   providerId: AdminClientIntegrationProviderId,
   status: AdminClientIntegrationStatus,
   accountLabel: string | null,
   detail: string,
   lastActivityAt: string | null = null,
+  selection: Partial<Pick<AdminClientProviderStatus, "selectionStatus" | "selectionLabel" | "selectedAssets">> = {},
 ): AdminClientProviderStatus {
   return {
     providerId,
@@ -713,6 +817,9 @@ function providerStatus(
     detail,
     lastActivityAt,
     issue: status === "connected" ? null : detail,
+    selectionStatus: selection.selectionStatus ?? "not_required",
+    selectionLabel: selection.selectionLabel ?? "Nao exige selecao guiada.",
+    selectedAssets: selection.selectedAssets ?? [],
   };
 }
 
@@ -725,7 +832,8 @@ function buildCompanyAlerts(
     : company.providers.filter((provider) => provider.providerId === filters.provider);
 
   return providers.flatMap((provider) => {
-    if (filters.status !== "all" && provider.status !== filters.status) return [];
+    if (filters.status === "selection_pending" && provider.selectionStatus !== "partial") return [];
+    if (filters.status !== "all" && filters.status !== "selection_pending" && provider.status !== filters.status) return [];
     return buildProviderAlerts(company, provider);
   });
 }
@@ -878,6 +986,10 @@ function countProviderStatuses(companies: AdminClientIntegrationCompany[], statu
   return companies.reduce((total, company) => total + company.providers.filter((provider) => provider.status === status).length, 0);
 }
 
+function countSelectionPending(companies: AdminClientIntegrationCompany[]) {
+  return companies.reduce((total, company) => total + company.providers.filter((provider) => provider.selectionStatus === "partial").length, 0);
+}
+
 function matchesFilters(company: AdminClientIntegrationCompany, filters: AdminClientIntegrationFilters) {
   const providers = filters.provider === "all"
     ? company.providers
@@ -885,6 +997,10 @@ function matchesFilters(company: AdminClientIntegrationCompany, filters: AdminCl
 
   if (filters.status === "all") {
     return providers.length > 0;
+  }
+
+  if (filters.status === "selection_pending") {
+    return providers.some((provider) => provider.selectionStatus === "partial");
   }
 
   return providers.some((provider) => provider.status === filters.status);
@@ -974,5 +1090,10 @@ function isProviderId(value: unknown): value is AdminClientIntegrationProviderId
 }
 
 function isFilterStatus(value: unknown): value is AdminClientIntegrationFilterStatus {
-  return value === "all" || value === "connected" || value === "warning" || value === "error" || value === "not_configured";
+  return value === "all"
+    || value === "connected"
+    || value === "warning"
+    || value === "error"
+    || value === "not_configured"
+    || value === "selection_pending";
 }

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AlertTriangle, ArrowUpRight, BellRing, CheckCircle2, Eye, Filter, History, PlugZap, RefreshCw, ShieldCheck } from "lucide-react";
+import { AlertTriangle, ArrowUpRight, BellRing, CheckCircle2, Eye, Filter, History, ListChecks, PlugZap, RefreshCw, ShieldCheck } from "lucide-react";
 import {
   DataTable,
   KpiStat,
@@ -74,10 +74,11 @@ export function AdminClientIntegrationsConsole({ overview }: { overview: AdminCl
         </Panel>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-7">
         <KpiStat label="Clientes" value={String(overview.totalCompanies)} tone="cyan" />
         <KpiStat label="Conexoes ativas" value={String(overview.connectedLinks)} tone="green" />
         <KpiStat label="Pendencias" value={String(overview.warningLinks)} tone="amber" />
+        <KpiStat label="Selecoes" value={String(overview.selectionPendingLinks)} tone={overview.selectionPendingLinks > 0 ? "amber" : "green"} />
         <KpiStat label="Erros" value={String(overview.errorLinks)} tone="rose" />
         <KpiStat label="Alertas" value={String(totalAlerts)} tone={overview.criticalAlerts > 0 ? "rose" : totalAlerts > 0 ? "amber" : "green"} />
         <KpiStat label="Ultima atividade" value={formatDateShort(overview.lastActivityAt)} tone="violet" />
@@ -372,6 +373,18 @@ function ProviderSummaryCard({ provider }: { provider: AdminClientProviderSummar
         <TinyCount label="erro" value={provider.error} tone="rose" />
         <TinyCount label="vazio" value={provider.notConfigured} tone="zinc" />
       </div>
+      {provider.selectionPending > 0 && (
+        <div
+          className="mt-3 flex items-center justify-between gap-3 rounded-xl px-3 py-2"
+          style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.18)" }}
+        >
+          <span className="flex items-center gap-2 font-mono text-[9px] uppercase tracking-wide text-amber-300">
+            <ListChecks className="h-3.5 w-3.5" />
+            selecao pendente
+          </span>
+          <span className="font-mono text-[12px] font-bold text-amber-200">{provider.selectionPending}</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -403,6 +416,11 @@ function ProviderCell({ provider }: { provider: AdminClientProviderStatus }) {
         <p className="max-w-[190px] truncate font-mono text-[10px] text-slate-300">{provider.accountLabel}</p>
       )}
       <p className="max-w-[220px] truncate text-[11px] text-slate-500">{provider.detail}</p>
+      {provider.selectionStatus !== "not_required" && (
+        <p className={`max-w-[220px] truncate font-mono text-[9px] uppercase tracking-wide ${selectionText(provider.selectionStatus)}`}>
+          {provider.selectionLabel}
+        </p>
+      )}
     </div>
   );
 }
@@ -506,6 +524,7 @@ function ProviderDetailCard({
           {provider.accountLabel}
         </p>
       )}
+      <ProviderSelectionBlock provider={provider} />
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <Link
           href={filterHref(filters, { provider: provider.providerId, companyId })}
@@ -536,6 +555,44 @@ function ProviderDetailCard({
           note={`Reteste solicitado pelo admin no detalhe do cliente para ${provider.label}.`}
         />
       </div>
+    </div>
+  );
+}
+
+function ProviderSelectionBlock({ provider }: { provider: AdminClientProviderStatus }) {
+  if (provider.selectionStatus === "not_required" && provider.selectedAssets.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="mt-3 rounded-xl p-3" style={{ background: "rgba(255,255,255,0.025)", border: "1px solid var(--ch-border)" }}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-slate-500">selecao guiada</p>
+          <p className={`mt-1 text-[11px] leading-4 ${selectionText(provider.selectionStatus)}`}>{provider.selectionLabel}</p>
+        </div>
+        <StatusBadge status={selectionStatusTone(provider.selectionStatus)} label={selectionStatusLabel(provider.selectionStatus)} />
+      </div>
+
+      {provider.selectedAssets.length > 0 && (
+        <div className="mt-3 grid gap-2">
+          {provider.selectedAssets.map((asset) => (
+            <div
+              key={`${provider.providerId}-${asset.label}`}
+              className="flex min-w-0 items-center justify-between gap-2 rounded-lg px-2 py-2"
+              style={{ background: "rgba(15,23,42,0.46)" }}
+            >
+              <div className="min-w-0">
+                <p className="truncate font-mono text-[9px] uppercase tracking-wide text-slate-500">{asset.label}</p>
+                <p className="truncate font-mono text-[10px] text-slate-300">{asset.value ?? "Nao selecionado"}</p>
+              </div>
+              <NeonBadge tone={asset.ready ? "green" : asset.required ? "amber" : "zinc"}>
+                {asset.ready ? "ok" : asset.required ? "pendente" : "opcional"}
+              </NeonBadge>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -659,6 +716,25 @@ function statusTone(status: AdminClientIntegrationStatus): StatusTone {
   if (status === "warning") return "warning";
   if (status === "error") return "critical";
   return "idle";
+}
+
+function selectionStatusTone(status: AdminClientProviderStatus["selectionStatus"]): StatusTone {
+  if (status === "complete") return "online";
+  if (status === "partial") return "warning";
+  return "idle";
+}
+
+function selectionStatusLabel(status: AdminClientProviderStatus["selectionStatus"]) {
+  if (status === "complete") return "Escolhido";
+  if (status === "partial") return "Pendente";
+  if (status === "not_available") return "Aguardando";
+  return "Nao exige";
+}
+
+function selectionText(status: AdminClientProviderStatus["selectionStatus"]) {
+  if (status === "complete") return "text-emerald-300";
+  if (status === "partial") return "text-amber-300";
+  return "text-slate-500";
 }
 
 function eventTone(status: AdminClientIntegrationEventStatus): StatusTone {
