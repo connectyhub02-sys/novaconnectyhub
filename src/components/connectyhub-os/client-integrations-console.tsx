@@ -1605,6 +1605,10 @@ function getMercadoPagoConnectionErrorMessage(reason: string | null) {
     return "Mercado Pago ainda precisa ser configurado no painel admin da ConnectyHub. Depois disso, este botao abre a autorizacao oficial.";
   }
 
+  if (reason === "invalid_oauth_credentials") {
+    return "As credenciais do aplicativo Mercado Pago da ConnectyHub nao foram aceitas. Confira se o Client ID e o App ID do aplicativo, nao o e-mail da conta, e tente novamente.";
+  }
+
   if (reason === "missing_company") {
     return "Escolha uma empresa antes de conectar o Mercado Pago.";
   }

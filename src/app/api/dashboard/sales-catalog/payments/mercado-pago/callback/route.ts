@@ -6,7 +6,9 @@ import {
   buildMercadoPagoWebhookUrl,
   calculateMercadoPagoTokenExpiration,
   exchangeMercadoPagoAuthorizationCode,
+  formatMercadoPagoOAuthError,
   getAppBaseUrl,
+  isMercadoPagoInvalidClientError,
   serializeMercadoPagoOAuthTokens,
 } from "@/lib/sales-catalog/mercado-pago";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
@@ -106,13 +108,13 @@ export async function GET(request: NextRequest) {
       .from("sales_catalog_payment_integrations")
       .update({
         status: "error",
-        last_error: error instanceof Error ? error.message : "Falha ao conectar Mercado Pago.",
+        last_error: formatMercadoPagoOAuthError(error),
       })
       .eq("id", integration.id)
       .eq("organization_id", integration.organization_id);
 
     returnUrl.searchParams.set("payment", "mercado_pago_error");
-    returnUrl.searchParams.set("reason", "token_exchange");
+    returnUrl.searchParams.set("reason", isMercadoPagoInvalidClientError(error) ? "invalid_oauth_credentials" : "token_exchange");
     return NextResponse.redirect(returnUrl);
   }
 }

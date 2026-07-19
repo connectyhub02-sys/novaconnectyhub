@@ -18,6 +18,13 @@ type MercadoPagoOAuthTokenResponse = {
   live_mode?: boolean;
 };
 
+type MercadoPagoOAuthErrorResponse = {
+  message?: string;
+  error?: string;
+  error_description?: string;
+  cause?: unknown;
+};
+
 type MercadoPagoPaymentResponse = {
   id?: number | string;
   status?: string;
@@ -50,6 +57,19 @@ type MercadoPagoOAuthConfig = {
   testTokenEnabled: boolean;
 };
 
+type MercadoPagoOAuthTokenRequestResult = {
+  body: MercadoPagoOAuthTokenResponse;
+  httpStatus: number;
+};
+
+export type MercadoPagoOAuthCredentialValidation = {
+  httpStatus: number;
+  liveMode: boolean | null;
+  scope: string | null;
+  tokenType: string | null;
+  expiresIn: number | null;
+};
+
 export type MercadoPagoPlatformBillingConfig = {
   accessToken: string;
   publicKey: string | null;
@@ -80,6 +100,18 @@ const mercadoPagoBillingCredentialNames = [
   "MERCADO_PAGO_BILLING_MODE",
 ];
 
+export class MercadoPagoOAuthRequestError extends Error {
+  readonly code: string | null;
+  readonly httpStatus: number | null;
+
+  constructor(message: string, options: { code?: string | null; httpStatus?: number | null } = {}) {
+    super(message);
+    this.name = "MercadoPagoOAuthRequestError";
+    this.code = options.code ?? null;
+    this.httpStatus = options.httpStatus ?? null;
+  }
+}
+
 export function getMercadoPagoOAuthConfig() {
   return buildMercadoPagoOAuthConfigFromCredentials(new Map());
 }
@@ -100,6 +132,50 @@ export async function isMercadoPagoTestTokenEnabled(input: { client?: SupabaseCl
   const credentials = await loadMercadoPagoPlatformCredentials(input.client, ["MERCADO_PAGO_TEST_TOKEN"]);
 
   return readEnabledFlag(getCredentialValue(credentials, ["MERCADO_PAGO_TEST_TOKEN"]));
+}
+
+export async function validateMercadoPagoOAuthCredentials(input: {
+  client?: SupabaseClient;
+  clientId?: string;
+  clientSecret?: string;
+  testTokenEnabled?: boolean;
+} = {}): Promise<MercadoPagoOAuthCredentialValidation> {
+  const clientId = input.clientId?.trim();
+  const clientSecret = input.clientSecret?.trim();
+  const hasExplicitCredentials = Boolean(clientId || clientSecret);
+  const config = hasExplicitCredentials
+    ? buildMercadoPagoOAuthConfigFromCredentials(new Map([
+        ["MERCADO_PAGO_CLIENT_ID", clientId ?? ""],
+        ["MERCADO_PAGO_CLIENT_SECRET", clientSecret ?? ""],
+        ["MERCADO_PAGO_TEST_TOKEN", input.testTokenEnabled ? "true" : "false"],
+      ]))
+    : await loadMercadoPagoOAuthConfig({ client: input.client });
+  const payload: Record<string, string> = {
+    client_id: config.clientId,
+    client_secret: config.clientSecret,
+    grant_type: "client_credentials",
+  };
+  const clientIdShapeError = readMercadoPagoClientIdShapeError(config.clientId);
+
+  if (clientIdShapeError) {
+    throw new MercadoPagoOAuthRequestError(clientIdShapeError, {
+      code: "invalid_client_id_format",
+      httpStatus: null,
+    });
+  }
+
+  const { body, httpStatus } = await requestMercadoPagoOAuthToken(
+    payload,
+    "Mercado Pago nao aceitou Client ID e Client Secret.",
+  );
+
+  return {
+    httpStatus,
+    liveMode: typeof body.live_mode === "boolean" ? body.live_mode : null,
+    scope: body.scope ?? null,
+    tokenType: body.token_type ?? null,
+    expiresIn: typeof body.expires_in === "number" ? body.expires_in : null,
+  };
 }
 
 export async function loadMercadoPagoPlatformBillingConfig(input: { client?: SupabaseClient } = {}): Promise<MercadoPagoPlatformBillingConfig> {
@@ -233,23 +309,14 @@ export async function exchangeMercadoPagoAuthorizationCode(input: {
   client?: SupabaseClient;
 }) {
   const config = await loadMercadoPagoOAuthConfig({ client: input.client });
-  const response = await fetch(`${mercadoPagoApiBaseUrl}/oauth/token`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      client_id: config.clientId,
-      client_secret: config.clientSecret,
-      code: input.code,
-      grant_type: "authorization_code",
-      redirect_uri: config.redirectUri,
-      test_token: config.testTokenEnabled ? "true" : "false",
-    }),
-  });
-  const body = await response.json().catch(() => null) as MercadoPagoOAuthTokenResponse & { message?: string; error?: string } | null;
-
-  if (!response.ok || !body?.access_token) {
-    throw new Error(body?.message ?? body?.error ?? "Mercado Pago nao retornou Access Token.");
-  }
+  const { body } = await requestMercadoPagoOAuthToken({
+    client_id: config.clientId,
+    client_secret: config.clientSecret,
+    code: input.code,
+    grant_type: "authorization_code",
+    redirect_uri: config.redirectUri,
+    test_token: config.testTokenEnabled ? "true" : "false",
+  }, "Mercado Pago nao retornou Access Token.");
 
   return body;
 }
@@ -259,23 +326,112 @@ export async function refreshMercadoPagoAccessToken(input: {
   client?: SupabaseClient;
 }) {
   const config = await loadMercadoPagoOAuthConfig({ client: input.client });
+  const { body } = await requestMercadoPagoOAuthToken({
+    client_id: config.clientId,
+    client_secret: config.clientSecret,
+    grant_type: "refresh_token",
+    refresh_token: input.refreshToken,
+  }, "Nao foi possivel renovar o token Mercado Pago.");
+
+  return body;
+}
+
+async function requestMercadoPagoOAuthToken(
+  payload: Record<string, string>,
+  fallbackMessage: string,
+): Promise<MercadoPagoOAuthTokenRequestResult> {
   const response = await fetch(`${mercadoPagoApiBaseUrl}/oauth/token`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      client_id: config.clientId,
-      client_secret: config.clientSecret,
-      grant_type: "refresh_token",
-      refresh_token: input.refreshToken,
-    }),
+    body: JSON.stringify(payload),
   });
-  const body = await response.json().catch(() => null) as MercadoPagoOAuthTokenResponse & { message?: string; error?: string } | null;
+  const body = await response.json().catch(() => null) as (MercadoPagoOAuthTokenResponse & MercadoPagoOAuthErrorResponse) | null;
 
   if (!response.ok || !body?.access_token) {
-    throw new Error(body?.message ?? body?.error ?? "Nao foi possivel renovar o token Mercado Pago.");
+    throw createMercadoPagoOAuthError(body, response.status, fallbackMessage);
   }
 
-  return body;
+  return { body, httpStatus: response.status };
+}
+
+function createMercadoPagoOAuthError(
+  body: MercadoPagoOAuthErrorResponse | null,
+  httpStatus: number,
+  fallbackMessage: string,
+) {
+  const code = readOptionalString(body?.error);
+  const message = readOptionalString(body?.message)
+    ?? readOptionalString(body?.error_description)
+    ?? readOptionalString(body?.error)
+    ?? readMercadoPagoCauseMessage(body?.cause)
+    ?? fallbackMessage;
+
+  return new MercadoPagoOAuthRequestError(message, { code, httpStatus });
+}
+
+function readMercadoPagoCauseMessage(value: unknown): string | null {
+  if (!value) return null;
+
+  if (typeof value === "string") return value;
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const message = readMercadoPagoCauseMessage(item);
+
+      if (message) return message;
+    }
+  }
+
+  if (typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    return readOptionalString(record.description)
+      ?? readOptionalString(record.message)
+      ?? readOptionalString(record.code);
+  }
+
+  return null;
+}
+
+function readOptionalString(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function readMercadoPagoClientIdShapeError(value: string) {
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+    return "O Client ID do Mercado Pago precisa ser o ID/App ID do aplicativo, nao o e-mail da conta Mercado Pago.";
+  }
+
+  if (/^(APP_USR|TEST)-/i.test(value)) {
+    return "O Client ID do Mercado Pago parece ser um Access Token ou Public Key. Use o ID/App ID do aplicativo OAuth.";
+  }
+
+  return null;
+}
+
+export function isMercadoPagoInvalidClientError(error: unknown) {
+  const code = error instanceof MercadoPagoOAuthRequestError ? error.code : null;
+  const message = error instanceof Error ? error.message.toLowerCase() : "";
+
+  return code === "invalid_client"
+    || code === "invalid_client_id_format"
+    || (message.includes("client_id") && message.includes("client_secret"))
+    || message.includes("invalid_client");
+}
+
+export function formatMercadoPagoOAuthError(error: unknown) {
+  if (error instanceof MercadoPagoOAuthRequestError && error.code === "invalid_client_id_format") {
+    return error.message;
+  }
+
+  if (isMercadoPagoInvalidClientError(error)) {
+    return "Client ID ou Client Secret do aplicativo Mercado Pago da ConnectyHub nao foram aceitos pelo Mercado Pago.";
+  }
+
+  if (error instanceof Error && error.message.trim()) {
+    return error.message.trim();
+  }
+
+  return "Falha ao validar OAuth Mercado Pago.";
 }
 
 export async function loadMercadoPagoIntegrationSecrets(

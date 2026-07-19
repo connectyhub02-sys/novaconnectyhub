@@ -595,11 +595,11 @@ export const maintenanceIntegrations: IntegrationDefinition[] = [
     modules: ["OAuth guiado", "Pix", "Cartao", "Checkout transparente", "Webhooks"],
     fields: [
       {
-        label: "Client ID",
+        label: "Client ID / App ID",
         env: "MERCADO_PAGO_CLIENT_ID",
         kind: "identifier",
         requirement: "required",
-        help: "Client ID do aplicativo Mercado Pago criado pela ConnectyHub Developers.",
+        help: "ID/App ID do aplicativo Mercado Pago criado no Mercado Pago Developers. Nao use e-mail da conta, Access Token nem Public Key.",
       },
       {
         label: "Client Secret",

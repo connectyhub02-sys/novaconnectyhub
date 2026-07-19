@@ -4,6 +4,11 @@ import { NextResponse } from "next/server";
 import { createClient as createSupabaseServiceClient } from "@supabase/supabase-js";
 import { maintenanceIntegrations, type CredentialDefinition } from "@/lib/maintenance-vault";
 import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
+import {
+  formatMercadoPagoOAuthError,
+  MercadoPagoOAuthRequestError,
+  validateMercadoPagoOAuthCredentials,
+} from "@/lib/sales-catalog/mercado-pago";
 import { isSupabaseAuthConfigured } from "@/lib/supabase/env";
 import { createClient } from "@/lib/supabase/server";
 
@@ -558,6 +563,7 @@ async function testMercadoPago(credentials: CredentialBag): Promise<ConnectionTe
   const clientSecret = getCredential(credentials, ["MERCADO_PAGO_CLIENT_SECRET"]);
   const redirectUri = getCredential(credentials, ["MERCADO_PAGO_REDIRECT_URI"]) || `${resolveAppBaseUrlForTest()}/api/dashboard/sales-catalog/payments/mercado-pago/callback`;
   const webhookSecret = getCredential(credentials, ["MERCADO_PAGO_WEBHOOK_SECRET"]);
+  const testTokenEnabled = readEnabledFlag(getCredential(credentials, ["MERCADO_PAGO_TEST_TOKEN"]));
 
   if (!clientId || !clientSecret) {
     return offline("Preencha Client ID e Client Secret do aplicativo Mercado Pago antes de testar.");
@@ -567,11 +573,33 @@ async function testMercadoPago(credentials: CredentialBag): Promise<ConnectionTe
     return offline("Redirect URI do Mercado Pago precisa ser uma URL https valida.");
   }
 
-  return online("Mercado Pago pronto para OAuth. Client ID, Client Secret e Redirect URI estao presentes; o secret e validado no retorno oficial do Mercado Pago.", {
-    details: webhookSecret
-      ? ["Webhook signature configurada para validar notificacoes."]
-      : ["Webhook signature ainda ausente; notificacoes serao processadas sem validacao HMAC ate configurar."],
-  });
+  try {
+    const validation = await validateMercadoPagoOAuthCredentials({
+      clientId,
+      clientSecret,
+      testTokenEnabled,
+    });
+    const details = [
+      "Client ID e Client Secret validados no /oauth/token do Mercado Pago.",
+      `Modo OAuth: ${testTokenEnabled ? "sandbox" : "production"}.`,
+      webhookSecret
+        ? "Webhook signature configurada para validar notificacoes."
+        : "Webhook signature ainda ausente; notificacoes serao processadas sem validacao HMAC ate configurar.",
+    ];
+
+    if (validation.scope) {
+      details.push(`Scopes retornados: ${validation.scope}.`);
+    }
+
+    return online("Mercado Pago online. App OAuth validado e pronto para o cliente autorizar a propria conta.", {
+      httpStatus: validation.httpStatus,
+      details,
+    });
+  } catch (error) {
+    return offline(formatMercadoPagoOAuthError(error), {
+      httpStatus: error instanceof MercadoPagoOAuthRequestError ? error.httpStatus ?? undefined : undefined,
+    });
+  }
 }
 
 async function testConfiguredCredentials(credentials: CredentialBag): Promise<ConnectionTestResult> {
@@ -669,6 +697,10 @@ function normalizeGoogleAdsApiVersion(value: string) {
   }
 
   return trimmed.startsWith("v") ? trimmed : `v${trimmed}`;
+}
+
+function readEnabledFlag(value: string) {
+  return value.trim().toLowerCase() === "true";
 }
 
 function resolveAppBaseUrlForTest() {
