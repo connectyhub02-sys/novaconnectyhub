@@ -124,8 +124,115 @@ type MetaWebhookSimulationSnapshot = {
 
 type MetaWebhookActionResponse = {
   activation?: MetaWebhookActivationSnapshot;
+  monitor?: MetaWebhookMonitorSnapshot;
+  replay?: MetaWebhookReplaySnapshot;
   simulation?: MetaWebhookSimulationSnapshot;
   error?: string;
+};
+
+type MetaWebhookMonitorStatus = "received" | "processed" | "ignored" | "failed";
+type MetaWebhookMonitorHealth = "idle" | "healthy" | "warning" | "critical";
+type MetaWebhookMonitorChannel =
+  | "facebook_comments"
+  | "facebook_messenger"
+  | "instagram_comments"
+  | "instagram_direct"
+  | "unknown";
+
+type MetaWebhookMonitorSummary = {
+  total: number;
+  received: number;
+  processed: number;
+  ignored: number;
+  failed: number;
+  replayable: number;
+  processedRate: number;
+  health: MetaWebhookMonitorHealth;
+  lastReceivedAt: string | null;
+  lastFailedAt: string | null;
+};
+
+type MetaWebhookMonitorEvent = {
+  id: string;
+  eventType: string;
+  status: MetaWebhookMonitorStatus;
+  channel: MetaWebhookMonitorChannel;
+  sourceEventId: string | null;
+  assetId: string | null;
+  leadIdentity: string | null;
+  direction: "inbound" | "outbound" | "system" | "unknown";
+  textPreview: string | null;
+  errorMessage: string | null;
+  receivedAt: string | null;
+  processedAt: string | null;
+  replayable: boolean;
+  origin: "meta" | "simulation";
+};
+
+type MetaWebhookMonitorChannelSummary = MetaWebhookMonitorSummary & {
+  channel: MetaWebhookMonitorChannel;
+};
+
+type MetaWebhookMonitorAgentQueue = {
+  total: number;
+  queued: number;
+  running: number;
+  needsApproval: number;
+  completed: number;
+  failed: number;
+  cancelled: number;
+  latestAt: string | null;
+  runs: Array<{
+    id: string;
+    status: string;
+    channel: MetaWebhookMonitorChannel | null;
+    triggerSource: string | null;
+    summary: string | null;
+    errorMessage: string | null;
+    startedAt: string | null;
+    finishedAt: string | null;
+  }>;
+};
+
+type MetaWebhookMonitorDiagnostic = {
+  id: string;
+  label: string;
+  status: "ok" | "warning" | "critical";
+  detail: string;
+};
+
+type MetaWebhookMonitorSnapshot = {
+  generatedAt: string;
+  integration: {
+    id: string | null;
+    status: string;
+    label: string;
+    accountLabel: string | null;
+    lastSyncAt: string | null;
+    lastError: string | null;
+    pageId: string | null;
+    instagramBusinessId: string | null;
+    activationOk: boolean;
+  };
+  summary: MetaWebhookMonitorSummary;
+  channels: MetaWebhookMonitorChannelSummary[];
+  agentQueue: MetaWebhookMonitorAgentQueue;
+  diagnostics: MetaWebhookMonitorDiagnostic[];
+  events: MetaWebhookMonitorEvent[];
+  recentActions: Array<{
+    id: string;
+    action: string;
+    status: "success" | "warning" | "error";
+    createdAt: string | null;
+  }>;
+};
+
+type MetaWebhookReplaySnapshot = {
+  ok: boolean;
+  eventId: string;
+  status: "normalized" | "ignored" | "skipped" | "failed";
+  detail: string;
+  replayedAt: string;
 };
 
 const categoryIcons: Record<IntegrationCategory, LucideIcon> = {
@@ -168,6 +275,8 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
   const [disconnectingGuidedProvider, setDisconnectingGuidedProvider] = useState<string | null>(null);
   const [savingSelectionProvider, setSavingSelectionProvider] = useState<string | null>(null);
   const [metaWebhookAction, setMetaWebhookAction] = useState<string | null>(null);
+  const [metaWebhookMonitor, setMetaWebhookMonitor] = useState<MetaWebhookMonitorSnapshot | null>(null);
+  const [loadingMetaWebhookMonitor, setLoadingMetaWebhookMonitor] = useState(false);
   const [guidedSelectionDrafts, setGuidedSelectionDrafts] = useState<Record<string, GuidedSelectionDraft>>({});
   const [newWebhookSecret, setNewWebhookSecret] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
@@ -272,6 +381,37 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
 
     return () => window.clearTimeout(timeoutId);
   }, []);
+
+  useEffect(() => {
+    if (!selectedCompanyId || metaConnection?.status !== "connected") {
+      return;
+    }
+
+    const controller = new AbortController();
+
+    async function loadSilentMonitor() {
+      try {
+        const params = new URLSearchParams({ companyId: selectedCompanyId });
+        const response = await fetch(`/api/dashboard/integrations/meta/webhooks?${params.toString()}`, {
+          method: "GET",
+          signal: controller.signal,
+        });
+        const data = await response.json().catch(() => null) as MetaWebhookActionResponse | null;
+
+        if (response.ok && data?.monitor) {
+          setMetaWebhookMonitor(data.monitor);
+        }
+      } catch (error) {
+        if (!(error instanceof DOMException && error.name === "AbortError")) {
+          setMetaWebhookMonitor(null);
+        }
+      }
+    }
+
+    void loadSilentMonitor();
+
+    return () => controller.abort();
+  }, [selectedCompanyId, metaConnection?.status, metaConnection?.lastSyncAt]);
 
   async function createUniversalWebhook() {
     if (!selectedCompanyId || creatingWebhook) return;
@@ -438,6 +578,9 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
         ...current.filter((connection) => !(connection.companyId === selectedCompanyId && connection.providerId === providerId)),
       ]);
       setCredentialSnapshots((current) => current.filter((credential) => !(credential.companyId === selectedCompanyId && credential.providerId === providerId)));
+      if (providerId === "meta-ads") {
+        setMetaWebhookMonitor(null);
+      }
       setNotice({
         tone: "success",
         message: providerId === "meta-ads" ? "Meta desconectado desta empresa." : "Google desconectado desta empresa.",
@@ -529,6 +672,52 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
     }, ...current].slice(0, 80));
   }
 
+  async function loadMetaWebhookMonitor(input: { silent?: boolean; signal?: AbortSignal } = {}) {
+    if (!selectedCompanyId) return;
+
+    if (!input.silent) {
+      setLoadingMetaWebhookMonitor(true);
+      setNotice(null);
+    }
+
+    try {
+      const params = new URLSearchParams({ companyId: selectedCompanyId });
+      const response = await fetch(`/api/dashboard/integrations/meta/webhooks?${params.toString()}`, {
+        method: "GET",
+        signal: input.signal,
+      });
+      const data = await response.json().catch(() => null) as MetaWebhookActionResponse | null;
+
+      if (!response.ok || !data?.monitor) {
+        throw new Error(data?.error ?? "Nao foi possivel carregar o monitor Meta.");
+      }
+
+      setMetaWebhookMonitor(data.monitor);
+
+      if (!input.silent) {
+        setNotice({
+          tone: data.monitor.summary.failed > 0 ? "warning" : "success",
+          message: `Monitor Meta atualizado: ${data.monitor.summary.total} evento(s) recentes.`,
+        });
+      }
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        return;
+      }
+
+      if (!input.silent) {
+        setNotice({
+          tone: "error",
+          message: error instanceof Error ? error.message : "Erro ao carregar monitor Meta.",
+        });
+      }
+    } finally {
+      if (!input.silent) {
+        setLoadingMetaWebhookMonitor(false);
+      }
+    }
+  }
+
   async function runMetaWebhookAction(action: "subscribe_page" | "simulate", scenario?: MetaWebhookSimulationScenario) {
     if (!selectedCompanyId || metaWebhookAction) return;
 
@@ -584,6 +773,7 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
           tone: activation.ok ? "success" : "warning",
           message: activation.detail,
         });
+        void loadMetaWebhookMonitor({ silent: true });
       }
 
       if (data.simulation) {
@@ -618,11 +808,61 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
           tone: simulationOk ? "success" : "warning",
           message: simulation.detail,
         });
+        void loadMetaWebhookMonitor({ silent: true });
       }
     } catch (error) {
       setNotice({
         tone: "error",
         message: error instanceof Error ? error.message : "Erro ao executar acao Meta.",
+      });
+    } finally {
+      setMetaWebhookAction(null);
+    }
+  }
+
+  async function replayMetaWebhookEvent(eventId: string) {
+    if (!selectedCompanyId || metaWebhookAction) return;
+
+    setMetaWebhookAction(`replay:${eventId}`);
+    setNotice(null);
+
+    try {
+      const response = await fetch("/api/dashboard/integrations/meta/webhooks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "replay_event",
+          companyId: selectedCompanyId,
+          eventId,
+        }),
+      });
+      const data = await response.json().catch(() => null) as MetaWebhookActionResponse | null;
+
+      if (!response.ok || !data?.replay) {
+        throw new Error(data?.error ?? "Nao foi possivel reprocessar o evento Meta.");
+      }
+
+      if (data.monitor) {
+        setMetaWebhookMonitor(data.monitor);
+      }
+
+      setActionLogs((current) => [{
+        id: `local-meta-webhook-replay-${Date.now()}`,
+        action: "meta.webhook.replay",
+        companyId: selectedCompanyId,
+        createdAt: data.replay!.replayedAt,
+        metadata: data.replay!,
+        providerId: "meta-ads",
+        status: data.replay!.ok ? "success" as const : data.replay!.status === "failed" ? "error" as const : "warning" as const,
+      }, ...current].slice(0, 80));
+      setNotice({
+        tone: data.replay.ok ? "success" : data.replay.status === "failed" ? "error" : "warning",
+        message: data.replay.detail,
+      });
+    } catch (error) {
+      setNotice({
+        tone: "error",
+        message: error instanceof Error ? error.message : "Erro ao reprocessar evento Meta.",
       });
     } finally {
       setMetaWebhookAction(null);
@@ -726,6 +966,7 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
               setNotice(null);
               setNewWebhookSecret(null);
               setMetaWebhookAction(null);
+              setMetaWebhookMonitor(null);
               setGuidedSelectionDrafts({});
             }}
             className="h-11 w-full rounded-xl px-3 text-[13px] outline-none"
@@ -766,7 +1007,9 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
             disconnecting={disconnectingGuidedProvider === "meta-ads"}
             kind="meta"
             actionLogs={metaActionLogs}
+            loadingMetaWebhookMonitor={loadingMetaWebhookMonitor}
             metaWebhookAction={metaWebhookAction}
+            metaWebhookMonitor={metaWebhookMonitor}
             savingSelection={savingSelectionProvider === "meta-ads"}
             selectionDraft={guidedSelectionDrafts[guidedSelectionKey(selectedCompanyId, "meta-ads")] ?? {}}
             selectedCompanyId={selectedCompanyId}
@@ -775,6 +1018,8 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
             onConnect={(event) => handleGuidedOAuthConnectClick("meta-ads", event)}
             onDisconnect={() => disconnectGuidedOAuth("meta-ads")}
             onMetaReviewTestResult={handleMetaReviewTestResult}
+            onRefreshMetaWebhookMonitor={() => loadMetaWebhookMonitor()}
+            onReplayMetaWebhookEvent={replayMetaWebhookEvent}
             onSaveSelection={(selection) => saveGuidedSelection("meta-ads", selection)}
             onSelectionChange={(selection) => {
               setGuidedSelectionDrafts((current) => ({
@@ -1294,7 +1539,9 @@ function GuidedOAuthCard({
   connecting,
   disconnecting,
   kind,
+  loadingMetaWebhookMonitor,
   metaWebhookAction,
+  metaWebhookMonitor,
   savingSelection,
   selectionDraft,
   selectedCompanyId,
@@ -1303,6 +1550,8 @@ function GuidedOAuthCard({
   onConnect,
   onDisconnect,
   onMetaReviewTestResult,
+  onRefreshMetaWebhookMonitor,
+  onReplayMetaWebhookEvent,
   onSaveSelection,
   onSelectionChange,
   onSimulateMetaWebhook,
@@ -1314,7 +1563,9 @@ function GuidedOAuthCard({
   connecting: boolean;
   disconnecting: boolean;
   kind: "meta" | "google";
+  loadingMetaWebhookMonitor?: boolean;
   metaWebhookAction?: string | null;
+  metaWebhookMonitor?: MetaWebhookMonitorSnapshot | null;
   savingSelection: boolean;
   selectionDraft: GuidedSelectionDraft;
   selectedCompanyId: string;
@@ -1323,6 +1574,8 @@ function GuidedOAuthCard({
   onConnect: (event: MouseEvent<HTMLAnchorElement>) => void;
   onDisconnect: () => void;
   onMetaReviewTestResult?: (response: ReviewTestResponse) => void;
+  onRefreshMetaWebhookMonitor?: () => void;
+  onReplayMetaWebhookEvent?: (eventId: string) => void;
   onSaveSelection: (selection: GuidedSelectionDraft) => void;
   onSelectionChange: (selection: GuidedSelectionDraft) => void;
   onSimulateMetaWebhook?: (scenario: MetaWebhookSimulationScenario) => void;
@@ -1496,11 +1749,15 @@ function GuidedOAuthCard({
             actionLogs={actionLogs}
             activation={metaWebhookActivation}
             connected={connected}
+            loadingMonitor={loadingMetaWebhookMonitor ?? false}
             metaWebhookAction={metaWebhookAction ?? null}
+            monitor={metaWebhookMonitor ?? null}
             review={metaReview}
             simulation={metaWebhookSimulation}
             onActivateWebhooks={onActivateMetaWebhooks}
             onReviewResult={onMetaReviewTestResult}
+            onRefreshMonitor={onRefreshMetaWebhookMonitor}
+            onReplayEvent={onReplayMetaWebhookEvent}
             onSimulateWebhook={onSimulateMetaWebhook}
           />
         ) : null}
@@ -1513,21 +1770,29 @@ function MetaReadinessPanel({
   actionLogs,
   activation,
   connected,
+  loadingMonitor,
   metaWebhookAction,
+  monitor,
   review,
   simulation,
   onActivateWebhooks,
   onReviewResult,
+  onRefreshMonitor,
+  onReplayEvent,
   onSimulateWebhook,
 }: {
   actionLogs: ClientIntegrationActionLog[];
   activation: MetaWebhookActivationSnapshot | null;
   connected: boolean;
+  loadingMonitor: boolean;
   metaWebhookAction: string | null;
+  monitor: MetaWebhookMonitorSnapshot | null;
   review: MetaReviewSnapshot | null;
   simulation: MetaWebhookSimulationSnapshot | null;
   onActivateWebhooks?: () => void;
   onReviewResult?: (response: ReviewTestResponse) => void;
+  onRefreshMonitor?: () => void;
+  onReplayEvent?: (eventId: string) => void;
   onSimulateWebhook?: (scenario: MetaWebhookSimulationScenario) => void;
 }) {
   const summary = review?.readiness;
@@ -1659,6 +1924,88 @@ function MetaReadinessPanel({
         ) : null}
       </div>
 
+      <div className="mt-3 border-t border-white/10 pt-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="min-w-0">
+            <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-slate-500">monitor operacional</p>
+            <p className="mt-1 truncate text-[11px] text-slate-500">
+              {monitor ? `${monitor.summary.total} evento(s), ${monitor.summary.failed} falha(s)` : "Eventos Meta reais e simulados"}
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled={!connected || loadingMonitor || !onRefreshMonitor}
+            onClick={onRefreshMonitor}
+            className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border px-3 font-mono text-[9px] font-bold uppercase tracking-wide text-slate-300 transition hover:bg-cyan-400/10 hover:text-cyan-100 disabled:cursor-not-allowed disabled:opacity-60"
+            style={{ borderColor: "var(--ch-border)" }}
+          >
+            {loadingMonitor ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5" />}
+            Atualizar
+          </button>
+        </div>
+
+        {monitor ? (
+          <div className="mt-3 grid gap-3">
+            <div className="grid grid-cols-4 gap-2">
+              <ReadinessMiniStat label="Total" value={String(monitor.summary.total)} tone="green" />
+              <ReadinessMiniStat label="OK" value={String(monitor.summary.processed)} tone="green" />
+              <ReadinessMiniStat label="Replay" value={String(monitor.summary.replayable)} tone={monitor.summary.replayable > 0 ? "amber" : "green"} />
+              <ReadinessMiniStat label="Agentes" value={String(monitor.agentQueue.total)} tone={monitor.agentQueue.failed > 0 ? "rose" : "green"} />
+            </div>
+
+            <div className="grid gap-2 sm:grid-cols-2">
+              {monitor.diagnostics.slice(0, 4).map((diagnostic) => (
+                <div key={diagnostic.id} className="min-w-0 border-t border-white/10 pt-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="truncate text-[11px] font-semibold text-slate-200">{diagnostic.label}</p>
+                    <span className={cn(
+                      "shrink-0 font-mono text-[8px] uppercase tracking-wide",
+                      diagnostic.status === "ok" ? "text-emerald-300" : diagnostic.status === "warning" ? "text-amber-300" : "text-rose-300",
+                    )}>
+                      {diagnostic.status === "ok" ? "ok" : diagnostic.status === "warning" ? "atencao" : "critico"}
+                    </span>
+                  </div>
+                  <p className="mt-1 line-clamp-2 text-[10px] leading-4 text-slate-500">{diagnostic.detail}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="grid gap-1.5">
+              {monitor.channels.filter((channel) => channel.total > 0).slice(0, 5).map((channel) => (
+                <div key={channel.channel} className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2 border-t border-white/10 pt-1.5">
+                  <p className="truncate text-[11px] text-slate-300">{formatMetaMonitorChannel(channel.channel)}</p>
+                  <span className="font-mono text-[9px] uppercase text-emerald-300">{channel.processed} ok</span>
+                  <span className={cn("font-mono text-[9px] uppercase", channel.failed > 0 ? "text-rose-300" : "text-slate-500")}>
+                    {channel.failed} falha(s)
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            {monitor.events.length ? (
+              <div className="grid gap-1.5">
+                {monitor.events.slice(0, 8).map((event) => (
+                  <MetaWebhookEventRow
+                    key={event.id}
+                    event={event}
+                    replaying={metaWebhookAction === `replay:${event.id}`}
+                    onReplay={onReplayEvent}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-lg border border-dashed border-white/10 px-3 py-4 text-center text-[11px] text-slate-500">
+                Sem eventos Meta recebidos para esta empresa.
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="mt-3 rounded-lg border border-dashed border-white/10 px-3 py-4 text-center text-[11px] text-slate-500">
+            Atualize o monitor depois de conectar a Meta ou simular um evento.
+          </div>
+        )}
+      </div>
+
       {actionLogs.length ? (
         <div className="mt-3 border-t border-white/10 pt-3">
           <div className="mb-2 flex items-center gap-2">
@@ -1727,6 +2074,54 @@ function MetaReviewResultRow({ result }: { result: ReviewTestResult }) {
         )}>
           {result.ok ? "ok" : result.severity === "recommended" ? "alerta" : "acao"}
         </span>
+      </div>
+    </div>
+  );
+}
+
+function MetaWebhookEventRow({
+  event,
+  replaying,
+  onReplay,
+}: {
+  event: MetaWebhookMonitorEvent;
+  replaying: boolean;
+  onReplay?: (eventId: string) => void;
+}) {
+  return (
+    <div className="grid gap-2 border-t border-white/10 pt-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className={cn(
+            "rounded-md border px-1.5 py-0.5 font-mono text-[8px] uppercase",
+            metaMonitorStatusClass(event.status),
+          )}>
+            {formatMetaMonitorStatus(event.status)}
+          </span>
+          <p className="truncate text-[11px] font-semibold text-slate-100">{formatMetaMonitorChannel(event.channel)}</p>
+          <span className="font-mono text-[8px] uppercase tracking-wide text-slate-500">{event.origin}</span>
+        </div>
+        <p className="mt-1 line-clamp-2 text-[10px] leading-4 text-slate-500">
+          {event.textPreview ?? event.errorMessage ?? event.eventType}
+        </p>
+        <p className="mt-1 truncate font-mono text-[8px] uppercase tracking-wide text-slate-600">
+          {event.leadIdentity ?? event.assetId ?? event.sourceEventId ?? event.id}
+        </p>
+      </div>
+      <div className="flex items-center justify-between gap-2 sm:justify-end">
+        <span className="shrink-0 font-mono text-[9px] uppercase text-slate-500">
+          {formatShortDate(event.receivedAt ?? "")}
+        </span>
+        <button
+          type="button"
+          disabled={!event.replayable || replaying || !onReplay}
+          onClick={() => onReplay?.(event.id)}
+          className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-lg border px-2.5 font-mono text-[8px] font-bold uppercase tracking-wide text-amber-100 transition hover:bg-amber-400/10 disabled:cursor-not-allowed disabled:opacity-50"
+          style={{ borderColor: "var(--ch-border)" }}
+        >
+          {replaying ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
+          Replay
+        </button>
       </div>
     </div>
   );
@@ -2296,6 +2691,35 @@ function normalizeMetaAdAccountId(value: string | null) {
   }
 
   return trimmed.startsWith("act_") ? trimmed : `act_${trimmed.replace(/^act_/, "")}`;
+}
+
+function formatMetaMonitorChannel(value: MetaWebhookMonitorChannel | null) {
+  switch (value) {
+    case "facebook_comments":
+      return "Comentarios Facebook";
+    case "facebook_messenger":
+      return "Messenger Facebook";
+    case "instagram_comments":
+      return "Comentarios Instagram";
+    case "instagram_direct":
+      return "Direct Instagram";
+    default:
+      return "Meta desconhecido";
+  }
+}
+
+function formatMetaMonitorStatus(value: MetaWebhookMonitorStatus) {
+  if (value === "processed") return "ok";
+  if (value === "ignored") return "ignorado";
+  if (value === "failed") return "falha";
+  return "recebido";
+}
+
+function metaMonitorStatusClass(value: MetaWebhookMonitorStatus) {
+  if (value === "processed") return "border-emerald-300/20 bg-emerald-300/10 text-emerald-200";
+  if (value === "failed") return "border-rose-300/20 bg-rose-300/10 text-rose-200";
+  if (value === "ignored") return "border-slate-300/20 bg-slate-300/10 text-slate-300";
+  return "border-amber-300/20 bg-amber-300/10 text-amber-200";
 }
 
 function formatShortDate(value: string) {
