@@ -9,6 +9,7 @@ import {
 import { inngest } from "@/lib/inngest/client";
 import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
 import { createServiceClient } from "@/lib/supabase/service";
+import { appendMetaDispatchAudit } from "./social-dispatch-audit";
 import {
   resolveMetaSocialDispatchTarget,
   type MetaSocialDispatchTarget,
@@ -73,14 +74,19 @@ export async function enqueueApprovedMetaSocialDispatch(input: {
       runId: input.runId,
     },
   }).catch(async (error: unknown) => {
+    const message = error instanceof Error ? error.message : "Falha ao disparar Inngest.";
     await input.client
       .from("agent_runs")
       .update({
-        metadata: {
+        metadata: appendMetaDispatchAudit({
           ...input.metadata,
-          meta_dispatch_inngest_error: error instanceof Error ? error.message : "Falha ao disparar Inngest.",
+          meta_dispatch_inngest_error: message,
           meta_dispatch_inngest_failed_at: new Date().toISOString(),
-        },
+        }, {
+          type: "dispatch_enqueue_failed",
+          status: readString(input.metadata.meta_dispatch_status) ?? "pending_adapter",
+          message,
+        }),
       })
       .eq("id", input.runId);
   });
@@ -122,12 +128,16 @@ export async function processApprovedMetaSocialDispatch(input: {
   }
 
   const startedAt = new Date().toISOString();
-  const workingMetadata = {
+  const workingMetadata = appendMetaDispatchAudit({
     ...metadata,
     meta_dispatch_status: "sending",
     meta_dispatch_started_at: startedAt,
     meta_dispatch_attempt_count: readNumber(metadata.meta_dispatch_attempt_count) + 1,
-  };
+  }, {
+    at: startedAt,
+    type: "dispatch_started",
+    status: "sending",
+  });
 
   await client
     .from("agent_runs")
@@ -190,7 +200,7 @@ export async function processApprovedMetaSocialDispatch(input: {
       .from("agent_runs")
       .update({
         error_message: null,
-        metadata: {
+        metadata: appendMetaDispatchAudit({
           ...workingMetadata,
           meta_dispatch_status: "sent",
           meta_dispatched_at: sentAt,
@@ -202,7 +212,14 @@ export async function processApprovedMetaSocialDispatch(input: {
           outbound_conversation_message_id: outboundMessage.id,
           graph_response: sanitizeGraphResponse(graph.data),
           ready_for_meta_dispatch: false,
-        },
+        }, {
+          at: sentAt,
+          type: "dispatch_sent",
+          status: "sent",
+          httpStatus: graph.httpStatus,
+          providerMessageId,
+          targetKind: target.kind,
+        }),
       })
       .eq("id", run.id);
 
@@ -499,18 +516,24 @@ async function updateConversationAfterDispatch(
 
 async function markDispatchFailed(client: SupabaseClient, run: AgentRunRow, message: string) {
   const metadata = readRecord(run.metadata) ?? {};
+  const failedAt = new Date().toISOString();
 
   await client
     .from("agent_runs")
     .update({
       error_message: message,
-      metadata: {
+      metadata: appendMetaDispatchAudit({
         ...metadata,
         meta_dispatch_status: "failed",
         meta_dispatch_error: message,
-        meta_dispatch_failed_at: new Date().toISOString(),
+        meta_dispatch_failed_at: failedAt,
         ready_for_meta_dispatch: true,
-      },
+      }, {
+        at: failedAt,
+        type: "dispatch_failed",
+        status: "failed",
+        message,
+      }),
     })
     .eq("id", run.id);
 }

@@ -21,7 +21,9 @@ import {
   MapPin,
   MessageCircle,
   Phone,
+  RotateCcw,
   Search,
+  Send,
   ShieldCheck,
   Target,
   X,
@@ -29,7 +31,12 @@ import {
 } from "lucide-react";
 import { KpiStat, NeonBadge, PageHeader, Panel, ProgressBar } from "@/components/connectyhub-os/panel-primitives";
 import { cn } from "@/lib/utils";
-import type { ClientSocialApproval } from "@/lib/client-os/social-approvals";
+import type {
+  ClientSocialApproval,
+  ClientSocialDispatch,
+  ClientSocialDispatchMonitor,
+  ClientSocialDispatchStatus,
+} from "@/lib/client-os/social-approvals";
 import type {
   ClientLeadActivity,
   ClientLeadConversationFile,
@@ -44,6 +51,7 @@ type ConsoleMode = "leads" | "crm" | "conversas";
 type LeadCrmConsoleProps = {
   mode: ConsoleMode;
   socialApprovals?: ClientSocialApproval[];
+  socialDispatchMonitor?: ClientSocialDispatchMonitor;
   workspace: ClientLeadCrmWorkspace;
 };
 
@@ -66,7 +74,25 @@ const statusMeta: Record<ClientLeadStatus, { label: string; tone: "cyan" | "gree
   archived: { label: "Arquivado", tone: "zinc", dot: "bg-slate-400" },
 };
 
-export function LeadCrmConsole({ mode, socialApprovals: initialSocialApprovals = [], workspace }: LeadCrmConsoleProps) {
+const emptySocialDispatchMonitor: ClientSocialDispatchMonitor = {
+  items: [],
+  summary: {
+    failed: 0,
+    pending: 0,
+    rejected: 0,
+    retryable: 0,
+    sending: 0,
+    sent: 0,
+    total: 0,
+  },
+};
+
+export function LeadCrmConsole({
+  mode,
+  socialApprovals: initialSocialApprovals = [],
+  socialDispatchMonitor: initialSocialDispatchMonitor = emptySocialDispatchMonitor,
+  workspace,
+}: LeadCrmConsoleProps) {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<"all" | ClientLeadStatus>("all");
   const [expandedLeadId, setExpandedLeadId] = useState<string | null>(workspace.leads[0]?.id ?? null);
@@ -74,6 +100,7 @@ export function LeadCrmConsole({ mode, socialApprovals: initialSocialApprovals =
   const [conversationPane, setConversationPane] = useState<"inbox" | "chat">("inbox");
   const [detailsLeadId, setDetailsLeadId] = useState<string | null>(null);
   const [socialApprovals, setSocialApprovals] = useState<ClientSocialApproval[]>(initialSocialApprovals);
+  const [socialDispatchMonitor, setSocialDispatchMonitor] = useState<ClientSocialDispatchMonitor>(initialSocialDispatchMonitor);
 
   const filteredLeads = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -184,9 +211,11 @@ export function LeadCrmConsole({ mode, socialApprovals: initialSocialApprovals =
           setDetailsLeadId={setDetailsLeadId}
           setSearch={setSearch}
           setSocialApprovals={setSocialApprovals}
+          setSocialDispatchMonitor={setSocialDispatchMonitor}
           setSelectedLeadId={setSelectedLeadId}
           setStatus={setStatus}
           socialApprovals={socialApprovals}
+          socialDispatchMonitor={socialDispatchMonitor}
           status={status}
           totalLeads={workspace.leads.length}
         />
@@ -442,9 +471,11 @@ function ConversationsView({
   setDetailsLeadId,
   setSearch,
   setSocialApprovals,
+  setSocialDispatchMonitor,
   setSelectedLeadId,
   setStatus,
   socialApprovals,
+  socialDispatchMonitor,
   status,
   totalLeads,
 }: {
@@ -456,22 +487,69 @@ function ConversationsView({
   setConversationPane: (pane: "inbox" | "chat") => void;
   setDetailsLeadId: (id: string) => void;
   setSearch: (value: string) => void;
-  setSocialApprovals: (updater: (items: ClientSocialApproval[]) => ClientSocialApproval[]) => void;
+  setSocialApprovals: (value: ClientSocialApproval[] | ((items: ClientSocialApproval[]) => ClientSocialApproval[])) => void;
+  setSocialDispatchMonitor: (value: ClientSocialDispatchMonitor) => void;
   setSelectedLeadId: (id: string) => void;
   setStatus: (value: "all" | ClientLeadStatus) => void;
   socialApprovals: ClientSocialApproval[];
+  socialDispatchMonitor: ClientSocialDispatchMonitor;
   status: "all" | ClientLeadStatus;
   totalLeads: number;
 }) {
+  const [refreshingSocialOps, setRefreshingSocialOps] = useState(false);
+
+  async function refreshSocialOperations() {
+    setRefreshingSocialOps(true);
+
+    try {
+      const response = await fetch("/api/dashboard/social-approvals", { cache: "no-store" });
+      const payload = await response.json().catch(() => ({})) as {
+        approvals?: ClientSocialApproval[];
+        dispatchMonitor?: ClientSocialDispatchMonitor;
+        error?: string;
+      };
+
+      if (!response.ok) {
+        throw new Error(typeof payload.error === "string" ? payload.error : "Nao foi possivel atualizar operacao Meta.");
+      }
+
+      if (Array.isArray(payload.approvals)) {
+        setSocialApprovals(payload.approvals);
+      }
+
+      if (payload.dispatchMonitor?.summary && Array.isArray(payload.dispatchMonitor.items)) {
+        setSocialDispatchMonitor(payload.dispatchMonitor);
+      }
+    } finally {
+      setRefreshingSocialOps(false);
+    }
+  }
+
   return (
     <div className="space-y-5">
       <SocialApprovalQueue
         approvals={socialApprovals}
-        onReviewed={(runId) => setSocialApprovals((items) => items.filter((item) => item.id !== runId))}
+        onReviewed={(runId, action) => {
+          setSocialApprovals((items) => items.filter((item) => item.id !== runId));
+
+          if (action === "approve") {
+            void refreshSocialOperations().catch(() => undefined);
+          }
+        }}
         onSelectLead={(leadId) => {
           setSelectedLeadId(leadId);
           setConversationPane("chat");
         }}
+      />
+
+      <SocialDispatchMonitorPanel
+        monitor={socialDispatchMonitor}
+        onRefresh={refreshSocialOperations}
+        onSelectLead={(leadId) => {
+          setSelectedLeadId(leadId);
+          setConversationPane("chat");
+        }}
+        refreshing={refreshingSocialOps}
       />
 
       <div className="grid gap-5 xl:grid-cols-[390px_minmax(0,1fr)]">
@@ -576,7 +654,7 @@ function SocialApprovalQueue({
   onSelectLead,
 }: {
   approvals: ClientSocialApproval[];
-  onReviewed: (runId: string) => void;
+  onReviewed: (runId: string, action: "approve" | "reject") => void;
   onSelectLead: (leadId: string) => void;
 }) {
   const [drafts, setDrafts] = useState<Record<string, string>>(() =>
@@ -609,7 +687,7 @@ function SocialApprovalQueue({
         throw new Error(typeof payload?.error === "string" ? payload.error : "Nao foi possivel revisar esta resposta.");
       }
 
-      onReviewed(item.id);
+      onReviewed(item.id, action);
       setNotice({
         tone: "success",
         message: typeof payload?.message === "string" ? payload.message : "Aprovacao social revisada.",
@@ -743,6 +821,247 @@ function SocialApprovalQueue({
       </div>
     </Panel>
   );
+}
+
+function SocialDispatchMonitorPanel({
+  monitor,
+  onRefresh,
+  onSelectLead,
+  refreshing,
+}: {
+  monitor: ClientSocialDispatchMonitor;
+  onRefresh: () => Promise<void>;
+  onSelectLead: (leadId: string) => void;
+  refreshing: boolean;
+}) {
+  const [retryingId, setRetryingId] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{ tone: "success" | "error"; message: string } | null>(null);
+  const visibleItems = monitor.items.slice(0, 8);
+
+  async function retryDispatch(item: ClientSocialDispatch) {
+    setRetryingId(item.id);
+    setNotice(null);
+
+    try {
+      const response = await fetch("/api/dashboard/social-approvals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "retry_dispatch",
+          runId: item.id,
+        }),
+      });
+      const payload = await response.json().catch(() => ({})) as { error?: string; message?: string };
+
+      if (!response.ok) {
+        throw new Error(typeof payload.error === "string" ? payload.error : "Nao foi possivel reenfileirar este envio.");
+      }
+
+      setNotice({
+        tone: "success",
+        message: typeof payload.message === "string" ? payload.message : "Envio social reenfileirado.",
+      });
+      await onRefresh();
+    } catch (error) {
+      setNotice({
+        tone: "error",
+        message: error instanceof Error ? error.message : "Erro inesperado ao reenfileirar.",
+      });
+    } finally {
+      setRetryingId(null);
+    }
+  }
+
+  async function refresh() {
+    setNotice(null);
+
+    try {
+      await onRefresh();
+    } catch (error) {
+      setNotice({
+        tone: "error",
+        message: error instanceof Error ? error.message : "Nao foi possivel atualizar operacao Meta.",
+      });
+    }
+  }
+
+  return (
+    <Panel
+      eyebrow="Meta / Operacao"
+      title="Envios sociais"
+      tone={monitor.summary.failed ? "rose" : "cyan"}
+      action={
+        <div className="flex items-center gap-2">
+          <NeonBadge tone={monitor.summary.failed ? "rose" : "cyan"}>
+            {monitor.summary.failed ? `${monitor.summary.failed} falhas` : `${monitor.summary.sent} enviados`}
+          </NeonBadge>
+          <button
+            className="inline-flex h-8 items-center gap-2 rounded-xl border border-white/10 px-3 font-mono text-[9px] font-bold uppercase tracking-wide text-slate-300 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-55"
+            disabled={refreshing}
+            onClick={() => void refresh()}
+            type="button"
+          >
+            {refreshing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
+            Atualizar
+          </button>
+        </div>
+      }
+    >
+      <div className="grid gap-3">
+        <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
+          <SocialDispatchMetric label="Na fila" value={monitor.summary.pending} tone="amber" />
+          <SocialDispatchMetric label="Enviando" value={monitor.summary.sending} tone="cyan" />
+          <SocialDispatchMetric label="Enviados" value={monitor.summary.sent} tone="green" />
+          <SocialDispatchMetric label="Falhas" value={monitor.summary.failed} tone="rose" />
+          <SocialDispatchMetric label="Retry" value={monitor.summary.retryable} tone="violet" />
+        </div>
+
+        {notice ? (
+          <div className={cn(
+            "rounded-xl border px-3 py-2 text-[12px]",
+            notice.tone === "success"
+              ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-100"
+              : "border-rose-400/25 bg-rose-400/10 text-rose-100",
+          )}>
+            {notice.message}
+          </div>
+        ) : null}
+
+        {visibleItems.length ? (
+          <div className="grid gap-2">
+            {visibleItems.map((item) => {
+              const isRetrying = retryingId === item.id;
+              const lastAudit = item.audit[0] ?? null;
+
+              return (
+                <div key={item.id} className="grid gap-3 rounded-2xl border border-white/10 bg-slate-950/35 p-3 lg:grid-cols-[minmax(0,1fr)_220px]">
+                  <div className="min-w-0 space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <MetaDispatchStatusPill label={item.dispatchStatusLabel} status={item.dispatchStatus} />
+                      <NeonBadge tone={item.publicSurface ? "amber" : "cyan"}>{item.channelLabel}</NeonBadge>
+                      <span className="rounded-lg border border-white/10 px-2 py-1 font-mono text-[9px] uppercase tracking-wide text-slate-500">
+                        {item.companyName}
+                      </span>
+                      <span className="rounded-lg border border-white/10 px-2 py-1 font-mono text-[9px] uppercase tracking-wide text-slate-500">
+                        {formatDateTime(item.sentAt ?? item.failedAt ?? item.startedAt ?? item.approvedAt ?? item.createdAt)}
+                      </span>
+                    </div>
+
+                    <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_180px]">
+                      <div className="min-w-0">
+                        <p className="truncate text-[13px] font-semibold text-white">{item.leadName}</p>
+                        <p className="mt-1 line-clamp-2 text-[12px] leading-5 text-slate-400">{item.approvedReply}</p>
+                      </div>
+                      <div className="min-w-0 text-left sm:text-right">
+                        <p className="truncate font-mono text-[9px] uppercase tracking-wide text-slate-500">Agente</p>
+                        <p className="truncate text-[12px] font-semibold text-slate-200">{item.agentName}</p>
+                      </div>
+                    </div>
+
+                    {item.lastError ? (
+                      <p className="line-clamp-2 rounded-xl border border-rose-300/20 bg-rose-300/10 px-3 py-2 text-[12px] leading-5 text-rose-100">
+                        {item.lastError}
+                      </p>
+                    ) : null}
+
+                    <div className="flex flex-wrap gap-1.5">
+                      <span className="rounded-md border border-white/10 px-2 py-1 font-mono text-[8px] uppercase tracking-wide text-slate-500">
+                        Tentativas {item.attempts}
+                      </span>
+                      <span className="rounded-md border border-white/10 px-2 py-1 font-mono text-[8px] uppercase tracking-wide text-slate-500">
+                        Retry {item.retryCount}
+                      </span>
+                      {item.httpStatus ? (
+                        <span className="rounded-md border border-white/10 px-2 py-1 font-mono text-[8px] uppercase tracking-wide text-slate-500">
+                          HTTP {item.httpStatus}
+                        </span>
+                      ) : null}
+                      {item.targetKind ? (
+                        <span className="rounded-md border border-white/10 px-2 py-1 font-mono text-[8px] uppercase tracking-wide text-slate-500">
+                          {formatDispatchTarget(item.targetKind)}
+                        </span>
+                      ) : null}
+                      {lastAudit ? (
+                        <span className="rounded-md border border-white/10 px-2 py-1 font-mono text-[8px] uppercase tracking-wide text-slate-500">
+                          {formatDispatchAuditType(lastAudit.type)}
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  <div className="grid content-start gap-2">
+                    {item.leadId ? (
+                      <button
+                        className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-cyan-400/25 bg-cyan-400/10 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-cyan-200 transition hover:bg-cyan-400/15"
+                        onClick={() => onSelectLead(item.leadId!)}
+                        type="button"
+                      >
+                        <MessageCircle className="h-3.5 w-3.5" />
+                        Ver conversa
+                      </button>
+                    ) : null}
+                    {item.retryable ? (
+                      <button
+                        className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-violet-300/25 bg-violet-300/10 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-violet-100 transition hover:bg-violet-300/15 disabled:cursor-not-allowed disabled:opacity-60"
+                        disabled={isRetrying || refreshing}
+                        onClick={() => void retryDispatch(item)}
+                        type="button"
+                      >
+                        {isRetrying ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
+                        Reenfileirar
+                      </button>
+                    ) : (
+                      <span className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-white/10 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                        <Send className="h-3.5 w-3.5" />
+                        Sem acao
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <EmptyState title="Sem envios Meta" detail="As respostas aprovadas para Instagram e Facebook aparecem aqui depois da primeira aprovacao." />
+        )}
+      </div>
+    </Panel>
+  );
+}
+
+function SocialDispatchMetric({
+  label,
+  tone,
+  value,
+}: {
+  label: string;
+  tone: "green" | "cyan" | "amber" | "rose" | "violet";
+  value: number;
+}) {
+  const toneClassName = {
+    amber: "border-amber-400/20 bg-amber-400/10 text-amber-100",
+    cyan: "border-cyan-400/20 bg-cyan-400/10 text-cyan-100",
+    green: "border-emerald-400/20 bg-emerald-400/10 text-emerald-100",
+    rose: "border-rose-400/20 bg-rose-400/10 text-rose-100",
+    violet: "border-violet-400/20 bg-violet-400/10 text-violet-100",
+  }[tone];
+
+  return (
+    <div className={cn("rounded-xl border px-3 py-3", toneClassName)}>
+      <p className="font-mono text-[9px] uppercase tracking-widest opacity-75">{label}</p>
+      <p className="mt-1 font-mono text-[20px] font-bold leading-none">{value}</p>
+    </div>
+  );
+}
+
+function MetaDispatchStatusPill({
+  label,
+  status,
+}: {
+  label: string;
+  status: ClientSocialDispatchStatus;
+}) {
+  return <NeonBadge tone={getDispatchStatusTone(status)}>{label}</NeonBadge>;
 }
 
 function LeadDetailsModal({ lead, onClose }: { lead: ClientLeadRecord; onClose: () => void }) {
@@ -1460,6 +1779,54 @@ function formatApprovalReason(value: string) {
       return "auto resposta off";
     case "agent_requires_human_approval":
       return "aprovacao do agente";
+    default:
+      return value.replace(/_/g, " ");
+  }
+}
+
+function getDispatchStatusTone(status: ClientSocialDispatchStatus): "green" | "cyan" | "amber" | "rose" | "zinc" {
+  switch (status) {
+    case "sent":
+      return "green";
+    case "sending":
+      return "cyan";
+    case "pending_adapter":
+      return "amber";
+    case "failed":
+      return "rose";
+    case "rejected":
+    case "unknown":
+      return "zinc";
+  }
+}
+
+function formatDispatchTarget(value: string) {
+  switch (value) {
+    case "direct_message":
+      return "direct";
+    case "private_comment_reply":
+      return "private reply";
+    case "public_comment_reply":
+      return "comentario";
+    default:
+      return value.replace(/_/g, " ");
+  }
+}
+
+function formatDispatchAuditType(value: string) {
+  switch (value) {
+    case "dispatch_queued":
+      return "fila criada";
+    case "dispatch_started":
+      return "envio iniciado";
+    case "dispatch_sent":
+      return "confirmado";
+    case "dispatch_failed":
+      return "falhou";
+    case "dispatch_enqueue_failed":
+      return "fila falhou";
+    case "manual_retry_requested":
+      return "retry manual";
     default:
       return value.replace(/_/g, " ");
   }

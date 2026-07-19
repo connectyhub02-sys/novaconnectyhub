@@ -2,7 +2,10 @@ import type { Metadata } from "next";
 import { ConnectyShell } from "@/components/connectyhub-os/connecty-shell";
 import { LeadCrmConsole } from "@/components/connectyhub-os/leads-crm-console";
 import { getClientLeadCrmWorkspace } from "@/lib/client-os/leads-crm";
-import { listClientSocialApprovals } from "@/lib/client-os/social-approvals";
+import {
+  listClientSocialApprovals,
+  listClientSocialDispatchMonitor,
+} from "@/lib/client-os/social-approvals";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 
 export const metadata: Metadata = {
@@ -20,6 +23,9 @@ export default async function ConversationsPage() {
   const socialApprovals = workspace?.user.id
     ? await listClientSocialApprovals({ userId: workspace.user.id }).catch(() => [])
     : [];
+  const socialDispatchMonitor = workspace?.user.id
+    ? await listClientSocialDispatchMonitor({ userId: workspace.user.id }).catch(() => null)
+    : null;
 
   return (
     <ConnectyShell
@@ -30,7 +36,12 @@ export default async function ConversationsPage() {
       userLabel={profile?.email ?? undefined}
       workspaceName={organization?.name ?? profile?.companyName ?? "Workspace"}
     >
-      <LeadCrmConsole mode="conversas" socialApprovals={socialApprovals} workspace={leadWorkspace} />
+      <LeadCrmConsole
+        mode="conversas"
+        socialApprovals={socialApprovals}
+        socialDispatchMonitor={socialDispatchMonitor ?? undefined}
+        workspace={leadWorkspace}
+      />
     </ConnectyShell>
   );
 }

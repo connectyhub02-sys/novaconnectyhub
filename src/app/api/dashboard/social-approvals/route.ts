@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import {
+  listClientSocialDispatchMonitor,
   listClientSocialApprovals,
+  retryClientSocialDispatch,
   reviewClientSocialApproval,
 } from "@/lib/client-os/social-approvals";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
@@ -16,8 +18,12 @@ export async function GET() {
   }
 
   try {
-    const approvals = await listClientSocialApprovals({ userId: workspace.user.id });
-    return NextResponse.json({ approvals });
+    const [approvals, dispatchMonitor] = await Promise.all([
+      listClientSocialApprovals({ userId: workspace.user.id }),
+      listClientSocialDispatchMonitor({ userId: workspace.user.id }),
+    ]);
+
+    return NextResponse.json({ approvals, dispatchMonitor });
   } catch (error) {
     return NextResponse.json(formatError(error), { status: 500 });
   }
@@ -36,7 +42,9 @@ export async function POST(request: NextRequest) {
     responseText?: unknown;
     note?: unknown;
   }>(request);
-  const action = body?.action === "approve"
+  const action = body?.action === "retry_dispatch"
+    ? "retry_dispatch"
+    : body?.action === "approve"
     ? "approve"
     : body?.action === "reject"
       ? "reject"
@@ -47,6 +55,15 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    if (action === "retry_dispatch") {
+      const result = await retryClientSocialDispatch({
+        userId: workspace.user.id,
+        runId: typeof body?.runId === "string" ? body.runId : "",
+      });
+
+      return NextResponse.json(result);
+    }
+
     const result = await reviewClientSocialApproval({
       userId: workspace.user.id,
       runId: typeof body?.runId === "string" ? body.runId : "",
