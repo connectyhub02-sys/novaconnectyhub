@@ -309,14 +309,19 @@ export async function exchangeMercadoPagoAuthorizationCode(input: {
   client?: SupabaseClient;
 }) {
   const config = await loadMercadoPagoOAuthConfig({ client: input.client });
-  const { body } = await requestMercadoPagoOAuthToken({
+  const payload: Record<string, string> = {
     client_id: config.clientId,
     client_secret: config.clientSecret,
     code: input.code,
     grant_type: "authorization_code",
     redirect_uri: config.redirectUri,
-    test_token: config.testTokenEnabled ? "true" : "false",
-  }, "Mercado Pago nao retornou Access Token.");
+  };
+
+  if (config.testTokenEnabled) {
+    payload.test_token = "true";
+  }
+
+  const { body } = await requestMercadoPagoOAuthToken(payload, "Mercado Pago nao retornou Access Token.");
 
   return body;
 }
@@ -340,10 +345,14 @@ async function requestMercadoPagoOAuthToken(
   payload: Record<string, string>,
   fallbackMessage: string,
 ): Promise<MercadoPagoOAuthTokenRequestResult> {
+  const bodyParams = new URLSearchParams(payload);
   const response = await fetch(`${mercadoPagoApiBaseUrl}/oauth/token`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: bodyParams,
   });
   const body = await response.json().catch(() => null) as (MercadoPagoOAuthTokenResponse & MercadoPagoOAuthErrorResponse) | null;
 
