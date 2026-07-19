@@ -211,6 +211,29 @@ type MetaSocialCanaryResponse = {
   error?: string;
 };
 
+type MetaOperationalChecklistItemStatus = "ready" | "warning" | "blocked";
+
+type MetaOperationalChecklistSnapshot = {
+  status: "ready_for_tests" | "needs_attention" | "blocked";
+  generatedAt: string;
+  runtimeMode: "dry_run" | "live";
+  ready: number;
+  warning: number;
+  blocked: number;
+  items: Array<{
+    id: string;
+    label: string;
+    status: MetaOperationalChecklistItemStatus;
+    detail: string;
+    action: string;
+  }>;
+};
+
+type MetaOperationalChecklistResponse = {
+  checklist?: MetaOperationalChecklistSnapshot;
+  error?: string;
+};
+
 type MetaWebhookMonitorStatus = "received" | "processed" | "ignored" | "failed";
 type MetaWebhookMonitorHealth = "idle" | "healthy" | "warning" | "critical";
 type MetaWebhookMonitorChannel =
@@ -367,6 +390,8 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
   const [runningMetaCanary, setRunningMetaCanary] = useState(false);
   const [metaWebhookMonitor, setMetaWebhookMonitor] = useState<MetaWebhookMonitorSnapshot | null>(null);
   const [loadingMetaWebhookMonitor, setLoadingMetaWebhookMonitor] = useState(false);
+  const [metaOperationalChecklist, setMetaOperationalChecklist] = useState<MetaOperationalChecklistSnapshot | null>(null);
+  const [loadingMetaOperationalChecklist, setLoadingMetaOperationalChecklist] = useState(false);
   const [guidedSelectionDrafts, setGuidedSelectionDrafts] = useState<Record<string, GuidedSelectionDraft>>({});
   const [newWebhookSecret, setNewWebhookSecret] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
@@ -498,7 +523,27 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
       }
     }
 
+    async function loadSilentChecklist() {
+      try {
+        const params = new URLSearchParams({ companyId: selectedCompanyId });
+        const response = await fetch(`/api/dashboard/integrations/meta/operational-checklist?${params.toString()}`, {
+          method: "GET",
+          signal: controller.signal,
+        });
+        const data = await response.json().catch(() => null) as MetaOperationalChecklistResponse | null;
+
+        if (response.ok && data?.checklist) {
+          setMetaOperationalChecklist(data.checklist);
+        }
+      } catch (error) {
+        if (!(error instanceof DOMException && error.name === "AbortError")) {
+          setMetaOperationalChecklist(null);
+        }
+      }
+    }
+
     void loadSilentMonitor();
+    void loadSilentChecklist();
 
     return () => controller.abort();
   }, [selectedCompanyId, metaConnection?.status, metaConnection?.lastSyncAt]);
@@ -670,6 +715,7 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
       setCredentialSnapshots((current) => current.filter((credential) => !(credential.companyId === selectedCompanyId && credential.providerId === providerId)));
       if (providerId === "meta-ads") {
         setMetaWebhookMonitor(null);
+        setMetaOperationalChecklist(null);
       }
       setNotice({
         tone: "success",
@@ -717,6 +763,9 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
         tone: "success",
         message: providerId === "meta-ads" ? "Conta Meta selecionada para os dashboards." : "Conta Google selecionada para os dashboards.",
       });
+      if (providerId === "meta-ads") {
+        void loadMetaOperationalChecklist({ silent: true });
+      }
     } catch (error) {
       setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao salvar selecao." });
     } finally {
@@ -760,6 +809,7 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
       providerId: "meta-ads",
       status: response.ok ? "success" as const : "warning" as const,
     }, ...current].slice(0, 80));
+    void loadMetaOperationalChecklist({ silent: true });
   }
 
   async function loadMetaWebhookMonitor(input: { silent?: boolean; signal?: AbortSignal } = {}) {
@@ -804,6 +854,52 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
     } finally {
       if (!input.silent) {
         setLoadingMetaWebhookMonitor(false);
+      }
+    }
+  }
+
+  async function loadMetaOperationalChecklist(input: { silent?: boolean; signal?: AbortSignal } = {}) {
+    if (!selectedCompanyId) return;
+
+    if (!input.silent) {
+      setLoadingMetaOperationalChecklist(true);
+      setNotice(null);
+    }
+
+    try {
+      const params = new URLSearchParams({ companyId: selectedCompanyId });
+      const response = await fetch(`/api/dashboard/integrations/meta/operational-checklist?${params.toString()}`, {
+        method: "GET",
+        signal: input.signal,
+      });
+      const data = await response.json().catch(() => null) as MetaOperationalChecklistResponse | null;
+
+      if (!response.ok || !data?.checklist) {
+        throw new Error(data?.error ?? "Nao foi possivel carregar o checklist operacional Meta.");
+      }
+
+      setMetaOperationalChecklist(data.checklist);
+
+      if (!input.silent) {
+        setNotice({
+          tone: data.checklist.status === "blocked" ? "warning" : "success",
+          message: `Checklist operacional Meta atualizado: ${data.checklist.ready} pronto(s), ${data.checklist.blocked} bloqueio(s).`,
+        });
+      }
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        return;
+      }
+
+      if (!input.silent) {
+        setNotice({
+          tone: "error",
+          message: error instanceof Error ? error.message : "Erro ao carregar checklist operacional Meta.",
+        });
+      }
+    } finally {
+      if (!input.silent) {
+        setLoadingMetaOperationalChecklist(false);
       }
     }
   }
@@ -864,6 +960,7 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
           message: activation.detail,
         });
         void loadMetaWebhookMonitor({ silent: true });
+        void loadMetaOperationalChecklist({ silent: true });
       }
 
       if (data.simulation) {
@@ -899,6 +996,7 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
           message: simulation.detail,
         });
         void loadMetaWebhookMonitor({ silent: true });
+        void loadMetaOperationalChecklist({ silent: true });
       }
     } catch (error) {
       setNotice({
@@ -1000,6 +1098,7 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
           ? `Ativacao Meta salva com ${data.activation.blockedChannels} canal(is) bloqueado(s).`
           : "Ativacao live Meta salva para os canais selecionados.",
       });
+      void loadMetaOperationalChecklist({ silent: true });
     } catch (error) {
       setNotice({
         tone: "error",
@@ -1054,6 +1153,7 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
         tone: data.canary.status === "sent" ? "success" : data.canary.status === "failed" ? "error" : "warning",
         message: data.canary.detail,
       });
+      void loadMetaOperationalChecklist({ silent: true });
 
       return data.canary;
     } catch (error) {
@@ -1205,9 +1305,11 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
             disconnecting={disconnectingGuidedProvider === "meta-ads"}
             kind="meta"
             actionLogs={metaActionLogs}
+            loadingMetaOperationalChecklist={loadingMetaOperationalChecklist}
             loadingMetaWebhookMonitor={loadingMetaWebhookMonitor}
+            metaOperationalChecklist={metaConnection?.status === "connected" ? metaOperationalChecklist : null}
             metaWebhookAction={metaWebhookAction}
-            metaWebhookMonitor={metaWebhookMonitor}
+            metaWebhookMonitor={metaConnection?.status === "connected" ? metaWebhookMonitor : null}
             runningMetaCanary={runningMetaCanary}
             savingMetaLiveActivation={savingMetaLiveActivation}
             savingSelection={savingSelectionProvider === "meta-ads"}
@@ -1218,6 +1320,7 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
             onConnect={(event) => handleGuidedOAuthConnectClick("meta-ads", event)}
             onDisconnect={() => disconnectGuidedOAuth("meta-ads")}
             onMetaReviewTestResult={handleMetaReviewTestResult}
+            onRefreshMetaOperationalChecklist={() => loadMetaOperationalChecklist()}
             onRefreshMetaWebhookMonitor={() => loadMetaWebhookMonitor()}
             onReplayMetaWebhookEvent={replayMetaWebhookEvent}
             onRunMetaCanary={runMetaSocialCanary}
@@ -1745,7 +1848,9 @@ function GuidedOAuthCard({
   connecting,
   disconnecting,
   kind,
+  loadingMetaOperationalChecklist,
   loadingMetaWebhookMonitor,
+  metaOperationalChecklist,
   metaWebhookAction,
   metaWebhookMonitor,
   runningMetaCanary,
@@ -1758,6 +1863,7 @@ function GuidedOAuthCard({
   onConnect,
   onDisconnect,
   onMetaReviewTestResult,
+  onRefreshMetaOperationalChecklist,
   onRefreshMetaWebhookMonitor,
   onReplayMetaWebhookEvent,
   onRunMetaCanary,
@@ -1773,7 +1879,9 @@ function GuidedOAuthCard({
   connecting: boolean;
   disconnecting: boolean;
   kind: "meta" | "google";
+  loadingMetaOperationalChecklist?: boolean;
   loadingMetaWebhookMonitor?: boolean;
+  metaOperationalChecklist?: MetaOperationalChecklistSnapshot | null;
   metaWebhookAction?: string | null;
   metaWebhookMonitor?: MetaWebhookMonitorSnapshot | null;
   runningMetaCanary: boolean;
@@ -1786,6 +1894,7 @@ function GuidedOAuthCard({
   onConnect: (event: MouseEvent<HTMLAnchorElement>) => void;
   onDisconnect: () => void;
   onMetaReviewTestResult?: (response: ReviewTestResponse) => void;
+  onRefreshMetaOperationalChecklist?: () => void;
   onRefreshMetaWebhookMonitor?: () => void;
   onReplayMetaWebhookEvent?: (eventId: string) => void;
   onRunMetaCanary?: (draft: MetaSocialCanaryDraft) => Promise<MetaSocialCanarySnapshot>;
@@ -1963,7 +2072,9 @@ function GuidedOAuthCard({
           <MetaReadinessPanel
             actionLogs={actionLogs}
             activation={metaWebhookActivation}
+            checklist={metaOperationalChecklist ?? null}
             connected={connected}
+            loadingChecklist={loadingMetaOperationalChecklist ?? false}
             loadingMonitor={loadingMetaWebhookMonitor ?? false}
             metaWebhookAction={metaWebhookAction ?? null}
             monitor={metaWebhookMonitor ?? null}
@@ -1974,6 +2085,7 @@ function GuidedOAuthCard({
             liveActivation={metaLiveActivation}
             onActivateWebhooks={onActivateMetaWebhooks}
             onReviewResult={onMetaReviewTestResult}
+            onRefreshChecklist={onRefreshMetaOperationalChecklist}
             onRefreshMonitor={onRefreshMetaWebhookMonitor}
             onReplayEvent={onReplayMetaWebhookEvent}
             onRunCanary={onRunMetaCanary}
@@ -1989,7 +2101,9 @@ function GuidedOAuthCard({
 function MetaReadinessPanel({
   actionLogs,
   activation,
+  checklist,
   connected,
+  loadingChecklist,
   loadingMonitor,
   metaWebhookAction,
   monitor,
@@ -2000,6 +2114,7 @@ function MetaReadinessPanel({
   liveActivation,
   onActivateWebhooks,
   onReviewResult,
+  onRefreshChecklist,
   onRefreshMonitor,
   onReplayEvent,
   onRunCanary,
@@ -2008,7 +2123,9 @@ function MetaReadinessPanel({
 }: {
   actionLogs: ClientIntegrationActionLog[];
   activation: MetaWebhookActivationSnapshot | null;
+  checklist: MetaOperationalChecklistSnapshot | null;
   connected: boolean;
+  loadingChecklist: boolean;
   loadingMonitor: boolean;
   metaWebhookAction: string | null;
   monitor: MetaWebhookMonitorSnapshot | null;
@@ -2019,6 +2136,7 @@ function MetaReadinessPanel({
   liveActivation: MetaSocialLiveActivationSnapshot | null;
   onActivateWebhooks?: () => void;
   onReviewResult?: (response: ReviewTestResponse) => void;
+  onRefreshChecklist?: () => void;
   onRefreshMonitor?: () => void;
   onReplayEvent?: (eventId: string) => void;
   onRunCanary?: (draft: MetaSocialCanaryDraft) => Promise<MetaSocialCanarySnapshot>;
@@ -2090,6 +2208,13 @@ function MetaReadinessPanel({
         connected={connected}
         running={runningCanary}
         onRun={onRunCanary}
+      />
+
+      <MetaOperationalChecklistPanel
+        checklist={checklist}
+        connected={connected}
+        loading={loadingChecklist}
+        onRefresh={onRefreshChecklist}
       />
 
       <div className="mt-3 border-t border-white/10 pt-3">
@@ -2532,6 +2657,93 @@ function MetaCanaryDispatchPanel({
         {running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
         Executar canario
       </button>
+    </div>
+  );
+}
+
+function MetaOperationalChecklistPanel({
+  checklist,
+  connected,
+  loading,
+  onRefresh,
+}: {
+  checklist: MetaOperationalChecklistSnapshot | null;
+  connected: boolean;
+  loading: boolean;
+  onRefresh?: () => void;
+}) {
+  const statusTone = checklist ? getMetaOperationalChecklistTone(checklist.status) : "zinc";
+
+  return (
+    <div className="mt-3 border-t border-white/10 pt-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0">
+          <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-slate-500">pacote final de testes</p>
+          <p className="mt-1 truncate text-[11px] text-slate-500">
+            {checklist
+              ? `${checklist.ready} pronto(s), ${checklist.warning} alerta(s), ${checklist.blocked} bloqueio(s)`
+              : "Checklist operacional consolidado da Fase 15"}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <NeonBadge tone={statusTone}>
+            {checklist ? formatMetaOperationalChecklistStatus(checklist.status) : "sem leitura"}
+          </NeonBadge>
+          <button
+            type="button"
+            disabled={!connected || loading || !onRefresh}
+            onClick={onRefresh}
+            className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border px-3 font-mono text-[9px] font-bold uppercase tracking-wide text-emerald-100 transition hover:bg-emerald-400/10 disabled:cursor-not-allowed disabled:opacity-60"
+            style={{ borderColor: "var(--ch-border)" }}
+          >
+            {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PackageCheck className="h-3.5 w-3.5" />}
+            Atualizar
+          </button>
+        </div>
+      </div>
+
+      {checklist ? (
+        <div className="mt-3 grid gap-3">
+          <div className="grid grid-cols-4 gap-2">
+            <ReadinessMiniStat label="OK" value={String(checklist.ready)} tone="green" />
+            <ReadinessMiniStat label="Alertas" value={String(checklist.warning)} tone={checklist.warning > 0 ? "amber" : "green"} />
+            <ReadinessMiniStat label="Bloqueios" value={String(checklist.blocked)} tone={checklist.blocked > 0 ? "rose" : "green"} />
+            <ReadinessMiniStat label="Modo" value={checklist.runtimeMode === "live" ? "live" : "dry"} tone={checklist.runtimeMode === "live" ? "green" : "amber"} />
+          </div>
+
+          <div className="grid gap-2">
+            {checklist.items.map((item) => (
+              <div key={item.id} className="grid gap-2 rounded-lg border px-3 py-2 sm:grid-cols-[minmax(0,1fr)_auto]" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {item.status === "ready" ? (
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-300" />
+                    ) : (
+                      <AlertTriangle className={cn("h-3.5 w-3.5", item.status === "blocked" ? "text-rose-300" : "text-amber-300")} />
+                    )}
+                    <p className="truncate text-[12px] font-semibold text-slate-100">{item.label}</p>
+                    <span className={cn("font-mono text-[8px] uppercase tracking-wide", metaOperationalChecklistItemStatusClass(item.status))}>
+                      {formatMetaOperationalChecklistItemStatus(item.status)}
+                    </span>
+                  </div>
+                  <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-slate-500">{item.detail}</p>
+                </div>
+                <p className="text-[10px] leading-4 text-slate-500 sm:max-w-52 sm:text-right">
+                  {item.action}
+                </p>
+              </div>
+            ))}
+          </div>
+
+          <p className="rounded-lg border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-[11px] leading-5 text-cyan-100">
+            Gerado em {formatShortDate(checklist.generatedAt)}. Quando este pacote estiver sem bloqueios, os testes internos podem comecar sem abrir nova fase do bloco Meta.
+          </p>
+        </div>
+      ) : (
+        <div className="mt-3 rounded-lg border border-dashed border-white/10 px-3 py-5 text-center text-[11px] text-slate-500">
+          Atualize depois de conectar a Meta e salvar os primeiros testes operacionais.
+        </div>
+      )}
     </div>
   );
 }
@@ -3321,6 +3533,30 @@ function formatMetaCanaryStatus(status: MetaSocialCanarySnapshot["status"]) {
 function metaCanaryStatusClass(status: MetaSocialCanarySnapshot["status"]) {
   if (status === "sent") return "text-emerald-300";
   if (status === "failed") return "text-rose-300";
+  return "text-amber-300";
+}
+
+function getMetaOperationalChecklistTone(status: MetaOperationalChecklistSnapshot["status"]): "green" | "amber" | "rose" {
+  if (status === "ready_for_tests") return "green";
+  if (status === "blocked") return "rose";
+  return "amber";
+}
+
+function formatMetaOperationalChecklistStatus(status: MetaOperationalChecklistSnapshot["status"]) {
+  if (status === "ready_for_tests") return "pronto p/ testes";
+  if (status === "blocked") return "bloqueado";
+  return "com atencao";
+}
+
+function formatMetaOperationalChecklistItemStatus(status: MetaOperationalChecklistItemStatus) {
+  if (status === "ready") return "ok";
+  if (status === "blocked") return "bloqueado";
+  return "atencao";
+}
+
+function metaOperationalChecklistItemStatusClass(status: MetaOperationalChecklistItemStatus) {
+  if (status === "ready") return "text-emerald-300";
+  if (status === "blocked") return "text-rose-300";
   return "text-amber-300";
 }
 
