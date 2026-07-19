@@ -3,6 +3,8 @@ import "server-only";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServiceClient } from "@/lib/supabase/service";
+import { normalizeMetaEventToCrm } from "./event-normalizer";
+import { extractMetaWebhookEvents } from "./webhook-events";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -12,16 +14,12 @@ type OrganizationIntegrationRow = {
   metadata: JsonRecord | null;
 };
 
-export type MetaWebhookEvent = {
-  assetId: string | null;
-  eventType: string;
-  sourceEventId: string | null;
-  payload: JsonRecord;
-};
-
 export type MetaWebhookIngestResult = {
   received: number;
   stored: number;
+  normalized: number;
+  ignored: number;
+  failed: number;
   unmapped: number;
 };
 
@@ -57,6 +55,9 @@ export async function ingestMetaWebhook(input: {
   const headers = sanitizeHeaders(input.headers);
   const receivedAt = new Date().toISOString();
   let stored = 0;
+  let normalized = 0;
+  let ignored = 0;
+  let failed = 0;
   let unmapped = 0;
 
   for (const event of events) {
@@ -67,103 +68,56 @@ export async function ingestMetaWebhook(input: {
       continue;
     }
 
-    const { error } = await client.from("integration_events").insert({
-      organization_id: integration.organization_id,
-      organization_integration_id: integration.id,
-      provider_id: "meta-ads",
-      direction: "inbound",
-      event_type: event.eventType,
-      status: "received",
-      source_event_id: event.sourceEventId,
-      payload: event.payload,
-      headers,
-      received_at: receivedAt,
-    });
+    const { data: integrationEvent, error } = await client
+      .from("integration_events")
+      .insert({
+        organization_id: integration.organization_id,
+        organization_integration_id: integration.id,
+        provider_id: "meta-ads",
+        direction: "inbound",
+        event_type: event.eventType,
+        status: "received",
+        source_event_id: event.sourceEventId,
+        payload: event.payload,
+        headers,
+        received_at: receivedAt,
+      })
+      .select("id")
+      .single<{ id: string }>();
 
     if (error) {
       throw new Error(`Nao foi possivel registrar webhook Meta: ${error.message}`);
     }
 
     stored += 1;
+
+    try {
+      const crm = await normalizeMetaEventToCrm({
+        client,
+        event,
+        integration,
+        integrationEventId: integrationEvent?.id ?? null,
+      });
+
+      if (crm.status === "normalized") {
+        normalized += 1;
+      } else {
+        ignored += 1;
+      }
+    } catch (error) {
+      failed += 1;
+      await markMetaEventFailed(client, integrationEvent?.id ?? null, error);
+    }
   }
 
   return {
     received: events.length,
     stored,
+    normalized,
+    ignored,
+    failed,
     unmapped,
   };
-}
-
-export function extractMetaWebhookEvents(payload: JsonRecord): MetaWebhookEvent[] {
-  const object = readString(payload.object) ?? "meta";
-  const entries = readArray(payload.entry);
-  const events: MetaWebhookEvent[] = [];
-
-  for (const entryValue of entries) {
-    const entry = readRecord(entryValue);
-    if (!entry) continue;
-
-    const entryId = readString(entry.id);
-    const entryTime = readString(entry.time) ?? String(readNumber(entry.time) ?? Date.now());
-
-    for (const changeValue of readArray(entry.changes)) {
-      const change = readRecord(changeValue);
-      if (!change) continue;
-
-      const field = readString(change.field) ?? "change";
-      const value = readRecord(change.value) ?? {};
-      const from = readRecord(value.from);
-      const assetId = readString(value.page_id)
-        ?? readString(from?.id)
-        ?? readString(value.recipient_id)
-        ?? entryId;
-      const sourceEventId = [
-        entryId,
-        entryTime,
-        field,
-        readString(value.comment_id),
-        readString(value.message_id),
-        readString(value.post_id),
-        readString(value.media_id),
-        readString(value.leadgen_id),
-      ].filter(Boolean).join(":") || null;
-
-      events.push({
-        assetId,
-        eventType: `meta.${object}.${field}`,
-        sourceEventId,
-        payload: {
-          object,
-          entry,
-          change,
-        },
-      });
-    }
-
-    for (const messageValue of readArray(entry.messaging)) {
-      const message = readRecord(messageValue);
-      if (!message) continue;
-
-      const recipient = readRecord(message.recipient);
-      const sender = readRecord(message.sender);
-      const body = readRecord(message.message) ?? readRecord(message.postback) ?? {};
-      const mid = readString(body.mid) ?? readString(body.message_id);
-      const recipientId = readString(recipient?.id) ?? entryId;
-
-      events.push({
-        assetId: recipientId,
-        eventType: `meta.${object}.messaging`,
-        sourceEventId: [recipientId, readString(sender?.id), readString(message.timestamp) ?? String(readNumber(message.timestamp) ?? ""), mid].filter(Boolean).join(":") || null,
-        payload: {
-          object,
-          entry,
-          messaging: message,
-        },
-      });
-    }
-  }
-
-  return events;
 }
 
 async function loadMetaIntegrations(client: SupabaseClient) {
@@ -230,6 +184,21 @@ function sanitizeHeaders(headers: Headers) {
   return safe;
 }
 
+async function markMetaEventFailed(client: SupabaseClient, integrationEventId: string | null, error: unknown) {
+  if (!integrationEventId) {
+    return;
+  }
+
+  await client
+    .from("integration_events")
+    .update({
+      status: "failed",
+      error_message: error instanceof Error ? error.message : "Falha ao normalizar evento Meta.",
+      processed_at: new Date().toISOString(),
+    })
+    .eq("id", integrationEventId);
+}
+
 function readRecord(value: unknown): JsonRecord | null {
   return value && typeof value === "object" && !Array.isArray(value) ? value as JsonRecord : null;
 }
@@ -245,19 +214,6 @@ function readString(value: unknown) {
 
   if (typeof value === "number" && Number.isFinite(value)) {
     return String(value);
-  }
-
-  return null;
-}
-
-function readNumber(value: unknown) {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
-  }
-
-  if (typeof value === "string") {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : null;
   }
 
   return null;
