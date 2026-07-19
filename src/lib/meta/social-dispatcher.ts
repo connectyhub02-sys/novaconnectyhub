@@ -12,8 +12,11 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { appendMetaDispatchAudit } from "./social-dispatch-audit";
 import {
   evaluateMetaSocialDispatchReadiness,
+  normalizeMetaSocialDispatchLiveActivation,
+  readMetaSocialGrantedPermissions,
   resolveMetaSocialDispatchTarget,
   resolveMetaSocialDispatchMode,
+  type MetaSocialDispatchLiveActivationSnapshot,
   type MetaSocialDispatchTarget,
 } from "./social-dispatch-policy";
 import { isMetaSocialChannel, type MetaSocialChannel } from "./social-agent-policy";
@@ -53,6 +56,7 @@ type MetaDispatchCredentials = {
   integrationId: string | null;
   credentialSource: "page_token" | "user_token" | "missing";
   grantedPermissions: string[];
+  liveActivation: MetaSocialDispatchLiveActivationSnapshot;
 };
 
 type GraphSendResult = {
@@ -170,6 +174,7 @@ export async function processApprovedMetaSocialDispatch(input: {
       target,
       mode: dispatchMode,
       grantedPermissions: credentials.grantedPermissions,
+      liveActivation: credentials.liveActivation,
       occurredAt: readString(metadata.occurredAt),
     });
 
@@ -360,10 +365,11 @@ async function loadMetaDispatchCredentials(
     appSecret: config.appSecret,
     integrationId: integration?.id ?? null,
     credentialSource: pageAccessToken ? "page_token" : accessToken ? "user_token" : "missing",
-    grantedPermissions: readGrantedMetaPermissions({
+    grantedPermissions: readMetaSocialGrantedPermissions({
       metadata,
       scopes: integration?.scopes,
     }),
+    liveActivation: normalizeMetaSocialDispatchLiveActivation(metadata.meta_social_dispatch_activation),
   };
 }
 
@@ -596,6 +602,7 @@ async function markDispatchBlocked(
         meta_dispatch_mode: input.readiness.mode,
         meta_dispatch_required_permissions: input.readiness.requiredPermissions,
         meta_dispatch_missing_permissions: input.readiness.missingPermissions,
+        meta_dispatch_missing_assets: input.readiness.missingAssets,
         meta_dispatch_warnings: input.readiness.warnings,
         meta_dispatch_target_kind: input.target.kind,
         meta_dispatch_endpoint: input.target.endpointPath,
@@ -687,41 +694,4 @@ function readBoolean(value: unknown) {
 
 function readNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
-}
-
-function readGrantedMetaPermissions(input: {
-  metadata: JsonRecord | null;
-  scopes?: string[] | null;
-}) {
-  const permissions = new Set<string>();
-
-  for (const scope of input.scopes ?? []) {
-    if (scope.trim()) permissions.add(scope.trim());
-  }
-
-  const reviewTest = readRecord(input.metadata?.review_test);
-
-  for (const result of readArray(reviewTest?.results)) {
-    const record = readRecord(result);
-
-    if (record?.ok !== true) {
-      continue;
-    }
-
-    for (const permission of readStringArray(record.permissions)) {
-      permissions.add(permission);
-    }
-  }
-
-  return Array.from(permissions).sort();
-}
-
-function readArray(value: unknown) {
-  return Array.isArray(value) ? value : [];
-}
-
-function readStringArray(value: unknown) {
-  return Array.isArray(value)
-    ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
-    : [];
 }

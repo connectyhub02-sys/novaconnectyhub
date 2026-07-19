@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildMetaSocialDispatchLiveActivation,
   evaluateMetaSocialDispatchReadiness,
   resolveMetaSocialDispatchMode,
   resolveMetaSocialDispatchTarget,
@@ -89,21 +90,27 @@ describe("Meta social dispatch policy", () => {
 
   it("requires channel permissions before live dispatch", () => {
     const target = resolveMetaSocialDispatchTarget({
-      channel: "instagram_direct",
-      externalUserId: "igsid-123",
-      pageId: "page-123",
-      text: "Oi.",
+      allowPrivateReplies: false,
+      allowPublicReplies: true,
+      channel: "facebook_comments",
+      sourceCommentId: "comment-123",
+      text: "Respondido por aqui.",
     });
+    const liveActivation = buildReadyLiveActivation("facebook_comments", [
+      "pages_messaging",
+      "pages_manage_metadata",
+    ]);
 
     expect(evaluateMetaSocialDispatchReadiness({
-      channel: "instagram_direct",
+      channel: "facebook_comments",
       target,
       mode: "live",
-      grantedPermissions: ["pages_messaging"],
+      liveActivation,
+      grantedPermissions: ["pages_messaging", "pages_manage_metadata"],
     })).toMatchObject({
       ok: false,
       reason: "missing_permissions",
-      missingPermissions: ["instagram_manage_messages"],
+      missingPermissions: ["pages_manage_engagement"],
     });
   });
 
@@ -114,11 +121,16 @@ describe("Meta social dispatch policy", () => {
       sourceCommentId: "comment-123",
       text: "Te chamei no privado.",
     });
+    const liveActivation = buildReadyLiveActivation("facebook_comments", [
+      "pages_messaging",
+      "pages_manage_metadata",
+    ]);
 
     expect(evaluateMetaSocialDispatchReadiness({
       channel: "facebook_comments",
       target,
       mode: "live",
+      liveActivation,
       grantedPermissions: ["pages_messaging", "pages_manage_metadata"],
       occurredAt: "2026-07-01T12:00:00.000Z",
       now: new Date("2026-07-19T12:00:00.000Z"),
@@ -128,4 +140,91 @@ describe("Meta social dispatch policy", () => {
       missingPermissions: [],
     });
   });
+
+  it("requires operational live activation before live dispatch", () => {
+    const target = resolveMetaSocialDispatchTarget({
+      channel: "facebook_messenger",
+      externalUserId: "psid-123",
+      pageId: "page-123",
+      text: "Oi.",
+    });
+
+    expect(evaluateMetaSocialDispatchReadiness({
+      channel: "facebook_messenger",
+      target,
+      mode: "live",
+      grantedPermissions: ["pages_messaging"],
+    })).toMatchObject({
+      ok: false,
+      reason: "live_activation_required",
+    });
+  });
+
+  it("builds ready live activation only after review, app live and assets are confirmed", () => {
+    const activation = buildReadyLiveActivation("instagram_direct", [
+      "pages_messaging",
+      "instagram_manage_messages",
+    ]);
+
+    expect(activation).toMatchObject({
+      status: "ready",
+      appLiveModeConfirmed: true,
+      enabledChannels: 1,
+      readyChannels: 1,
+      blockedChannels: 0,
+    });
+    expect(activation.channels.instagram_direct).toMatchObject({
+      enabled: true,
+      status: "ready",
+      missingPermissions: [],
+      missingAssets: [],
+    });
+  });
+
+  it("keeps live activation blocked when Meta prerequisites are missing", () => {
+    const activation = buildMetaSocialDispatchLiveActivation({
+      appLiveModeConfirmed: false,
+      channels: { instagram_comments: true },
+      metadata: {
+        selected_facebook_page_id: "page-123",
+        review_test: {
+          ok: true,
+          readiness: { status: "ready" },
+          results: [{ ok: true, permissions: ["pages_messaging"] }],
+        },
+      },
+      updatedAt: "2026-07-19T12:00:00.000Z",
+      updatedBy: "user-123",
+    });
+
+    expect(activation.status).toBe("blocked");
+    expect(activation.channels.instagram_comments).toMatchObject({
+      enabled: true,
+      status: "blocked",
+      missingPermissions: ["instagram_manage_comments", "instagram_manage_messages"],
+      missingAssets: ["instagram_business_account"],
+    });
+  });
 });
+
+function buildReadyLiveActivation(
+  channel: "facebook_messenger" | "instagram_direct" | "facebook_comments" | "instagram_comments",
+  permissions: string[],
+) {
+  return buildMetaSocialDispatchLiveActivation({
+    appLiveModeConfirmed: true,
+    channels: { [channel]: true },
+    metadata: {
+      selected_facebook_page_id: "page-123",
+      selected_instagram_business_id: "ig-123",
+      webhook_activation: { ok: true },
+      review_test: {
+        ok: true,
+        readiness: { status: "ready" },
+        results: [{ ok: true, permissions }],
+      },
+    },
+    updatedAt: "2026-07-19T12:00:00.000Z",
+    updatedBy: "user-123",
+  });
+}

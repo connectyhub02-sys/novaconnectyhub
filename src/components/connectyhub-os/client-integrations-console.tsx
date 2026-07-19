@@ -130,6 +130,47 @@ type MetaWebhookActionResponse = {
   error?: string;
 };
 
+type MetaSocialLiveChannelId =
+  | "facebook_messenger"
+  | "instagram_direct"
+  | "facebook_comments"
+  | "instagram_comments";
+
+type MetaSocialLiveChannelSnapshot = {
+  channel: MetaSocialLiveChannelId;
+  enabled: boolean;
+  status: "disabled" | "ready" | "blocked";
+  detail: string;
+  requiredPermissions: string[];
+  missingPermissions: string[];
+  missingAssets: string[];
+  warnings: string[];
+  activatedAt: string | null;
+  activatedBy: string | null;
+};
+
+type MetaSocialLiveActivationSnapshot = {
+  status: "disabled" | "ready" | "blocked" | "partially_ready";
+  appLiveModeConfirmed: boolean;
+  updatedAt: string;
+  updatedBy: string | null;
+  enabledChannels: number;
+  readyChannels: number;
+  blockedChannels: number;
+  channels: Record<MetaSocialLiveChannelId, MetaSocialLiveChannelSnapshot>;
+};
+
+type MetaSocialLiveActivationDraft = {
+  appLiveModeConfirmed: boolean;
+  channels: Record<MetaSocialLiveChannelId, boolean>;
+};
+
+type MetaSocialLiveActivationResponse = {
+  activation?: MetaSocialLiveActivationSnapshot;
+  connection?: ClientIntegrationConnection;
+  error?: string;
+};
+
 type MetaWebhookMonitorStatus = "received" | "processed" | "ignored" | "failed";
 type MetaWebhookMonitorHealth = "idle" | "healthy" | "warning" | "critical";
 type MetaWebhookMonitorChannel =
@@ -260,6 +301,13 @@ const metaWebhookSimulationScenarios: { id: MetaWebhookSimulationScenario; label
   { id: "instagram_direct", label: "Direct IG" },
 ];
 
+const metaSocialLiveChannels: { id: MetaSocialLiveChannelId; label: string; shortLabel: string }[] = [
+  { id: "facebook_messenger", label: "Facebook Messenger", shortLabel: "Messenger" },
+  { id: "instagram_direct", label: "Instagram Direct", shortLabel: "Direct IG" },
+  { id: "facebook_comments", label: "Comentarios Facebook", shortLabel: "Comentarios FB" },
+  { id: "instagram_comments", label: "Comentarios Instagram", shortLabel: "Comentarios IG" },
+];
+
 export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationHubState }) {
   const [selectedCompanyId, setSelectedCompanyId] = useState(state.selectedCompanyId ?? state.companies[0]?.id ?? "");
   const [connections, setConnections] = useState(state.connections);
@@ -275,6 +323,7 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
   const [disconnectingGuidedProvider, setDisconnectingGuidedProvider] = useState<string | null>(null);
   const [savingSelectionProvider, setSavingSelectionProvider] = useState<string | null>(null);
   const [metaWebhookAction, setMetaWebhookAction] = useState<string | null>(null);
+  const [savingMetaLiveActivation, setSavingMetaLiveActivation] = useState(false);
   const [metaWebhookMonitor, setMetaWebhookMonitor] = useState<MetaWebhookMonitorSnapshot | null>(null);
   const [loadingMetaWebhookMonitor, setLoadingMetaWebhookMonitor] = useState(false);
   const [guidedSelectionDrafts, setGuidedSelectionDrafts] = useState<Record<string, GuidedSelectionDraft>>({});
@@ -869,6 +918,57 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
     }
   }
 
+  async function saveMetaLiveDispatchActivation(draft: MetaSocialLiveActivationDraft) {
+    if (!selectedCompanyId || savingMetaLiveActivation) return;
+
+    setSavingMetaLiveActivation(true);
+    setNotice(null);
+
+    try {
+      const response = await fetch("/api/dashboard/integrations/meta/live-dispatch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          appLiveModeConfirmed: draft.appLiveModeConfirmed,
+          channels: draft.channels,
+          companyId: selectedCompanyId,
+        }),
+      });
+      const data = await response.json().catch(() => null) as MetaSocialLiveActivationResponse | null;
+
+      if (!response.ok || !data?.connection || !data.activation) {
+        throw new Error(data?.error ?? "Nao foi possivel salvar a ativacao live Meta.");
+      }
+
+      setConnections((current) => [
+        data.connection!,
+        ...current.filter((connection) => !(connection.companyId === selectedCompanyId && connection.providerId === "meta-ads")),
+      ]);
+      setActionLogs((current) => [{
+        id: `local-meta-live-dispatch-${Date.now()}`,
+        action: "meta.social_dispatch.live_activation.updated",
+        companyId: selectedCompanyId,
+        createdAt: data.activation!.updatedAt,
+        metadata: data.activation!,
+        providerId: "meta-ads",
+        status: data.activation!.blockedChannels > 0 ? "warning" as const : "success" as const,
+      }, ...current].slice(0, 80));
+      setNotice({
+        tone: data.activation.blockedChannels > 0 ? "warning" : "success",
+        message: data.activation.blockedChannels > 0
+          ? `Ativacao Meta salva com ${data.activation.blockedChannels} canal(is) bloqueado(s).`
+          : "Ativacao live Meta salva para os canais selecionados.",
+      });
+    } catch (error) {
+      setNotice({
+        tone: "error",
+        message: error instanceof Error ? error.message : "Erro ao salvar ativacao live Meta.",
+      });
+    } finally {
+      setSavingMetaLiveActivation(false);
+    }
+  }
+
   async function disconnectMercadoPago() {
     if (!selectedCompanyId || disconnectingMercadoPago) return;
 
@@ -1010,6 +1110,7 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
             loadingMetaWebhookMonitor={loadingMetaWebhookMonitor}
             metaWebhookAction={metaWebhookAction}
             metaWebhookMonitor={metaWebhookMonitor}
+            savingMetaLiveActivation={savingMetaLiveActivation}
             savingSelection={savingSelectionProvider === "meta-ads"}
             selectionDraft={guidedSelectionDrafts[guidedSelectionKey(selectedCompanyId, "meta-ads")] ?? {}}
             selectedCompanyId={selectedCompanyId}
@@ -1020,6 +1121,7 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
             onMetaReviewTestResult={handleMetaReviewTestResult}
             onRefreshMetaWebhookMonitor={() => loadMetaWebhookMonitor()}
             onReplayMetaWebhookEvent={replayMetaWebhookEvent}
+            onSaveMetaLiveActivation={saveMetaLiveDispatchActivation}
             onSaveSelection={(selection) => saveGuidedSelection("meta-ads", selection)}
             onSelectionChange={(selection) => {
               setGuidedSelectionDrafts((current) => ({
@@ -1038,6 +1140,7 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
             disconnecting={disconnectingGuidedProvider === "google-growth"}
             kind="google"
             actionLogs={[]}
+            savingMetaLiveActivation={false}
             savingSelection={savingSelectionProvider === "google-growth"}
             selectionDraft={guidedSelectionDrafts[guidedSelectionKey(selectedCompanyId, "google-growth")] ?? {}}
             selectedCompanyId={selectedCompanyId}
@@ -1045,6 +1148,7 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
             onConnect={(event) => handleGuidedOAuthConnectClick("google-growth", event)}
             onDisconnect={() => disconnectGuidedOAuth("google-growth")}
             onMetaReviewTestResult={undefined}
+            onSaveMetaLiveActivation={undefined}
             onSaveSelection={(selection) => saveGuidedSelection("google-growth", selection)}
             onSelectionChange={(selection) => {
               setGuidedSelectionDrafts((current) => ({
@@ -1542,6 +1646,7 @@ function GuidedOAuthCard({
   loadingMetaWebhookMonitor,
   metaWebhookAction,
   metaWebhookMonitor,
+  savingMetaLiveActivation,
   savingSelection,
   selectionDraft,
   selectedCompanyId,
@@ -1552,6 +1657,7 @@ function GuidedOAuthCard({
   onMetaReviewTestResult,
   onRefreshMetaWebhookMonitor,
   onReplayMetaWebhookEvent,
+  onSaveMetaLiveActivation,
   onSaveSelection,
   onSelectionChange,
   onSimulateMetaWebhook,
@@ -1566,6 +1672,7 @@ function GuidedOAuthCard({
   loadingMetaWebhookMonitor?: boolean;
   metaWebhookAction?: string | null;
   metaWebhookMonitor?: MetaWebhookMonitorSnapshot | null;
+  savingMetaLiveActivation: boolean;
   savingSelection: boolean;
   selectionDraft: GuidedSelectionDraft;
   selectedCompanyId: string;
@@ -1576,6 +1683,7 @@ function GuidedOAuthCard({
   onMetaReviewTestResult?: (response: ReviewTestResponse) => void;
   onRefreshMetaWebhookMonitor?: () => void;
   onReplayMetaWebhookEvent?: (eventId: string) => void;
+  onSaveMetaLiveActivation?: (draft: MetaSocialLiveActivationDraft) => void;
   onSaveSelection: (selection: GuidedSelectionDraft) => void;
   onSelectionChange: (selection: GuidedSelectionDraft) => void;
   onSimulateMetaWebhook?: (scenario: MetaWebhookSimulationScenario) => void;
@@ -1621,6 +1729,7 @@ function GuidedOAuthCard({
   const metaReview = kind === "meta" ? readMetaReviewTest(connection?.metadata?.review_test) : null;
   const metaWebhookActivation = kind === "meta" ? readMetaWebhookActivation(connection?.metadata?.webhook_activation) : null;
   const metaWebhookSimulation = kind === "meta" ? readMetaWebhookSimulation(connection?.metadata?.webhook_simulation) : null;
+  const metaLiveActivation = kind === "meta" ? readMetaSocialLiveActivation(connection?.metadata?.meta_social_dispatch_activation) : null;
 
   return (
     <section id={config.id} className="rounded-2xl p-4" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}>
@@ -1753,11 +1862,14 @@ function GuidedOAuthCard({
             metaWebhookAction={metaWebhookAction ?? null}
             monitor={metaWebhookMonitor ?? null}
             review={metaReview}
+            savingLiveActivation={savingMetaLiveActivation}
             simulation={metaWebhookSimulation}
+            liveActivation={metaLiveActivation}
             onActivateWebhooks={onActivateMetaWebhooks}
             onReviewResult={onMetaReviewTestResult}
             onRefreshMonitor={onRefreshMetaWebhookMonitor}
             onReplayEvent={onReplayMetaWebhookEvent}
+            onSaveLiveActivation={onSaveMetaLiveActivation}
             onSimulateWebhook={onSimulateMetaWebhook}
           />
         ) : null}
@@ -1774,11 +1886,14 @@ function MetaReadinessPanel({
   metaWebhookAction,
   monitor,
   review,
+  savingLiveActivation,
   simulation,
+  liveActivation,
   onActivateWebhooks,
   onReviewResult,
   onRefreshMonitor,
   onReplayEvent,
+  onSaveLiveActivation,
   onSimulateWebhook,
 }: {
   actionLogs: ClientIntegrationActionLog[];
@@ -1788,11 +1903,14 @@ function MetaReadinessPanel({
   metaWebhookAction: string | null;
   monitor: MetaWebhookMonitorSnapshot | null;
   review: MetaReviewSnapshot | null;
+  savingLiveActivation: boolean;
   simulation: MetaWebhookSimulationSnapshot | null;
+  liveActivation: MetaSocialLiveActivationSnapshot | null;
   onActivateWebhooks?: () => void;
   onReviewResult?: (response: ReviewTestResponse) => void;
   onRefreshMonitor?: () => void;
   onReplayEvent?: (eventId: string) => void;
+  onSaveLiveActivation?: (draft: MetaSocialLiveActivationDraft) => void;
   onSimulateWebhook?: (scenario: MetaWebhookSimulationScenario) => void;
 }) {
   const summary = review?.readiness;
@@ -1847,6 +1965,14 @@ function MetaReadinessPanel({
           Sem checklist salvo para esta empresa.
         </div>
       )}
+
+      <MetaLiveDispatchPanel
+        key={liveActivation?.updatedAt || "meta-live-empty"}
+        activation={liveActivation}
+        connected={connected}
+        saving={savingLiveActivation}
+        onSave={onSaveLiveActivation}
+      />
 
       <div className="mt-3 border-t border-white/10 pt-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -2027,6 +2153,114 @@ function MetaReadinessPanel({
           </div>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function MetaLiveDispatchPanel({
+  activation,
+  connected,
+  saving,
+  onSave,
+}: {
+  activation: MetaSocialLiveActivationSnapshot | null;
+  connected: boolean;
+  saving: boolean;
+  onSave?: (draft: MetaSocialLiveActivationDraft) => void;
+}) {
+  const [draft, setDraft] = useState<MetaSocialLiveActivationDraft>(() => buildMetaLiveActivationDraft(activation));
+
+  const enabledCount = Object.values(draft.channels).filter(Boolean).length;
+  const status = activation?.status ?? "disabled";
+  const statusTone = getMetaLiveActivationTone(status);
+
+  return (
+    <div className="mt-3 border-t border-white/10 pt-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0">
+          <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-slate-500">envio social live</p>
+          <p className="mt-1 truncate text-[11px] text-slate-500">
+            {activation
+              ? `${activation.readyChannels}/${activation.enabledChannels || enabledCount} canal(is) pronto(s)`
+              : "Canais Meta seguem em dry-run ate a ativacao operacional."}
+          </p>
+        </div>
+        <NeonBadge tone={statusTone}>{formatMetaLiveActivationStatus(status)}</NeonBadge>
+      </div>
+
+      <label className="mt-3 flex items-start gap-2 rounded-lg border px-3 py-2" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+        <input
+          type="checkbox"
+          checked={draft.appLiveModeConfirmed}
+          onChange={(event) => setDraft((current) => ({ ...current, appLiveModeConfirmed: event.target.checked }))}
+          className="mt-0.5 h-4 w-4 accent-emerald-300"
+        />
+        <span className="min-w-0">
+          <span className="block text-[12px] font-semibold text-slate-100">App Meta em Live Mode e App Review aprovado</span>
+          <span className="mt-1 block text-[10px] leading-4 text-slate-500">
+            Esta confirmacao libera apenas a trava operacional da empresa; o servidor ainda precisa estar em modo live.
+          </span>
+        </span>
+      </label>
+
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        {metaSocialLiveChannels.map((item) => {
+          const channel = activation?.channels[item.id];
+          const checked = draft.channels[item.id];
+
+          return (
+            <label key={item.id} className="min-w-0 rounded-lg border px-3 py-2" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+              <div className="flex items-start gap-2">
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={(event) => setDraft((current) => ({
+                    ...current,
+                    channels: {
+                      ...current.channels,
+                      [item.id]: event.target.checked,
+                    },
+                  }))}
+                  className="mt-0.5 h-4 w-4 accent-cyan-300"
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center justify-between gap-2">
+                    <span className="truncate text-[12px] font-semibold text-slate-100">{item.label}</span>
+                    <span className={cn("shrink-0 font-mono text-[8px] uppercase tracking-wide", metaLiveChannelStatusClass(channel?.status ?? "disabled"))}>
+                      {formatMetaLiveChannelStatus(channel?.status ?? "disabled")}
+                    </span>
+                  </span>
+                  <span className="mt-1 line-clamp-2 block text-[10px] leading-4 text-slate-500">
+                    {channel?.detail ?? "Aguardando primeira ativacao."}
+                  </span>
+                  {channel?.missingPermissions.length || channel?.missingAssets.length ? (
+                    <span className="mt-1 block truncate font-mono text-[8px] uppercase tracking-wide text-amber-300">
+                      {[...channel.missingAssets, ...channel.missingPermissions].join(", ")}
+                    </span>
+                  ) : null}
+                </span>
+              </div>
+            </label>
+          );
+        })}
+      </div>
+
+      <div className="mt-3 grid grid-cols-3 gap-2">
+        <ReadinessMiniStat label="Ligados" value={String(enabledCount)} tone={enabledCount > 0 ? "green" : "amber"} />
+        <ReadinessMiniStat label="Prontos" value={String(activation?.readyChannels ?? 0)} tone={(activation?.readyChannels ?? 0) > 0 ? "green" : "amber"} />
+        <ReadinessMiniStat label="Bloqueados" value={String(activation?.blockedChannels ?? 0)} tone={(activation?.blockedChannels ?? 0) > 0 ? "rose" : "green"} />
+      </div>
+
+      <button
+        type="button"
+        disabled={!connected || saving || !onSave}
+        onClick={() => onSave?.(draft)}
+        className="mt-3 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border px-4 font-mono text-[10px] font-bold uppercase tracking-wide text-emerald-100 transition hover:bg-emerald-400/10 disabled:cursor-not-allowed disabled:opacity-60"
+        style={{ borderColor: "var(--ch-border)" }}
+      >
+        {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+        Salvar envio live
+      </button>
     </div>
   );
 }
@@ -2484,6 +2718,61 @@ function copyText(value: string) {
   void navigator.clipboard.writeText(value);
 }
 
+function buildMetaLiveActivationDraft(activation: MetaSocialLiveActivationSnapshot | null): MetaSocialLiveActivationDraft {
+  return {
+    appLiveModeConfirmed: activation?.appLiveModeConfirmed ?? false,
+    channels: Object.fromEntries(metaSocialLiveChannels.map((channel) => [
+      channel.id,
+      activation?.channels[channel.id]?.enabled === true,
+    ])) as Record<MetaSocialLiveChannelId, boolean>,
+  };
+}
+
+function readMetaSocialLiveActivation(value: unknown): MetaSocialLiveActivationSnapshot | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  const channelRecord = readRecord(record.channels);
+  const channels = Object.fromEntries(metaSocialLiveChannels.map((channel) => [
+    channel.id,
+    readMetaSocialLiveChannel(channel.id, channelRecord[channel.id]),
+  ])) as Record<MetaSocialLiveChannelId, MetaSocialLiveChannelSnapshot>;
+  const enabled = Object.values(channels).filter((channel) => channel.enabled);
+  const ready = enabled.filter((channel) => channel.status === "ready");
+  const blocked = enabled.filter((channel) => channel.status === "blocked");
+
+  return {
+    status: readMetaLiveActivationStatus(record.status, enabled.length, ready.length, blocked.length),
+    appLiveModeConfirmed: record.appLiveModeConfirmed === true || record.app_live_mode_confirmed === true,
+    updatedAt: readMetadataString(record.updatedAt ?? record.updated_at) ?? "",
+    updatedBy: readMetadataString(record.updatedBy ?? record.updated_by),
+    enabledChannels: readMetadataNumber(record.enabledChannels ?? record.enabled_channels) || enabled.length,
+    readyChannels: readMetadataNumber(record.readyChannels ?? record.ready_channels) || ready.length,
+    blockedChannels: readMetadataNumber(record.blockedChannels ?? record.blocked_channels) || blocked.length,
+    channels,
+  };
+}
+
+function readMetaSocialLiveChannel(channel: MetaSocialLiveChannelId, value: unknown): MetaSocialLiveChannelSnapshot {
+  const record = readRecord(value);
+  const enabled = record.enabled === true;
+
+  return {
+    channel,
+    enabled,
+    status: readMetaLiveChannelStatus(record.status, enabled),
+    detail: readMetadataString(record.detail) ?? (enabled ? "Canal aguardando nova validacao live." : "Canal mantido em dry-run operacional."),
+    requiredPermissions: readMetadataStringArray(record.requiredPermissions ?? record.required_permissions),
+    missingPermissions: readMetadataStringArray(record.missingPermissions ?? record.missing_permissions),
+    missingAssets: readMetadataStringArray(record.missingAssets ?? record.missing_assets),
+    warnings: readMetadataStringArray(record.warnings),
+    activatedAt: readMetadataString(record.activatedAt ?? record.activated_at),
+    activatedBy: readMetadataString(record.activatedBy ?? record.activated_by),
+  };
+}
+
 function readMetaReviewTest(value: unknown): MetaReviewSnapshot | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return null;
@@ -2655,6 +2944,32 @@ function readMetadataStringArray(value: unknown) {
     : [];
 }
 
+function readRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function readMetaLiveActivationStatus(
+  value: unknown,
+  enabled: number,
+  ready: number,
+  blocked: number,
+): MetaSocialLiveActivationSnapshot["status"] {
+  if (value === "ready" || value === "blocked" || value === "partially_ready" || value === "disabled") {
+    return value;
+  }
+
+  if (enabled === 0) return "disabled";
+  if (blocked > 0 && ready > 0) return "partially_ready";
+  if (blocked > 0) return "blocked";
+  return "ready";
+}
+
+function readMetaLiveChannelStatus(value: unknown, enabled: boolean): MetaSocialLiveChannelSnapshot["status"] {
+  if (!enabled) return "disabled";
+  if (value === "ready" || value === "blocked") return value;
+  return "blocked";
+}
+
 function readMetadataOptions(value: unknown): GuidedSelectionOption[] {
   if (!Array.isArray(value)) {
     return [];
@@ -2691,6 +3006,32 @@ function normalizeMetaAdAccountId(value: string | null) {
   }
 
   return trimmed.startsWith("act_") ? trimmed : `act_${trimmed.replace(/^act_/, "")}`;
+}
+
+function getMetaLiveActivationTone(status: MetaSocialLiveActivationSnapshot["status"] | "disabled"): "green" | "amber" | "rose" | "zinc" {
+  if (status === "ready") return "green";
+  if (status === "blocked") return "rose";
+  if (status === "partially_ready") return "amber";
+  return "zinc";
+}
+
+function formatMetaLiveActivationStatus(status: MetaSocialLiveActivationSnapshot["status"] | "disabled") {
+  if (status === "ready") return "live pronto";
+  if (status === "partially_ready") return "live parcial";
+  if (status === "blocked") return "bloqueado";
+  return "dry-run";
+}
+
+function formatMetaLiveChannelStatus(status: MetaSocialLiveChannelSnapshot["status"]) {
+  if (status === "ready") return "pronto";
+  if (status === "blocked") return "bloqueado";
+  return "dry-run";
+}
+
+function metaLiveChannelStatusClass(status: MetaSocialLiveChannelSnapshot["status"]) {
+  if (status === "ready") return "text-emerald-300";
+  if (status === "blocked") return "text-rose-300";
+  return "text-slate-500";
 }
 
 function formatMetaMonitorChannel(value: MetaWebhookMonitorChannel | null) {
