@@ -8,6 +8,7 @@ import {
 import { inngest } from "../inngest/client";
 import { createServiceClient } from "../supabase/service";
 import type { MetaCrmSnapshot } from "./event-normalizer";
+import { buildMetaSocialSuggestedReply } from "./social-approval-policy";
 import {
   isMetaSocialChannel,
   metaSocialCommentReceivedEventName,
@@ -250,6 +251,10 @@ export async function processMetaSocialAgentRun(input: {
     channelId: channel,
     config,
   });
+  const suggestedReplyText = buildMetaSocialSuggestedReply({
+    channel,
+    messageText: asString(metadata.textContentPreview),
+  });
   const preparedAt = new Date().toISOString();
   const outputSummary = decision.requiresHumanApproval
     ? "Atendimento social Meta preparado e aguardando aprovacao humana."
@@ -275,6 +280,9 @@ export async function processMetaSocialAgentRun(input: {
         publicSurface: decision.publicSurface,
         autoSendBlocked: decision.autoSendBlocked,
         autoSendBlockReason: decision.autoSendBlockReason,
+        social_suggested_reply_text: suggestedReplyText,
+        social_suggested_reply_source: "safe_template",
+        social_suggested_reply_created_at: preparedAt,
         nextStep: "review_social_agent_response",
       },
     })
@@ -574,4 +582,8 @@ function readRecord(value: unknown): JsonRecord | null {
 
 function readNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function asString(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }

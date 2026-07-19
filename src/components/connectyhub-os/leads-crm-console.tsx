@@ -8,6 +8,7 @@ import {
   Archive,
   Building2,
   CalendarClock,
+  CheckCircle2,
   ChevronDown,
   ChevronUp,
   Clock,
@@ -15,16 +16,20 @@ import {
   Filter,
   Globe2,
   Laptop,
+  Loader2,
   Mail,
   MapPin,
   MessageCircle,
   Phone,
   Search,
+  ShieldCheck,
   Target,
   X,
+  XCircle,
 } from "lucide-react";
 import { KpiStat, NeonBadge, PageHeader, Panel, ProgressBar } from "@/components/connectyhub-os/panel-primitives";
 import { cn } from "@/lib/utils";
+import type { ClientSocialApproval } from "@/lib/client-os/social-approvals";
 import type {
   ClientLeadActivity,
   ClientLeadConversationFile,
@@ -38,6 +43,7 @@ type ConsoleMode = "leads" | "crm" | "conversas";
 
 type LeadCrmConsoleProps = {
   mode: ConsoleMode;
+  socialApprovals?: ClientSocialApproval[];
   workspace: ClientLeadCrmWorkspace;
 };
 
@@ -60,13 +66,14 @@ const statusMeta: Record<ClientLeadStatus, { label: string; tone: "cyan" | "gree
   archived: { label: "Arquivado", tone: "zinc", dot: "bg-slate-400" },
 };
 
-export function LeadCrmConsole({ mode, workspace }: LeadCrmConsoleProps) {
+export function LeadCrmConsole({ mode, socialApprovals: initialSocialApprovals = [], workspace }: LeadCrmConsoleProps) {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<"all" | ClientLeadStatus>("all");
   const [expandedLeadId, setExpandedLeadId] = useState<string | null>(workspace.leads[0]?.id ?? null);
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(workspace.leads[0]?.id ?? null);
   const [conversationPane, setConversationPane] = useState<"inbox" | "chat">("inbox");
   const [detailsLeadId, setDetailsLeadId] = useState<string | null>(null);
+  const [socialApprovals, setSocialApprovals] = useState<ClientSocialApproval[]>(initialSocialApprovals);
 
   const filteredLeads = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -176,8 +183,10 @@ export function LeadCrmConsole({ mode, workspace }: LeadCrmConsoleProps) {
           setConversationPane={setConversationPane}
           setDetailsLeadId={setDetailsLeadId}
           setSearch={setSearch}
+          setSocialApprovals={setSocialApprovals}
           setSelectedLeadId={setSelectedLeadId}
           setStatus={setStatus}
+          socialApprovals={socialApprovals}
           status={status}
           totalLeads={workspace.leads.length}
         />
@@ -432,8 +441,10 @@ function ConversationsView({
   setConversationPane,
   setDetailsLeadId,
   setSearch,
+  setSocialApprovals,
   setSelectedLeadId,
   setStatus,
+  socialApprovals,
   status,
   totalLeads,
 }: {
@@ -445,104 +456,292 @@ function ConversationsView({
   setConversationPane: (pane: "inbox" | "chat") => void;
   setDetailsLeadId: (id: string) => void;
   setSearch: (value: string) => void;
+  setSocialApprovals: (updater: (items: ClientSocialApproval[]) => ClientSocialApproval[]) => void;
   setSelectedLeadId: (id: string) => void;
   setStatus: (value: "all" | ClientLeadStatus) => void;
+  socialApprovals: ClientSocialApproval[];
   status: "all" | ClientLeadStatus;
   totalLeads: number;
 }) {
   return (
-    <div className="grid gap-5 xl:grid-cols-[390px_minmax(0,1fr)]">
-      <Panel
-        className={cn(conversationPane === "chat" && "hidden xl:block")}
-        eyebrow="Inbox"
-        title="Conversas"
-        action={<NeonBadge tone="cyan">{totalLeads} leads</NeonBadge>}
-      >
-        <LeadFilters compact search={search} setSearch={setSearch} setStatus={setStatus} status={status} />
-        <div className="mt-4 max-h-[720px] space-y-2 overflow-y-auto pr-1">
-          {filteredLeads.map((lead) => (
-            <button
-              key={lead.id}
-              className={cn(
-                "w-full rounded-2xl border p-3 text-left transition",
-                selectedLeadId === lead.id
-                  ? "border-cyan-400/45 bg-cyan-400/10"
-                  : "border-white/10 bg-white/[0.02] hover:border-cyan-400/25 hover:bg-cyan-400/5",
-              )}
-              onClick={() => {
-                setSelectedLeadId(lead.id);
-                setConversationPane("chat");
-              }}
-              type="button"
-            >
-              <div className="flex items-start gap-3">
-                <LeadAvatar lead={lead} />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="truncate text-[13px] font-semibold text-white">{lead.name}</p>
-                    <span className="shrink-0 font-mono text-[9px] text-slate-500">{formatTime(lead.lastMessageAt ?? lead.updatedAt)}</span>
-                  </div>
-                  <p className="mt-1 truncate text-[12px] text-slate-400">{lead.conversation.preview ?? lead.summary}</p>
-                  <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <StatusPill status={lead.status} />
-                    <span className="rounded-md border border-white/10 px-2 py-1 font-mono text-[9px] uppercase tracking-wide text-slate-500">
-                      {lead.companyName}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </button>
-          ))}
-          {!filteredLeads.length ? <EmptyState title="Nenhuma conversa" detail="As conversas aparecem quando o webhook receber mensagens." /> : null}
-        </div>
-      </Panel>
+    <div className="space-y-5">
+      <SocialApprovalQueue
+        approvals={socialApprovals}
+        onReviewed={(runId) => setSocialApprovals((items) => items.filter((item) => item.id !== runId))}
+        onSelectLead={(leadId) => {
+          setSelectedLeadId(leadId);
+          setConversationPane("chat");
+        }}
+      />
 
-      <Panel
-        className={cn(conversationPane === "inbox" && "hidden xl:block")}
-        eyebrow="WhatsApp / Atendimento"
-        title={selectedLead ? selectedLead.name : "Selecione uma conversa"}
-        action={
-          selectedLead ? (
-            <div className="flex items-center gap-2">
+      <div className="grid gap-5 xl:grid-cols-[390px_minmax(0,1fr)]">
+        <Panel
+          className={cn(conversationPane === "chat" && "hidden xl:block")}
+          eyebrow="Inbox"
+          title="Conversas"
+          action={<NeonBadge tone="cyan">{totalLeads} leads</NeonBadge>}
+        >
+          <LeadFilters compact search={search} setSearch={setSearch} setStatus={setStatus} status={status} />
+          <div className="mt-4 max-h-[720px] space-y-2 overflow-y-auto pr-1">
+            {filteredLeads.map((lead) => (
               <button
-                className="inline-flex h-9 items-center gap-2 rounded-xl border border-white/10 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-300 transition hover:bg-white/10 xl:hidden"
-                onClick={() => setConversationPane("inbox")}
+                key={lead.id}
+                className={cn(
+                  "w-full rounded-2xl border p-3 text-left transition",
+                  selectedLeadId === lead.id
+                    ? "border-cyan-400/45 bg-cyan-400/10"
+                    : "border-white/10 bg-white/[0.02] hover:border-cyan-400/25 hover:bg-cyan-400/5",
+                )}
+                onClick={() => {
+                  setSelectedLeadId(lead.id);
+                  setConversationPane("chat");
+                }}
                 type="button"
               >
-                <ChevronDown className="h-3.5 w-3.5 rotate-90" />
-                Voltar
+                <div className="flex items-start gap-3">
+                  <LeadAvatar lead={lead} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="truncate text-[13px] font-semibold text-white">{lead.name}</p>
+                      <span className="shrink-0 font-mono text-[9px] text-slate-500">{formatTime(lead.lastMessageAt ?? lead.updatedAt)}</span>
+                    </div>
+                    <p className="mt-1 truncate text-[12px] text-slate-400">{lead.conversation.preview ?? lead.summary}</p>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <StatusPill status={lead.status} />
+                      <span className="rounded-md border border-white/10 px-2 py-1 font-mono text-[9px] uppercase tracking-wide text-slate-500">
+                        {lead.companyName}
+                      </span>
+                    </div>
+                  </div>
+                </div>
               </button>
-              <StatusPill status={selectedLead.status} />
-            </div>
-          ) : null
-        }
-      >
-        {selectedLead ? (
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
-            <div className="min-h-[calc(100svh-280px)] rounded-2xl border border-white/10 bg-slate-950/30 p-3 sm:p-4 lg:min-h-[620px]">
-              <ConversationHeader lead={selectedLead} />
-              <div className="mt-3 h-[min(520px,calc(100svh-390px))] min-h-[340px] overflow-y-auto rounded-2xl border border-white/10 bg-slate-950/40 p-3 sm:mt-4 sm:p-4">
-                <ChatMessages messages={selectedLead.conversation.messages} />
-              </div>
-              <div className="mt-3 grid gap-2 sm:hidden">
-                <OpenWhatsAppButton phone={selectedLead.phone} />
+            ))}
+            {!filteredLeads.length ? <EmptyState title="Nenhuma conversa" detail="As conversas aparecem quando o webhook receber mensagens." /> : null}
+          </div>
+        </Panel>
+
+        <Panel
+          className={cn(conversationPane === "inbox" && "hidden xl:block")}
+          eyebrow="Atendimento / Conversa"
+          title={selectedLead ? selectedLead.name : "Selecione uma conversa"}
+          action={
+            selectedLead ? (
+              <div className="flex items-center gap-2">
                 <button
-                  className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-cyan-400/25 bg-cyan-400/10 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-cyan-200 transition hover:bg-cyan-400/15"
-                  onClick={() => setDetailsLeadId(selectedLead.id)}
+                  className="inline-flex h-9 items-center gap-2 rounded-xl border border-white/10 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-300 transition hover:bg-white/10 xl:hidden"
+                  onClick={() => setConversationPane("inbox")}
                   type="button"
                 >
-                  Abrir arquivo do lead
-                  <ExternalLink className="h-3.5 w-3.5" />
+                  <ChevronDown className="h-3.5 w-3.5 rotate-90" />
+                  Voltar
                 </button>
+                <StatusPill status={selectedLead.status} />
+              </div>
+            ) : null
+          }
+        >
+          {selectedLead ? (
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+              <div className="min-h-[calc(100svh-280px)] rounded-2xl border border-white/10 bg-slate-950/30 p-3 sm:p-4 lg:min-h-[620px]">
+                <ConversationHeader lead={selectedLead} />
+                <div className="mt-3 h-[min(520px,calc(100svh-390px))] min-h-[340px] overflow-y-auto rounded-2xl border border-white/10 bg-slate-950/40 p-3 sm:mt-4 sm:p-4">
+                  <ChatMessages messages={selectedLead.conversation.messages} />
+                </div>
+                <div className="mt-3 grid gap-2 sm:hidden">
+                  <OpenWhatsAppButton phone={selectedLead.phone} />
+                  <button
+                    className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-cyan-400/25 bg-cyan-400/10 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-cyan-200 transition hover:bg-cyan-400/15"
+                    onClick={() => setDetailsLeadId(selectedLead.id)}
+                    type="button"
+                  >
+                    Abrir arquivo do lead
+                    <ExternalLink className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+              <LeadSideFile className="hidden lg:block" lead={selectedLead} onDetails={() => setDetailsLeadId(selectedLead.id)} />
+            </div>
+          ) : (
+            <EmptyState title="Sem conversa selecionada" detail="Escolha um lead para ver o historico completo." />
+          )}
+        </Panel>
+      </div>
+    </div>
+  );
+}
+
+function SocialApprovalQueue({
+  approvals,
+  onReviewed,
+  onSelectLead,
+}: {
+  approvals: ClientSocialApproval[];
+  onReviewed: (runId: string) => void;
+  onSelectLead: (leadId: string) => void;
+}) {
+  const [drafts, setDrafts] = useState<Record<string, string>>(() =>
+    Object.fromEntries(approvals.map((item) => [item.id, item.suggestedReply])),
+  );
+  const [reviewingId, setReviewingId] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{ tone: "success" | "error"; message: string } | null>(null);
+
+  if (!approvals.length) {
+    return null;
+  }
+
+  async function reviewApproval(item: ClientSocialApproval, action: "approve" | "reject") {
+    setReviewingId(item.id);
+    setNotice(null);
+
+    try {
+      const response = await fetch("/api/dashboard/social-approvals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action,
+          runId: item.id,
+          responseText: drafts[item.id] ?? item.suggestedReply,
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(typeof payload?.error === "string" ? payload.error : "Nao foi possivel revisar esta resposta.");
+      }
+
+      onReviewed(item.id);
+      setNotice({
+        tone: "success",
+        message: typeof payload?.message === "string" ? payload.message : "Aprovacao social revisada.",
+      });
+    } catch (error) {
+      setNotice({
+        tone: "error",
+        message: error instanceof Error ? error.message : "Erro inesperado.",
+      });
+    } finally {
+      setReviewingId(null);
+    }
+  }
+
+  return (
+    <Panel
+      eyebrow="Meta / Social"
+      title="Aprovacoes sociais"
+      tone="amber"
+      action={<NeonBadge tone="amber">{approvals.length} pendentes</NeonBadge>}
+    >
+      <div className="grid gap-3">
+        {notice ? (
+          <div className={cn(
+            "rounded-xl border px-3 py-2 text-[12px]",
+            notice.tone === "success"
+              ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-100"
+              : "border-rose-400/25 bg-rose-400/10 text-rose-100",
+          )}>
+            {notice.message}
+          </div>
+        ) : null}
+
+        {approvals.slice(0, 6).map((item) => {
+          const isReviewing = reviewingId === item.id;
+          const draft = drafts[item.id] ?? item.suggestedReply;
+
+          return (
+            <div
+              key={item.id}
+              className="grid gap-3 rounded-2xl border border-amber-400/20 bg-amber-400/[0.045] p-3 lg:grid-cols-[minmax(0,1fr)_minmax(280px,420px)]"
+            >
+              <div className="min-w-0 space-y-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <NeonBadge tone={item.publicSurface ? "amber" : "cyan"}>{item.channelLabel}</NeonBadge>
+                  <span className="rounded-lg border border-white/10 px-2 py-1 font-mono text-[9px] uppercase tracking-wide text-slate-400">
+                    {item.companyName}
+                  </span>
+                  <span className="rounded-lg border border-white/10 px-2 py-1 font-mono text-[9px] uppercase tracking-wide text-slate-400">
+                    {formatDateTime(item.preparedAt ?? item.createdAt)}
+                  </span>
+                </div>
+
+                <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_160px]">
+                  <div className="min-w-0">
+                    <p className="truncate text-[13px] font-semibold text-white">{item.leadName}</p>
+                    <p className="mt-1 truncate text-[11px] text-slate-400">{item.leadPhone ?? item.providerChatId ?? "Contato social"}</p>
+                  </div>
+                  <div className="min-w-0 text-left sm:text-right">
+                    <p className="truncate font-mono text-[9px] uppercase tracking-wide text-slate-500">Agente</p>
+                    <p className="truncate text-[12px] font-semibold text-slate-200">{item.agentName}</p>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-white/10 bg-slate-950/40 p-3">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Mensagem do lead</p>
+                    {item.publicSurface ? <ShieldCheck className="h-3.5 w-3.5 text-amber-300" /> : <MessageCircle className="h-3.5 w-3.5 text-cyan-300" />}
+                  </div>
+                  <p className="line-clamp-3 whitespace-pre-wrap text-[12px] leading-5 text-slate-200">{item.leadMessage}</p>
+                </div>
+
+                {item.approvalReasons.length ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {item.approvalReasons.slice(0, 4).map((reason) => (
+                      <span key={reason} className="rounded-md border border-amber-300/20 bg-amber-300/10 px-2 py-1 font-mono text-[8px] uppercase tracking-wide text-amber-100">
+                        {formatApprovalReason(reason)}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+
+                {item.leadId ? (
+                  <button
+                    className="inline-flex h-9 items-center gap-2 rounded-xl border border-cyan-400/25 bg-cyan-400/10 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-cyan-200 transition hover:bg-cyan-400/15"
+                    onClick={() => onSelectLead(item.leadId!)}
+                    type="button"
+                  >
+                    <MessageCircle className="h-3.5 w-3.5" />
+                    Ver conversa
+                  </button>
+                ) : null}
+              </div>
+
+              <div className="grid min-w-0 gap-2">
+                <label className="grid gap-2">
+                  <span className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Rascunho</span>
+                  <textarea
+                    className="min-h-[126px] resize-y rounded-xl border border-white/10 bg-slate-950/70 px-3 py-3 text-[13px] leading-5 text-slate-100 outline-none transition placeholder:text-slate-600 focus:border-cyan-300/45"
+                    disabled={isReviewing}
+                    maxLength={1500}
+                    onChange={(event) => setDrafts((current) => ({ ...current, [item.id]: event.target.value }))}
+                    value={draft}
+                  />
+                </label>
+
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <button
+                    className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-emerald-300/25 bg-emerald-300/15 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-emerald-100 transition hover:bg-emerald-300/20 disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={isReviewing}
+                    onClick={() => reviewApproval(item, "approve")}
+                    type="button"
+                  >
+                    {isReviewing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                    Aprovar rascunho
+                  </button>
+                  <button
+                    className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-rose-300/25 bg-rose-300/10 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-rose-100 transition hover:bg-rose-300/15 disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={isReviewing}
+                    onClick={() => reviewApproval(item, "reject")}
+                    type="button"
+                  >
+                    {isReviewing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <XCircle className="h-3.5 w-3.5" />}
+                    Rejeitar
+                  </button>
+                </div>
               </div>
             </div>
-            <LeadSideFile className="hidden lg:block" lead={selectedLead} onDetails={() => setDetailsLeadId(selectedLead.id)} />
-          </div>
-        ) : (
-          <EmptyState title="Sem conversa selecionada" detail="Escolha um lead para ver o historico completo." />
-        )}
-      </Panel>
-    </div>
+          );
+        })}
+      </div>
+    </Panel>
   );
 }
 
@@ -1194,9 +1393,9 @@ function EmptyState({ title, detail }: { title: string; detail: string }) {
 function getHeaderCopy(mode: ConsoleMode) {
   if (mode === "conversas") {
     return {
-      eyebrow: "WhatsApp / Atendimento",
+      eyebrow: "Atendimento / Multicanal",
       title: "Conversas",
-      description: "Acompanhe o historico de atendimento dos leads em tempo real.",
+      description: "Acompanhe o historico dos leads e revise respostas sociais pendentes.",
     };
   }
 
@@ -1249,4 +1448,19 @@ function formatDateTime(value: string | null | undefined) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(value));
+}
+
+function formatApprovalReason(value: string) {
+  switch (value) {
+    case "public_social_surface":
+      return "comentario publico";
+    case "channel_requires_human_approval":
+      return "aprovacao do canal";
+    case "channel_auto_reply_disabled":
+      return "auto resposta off";
+    case "agent_requires_human_approval":
+      return "aprovacao do agente";
+    default:
+      return value.replace(/_/g, " ");
+  }
 }
