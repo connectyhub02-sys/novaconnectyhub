@@ -4,6 +4,14 @@ import {
   processQueuedWhatsappAgentRuns,
   processWhatsappAgentRun,
 } from "@/lib/whatsapp/agent-runtime";
+import {
+  processMetaSocialAgentRun,
+  processQueuedMetaSocialAgentRuns,
+} from "@/lib/meta/social-agent-queue";
+import {
+  metaSocialCommentReceivedEventName,
+  metaSocialMessageReceivedEventName,
+} from "@/lib/meta/social-agent-policy";
 import { processScheduledWhatsappOutbounds } from "@/lib/whatsapp/channel-operations";
 import {
   processWhatsappHandoffNotification,
@@ -125,6 +133,67 @@ export const connectyhubWhatsappAgentSweep = inngest.createFunction(
   async ({ step }) => {
     const summary = await step.run("process-queued-whatsapp-agent-runs", () =>
       processQueuedWhatsappAgentRuns({ limit: 5 }),
+    );
+
+    return {
+      status: "swept",
+      summary,
+    };
+  },
+);
+
+export const connectyhubMetaSocialMessageQueue = inngest.createFunction(
+  {
+    id: "connectyhub-meta-social-message-queue",
+    name: "ConnectyHub Meta Social Message Queue",
+    retries: 3,
+    triggers: [{ event: metaSocialMessageReceivedEventName }],
+  },
+  async ({ event, step }) => {
+    const data = event.data as { runId?: string } | undefined;
+    const runId = data?.runId;
+
+    if (!runId) {
+      return { status: "skipped", reason: "missing_run_id" };
+    }
+
+    return step.run("prepare-meta-social-agent-run", () =>
+      processMetaSocialAgentRun({ runId }),
+    );
+  },
+);
+
+export const connectyhubMetaSocialCommentQueue = inngest.createFunction(
+  {
+    id: "connectyhub-meta-social-comment-queue",
+    name: "ConnectyHub Meta Social Comment Queue",
+    retries: 3,
+    triggers: [{ event: metaSocialCommentReceivedEventName }],
+  },
+  async ({ event, step }) => {
+    const data = event.data as { runId?: string } | undefined;
+    const runId = data?.runId;
+
+    if (!runId) {
+      return { status: "skipped", reason: "missing_run_id" };
+    }
+
+    return step.run("prepare-meta-social-agent-run", () =>
+      processMetaSocialAgentRun({ runId }),
+    );
+  },
+);
+
+export const connectyhubMetaSocialAgentSweep = inngest.createFunction(
+  {
+    id: "connectyhub-meta-social-agent-sweep",
+    name: "ConnectyHub Meta Social Agent Queue Sweep",
+    retries: 1,
+    triggers: [{ cron: "*/5 * * * *" }],
+  },
+  async ({ step }) => {
+    const summary = await step.run("process-queued-meta-social-agent-runs", () =>
+      processQueuedMetaSocialAgentRuns({ limit: 10 }),
     );
 
     return {
@@ -341,6 +410,9 @@ export const functions = [
   connectyhubWhatsappSync,
   connectyhubWhatsappAgentResponse,
   connectyhubWhatsappAgentSweep,
+  connectyhubMetaSocialMessageQueue,
+  connectyhubMetaSocialCommentQueue,
+  connectyhubMetaSocialAgentSweep,
   connectyhubWhatsappOutboundDispatcher,
   connectyhubWhatsappOutboundSweep,
   connectyhubApiHealthMonitor,

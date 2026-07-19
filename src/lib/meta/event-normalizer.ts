@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { enqueueMetaSocialAgentRun } from "./social-agent-queue";
 import type { MetaWebhookEvent } from "./webhook-events";
 
 type JsonRecord = Record<string, unknown>;
@@ -59,6 +60,10 @@ export type MetaCrmNormalizeResult =
       conversationId: string;
       messageId: string;
       channel: MetaSocialChannel;
+      agentRunId: string | null;
+      agentQueueStatus: "queued" | "debounced" | "skipped";
+      agentQueueReason?: string;
+      agentTriggerSource?: string;
     }
   | {
       status: "ignored";
@@ -103,6 +108,16 @@ export async function normalizeMetaEventToCrm(input: {
     snapshot,
     event: input.event,
   });
+  const agentQueue = await enqueueMetaSocialAgentRun({
+    client: input.client,
+    integration: input.integration,
+    event: input.event,
+    snapshot,
+    integrationEventId: input.integrationEventId,
+    leadId: lead.id,
+    conversationId: conversation.id,
+    messageId: message.id,
+  });
 
   await markIntegrationEvent(input.client, input.integrationEventId, {
     status: "processed",
@@ -114,6 +129,10 @@ export async function normalizeMetaEventToCrm(input: {
     conversationId: conversation.id,
     messageId: message.id,
     channel: snapshot.channel,
+    agentRunId: "runId" in agentQueue ? agentQueue.runId : null,
+    agentQueueStatus: agentQueue.status,
+    agentQueueReason: "reason" in agentQueue ? agentQueue.reason : undefined,
+    agentTriggerSource: agentQueue.triggerSource,
   };
 }
 
