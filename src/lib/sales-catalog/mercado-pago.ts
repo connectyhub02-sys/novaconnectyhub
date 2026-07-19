@@ -222,6 +222,14 @@ async function loadMercadoPagoPlatformCredentials(
 ) {
   const credentials = new Map<string, string>();
 
+  for (const envName of envNames) {
+    const value = process.env[envName]?.trim();
+
+    if (value) {
+      credentials.set(envName, value);
+    }
+  }
+
   if (client) {
     const { data, error } = await client
       .from("integration_credentials")
@@ -244,14 +252,6 @@ async function loadMercadoPagoPlatformCredentials(
           // If the vault cannot be decrypted in this runtime, fall back to env vars below.
         }
       }
-    }
-  }
-
-  for (const envName of envNames) {
-    const fallback = process.env[envName]?.trim();
-
-    if (fallback && !credentials.has(envName)) {
-      credentials.set(envName, fallback);
     }
   }
 
