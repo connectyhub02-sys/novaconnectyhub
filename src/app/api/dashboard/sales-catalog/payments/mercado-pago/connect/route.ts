@@ -5,9 +5,7 @@ import {
   buildMercadoPagoAuthorizationUrl,
   buildMercadoPagoWebhookUrl,
   getAppBaseUrl,
-  isMercadoPagoInvalidClientError,
   isMercadoPagoTestTokenEnabled,
-  validateMercadoPagoOAuthCredentials,
 } from "@/lib/sales-catalog/mercado-pago";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
@@ -43,7 +41,6 @@ export async function GET(request: NextRequest) {
       companyId,
       client,
     });
-    await validateMercadoPagoOAuthCredentials({ client });
     const state = `mp_${randomUUID()}`;
     const webhookUrl = buildMercadoPagoWebhookUrl();
     const authorizationUrl = await buildMercadoPagoAuthorizationUrl({ companyId: company.id, state, client });
@@ -87,10 +84,6 @@ function normalizeMercadoPagoReturnTo(value: string | null) {
 
 function getMercadoPagoConnectErrorReason(error: unknown) {
   const message = error instanceof Error ? error.message : "";
-
-  if (isMercadoPagoInvalidClientError(error)) {
-    return "invalid_oauth_credentials";
-  }
 
   if (
     message.includes("MERCADO_PAGO_CLIENT_ID")

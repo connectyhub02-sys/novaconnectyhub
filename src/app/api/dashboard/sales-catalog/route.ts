@@ -60,9 +60,7 @@ import { encryptCredentialValue } from "@/lib/security/credentials-crypto";
 import {
   buildMercadoPagoAuthorizationUrl,
   buildMercadoPagoWebhookUrl,
-  formatMercadoPagoOAuthError,
   isMercadoPagoTestTokenEnabled,
-  validateMercadoPagoOAuthCredentials,
 } from "@/lib/sales-catalog/mercado-pago";
 import { createSalesCatalogPixPaymentSession } from "@/lib/sales-catalog/payment-sessions";
 import { calculateSalesCatalogShippingQuotes, normalizeSalesCatalogCep } from "@/lib/sales-catalog/shipping-calculator";
@@ -826,15 +824,7 @@ async function startMercadoPagoOAuth(input: {
   });
   const state = `mp_${randomUUID()}`;
   const webhookUrl = buildMercadoPagoWebhookUrl();
-  let testTokenEnabled = false;
-
-  try {
-    await validateMercadoPagoOAuthCredentials({ client: input.client });
-    testTokenEnabled = await isMercadoPagoTestTokenEnabled({ client: input.client });
-  } catch (error) {
-    throw new Error(formatMercadoPagoOAuthError(error));
-  }
-
+  const testTokenEnabled = await isMercadoPagoTestTokenEnabled({ client: input.client });
   const now = new Date().toISOString();
   const payload = {
     organization_id: company.id,
