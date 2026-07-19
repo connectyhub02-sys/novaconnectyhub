@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { defaultAgentChannelConfig } from "@/lib/agents/multichannel";
 import { defaultLeadQualificationConfig, leadQualificationConfigKey } from "@/lib/leads/qualification";
 import { defaultWhatsappBehaviorConfig, defaultWhatsappCloneMemory, defaultWhatsappCloneProfile } from "@/lib/whatsapp/agent-behavior";
 import { createServiceClient } from "@/lib/supabase/service";
@@ -185,6 +186,7 @@ export async function createPlatformWhatsappAgent(input: {
         sector_id: sector.id,
         sector_code: sector.sectorCode,
         sector_name: sector.name,
+        multichannel_config: defaultAgentChannelConfig,
         whatsapp_behavior_config: defaultWhatsappBehaviorConfig,
         whatsapp_clone_profile: defaultWhatsappCloneProfile,
         whatsapp_clone_memory: defaultWhatsappCloneMemory,

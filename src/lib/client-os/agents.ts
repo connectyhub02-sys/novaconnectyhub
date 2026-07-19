@@ -3,6 +3,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
 import { defaultLeadQualificationConfig, leadQualificationConfigKey } from "@/lib/leads/qualification";
+import { defaultAgentChannelConfig, normalizeAgentChannelConfig } from "@/lib/agents/multichannel";
 import { defaultWhatsappAgentPrompt, defaultWhatsappBehaviorConfig, defaultWhatsappCloneMemory, defaultWhatsappCloneProfile } from "@/lib/whatsapp/agent-behavior";
 import { deleteUazapiProviderInstance } from "@/lib/whatsapp/uazapi-instance-cleanup";
 import { loadUazapiCredentials } from "@/lib/whatsapp/uazapi-credentials";
@@ -157,6 +158,7 @@ export async function createClientAgent(input: {
       metadata: {
         client_created: true,
         agent_kind: "whatsapp",
+        multichannel_config: defaultAgentChannelConfig,
         company_id: company.id,
         company_name: company.name,
         sector_code: sectorCode,
@@ -508,6 +510,7 @@ function mergeAgentMetadata(
     ...(metadata ?? {}),
     client_created: true,
     agent_kind: "whatsapp",
+    multichannel_config: normalizeAgentChannelConfig((metadata ?? {}).multichannel_config),
     company_id: company.id,
     company_name: company.name,
     sector_code: sectorCode,

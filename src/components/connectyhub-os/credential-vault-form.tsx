@@ -1117,7 +1117,7 @@ function getInputType(field: VaultField) {
 function getPlaceholder(field: VaultField) {
   if (field.multiline) return "Cole uma lista separada por virgulas ou uma permissao por linha.";
   if (field.env.includes("STATUS")) return "Ex: teste, em revisao, aprovado.";
-  if (field.env.includes("VERSION")) return "Ex: v23.0 ou v24.";
+  if (field.env.includes("VERSION")) return "Ex: v25.0.";
   if (field.kind === "endpoint")    return "Cole a URL completa, com https://.";
   if (field.env.includes("EMAIL"))  return "Digite o email da conta.";
   if (field.kind === "secret")      return "Cole a chave, senha ou token.";

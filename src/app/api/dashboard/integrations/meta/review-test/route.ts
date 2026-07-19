@@ -292,7 +292,7 @@ async function updateIntegrationTestStatus(input: {
           ...metadata,
           review_test: reviewTest,
         },
-        status: input.summary ? "warning" : "connected",
+        status: input.summary ? "error" : "connected",
         updated_at: input.ranAt,
       })
       .eq("id", data.id);

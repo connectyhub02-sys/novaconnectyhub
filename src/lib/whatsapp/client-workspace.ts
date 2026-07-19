@@ -2,6 +2,11 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
+import {
+  defaultAgentChannelConfig,
+  normalizeAgentChannelConfig,
+  type AgentChannelConfig,
+} from "@/lib/agents/multichannel";
 import { generateElevenLabsAudio } from "@/lib/elevenlabs/tts";
 import { listWhatsappAudioVoices, type WhatsappAudioVoiceState } from "@/lib/elevenlabs/voices";
 import {
@@ -210,6 +215,7 @@ export type ClientWhatsappState = {
     cloneMemory: WhatsappCloneMemory;
     cloneProfileImport: WhatsappCloneProfileImportStatus;
     qualification: LeadQualificationConfig;
+    channelConfig: AgentChannelConfig;
     updatedAt: string | null;
   } | null;
   globalAgent: {
@@ -1034,6 +1040,7 @@ export async function updateClientWhatsappPrompt(input: {
   behavior?: unknown;
   cloneProfile?: unknown;
   qualificationConfig?: unknown;
+  channelConfig?: unknown;
   client?: SupabaseClient;
 }): Promise<ClientWhatsappState> {
   const agentPrompt = (input.agentPrompt ?? input.prompt)?.trim();
@@ -1073,9 +1080,13 @@ export async function updateClientWhatsappPrompt(input: {
   const nextQualificationConfig = hasQualificationConfig
     ? normalizeLeadQualificationConfig(input.qualificationConfig)
     : getLeadQualificationConfig(agent);
+  const hasChannelConfig = input.channelConfig !== undefined;
+  const nextChannelConfig = hasChannelConfig
+    ? normalizeAgentChannelConfig(input.channelConfig)
+    : getAgentChannelConfig(agent);
   const now = new Date().toISOString();
 
-  if (hasAgentPrompt || hasQualificationConfig || input.behavior !== undefined || hasCloneProfile) {
+  if (hasAgentPrompt || hasQualificationConfig || input.behavior !== undefined || hasCloneProfile || hasChannelConfig) {
     const promptToSave = hasAgentPrompt ? agentPrompt : agent.prompt?.trim() || defaultWhatsappAgentPrompt;
     const nextVersion = hasAgentPrompt ? await getNextPromptVersion(client, agent.id) : null;
     const { error } = await client
@@ -1087,6 +1098,7 @@ export async function updateClientWhatsappPrompt(input: {
           ...(agent.metadata ?? {}),
           whatsapp_behavior_config: nextBehavior,
           whatsapp_clone_profile: nextCloneProfile,
+          multichannel_config: nextChannelConfig,
           [leadQualificationConfigKey]: nextQualificationConfig,
           prompt_control: {
             last_updated_at: now,
@@ -2290,6 +2302,7 @@ function buildState(
           cloneMemory: getCloneMemoryConfig(agent),
           cloneProfileImport: getCloneProfileImportStatus(agent),
           qualification: getLeadQualificationConfig(agent),
+          channelConfig: getAgentChannelConfig(agent),
           updatedAt: agent.updated_at,
         }
       : null,
@@ -2368,6 +2381,10 @@ function getBehaviorConfig(globalAgent: AgentRow, instance: WhatsappInstanceRow 
 
 function getLeadQualificationConfig(agent: AgentRow | null) {
   return normalizeLeadQualificationConfig(readRecord(agent?.metadata)?.[leadQualificationConfigKey]);
+}
+
+function getAgentChannelConfig(agent: AgentRow | null) {
+  return normalizeAgentChannelConfig(readRecord(agent?.metadata)?.multichannel_config ?? defaultAgentChannelConfig);
 }
 
 function getCloneProfileConfig(agent: AgentRow | null) {

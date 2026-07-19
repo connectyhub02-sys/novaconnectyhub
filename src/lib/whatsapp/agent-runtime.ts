@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { buildAgentChannelRuntimeInstruction } from "@/lib/agents/multichannel";
 import { generateElevenLabsAudio } from "@/lib/elevenlabs/tts";
 import {
   buildLeadQualificationAnalysisPrompt,
@@ -1614,6 +1615,12 @@ function buildSystemInstruction(input: {
     `- Empresa: ${input.organization.name}`,
     `- Agente: ${input.agent.persona_name?.trim() || input.agent.name}`,
     leadNameContext,
+    "",
+    "CANAL DO ATENDIMENTO:",
+    buildAgentChannelRuntimeInstruction({
+      channelId: "whatsapp",
+      config: readRecord(input.agent.metadata)?.multichannel_config,
+    }),
     ...buildLeadMemoryLines(input.lead, input.behavior),
     ...buildCrossAgentConversationLines(input.crossAgentContext, input.agent),
     ...buildKnowledgeLines(input.knowledge),

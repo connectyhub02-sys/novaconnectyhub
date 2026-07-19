@@ -88,6 +88,14 @@ import {
   formatSalesCatalogStockStatus,
   type ClientSalesCatalogItem,
 } from "@/lib/sales-catalog/shared";
+import {
+  agentChannelDefinitions,
+  defaultAgentChannelConfig,
+  normalizeAgentChannelConfig,
+  type AgentChannelConfig,
+  type AgentChannelConfigItem,
+  type AgentChannelId,
+} from "@/lib/agents/multichannel";
 import { cn } from "@/lib/utils";
 
 type WhatsappStatus = "draft" | "qr_pending" | "connected" | "disconnected" | "blocked" | "error" | "archived";
@@ -235,6 +243,7 @@ type WhatsappState = {
     cloneMemory?: WhatsappCloneMemory;
     cloneProfileImport?: CloneProfileImportStatus;
     qualification?: LeadQualificationConfig;
+    channelConfig?: AgentChannelConfig;
     updatedAt: string | null;
   } | null;
   globalAgent: {
@@ -423,7 +432,7 @@ const controlToneStyles: Record<ControlTone, ControlToneStyle> = {
   slate: { color: "#94a3b8", rgb: "148,163,184" },
 };
 
-type WhatsappConsoleTab = "connection" | "prompt" | "qualification" | "behavior" | "multichannel" | "files";
+type WhatsappConsoleTab = "connection" | "prompt" | "qualification" | "behavior" | "channels" | "multichannel" | "files";
 
 type WhatsappConsoleVariant = {
   entityIdKey: "companyId" | "sectorId";
@@ -572,6 +581,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
   const [behaviorDraft, setBehaviorDraft] = useState<WhatsappBehaviorConfig>(defaultWhatsappBehaviorConfig);
   const [cloneProfileDraft, setCloneProfileDraft] = useState<WhatsappCloneProfile>(defaultWhatsappCloneProfile);
   const [qualificationDraft, setQualificationDraft] = useState<LeadQualificationConfig>(defaultLeadQualificationConfig);
+  const [channelConfigDraft, setChannelConfigDraft] = useState<AgentChannelConfig>(defaultAgentChannelConfig);
   const [selectedCompanyId, setSelectedCompanyId] = useState("");
   const [selectedAgentId, setSelectedAgentId] = useState("");
   const [showAgentForm, setShowAgentForm] = useState(false);
@@ -673,6 +683,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
       const nextBehavior = normalizeWhatsappBehaviorConfig(nextState.behavior);
       setBehaviorDraft(nextBehavior);
       setCloneProfileDraft(normalizeWhatsappCloneProfile(nextState.agent?.cloneProfile));
+      setChannelConfigDraft(normalizeAgentChannelConfig(nextState.agent?.channelConfig));
       setStatusMaxRecipients(nextBehavior.whatsappMaxStatusRecipients);
       setQualificationDraft(normalizeLeadQualificationConfig(nextState.agent?.qualification));
     }
@@ -893,7 +904,10 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
   const qualificationChanged = state?.agent
     ? !isLeadQualificationConfigEqual(qualificationDraft, normalizeLeadQualificationConfig(state.agent.qualification))
     : false;
-  const settingsChanged = promptChanged || behaviorChanged || cloneProfileChanged || qualificationChanged;
+  const channelConfigChanged = state?.agent
+    ? !isAgentChannelConfigEqual(channelConfigDraft, normalizeAgentChannelConfig(state.agent.channelConfig))
+    : false;
+  const settingsChanged = promptChanged || behaviorChanged || cloneProfileChanged || qualificationChanged || channelConfigChanged;
   const companies = state?.companies ?? [];
   const agents = state?.agents ?? [];
   const selectedCompany = companies.find((company) => company.id === selectedCompanyId) ?? companies[0] ?? null;
@@ -933,6 +947,25 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
 
   function updateBehavior<K extends keyof WhatsappBehaviorConfig>(key: K, value: WhatsappBehaviorConfig[K]) {
     setBehaviorDraft((current) => normalizeWhatsappBehaviorConfig({ ...current, [key]: value }));
+  }
+
+  function updateAgentChannelConfig(channelId: AgentChannelId, patch: Partial<AgentChannelConfigItem>) {
+    setChannelConfigDraft((current) => {
+      const normalized = normalizeAgentChannelConfig(current);
+      const currentChannel = normalized.channels[channelId];
+
+      return normalizeAgentChannelConfig({
+        ...normalized,
+        channels: {
+          ...normalized.channels,
+          [channelId]: {
+            ...currentChannel,
+            ...patch,
+            enabled: channelId === "whatsapp" ? true : patch.enabled ?? currentChannel.enabled,
+          },
+        },
+      });
+    });
   }
 
   function updatePresenceMode(value: WhatsappPresenceMode) {
@@ -1176,6 +1209,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
           behavior: behaviorDraft,
           cloneProfile: cloneProfileDraft,
           qualificationConfig: qualificationDraft,
+          channelConfig: channelConfigDraft,
         }),
       });
       const data = (await response.json().catch(() => null)) as (WhatsappState & { error?: string }) | null;
@@ -1701,6 +1735,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
           promptChanged={promptChanged}
           cloneProfileChanged={cloneProfileChanged}
           qualificationChanged={qualificationChanged}
+          channelConfigChanged={channelConfigChanged}
           settingsChanged={settingsChanged}
           behaviorChanged={behaviorChanged}
           promptTooLong={promptTooLong}
@@ -2177,7 +2212,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
               </BehaviorSection>
             </div>
 
-            <BehaviorSummary behavior={behaviorDraft} promptChanged={promptChanged} behaviorChanged={behaviorChanged} />
+              <BehaviorSummary behavior={behaviorDraft} promptChanged={promptChanged} behaviorChanged={behaviorChanged} />
 
             <div className="flex flex-wrap gap-2 2xl:col-start-2">
               <SecondaryAction
@@ -2195,6 +2230,47 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
                 loading={running === "save_settings"}
                 onClick={saveAgentSettings}
               />
+            </div>
+          </div>
+        </Panel>
+      </div>
+      ) : null}
+
+      {state?.agent && activeTab === "channels" ? (
+      <div className="mt-5">
+        <Panel
+          title="Canais do agente"
+          eyebrow="whatsapp / instagram / facebook"
+          action={<NeonBadge tone={channelConfigChanged ? "amber" : "green"}>{channelConfigChanged ? "alterado" : "salvo"}</NeonBadge>}
+        >
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(260px,0.36fr)]">
+            <AgentChannelSettingsPanel
+              config={channelConfigDraft}
+              changed={channelConfigChanged}
+              onChange={(channelId, patch) => updateAgentChannelConfig(channelId, patch)}
+            />
+            <div className="grid content-start gap-2">
+              <InfoTile label="Canal principal" value="WhatsApp" />
+              <InfoTile label="Meta ativos" value={`${countEnabledMetaChannels(channelConfigDraft)} / 4`} />
+              <InfoTile label="Comentarios" value={countEnabledPublicChannels(channelConfigDraft) ? "Preparado" : "Pausado"} />
+              <InfoTile label="Directs" value={countEnabledPrivateMetaChannels(channelConfigDraft) ? "Preparado" : "Pausado"} />
+              <div className="flex flex-wrap gap-2 pt-1">
+                <SecondaryAction
+                  icon={RefreshCcw}
+                  label="Restaurar salvo"
+                  description="Desfaz alteracoes ainda nao salvas nos canais do agente."
+                  disabled={!state || !channelConfigChanged}
+                  onClick={() => setChannelConfigDraft(normalizeAgentChannelConfig(state?.agent?.channelConfig))}
+                />
+                <ActionButton
+                  icon={Wand2}
+                  label="Salvar canais"
+                  description="Grava quais redes o mesmo agente pode atender."
+                  disabled={!state?.capability.schemaReady || !channelConfigChanged}
+                  loading={running === "save_settings"}
+                  onClick={saveAgentSettings}
+                />
+              </div>
             </div>
           </div>
         </Panel>
@@ -2270,8 +2346,151 @@ function isBehaviorEqual(left: WhatsappBehaviorConfig, right: WhatsappBehaviorCo
   return JSON.stringify(normalizeWhatsappBehaviorConfig(left)) === JSON.stringify(normalizeWhatsappBehaviorConfig(right));
 }
 
+function isAgentChannelConfigEqual(left: AgentChannelConfig, right: AgentChannelConfig) {
+  return JSON.stringify(normalizeAgentChannelConfig(left)) === JSON.stringify(normalizeAgentChannelConfig(right));
+}
+
 function isCloneProfileEqual(left: WhatsappCloneProfile, right: WhatsappCloneProfile) {
   return JSON.stringify(normalizeWhatsappCloneProfile(left)) === JSON.stringify(normalizeWhatsappCloneProfile(right));
+}
+
+function countEnabledMetaChannels(config: AgentChannelConfig) {
+  const normalized = normalizeAgentChannelConfig(config);
+  return agentChannelDefinitions.filter((definition) =>
+    definition.provider === "meta" && normalized.channels[definition.id].enabled
+  ).length;
+}
+
+function countEnabledPublicChannels(config: AgentChannelConfig) {
+  const normalized = normalizeAgentChannelConfig(config);
+  return agentChannelDefinitions.filter((definition) =>
+    definition.provider === "meta" && definition.mode === "public" && normalized.channels[definition.id].enabled
+  ).length;
+}
+
+function countEnabledPrivateMetaChannels(config: AgentChannelConfig) {
+  const normalized = normalizeAgentChannelConfig(config);
+  return agentChannelDefinitions.filter((definition) =>
+    definition.provider === "meta" && definition.mode === "private" && normalized.channels[definition.id].enabled
+  ).length;
+}
+
+function AgentChannelSettingsPanel({
+  config,
+  changed,
+  onChange,
+}: {
+  config: AgentChannelConfig;
+  changed: boolean;
+  onChange: (channelId: AgentChannelId, patch: Partial<AgentChannelConfigItem>) => void;
+}) {
+  const normalized = normalizeAgentChannelConfig(config);
+
+  return (
+    <div className="grid gap-4">
+      <BehaviorSection
+        title="Agente unico"
+        description="O prompt principal continua sendo um so. Cada rede adiciona apenas o contexto operacional do canal antes da IA responder."
+      >
+        <div className="grid gap-2 md:grid-cols-2">
+          {agentChannelDefinitions.map((definition) => {
+            const channel = normalized.channels[definition.id];
+            const enabled = channel.enabled;
+
+            return (
+              <div
+                key={definition.id}
+                className="rounded-lg border p-3"
+                style={{ borderColor: "var(--ch-border)", background: "var(--ch-panel-2)" }}
+              >
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-[13px] font-semibold leading-5" style={{ color: "var(--ch-text)" }}>{definition.label}</p>
+                      <NeonBadge tone={enabled ? "green" : "amber"}>{enabled ? "ativo" : "pausado"}</NeonBadge>
+                      {definition.primary ? <NeonBadge tone="cyan">principal</NeonBadge> : null}
+                    </div>
+                    <p className="mt-1 text-[11px] leading-5 text-slate-500">{definition.description}</p>
+                  </div>
+                </div>
+
+                <div className="mt-3 grid gap-2">
+                  {definition.primary ? (
+                    <>
+                      <InfoTile label="Estado" value="Sempre ativo" />
+                      <InfoTile label="Historico" value="Gravado no CRM" />
+                    </>
+                  ) : (
+                    <ToggleTile
+                      icon={Power}
+                      label={`Ativar ${definition.shortLabel}`}
+                      description="Habilita este canal para o mesmo agente atender quando a integracao Meta permitir."
+                      checked={enabled}
+                      onChange={() => onChange(definition.id, { enabled: !enabled })}
+                    />
+                  )}
+
+                  {definition.mode === "public" ? (
+                    <div className="grid gap-2 md:grid-cols-3">
+                      <ToggleTile
+                        icon={MessageCircle}
+                        label="Comentario publico"
+                        description="Permite registrar e preparar resposta publica em comentarios."
+                        checked={channel.allowPublicReplies}
+                        onChange={() => onChange(definition.id, { allowPublicReplies: !channel.allowPublicReplies })}
+                      />
+                      <ToggleTile
+                        icon={Send}
+                        label="Direct privado"
+                        description="Permite continuar a conversa no privado quando a Meta liberar private reply/direct."
+                        checked={channel.allowPrivateReplies}
+                        onChange={() => onChange(definition.id, { allowPrivateReplies: !channel.allowPrivateReplies })}
+                      />
+                      <ToggleTile
+                        icon={ShieldCheck}
+                        label="Aprovacao humana"
+                        description="Segura respostas sensiveis de comentario antes de publicar."
+                        checked={channel.requiresHumanApproval}
+                        onChange={() => onChange(definition.id, { requiresHumanApproval: !channel.requiresHumanApproval })}
+                      />
+                    </div>
+                  ) : definition.primary ? null : (
+                    <div className="grid gap-2 md:grid-cols-2">
+                      <ToggleTile
+                        icon={Bot}
+                        label="Resposta automatica"
+                        description="Permite que o agente responda no canal privado sem criar outro prompt."
+                        checked={channel.autoReply}
+                        onChange={() => onChange(definition.id, { autoReply: !channel.autoReply })}
+                      />
+                      <ToggleTile
+                        icon={ShieldCheck}
+                        label="Aprovacao humana"
+                        description="Segura conversas privadas quando houver risco ou regra comercial sensivel."
+                        checked={channel.requiresHumanApproval}
+                        onChange={() => onChange(definition.id, { requiresHumanApproval: !channel.requiresHumanApproval })}
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </BehaviorSection>
+
+      <BehaviorSection
+        title="Politica de atendimento"
+        description="O historico continua centralizado em leads, conversas e mensagens. Meta entra como novo canal, nao como novo agente."
+      >
+        <div className="grid gap-2 md:grid-cols-3">
+          <InfoTile label="Prompt" value="Unico por agente" />
+          <InfoTile label="Memoria" value="Unificada por lead" />
+          <InfoTile label="Status" value={changed ? "Alteracoes pendentes" : "Configuracao salva"} />
+        </div>
+      </BehaviorSection>
+    </div>
+  );
 }
 
 function countCloneProfileFields(profile: WhatsappCloneProfile) {
@@ -2383,6 +2602,7 @@ const whatsappConsoleTabs: Array<{
   { id: "prompt", label: "Prompt", description: "Texto do agente", icon: PenLine },
   { id: "qualification", label: "Qualificacao", description: "CRM e score", icon: CheckCircle2 },
   { id: "behavior", label: "Comportamento", description: "Modos e timers", icon: Shuffle },
+  { id: "channels", label: "Redes sociais", description: "Canais do agente", icon: Globe2 },
   { id: "multichannel", label: "Multicanal", description: "Grupos e campanhas", icon: Forward },
   { id: "files", label: "Arquivos", description: "Conhecimento", icon: FileText },
 ];
@@ -2396,6 +2616,7 @@ function WhatsappConsoleCommandBar({
   promptChanged,
   cloneProfileChanged,
   qualificationChanged,
+  channelConfigChanged,
   settingsChanged,
   behaviorChanged,
   promptTooLong,
@@ -2411,6 +2632,7 @@ function WhatsappConsoleCommandBar({
   promptChanged: boolean;
   cloneProfileChanged: boolean;
   qualificationChanged: boolean;
+  channelConfigChanged: boolean;
   settingsChanged: boolean;
   behaviorChanged: boolean;
   promptTooLong: boolean;
@@ -2423,6 +2645,7 @@ function WhatsappConsoleCommandBar({
     promptChanged ? "Prompt" : null,
     cloneProfileChanged ? "DNA manual" : null,
     qualificationChanged ? "CRM" : null,
+    channelConfigChanged ? "Canais" : null,
     behaviorChanged ? "Comportamento" : null,
   ].filter(Boolean);
   const changeLabel = promptTooLong

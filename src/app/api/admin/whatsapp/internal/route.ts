@@ -31,6 +31,7 @@ type ActionBody = {
   behavior?: unknown;
   cloneProfile?: unknown;
   qualificationConfig?: unknown;
+  channelConfig?: unknown;
   maxChats?: unknown;
   maxMessagesPerChat?: unknown;
   connectPhone?: unknown;
@@ -220,6 +221,7 @@ export async function PATCH(request: NextRequest) {
       behavior: body?.behavior,
       cloneProfile: body?.cloneProfile,
       qualificationConfig: body?.qualificationConfig,
+      channelConfig: body?.channelConfig,
       client: createServiceClient(),
     });
 

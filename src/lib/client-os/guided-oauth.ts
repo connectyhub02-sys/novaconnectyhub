@@ -134,10 +134,17 @@ const defaultMetaPermissions = [
   "read_insights",
   "pages_show_list",
   "pages_read_engagement",
+  "pages_manage_metadata",
+  "pages_manage_posts",
+  "pages_manage_engagement",
   "pages_manage_ads",
+  "pages_messaging",
   "leads_retrieval",
   "instagram_basic",
   "instagram_manage_insights",
+  "instagram_content_publish",
+  "instagram_manage_comments",
+  "instagram_manage_messages",
 ];
 
 export function getGuidedOAuthConfig(kind: GuidedOAuthProviderKind) {
@@ -177,7 +184,7 @@ export async function loadMetaGuidedOAuthConfig(input: { client?: SupabaseClient
   const redirectUri = getCredentialValue(credentials, ["META_OAUTH_REDIRECT_URI"])
     || `${getAppBaseUrl()}/api/dashboard/integrations/meta/callback`;
   const permissions = normalizeMetaPermissions(getCredentialValue(credentials, ["META_ENABLED_PERMISSIONS"]));
-  const graphVersion = normalizeVersion(getCredentialValue(credentials, ["META_GRAPH_API_VERSION"]) || "v23.0");
+  const graphVersion = normalizeVersion(getCredentialValue(credentials, ["META_GRAPH_API_VERSION"]) || "v25.0");
   const loginConfigId = getCredentialValue(credentials, ["META_LOGIN_CONFIG_ID"]) || null;
 
   if (!appId || !appSecret) {

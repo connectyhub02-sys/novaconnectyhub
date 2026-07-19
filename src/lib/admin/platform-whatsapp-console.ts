@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
 import { generateElevenLabsAudio } from "@/lib/elevenlabs/tts";
 import { listWhatsappAudioVoices, type WhatsappAudioVoiceState } from "@/lib/elevenlabs/voices";
+import { defaultAgentChannelConfig, normalizeAgentChannelConfig } from "@/lib/agents/multichannel";
 import {
   leadQualificationConfigKey,
   normalizeLeadQualificationConfig,
@@ -257,6 +258,7 @@ export async function updatePlatformWhatsappConsoleSettings(input: {
   behavior?: unknown;
   cloneProfile?: unknown;
   qualificationConfig?: unknown;
+  channelConfig?: unknown;
   voiceOrganizationId?: string | null;
   client?: SupabaseClient;
 }) {
@@ -291,6 +293,9 @@ export async function updatePlatformWhatsappConsoleSettings(input: {
   const nextQualificationConfig = input.qualificationConfig !== undefined
     ? normalizeLeadQualificationConfig(input.qualificationConfig)
     : normalizeLeadQualificationConfig(readRecord(agent.metadata)?.[leadQualificationConfigKey]);
+  const nextChannelConfig = input.channelConfig !== undefined
+    ? normalizeAgentChannelConfig(input.channelConfig)
+    : getAgentChannelConfig(agent);
   const now = new Date().toISOString();
   const nextPrompt = hasAgentPrompt ? agentPrompt! : agent.prompt?.trim() || defaultWhatsappAgentPrompt;
   const nextVersion = hasAgentPrompt ? await getNextPromptVersion(client, agent.id) : null;
@@ -298,6 +303,7 @@ export async function updatePlatformWhatsappConsoleSettings(input: {
     ...(agent.metadata ?? {}),
     whatsapp_behavior_config: nextBehavior,
     whatsapp_clone_profile: nextCloneProfile,
+    multichannel_config: nextChannelConfig,
     [leadQualificationConfigKey]: nextQualificationConfig,
     prompt_control: {
       last_updated_at: now,
@@ -1139,6 +1145,7 @@ function buildState(
           cloneMemory: getCloneMemoryConfig(agent),
           cloneProfileImport: getCloneProfileImportStatus(agent),
           qualification: normalizeLeadQualificationConfig(readRecord(agent.metadata)?.[leadQualificationConfigKey]),
+          channelConfig: getAgentChannelConfig(agent),
           updatedAt: agent.updated_at,
         }
       : null,
@@ -1879,6 +1886,10 @@ function getBehaviorConfig(agent: AgentRow | null, instance: WhatsappInstanceRow
   const instanceConfig = readRecord(instance?.metadata)?.behavior_config;
   const agentConfig = readRecord(agent?.metadata)?.whatsapp_behavior_config;
   return normalizeWhatsappBehaviorConfig(instanceConfig ?? agentConfig ?? defaultWhatsappBehaviorConfig);
+}
+
+function getAgentChannelConfig(agent: AgentRow | null) {
+  return normalizeAgentChannelConfig(readRecord(agent?.metadata)?.multichannel_config ?? defaultAgentChannelConfig);
 }
 
 function getCloneProfileConfig(agent: AgentRow | null): WhatsappCloneProfile {

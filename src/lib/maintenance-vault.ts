@@ -180,7 +180,7 @@ export const maintenanceIntegrations: IntegrationDefinition[] = [
         kind: "identifier",
         requirement: "recommended",
         section: "App oficial",
-        help: "Versao usada nas chamadas Graph API, por exemplo v23.0. Se ficar vazio, usamos o padrao do sistema.",
+        help: "Versao usada nas chamadas Graph API, por exemplo v25.0. Se ficar vazio, usamos o padrao do sistema.",
       },
       {
         label: "Login Configuration ID",
@@ -229,7 +229,7 @@ export const maintenanceIntegrations: IntegrationDefinition[] = [
         requirement: "recommended",
         section: "Revisao e permissao",
         multiline: true,
-        help: "Lista de permissoes aprovadas ou solicitadas, como ads_read, ads_management, business_management, read_insights, pages_show_list, pages_read_engagement, leads_retrieval e instagram_basic.",
+        help: "Lista de permissoes aprovadas ou solicitadas, como ads_read, ads_management, business_management, pages_manage_posts, pages_messaging, leads_retrieval, instagram_content_publish, instagram_manage_comments e instagram_manage_messages.",
       },
       {
         label: "Webhook Verify Token",

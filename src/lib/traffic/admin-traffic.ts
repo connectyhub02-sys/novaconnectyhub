@@ -839,7 +839,7 @@ function buildGoogleAdsHeaders(credentials: CredentialMap, accessToken: string, 
 }
 
 function buildMetaGraphUrl(credentials: CredentialMap, path: string) {
-  const version = getCredential(credentials, ["META_GRAPH_API_VERSION"]) || "v23.0";
+  const version = getCredential(credentials, ["META_GRAPH_API_VERSION"]) || "v25.0";
   return new URL(`https://graph.facebook.com/${version}${path}`);
 }
 

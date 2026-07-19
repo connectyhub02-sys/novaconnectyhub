@@ -655,7 +655,7 @@ function normalizeMetaGraphVersion(value: string) {
   const trimmed = value.trim();
 
   if (!trimmed) {
-    return "v23.0";
+    return "v25.0";
   }
 
   return trimmed.startsWith("v") ? trimmed : `v${trimmed}`;
