@@ -86,6 +86,48 @@ type MetaReviewSnapshot = {
   results: ReviewTestResult[];
 };
 
+type MetaWebhookSimulationScenario =
+  | "facebook_comment"
+  | "facebook_messenger"
+  | "instagram_comment"
+  | "instagram_direct";
+
+type MetaWebhookIngestSnapshot = {
+  received: number;
+  stored: number;
+  normalized: number;
+  ignored: number;
+  failed: number;
+  unmapped: number;
+};
+
+type MetaWebhookActivationSnapshot = {
+  ok: boolean;
+  pageId: string;
+  requestedFields: string[];
+  subscribedFields: string[];
+  missingFields: string[];
+  endpoint: string;
+  httpStatus: number | null;
+  detail: string;
+  activatedAt: string;
+  instagramAppDashboardRequired: boolean;
+};
+
+type MetaWebhookSimulationSnapshot = {
+  scenario: MetaWebhookSimulationScenario;
+  assetId: string;
+  simulatedAt: string;
+  detail: string;
+  ingest: MetaWebhookIngestSnapshot;
+};
+
+type MetaWebhookActionResponse = {
+  activation?: MetaWebhookActivationSnapshot;
+  simulation?: MetaWebhookSimulationSnapshot;
+  error?: string;
+};
+
 const categoryIcons: Record<IntegrationCategory, LucideIcon> = {
   ads: BarChart3,
   calendar: CalendarDays,
@@ -104,6 +146,13 @@ const categoryLabels: Record<IntegrationCategory, string> = {
   webhooks: "Webhooks",
 };
 
+const metaWebhookSimulationScenarios: { id: MetaWebhookSimulationScenario; label: string }[] = [
+  { id: "facebook_comment", label: "Comentario FB" },
+  { id: "facebook_messenger", label: "Messenger" },
+  { id: "instagram_comment", label: "Comentario IG" },
+  { id: "instagram_direct", label: "Direct IG" },
+];
+
 export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationHubState }) {
   const [selectedCompanyId, setSelectedCompanyId] = useState(state.selectedCompanyId ?? state.companies[0]?.id ?? "");
   const [connections, setConnections] = useState(state.connections);
@@ -118,6 +167,7 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
   const [connectingGuidedProvider, setConnectingGuidedProvider] = useState<string | null>(null);
   const [disconnectingGuidedProvider, setDisconnectingGuidedProvider] = useState<string | null>(null);
   const [savingSelectionProvider, setSavingSelectionProvider] = useState<string | null>(null);
+  const [metaWebhookAction, setMetaWebhookAction] = useState<string | null>(null);
   const [guidedSelectionDrafts, setGuidedSelectionDrafts] = useState<Record<string, GuidedSelectionDraft>>({});
   const [newWebhookSecret, setNewWebhookSecret] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
@@ -479,6 +529,106 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
     }, ...current].slice(0, 80));
   }
 
+  async function runMetaWebhookAction(action: "subscribe_page" | "simulate", scenario?: MetaWebhookSimulationScenario) {
+    if (!selectedCompanyId || metaWebhookAction) return;
+
+    const actionKey = action === "simulate" ? `simulate:${scenario ?? ""}` : action;
+
+    setMetaWebhookAction(actionKey);
+    setNotice(null);
+
+    try {
+      const response = await fetch("/api/dashboard/integrations/meta/webhooks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action,
+          companyId: selectedCompanyId,
+          scenario,
+        }),
+      });
+      const data = await response.json().catch(() => null) as MetaWebhookActionResponse | null;
+
+      if (!response.ok || (!data?.activation && !data?.simulation)) {
+        throw new Error(data?.error ?? "Nao foi possivel executar a acao Meta.");
+      }
+
+      if (data.activation) {
+        const activation = data.activation;
+
+        setConnections((current) => current.map((connection) => {
+          if (connection.companyId !== selectedCompanyId || connection.providerId !== "meta-ads") {
+            return connection;
+          }
+
+          return {
+            ...connection,
+            lastError: activation.ok ? null : activation.detail,
+            lastSyncAt: activation.activatedAt,
+            metadata: {
+              ...connection.metadata,
+              webhook_activation: activation,
+            },
+          };
+        }));
+        setActionLogs((current) => [{
+          id: `local-meta-webhook-subscribe-${Date.now()}`,
+          action: "meta.webhook.subscribe",
+          companyId: selectedCompanyId,
+          createdAt: activation.activatedAt,
+          metadata: activation,
+          providerId: "meta-ads",
+          status: activation.ok ? "success" as const : "warning" as const,
+        }, ...current].slice(0, 80));
+        setNotice({
+          tone: activation.ok ? "success" : "warning",
+          message: activation.detail,
+        });
+      }
+
+      if (data.simulation) {
+        const simulation = data.simulation;
+        const simulationOk = simulation.ingest.normalized > 0 && simulation.ingest.failed === 0;
+
+        setConnections((current) => current.map((connection) => {
+          if (connection.companyId !== selectedCompanyId || connection.providerId !== "meta-ads") {
+            return connection;
+          }
+
+          return {
+            ...connection,
+            lastError: simulationOk ? null : simulation.detail,
+            lastSyncAt: simulation.simulatedAt,
+            metadata: {
+              ...connection.metadata,
+              webhook_simulation: simulation,
+            },
+          };
+        }));
+        setActionLogs((current) => [{
+          id: `local-meta-webhook-simulate-${Date.now()}`,
+          action: "meta.webhook.simulate",
+          companyId: selectedCompanyId,
+          createdAt: simulation.simulatedAt,
+          metadata: simulation,
+          providerId: "meta-ads",
+          status: simulationOk ? "success" as const : "warning" as const,
+        }, ...current].slice(0, 80));
+        setNotice({
+          tone: simulationOk ? "success" : "warning",
+          message: simulation.detail,
+        });
+      }
+    } catch (error) {
+      setNotice({
+        tone: "error",
+        message: error instanceof Error ? error.message : "Erro ao executar acao Meta.",
+      });
+    } finally {
+      setMetaWebhookAction(null);
+    }
+  }
+
   async function disconnectMercadoPago() {
     if (!selectedCompanyId || disconnectingMercadoPago) return;
 
@@ -575,6 +725,7 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
               setSelectedCompanyId(event.target.value);
               setNotice(null);
               setNewWebhookSecret(null);
+              setMetaWebhookAction(null);
               setGuidedSelectionDrafts({});
             }}
             className="h-11 w-full rounded-xl px-3 text-[13px] outline-none"
@@ -615,10 +766,12 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
             disconnecting={disconnectingGuidedProvider === "meta-ads"}
             kind="meta"
             actionLogs={metaActionLogs}
+            metaWebhookAction={metaWebhookAction}
             savingSelection={savingSelectionProvider === "meta-ads"}
             selectionDraft={guidedSelectionDrafts[guidedSelectionKey(selectedCompanyId, "meta-ads")] ?? {}}
             selectedCompanyId={selectedCompanyId}
             selectedCompanyName={selectedCompany?.name ?? null}
+            onActivateMetaWebhooks={() => runMetaWebhookAction("subscribe_page")}
             onConnect={(event) => handleGuidedOAuthConnectClick("meta-ads", event)}
             onDisconnect={() => disconnectGuidedOAuth("meta-ads")}
             onMetaReviewTestResult={handleMetaReviewTestResult}
@@ -629,6 +782,7 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
                 [guidedSelectionKey(selectedCompanyId, "meta-ads")]: selection,
               }));
             }}
+            onSimulateMetaWebhook={(scenario) => runMetaWebhookAction("simulate", scenario)}
           />
 
           <GuidedOAuthCard
@@ -1140,15 +1294,18 @@ function GuidedOAuthCard({
   connecting,
   disconnecting,
   kind,
+  metaWebhookAction,
   savingSelection,
   selectionDraft,
   selectedCompanyId,
   selectedCompanyName,
+  onActivateMetaWebhooks,
   onConnect,
   onDisconnect,
   onMetaReviewTestResult,
   onSaveSelection,
   onSelectionChange,
+  onSimulateMetaWebhook,
 }: {
   accountLabel: string | null;
   actionLogs: ClientIntegrationActionLog[];
@@ -1157,15 +1314,18 @@ function GuidedOAuthCard({
   connecting: boolean;
   disconnecting: boolean;
   kind: "meta" | "google";
+  metaWebhookAction?: string | null;
   savingSelection: boolean;
   selectionDraft: GuidedSelectionDraft;
   selectedCompanyId: string;
   selectedCompanyName: string | null;
+  onActivateMetaWebhooks?: () => void;
   onConnect: (event: MouseEvent<HTMLAnchorElement>) => void;
   onDisconnect: () => void;
   onMetaReviewTestResult?: (response: ReviewTestResponse) => void;
   onSaveSelection: (selection: GuidedSelectionDraft) => void;
   onSelectionChange: (selection: GuidedSelectionDraft) => void;
+  onSimulateMetaWebhook?: (scenario: MetaWebhookSimulationScenario) => void;
 }) {
   const config = kind === "meta"
     ? {
@@ -1206,6 +1366,8 @@ function GuidedOAuthCard({
     [group.field]: group.value,
   }), {});
   const metaReview = kind === "meta" ? readMetaReviewTest(connection?.metadata?.review_test) : null;
+  const metaWebhookActivation = kind === "meta" ? readMetaWebhookActivation(connection?.metadata?.webhook_activation) : null;
+  const metaWebhookSimulation = kind === "meta" ? readMetaWebhookSimulation(connection?.metadata?.webhook_simulation) : null;
 
   return (
     <section id={config.id} className="rounded-2xl p-4" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}>
@@ -1332,9 +1494,14 @@ function GuidedOAuthCard({
         {kind === "meta" ? (
           <MetaReadinessPanel
             actionLogs={actionLogs}
+            activation={metaWebhookActivation}
             connected={connected}
+            metaWebhookAction={metaWebhookAction ?? null}
             review={metaReview}
+            simulation={metaWebhookSimulation}
+            onActivateWebhooks={onActivateMetaWebhooks}
             onReviewResult={onMetaReviewTestResult}
+            onSimulateWebhook={onSimulateMetaWebhook}
           />
         ) : null}
       </div>
@@ -1344,14 +1511,24 @@ function GuidedOAuthCard({
 
 function MetaReadinessPanel({
   actionLogs,
+  activation,
   connected,
+  metaWebhookAction,
   review,
+  simulation,
+  onActivateWebhooks,
   onReviewResult,
+  onSimulateWebhook,
 }: {
   actionLogs: ClientIntegrationActionLog[];
+  activation: MetaWebhookActivationSnapshot | null;
   connected: boolean;
+  metaWebhookAction: string | null;
   review: MetaReviewSnapshot | null;
+  simulation: MetaWebhookSimulationSnapshot | null;
+  onActivateWebhooks?: () => void;
   onReviewResult?: (response: ReviewTestResponse) => void;
+  onSimulateWebhook?: (scenario: MetaWebhookSimulationScenario) => void;
 }) {
   const summary = review?.readiness;
   const tone = summary?.status === "ready"
@@ -1359,6 +1536,7 @@ function MetaReadinessPanel({
     : summary?.status === "warning"
       ? "amber"
       : "rose";
+  const actionRunning = Boolean(metaWebhookAction);
 
   return (
     <div className="mt-3 rounded-xl border p-3" style={{ background: "var(--ch-surface)", borderColor: "var(--ch-border)" }}>
@@ -1404,6 +1582,82 @@ function MetaReadinessPanel({
           Sem checklist salvo para esta empresa.
         </div>
       )}
+
+      <div className="mt-3 border-t border-white/10 pt-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="min-w-0">
+            <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-slate-500">ativacao webhooks</p>
+            <p className="mt-1 truncate text-[11px] text-slate-500">
+              {activation ? formatShortDate(activation.activatedAt) : "Aguardando assinatura da Pagina"}
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled={!connected || actionRunning || !onActivateWebhooks}
+            onClick={onActivateWebhooks}
+            className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border px-3 font-mono text-[9px] font-bold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10 disabled:cursor-not-allowed disabled:opacity-60"
+            style={{ borderColor: "var(--ch-border)" }}
+          >
+            {metaWebhookAction === "subscribe_page" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PlugZap className="h-3.5 w-3.5" />}
+            Assinar Page
+          </button>
+        </div>
+
+        {activation ? (
+          <div className="mt-2 rounded-lg border px-3 py-2" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="truncate text-[12px] font-semibold text-slate-100">Page {activation.pageId}</p>
+              <NeonBadge tone={activation.ok ? "green" : "amber"}>
+                {activation.ok ? "assinada" : `${activation.missingFields.length} pendente(s)`}
+              </NeonBadge>
+            </div>
+            <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-slate-500">{activation.detail}</p>
+            <p className="mt-1 truncate font-mono text-[9px] uppercase tracking-wide text-slate-500">
+              {activation.subscribedFields.length ? activation.subscribedFields.join(", ") : "sem confirmacao de campos"}
+            </p>
+            {activation.instagramAppDashboardRequired ? (
+              <p className="mt-2 rounded-md border border-amber-300/20 bg-amber-300/10 px-2 py-1.5 text-[10px] leading-4 text-amber-100">
+                Instagram Direct e comentarios seguem pelo App Dashboard da Meta.
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+
+        <div className="mt-3 flex flex-wrap gap-2">
+          {metaWebhookSimulationScenarios.map((scenario) => {
+            const key = `simulate:${scenario.id}`;
+
+            return (
+              <button
+                key={scenario.id}
+                type="button"
+                disabled={!connected || actionRunning || !onSimulateWebhook}
+                onClick={() => onSimulateWebhook?.(scenario.id)}
+                className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-lg border px-2.5 font-mono text-[8px] font-bold uppercase tracking-wide text-slate-300 transition hover:bg-emerald-400/10 hover:text-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
+                style={{ borderColor: "var(--ch-border)" }}
+              >
+                {metaWebhookAction === key ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
+                {scenario.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {simulation ? (
+          <div className="mt-2 rounded-lg border px-3 py-2" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="truncate text-[12px] font-semibold text-slate-100">{formatMetaWebhookScenario(simulation.scenario)}</p>
+              <span className="font-mono text-[9px] uppercase tracking-wide text-slate-500">{formatShortDate(simulation.simulatedAt)}</span>
+            </div>
+            <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-slate-500">{simulation.detail}</p>
+            <div className="mt-2 grid grid-cols-3 gap-2">
+              <ReadinessMiniStat label="Eventos" value={String(simulation.ingest.received)} tone="green" />
+              <ReadinessMiniStat label="CRM" value={String(simulation.ingest.normalized)} tone="green" />
+              <ReadinessMiniStat label="Falhas" value={String(simulation.ingest.failed + simulation.ingest.unmapped)} tone={simulation.ingest.failed + simulation.ingest.unmapped > 0 ? "amber" : "green"} />
+            </div>
+          </div>
+        ) : null}
+      </div>
 
       {actionLogs.length ? (
         <div className="mt-3 border-t border-white/10 pt-3">
@@ -1905,6 +2159,93 @@ function readMetaReviewReadiness(value: unknown): MetaReviewSnapshot["readiness"
   };
 }
 
+function readMetaWebhookActivation(value: unknown): MetaWebhookActivationSnapshot | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  const pageId = readMetadataString(record.pageId ?? record.page_id);
+  const detail = readMetadataString(record.detail);
+  const activatedAt = readMetadataString(record.activatedAt ?? record.activated_at);
+
+  if (!pageId || !detail || !activatedAt) {
+    return null;
+  }
+
+  return {
+    ok: record.ok === true,
+    pageId,
+    requestedFields: readMetadataStringArray(record.requestedFields ?? record.requested_fields),
+    subscribedFields: readMetadataStringArray(record.subscribedFields ?? record.subscribed_fields),
+    missingFields: readMetadataStringArray(record.missingFields ?? record.missing_fields),
+    endpoint: readMetadataString(record.endpoint) ?? "unknown",
+    httpStatus: typeof record.httpStatus === "number"
+      ? record.httpStatus
+      : typeof record.http_status === "number"
+        ? record.http_status
+        : null,
+    detail,
+    activatedAt,
+    instagramAppDashboardRequired: record.instagramAppDashboardRequired === true || record.instagram_app_dashboard_required === true,
+  };
+}
+
+function readMetaWebhookSimulation(value: unknown): MetaWebhookSimulationSnapshot | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  const scenario = readMetaWebhookScenario(record.scenario);
+  const assetId = readMetadataString(record.assetId ?? record.asset_id);
+  const simulatedAt = readMetadataString(record.simulatedAt ?? record.simulated_at);
+  const detail = readMetadataString(record.detail);
+  const ingest = readMetaWebhookIngest(record.ingest);
+
+  if (!scenario || !assetId || !simulatedAt || !detail || !ingest) {
+    return null;
+  }
+
+  return {
+    scenario,
+    assetId,
+    simulatedAt,
+    detail,
+    ingest,
+  };
+}
+
+function readMetaWebhookScenario(value: unknown): MetaWebhookSimulationScenario | null {
+  if (
+    value === "facebook_comment"
+    || value === "facebook_messenger"
+    || value === "instagram_comment"
+    || value === "instagram_direct"
+  ) {
+    return value;
+  }
+
+  return null;
+}
+
+function readMetaWebhookIngest(value: unknown): MetaWebhookIngestSnapshot | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+
+  return {
+    received: readMetadataNumber(record.received),
+    stored: readMetadataNumber(record.stored),
+    normalized: readMetadataNumber(record.normalized),
+    ignored: readMetadataNumber(record.ignored),
+    failed: readMetadataNumber(record.failed),
+    unmapped: readMetadataNumber(record.unmapped),
+  };
+}
+
 function readMetadataString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
@@ -1967,4 +2308,8 @@ function formatShortDate(value: string) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(time));
+}
+
+function formatMetaWebhookScenario(value: MetaWebhookSimulationScenario) {
+  return metaWebhookSimulationScenarios.find((scenario) => scenario.id === value)?.label ?? value;
 }

@@ -15,6 +15,7 @@ import {
   type MetaReviewReadinessSummary,
   type MetaReviewTestResult,
 } from "@/lib/meta/review-readiness";
+import { metaPageWebhookFields, summarizeMetaPageSubscription } from "@/lib/meta/webhook-activation-policy";
 import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
@@ -443,9 +444,11 @@ async function runPageSubscriptionTest(input: {
     });
     const data = await response.json().catch(() => null) as unknown;
     const subscribedFields = readPageSubscribedFields(data, input.config.appId);
-    const expectedFields = ["feed", "mention", "messages", "messaging_postbacks"];
-    const missingFields = expectedFields.filter((field) => !subscribedFields.has(field));
-    const ok = response.ok && subscribedFields.size > 0 && missingFields.length === 0;
+    const subscription = summarizeMetaPageSubscription({
+      requestedFields: metaPageWebhookFields,
+      subscribedFields,
+    });
+    const ok = response.ok && subscribedFields.size > 0 && subscription.ok;
 
     return createMetaReviewResult({
       id: "page_webhook_subscription",
@@ -454,7 +457,7 @@ async function runPageSubscriptionTest(input: {
       detail: response.ok
         ? ok
           ? "Pagina assinada para feed, mencoes e mensagens."
-          : `Subscription encontrada com campos pendentes: ${missingFields.join(", ") || "app nao listado"}.`
+          : `Subscription encontrada com campos pendentes: ${subscription.missingFields.join(", ") || "app nao listado"}.`
         : readGraphError(data),
       endpoint: sanitizeGraphUrl(url),
     });
