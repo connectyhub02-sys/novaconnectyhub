@@ -5,6 +5,7 @@ import {
   buildMetaSocialSuggestedReply,
   normalizeMetaSocialApprovalText,
 } from "@/lib/meta/social-approval-policy";
+import { enqueueApprovedMetaSocialDispatch } from "@/lib/meta/social-dispatcher";
 import {
   isMetaCommentChannel,
   isMetaSocialChannel,
@@ -213,10 +214,16 @@ export async function reviewClientSocialApproval(input: {
       throw new Error(`Nao foi possivel aprovar resposta social: ${error.message}`);
     }
 
+    await enqueueApprovedMetaSocialDispatch({
+      client,
+      runId: run.id,
+      metadata,
+    });
+
     return {
       runId: run.id,
       status: "approved",
-      message: "Resposta social aprovada.",
+      message: "Resposta social aprovada e enviada para a fila Meta.",
     };
   }
 

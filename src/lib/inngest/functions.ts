@@ -9,6 +9,11 @@ import {
   processQueuedMetaSocialAgentRuns,
 } from "@/lib/meta/social-agent-queue";
 import {
+  metaSocialDispatchRequestedEventName,
+  processApprovedMetaSocialDispatch,
+  processPendingApprovedMetaSocialDispatches,
+} from "@/lib/meta/social-dispatcher";
+import {
   metaSocialCommentReceivedEventName,
   metaSocialMessageReceivedEventName,
 } from "@/lib/meta/social-agent-policy";
@@ -194,6 +199,46 @@ export const connectyhubMetaSocialAgentSweep = inngest.createFunction(
   async ({ step }) => {
     const summary = await step.run("process-queued-meta-social-agent-runs", () =>
       processQueuedMetaSocialAgentRuns({ limit: 10 }),
+    );
+
+    return {
+      status: "swept",
+      summary,
+    };
+  },
+);
+
+export const connectyhubMetaSocialApprovedDispatch = inngest.createFunction(
+  {
+    id: "connectyhub-meta-social-approved-dispatch",
+    name: "ConnectyHub Meta Social Approved Dispatch",
+    retries: 3,
+    triggers: [{ event: metaSocialDispatchRequestedEventName }],
+  },
+  async ({ event, step }) => {
+    const data = event.data as { runId?: string } | undefined;
+    const runId = data?.runId;
+
+    if (!runId) {
+      return { status: "skipped", reason: "missing_run_id" };
+    }
+
+    return step.run("send-approved-meta-social-reply", () =>
+      processApprovedMetaSocialDispatch({ runId }),
+    );
+  },
+);
+
+export const connectyhubMetaSocialDispatchSweep = inngest.createFunction(
+  {
+    id: "connectyhub-meta-social-dispatch-sweep",
+    name: "ConnectyHub Meta Social Dispatch Sweep",
+    retries: 1,
+    triggers: [{ cron: "*/5 * * * *" }],
+  },
+  async ({ step }) => {
+    const summary = await step.run("process-pending-meta-social-dispatches", () =>
+      processPendingApprovedMetaSocialDispatches({ limit: 10 }),
     );
 
     return {
@@ -413,6 +458,8 @@ export const functions = [
   connectyhubMetaSocialMessageQueue,
   connectyhubMetaSocialCommentQueue,
   connectyhubMetaSocialAgentSweep,
+  connectyhubMetaSocialApprovedDispatch,
+  connectyhubMetaSocialDispatchSweep,
   connectyhubWhatsappOutboundDispatcher,
   connectyhubWhatsappOutboundSweep,
   connectyhubApiHealthMonitor,
