@@ -97,6 +97,16 @@ export type ClientIntegrationCredentialSnapshot = {
   updatedAt: string | null;
 };
 
+export type ClientIntegrationActionLog = {
+  id: string;
+  companyId: string | null;
+  providerId: string | null;
+  action: string;
+  status: "success" | "warning" | "error";
+  metadata: Record<string, unknown>;
+  createdAt: string | null;
+};
+
 export type ClientIntegrationHubState = {
   schemaReady: boolean;
   schemaMessage: string | null;
@@ -107,6 +117,7 @@ export type ClientIntegrationHubState = {
   connections: ClientIntegrationConnection[];
   credentialDefinitions: ClientIntegrationCredentialDefinition[];
   credentialSnapshots: ClientIntegrationCredentialSnapshot[];
+  actionLogs: ClientIntegrationActionLog[];
   webhookEndpoints: ClientIntegrationWebhookEndpoint[];
 };
 
@@ -148,6 +159,16 @@ type CredentialRow = {
   requirement: CredentialRequirement;
   value_preview: string;
   updated_at: string | null;
+};
+
+type IntegrationActionLogRow = {
+  id: string;
+  organization_id: string | null;
+  provider_id: string | null;
+  action: string;
+  status: string | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string | null;
 };
 
 const clientCredentialProviderMap: Record<string, string> = {
@@ -260,11 +281,12 @@ export async function getClientIntegrationHub(input: {
   const selectedCompanyId = resolveSelectedCompanyId(companies, input.preferredCompanyId);
   const companyIds = companies.map((company) => company.id);
 
-  const [paymentIntegrations, genericResult, webhookResult, credentialResult] = await Promise.all([
+  const [paymentIntegrations, genericResult, webhookResult, credentialResult, actionLogResult] = await Promise.all([
     listClientSalesCatalogPaymentIntegrations({ userId: input.userId, client }).catch(() => []),
     loadOrganizationIntegrations(client, companyIds),
     loadWebhookEndpoints(client, companyIds),
     loadOrganizationCredentials(client, companyIds),
+    loadIntegrationActionLogs(client, companyIds),
   ]);
 
   const connections = [
@@ -272,7 +294,7 @@ export async function getClientIntegrationHub(input: {
     ...buildGenericConnections(companies, genericResult.rows),
     ...buildFallbackConnections(companies, genericResult.rows, webhookResult.rows),
   ];
-  const schemaReady = genericResult.ready && webhookResult.ready;
+  const schemaReady = genericResult.ready && webhookResult.ready && actionLogResult.ready;
 
   return {
     schemaReady,
@@ -284,6 +306,7 @@ export async function getClientIntegrationHub(input: {
     connections,
     credentialDefinitions: clientCredentialDefinitions,
     credentialSnapshots: credentialResult.rows.map((row) => mapCredentialSnapshot(row)),
+    actionLogs: actionLogResult.rows.map((row) => mapIntegrationActionLog(row)),
     webhookEndpoints: webhookResult.rows.map((row) => mapWebhookEndpoint(row)),
   };
 }
@@ -472,6 +495,25 @@ async function loadOrganizationCredentials(client: SupabaseClient, companyIds: s
   return { ready: true, rows: (data ?? []) as CredentialRow[] };
 }
 
+async function loadIntegrationActionLogs(client: SupabaseClient, companyIds: string[]) {
+  if (companyIds.length === 0) {
+    return { ready: true, rows: [] as IntegrationActionLogRow[] };
+  }
+
+  const { data, error } = await client
+    .from("integration_action_logs")
+    .select("id, organization_id, provider_id, action, status, metadata, created_at")
+    .in("organization_id", companyIds)
+    .order("created_at", { ascending: false })
+    .limit(80);
+
+  if (error) {
+    return { ready: false, rows: [] as IntegrationActionLogRow[] };
+  }
+
+  return { ready: true, rows: (data ?? []) as IntegrationActionLogRow[] };
+}
+
 function mapWebhookEndpoint(row: WebhookEndpointRow): ClientIntegrationWebhookEndpoint {
   const urlPath = row.url_path ?? `/api/webhooks/universal/${row.id}`;
   const appBaseUrl = resolveAppBaseUrl();
@@ -493,6 +535,18 @@ function mapWebhookEndpoint(row: WebhookEndpointRow): ClientIntegrationWebhookEn
   };
 }
 
+function mapIntegrationActionLog(row: IntegrationActionLogRow): ClientIntegrationActionLog {
+  return {
+    id: row.id,
+    companyId: row.organization_id,
+    providerId: row.provider_id,
+    action: row.action,
+    status: normalizeActionLogStatus(row.status),
+    metadata: row.metadata ?? {},
+    createdAt: row.created_at,
+  };
+}
+
 function mapCredentialSnapshot(row: CredentialRow): ClientIntegrationCredentialSnapshot {
   return {
     id: row.id,
@@ -507,6 +561,14 @@ function mapCredentialSnapshot(row: CredentialRow): ClientIntegrationCredentialS
     configured: true,
     updatedAt: row.updated_at,
   };
+}
+
+function normalizeActionLogStatus(status: string | null): ClientIntegrationActionLog["status"] {
+  if (status === "warning" || status === "error") {
+    return status;
+  }
+
+  return "success";
 }
 
 function buildClientCredentialDefinitions(): ClientIntegrationCredentialDefinition[] {

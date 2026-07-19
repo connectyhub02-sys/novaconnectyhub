@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, type MouseEvent } from "react";
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
 import {
+  AlertTriangle,
   BarChart3,
   CalendarDays,
   CheckCircle2,
@@ -22,6 +23,7 @@ import {
   X,
 } from "lucide-react";
 import type {
+  ClientIntegrationActionLog,
   ClientIntegrationConnection,
   ClientIntegrationCredentialDefinition,
   ClientIntegrationCredentialSnapshot,
@@ -32,6 +34,7 @@ import type {
   IntegrationConnectionStatus,
 } from "@/lib/client-os/integrations";
 import { cn } from "@/lib/utils";
+import { MetaReviewTestButton, type ReviewTestResponse, type ReviewTestResult } from "./meta-review-test-button";
 import { NeonBadge, PageHeader, StatusBadge } from "./panel-primitives";
 
 type Notice = {
@@ -76,6 +79,13 @@ type GuidedSelectionGroup = {
   value: string;
 };
 
+type MetaReviewSnapshot = {
+  ranAt: string | null;
+  ok: boolean;
+  readiness: NonNullable<ReviewTestResponse["readiness"]> | null;
+  results: ReviewTestResult[];
+};
+
 const categoryIcons: Record<IntegrationCategory, LucideIcon> = {
   ads: BarChart3,
   calendar: CalendarDays,
@@ -98,6 +108,7 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
   const [selectedCompanyId, setSelectedCompanyId] = useState(state.selectedCompanyId ?? state.companies[0]?.id ?? "");
   const [connections, setConnections] = useState(state.connections);
   const [credentialSnapshots, setCredentialSnapshots] = useState(state.credentialSnapshots);
+  const [actionLogs, setActionLogs] = useState(state.actionLogs);
   const [credentialDrafts, setCredentialDrafts] = useState<Record<string, string>>({});
   const [savingProviderId, setSavingProviderId] = useState<string | null>(null);
   const [webhookEndpoints, setWebhookEndpoints] = useState(state.webhookEndpoints);
@@ -146,6 +157,10 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
   const metaConnection = connectionByProvider.get("meta-ads");
   const googleConnection = connectionByProvider.get("google-growth");
   const webhookConnection = connectionByProvider.get("webhook-universal");
+  const metaActionLogs = useMemo(
+    () => actionLogs.filter((log) => log.companyId === selectedCompanyId && log.providerId === "meta-ads").slice(0, 5),
+    [actionLogs, selectedCompanyId],
+  );
   const visibleProviders = useMemo(
     () => state.providers.filter((provider) => !isTopGuidedProvider(provider.id)),
     [state.providers],
@@ -426,6 +441,44 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
     }
   }
 
+  function handleMetaReviewTestResult(response: ReviewTestResponse) {
+    if (!selectedCompanyId) return;
+
+    const ranAt = response.ranAt ?? new Date().toISOString();
+    const reviewTest = {
+      ran_at: ranAt,
+      ok: response.ok === true,
+      readiness: response.readiness ?? null,
+      results: response.results ?? [],
+    };
+
+    setConnections((current) => current.map((connection) => {
+      if (connection.companyId !== selectedCompanyId || connection.providerId !== "meta-ads") {
+        return connection;
+      }
+
+      return {
+        ...connection,
+        lastError: response.ok ? null : response.summary ?? "Checklist Meta com pendencias.",
+        lastSyncAt: ranAt,
+        metadata: {
+          ...connection.metadata,
+          review_test: reviewTest,
+        },
+      };
+    }));
+
+    setActionLogs((current) => [{
+      id: `local-meta-review-${Date.now()}`,
+      action: "meta.review_test",
+      companyId: selectedCompanyId,
+      createdAt: ranAt,
+      metadata: reviewTest,
+      providerId: "meta-ads",
+      status: response.ok ? "success" as const : "warning" as const,
+    }, ...current].slice(0, 80));
+  }
+
   async function disconnectMercadoPago() {
     if (!selectedCompanyId || disconnectingMercadoPago) return;
 
@@ -561,12 +614,14 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
             connecting={connectingGuidedProvider === "meta-ads"}
             disconnecting={disconnectingGuidedProvider === "meta-ads"}
             kind="meta"
+            actionLogs={metaActionLogs}
             savingSelection={savingSelectionProvider === "meta-ads"}
             selectionDraft={guidedSelectionDrafts[guidedSelectionKey(selectedCompanyId, "meta-ads")] ?? {}}
             selectedCompanyId={selectedCompanyId}
             selectedCompanyName={selectedCompany?.name ?? null}
             onConnect={(event) => handleGuidedOAuthConnectClick("meta-ads", event)}
             onDisconnect={() => disconnectGuidedOAuth("meta-ads")}
+            onMetaReviewTestResult={handleMetaReviewTestResult}
             onSaveSelection={(selection) => saveGuidedSelection("meta-ads", selection)}
             onSelectionChange={(selection) => {
               setGuidedSelectionDrafts((current) => ({
@@ -583,12 +638,14 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
             connecting={connectingGuidedProvider === "google-growth"}
             disconnecting={disconnectingGuidedProvider === "google-growth"}
             kind="google"
+            actionLogs={[]}
             savingSelection={savingSelectionProvider === "google-growth"}
             selectionDraft={guidedSelectionDrafts[guidedSelectionKey(selectedCompanyId, "google-growth")] ?? {}}
             selectedCompanyId={selectedCompanyId}
             selectedCompanyName={selectedCompany?.name ?? null}
             onConnect={(event) => handleGuidedOAuthConnectClick("google-growth", event)}
             onDisconnect={() => disconnectGuidedOAuth("google-growth")}
+            onMetaReviewTestResult={undefined}
             onSaveSelection={(selection) => saveGuidedSelection("google-growth", selection)}
             onSelectionChange={(selection) => {
               setGuidedSelectionDrafts((current) => ({
@@ -1077,6 +1134,7 @@ function MercadoPagoGuidedCard({
 
 function GuidedOAuthCard({
   accountLabel,
+  actionLogs,
   connected,
   connection,
   connecting,
@@ -1088,10 +1146,12 @@ function GuidedOAuthCard({
   selectedCompanyName,
   onConnect,
   onDisconnect,
+  onMetaReviewTestResult,
   onSaveSelection,
   onSelectionChange,
 }: {
   accountLabel: string | null;
+  actionLogs: ClientIntegrationActionLog[];
   connected: boolean;
   connection?: ClientIntegrationConnection;
   connecting: boolean;
@@ -1103,6 +1163,7 @@ function GuidedOAuthCard({
   selectedCompanyName: string | null;
   onConnect: (event: MouseEvent<HTMLAnchorElement>) => void;
   onDisconnect: () => void;
+  onMetaReviewTestResult?: (response: ReviewTestResponse) => void;
   onSaveSelection: (selection: GuidedSelectionDraft) => void;
   onSelectionChange: (selection: GuidedSelectionDraft) => void;
 }) {
@@ -1144,6 +1205,7 @@ function GuidedOAuthCard({
     ...current,
     [group.field]: group.value,
   }), {});
+  const metaReview = kind === "meta" ? readMetaReviewTest(connection?.metadata?.review_test) : null;
 
   return (
     <section id={config.id} className="rounded-2xl p-4" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}>
@@ -1266,8 +1328,153 @@ function GuidedOAuthCard({
             </button>
           </div>
         ) : null}
+
+        {kind === "meta" ? (
+          <MetaReadinessPanel
+            actionLogs={actionLogs}
+            connected={connected}
+            review={metaReview}
+            onReviewResult={onMetaReviewTestResult}
+          />
+        ) : null}
       </div>
     </section>
+  );
+}
+
+function MetaReadinessPanel({
+  actionLogs,
+  connected,
+  review,
+  onReviewResult,
+}: {
+  actionLogs: ClientIntegrationActionLog[];
+  connected: boolean;
+  review: MetaReviewSnapshot | null;
+  onReviewResult?: (response: ReviewTestResponse) => void;
+}) {
+  const summary = review?.readiness;
+  const tone = summary?.status === "ready"
+    ? "green"
+    : summary?.status === "warning"
+      ? "amber"
+      : "rose";
+
+  return (
+    <div className="mt-3 rounded-xl border p-3" style={{ background: "var(--ch-surface)", borderColor: "var(--ch-border)" }}>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-slate-500">readiness Meta</p>
+          <p className="mt-1 text-[11px] leading-4 text-slate-500">
+            {summary
+              ? `${summary.ready}/${summary.total} checks prontos`
+              : "Execute o checklist antes de operar com usuarios reais."}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {summary ? (
+            <NeonBadge tone={tone}>
+              {summary.status === "ready" ? "pronto" : summary.status === "warning" ? "alerta" : "bloqueado"}
+            </NeonBadge>
+          ) : null}
+          <MetaReviewTestButton
+            label={connected ? "Rodar checklist" : "Testar Meta"}
+            onResult={onReviewResult}
+            tone="violet"
+          />
+        </div>
+      </div>
+
+      {summary ? (
+        <div className="mt-3 grid grid-cols-3 gap-2">
+          <ReadinessMiniStat label="OK" value={String(summary.ready)} tone="green" />
+          <ReadinessMiniStat label="Alertas" value={String(summary.warning)} tone="amber" />
+          <ReadinessMiniStat label="Bloqueios" value={String(summary.blocked)} tone="rose" />
+        </div>
+      ) : null}
+
+      {review?.results.length ? (
+        <div className="mt-3 grid gap-2">
+          {review.results.slice(0, 10).map((result) => (
+            <MetaReviewResultRow key={result.id} result={result} />
+          ))}
+        </div>
+      ) : (
+        <div className="mt-3 rounded-lg border border-dashed border-white/10 px-3 py-5 text-center text-[11px] text-slate-500">
+          Sem checklist salvo para esta empresa.
+        </div>
+      )}
+
+      {actionLogs.length ? (
+        <div className="mt-3 border-t border-white/10 pt-3">
+          <div className="mb-2 flex items-center gap-2">
+            <ShieldCheck className="h-3.5 w-3.5 text-cyan-200" />
+            <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-slate-500">ultimos logs Meta</p>
+          </div>
+          <div className="grid gap-1.5">
+            {actionLogs.map((log) => (
+              <div key={log.id} className="flex min-w-0 items-center justify-between gap-2 rounded-lg border px-2 py-1.5" style={{ borderColor: "var(--ch-border)" }}>
+                <span className="truncate font-mono text-[9px] uppercase tracking-wide text-slate-500">{log.action}</span>
+                <span className={cn(
+                  "shrink-0 font-mono text-[9px] uppercase",
+                  log.status === "success" ? "text-emerald-300" : log.status === "warning" ? "text-amber-300" : "text-rose-300",
+                )}>
+                  {formatShortDate(log.createdAt ?? "")}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function ReadinessMiniStat({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone: "green" | "amber" | "rose";
+}) {
+  const className = tone === "green"
+    ? "text-emerald-300"
+    : tone === "amber"
+      ? "text-amber-300"
+      : "text-rose-300";
+
+  return (
+    <div className="rounded-lg border px-2 py-2" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+      <p className="font-mono text-[8px] uppercase tracking-wide text-slate-500">{label}</p>
+      <p className={cn("mt-1 font-mono text-[15px] font-bold", className)}>{value}</p>
+    </div>
+  );
+}
+
+function MetaReviewResultRow({ result }: { result: ReviewTestResult }) {
+  return (
+    <div className="grid gap-2 rounded-lg border px-3 py-2 sm:grid-cols-[minmax(0,1fr)_auto]" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          {result.ok ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-300" /> : <AlertTriangle className="h-3.5 w-3.5 text-amber-300" />}
+          <p className="truncate text-[12px] font-semibold text-slate-100">{result.label}</p>
+          <span className="rounded-md border px-1.5 py-0.5 font-mono text-[8px] uppercase text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
+            {result.surface ?? "meta"}
+          </span>
+        </div>
+        <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-slate-500">{result.detail}</p>
+      </div>
+      <div className="flex items-center gap-2 sm:justify-end">
+        <span className={cn(
+          "rounded-md border px-2 py-1 font-mono text-[8px] uppercase tracking-wide",
+          result.ok ? "border-emerald-300/20 bg-emerald-300/10 text-emerald-200" : "border-amber-300/20 bg-amber-300/10 text-amber-200",
+        )}>
+          {result.ok ? "ok" : result.severity === "recommended" ? "alerta" : "acao"}
+        </span>
+      </div>
+    </div>
   );
 }
 
@@ -1628,8 +1835,82 @@ function copyText(value: string) {
   void navigator.clipboard.writeText(value);
 }
 
+function readMetaReviewTest(value: unknown): MetaReviewSnapshot | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  const results = Array.isArray(record.results)
+    ? record.results.map(readMetaReviewResult).filter((item): item is ReviewTestResult => Boolean(item))
+    : [];
+
+  return {
+    ranAt: readMetadataString(record.ran_at),
+    ok: record.ok === true,
+    readiness: readMetaReviewReadiness(record.readiness),
+    results,
+  };
+}
+
+function readMetaReviewResult(value: unknown): ReviewTestResult | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  const id = readMetadataString(record.id);
+  const label = readMetadataString(record.label);
+  const permission = readMetadataString(record.permission);
+  const detail = readMetadataString(record.detail);
+
+  if (!id || !label || !permission || !detail) {
+    return null;
+  }
+
+  return {
+    id,
+    label,
+    ok: record.ok === true,
+    permission,
+    permissions: readMetadataStringArray(record.permissions),
+    status: typeof record.status === "number" ? record.status : null,
+    detail,
+    endpoint: readMetadataString(record.endpoint) ?? "unknown",
+    surface: readMetadataString(record.surface) ?? undefined,
+    severity: readMetadataString(record.severity) ?? undefined,
+    action: readMetadataString(record.action) ?? undefined,
+  };
+}
+
+function readMetaReviewReadiness(value: unknown): MetaReviewSnapshot["readiness"] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  const status = readMetadataString(record.status);
+
+  if (status !== "ready" && status !== "warning" && status !== "blocked") {
+    return null;
+  }
+
+  return {
+    status,
+    total: readMetadataNumber(record.total),
+    ready: readMetadataNumber(record.ready),
+    warning: readMetadataNumber(record.warning),
+    blocked: readMetadataNumber(record.blocked),
+    generatedAt: readMetadataString(record.generatedAt) ?? readMetadataString(record.generated_at) ?? "",
+  };
+}
+
 function readMetadataString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function readMetadataNumber(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
 function readMetadataStringArray(value: unknown) {

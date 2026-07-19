@@ -6,18 +6,31 @@ import type { Tone } from "@/lib/connectyhub-os-data";
 import { cn } from "@/lib/utils";
 import { toneClass } from "./panel-primitives";
 
-type ReviewTestResult = {
+export type ReviewTestResult = {
   id: string;
   label: string;
   ok: boolean;
   permission: string;
+  permissions?: string[];
   status: number | null;
   detail: string;
   endpoint: string;
+  surface?: string;
+  severity?: string;
+  action?: string;
 };
 
-type ReviewTestResponse = {
+export type ReviewTestResponse = {
   ok?: boolean;
+  ranAt?: string;
+  readiness?: {
+    status: "ready" | "warning" | "blocked";
+    total: number;
+    ready: number;
+    warning: number;
+    blocked: number;
+    generatedAt: string;
+  };
   summary?: string;
   results?: ReviewTestResult[];
   error?: string;
@@ -27,9 +40,11 @@ type ButtonState = "idle" | "loading" | "success" | "warning" | "error";
 
 export function MetaReviewTestButton({
   label = "Testar conexao",
+  onResult,
   tone = "violet",
 }: {
   label?: string;
+  onResult?: (response: ReviewTestResponse) => void;
   tone?: Tone;
 }) {
   const [state, setState] = useState<ButtonState>("idle");
@@ -69,6 +84,8 @@ export function MetaReviewTestButton({
         setMessage(`${successCount}/${total} OK: ${formatFailedLabel(failed)}`);
         setDetail(formatFailedDetail(failed, body?.summary));
       }
+
+      onResult?.(body ?? {});
     } catch (error) {
       setState("error");
       const errorMessage = error instanceof Error ? error.message : "Teste Meta falhou.";
