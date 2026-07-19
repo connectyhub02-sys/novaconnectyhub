@@ -171,6 +171,46 @@ type MetaSocialLiveActivationResponse = {
   error?: string;
 };
 
+type MetaSocialCanaryDraft = {
+  channel: MetaSocialLiveChannelId;
+  targetId: string;
+  text: string;
+  replyMode: "private" | "public";
+  occurredAt: string;
+};
+
+type MetaSocialCanarySnapshot = {
+  runId: string | null;
+  status: "sent" | "blocked" | "failed" | "skipped";
+  dispatchStatus: string;
+  detail: string;
+  channel: MetaSocialLiveChannelId;
+  channelLabel: string;
+  replyMode: "private" | "public";
+  targetId: string;
+  targetKind: string | null;
+  endpoint: string | null;
+  httpStatus: number | null;
+  providerMessageId: string | null;
+  agentName: string;
+  ranAt: string;
+  audit: Array<{
+    at: string;
+    type: string;
+    status?: string;
+    message?: string;
+    targetKind?: string;
+    providerMessageId?: string;
+    httpStatus?: number;
+  }>;
+};
+
+type MetaSocialCanaryResponse = {
+  canary?: MetaSocialCanarySnapshot;
+  connection?: ClientIntegrationConnection;
+  error?: string;
+};
+
 type MetaWebhookMonitorStatus = "received" | "processed" | "ignored" | "failed";
 type MetaWebhookMonitorHealth = "idle" | "healthy" | "warning" | "critical";
 type MetaWebhookMonitorChannel =
@@ -324,6 +364,7 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
   const [savingSelectionProvider, setSavingSelectionProvider] = useState<string | null>(null);
   const [metaWebhookAction, setMetaWebhookAction] = useState<string | null>(null);
   const [savingMetaLiveActivation, setSavingMetaLiveActivation] = useState(false);
+  const [runningMetaCanary, setRunningMetaCanary] = useState(false);
   const [metaWebhookMonitor, setMetaWebhookMonitor] = useState<MetaWebhookMonitorSnapshot | null>(null);
   const [loadingMetaWebhookMonitor, setLoadingMetaWebhookMonitor] = useState(false);
   const [guidedSelectionDrafts, setGuidedSelectionDrafts] = useState<Record<string, GuidedSelectionDraft>>({});
@@ -969,6 +1010,63 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
     }
   }
 
+  async function runMetaSocialCanary(draft: MetaSocialCanaryDraft) {
+    if (!selectedCompanyId || runningMetaCanary) {
+      throw new Error("Canario Meta ja esta em execucao.");
+    }
+
+    setRunningMetaCanary(true);
+    setNotice(null);
+
+    try {
+      const response = await fetch("/api/dashboard/integrations/meta/canary-dispatch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...draft,
+          companyId: selectedCompanyId,
+        }),
+      });
+      const data = await response.json().catch(() => null) as MetaSocialCanaryResponse | null;
+
+      if (!response.ok || !data?.canary || !data.connection) {
+        throw new Error(data?.error ?? "Nao foi possivel executar o canario Meta.");
+      }
+
+      setConnections((current) => [
+        data.connection!,
+        ...current.filter((connection) => !(connection.companyId === selectedCompanyId && connection.providerId === "meta-ads")),
+      ]);
+      setActionLogs((current) => [{
+        id: `local-meta-canary-${Date.now()}`,
+        action: "meta.social_dispatch.canary",
+        companyId: selectedCompanyId,
+        createdAt: data.canary!.ranAt,
+        metadata: data.canary!,
+        providerId: "meta-ads",
+        status: data.canary!.status === "sent"
+          ? "success" as const
+          : data.canary!.status === "failed"
+            ? "error" as const
+            : "warning" as const,
+      }, ...current].slice(0, 80));
+      setNotice({
+        tone: data.canary.status === "sent" ? "success" : data.canary.status === "failed" ? "error" : "warning",
+        message: data.canary.detail,
+      });
+
+      return data.canary;
+    } catch (error) {
+      setNotice({
+        tone: "error",
+        message: error instanceof Error ? error.message : "Erro ao executar canario Meta.",
+      });
+      throw error;
+    } finally {
+      setRunningMetaCanary(false);
+    }
+  }
+
   async function disconnectMercadoPago() {
     if (!selectedCompanyId || disconnectingMercadoPago) return;
 
@@ -1110,6 +1208,7 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
             loadingMetaWebhookMonitor={loadingMetaWebhookMonitor}
             metaWebhookAction={metaWebhookAction}
             metaWebhookMonitor={metaWebhookMonitor}
+            runningMetaCanary={runningMetaCanary}
             savingMetaLiveActivation={savingMetaLiveActivation}
             savingSelection={savingSelectionProvider === "meta-ads"}
             selectionDraft={guidedSelectionDrafts[guidedSelectionKey(selectedCompanyId, "meta-ads")] ?? {}}
@@ -1121,6 +1220,7 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
             onMetaReviewTestResult={handleMetaReviewTestResult}
             onRefreshMetaWebhookMonitor={() => loadMetaWebhookMonitor()}
             onReplayMetaWebhookEvent={replayMetaWebhookEvent}
+            onRunMetaCanary={runMetaSocialCanary}
             onSaveMetaLiveActivation={saveMetaLiveDispatchActivation}
             onSaveSelection={(selection) => saveGuidedSelection("meta-ads", selection)}
             onSelectionChange={(selection) => {
@@ -1140,6 +1240,7 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
             disconnecting={disconnectingGuidedProvider === "google-growth"}
             kind="google"
             actionLogs={[]}
+            runningMetaCanary={false}
             savingMetaLiveActivation={false}
             savingSelection={savingSelectionProvider === "google-growth"}
             selectionDraft={guidedSelectionDrafts[guidedSelectionKey(selectedCompanyId, "google-growth")] ?? {}}
@@ -1148,6 +1249,7 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
             onConnect={(event) => handleGuidedOAuthConnectClick("google-growth", event)}
             onDisconnect={() => disconnectGuidedOAuth("google-growth")}
             onMetaReviewTestResult={undefined}
+            onRunMetaCanary={undefined}
             onSaveMetaLiveActivation={undefined}
             onSaveSelection={(selection) => saveGuidedSelection("google-growth", selection)}
             onSelectionChange={(selection) => {
@@ -1646,6 +1748,7 @@ function GuidedOAuthCard({
   loadingMetaWebhookMonitor,
   metaWebhookAction,
   metaWebhookMonitor,
+  runningMetaCanary,
   savingMetaLiveActivation,
   savingSelection,
   selectionDraft,
@@ -1657,6 +1760,7 @@ function GuidedOAuthCard({
   onMetaReviewTestResult,
   onRefreshMetaWebhookMonitor,
   onReplayMetaWebhookEvent,
+  onRunMetaCanary,
   onSaveMetaLiveActivation,
   onSaveSelection,
   onSelectionChange,
@@ -1672,6 +1776,7 @@ function GuidedOAuthCard({
   loadingMetaWebhookMonitor?: boolean;
   metaWebhookAction?: string | null;
   metaWebhookMonitor?: MetaWebhookMonitorSnapshot | null;
+  runningMetaCanary: boolean;
   savingMetaLiveActivation: boolean;
   savingSelection: boolean;
   selectionDraft: GuidedSelectionDraft;
@@ -1683,6 +1788,7 @@ function GuidedOAuthCard({
   onMetaReviewTestResult?: (response: ReviewTestResponse) => void;
   onRefreshMetaWebhookMonitor?: () => void;
   onReplayMetaWebhookEvent?: (eventId: string) => void;
+  onRunMetaCanary?: (draft: MetaSocialCanaryDraft) => Promise<MetaSocialCanarySnapshot>;
   onSaveMetaLiveActivation?: (draft: MetaSocialLiveActivationDraft) => void;
   onSaveSelection: (selection: GuidedSelectionDraft) => void;
   onSelectionChange: (selection: GuidedSelectionDraft) => void;
@@ -1862,6 +1968,7 @@ function GuidedOAuthCard({
             metaWebhookAction={metaWebhookAction ?? null}
             monitor={metaWebhookMonitor ?? null}
             review={metaReview}
+            runningCanary={runningMetaCanary}
             savingLiveActivation={savingMetaLiveActivation}
             simulation={metaWebhookSimulation}
             liveActivation={metaLiveActivation}
@@ -1869,6 +1976,7 @@ function GuidedOAuthCard({
             onReviewResult={onMetaReviewTestResult}
             onRefreshMonitor={onRefreshMetaWebhookMonitor}
             onReplayEvent={onReplayMetaWebhookEvent}
+            onRunCanary={onRunMetaCanary}
             onSaveLiveActivation={onSaveMetaLiveActivation}
             onSimulateWebhook={onSimulateMetaWebhook}
           />
@@ -1886,6 +1994,7 @@ function MetaReadinessPanel({
   metaWebhookAction,
   monitor,
   review,
+  runningCanary,
   savingLiveActivation,
   simulation,
   liveActivation,
@@ -1893,6 +2002,7 @@ function MetaReadinessPanel({
   onReviewResult,
   onRefreshMonitor,
   onReplayEvent,
+  onRunCanary,
   onSaveLiveActivation,
   onSimulateWebhook,
 }: {
@@ -1903,6 +2013,7 @@ function MetaReadinessPanel({
   metaWebhookAction: string | null;
   monitor: MetaWebhookMonitorSnapshot | null;
   review: MetaReviewSnapshot | null;
+  runningCanary: boolean;
   savingLiveActivation: boolean;
   simulation: MetaWebhookSimulationSnapshot | null;
   liveActivation: MetaSocialLiveActivationSnapshot | null;
@@ -1910,6 +2021,7 @@ function MetaReadinessPanel({
   onReviewResult?: (response: ReviewTestResponse) => void;
   onRefreshMonitor?: () => void;
   onReplayEvent?: (eventId: string) => void;
+  onRunCanary?: (draft: MetaSocialCanaryDraft) => Promise<MetaSocialCanarySnapshot>;
   onSaveLiveActivation?: (draft: MetaSocialLiveActivationDraft) => void;
   onSimulateWebhook?: (scenario: MetaWebhookSimulationScenario) => void;
 }) {
@@ -1972,6 +2084,12 @@ function MetaReadinessPanel({
         connected={connected}
         saving={savingLiveActivation}
         onSave={onSaveLiveActivation}
+      />
+
+      <MetaCanaryDispatchPanel
+        connected={connected}
+        running={runningCanary}
+        onRun={onRunCanary}
       />
 
       <div className="mt-3 border-t border-white/10 pt-3">
@@ -2260,6 +2378,159 @@ function MetaLiveDispatchPanel({
       >
         {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
         Salvar envio live
+      </button>
+    </div>
+  );
+}
+
+function MetaCanaryDispatchPanel({
+  connected,
+  running,
+  onRun,
+}: {
+  connected: boolean;
+  running: boolean;
+  onRun?: (draft: MetaSocialCanaryDraft) => Promise<MetaSocialCanarySnapshot>;
+}) {
+  const [draft, setDraft] = useState<MetaSocialCanaryDraft>({
+    channel: "facebook_messenger",
+    targetId: "",
+    text: "Teste controlado ConnectyHub.",
+    replyMode: "private",
+    occurredAt: "",
+  });
+  const [result, setResult] = useState<MetaSocialCanarySnapshot | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const commentChannel = draft.channel === "facebook_comments" || draft.channel === "instagram_comments";
+
+  async function handleRun() {
+    if (!onRun) return;
+
+    setError(null);
+
+    try {
+      const nextResult = await onRun(draft);
+      setResult(nextResult);
+    } catch (runError) {
+      setError(runError instanceof Error ? runError.message : "Canario Meta falhou.");
+    }
+  }
+
+  return (
+    <div className="mt-3 border-t border-white/10 pt-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0">
+          <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-slate-500">canario de envio</p>
+          <p className="mt-1 truncate text-[11px] text-slate-500">
+            {result ? `${formatMetaCanaryStatus(result.status)} / ${formatShortDate(result.ranAt)}` : "Disparo controlado pelo dispatcher real"}
+          </p>
+        </div>
+        <NeonBadge tone={result ? getMetaCanaryTone(result.status) : "zinc"}>
+          {result ? formatMetaCanaryStatus(result.status) : "sem teste"}
+        </NeonBadge>
+      </div>
+
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        <label className="block">
+          <span className="mb-1 block font-mono text-[9px] uppercase tracking-[0.12em] text-slate-500">Canal</span>
+          <select
+            value={draft.channel}
+            onChange={(event) => setDraft((current) => ({
+              ...current,
+              channel: event.target.value as MetaSocialLiveChannelId,
+              replyMode: event.target.value.endsWith("_comments") ? current.replyMode : "private",
+            }))}
+            className="h-10 w-full rounded-xl px-3 text-[12px] outline-none"
+            style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)", color: "var(--ch-text)" }}
+          >
+            {metaSocialLiveChannels.map((channel) => (
+              <option key={channel.id} value={channel.id}>{channel.label}</option>
+            ))}
+          </select>
+        </label>
+
+        <label className="block">
+          <span className="mb-1 block font-mono text-[9px] uppercase tracking-[0.12em] text-slate-500">
+            {commentChannel ? "ID do comentario" : "ID do lead"}
+          </span>
+          <input
+            value={draft.targetId}
+            onChange={(event) => setDraft((current) => ({ ...current, targetId: event.target.value }))}
+            className="h-10 w-full rounded-xl px-3 text-[12px] outline-none"
+            placeholder={commentChannel ? "comment_id" : "psid / igsid"}
+            style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)", color: "var(--ch-text)" }}
+          />
+        </label>
+
+        {commentChannel ? (
+          <label className="block">
+            <span className="mb-1 block font-mono text-[9px] uppercase tracking-[0.12em] text-slate-500">Modo</span>
+            <select
+              value={draft.replyMode}
+              onChange={(event) => setDraft((current) => ({ ...current, replyMode: event.target.value as "private" | "public" }))}
+              className="h-10 w-full rounded-xl px-3 text-[12px] outline-none"
+              style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)", color: "var(--ch-text)" }}
+            >
+              <option value="private">Mensagem privada</option>
+              <option value="public">Comentario publico</option>
+            </select>
+          </label>
+        ) : null}
+
+        <label className="block">
+          <span className="mb-1 block font-mono text-[9px] uppercase tracking-[0.12em] text-slate-500">Data do evento</span>
+          <input
+            type="datetime-local"
+            value={draft.occurredAt}
+            onChange={(event) => setDraft((current) => ({ ...current, occurredAt: event.target.value }))}
+            className="h-10 w-full rounded-xl px-3 text-[12px] outline-none"
+            style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)", color: "var(--ch-text)" }}
+          />
+        </label>
+      </div>
+
+      <label className="mt-2 block">
+        <span className="mb-1 block font-mono text-[9px] uppercase tracking-[0.12em] text-slate-500">Texto</span>
+        <textarea
+          value={draft.text}
+          onChange={(event) => setDraft((current) => ({ ...current, text: event.target.value }))}
+          className="min-h-20 w-full resize-none rounded-xl px-3 py-2 text-[12px] leading-5 outline-none"
+          style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)", color: "var(--ch-text)" }}
+        />
+      </label>
+
+      {error ? (
+        <p className="mt-2 rounded-lg border border-rose-300/20 bg-rose-300/10 px-3 py-2 text-[11px] leading-4 text-rose-100">
+          {error}
+        </p>
+      ) : null}
+
+      {result ? (
+        <div className="mt-2 rounded-lg border px-3 py-2" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="truncate text-[12px] font-semibold text-slate-100">{result.channelLabel}</p>
+            <span className={cn("font-mono text-[9px] uppercase tracking-wide", metaCanaryStatusClass(result.status))}>
+              {formatMetaCanaryStatus(result.status)}
+            </span>
+          </div>
+          <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-slate-500">{result.detail}</p>
+          <div className="mt-2 grid grid-cols-3 gap-2">
+            <ReadinessMiniStat label="HTTP" value={result.httpStatus ? String(result.httpStatus) : "-"} tone={result.status === "failed" ? "rose" : "green"} />
+            <ReadinessMiniStat label="Tentativas" value={String(result.audit.filter((entry) => entry.type === "dispatch_started").length)} tone="green" />
+            <ReadinessMiniStat label="Run" value={result.runId ? "ok" : "-"} tone={result.runId ? "green" : "amber"} />
+          </div>
+        </div>
+      ) : null}
+
+      <button
+        type="button"
+        disabled={!connected || running || !onRun}
+        onClick={handleRun}
+        className="mt-3 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border px-4 font-mono text-[10px] font-bold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10 disabled:cursor-not-allowed disabled:opacity-60"
+        style={{ borderColor: "var(--ch-border)" }}
+      >
+        {running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+        Executar canario
       </button>
     </div>
   );
@@ -3032,6 +3303,25 @@ function metaLiveChannelStatusClass(status: MetaSocialLiveChannelSnapshot["statu
   if (status === "ready") return "text-emerald-300";
   if (status === "blocked") return "text-rose-300";
   return "text-slate-500";
+}
+
+function getMetaCanaryTone(status: MetaSocialCanarySnapshot["status"]): "green" | "amber" | "rose" {
+  if (status === "sent") return "green";
+  if (status === "failed") return "rose";
+  return "amber";
+}
+
+function formatMetaCanaryStatus(status: MetaSocialCanarySnapshot["status"]) {
+  if (status === "sent") return "enviado";
+  if (status === "blocked") return "bloqueado";
+  if (status === "failed") return "falhou";
+  return "sem envio";
+}
+
+function metaCanaryStatusClass(status: MetaSocialCanarySnapshot["status"]) {
+  if (status === "sent") return "text-emerald-300";
+  if (status === "failed") return "text-rose-300";
+  return "text-amber-300";
 }
 
 function formatMetaMonitorChannel(value: MetaWebhookMonitorChannel | null) {
