@@ -51,6 +51,7 @@ export async function POST(request: NextRequest) {
     itemId?: unknown;
     linkUrl?: unknown;
     mediaUrl?: unknown;
+    scheduledFor?: unknown;
     surfaces?: unknown;
     title?: unknown;
   }>(request);
@@ -69,6 +70,7 @@ export async function POST(request: NextRequest) {
         linkUrl: body?.linkUrl,
         mediaUrl: body?.mediaUrl,
         organizationId: workspace.organization.id,
+        scheduledFor: body?.scheduledFor,
         surfaces: body?.surfaces,
         title: body?.title,
         userId: workspace.user.id,

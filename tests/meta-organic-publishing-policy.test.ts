@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   normalizeMetaOrganicDraft,
+  normalizeMetaOrganicScheduledFor,
   resolveMetaOrganicPublishTargets,
 } from "../src/lib/meta/organic-publishing-policy";
 
@@ -16,9 +17,22 @@ describe("Meta organic publishing policy", () => {
       caption: "Novo post da campanha.",
       linkUrl: "https://connectyhub.com/oferta",
       mediaUrl: "https://cdn.connectyhub.com/post.jpg",
+      scheduledFor: null,
       surfaces: ["facebook_page", "instagram_feed"],
       title: "Campanha Meta",
     });
+  });
+
+  it("normalizes a future scheduled publish date", () => {
+    const future = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+
+    expect(normalizeMetaOrganicScheduledFor(future)).toBe(future);
+  });
+
+  it("blocks past scheduled publish dates", () => {
+    const past = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+
+    expect(() => normalizeMetaOrganicScheduledFor(past)).toThrow("Escolha uma data futura para agendar.");
   });
 
   it("builds Facebook photo and Instagram image publish targets", () => {

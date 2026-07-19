@@ -17,6 +17,7 @@ import {
   metaSocialCommentReceivedEventName,
   metaSocialMessageReceivedEventName,
 } from "@/lib/meta/social-agent-policy";
+import { processScheduledMetaOrganicPosts } from "@/lib/meta/organic-publishing";
 import { processScheduledWhatsappOutbounds } from "@/lib/whatsapp/channel-operations";
 import {
   processWhatsappHandoffNotification,
@@ -248,6 +249,25 @@ export const connectyhubMetaSocialDispatchSweep = inngest.createFunction(
   },
 );
 
+export const connectyhubMetaOrganicPublishSweep = inngest.createFunction(
+  {
+    id: "connectyhub-meta-organic-publish-sweep",
+    name: "ConnectyHub Meta Organic Publish Sweep",
+    retries: 1,
+    triggers: [{ cron: "*/5 * * * *" }],
+  },
+  async ({ step }) => {
+    const summary = await step.run("process-scheduled-meta-organic-posts", () =>
+      processScheduledMetaOrganicPosts({ limit: 10 }),
+    );
+
+    return {
+      status: "swept",
+      summary,
+    };
+  },
+);
+
 export const connectyhubWhatsappOutboundDispatcher = inngest.createFunction(
   {
     id: "connectyhub-whatsapp-outbound-dispatcher",
@@ -460,6 +480,7 @@ export const functions = [
   connectyhubMetaSocialAgentSweep,
   connectyhubMetaSocialApprovedDispatch,
   connectyhubMetaSocialDispatchSweep,
+  connectyhubMetaOrganicPublishSweep,
   connectyhubWhatsappOutboundDispatcher,
   connectyhubWhatsappOutboundSweep,
   connectyhubApiHealthMonitor,

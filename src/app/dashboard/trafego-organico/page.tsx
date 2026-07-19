@@ -28,12 +28,14 @@ export default async function OrganicTrafficPage() {
     userId: workspace.user.id,
   }).catch(() => ({
     items: [],
+    media: [],
     summary: {
       approved: 0,
       drafts: 0,
       failed: 0,
       published: 0,
       publishing: 0,
+      scheduled: 0,
       total: 0,
     },
   }));

@@ -5,6 +5,7 @@ export type NormalizedMetaOrganicDraft = {
   caption: string;
   linkUrl: string | null;
   mediaUrl: string | null;
+  scheduledFor: string | null;
   surfaces: MetaOrganicSurface[];
 };
 
@@ -31,6 +32,7 @@ export function normalizeMetaOrganicDraft(input: {
   caption?: unknown;
   linkUrl?: unknown;
   mediaUrl?: unknown;
+  scheduledFor?: unknown;
   surfaces?: unknown;
 }): NormalizedMetaOrganicDraft {
   const caption = normalizeText(input.caption, "Escreva a legenda da publicacao.", maxCaptionLength);
@@ -39,6 +41,7 @@ export function normalizeMetaOrganicDraft(input: {
     ?? "Publicacao organica Meta";
   const linkUrl = normalizeOptionalUrl(input.linkUrl, "URL de link invalida.");
   const mediaUrl = normalizeOptionalUrl(input.mediaUrl, "URL da midia invalida.");
+  const scheduledFor = normalizeMetaOrganicScheduledFor(input.scheduledFor);
   const surfaces = normalizeSurfaces(input.surfaces);
 
   return {
@@ -46,8 +49,29 @@ export function normalizeMetaOrganicDraft(input: {
     caption,
     linkUrl,
     mediaUrl,
+    scheduledFor,
     surfaces,
   };
+}
+
+export function normalizeMetaOrganicScheduledFor(value: unknown) {
+  const text = typeof value === "string" ? value.trim() : "";
+
+  if (!text) {
+    return null;
+  }
+
+  const date = new Date(text);
+
+  if (Number.isNaN(date.getTime())) {
+    throw new Error("Data de agendamento invalida.");
+  }
+
+  if (date.getTime() <= Date.now()) {
+    throw new Error("Escolha uma data futura para agendar.");
+  }
+
+  return date.toISOString();
 }
 
 export function resolveMetaOrganicPublishTargets(input: {

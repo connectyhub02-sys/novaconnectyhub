@@ -1,6 +1,6 @@
 import "server-only";
 
-import { createHmac } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   fetchMetaPageAccessToken,
@@ -8,6 +8,7 @@ import {
 } from "@/lib/client-os/guided-oauth";
 import { requireClientCompanyAccess, type ClientCompany } from "@/lib/client-os/companies";
 import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
+import { loadR2Config, putR2Object } from "@/lib/storage/r2";
 import { createServiceClient } from "@/lib/supabase/service";
 import {
   getMetaOrganicSurfaceLabel,
@@ -74,6 +75,7 @@ export type ClientMetaOrganicPostStatus =
   | "draft"
   | "review"
   | "approved"
+  | "scheduled"
   | "publishing"
   | "published"
   | "archived";
@@ -97,15 +99,30 @@ export type ClientMetaOrganicPost = {
   createdAt: string | null;
   failedAt: string | null;
   publishedAt: string | null;
+  scheduledFor: string | null;
   audit: MetaOrganicAuditEntry[];
+};
+
+export type ClientMetaOrganicMediaAsset = {
+  id: string;
+  companyId: string;
+  companyName: string;
+  fileName: string;
+  contentType: string;
+  bytesSize: number;
+  objectKey: string;
+  storageUrl: string;
+  createdAt: string | null;
 };
 
 export type ClientMetaOrganicOverview = {
   items: ClientMetaOrganicPost[];
+  media: ClientMetaOrganicMediaAsset[];
   summary: {
     total: number;
     drafts: number;
     approved: number;
+    scheduled: number;
     publishing: number;
     published: number;
     failed: number;
@@ -113,8 +130,15 @@ export type ClientMetaOrganicOverview = {
 };
 
 export const metaOrganicContentType = "meta_organic_post";
+export const metaOrganicMediaContentType = "meta_organic_media";
 
 const metaOrganicSelect = "id, scope, organization_id, content_type, status, title, summary, body, scheduled_for, published_at, tags, metadata, created_at";
+const maxOrganicMediaBytes = 8 * 1024 * 1024;
+const allowedOrganicMediaTypes = new Map([
+  ["image/jpeg", "jpg"],
+  ["image/png", "png"],
+  ["image/webp", "webp"],
+]);
 
 export async function getClientMetaOrganicOverview(input: {
   userId: string;
@@ -129,21 +153,39 @@ export async function getClientMetaOrganicOverview(input: {
     client,
   });
   const limit = Math.max(1, Math.min(input.limit ?? 40, 100));
-  const { data, error } = await client
-    .from("content_pipeline_items")
-    .select(metaOrganicSelect)
-    .eq("scope", "organization")
-    .eq("organization_id", company.id)
-    .eq("content_type", metaOrganicContentType)
-    .contains("metadata", { meta_organic: true })
-    .order("created_at", { ascending: false })
-    .limit(limit);
+  const [postsResult, mediaResult] = await Promise.all([
+    client
+      .from("content_pipeline_items")
+      .select(metaOrganicSelect)
+      .eq("scope", "organization")
+      .eq("organization_id", company.id)
+      .eq("content_type", metaOrganicContentType)
+      .contains("metadata", { meta_organic: true })
+      .order("created_at", { ascending: false })
+      .limit(limit),
+    client
+      .from("content_pipeline_items")
+      .select(metaOrganicSelect)
+      .eq("scope", "organization")
+      .eq("organization_id", company.id)
+      .eq("content_type", metaOrganicMediaContentType)
+      .contains("metadata", { meta_organic_media: true })
+      .order("created_at", { ascending: false })
+      .limit(18),
+  ]);
 
-  if (error) {
-    throw new Error(`Nao foi possivel carregar publicacoes Meta: ${error.message}`);
+  if (postsResult.error) {
+    throw new Error(`Nao foi possivel carregar publicacoes Meta: ${postsResult.error.message}`);
   }
 
-  return buildOverview(((data ?? []) as ContentPipelineRow[]).map((row) => mapPost(row, company)));
+  if (mediaResult.error) {
+    throw new Error(`Nao foi possivel carregar midias Meta: ${mediaResult.error.message}`);
+  }
+
+  return buildOverview(
+    ((postsResult.data ?? []) as ContentPipelineRow[]).map((row) => mapPost(row, company)),
+    ((mediaResult.data ?? []) as ContentPipelineRow[]).map((row) => mapMediaAsset(row, company)),
+  );
 }
 
 export async function createClientMetaOrganicDraft(input: {
@@ -153,6 +195,7 @@ export async function createClientMetaOrganicDraft(input: {
   caption?: unknown;
   mediaUrl?: unknown;
   linkUrl?: unknown;
+  scheduledFor?: unknown;
   surfaces?: unknown;
   client?: SupabaseClient;
 }) {
@@ -168,6 +211,7 @@ export async function createClientMetaOrganicDraft(input: {
     meta_organic: true,
     media_url: draft.mediaUrl,
     link_url: draft.linkUrl,
+    scheduled_for: draft.scheduledFor,
     surfaces: draft.surfaces,
     publish_status: "draft",
     created_by: input.userId,
@@ -188,6 +232,7 @@ export async function createClientMetaOrganicDraft(input: {
       title: draft.title,
       summary: preview(draft.caption, 180),
       body: draft.caption,
+      scheduled_for: draft.scheduledFor,
       tags: ["meta", "organic", ...draft.surfaces],
       metadata,
     })
@@ -199,6 +244,80 @@ export async function createClientMetaOrganicDraft(input: {
   }
 
   return mapPost(data, company);
+}
+
+export async function uploadClientMetaOrganicMedia(input: {
+  userId: string;
+  organizationId: string;
+  fileName: string;
+  contentType: string;
+  bytes: Uint8Array;
+  client?: SupabaseClient;
+}) {
+  const client = input.client ?? createServiceClient();
+  const company = await requireClientCompanyAccess({
+    userId: input.userId,
+    companyId: input.organizationId,
+    client,
+  });
+  const contentType = input.contentType.trim().toLowerCase();
+  const extension = allowedOrganicMediaTypes.get(contentType);
+
+  if (!extension) {
+    throw new Error("Use imagens JPG, PNG ou WEBP para publicar no Meta.");
+  }
+
+  if (input.bytes.byteLength <= 0 || input.bytes.byteLength > maxOrganicMediaBytes) {
+    throw new Error("A midia precisa ter ate 8 MB.");
+  }
+
+  const configResult = await loadR2Config(client);
+
+  if (!configResult.ok) {
+    throw new Error(configResult.error);
+  }
+
+  const fileName = sanitizeFileName(input.fileName || `meta-organic.${extension}`);
+  const objectKey = `meta/organic/${company.id}/${Date.now()}-${randomUUID()}-${fileName}`;
+  const uploadResult = await putR2Object(configResult.config, objectKey, input.bytes, contentType);
+
+  if (!uploadResult.ok) {
+    throw new Error(uploadResult.error);
+  }
+
+  const uploadedAt = new Date().toISOString();
+  const { data, error } = await client
+    .from("content_pipeline_items")
+    .insert({
+      scope: "organization",
+      organization_id: company.id,
+      content_type: metaOrganicMediaContentType,
+      status: "published",
+      title: fileName,
+      summary: `Midia Meta: ${fileName}`,
+      body: uploadResult.publicUrl,
+      published_at: uploadedAt,
+      tags: ["meta", "organic", "media"],
+      metadata: {
+        meta_organic_media: true,
+        storage_provider: "cloudflare-r2",
+        storage_key: uploadResult.objectKey,
+        storage_url: uploadResult.publicUrl,
+        file_name: fileName,
+        content_type: contentType,
+        size: uploadResult.bytesSize,
+        uploaded_at: uploadedAt,
+        uploaded_by: input.userId,
+      },
+    })
+    .select(metaOrganicSelect)
+    .single<ContentPipelineRow>();
+
+  if (error || !data) {
+    throw new Error(error?.message ?? "Nao foi possivel registrar midia Meta.");
+  }
+
+  return mapMediaAsset(data, company);
 }
 
 export async function approveClientMetaOrganicPost(input: {
@@ -220,20 +339,23 @@ export async function approveClientMetaOrganicPost(input: {
   }
 
   const approvedAt = new Date().toISOString();
+  const scheduledFor = readFutureIso(item.scheduled_for ?? metadata.scheduled_for);
+  const nextStatus = scheduledFor ? "scheduled" : "approved";
   const { data, error } = await client
     .from("content_pipeline_items")
     .update({
-      status: "approved",
+      status: nextStatus,
       metadata: appendMetaOrganicAudit({
         ...metadata,
-        publish_status: "approved",
+        publish_status: nextStatus,
         approved_at: approvedAt,
         approved_by: input.userId,
+        scheduled_for: scheduledFor,
       }, {
         at: approvedAt,
         actorId: input.userId,
-        status: "approved",
-        type: "post_approved",
+        status: nextStatus,
+        type: scheduledFor ? "post_scheduled" : "post_approved",
       }),
     })
     .eq("id", item.id)
@@ -303,7 +425,11 @@ export async function publishClientMetaOrganicPost(input: {
     throw new Error("Publicacao Meta ja publicada.");
   }
 
-  if (item.status !== "approved" && !(item.status === "review" && readString(metadata.publish_status) === "failed")) {
+  if (
+    item.status !== "approved"
+    && item.status !== "scheduled"
+    && !(item.status === "review" && readString(metadata.publish_status) === "failed")
+  ) {
     throw new Error("Aprove a publicacao antes de enviar para a Meta.");
   }
 
@@ -325,7 +451,7 @@ export async function publishClientMetaOrganicPost(input: {
       }),
     })
     .eq("id", item.id)
-    .in("status", ["approved", "review"])
+    .in("status", ["approved", "review", "scheduled"])
     .select(metaOrganicSelect)
     .maybeSingle<ContentPipelineRow>();
 
@@ -370,6 +496,102 @@ export async function publishClientMetaOrganicPost(input: {
     }
 
     throw error;
+  }
+}
+
+export async function processScheduledMetaOrganicPosts(input: {
+  limit?: number;
+  client?: SupabaseClient;
+} = {}) {
+  const client = input.client ?? createServiceClient();
+  const now = new Date().toISOString();
+  const { data, error } = await client
+    .from("content_pipeline_items")
+    .select(metaOrganicSelect)
+    .eq("scope", "organization")
+    .eq("content_type", metaOrganicContentType)
+    .eq("status", "scheduled")
+    .contains("metadata", { meta_organic: true })
+    .lte("scheduled_for", now)
+    .order("scheduled_for", { ascending: true })
+    .limit(Math.min(Math.max(input.limit ?? 10, 1), 50));
+
+  if (error) {
+    throw new Error(`Nao foi possivel carregar publicacoes Meta agendadas: ${error.message}`);
+  }
+
+  const results = [];
+
+  for (const item of (data ?? []) as ContentPipelineRow[]) {
+    results.push(await processScheduledMetaOrganicItem(client, item));
+  }
+
+  return {
+    processed: results.length,
+    results,
+  };
+}
+
+async function processScheduledMetaOrganicItem(client: SupabaseClient, item: ContentPipelineRow) {
+  const metadata = readRecord(item.metadata) ?? {};
+  const actorId = "system:inngest";
+  const startedAt = new Date().toISOString();
+  const { data: claimed, error: claimError } = await client
+    .from("content_pipeline_items")
+    .update({
+      status: "researching",
+      metadata: appendMetaOrganicAudit({
+        ...metadata,
+        publish_status: "publishing",
+        publish_started_at: startedAt,
+        publish_attempt_count: readNumber(metadata.publish_attempt_count) + 1,
+      }, {
+        actorId,
+        at: startedAt,
+        status: "publishing",
+        type: "scheduled_publish_started",
+      }),
+    })
+    .eq("id", item.id)
+    .eq("status", "scheduled")
+    .select(metaOrganicSelect)
+    .maybeSingle<ContentPipelineRow>();
+
+  if (claimError) {
+    throw new Error(`Nao foi possivel reservar publicacao Meta agendada: ${claimError.message}`);
+  }
+
+  if (!claimed) {
+    return { id: item.id, status: "skipped", reason: "already_claimed" };
+  }
+
+  try {
+    await publishClaimedMetaOrganicPost(client, claimed, actorId);
+    return { id: item.id, status: "published" };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Falha ao publicar conteudo Meta agendado.";
+    const failedAt = new Date().toISOString();
+    const failedMetadata = readRecord(claimed.metadata) ?? metadata;
+    await client
+      .from("content_pipeline_items")
+      .update({
+        status: "review",
+        metadata: appendMetaOrganicAudit({
+          ...failedMetadata,
+          publish_status: "failed",
+          publish_error: message,
+          failed_at: failedAt,
+        }, {
+          actorId,
+          at: failedAt,
+          message,
+          status: "failed",
+          type: "scheduled_publish_failed",
+        }),
+      })
+      .eq("id", item.id);
+
+    return { id: item.id, status: "failed", error: message };
   }
 }
 
@@ -641,13 +863,18 @@ async function sendMetaOrganicGraphRequest(input: {
   };
 }
 
-function buildOverview(items: ClientMetaOrganicPost[]): ClientMetaOrganicOverview {
+function buildOverview(
+  items: ClientMetaOrganicPost[],
+  media: ClientMetaOrganicMediaAsset[],
+): ClientMetaOrganicOverview {
   return {
     items,
+    media,
     summary: {
       total: items.length,
       drafts: items.filter((item) => item.status === "draft").length,
       approved: items.filter((item) => item.status === "approved").length,
+      scheduled: items.filter((item) => item.status === "scheduled").length,
       publishing: items.filter((item) => item.status === "publishing").length,
       published: items.filter((item) => item.status === "published").length,
       failed: items.filter((item) => item.lastError).length,
@@ -675,6 +902,7 @@ function mapPost(row: ContentPipelineRow, company: ClientCompany): ClientMetaOrg
     providerIds: readStringArray(metadata.provider_ids),
     publishedAt: row.published_at ?? readString(metadata.published_at),
     retryable: status === "review" && readString(metadata.publish_status) === "failed",
+    scheduledFor: row.scheduled_for ?? readString(metadata.scheduled_for),
     status,
     statusLabel: getStatusLabel(status, metadata),
     surfaceLabels: surfaces.map(getMetaOrganicSurfaceLabel),
@@ -688,6 +916,7 @@ function readPostStatus(status: string | null, metadata: JsonRecord): ClientMeta
 
   if (publishStatus === "publishing" || status === "researching") return "publishing";
   if (status === "published") return "published";
+  if (status === "scheduled") return "scheduled";
   if (status === "approved") return "approved";
   if (status === "archived") return "archived";
   if (status === "review") return "review";
@@ -706,6 +935,8 @@ function getStatusLabel(status: ClientMetaOrganicPostStatus, metadata: JsonRecor
       return "Revisao";
     case "approved":
       return "Aprovado";
+    case "scheduled":
+      return "Agendado";
     case "publishing":
       return "Publicando";
     case "published":
@@ -713,6 +944,22 @@ function getStatusLabel(status: ClientMetaOrganicPostStatus, metadata: JsonRecor
     case "archived":
       return "Arquivado";
   }
+}
+
+function mapMediaAsset(row: ContentPipelineRow, company: ClientCompany): ClientMetaOrganicMediaAsset {
+  const metadata = readRecord(row.metadata) ?? {};
+
+  return {
+    id: row.id,
+    bytesSize: readNumber(metadata.size),
+    companyId: company.id,
+    companyName: company.name,
+    contentType: readString(metadata.content_type) ?? "image/jpeg",
+    createdAt: row.created_at,
+    fileName: readString(metadata.file_name) ?? row.title,
+    objectKey: readString(metadata.storage_key) ?? "",
+    storageUrl: readString(metadata.storage_url) ?? readString(row.body) ?? "",
+  };
 }
 
 function appendMetaOrganicAudit(
@@ -817,7 +1064,29 @@ function readNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
+function readFutureIso(value: unknown) {
+  const text = readString(value);
+
+  if (!text) {
+    return null;
+  }
+
+  const date = new Date(text);
+  return Number.isFinite(date.getTime()) && date.getTime() > Date.now() ? date.toISOString() : null;
+}
+
 function preview(value: string, maxLength: number) {
   const text = value.trim().replace(/\s+/g, " ");
   return text.length > maxLength ? `${text.slice(0, maxLength - 1)}...` : text;
+}
+
+function sanitizeFileName(value: string) {
+  const normalized = value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 96);
+
+  return normalized || "meta-organic.jpg";
 }
