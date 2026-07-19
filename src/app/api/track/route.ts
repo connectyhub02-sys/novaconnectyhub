@@ -1,7 +1,15 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
+import {
+  validatePublicWriteRequest,
+  type PublicWriteGuardResult,
+} from "@/lib/security/public-request-guard";
 import { createServiceClient } from "@/lib/supabase/service";
 import { createClient } from "@/lib/supabase/server";
+import {
+  decideOrganizationAttribution,
+  verifyOrganizationTrackingToken,
+} from "@/lib/tracking/organization-attribution";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -13,6 +21,7 @@ type TrackingBody = {
   session_cookie_id?: unknown;
   organization_id?: unknown;
   scope?: unknown;
+  tracking_token?: unknown;
   event_type?: unknown;
   referrer?: unknown;
   search_params?: unknown;
@@ -24,50 +33,82 @@ type TrackingBody = {
 };
 
 export async function POST(request: NextRequest) {
+  const guard = validatePublicWriteRequest({
+    headers: request.headers,
+    requestUrl: request.url,
+    routeKey: "track",
+    maxPayloadBytes: 64 * 1024,
+    rateLimit: {
+      limit: 240,
+      windowMs: 60_000,
+    },
+  });
+
+  if (!guard.ok) {
+    return publicGuardResponse(guard);
+  }
+
   const body = await readBody(request);
   const visitorId = readString(body.visitor_cookie_id) ?? randomUUID();
   const sessionId = readString(body.session_cookie_id);
   const eventType = normalizeEventType(readString(body.event_type) ?? "page_view");
   const requestedOrganizationId = readUuid(readString(body.organization_id));
   const requestedScope = readString(body.scope);
+  const trackingToken = readString(body.tracking_token)
+    ?? readString(request.headers.get("x-connectyhub-tracking-token"));
   const metadata = readRecord(body.metadata) ?? {};
   const tracking = extractTrackingData(request);
   const authUser = await getAuthUser();
-  const scope = requestedScope === "organization" && requestedOrganizationId ? "organization" : "platform";
-  const sourceType = scope === "organization"
-    ? "client_marketing_tracking"
-    : authUser
-      ? "platform_user_activity"
-      : "platform_marketing_tracking";
-  const pagePath = readString(metadata.page_path);
-  const title = buildEventTitle(eventType, pagePath, sourceType);
-  const summary = buildEventSummary(eventType, metadata, tracking);
   const firstTouch = readRecord(body.first_touch) ?? readRecord(metadata.first_touch);
   const lastTouch = readRecord(body.last_touch) ?? readRecord(metadata.last_touch);
   const attribution = readRecord(body.attribution) ?? readRecord(metadata.attribution);
   const consent = readString(body.consent) ?? readString(metadata.consent);
-  const tags = buildTags({ eventType, scope, authUserId: authUser?.id ?? null, sessionId });
-  const payload = {
-    visitor_cookie_id: visitorId,
-    session_cookie_id: sessionId,
-    referrer: readString(body.referrer),
-    search_params: readString(body.search_params),
-    first_touch: firstTouch,
-    last_touch: lastTouch,
-    attribution,
-    tracking_consent: consent,
-    ...tracking,
-    ...metadata,
-    user_id: authUser?.id ?? null,
-    user_email: authUser?.email ?? null,
-    tracked_at: new Date().toISOString(),
-  };
 
   try {
     const client = createServiceClient();
+    const authenticatedCanAccessOrganization = await canAttributeOrganization(
+      client,
+      authUser?.id ?? null,
+      requestedOrganizationId,
+    );
+    const organizationAttribution = decideOrganizationAttribution({
+      requestedOrganizationId,
+      requestedScope,
+      authenticatedCanAccessOrganization,
+      hasValidTrackingToken: verifyOrganizationTrackingToken(requestedOrganizationId, trackingToken),
+    });
+    const scope = organizationAttribution.scope;
+    const sourceType = scope === "organization"
+      ? "client_marketing_tracking"
+      : authUser
+        ? "platform_user_activity"
+        : "platform_marketing_tracking";
+    const pagePath = readString(metadata.page_path);
+    const title = buildEventTitle(eventType, pagePath, sourceType);
+    const summary = buildEventSummary(eventType, metadata, tracking);
+    const tags = buildTags({ eventType, scope, authUserId: authUser?.id ?? null, sessionId });
+    const payload = {
+      visitor_cookie_id: visitorId,
+      session_cookie_id: sessionId,
+      referrer: readString(body.referrer),
+      search_params: readString(body.search_params),
+      first_touch: firstTouch,
+      last_touch: lastTouch,
+      attribution,
+      tracking_consent: consent,
+      organization_attribution: {
+        requested_organization_id: requestedOrganizationId,
+        result: organizationAttribution.reason,
+      },
+      ...tracking,
+      ...metadata,
+      user_id: authUser?.id ?? null,
+      user_email: authUser?.email ?? null,
+      tracked_at: new Date().toISOString(),
+    };
     const { error } = await client.from("intelligence_events").insert({
       scope,
-      organization_id: scope === "organization" ? requestedOrganizationId : null,
+      organization_id: organizationAttribution.organizationId,
       source_type: sourceType,
       source_id: visitorId,
       event_type: eventType,
@@ -97,6 +138,44 @@ export async function POST(request: NextRequest) {
     visitor_id: visitorId,
     vapid_public_key: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? null,
   });
+}
+
+async function canAttributeOrganization(
+  client: ReturnType<typeof createServiceClient>,
+  userId: string | null,
+  organizationId: string | null,
+) {
+  if (!userId || !organizationId) {
+    return false;
+  }
+
+  const { data: profile } = await client
+    .from("profiles")
+    .select("is_platform_admin")
+    .eq("id", userId)
+    .maybeSingle<{ is_platform_admin: boolean | null }>();
+
+  if (profile?.is_platform_admin) {
+    return true;
+  }
+
+  const { data: membership } = await client
+    .from("organization_members")
+    .select("user_id")
+    .eq("organization_id", organizationId)
+    .eq("user_id", userId)
+    .limit(1)
+    .maybeSingle<{ user_id: string }>();
+
+  return Boolean(membership);
+}
+
+function publicGuardResponse(guard: Extract<PublicWriteGuardResult, { ok: false }>) {
+  const headers = guard.retryAfterSeconds
+    ? { "Retry-After": String(guard.retryAfterSeconds) }
+    : undefined;
+
+  return NextResponse.json({ error: guard.message }, { status: guard.status, headers });
 }
 
 async function readBody(request: NextRequest): Promise<TrackingBody> {

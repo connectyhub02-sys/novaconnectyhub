@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test": "vitest run",
     "api:docs": "node scripts/generate-connectyhub-openapi.mjs",
     "api:audit": "node scripts/audit-uazapi-coverage.mjs --write-doc"
   },
@@ -19,9 +20,9 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "framer-motion": "^12.40.0",
-    "inngest": "^4.5.0",
+    "inngest": "4.13.0",
     "lucide-react": "^1.17.0",
-    "next": "16.2.6",
+    "next": "16.2.10",
     "next-themes": "^0.4.6",
     "radix-ui": "^1.4.3",
     "react": "19.2.4",
@@ -38,10 +39,14 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.2.6",
+    "eslint-config-next": "16.2.10",
     "playwright": "^1.60.0",
     "shadcn": "^4.10.0",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "4.1.10"
+  },
+  "overrides": {
+    "postcss": "8.5.19"
   }
 }
