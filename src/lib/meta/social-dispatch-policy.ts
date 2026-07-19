@@ -1,5 +1,7 @@
 import { isMetaCommentChannel, type MetaSocialChannel } from "./social-agent-policy";
 
+export type MetaSocialDispatchMode = "dry_run" | "live";
+
 export type MetaSocialDispatchTarget =
   | {
       kind: "direct_message" | "private_comment_reply";
@@ -21,6 +23,18 @@ export type MetaSocialDispatchTarget =
         message: string;
       };
     };
+
+export type MetaSocialDispatchReadiness = {
+  ok: boolean;
+  mode: MetaSocialDispatchMode;
+  reason: "ready" | "dry_run" | "missing_permissions" | "expired_private_reply_window";
+  detail: string;
+  requiredPermissions: string[];
+  missingPermissions: string[];
+  warnings: string[];
+};
+
+const privateReplyWindowMs = 7 * 24 * 60 * 60 * 1000;
 
 export function resolveMetaSocialDispatchTarget(input: {
   channel: MetaSocialChannel;
@@ -90,6 +104,93 @@ export function resolveMetaSocialDispatchTarget(input: {
   throw new Error("Canal de comentarios Meta sem modo de resposta permitido.");
 }
 
+export function resolveMetaSocialDispatchMode(value: unknown = process.env.META_SOCIAL_DISPATCH_MODE): MetaSocialDispatchMode {
+  return typeof value === "string" && value.trim().toLowerCase() === "live" ? "live" : "dry_run";
+}
+
+export function evaluateMetaSocialDispatchReadiness(input: {
+  channel: MetaSocialChannel;
+  target: MetaSocialDispatchTarget;
+  mode: MetaSocialDispatchMode;
+  grantedPermissions: Iterable<string>;
+  occurredAt?: string | null;
+  now?: Date;
+}): MetaSocialDispatchReadiness {
+  const requiredPermissions = resolveMetaSocialDispatchPermissions(input.channel, input.target.kind);
+  const granted = new Set(Array.from(input.grantedPermissions).map((permission) => permission.trim()).filter(Boolean));
+  const missingPermissions = requiredPermissions.filter((permission) => !granted.has(permission));
+  const warnings = input.target.kind === "public_comment_reply"
+    ? ["public_comment_reply_visible_to_all"]
+    : [];
+
+  if (input.mode !== "live") {
+    return {
+      ok: false,
+      mode: input.mode,
+      reason: "dry_run",
+      detail: "Adapter Meta em modo dry-run. O envio real so ocorre com META_SOCIAL_DISPATCH_MODE=live.",
+      requiredPermissions,
+      missingPermissions,
+      warnings,
+    };
+  }
+
+  if (missingPermissions.length > 0) {
+    return {
+      ok: false,
+      mode: input.mode,
+      reason: "missing_permissions",
+      detail: `Permissoes Meta ausentes para envio: ${missingPermissions.join(", ")}.`,
+      requiredPermissions,
+      missingPermissions,
+      warnings,
+    };
+  }
+
+  if (input.target.kind === "private_comment_reply" && isPrivateReplyWindowExpired(input.occurredAt, input.now)) {
+    return {
+      ok: false,
+      mode: input.mode,
+      reason: "expired_private_reply_window",
+      detail: "Private reply Meta bloqueado: comentario fora da janela de 7 dias.",
+      requiredPermissions,
+      missingPermissions,
+      warnings,
+    };
+  }
+
+  return {
+    ok: true,
+    mode: input.mode,
+    reason: "ready",
+    detail: "Adapter Meta pronto para envio real.",
+    requiredPermissions,
+    missingPermissions,
+    warnings,
+  };
+}
+
+export function resolveMetaSocialDispatchPermissions(
+  channel: MetaSocialChannel,
+  targetKind: MetaSocialDispatchTarget["kind"],
+) {
+  if (targetKind === "public_comment_reply") {
+    return channel === "instagram_comments"
+      ? ["instagram_manage_comments"]
+      : ["pages_manage_engagement"];
+  }
+
+  if (targetKind === "private_comment_reply") {
+    return channel === "instagram_comments"
+      ? ["pages_messaging", "instagram_manage_comments", "instagram_manage_messages"]
+      : ["pages_messaging", "pages_manage_metadata"];
+  }
+
+  return channel === "instagram_direct"
+    ? ["pages_messaging", "instagram_manage_messages"]
+    : ["pages_messaging"];
+}
+
 function normalizeDispatchText(value: string) {
   const text = value.trim();
 
@@ -103,4 +204,20 @@ function normalizeDispatchText(value: string) {
 function normalizeId(value: string | null | undefined) {
   const text = value?.trim();
   return text || null;
+}
+
+function isPrivateReplyWindowExpired(value: string | null | undefined, now = new Date()) {
+  const text = value?.trim();
+
+  if (!text) {
+    return false;
+  }
+
+  const time = Date.parse(text);
+
+  if (!Number.isFinite(time)) {
+    return false;
+  }
+
+  return now.getTime() - time > privateReplyWindowMs;
 }

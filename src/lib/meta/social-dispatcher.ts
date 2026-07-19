@@ -11,7 +11,9 @@ import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
 import { createServiceClient } from "@/lib/supabase/service";
 import { appendMetaDispatchAudit } from "./social-dispatch-audit";
 import {
+  evaluateMetaSocialDispatchReadiness,
   resolveMetaSocialDispatchTarget,
+  resolveMetaSocialDispatchMode,
   type MetaSocialDispatchTarget,
 } from "./social-dispatch-policy";
 import { isMetaSocialChannel, type MetaSocialChannel } from "./social-agent-policy";
@@ -37,6 +39,7 @@ type CredentialRow = {
 
 type OrganizationIntegrationRow = {
   id: string;
+  scopes: string[] | null;
   metadata: JsonRecord | null;
 };
 
@@ -49,6 +52,7 @@ type MetaDispatchCredentials = {
   appSecret: string;
   integrationId: string | null;
   credentialSource: "page_token" | "user_token" | "missing";
+  grantedPermissions: string[];
 };
 
 type GraphSendResult = {
@@ -160,6 +164,32 @@ export async function processApprovedMetaSocialDispatch(input: {
       allowPrivateReplies: readBoolean(channelConfig.allowPrivateReplies ?? channelConfig.allow_private_replies),
       allowPublicReplies: readBoolean(channelConfig.allowPublicReplies ?? channelConfig.allow_public_replies),
     });
+    const dispatchMode = resolveMetaSocialDispatchMode();
+    const readiness = evaluateMetaSocialDispatchReadiness({
+      channel,
+      target,
+      mode: dispatchMode,
+      grantedPermissions: credentials.grantedPermissions,
+      occurredAt: readString(metadata.occurredAt),
+    });
+
+    if (!readiness.ok) {
+      await markDispatchBlocked(client, {
+        run,
+        metadata: workingMetadata,
+        readiness,
+        target,
+      });
+
+      return {
+        status: "blocked",
+        runId: run.id,
+        channel,
+        targetKind: target.kind,
+        reason: readiness.reason,
+      };
+    }
+
     const token = credentials.pageAccessToken ?? credentials.accessToken;
 
     if (!token) {
@@ -330,13 +360,17 @@ async function loadMetaDispatchCredentials(
     appSecret: config.appSecret,
     integrationId: integration?.id ?? null,
     credentialSource: pageAccessToken ? "page_token" : accessToken ? "user_token" : "missing",
+    grantedPermissions: readGrantedMetaPermissions({
+      metadata,
+      scopes: integration?.scopes,
+    }),
   };
 }
 
 async function loadMetaIntegration(client: SupabaseClient, organizationId: string) {
   const { data, error } = await client
     .from("organization_integrations")
-    .select("id, metadata")
+    .select("id, scopes, metadata")
     .eq("organization_id", organizationId)
     .eq("provider_id", "meta-ads")
     .maybeSingle<OrganizationIntegrationRow>();
@@ -538,6 +572,45 @@ async function markDispatchFailed(client: SupabaseClient, run: AgentRunRow, mess
     .eq("id", run.id);
 }
 
+async function markDispatchBlocked(
+  client: SupabaseClient,
+  input: {
+    run: AgentRunRow;
+    metadata: JsonRecord;
+    readiness: ReturnType<typeof evaluateMetaSocialDispatchReadiness>;
+    target: MetaSocialDispatchTarget;
+  },
+) {
+  const blockedAt = new Date().toISOString();
+
+  await client
+    .from("agent_runs")
+    .update({
+      error_message: null,
+      metadata: appendMetaDispatchAudit({
+        ...input.metadata,
+        meta_dispatch_status: "blocked_pending_meta",
+        meta_dispatch_blocked_at: blockedAt,
+        meta_dispatch_block_reason: input.readiness.reason,
+        meta_dispatch_block_detail: input.readiness.detail,
+        meta_dispatch_mode: input.readiness.mode,
+        meta_dispatch_required_permissions: input.readiness.requiredPermissions,
+        meta_dispatch_missing_permissions: input.readiness.missingPermissions,
+        meta_dispatch_warnings: input.readiness.warnings,
+        meta_dispatch_target_kind: input.target.kind,
+        meta_dispatch_endpoint: input.target.endpointPath,
+        ready_for_meta_dispatch: true,
+      }, {
+        at: blockedAt,
+        type: "dispatch_blocked",
+        status: "blocked_pending_meta",
+        message: input.readiness.detail,
+        targetKind: input.target.kind,
+      }),
+    })
+    .eq("id", input.run.id);
+}
+
 function readProviderMessageId(data: unknown): string | null {
   const record = readRecord(data);
   return readString(record?.message_id)
@@ -614,4 +687,41 @@ function readBoolean(value: unknown) {
 
 function readNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function readGrantedMetaPermissions(input: {
+  metadata: JsonRecord | null;
+  scopes?: string[] | null;
+}) {
+  const permissions = new Set<string>();
+
+  for (const scope of input.scopes ?? []) {
+    if (scope.trim()) permissions.add(scope.trim());
+  }
+
+  const reviewTest = readRecord(input.metadata?.review_test);
+
+  for (const result of readArray(reviewTest?.results)) {
+    const record = readRecord(result);
+
+    if (record?.ok !== true) {
+      continue;
+    }
+
+    for (const permission of readStringArray(record.permissions)) {
+      permissions.add(permission);
+    }
+  }
+
+  return Array.from(permissions).sort();
+}
+
+function readArray(value: unknown) {
+  return Array.isArray(value) ? value : [];
+}
+
+function readStringArray(value: unknown) {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+    : [];
 }

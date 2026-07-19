@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { resolveMetaSocialDispatchTarget } from "../src/lib/meta/social-dispatch-policy";
+import {
+  evaluateMetaSocialDispatchReadiness,
+  resolveMetaSocialDispatchMode,
+  resolveMetaSocialDispatchTarget,
+} from "../src/lib/meta/social-dispatch-policy";
 
 describe("Meta social dispatch policy", () => {
   it("routes direct Instagram messages through the page messages endpoint", () => {
@@ -60,5 +64,68 @@ describe("Meta social dispatch policy", () => {
       sourceCommentId: "comment-123",
       text: "Oi.",
     })).toThrow("Canal de comentarios Meta sem modo de resposta permitido.");
+  });
+
+  it("keeps dispatches blocked in dry-run mode", () => {
+    const target = resolveMetaSocialDispatchTarget({
+      channel: "facebook_messenger",
+      externalUserId: "psid-123",
+      pageId: "page-123",
+      text: "Oi.",
+    });
+
+    expect(resolveMetaSocialDispatchMode(undefined)).toBe("dry_run");
+    expect(evaluateMetaSocialDispatchReadiness({
+      channel: "facebook_messenger",
+      target,
+      mode: "dry_run",
+      grantedPermissions: ["pages_messaging"],
+    })).toMatchObject({
+      ok: false,
+      reason: "dry_run",
+      missingPermissions: [],
+    });
+  });
+
+  it("requires channel permissions before live dispatch", () => {
+    const target = resolveMetaSocialDispatchTarget({
+      channel: "instagram_direct",
+      externalUserId: "igsid-123",
+      pageId: "page-123",
+      text: "Oi.",
+    });
+
+    expect(evaluateMetaSocialDispatchReadiness({
+      channel: "instagram_direct",
+      target,
+      mode: "live",
+      grantedPermissions: ["pages_messaging"],
+    })).toMatchObject({
+      ok: false,
+      reason: "missing_permissions",
+      missingPermissions: ["instagram_manage_messages"],
+    });
+  });
+
+  it("blocks expired private replies in live mode", () => {
+    const target = resolveMetaSocialDispatchTarget({
+      channel: "facebook_comments",
+      pageId: "page-123",
+      sourceCommentId: "comment-123",
+      text: "Te chamei no privado.",
+    });
+
+    expect(evaluateMetaSocialDispatchReadiness({
+      channel: "facebook_comments",
+      target,
+      mode: "live",
+      grantedPermissions: ["pages_messaging", "pages_manage_metadata"],
+      occurredAt: "2026-07-01T12:00:00.000Z",
+      now: new Date("2026-07-19T12:00:00.000Z"),
+    })).toMatchObject({
+      ok: false,
+      reason: "expired_private_reply_window",
+      missingPermissions: [],
+    });
   });
 });

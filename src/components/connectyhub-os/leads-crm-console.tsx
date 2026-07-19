@@ -77,6 +77,7 @@ const statusMeta: Record<ClientLeadStatus, { label: string; tone: "cyan" | "gree
 const emptySocialDispatchMonitor: ClientSocialDispatchMonitor = {
   items: [],
   summary: {
+    blocked: 0,
     failed: 0,
     pending: 0,
     rejected: 0,
@@ -908,11 +909,12 @@ function SocialDispatchMonitorPanel({
       }
     >
       <div className="grid gap-3">
-        <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
+        <div className="grid grid-cols-2 gap-2 md:grid-cols-6">
           <SocialDispatchMetric label="Na fila" value={monitor.summary.pending} tone="amber" />
           <SocialDispatchMetric label="Enviando" value={monitor.summary.sending} tone="cyan" />
           <SocialDispatchMetric label="Enviados" value={monitor.summary.sent} tone="green" />
           <SocialDispatchMetric label="Falhas" value={monitor.summary.failed} tone="rose" />
+          <SocialDispatchMetric label="Bloqueados" value={monitor.summary.blocked} tone="amber" />
           <SocialDispatchMetric label="Retry" value={monitor.summary.retryable} tone="violet" />
         </div>
 
@@ -1791,6 +1793,7 @@ function getDispatchStatusTone(status: ClientSocialDispatchStatus): "green" | "c
     case "sending":
       return "cyan";
     case "pending_adapter":
+    case "blocked":
       return "amber";
     case "failed":
       return "rose";
@@ -1823,6 +1826,8 @@ function formatDispatchAuditType(value: string) {
       return "confirmado";
     case "dispatch_failed":
       return "falhou";
+    case "dispatch_blocked":
+      return "bloqueado";
     case "dispatch_enqueue_failed":
       return "fila falhou";
     case "manual_retry_requested":

@@ -112,6 +112,7 @@ export type ClientSocialDispatchStatus =
   | "sending"
   | "sent"
   | "failed"
+  | "blocked"
   | "rejected"
   | "unknown";
 
@@ -153,6 +154,7 @@ export type ClientSocialDispatchMonitor = {
     sending: number;
     sent: number;
     failed: number;
+    blocked: number;
     rejected: number;
     retryable: number;
   };
@@ -296,7 +298,7 @@ export async function retryClientSocialDispatch(input: {
   const status = readSocialDispatchStatus(metadata, run.run_status);
 
   if (status === "sent") {
-    throw new Error("Este envio ja foi confirmado pela Meta.");
+      throw new Error("Este envio ja foi confirmado pela Meta.");
   }
 
   if (status === "rejected") {
@@ -316,6 +318,8 @@ export async function retryClientSocialDispatch(input: {
     meta_dispatch_retry_count: readNumber(metadata.meta_dispatch_retry_count) + 1,
     meta_dispatch_retry_requested_at: requestedAt,
     meta_dispatch_retry_requested_by: input.userId,
+    meta_dispatch_block_reason: null,
+    meta_dispatch_block_detail: null,
     ...(asString(metadata.meta_dispatch_error) ? { meta_dispatch_last_error: asString(metadata.meta_dispatch_error) } : {}),
   }, {
     at: requestedAt,
@@ -572,7 +576,9 @@ function mapSocialDispatch(
     approvedReply: asString(metadata.social_approved_reply_text)
       ?? asString(run.output_summary)
       ?? "Resposta aprovada sem texto salvo.",
-    lastError: asString(metadata.meta_dispatch_error) ?? asString(run.error_message),
+    lastError: asString(metadata.meta_dispatch_error)
+      ?? asString(metadata.meta_dispatch_block_detail)
+      ?? asString(run.error_message),
     providerMessageId: asString(metadata.meta_dispatch_provider_message_id),
     targetKind: asString(metadata.meta_dispatch_target_kind),
     httpStatus: readOptionalNumber(metadata.meta_dispatch_http_status),
@@ -596,6 +602,7 @@ function buildSocialDispatchMonitor(items: ClientSocialDispatch[]): ClientSocial
       sending: items.filter((item) => item.dispatchStatus === "sending").length,
       sent: items.filter((item) => item.dispatchStatus === "sent").length,
       failed: items.filter((item) => item.dispatchStatus === "failed").length,
+      blocked: items.filter((item) => item.dispatchStatus === "blocked").length,
       rejected: items.filter((item) => item.dispatchStatus === "rejected").length,
       retryable: items.filter((item) => item.retryable).length,
     },
@@ -615,6 +622,10 @@ function readSocialDispatchStatus(metadata: JsonRecord, runStatus: string | null
     return status;
   }
 
+  if (status === "blocked_pending_meta") {
+    return "blocked";
+  }
+
   if (asString(metadata.social_approval_status) === "rejected" || runStatus === "cancelled") {
     return "rejected";
   }
@@ -632,6 +643,8 @@ function getSocialDispatchStatusLabel(status: ClientSocialDispatchStatus) {
       return "Enviado";
     case "failed":
       return "Falhou";
+    case "blocked":
+      return "Bloqueado";
     case "rejected":
       return "Rejeitado";
     case "unknown":
@@ -640,7 +653,7 @@ function getSocialDispatchStatusLabel(status: ClientSocialDispatchStatus) {
 }
 
 function isSocialDispatchRetryable(status: ClientSocialDispatchStatus) {
-  return status === "failed" || status === "pending_adapter";
+  return status === "failed" || status === "pending_adapter" || status === "blocked";
 }
 
 async function loadAgentRun(client: SupabaseClient, runId: string) {
