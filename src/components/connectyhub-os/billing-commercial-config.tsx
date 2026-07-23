@@ -75,13 +75,13 @@ export function BillingCommercialConfig({ catalog }: { catalog: BillingCommercia
   const configuredRateCount = useMemo(() => countConfiguredDrafts(rates, rateDrafts), [rates, rateDrafts]);
   const providerGroups = useMemo(() => groupRatesByProvider(rates, rateDrafts), [rates, rateDrafts]);
   const planOptions = useMemo(() => buildPlanOptions(catalog), [catalog]);
-  const elevenLabsFeatures = useMemo(
-    () => catalog.features.filter((feature) => feature.provider === "elevenlabs"),
+  const voiceAndAiFeatures = useMemo(
+    () => catalog.features.filter((feature) => feature.provider === "elevenlabs" || feature.provider === "gemini"),
     [catalog.features],
   );
-  const elevenLabsConfiguredCount = useMemo(
-    () => countConfiguredFeatures(elevenLabsFeatures, featureDrafts),
-    [elevenLabsFeatures, featureDrafts],
+  const voiceAndAiConfiguredCount = useMemo(
+    () => countConfiguredFeatures(voiceAndAiFeatures, featureDrafts),
+    [voiceAndAiFeatures, featureDrafts],
   );
 
   if (!catalog.schemaReady) {
@@ -401,12 +401,12 @@ export function BillingCommercialConfig({ catalog }: { catalog: BillingCommercia
       </Panel>
 
       <Panel
-        title="Ferramentas ElevenLabs por plano"
-        eyebrow="painel do cliente / voz"
+        title="Ferramentas de IA e voz por plano"
+        eyebrow="painel do cliente / creditos"
         action={
           <StatusBadge
-            status={elevenLabsFeatures.length > 0 && elevenLabsConfiguredCount === elevenLabsFeatures.length ? "online" : "warning"}
-            label={`${elevenLabsConfiguredCount}/${elevenLabsFeatures.length} liberadas`}
+            status={voiceAndAiFeatures.length > 0 && voiceAndAiConfiguredCount === voiceAndAiFeatures.length ? "online" : "warning"}
+            label={`${voiceAndAiConfiguredCount}/${voiceAndAiFeatures.length} liberadas`}
           />
         }
       >
@@ -421,16 +421,16 @@ export function BillingCommercialConfig({ catalog }: { catalog: BillingCommercia
                 A manutencao conecta apenas o token. Aqui voce decide o produto vendido.
               </p>
               <p className="mt-1 text-[12px] leading-5 text-slate-500">
-                Use estes controles para definir quais planos enxergam voz no WhatsApp, biblioteca de vozes,
-                clonagem autorizada e ferramentas avancadas no painel do usuario.
+                Use estes controles para definir quais planos enxergam atendimento IA, voz economica,
+                voz premium, clonagem autorizada e ferramentas avancadas no painel do usuario.
               </p>
             </div>
           </div>
         </div>
 
-        {elevenLabsFeatures.length > 0 ? (
+        {voiceAndAiFeatures.length > 0 ? (
           <div className="grid gap-3 xl:grid-cols-2">
-            {elevenLabsFeatures.map((feature) => {
+            {voiceAndAiFeatures.map((feature) => {
               const draft = featureDrafts[feature.id] ?? buildFeatureDraft(feature);
 
               return (
@@ -523,7 +523,7 @@ export function BillingCommercialConfig({ catalog }: { catalog: BillingCommercia
             className="rounded-xl p-5 text-[13px] leading-6 text-slate-500"
             style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
           >
-            Nenhuma ferramenta ElevenLabs foi encontrada no catalogo financeiro. Rode a seed do centro de custo para liberar esta configuracao.
+            Nenhuma ferramenta de IA ou voz foi encontrada no catalogo financeiro. Rode a seed do centro de custo para liberar esta configuracao.
           </div>
         )}
       </Panel>

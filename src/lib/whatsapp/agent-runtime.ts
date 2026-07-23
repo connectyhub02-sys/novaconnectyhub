@@ -2,7 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { buildAgentChannelRuntimeInstruction } from "@/lib/agents/multichannel";
-import { generateElevenLabsAudio } from "@/lib/elevenlabs/tts";
+import { generateConnectyVoiceAudio, type GeneratedConnectyVoiceAudio } from "@/lib/voice/tts";
 import {
   buildLeadQualificationAnalysisPrompt,
   buildLeadQualificationInstruction,
@@ -212,7 +212,7 @@ type OutboundMessage = {
   text: string;
   mode: "text" | "audio";
   providerResponse: unknown;
-  generatedAudio?: Awaited<ReturnType<typeof generateElevenLabsAudio>>;
+  generatedAudio?: GeneratedConnectyVoiceAudio;
   chunkIndex?: number;
   chunksTotal?: number;
   persisted?: boolean;
@@ -3402,13 +3402,14 @@ async function sendAgentResponse(input: {
         await setChatPresence(context.credentials, input.token, input.phone, "recording", 60000);
       }
 
-      const generatedAudio = await generateElevenLabsAudio({
+      const generatedAudio = await generateConnectyVoiceAudio({
         organizationId: context.organization.id,
         userId: null,
         text: sanitizeTextForTts(text),
         voiceId: context.behavior.audioVoiceId || null,
         voicePublicOwnerId: context.behavior.audioVoicePublicOwnerId || null,
         voiceName: context.behavior.audioVoiceName || null,
+        voiceSource: context.behavior.audioVoiceSource || null,
         modelId: context.behavior.audioModelId || null,
         source: "whatsapp_agent",
         metadata: {

@@ -3,15 +3,22 @@
 import { useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import {
-  CalendarDays,
+  Calculator,
+  Coins,
   CreditCard,
   Layers3,
   PackagePlus,
   Plus,
   Save,
   SlidersHorizontal,
+  TrendingUp,
   WalletCards,
 } from "lucide-react";
+import {
+  calculatePlanCreditEconomics,
+  CONNECTY_CREDIT_UNIT_BRL,
+  INCLUDED_CREDIT_TARGET_MARKUP,
+} from "@/lib/billing/credit-economics";
 import type { BillingPlan, BillingPlanCatalog, BillingPlanStatus } from "@/lib/billing/plans";
 import { ConnectyShell } from "./connecty-shell";
 import { NeonBadge, PageHeader, Panel, StatusBadge } from "./panel-primitives";
@@ -67,9 +74,18 @@ export function BillingPlansConsole({
   const selectedPlan = selectedPlanId === "new" ? null : plans.find((plan) => plan.id === selectedPlanId) ?? null;
   const [draft, setDraft] = useState<PlanDraft>(() => createDraft(selectedPlan));
   const [saving, setSaving] = useState(false);
+  const [presetSaving, setPresetSaving] = useState(false);
   const [state, setState] = useState<ActionState>({ tone: "idle", message: "" });
   const metrics = useMemo(() => buildMetrics(plans), [plans]);
   const activeModuleOptions = useMemo(() => buildModuleOptions(plans, draft.moduleCodes), [plans, draft.moduleCodes]);
+  const draftEconomics = useMemo(
+    () =>
+      calculatePlanCreditEconomics({
+        monthlyPriceBrl: Number(draft.monthlyPriceBrl || 0),
+        includedCredits: Number(draft.includedCredits || 0),
+      }),
+    [draft.includedCredits, draft.monthlyPriceBrl],
+  );
 
   function selectPlan(plan: BillingPlan | null) {
     setSelectedPlanId(plan?.id ?? "new");
@@ -108,6 +124,39 @@ export function BillingPlansConsole({
     }
   }
 
+  async function applyCommercialPresets() {
+    setPresetSaving(true);
+    setState({ tone: "idle", message: "" });
+
+    try {
+      const response = await fetch("/api/admin/billing/plans/presets", { method: "POST" });
+      const data = (await response.json().catch(() => null)) as { plans?: BillingPlan[]; error?: string } | null;
+
+      if (!response.ok || !data?.plans) {
+        throw new Error(data?.error ?? "Nao foi possivel aplicar os planos comerciais.");
+      }
+
+      setPlans((current) => upsertPlans(current, data.plans ?? []));
+
+      const starterPlan = data.plans.find((plan) => plan.planCode === "starter") ?? data.plans[0] ?? null;
+
+      if (starterPlan) {
+        setSelectedPlanId(starterPlan.id);
+        setDraft(createDraft(starterPlan));
+      }
+
+      setState({
+        tone: "success",
+        message: "Planos comerciais aplicados: Start R$97, Pro R$247 e Scale R$497 com creditos inclusos.",
+      });
+      router.refresh();
+    } catch (error) {
+      setState({ tone: "error", message: error instanceof Error ? error.message : "Falha ao aplicar planos comerciais." });
+    } finally {
+      setPresetSaving(false);
+    }
+  }
+
   return (
     <ConnectyShell mode="admin" isPlatformAdmin userLabel={userLabel} activeHref="/admin/planos">
       <PageHeader
@@ -116,6 +165,18 @@ export function BillingPlansConsole({
         description="Configure mensalidade, creditos inclusos, excedentes e limites antes de ligar a assinatura automatica."
         actions={
           <div className="flex flex-wrap gap-2">
+            {catalog.schemaReady ? (
+              <button
+                type="button"
+                disabled={presetSaving}
+                onClick={applyCommercialPresets}
+                className="inline-flex h-8 items-center justify-center gap-2 rounded-xl px-3 text-[11px] font-bold transition disabled:opacity-50"
+                style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)", color: "var(--ch-text)" }}
+              >
+                <Coins className="h-3.5 w-3.5" />
+                {presetSaving ? "Aplicando" : "Planos 97/247/497"}
+              </button>
+            ) : null}
             <NeonBadge tone={catalog.schemaReady ? "green" : "amber"}>
               {catalog.schemaReady ? "Schema pronto" : "Aguardando SQL"}
             </NeonBadge>
@@ -153,7 +214,7 @@ export function BillingPlansConsole({
             <PlanMetric icon={Layers3} label="Planos" value={String(metrics.total)} detail={`${metrics.active} ativos`} />
             <PlanMetric icon={WalletCards} label="Creditos inclusos" value={formatCredits(metrics.includedCredits)} detail="somando planos ativos" />
             <PlanMetric icon={CreditCard} label="Excedente medio" value={formatMoney(metrics.averageOveragePrice)} detail="por credito extra" />
-            <PlanMetric icon={CalendarDays} label="Trial" value={`${metrics.maxTrialDays} dias`} detail="maior periodo configurado" />
+            <PlanMetric icon={TrendingUp} label="Custo IA alvo" value={formatMoney(metrics.targetProviderCost)} detail="creditos inclusos / 4" />
           </div>
 
           <div className="grid gap-5 xl:grid-cols-[430px_1fr]">
@@ -266,6 +327,31 @@ export function BillingPlansConsole({
                   <NumberField label="Creditos inclusos" value={draft.includedCredits} onChange={(value) => updateDraft({ includedCredits: value })} step="1" />
                   <NumberField label="Credito excedente R$" value={draft.overageCreditPriceBrl} onChange={(value) => updateDraft({ overageCreditPriceBrl: value })} step="0.01" />
                   <NumberField label="Limite excedente" value={draft.overageLimitCredits} onChange={(value) => updateDraft({ overageLimitCredits: value })} step="1" />
+                </div>
+
+                <div className="rounded-xl p-4" style={{ background: "rgba(16,185,129,0.08)", border: "1px solid rgba(16,185,129,0.22)" }}>
+                  <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+                    <div className="flex items-start gap-3">
+                      <Calculator className="mt-0.5 h-4 w-4 shrink-0 text-emerald-300" />
+                      <div>
+                        <p className="text-[13px] font-semibold text-emerald-100">Centro de custo do plano</p>
+                        <p className="mt-1 text-[12px] leading-5 text-emerald-100/75">
+                          {formatCredits(1)} credito = {formatMoney(CONNECTY_CREDIT_UNIT_BRL)}. Custo alvo dos creditos inclusos = valor percebido / {INCLUDED_CREDIT_TARGET_MARKUP}.
+                        </p>
+                      </div>
+                    </div>
+                    <StatusBadge
+                      status={draftEconomics.planGrossMarginBeforeFixedCostsBrl >= 0 ? "online" : "warning"}
+                      label={`${formatPercent(draftEconomics.planGrossMarginBeforeFixedCostsPercent)} margem`}
+                    />
+                  </div>
+
+                  <div className="grid gap-2 md:grid-cols-4">
+                    <CostValue label="Valor em creditos" value={formatMoney(draftEconomics.includedCreditValueBrl)} />
+                    <CostValue label="Custo alvo IA" value={formatMoney(draftEconomics.includedCreditTargetCostBrl)} />
+                    <CostValue label="Sobra do plano" value={formatMoney(draftEconomics.planGrossMarginBeforeFixedCostsBrl)} />
+                    <CostValue label="Markup alvo" value={`${draftEconomics.targetMarkup}x`} />
+                  </div>
                 </div>
 
                 <div className="grid gap-3 md:grid-cols-5">
@@ -468,6 +554,15 @@ function MiniValue({ label, value }: { label: string; value: string }) {
   );
 }
 
+function CostValue({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg px-3 py-2.5" style={{ background: "rgba(15,23,42,0.28)", border: "1px solid rgba(16,185,129,0.18)" }}>
+      <p className="text-[10px] font-semibold uppercase text-emerald-100/60">{label}</p>
+      <p className="mt-1 truncate font-mono text-[15px] font-bold text-emerald-50">{value}</p>
+    </div>
+  );
+}
+
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="block">
@@ -581,6 +676,14 @@ function buildMetrics(plans: BillingPlan[]) {
   const averageOveragePrice = activePlans.length > 0
     ? activePlans.reduce((total, plan) => total + plan.overageCreditPriceBrl, 0) / activePlans.length
     : 0;
+  const targetProviderCost = activePlans.reduce((total, plan) => {
+    const economics = calculatePlanCreditEconomics({
+      monthlyPriceBrl: plan.monthlyPriceBrl,
+      includedCredits: plan.includedCredits,
+    });
+
+    return total + economics.includedCreditTargetCostBrl;
+  }, 0);
 
   return {
     total: plans.length,
@@ -589,6 +692,7 @@ function buildMetrics(plans: BillingPlan[]) {
     includedCredits: activePlans.reduce((total, plan) => total + plan.includedCredits, 0),
     averageOveragePrice,
     maxTrialDays: plans.reduce((max, plan) => Math.max(max, plan.trialDays), 0),
+    targetProviderCost,
   };
 }
 
@@ -619,6 +723,17 @@ function upsertPlan(plans: BillingPlan[], plan: BillingPlan) {
   return next.sort((left, right) => left.sortOrder - right.sortOrder || left.monthlyPriceBrl - right.monthlyPriceBrl);
 }
 
+function upsertPlans(plans: BillingPlan[], incomingPlans: BillingPlan[]) {
+  const incomingCodes = new Set(incomingPlans.map((plan) => plan.planCode));
+  const incomingIds = new Set(incomingPlans.map((plan) => plan.id));
+  const next = [
+    ...plans.filter((plan) => !incomingIds.has(plan.id) && !incomingCodes.has(plan.planCode)),
+    ...incomingPlans,
+  ];
+
+  return next.sort((left, right) => left.sortOrder - right.sortOrder || left.monthlyPriceBrl - right.monthlyPriceBrl);
+}
+
 function normalizeCode(value: string) {
   return value.trim().toLowerCase().replace(/\s+/g, "-");
 }
@@ -633,4 +748,11 @@ function formatMoney(value: number) {
 
 function formatCredits(value: number) {
   return new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 2 }).format(value);
+}
+
+function formatPercent(value: number) {
+  return new Intl.NumberFormat("pt-BR", {
+    style: "percent",
+    maximumFractionDigits: 1,
+  }).format(value);
 }

@@ -127,6 +127,13 @@ export const maintenanceIntegrations: IntegrationDefinition[] = [
         requirement: "recommended",
         help: "Modelo padrao usado pelos agentes. Pode ser alterado por plano, setor ou agente no futuro.",
       },
+      {
+        label: "Modelo Gemini de voz",
+        env: "GEMINI_TTS_MODEL",
+        kind: "identifier",
+        requirement: "recommended",
+        help: "Modelo padrao para a Voz Economica do painel de agentes. Use um modelo Gemini TTS compativel.",
+      },
     ],
   },
   {

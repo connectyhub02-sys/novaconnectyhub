@@ -7,18 +7,21 @@ import { createServiceClient } from "@/lib/supabase/service";
 export type GeminiCredentials = {
   apiKey: string;
   model: string;
+  ttsModel: string;
 };
 
 const defaultGeminiModel = "gemini-2.5-flash";
+const defaultGeminiTtsModel = "gemini-3.1-flash-tts-preview";
 
 const geminiCredentialNames = [
   "GEMINI_API_KEY",
   "GOOGLE_GENERATIVE_AI_API_KEY",
   "GOOGLE_AI_API_KEY",
   "GEMINI_DEFAULT_MODEL",
+  "GEMINI_TTS_MODEL",
 ];
 
-export { defaultGeminiModel, geminiCredentialNames };
+export { defaultGeminiModel, defaultGeminiTtsModel, geminiCredentialNames };
 
 export async function loadGeminiCredentials(
   client: SupabaseClient = createServiceClient(),
@@ -72,6 +75,7 @@ export async function loadGeminiCredentials(
   return {
     apiKey: apiKey.trim(),
     model: normalizeGeminiModel(values.get("GEMINI_DEFAULT_MODEL") ?? defaultGeminiModel),
+    ttsModel: normalizeGeminiModel(values.get("GEMINI_TTS_MODEL") ?? defaultGeminiTtsModel),
   };
 }
 

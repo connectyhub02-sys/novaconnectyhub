@@ -2,13 +2,17 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { ElevenLabsClient, type ElevenLabs } from "@elevenlabs/elevenlabs-js";
+import { loadGeminiCredentials } from "@/lib/gemini/credentials";
+import { geminiTtsVoices } from "@/lib/gemini/tts";
 import { createServiceClient } from "@/lib/supabase/service";
 import { loadElevenLabsCredentials } from "./credentials";
+
+export type WhatsappAudioVoiceSource = "platform" | "customer" | "elevenlabs" | "library" | "gemini";
 
 export type WhatsappAudioVoiceOption = {
   voiceId: string;
   name: string;
-  source: "platform" | "customer" | "elevenlabs" | "library";
+  source: WhatsappAudioVoiceSource;
   previewUrl: string | null;
   category: string | null;
   status: string | null;
@@ -59,67 +63,93 @@ export async function listWhatsappAudioVoices(input: {
       errorMessage: error instanceof Error ? error.message : "Servico de voz nao configurado.",
     };
   });
-
-  if ("errorMessage" in credentials) {
+  const geminiCredentials = await loadGeminiCredentials(client).catch((error: unknown) => {
     return {
-      configured: false,
-      defaultVoiceId: null,
-      defaultModelId: null,
-      outputFormat: null,
-      voices: [],
-      errorMessage: credentials.errorMessage,
+      errorMessage: error instanceof Error ? error.message : "Voz economica Gemini nao configurada.",
     };
-  }
+  });
 
+  const elevenCredentialsErrorMessage = "errorMessage" in credentials ? credentials.errorMessage : null;
+  const elevenCredentials = "errorMessage" in credentials ? null : credentials;
+  const geminiCredentialsErrorMessage = "errorMessage" in geminiCredentials ? geminiCredentials.errorMessage : null;
+  const geminiVoiceConfigured = !("errorMessage" in geminiCredentials);
   const [remoteVoices, customerVoices, previewIndex] = await Promise.all([
-    withTimeout(listRemoteVoices(credentials.apiKey), remoteVoiceTimeoutMs, remoteVoiceTimeoutFallback),
-    listCustomerVoices(client, input.organizationId),
-    listClonedVoicePreviews(client),
+    !elevenCredentials
+      ? Promise.resolve({
+          voices: [] as ElevenLabs.Voice[],
+          libraryVoices: [] as ElevenLabs.LibraryVoiceResponse[],
+          errorMessage: elevenCredentialsErrorMessage,
+        })
+      : withTimeout(listRemoteVoices(elevenCredentials.apiKey), remoteVoiceTimeoutMs, remoteVoiceTimeoutFallback),
+    elevenCredentials ? listCustomerVoices(client, input.organizationId) : Promise.resolve([] as CustomerVoiceRow[]),
+    elevenCredentials ? listClonedVoicePreviews(client) : Promise.resolve(new Map<string, string>()),
   ]);
   const voices = new Map<string, WhatsappAudioVoiceOption>();
 
-  for (const voice of remoteVoices.voices) {
-    if (!voice.voiceId) {
-      continue;
+  if (elevenCredentials) {
+    for (const voice of remoteVoices.voices) {
+      if (!voice.voiceId) {
+        continue;
+      }
+
+      voices.set(voice.voiceId, {
+        voiceId: voice.voiceId,
+        name: voice.name?.trim() || "Voz ConnectyHub",
+        source: voice.voiceId === elevenCredentials.defaultVoiceId ? "platform" : "elevenlabs",
+        previewUrl: normalizeUrl(voice.previewUrl) ?? previewIndex.get(voice.voiceId) ?? null,
+        category: voice.category ?? null,
+        status: null,
+        publicOwnerId: null,
+        language: firstVerifiedLanguage(voice.verifiedLanguages),
+        accent: readLabel(voice.labels, "accent"),
+        gender: readLabel(voice.labels, "gender"),
+        useCase: readLabel(voice.labels, "use case") ?? readLabel(voice.labels, "use_case"),
+        defaultForAgents: voice.voiceId === elevenCredentials.defaultVoiceId,
+        isDefault: voice.voiceId === elevenCredentials.defaultVoiceId,
+      });
     }
 
-    voices.set(voice.voiceId, {
-      voiceId: voice.voiceId,
-      name: voice.name?.trim() || "Voz ConnectyHub",
-      source: voice.voiceId === credentials.defaultVoiceId ? "platform" : "elevenlabs",
-      previewUrl: normalizeUrl(voice.previewUrl) ?? previewIndex.get(voice.voiceId) ?? null,
-      category: voice.category ?? null,
-      status: null,
-      publicOwnerId: null,
-      language: firstVerifiedLanguage(voice.verifiedLanguages),
-      accent: readLabel(voice.labels, "accent"),
-      gender: readLabel(voice.labels, "gender"),
-      useCase: readLabel(voice.labels, "use case") ?? readLabel(voice.labels, "use_case"),
-      defaultForAgents: voice.voiceId === credentials.defaultVoiceId,
-      isDefault: voice.voiceId === credentials.defaultVoiceId,
-    });
+    for (const voice of remoteVoices.libraryVoices) {
+      if (!voice.voiceId || voices.has(voice.voiceId)) {
+        continue;
+      }
+
+      voices.set(voice.voiceId, {
+        voiceId: voice.voiceId,
+        name: voice.name?.trim() || "Voz ConnectyHub",
+        source: "library",
+        previewUrl: normalizeUrl(voice.previewUrl),
+        category: voice.category ?? null,
+        status: null,
+        publicOwnerId: voice.publicOwnerId ?? null,
+        language: voice.language ?? voice.locale ?? null,
+        accent: voice.accent ?? null,
+        gender: voice.gender ?? null,
+        useCase: voice.useCase ?? voice.descriptive ?? null,
+        defaultForAgents: false,
+        isDefault: false,
+      });
+    }
   }
 
-  for (const voice of remoteVoices.libraryVoices) {
-    if (!voice.voiceId || voices.has(voice.voiceId)) {
-      continue;
+  if (geminiVoiceConfigured) {
+    for (const voice of geminiTtsVoices) {
+      voices.set(voice.voiceId, {
+        voiceId: voice.voiceId,
+        name: voice.displayName,
+        source: "gemini",
+        previewUrl: null,
+        category: "voz economica",
+        status: "ready",
+        publicOwnerId: null,
+        language: "pt-BR",
+        accent: "brasileiro",
+        gender: null,
+        useCase: `${voice.tone} / ${voice.useCase}`,
+        defaultForAgents: false,
+        isDefault: false,
+      });
     }
-
-    voices.set(voice.voiceId, {
-      voiceId: voice.voiceId,
-      name: voice.name?.trim() || "Voz ConnectyHub",
-      source: "library",
-      previewUrl: normalizeUrl(voice.previewUrl),
-      category: voice.category ?? null,
-      status: null,
-      publicOwnerId: voice.publicOwnerId ?? null,
-      language: voice.language ?? voice.locale ?? null,
-      accent: voice.accent ?? null,
-      gender: voice.gender ?? null,
-      useCase: voice.useCase ?? voice.descriptive ?? null,
-      defaultForAgents: false,
-      isDefault: false,
-    });
   }
 
   for (const voice of customerVoices) {
@@ -144,13 +174,13 @@ export async function listWhatsappAudioVoices(input: {
       gender: existing?.gender ?? null,
       useCase: existing?.useCase ?? null,
       defaultForAgents: Boolean(voice.default_for_agents),
-      isDefault: voiceId === credentials.defaultVoiceId,
+      isDefault: voiceId === elevenCredentials?.defaultVoiceId,
     });
   }
 
-  if (!voices.has(credentials.defaultVoiceId)) {
-    voices.set(credentials.defaultVoiceId, {
-      voiceId: credentials.defaultVoiceId,
+  if (elevenCredentials && !voices.has(elevenCredentials.defaultVoiceId)) {
+    voices.set(elevenCredentials.defaultVoiceId, {
+      voiceId: elevenCredentials.defaultVoiceId,
       name: "Voz padrao ConnectyHub",
       source: "platform",
       previewUrl: null,
@@ -166,13 +196,19 @@ export async function listWhatsappAudioVoices(input: {
     });
   }
 
+  const fallbackGeminiVoice = geminiVoiceConfigured ? geminiTtsVoices[0]?.voiceId ?? null : null;
+  const defaultVoiceId = elevenCredentials ? elevenCredentials.defaultVoiceId : fallbackGeminiVoice;
+  const defaultModelId = elevenCredentials
+    ? elevenCredentials.defaultModelId
+    : "errorMessage" in geminiCredentials ? null : geminiCredentials.ttsModel;
+
   return {
-    configured: true,
-    defaultVoiceId: credentials.defaultVoiceId,
-    defaultModelId: credentials.defaultModelId,
-    outputFormat: credentials.outputFormat,
+    configured: voices.size > 0,
+    defaultVoiceId,
+    defaultModelId,
+    outputFormat: elevenCredentials ? elevenCredentials.outputFormat : null,
     voices: Array.from(voices.values()).sort(sortVoices),
-    errorMessage: remoteVoices.errorMessage,
+    errorMessage: joinErrorMessages(remoteVoices.errorMessage, geminiCredentialsErrorMessage),
   };
 }
 
@@ -302,6 +338,8 @@ function sortVoices(left: WhatsappAudioVoiceOption, right: WhatsappAudioVoiceOpt
   if (left.source !== right.source) {
     if (left.source === "customer") return -1;
     if (right.source === "customer") return 1;
+    if (left.source === "gemini") return -1;
+    if (right.source === "gemini") return 1;
   }
 
   return left.name.localeCompare(right.name, "pt-BR");
@@ -337,4 +375,9 @@ function firstVerifiedLanguage(languages: ElevenLabs.VerifiedVoiceLanguageRespon
   }
 
   return first.language || first.locale || null;
+}
+
+function joinErrorMessages(...messages: Array<string | null | undefined>) {
+  const unique = Array.from(new Set(messages.map((message) => message?.trim()).filter(Boolean)));
+  return unique.length > 0 ? unique.join(" ") : null;
 }

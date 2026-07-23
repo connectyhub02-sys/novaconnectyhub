@@ -324,7 +324,7 @@ type CloneRealTestSummary = {
 type AudioVoiceOption = {
   voiceId: string;
   name: string;
-  source: "platform" | "customer" | "elevenlabs" | "library";
+  source: "platform" | "customer" | "elevenlabs" | "library" | "gemini";
   previewUrl: string | null;
   category: string | null;
   status: string | null;
@@ -1068,6 +1068,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
         audioVoiceName: voice.name,
         audioVoiceSource: voice.source,
         audioVoicePublicOwnerId: voice.publicOwnerId ?? "",
+        audioModelId: "",
       }),
     );
   }
@@ -5504,9 +5505,10 @@ function formatPresenceMode(value: WhatsappPresenceMode) {
 function formatVoiceSource(voice: AudioVoiceOption) {
   if (voice.isDefault) return "padrao";
   if (voice.source === "customer") return "voz propria";
+  if (voice.source === "gemini") return "economica";
   if (voice.source === "library") return "biblioteca";
   if (voice.category) return voice.category;
-  return "biblioteca";
+  return "premium";
 }
 
 function formatVoiceDetails(voice: AudioVoiceOption) {

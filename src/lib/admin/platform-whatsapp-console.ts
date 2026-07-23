@@ -2,8 +2,8 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
-import { generateElevenLabsAudio } from "@/lib/elevenlabs/tts";
 import { listWhatsappAudioVoices, type WhatsappAudioVoiceState } from "@/lib/elevenlabs/voices";
+import { generateConnectyVoiceAudio, type GeneratedConnectyVoiceAudio } from "@/lib/voice/tts";
 import { defaultAgentChannelConfig, normalizeAgentChannelConfig } from "@/lib/agents/multichannel";
 import {
   leadQualificationConfigKey,
@@ -822,17 +822,18 @@ export async function sendPlatformWhatsappConsoleTest(input: {
   }
 
   let deliveryMode: "text" | "audio" = "text";
-  let generatedAudio: Awaited<ReturnType<typeof generateElevenLabsAudio>> | null = null;
+  let generatedAudio: GeneratedConnectyVoiceAudio | null = null;
 
   if (behavior.responseMode === "audio") {
     deliveryMode = "audio";
-    generatedAudio = await generateElevenLabsAudio({
+    generatedAudio = await generateConnectyVoiceAudio({
       organizationId: instance.organization_id,
       userId: input.userId,
       text,
       voiceId: behavior.audioVoiceId || null,
       voicePublicOwnerId: behavior.audioVoicePublicOwnerId || null,
       voiceName: behavior.audioVoiceName || null,
+      voiceSource: behavior.audioVoiceSource || null,
       modelId: behavior.audioModelId || null,
       source: "whatsapp_internal_test",
       metadata: {
