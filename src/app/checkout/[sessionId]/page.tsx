@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Script from "next/script";
 import type { ReactNode } from "react";
 import { CheckoutPaymentOptions } from "@/components/checkout/checkout-payment-options";
 import { CheckoutStatusPoller } from "@/components/checkout/checkout-status-poller";
@@ -16,6 +17,10 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: "Checkout | ConnectyHub",
   description: "Checkout seguro para pedidos feitos pelo WhatsApp.",
+};
+
+const mercadoPagoSecurityScriptAttributes: Record<string, string> = {
+  view: "checkout",
 };
 
 type JsonRecord = Record<string, unknown>;
@@ -285,6 +290,12 @@ export default async function CheckoutPage({
 function CheckoutShell({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen bg-[#050912] text-white">
+      <Script
+        id="mercado-pago-security"
+        src="https://www.mercadopago.com/v2/security.js"
+        strategy="afterInteractive"
+        {...mercadoPagoSecurityScriptAttributes}
+      />
       <div className="absolute inset-x-0 top-0 h-64 bg-[radial-gradient(circle_at_top,_rgba(34,211,238,0.22),_transparent_55%)]" />
       <div className="relative">{children}</div>
     </div>

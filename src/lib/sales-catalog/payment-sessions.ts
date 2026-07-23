@@ -8,6 +8,7 @@ import {
 } from "@/lib/client-os/sales-catalog";
 import { resolveSalesCatalogOrderPaymentOwner } from "@/lib/platform-product-sales";
 import {
+  buildMercadoPagoAdditionalInfo,
   buildMercadoPagoWebhookUrl,
   buildSalesCatalogCheckoutUrl,
   createMercadoPagoPixPayment,
@@ -25,6 +26,7 @@ type OrderRow = {
   customer_name: string | null;
   customer_document: string | null;
   customer_email: string | null;
+  customer_phone: string | null;
   destination_cep: string | null;
   subtotal: string | null;
   shipping_total: string | null;
@@ -53,7 +55,7 @@ export async function createSalesCatalogPixPaymentSession(input: {
 }) {
   const { data: order, error: orderError } = await input.client
     .from("sales_catalog_orders")
-    .select("id, organization_id, customer_name, customer_document, customer_email, destination_cep, subtotal, shipping_total, total, metadata")
+    .select("id, organization_id, customer_name, customer_document, customer_email, customer_phone, destination_cep, subtotal, shipping_total, total, metadata")
     .eq("id", input.orderId)
     .eq("organization_id", input.organizationId)
     .maybeSingle<OrderRow>();
@@ -107,6 +109,21 @@ export async function createSalesCatalogPixPaymentSession(input: {
   const checkoutUrl = buildSalesCatalogCheckoutUrl(sessionId);
   const payerEmail = normalizePayerEmail(input.payerEmail ?? order.customer_email, order.id);
   const description = buildPaymentDescription(items, order.id);
+  const additionalInfo = buildMercadoPagoAdditionalInfo({
+    payerName: order.customer_name,
+    payerPhone: order.customer_phone,
+    payerZipCode: order.destination_cep,
+    shippingTotal: order.shipping_total,
+    items: items.map((item) => ({
+      id: item.id,
+      title: item.title,
+      skuCode: item.sku_code,
+      quantity: item.quantity,
+      unitPrice: item.unit_price,
+      salePrice: item.sale_price,
+      total: item.total,
+    })),
+  });
   const now = new Date().toISOString();
 
   const { data: inserted, error: insertError } = await input.client
@@ -168,6 +185,7 @@ export async function createSalesCatalogPixPaymentSession(input: {
       payerZipCode: order.destination_cep,
       notificationUrl: buildMercadoPagoWebhookUrl(),
       idempotencyKey,
+      additionalInfo,
     });
     const pixData = extractMercadoPagoPixData(pix.payment);
     const { data: updated, error: updateError } = await input.client

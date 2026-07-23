@@ -2,10 +2,30 @@ import "server-only";
 
 import { createHmac, randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { MercadoPagoConfig, Payment } from "mercadopago";
+import type { AdditionalInfo, PaymentCreateRequest } from "mercadopago/dist/clients/payment/create/types";
 import { decryptCredentialValue, encryptCredentialValue } from "@/lib/security/credentials-crypto";
 import type { SalesCatalogPaymentSessionStatus } from "./shared";
 
 type JsonRecord = Record<string, unknown>;
+
+export type MercadoPagoAdditionalInfoItemInput = {
+  id?: string | null;
+  title?: string | null;
+  skuCode?: string | null;
+  quantity?: number | null;
+  unitPrice?: string | number | null;
+  salePrice?: string | number | null;
+  total?: string | number | null;
+};
+
+export type MercadoPagoAdditionalInfoInput = {
+  payerName?: string | null;
+  payerPhone?: string | null;
+  payerZipCode?: string | null;
+  shippingTotal?: string | number | null;
+  items?: MercadoPagoAdditionalInfoItemInput[];
+};
 
 type MercadoPagoOAuthTokenResponse = {
   access_token?: string;
@@ -534,33 +554,26 @@ export async function createMercadoPagoPixPayment(input: {
   payerZipCode?: string | null;
   notificationUrl?: string | null;
   idempotencyKey?: string | null;
+  additionalInfo?: AdditionalInfo | null;
 }) {
   const idempotencyKey = input.idempotencyKey ?? randomUUID();
   const payer = buildPixPayer(input);
-  const response = await fetch(`${mercadoPagoApiBaseUrl}/v1/payments`, {
-    method: "POST",
-    headers: {
-      accept: "application/json",
-      "content-type": "application/json",
-      Authorization: `Bearer ${input.accessToken}`,
-      "X-Idempotency-Key": idempotencyKey,
-    },
-    body: JSON.stringify({
+  const payment = await createMercadoPagoPayment({
+    accessToken: input.accessToken,
+    idempotencyKey,
+    fallbackMessage: "Nao foi possivel gerar Pix no Mercado Pago.",
+    body: {
       transaction_amount: input.amount,
       description: input.description,
       payment_method_id: "pix",
       external_reference: input.externalReference,
       notification_url: input.notificationUrl ?? undefined,
       payer,
-    }),
+      additional_info: input.additionalInfo ?? undefined,
+    },
   });
-  const body = await response.json().catch(() => null) as MercadoPagoPaymentResponse & { message?: string; error?: string } | null;
 
-  if (!response.ok || !body?.id) {
-    throw new Error(body?.message ?? body?.error ?? "Nao foi possivel gerar Pix no Mercado Pago.");
-  }
-
-  return { payment: body, idempotencyKey };
+  return { payment, idempotencyKey };
 }
 
 export async function createMercadoPagoCardPayment(input: {
@@ -573,44 +586,90 @@ export async function createMercadoPagoCardPayment(input: {
   paymentMethodId: string;
   installments: number;
   issuerId?: string | number | null;
+  payerName?: string | null;
+  payerPhone?: string | null;
+  payerDocument?: string | null;
+  payerZipCode?: string | null;
   payerIdentification?: {
     type: string | null;
     number: string | null;
   } | null;
   notificationUrl?: string | null;
   idempotencyKey?: string | null;
+  deviceSessionId?: string | null;
+  additionalInfo?: AdditionalInfo | null;
 }) {
   const idempotencyKey = input.idempotencyKey ?? randomUUID();
-  const response = await fetch(`${mercadoPagoApiBaseUrl}/v1/payments`, {
-    method: "POST",
-    headers: {
-      accept: "application/json",
-      "content-type": "application/json",
-      Authorization: `Bearer ${input.accessToken}`,
-      "X-Idempotency-Key": idempotencyKey,
-    },
-    body: JSON.stringify({
+  const payment = await createMercadoPagoPayment({
+    accessToken: input.accessToken,
+    idempotencyKey,
+    deviceSessionId: input.deviceSessionId,
+    fallbackMessage: "Nao foi possivel processar cartao no Mercado Pago.",
+    body: {
       transaction_amount: input.amount,
       token: input.token,
       description: input.description,
       installments: input.installments,
       payment_method_id: input.paymentMethodId,
-      issuer_id: input.issuerId ?? undefined,
+      issuer_id: normalizeMercadoPagoNumber(input.issuerId) ?? undefined,
       external_reference: input.externalReference,
       notification_url: input.notificationUrl ?? undefined,
-      payer: {
-        email: input.payerEmail,
-        identification: normalizePayerIdentification(input.payerIdentification),
-      },
-    }),
+      payer: buildCardPayer(input),
+      additional_info: input.additionalInfo ?? undefined,
+    },
   });
-  const body = await response.json().catch(() => null) as MercadoPagoPaymentResponse & { message?: string; error?: string } | null;
 
-  if (!response.ok || !body?.id) {
-    throw new Error(body?.message ?? body?.error ?? "Nao foi possivel processar cartao no Mercado Pago.");
+  return { payment, idempotencyKey };
+}
+
+async function createMercadoPagoPayment(input: {
+  accessToken: string;
+  body: PaymentCreateRequest;
+  idempotencyKey: string;
+  deviceSessionId?: string | null;
+  fallbackMessage: string;
+}) {
+  const paymentClient = new Payment(new MercadoPagoConfig({
+    accessToken: input.accessToken,
+    options: {
+      timeout: 10000,
+    },
+  }));
+
+  try {
+    const payment = await paymentClient.create({
+      body: input.body,
+      requestOptions: {
+        idempotencyKey: input.idempotencyKey,
+        meliSessionId: normalizeMercadoPagoDeviceSessionId(input.deviceSessionId) ?? undefined,
+      },
+    });
+
+    if (!payment?.id) {
+      throw new Error(input.fallbackMessage);
+    }
+
+    return payment;
+  } catch (error) {
+    throw new Error(readMercadoPagoPaymentErrorMessage(error) ?? input.fallbackMessage);
+  }
+}
+
+function readMercadoPagoPaymentErrorMessage(error: unknown) {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message.trim();
   }
 
-  return { payment: body, idempotencyKey };
+  if (!error || typeof error !== "object") {
+    return null;
+  }
+
+  const record = error as Record<string, unknown>;
+
+  return readOptionalString(record.message)
+    ?? readOptionalString(record.error)
+    ?? readOptionalString(record.error_description)
+    ?? readMercadoPagoCauseMessage(record.cause);
 }
 
 export async function getMercadoPagoPayment(input: {
@@ -701,6 +760,31 @@ export function normalizeCurrencyAmount(value: string | number | null | undefine
   return Number.isFinite(amount) && amount > 0 ? Math.round(amount * 100) / 100 : null;
 }
 
+export function buildMercadoPagoAdditionalInfo(input: MercadoPagoAdditionalInfoInput): AdditionalInfo | undefined {
+  const payerName = splitMercadoPagoPayerName(input.payerName);
+  const payerAddress = buildMercadoPagoAddress(input.payerZipCode);
+  const payer = {
+    first_name: payerName.firstName,
+    last_name: payerName.lastName,
+    phone: buildMercadoPagoPhone(input.payerPhone),
+    address: payerAddress,
+  };
+  const items = buildMercadoPagoAdditionalInfoItems(input.items ?? []);
+  const shippingCost = normalizeCurrencyAmount(input.shippingTotal);
+  const shipments = {
+    mode: "custom",
+    cost: shippingCost ?? undefined,
+    receiver_address: payerAddress,
+  };
+  const additionalInfo: AdditionalInfo = {
+    items: items.length > 0 ? items : undefined,
+    payer: hasObjectValues(payer) ? payer : undefined,
+    shipments: hasObjectValues(shipments) ? shipments : undefined,
+  };
+
+  return hasObjectValues(additionalInfo) ? additionalInfo : undefined;
+}
+
 export function buildSalesCatalogCheckoutUrl(sessionId: string) {
   return `${getAppBaseUrl()}/checkout/${sessionId}`;
 }
@@ -728,23 +812,158 @@ function buildPixPayer(input: {
   payerDocument?: string | null;
   payerZipCode?: string | null;
 }) {
-  const [firstName, ...rest] = (input.payerName ?? "").trim().split(/\s+/).filter(Boolean);
-  const document = input.payerDocument?.replace(/\D/g, "");
+  const payerName = splitMercadoPagoPayerName(input.payerName);
 
   return {
     email: input.payerEmail,
-    first_name: firstName || undefined,
-    last_name: rest.join(" ") || undefined,
-    identification: document && (document.length === 11 || document.length === 14)
-      ? {
-          type: document.length === 14 ? "CNPJ" : "CPF",
-          number: document,
-        }
-      : undefined,
-    address: input.payerZipCode
-      ? { zip_code: input.payerZipCode.replace(/\D/g, "") }
-      : undefined,
+    first_name: payerName.firstName,
+    last_name: payerName.lastName,
+    identification: normalizeMercadoPagoDocument(input.payerDocument),
+    address: buildMercadoPagoAddress(input.payerZipCode),
   };
+}
+
+function buildCardPayer(input: {
+  payerEmail: string;
+  payerName?: string | null;
+  payerPhone?: string | null;
+  payerDocument?: string | null;
+  payerZipCode?: string | null;
+  payerIdentification?: {
+    type: string | null;
+    number: string | null;
+  } | null;
+}) {
+  const payerName = splitMercadoPagoPayerName(input.payerName);
+
+  return {
+    email: input.payerEmail,
+    first_name: payerName.firstName,
+    last_name: payerName.lastName,
+    phone: buildMercadoPagoPhone(input.payerPhone),
+    identification: normalizePayerIdentification(input.payerIdentification)
+      ?? normalizeMercadoPagoDocument(input.payerDocument),
+    address: buildMercadoPagoAddress(input.payerZipCode),
+  };
+}
+
+function buildMercadoPagoAdditionalInfoItems(items: MercadoPagoAdditionalInfoItemInput[]) {
+  return items.flatMap((item, index) => {
+    const title = sanitizeMercadoPagoText(item.title, 256);
+    const quantity = normalizeMercadoPagoQuantity(item.quantity);
+    const unitPrice = normalizeMercadoPagoItemUnitPrice(item, quantity);
+
+    if (!title || !unitPrice) {
+      return [];
+    }
+
+    return [{
+      id: sanitizeMercadoPagoText(item.skuCode ?? item.id ?? `item-${index + 1}`, 256) ?? `item-${index + 1}`,
+      title,
+      description: sanitizeMercadoPagoText(item.skuCode ? `SKU ${item.skuCode}` : item.title, 256) ?? undefined,
+      quantity,
+      currency_id: "BRL",
+      unit_price: unitPrice,
+    }];
+  });
+}
+
+function normalizeMercadoPagoItemUnitPrice(item: MercadoPagoAdditionalInfoItemInput, quantity: number) {
+  const unitPrice = normalizeCurrencyAmount(item.unitPrice) ?? normalizeCurrencyAmount(item.salePrice);
+
+  if (unitPrice) {
+    return unitPrice;
+  }
+
+  const total = normalizeCurrencyAmount(item.total);
+
+  return total ? Math.round((total / quantity) * 100) / 100 : null;
+}
+
+function normalizeMercadoPagoQuantity(value: number | null | undefined) {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.max(1, Math.floor(value)) : 1;
+}
+
+function splitMercadoPagoPayerName(value: string | null | undefined) {
+  const parts = (value ?? "").trim().split(/\s+/).filter(Boolean);
+  const firstName = sanitizeMercadoPagoText(parts[0], 64);
+  const lastName = sanitizeMercadoPagoText(parts.slice(1).join(" "), 128);
+
+  return {
+    firstName: firstName ?? undefined,
+    lastName: lastName ?? undefined,
+  };
+}
+
+function buildMercadoPagoPhone(value: string | null | undefined) {
+  const digits = value?.replace(/\D/g, "") ?? "";
+  const national = digits.startsWith("55") && digits.length > 11 ? digits.slice(2) : digits;
+
+  if (national.length >= 10) {
+    return {
+      area_code: national.slice(0, 2),
+      number: national.slice(2),
+    };
+  }
+
+  if (national.length >= 8) {
+    return { number: national };
+  }
+
+  return undefined;
+}
+
+function buildMercadoPagoAddress(zipCode: string | null | undefined) {
+  const normalizedZipCode = normalizeMercadoPagoZipCode(zipCode);
+
+  return normalizedZipCode ? { zip_code: normalizedZipCode } : undefined;
+}
+
+function normalizeMercadoPagoZipCode(value: string | null | undefined) {
+  const digits = value?.replace(/\D/g, "") ?? "";
+
+  return digits.length >= 5 ? digits.slice(0, 8) : null;
+}
+
+function normalizeMercadoPagoDocument(value: string | null | undefined) {
+  const document = value?.replace(/\D/g, "");
+
+  if (!document || (document.length !== 11 && document.length !== 14)) {
+    return undefined;
+  }
+
+  return {
+    type: document.length === 14 ? "CNPJ" : "CPF",
+    number: document,
+  };
+}
+
+function normalizeMercadoPagoNumber(value: string | number | null | undefined) {
+  const parsed = typeof value === "number" ? value : Number.parseInt(String(value ?? ""), 10);
+
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function normalizeMercadoPagoDeviceSessionId(value: string | null | undefined) {
+  const normalized = value?.trim();
+
+  return normalized && normalized.length <= 256 ? normalized : null;
+}
+
+function sanitizeMercadoPagoText(value: string | null | undefined, maxLength: number) {
+  const normalized = value?.trim().replace(/\s+/g, " ");
+
+  return normalized ? normalized.slice(0, maxLength) : null;
+}
+
+function hasObjectValues(value: Record<string, unknown> | undefined): boolean {
+  if (!value) return false;
+
+  return Object.values(value).some((item) => {
+    if (Array.isArray(item)) return item.length > 0;
+    if (item && typeof item === "object") return hasObjectValues(item as Record<string, unknown>);
+    return item !== undefined && item !== null && item !== "";
+  });
 }
 
 function normalizePayerIdentification(value: {

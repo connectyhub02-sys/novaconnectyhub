@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { NextResponse, type NextRequest } from "next/server";
 import {
+  buildMercadoPagoAdditionalInfo,
   buildMercadoPagoWebhookUrl,
   buildSalesCatalogCheckoutUrl,
   createMercadoPagoCardPayment,
@@ -39,14 +40,22 @@ type OrderRow = {
   customer_name: string | null;
   customer_document: string | null;
   customer_email: string | null;
+  customer_phone: string | null;
+  destination_cep: string | null;
+  shipping_total: string | null;
+  shipping_method: string | null;
   total: string | null;
   subtotal: string | null;
   metadata: JsonRecord | null;
 };
 
 type OrderItemRow = {
+  id: string;
   title: string;
   quantity: number | null;
+  unit_price: string | null;
+  sale_price: string | null;
+  total: string | null;
   sku_code: string | null;
 };
 
@@ -74,6 +83,10 @@ export async function POST(
   const payer = readRecord(formData.payer);
   const payerIdentification = readRecord(payer?.identification);
   const payerEmail = normalizeEmail(readString(payer?.email) ?? sourceSession.payer_email);
+  const deviceSessionId = readString(body.deviceSessionId)
+    ?? readString(body.device_id)
+    ?? readString(body.MP_DEVICE_SESSION_ID)
+    ?? readString(request.headers.get("x-meli-session-id"));
   const frontendAmount = normalizeCurrencyAmount(readString(formData.transaction_amount) ?? readNumber(formData.transaction_amount));
   const sessionAmount = normalizeCurrencyAmount(sourceSession.amount);
   const amount = sessionAmount ?? frontendAmount;
@@ -88,7 +101,7 @@ export async function POST(
 
   const { data: order, error: orderError } = await client
     .from("sales_catalog_orders")
-    .select("id, customer_name, customer_document, customer_email, total, subtotal, metadata")
+    .select("id, customer_name, customer_document, customer_email, customer_phone, destination_cep, shipping_total, shipping_method, total, subtotal, metadata")
     .eq("id", sourceSession.order_id)
     .eq("organization_id", sourceSession.organization_id)
     .maybeSingle<OrderRow>();
@@ -97,6 +110,13 @@ export async function POST(
     return NextResponse.json({ error: "Pedido nao encontrado." }, { status: 404 });
   }
 
+  const { data: itemRows } = await client
+    .from("sales_catalog_order_items")
+    .select("id, title, quantity, unit_price, sale_price, total, sku_code")
+    .eq("order_id", order.id)
+    .eq("organization_id", sourceSession.organization_id)
+    .order("created_at", { ascending: true });
+  const items = (itemRows ?? []) as OrderItemRow[];
   let cardSessionId: string | null = null;
 
   try {
@@ -136,7 +156,22 @@ export async function POST(
     const idempotencyKey = randomUUID();
     const externalReference = `sales_catalog_order:${order.id}:${cardSessionId}`;
     const checkoutUrl = buildSalesCatalogCheckoutUrl(cardSessionId);
-    const description = await buildCardPaymentDescription(client, order.id);
+    const description = buildCardPaymentDescription(items, order.id);
+    const additionalInfo = buildMercadoPagoAdditionalInfo({
+      payerName: order.customer_name,
+      payerPhone: order.customer_phone,
+      payerZipCode: order.destination_cep,
+      shippingTotal: order.shipping_total,
+      items: items.map((item) => ({
+        id: item.id,
+        title: item.title,
+        skuCode: item.sku_code,
+        quantity: item.quantity,
+        unitPrice: item.unit_price,
+        salePrice: item.sale_price,
+        total: item.total,
+      })),
+    });
     const now = new Date().toISOString();
     const { data: inserted, error: insertError } = await client
       .from("sales_catalog_payment_sessions")
@@ -168,6 +203,7 @@ export async function POST(
           source_payment_session_id: sourceSession.id,
           payment_method_id: paymentMethodId,
           installments,
+          mercado_pago_device_session_sent: Boolean(deviceSessionId),
           payment_owner: connectyHubOwned ? "connectyhub" : "seller",
           commercial_flow_type: commercialFlowType,
           revenue_owner_type: revenueOwnerType,
@@ -197,12 +233,18 @@ export async function POST(
       paymentMethodId,
       installments,
       issuerId: readString(formData.issuer_id) ?? readNumber(formData.issuer_id),
+      payerName: order.customer_name,
+      payerPhone: order.customer_phone,
+      payerDocument: order.customer_document,
+      payerZipCode: order.destination_cep,
       payerIdentification: {
         type: readString(payerIdentification?.type),
         number: readString(payerIdentification?.number),
       },
       notificationUrl: buildMercadoPagoWebhookUrl(),
       idempotencyKey,
+      deviceSessionId,
+      additionalInfo,
     });
     const paymentData = extractMercadoPagoPixData(payment.payment);
 
@@ -220,6 +262,7 @@ export async function POST(
           source_payment_session_id: sourceSession.id,
           payment_method_id: paymentMethodId,
           installments,
+          mercado_pago_device_session_sent: Boolean(deviceSessionId),
           payment_owner: connectyHubOwned ? "connectyhub" : "seller",
           commercial_flow_type: commercialFlowType,
           revenue_owner_type: revenueOwnerType,
@@ -314,13 +357,7 @@ export async function POST(
   }
 }
 
-async function buildCardPaymentDescription(client: ReturnType<typeof createServiceClient>, orderId: string) {
-  const { data } = await client
-    .from("sales_catalog_order_items")
-    .select("title, quantity, sku_code")
-    .eq("order_id", orderId)
-    .order("created_at", { ascending: true });
-  const items = (data ?? []) as OrderItemRow[];
+function buildCardPaymentDescription(items: OrderItemRow[], orderId: string) {
   const titles = items.length > 0
     ? items.slice(0, 4).map((item) => {
         const quantity = item.quantity ?? 1;

@@ -40,6 +40,7 @@ type MercadoPagoInstance = {
 declare global {
   interface Window {
     MercadoPago?: new (publicKey: string, options: { locale: string }) => MercadoPagoInstance;
+    MP_DEVICE_SESSION_ID?: string;
   }
 }
 
@@ -103,10 +104,14 @@ export function MercadoPagoCardBrick({
             setResult(null);
 
             try {
+              const deviceSessionId = readMercadoPagoDeviceSessionId();
               const response = await fetch(`/api/checkout/${sessionId}/card`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ formData, additionalData }),
+                headers: {
+                  "Content-Type": "application/json",
+                  ...(deviceSessionId ? { "X-Meli-Session-Id": deviceSessionId } : {}),
+                },
+                body: JSON.stringify({ formData, additionalData, deviceSessionId }),
               });
               const data = await response.json().catch(() => null) as {
                 error?: string;
@@ -172,6 +177,7 @@ export function MercadoPagoCardBrick({
       </div>
 
       <div id={containerId} className="mt-4 min-h-[260px]" />
+      <input id="deviceId" name="deviceId" type="hidden" />
 
       {result ? (
         <div className={cn(
@@ -187,6 +193,14 @@ export function MercadoPagoCardBrick({
       ) : null}
     </div>
   );
+}
+
+function readMercadoPagoDeviceSessionId() {
+  const hiddenInput = document.getElementById("deviceId");
+  const hiddenValue = hiddenInput instanceof HTMLInputElement ? hiddenInput.value.trim() : "";
+  const globalValue = window.MP_DEVICE_SESSION_ID?.trim() ?? "";
+
+  return globalValue || hiddenValue || null;
 }
 
 function loadMercadoPagoSdk() {
