@@ -819,7 +819,7 @@ export default function Home() {
         <h2 className="section-heading mt-4">
           Planos para iniciar,<br className="hidden sm:block" /> vender e escalar.
         </h2>
-        <div className="mt-10 grid gap-4 md:grid-cols-2 md:items-start xl:grid-cols-4">
+        <div className="mt-10 grid items-stretch gap-4 md:grid-cols-2 xl:grid-cols-4">
           {plans.map((plan) => (
             <div
               key={plan.name}

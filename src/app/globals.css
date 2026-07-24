@@ -635,6 +635,9 @@ html {
 
 .pricing-card {
   position: relative;
+  display: flex;
+  height: 100%;
+  flex-direction: column;
   border: 1px solid rgb(255 255 255 / 10%);
   border-radius: 16px;
   background: linear-gradient(180deg, rgb(10 10 18 / 95%) 0%, rgb(10 10 18 / 72%) 100%);
@@ -710,6 +713,8 @@ html {
 .pricing-card ul {
   margin: 28px 0;
   display: grid;
+  flex: 1;
+  align-content: start;
   gap: 12px;
   color: #d4d4d8;
   font-family: var(--font-geist-mono);
@@ -733,6 +738,7 @@ html {
 
 .pricing-card a {
   display: block;
+  margin-top: auto;
   border: 1px solid rgb(0 243 255 / 50%);
   padding: 12px;
   text-align: center;
