@@ -39,10 +39,16 @@ export type ReviewTestResponse = {
 type ButtonState = "idle" | "loading" | "success" | "warning" | "error";
 
 export function MetaReviewTestButton({
+  defaultTitle = "Executa chamadas reais na Graph API para validar a conexao Meta.",
+  endpoint = "/api/dashboard/integrations/meta/review-test",
+  errorMessage = "Nao foi possivel testar a conexao Meta.",
   label = "Testar conexao",
   onResult,
   tone = "violet",
 }: {
+  defaultTitle?: string;
+  endpoint?: string;
+  errorMessage?: string;
   label?: string;
   onResult?: (response: ReviewTestResponse) => void;
   tone?: Tone;
@@ -60,14 +66,14 @@ export function MetaReviewTestButton({
     setDetail(null);
 
     try {
-      const response = await fetch("/api/dashboard/integrations/meta/review-test", {
+      const response = await fetch(endpoint, {
         method: "POST",
         headers: { Accept: "application/json" },
       });
       const body = await response.json().catch(() => null) as ReviewTestResponse | null;
 
       if (!response.ok) {
-        throw new Error(body?.error ?? "Nao foi possivel testar a conexao Meta.");
+        throw new Error(body?.error ?? errorMessage);
       }
 
       const results = body?.results ?? [];
@@ -99,7 +105,7 @@ export function MetaReviewTestButton({
       type="button"
       onClick={handleClick}
       disabled={loading}
-      title={detail ?? message ?? "Executa chamadas reais na Graph API para validar a conexao Meta."}
+      title={detail ?? message ?? defaultTitle}
       aria-live="polite"
       className={cn(
         "inline-flex h-9 shrink-0 items-center gap-2 rounded-xl border px-3 text-[12px] font-semibold transition disabled:cursor-wait disabled:opacity-80",
@@ -111,6 +117,25 @@ export function MetaReviewTestButton({
       <StateIcon state={state} />
       <span>{displayLabel}</span>
     </button>
+  );
+}
+
+export function GoogleReviewTestButton({
+  label = "Testar conexao",
+  onResult,
+}: {
+  label?: string;
+  onResult?: (response: ReviewTestResponse) => void;
+}) {
+  return (
+    <MetaReviewTestButton
+      defaultTitle="Valida OAuth, conta Google Ads, tags e leitura do dashboard Google."
+      endpoint="/api/dashboard/integrations/google/review-test"
+      errorMessage="Nao foi possivel testar a conexao Google."
+      label={label}
+      onResult={onResult}
+      tone="cyan"
+    />
   );
 }
 

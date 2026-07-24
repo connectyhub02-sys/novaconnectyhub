@@ -32,7 +32,7 @@ import { cn } from "@/lib/utils";
 import { AdsDashboardSyncButton } from "./ads-dashboard-sync-button";
 import { AreaChartPanel, BarChartPanel } from "./charts";
 import { ConnectyShell } from "./connecty-shell";
-import { MetaReviewTestButton } from "./meta-review-test-button";
+import { GoogleReviewTestButton, MetaReviewTestButton } from "./meta-review-test-button";
 import { DataTable, NeonBadge, PageHeader, Panel, StatusBadge, toneClass } from "./panel-primitives";
 
 export type AdsDashboardPlatform = "meta" | "google";
@@ -63,7 +63,7 @@ const platformConfig = {
   google: {
     activeHref: "/admin/trafego/google-ads",
     eyebrow: "Trafego IA / Google",
-    title: "Google Ads 360",
+    title: "Google Ads",
     description: "Mostradores de campanhas, tags, conversoes e leitura organica do Google.",
     platformName: "Google" as const,
     tone: "cyan" as const,
@@ -146,7 +146,7 @@ export function AdminAdsPlatformDashboard({
           <div className="flex min-w-max items-center gap-2">
             <ToolbarButton icon={CalendarDays} label="Hoje" />
             <AdsDashboardSyncButton provider={platform} />
-            {platform === "meta" ? <MetaReviewTestButton /> : null}
+            {platform === "meta" ? <MetaReviewTestButton /> : <GoogleReviewTestButton />}
             <ToolbarButton icon={BrainCircuit} label="Analisar com IA" tone="violet" />
             <ToolbarButton icon={Activity} label="Gestor IA" tone="amber" />
             <ToolbarButton icon={Plus} label="Nova campanha" tone="amber" disabled />
