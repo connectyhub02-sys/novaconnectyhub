@@ -29,6 +29,33 @@ const PLAN_SELECT = [
 
 const COMMERCIAL_PLAN_PRESETS = [
   {
+    plan_code: "trial",
+    name: "Teste gratis",
+    short_description: "Teste de 7 dias com creditos limitados para validar o atendimento no WhatsApp.",
+    status: "active",
+    sort_order: 5,
+    highlighted: false,
+    monthly_price_brl: 0,
+    included_credits: 1000,
+    overage_credit_price_brl: 0.01,
+    auto_recharge_min_credits: 0,
+    overage_limit_credits: 0,
+    trial_days: 7,
+    agent_limit: 1,
+    whatsapp_instance_limit: 1,
+    user_limit: 1,
+    module_codes: ["whatsapp_agent", "sales_catalog", "crm_basic", "voice_ai"],
+    metadata: {
+      seed: "trial_credit_catalog",
+      credit_unit_brl: 0.01,
+      target_markup: 4,
+      included_credit_value_brl: 10,
+      target_provider_cost_brl: 2.5,
+      credits_expire_with_trial: true,
+      editable: true,
+    },
+  },
+  {
     plan_code: "starter",
     name: "Start",
     short_description: "Entrada com agente WhatsApp, catalogo e creditos iniciais para validar vendas.",

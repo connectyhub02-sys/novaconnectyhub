@@ -653,6 +653,27 @@ html {
   box-shadow: 0 0 28px rgb(10 255 10 / 12%);
 }
 
+.pricing-card-trial {
+  border-color: rgb(0 243 255 / 42%);
+  background:
+    linear-gradient(180deg, rgb(0 243 255 / 8%), transparent 36%),
+    linear-gradient(180deg, rgb(10 10 18 / 95%) 0%, rgb(10 10 18 / 72%) 100%);
+}
+
+.trial-badge {
+  position: absolute;
+  right: 16px;
+  top: 0;
+  border: 1px solid rgb(0 243 255 / 38%);
+  background: rgb(0 243 255 / 10%);
+  color: #a5f3fc;
+  padding: 4px 10px;
+  font-family: var(--font-geist-mono);
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
 .popular-badge {
   position: absolute;
   right: 16px;

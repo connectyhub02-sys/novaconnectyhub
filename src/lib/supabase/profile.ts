@@ -4,6 +4,7 @@ import type { User } from "@supabase/supabase-js";
 import { isSupabaseAuthConfigured } from "./env";
 import { createClient } from "./server";
 import { createServiceClient } from "./service";
+import { grantTrialCredits, scheduleTrialConversionMessages, TRIAL_PLAN_CODE } from "@/lib/billing/trial";
 import { ensureClientApiClient } from "@/lib/connectyhub-api/gateway";
 
 export type CurrentProfile = {
@@ -13,6 +14,8 @@ export type CurrentProfile = {
   phone: string | null;
   companyName: string | null;
   avatarUrl: string | null;
+  trialWhatsappOptIn: boolean;
+  trialWhatsappOptInAt: string | null;
   isPlatformAdmin: boolean;
 };
 
@@ -37,8 +40,12 @@ type ProfileRow = {
   full_name: string | null;
   phone: string | null;
   company_name: string | null;
+  trial_whatsapp_opt_in: boolean | null;
+  trial_whatsapp_opt_in_at: string | null;
   is_platform_admin: boolean | null;
 };
+
+type LegacyProfileRow = Omit<ProfileRow, "trial_whatsapp_opt_in" | "trial_whatsapp_opt_in_at">;
 
 type OrganizationMembershipRow = {
   role: string;
@@ -87,11 +94,21 @@ export async function ensureStarterOrganization() {
     return null;
   }
 
+  const supabase = await createWorkspaceDataClient();
+
   if (workspace.organization) {
+    if (!workspace.profile.isPlatformAdmin && workspace.organization.planCode === TRIAL_PLAN_CODE) {
+      await ensureTrialSetup({
+        organizationId: workspace.organization.id,
+        userId: workspace.user.id,
+        optIn: workspace.profile.trialWhatsappOptIn,
+        client: supabase,
+      });
+    }
+
     return workspace.organization;
   }
 
-  const supabase = await createWorkspaceDataClient();
   const name = workspace.profile.companyName || workspace.profile.fullName || workspace.profile.email || "Minha empresa";
   const slug = slugify(name);
 
@@ -126,6 +143,13 @@ export async function ensureStarterOrganization() {
       actorId: workspace.user.id,
       client: supabase,
     });
+
+    await ensureTrialSetup({
+      organizationId: organization.id,
+      userId: workspace.user.id,
+      optIn: workspace.profile.trialWhatsappOptIn,
+      client: supabase,
+    });
   }
 
   return {
@@ -140,9 +164,9 @@ export async function ensureStarterOrganization() {
 
 async function getOrCreateProfile(user: User): Promise<CurrentProfile> {
   const supabase = await createWorkspaceDataClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("profiles")
-    .select("id, email, full_name, phone, company_name, is_platform_admin")
+    .select("id, email, full_name, phone, company_name, trial_whatsapp_opt_in, trial_whatsapp_opt_in_at, is_platform_admin")
     .eq("id", user.id)
     .maybeSingle<ProfileRow>();
 
@@ -150,8 +174,20 @@ async function getOrCreateProfile(user: User): Promise<CurrentProfile> {
     return mapProfile(data, user);
   }
 
+  if (error) {
+    const { data: legacyData } = await supabase
+      .from("profiles")
+      .select("id, email, full_name, phone, company_name, is_platform_admin")
+      .eq("id", user.id)
+      .maybeSingle<LegacyProfileRow>();
+
+    if (legacyData) {
+      return mapLegacyProfile(legacyData, user);
+    }
+  }
+
   const metadata = user.user_metadata ?? {};
-  const { data: inserted } = await supabase
+  const { data: inserted, error: insertError } = await supabase
     .from("profiles")
     .insert({
       id: user.id,
@@ -159,9 +195,30 @@ async function getOrCreateProfile(user: User): Promise<CurrentProfile> {
       full_name: typeof metadata.full_name === "string" ? metadata.full_name : null,
       phone: typeof metadata.phone === "string" ? metadata.phone : null,
       company_name: typeof metadata.company_name === "string" ? metadata.company_name : null,
+      trial_whatsapp_opt_in: readBoolean(metadata.trial_whatsapp_opt_in),
+      trial_whatsapp_opt_in_at: typeof metadata.trial_whatsapp_opt_in_at === "string" ? metadata.trial_whatsapp_opt_in_at : null,
+      trial_whatsapp_opt_in_source: typeof metadata.trial_whatsapp_opt_in_source === "string" ? metadata.trial_whatsapp_opt_in_source : null,
     })
-    .select("id, email, full_name, phone, company_name, is_platform_admin")
+    .select("id, email, full_name, phone, company_name, trial_whatsapp_opt_in, trial_whatsapp_opt_in_at, is_platform_admin")
     .single<ProfileRow>();
+
+  if (!inserted && insertError) {
+    const { data: legacyInserted } = await supabase
+      .from("profiles")
+      .insert({
+        id: user.id,
+        email: user.email,
+        full_name: typeof metadata.full_name === "string" ? metadata.full_name : null,
+        phone: typeof metadata.phone === "string" ? metadata.phone : null,
+        company_name: typeof metadata.company_name === "string" ? metadata.company_name : null,
+      })
+      .select("id, email, full_name, phone, company_name, is_platform_admin")
+      .single<LegacyProfileRow>();
+
+    if (legacyInserted) {
+      return mapLegacyProfile(legacyInserted, user);
+    }
+  }
 
   return inserted
     ? mapProfile(inserted, user)
@@ -172,6 +229,8 @@ async function getOrCreateProfile(user: User): Promise<CurrentProfile> {
         phone: null,
         companyName: null,
         avatarUrl: readAvatarUrl(user),
+        trialWhatsappOptIn: readBoolean(metadata.trial_whatsapp_opt_in),
+        trialWhatsappOptInAt: typeof metadata.trial_whatsapp_opt_in_at === "string" ? metadata.trial_whatsapp_opt_in_at : null,
         isPlatformAdmin: false,
       };
 }
@@ -208,8 +267,46 @@ function mapProfile(row: ProfileRow, user: User): CurrentProfile {
     phone: row.phone,
     companyName: row.company_name,
     avatarUrl: readAvatarUrl(user),
+    trialWhatsappOptIn: Boolean(row.trial_whatsapp_opt_in),
+    trialWhatsappOptInAt: row.trial_whatsapp_opt_in_at,
     isPlatformAdmin: Boolean(row.is_platform_admin),
   };
+}
+
+function mapLegacyProfile(row: LegacyProfileRow, user: User): CurrentProfile {
+  return mapProfile({
+    ...row,
+    trial_whatsapp_opt_in: readBoolean(user.user_metadata?.trial_whatsapp_opt_in),
+    trial_whatsapp_opt_in_at: typeof user.user_metadata?.trial_whatsapp_opt_in_at === "string"
+      ? user.user_metadata.trial_whatsapp_opt_in_at
+      : null,
+  }, user);
+}
+
+async function ensureTrialSetup(input: {
+  organizationId: string;
+  userId: string;
+  optIn: boolean;
+  client: Awaited<ReturnType<typeof createWorkspaceDataClient>>;
+}) {
+  try {
+    await grantTrialCredits({
+      organizationId: input.organizationId,
+      userId: input.userId,
+      externalReference: `trial:${input.organizationId}`,
+      client: input.client,
+    });
+  } catch (error) {
+    console.warn("Nao foi possivel preparar creditos de teste.", error);
+    return;
+  }
+
+  await scheduleTrialConversionMessages({
+    organizationId: input.organizationId,
+    userId: input.userId,
+    optIn: input.optIn,
+    client: input.client,
+  }).catch(() => 0);
 }
 
 function readAvatarUrl(user: User) {
@@ -225,6 +322,10 @@ function readAvatarUrl(user: User) {
   }
 
   return value;
+}
+
+function readBoolean(value: unknown) {
+  return value === true || value === "true";
 }
 
 async function createWorkspaceDataClient() {

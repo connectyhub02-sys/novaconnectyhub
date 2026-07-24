@@ -142,8 +142,27 @@ const socialMetrics = [
 
 const plans = [
   {
+    name: "Teste gratis",
+    price: "R$ 0",
+    period: "/7 dias",
+    description: "Para provar o atendimento antes de assinar.",
+    tagline: "1.000 creditos de teste para ativar seu primeiro agente",
+    trial: true as const,
+    included: [
+      "1.000 creditos inclusos",
+      "7 dias de acesso",
+      "1 WhatsApp conectado",
+      "1 agente IA",
+      "Voz IA por creditos",
+      "CRM basico, leads e conversas",
+    ],
+    locked: ["Creditos expiram no fim do teste", "Nao acumula com plano pago"],
+    cta: "Comecar teste gratis",
+  },
+  {
     name: "Start",
     price: "R$ 97",
+    period: "/mes",
     description: "Para começar a vender com IA no WhatsApp.",
     tagline: "Entrada com 1 agente para validar atendimento e vendas",
     included: [
@@ -156,10 +175,12 @@ const plans = [
       "Voz IA por créditos",
     ],
     locked: ["Campanhas e automações", "API WhatsApp", "Relatórios avançados"],
+    cta: "Assinar Start",
   },
   {
     name: "Pro",
     price: "R$ 247",
+    period: "/mes",
     description: "Para operação comercial com mais volume.",
     tagline: "4 agentes e 4 WhatsApps para times que atendem todos os dias",
     popular: true,
@@ -174,10 +195,12 @@ const plans = [
       "Voz IA por créditos",
     ],
     locked: ["API WhatsApp", "Integrações avançadas"],
+    cta: "Assinar Pro",
   },
   {
     name: "Scale",
     price: "R$ 497",
+    period: "/mes",
     description: "Para escalar atendimento, agentes e API.",
     tagline: "1 agente para cada WhatsApp em operações com equipe",
     premium: true as const,
@@ -192,6 +215,7 @@ const plans = [
       "Voz IA por créditos",
     ],
     locked: [],
+    cta: "Assinar Scale",
   },
 ];
 
@@ -795,24 +819,27 @@ export default function Home() {
         <h2 className="section-heading mt-4">
           Planos para iniciar,<br className="hidden sm:block" /> vender e escalar.
         </h2>
-        <div className="mt-10 grid gap-4 md:grid-cols-3 md:items-start">
+        <div className="mt-10 grid gap-4 md:grid-cols-2 md:items-start xl:grid-cols-4">
           {plans.map((plan) => (
             <div
               key={plan.name}
               className={
-                plan.popular
+                "trial" in plan && plan.trial
+                  ? "pricing-card pricing-card-trial"
+                  : plan.popular
                   ? "pricing-card pricing-card-popular"
                   : "premium" in plan && plan.premium
                   ? "pricing-card pricing-card-premium"
                   : "pricing-card"
               }
             >
+              {"trial" in plan && plan.trial && <span className="trial-badge">7 dias gratis</span>}
               {plan.popular && <span className="popular-badge">Mais popular</span>}
               {"premium" in plan && plan.premium && (
                 <span className="premium-badge">Mais completo</span>
               )}
               <h3>{plan.name}</h3>
-              <strong>{plan.price}<small>/mês</small></strong>
+              <strong>{plan.price}<small>{plan.period}</small></strong>
               <p className="mt-3 font-mono text-xs text-zinc-400">{plan.description}</p>
               {"tagline" in plan && plan.tagline && (
                 <p className="mt-1 text-xs italic" style={{ color: `${G}99` }}>{plan.tagline}</p>
@@ -821,7 +848,7 @@ export default function Home() {
                 {plan.included.map((item) => <li key={item}>{item}</li>)}
                 {plan.locked.map((item) => <li key={item} className="plan-locked">{item}</li>)}
               </ul>
-              <a href="/iniciar">Ativar teste grátis</a>
+              <a href="/iniciar">{"cta" in plan ? plan.cta : "Ativar teste gratis"}</a>
             </div>
           ))}
         </div>
@@ -1015,7 +1042,7 @@ function PageSection({
   return (
     <section
       id={id}
-      className="border-t border-white/5 px-6 py-16 md:px-12 md:py-24 lg:px-16"
+      className="scroll-mt-20 border-t border-white/5 px-6 py-16 md:px-12 md:py-24 lg:px-16"
       style={{ background: bg }}
     >
       <motion.div

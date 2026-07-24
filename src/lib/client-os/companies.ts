@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { grantTrialCredits, scheduleTrialConversionMessages } from "@/lib/billing/trial";
 import { ensureClientApiClient } from "@/lib/connectyhub-api/gateway";
 import { createServiceClient } from "@/lib/supabase/service";
 
@@ -87,6 +88,14 @@ export async function createClientCompany(input: {
     organizationName: organization.name,
     organizationSlug: organization.slug,
     actorId: input.userId,
+    client,
+  });
+
+  const trialOptIn = await loadUserTrialWhatsappOptIn(client, input.userId);
+  await prepareClientCompanyTrial({
+    organizationId: organization.id,
+    userId: input.userId,
+    optIn: trialOptIn,
     client,
   });
 
@@ -215,6 +224,42 @@ function mapCompany(row: MembershipRow) {
     role: row.role,
     createdAt: organization.created_at,
   } satisfies ClientCompany;
+}
+
+async function loadUserTrialWhatsappOptIn(client: SupabaseClient, userId: string) {
+  const { data } = await client
+    .from("profiles")
+    .select("trial_whatsapp_opt_in")
+    .eq("id", userId)
+    .maybeSingle<{ trial_whatsapp_opt_in: boolean | null }>();
+
+  return Boolean(data?.trial_whatsapp_opt_in);
+}
+
+async function prepareClientCompanyTrial(input: {
+  organizationId: string;
+  userId: string;
+  optIn: boolean;
+  client: SupabaseClient;
+}) {
+  try {
+    await grantTrialCredits({
+      organizationId: input.organizationId,
+      userId: input.userId,
+      externalReference: `trial:${input.organizationId}`,
+      client: input.client,
+    });
+  } catch (error) {
+    console.warn("Nao foi possivel preparar creditos de teste para a empresa cliente.", error);
+    return;
+  }
+
+  await scheduleTrialConversionMessages({
+    organizationId: input.organizationId,
+    userId: input.userId,
+    optIn: input.optIn,
+    client: input.client,
+  }).catch(() => 0);
 }
 
 function normalizeCompanyName(value: string) {

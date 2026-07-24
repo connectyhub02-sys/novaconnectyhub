@@ -86,6 +86,19 @@ export type ConnectyShellNotification = {
   tone?: NotificationTone;
 };
 
+type BillingAccessClientStatus = {
+  state: "trial_active" | "trial_low_credits" | "trial_no_credits" | "trial_expired" | "paid_active" | "paid_no_credits" | "inactive";
+  balanceCredits: number;
+  trialDaysRemaining: number | null;
+  includedCredits: number;
+  usedCredits: number;
+  bannerTone: "green" | "amber" | "rose" | "cyan";
+  bannerTitle: string;
+  bannerDescription: string;
+  ctaLabel: string;
+  ctaHref: string;
+};
+
 type ConnectyShellNotificationsContextValue = {
   setNotificationGroup: (source: string, notifications: ConnectyShellNotification[]) => void;
   clearNotificationGroup: (source: string) => void;
@@ -238,6 +251,7 @@ export function ConnectyShell({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [notificationGroups, setNotificationGroups] = useState<Record<string, ConnectyShellNotification[]>>({});
+  const [billingAccess, setBillingAccess] = useState<BillingAccessClientStatus | null>(null);
 
   const setNotificationGroup = useCallback((source: string, notifications: ConnectyShellNotification[]) => {
     setNotificationGroups((current) => {
@@ -277,6 +291,35 @@ export function ConnectyShell({
     [initialNotifications, notificationGroups],
   );
   const notificationCount = notifications.length;
+
+  useEffect(() => {
+    if (mode !== "client") {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadBillingAccess() {
+      try {
+        const response = await fetch("/api/dashboard/billing/status", { cache: "no-store" });
+        const data = (await response.json().catch(() => null)) as { billingAccess?: BillingAccessClientStatus } | null;
+
+        if (!cancelled && response.ok && data?.billingAccess) {
+          setBillingAccess(data.billingAccess);
+        }
+      } catch {
+        if (!cancelled) {
+          setBillingAccess(null);
+        }
+      }
+    }
+
+    void loadBillingAccess();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [mode]);
 
   async function handleAvatarUpload(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0] ?? null;
@@ -771,6 +814,7 @@ export function ConnectyShell({
         {/* Content */}
         <main className="flex-1 overflow-auto">
           {mode === "client" ? <AdminImpersonationBanner /> : null}
+          {mode === "client" ? <BillingStatusBanner status={billingAccess} /> : null}
           <div className="connecty-shell-content mx-auto w-full max-w-[1680px] px-3 pt-4 sm:px-4 sm:pt-5 lg:px-8 lg:py-6">
             {children}
           </div>
@@ -778,6 +822,67 @@ export function ConnectyShell({
       </div>
       </div>
     </ConnectyShellNotificationsContext.Provider>
+  );
+}
+
+function BillingStatusBanner({ status }: { status: BillingAccessClientStatus | null }) {
+  if (!status || status.state === "paid_active") {
+    return null;
+  }
+
+  const tone = billingBannerTone(status.bannerTone);
+  const progress = status.includedCredits > 0
+    ? Math.max(0, Math.min(100, ((status.includedCredits - status.usedCredits) / status.includedCredits) * 100))
+    : 0;
+
+  return (
+    <div className="mx-auto w-full max-w-[1680px] px-3 pt-4 sm:px-4 sm:pt-5 lg:px-8 lg:pt-6">
+      <div
+        className="flex flex-col gap-3 rounded-2xl border px-4 py-3 shadow-2xl lg:flex-row lg:items-center lg:justify-between"
+        style={{
+          background: `linear-gradient(135deg, ${tone.background}, rgba(var(--ch-accent-2-rgb),0.08)), var(--ch-surface)`,
+          borderColor: tone.border,
+          boxShadow: "0 18px 44px rgba(0,0,0,0.24)",
+        }}
+      >
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span
+              className="inline-flex h-8 w-8 items-center justify-center rounded-xl"
+              style={{ background: tone.iconBackground, color: tone.color }}
+            >
+              <Coins className="h-4 w-4" />
+            </span>
+            <div className="min-w-0">
+              <p className="truncate text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>
+                {status.bannerTitle}
+              </p>
+              <p className="mt-0.5 text-[11px] leading-5 text-slate-400">
+                {status.bannerDescription}
+              </p>
+            </div>
+          </div>
+          {status.includedCredits > 0 ? (
+            <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+              <div className="h-2 overflow-hidden rounded-full bg-white/10">
+                <div className="h-full rounded-full" style={{ width: `${progress}%`, background: tone.color }} />
+              </div>
+              <span className="font-mono text-[10px] uppercase tracking-wide text-slate-400">
+                {formatShellCredits(status.balanceCredits)} / {formatShellCredits(status.includedCredits)} creditos
+              </span>
+            </div>
+          ) : null}
+        </div>
+
+        <a
+          href={status.ctaHref}
+          className="inline-flex min-h-9 shrink-0 items-center justify-center rounded-xl px-4 font-mono text-[10px] font-bold uppercase tracking-wide transition hover:opacity-90"
+          style={{ background: tone.color, color: "#061015" }}
+        >
+          {status.ctaLabel}
+        </a>
+      </div>
+    </div>
   );
 }
 
@@ -870,6 +975,48 @@ function AdminImpersonationBanner() {
 }
 
 // ─── SidebarLink ─────────────────────────────────────────────────────────────
+
+function billingBannerTone(tone: BillingAccessClientStatus["bannerTone"]) {
+  const tones = {
+    green: {
+      color: "#34d399",
+      border: "rgba(52,211,153,0.34)",
+      background: "rgba(52,211,153,0.14)",
+      iconBackground: "rgba(52,211,153,0.16)",
+    },
+    amber: {
+      color: "#fbbf24",
+      border: "rgba(251,191,36,0.38)",
+      background: "rgba(251,191,36,0.14)",
+      iconBackground: "rgba(251,191,36,0.16)",
+    },
+    rose: {
+      color: "#fb7185",
+      border: "rgba(251,113,133,0.38)",
+      background: "rgba(251,113,133,0.14)",
+      iconBackground: "rgba(251,113,133,0.16)",
+    },
+    cyan: {
+      color: "#38e8d6",
+      border: "rgba(56,232,214,0.34)",
+      background: "rgba(56,232,214,0.12)",
+      iconBackground: "rgba(56,232,214,0.15)",
+    },
+  } satisfies Record<BillingAccessClientStatus["bannerTone"], {
+    color: string;
+    border: string;
+    background: string;
+    iconBackground: string;
+  }>;
+
+  return tones[tone];
+}
+
+function formatShellCredits(value: number) {
+  return new Intl.NumberFormat("pt-BR", {
+    maximumFractionDigits: value < 10 ? 2 : 0,
+  }).format(Math.max(value, 0));
+}
 
 function notificationToneColor(tone: NotificationTone = "zinc") {
   const colors: Record<NotificationTone, string> = {

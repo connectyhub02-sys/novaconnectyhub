@@ -147,7 +147,7 @@ export function BillingPlansConsole({
 
       setState({
         tone: "success",
-        message: "Planos comerciais aplicados: Start R$97, Pro R$247 e Scale R$497 com creditos inclusos.",
+        message: "Planos comerciais aplicados: Teste gratis, Start R$97, Pro R$247 e Scale R$497 com creditos inclusos.",
       });
       router.refresh();
     } catch (error) {

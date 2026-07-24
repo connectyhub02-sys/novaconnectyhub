@@ -2,6 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { buildAgentChannelRuntimeInstruction } from "@/lib/agents/multichannel";
+import { assertBillableAccess, BillingAccessError } from "@/lib/billing/trial";
 import { generateConnectyVoiceAudio, type GeneratedConnectyVoiceAudio } from "@/lib/voice/tts";
 import {
   buildLeadQualificationAnalysisPrompt,
@@ -359,6 +360,27 @@ export async function processWhatsappAgentRun(input: {
 
     if (await isOrgRateLimited(client, run.organization_id!)) {
       return await completeRun(client, run.id, "Limite de execucoes por minuto atingido.", { skipped: true, reason: "org_rate_limited" });
+    }
+
+    if (!isPlatformWhatsappContext(context)) {
+      try {
+        await assertBillableAccess({
+          client,
+          organizationId: organization.id,
+        });
+      } catch (error) {
+        if (error instanceof BillingAccessError) {
+          return await completeRun(client, run.id, error.status.bannerTitle, {
+            skipped: true,
+            reason: error.status.state,
+            billing_access_blocked: true,
+            balance_credits: error.status.balanceCredits,
+            trial_ends_at: error.status.trialEndsAt,
+          });
+        }
+
+        throw error;
+      }
     }
 
     const token = decryptInstanceToken(instance);
@@ -774,6 +796,16 @@ async function loadRunBehaviorContext(client: SupabaseClient, runId: string) {
     latestInbound,
     recentInboundMessages,
   };
+}
+
+function isPlatformWhatsappContext(context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>) {
+  const instanceMetadata = readRecord(context.instance.metadata);
+  const agentMetadata = readRecord(context.agent.metadata);
+
+  return instanceMetadata?.admin_whatsapp === true
+    || instanceMetadata?.connectyhub_internal === true
+    || agentMetadata?.admin_whatsapp === true
+    || agentMetadata?.connectyhub_internal === true;
 }
 
 async function loadRecentInboundMessagesForDelay(client: SupabaseClient, conversationId: string) {

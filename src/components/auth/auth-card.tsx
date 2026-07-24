@@ -28,6 +28,7 @@ export function AuthCard({
   const [fullName, setFullName] = useState("");
   const [companyName, setCompanyName] = useState("");
   const [phone, setPhone] = useState("");
+  const [trialWhatsappOptIn, setTrialWhatsappOptIn] = useState(true);
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
 
@@ -59,6 +60,9 @@ export function AuthCard({
               full_name: fullName,
               company_name: companyName,
               phone,
+              trial_whatsapp_opt_in: trialWhatsappOptIn,
+              trial_whatsapp_opt_in_at: trialWhatsappOptIn ? new Date().toISOString() : null,
+              trial_whatsapp_opt_in_source: "signup_trial_form",
             },
           },
         });
@@ -196,6 +200,17 @@ export function AuthCard({
                   type="tel"
                   value={phone}
                 />
+                <label className="flex gap-3 rounded-md border border-white/[0.08] bg-black/25 p-3 text-left">
+                  <input
+                    checked={trialWhatsappOptIn}
+                    className="mt-0.5 h-4 w-4 accent-[#0aff0a]"
+                    onChange={(event) => setTrialWhatsappOptIn(event.target.checked)}
+                    type="checkbox"
+                  />
+                  <span className="text-xs leading-5 text-zinc-400">
+                    Aceito receber avisos importantes sobre meu teste gratis, creditos e assinatura pelo WhatsApp.
+                  </span>
+                </label>
               </>
             ) : null}
 
