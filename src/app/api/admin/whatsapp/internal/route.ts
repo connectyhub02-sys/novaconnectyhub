@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import {
+  archivePlatformWhatsappConsoleAgent,
   connectPlatformWhatsappConsole,
   createPlatformWhatsappConsoleAgent,
   createPlatformWhatsappConsoleSectorAgent,
@@ -11,6 +12,7 @@ import {
   resetPlatformWhatsappConsoleConnection,
   sendPlatformWhatsappHandoffNotificationTest,
   sendPlatformWhatsappConsoleTest,
+  updatePlatformWhatsappConsoleAgentProfile,
   updatePlatformWhatsappConsoleSettings,
 } from "@/lib/admin/platform-whatsapp-console";
 import { requirePlatformAdmin } from "@/lib/supabase/admin-auth";
@@ -23,9 +25,11 @@ type ActionBody = {
   action?: unknown;
   sectorId?: unknown;
   name?: unknown;
+  personaName?: unknown;
   roleTitle?: unknown;
   sectorName?: unknown;
   description?: unknown;
+  automationRoles?: unknown;
   prompt?: unknown;
   agentPrompt?: unknown;
   behavior?: unknown;
@@ -98,6 +102,37 @@ export async function POST(request: NextRequest) {
         state,
         notice: { tone: "success", message: "Agente interno criado. Agora configure prompt, conexao e comportamento." },
       }, { status: 201 });
+    }
+
+    if (action === "update_agent_profile") {
+      const state = await updatePlatformWhatsappConsoleAgentProfile({
+        sectorId: asString(body?.sectorId) ?? "",
+        name: asString(body?.name) ?? "",
+        personaName: asString(body?.personaName) ?? "",
+        roleTitle: asString(body?.roleTitle),
+        description: typeof body?.description === "string" ? body.description : null,
+        automationRoles: body?.automationRoles,
+        userId: auth.userId,
+        client: createServiceClient(),
+      });
+
+      return NextResponse.json({
+        state,
+        notice: { tone: "success", message: "Agente interno atualizado." },
+      });
+    }
+
+    if (action === "archive_agent") {
+      const state = await archivePlatformWhatsappConsoleAgent({
+        sectorId: asString(body?.sectorId) ?? "",
+        userId: auth.userId,
+        client: createServiceClient(),
+      });
+
+      return NextResponse.json({
+        state,
+        notice: { tone: "success", message: "Agente interno arquivado." },
+      });
     }
 
     if (action === "connect") {

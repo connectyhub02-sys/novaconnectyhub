@@ -101,6 +101,8 @@ import { cn } from "@/lib/utils";
 type WhatsappStatus = "draft" | "qr_pending" | "connected" | "disconnected" | "blocked" | "error" | "archived";
 type ConnectionMode = "qr" | "phone";
 type ConnectionFinalStatus = "pending" | "success" | "passkey_blocked" | "qr_timeout" | "disconnected" | "provider_error" | "reset" | "unknown";
+type AgentAutomationRoleKey = "signup_whatsapp_verification" | "trial_welcome" | "trial_conversion";
+type AgentAutomationRoles = Record<AgentAutomationRoleKey, boolean>;
 type ConnectionEventType =
   | "connect_requested"
   | "connect_response"
@@ -237,6 +239,9 @@ type WhatsappState = {
     name: string;
     avatarUrl: string | null;
     avatarAlt: string | null;
+    roleTitle?: string | null;
+    description?: string | null;
+    status?: string | null;
     prompt: string;
     promptPreview: string;
     cloneProfile?: WhatsappCloneProfile;
@@ -244,6 +249,7 @@ type WhatsappState = {
     cloneProfileImport?: CloneProfileImportStatus;
     qualification?: LeadQualificationConfig;
     channelConfig?: AgentChannelConfig;
+    automationRoles?: AgentAutomationRoles;
     updatedAt: string | null;
   } | null;
   globalAgent: {
@@ -594,6 +600,14 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
   const [internalSectorDescription, setInternalSectorDescription] = useState("");
   const [internalAgentName, setInternalAgentName] = useState("");
   const [creatingInternalAgent, setCreatingInternalAgent] = useState(false);
+  const [showInternalAgentEdit, setShowInternalAgentEdit] = useState(false);
+  const [editingInternalAgent, setEditingInternalAgent] = useState(false);
+  const [archivingInternalAgent, setArchivingInternalAgent] = useState(false);
+  const [internalEditName, setInternalEditName] = useState("");
+  const [internalEditPersonaName, setInternalEditPersonaName] = useState("");
+  const [internalEditRoleTitle, setInternalEditRoleTitle] = useState("");
+  const [internalEditDescription, setInternalEditDescription] = useState("");
+  const [internalEditAutomationRoles, setInternalEditAutomationRoles] = useState<AgentAutomationRoles>(createEmptyAgentAutomationRoles());
   const [promptProductUrl, setPromptProductUrl] = useState("");
   const [promptNotes, setPromptNotes] = useState("");
   const [linkButtonLabel, setLinkButtonLabel] = useState("");
@@ -1526,6 +1540,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
       setQrCode(null);
       setPairCode(null);
       setChannelOps(null);
+      setShowInternalAgentEdit(false);
     } catch (error) {
       setNotice({ tone: "error", message: error instanceof Error ? error.message : "Nao foi possivel abrir este agente." });
     } finally {
@@ -1555,6 +1570,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
       setQrCode(null);
       setPairCode(null);
       setChannelOps(null);
+      setShowInternalAgentEdit(false);
     } catch (error) {
       setNotice({ tone: "error", message: error instanceof Error ? error.message : `Nao foi possivel abrir este ${variant.entitySingular}.` });
     } finally {
@@ -1608,6 +1624,116 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
     }
   }
 
+  function openInternalAgentEdit() {
+    if (!state?.agent) {
+      setNotice({ tone: "warning", message: "Escolha um agente interno antes de editar." });
+      return;
+    }
+
+    setInternalEditName(state.agent.name);
+    setInternalEditPersonaName(state.agent.name);
+    setInternalEditRoleTitle(state.agent.roleTitle ?? variant.agentRoleTitle);
+    setInternalEditDescription(state.agent.description ?? "");
+    setInternalEditAutomationRoles(normalizeAgentAutomationRoles(state.agent.automationRoles));
+    setShowInternalAgentEdit(true);
+  }
+
+  function updateInternalAgentAutomationRole(role: AgentAutomationRoleKey, enabled: boolean) {
+    setInternalEditAutomationRoles((current) => ({
+      ...current,
+      [role]: enabled,
+    }));
+  }
+
+  async function saveInternalAgentProfile() {
+    if (!selectedCompanyId) {
+      setNotice({ tone: "warning", message: "Escolha um agente interno antes de salvar." });
+      return;
+    }
+
+    setEditingInternalAgent(true);
+    setNotice(null);
+
+    try {
+      const response = await fetch(variant.endpoints.createAgent, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "update_agent_profile",
+          [variant.entityIdKey]: selectedCompanyId,
+          name: internalEditName,
+          personaName: internalEditPersonaName || internalEditName,
+          roleTitle: internalEditRoleTitle,
+          description: internalEditDescription,
+          automationRoles: internalEditAutomationRoles,
+        }),
+      });
+      const data = (await response.json().catch(() => null)) as ActionResponse | null;
+
+      if (!response.ok || !data?.state) {
+        throw new Error(data?.error ?? "Nao foi possivel atualizar o agente interno.");
+      }
+
+      applyWhatsappState(data.state);
+      setShowInternalAgentEdit(false);
+      setNotice(data.notice ?? { tone: "success", message: "Agente interno atualizado." });
+    } catch (error) {
+      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao atualizar agente interno." });
+    } finally {
+      setEditingInternalAgent(false);
+    }
+  }
+
+  async function archiveInternalWhatsappAgent() {
+    if (!selectedCompanyId || !state?.agent) {
+      setNotice({ tone: "warning", message: "Escolha um agente interno antes de arquivar." });
+      return;
+    }
+
+    if (state.instance?.status === "connected") {
+      setNotice({ tone: "warning", message: "Desconecte o WhatsApp interno antes de arquivar este agente." });
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Arquivar o agente "${state.agent.name}"?\n\nEle saira da lista de agentes internos, mas o historico e os registros continuam preservados.`,
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setArchivingInternalAgent(true);
+    setNotice(null);
+
+    try {
+      const response = await fetch(variant.endpoints.createAgent, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "archive_agent",
+          [variant.entityIdKey]: selectedCompanyId,
+        }),
+      });
+      const data = (await response.json().catch(() => null)) as ActionResponse | null;
+
+      if (!response.ok || !data?.state) {
+        throw new Error(data?.error ?? "Nao foi possivel arquivar o agente interno.");
+      }
+
+      applyWhatsappState(data.state);
+      setShowInternalAgentEdit(false);
+      setQrCode(null);
+      setPairCode(null);
+      setChannelOps(null);
+      setNotice(data.notice ?? { tone: "success", message: "Agente interno arquivado." });
+    } catch (error) {
+      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao arquivar agente interno." });
+    } finally {
+      setArchivingInternalAgent(false);
+    }
+  }
+
   return (
     <>
       <SectionHeader
@@ -1624,17 +1750,36 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
         <CompanyRequiredState variant={variant} />
       ) : companies.length === 0 && canManageInternalAgents ? (
         <InternalAgentsManager
+          agent={state?.agent ?? null}
           agentName={internalAgentName}
+          archiving={archivingInternalAgent}
           companies={companies}
           creating={creatingInternalAgent}
+          editing={editingInternalAgent}
+          editAutomationRoles={internalEditAutomationRoles}
+          editDescription={internalEditDescription}
+          editName={internalEditName}
+          editPersonaName={internalEditPersonaName}
+          editRoleTitle={internalEditRoleTitle}
+          instance={state?.instance ?? null}
           sectorDescription={internalSectorDescription}
           sectorName={internalSectorName}
           selectedCompany={selectedCompany}
           selectedCompanyId={selectedCompanyId}
+          showEdit={showInternalAgentEdit}
           showForm
           onAgentNameChange={setInternalAgentName}
+          onArchive={archiveInternalWhatsappAgent}
           onCancel={() => setShowInternalAgentForm(false)}
           onCreate={createInternalWhatsappAgent}
+          onEditAutomationRoleChange={updateInternalAgentAutomationRole}
+          onEditCancel={() => setShowInternalAgentEdit(false)}
+          onEditDescriptionChange={setInternalEditDescription}
+          onEditNameChange={setInternalEditName}
+          onEditPersonaNameChange={setInternalEditPersonaName}
+          onEditRoleTitleChange={setInternalEditRoleTitle}
+          onEditSave={saveInternalAgentProfile}
+          onEditStart={openInternalAgentEdit}
           onSectorDescriptionChange={setInternalSectorDescription}
           onSectorNameChange={setInternalSectorName}
           onSelectCompany={switchWhatsappEntity}
@@ -1708,17 +1853,36 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
 
         {canManageInternalAgents ? (
           <InternalAgentsManager
+            agent={state.agent}
             agentName={internalAgentName}
+            archiving={archivingInternalAgent}
             companies={companies}
             creating={creatingInternalAgent}
+            editing={editingInternalAgent}
+            editAutomationRoles={internalEditAutomationRoles}
+            editDescription={internalEditDescription}
+            editName={internalEditName}
+            editPersonaName={internalEditPersonaName}
+            editRoleTitle={internalEditRoleTitle}
+            instance={state.instance}
             sectorDescription={internalSectorDescription}
             sectorName={internalSectorName}
             selectedCompany={selectedCompany}
             selectedCompanyId={selectedCompanyId}
+            showEdit={showInternalAgentEdit}
             showForm={showInternalAgentForm}
             onAgentNameChange={setInternalAgentName}
+            onArchive={archiveInternalWhatsappAgent}
             onCancel={() => setShowInternalAgentForm(false)}
             onCreate={createInternalWhatsappAgent}
+            onEditAutomationRoleChange={updateInternalAgentAutomationRole}
+            onEditCancel={() => setShowInternalAgentEdit(false)}
+            onEditDescriptionChange={setInternalEditDescription}
+            onEditNameChange={setInternalEditName}
+            onEditPersonaNameChange={setInternalEditPersonaName}
+            onEditRoleTitleChange={setInternalEditRoleTitle}
+            onEditSave={saveInternalAgentProfile}
+            onEditStart={openInternalAgentEdit}
             onSectorDescriptionChange={setInternalSectorDescription}
             onSectorNameChange={setInternalSectorName}
             onSelectCompany={switchWhatsappEntity}
@@ -2341,6 +2505,24 @@ async function fetchWhatsappState(variant: WhatsappConsoleVariant, entityId?: st
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function createEmptyAgentAutomationRoles(): AgentAutomationRoles {
+  return {
+    signup_whatsapp_verification: false,
+    trial_welcome: false,
+    trial_conversion: false,
+  };
+}
+
+function normalizeAgentAutomationRoles(value: AgentAutomationRoles | null | undefined): AgentAutomationRoles {
+  const empty = createEmptyAgentAutomationRoles();
+
+  return {
+    signup_whatsapp_verification: value?.signup_whatsapp_verification ?? empty.signup_whatsapp_verification,
+    trial_welcome: value?.trial_welcome ?? empty.trial_welcome,
+    trial_conversion: value?.trial_conversion ?? empty.trial_conversion,
+  };
 }
 
 function isBehaviorEqual(left: WhatsappBehaviorConfig, right: WhatsappBehaviorConfig) {
@@ -2997,40 +3179,92 @@ function ClientAgentsManager({
 }
 
 function InternalAgentsManager({
+  agent,
   agentName,
+  archiving,
   companies,
   creating,
+  editing,
+  editAutomationRoles,
+  editDescription,
+  editName,
+  editPersonaName,
+  editRoleTitle,
+  instance,
   sectorDescription,
   sectorName,
   selectedCompany,
   selectedCompanyId,
+  showEdit,
   showForm,
   onAgentNameChange,
+  onArchive,
   onCancel,
   onCreate,
+  onEditAutomationRoleChange,
+  onEditCancel,
+  onEditDescriptionChange,
+  onEditNameChange,
+  onEditPersonaNameChange,
+  onEditRoleTitleChange,
+  onEditSave,
+  onEditStart,
   onSectorDescriptionChange,
   onSectorNameChange,
   onSelectCompany,
   onStart,
   variant,
 }: {
+  agent: WhatsappState["agent"];
   agentName: string;
+  archiving: boolean;
   companies: ClientCompany[];
   creating: boolean;
+  editing: boolean;
+  editAutomationRoles: AgentAutomationRoles;
+  editDescription: string;
+  editName: string;
+  editPersonaName: string;
+  editRoleTitle: string;
+  instance: WhatsappState["instance"];
   sectorDescription: string;
   sectorName: string;
   selectedCompany: ClientCompany | null;
   selectedCompanyId: string;
+  showEdit: boolean;
   showForm: boolean;
   onAgentNameChange: (value: string) => void;
+  onArchive: () => void;
   onCancel: () => void;
   onCreate: () => void;
+  onEditAutomationRoleChange: (role: AgentAutomationRoleKey, enabled: boolean) => void;
+  onEditCancel: () => void;
+  onEditDescriptionChange: (value: string) => void;
+  onEditNameChange: (value: string) => void;
+  onEditPersonaNameChange: (value: string) => void;
+  onEditRoleTitleChange: (value: string) => void;
+  onEditSave: () => void;
+  onEditStart: () => void;
   onSectorDescriptionChange: (value: string) => void;
   onSectorNameChange: (value: string) => void;
   onSelectCompany: (value: string) => void;
   onStart: () => void;
   variant: WhatsappConsoleVariant;
 }) {
+  const connectionLabel = instance?.status === "connected"
+    ? "Conectado"
+    : instance?.status === "qr_pending"
+      ? "QR pendente"
+      : instance?.status
+        ? instance.status
+        : "Sem conexao";
+  const currentAutomationRoles = normalizeAgentAutomationRoles(agent?.automationRoles);
+  const activeAutomationLabels = [
+    currentAutomationRoles.signup_whatsapp_verification ? "Validacao cadastro" : null,
+    currentAutomationRoles.trial_welcome ? "Boas-vindas trial" : null,
+    currentAutomationRoles.trial_conversion ? "Conversao trial" : null,
+  ].filter((label): label is string => Boolean(label));
+
   return (
     <Panel
       title="Agentes internos"
@@ -3061,7 +3295,7 @@ function InternalAgentsManager({
 
           <div className="grid gap-2 sm:grid-cols-2">
             <InfoTile label={variant.agentGateSelectedLabel} value={selectedCompany?.name ?? "Nenhum"} />
-            <InfoTile label="Status" value={selectedCompany?.status ?? "Novo"} />
+            <InfoTile label="WhatsApp" value={connectionLabel} />
           </div>
         </div>
 
@@ -3072,6 +3306,115 @@ function InternalAgentsManager({
           onClick={onStart}
         />
       </div>
+
+      {agent ? (
+        <div
+          className="mt-4 grid gap-3 rounded-xl p-4 lg:grid-cols-[minmax(0,1fr)_auto]"
+          style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
+        >
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="break-words text-[14px] font-semibold" style={{ color: "var(--ch-text)" }}>
+                {agent.name}
+              </h3>
+              <NeonBadge tone={instance?.status === "connected" ? "green" : "amber"}>{connectionLabel}</NeonBadge>
+              {agent.status ? <NeonBadge tone="cyan">{agent.status}</NeonBadge> : null}
+              {activeAutomationLabels.map((label) => (
+                <NeonBadge key={label} tone="violet">{label}</NeonBadge>
+              ))}
+            </div>
+            <p className="mt-2 text-[12px] leading-5 text-slate-500">
+              {agent.roleTitle ?? variant.agentRoleTitle}
+              {agent.description ? ` / ${agent.description}` : ""}
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-2 lg:justify-end">
+            <SecondaryAction icon={PenLine} label="Editar agente" disabled={editing || archiving} onClick={onEditStart} />
+            <SecondaryAction
+              icon={Trash2}
+              label="Arquivar"
+              tone="danger"
+              disabled={editing || archiving || instance?.status === "connected"}
+              loading={archiving}
+              description={instance?.status === "connected" ? "Desconecte antes de arquivar." : undefined}
+              onClick={onArchive}
+            />
+          </div>
+        </div>
+      ) : null}
+
+      {showEdit && agent ? (
+        <div
+          className="mt-4 rounded-xl p-4"
+          style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
+        >
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <label className="block">
+              <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Nome interno</span>
+              <input
+                className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
+                placeholder="Ex: Agente validacao"
+                value={editName}
+                onChange={(event) => onEditNameChange(event.target.value)}
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Nome/persona</span>
+              <input
+                className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
+                placeholder="Ex: Ana ConnectyHub"
+                value={editPersonaName}
+                onChange={(event) => onEditPersonaNameChange(event.target.value)}
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Funcao</span>
+              <input
+                className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
+                placeholder="Ex: Agente de onboarding"
+                value={editRoleTitle}
+                onChange={(event) => onEditRoleTitleChange(event.target.value)}
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Descricao</span>
+              <input
+                className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
+                placeholder="Ex: Envia codigos e lembretes"
+                value={editDescription}
+                onChange={(event) => onEditDescriptionChange(event.target.value)}
+              />
+            </label>
+          </div>
+
+          <div className="mt-4 grid gap-2 md:grid-cols-3">
+            <AutomationRoleToggle
+              checked={editAutomationRoles.signup_whatsapp_verification}
+              label="Validacao no cadastro"
+              description="Pode enviar codigo para confirmar o WhatsApp do novo usuario."
+              onChange={(enabled) => onEditAutomationRoleChange("signup_whatsapp_verification", enabled)}
+            />
+            <AutomationRoleToggle
+              checked={editAutomationRoles.trial_welcome}
+              label="Boas-vindas do trial"
+              description="Pode acionar novos usuarios durante os 7 dias gratis."
+              onChange={(enabled) => onEditAutomationRoleChange("trial_welcome", enabled)}
+            />
+            <AutomationRoleToggle
+              checked={editAutomationRoles.trial_conversion}
+              label="Conversao do trial"
+              description="Pode chamar o lead perto do fim do teste ou sem creditos."
+              onChange={(enabled) => onEditAutomationRoleChange("trial_conversion", enabled)}
+            />
+          </div>
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            <SecondaryAction icon={X} label="Cancelar" disabled={editing} onClick={onEditCancel} />
+            <ActionButton icon={ShieldCheck} label="Salvar edicao" disabled={editing || !editName.trim()} loading={editing} onClick={onEditSave} />
+          </div>
+        </div>
+      ) : null}
 
       {showForm ? (
         <div
@@ -3117,6 +3460,36 @@ function InternalAgentsManager({
         </div>
       ) : null}
     </Panel>
+  );
+}
+
+function AutomationRoleToggle({
+  checked,
+  description,
+  label,
+  onChange,
+}: {
+  checked: boolean;
+  description: string;
+  label: string;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <label
+      className="flex min-h-[84px] cursor-pointer items-start gap-3 rounded-lg border p-3 transition hover:border-cyan-300/35"
+      style={{ background: "var(--ch-panel-2)", borderColor: "var(--ch-border)" }}
+    >
+      <input
+        type="checkbox"
+        className="mt-1 h-4 w-4 shrink-0 rounded border-white/20 bg-black/20 accent-cyan-300"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+      />
+      <span className="min-w-0">
+        <span className="block text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>{label}</span>
+        <span className="mt-1 block text-[11px] leading-5 text-slate-500">{description}</span>
+      </span>
+    </label>
   );
 }
 

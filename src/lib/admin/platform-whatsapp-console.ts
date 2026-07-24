@@ -57,6 +57,12 @@ import { createPlatformWhatsappAgent, createPlatformWhatsappSector } from "./pla
 
 type JsonRecord = Record<string, unknown>;
 
+type AgentAutomationRoles = {
+  signup_whatsapp_verification: boolean;
+  trial_welcome: boolean;
+  trial_conversion: boolean;
+};
+
 export type PlatformWhatsappConsoleEntity = {
   id: string;
   name: string;
@@ -79,6 +85,7 @@ type SectorRow = {
   description: string | null;
   status: string;
   created_at: string | null;
+  metadata: JsonRecord | null;
 };
 
 type AgentRow = {
@@ -88,6 +95,9 @@ type AgentRow = {
   name: string;
   avatar_url: string | null;
   avatar_alt: string | null;
+  role_title: string | null;
+  description: string | null;
+  status: string | null;
   updated_at: string | null;
   metadata: JsonRecord | null;
 };
@@ -358,6 +368,148 @@ export async function updatePlatformWhatsappConsoleSettings(input: {
     voiceOrganizationId: input.voiceOrganizationId,
     client,
   });
+}
+
+export async function updatePlatformWhatsappConsoleAgentProfile(input: {
+  sectorId: string;
+  userId: string;
+  name?: string | null;
+  personaName?: string | null;
+  roleTitle?: string | null;
+  description?: string | null;
+  automationRoles?: unknown;
+  client?: SupabaseClient;
+}) {
+  const client = input.client ?? createServiceClient();
+  const sector = await requirePlatformWhatsappSector(client, input.sectorId);
+  const agent = await requireSectorWhatsappAgent(client, sector.id);
+  const instance = await getSectorWhatsappInstance(client, sector.id);
+  const name = normalizeAgentProfileName(input.name ?? agent.name);
+  const personaName = normalizeAgentProfileName(input.personaName ?? agent.persona_name ?? name);
+  const roleTitle = normalizeAgentRoleTitle(input.roleTitle ?? agent.role_title ?? "Agente WhatsApp da ConnectyHub");
+  const description = normalizeAgentDescription(input.description ?? agent.description);
+  const automationRoles = normalizeAgentAutomationRoles(input.automationRoles, readAutomationRoles(agent.metadata));
+  const now = new Date().toISOString();
+  const metadata = {
+    ...(readRecord(agent.metadata) ?? {}),
+    automation_roles: automationRoles,
+    can_send_signup_verification: automationRoles.signup_whatsapp_verification,
+    can_send_trial_messages: automationRoles.trial_welcome || automationRoles.trial_conversion,
+    updated_from: "admin_whatsapp_agent_profile",
+    updated_by: input.userId,
+    updated_at: now,
+  };
+
+  const { error } = await client
+    .from("agent_registry")
+    .update({
+      name,
+      persona_name: personaName,
+      avatar_alt: `Agente ${personaName}`,
+      role_title: roleTitle,
+      description,
+      metadata,
+    })
+    .eq("id", agent.id)
+    .eq("scope", "platform")
+    .is("organization_id", null);
+
+  if (error) {
+    throw new Error(`Nao foi possivel editar o agente: ${error.message}`);
+  }
+
+  if (instance) {
+    await client
+      .from("whatsapp_instances")
+      .update({
+        metadata: {
+          ...(readRecord(instance.metadata) ?? {}),
+          agent_id: agent.id,
+          agent_name: personaName,
+          sector_id: sector.id,
+          sector_name: sector.name,
+        },
+      })
+      .eq("id", instance.id);
+  }
+
+  revalidateWhatsappAdmin();
+  return getPlatformWhatsappConsoleState({ sectorId: sector.id, userId: input.userId, client });
+}
+
+export async function archivePlatformWhatsappConsoleAgent(input: {
+  sectorId: string;
+  userId: string;
+  client?: SupabaseClient;
+}) {
+  const client = input.client ?? createServiceClient();
+  const sector = await requirePlatformWhatsappSector(client, input.sectorId);
+  const agent = await requireSectorWhatsappAgent(client, sector.id);
+  const instance = await getSectorWhatsappInstance(client, sector.id);
+
+  if (instance?.status === "connected") {
+    throw new Error("Desconecte o WhatsApp interno antes de arquivar este agente.");
+  }
+
+  const now = new Date().toISOString();
+
+  const { error: agentError } = await client
+    .from("agent_registry")
+    .update({
+      status: "archived",
+      metadata: {
+        ...(readRecord(agent.metadata) ?? {}),
+        archived_at: now,
+        archived_by: input.userId,
+        archived_reason: "admin_agent_archive",
+      },
+    })
+    .eq("id", agent.id)
+    .eq("scope", "platform")
+    .is("organization_id", null);
+
+  if (agentError) {
+    throw new Error(`Nao foi possivel arquivar o agente: ${agentError.message}`);
+  }
+
+  const { error: sectorError } = await client
+    .from("platform_whatsapp_sectors")
+    .update({
+      status: "archived",
+      metadata: {
+        ...(readRecord(sector.metadata) ?? {}),
+        archived_at: now,
+        archived_by: input.userId,
+        archived_reason: "admin_agent_archive",
+        archived_agent_id: agent.id,
+      },
+    })
+    .eq("id", sector.id);
+
+  if (sectorError) {
+    throw new Error(`Agente arquivado, mas nao foi possivel arquivar o setor: ${sectorError.message}`);
+  }
+
+  if (instance) {
+    await client
+      .from("whatsapp_instances")
+      .update({
+        status: "archived",
+        metadata: {
+          ...(readRecord(instance.metadata) ?? {}),
+          archived_at: now,
+          archived_by: input.userId,
+          archived_reason: "admin_agent_archive",
+          archived_agent_id: agent.id,
+        },
+        disconnected_at: instance.disconnected_at ?? now,
+        last_synced_at: now,
+      })
+      .eq("id", instance.id);
+  }
+
+  revalidateWhatsappAdmin();
+  return getPlatformWhatsappConsoleState({ userId: input.userId, client });
 }
 
 export async function connectPlatformWhatsappConsole(input: {
@@ -1059,7 +1211,7 @@ export async function requirePlatformWhatsappSector(client: SupabaseClient, sect
 
   const { data, error } = await client
     .from("platform_whatsapp_sectors")
-    .select("id, sector_code, name, description, status, created_at")
+    .select("id, sector_code, name, description, status, created_at, metadata")
     .or(`id.eq.${id},sector_code.eq.${id}`)
     .neq("status", "archived")
     .maybeSingle<SectorRow>();
@@ -1140,6 +1292,9 @@ function buildState(
           name: agent.persona_name?.trim() || agent.name,
           avatarUrl: agent.avatar_url,
           avatarAlt: agent.avatar_alt,
+          roleTitle: agent.role_title,
+          description: agent.description,
+          status: agent.status,
           prompt: agentPrompt,
           promptPreview: preview(agentPrompt),
           cloneProfile: getCloneProfileConfig(agent),
@@ -1147,6 +1302,7 @@ function buildState(
           cloneProfileImport: getCloneProfileImportStatus(agent),
           qualification: normalizeLeadQualificationConfig(readRecord(agent.metadata)?.[leadQualificationConfigKey]),
           channelConfig: getAgentChannelConfig(agent),
+          automationRoles: readAutomationRoles(agent.metadata),
           updatedAt: agent.updated_at,
         }
       : null,
@@ -1177,7 +1333,7 @@ function buildState(
 async function listPlatformWhatsappSectors(client: SupabaseClient) {
   const { data, error } = await client
     .from("platform_whatsapp_sectors")
-    .select("id, sector_code, name, description, status, created_at")
+    .select("id, sector_code, name, description, status, created_at, metadata")
     .neq("status", "archived")
     .order("created_at", { ascending: true });
 
@@ -1199,10 +1355,11 @@ function selectSector(sectors: SectorRow[], sectorId: string | null | undefined)
 async function getSectorWhatsappAgent(client: SupabaseClient, sectorId: string): Promise<AgentRow | null> {
   const { data, error } = await client
     .from("agent_registry")
-    .select("id, prompt, persona_name, name, avatar_url, avatar_alt, updated_at, metadata")
+    .select("id, prompt, persona_name, name, avatar_url, avatar_alt, role_title, description, status, updated_at, metadata")
     .eq("scope", "platform")
     .is("organization_id", null)
     .contains("metadata", { admin_whatsapp: true, agent_kind: "whatsapp", sector_id: sectorId })
+    .neq("status", "archived")
     .order("updated_at", { ascending: false })
     .limit(1)
     .maybeSingle<AgentRow>();
@@ -2148,6 +2305,61 @@ function buildUnavailableAudioState(): WhatsappAudioVoiceState {
     voices: [],
     errorMessage: null,
   };
+}
+
+function normalizeAgentProfileName(value: string | null | undefined) {
+  const name = value?.trim().replace(/\s+/g, " ");
+
+  if (!name) {
+    throw new Error("Informe o nome do agente.");
+  }
+
+  return name.slice(0, 120);
+}
+
+function normalizeAgentRoleTitle(value: string | null | undefined) {
+  const title = value?.trim().replace(/\s+/g, " ");
+  return (title || "Agente WhatsApp da ConnectyHub").slice(0, 160);
+}
+
+function normalizeAgentDescription(value: string | null | undefined) {
+  const description = value?.trim().replace(/\s+/g, " ");
+  return description ? description.slice(0, 500) : null;
+}
+
+function normalizeAgentAutomationRoles(value: unknown, fallback: AgentAutomationRoles = defaultAgentAutomationRoles()): AgentAutomationRoles {
+  const record = readRecord(value);
+
+  if (!record) {
+    return { ...fallback };
+  }
+
+  return {
+    signup_whatsapp_verification: readBoolean(record.signup_whatsapp_verification, fallback.signup_whatsapp_verification),
+    trial_welcome: readBoolean(record.trial_welcome, fallback.trial_welcome),
+    trial_conversion: readBoolean(record.trial_conversion, fallback.trial_conversion),
+  };
+}
+
+function readAutomationRoles(metadataValue: unknown): AgentAutomationRoles {
+  const metadata = readRecord(metadataValue) ?? {};
+  return normalizeAgentAutomationRoles(metadata.automation_roles, {
+    signup_whatsapp_verification: readBoolean(metadata.can_send_signup_verification, false),
+    trial_welcome: readBoolean(metadata.can_send_trial_welcome, readBoolean(metadata.can_send_trial_messages, false)),
+    trial_conversion: readBoolean(metadata.can_send_trial_conversion, readBoolean(metadata.can_send_trial_messages, false)),
+  });
+}
+
+function defaultAgentAutomationRoles(): AgentAutomationRoles {
+  return {
+    signup_whatsapp_verification: false,
+    trial_welcome: false,
+    trial_conversion: false,
+  };
+}
+
+function readBoolean(value: unknown, fallback = false) {
+  return typeof value === "boolean" ? value : fallback;
 }
 
 function revalidateWhatsappAdmin() {

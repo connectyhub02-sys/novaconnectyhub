@@ -63,6 +63,12 @@ type JsonRecord = Record<string, unknown>;
 
 type WhatsappStatus = "draft" | "qr_pending" | "connected" | "disconnected" | "blocked" | "error" | "archived";
 
+export type ClientWhatsappAgentAutomationRoles = {
+  signup_whatsapp_verification: boolean;
+  trial_welcome: boolean;
+  trial_conversion: boolean;
+};
+
 type WhatsappInstanceRow = {
   id: string;
   organization_id: string;
@@ -209,6 +215,9 @@ export type ClientWhatsappState = {
     name: string;
     avatarUrl: string | null;
     avatarAlt: string | null;
+    roleTitle?: string | null;
+    description?: string | null;
+    status?: string | null;
     prompt: string;
     promptPreview: string;
     cloneProfile: WhatsappCloneProfile;
@@ -216,6 +225,7 @@ export type ClientWhatsappState = {
     cloneProfileImport: WhatsappCloneProfileImportStatus;
     qualification: LeadQualificationConfig;
     channelConfig: AgentChannelConfig;
+    automationRoles?: ClientWhatsappAgentAutomationRoles;
     updatedAt: string | null;
   } | null;
   globalAgent: {
