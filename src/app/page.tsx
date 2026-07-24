@@ -10,6 +10,7 @@ import {
   GraduationCap,
   Layers,
   Languages,
+  Menu,
   MessageCircle,
   MessageSquare,
   Mic,
@@ -941,7 +942,7 @@ function Header() {
         >
           <ConnectyLogo className="h-4 w-[118px] sm:w-[132px]" tone="white" type="full" />
         </a>
-        <nav className="hidden min-w-0 items-center gap-4 font-mono text-[11px] text-zinc-300 lg:flex xl:gap-6">
+        <nav className="hidden min-w-0 items-center gap-4 font-mono text-[11px] text-zinc-300 xl:flex">
           {landingNavItems.map((item) => (
             <a key={item.href} href={item.href} className="whitespace-nowrap transition-colors hover:text-white">
               [ {item.label} ]
@@ -950,28 +951,26 @@ function Header() {
         </nav>
         <div className="flex shrink-0 items-center gap-2">
           <a
-            className="hidden rounded-full border border-white/15 px-3 py-2 text-[11px] font-bold text-white transition hover:border-white/35 sm:inline-flex"
+            className="inline-flex rounded-full border border-white/15 px-3 py-2 text-[11px] font-bold text-white transition hover:border-white/35"
             href="/login"
           >
             Entrar
           </a>
           <a
-            className="rounded-full px-3 py-2 text-[11px] font-bold text-black transition-all hover:opacity-90 sm:px-4"
+            className="hidden rounded-full px-4 py-2 text-[11px] font-bold text-black transition-all hover:opacity-90 xl:inline-flex"
             style={{ background: G }}
-            href="#planos"
-            onClick={() => setMobileNavOpen(false)}
+            href="/iniciar"
           >
-            Ver planos
+            Teste grátis
           </a>
           <button
             type="button"
-            className="inline-flex h-9 items-center justify-center gap-1 rounded-full border border-white/15 px-3 font-mono text-[10px] font-bold uppercase text-zinc-200 transition hover:border-white/35 lg:hidden"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/15 text-zinc-200 transition hover:border-white/35 xl:hidden"
             aria-label={mobileNavOpen ? "Fechar menu" : "Abrir menu"}
             aria-expanded={mobileNavOpen}
             onClick={() => setMobileNavOpen((current) => !current)}
           >
-            Menu
-            {mobileNavOpen ? <X size={13} /> : <ChevronDown size={13} />}
+            {mobileNavOpen ? <X size={15} /> : <Menu size={16} />}
           </button>
         </div>
       </div>
@@ -983,7 +982,7 @@ function Header() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.18 }}
-            className="mx-auto mt-3 grid max-w-[1760px] gap-2 rounded-2xl border border-white/10 bg-black/95 p-3 font-mono text-[11px] text-zinc-200 shadow-2xl shadow-black/35 lg:hidden"
+            className="mx-auto mt-3 grid max-w-[1760px] gap-2 rounded-2xl border border-white/10 bg-black/95 p-3 font-mono text-[11px] text-zinc-200 shadow-2xl shadow-black/35 xl:hidden"
           >
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               {landingNavItems.map((item) => (
@@ -998,11 +997,12 @@ function Header() {
               ))}
             </div>
             <a
-              href="/login"
-              className="rounded-xl border border-white/10 px-3 py-2 text-center font-bold text-white transition hover:border-white/30 sm:hidden"
+              href="/iniciar"
+              className="rounded-xl px-3 py-2 text-center font-bold text-black transition hover:opacity-90"
+              style={{ background: G }}
               onClick={() => setMobileNavOpen(false)}
             >
-              Entrar
+              Teste grátis
             </a>
           </motion.nav>
         ) : null}
