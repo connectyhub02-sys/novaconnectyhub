@@ -141,55 +141,67 @@ const socialMetrics = [
 
 const plans = [
   {
-    name: "Starter",
+    name: "Start",
     price: "R$ 97",
-    description: "Para começar hoje.",
-    tagline: "Ideal para começar com 1 WhatsApp",
+    description: "Para começar a vender com IA no WhatsApp.",
+    tagline: "Entrada com 1 agente para validar atendimento e vendas",
     included: [
+      "3.000 créditos inclusos",
       "1 WhatsApp conectado",
-      "1 clone ativo",
-      "Respostas ilimitadas",
-      "CRM básico",
-      "Transcrição de áudio",
+      "1 agente IA",
+      "2 usuários no painel",
+      "Catálogo de vendas",
+      "CRM básico, leads e conversas",
+      "Voz IA por créditos",
     ],
-    locked: ["Campanhas em massa", "Múltiplos clones", "WooCommerce"],
+    locked: ["Campanhas e automações", "API WhatsApp", "Relatórios avançados"],
   },
   {
-    name: "Profissional",
-    price: "R$ 297",
-    description: "Para quem já vende.",
-    tagline: "Ideal para negócios que recebem leads todos os dias",
+    name: "Pro",
+    price: "R$ 247",
+    description: "Para operação comercial com mais volume.",
+    tagline: "4 agentes e 4 WhatsApps para times que atendem todos os dias",
     popular: true,
     included: [
-      "3 WhatsApps conectados",
-      "3 clones ativos",
-      "Respostas ilimitadas",
-      "CRM completo",
-      "Transcrição de áudio",
-      "Campanhas em massa",
-      "WooCommerce",
+      "10.000 créditos inclusos",
+      "4 WhatsApps conectados",
+      "4 agentes IA",
+      "5 usuários no painel",
+      "CRM e funil comercial",
+      "Campanhas e automações",
+      "Relatórios básicos",
+      "Voz IA por créditos",
     ],
-    locked: ["API personalizada", "White-label"],
+    locked: ["API WhatsApp", "Integrações avançadas"],
   },
   {
-    name: "Elite",
+    name: "Scale",
     price: "R$ 497",
-    description: "Para escalar sem limites.",
-    tagline: "Ideal para operação com múltiplos atendimentos e escala",
+    description: "Para escalar atendimento, agentes e API.",
+    tagline: "1 agente para cada WhatsApp em operações com equipe",
     premium: true as const,
     included: [
-      "5 WhatsApps conectados",
-      "5 clones ativos",
-      "Respostas ilimitadas",
-      "CRM completo",
-      "Transcrição de áudio",
-      "Campanhas em massa",
-      "WooCommerce",
-      "API personalizada",
-      "White-label",
+      "25.000 créditos inclusos",
+      "8 WhatsApps conectados",
+      "8 agentes IA",
+      "15 usuários no painel",
+      "API WhatsApp",
+      "Integrações avançadas",
+      "Relatórios e operação em escala",
+      "Voz IA por créditos",
     ],
     locked: [],
   },
+];
+
+const landingNavItems = [
+  { href: "#inicio", label: "Início" },
+  { href: "#teste-turing", label: "Teste" },
+  { href: "#diferencial", label: "Diferenciais" },
+  { href: "#idiomas", label: "Idiomas" },
+  { href: "#como-funciona", label: "Como funciona" },
+  { href: "#planos", label: "Planos" },
+  { href: "#faq", label: "FAQ" },
 ];
 
 const faqs: [string, string][] = [
@@ -364,7 +376,7 @@ export default function Home() {
       <Header />
 
       {/* ── 1. HERO ──────────────────────────────────── */}
-      <section className="connecty-hero relative w-full overflow-hidden">
+      <section id="inicio" className="connecty-hero relative w-full overflow-hidden">
         <Spotlight className="-top-60 right-0 md:right-32" fill={G} />
 
         {/* Mobile: vídeo como fundo atrás do texto */}
@@ -818,7 +830,7 @@ export default function Home() {
       </PageSection>
 
       {/* ── 8. FAQ ───────────────────────────────────── */}
-      <PageSection bg="#0d0d0d">
+      <PageSection id="faq" bg="#0d0d0d">
         <GreenPill>{"// FAQ"}</GreenPill>
         <h2 className="section-heading mt-4">
           Perguntas antes de ativar seu clone.
@@ -916,30 +928,85 @@ export default function Home() {
 /* ── COMPONENTS ────────────────────────────────────── */
 
 function Header() {
+  const [mobileNavOpen, setMobileNavOpen] = React.useState(false);
+
   return (
-    <header className="fixed left-0 right-0 top-0 z-50 border-b border-white/[0.05] bg-black/60 px-6 py-4 backdrop-blur-md md:px-12 lg:px-16">
-      <div className="mx-auto flex max-w-[1760px] items-center justify-between">
+    <header className="fixed left-0 right-0 top-0 z-50 border-b border-white/[0.05] bg-black/70 px-4 py-3 backdrop-blur-md md:px-12 lg:px-16">
+      <div className="mx-auto flex max-w-[1760px] items-center justify-between gap-3">
         <a
-          className="inline-flex rounded-full border px-4 py-2 transition-colors"
+          className="inline-flex shrink-0 rounded-full border px-3 py-2 transition-colors sm:px-4"
           style={{ borderColor: `${G}50` }}
-          href="#"
+          href="#inicio"
+          onClick={() => setMobileNavOpen(false)}
         >
-          <ConnectyLogo className="h-4 w-[132px]" tone="white" type="full" />
+          <ConnectyLogo className="h-4 w-[118px] sm:w-[132px]" tone="white" type="full" />
         </a>
-        <nav className="hidden items-center gap-8 font-mono text-xs text-zinc-300 md:flex">
-          <a href="#teste-turing" className="transition-colors hover:text-white">[ Teste de Turing ]</a>
-          <a href="#como-funciona" className="transition-colors hover:text-white">[ Como funciona ]</a>
-          <a href="#planos" className="transition-colors hover:text-white">[ Planos ]</a>
-          <a href="/docs/api" className="transition-colors hover:text-white">[ API Docs ]</a>
+        <nav className="hidden min-w-0 items-center gap-4 font-mono text-[11px] text-zinc-300 lg:flex xl:gap-6">
+          {landingNavItems.map((item) => (
+            <a key={item.href} href={item.href} className="whitespace-nowrap transition-colors hover:text-white">
+              [ {item.label} ]
+            </a>
+          ))}
         </nav>
-        <a
-          className="rounded-full px-4 py-2 text-xs font-bold text-black transition-all hover:opacity-90"
-          style={{ background: G }}
-          href="/iniciar"
-        >
-          Teste grátis
-        </a>
+        <div className="flex shrink-0 items-center gap-2">
+          <a
+            className="hidden rounded-full border border-white/15 px-3 py-2 text-[11px] font-bold text-white transition hover:border-white/35 sm:inline-flex"
+            href="/login"
+          >
+            Entrar
+          </a>
+          <a
+            className="rounded-full px-3 py-2 text-[11px] font-bold text-black transition-all hover:opacity-90 sm:px-4"
+            style={{ background: G }}
+            href="#planos"
+            onClick={() => setMobileNavOpen(false)}
+          >
+            Ver planos
+          </a>
+          <button
+            type="button"
+            className="inline-flex h-9 items-center justify-center gap-1 rounded-full border border-white/15 px-3 font-mono text-[10px] font-bold uppercase text-zinc-200 transition hover:border-white/35 lg:hidden"
+            aria-label={mobileNavOpen ? "Fechar menu" : "Abrir menu"}
+            aria-expanded={mobileNavOpen}
+            onClick={() => setMobileNavOpen((current) => !current)}
+          >
+            Menu
+            {mobileNavOpen ? <X size={13} /> : <ChevronDown size={13} />}
+          </button>
+        </div>
       </div>
+
+      <AnimatePresence>
+        {mobileNavOpen ? (
+          <motion.nav
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.18 }}
+            className="mx-auto mt-3 grid max-w-[1760px] gap-2 rounded-2xl border border-white/10 bg-black/95 p-3 font-mono text-[11px] text-zinc-200 shadow-2xl shadow-black/35 lg:hidden"
+          >
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {landingNavItems.map((item) => (
+                <a
+                  key={item.href}
+                  href={item.href}
+                  className="rounded-xl border border-white/10 px-3 py-2 text-center transition hover:border-white/30 hover:text-white"
+                  onClick={() => setMobileNavOpen(false)}
+                >
+                  {item.label}
+                </a>
+              ))}
+            </div>
+            <a
+              href="/login"
+              className="rounded-xl border border-white/10 px-3 py-2 text-center font-bold text-white transition hover:border-white/30 sm:hidden"
+              onClick={() => setMobileNavOpen(false)}
+            >
+              Entrar
+            </a>
+          </motion.nav>
+        ) : null}
+      </AnimatePresence>
     </header>
   );
 }

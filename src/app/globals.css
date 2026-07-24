@@ -93,6 +93,10 @@ body {
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
 }
 
+main section[id] {
+  scroll-margin-top: 88px;
+}
+
 .connecty-shell {
   color: var(--ch-text);
 }
