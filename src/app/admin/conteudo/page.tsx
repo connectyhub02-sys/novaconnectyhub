@@ -6,8 +6,8 @@ import { getAutonomousAdminOverview } from "@/lib/autonomous-os/admin";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 
 export const metadata: Metadata = {
-  title: "Conteudo e Noticias | ConnectyHub",
-  description: "Pipeline de blog, noticias e conteudo organico gerado pelos agentes da ConnectyHub.",
+  title: "Central de Criativos IA | ConnectyHub",
+  description: "Central de criativos, campanhas, posts e conteudo organico gerado pelos agentes da ConnectyHub.",
 };
 
 export default async function AdminConteudoPage() {

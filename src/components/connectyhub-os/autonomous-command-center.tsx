@@ -2,13 +2,22 @@ import {
   Activity,
   Bot,
   BrainCircuit,
+  CalendarDays,
+  CheckCircle2,
+  Clock3,
   DatabaseZap,
+  ExternalLink,
   FileText,
   Layers3,
+  Megaphone,
   MessageCircle,
   Network,
+  Palette,
+  Rocket,
+  Search,
   ShieldCheck,
   Sparkles,
+  Target,
   Workflow,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -31,6 +40,7 @@ import {
   Panel,
   ProgressBar,
   StatusBadge,
+  toneClass,
 } from "./panel-primitives";
 import { AgentAvatarUpload } from "./agent-avatar-upload";
 import { AgentPromptEditor } from "./agent-prompt-editor";
@@ -68,9 +78,9 @@ const viewMeta: Record<
   },
   content: {
     href: "/admin/conteudo",
-    eyebrow: "Admin OS / Blog e noticias",
-    title: "Pipeline de conteudo e noticias",
-    description: "Pautas, pesquisas, noticias e posts criados a partir da central de inteligencia da ConnectyHub.",
+    eyebrow: "Admin OS / Central de criativos",
+    title: "Central de Criativos IA",
+    description: "Pautas, anuncios, posts, noticias e ideias comerciais criadas pelos agentes de crescimento da ConnectyHub.",
   },
 };
 
@@ -92,12 +102,16 @@ export function AutonomousCommandCenter({
         title={meta.title}
         description={meta.description}
         actions={
-          <div className="flex flex-wrap gap-2">
-            <NeonBadge tone={overview.schemaReady ? "green" : "amber"}>
-              {overview.schemaReady ? "Schema autonomo pronto" : "Aguardando SQL 0006"}
-            </NeonBadge>
-            <NeonBadge tone="cyan">Gemini core</NeonBadge>
-          </div>
+          view === "content"
+            ? <ContentHeaderActions schemaReady={overview.schemaReady} />
+            : (
+              <div className="flex flex-wrap gap-2">
+                <NeonBadge tone={overview.schemaReady ? "green" : "amber"}>
+                  {overview.schemaReady ? "Schema autonomo pronto" : "Aguardando SQL 0006"}
+                </NeonBadge>
+                <NeonBadge tone="cyan">Gemini core</NeonBadge>
+              </div>
+            )
         }
       />
 
@@ -126,6 +140,47 @@ export function AutonomousCommandCenter({
       {view === "instances" && <InstancesView overview={overview} />}
       {view === "content" && <ContentView overview={overview} />}
     </ConnectyShell>
+  );
+}
+
+function ContentHeaderActions({ schemaReady }: { schemaReady: boolean }) {
+  return (
+    <div className="flex min-w-max items-center gap-2">
+      <CreativeActionButton icon={CalendarDays} label="Hoje" tone="amber" />
+      <CreativeActionButton icon={Sparkles} label="Gerar criativo IA" tone="violet" disabled={!schemaReady} />
+      <CreativeActionButton icon={Palette} label="Nova peca" tone="cyan" disabled />
+      <CreativeActionButton icon={Rocket} label="Publicar" tone="green" disabled />
+    </div>
+  );
+}
+
+function CreativeActionButton({
+  disabled = false,
+  icon: Icon,
+  label,
+  tone,
+}: {
+  disabled?: boolean;
+  icon: LucideIcon;
+  label: string;
+  tone: "green" | "cyan" | "amber" | "violet";
+}) {
+  const styles = toneClass(tone);
+
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      className={cn(
+        "inline-flex h-9 shrink-0 items-center gap-2 rounded-xl border px-3 text-[12px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-55",
+        styles.border,
+        styles.bg,
+        styles.text,
+      )}
+    >
+      <Icon className="h-4 w-4" />
+      <span>{label}</span>
+    </button>
   );
 }
 
@@ -370,40 +425,263 @@ function ContentView({ overview }: { overview: AutonomousAdminOverview }) {
       || agent.metadata.growth_engine === true
       || agent.metadata.seo_aeo_geo === true,
   );
+  const metrics = buildCreativeMetrics(overview.contentPipeline);
+  const nextCreative = selectNextCreative(overview.contentPipeline);
 
   return (
-    <div className="grid gap-5 xl:grid-cols-[1fr_410px]">
-      <Panel title="Pautas e noticias" eyebrow="blog / social / pesquisa">
-        {overview.contentPipeline.length > 0 ? (
-          <div className="grid gap-3 lg:grid-cols-2">
-            {overview.contentPipeline.map((item) => (
-              <ContentCard key={item.id} item={item} />
-            ))}
-          </div>
-        ) : (
-          <EmptyState
-            icon={FileText}
-            title="Pipeline sem itens"
-            text="O agente de noticias e o agente de blog vao criar pautas a partir da memoria do ecossistema."
-          />
-        )}
-      </Panel>
+    <div className="space-y-5">
+      <CreativeCommandPanel
+        agents={contentAgents}
+        metrics={metrics}
+        nextCreative={nextCreative}
+        schemaReady={overview.schemaReady}
+      />
 
-      <Panel title="Agentes de crescimento" eyebrow="seo / aeo / geo">
-        {contentAgents.length > 0 ? (
-          <div className="space-y-3">
-            {contentAgents.map((agent) => (
-              <AgentMini key={agent.id} agent={agent} />
-            ))}
+      <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+        <CreativeMetricCard icon={Sparkles} label="Ideias IA" value={String(metrics.ideas)} detail="pauta, pesquisa e rascunho" tone="violet" />
+        <CreativeMetricCard icon={ShieldCheck} label="Em revisao" value={String(metrics.review)} detail="aguardando ajuste humano" tone="amber" />
+        <CreativeMetricCard icon={CalendarDays} label="Agendados" value={String(metrics.scheduled)} detail="fila pronta para publicar" tone="cyan" />
+        <CreativeMetricCard icon={Rocket} label="Publicados" value={String(metrics.published)} detail="criativos ja no ar" tone="green" />
+      </div>
+
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_410px]">
+        <Panel
+          title="Fila de criativos IA"
+          eyebrow="anuncios / posts / blog / pesquisa"
+          action={<NeonBadge tone={metrics.total > 0 ? "cyan" : "amber"}>{metrics.total} item(s)</NeonBadge>}
+          tone="cyan"
+        >
+          {overview.contentPipeline.length > 0 ? (
+            <div className="grid items-stretch gap-3 lg:grid-cols-2">
+              {overview.contentPipeline.map((item) => (
+                <ContentCard key={item.id} item={item} />
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              icon={FileText}
+              title="Fila de criativos vazia"
+              text="Os agentes de noticias, blog, campanhas e SEO vao criar ideias a partir da memoria viva do ecossistema."
+            />
+          )}
+        </Panel>
+
+        <div className="space-y-5 xl:sticky xl:top-20 xl:self-start">
+          <Panel
+            title="Agentes criativos IA"
+            eyebrow="seo / aeo / geo / social"
+            action={<NeonBadge tone={contentAgents.length > 0 ? "violet" : "amber"}>{contentAgents.length} agente(s)</NeonBadge>}
+            tone="violet"
+          >
+            {contentAgents.length > 0 ? (
+              <div className="space-y-3">
+                {contentAgents.map((agent) => (
+                  <AgentMini key={agent.id} agent={agent} />
+                ))}
+              </div>
+            ) : (
+              <EmptyState
+                icon={Sparkles}
+                title="Sem agentes de crescimento"
+                text="Depois da migration, os agentes de pesquisa, noticias, blog, radar, SEO, AEO e GEO aparecem aqui."
+              />
+            )}
+          </Panel>
+
+          <Panel title="Checklist do criativo" eyebrow="qualidade / publicacao" tone="amber">
+            <div className="space-y-3">
+              <CreativeChecklistItem
+                icon={BrainCircuit}
+                title="Briefing da memoria"
+                text="Toda peca deve nascer de pesquisa, evento ou memoria registrada."
+                complete={metrics.total > 0}
+              />
+              <CreativeChecklistItem
+                icon={Search}
+                title="SEO, AEO e GEO"
+                text="Titulo, angulo e resposta curta precisam servir busca e IA generativa."
+                complete={contentAgents.some((agent) => agent.metadata.seo_aeo_geo === true)}
+              />
+              <CreativeChecklistItem
+                icon={Target}
+                title="Oferta e CTA"
+                text="O criativo precisa conduzir para teste gratis, planos ou conversa no WhatsApp."
+                complete={metrics.ready > 0 || metrics.published > 0}
+              />
+              <CreativeChecklistItem
+                icon={CheckCircle2}
+                title="Revisao antes de publicar"
+                text="Itens em review/approved ficam visiveis para decisao humana."
+                complete={metrics.review > 0 || metrics.published > 0}
+              />
+            </div>
+          </Panel>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CreativeCommandPanel({
+  agents,
+  metrics,
+  nextCreative,
+  schemaReady,
+}: {
+  agents: AdminAgent[];
+  metrics: ReturnType<typeof buildCreativeMetrics>;
+  nextCreative: ContentPipelineItem | null;
+  schemaReady: boolean;
+}) {
+  const readiness = metrics.total === 0
+    ? { label: "aguardando ideias", tone: "amber" as const, progress: schemaReady ? 32 : 12 }
+    : metrics.ready > 0
+      ? { label: "pronto para publicar", tone: "green" as const, progress: 86 }
+      : metrics.review > 0
+        ? { label: "em revisao", tone: "amber" as const, progress: 64 }
+        : { label: "em producao", tone: "cyan" as const, progress: 48 };
+
+  return (
+    <Panel
+      title="Comando criativo IA"
+      eyebrow="briefing / producao / publicacao"
+      action={<NeonBadge tone={readiness.tone}>{readiness.label}</NeonBadge>}
+      tone={readiness.tone}
+    >
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="min-w-0">
+          <div className="flex items-start gap-3">
+            <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-cyan-400/10 text-cyan-300">
+              <Palette className="h-6 w-6" />
+            </span>
+            <div className="min-w-0">
+              <p className="text-[15px] font-semibold" style={{ color: "var(--ch-text)" }}>
+                Criativos conectados ao funil, trafego e WhatsApp
+              </p>
+              <p className="mt-1 max-w-3xl text-[12px] leading-5 text-slate-500">
+                A central organiza ideias de campanha, blog, social e pesquisa para virar peca publicavel com revisao humana antes de ir para o ar.
+              </p>
+            </div>
           </div>
-        ) : (
-          <EmptyState
-            icon={Sparkles}
-            title="Sem agentes de crescimento"
-            text="Depois da migration, os agentes de pesquisa, noticias, blog, radar, SEO, AEO e GEO aparecem aqui."
-          />
-        )}
-      </Panel>
+
+          <div className="mt-5 grid gap-3 md:grid-cols-3">
+            <CreativeSignal icon={Megaphone} label="Angulos ativos" value={String(metrics.total)} detail="criativos no pipeline" tone="cyan" />
+            <CreativeSignal icon={Bot} label="Agentes criativos" value={String(agents.length)} detail="operadores de crescimento" tone="violet" />
+            <CreativeSignal icon={Clock3} label="Proxima peca" value={nextCreative ? formatDate(nextCreative.scheduledFor ?? nextCreative.createdAt) : "Pendente"} detail={nextCreative?.title ?? "Nenhuma peca na fila"} tone="amber" />
+          </div>
+        </div>
+
+        <div className="grid content-between gap-3 rounded-xl p-3" style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}>
+          <div>
+            <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">Maturidade do pipeline</p>
+            <p className="mt-1 text-[13px] font-semibold text-white">{readiness.label}</p>
+            <p className="mt-2 text-[11px] leading-4 text-slate-500">
+              {schemaReady ? "Banco pronto para registrar criativos, agentes e execucoes." : "Aguardando schema autonomo para ativar o fluxo completo."}
+            </p>
+          </div>
+          <ProgressBar value={readiness.progress} tone={readiness.tone} />
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
+function CreativeMetricCard({
+  detail,
+  icon: Icon,
+  label,
+  tone,
+  value,
+}: {
+  detail: string;
+  icon: LucideIcon;
+  label: string;
+  tone: "green" | "cyan" | "amber" | "violet";
+  value: string;
+}) {
+  const styles = toneClass(tone);
+
+  return (
+    <div
+      className="min-w-0 rounded-2xl p-3 sm:p-4"
+      style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <Icon className={cn("h-4 w-4 shrink-0", styles.text)} />
+        <span className={cn("h-2 w-2 shrink-0 rounded-full", styles.dot)} />
+      </div>
+      <p className="mt-3 truncate font-mono text-[9px] uppercase tracking-[0.12em] text-slate-500">{label}</p>
+      <p className={cn("mt-2 truncate font-mono text-[22px] font-bold leading-none", styles.text)}>{value}</p>
+      <p className="mt-2 truncate text-[10px] text-slate-500">{detail}</p>
+    </div>
+  );
+}
+
+function CreativeSignal({
+  detail,
+  icon: Icon,
+  label,
+  tone,
+  value,
+}: {
+  detail: string;
+  icon: LucideIcon;
+  label: string;
+  tone: "cyan" | "amber" | "violet";
+  value: string;
+}) {
+  const styles = toneClass(tone);
+
+  return (
+    <div
+      className="min-w-0 rounded-xl p-3"
+      style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
+    >
+      <div className="flex items-center gap-2">
+        <Icon className={cn("h-4 w-4", styles.text)} />
+        <p className="truncate font-mono text-[9px] uppercase tracking-[0.14em] text-slate-500">{label}</p>
+      </div>
+      <p className="mt-2 truncate text-[15px] font-semibold" style={{ color: "var(--ch-text)" }}>
+        {value}
+      </p>
+      <p className="mt-1 truncate text-[11px] text-slate-500">{detail}</p>
+    </div>
+  );
+}
+
+function CreativeChecklistItem({
+  complete,
+  icon: Icon,
+  text,
+  title,
+}: {
+  complete: boolean;
+  icon: LucideIcon;
+  text: string;
+  title: string;
+}) {
+  return (
+    <div
+      className="rounded-xl p-3"
+      style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
+    >
+      <div className="flex gap-3">
+        <span
+          className={cn(
+            "grid h-9 w-9 shrink-0 place-items-center rounded-xl",
+            complete ? "bg-emerald-400/10 text-emerald-300" : "bg-amber-400/10 text-amber-300",
+          )}
+        >
+          <Icon className="h-4 w-4" />
+        </span>
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>{title}</p>
+            <NeonBadge tone={complete ? "green" : "amber"}>{complete ? "ok" : "pendente"}</NeonBadge>
+          </div>
+          <p className="mt-1 text-[12px] leading-5 text-slate-500">{text}</p>
+        </div>
+      </div>
     </div>
   );
 }
@@ -639,26 +917,50 @@ function EventRow({ event }: { event: IntelligenceEvent }) {
 }
 
 function ContentCard({ item }: { item: ContentPipelineItem }) {
+  const statusTone = contentStatusTone(item.status);
+  const contentKind = formatContentType(item.contentType);
+
   return (
     <div
-      className="rounded-xl p-4"
+      className="flex h-full min-h-[260px] flex-col rounded-xl p-4"
       style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
     >
       <div className="flex items-start justify-between gap-3">
-        <div>
-          <StatusBadge status={contentStatusTone(item.status)} label={item.status} />
-          <p className="mt-2 text-[14px] font-semibold" style={{ color: "var(--ch-text)" }}>{item.title}</p>
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusBadge status={statusTone} label={item.status} />
+            <span
+              className="rounded-lg px-2 py-1 font-mono text-[9px] uppercase tracking-wide text-slate-500"
+              style={{ border: "1px solid var(--ch-border)" }}
+            >
+              {contentKind}
+            </span>
+          </div>
+          <p className="mt-3 text-[14px] font-semibold leading-5" style={{ color: "var(--ch-text)" }}>{item.title}</p>
         </div>
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-cyan-500/10 text-cyan-500">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-cyan-500/10 text-cyan-500">
           <FileText className="h-4 w-4" />
         </div>
       </div>
-      <p className="mt-2 text-[12px] leading-5 text-slate-500">{item.summary ?? "Sem resumo."}</p>
-      <div className="mt-3 grid gap-2 sm:grid-cols-2">
-        <KpiStat label="tipo" value={item.contentType} tone="cyan" />
+      <p className="mt-3 line-clamp-3 text-[12px] leading-5 text-slate-500">{item.summary ?? "Sem resumo."}</p>
+      <div className="mt-4 grid gap-2 sm:grid-cols-2">
         <KpiStat label="agenda" value={formatDate(item.scheduledFor)} tone="amber" />
+        <KpiStat label="publicado" value={formatDate(item.publishedAt)} tone="green" />
       </div>
-      <TagRow tags={item.tags} />
+      <div className="mt-auto pt-3">
+        <TagRow tags={item.tags.length ? item.tags : [item.contentType]} />
+        {item.sourceUrl ? (
+          <a
+            href={item.sourceUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-3 inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wide text-cyan-400 transition hover:text-cyan-200"
+          >
+            <ExternalLink className="h-3.5 w-3.5" />
+            Fonte do briefing
+          </a>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -773,6 +1075,42 @@ function contentStatusTone(status: string): StatusTone {
   if (status === "review" || status === "scheduled") return "warning";
   if (status === "archived") return "critical";
   return "idle";
+}
+
+function buildCreativeMetrics(items: ContentPipelineItem[]) {
+  return items.reduce(
+    (metrics, item) => {
+      metrics.total += 1;
+
+      if (item.status === "published") metrics.published += 1;
+      if (item.status === "scheduled") metrics.scheduled += 1;
+      if (item.status === "review" || item.status === "approved") metrics.review += 1;
+      if (item.status === "approved" || item.status === "scheduled") metrics.ready += 1;
+      if (item.status === "idea" || item.status === "researching" || item.status === "draft") metrics.ideas += 1;
+
+      return metrics;
+    },
+    { ideas: 0, published: 0, ready: 0, review: 0, scheduled: 0, total: 0 },
+  );
+}
+
+function selectNextCreative(items: ContentPipelineItem[]) {
+  const candidates = items.filter((item) => item.status !== "published" && item.status !== "archived");
+
+  return candidates.sort((a, b) => {
+    const aTime = Date.parse(a.scheduledFor ?? a.createdAt);
+    const bTime = Date.parse(b.scheduledFor ?? b.createdAt);
+
+    return (Number.isNaN(aTime) ? Number.MAX_SAFE_INTEGER : aTime)
+      - (Number.isNaN(bTime) ? Number.MAX_SAFE_INTEGER : bTime);
+  })[0] ?? null;
+}
+
+function formatContentType(value: string) {
+  return value
+    .replace(/[_-]+/g, " ")
+    .trim()
+    .toLowerCase();
 }
 
 function formatDate(value: string | null | undefined) {
