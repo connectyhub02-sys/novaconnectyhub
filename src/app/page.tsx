@@ -942,7 +942,7 @@ function Header() {
         >
           <ConnectyLogo className="h-4 w-[104px] sm:w-[132px]" tone="white" type="full" />
         </a>
-        <nav className="hidden min-w-0 items-center gap-4 font-mono text-[11px] text-zinc-300 xl:flex">
+        <nav className="hidden min-w-0 items-center gap-3 font-mono text-[10px] text-zinc-300 lg:flex xl:gap-4 xl:text-[11px]">
           {landingNavItems.map((item) => (
             <a key={item.href} href={item.href} className="whitespace-nowrap transition-colors hover:text-white">
               [ {item.label} ]
@@ -965,7 +965,7 @@ function Header() {
           </a>
           <button
             type="button"
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/15 text-zinc-200 transition hover:border-white/35 xl:hidden"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/15 text-zinc-200 transition hover:border-white/35 lg:hidden"
             aria-label={mobileNavOpen ? "Fechar menu" : "Abrir menu"}
             aria-expanded={mobileNavOpen}
             onClick={() => setMobileNavOpen((current) => !current)}
@@ -982,7 +982,7 @@ function Header() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.18 }}
-            className="mx-auto mt-3 grid max-w-[1760px] gap-2 rounded-2xl border border-white/10 bg-black/95 p-3 font-mono text-[11px] text-zinc-200 shadow-2xl shadow-black/35 xl:hidden"
+            className="mx-auto mt-3 grid max-w-[1760px] gap-2 rounded-2xl border border-white/10 bg-black/95 p-3 font-mono text-[11px] text-zinc-200 shadow-2xl shadow-black/35 lg:hidden"
           >
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               {landingNavItems.map((item) => (
