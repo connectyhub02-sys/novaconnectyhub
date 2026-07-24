@@ -935,12 +935,12 @@ function Header() {
     <header className="fixed left-0 right-0 top-0 z-50 border-b border-white/[0.05] bg-black/70 px-4 py-3 backdrop-blur-md md:px-12 lg:px-16">
       <div className="mx-auto flex max-w-[1760px] items-center justify-between gap-3">
         <a
-          className="inline-flex shrink-0 rounded-full border px-3 py-2 transition-colors sm:px-4"
+          className="inline-flex shrink-0 rounded-full border px-2.5 py-2 transition-colors sm:px-4"
           style={{ borderColor: `${G}50` }}
           href="#inicio"
           onClick={() => setMobileNavOpen(false)}
         >
-          <ConnectyLogo className="h-4 w-[118px] sm:w-[132px]" tone="white" type="full" />
+          <ConnectyLogo className="h-4 w-[104px] sm:w-[132px]" tone="white" type="full" />
         </a>
         <nav className="hidden min-w-0 items-center gap-4 font-mono text-[11px] text-zinc-300 xl:flex">
           {landingNavItems.map((item) => (
@@ -951,13 +951,13 @@ function Header() {
         </nav>
         <div className="flex shrink-0 items-center gap-2">
           <a
-            className="inline-flex rounded-full border border-white/15 px-3 py-2 text-[11px] font-bold text-white transition hover:border-white/35"
+            className="inline-flex rounded-full border border-white/15 px-2.5 py-2 text-[10px] font-bold text-white transition hover:border-white/35 sm:px-3 sm:text-[11px]"
             href="/login"
           >
             Entrar
           </a>
           <a
-            className="hidden rounded-full px-4 py-2 text-[11px] font-bold text-black transition-all hover:opacity-90 xl:inline-flex"
+            className="inline-flex rounded-full px-2.5 py-2 text-[10px] font-bold text-black transition-all hover:opacity-90 sm:px-4 sm:text-[11px]"
             style={{ background: G }}
             href="/iniciar"
           >
@@ -996,14 +996,6 @@ function Header() {
                 </a>
               ))}
             </div>
-            <a
-              href="/iniciar"
-              className="rounded-xl px-3 py-2 text-center font-bold text-black transition hover:opacity-90"
-              style={{ background: G }}
-              onClick={() => setMobileNavOpen(false)}
-            >
-              Teste grátis
-            </a>
           </motion.nav>
         ) : null}
       </AnimatePresence>
