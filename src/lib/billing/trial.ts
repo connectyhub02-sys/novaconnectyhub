@@ -251,7 +251,7 @@ export async function getOrganizationBillingAccess(input: {
       bannerTitle: "Teste gratis encerrado",
       bannerDescription: "Seu teste de 7 dias acabou. Seus dados continuam salvos, mas os agentes e recursos com custo estao pausados.",
       ctaLabel: "Escolher plano",
-      ctaHref: "/#planos",
+      ctaHref: "/dashboard/planos",
     };
   }
 
@@ -274,7 +274,7 @@ export async function getOrganizationBillingAccess(input: {
       bannerTitle: "Creditos de teste acabaram",
       bannerDescription: "Voce ainda pode mexer no painel, mas os atendimentos automaticos, IA e voz ficam pausados ate assinar um plano.",
       ctaLabel: "Assinar agora",
-      ctaHref: "/#planos",
+      ctaHref: "/dashboard/planos",
     };
   }
 
@@ -297,7 +297,7 @@ export async function getOrganizationBillingAccess(input: {
       bannerTitle: "Creditos de teste quase acabando",
       bannerDescription: `Restam ${formatCredits(balanceCredits)} creditos. Para continuar atendendo sem pausa, escolha um plano.`,
       ctaLabel: "Ver planos",
-      ctaHref: "/#planos",
+      ctaHref: "/dashboard/planos",
     };
   }
 
@@ -320,7 +320,7 @@ export async function getOrganizationBillingAccess(input: {
       bannerTitle: "Teste gratis ativo",
       bannerDescription: `${trialDaysRemaining ?? TRIAL_DAYS} dia${trialDaysRemaining === 1 ? "" : "s"} restante${trialDaysRemaining === 1 ? "" : "s"} e ${formatCredits(balanceCredits)} creditos disponiveis.`,
       ctaLabel: "Ver planos",
-      ctaHref: "/#planos",
+      ctaHref: "/dashboard/planos",
     };
   }
 
@@ -343,7 +343,7 @@ export async function getOrganizationBillingAccess(input: {
       bannerTitle: "Plano vencido",
       bannerDescription: "Seu plano venceu. O painel continua acessivel, mas os recursos ficam bloqueados ate renovar ou migrar de plano.",
       ctaLabel: "Renovar plano",
-      ctaHref: "/#planos",
+      ctaHref: "/dashboard/planos",
     };
   }
 
@@ -366,7 +366,7 @@ export async function getOrganizationBillingAccess(input: {
       bannerTitle: "Creditos acabaram",
       bannerDescription: "Seu painel continua acessivel, mas IA, voz e atendimentos automaticos precisam de creditos para operar.",
       ctaLabel: "Comprar creditos",
-      ctaHref: "/#planos",
+      ctaHref: "/dashboard/planos",
     };
   }
 
@@ -388,7 +388,7 @@ export async function getOrganizationBillingAccess(input: {
     bannerTitle: "Plano ativo",
     bannerDescription: `${formatCredits(balanceCredits)} creditos disponiveis para IA, voz e atendimentos automaticos.`,
     ctaLabel: "Comprar creditos",
-    ctaHref: "/#planos",
+    ctaHref: "/dashboard/planos",
   };
 }
 
@@ -472,7 +472,7 @@ function buildInactiveStatus(organizationId: string): BillingAccessStatus {
     bannerTitle: "Empresa indisponivel",
     bannerDescription: "Nao foi possivel validar plano e creditos desta empresa.",
     ctaLabel: "Ver planos",
-    ctaHref: "/#planos",
+    ctaHref: "/dashboard/planos",
   };
 }
 

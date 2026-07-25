@@ -645,6 +645,24 @@ html {
   transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
 }
 
+.pricing-plans-grid {
+  display: grid;
+  align-items: stretch;
+  gap: 16px;
+}
+
+@media (min-width: 768px) {
+  .pricing-plans-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1280px) {
+  .pricing-plans-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
 .pricing-card:hover {
   transform: translateY(-4px);
   border-color: rgb(0 243 255 / 70%);
@@ -736,16 +754,29 @@ html {
   color: #52525b;
 }
 
-.pricing-card a {
+.pricing-card a,
+.pricing-card button.pricing-card-action {
   display: block;
   margin-top: auto;
   border: 1px solid rgb(0 243 255 / 50%);
+  width: 100%;
   padding: 12px;
   text-align: center;
   color: white;
   font-size: 12px;
   font-weight: 900;
   text-transform: uppercase;
+}
+
+.pricing-card button.pricing-card-action {
+  cursor: pointer;
+  background: transparent;
+}
+
+.pricing-card button.pricing-card-action:disabled {
+  cursor: not-allowed;
+  border-color: rgb(255 255 255 / 16%);
+  color: #71717a;
 }
 
 .faq-item {

@@ -202,6 +202,7 @@ const clientSections: NavSection[] = [
       { label: "Relatórios",      href: "/dashboard/relatorios",       icon: BarChart3, tone: "blue" },
       { label: "Integrações",     href: "/dashboard/integracoes",      icon: PlugZap, tone: "teal" },
       { label: "API WhatsApp",     href: "/dashboard/api-whatsapp",     icon: PlugZap, tone: "emerald" },
+      { label: "Planos",           href: "/dashboard/planos",           icon: Coins, tone: "amber" },
       { label: "Configurações",   href: "/dashboard/configuracoes",    icon: Settings, tone: "slate" },
     ],
   },
@@ -840,7 +841,7 @@ export function ConnectyShell({
           </div>
         </main>
       </div>
-      {mode === "client" ? <BillingAccessLockOverlay status={billingAccess} /> : null}
+      {mode === "client" && active !== "/dashboard/planos" ? <BillingAccessLockOverlay status={billingAccess} /> : null}
       </div>
     </ConnectyShellNotificationsContext.Provider>
   );

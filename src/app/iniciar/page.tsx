@@ -7,13 +7,31 @@ export const metadata: Metadata = {
   title: "Iniciar | ConnectyHub",
 };
 
-export default async function IniciarPage() {
+type IniciarPageProps = {
+  searchParams?: Promise<{
+    plan?: string;
+  }>;
+};
+
+export default async function IniciarPage({ searchParams }: IniciarPageProps) {
+  const params = (await searchParams) ?? {};
   const user = await getAuthenticatedUser();
 
   if (user) {
     const workspace = await getCurrentWorkspace();
-    redirect(workspace?.profile.isPlatformAdmin ? "/admin" : "/dashboard");
+    const plan = normalizePlanParam(params.plan);
+    const clientDestination = plan ? `/dashboard/planos?plan=${encodeURIComponent(plan)}` : "/dashboard/planos";
+    redirect(workspace?.profile.isPlatformAdmin ? "/admin" : clientDestination);
   }
 
-  redirect("/cadastro");
+  const plan = normalizePlanParam(params.plan);
+  redirect(plan ? `/cadastro?plan=${encodeURIComponent(plan)}` : "/cadastro");
+}
+
+function normalizePlanParam(value: string | undefined) {
+  if (value === "trial" || value === "starter" || value === "pro" || value === "scale") {
+    return value;
+  }
+
+  return null;
 }

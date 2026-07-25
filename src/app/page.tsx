@@ -23,6 +23,7 @@ import {
   Zap,
 } from "lucide-react";
 import { ConnectyLogo } from "@/components/brand/connecty-logo";
+import { PricingPlansGrid } from "@/components/connectyhub-os/pricing-plans-grid";
 import { Spotlight } from "@/components/ui/spotlight";
 
 const HERO_VIDEO_MP4 = "https://pub-9f5b2802265a4ee2b52bc4e080f3941e.r2.dev/avatar%20connectyhub.mp4";
@@ -138,85 +139,6 @@ const socialMetrics = [
   { value: "+14.382", label: "conversas processadas" },
   { value: "98%", label: "taxa de resposta < 30s" },
   { value: "2.108", label: "clones ativos hoje" },
-];
-
-const plans = [
-  {
-    name: "Teste gratis",
-    price: "R$ 0",
-    period: "/7 dias",
-    description: "Para provar o atendimento antes de assinar.",
-    tagline: "1.000 creditos de teste para ativar seu primeiro agente",
-    trial: true as const,
-    included: [
-      "1.000 creditos inclusos",
-      "7 dias de acesso",
-      "1 WhatsApp conectado",
-      "1 agente IA",
-      "Voz IA por creditos",
-      "CRM basico, leads e conversas",
-    ],
-    locked: ["Creditos expiram no fim do teste", "Nao acumula com plano pago"],
-    cta: "Comecar teste gratis",
-  },
-  {
-    name: "Start",
-    price: "R$ 97",
-    period: "/mes",
-    description: "Para começar a vender com IA no WhatsApp.",
-    tagline: "Entrada com 1 agente para validar atendimento e vendas",
-    included: [
-      "3.000 créditos inclusos",
-      "1 WhatsApp conectado",
-      "1 agente IA",
-      "2 usuários no painel",
-      "Catálogo de vendas",
-      "CRM básico, leads e conversas",
-      "Voz IA por créditos",
-    ],
-    locked: ["Campanhas e automações", "API WhatsApp", "Relatórios avançados"],
-    cta: "Assinar Start",
-  },
-  {
-    name: "Pro",
-    price: "R$ 247",
-    period: "/mes",
-    description: "Para operação comercial com mais volume.",
-    tagline: "4 agentes e 4 WhatsApps para times que atendem todos os dias",
-    popular: true,
-    included: [
-      "10.000 créditos inclusos",
-      "4 WhatsApps conectados",
-      "4 agentes IA",
-      "5 usuários no painel",
-      "CRM e funil comercial",
-      "Campanhas e automações",
-      "Relatórios básicos",
-      "Voz IA por créditos",
-    ],
-    locked: ["API WhatsApp", "Integrações avançadas"],
-    cta: "Assinar Pro",
-  },
-  {
-    name: "Scale",
-    price: "R$ 497",
-    period: "/mes",
-    description: "Para escalar atendimento, agentes e API.",
-    tagline: "1 agente para cada WhatsApp em operações com equipe",
-    premium: true as const,
-    included: [
-      "25.000 créditos inclusos",
-      "8 WhatsApps conectados",
-      "8 agentes IA",
-      "15 usuários no painel",
-      "API WhatsApp",
-      "Integrações avançadas",
-      "Relatórios e operação em escala",
-      "Voz IA por créditos",
-    ],
-    locked: [],
-    cta: "Assinar Scale",
-  },
 ];
 
 const landingNavItems = [
@@ -819,38 +741,8 @@ export default function Home() {
         <h2 className="section-heading mt-4">
           Planos para iniciar,<br className="hidden sm:block" /> vender e escalar.
         </h2>
-        <div className="mt-10 grid items-stretch gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {plans.map((plan) => (
-            <div
-              key={plan.name}
-              className={
-                "trial" in plan && plan.trial
-                  ? "pricing-card pricing-card-trial"
-                  : plan.popular
-                  ? "pricing-card pricing-card-popular"
-                  : "premium" in plan && plan.premium
-                  ? "pricing-card pricing-card-premium"
-                  : "pricing-card"
-              }
-            >
-              {"trial" in plan && plan.trial && <span className="trial-badge">7 dias gratis</span>}
-              {plan.popular && <span className="popular-badge">Mais popular</span>}
-              {"premium" in plan && plan.premium && (
-                <span className="premium-badge">Mais completo</span>
-              )}
-              <h3>{plan.name}</h3>
-              <strong>{plan.price}<small>{plan.period}</small></strong>
-              <p className="mt-3 font-mono text-xs text-zinc-400">{plan.description}</p>
-              {"tagline" in plan && plan.tagline && (
-                <p className="mt-1 text-xs italic" style={{ color: `${G}99` }}>{plan.tagline}</p>
-              )}
-              <ul>
-                {plan.included.map((item) => <li key={item}>{item}</li>)}
-                {plan.locked.map((item) => <li key={item} className="plan-locked">{item}</li>)}
-              </ul>
-              <a href="/iniciar">{"cta" in plan ? plan.cta : "Ativar teste gratis"}</a>
-            </div>
-          ))}
+        <div className="mt-10">
+          <PricingPlansGrid />
         </div>
         <p className="mt-6 text-center font-mono text-xs text-zinc-400">
           Cancele quando quiser. Sem fidelidade. Sem contrato.
