@@ -2,7 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getAppBaseUrl, normalizeCurrencyAmount } from "@/lib/sales-catalog/mercado-pago";
-import type { BillingCheckoutBump, BillingCheckoutBumpCode } from "./plan-checkout-catalog";
+import type { BillingCheckoutBump, BillingCheckoutBumpCode, BillingCheckoutBumpMedia } from "./plan-checkout-catalog";
 
 export type JsonRecord = Record<string, unknown>;
 
@@ -60,6 +60,7 @@ export type BillingOrderBumpProductOption = {
   creditAmount: number | null;
   recurrence: BillingCheckoutBump["recurrence"];
   badge: string;
+  media: BillingCheckoutBumpMedia | null;
 };
 
 export function buildDashboardBillingCheckoutPath(subscriptionId: string) {
@@ -369,6 +370,7 @@ export async function loadBillingCheckoutBumps(client: SupabaseClient) {
       itemType: option.creditAmount && option.creditAmount > 0 ? "credit_pack" : "adjustment",
       creditAmount: option.creditAmount,
       badge: option.badge,
+      media: option.media,
     } satisfies BillingCheckoutBump));
 }
 
@@ -376,7 +378,7 @@ export async function loadBillingOrderBumpProductOptions(client: SupabaseClient)
   const settings = await loadBillingOrderBumpSettings(client);
   const { data, error } = await client
     .from("platform_products")
-    .select("id, product_code, name, short_description, commercial_description, category, status, owner_type, sales_channel_type, price, currency, offer, metadata, updated_at")
+    .select("id, product_code, name, short_description, commercial_description, category, status, owner_type, sales_channel_type, price, currency, offer, media, metadata, updated_at")
     .eq("owner_type", "connectyhub")
     .eq("sales_channel_type", "direct")
     .neq("status", "archived")
@@ -401,6 +403,7 @@ export async function loadBillingOrderBumpProductOptions(client: SupabaseClient)
       ?? "Adicional ConnectyHub para aumentar o carrinho no checkout.";
     const status = readString(record.status) ?? "draft";
     const creditAmount = readOrderBumpCreditAmount(metadata, name, description);
+    const media = readOrderBumpMedia(record.media);
 
     return {
       id: String(record.id),
@@ -416,6 +419,7 @@ export async function loadBillingOrderBumpProductOptions(client: SupabaseClient)
       recurrence: readString(metadata.billing_order_bump_recurrence) === "monthly" ? "monthly" : "one_time",
       badge: readString(metadata.billing_order_bump_badge)
         ?? (creditAmount && creditAmount > 0 ? "Creditos" : "Adicional"),
+      media,
     };
   });
 }
@@ -429,6 +433,7 @@ function serializeBump(bump: BillingCheckoutBump) {
     recurrence: bump.recurrence,
     item_type: bump.itemType,
     credit_amount: bump.creditAmount,
+    media: bump.media,
   };
 }
 
@@ -480,6 +485,44 @@ function readOrderBumpCreditAmount(metadata: JsonRecord, name: string, descripti
   }
 
   return /(?:mil|k)\s*credit/.test(match[0]) && base < 1000 ? base * 1000 : base;
+}
+
+function readOrderBumpMedia(value: unknown): BillingCheckoutBumpMedia | null {
+  const source = Array.isArray(value) ? value : [];
+
+  for (const item of source) {
+    const record = readRecord(item);
+    if (!record) continue;
+
+    const storageUrl = readString(record.storage_url ?? record.storageUrl);
+    if (!storageUrl) continue;
+
+    const fileName = readString(record.file_name ?? record.fileName) ?? "midia";
+    const contentType = readString(record.content_type ?? record.contentType) ?? "";
+    const kind = readOrderBumpMediaKind(record.kind, contentType, fileName);
+    if (!kind) continue;
+
+    return {
+      fileName,
+      contentType,
+      storageUrl,
+      kind,
+    };
+  }
+
+  return null;
+}
+
+function readOrderBumpMediaKind(value: unknown, contentType: string, fileName: string): BillingCheckoutBumpMedia["kind"] | null {
+  const explicit = readString(value);
+  if (explicit === "image" || explicit === "video") return explicit;
+
+  const lowerName = fileName.toLowerCase();
+  const lowerType = contentType.toLowerCase();
+  if (lowerType.startsWith("image/") || /\.(png|jpe?g|webp|gif)$/i.test(lowerName)) return "image";
+  if (lowerType.startsWith("video/") || /\.(mp4|webm|mov)$/i.test(lowerName)) return "video";
+
+  return null;
 }
 
 function parseBrlPrice(value: string | null) {

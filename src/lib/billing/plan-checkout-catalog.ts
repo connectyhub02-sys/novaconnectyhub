@@ -1,5 +1,12 @@
 export type BillingCheckoutBumpCode = string;
 
+export type BillingCheckoutBumpMedia = {
+  fileName: string;
+  contentType: string;
+  storageUrl: string;
+  kind: "image" | "video";
+};
+
 export type BillingCheckoutBump = {
   code: BillingCheckoutBumpCode;
   platformProductId: string | null;
@@ -10,6 +17,7 @@ export type BillingCheckoutBump = {
   itemType: "credit_pack" | "adjustment";
   creditAmount: number | null;
   badge: string;
+  media: BillingCheckoutBumpMedia | null;
 };
 
 export const billingCheckoutBumps: BillingCheckoutBump[] = [
@@ -23,6 +31,7 @@ export const billingCheckoutBumps: BillingCheckoutBump[] = [
     itemType: "credit_pack",
     creditAmount: 5000,
     badge: "Agente online",
+    media: null,
   },
   {
     code: "promo_credits_10k",
@@ -34,6 +43,7 @@ export const billingCheckoutBumps: BillingCheckoutBump[] = [
     itemType: "credit_pack",
     creditAmount: 10000,
     badge: "Venda mais",
+    media: null,
   },
   {
     code: "promo_credits_25k",
@@ -45,6 +55,7 @@ export const billingCheckoutBumps: BillingCheckoutBump[] = [
     itemType: "credit_pack",
     creditAmount: 25000,
     badge: "Alta performance",
+    media: null,
   },
   {
     code: "voice_priority",
@@ -56,6 +67,7 @@ export const billingCheckoutBumps: BillingCheckoutBump[] = [
     itemType: "adjustment",
     creditAmount: null,
     badge: "Recorrente",
+    media: null,
   },
   {
     code: "onboarding_assisted",
@@ -67,5 +79,6 @@ export const billingCheckoutBumps: BillingCheckoutBump[] = [
     itemType: "adjustment",
     creditAmount: null,
     badge: "Implantacao",
+    media: null,
   },
 ];
