@@ -27,18 +27,30 @@ type IntegrationRow = {
 };
 
 export async function GET(request: NextRequest) {
-  const workspace = await getCurrentWorkspace();
   const baseUrl = getAppBaseUrl();
   let returnUrl = new URL("/dashboard/links", baseUrl);
+  const code = request.nextUrl.searchParams.get("code")?.trim();
+  const state = request.nextUrl.searchParams.get("state")?.trim();
+
+  if (state?.startsWith("mpb_")) {
+    const platformBillingCallbackUrl = new URL("/api/admin/billing/mercado-pago/callback", baseUrl);
+
+    if (code) {
+      platformBillingCallbackUrl.searchParams.set("code", code);
+    }
+
+    platformBillingCallbackUrl.searchParams.set("state", state);
+
+    return NextResponse.redirect(platformBillingCallbackUrl);
+  }
+
+  const workspace = await getCurrentWorkspace();
 
   if (!workspace) {
     const loginUrl = new URL("/login", baseUrl);
     loginUrl.searchParams.set("next", "/dashboard/links");
     return NextResponse.redirect(loginUrl);
   }
-
-  const code = request.nextUrl.searchParams.get("code")?.trim();
-  const state = request.nextUrl.searchParams.get("state")?.trim();
 
   if (!code || !state) {
     returnUrl.searchParams.set("payment", "mercado_pago_error");

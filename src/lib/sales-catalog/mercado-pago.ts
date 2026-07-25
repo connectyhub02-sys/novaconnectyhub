@@ -298,7 +298,13 @@ export async function loadMercadoPagoPlatformBillingConfig(input: { client?: Sup
 }
 
 export function buildMercadoPagoPlatformBillingRedirectUrl() {
-  return `${getAppBaseUrl()}/api/admin/billing/mercado-pago/callback`;
+  return `${getAppBaseUrl()}/api/dashboard/sales-catalog/payments/mercado-pago/callback`;
+}
+
+export async function loadMercadoPagoPlatformBillingRedirectUrl(input: { client?: SupabaseClient } = {}) {
+  const config = await loadMercadoPagoOAuthConfig({ client: input.client });
+
+  return config.redirectUri;
 }
 
 export function buildMercadoPagoPlatformBillingWebhookUrl() {
@@ -312,10 +318,7 @@ export async function buildMercadoPagoPlatformBillingAuthorizationUrl(input: {
   const config = await loadMercadoPagoOAuthConfig({ client: input.client });
 
   return buildMercadoPagoAuthorizationUrlFromConfig({
-    config: {
-      ...config,
-      redirectUri: buildMercadoPagoPlatformBillingRedirectUrl(),
-    },
+    config,
     state: input.state,
   });
 }
@@ -329,7 +332,7 @@ export async function exchangeMercadoPagoPlatformBillingAuthorizationCode(input:
   return exchangeMercadoPagoAuthorizationCodeWithRedirect({
     code: input.code,
     client: input.client,
-    redirectUri: buildMercadoPagoPlatformBillingRedirectUrl(),
+    redirectUri: config.redirectUri,
     testTokenEnabled: config.testTokenEnabled,
   });
 }

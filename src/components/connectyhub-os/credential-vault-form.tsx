@@ -923,7 +923,7 @@ function MercadoPagoBillingNotice() {
             public key e modo automaticamente no cofre.
           </p>
           <div className="mt-3 grid gap-2 md:grid-cols-2">
-            <CodeHint label="Callback" value="/api/admin/billing/mercado-pago/callback" />
+            <CodeHint label="Callback OAuth" value="/api/dashboard/sales-catalog/payments/mercado-pago/callback" />
             <CodeHint label="Webhook" value="/api/webhooks/mercado-pago/platform-billing" />
           </div>
         </div>

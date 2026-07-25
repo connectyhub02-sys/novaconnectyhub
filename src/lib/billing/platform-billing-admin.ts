@@ -398,7 +398,7 @@ function buildMercadoPagoConnection(credentials: CredentialSnapshot[], settings:
     accountId,
     tokenExpiresAt,
     webhookUrl,
-    redirectUrl: buildMercadoPagoPlatformBillingRedirectUrl(),
+    redirectUrl: readString(settings.metadata.mercado_pago_billing_redirect_url) ?? buildMercadoPagoPlatformBillingRedirectUrl(),
     lastError: readString(settings.metadata.mercado_pago_billing_last_error),
   };
 }

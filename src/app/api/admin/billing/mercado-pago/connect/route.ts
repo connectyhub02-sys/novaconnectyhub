@@ -2,9 +2,9 @@ import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import {
   buildMercadoPagoPlatformBillingAuthorizationUrl,
-  buildMercadoPagoPlatformBillingRedirectUrl,
   buildMercadoPagoPlatformBillingWebhookUrl,
   getAppBaseUrl,
+  loadMercadoPagoPlatformBillingRedirectUrl,
 } from "@/lib/sales-catalog/mercado-pago";
 import { requirePlatformAdmin } from "@/lib/supabase/admin-auth";
 import { createServiceClient } from "@/lib/supabase/service";
@@ -30,6 +30,7 @@ export async function GET() {
   const now = new Date().toISOString();
 
   try {
+    const redirectUrl = await loadMercadoPagoPlatformBillingRedirectUrl({ client });
     const authorizationUrl = await buildMercadoPagoPlatformBillingAuthorizationUrl({ state, client });
     const metadata = await loadPlatformBillingMetadata(client);
 
@@ -44,7 +45,7 @@ export async function GET() {
             mercado_pago_billing_oauth_state: state,
             mercado_pago_billing_oauth_requested_by: auth.userId,
             mercado_pago_billing_oauth_requested_at: now,
-            mercado_pago_billing_redirect_url: buildMercadoPagoPlatformBillingRedirectUrl(),
+            mercado_pago_billing_redirect_url: redirectUrl,
             mercado_pago_billing_webhook_url: buildMercadoPagoPlatformBillingWebhookUrl(),
           },
         },
@@ -57,7 +58,7 @@ export async function GET() {
       target_table: "platform_billing_settings",
       target_id: null,
       metadata: {
-        redirectUrl: buildMercadoPagoPlatformBillingRedirectUrl(),
+        redirectUrl,
         webhookUrl: buildMercadoPagoPlatformBillingWebhookUrl(),
       },
     });
