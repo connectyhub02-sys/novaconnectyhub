@@ -49,6 +49,10 @@ type CardBrickProps = {
   sessionId: string;
   amount: number;
   payerEmail: string | null;
+  submitPath?: string;
+  extraPayload?: JsonRecord;
+  successMessage?: string;
+  pendingMessage?: string;
 };
 
 let mercadoPagoSdkPromise: Promise<void> | null = null;
@@ -58,6 +62,10 @@ export function MercadoPagoCardBrick({
   sessionId,
   amount,
   payerEmail,
+  submitPath,
+  extraPayload,
+  successMessage = "Pagamento aprovado. Vamos atualizar seu pedido.",
+  pendingMessage = "Pagamento enviado. A confirmacao pode levar alguns instantes.",
 }: CardBrickProps) {
   const containerId = useMemo(() => `mp-card-${sessionId.replace(/[^a-zA-Z0-9_-]/g, "")}`, [sessionId]);
   const controllerRef = useRef<MercadoPagoBrickController | null>(null);
@@ -105,13 +113,13 @@ export function MercadoPagoCardBrick({
 
             try {
               const deviceSessionId = readMercadoPagoDeviceSessionId();
-              const response = await fetch(`/api/checkout/${sessionId}/card`, {
+              const response = await fetch(submitPath ?? `/api/checkout/${sessionId}/card`, {
                 method: "POST",
                 headers: {
                   "Content-Type": "application/json",
                   ...(deviceSessionId ? { "X-Meli-Session-Id": deviceSessionId } : {}),
                 },
-                body: JSON.stringify({ formData, additionalData, deviceSessionId }),
+                body: JSON.stringify({ formData, additionalData, deviceSessionId, ...(extraPayload ?? {}) }),
               });
               const data = await response.json().catch(() => null) as {
                 error?: string;
@@ -128,8 +136,8 @@ export function MercadoPagoCardBrick({
               setResult({
                 tone: approved ? "success" : "warning",
                 message: approved
-                  ? "Pagamento aprovado. Vamos atualizar seu pedido."
-                  : "Pagamento enviado. A confirmacao pode levar alguns instantes.",
+                  ? successMessage
+                  : pendingMessage,
               });
 
               if (data?.checkoutUrl) {
@@ -164,7 +172,7 @@ export function MercadoPagoCardBrick({
       controllerRef.current?.unmount();
       controllerRef.current = null;
     };
-  }, [amount, containerId, payerEmail, publicKey, sessionId]);
+  }, [amount, containerId, extraPayload, payerEmail, pendingMessage, publicKey, sessionId, submitPath, successMessage]);
 
   return (
     <div className="mt-6 rounded-[8px] border border-slate-700 bg-slate-900/70 p-4">

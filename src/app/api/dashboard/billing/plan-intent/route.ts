@@ -1,11 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { randomUUID } from "node:crypto";
 import {
-  buildPlatformBillingPlanReturnUrl,
-  createMercadoPagoPendingBillingSubscription,
-  mapMercadoPagoPreapprovalStatus,
-  MercadoPagoBillingSubscriptionError,
-} from "@/lib/billing/mercado-pago-subscriptions";
+  buildDashboardBillingCheckoutPath,
+  buildDashboardBillingCheckoutUrl,
+  buildPlatformBillingExternalReference,
+} from "@/lib/billing/plan-checkout";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
 
@@ -87,13 +86,13 @@ export async function POST(request: NextRequest) {
       const existingCheckoutUrl = readCheckoutUrl(existingSubscription.metadata);
 
       if (isPendingSubscription(existingSubscription.status)) {
-        if (existingSubscription.plan_code === plan.plan_code && existingCheckoutUrl) {
+        if (existingSubscription.plan_code === plan.plan_code) {
           return NextResponse.json({
             ok: true,
             subscriptionId: existingSubscription.id,
             planCode: existingSubscription.plan_code,
-            checkoutUrl: existingCheckoutUrl,
-            message: "Ja existe um checkout deste plano em aberto. Vamos te levar para concluir a assinatura.",
+            checkoutUrl: existingCheckoutUrl ?? buildDashboardBillingCheckoutPath(existingSubscription.id),
+            message: "Ja existe um checkout deste plano em aberto. Vamos te levar para concluir pelo painel.",
           });
         }
 
@@ -128,11 +127,17 @@ export async function POST(request: NextRequest) {
     const subscriptionId = randomUUID();
     const invoiceId = randomUUID();
     const paymentId = randomUUID();
-    const externalReference = `connectyhub_subscription:${workspace.organization.id}:${subscriptionId}:${invoiceId}:${paymentId}`;
-    const checkoutBackUrl = buildPlatformBillingPlanReturnUrl(plan.plan_code);
+    const externalReference = buildPlatformBillingExternalReference({
+      organizationId: workspace.organization.id,
+      subscriptionId,
+      invoiceId,
+      paymentId,
+    });
+    const checkoutPath = buildDashboardBillingCheckoutPath(subscriptionId);
+    const checkoutUrl = buildDashboardBillingCheckoutUrl(subscriptionId);
     const intentMetadata = {
       source: "dashboard_plan_intent",
-      checkout_model: "mercado_pago_preapproval_pending",
+      checkout_model: "connectyhub_plan_checkout",
       requested_plan_code: plan.plan_code,
       current_plan_code: workspace.organization.planCode,
       organization_status: workspace.organization.status,
@@ -141,8 +146,9 @@ export async function POST(request: NextRequest) {
       invoice_id: invoiceId,
       payment_id: paymentId,
       external_reference: externalReference,
-      checkout_status: "pending_provider_checkout",
-      checkout_back_url: checkoutBackUrl,
+      checkout_status: "internal_checkout_created",
+      checkout_url: checkoutPath,
+      checkout_public_url: checkoutUrl,
     };
 
     const { error: subscriptionError } = await client
@@ -217,84 +223,12 @@ export async function POST(request: NextRequest) {
       throw new Error(paymentError?.message ?? "Nao foi possivel registrar o pagamento pendente.");
     }
 
-    const checkout = await createMercadoPagoPendingBillingSubscription({
-      client,
-      amountBrl,
-      planCode: plan.plan_code,
-      planName: plan.name,
-      payerEmail,
-      externalReference,
-      backUrl: checkoutBackUrl,
-      idempotencyKey: paymentId,
-    }).catch(async (error) => {
-      await markCheckoutAsFailed(client, {
-        subscriptionId,
-        invoiceId,
-        paymentId,
-        error,
-        metadata: intentMetadata,
-      });
-
-      throw error;
-    });
-
-    const providerStatus = checkout.status ?? "pending";
-    const subscriptionStatus = mapMercadoPagoPreapprovalStatus(providerStatus);
-    const checkoutMetadata = {
-      ...intentMetadata,
-      provider_subscription_id: checkout.id,
-      provider_status: providerStatus,
-      checkout_status: "provider_checkout_created",
-      checkout_url: checkout.initPoint,
-      checkout_created_at: new Date().toISOString(),
-      mercado_pago: checkout.raw,
-    };
-    const [subscriptionUpdate, invoiceUpdate, paymentUpdate] = await Promise.all([
-      client
-        .from("organization_subscriptions")
-        .update({
-          status: subscriptionStatus,
-          provider_subscription_id: checkout.id,
-          payer_email: payerEmail,
-          metadata: checkoutMetadata,
-        })
-        .eq("id", subscriptionId)
-        .eq("organization_id", workspace.organization.id),
-      client
-        .from("billing_invoices")
-        .update({
-          provider_payment_id: checkout.id,
-          metadata: checkoutMetadata,
-        })
-        .eq("id", invoiceId)
-        .eq("organization_id", workspace.organization.id),
-      client
-        .from("billing_payments")
-        .update({
-          provider_payment_id: checkout.id,
-          provider_status: providerStatus,
-          status: subscriptionStatus === "active" ? "approved" : "pending",
-          payload: checkoutMetadata,
-        })
-        .eq("id", paymentId)
-        .eq("organization_id", workspace.organization.id),
-    ]);
-
-    if (subscriptionUpdate.error || invoiceUpdate.error || paymentUpdate.error) {
-      throw new Error(
-        subscriptionUpdate.error?.message
-        ?? invoiceUpdate.error?.message
-        ?? paymentUpdate.error?.message
-        ?? "Checkout criado, mas nao foi possivel atualizar o registro interno.",
-      );
-    }
-
     await client.from("maintenance_audit_logs").insert({
-      event_type: "billing.subscription_checkout.created",
+      event_type: "billing.plan_checkout.created",
       target_table: "billing_payments",
       target_id: paymentId,
       metadata: {
-        ...checkoutMetadata,
+        ...intentMetadata,
         amount_brl: amountBrl,
       },
     });
@@ -305,15 +239,13 @@ export async function POST(request: NextRequest) {
       invoiceId,
       paymentId,
       planCode: plan.plan_code,
-      checkoutUrl: checkout.initPoint,
-      message: "Checkout recorrente criado. Conclua a assinatura no Mercado Pago para ativar o plano.",
+      checkoutUrl: checkoutPath,
+      message: "Checkout criado. Conclua o pagamento sem sair do painel.",
     });
   } catch (error) {
-    const status = error instanceof MercadoPagoBillingSubscriptionError ? 502 : 500;
-
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Nao foi possivel solicitar o plano." },
-      { status },
+      { status: 500 },
     );
   }
 }
@@ -356,50 +288,15 @@ async function loadBlockingSubscription(client: ReturnType<typeof createServiceC
 function readCheckoutUrl(metadata: JsonRecord | null) {
   const value = metadata?.checkout_url;
 
-  return typeof value === "string" && /^https?:\/\//i.test(value) ? value : null;
+  if (typeof value !== "string" || !value.trim()) {
+    return null;
+  }
+
+  return /^https?:\/\//i.test(value) || value.startsWith("/dashboard/planos/checkout/")
+    ? value
+    : null;
 }
 
 function isPendingSubscription(status: string) {
   return status === "pending" || status === "incomplete";
-}
-
-async function markCheckoutAsFailed(
-  client: ReturnType<typeof createServiceClient>,
-  input: {
-    subscriptionId: string;
-    invoiceId: string;
-    paymentId: string;
-    error: unknown;
-    metadata: JsonRecord;
-  },
-) {
-  const failedMetadata = {
-    ...input.metadata,
-    checkout_status: "provider_checkout_failed",
-    checkout_failed_at: new Date().toISOString(),
-    error_message: input.error instanceof Error ? input.error.message : "Falha ao criar checkout Mercado Pago.",
-  };
-
-  await Promise.all([
-    client.from("organization_subscriptions").update({
-      status: "canceled",
-      canceled_at: new Date().toISOString(),
-      metadata: failedMetadata,
-    }).eq("id", input.subscriptionId),
-    client.from("billing_invoices").update({
-      status: "failed",
-      metadata: failedMetadata,
-    }).eq("id", input.invoiceId),
-    client.from("billing_payments").update({
-      status: "rejected",
-      provider_status: "checkout_failed",
-      payload: failedMetadata,
-    }).eq("id", input.paymentId),
-    client.from("maintenance_audit_logs").insert({
-      event_type: "billing.subscription_checkout.failed",
-      target_table: "billing_payments",
-      target_id: input.paymentId,
-      metadata: failedMetadata,
-    }),
-  ]);
 }
