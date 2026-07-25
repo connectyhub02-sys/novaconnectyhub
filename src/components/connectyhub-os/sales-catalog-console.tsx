@@ -102,6 +102,7 @@ type SalesCatalogConsoleProps = {
 };
 
 type CatalogTab = "setup" | "shipping" | "products" | "orders" | "payments" | "whatsapp";
+type SalesCatalogProductFormTab = "essential" | "pricing" | "media" | "stock" | "delivery";
 type CommercialFlowFilter = "all" | SalesCatalogCommercialFlowType;
 
 type SettingsDraft = {
@@ -198,6 +199,14 @@ type CommerceSummary = {
 const statusOptions: Array<{ value: SalesCatalogItemStatus; label: string }> = [
   { value: "active", label: "Ativo" },
   { value: "draft", label: "Rascunho" },
+];
+
+const salesCatalogProductFormTabs: Array<{ id: SalesCatalogProductFormTab; label: string; icon: LucideIcon }> = [
+  { id: "essential", label: "Essencial", icon: PackagePlus },
+  { id: "pricing", label: "Preco", icon: BadgePercent },
+  { id: "media", label: "Midia", icon: Upload },
+  { id: "stock", label: "Estoque", icon: Tags },
+  { id: "delivery", label: "Entrega", icon: Truck },
 ];
 
 const orderStatusOptions: SalesCatalogOrderStatus[] = [
@@ -321,6 +330,7 @@ export function SalesCatalogConsole({
   const [shippingSettings, setShippingSettings] = useState(initialShippingSettings);
   const [selectedCompanyId, setSelectedCompanyId] = useState(initialSelectedCompanyId);
   const [activeTab, setActiveTab] = useState<CatalogTab>(initialSelectedSettings?.configured ? "products" : "setup");
+  const [productFormTab, setProductFormTab] = useState<SalesCatalogProductFormTab>("essential");
   const [orderFlowFilter, setOrderFlowFilter] = useState<CommercialFlowFilter>("all");
   const [paymentFlowFilter, setPaymentFlowFilter] = useState<CommercialFlowFilter>("all");
   const [settingsDraft, setSettingsDraft] = useState<SettingsDraft>(() => buildSettingsDraft(initialSelectedSettings));
@@ -491,6 +501,7 @@ export function SalesCatalogConsole({
     setSelectedAttributes({});
     setSkuDrafts([]);
     setEditingItemId(null);
+    setProductFormTab("essential");
     setQuoteItemId("");
     setQuoteCep("");
     setQuoteResult(null);
@@ -1313,6 +1324,7 @@ export function SalesCatalogConsole({
     setEditingMedia(item.media);
     setFiles([]);
     setConfirmDeleteId(null);
+    setProductFormTab("essential");
     setNotice({ tone: "warning", message: `Editando item: ${item.title}` });
   }
 
@@ -1355,6 +1367,7 @@ export function SalesCatalogConsole({
     setShippingProfile("default");
     setShippingNotes("");
     setFiles([]);
+    setProductFormTab("essential");
   }
 
   function resetOrderForm() {
@@ -2472,6 +2485,27 @@ export function SalesCatalogConsole({
           {activeTab === "products" ? (
           <Panel id="sales-catalog-tour-products" title={editingItemId ? "Editar item" : "Novo item"} eyebrow={selectedCompany?.name ?? "empresa"} tone="cyan" compact>
             <div className="space-y-3">
+            <SalesProductFormTabs activeTab={productFormTab} onChange={setProductFormTab} tabs={salesCatalogProductFormTabs} />
+
+            <div className="grid gap-3 rounded-xl border p-3 sm:grid-cols-[minmax(0,1fr)_130px_120px_130px_120px]" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+              <div className="min-w-0">
+                <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">produto</p>
+                <p className="mt-1 truncate text-[14px] font-semibold text-slate-100">{title.trim() || "Novo produto"}</p>
+              </div>
+              <MiniStat label="preco" value={price.trim() || "Sem preco"} />
+              <MiniStat label="status" value={status} />
+              <button type="button" onClick={() => setProductFormTab("media")} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10" style={{ borderColor: "var(--ch-border)" }}>
+                <Upload className="h-3.5 w-3.5" />
+                {files.length + editingMedia.length} midias
+              </button>
+              <button type="button" disabled={!canCreate} onClick={createItem} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-cyan-300 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-50">
+                {creating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                Salvar
+              </button>
+            </div>
+
+            {productFormTab === "essential" ? (
+              <>
             <label className="block">
               <FieldLabel>Empresa</FieldLabel>
               <select
@@ -2544,7 +2578,10 @@ export function SalesCatalogConsole({
                 style={{ borderColor: "var(--ch-border)" }}
               />
             </label>
+              </>
+            ) : null}
 
+            {productFormTab === "pricing" ? (
             <div className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
               <div className="mb-3 flex items-center gap-2">
                 <BadgePercent className="h-4 w-4 text-cyan-300" />
@@ -2618,7 +2655,10 @@ export function SalesCatalogConsole({
                 />
               </div>
             </div>
+            ) : null}
 
+            {productFormTab === "stock" ? (
+              <>
             {productAttributes.length > 0 ? (
               <div className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
                 <div className="mb-3 flex items-center gap-2">
@@ -2829,7 +2869,10 @@ export function SalesCatalogConsole({
                 </p>
               )}
             </div>
+              </>
+            ) : null}
 
+            {productFormTab === "delivery" ? (
             <div className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
               <div className="mb-3 flex items-center gap-2">
                 <Truck className="h-4 w-4 text-cyan-300" />
@@ -2957,7 +3000,10 @@ export function SalesCatalogConsole({
                 />
               </label>
             </div>
+            ) : null}
 
+            {productFormTab === "media" ? (
+              <>
             <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_150px]">
               <label className="block">
                 <FieldLabel>Fotos, GIFs, videos ou arquivos</FieldLabel>
@@ -3034,6 +3080,8 @@ export function SalesCatalogConsole({
                   </div>
                 ))}
               </div>
+            ) : null}
+              </>
             ) : null}
 
             <div className={cn("grid gap-2", editingItemId ? "sm:grid-cols-[minmax(0,1fr)_160px]" : "")}>
@@ -3960,6 +4008,49 @@ function getMercadoPagoConnectionErrorMessage(reason: string | null) {
   }
 
   return "Nao foi possivel abrir a conexao com Mercado Pago agora. Tente novamente ou chame o suporte.";
+}
+
+function MiniStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border px-3 py-2" style={{ borderColor: "var(--ch-border)", background: "var(--ch-panel)" }}>
+      <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-slate-500">{label}</p>
+      <p className="mt-1 truncate text-[12px] font-semibold text-slate-200">{value}</p>
+    </div>
+  );
+}
+
+function SalesProductFormTabs({
+  activeTab,
+  onChange,
+  tabs,
+}: {
+  activeTab: SalesCatalogProductFormTab;
+  onChange: (tab: SalesCatalogProductFormTab) => void;
+  tabs: Array<{ id: SalesCatalogProductFormTab; label: string; icon: LucideIcon }>;
+}) {
+  return (
+    <div className="grid grid-cols-2 gap-1.5 rounded-xl border p-1.5 sm:grid-cols-5" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+      {tabs.map((tab) => {
+        const Icon = tab.icon;
+        const active = activeTab === tab.id;
+
+        return (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => onChange(tab.id)}
+            className={cn(
+              "inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg border px-2 font-mono text-[9px] font-bold uppercase tracking-wide transition",
+              active ? "border-cyan-300/50 bg-cyan-300/15 text-cyan-100" : "border-transparent text-slate-500 hover:bg-white/[0.035] hover:text-slate-200",
+            )}
+          >
+            <Icon className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">{tab.label}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
 }
 
 function TabButton({

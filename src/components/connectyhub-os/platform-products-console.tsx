@@ -140,6 +140,7 @@ type Notice = {
 };
 
 type PlatformProductAdminTab = "setup" | "products" | "commissions";
+type PlatformProductFormTab = "essential" | "pricing" | "media" | "stock" | "delivery" | "agent" | "advanced";
 type PlatformUiTone = "green" | "cyan" | "amber" | "rose" | "violet" | "zinc";
 
 const platformUiToneStyles: Record<PlatformUiTone, { rgb: string; fill: string; text: string; label: string }> = {
@@ -150,6 +151,16 @@ const platformUiToneStyles: Record<PlatformUiTone, { rgb: string; fill: string; 
   violet: { rgb: "167,139,250", fill: "#a78bfa", text: "text-violet-200", label: "text-violet-300" },
   zinc: { rgb: "148,163,184", fill: "#94a3b8", text: "text-slate-200", label: "text-slate-300" },
 };
+
+const platformProductFormTabs: Array<{ id: PlatformProductFormTab; label: string; icon: LucideIcon }> = [
+  { id: "essential", label: "Essencial", icon: PackagePlus },
+  { id: "pricing", label: "Preco", icon: BadgePercent },
+  { id: "media", label: "Midia", icon: Upload },
+  { id: "stock", label: "Estoque", icon: Tags },
+  { id: "delivery", label: "Entrega", icon: Truck },
+  { id: "agent", label: "Agente IA", icon: CheckCircle2 },
+  { id: "advanced", label: "Avancado", icon: SlidersHorizontal },
+];
 
 const emptyDraft: ProductDraft = {
   productId: "",
@@ -291,6 +302,7 @@ export function PlatformProductsConsole({
   const [payoutNote, setPayoutNote] = useState("");
   const [notice, setNotice] = useState<Notice | null>(null);
   const [activeTab, setActiveTab] = useState<PlatformProductAdminTab>("products");
+  const [productFormTab, setProductFormTab] = useState<PlatformProductFormTab>("essential");
   const metrics = useMemo(() => buildMetrics(products, catalog.imports.length, commissions), [products, catalog.imports.length, commissions]);
   const commissionSummary = useMemo(() => buildCommissionSummary(commissions), [commissions]);
   const availableCommissionIds = useMemo(() => (
@@ -406,6 +418,7 @@ export function PlatformProductsConsole({
     setConfirmDeleteProductId(null);
     setNotice(null);
     setActiveTab("products");
+    setProductFormTab("essential");
   }
 
   async function publishProduct(product: PlatformProduct) {
@@ -453,6 +466,7 @@ export function PlatformProductsConsole({
     setEditingMedia([]);
     setConfirmDeleteProductId(null);
     setActiveTab("products");
+    setProductFormTab("essential");
   }
 
   async function deleteProduct(product: PlatformProduct) {
@@ -801,6 +815,27 @@ export function PlatformProductsConsole({
 
                   {activeTab === "products" ? (
                     <>
+                      <ProductFormTabs activeTab={productFormTab} onChange={setProductFormTab} tabs={platformProductFormTabs} />
+
+                      <div className="grid gap-3 rounded-xl border p-3 md:grid-cols-[minmax(0,1fr)_140px_130px_140px_120px]" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+                        <div className="min-w-0">
+                          <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">produto</p>
+                          <p className="mt-1 truncate text-[14px] font-semibold text-slate-100">{draft.name.trim() || "Novo produto"}</p>
+                        </div>
+                        <MiniValue label="preco" value={draft.price.trim() || "Sem preco"} />
+                        <MiniValue label="status" value={draft.status} />
+                        <button type="button" onClick={() => setProductFormTab("media")} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10" style={{ borderColor: "var(--ch-border)" }}>
+                          <Upload className="h-3.5 w-3.5" />
+                          {files.length + editingMedia.length} midias
+                        </button>
+                        <button disabled={saving || !draft.name.trim()} type="submit" className="inline-flex h-10 items-center justify-center gap-2 rounded-xl px-3 font-mono text-[10px] font-bold uppercase tracking-wide transition disabled:opacity-50" style={{ background: "var(--ch-accent)", color: "#061015" }}>
+                          {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                          Salvar
+                        </button>
+                      </div>
+
+                      {productFormTab === "essential" ? (
+                        <>
                       <Block id="platform-products-tour-visibility" icon={draft.marketplaceStatus !== "hidden" && draft.status === "active" ? Eye : EyeOff} title="Visibilidade no painel do usuario" tone="cyan" defaultOpen>
                         {draft.salesChannelType === "direct" ? (
                           <div className="mb-3 rounded-xl border border-amber-400/25 bg-amber-400/10 px-3 py-2 text-[11px] leading-5 text-amber-100">
@@ -869,7 +904,10 @@ export function PlatformProductsConsole({
                       <Field label="Descricao comercial">
                         <textarea value={draft.commercialDescription} onChange={(event) => patchDraft({ commercialDescription: event.target.value.slice(0, 2200) })} className="min-h-28 w-full resize-y rounded-xl px-3 py-3 text-[13px] leading-5 outline-none" placeholder="O que e, para quem serve, beneficios, entrega, garantias e condicoes." style={inputStyle} />
                       </Field>
+                        </>
+                      ) : null}
 
+                      {productFormTab === "pricing" ? (
                       <Block icon={BadgePercent} title="Oferta e fechamento" tone="amber">
                         <div className="grid gap-3 md:grid-cols-4">
                           <Field label="Promocional"><input value={draft.salePrice} onChange={(event) => patchDraft({ salePrice: event.target.value.slice(0, 60) })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" style={inputStyle} /></Field>
@@ -883,7 +921,10 @@ export function PlatformProductsConsole({
                           <input value={draft.offerNotes} onChange={(event) => patchDraft({ offerNotes: event.target.value.slice(0, 240) })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" placeholder="Condicoes comerciais" style={inputStyle} />
                         </div>
                       </Block>
+                      ) : null}
 
+                      {productFormTab === "stock" ? (
+                        <>
                       <Block icon={SlidersHorizontal} title="Variacoes deste item" tone="violet">
                         {productAttributes.length > 0 ? (
                           <div className="space-y-3">
@@ -1000,7 +1041,10 @@ export function PlatformProductsConsole({
                           )}
                         </div>
                       </Block>
+                        </>
+                      ) : null}
 
+                      {productFormTab === "media" ? (
                       <Block icon={Upload} title="Fotos, GIFs, videos ou arquivos" tone="cyan">
                         <label className="flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed px-3 text-center text-[12px] text-slate-400 transition hover:border-cyan-300/60 hover:text-cyan-200" style={{ borderColor: "var(--ch-border)" }}>
                           <Upload className="h-4 w-4" />
@@ -1036,7 +1080,9 @@ export function PlatformProductsConsole({
                           </div>
                         ) : null}
                       </Block>
+                      ) : null}
 
+                      {productFormTab === "agent" ? (
                       <Block icon={CheckCircle2} title="Agente e venda" tone="cyan">
                         <Field label="Tag">
                           <input value={draft.agentTag} onChange={(event) => patchDraft({ agentTag: event.target.value.slice(0, 120) })} className="h-10 w-full rounded-xl px-3 font-mono text-[12px] outline-none" placeholder="Automatico se vazio" style={inputStyle} />
@@ -1050,10 +1096,11 @@ export function PlatformProductsConsole({
                           </Field>
                         </div>
                       </Block>
+                      ) : null}
                     </>
                   ) : null}
 
-                  {activeTab === "products" ? (
+                  {activeTab === "products" && productFormTab === "delivery" ? (
                     <Block icon={Truck} title="Entrega deste item" tone="green">
                       <div className="grid gap-3 md:grid-cols-4">
                         <Field label="Tipo">
@@ -1094,7 +1141,7 @@ export function PlatformProductsConsole({
                     </Block>
                   ) : null}
 
-                  {activeTab === "products" ? (
+                  {activeTab === "products" && productFormTab === "advanced" ? (
                     <>
                       <Block id="platform-products-tour-marketplace" icon={PackagePlus} title="Produto no marketplace" tone="cyan">
                         <div className="grid gap-3 md:grid-cols-[1fr_1fr_160px_170px]">
@@ -1617,6 +1664,40 @@ function NumberField({ label, value, onChange, step, allowBlank = false, help }:
     <Field label={label} help={help}>
       <input type="number" min="0" step={step} value={value} onChange={(event) => onChange(allowBlank && event.target.value === "" ? "" : event.target.value)} className="h-10 w-full rounded-xl px-3 font-mono text-[13px] outline-none" style={inputStyle} />
     </Field>
+  );
+}
+
+function ProductFormTabs({
+  activeTab,
+  onChange,
+  tabs,
+}: {
+  activeTab: PlatformProductFormTab;
+  onChange: (tab: PlatformProductFormTab) => void;
+  tabs: Array<{ id: PlatformProductFormTab; label: string; icon: LucideIcon }>;
+}) {
+  return (
+    <div className="grid grid-cols-2 gap-1.5 rounded-xl border p-1.5 sm:grid-cols-4 lg:grid-cols-7" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+      {tabs.map((tab) => {
+        const Icon = tab.icon;
+        const active = activeTab === tab.id;
+
+        return (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => onChange(tab.id)}
+            className={cn(
+              "inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg border px-2 font-mono text-[9px] font-bold uppercase tracking-wide transition",
+              active ? "border-cyan-300/50 bg-cyan-300/15 text-cyan-100" : "border-transparent text-slate-500 hover:bg-white/[0.035] hover:text-slate-200",
+            )}
+          >
+            <Icon className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">{tab.label}</span>
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
