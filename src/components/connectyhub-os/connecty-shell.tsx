@@ -922,19 +922,13 @@ function BillingAccessLockOverlay({ status }: { status: BillingAccessClientStatu
           Seus dados continuam salvos. Para voltar a criar agentes, conectar WhatsApp, usar IA, voz, campanhas e automacoes, escolha um plano ou adicione creditos.
         </div>
 
-        <div className="mt-5 grid gap-2 sm:grid-cols-[1fr_auto]">
+        <div className="mt-5">
           <a
             href={status.ctaHref}
-            className="inline-flex min-h-11 items-center justify-center rounded-xl px-4 text-[13px] font-bold transition hover:opacity-90"
+            className="inline-flex min-h-11 w-full items-center justify-center rounded-xl px-4 text-[13px] font-bold transition hover:opacity-90"
             style={{ background: tone.color, color: "#061015" }}
           >
             {status.ctaLabel}
-          </a>
-          <a
-            href="/auth/signout"
-            className="inline-flex min-h-11 items-center justify-center rounded-xl border border-white/15 px-4 text-[13px] font-semibold text-slate-200 transition hover:bg-white/10"
-          >
-            Sair
           </a>
         </div>
       </div>
