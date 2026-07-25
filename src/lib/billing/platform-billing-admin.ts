@@ -343,7 +343,10 @@ export async function getPlatformBillingOperationsCatalog(): Promise<PlatformBil
   const orgIds = collectOrganizationIds(paymentsResult.data ?? [], subscriptionsResult.data ?? [], notificationsResult.data ?? []);
   const organizationMap = await loadOrganizationMap(client, orgIds);
   const payments = (paymentsResult.data ?? []).map((payment) => mapPayment(payment, organizationMap));
-  const subscriptions = (subscriptionsResult.data ?? []).map((subscription) => mapSubscription(subscription, organizationMap));
+  const pendingCheckoutSubscriptionIds = collectPendingCheckoutSubscriptionIds(payments);
+  const subscriptions = (subscriptionsResult.data ?? [])
+    .map((subscription) => mapSubscription(subscription, organizationMap))
+    .filter((subscription) => shouldShowSubscriptionInOperations(subscription, pendingCheckoutSubscriptionIds));
   const notifications = notificationsResult.error
     ? []
     : (notificationsResult.data ?? []).map((notification) => mapNotification(notification, organizationMap, agentNameById));
@@ -518,6 +521,31 @@ function mapSubscription(row: BillingSubscriptionRow, organizations: Map<string,
   };
 }
 
+function collectPendingCheckoutSubscriptionIds(payments: PlatformBillingPaymentItem[]) {
+  return new Set(
+    payments
+      .filter((payment) => payment.subscriptionId && isOpenPaymentStatus(payment.status))
+      .map((payment) => payment.subscriptionId as string),
+  );
+}
+
+function shouldShowSubscriptionInOperations(
+  subscription: PlatformBillingSubscriptionItem,
+  pendingCheckoutSubscriptionIds: Set<string>,
+) {
+  const status = subscription.status.toLowerCase();
+
+  if (status === "canceled" || status === "cancelled") {
+    return false;
+  }
+
+  if ((status === "pending" || status === "incomplete") && pendingCheckoutSubscriptionIds.has(subscription.id)) {
+    return false;
+  }
+
+  return true;
+}
+
 function mapNotification(
   row: BillingNotificationRow,
   organizations: Map<string, OrganizationRow>,
@@ -609,6 +637,10 @@ function readCheckoutUrl(metadata: JsonRecord | null | undefined) {
 
 function readString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function isOpenPaymentStatus(status: string) {
+  return status === "pending" || status === "in_process";
 }
 
 function toNumber(value: number | string | null | undefined) {

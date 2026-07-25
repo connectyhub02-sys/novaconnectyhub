@@ -779,8 +779,8 @@ function HistoryPanels({
 
       <div className="grid gap-3 xl:grid-cols-2">
         <Panel
-          title="Assinaturas"
-          eyebrow="recorrencia"
+          title="Assinaturas ativas"
+          eyebrow="recorrencia confirmada"
           compact
           action={<StatusBadge status={catalog.stats.activeSubscriptions > 0 ? "online" : "idle"} label={`${catalog.stats.activeSubscriptions} ativas`} />}
         >
@@ -802,7 +802,7 @@ function HistoryPanels({
               ])}
             />
           ) : (
-            <EmptyState icon={<CreditCard className="h-4 w-4" />} text="Sem assinaturas recentes." />
+            <EmptyState icon={<CreditCard className="h-4 w-4" />} text="Sem assinaturas ativas ou recorrencias confirmadas." />
           )}
         </Panel>
 
