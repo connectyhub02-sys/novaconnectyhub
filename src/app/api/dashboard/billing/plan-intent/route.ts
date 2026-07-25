@@ -127,7 +127,7 @@ export async function POST(request: NextRequest) {
 
         return NextResponse.json(
           {
-            error: "Mudanca de plano com assinatura ativa sera liberada na proxima etapa, sem sair do painel.",
+            error: "Mudanca de plano com assinatura ativa sera liberada na proxima etapa.",
           },
           { status: 409 },
         );
@@ -252,7 +252,7 @@ export async function POST(request: NextRequest) {
       paymentId,
       planCode: plan.plan_code,
       checkoutUrl: checkoutPath,
-      message: "Checkout criado. Conclua o pagamento sem sair do painel.",
+      message: "Checkout criado. Finalize o pagamento para ativar seu plano.",
     });
   } catch (error) {
     return NextResponse.json(

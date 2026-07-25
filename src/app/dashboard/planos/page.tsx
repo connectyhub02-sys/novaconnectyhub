@@ -41,10 +41,10 @@ export default async function DashboardPlanosPage() {
               Billing / planos
             </div>
             <h1 className="mt-3 text-[28px] font-black leading-tight text-white sm:text-[36px]">
-              Escolha o plano sem sair do painel.
+              Escolha o plano ideal para sua operacao.
             </h1>
             <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">
-              Compare creditos, agentes, WhatsApps e recursos. Upgrade e downgrade ficam registrados aqui no painel para a ativacao do plano.
+              Compare creditos, agentes, WhatsApps e recursos. Ative, finalize ou troque seu plano com seguranca quando sua operacao precisar crescer.
             </p>
           </div>
           <div className="rounded-xl border border-white/10 bg-white/[0.045] px-4 py-3 font-mono text-[11px] uppercase tracking-wide text-slate-400">
