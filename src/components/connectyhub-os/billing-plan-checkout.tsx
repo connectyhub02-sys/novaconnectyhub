@@ -175,11 +175,17 @@ export function BillingPlanCheckout({
         </div>
 
         {availableBumps.length > 0 ? (
-        <div className="rounded-[8px] border border-white/10 bg-slate-950/72 p-5">
-          <div className="flex items-center justify-between gap-3">
+        <div className="relative overflow-hidden rounded-[8px] border border-emerald-400/35 bg-slate-950/72 p-5 shadow-[0_0_34px_rgba(16,185,129,0.11)]">
+          <div className="pointer-events-none absolute inset-2 rounded-[8px] border border-dashed border-emerald-300/20" />
+          <div className="relative flex items-center justify-between gap-3">
             <div>
-              <div className="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-emerald-300">
-                Order bumps
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-emerald-300">
+                  Order bumps
+                </div>
+                <span className="rounded-full border border-emerald-300/25 bg-emerald-400/10 px-2 py-1 font-mono text-[9px] font-bold uppercase tracking-wide text-emerald-100">
+                  Oferta extra no checkout
+                </span>
               </div>
               <h3 className="mt-2 text-lg font-bold text-white">Aumente seu saldo de creditos</h3>
               <p className="mt-2 max-w-2xl text-xs leading-5 text-slate-400">
@@ -189,7 +195,12 @@ export function BillingPlanCheckout({
             <Sparkles className="h-5 w-5 text-emerald-300" />
           </div>
 
-          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <div className="relative mt-4 flex items-center gap-3">
+            <span className="h-px flex-1 bg-gradient-to-r from-emerald-300/50 via-cyan-300/20 to-transparent" />
+            <span className="font-mono text-[9px] font-bold uppercase tracking-[0.18em] text-emerald-100/80">1 clique para adicionar</span>
+          </div>
+
+          <div className="relative mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
             {availableBumps.map((bump) => {
               const selected = selectedBumpCodes.includes(bump.code);
 
@@ -202,8 +213,8 @@ export function BillingPlanCheckout({
                   className={cn(
                     "flex min-h-[168px] flex-col rounded-[8px] border p-3 text-left transition",
                     selected
-                      ? "border-emerald-300/70 bg-emerald-400/12 shadow-lg shadow-emerald-950/30"
-                      : "border-slate-700 bg-slate-900/70 hover:border-cyan-300/40",
+                      ? "border-emerald-300/80 bg-emerald-400/12 shadow-lg shadow-emerald-950/30"
+                      : "border-slate-700 bg-slate-900/70 hover:border-emerald-300/45 hover:bg-slate-900",
                     !canPay ? "cursor-not-allowed opacity-60" : "",
                   )}
                 >
@@ -219,9 +230,9 @@ export function BillingPlanCheckout({
                   {bump.media ? (
                     <OrderBumpMediaPreview bump={bump} />
                   ) : null}
-                  <p className="mt-4 text-sm font-bold text-white">{bump.title}</p>
-                  <p className="mt-2 text-xs leading-5 text-slate-400">{bump.description}</p>
-                  <p className="mt-4 font-mono text-sm font-black text-cyan-100">
+                  <p className="mt-3 line-clamp-2 min-h-10 text-sm font-bold leading-5 text-white">{bump.title}</p>
+                  <p className="mt-1.5 line-clamp-2 min-h-10 text-xs leading-5 text-slate-400">{bump.description}</p>
+                  <p className="mt-auto pt-3 font-mono text-sm font-black text-cyan-100">
                     {formatMoney(bump.priceBrl)}
                     <span className="ml-1 text-[10px] font-semibold text-slate-500">
                       {bump.recurrence === "monthly" ? "/mes" : "unico"}
@@ -327,11 +338,11 @@ function OrderBumpMediaPreview({ bump }: { bump: BillingCheckoutBump }) {
   if (!media) return null;
 
   return (
-    <div className="relative mt-3 grid h-52 place-items-center overflow-hidden rounded-[8px] border border-white/10 bg-slate-950/90 p-2 sm:h-56 xl:h-52">
+    <div className="relative mt-3 aspect-square w-full overflow-hidden rounded-[8px] border border-white/10 bg-slate-950/90">
       {media.kind === "video" ? (
         <video
           aria-label={bump.title}
-          className="h-full w-full object-contain"
+          className="h-full w-full object-cover"
           muted
           playsInline
           preload="metadata"
@@ -340,9 +351,9 @@ function OrderBumpMediaPreview({ bump }: { bump: BillingCheckoutBump }) {
       ) : (
         <Image
           alt={bump.title}
-          className="object-contain"
+          className="object-cover"
           fill
-          sizes="(max-width: 767px) 100vw, (max-width: 1279px) 50vw, 360px"
+          sizes="(max-width: 767px) 100vw, (max-width: 1279px) 50vw, (max-width: 1535px) 33vw, 260px"
           src={media.storageUrl}
           unoptimized
         />
