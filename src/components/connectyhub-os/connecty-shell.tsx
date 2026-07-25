@@ -270,6 +270,7 @@ export function ConnectyShell({
   const [billingAccess, setBillingAccess] = useState<BillingAccessClientStatus | null>(null);
   const [accountCompletion, setAccountCompletion] = useState<AccountCompletionClientStatus | null>(null);
   const [accountCompletionDismissed, setAccountCompletionDismissed] = useState(false);
+  const accountCompletionPending = mode === "client" && accountCompletion?.isComplete === false;
 
   const setNotificationGroup = useCallback((source: string, notifications: ConnectyShellNotification[]) => {
     setNotificationGroups((current) => {
@@ -784,7 +785,9 @@ export function ConnectyShell({
               ) : null}
             </div>
 
-            {mode === "client" ? <CreditBalancePill status={billingAccess} /> : null}
+            {mode === "client" ? (
+              accountCompletionPending ? <AccountCompletionPill /> : <CreditBalancePill status={billingAccess} />
+            ) : null}
 
             {/* Mode switch */}
             {canSwitch && (
@@ -912,13 +915,15 @@ export function ConnectyShell({
         {/* Content */}
         <main className="flex-1 overflow-auto">
           {mode === "client" ? <AdminImpersonationBanner /> : null}
-          {mode === "client" ? <BillingStatusBanner status={billingAccess} /> : null}
+          {mode === "client" && !accountCompletionPending ? <BillingStatusBanner status={billingAccess} /> : null}
           <div className="connecty-shell-content mx-auto w-full max-w-[1680px] px-3 pt-4 sm:px-4 sm:pt-5 lg:px-8 lg:py-6">
             {children}
           </div>
         </main>
       </div>
-      {mode === "client" && active !== "/dashboard/planos" ? <BillingAccessLockOverlay status={billingAccess} /> : null}
+      {mode === "client" && !accountCompletionPending && active !== "/dashboard/planos" ? (
+        <BillingAccessLockOverlay status={billingAccess} />
+      ) : null}
       {mode === "client" ? (
         <AccountCompletionModal
           key={accountCompletion
@@ -960,6 +965,24 @@ function CreditBalancePill({ status }: { status: BillingAccessClientStatus | nul
       <Coins className="h-3.5 w-3.5" />
       <span className="hidden sm:inline">Creditos</span>
       <span>{label}</span>
+    </div>
+  );
+}
+
+function AccountCompletionPill() {
+  return (
+    <div
+      className="flex h-8 shrink-0 items-center gap-2 rounded-lg px-2.5 font-mono text-[10px] font-bold uppercase tracking-wide sm:px-3"
+      title="Cadastro pendente"
+      style={{
+        background: "rgba(251,113,133,0.14)",
+        border: "1px solid rgba(251,113,133,0.42)",
+        color: "#fb7185",
+      }}
+    >
+      <UserCheck className="h-3.5 w-3.5" />
+      <span className="hidden sm:inline">Cadastro</span>
+      <span>Pendente</span>
     </div>
   );
 }
