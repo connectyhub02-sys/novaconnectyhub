@@ -72,7 +72,7 @@ export function AuthCard({
       }
 
       if (isSignup) {
-        const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(nextPath)}`;
+        const redirectTo = buildAuthCallbackUrl(nextPath);
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
@@ -152,7 +152,7 @@ export function AuthCard({
 
     try {
       const supabase = createClient();
-      const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(nextPath)}`;
+      const redirectTo = buildAuthCallbackUrl(nextPath);
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
@@ -470,6 +470,15 @@ function GoogleLogoIcon() {
       />
     </svg>
   );
+}
+
+function buildAuthCallbackUrl(nextPath: string) {
+  const configuredBaseUrl = process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/$/, "");
+  const baseUrl = configuredBaseUrl && /^https?:\/\//i.test(configuredBaseUrl)
+    ? configuredBaseUrl
+    : window.location.origin;
+
+  return `${baseUrl}/auth/callback?next=${encodeURIComponent(nextPath)}`;
 }
 
 function resolvePostLoginPath(nextPath: string, rolePath?: string) {
