@@ -54,6 +54,7 @@ import {
   readAdminImpersonationReturn,
   type AdminImpersonationReturn,
 } from "@/lib/admin-impersonation";
+import { formatBrazilPhoneInput, formatCpfInput, normalizeBrazilPhoneForApi } from "@/lib/account/input-format";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
@@ -999,7 +1000,7 @@ function AccountCompletionModal({
   onCompleted: (status: AccountCompletionClientStatus) => void;
 }) {
   const [fullName, setFullName] = useState(status?.fullName ?? "");
-  const [phone, setPhone] = useState(status?.phone ?? "");
+  const [phone, setPhone] = useState(formatBrazilPhoneInput(status?.phone ?? ""));
   const [cpf, setCpf] = useState("");
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
@@ -1019,6 +1020,12 @@ function AccountCompletionModal({
     setMessage(null);
 
     try {
+      const phoneForVerification = normalizeBrazilPhoneForApi(phone);
+
+      if (!phoneForVerification) {
+        throw new Error("Informe um WhatsApp valido com DDD. Ex.: (47) 99999-9999.");
+      }
+
       if (password.trim()) {
         if (password.trim().length < 6) {
           throw new Error("A senha precisa ter no minimo 6 caracteres.");
@@ -1050,7 +1057,9 @@ function AccountCompletionModal({
         throw new Error(profileData?.error ?? "Nao foi possivel salvar o cadastro.");
       }
 
-      if (profileData.accountCompletion.isComplete && status?.phone === phone) {
+      const currentPhoneNormalized = status?.phoneNormalized ?? normalizeBrazilPhoneForApi(status?.phone);
+
+      if (profileData.accountCompletion.isComplete && currentPhoneNormalized === phoneForVerification) {
         onCompleted(profileData.accountCompletion);
         return;
       }
@@ -1058,7 +1067,7 @@ function AccountCompletionModal({
       const phoneResponse = await fetch("/api/account/phone-verification/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone }),
+        body: JSON.stringify({ phone: phoneForVerification }),
       });
       const phoneData = (await phoneResponse.json().catch(() => null)) as { error?: string } | null;
 
@@ -1152,8 +1161,23 @@ function AccountCompletionModal({
         {step === "profile" ? (
           <form className="mt-5 grid gap-3" onSubmit={handleProfileSubmit}>
             <AccountCompletionInput label="Nome completo" onChange={setFullName} placeholder="Seu nome completo" value={fullName} />
-            <AccountCompletionInput label="WhatsApp" onChange={setPhone} placeholder="(47) 99999-9999" type="tel" value={phone} />
-            <AccountCompletionInput label="CPF" onChange={setCpf} placeholder={status.cpfPreview ?? "000.000.000-00"} value={cpf} />
+            <AccountCompletionInput
+              inputMode="tel"
+              label="WhatsApp"
+              maxLength={19}
+              onChange={(value) => setPhone(formatBrazilPhoneInput(value))}
+              placeholder="(47) 99999-9999"
+              type="tel"
+              value={phone}
+            />
+            <AccountCompletionInput
+              inputMode="numeric"
+              label="CPF"
+              maxLength={14}
+              onChange={(value) => setCpf(formatCpfInput(value))}
+              placeholder={status.cpfPreview ?? "000.000.000-00"}
+              value={cpf}
+            />
             <AccountCompletionInput
               label="Criar senha"
               onChange={setPassword}
@@ -1173,7 +1197,14 @@ function AccountCompletionModal({
           </form>
         ) : (
           <form className="mt-5 grid gap-3" onSubmit={handleCodeSubmit}>
-            <AccountCompletionInput label="Codigo recebido no WhatsApp" onChange={setCode} placeholder="000000" value={code} />
+            <AccountCompletionInput
+              inputMode="numeric"
+              label="Codigo recebido no WhatsApp"
+              maxLength={6}
+              onChange={(value) => setCode(value.replace(/\D/g, "").slice(0, 6))}
+              placeholder="000000"
+              value={code}
+            />
             <AccountCompletionFeedback error={error} message={message} />
             <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
               <button
@@ -1213,13 +1244,17 @@ function AccountCompletionBadge({ label, ok }: { label: string; ok: boolean }) {
 }
 
 function AccountCompletionInput({
+  inputMode,
   label,
+  maxLength,
   onChange,
   placeholder,
   type = "text",
   value,
 }: {
+  inputMode?: "none" | "text" | "tel" | "url" | "email" | "numeric" | "decimal" | "search";
   label: string;
+  maxLength?: number;
   onChange: (value: string) => void;
   placeholder: string;
   type?: string;
@@ -1232,6 +1267,8 @@ function AccountCompletionInput({
       </span>
       <input
         className="h-11 w-full rounded-xl border border-slate-500/32 bg-slate-950/45 px-3 text-sm text-white outline-none placeholder:text-slate-600 focus:border-cyan-300/50"
+        inputMode={inputMode}
+        maxLength={maxLength}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
         required={label !== "Criar senha"}

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
 import { ArrowRight, CheckCircle2, Loader2, LockKeyhole, Mail, Phone, UserRound } from "lucide-react";
 import { ConnectyLogo } from "@/components/brand/connecty-logo";
+import { formatBrazilPhoneInput, formatCpfInput, normalizeBrazilPhoneForApi } from "@/lib/account/input-format";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
@@ -52,6 +53,14 @@ export function AuthCard({
       const supabase = createClient();
 
       if (awaitingPhoneVerification) {
+        const phoneForVerification = normalizeBrazilPhoneForApi(phone);
+
+        if (!phoneForVerification) {
+          setStatus("error");
+          setMessage("Informe um WhatsApp valido com DDD. Ex.: (47) 99999-9999.");
+          return;
+        }
+
         const response = await fetch("/api/account/phone-verification/verify", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -72,6 +81,14 @@ export function AuthCard({
       }
 
       if (isSignup) {
+        const phoneForVerification = normalizeBrazilPhoneForApi(phone);
+
+        if (!phoneForVerification) {
+          setStatus("error");
+          setMessage("Informe um WhatsApp valido com DDD. Ex.: (47) 99999-9999.");
+          return;
+        }
+
         const redirectTo = buildAuthCallbackUrl(nextPath);
         const { data, error } = await supabase.auth.signUp({
           email,
@@ -80,7 +97,7 @@ export function AuthCard({
             emailRedirectTo: redirectTo,
             data: {
               full_name: fullName,
-              phone,
+              phone: phoneForVerification,
               password_set_at: new Date().toISOString(),
               trial_whatsapp_opt_in: trialWhatsappOptIn,
               trial_whatsapp_opt_in_at: trialWhatsappOptIn ? new Date().toISOString() : null,
@@ -111,7 +128,7 @@ export function AuthCard({
             cpf,
             passwordSet: true,
           });
-          await requestPhoneVerification(phone);
+          await requestPhoneVerification(phoneForVerification);
           setAwaitingPhoneVerification(true);
           setStatus("success");
           setMessage("Enviamos um codigo para seu WhatsApp. Confirme para liberar o teste gratis.");
@@ -178,7 +195,13 @@ export function AuthCard({
     setMessage("");
 
     try {
-      await requestPhoneVerification(phone);
+      const phoneForVerification = normalizeBrazilPhoneForApi(phone);
+
+      if (!phoneForVerification) {
+        throw new Error("Informe um WhatsApp valido com DDD. Ex.: (47) 99999-9999.");
+      }
+
+      await requestPhoneVerification(phoneForVerification);
       setStatus("success");
       setMessage("Codigo reenviado para seu WhatsApp.");
     } catch (error) {
@@ -276,7 +299,9 @@ export function AuthCard({
                       icon={Phone}
                       label="WhatsApp"
                       name="phone"
-                      onChange={setPhone}
+                      inputMode="tel"
+                      maxLength={19}
+                      onChange={(value) => setPhone(formatBrazilPhoneInput(value))}
                       placeholder="(47) 99999-9999"
                       type="tel"
                       value={phone}
@@ -285,7 +310,9 @@ export function AuthCard({
                       icon={CheckCircle2}
                       label="CPF"
                       name="cpf"
-                      onChange={setCpf}
+                      inputMode="numeric"
+                      maxLength={14}
+                      onChange={(value) => setCpf(formatCpfInput(value))}
                       placeholder="000.000.000-00"
                       value={cpf}
                     />
@@ -307,7 +334,9 @@ export function AuthCard({
                       icon={Phone}
                       label="WhatsApp"
                       name="phone"
-                      onChange={setPhone}
+                      inputMode="tel"
+                      maxLength={19}
+                      onChange={(value) => setPhone(formatBrazilPhoneInput(value))}
                       placeholder="(47) 99999-9999"
                       type="tel"
                       value={phone}
@@ -316,7 +345,9 @@ export function AuthCard({
                       icon={CheckCircle2}
                       label="Codigo"
                       name="verification_code"
-                      onChange={setVerificationCode}
+                      inputMode="numeric"
+                      maxLength={6}
+                      onChange={(value) => setVerificationCode(value.replace(/\D/g, "").slice(0, 6))}
                       placeholder="000000"
                       value={verificationCode}
                     />
@@ -495,12 +526,16 @@ function FormField({
   name,
   onChange,
   placeholder,
+  inputMode,
+  maxLength,
   type = "text",
   value,
 }: {
   icon: LucideIcon;
   label: string;
   name: string;
+  inputMode?: "none" | "text" | "tel" | "url" | "email" | "numeric" | "decimal" | "search";
+  maxLength?: number;
   onChange: (value: string) => void;
   placeholder: string;
   type?: string;
@@ -514,6 +549,8 @@ function FormField({
         <input
           autoComplete={name}
           className="min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-zinc-700"
+          inputMode={inputMode}
+          maxLength={maxLength}
           name={name}
           onChange={(event) => onChange(event.target.value)}
           placeholder={placeholder}
