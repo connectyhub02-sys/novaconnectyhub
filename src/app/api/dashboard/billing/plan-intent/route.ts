@@ -83,15 +83,13 @@ export async function POST(request: NextRequest) {
     const existingSubscription = await loadBlockingSubscription(client, workspace.organization.id);
 
     if (existingSubscription) {
-      const existingCheckoutUrl = readCheckoutUrl(existingSubscription.metadata);
-
       if (isPendingSubscription(existingSubscription.status)) {
         if (existingSubscription.plan_code === plan.plan_code) {
           return NextResponse.json({
             ok: true,
             subscriptionId: existingSubscription.id,
             planCode: existingSubscription.plan_code,
-            checkoutUrl: existingCheckoutUrl ?? buildDashboardBillingCheckoutPath(existingSubscription.id),
+            checkoutUrl: buildDashboardBillingCheckoutPath(existingSubscription.id),
             message: "Ja existe um checkout deste plano em aberto. Vamos te levar para concluir pelo painel.",
           });
         }
@@ -283,18 +281,6 @@ async function loadBlockingSubscription(client: ReturnType<typeof createServiceC
   }
 
   return data?.[0] ?? null;
-}
-
-function readCheckoutUrl(metadata: JsonRecord | null) {
-  const value = metadata?.checkout_url;
-
-  if (typeof value !== "string" || !value.trim()) {
-    return null;
-  }
-
-  return /^https?:\/\//i.test(value) || value.startsWith("/dashboard/planos/checkout/")
-    ? value
-    : null;
 }
 
 function isPendingSubscription(status: string) {
