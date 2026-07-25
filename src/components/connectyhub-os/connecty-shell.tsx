@@ -919,7 +919,7 @@ function BillingAccessLockOverlay({ status }: { status: BillingAccessClientStatu
         </div>
 
         <div className="mt-5 rounded-xl border border-white/10 bg-white/[0.045] px-4 py-3 text-[12px] leading-5 text-slate-400">
-          Seus dados continuam salvos. Para voltar a criar agentes, conectar WhatsApp, usar IA, voz, campanhas e automacoes, escolha um plano ou adicione creditos.
+          {lockSupportText(status)}
         </div>
 
         <div className="mt-5">
@@ -950,6 +950,22 @@ function lockReasonLabel(state: BillingAccessClientStatus["state"]) {
   if (state === "trial_no_credits" || state === "paid_no_credits") return "creditos zerados";
   if (state === "paid_expired") return "plano vencido";
   return "acesso bloqueado";
+}
+
+function lockSupportText(status: BillingAccessClientStatus) {
+  if (status.state === "trial_expired" && status.balanceCredits > 0) {
+    return `Seus ${formatShellCredits(status.balanceCredits)} creditos ficaram guardados. Escolha um plano para somar esse saldo aos novos creditos e voltar a operar.`;
+  }
+
+  if (status.state === "paid_expired" && status.balanceCredits > 0) {
+    return `Seus ${formatShellCredits(status.balanceCredits)} creditos continuam guardados, mas ficam congelados enquanto o plano estiver vencido.`;
+  }
+
+  if (status.state === "trial_no_credits" || status.state === "paid_no_credits") {
+    return "Seus dados continuam salvos. Adicione creditos ou escolha um plano para liberar atendimentos, IA, voz, campanhas e automacoes.";
+  }
+
+  return "Seus dados continuam salvos. Para voltar a criar agentes, conectar WhatsApp, usar IA, voz, campanhas e automacoes, escolha um plano ativo.";
 }
 
 function BillingStatusBanner({ status }: { status: BillingAccessClientStatus | null }) {

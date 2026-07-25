@@ -6,6 +6,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 export const TRIAL_PLAN_CODE = "trial";
 export const TRIAL_DAYS = 7;
 export const TRIAL_INCLUDED_CREDITS = 1000;
+export const TRIAL_CREDIT_CONVERSION_GRACE_DAYS = 7;
 export const LOW_CREDIT_PERCENT = 20;
 
 export type BillingAccessState =
@@ -253,7 +254,9 @@ export async function getOrganizationBillingAccess(input: {
       lowCreditThreshold,
       bannerTone: "rose",
       bannerTitle: "Teste gratis encerrado",
-      bannerDescription: "Seu teste de 7 dias acabou. Seus dados continuam salvos, mas os agentes e recursos com custo estao pausados.",
+      bannerDescription: balanceCredits > 0
+        ? `Seu teste de 7 dias acabou. ${formatCredits(balanceCredits)} creditos ficaram guardados. Assine em ate ${TRIAL_CREDIT_CONVERSION_GRACE_DAYS} dias para somar esse saldo ao novo plano.`
+        : "Seu teste de 7 dias acabou. Seus dados continuam salvos, mas os agentes e recursos com custo estao pausados ate voce escolher um plano.",
       ctaLabel: "Escolher plano",
       ctaHref: "/dashboard/planos",
     };
@@ -276,7 +279,7 @@ export async function getOrganizationBillingAccess(input: {
       lowCreditThreshold,
       bannerTone: "rose",
       bannerTitle: "Creditos de teste acabaram",
-      bannerDescription: "Voce ainda pode mexer no painel, mas os atendimentos automaticos, IA e voz ficam pausados ate assinar um plano.",
+      bannerDescription: "Voce ainda pode mexer no painel, mas atendimentos automaticos, IA e voz ficam pausados. Ao assinar, os creditos do plano entram na hora.",
       ctaLabel: "Assinar agora",
       ctaHref: "/dashboard/planos",
     };
@@ -299,7 +302,7 @@ export async function getOrganizationBillingAccess(input: {
       lowCreditThreshold,
       bannerTone: "amber",
       bannerTitle: "Creditos de teste quase acabando",
-      bannerDescription: `Restam ${formatCredits(balanceCredits)} creditos. Para continuar atendendo sem pausa, escolha um plano.`,
+      bannerDescription: `Restam ${formatCredits(balanceCredits)} creditos. Se voce assinar agora, esse saldo soma aos creditos do plano escolhido.`,
       ctaLabel: "Ver planos",
       ctaHref: "/dashboard/planos",
     };
@@ -322,7 +325,7 @@ export async function getOrganizationBillingAccess(input: {
       lowCreditThreshold,
       bannerTone: "green",
       bannerTitle: "Teste gratis ativo",
-      bannerDescription: `${trialDaysRemaining ?? TRIAL_DAYS} dia${trialDaysRemaining === 1 ? "" : "s"} restante${trialDaysRemaining === 1 ? "" : "s"} e ${formatCredits(balanceCredits)} creditos disponiveis.`,
+      bannerDescription: `${trialDaysRemaining ?? TRIAL_DAYS} dia${trialDaysRemaining === 1 ? "" : "s"} restante${trialDaysRemaining === 1 ? "" : "s"} e ${formatCredits(balanceCredits)} creditos disponiveis. Se assinar durante o teste, o saldo restante soma ao plano.`,
       ctaLabel: "Ver planos",
       ctaHref: "/dashboard/planos",
     };
@@ -345,7 +348,9 @@ export async function getOrganizationBillingAccess(input: {
       lowCreditThreshold: 0,
       bannerTone: "rose",
       bannerTitle: "Plano vencido",
-      bannerDescription: "Seu plano venceu. O painel continua acessivel, mas os recursos ficam bloqueados ate renovar ou migrar de plano.",
+      bannerDescription: balanceCredits > 0
+        ? `Seu plano venceu. ${formatCredits(balanceCredits)} creditos continuam guardados, mas ficam congelados ate renovar ou migrar de plano.`
+        : "Seu plano venceu. O painel continua acessivel, mas os recursos ficam bloqueados ate renovar ou migrar de plano.",
       ctaLabel: "Renovar plano",
       ctaHref: "/dashboard/planos",
     };
@@ -390,7 +395,7 @@ export async function getOrganizationBillingAccess(input: {
     lowCreditThreshold: 0,
     bannerTone: "cyan",
     bannerTitle: "Plano ativo",
-    bannerDescription: `${formatCredits(balanceCredits)} creditos disponiveis para IA, voz e atendimentos automaticos.`,
+    bannerDescription: `${formatCredits(balanceCredits)} creditos acumulados disponiveis para IA, voz e atendimentos automaticos.`,
     ctaLabel: "Comprar creditos",
     ctaHref: "/dashboard/planos",
   };
@@ -500,8 +505,13 @@ function isPaidPlanExpired(status: string | null) {
   return normalized === "expired"
     || normalized === "past_due"
     || normalized === "cancelled"
+    || normalized === "canceled"
     || normalized === "inactive"
-    || normalized === "suspended";
+    || normalized === "suspended"
+    || normalized === "paused"
+    || normalized === "pending"
+    || normalized === "payment_pending"
+    || normalized === "incomplete";
 }
 
 function positiveLimit(value: number | string | null | undefined, fallback: number) {

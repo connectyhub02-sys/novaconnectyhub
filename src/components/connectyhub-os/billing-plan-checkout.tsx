@@ -160,7 +160,7 @@ export function BillingPlanCheckout({
               </div>
               <h2 className="mt-2 text-2xl font-black text-white">{planName}</h2>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">
-                Plano {planCode} com {formatCredits(includedCredits)} creditos inclusos. Escolha adicionais antes de pagar.
+                Plano {planCode} com {formatCredits(includedCredits)} creditos inclusos. Saldos anteriores continuam na carteira e somam ao plano ativo.
               </p>
             </div>
             <span className={cn(
