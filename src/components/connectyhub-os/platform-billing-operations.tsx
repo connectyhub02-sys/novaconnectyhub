@@ -315,11 +315,12 @@ export function PlatformBillingOperations({
   }
 
   return (
-    <div className="mb-5 space-y-5">
+    <div className="mb-4 space-y-3">
       <Panel
         title="Cobranca ConnectyHub"
         eyebrow="Mercado Pago / Pix Automatico / WhatsApp"
         tone="amber"
+        compact
         action={
           <div className="flex flex-wrap gap-2">
             <NeonBadge tone={catalog.credentialReadiness === 100 ? "green" : "amber"}>
@@ -334,7 +335,7 @@ export function PlatformBillingOperations({
           </div>
         }
       >
-        <div className="grid grid-cols-4 gap-1.5 sm:gap-2 xl:gap-4">
+        <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
           <BillingOpsMetric
             icon={PlugZap}
             label="Credenciais"
@@ -367,7 +368,7 @@ export function PlatformBillingOperations({
 
         {state.message ? (
           <div
-            className="mt-4 rounded-xl px-4 py-3 text-[13px] font-medium"
+            className="mt-3 rounded-xl px-3 py-2 text-[12px] font-medium"
             style={getActionMessageStyle(state.tone)}
           >
             {state.message}
@@ -376,25 +377,25 @@ export function PlatformBillingOperations({
 
         {catalog.warnings.length > 0 ? (
           <div
-            className="mt-4 rounded-xl p-4 text-[12px] leading-5 text-amber-100"
+            className="mt-3 rounded-xl p-3 text-[12px] leading-5 text-amber-100"
             style={{ background: "rgba(245,158,11,0.10)", border: "1px solid rgba(245,158,11,0.24)" }}
           >
             {catalog.warnings.slice(0, 2).join(" ")}
           </div>
         ) : null}
 
-        <div className="mt-5 grid gap-5 xl:grid-cols-[420px_1fr]">
-          <form className="space-y-4" onSubmit={saveSettings}>
+        <div className="mt-3 grid gap-3 2xl:grid-cols-[380px_minmax(0,1fr)]">
+          <form className="grid content-start gap-3" onSubmit={saveSettings}>
             <div
-              className="rounded-xl p-4"
+              className="rounded-xl p-3"
               style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
             >
-              <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+              <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <p className="text-[14px] font-semibold" style={{ color: "var(--ch-text)" }}>
+                  <p className="text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>
                     Operacao de cobranca
                   </p>
-                  <p className="mt-1 text-[12px] leading-5 text-slate-500">
+                  <p className="mt-0.5 text-[11px] leading-4 text-slate-500">
                     Agente, recorrencia e notificacoes que os webhooks vao usar.
                   </p>
                 </div>
@@ -414,7 +415,7 @@ export function PlatformBillingOperations({
                 <select
                   value={draft.billingWhatsappAgentId}
                   onChange={(event) => setDraft((current) => ({ ...current, billingWhatsappAgentId: event.target.value }))}
-                  className="h-10 w-full rounded-xl px-3 text-[13px] outline-none"
+                  className="h-9 w-full rounded-lg px-3 text-[12px] outline-none"
                   style={inputStyle}
                 >
                   <option value="">Escolha um agente conectado</option>
@@ -428,7 +429,7 @@ export function PlatformBillingOperations({
 
               {selectedAgent ? (
                 <div
-                  className="grid gap-2 rounded-xl p-3 sm:grid-cols-2"
+                  className="grid gap-2 rounded-lg p-2 sm:grid-cols-2"
                   style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}
                 >
                   <MiniValue label="WhatsApp" value={selectedAgent.phoneNumber ?? "Sem numero"} />
@@ -460,7 +461,7 @@ export function PlatformBillingOperations({
                       checkoutMode: event.target.value === "manual_review" ? "manual_review" : "subscription",
                     }))
                   }
-                  className="h-10 w-full rounded-xl px-3 text-[13px] outline-none"
+                  className="h-9 w-full rounded-lg px-3 text-[12px] outline-none"
                   style={inputStyle}
                 >
                   <option value="subscription">Assinatura recorrente Mercado Pago</option>
@@ -489,7 +490,7 @@ export function PlatformBillingOperations({
                     value={selectedTestOrganizationId}
                     onChange={(event) => setTestOrganizationId(event.target.value)}
                     disabled={testCustomers.length === 0}
-                    className="h-10 w-full rounded-xl px-3 text-[13px] outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                    className="h-9 w-full rounded-lg px-3 text-[12px] outline-none disabled:cursor-not-allowed disabled:opacity-50"
                     style={inputStyle}
                   >
                     {testCustomers.length === 0 ? (
@@ -509,7 +510,7 @@ export function PlatformBillingOperations({
                     type="button"
                     onClick={runOperationalHealth}
                     disabled={testing !== null}
-                    className="inline-flex h-9 items-center justify-center gap-2 rounded-xl px-3 text-[11px] font-bold transition disabled:cursor-not-allowed disabled:opacity-50"
+                    className="inline-flex h-8 items-center justify-center gap-2 rounded-lg px-2.5 text-[10px] font-bold transition disabled:cursor-not-allowed disabled:opacity-50"
                     style={{ background: "rgba(6,182,212,0.14)", border: "1px solid rgba(6,182,212,0.28)", color: "#67e8f9" }}
                   >
                     <Activity className="h-4 w-4" />
@@ -519,7 +520,7 @@ export function PlatformBillingOperations({
                     type="button"
                     onClick={sendOperationalNotification}
                     disabled={testing !== null || !selectedTestOrganizationId}
-                    className="inline-flex h-9 items-center justify-center gap-2 rounded-xl px-3 text-[11px] font-bold transition disabled:cursor-not-allowed disabled:opacity-50"
+                    className="inline-flex h-8 items-center justify-center gap-2 rounded-lg px-2.5 text-[10px] font-bold transition disabled:cursor-not-allowed disabled:opacity-50"
                     style={{ background: "rgba(16,185,129,0.14)", border: "1px solid rgba(16,185,129,0.26)", color: "#86efac" }}
                   >
                     <Send className="h-4 w-4" />
@@ -536,7 +537,7 @@ export function PlatformBillingOperations({
                 <button
                   type="submit"
                   disabled={saving || !canSave}
-                  className="inline-flex h-10 items-center justify-center gap-2 rounded-xl px-4 text-[12px] font-bold transition disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex h-9 items-center justify-center gap-2 rounded-lg px-3 text-[11px] font-bold transition disabled:cursor-not-allowed disabled:opacity-50"
                   style={{ background: "var(--ch-accent)", color: "#061015" }}
                 >
                   <Save className="h-4 w-4" />
@@ -544,7 +545,7 @@ export function PlatformBillingOperations({
                 </button>
                 <Link
                   href="/admin/whatsapp/atendimento"
-                  className="inline-flex h-10 items-center justify-center gap-2 rounded-xl px-4 text-[12px] font-semibold transition hover:opacity-90"
+                  className="inline-flex h-9 items-center justify-center gap-2 rounded-lg px-3 text-[11px] font-semibold transition hover:opacity-90"
                   style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)", color: "var(--ch-text)" }}
                 >
                   <MessageCircle className="h-4 w-4" />
@@ -554,11 +555,11 @@ export function PlatformBillingOperations({
             </div>
 
             <div
-              className="rounded-xl p-4"
+              className="rounded-xl p-3"
               style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
             >
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <p className="text-[14px] font-semibold" style={{ color: "var(--ch-text)" }}>
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <p className="text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>
                   Credenciais Mercado Pago
                 </p>
                 <StatusBadge
@@ -573,25 +574,11 @@ export function PlatformBillingOperations({
                 onDisconnect={disconnectMercadoPagoBilling}
               />
 
-              <div className="grid gap-2">
-                {catalog.credentials.map((field) => (
-                  <div
-                    key={field.env}
-                    className="flex items-center justify-between gap-3 rounded-lg px-3 py-2"
-                    style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}
-                  >
-                    <div className="min-w-0">
-                      <p className="truncate text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>{field.label}</p>
-                      <p className="truncate font-mono text-[9px] uppercase tracking-wider text-slate-500">{field.displayValue}</p>
-                    </div>
-                    <StatusBadge status={field.configured ? "online" : field.requirement === "required" ? "critical" : "warning"} />
-                  </div>
-                ))}
-              </div>
+              <CredentialStatusGrid credentials={catalog.credentials} />
 
               <Link
                 href="/admin/maintenance#credenciais-do-sistema"
-                className="mt-3 inline-flex h-9 items-center justify-center gap-2 rounded-xl px-3 text-[11px] font-semibold transition hover:opacity-90"
+                className="mt-2 inline-flex h-8 items-center justify-center gap-2 rounded-lg px-2.5 text-[10px] font-semibold transition hover:opacity-90"
                 style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)", color: "var(--ch-text)" }}
               >
                 <PlugZap className="h-4 w-4" />
@@ -600,7 +587,7 @@ export function PlatformBillingOperations({
             </div>
           </form>
 
-          <div className="space-y-5">
+          <div className="grid content-start gap-3">
             <PlanMappingPanel catalog={catalog} />
             <HistoryPanels
               catalog={catalog}
@@ -622,16 +609,16 @@ function PlanMappingPanel({ catalog }: { catalog: PlatformBillingOperationsCatal
       compact
       action={<StatusBadge status={catalog.stats.mappedPaidPlans === 3 ? "online" : "warning"} label={`${catalog.stats.mappedPaidPlans}/3 MP`} />}
     >
-      <div className="grid gap-3 md:grid-cols-3">
+      <div className="grid gap-2 md:grid-cols-3">
         {catalog.plans.map((plan) => (
           <div
             key={plan.id}
-            className="rounded-xl p-4"
+            className="rounded-xl p-3"
             style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
           >
-            <div className="mb-3 flex items-start justify-between gap-3">
+            <div className="mb-2 flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="truncate text-[14px] font-semibold" style={{ color: "var(--ch-text)" }}>{plan.name}</p>
+                <p className="truncate text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>{plan.name}</p>
                 <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">{plan.planCode}</p>
               </div>
               <StatusBadge status={plan.mercadoPagoPreapprovalPlanId ? "online" : "warning"} />
@@ -640,7 +627,7 @@ function PlanMappingPanel({ catalog }: { catalog: PlatformBillingOperationsCatal
               <MiniValue label="Mensal" value={formatMoney(plan.monthlyPriceBrl)} />
               <MiniValue label="Creditos" value={formatCredits(plan.includedCredits)} />
             </div>
-            <p className="mt-3 truncate font-mono text-[10px] text-slate-500">
+            <p className="mt-2 truncate font-mono text-[9px] text-slate-500">
               {plan.mercadoPagoPreapprovalPlanId ?? "Sem preapproval_plan_id"}
             </p>
           </div>
@@ -661,7 +648,7 @@ function MercadoPagoBillingConnectionCard({
 }) {
   return (
     <div
-      className="mb-3 rounded-xl p-3"
+      className="mb-2 rounded-xl p-3"
       style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -678,7 +665,7 @@ function MercadoPagoBillingConnectionCard({
         <StatusBadge status={connection.connected ? "online" : "warning"} label={connection.connected ? "ativa" : "pendente"} />
       </div>
 
-      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+      <div className="mt-2 grid gap-2 sm:grid-cols-2">
         <MiniValue label="Callback" value={connection.redirectUrl} />
         <MiniValue label="Webhook" value={connection.webhookUrl} />
       </div>
@@ -692,13 +679,13 @@ function MercadoPagoBillingConnectionCard({
         </div>
       ) : null}
 
-      <div className="mt-3 flex flex-wrap items-center gap-2">
+      <div className="mt-2 flex flex-wrap items-center gap-2">
         <a
           href="/api/admin/billing/mercado-pago/connect"
-          className="inline-flex h-9 items-center justify-center gap-2 rounded-xl px-3 text-[11px] font-bold transition hover:opacity-90"
+          className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg px-2.5 text-[10px] font-bold transition hover:opacity-90"
           style={{ background: "rgba(16,185,129,0.14)", border: "1px solid rgba(16,185,129,0.26)", color: "#86efac" }}
         >
-          <ExternalLink className="h-4 w-4" />
+          <ExternalLink className="h-3.5 w-3.5" />
           {connection.connected ? "Reconectar" : "Conectar Mercado Pago"}
         </a>
 
@@ -707,14 +694,45 @@ function MercadoPagoBillingConnectionCard({
             type="button"
             onClick={onDisconnect}
             disabled={disconnecting}
-            className="inline-flex h-9 items-center justify-center gap-2 rounded-xl px-3 text-[11px] font-bold transition disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg px-2.5 text-[10px] font-bold transition disabled:cursor-not-allowed disabled:opacity-50"
             style={{ background: "rgba(244,63,94,0.08)", border: "1px solid rgba(244,63,94,0.22)", color: "#fda4af" }}
           >
-            <RefreshCw className={`h-4 w-4 ${disconnecting ? "animate-spin" : ""}`} />
+            <RefreshCw className={`h-3.5 w-3.5 ${disconnecting ? "animate-spin" : ""}`} />
             {disconnecting ? "Desconectando" : "Desconectar"}
           </button>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+function CredentialStatusGrid({
+  credentials,
+}: {
+  credentials: PlatformBillingOperationsCatalog["credentials"];
+}) {
+  return (
+    <div className="grid grid-cols-2 gap-2">
+      {credentials.map((field) => (
+        <div
+          key={field.env}
+          className="min-w-0 rounded-lg px-2 py-2"
+          style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}
+        >
+          <div className="flex items-center justify-between gap-2">
+            <p className="min-w-0 truncate text-[11px] font-semibold" style={{ color: "var(--ch-text)" }}>
+              {shortCredentialLabel(field.label)}
+            </p>
+            <span
+              className="h-2 w-2 shrink-0 rounded-full"
+              style={{ background: field.configured ? "#10b981" : field.requirement === "required" ? "#fb7185" : "#f59e0b" }}
+            />
+          </div>
+          <p className="mt-1 truncate font-mono text-[8px] uppercase tracking-wide text-slate-500">
+            {field.configured ? field.displayValue : field.requirement === "required" ? "obrigatorio" : "opcional"}
+          </p>
+        </div>
+      ))}
     </div>
   );
 }
@@ -729,7 +747,7 @@ function HistoryPanels({
   reconcilingId: string | null;
 }) {
   return (
-    <div className="grid gap-5">
+    <div className="grid gap-3">
       <Panel
         title="Checkout e pagamentos"
         eyebrow="intencoes / webhooks"
@@ -759,7 +777,7 @@ function HistoryPanels({
         )}
       </Panel>
 
-      <div className="grid gap-5 xl:grid-cols-2">
+      <div className="grid gap-3 xl:grid-cols-2">
         <Panel
           title="Assinaturas"
           eyebrow="recorrencia"
@@ -851,19 +869,19 @@ function BillingOpsMetric({
 
   return (
     <div
-      className="min-w-0 rounded-xl p-2 sm:rounded-2xl sm:p-5"
+      className="min-w-0 rounded-xl p-3"
       style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}
     >
-      <div className="flex min-w-0 items-start justify-between gap-1.5 sm:gap-3">
-        <p className="min-w-0 truncate font-mono text-[8px] uppercase tracking-[0.11em] text-slate-500 sm:text-[10px] sm:tracking-widest">{label}</p>
-        <div className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-xl sm:flex" style={{ background: `${color}18`, color }}>
+      <div className="flex min-w-0 items-start justify-between gap-2">
+        <p className="min-w-0 truncate font-mono text-[9px] uppercase tracking-[0.12em] text-slate-500">{label}</p>
+        <div className="hidden h-7 w-7 shrink-0 items-center justify-center rounded-lg sm:flex" style={{ background: `${color}18`, color }}>
           <Icon className="h-4 w-4" />
         </div>
       </div>
-      <p className="mt-1 truncate font-mono text-[15px] font-bold leading-none sm:mt-4 sm:text-[26px]" style={{ color: "var(--ch-text)" }}>
+      <p className="mt-2 truncate font-mono text-[20px] font-bold leading-none" style={{ color: "var(--ch-text)" }}>
         {value}
       </p>
-      <p className="mt-1 hidden truncate text-[12px] text-slate-500 sm:mt-3 sm:block">{detail}</p>
+      <p className="mt-1 truncate text-[11px] text-slate-500">{detail}</p>
     </div>
   );
 }
@@ -890,7 +908,7 @@ function ToggleRow({
 }) {
   return (
     <label
-      className="flex cursor-pointer items-start gap-3 rounded-xl p-3"
+      className="flex cursor-pointer items-start gap-2 rounded-lg p-2.5"
       style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}
     >
       <input
@@ -900,7 +918,7 @@ function ToggleRow({
         className="mt-1"
       />
       <span>
-        <span className="block text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>{label}</span>
+        <span className="block text-[11px] font-semibold" style={{ color: "var(--ch-text)" }}>{label}</span>
         <span className="mt-0.5 block text-[11px] leading-4 text-slate-500">{text}</span>
       </span>
     </label>
@@ -934,7 +952,7 @@ function OperationalTestResult({ state }: { state: OperationalTestState }) {
   const style = getOperationalResultStyle(state.tone);
 
   return (
-    <div className="mt-3 rounded-xl p-3 text-[12px] leading-5" style={style}>
+    <div className="mt-3 rounded-lg p-2.5 text-[12px] leading-5" style={style}>
       <p className="font-semibold">{state.message}</p>
       {state.checks.length > 0 ? (
         <div className="mt-3 grid gap-2">
@@ -960,7 +978,7 @@ function MiniValue({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0">
       <p className="font-mono text-[8px] uppercase tracking-wider text-slate-500">{label}</p>
-      <p className="mt-1 truncate font-mono text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>{value}</p>
+      <p className="mt-1 truncate font-mono text-[11px] font-semibold" style={{ color: "var(--ch-text)" }}>{value}</p>
     </div>
   );
 }
@@ -974,10 +992,10 @@ function PaymentStatus({ status }: { status: string }) {
 function EmptyState({ icon, text }: { icon: ReactNode; text: string }) {
   return (
     <div
-      className="flex min-h-24 items-center gap-3 rounded-xl p-4 text-[13px] leading-6 text-slate-500"
+      className="flex min-h-16 items-center gap-3 rounded-xl p-3 text-[12px] leading-5 text-slate-500"
       style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
     >
-      <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl" style={{ background: "var(--ch-surface)", color: "var(--ch-accent)" }}>
+      <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg" style={{ background: "var(--ch-surface)", color: "var(--ch-accent)" }}>
         {icon}
       </div>
       {text}
@@ -1146,6 +1164,15 @@ function formatStatus(value: string) {
   };
 
   return labels[value] ?? value;
+}
+
+function shortCredentialLabel(label: string) {
+  return label
+    .replace("ConnectyHub", "CH")
+    .replace("Expiracao do token billing", "Expiracao token")
+    .replace("Webhook secret billing", "Webhook secret")
+    .replace("Webhook billing", "Webhook")
+    .replace("Modo cobranca", "Modo");
 }
 
 function formatMoney(value: number) {

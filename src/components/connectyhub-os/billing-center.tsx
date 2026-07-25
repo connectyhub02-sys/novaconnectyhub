@@ -74,7 +74,7 @@ export function BillingCenter({
         </Panel>
       )}
 
-      <div className="mb-5 grid grid-cols-4 gap-1.5 sm:gap-2 xl:gap-4">
+      <div className="mb-4 grid grid-cols-2 gap-2 xl:grid-cols-4">
         <BillingMetric
           icon={DatabaseZap}
           label="Eventos de uso"
@@ -109,8 +109,8 @@ export function BillingCenter({
 
       <CommercialSalesPanel summary={summary} />
 
-      <div className="mb-5 grid gap-4 xl:grid-cols-[1fr_420px]">
-        <Panel title="Provedores faturaveis" eyebrow="custo real / cobranca connectyhub">
+      <div className="mb-4 grid gap-3 xl:grid-cols-[1fr_360px]">
+        <Panel title="Provedores faturaveis" eyebrow="custo real / cobranca connectyhub" compact collapsible>
           <div className="space-y-3">
             {summary.providers.length > 0 ? (
               summary.providers.map((provider) => {
@@ -119,12 +119,12 @@ export function BillingCenter({
                 return (
                   <div
                     key={provider.provider}
-                    className="rounded-xl p-4"
+                    className="rounded-xl p-3"
                     style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
                   >
                     <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
                       <div>
-                        <p className="text-[14px] font-semibold" style={{ color: "var(--ch-text)" }}>
+                        <p className="text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>
                           {provider.label}
                         </p>
                         <p className="mt-1 font-mono text-[10px] uppercase tracking-wider text-slate-500">
@@ -140,7 +140,7 @@ export function BillingCenter({
                       <ProviderValue label="Margem" value={`${providerMargin}%`} />
                     </div>
 
-                    <div className="mt-4">
+                    <div className="mt-3">
                       <ProgressBar value={Math.min(providerMargin, 100)} tone={providerMargin >= 60 ? "green" : "amber"} />
                     </div>
                   </div>
@@ -157,8 +157,8 @@ export function BillingCenter({
           </div>
         </Panel>
 
-        <Panel title="Regras do centro de custo" eyebrow="como vamos cobrar">
-          <div className="space-y-3">
+        <Panel title="Regras do centro de custo" eyebrow="como vamos cobrar" compact collapsible>
+          <div className="space-y-2">
             <RuleCard
               icon={BrainCircuit}
               title="Gemini"
@@ -193,9 +193,10 @@ function CommercialSalesPanel({ summary }: { summary: BillingAdminSummary }) {
 
   return (
     <Panel
-      className="mb-5"
+      className="mb-4"
       title="Vendas por origem"
       eyebrow="checkout / produtos / comissao"
+      compact
       action={
         <div className="flex flex-wrap gap-2">
           <NeonBadge tone={commerce.schemaReady ? "green" : "amber"}>
@@ -205,7 +206,7 @@ function CommercialSalesPanel({ summary }: { summary: BillingAdminSummary }) {
         </div>
       }
     >
-      <div className="grid grid-cols-4 gap-1.5 sm:gap-2 xl:gap-3">
+      <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
         <CommercialMetric
           icon={ReceiptText}
           label="Total aprovado"
@@ -236,9 +237,9 @@ function CommercialSalesPanel({ summary }: { summary: BillingAdminSummary }) {
         />
       </div>
 
-      <div className="mt-4 grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
+      <div className="mt-3 grid gap-3 xl:grid-cols-[300px_minmax(0,1fr)]">
         <div
-          className="rounded-xl p-4"
+          className="rounded-xl p-3"
           style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
         >
           <div className="mb-3 flex items-center gap-2">
@@ -251,13 +252,13 @@ function CommercialSalesPanel({ summary }: { summary: BillingAdminSummary }) {
             <ProviderValue label="Comissao gerada" value={formatMoney(commerce.commissionAccrued)} />
             <ProviderValue label="Liquido ConnectyHub" value={formatMoney(commerce.netConnectyHubRevenue)} />
           </div>
-          <p className="mt-3 text-[11px] leading-5 text-slate-500">
+          <p className="mt-2 text-[11px] leading-4 text-slate-500">
             Revenda gera comissao para o cliente. Venda direta ConnectyHub fica como receita nossa sem repasse de afiliado.
           </p>
         </div>
 
         <div
-          className="rounded-xl p-4"
+          className="rounded-xl p-3"
           style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
         >
           {commerce.flows.length > 0 ? (
@@ -308,22 +309,22 @@ function BillingMetric({
 
   return (
     <div
-      className="min-w-0 rounded-xl p-2 sm:rounded-2xl sm:p-5"
+      className="min-w-0 rounded-xl p-3"
       style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}
     >
-      <div className="flex min-w-0 items-start justify-between gap-1.5 sm:gap-3">
-        <p className="min-w-0 truncate font-mono text-[8px] uppercase tracking-[0.11em] text-slate-500 sm:text-[10px] sm:tracking-widest">{label}</p>
+      <div className="flex min-w-0 items-start justify-between gap-2">
+        <p className="min-w-0 truncate font-mono text-[9px] uppercase tracking-[0.12em] text-slate-500">{label}</p>
         <div
-          className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-xl sm:flex"
+          className="hidden h-7 w-7 shrink-0 items-center justify-center rounded-lg sm:flex"
           style={{ background: `${color}18`, color }}
         >
           <Icon className="h-4 w-4" />
         </div>
       </div>
-      <p className="mt-1 truncate font-mono text-[15px] font-bold leading-none sm:mt-4 sm:text-[28px]" style={{ color: "var(--ch-text)" }}>
+      <p className="mt-2 truncate font-mono text-[20px] font-bold leading-none" style={{ color: "var(--ch-text)" }}>
         {value}
       </p>
-      <p className="mt-1 hidden truncate text-[12px] text-slate-500 sm:mt-3 sm:block">{detail}</p>
+      <p className="mt-1 truncate text-[11px] text-slate-500">{detail}</p>
     </div>
   );
 }
@@ -345,22 +346,22 @@ function CommercialMetric({
 
   return (
     <div
-      className="min-w-0 rounded-xl p-2 sm:p-4"
+      className="min-w-0 rounded-xl p-3"
       style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
     >
-      <div className="flex min-w-0 items-start justify-between gap-1.5 sm:gap-3">
-        <p className="min-w-0 truncate font-mono text-[8px] uppercase tracking-[0.11em] text-slate-500 sm:text-[10px] sm:tracking-widest">{label}</p>
+      <div className="flex min-w-0 items-start justify-between gap-2">
+        <p className="min-w-0 truncate font-mono text-[9px] uppercase tracking-[0.12em] text-slate-500">{label}</p>
         <div
-          className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-xl sm:flex"
+          className="hidden h-7 w-7 shrink-0 items-center justify-center rounded-lg sm:flex"
           style={{ background: `${color}18`, color }}
         >
           <Icon className="h-4 w-4" />
         </div>
       </div>
-      <p className="mt-1 truncate font-mono text-[15px] font-bold leading-none sm:mt-3 sm:text-[22px]" style={{ color: "var(--ch-text)" }}>
+      <p className="mt-2 truncate font-mono text-[19px] font-bold leading-none" style={{ color: "var(--ch-text)" }}>
         {value}
       </p>
-      <p className="mt-1 hidden text-[12px] leading-5 text-slate-500 sm:mt-2 sm:block">{detail}</p>
+      <p className="mt-1 truncate text-[11px] text-slate-500">{detail}</p>
     </div>
   );
 }
@@ -368,11 +369,11 @@ function CommercialMetric({
 function ProviderValue({ label, value }: { label: string; value: string }) {
   return (
     <div
-      className="rounded-lg px-3 py-2"
+      className="rounded-lg px-2.5 py-2"
       style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}
     >
       <p className="font-mono text-[9px] uppercase tracking-wider text-slate-500">{label}</p>
-      <p className="mt-1 font-mono text-[14px] font-semibold" style={{ color: "var(--ch-text)" }}>{value}</p>
+      <p className="mt-1 truncate font-mono text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>{value}</p>
     </div>
   );
 }
@@ -388,14 +389,14 @@ function RuleCard({
 }) {
   return (
     <div
-      className="rounded-xl p-4"
+      className="rounded-xl p-3"
       style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
     >
-      <div className="mb-2 flex items-center gap-2">
+      <div className="mb-1.5 flex items-center gap-2">
         <Icon className="h-4 w-4 text-cyan-500" />
         <p className="text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>{title}</p>
       </div>
-      <p className="text-[12px] leading-5 text-slate-500">{text}</p>
+      <p className="text-[11px] leading-4 text-slate-500">{text}</p>
     </div>
   );
 }

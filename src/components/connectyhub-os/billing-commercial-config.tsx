@@ -299,10 +299,10 @@ export function BillingCommercialConfig({ catalog }: { catalog: BillingCommercia
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-3">
       {state.message && (
         <div
-          className="rounded-2xl px-4 py-3 text-[13px] font-medium"
+          className="rounded-xl px-3 py-2 text-[12px] font-medium"
           style={{
             background: state.tone === "success" ? "rgba(16,185,129,0.1)" : "rgba(244,63,94,0.08)",
             border: state.tone === "success" ? "1px solid rgba(16,185,129,0.24)" : "1px solid rgba(244,63,94,0.2)",
@@ -316,22 +316,24 @@ export function BillingCommercialConfig({ catalog }: { catalog: BillingCommercia
       <Panel
         title="Comece por aqui"
         eyebrow="configuracao simples"
+        compact
+        collapsible
         action={<StatusBadge status={configuredRateCount === rates.length ? "online" : "warning"} label={`${configuredRateCount}/${rates.length} prontas`} />}
       >
-        <div className="grid gap-4 xl:grid-cols-[1fr_360px]">
+        <div className="grid gap-3 xl:grid-cols-[1fr_300px]">
           <div
-            className="rounded-xl p-4"
+            className="rounded-xl p-3"
             style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
           >
-            <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <div className="flex items-center gap-2">
                   <Wand2 className="h-4 w-4 text-cyan-500" />
-                  <p className="text-[15px] font-semibold" style={{ color: "var(--ch-text)" }}>
+                  <p className="text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>
                     Modo MVP recomendado
                   </p>
                 </div>
-                <p className="mt-2 max-w-2xl text-[13px] leading-6 text-slate-500">
+                <p className="mt-1 max-w-2xl text-[12px] leading-5 text-slate-500">
                   Para comecar, nao tente calcular o preco oficial de cada token. Use uma regua comercial temporaria:
                   creditos para o cliente, margem 5x e custo real sendo ajustado depois pelos eventos de uso.
                 </p>
@@ -340,7 +342,7 @@ export function BillingCommercialConfig({ catalog }: { catalog: BillingCommercia
                 <button
                   type="button"
                   onClick={applyStarterPreset}
-                  className="flex h-10 items-center justify-center gap-2 rounded-xl px-4 text-[12px] font-semibold text-white transition hover:opacity-90"
+                  className="flex h-8 items-center justify-center gap-2 rounded-lg px-3 text-[11px] font-semibold text-white transition hover:opacity-90"
                   style={{ background: "#01004c" }}
                 >
                   <Wand2 className="h-4 w-4" />
@@ -350,7 +352,7 @@ export function BillingCommercialConfig({ catalog }: { catalog: BillingCommercia
                   type="button"
                   disabled={savingAllRates || rates.length === 0}
                   onClick={saveAllRateDrafts}
-                  className="flex h-10 items-center justify-center gap-2 rounded-xl px-4 text-[12px] font-semibold text-white transition disabled:opacity-50"
+                  className="flex h-8 items-center justify-center gap-2 rounded-lg px-3 text-[11px] font-semibold text-white transition disabled:opacity-50"
                   style={{ background: "#06b6d4" }}
                 >
                   <Save className="h-4 w-4" />
@@ -359,7 +361,7 @@ export function BillingCommercialConfig({ catalog }: { catalog: BillingCommercia
               </div>
             </div>
 
-            <div className="mt-4 grid gap-3 md:grid-cols-3">
+            <div className="mt-3 grid gap-2 md:grid-cols-3">
               <GuidedCard
                 icon={<Gauge className="h-4 w-4 text-cyan-500" />}
                 title="O que preencher?"
@@ -379,20 +381,20 @@ export function BillingCommercialConfig({ catalog }: { catalog: BillingCommercia
           </div>
 
           <div
-            className="rounded-xl p-4"
+            className="rounded-xl p-3"
             style={{ background: "rgba(1,0,76,0.04)", border: "1px solid rgba(1,0,76,0.12)" }}
           >
             <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">proximo clique</p>
             <p className="mt-2 text-[14px] font-semibold" style={{ color: "var(--ch-text)" }}>
               Sequencia segura
             </p>
-            <ol className="mt-3 space-y-2 text-[12px] leading-5 text-slate-500">
+            <ol className="mt-2 space-y-1.5 text-[12px] leading-5 text-slate-500">
               <li>1. Aplicar MVP.</li>
               <li>2. Salvar todas as tarifas.</li>
               <li>3. Adicionar creditos ao cliente.</li>
               <li>4. Lancar consumo teste.</li>
             </ol>
-            <p className="mt-4 rounded-lg p-3 text-[11px] leading-5 text-slate-500" style={{ background: "var(--ch-surface)" }}>
+            <p className="mt-3 rounded-lg p-2.5 text-[11px] leading-4 text-slate-500" style={{ background: "var(--ch-surface)" }}>
               Estes valores sao para operar o MVP. Quando tivermos billing real de Gemini e ElevenLabs,
               ajustamos a tabela com custo oficial e margem por plano.
             </p>
@@ -403,6 +405,8 @@ export function BillingCommercialConfig({ catalog }: { catalog: BillingCommercia
       <Panel
         title="Ferramentas de IA e voz por plano"
         eyebrow="painel do cliente / creditos"
+        compact
+        collapsible
         action={
           <StatusBadge
             status={voiceAndAiFeatures.length > 0 && voiceAndAiConfiguredCount === voiceAndAiFeatures.length ? "online" : "warning"}
@@ -411,7 +415,7 @@ export function BillingCommercialConfig({ catalog }: { catalog: BillingCommercia
         }
       >
         <div
-          className="mb-4 rounded-xl p-4"
+          className="mb-3 rounded-xl p-3"
           style={{ background: "rgba(6,182,212,0.07)", border: "1px solid rgba(6,182,212,0.18)" }}
         >
           <div className="flex items-start gap-3">
@@ -436,18 +440,18 @@ export function BillingCommercialConfig({ catalog }: { catalog: BillingCommercia
               return (
                 <div
                   key={feature.id}
-                  className="rounded-xl p-4"
+                  className="rounded-xl p-3"
                   style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
                 >
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <Mic2 className="h-4 w-4 text-violet-500" />
-                        <p className="text-[14px] font-semibold" style={{ color: "var(--ch-text)" }}>
+                        <p className="text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>
                           {feature.name}
                         </p>
                       </div>
-                      <p className="mt-1 max-w-2xl text-[12px] leading-5 text-slate-500">
+                      <p className="mt-1 max-w-2xl text-[11px] leading-4 text-slate-500">
                         {feature.description ?? "Ferramenta de audio liberada conforme plano do cliente."}
                       </p>
                       <p className="mt-2 font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">
@@ -457,7 +461,7 @@ export function BillingCommercialConfig({ catalog }: { catalog: BillingCommercia
                     <StatusBadge status={draft.enabled && draft.includedInPlans.length > 0 ? "online" : "warning"} />
                   </div>
 
-                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
                     <ToggleRow
                       checked={draft.enabled}
                       label="Ativa no produto"
@@ -472,7 +476,7 @@ export function BillingCommercialConfig({ catalog }: { catalog: BillingCommercia
                     />
                   </div>
 
-                  <div className="mt-4">
+                  <div className="mt-3">
                     <p className="mb-2 font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">
                       Liberar nos planos
                     </p>
@@ -483,7 +487,7 @@ export function BillingCommercialConfig({ catalog }: { catalog: BillingCommercia
                         return (
                           <label
                             key={plan.code}
-                            className="flex h-10 cursor-pointer items-center justify-center gap-2 rounded-xl px-3 text-[12px] font-semibold transition"
+                            className="flex h-8 cursor-pointer items-center justify-center gap-2 rounded-lg px-2 text-[11px] font-semibold transition"
                             style={{
                               background: checked ? "rgba(1,0,76,0.08)" : "var(--ch-surface)",
                               border: checked ? "1px solid rgba(1,0,76,0.26)" : "1px solid var(--ch-border)",
@@ -502,12 +506,12 @@ export function BillingCommercialConfig({ catalog }: { catalog: BillingCommercia
                     </div>
                   </div>
 
-                  <div className="mt-4 flex justify-end">
+                  <div className="mt-3 flex justify-end">
                     <button
                       type="button"
                       disabled={savingFeatureId === feature.id}
                       onClick={() => saveFeatureAccess(feature)}
-                      className="flex h-10 items-center justify-center gap-2 rounded-xl px-4 text-[12px] font-semibold text-white transition disabled:opacity-50"
+                      className="flex h-8 items-center justify-center gap-2 rounded-lg px-3 text-[11px] font-semibold text-white transition disabled:opacity-50"
                       style={{ background: "#01004c" }}
                     >
                       <Save className="h-4 w-4" />
@@ -531,6 +535,8 @@ export function BillingCommercialConfig({ catalog }: { catalog: BillingCommercia
       <Panel
         title="Tarifas avancadas"
         eyebrow="opcional / ajuste fino"
+        compact
+        collapsible
         action={
           <button
             type="button"
@@ -649,14 +655,14 @@ export function BillingCommercialConfig({ catalog }: { catalog: BillingCommercia
         )}
       </Panel>
 
-      <div className="grid gap-5 xl:grid-cols-2">
-        <Panel title="Coloque creditos no cliente" eyebrow="carteira de teste">
-          <form className="space-y-4" onSubmit={grantOrganizationCredits}>
+      <div className="grid gap-3 xl:grid-cols-2">
+        <Panel title="Coloque creditos no cliente" eyebrow="carteira de teste" compact>
+          <form className="space-y-3" onSubmit={grantOrganizationCredits}>
             <FieldLabel label="Empresa">
               <select
                 value={selectedOrganizationId}
                 onChange={(event) => setSelectedOrganizationId(event.target.value)}
-                className="h-10 w-full rounded-xl px-3 text-[13px] outline-none"
+                className="h-9 w-full rounded-lg px-3 text-[12px] outline-none"
                 style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)", color: "var(--ch-text)" }}
               >
                 {catalog.organizations.map((organization) => (
@@ -669,7 +675,7 @@ export function BillingCommercialConfig({ catalog }: { catalog: BillingCommercia
 
             {selectedOrganization && (
               <div
-                className="grid gap-3 rounded-xl p-4 sm:grid-cols-3"
+                className="grid gap-3 rounded-xl p-3 sm:grid-cols-3"
                 style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
               >
                 <MiniStat label="Saldo" value={formatCredits(selectedOrganization.balanceCredits)} />
@@ -678,13 +684,13 @@ export function BillingCommercialConfig({ catalog }: { catalog: BillingCommercia
               </div>
             )}
 
-            <div className="grid gap-3 md:grid-cols-[180px_1fr]">
+            <div className="grid gap-3 md:grid-cols-[160px_1fr]">
               <MoneyInput label="Creditos" value={grantAmount} onChange={setGrantAmount} step="1" />
               <FieldLabel label="Descricao">
                 <input
                   value={grantDescription}
                   onChange={(event) => setGrantDescription(event.target.value)}
-                  className="h-10 w-full rounded-xl px-3 text-[13px] outline-none"
+                  className="h-9 w-full rounded-lg px-3 text-[12px] outline-none"
                   style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)", color: "var(--ch-text)" }}
                 />
               </FieldLabel>
@@ -693,7 +699,7 @@ export function BillingCommercialConfig({ catalog }: { catalog: BillingCommercia
             <button
               type="submit"
               disabled={!selectedOrganizationId || granting}
-              className="flex h-10 items-center justify-center gap-2 rounded-xl px-4 text-[12px] font-semibold text-white transition disabled:opacity-50"
+              className="flex h-9 items-center justify-center gap-2 rounded-lg px-3 text-[11px] font-semibold text-white transition disabled:opacity-50"
               style={{ background: "#01004c" }}
             >
               <Coins className="h-4 w-4" />
@@ -702,13 +708,13 @@ export function BillingCommercialConfig({ catalog }: { catalog: BillingCommercia
           </form>
         </Panel>
 
-        <Panel title="Lance um consumo teste" eyebrow="simulador rapido">
-          <form className="space-y-4" onSubmit={createTestEvent}>
+        <Panel title="Lance um consumo teste" eyebrow="simulador rapido" compact>
+          <form className="space-y-3" onSubmit={createTestEvent}>
             <FieldLabel label="Tarifa base">
               <select
                 value={selectedRateId}
                 onChange={(event) => setSelectedRateId(event.target.value)}
-                className="h-10 w-full rounded-xl px-3 text-[13px] outline-none"
+                className="h-9 w-full rounded-lg px-3 text-[12px] outline-none"
                 style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)", color: "var(--ch-text)" }}
               >
                 {rates.map((rate) => (
@@ -726,7 +732,7 @@ export function BillingCommercialConfig({ catalog }: { catalog: BillingCommercia
               <MoneyInput label="Cobrar creditos" value={chargeCredits} onChange={setChargeCredits} step="0.01" />
               <MoneyInput label="Receita estimada R$" value={revenueEstimate} onChange={setRevenueEstimate} step="0.01" />
               <label
-                className="mt-5 flex h-10 items-center gap-2 rounded-xl px-3 text-[12px]"
+                className="mt-5 flex h-9 items-center gap-2 rounded-lg px-3 text-[12px]"
                 style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)", color: "var(--ch-text)" }}
               >
                 <input
@@ -741,7 +747,7 @@ export function BillingCommercialConfig({ catalog }: { catalog: BillingCommercia
             <button
               type="submit"
               disabled={!selectedOrganizationId || !selectedRate || testing}
-              className="flex h-10 items-center justify-center gap-2 rounded-xl px-4 text-[12px] font-semibold text-white transition disabled:opacity-50"
+              className="flex h-9 items-center justify-center gap-2 rounded-lg px-3 text-[11px] font-semibold text-white transition disabled:opacity-50"
               style={{ background: "#06b6d4" }}
             >
               <FlaskConical className="h-4 w-4" />
@@ -751,7 +757,7 @@ export function BillingCommercialConfig({ catalog }: { catalog: BillingCommercia
         </Panel>
       </div>
 
-      <Panel title="Como usar agora" eyebrow="fluxo financeiro">
+      <Panel title="Como usar agora" eyebrow="fluxo financeiro" compact collapsible>
         <div className="grid gap-3 md:grid-cols-3">
           <StepCard title="1. Aplique o MVP" text="Preencha uma regua inicial de creditos sem depender do preco oficial de cada provedor." />
           <StepCard title="2. Salve e credite" text="Salve as tarifas e coloque creditos na empresa usada para teste." />
@@ -823,7 +829,7 @@ function MoneyInput({
         step={step}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="h-10 w-full rounded-xl px-3 font-mono text-[13px] outline-none"
+        className="h-9 w-full rounded-lg px-3 font-mono text-[12px] outline-none"
         style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)", color: "var(--ch-text)" }}
       />
     </FieldLabel>
@@ -833,7 +839,7 @@ function MoneyInput({
 function FieldLabel({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="block">
-      <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">{label}</span>
+      <span className="mb-1 block font-mono text-[9px] uppercase tracking-[0.16em] text-slate-500">{label}</span>
       {children}
     </label>
   );
@@ -843,7 +849,7 @@ function MiniStat({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <p className="font-mono text-[9px] uppercase tracking-wider text-slate-500">{label}</p>
-      <p className="mt-1 font-mono text-[16px] font-bold" style={{ color: "var(--ch-text)" }}>{value}</p>
+      <p className="mt-1 truncate font-mono text-[14px] font-bold" style={{ color: "var(--ch-text)" }}>{value}</p>
     </div>
   );
 }
@@ -851,14 +857,14 @@ function MiniStat({ label, value }: { label: string; value: string }) {
 function GuidedCard({ icon, title, text }: { icon: ReactNode; title: string; text: string }) {
   return (
     <div
-      className="rounded-xl p-4"
+      className="rounded-xl p-3"
       style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}
     >
-      <div className="mb-2 flex items-center gap-2">
+      <div className="mb-1.5 flex items-center gap-2">
         {icon}
         <p className="text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>{title}</p>
       </div>
-      <p className="text-[12px] leading-5 text-slate-500">{text}</p>
+      <p className="text-[11px] leading-4 text-slate-500">{text}</p>
     </div>
   );
 }
@@ -876,7 +882,7 @@ function ToggleRow({
 }) {
   return (
     <label
-      className="flex cursor-pointer items-start gap-3 rounded-xl p-3"
+      className="flex cursor-pointer items-start gap-2 rounded-lg p-2.5"
       style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}
     >
       <input
@@ -886,7 +892,7 @@ function ToggleRow({
         className="mt-1"
       />
       <span>
-        <span className="block text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>{label}</span>
+        <span className="block text-[11px] font-semibold" style={{ color: "var(--ch-text)" }}>{label}</span>
         <span className="mt-0.5 block text-[11px] leading-4 text-slate-500">{text}</span>
       </span>
     </label>
@@ -896,14 +902,14 @@ function ToggleRow({
 function StepCard({ title, text }: { title: string; text: string }) {
   return (
     <div
-      className="rounded-xl p-4"
+      className="rounded-xl p-3"
       style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
     >
-      <div className="mb-2 flex items-center gap-2">
+      <div className="mb-1.5 flex items-center gap-2">
         <CheckCircle2 className="h-4 w-4 text-emerald-500" />
         <p className="text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>{title}</p>
       </div>
-      <p className="text-[12px] leading-5 text-slate-500">{text}</p>
+      <p className="text-[11px] leading-4 text-slate-500">{text}</p>
     </div>
   );
 }
