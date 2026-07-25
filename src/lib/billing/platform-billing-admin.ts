@@ -3,6 +3,10 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { CredentialSnapshot, MaintenanceStoredCredential } from "@/lib/maintenance-vault";
 import { getMaintenanceVaultSnapshot } from "@/lib/maintenance-vault";
+import {
+  buildMercadoPagoPlatformBillingRedirectUrl,
+  buildMercadoPagoPlatformBillingWebhookUrl,
+} from "@/lib/sales-catalog/mercado-pago";
 import { createServiceClient } from "@/lib/supabase/service";
 
 type JsonRecord = Record<string, unknown>;
@@ -15,6 +19,7 @@ export type PlatformBillingSettings = {
   checkoutMode: "subscription" | "manual_review";
   recurringProvider: "mercado_pago";
   updatedAt: string | null;
+  metadata: JsonRecord;
 };
 
 export type PlatformBillingAgentOption = {
@@ -102,6 +107,15 @@ export type PlatformBillingWebhookItem = {
 export type PlatformBillingOperationsCatalog = {
   settings: PlatformBillingSettings;
   credentials: CredentialSnapshot[];
+  mercadoPagoConnection: {
+    connected: boolean;
+    mode: string | null;
+    accountId: string | null;
+    tokenExpiresAt: string | null;
+    webhookUrl: string;
+    redirectUrl: string;
+    lastError: string | null;
+  };
   credentialReadiness: number;
   agents: PlatformBillingAgentOption[];
   plans: PlatformBillingPlanMapping[];
@@ -131,6 +145,7 @@ type PlatformBillingSettingsRow = {
   checkout_mode: string | null;
   recurring_provider: string | null;
   updated_at: string | null;
+  metadata: JsonRecord | null;
 };
 
 type BillingPlanRow = {
@@ -223,6 +238,7 @@ const defaultSettings: PlatformBillingSettings = {
   checkoutMode: "subscription",
   recurringProvider: "mercado_pago",
   updatedAt: null,
+  metadata: {},
 };
 
 export async function getPlatformBillingOperationsCatalog(): Promise<PlatformBillingOperationsCatalog> {
@@ -247,7 +263,7 @@ export async function getPlatformBillingOperationsCatalog(): Promise<PlatformBil
       .order("updated_at", { ascending: false }),
     client
       .from("platform_billing_settings")
-      .select("billing_whatsapp_agent_id, notification_whatsapp_enabled, pix_automatic_required, checkout_mode, recurring_provider, updated_at")
+      .select("billing_whatsapp_agent_id, notification_whatsapp_enabled, pix_automatic_required, checkout_mode, recurring_provider, updated_at, metadata")
       .eq("setting_key", "default")
       .maybeSingle<PlatformBillingSettingsRow>(),
     client
@@ -337,6 +353,7 @@ export async function getPlatformBillingOperationsCatalog(): Promise<PlatformBil
   return {
     settings,
     credentials,
+    mercadoPagoConnection: buildMercadoPagoConnection(credentials, settings),
     credentialReadiness: getCredentialReadiness(credentials),
     agents,
     plans,
@@ -366,6 +383,26 @@ function buildBillingCredentialSnapshots(storedCredentials: MaintenanceStoredCre
   return integration?.fields ?? [];
 }
 
+function buildMercadoPagoConnection(credentials: CredentialSnapshot[], settings: PlatformBillingSettings) {
+  const fieldByEnv = new Map(credentials.map((field) => [field.env, field]));
+  const accessToken = fieldByEnv.get("MERCADO_PAGO_BILLING_ACCESS_TOKEN");
+  const mode = readConfiguredDisplayValue(fieldByEnv.get("MERCADO_PAGO_BILLING_MODE"));
+  const accountId = readConfiguredDisplayValue(fieldByEnv.get("MERCADO_PAGO_BILLING_ACCOUNT_ID"));
+  const tokenExpiresAt = readConfiguredDisplayValue(fieldByEnv.get("MERCADO_PAGO_BILLING_TOKEN_EXPIRES_AT"));
+  const webhookUrl = readConfiguredDisplayValue(fieldByEnv.get("MERCADO_PAGO_BILLING_WEBHOOK_URL"))
+    ?? buildMercadoPagoPlatformBillingWebhookUrl();
+
+  return {
+    connected: Boolean(accessToken?.configured),
+    mode,
+    accountId,
+    tokenExpiresAt,
+    webhookUrl,
+    redirectUrl: buildMercadoPagoPlatformBillingRedirectUrl(),
+    lastError: readString(settings.metadata.mercado_pago_billing_last_error),
+  };
+}
+
 function mapSettings(row: PlatformBillingSettingsRow | null): PlatformBillingSettings {
   if (!row) {
     return {
@@ -382,7 +419,16 @@ function mapSettings(row: PlatformBillingSettingsRow | null): PlatformBillingSet
     checkoutMode: row.checkout_mode === "manual_review" ? "manual_review" : "subscription",
     recurringProvider: "mercado_pago",
     updatedAt: row.updated_at,
+    metadata: row.metadata ?? {},
   };
+}
+
+function readConfiguredDisplayValue(field: CredentialSnapshot | undefined) {
+  if (!field?.configured || field.displayValue === "Nao configurado") {
+    return null;
+  }
+
+  return field.displayValue;
 }
 
 function mapPlan(row: BillingPlanRow): PlatformBillingPlanMapping {

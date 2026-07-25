@@ -57,6 +57,7 @@ export function PlatformBillingOperations({
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState<"health" | "notification" | null>(null);
   const [reconcilingId, setReconcilingId] = useState<string | null>(null);
+  const [disconnectingBilling, setDisconnectingBilling] = useState(false);
   const [state, setState] = useState<ActionState>({ tone: "idle", message: "" });
   const [testState, setTestState] = useState<OperationalTestState>({ tone: "idle", message: "", checks: [] });
   const [draft, setDraft] = useState<SettingsDraft>(() => ({
@@ -284,6 +285,32 @@ export function PlatformBillingOperations({
       });
     } finally {
       setReconcilingId(null);
+    }
+  }
+
+  async function disconnectMercadoPagoBilling() {
+    setDisconnectingBilling(true);
+    setState({ tone: "idle", message: "" });
+
+    try {
+      const response = await fetch("/api/admin/billing/mercado-pago/disconnect", {
+        method: "POST",
+      });
+      const data = await response.json().catch(() => null) as { error?: string } | null;
+
+      if (!response.ok) {
+        throw new Error(data?.error ?? "Nao foi possivel desconectar Mercado Pago billing.");
+      }
+
+      setState({ tone: "success", message: "Mercado Pago da ConnectyHub desconectado da cobranca." });
+      router.refresh();
+    } catch (error) {
+      setState({
+        tone: "error",
+        message: error instanceof Error ? error.message : "Falha ao desconectar Mercado Pago billing.",
+      });
+    } finally {
+      setDisconnectingBilling(false);
     }
   }
 
@@ -534,8 +561,17 @@ export function PlatformBillingOperations({
                 <p className="text-[14px] font-semibold" style={{ color: "var(--ch-text)" }}>
                   Credenciais Mercado Pago
                 </p>
-                <StatusBadge status={catalog.credentialReadiness === 100 ? "online" : "warning"} label={`${catalog.credentialReadiness}%`} />
+                <StatusBadge
+                  status={catalog.mercadoPagoConnection.connected ? "online" : "warning"}
+                  label={catalog.mercadoPagoConnection.connected ? "conectado" : `${catalog.credentialReadiness}%`}
+                />
               </div>
+
+              <MercadoPagoBillingConnectionCard
+                connection={catalog.mercadoPagoConnection}
+                disconnecting={disconnectingBilling}
+                onDisconnect={disconnectMercadoPagoBilling}
+              />
 
               <div className="grid gap-2">
                 {catalog.credentials.map((field) => (
@@ -611,6 +647,75 @@ function PlanMappingPanel({ catalog }: { catalog: PlatformBillingOperationsCatal
         ))}
       </div>
     </Panel>
+  );
+}
+
+function MercadoPagoBillingConnectionCard({
+  connection,
+  disconnecting,
+  onDisconnect,
+}: {
+  connection: PlatformBillingOperationsCatalog["mercadoPagoConnection"];
+  disconnecting: boolean;
+  onDisconnect: () => void;
+}) {
+  return (
+    <div
+      className="mb-3 rounded-xl p-3"
+      style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}
+    >
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>
+            Conta recebedora ConnectyHub
+          </p>
+          <p className="mt-1 truncate font-mono text-[10px] uppercase tracking-wider text-slate-500">
+            {connection.connected
+              ? `${connection.mode ?? "production"} / ${connection.accountId ?? "conta conectada"}`
+              : "Conecte por OAuth sem copiar access token"}
+          </p>
+        </div>
+        <StatusBadge status={connection.connected ? "online" : "warning"} label={connection.connected ? "ativa" : "pendente"} />
+      </div>
+
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        <MiniValue label="Callback" value={connection.redirectUrl} />
+        <MiniValue label="Webhook" value={connection.webhookUrl} />
+      </div>
+
+      {connection.lastError ? (
+        <div
+          className="mt-3 rounded-lg px-3 py-2 text-[11px] leading-4 text-rose-200"
+          style={{ background: "rgba(244,63,94,0.08)", border: "1px solid rgba(244,63,94,0.18)" }}
+        >
+          {connection.lastError}
+        </div>
+      ) : null}
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <a
+          href="/api/admin/billing/mercado-pago/connect"
+          className="inline-flex h-9 items-center justify-center gap-2 rounded-xl px-3 text-[11px] font-bold transition hover:opacity-90"
+          style={{ background: "rgba(16,185,129,0.14)", border: "1px solid rgba(16,185,129,0.26)", color: "#86efac" }}
+        >
+          <ExternalLink className="h-4 w-4" />
+          {connection.connected ? "Reconectar" : "Conectar Mercado Pago"}
+        </a>
+
+        {connection.connected ? (
+          <button
+            type="button"
+            onClick={onDisconnect}
+            disabled={disconnecting}
+            className="inline-flex h-9 items-center justify-center gap-2 rounded-xl px-3 text-[11px] font-bold transition disabled:cursor-not-allowed disabled:opacity-50"
+            style={{ background: "rgba(244,63,94,0.08)", border: "1px solid rgba(244,63,94,0.22)", color: "#fda4af" }}
+          >
+            <RefreshCw className={`h-4 w-4 ${disconnecting ? "animate-spin" : ""}`} />
+            {disconnecting ? "Desconectando" : "Desconectar"}
+          </button>
+        ) : null}
+      </div>
+    </div>
   );
 }
 

@@ -4,7 +4,12 @@ import { createHmac, randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { MercadoPagoConfig, Payment } from "mercadopago";
 import type { AdditionalInfo, PaymentCreateRequest } from "mercadopago/dist/clients/payment/create/types";
-import { decryptCredentialValue, encryptCredentialValue } from "@/lib/security/credentials-crypto";
+import {
+  decryptCredentialValue,
+  encryptCredentialValue,
+  hashCredentialValue,
+  previewCredentialValue,
+} from "@/lib/security/credentials-crypto";
 import type { SalesCatalogPaymentSessionStatus } from "./shared";
 
 type JsonRecord = Record<string, unknown>;
@@ -27,7 +32,7 @@ export type MercadoPagoAdditionalInfoInput = {
   items?: MercadoPagoAdditionalInfoItemInput[];
 };
 
-type MercadoPagoOAuthTokenResponse = {
+export type MercadoPagoOAuthTokenResponse = {
   access_token?: string;
   refresh_token?: string;
   public_key?: string;
@@ -116,9 +121,59 @@ const mercadoPagoWebhookCredentialNames = ["MERCADO_PAGO_WEBHOOK_SECRET"];
 const mercadoPagoBillingCredentialNames = [
   "MERCADO_PAGO_BILLING_ACCESS_TOKEN",
   "MERCADO_PAGO_BILLING_PUBLIC_KEY",
+  "MERCADO_PAGO_BILLING_REFRESH_TOKEN",
+  "MERCADO_PAGO_BILLING_ACCOUNT_ID",
+  "MERCADO_PAGO_BILLING_TOKEN_EXPIRES_AT",
   "MERCADO_PAGO_BILLING_WEBHOOK_SECRET",
+  "MERCADO_PAGO_BILLING_WEBHOOK_URL",
   "MERCADO_PAGO_BILLING_MODE",
 ];
+const mercadoPagoBillingCredentialDefinitions = {
+  MERCADO_PAGO_BILLING_ACCESS_TOKEN: {
+    label: "Access Token ConnectyHub",
+    kind: "secret",
+    requirement: "required",
+  },
+  MERCADO_PAGO_BILLING_PUBLIC_KEY: {
+    label: "Public Key ConnectyHub",
+    kind: "public",
+    requirement: "recommended",
+  },
+  MERCADO_PAGO_BILLING_REFRESH_TOKEN: {
+    label: "Refresh Token ConnectyHub",
+    kind: "secret",
+    requirement: "recommended",
+  },
+  MERCADO_PAGO_BILLING_ACCOUNT_ID: {
+    label: "Conta Mercado Pago ConnectyHub",
+    kind: "identifier",
+    requirement: "optional",
+  },
+  MERCADO_PAGO_BILLING_TOKEN_EXPIRES_AT: {
+    label: "Expiracao do token billing",
+    kind: "identifier",
+    requirement: "optional",
+  },
+  MERCADO_PAGO_BILLING_WEBHOOK_URL: {
+    label: "Webhook billing",
+    kind: "endpoint",
+    requirement: "recommended",
+  },
+  MERCADO_PAGO_BILLING_WEBHOOK_SECRET: {
+    label: "Webhook secret billing",
+    kind: "secret",
+    requirement: "recommended",
+  },
+  MERCADO_PAGO_BILLING_MODE: {
+    label: "Modo cobranca",
+    kind: "identifier",
+    requirement: "optional",
+  },
+} satisfies Record<string, {
+  label: string;
+  kind: "secret" | "public" | "endpoint" | "identifier";
+  requirement: "required" | "recommended" | "optional";
+}>;
 
 export class MercadoPagoOAuthRequestError extends Error {
   readonly code: string | null;
@@ -199,18 +254,39 @@ export async function validateMercadoPagoOAuthCredentials(input: {
 }
 
 export async function loadMercadoPagoPlatformBillingConfig(input: { client?: SupabaseClient } = {}): Promise<MercadoPagoPlatformBillingConfig> {
-  const credentials = await loadMercadoPagoPlatformCredentials(
+  let credentials = await loadMercadoPagoPlatformCredentials(
     input.client,
     mercadoPagoBillingCredentialNames,
     mercadoPagoBillingIntegrationId,
   );
-  const accessToken = getCredentialValue(credentials, ["MERCADO_PAGO_BILLING_ACCESS_TOKEN"]);
+  let accessToken = getCredentialValue(credentials, ["MERCADO_PAGO_BILLING_ACCESS_TOKEN"]);
   const publicKey = getCredentialValue(credentials, ["MERCADO_PAGO_BILLING_PUBLIC_KEY"]) || null;
   const webhookSecret = getCredentialValue(credentials, ["MERCADO_PAGO_BILLING_WEBHOOK_SECRET"]) || null;
   const modeValue = getCredentialValue(credentials, ["MERCADO_PAGO_BILLING_MODE"]).toLowerCase();
+  const refreshToken = getCredentialValue(credentials, ["MERCADO_PAGO_BILLING_REFRESH_TOKEN"]);
+  const tokenExpiresAt = getCredentialValue(credentials, ["MERCADO_PAGO_BILLING_TOKEN_EXPIRES_AT"]);
+
+  if (input.client && refreshToken && isTokenNearExpiry(tokenExpiresAt)) {
+    const refreshed = await refreshMercadoPagoAccessToken({
+      refreshToken,
+      client: input.client,
+    });
+    await saveMercadoPagoPlatformBillingOAuthTokens({
+      client: input.client,
+      tokens: refreshed,
+      configuredBy: null,
+      source: "billing_token_refresh",
+    });
+    credentials = await loadMercadoPagoPlatformCredentials(
+      input.client,
+      mercadoPagoBillingCredentialNames,
+      mercadoPagoBillingIntegrationId,
+    );
+    accessToken = getCredentialValue(credentials, ["MERCADO_PAGO_BILLING_ACCESS_TOKEN"]);
+  }
 
   if (!accessToken) {
-    throw new Error("Configure MERCADO_PAGO_BILLING_ACCESS_TOKEN para cobrar produtos ConnectyHub importados.");
+    throw new Error("Conecte o Mercado Pago da ConnectyHub no painel financeiro para cobrar planos e creditos.");
   }
 
   return {
@@ -218,6 +294,87 @@ export async function loadMercadoPagoPlatformBillingConfig(input: { client?: Sup
     publicKey,
     webhookSecret,
     mode: modeValue === "sandbox" ? "sandbox" : "production",
+  };
+}
+
+export function buildMercadoPagoPlatformBillingRedirectUrl() {
+  return `${getAppBaseUrl()}/api/admin/billing/mercado-pago/callback`;
+}
+
+export function buildMercadoPagoPlatformBillingWebhookUrl() {
+  return `${getAppBaseUrl()}/api/webhooks/mercado-pago/platform-billing`;
+}
+
+export async function buildMercadoPagoPlatformBillingAuthorizationUrl(input: {
+  state: string;
+  client?: SupabaseClient;
+}) {
+  const config = await loadMercadoPagoOAuthConfig({ client: input.client });
+
+  return buildMercadoPagoAuthorizationUrlFromConfig({
+    config: {
+      ...config,
+      redirectUri: buildMercadoPagoPlatformBillingRedirectUrl(),
+    },
+    state: input.state,
+  });
+}
+
+export async function exchangeMercadoPagoPlatformBillingAuthorizationCode(input: {
+  code: string;
+  client?: SupabaseClient;
+}) {
+  const config = await loadMercadoPagoOAuthConfig({ client: input.client });
+
+  return exchangeMercadoPagoAuthorizationCodeWithRedirect({
+    code: input.code,
+    client: input.client,
+    redirectUri: buildMercadoPagoPlatformBillingRedirectUrl(),
+    testTokenEnabled: config.testTokenEnabled,
+  });
+}
+
+export async function saveMercadoPagoPlatformBillingOAuthTokens(input: {
+  client: SupabaseClient;
+  tokens: MercadoPagoOAuthTokenResponse;
+  configuredBy: string | null;
+  source: string;
+}) {
+  if (!input.tokens.access_token?.trim()) {
+    throw new Error("Mercado Pago nao retornou Access Token para a conta recebedora.");
+  }
+
+  const mode = input.tokens.live_mode === false ? "sandbox" : "production";
+  const tokenExpiresAt = calculateMercadoPagoTokenExpiration(input.tokens.expires_in);
+  const values: Array<{ envName: keyof typeof mercadoPagoBillingCredentialDefinitions; value: string | null | undefined }> = [
+    { envName: "MERCADO_PAGO_BILLING_ACCESS_TOKEN", value: input.tokens.access_token },
+    { envName: "MERCADO_PAGO_BILLING_PUBLIC_KEY", value: input.tokens.public_key },
+    { envName: "MERCADO_PAGO_BILLING_REFRESH_TOKEN", value: input.tokens.refresh_token },
+    { envName: "MERCADO_PAGO_BILLING_ACCOUNT_ID", value: input.tokens.user_id ? String(input.tokens.user_id) : null },
+    { envName: "MERCADO_PAGO_BILLING_TOKEN_EXPIRES_AT", value: tokenExpiresAt },
+    { envName: "MERCADO_PAGO_BILLING_WEBHOOK_URL", value: buildMercadoPagoPlatformBillingWebhookUrl() },
+    { envName: "MERCADO_PAGO_BILLING_MODE", value: mode },
+  ];
+  const savedIds: string[] = [];
+
+  for (const item of values) {
+    const savedId = await upsertMercadoPagoPlatformBillingCredential({
+      client: input.client,
+      envName: item.envName,
+      value: item.value,
+      configuredBy: input.configuredBy,
+    });
+
+    if (savedId) {
+      savedIds.push(savedId);
+    }
+  }
+
+  return {
+    mode,
+    accountId: input.tokens.user_id ? String(input.tokens.user_id) : null,
+    tokenExpiresAt,
+    savedIds,
   };
 }
 
@@ -278,6 +435,67 @@ async function loadMercadoPagoPlatformCredentials(
   return credentials;
 }
 
+async function upsertMercadoPagoPlatformBillingCredential(input: {
+  client: SupabaseClient;
+  envName: keyof typeof mercadoPagoBillingCredentialDefinitions;
+  value: string | null | undefined;
+  configuredBy: string | null;
+}) {
+  const value = input.value?.trim();
+
+  if (!value) {
+    return null;
+  }
+
+  const definition = mercadoPagoBillingCredentialDefinitions[input.envName];
+  const encryptedValue = encryptCredentialValue(value);
+  const payload = {
+    scope: "platform",
+    organization_id: null,
+    integration_id: mercadoPagoBillingIntegrationId,
+    env_name: input.envName,
+    label: definition.label,
+    kind: definition.kind,
+    requirement: definition.requirement,
+    encrypted_value: encryptedValue,
+    value_preview: previewCredentialValue(value, definition.kind),
+    value_hash: hashCredentialValue(value),
+    configured_by: input.configuredBy,
+  };
+  const { data: existing, error: existingError } = await input.client
+    .from("integration_credentials")
+    .select("id")
+    .eq("scope", "platform")
+    .eq("integration_id", mercadoPagoBillingIntegrationId)
+    .eq("env_name", input.envName)
+    .is("organization_id", null)
+    .maybeSingle<{ id: string }>();
+
+  if (existingError) {
+    throw new Error(`Nao foi possivel localizar credencial ${input.envName}: ${existingError.message}`);
+  }
+
+  const query = existing
+    ? input.client
+        .from("integration_credentials")
+        .update(payload)
+        .eq("id", existing.id)
+        .select("id")
+        .single<{ id: string }>()
+    : input.client
+        .from("integration_credentials")
+        .insert(payload)
+        .select("id")
+        .single<{ id: string }>();
+  const { data, error } = await query;
+
+  if (error) {
+    throw new Error(`Nao foi possivel salvar credencial ${input.envName}: ${error.message}`);
+  }
+
+  return data.id;
+}
+
 function getCredentialValue(credentials: Map<string, string>, envNames: string[]) {
   for (const envName of envNames) {
     const value = credentials.get(envName) ?? process.env[envName];
@@ -314,12 +532,20 @@ export async function buildMercadoPagoAuthorizationUrl(input: {
   client?: SupabaseClient;
 }) {
   const config = await loadMercadoPagoOAuthConfig({ client: input.client });
+
+  return buildMercadoPagoAuthorizationUrlFromConfig({ config, state: input.state });
+}
+
+function buildMercadoPagoAuthorizationUrlFromConfig(input: {
+  config: MercadoPagoOAuthConfig;
+  state: string;
+}) {
   const url = new URL(mercadoPagoAuthorizationUrl);
-  url.searchParams.set("client_id", config.clientId);
+  url.searchParams.set("client_id", input.config.clientId);
   url.searchParams.set("response_type", "code");
   url.searchParams.set("platform_id", "mp");
   url.searchParams.set("state", input.state);
-  url.searchParams.set("redirect_uri", config.redirectUri);
+  url.searchParams.set("redirect_uri", input.config.redirectUri);
 
   return url.toString();
 }
@@ -329,15 +555,31 @@ export async function exchangeMercadoPagoAuthorizationCode(input: {
   client?: SupabaseClient;
 }) {
   const config = await loadMercadoPagoOAuthConfig({ client: input.client });
+
+  return exchangeMercadoPagoAuthorizationCodeWithRedirect({
+    code: input.code,
+    client: input.client,
+    redirectUri: config.redirectUri,
+    testTokenEnabled: config.testTokenEnabled,
+  });
+}
+
+async function exchangeMercadoPagoAuthorizationCodeWithRedirect(input: {
+  code: string;
+  redirectUri: string;
+  testTokenEnabled: boolean;
+  client?: SupabaseClient;
+}) {
+  const config = await loadMercadoPagoOAuthConfig({ client: input.client });
   const payload: Record<string, string> = {
     client_id: config.clientId,
     client_secret: config.clientSecret,
     code: input.code,
     grant_type: "authorization_code",
-    redirect_uri: config.redirectUri,
+    redirect_uri: input.redirectUri,
   };
 
-  if (config.testTokenEnabled) {
+  if (input.testTokenEnabled) {
     payload.test_token = "true";
   }
 

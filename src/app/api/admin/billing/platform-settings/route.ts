@@ -39,6 +39,7 @@ export async function PATCH(request: NextRequest) {
     }
   }
 
+  const currentMetadata = await loadCurrentSettingsMetadata(client);
   const { data, error } = await client
     .from("platform_billing_settings")
     .upsert(
@@ -51,6 +52,7 @@ export async function PATCH(request: NextRequest) {
         recurring_provider: "mercado_pago",
         updated_by: auth.userId,
         metadata: {
+          ...currentMetadata,
           source: "admin_billing_phase_1",
           updated_from: "platform_settings_route",
         },
@@ -146,6 +148,16 @@ async function validateConnectedBillingAgent(client: SupabaseClient, agentId: st
   }
 
   return { ok: true };
+}
+
+async function loadCurrentSettingsMetadata(client: SupabaseClient) {
+  const { data } = await client
+    .from("platform_billing_settings")
+    .select("metadata")
+    .eq("setting_key", "default")
+    .maybeSingle<{ metadata: JsonRecord | null }>();
+
+  return data?.metadata ?? {};
 }
 
 function readRecord(value: unknown): JsonRecord | null {
