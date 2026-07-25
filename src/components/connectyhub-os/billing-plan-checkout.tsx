@@ -218,12 +218,19 @@ export function BillingPlanCheckout({
                     !canPay ? "cursor-not-allowed opacity-60" : "",
                   )}
                 >
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 font-mono text-[9px] font-bold uppercase tracking-wide text-slate-300">
-                      {bump.badge}
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="flex flex-wrap gap-1.5">
+                      <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 font-mono text-[9px] font-bold uppercase tracking-wide text-slate-300">
+                        {bump.badge}
+                      </span>
+                      {bump.highlightLabel ? (
+                        <span className="rounded-full border border-amber-300/35 bg-amber-300/15 px-2 py-1 font-mono text-[9px] font-black uppercase tracking-wide text-amber-100">
+                          {bump.highlightLabel}
+                        </span>
+                      ) : null}
                     </span>
                     <span className={cn(
-                      "h-4 w-4 rounded border",
+                      "h-4 w-4 shrink-0 rounded border",
                       selected ? "border-emerald-200 bg-emerald-300" : "border-slate-500 bg-slate-950",
                     )} />
                   </div>

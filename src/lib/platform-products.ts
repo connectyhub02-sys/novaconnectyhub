@@ -74,6 +74,8 @@ export type PlatformProduct = {
   shipping: SalesCatalogProductShipping;
   skus: SalesCatalogSku[];
   media: SalesCatalogMedia[];
+  metadata: JsonRecord;
+  highlightLabel: string | null;
   agentTag: string;
   agentPrompt: string | null;
   salesNotes: string | null;
@@ -163,6 +165,7 @@ export type PlatformProductRow = {
   shipping: unknown;
   skus: unknown;
   media: unknown;
+  metadata: unknown;
   agent_tag: string | null;
   agent_prompt: string | null;
   sales_notes: string | null;
@@ -247,6 +250,7 @@ export const PLATFORM_PRODUCT_SELECT = [
   "shipping",
   "skus",
   "media",
+  "metadata",
   "agent_tag",
   "agent_prompt",
   "sales_notes",
@@ -560,6 +564,7 @@ export function mapPlatformProductRow(row: PlatformProductRow): PlatformProduct 
   const name = row.name || "Produto ConnectyHub";
   const id = row.id;
   const media = readMediaList(row.media);
+  const metadata = readRecord(row.metadata) ?? {};
   const commercialDescription = readString(row.commercial_description) ?? "";
 
   return {
@@ -586,6 +591,8 @@ export function mapPlatformProductRow(row: PlatformProductRow): PlatformProduct 
     shipping: readProductShipping(row.shipping),
     skus: readSkus(row.skus, id),
     media,
+    metadata,
+    highlightLabel: readHighlightLabel(metadata),
     agentTag: readString(row.agent_tag) ?? createSalesCatalogTag(name, id),
     agentPrompt: readString(row.agent_prompt),
     salesNotes: readString(row.sales_notes),
@@ -748,6 +755,7 @@ async function createOrUpdateImportedCatalogItem(input: {
     platform_product_commission_percentage: product.commissionPercentage,
     platform_product_commission_release_days: product.commissionReleaseDays,
     platform_product_agent_prompt: product.agentPrompt,
+    highlight_label: product.highlightLabel,
     updated_from: "platform_product_import",
     created_by: input.userId,
     updated_by: input.userId,
@@ -1272,6 +1280,15 @@ function readRecord(value: unknown): JsonRecord | null {
 
 function readString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function readHighlightLabel(metadata: JsonRecord) {
+  return readString(
+    metadata.highlight_label
+      ?? metadata.highlightLabel
+      ?? metadata.product_highlight_label
+      ?? metadata.productHighlightLabel,
+  );
 }
 
 function readStringList(value: unknown, fallback: string[]) {

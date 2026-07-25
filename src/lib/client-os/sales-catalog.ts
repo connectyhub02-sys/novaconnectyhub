@@ -565,6 +565,7 @@ export function mapSalesCatalogItem(row: SalesCatalogMemoryRow): ClientSalesCata
     currency,
     status,
     tag: readString(metadata.tag) ?? createSalesCatalogTag(row.title, row.id),
+    highlightLabel: readHighlightLabel(metadata),
     media,
     attributes: readItemAttributes(metadata.attributes),
     inventory: readProductInventory(metadata.inventory),
@@ -1344,6 +1345,15 @@ function readRecord(value: unknown): JsonRecord | null {
 
 function readString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function readHighlightLabel(metadata: JsonRecord) {
+  return readString(
+    metadata.highlight_label
+      ?? metadata.highlightLabel
+      ?? metadata.product_highlight_label
+      ?? metadata.productHighlightLabel,
+  );
 }
 
 function readNumber(value: unknown) {

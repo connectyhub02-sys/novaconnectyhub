@@ -17,6 +17,7 @@ export type BillingCheckoutBump = {
   itemType: "credit_pack" | "adjustment";
   creditAmount: number | null;
   badge: string;
+  highlightLabel: string | null;
   media: BillingCheckoutBumpMedia | null;
 };
 
@@ -31,6 +32,7 @@ export const billingCheckoutBumps: BillingCheckoutBump[] = [
     itemType: "credit_pack",
     creditAmount: 5000,
     badge: "Agente online",
+    highlightLabel: null,
     media: null,
   },
   {
@@ -43,6 +45,7 @@ export const billingCheckoutBumps: BillingCheckoutBump[] = [
     itemType: "credit_pack",
     creditAmount: 10000,
     badge: "Venda mais",
+    highlightLabel: null,
     media: null,
   },
   {
@@ -55,6 +58,7 @@ export const billingCheckoutBumps: BillingCheckoutBump[] = [
     itemType: "credit_pack",
     creditAmount: 25000,
     badge: "Alta performance",
+    highlightLabel: null,
     media: null,
   },
   {
@@ -67,6 +71,7 @@ export const billingCheckoutBumps: BillingCheckoutBump[] = [
     itemType: "adjustment",
     creditAmount: null,
     badge: "Recorrente",
+    highlightLabel: null,
     media: null,
   },
   {
@@ -79,6 +84,7 @@ export const billingCheckoutBumps: BillingCheckoutBump[] = [
     itemType: "adjustment",
     creditAmount: null,
     badge: "Implantacao",
+    highlightLabel: null,
     media: null,
   },
 ];

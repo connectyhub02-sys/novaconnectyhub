@@ -65,6 +65,7 @@ type ProductDraft = {
   shortDescription: string;
   commercialDescription: string;
   category: string;
+  highlightLabel: string;
   price: string;
   currency: string;
   status: PlatformProductStatus;
@@ -169,6 +170,15 @@ const platformProductSetupTabs: Array<{ id: PlatformProductSetupTab; label: stri
   { id: "variations", label: "Variacoes", icon: PackagePlus },
 ];
 
+const highlightLabelSuggestions = [
+  "Mais vendido",
+  "Mais procurado",
+  "Melhor escolha",
+  "Oferta especial",
+  "Alta conversao",
+  "Recomendado",
+];
+
 const emptyDraft: ProductDraft = {
   productId: "",
   name: "",
@@ -177,6 +187,7 @@ const emptyDraft: ProductDraft = {
   shortDescription: "",
   commercialDescription: "",
   category: "",
+  highlightLabel: "",
   price: "",
   currency: "BRL",
   status: "active",
@@ -926,6 +937,20 @@ export function PlatformProductsConsole({
                         )}
                       </Field>
 
+                      <Field label="Selo de destaque">
+                        <input
+                          value={draft.highlightLabel}
+                          onChange={(event) => patchDraft({ highlightLabel: event.target.value.slice(0, 32) })}
+                          className="h-10 w-full rounded-xl px-3 text-[13px] outline-none"
+                          list="platform-product-highlight-labels"
+                          placeholder="Ex.: Mais vendido, Mais procurado, Oferta especial"
+                          style={inputStyle}
+                        />
+                        <datalist id="platform-product-highlight-labels">
+                          {highlightLabelSuggestions.map((label) => <option key={label} value={label} />)}
+                        </datalist>
+                      </Field>
+
                       <Field label="Descricao curta para vitrine">
                         <input value={draft.shortDescription} onChange={(event) => patchDraft({ shortDescription: event.target.value.slice(0, 220) })} className="h-10 w-full rounded-xl px-3 text-[13px] outline-none" style={inputStyle} />
                       </Field>
@@ -1489,6 +1514,7 @@ function ProductCard({
             </p>
           </div>
           <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
+            {product.highlightLabel ? <NeonBadge tone="amber">{product.highlightLabel}</NeonBadge> : null}
             <StatusBadge status={product.status === "active" ? "online" : product.status === "draft" ? "warning" : "idle"} label={product.status} />
             <NeonBadge tone={product.marketplaceStatus === "featured" ? "amber" : product.marketplaceStatus === "visible" ? "cyan" : "zinc"}>{product.marketplaceStatus}</NeonBadge>
           </div>
@@ -1969,6 +1995,7 @@ function createDraft(product: PlatformProduct | null): ProductDraft {
     shortDescription: product.shortDescription ?? "",
     commercialDescription: product.commercialDescription,
     category: product.category ?? "",
+    highlightLabel: product.highlightLabel ?? "",
     price: product.price ?? "",
     currency: product.currency,
     status: product.status,

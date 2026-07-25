@@ -166,6 +166,7 @@ export type ClientSalesCatalogItem = {
   currency: string;
   status: SalesCatalogItemStatus;
   tag: string;
+  highlightLabel: string | null;
   media: SalesCatalogMedia[];
   attributes: SalesCatalogItemAttribute[];
   inventory: SalesCatalogProductInventory;

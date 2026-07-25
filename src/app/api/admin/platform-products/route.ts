@@ -308,6 +308,7 @@ async function savePlatformProduct(request: NextRequest, mode: "create" | "updat
     const commissionPercentage = commissionPolicyType === "none"
       ? 0
       : normalizeMoneyNumber(formData.get("commissionPercentage"), 0, 100);
+    const highlightLabel = normalizeHighlightLabel(readFormString(formData.get("highlightLabel")));
     const payload = {
       id: productId,
       product_code: productCode,
@@ -342,9 +343,12 @@ async function savePlatformProduct(request: NextRequest, mode: "create" | "updat
       refund_window_days: normalizeInteger(formData.get("refundWindowDays"), 0, 365, 7),
       created_by: existingProduct?.createdBy ?? auth.userId,
       metadata: {
+        ...(existingProduct?.metadata ?? {}),
         source: "admin_os",
         mirrored_from: "sales_catalog_product_contract",
         updated_by: auth.userId,
+        highlight_label: highlightLabel,
+        product_highlight_label: highlightLabel,
       },
     };
     const query = existingProduct
@@ -796,6 +800,10 @@ function normalizeDescription(value: string | null) {
 function normalizeOptionalText(value: string | null, maxLength: number) {
   const normalized = value?.replace(/\s+/g, " ").trim() ?? "";
   return normalized ? normalized.slice(0, maxLength) : null;
+}
+
+function normalizeHighlightLabel(value: string | null) {
+  return normalizeOptionalText(value, 32);
 }
 
 function normalizeDateString(value: string | null) {

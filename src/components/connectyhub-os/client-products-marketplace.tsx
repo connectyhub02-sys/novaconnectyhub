@@ -319,6 +319,7 @@ function MarketplaceProductCard({
             </p>
           </div>
           <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
+            {product.highlightLabel ? <NeonBadge tone="amber">{product.highlightLabel}</NeonBadge> : null}
             {product.marketplaceStatus === "featured" ? <NeonBadge tone="amber">destaque</NeonBadge> : null}
             {imported ? <StatusBadge status="online" label="importado" /> : null}
           </div>

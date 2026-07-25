@@ -209,6 +209,15 @@ const salesCatalogProductFormTabs: Array<{ id: SalesCatalogProductFormTab; label
   { id: "delivery", label: "Entrega", icon: Truck },
 ];
 
+const highlightLabelSuggestions = [
+  "Mais vendido",
+  "Mais procurado",
+  "Melhor escolha",
+  "Oferta especial",
+  "Alta conversao",
+  "Recomendado",
+];
+
 const orderStatusOptions: SalesCatalogOrderStatus[] = [
   "draft",
   "pending_payment",
@@ -344,6 +353,7 @@ export function SalesCatalogConsole({
   const [calculatingQuote, setCalculatingQuote] = useState(false);
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("");
+  const [highlightLabel, setHighlightLabel] = useState("");
   const [price, setPrice] = useState("");
   const [description, setDescription] = useState("");
   const [salePrice, setSalePrice] = useState("");
@@ -987,6 +997,7 @@ export function SalesCatalogConsole({
       formData.set("title", title);
       formData.set("description", description);
       formData.set("category", category);
+      formData.set("highlightLabel", highlightLabel);
       formData.set("price", price);
       formData.set("currency", "BRL");
       formData.set("salePrice", salePrice);
@@ -1293,6 +1304,7 @@ export function SalesCatalogConsole({
     setActiveTab("products");
     setTitle(item.title);
     setCategory(item.category ?? "");
+    setHighlightLabel(item.highlightLabel ?? "");
     setPrice(item.price ?? "");
     setDescription(item.description);
     setSalePrice(item.offer.salePrice ?? "");
@@ -1338,6 +1350,7 @@ export function SalesCatalogConsole({
     setEditingMedia([]);
     setTitle("");
     setCategory("");
+    setHighlightLabel("");
     setPrice("");
     setDescription("");
     setSalePrice("");
@@ -2569,6 +2582,21 @@ export function SalesCatalogConsole({
             </div>
 
             <label className="block">
+              <FieldLabel>Selo de destaque</FieldLabel>
+              <input
+                value={highlightLabel}
+                onChange={(event) => setHighlightLabel(event.target.value.slice(0, 32))}
+                className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                list="sales-catalog-highlight-labels"
+                placeholder="Ex.: Mais vendido, Mais procurado, Oferta especial"
+                style={{ borderColor: "var(--ch-border)" }}
+              />
+              <datalist id="sales-catalog-highlight-labels">
+                {highlightLabelSuggestions.map((label) => <option key={label} value={label} />)}
+              </datalist>
+            </label>
+
+            <label className="block">
               <FieldLabel>Descricao comercial</FieldLabel>
               <textarea
                 value={description}
@@ -3530,6 +3558,7 @@ function CatalogItemCard({
             </p>
           </div>
           <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
+            {item.highlightLabel ? <NeonBadge tone="amber">{item.highlightLabel}</NeonBadge> : null}
             <NeonBadge tone={item.source === "whatsapp_catalog" ? "green" : "cyan"}>{sourceLabel}</NeonBadge>
             <NeonBadge tone={inventoryTone(item.inventory.status)}>{formatSalesCatalogStockStatus(item.inventory.status)}</NeonBadge>
             <NeonBadge tone={item.readiness === "ready" ? "green" : "amber"}>{formatReadiness(item.readiness)}</NeonBadge>

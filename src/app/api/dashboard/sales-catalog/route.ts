@@ -258,6 +258,7 @@ export async function POST(request: NextRequest) {
     const tag = readFormString(existingMetadata.tag) ?? createSalesCatalogTag(title, itemId);
     const content = buildSalesCatalogContent({ title, description, category, price, currency, media, attributes, inventory, offer, fulfillment, shipping });
     const metadataSource = readFormString(existingMetadata.source) ?? "manual";
+    const highlightLabel = normalizeHighlightLabel(readFormString(formData.get("highlightLabel")));
     const memoryTags = [
       "sales_catalog_item",
       "sales_catalog",
@@ -274,6 +275,7 @@ export async function POST(request: NextRequest) {
       currency,
       status,
       tag,
+      highlight_label: highlightLabel,
       attributes: serializeItemAttributes(attributes),
       inventory: serializeProductInventory(inventory),
       offer: serializeProductOffer(offer),
@@ -2065,6 +2067,10 @@ function normalizeDescription(value: string | null) {
 function normalizeOptionalText(value: string | null, maxLength: number) {
   const normalized = value?.replace(/\s+/g, " ").trim() ?? "";
   return normalized ? normalized.slice(0, maxLength) : null;
+}
+
+function normalizeHighlightLabel(value: string | null) {
+  return normalizeOptionalText(value, 32);
 }
 
 function normalizeDateString(value: string | null) {

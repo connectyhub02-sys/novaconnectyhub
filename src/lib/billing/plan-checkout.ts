@@ -60,6 +60,7 @@ export type BillingOrderBumpProductOption = {
   creditAmount: number | null;
   recurrence: BillingCheckoutBump["recurrence"];
   badge: string;
+  highlightLabel: string | null;
   media: BillingCheckoutBumpMedia | null;
 };
 
@@ -370,6 +371,7 @@ export async function loadBillingCheckoutBumps(client: SupabaseClient) {
       itemType: option.creditAmount && option.creditAmount > 0 ? "credit_pack" : "adjustment",
       creditAmount: option.creditAmount,
       badge: option.badge,
+      highlightLabel: option.highlightLabel,
       media: option.media,
     } satisfies BillingCheckoutBump));
 }
@@ -419,6 +421,7 @@ export async function loadBillingOrderBumpProductOptions(client: SupabaseClient)
       recurrence: readString(metadata.billing_order_bump_recurrence) === "monthly" ? "monthly" : "one_time",
       badge: readString(metadata.billing_order_bump_badge)
         ?? (creditAmount && creditAmount > 0 ? "Creditos" : "Adicional"),
+      highlightLabel: readHighlightLabel(metadata),
       media,
     };
   });
@@ -433,6 +436,7 @@ function serializeBump(bump: BillingCheckoutBump) {
     recurrence: bump.recurrence,
     item_type: bump.itemType,
     credit_amount: bump.creditAmount,
+    highlight_label: bump.highlightLabel,
     media: bump.media,
   };
 }
@@ -485,6 +489,15 @@ function readOrderBumpCreditAmount(metadata: JsonRecord, name: string, descripti
   }
 
   return /(?:mil|k)\s*credit/.test(match[0]) && base < 1000 ? base * 1000 : base;
+}
+
+function readHighlightLabel(metadata: JsonRecord) {
+  return readString(
+    metadata.highlight_label
+      ?? metadata.highlightLabel
+      ?? metadata.product_highlight_label
+      ?? metadata.productHighlightLabel,
+  );
 }
 
 function readOrderBumpMedia(value: unknown): BillingCheckoutBumpMedia | null {
