@@ -6,7 +6,7 @@ import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { MercadoPagoCardBrick } from "@/components/checkout/mercado-pago-card-brick";
 import {
-  billingCheckoutBumps,
+  type BillingCheckoutBump,
   type BillingCheckoutBumpCode,
 } from "@/lib/billing/plan-checkout-catalog";
 import { cn } from "@/lib/utils";
@@ -21,6 +21,7 @@ type BillingPlanCheckoutProps = {
   subscriptionStatus: string;
   paymentStatus: string;
   cardPublicKey: string | null;
+  availableBumps: BillingCheckoutBump[];
   initialSelectedBumpCodes: BillingCheckoutBumpCode[];
   initialPixQrCode: string | null;
   initialPixQrCodeBase64: string | null;
@@ -50,6 +51,7 @@ export function BillingPlanCheckout({
   subscriptionStatus,
   paymentStatus,
   cardPublicKey,
+  availableBumps,
   initialSelectedBumpCodes,
   initialPixQrCode,
   initialPixQrCodeBase64,
@@ -68,8 +70,8 @@ export function BillingPlanCheckout({
   const [copied, setCopied] = useState(false);
   const [notice, setNotice] = useState<NoticeState>(null);
   const selectedBumps = useMemo(
-    () => billingCheckoutBumps.filter((bump) => selectedBumpCodes.includes(bump.code)),
-    [selectedBumpCodes],
+    () => availableBumps.filter((bump) => selectedBumpCodes.includes(bump.code)),
+    [availableBumps, selectedBumpCodes],
   );
   const bumpsAmount = selectedBumps.reduce((total, bump) => total + bump.priceBrl, 0);
   const totalAmount = Math.round((planAmountBrl + bumpsAmount) * 100) / 100;
@@ -172,6 +174,7 @@ export function BillingPlanCheckout({
           </div>
         </div>
 
+        {availableBumps.length > 0 ? (
         <div className="rounded-[8px] border border-white/10 bg-slate-950/72 p-5">
           <div className="flex items-center justify-between gap-3">
             <div>
@@ -187,7 +190,7 @@ export function BillingPlanCheckout({
           </div>
 
           <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {billingCheckoutBumps.map((bump) => {
+            {availableBumps.map((bump) => {
               const selected = selectedBumpCodes.includes(bump.code);
 
               return (
@@ -226,6 +229,7 @@ export function BillingPlanCheckout({
             })}
           </div>
         </div>
+        ) : null}
       </section>
 
       <aside className="rounded-[8px] border border-cyan-400/25 bg-slate-950/82 p-5 shadow-xl shadow-black/25">

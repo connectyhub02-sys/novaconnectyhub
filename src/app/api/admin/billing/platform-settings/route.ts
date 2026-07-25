@@ -19,6 +19,7 @@ type SettingsPayload = {
   pixAutomaticRequired: boolean;
   checkoutMode: "subscription" | "manual_review";
   billingMessageTemplates: PlatformBillingMessageTemplates | null;
+  billingOrderBumpProductIds: string[] | null;
 };
 
 export async function PATCH(request: NextRequest) {
@@ -47,6 +48,8 @@ export async function PATCH(request: NextRequest) {
   const currentMetadata = await loadCurrentSettingsMetadata(client);
   const billingMessageTemplates = parsed.settings.billingMessageTemplates
     ?? normalizePlatformBillingMessageTemplates(currentMetadata.billing_message_templates);
+  const billingOrderBumpProductIds = parsed.settings.billingOrderBumpProductIds
+    ?? readUuidList(currentMetadata.billing_order_bump_product_ids);
   const { data, error } = await client
     .from("platform_billing_settings")
     .upsert(
@@ -61,6 +64,7 @@ export async function PATCH(request: NextRequest) {
         metadata: {
           ...currentMetadata,
           billing_message_templates: billingMessageTemplates,
+          billing_order_bump_product_ids: billingOrderBumpProductIds,
           source: "admin_billing_phase_1",
           updated_from: "platform_settings_route",
         },
@@ -85,6 +89,7 @@ export async function PATCH(request: NextRequest) {
       pixAutomaticRequired: parsed.settings.pixAutomaticRequired,
       checkoutMode: parsed.settings.checkoutMode,
       billingMessageTemplatesUpdated: Boolean(parsed.settings.billingMessageTemplates),
+      billingOrderBumpProductIds,
     },
   });
 
@@ -107,6 +112,9 @@ function parseSettingsPayload(body: unknown):
   const billingMessageTemplates = Object.prototype.hasOwnProperty.call(record, "billingMessageTemplates")
     ? normalizePlatformBillingMessageTemplates(record.billingMessageTemplates)
     : null;
+  const billingOrderBumpProductIds = Object.prototype.hasOwnProperty.call(record, "billingOrderBumpProductIds")
+    ? readUuidList(record.billingOrderBumpProductIds)
+    : null;
 
   if (record.billingWhatsappAgentId !== null && record.billingWhatsappAgentId !== undefined && !billingWhatsappAgentId) {
     return { ok: false, error: "Escolha um agente valido." };
@@ -120,6 +128,7 @@ function parseSettingsPayload(body: unknown):
       pixAutomaticRequired: record.pixAutomaticRequired !== false,
       checkoutMode,
       billingMessageTemplates,
+      billingOrderBumpProductIds,
     },
   };
 }
@@ -191,4 +200,15 @@ function readNullableUuid(value: unknown) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input)
     ? input
     : null;
+}
+
+function readUuidList(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => item.trim())
+    .filter((item) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(item));
 }

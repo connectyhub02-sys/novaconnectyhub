@@ -6,9 +6,10 @@ import { connection } from "next/server";
 import { BillingPlanCheckout } from "@/components/connectyhub-os/billing-plan-checkout";
 import { ConnectyShell } from "@/components/connectyhub-os/connecty-shell";
 import {
+  loadBillingCheckoutBumps,
   loadBillingCheckoutIntent,
   readBillingCheckoutPixData,
-  readSelectedBillingCheckoutBumpCodes,
+  readSelectedBillingCheckoutBumpCodesForCatalog,
 } from "@/lib/billing/plan-checkout";
 import { loadMercadoPagoPlatformBillingConfig, normalizeCurrencyAmount } from "@/lib/sales-catalog/mercado-pago";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
@@ -47,6 +48,7 @@ export default async function DashboardBillingCheckoutPage({
     organizationId: workspace.organization.id,
     subscriptionId,
   });
+  const availableBumps = await loadBillingCheckoutBumps(client);
   const publicKey = await loadMercadoPagoPlatformBillingConfig({ client })
     .then((config) => config.publicKey)
     .catch(() => null);
@@ -115,7 +117,8 @@ export default async function DashboardBillingCheckoutPage({
             subscriptionStatus={intent.subscription.status}
             paymentStatus={intent.payment.status}
             cardPublicKey={publicKey}
-            initialSelectedBumpCodes={readSelectedBillingCheckoutBumpCodes(intent)}
+            availableBumps={availableBumps}
+            initialSelectedBumpCodes={readSelectedBillingCheckoutBumpCodesForCatalog(intent, availableBumps)}
             initialPixQrCode={readBillingCheckoutPixData(intent).pixQrCode}
             initialPixQrCodeBase64={readBillingCheckoutPixData(intent).pixQrCodeBase64}
             initialPixTicketUrl={readBillingCheckoutPixData(intent).pixTicketUrl}

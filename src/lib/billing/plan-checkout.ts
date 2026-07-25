@@ -2,11 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getAppBaseUrl, normalizeCurrencyAmount } from "@/lib/sales-catalog/mercado-pago";
-import {
-  billingCheckoutBumps,
-  type BillingCheckoutBump,
-  type BillingCheckoutBumpCode,
-} from "./plan-checkout-catalog";
+import type { BillingCheckoutBump, BillingCheckoutBumpCode } from "./plan-checkout-catalog";
 
 export type JsonRecord = Record<string, unknown>;
 
@@ -51,9 +47,20 @@ export type BillingCheckoutIntent = {
   };
 };
 
-const bumpByCode = new Map<BillingCheckoutBumpCode, BillingCheckoutBump>(
-  billingCheckoutBumps.map((bump) => [bump.code, bump]),
-);
+export type BillingOrderBumpProductOption = {
+  id: string;
+  productCode: string;
+  name: string;
+  description: string;
+  priceBrl: number;
+  priceLabel: string;
+  status: string;
+  selected: boolean;
+  available: boolean;
+  creditAmount: number | null;
+  recurrence: BillingCheckoutBump["recurrence"];
+  badge: string;
+};
 
 export function buildDashboardBillingCheckoutPath(subscriptionId: string) {
   return `/dashboard/planos/checkout/${encodeURIComponent(subscriptionId)}`;
@@ -146,7 +153,9 @@ export async function syncBillingCheckoutCart(
   client: SupabaseClient,
   intent: BillingCheckoutIntent,
   selectedBumpCodes: BillingCheckoutBumpCode[],
+  availableBumps: BillingCheckoutBump[],
 ) {
+  const bumpByCode = new Map(availableBumps.map((bump) => [bump.code, bump]));
   const selectedBumps = selectedBumpCodes
     .map((code) => bumpByCode.get(code))
     .filter((bump): bump is BillingCheckoutBump => Boolean(bump));
@@ -201,6 +210,7 @@ export async function syncBillingCheckoutCart(
           source: "dashboard_plan_checkout_bump",
           bump: serializeBump(bump),
           recurrence: bump.recurrence,
+          platform_product_id: bump.platformProductId,
         },
       })),
     );
@@ -269,17 +279,25 @@ export async function syncBillingCheckoutCart(
 }
 
 export function normalizeBillingCheckoutBumpCodes(value: unknown): BillingCheckoutBumpCode[] {
+  return normalizeBillingCheckoutBumpCodesForCatalog(value, null);
+}
+
+export function normalizeBillingCheckoutBumpCodesForCatalog(
+  value: unknown,
+  availableBumps: BillingCheckoutBump[] | null,
+): BillingCheckoutBumpCode[] {
   if (!Array.isArray(value)) {
     return [];
   }
 
   const seen = new Set<BillingCheckoutBumpCode>();
+  const allowedCodes = availableBumps ? new Set(availableBumps.map((bump) => bump.code)) : null;
 
   for (const item of value) {
     if (typeof item !== "string") continue;
     const code = item.trim() as BillingCheckoutBumpCode;
 
-    if (bumpByCode.has(code)) {
+    if (!allowedCodes || allowedCodes.has(code)) {
       seen.add(code);
     }
   }
@@ -292,6 +310,18 @@ export function readSelectedBillingCheckoutBumpCodes(intent: BillingCheckoutInte
     intent?.payment.payload?.selected_bump_codes
     ?? intent?.subscription.metadata?.selected_bump_codes
     ?? intent?.invoice.metadata?.selected_bump_codes,
+  );
+}
+
+export function readSelectedBillingCheckoutBumpCodesForCatalog(
+  intent: BillingCheckoutIntent | null,
+  availableBumps: BillingCheckoutBump[],
+) {
+  return normalizeBillingCheckoutBumpCodesForCatalog(
+    intent?.payment.payload?.selected_bump_codes
+    ?? intent?.subscription.metadata?.selected_bump_codes
+    ?? intent?.invoice.metadata?.selected_bump_codes,
+    availableBumps,
   );
 }
 
@@ -325,9 +355,75 @@ export function formatBillingCheckoutDescription(intent: BillingCheckoutIntent, 
   return `ConnectyHub ${intent.plan.name}${bumpText}`.slice(0, 220);
 }
 
+export async function loadBillingCheckoutBumps(client: SupabaseClient) {
+  const options = await loadBillingOrderBumpProductOptions(client);
+  return options
+    .filter((option) => option.selected && option.available)
+    .map((option) => ({
+      code: option.id,
+      platformProductId: option.id,
+      title: option.name,
+      description: option.description,
+      priceBrl: option.priceBrl,
+      recurrence: option.recurrence,
+      itemType: option.creditAmount && option.creditAmount > 0 ? "credit_pack" : "adjustment",
+      creditAmount: option.creditAmount,
+      badge: option.badge,
+    } satisfies BillingCheckoutBump));
+}
+
+export async function loadBillingOrderBumpProductOptions(client: SupabaseClient): Promise<BillingOrderBumpProductOption[]> {
+  const settings = await loadBillingOrderBumpSettings(client);
+  const { data, error } = await client
+    .from("platform_products")
+    .select("id, product_code, name, short_description, commercial_description, category, status, owner_type, sales_channel_type, price, currency, offer, metadata, updated_at")
+    .eq("owner_type", "connectyhub")
+    .eq("sales_channel_type", "direct")
+    .neq("status", "archived")
+    .order("updated_at", { ascending: false })
+    .limit(100);
+
+  if (error) {
+    throw new Error(`Nao foi possivel carregar produtos internos para order bump: ${error.message}`);
+  }
+
+  const selectedIds = new Set(settings.selectedProductIds);
+
+  return (data ?? []).map((row) => {
+    const record = row as JsonRecord;
+    const metadata = readRecord(record.metadata) ?? {};
+    const offer = readRecord(record.offer) ?? {};
+    const priceText = readString(offer.sale_price ?? offer.salePrice) ?? readString(record.price);
+    const priceBrl = parseBrlPrice(priceText);
+    const name = readString(record.name) ?? "Produto ConnectyHub";
+    const description = readString(record.short_description)
+      ?? readString(record.commercial_description)
+      ?? "Adicional ConnectyHub para aumentar o carrinho no checkout.";
+    const status = readString(record.status) ?? "draft";
+    const creditAmount = readOrderBumpCreditAmount(metadata, name, description);
+
+    return {
+      id: String(record.id),
+      productCode: readString(record.product_code) ?? String(record.id),
+      name,
+      description,
+      priceBrl,
+      priceLabel: priceBrl > 0 ? formatBrl(priceBrl) : priceText ?? "Sem preco",
+      status,
+      selected: selectedIds.has(String(record.id)),
+      available: status === "active" && priceBrl > 0,
+      creditAmount,
+      recurrence: readString(metadata.billing_order_bump_recurrence) === "monthly" ? "monthly" : "one_time",
+      badge: readString(metadata.billing_order_bump_badge)
+        ?? (creditAmount && creditAmount > 0 ? "Creditos" : "Adicional"),
+    };
+  });
+}
+
 function serializeBump(bump: BillingCheckoutBump) {
   return {
     code: bump.code,
+    platform_product_id: bump.platformProductId,
     title: bump.title,
     price_brl: bump.priceBrl,
     recurrence: bump.recurrence,
@@ -336,8 +432,99 @@ function serializeBump(bump: BillingCheckoutBump) {
   };
 }
 
+async function loadBillingOrderBumpSettings(client: SupabaseClient) {
+  const { data, error } = await client
+    .from("platform_billing_settings")
+    .select("metadata")
+    .eq("setting_key", "default")
+    .maybeSingle<{ metadata: JsonRecord | null }>();
+
+  if (error) {
+    throw new Error(`Nao foi possivel carregar configuracao de order bump: ${error.message}`);
+  }
+
+  const metadata = data?.metadata ?? {};
+
+  return {
+    selectedProductIds: readUuidList(metadata.billing_order_bump_product_ids),
+  };
+}
+
+function readOrderBumpCreditAmount(metadata: JsonRecord, name: string, description: string) {
+  const explicit = toNumberOrNull(
+    metadata.billing_credit_amount
+    ?? metadata.order_bump_credit_amount
+    ?? metadata.credit_amount,
+  );
+
+  if (explicit && explicit > 0) {
+    return explicit;
+  }
+
+  const text = `${name} ${description}`.toLowerCase();
+
+  if (!text.includes("credito") && !text.includes("creditos")) {
+    return null;
+  }
+
+  const match = text.match(/(\d{1,3}(?:[.\s]\d{3})+|\d+)\s*(?:mil|k)?\s*credit/);
+  if (!match) {
+    const compact = text.match(/(\d+)\s*(?:mil|k)/);
+    return compact ? Number(compact[1]) * 1000 : null;
+  }
+
+  const raw = match[1].replace(/[.\s]/g, "");
+  const base = Number(raw);
+  if (!Number.isFinite(base) || base <= 0) {
+    return null;
+  }
+
+  return /(?:mil|k)\s*credit/.test(match[0]) && base < 1000 ? base * 1000 : base;
+}
+
+function parseBrlPrice(value: string | null) {
+  if (!value) {
+    return 0;
+  }
+
+  const normalized = value
+    .replace(/[^\d,.-]/g, "")
+    .replace(/\.(?=\d{3}(?:\D|$))/g, "")
+    .replace(",", ".");
+  const parsed = Number.parseFloat(normalized);
+
+  return Number.isFinite(parsed) ? roundMoney(parsed) : 0;
+}
+
+function formatBrl(value: number) {
+  return new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  }).format(value);
+}
+
+function readUuidList(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => item.trim())
+    .filter((item) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(item));
+}
+
+function readRecord(value: unknown): JsonRecord | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as JsonRecord : null;
+}
+
 function readString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function toNumberOrNull(value: unknown) {
+  const parsed = typeof value === "number" ? value : Number(value ?? NaN);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function roundMoney(value: number) {

@@ -12,6 +12,7 @@ import {
   ExternalLink,
   Link2,
   MessageCircle,
+  PackagePlus,
   PlugZap,
   ReceiptText,
   RefreshCw,
@@ -55,6 +56,7 @@ type SettingsDraft = {
   pixAutomaticRequired: boolean;
   checkoutMode: "subscription" | "manual_review";
   billingMessageTemplates: PlatformBillingMessageTemplates;
+  billingOrderBumpProductIds: string[];
 };
 
 export function PlatformBillingOperations({
@@ -75,6 +77,7 @@ export function PlatformBillingOperations({
     pixAutomaticRequired: catalog.settings.pixAutomaticRequired,
     checkoutMode: catalog.settings.checkoutMode,
     billingMessageTemplates: catalog.settings.billingMessageTemplates,
+    billingOrderBumpProductIds: catalog.settings.billingOrderBumpProductIds,
   }));
   const selectedAgent = catalog.agents.find((agent) => agent.id === draft.billingWhatsappAgentId) ?? null;
   const connectedAgents = useMemo(() => catalog.agents.filter((agent) => agent.isConnected), [catalog.agents]);
@@ -111,6 +114,7 @@ export function PlatformBillingOperations({
           pixAutomaticRequired: draft.pixAutomaticRequired,
           checkoutMode: draft.checkoutMode,
           billingMessageTemplates: draft.billingMessageTemplates,
+          billingOrderBumpProductIds: draft.billingOrderBumpProductIds,
         }),
       });
       const data = await response.json().catch(() => null) as { error?: string } | null;
@@ -345,6 +349,18 @@ export function PlatformBillingOperations({
     }));
   }
 
+  function toggleOrderBumpProduct(productId: string) {
+    setDraft((current) => {
+      const selected = current.billingOrderBumpProductIds.includes(productId);
+      return {
+        ...current,
+        billingOrderBumpProductIds: selected
+          ? current.billingOrderBumpProductIds.filter((id) => id !== productId)
+          : [...current.billingOrderBumpProductIds, productId],
+      };
+    });
+  }
+
   return (
     <div className="mb-4 space-y-3">
       <Panel
@@ -568,6 +584,12 @@ export function PlatformBillingOperations({
                 templates={draft.billingMessageTemplates}
                 onChange={updateMessageTemplate}
                 onReset={resetMessageTemplate}
+              />
+
+              <OrderBumpProductsEditor
+                products={catalog.orderBumpProducts}
+                selectedProductIds={draft.billingOrderBumpProductIds}
+                onToggle={toggleOrderBumpProduct}
               />
 
               <div className="flex flex-wrap items-center gap-2">
@@ -1091,6 +1113,86 @@ function MessageTemplatesEditor({
             </div>
           </details>
         ))}
+      </div>
+    </details>
+  );
+}
+
+function OrderBumpProductsEditor({
+  products,
+  selectedProductIds,
+  onToggle,
+}: {
+  products: PlatformBillingOperationsCatalog["orderBumpProducts"];
+  selectedProductIds: string[];
+  onToggle: (productId: string) => void;
+}) {
+  const selectedCount = products.filter((product) => selectedProductIds.includes(product.id) && product.available).length;
+
+  return (
+    <details
+      className="rounded-xl"
+      style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}
+    >
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-3 marker:hidden [&::-webkit-details-marker]:hidden">
+        <span className="min-w-0">
+          <span className="flex items-center gap-2 text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>
+            <PackagePlus className="h-4 w-4 text-emerald-300" />
+            Order bumps do checkout
+          </span>
+          <span className="mt-0.5 block text-[11px] leading-4 text-slate-500">
+            Produtos internos do Produtos CH que aparecem como aumento de carrinho.
+          </span>
+        </span>
+        <StatusBadge status={selectedCount > 0 ? "online" : "warning"} label={`${selectedCount} ativos`} />
+      </summary>
+
+      <div className="grid gap-2 border-t border-white/10 p-3">
+        {products.length > 0 ? (
+          products.map((product) => {
+            const checked = selectedProductIds.includes(product.id);
+
+            return (
+              <label
+                key={product.id}
+                className="flex cursor-pointer items-start gap-3 rounded-lg p-3"
+                style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  disabled={!product.available && !checked}
+                  onChange={() => onToggle(product.id)}
+                  className="mt-1"
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="flex flex-wrap items-center gap-2">
+                    <span className="text-[11px] font-semibold" style={{ color: "var(--ch-text)" }}>
+                      {product.name}
+                    </span>
+                    <StatusBadge
+                      status={product.available ? "online" : "warning"}
+                      label={product.available ? product.priceLabel : product.status === "active" ? "sem preco" : product.status}
+                    />
+                  </span>
+                  <span className="mt-1 block text-[10px] leading-4 text-slate-500">
+                    {product.description}
+                  </span>
+                  <span className="mt-1 block font-mono text-[9px] uppercase tracking-wide text-slate-500">
+                    {product.productCode}
+                    {product.creditAmount ? ` / ${formatCredits(product.creditAmount)} creditos` : ""}
+                    {product.recurrence === "monthly" ? " / recorrente" : " / unico"}
+                  </span>
+                </span>
+              </label>
+            );
+          })
+        ) : (
+          <EmptyState
+            icon={<PackagePlus className="h-4 w-4" />}
+            text="Nenhum produto interno encontrado. Cadastre em Produtos CH com origem ConnectyHub e canal venda direta."
+          />
+        )}
       </div>
     </details>
   );

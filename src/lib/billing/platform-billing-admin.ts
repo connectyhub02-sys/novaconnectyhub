@@ -11,6 +11,10 @@ import {
   normalizePlatformBillingMessageTemplates,
   type PlatformBillingMessageTemplates,
 } from "@/lib/billing/platform-billing-messages";
+import {
+  loadBillingOrderBumpProductOptions,
+  type BillingOrderBumpProductOption,
+} from "@/lib/billing/plan-checkout";
 import { createServiceClient } from "@/lib/supabase/service";
 
 type JsonRecord = Record<string, unknown>;
@@ -23,6 +27,7 @@ export type PlatformBillingSettings = {
   checkoutMode: "subscription" | "manual_review";
   recurringProvider: "mercado_pago";
   billingMessageTemplates: PlatformBillingMessageTemplates;
+  billingOrderBumpProductIds: string[];
   updatedAt: string | null;
   metadata: JsonRecord;
 };
@@ -129,6 +134,7 @@ export type PlatformBillingOperationsCatalog = {
   notifications: PlatformBillingNotificationItem[];
   testCustomers: PlatformBillingCustomerOption[];
   webhookEvents: PlatformBillingWebhookItem[];
+  orderBumpProducts: BillingOrderBumpProductOption[];
   notificationsSchemaReady: boolean;
   stats: {
     configuredCredentialFields: number;
@@ -139,6 +145,7 @@ export type PlatformBillingOperationsCatalog = {
     activeSubscriptions: number;
     pendingNotifications: number;
     receivedWebhooks: number;
+    configuredOrderBumps: number;
   };
   warnings: string[];
 };
@@ -243,6 +250,7 @@ const defaultSettings: PlatformBillingSettings = {
   checkoutMode: "subscription",
   recurringProvider: "mercado_pago",
   billingMessageTemplates: normalizePlatformBillingMessageTemplates(null),
+  billingOrderBumpProductIds: [],
   updatedAt: null,
   metadata: {},
 };
@@ -358,6 +366,10 @@ export async function getPlatformBillingOperationsCatalog(): Promise<PlatformBil
     : (notificationsResult.data ?? []).map((notification) => mapNotification(notification, organizationMap, agentNameById));
   const testCustomers = (testCustomersResult.data ?? []).map(mapTestCustomer);
   const webhookEvents = (webhookLogsResult.data ?? []).map(mapWebhookEvent);
+  const orderBumpProducts = await loadBillingOrderBumpProductOptions(client).catch((error) => {
+    warnings.push(error instanceof Error ? error.message : "Nao foi possivel carregar produtos internos para order bump.");
+    return [];
+  });
 
   return {
     settings,
@@ -371,6 +383,7 @@ export async function getPlatformBillingOperationsCatalog(): Promise<PlatformBil
     notifications,
     testCustomers,
     webhookEvents,
+    orderBumpProducts,
     notificationsSchemaReady: !notificationsResult.error,
     stats: {
       configuredCredentialFields: credentials.filter((field) => field.configured).length,
@@ -381,6 +394,7 @@ export async function getPlatformBillingOperationsCatalog(): Promise<PlatformBil
       activeSubscriptions: subscriptions.filter((subscription) => subscription.status === "active").length,
       pendingNotifications: notifications.filter((notification) => notification.status === "pending").length,
       receivedWebhooks: webhookEvents.length,
+      configuredOrderBumps: orderBumpProducts.filter((product) => product.selected && product.available).length,
     },
     warnings,
   };
@@ -428,6 +442,7 @@ function mapSettings(row: PlatformBillingSettingsRow | null): PlatformBillingSet
     checkoutMode: row.checkout_mode === "manual_review" ? "manual_review" : "subscription",
     recurringProvider: "mercado_pago",
     billingMessageTemplates: normalizePlatformBillingMessageTemplates(row.metadata?.billing_message_templates),
+    billingOrderBumpProductIds: readUuidList(row.metadata?.billing_order_bump_product_ids),
     updatedAt: row.updated_at,
     metadata: row.metadata ?? {},
   };
@@ -644,6 +659,17 @@ function readCheckoutUrl(metadata: JsonRecord | null | undefined) {
 
 function readString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function readUuidList(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => item.trim())
+    .filter((item) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(item));
 }
 
 function isOpenPaymentStatus(status: string) {

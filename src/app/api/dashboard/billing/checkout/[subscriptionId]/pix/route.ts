@@ -10,8 +10,9 @@ import {
 import {
   formatBillingCheckoutDescription,
   isBillingCheckoutPayable,
+  loadBillingCheckoutBumps,
   loadBillingCheckoutIntent,
-  normalizeBillingCheckoutBumpCodes,
+  normalizeBillingCheckoutBumpCodesForCatalog,
   syncBillingCheckoutCart,
 } from "@/lib/billing/plan-checkout";
 import { processPlatformBillingMercadoPagoWebhook } from "@/lib/billing/platform-billing-webhook";
@@ -35,7 +36,6 @@ export async function POST(
   }
 
   const body = readRecord(await request.json().catch(() => null));
-  const selectedBumpCodes = normalizeBillingCheckoutBumpCodes(body.selectedBumpCodes);
   const payerEmail = normalizeEmail(workspace.profile.email ?? workspace.user.email ?? null);
 
   if (!payerEmail) {
@@ -43,6 +43,8 @@ export async function POST(
   }
 
   const client = createServiceClient();
+  const availableBumps = await loadBillingCheckoutBumps(client);
+  const selectedBumpCodes = normalizeBillingCheckoutBumpCodesForCatalog(body.selectedBumpCodes, availableBumps);
   const intent = await loadBillingCheckoutIntent(client, {
     organizationId: workspace.organization.id,
     subscriptionId,
@@ -57,7 +59,7 @@ export async function POST(
   }
 
   try {
-    const cart = await syncBillingCheckoutCart(client, intent, selectedBumpCodes);
+    const cart = await syncBillingCheckoutCart(client, intent, selectedBumpCodes, availableBumps);
     const config = await loadMercadoPagoPlatformBillingConfig({ client });
     const additionalInfo = buildMercadoPagoAdditionalInfo({
       payerName: workspace.profile.fullName ?? workspace.organization.name,

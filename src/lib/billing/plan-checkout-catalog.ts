@@ -1,12 +1,8 @@
-export type BillingCheckoutBumpCode =
-  | "extra_credits_5k"
-  | "promo_credits_10k"
-  | "promo_credits_25k"
-  | "voice_priority"
-  | "onboarding_assisted";
+export type BillingCheckoutBumpCode = string;
 
 export type BillingCheckoutBump = {
   code: BillingCheckoutBumpCode;
+  platformProductId: string | null;
   title: string;
   description: string;
   priceBrl: number;
@@ -19,6 +15,7 @@ export type BillingCheckoutBump = {
 export const billingCheckoutBumps: BillingCheckoutBump[] = [
   {
     code: "extra_credits_5k",
+    platformProductId: null,
     title: "5.000 creditos extras",
     description: "Reforce o saldo inicial para mais conversas, voz e campanhas.",
     priceBrl: 47,
@@ -29,6 +26,7 @@ export const billingCheckoutBumps: BillingCheckoutBump[] = [
   },
   {
     code: "promo_credits_10k",
+    platformProductId: null,
     title: "10.000 creditos promocionais",
     description: "Dobro de folego para manter o agente respondendo em dias de maior movimento.",
     priceBrl: 87,
@@ -39,6 +37,7 @@ export const billingCheckoutBumps: BillingCheckoutBump[] = [
   },
   {
     code: "promo_credits_25k",
+    platformProductId: null,
     title: "25.000 creditos promocionais",
     description: "Pacote com melhor custo por credito para operacoes que querem escalar atendimento.",
     priceBrl: 197,
@@ -49,6 +48,7 @@ export const billingCheckoutBumps: BillingCheckoutBump[] = [
   },
   {
     code: "voice_priority",
+    platformProductId: null,
     title: "Voz IA prioridade",
     description: "Pacote mensal para atendimento com mais mensagens de voz.",
     priceBrl: 67,
@@ -59,6 +59,7 @@ export const billingCheckoutBumps: BillingCheckoutBump[] = [
   },
   {
     code: "onboarding_assisted",
+    platformProductId: null,
     title: "Onboarding assistido",
     description: "Acompanhamento inicial para configurar agente, funil e WhatsApp.",
     priceBrl: 197,

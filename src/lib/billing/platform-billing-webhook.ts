@@ -12,6 +12,7 @@ import {
   renderPlatformBillingMessageTemplate,
   type PlatformBillingMessageTemplates,
 } from "@/lib/billing/platform-billing-messages";
+import { grantCredits } from "@/lib/billing/cost-center";
 import { getMercadoPagoPayment, loadMercadoPagoPlatformBillingConfig } from "@/lib/sales-catalog/mercado-pago";
 import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
 import { loadUazapiCredentials, type UazapiCredentials } from "@/lib/whatsapp/uazapi-credentials";
@@ -414,11 +415,14 @@ async function activateBillingPlan(
   const cycleEnd = readDate(input.providerSubscription?.nextPaymentDate) ?? addMonths(cycleStart, 1);
   const includedCredits = toNumber(plan?.included_credits);
   const alreadyGranted = toNumber(subscription.included_credits_granted) > 0;
+  const additionalBumpCredits = readSelectedBumpCreditAmount(subscription.metadata ?? record.payment?.payload ?? record.invoice?.metadata);
+  const bumpCreditsAlreadyGranted = Boolean(readString(subscription.metadata?.bump_credit_transaction_id));
   const externalReference = input.providerSubscription?.externalReference
     ?? readString(input.providerPayment?.external_reference)
     ?? readString(subscription.metadata?.external_reference)
     ?? `connectyhub_subscription:${subscription.organization_id}:${subscription.id}`;
   let creditTransactionId: string | null = null;
+  let bumpCreditTransactionId: string | null = null;
 
   if (!alreadyGranted && includedCredits > 0) {
     const { data, error } = await client.rpc("grant_billing_plan_credits", {
@@ -436,6 +440,22 @@ async function activateBillingPlan(
     creditTransactionId = data ? String(data) : null;
   }
 
+  if (!bumpCreditsAlreadyGranted && additionalBumpCredits > 0) {
+    bumpCreditTransactionId = await grantCredits(client, {
+      organizationId: subscription.organization_id,
+      amountCredits: additionalBumpCredits,
+      description: "Creditos extras comprados no checkout do plano",
+      externalReference: `${externalReference}:order_bumps`,
+      metadata: {
+        source: "dashboard_plan_checkout_bump",
+        subscription_id: subscription.id,
+        plan_code: subscription.plan_code,
+        selected_bumps: readSelectedBumps(subscription.metadata ?? record.payment?.payload ?? record.invoice?.metadata),
+      },
+      transactionType: "purchase",
+    });
+  }
+
   const metadata = {
     ...(subscription.metadata ?? {}),
     last_billing_activation_source: input.source,
@@ -444,7 +464,9 @@ async function activateBillingPlan(
     provider_subscription_id: input.providerSubscription?.id ?? subscription.provider_subscription_id,
     payment_confirmed_at: input.providerPayment?.date_approved ?? new Date().toISOString(),
     included_credits: includedCredits,
+    additional_bump_credits: additionalBumpCredits,
     credit_transaction_id: creditTransactionId,
+    bump_credit_transaction_id: bumpCreditTransactionId ?? readString(subscription.metadata?.bump_credit_transaction_id),
     mercado_pago_subscription: input.providerSubscription?.raw ?? null,
     mercado_pago_payment: input.providerPayment ? sanitizePayment(input.providerPayment) : null,
   };
@@ -545,7 +567,9 @@ async function activateBillingPlan(
     metadata: {
       activated: true,
       alreadyGranted,
+      bumpCreditsAlreadyGranted,
       includedCredits,
+      additionalBumpCredits,
       cycleStart: cycleStart.toISOString(),
       cycleEnd: cycleEnd.toISOString(),
     },
@@ -1163,6 +1187,26 @@ function getBillingMessageTemplateKey(eventType: string): keyof PlatformBillingM
   }
 
   return "billing_update";
+}
+
+function readSelectedBumpCreditAmount(metadata: JsonRecord | null | undefined) {
+  return readSelectedBumps(metadata).reduce((total, bump) => {
+    const rawCreditAmount = bump.credit_amount ?? bump.creditAmount;
+    const creditAmount = typeof rawCreditAmount === "number" || typeof rawCreditAmount === "string"
+      ? toNumber(rawCreditAmount)
+      : 0;
+    return total + (creditAmount > 0 ? creditAmount : 0);
+  }, 0);
+}
+
+function readSelectedBumps(metadata: JsonRecord | null | undefined) {
+  const value = metadata?.selected_bumps;
+
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.filter((item): item is JsonRecord => Boolean(item && typeof item === "object" && !Array.isArray(item)));
 }
 
 function buildResult(input: Partial<PlatformBillingWebhookProcessingResult> & {

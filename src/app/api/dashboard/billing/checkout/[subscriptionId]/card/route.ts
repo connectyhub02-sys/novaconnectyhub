@@ -11,8 +11,9 @@ import {
 import {
   formatBillingCheckoutDescription,
   isBillingCheckoutPayable,
+  loadBillingCheckoutBumps,
   loadBillingCheckoutIntent,
-  normalizeBillingCheckoutBumpCodes,
+  normalizeBillingCheckoutBumpCodesForCatalog,
   syncBillingCheckoutCart,
 } from "@/lib/billing/plan-checkout";
 import { processPlatformBillingMercadoPagoWebhook } from "@/lib/billing/platform-billing-webhook";
@@ -37,8 +38,9 @@ export async function POST(
 
   const body = readRecord(await request.json().catch(() => null));
   const formData = readRecord(body.formData) ?? body;
-  const selectedBumpCodes = normalizeBillingCheckoutBumpCodes(body.selectedBumpCodes);
   const client = createServiceClient();
+  const availableBumps = await loadBillingCheckoutBumps(client);
+  const selectedBumpCodes = normalizeBillingCheckoutBumpCodesForCatalog(body.selectedBumpCodes, availableBumps);
   const intent = await loadBillingCheckoutIntent(client, {
     organizationId: workspace.organization.id,
     subscriptionId,
@@ -67,7 +69,7 @@ export async function POST(
   }
 
   try {
-    const cart = await syncBillingCheckoutCart(client, intent, selectedBumpCodes);
+    const cart = await syncBillingCheckoutCart(client, intent, selectedBumpCodes, availableBumps);
 
     if (frontendAmount && Math.abs(frontendAmount - cart.totalAmount) > 0.009) {
       return NextResponse.json({ error: "Valor recebido nao confere com o carrinho." }, { status: 400 });
