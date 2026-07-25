@@ -141,6 +141,7 @@ type Notice = {
 
 type PlatformProductAdminTab = "setup" | "products" | "commissions";
 type PlatformProductFormTab = "essential" | "pricing" | "media" | "stock" | "delivery" | "agent" | "advanced";
+type PlatformProductSetupTab = "base" | "categories" | "variations";
 type PlatformUiTone = "green" | "cyan" | "amber" | "rose" | "violet" | "zinc";
 
 const platformUiToneStyles: Record<PlatformUiTone, { rgb: string; fill: string; text: string; label: string }> = {
@@ -160,6 +161,12 @@ const platformProductFormTabs: Array<{ id: PlatformProductFormTab; label: string
   { id: "delivery", label: "Entrega", icon: Truck },
   { id: "agent", label: "Agente IA", icon: CheckCircle2 },
   { id: "advanced", label: "Avancado", icon: SlidersHorizontal },
+];
+
+const platformProductSetupTabs: Array<{ id: PlatformProductSetupTab; label: string; icon: LucideIcon }> = [
+  { id: "base", label: "Base", icon: SlidersHorizontal },
+  { id: "categories", label: "Categorias", icon: Tags },
+  { id: "variations", label: "Variacoes", icon: PackagePlus },
 ];
 
 const emptyDraft: ProductDraft = {
@@ -303,6 +310,7 @@ export function PlatformProductsConsole({
   const [notice, setNotice] = useState<Notice | null>(null);
   const [activeTab, setActiveTab] = useState<PlatformProductAdminTab>("products");
   const [productFormTab, setProductFormTab] = useState<PlatformProductFormTab>("essential");
+  const [setupFormTab, setSetupFormTab] = useState<PlatformProductSetupTab>("base");
   const metrics = useMemo(() => buildMetrics(products, catalog.imports.length, commissions), [products, catalog.imports.length, commissions]);
   const commissionSummary = useMemo(() => buildCommissionSummary(commissions), [commissions]);
   const availableCommissionIds = useMemo(() => (
@@ -740,6 +748,22 @@ export function PlatformProductsConsole({
                 <form className="space-y-4" onSubmit={activeTab === "products" ? saveProduct : (event) => event.preventDefault()}>
                   {activeTab === "setup" ? (
                     <>
+                      <SetupFormTabs activeTab={setupFormTab} onChange={setSetupFormTab} tabs={platformProductSetupTabs} />
+
+                      <div className="grid gap-3 rounded-xl border p-3 md:grid-cols-[minmax(0,1fr)_130px_130px_150px]" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+                        <div className="min-w-0">
+                          <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">modelo</p>
+                          <p className="mt-1 truncate text-[14px] font-semibold text-slate-100">{formatBusinessType(settingsDraft.businessType)}</p>
+                        </div>
+                        <MiniValue label="categorias" value={String(categoryRows.length)} />
+                        <MiniValue label="variacoes" value={String(settingsDraft.attributes.length)} />
+                        <button disabled={savingSettings} type="button" onClick={saveSettings} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl px-3 font-mono text-[10px] font-bold uppercase tracking-wide transition disabled:opacity-50" style={{ background: "var(--ch-accent)", color: "#061015" }}>
+                          {savingSettings ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                          Salvar
+                        </button>
+                      </div>
+
+                      {setupFormTab === "base" ? (
                       <Block icon={SlidersHorizontal} title="Base do catalogo ConnectyHub" tone="cyan" defaultOpen>
                         <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_160px_160px]">
                           <Field label="Tipo de venda">
@@ -765,7 +789,9 @@ export function PlatformProductsConsole({
                           </label>
                         </div>
                       </Block>
+                      ) : null}
 
+                      {setupFormTab === "categories" ? (
                       <Block id="platform-products-tour-categories" icon={Tags} title="Categorias" tone="green" defaultOpen>
                         <div className="mb-3 flex justify-end">
                           <button type="button" onClick={() => addCategoryRow()} className="inline-flex h-9 items-center gap-2 rounded-xl border px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-cyan-100" style={{ borderColor: "var(--ch-border)" }}>
@@ -784,8 +810,10 @@ export function PlatformProductsConsole({
                           ))}
                         </div>
                       </Block>
+                      ) : null}
 
-                      <Block icon={SlidersHorizontal} title="Variacoes do catalogo" tone="violet">
+                      {setupFormTab === "variations" ? (
+                      <Block icon={SlidersHorizontal} title="Variacoes do catalogo" tone="violet" defaultOpen>
                         <div className="mb-3 flex flex-wrap justify-end gap-2">
                           <button type="button" onClick={addSettingsAttribute} className="inline-flex h-9 items-center gap-2 rounded-xl border px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-cyan-100" style={{ borderColor: "var(--ch-border)" }}>
                             <Plus className="h-3.5 w-3.5" />
@@ -810,6 +838,7 @@ export function PlatformProductsConsole({
                           ))}
                         </div>
                       </Block>
+                      ) : null}
                     </>
                   ) : null}
 
@@ -1667,6 +1696,40 @@ function NumberField({ label, value, onChange, step, allowBlank = false, help }:
   );
 }
 
+function SetupFormTabs({
+  activeTab,
+  onChange,
+  tabs,
+}: {
+  activeTab: PlatformProductSetupTab;
+  onChange: (tab: PlatformProductSetupTab) => void;
+  tabs: Array<{ id: PlatformProductSetupTab; label: string; icon: LucideIcon }>;
+}) {
+  return (
+    <div className="grid grid-cols-3 gap-1.5 rounded-xl border p-1.5" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+      {tabs.map((tab) => {
+        const Icon = tab.icon;
+        const active = activeTab === tab.id;
+
+        return (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => onChange(tab.id)}
+            className={cn(
+              "inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg border px-2 font-mono text-[9px] font-bold uppercase tracking-wide transition",
+              active ? "border-cyan-300/50 bg-cyan-300/15 text-cyan-100" : "border-transparent text-slate-500 hover:bg-white/[0.035] hover:text-slate-200",
+            )}
+          >
+            <Icon className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">{tab.label}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function ProductFormTabs({
   activeTab,
   onChange,
@@ -1826,6 +1889,10 @@ function cloneAttributes(attributes: SalesCatalogAttribute[]) {
     ...attribute,
     values: [...attribute.values],
   }));
+}
+
+function formatBusinessType(value: SalesCatalogBusinessType) {
+  return salesCatalogBusinessTemplates.find((template) => template.value === value)?.label ?? value;
 }
 
 function getCategoryRows(value: string) {
