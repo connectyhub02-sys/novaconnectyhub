@@ -8,6 +8,7 @@ import {
   CircleDot,
   Eye,
   EyeOff,
+  ExternalLink,
   KeyRound,
   Loader2,
   RefreshCcw,
@@ -413,6 +414,11 @@ export function CredentialVaultForm({ integrations }: { integrations: VaultInteg
           const message  = messages[integration.id];
           const connectionTest = connectionTests[integration.id] ?? { status: "idle" as const };
           const fieldGridClass = getFieldGridClass(integration.fields.length);
+          const isMercadoPagoBilling = integration.id === "mercado-pago-billing";
+          const hasMercadoPagoBillingConnection = isMercadoPagoBilling && integration.fields.some((field) =>
+            field.env === "MERCADO_PAGO_BILLING_ACCESS_TOKEN"
+            && Boolean(findSavedCredential(savedCredentialByField, integration.id, field)),
+          );
 
           return (
             <form key={integration.id} onSubmit={(e) => void handleSave(e, integration)}>
@@ -438,6 +444,16 @@ export function CredentialVaultForm({ integrations }: { integrations: VaultInteg
                     )}
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
+                    {isMercadoPagoBilling && (
+                      <a
+                        href="/api/admin/billing/mercado-pago/connect"
+                        className="flex h-8 items-center gap-1.5 rounded-xl px-3.5 font-mono text-[10px] uppercase tracking-wide transition hover:opacity-90"
+                        style={{ background: "rgba(16,185,129,0.14)", border: "1px solid rgba(16,185,129,0.26)", color: "#10b981" }}
+                      >
+                        <ExternalLink className="h-3 w-3" />
+                        {hasMercadoPagoBillingConnection ? "Reconectar" : "Conectar Mercado Pago"}
+                      </a>
+                    )}
                     <button
                       type="button"
                       onClick={() => void handleTestConnection(integration.id)}
@@ -529,6 +545,10 @@ export function CredentialVaultForm({ integrations }: { integrations: VaultInteg
 
                 {isOAuthAppIntegration(integration.id) && (
                   <OAuthAppNotice integrationId={integration.id} />
+                )}
+
+                {integration.id === "mercado-pago-billing" && (
+                  <MercadoPagoBillingNotice />
                 )}
 
                 {/* Fields grid */}
@@ -884,6 +904,42 @@ function OAuthAppNotice({ integrationId }: { integrationId: string }) {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function MercadoPagoBillingNotice() {
+  return (
+    <div
+      className="mx-5 mt-4 rounded-xl px-4 py-3"
+      style={{ background: "rgba(16,185,129,0.07)", border: "1px solid rgba(16,185,129,0.22)" }}
+    >
+      <div className="flex items-start gap-3">
+        <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
+        <div className="min-w-0">
+          <p className="text-[12px] font-semibold text-emerald-600">Conta recebedora por OAuth</p>
+          <p className="mt-0.5 text-[11px] leading-4 text-slate-500">
+            Use Conectar Mercado Pago para autorizar a conta da ConnectyHub. O sistema salva access token, refresh token,
+            public key e modo automaticamente no cofre.
+          </p>
+          <div className="mt-3 grid gap-2 md:grid-cols-2">
+            <CodeHint label="Callback" value="/api/admin/billing/mercado-pago/callback" />
+            <CodeHint label="Webhook" value="/api/webhooks/mercado-pago/platform-billing" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CodeHint({ label, value }: { label: string; value: string }) {
+  return (
+    <div
+      className="min-w-0 rounded-lg px-3 py-2"
+      style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}
+    >
+      <p className="font-mono text-[8px] uppercase tracking-wider text-slate-500">{label}</p>
+      <p className="mt-1 truncate font-mono text-[10px] text-slate-300">{value}</p>
     </div>
   );
 }
