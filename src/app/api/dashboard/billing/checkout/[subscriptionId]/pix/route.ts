@@ -1,6 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { randomUUID } from "node:crypto";
 import {
+  assertAccountComplete,
+  formatAccountCompletionError,
+  statusForAccountCompletionError,
+} from "@/lib/account/signup-completion";
+import {
   buildMercadoPagoAdditionalInfo,
   buildMercadoPagoPlatformBillingWebhookUrl,
   createMercadoPagoPixPayment,
@@ -35,6 +40,16 @@ export async function POST(
     return NextResponse.json({ error: "Sessao obrigatoria." }, { status: 401 });
   }
 
+  const client = createServiceClient();
+
+  try {
+    await assertAccountComplete({ userId: workspace.user.id, client });
+  } catch (error) {
+    return NextResponse.json(formatAccountCompletionError(error), {
+      status: statusForAccountCompletionError(error, 422),
+    });
+  }
+
   const body = readRecord(await request.json().catch(() => null));
   const payerEmail = normalizeEmail(workspace.profile.email ?? workspace.user.email ?? null);
 
@@ -42,7 +57,6 @@ export async function POST(
     return NextResponse.json({ error: "Informe um e-mail valido no cadastro para pagar com Pix." }, { status: 422 });
   }
 
-  const client = createServiceClient();
   const availableBumps = await loadBillingCheckoutBumps(client);
   const selectedBumpCodes = normalizeBillingCheckoutBumpCodesForCatalog(body.selectedBumpCodes, availableBumps);
   const intent = await loadBillingCheckoutIntent(client, {

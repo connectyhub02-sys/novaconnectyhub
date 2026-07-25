@@ -1,6 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { randomUUID } from "node:crypto";
 import {
+  assertAccountComplete,
+  formatAccountCompletionError,
+  statusForAccountCompletionError,
+} from "@/lib/account/signup-completion";
+import {
   buildDashboardBillingCheckoutPath,
   buildDashboardBillingCheckoutUrl,
   buildPlatformBillingExternalReference,
@@ -55,6 +60,8 @@ export async function POST(request: NextRequest) {
   const client = createServiceClient();
 
   try {
+    await assertAccountComplete({ userId: workspace.user.id, client });
+
     const { data: plan, error: planError } = await client
       .from("billing_plans")
       .select("id, plan_code, name, monthly_price_brl, included_credits, mercado_pago_preapproval_plan_id")
@@ -255,9 +262,13 @@ export async function POST(request: NextRequest) {
       message: "Checkout criado. Finalize o pagamento para ativar seu plano.",
     });
   } catch (error) {
+    const accountStatus = statusForAccountCompletionError(error, 500);
+
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Nao foi possivel solicitar o plano." },
-      { status: 500 },
+      accountStatus !== 500
+        ? formatAccountCompletionError(error)
+        : { error: error instanceof Error ? error.message : "Nao foi possivel solicitar o plano." },
+      { status: accountStatus },
     );
   }
 }

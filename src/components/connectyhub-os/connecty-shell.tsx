@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ChangeEvent } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import Image from "next/image";
 import Link from "next/link";
@@ -98,6 +98,20 @@ type BillingAccessClientStatus = {
   bannerDescription: string;
   ctaLabel: string;
   ctaHref: string;
+};
+
+type AccountCompletionClientStatus = {
+  isComplete: boolean;
+  missingFields: string[];
+  fullName: string | null;
+  email: string | null;
+  phone: string | null;
+  phoneNormalized: string | null;
+  phoneVerified: boolean;
+  phoneWhatsappExists: boolean | null;
+  cpfPreview: string | null;
+  signupCompletedAt: string | null;
+  isPlatformAdmin: boolean;
 };
 
 type ConnectyShellNotificationsContextValue = {
@@ -254,6 +268,8 @@ export function ConnectyShell({
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [notificationGroups, setNotificationGroups] = useState<Record<string, ConnectyShellNotification[]>>({});
   const [billingAccess, setBillingAccess] = useState<BillingAccessClientStatus | null>(null);
+  const [accountCompletion, setAccountCompletion] = useState<AccountCompletionClientStatus | null>(null);
+  const [accountCompletionDismissed, setAccountCompletionDismissed] = useState(false);
 
   const setNotificationGroup = useCallback((source: string, notifications: ConnectyShellNotification[]) => {
     setNotificationGroups((current) => {
@@ -337,6 +353,67 @@ export function ConnectyShell({
       window.clearInterval(intervalId);
       window.removeEventListener("focus", refreshOnFocus);
       document.removeEventListener("visibilitychange", refreshOnVisibility);
+    };
+  }, [mode]);
+
+  useEffect(() => {
+    if (mode !== "client") {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadAccountCompletion() {
+      try {
+        const response = await fetch("/api/account/completion", { cache: "no-store" });
+        const data = (await response.json().catch(() => null)) as {
+          accountCompletion?: AccountCompletionClientStatus;
+        } | null;
+
+        if (!cancelled && response.ok && data?.accountCompletion) {
+          setAccountCompletion(data.accountCompletion);
+          setAccountCompletionDismissed(data.accountCompletion.isComplete);
+        }
+      } catch {
+        if (!cancelled) {
+          setAccountCompletion(null);
+        }
+      }
+    }
+
+    void loadAccountCompletion();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [mode]);
+
+  useEffect(() => {
+    if (mode !== "client") {
+      return;
+    }
+
+    const originalFetch = window.fetch.bind(window);
+
+    window.fetch = async (...args: Parameters<typeof fetch>) => {
+      const response = await originalFetch(...args);
+
+      if (response.status === 428) {
+        const data = (await response.clone().json().catch(() => null)) as {
+          accountCompletion?: AccountCompletionClientStatus;
+        } | null;
+
+        if (data?.accountCompletion) {
+          setAccountCompletion(data.accountCompletion);
+          setAccountCompletionDismissed(false);
+        }
+      }
+
+      return response;
+    };
+
+    return () => {
+      window.fetch = originalFetch;
     };
   }, [mode]);
 
@@ -842,6 +919,25 @@ export function ConnectyShell({
         </main>
       </div>
       {mode === "client" && active !== "/dashboard/planos" ? <BillingAccessLockOverlay status={billingAccess} /> : null}
+      {mode === "client" ? (
+        <AccountCompletionModal
+          key={accountCompletion
+            ? [
+                accountCompletion.email,
+                accountCompletion.phone,
+                accountCompletion.cpfPreview,
+                accountCompletion.missingFields.join("|"),
+              ].join(":")
+            : "account-completion-empty"}
+          dismissed={accountCompletionDismissed}
+          status={accountCompletion}
+          onClose={() => setAccountCompletionDismissed(true)}
+          onCompleted={(nextStatus) => {
+            setAccountCompletion(nextStatus);
+            setAccountCompletionDismissed(nextStatus.isComplete);
+          }}
+        />
+      ) : null}
       </div>
     </ConnectyShellNotificationsContext.Provider>
   );
@@ -864,6 +960,278 @@ function CreditBalancePill({ status }: { status: BillingAccessClientStatus | nul
       <Coins className="h-3.5 w-3.5" />
       <span className="hidden sm:inline">Creditos</span>
       <span>{label}</span>
+    </div>
+  );
+}
+
+function AccountCompletionModal({
+  dismissed,
+  status,
+  onClose,
+  onCompleted,
+}: {
+  dismissed: boolean;
+  status: AccountCompletionClientStatus | null;
+  onClose: () => void;
+  onCompleted: (status: AccountCompletionClientStatus) => void;
+}) {
+  const [fullName, setFullName] = useState(status?.fullName ?? "");
+  const [phone, setPhone] = useState(status?.phone ?? "");
+  const [cpf, setCpf] = useState("");
+  const [password, setPassword] = useState("");
+  const [code, setCode] = useState("");
+  const [step, setStep] = useState<"profile" | "code">("profile");
+  const [working, setWorking] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  if (!status || status.isComplete || dismissed) {
+    return null;
+  }
+
+  async function handleProfileSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setWorking(true);
+    setError(null);
+    setMessage(null);
+
+    try {
+      if (password.trim()) {
+        if (password.trim().length < 6) {
+          throw new Error("A senha precisa ter no minimo 6 caracteres.");
+        }
+
+        const supabase = createClient();
+        const { error: passwordError } = await supabase.auth.updateUser({ password: password.trim() });
+
+        if (passwordError) {
+          throw new Error(passwordError.message);
+        }
+      }
+
+      const profileResponse = await fetch("/api/account/completion", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fullName,
+          cpf,
+          passwordSet: Boolean(password.trim()),
+        }),
+      });
+      const profileData = (await profileResponse.json().catch(() => null)) as {
+        accountCompletion?: AccountCompletionClientStatus;
+        error?: string;
+      } | null;
+
+      if (!profileResponse.ok || !profileData?.accountCompletion) {
+        throw new Error(profileData?.error ?? "Nao foi possivel salvar o cadastro.");
+      }
+
+      if (profileData.accountCompletion.isComplete && status?.phone === phone) {
+        onCompleted(profileData.accountCompletion);
+        return;
+      }
+
+      const phoneResponse = await fetch("/api/account/phone-verification/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone }),
+      });
+      const phoneData = (await phoneResponse.json().catch(() => null)) as { error?: string } | null;
+
+      if (!phoneResponse.ok) {
+        throw new Error(phoneData?.error ?? "Nao foi possivel enviar o codigo no WhatsApp.");
+      }
+
+      setStep("code");
+      setMessage("Codigo enviado no WhatsApp. Confira a conversa do numero informado.");
+    } catch (profileError) {
+      setError(profileError instanceof Error ? profileError.message : "Nao foi possivel completar o cadastro.");
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function handleCodeSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setWorking(true);
+    setError(null);
+
+    try {
+      const response = await fetch("/api/account/phone-verification/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code }),
+      });
+      const data = (await response.json().catch(() => null)) as {
+        accountCompletion?: AccountCompletionClientStatus;
+        error?: string;
+      } | null;
+
+      if (!response.ok || !data?.accountCompletion) {
+        throw new Error(data?.error ?? "Nao foi possivel validar o codigo.");
+      }
+
+      onCompleted(data.accountCompletion);
+      window.location.reload();
+    } catch (codeError) {
+      setError(codeError instanceof Error ? codeError.message : "Codigo invalido.");
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[10000] grid place-items-center bg-black/72 px-4 py-6 backdrop-blur-md">
+      <div
+        className="w-full max-w-[560px] rounded-2xl p-5 shadow-2xl"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Complete seu cadastro"
+        style={{
+          background: "linear-gradient(180deg, #111b2a 0%, #07111d 100%)",
+          border: "1px solid rgba(251,113,133,0.36)",
+          color: "#fbfdff",
+          boxShadow: "0 34px 110px rgba(0,0,0,0.70)",
+        }}
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex min-w-0 gap-3">
+            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-rose-400/16 text-rose-300">
+              <UserCheck className="h-5 w-5" />
+            </span>
+            <div className="min-w-0">
+              <p className="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-rose-300">
+                Cadastro obrigatorio
+              </p>
+              <h2 className="mt-1 text-2xl font-bold leading-7 text-white">Complete seu cadastro</h2>
+              <p className="mt-2 text-sm leading-6 text-slate-300">
+                Confirme CPF e WhatsApp para liberar agentes, WhatsApp, creditos, checkout e recursos de atendimento.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            aria-label="Fechar"
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-white/12 bg-white/6 text-slate-300 transition hover:bg-white/10"
+            onClick={onClose}
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="mt-4 grid grid-cols-3 gap-2">
+          <AccountCompletionBadge label="Nome" ok={!status.missingFields.includes("full_name")} />
+          <AccountCompletionBadge label="CPF" ok={!status.missingFields.includes("cpf")} />
+          <AccountCompletionBadge label="WhatsApp" ok={!status.missingFields.includes("phone_verification")} />
+        </div>
+
+        {step === "profile" ? (
+          <form className="mt-5 grid gap-3" onSubmit={handleProfileSubmit}>
+            <AccountCompletionInput label="Nome completo" onChange={setFullName} placeholder="Seu nome completo" value={fullName} />
+            <AccountCompletionInput label="WhatsApp" onChange={setPhone} placeholder="(47) 99999-9999" type="tel" value={phone} />
+            <AccountCompletionInput label="CPF" onChange={setCpf} placeholder={status.cpfPreview ?? "000.000.000-00"} value={cpf} />
+            <AccountCompletionInput
+              label="Criar senha"
+              onChange={setPassword}
+              placeholder="Opcional se voce ja usa senha"
+              type="password"
+              value={password}
+            />
+            <AccountCompletionFeedback error={error} message={message} />
+            <button
+              className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-rose-400 px-4 font-mono text-[11px] font-black uppercase tracking-wide text-slate-950 transition hover:bg-rose-300 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={working}
+              type="submit"
+            >
+              {working ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+              Salvar e enviar codigo
+            </button>
+          </form>
+        ) : (
+          <form className="mt-5 grid gap-3" onSubmit={handleCodeSubmit}>
+            <AccountCompletionInput label="Codigo recebido no WhatsApp" onChange={setCode} placeholder="000000" value={code} />
+            <AccountCompletionFeedback error={error} message={message} />
+            <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+              <button
+                className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-rose-400 px-4 font-mono text-[11px] font-black uppercase tracking-wide text-slate-950 transition hover:bg-rose-300 disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={working}
+                type="submit"
+              >
+                {working ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+                Validar WhatsApp
+              </button>
+              <button
+                className="h-12 rounded-xl border border-cyan-300/30 px-4 font-mono text-[10px] font-bold uppercase tracking-wide text-cyan-200 transition hover:bg-cyan-300/10"
+                onClick={() => setStep("profile")}
+                type="button"
+              >
+                Editar numero
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AccountCompletionBadge({ label, ok }: { label: string; ok: boolean }) {
+  return (
+    <div className="rounded-xl border px-3 py-2" style={{
+      background: ok ? "rgba(52,211,153,0.10)" : "rgba(251,113,133,0.10)",
+      borderColor: ok ? "rgba(52,211,153,0.30)" : "rgba(251,113,133,0.30)",
+      color: ok ? "#86efac" : "#fda4af",
+    }}>
+      <p className="font-mono text-[9px] font-bold uppercase tracking-[0.16em]">{label}</p>
+      <p className="mt-0.5 text-[11px] font-semibold">{ok ? "OK" : "Pendente"}</p>
+    </div>
+  );
+}
+
+function AccountCompletionInput({
+  label,
+  onChange,
+  placeholder,
+  type = "text",
+  value,
+}: {
+  label: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  type?: string;
+  value: string;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-1.5 block font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
+        {label}
+      </span>
+      <input
+        className="h-11 w-full rounded-xl border border-slate-500/32 bg-slate-950/45 px-3 text-sm text-white outline-none placeholder:text-slate-600 focus:border-cyan-300/50"
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        required={label !== "Criar senha"}
+        type={type}
+        value={value}
+      />
+    </label>
+  );
+}
+
+function AccountCompletionFeedback({ error, message }: { error: string | null; message: string | null }) {
+  if (!error && !message) {
+    return null;
+  }
+
+  return (
+    <div className={cn(
+      "rounded-xl border px-3 py-2 text-sm leading-6",
+      error
+        ? "border-rose-300/30 bg-rose-300/10 text-rose-100"
+        : "border-emerald-300/25 bg-emerald-300/10 text-emerald-100",
+    )}>
+      {error ?? message}
     </div>
   );
 }

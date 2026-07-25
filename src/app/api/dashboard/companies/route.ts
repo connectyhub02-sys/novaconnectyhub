@@ -1,7 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
+import {
+  assertAccountComplete,
+  formatAccountCompletionError,
+  statusForAccountCompletionError,
+} from "@/lib/account/signup-completion";
 import { createClientCompany, deleteClientCompany, listClientCompanies, updateClientCompany } from "@/lib/client-os/companies";
 import { assertBillableAccess, BillingAccessError } from "@/lib/billing/trial";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
+import { createServiceClient } from "@/lib/supabase/service";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -14,6 +20,8 @@ export async function GET() {
   }
 
   try {
+    await assertAccountComplete({ userId: workspace.user.id, client: createServiceClient() });
+
     const companies = await listClientCompanies(workspace.user.id);
     return NextResponse.json({ companies });
   } catch (error) {
@@ -58,6 +66,8 @@ export async function PATCH(request: NextRequest) {
   const body = await readJson<{ companyId?: unknown; name?: unknown }>(request);
 
   try {
+    await assertAccountComplete({ userId: workspace.user.id, client: createServiceClient() });
+
     const company = await updateClientCompany({
       userId: workspace.user.id,
       companyId: typeof body?.companyId === "string" ? body.companyId : "",
@@ -101,11 +111,17 @@ async function readJson<T>(request: NextRequest): Promise<T | null> {
 
 function formatError(error: unknown) {
   return {
-    error: error instanceof Error ? error.message : "Erro inesperado.",
+    ...formatAccountCompletionError(error),
     ...(error instanceof BillingAccessError ? { billingAccess: error.status } : {}),
   };
 }
 
 function statusForError(error: unknown, fallback: number) {
+  const accountStatus = statusForAccountCompletionError(error, fallback);
+
+  if (accountStatus !== fallback) {
+    return accountStatus;
+  }
+
   return error instanceof BillingAccessError ? 402 : fallback;
 }

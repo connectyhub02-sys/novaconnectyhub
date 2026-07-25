@@ -1,7 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
+import {
+  assertAccountComplete,
+  formatAccountCompletionError,
+  statusForAccountCompletionError,
+} from "@/lib/account/signup-completion";
 import { cloneClientAgent, createClientAgent, deleteClientAgent, getClientAgentsWorkspace, updateClientAgent } from "@/lib/client-os/agents";
 import { BillingAccessError } from "@/lib/billing/trial";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
+import { createServiceClient } from "@/lib/supabase/service";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -39,6 +45,8 @@ export async function POST(request: NextRequest) {
   }>(request);
 
   try {
+    await assertAccountComplete({ userId: workspace.user.id, client: createServiceClient() });
+
     if (body?.action === "clone") {
       const agent = await cloneClientAgent({
         userId: workspace.user.id,
@@ -85,6 +93,8 @@ export async function PATCH(request: NextRequest) {
   }>(request);
 
   try {
+    await assertAccountComplete({ userId: workspace.user.id, client: createServiceClient() });
+
     const agent = await updateClientAgent({
       userId: workspace.user.id,
       agentId: typeof body?.agentId === "string" ? body.agentId : "",
@@ -132,11 +142,17 @@ async function readJson<T>(request: NextRequest): Promise<T | null> {
 
 function formatError(error: unknown) {
   return {
-    error: error instanceof Error ? error.message : "Erro inesperado.",
+    ...formatAccountCompletionError(error),
     ...(error instanceof BillingAccessError ? { billingAccess: error.status } : {}),
   };
 }
 
 function statusForError(error: unknown, fallback: number) {
+  const accountStatus = statusForAccountCompletionError(error, fallback);
+
+  if (accountStatus !== fallback) {
+    return accountStatus;
+  }
+
   return error instanceof BillingAccessError ? 402 : fallback;
 }

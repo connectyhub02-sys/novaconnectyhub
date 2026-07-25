@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { getCurrentWorkspace } from "@/lib/supabase/profile";
+import { ensureStarterOrganization, getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createClient } from "@/lib/supabase/server";
 
 export async function GET(request: NextRequest) {
@@ -13,6 +13,7 @@ export async function GET(request: NextRequest) {
   }
 
   const workspace = await getCurrentWorkspace();
+  await ensureStarterOrganization().catch(() => null);
   const target = next === "/dashboard" && workspace?.profile.isPlatformAdmin ? "/admin" : next;
 
   return NextResponse.redirect(new URL(target, request.url));

@@ -1,6 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { randomUUID } from "node:crypto";
 import {
+  assertAccountComplete,
+  formatAccountCompletionError,
+  loadAccountCpfNumber,
+  statusForAccountCompletionError,
+} from "@/lib/account/signup-completion";
+import {
   buildMercadoPagoAdditionalInfo,
   buildMercadoPagoPlatformBillingWebhookUrl,
   createMercadoPagoCardPayment,
@@ -36,9 +42,18 @@ export async function POST(
     return NextResponse.json({ error: "Sessao obrigatoria." }, { status: 401 });
   }
 
+  const client = createServiceClient();
+
+  try {
+    await assertAccountComplete({ userId: workspace.user.id, client });
+  } catch (error) {
+    return NextResponse.json(formatAccountCompletionError(error), {
+      status: statusForAccountCompletionError(error, 422),
+    });
+  }
+
   const body = readRecord(await request.json().catch(() => null));
   const formData = readRecord(body.formData) ?? body;
-  const client = createServiceClient();
   const availableBumps = await loadBillingCheckoutBumps(client);
   const selectedBumpCodes = normalizeBillingCheckoutBumpCodesForCatalog(body.selectedBumpCodes, availableBumps);
   const intent = await loadBillingCheckoutIntent(client, {
@@ -60,6 +75,7 @@ export async function POST(
   const payer = readRecord(formData.payer);
   const payerIdentification = readRecord(payer?.identification);
   const payerEmail = normalizeEmail(readString(payer?.email) ?? intent.subscription.payer_email ?? workspace.profile.email);
+  const fallbackCpfNumber = await loadAccountCpfNumber({ userId: workspace.user.id, client });
   const deviceSessionId = readString(body.deviceSessionId)
     ?? readString(request.headers.get("x-meli-session-id"));
   const frontendAmount = normalizeCurrencyAmount(readString(formData.transaction_amount) ?? readNumber(formData.transaction_amount));
@@ -107,8 +123,8 @@ export async function POST(
       issuerId: readString(formData.issuer_id) ?? readNumber(formData.issuer_id),
       payerName: workspace.profile.fullName ?? workspace.organization.name,
       payerIdentification: {
-        type: readString(payerIdentification?.type),
-        number: readString(payerIdentification?.number),
+        type: readString(payerIdentification?.type) ?? (fallbackCpfNumber ? "CPF" : null),
+        number: readString(payerIdentification?.number) ?? fallbackCpfNumber,
       },
       notificationUrl: buildMercadoPagoPlatformBillingWebhookUrl(),
       idempotencyKey: randomUUID(),

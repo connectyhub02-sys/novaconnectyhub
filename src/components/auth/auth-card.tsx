@@ -4,7 +4,7 @@ import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
-import { ArrowRight, CheckCircle2, Loader2, LockKeyhole, Mail, Phone, UserRound } from "lucide-react";
+import { ArrowRight, CheckCircle2, Globe2, Loader2, LockKeyhole, Mail, Phone, UserRound } from "lucide-react";
 import { ConnectyLogo } from "@/components/brand/connecty-logo";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
@@ -26,8 +26,10 @@ export function AuthCard({
   const [email, setEmail] = useState(initialEmail);
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
-  const [companyName, setCompanyName] = useState("");
   const [phone, setPhone] = useState("");
+  const [cpf, setCpf] = useState("");
+  const [verificationCode, setVerificationCode] = useState("");
+  const [awaitingPhoneVerification, setAwaitingPhoneVerification] = useState(false);
   const [trialWhatsappOptIn, setTrialWhatsappOptIn] = useState(true);
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
@@ -49,6 +51,26 @@ export function AuthCard({
     try {
       const supabase = createClient();
 
+      if (awaitingPhoneVerification) {
+        const response = await fetch("/api/account/phone-verification/verify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code: verificationCode }),
+        });
+        const data = (await response.json().catch(() => null)) as { error?: string } | null;
+
+        if (!response.ok) {
+          setStatus("error");
+          setMessage(data?.error ?? "Nao foi possivel validar o codigo.");
+          return;
+        }
+
+        const bootstrap = await bootstrapAccount();
+        router.replace(resolvePostLoginPath(nextPath, bootstrap?.redirectPath));
+        router.refresh();
+        return;
+      }
+
       if (isSignup) {
         const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(nextPath)}`;
         const { data, error } = await supabase.auth.signUp({
@@ -58,8 +80,8 @@ export function AuthCard({
             emailRedirectTo: redirectTo,
             data: {
               full_name: fullName,
-              company_name: companyName,
               phone,
+              password_set_at: new Date().toISOString(),
               trial_whatsapp_opt_in: trialWhatsappOptIn,
               trial_whatsapp_opt_in_at: trialWhatsappOptIn ? new Date().toISOString() : null,
               trial_whatsapp_opt_in_source: "signup_trial_form",
@@ -84,9 +106,15 @@ export function AuthCard({
         }
 
         if (data.session) {
-          const bootstrap = await bootstrapAccount();
-          router.replace(resolvePostLoginPath(nextPath, bootstrap?.redirectPath));
-          router.refresh();
+          await saveSignupCompletion({
+            fullName,
+            cpf,
+            passwordSet: true,
+          });
+          await requestPhoneVerification(phone);
+          setAwaitingPhoneVerification(true);
+          setStatus("success");
+          setMessage("Enviamos um codigo para seu WhatsApp. Confirme para liberar o teste gratis.");
           return;
         }
 
@@ -109,6 +137,53 @@ export function AuthCard({
     } catch (error) {
       setStatus("error");
       setMessage(error instanceof Error ? error.message : "Nao foi possivel autenticar agora.");
+    }
+  }
+
+  async function handleGoogleSignIn() {
+    setStatus("loading");
+    setMessage("");
+
+    if (!supabaseConfigured) {
+      setStatus("error");
+      setMessage("Configure NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY para ativar login.");
+      return;
+    }
+
+    try {
+      const supabase = createClient();
+      const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(nextPath)}`;
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo,
+          queryParams: {
+            prompt: "select_account",
+          },
+        },
+      });
+
+      if (error) {
+        setStatus("error");
+        setMessage(error.message);
+      }
+    } catch (error) {
+      setStatus("error");
+      setMessage(error instanceof Error ? error.message : "Nao foi possivel entrar com Google.");
+    }
+  }
+
+  async function resendPhoneVerification() {
+    setStatus("loading");
+    setMessage("");
+
+    try {
+      await requestPhoneVerification(phone);
+      setStatus("success");
+      setMessage("Codigo reenviado para seu WhatsApp.");
+    } catch (error) {
+      setStatus("error");
+      setMessage(error instanceof Error ? error.message : "Nao foi possivel enviar o codigo.");
     }
   }
 
@@ -172,66 +247,114 @@ export function AuthCard({
             </div>
           ) : null}
 
+          {supabaseConfigured ? (
+            <button
+              className="mb-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md border border-white/[0.12] bg-white/[0.04] px-4 text-sm font-semibold text-white transition hover:border-[#00f3ff]/45 hover:bg-[#00f3ff]/10 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={status === "loading"}
+              onClick={handleGoogleSignIn}
+              type="button"
+            >
+              <Globe2 size={16} className="text-[#00f3ff]" />
+              Continuar com Google
+            </button>
+          ) : null}
+
           <form className="space-y-4" onSubmit={handleSubmit}>
             {isSignup ? (
               <>
-                <FormField
-                  icon={UserRound}
-                  label="Nome"
-                  name="full_name"
-                  onChange={setFullName}
-                  placeholder="Seu nome"
-                  value={fullName}
-                />
-                <FormField
-                  icon={CheckCircle2}
-                  label="Empresa"
-                  name="company_name"
-                  onChange={setCompanyName}
-                  placeholder="Nome da empresa ou projeto"
-                  value={companyName}
-                />
-                <FormField
-                  icon={Phone}
-                  label="WhatsApp"
-                  name="phone"
-                  onChange={setPhone}
-                  placeholder="(47) 99999-9999"
-                  type="tel"
-                  value={phone}
-                />
-                <label className="flex gap-3 rounded-md border border-white/[0.08] bg-black/25 p-3 text-left">
-                  <input
-                    checked={trialWhatsappOptIn}
-                    className="mt-0.5 h-4 w-4 accent-[#0aff0a]"
-                    onChange={(event) => setTrialWhatsappOptIn(event.target.checked)}
-                    type="checkbox"
-                  />
-                  <span className="text-xs leading-5 text-zinc-400">
-                    Aceito receber avisos importantes sobre meu teste gratis, creditos e assinatura pelo WhatsApp.
-                  </span>
-                </label>
+                {!awaitingPhoneVerification ? (
+                  <>
+                    <FormField
+                      icon={UserRound}
+                      label="Nome"
+                      name="full_name"
+                      onChange={setFullName}
+                      placeholder="Seu nome completo"
+                      value={fullName}
+                    />
+                    <FormField
+                      icon={Phone}
+                      label="WhatsApp"
+                      name="phone"
+                      onChange={setPhone}
+                      placeholder="(47) 99999-9999"
+                      type="tel"
+                      value={phone}
+                    />
+                    <FormField
+                      icon={CheckCircle2}
+                      label="CPF"
+                      name="cpf"
+                      onChange={setCpf}
+                      placeholder="000.000.000-00"
+                      value={cpf}
+                    />
+                    <label className="flex gap-3 rounded-md border border-white/[0.08] bg-black/25 p-3 text-left">
+                      <input
+                        checked={trialWhatsappOptIn}
+                        className="mt-0.5 h-4 w-4 accent-[#0aff0a]"
+                        onChange={(event) => setTrialWhatsappOptIn(event.target.checked)}
+                        type="checkbox"
+                      />
+                      <span className="text-xs leading-5 text-zinc-400">
+                        Aceito receber avisos importantes sobre meu teste gratis, creditos e assinatura pelo WhatsApp.
+                      </span>
+                    </label>
+                  </>
+                ) : (
+                  <>
+                    <FormField
+                      icon={Phone}
+                      label="WhatsApp"
+                      name="phone"
+                      onChange={setPhone}
+                      placeholder="(47) 99999-9999"
+                      type="tel"
+                      value={phone}
+                    />
+                    <FormField
+                      icon={CheckCircle2}
+                      label="Codigo"
+                      name="verification_code"
+                      onChange={setVerificationCode}
+                      placeholder="000000"
+                      value={verificationCode}
+                    />
+                    <button
+                      className="h-10 rounded-md border border-[#00f3ff]/30 px-4 font-mono text-[10px] font-bold uppercase text-[#00f3ff] transition hover:bg-[#00f3ff]/10 disabled:cursor-not-allowed disabled:opacity-60"
+                      disabled={status === "loading"}
+                      onClick={resendPhoneVerification}
+                      type="button"
+                    >
+                      Reenviar codigo
+                    </button>
+                  </>
+                )}
               </>
             ) : null}
 
-            <FormField
-              icon={Mail}
-              label="Email"
-              name="email"
-              onChange={setEmail}
-              placeholder="voce@email.com"
-              type="email"
-              value={email}
-            />
-            <FormField
-              icon={LockKeyhole}
-              label="Senha"
-              name="password"
-              onChange={setPassword}
-              placeholder="Minimo 6 caracteres"
-              type="password"
-              value={password}
-            />
+            {!awaitingPhoneVerification ? (
+              <>
+                <FormField
+                  icon={Mail}
+                  label="Email"
+                  name="email"
+                  onChange={setEmail}
+                  placeholder="voce@email.com"
+                  type="email"
+                  value={email}
+                />
+                <FormField
+                  icon={LockKeyhole}
+                  label="Senha"
+                  name="password"
+                  onChange={setPassword}
+                  placeholder="Minimo 6 caracteres"
+                  type="password"
+                  value={password}
+                />
+              </>
+            ) : null}
 
             {message ? (
               <div
@@ -252,7 +375,7 @@ export function AuthCard({
               type="submit"
             >
               {status === "loading" ? <Loader2 size={16} className="animate-spin" /> : <ArrowRight size={16} />}
-              {isSignup ? "Criar conta e iniciar" : "Entrar no painel"}
+              {awaitingPhoneVerification ? "Confirmar WhatsApp" : isSignup ? "Criar conta e validar" : "Entrar no painel"}
             </button>
           </form>
 
@@ -290,6 +413,40 @@ async function bootstrapAccount() {
   }
 
   return (await response.json().catch(() => null)) as { redirectPath?: string } | null;
+}
+
+async function saveSignupCompletion(input: {
+  fullName: string;
+  cpf: string;
+  passwordSet: boolean;
+}) {
+  const response = await fetch("/api/account/completion", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  const data = (await response.json().catch(() => null)) as { error?: string } | null;
+
+  if (!response.ok) {
+    throw new Error(data?.error ?? "Nao foi possivel salvar os dados do cadastro.");
+  }
+
+  return data;
+}
+
+async function requestPhoneVerification(phone: string) {
+  const response = await fetch("/api/account/phone-verification/send", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ phone }),
+  });
+  const data = (await response.json().catch(() => null)) as { error?: string } | null;
+
+  if (!response.ok) {
+    throw new Error(data?.error ?? "Nao foi possivel enviar o codigo no WhatsApp.");
+  }
+
+  return data;
 }
 
 function resolvePostLoginPath(nextPath: string, rolePath?: string) {

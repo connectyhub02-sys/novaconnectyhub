@@ -4,6 +4,7 @@ import type { User } from "@supabase/supabase-js";
 import { isSupabaseAuthConfigured } from "./env";
 import { createClient } from "./server";
 import { createServiceClient } from "./service";
+import { isAccountSignupComplete } from "@/lib/account/signup-completion";
 import { grantTrialCredits, scheduleTrialConversionMessages, TRIAL_PLAN_CODE } from "@/lib/billing/trial";
 import { ensureClientApiClient } from "@/lib/connectyhub-api/gateway";
 
@@ -95,9 +96,18 @@ export async function ensureStarterOrganization() {
   }
 
   const supabase = await createWorkspaceDataClient();
+  const signupComplete = workspace.profile.isPlatformAdmin
+    || await isAccountSignupComplete({ userId: workspace.user.id, client: supabase }).catch(() => true);
 
   if (workspace.organization) {
-    if (!workspace.profile.isPlatformAdmin && workspace.organization.planCode === TRIAL_PLAN_CODE) {
+    if (!workspace.profile.isPlatformAdmin && workspace.organization.planCode === TRIAL_PLAN_CODE && signupComplete) {
+      if (workspace.organization.status === "trial_pending") {
+        await supabase
+          .from("organizations")
+          .update({ status: "trial", updated_at: new Date().toISOString() })
+          .eq("id", workspace.organization.id);
+      }
+
       await ensureTrialSetup({
         organizationId: workspace.organization.id,
         userId: workspace.user.id,
@@ -119,7 +129,7 @@ export async function ensureStarterOrganization() {
       slug,
       owner_id: workspace.user.id,
       plan_code: "trial",
-      status: "trial",
+      status: signupComplete ? "trial" : "trial_pending",
     })
     .select("id, name, slug, plan_code, status")
     .single();
@@ -144,12 +154,14 @@ export async function ensureStarterOrganization() {
       client: supabase,
     });
 
-    await ensureTrialSetup({
-      organizationId: organization.id,
-      userId: workspace.user.id,
-      optIn: workspace.profile.trialWhatsappOptIn,
-      client: supabase,
-    });
+    if (signupComplete) {
+      await ensureTrialSetup({
+        organizationId: organization.id,
+        userId: workspace.user.id,
+        optIn: workspace.profile.trialWhatsappOptIn,
+        client: supabase,
+      });
+    }
   }
 
   return {
