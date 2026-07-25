@@ -21,6 +21,14 @@ import {
   Webhook,
 } from "lucide-react";
 import type { PlatformBillingOperationsCatalog } from "@/lib/billing/platform-billing-admin";
+import {
+  DEFAULT_PLATFORM_BILLING_MESSAGE_TEMPLATES,
+  PLATFORM_BILLING_MESSAGE_TEMPLATE_DEFINITIONS,
+  PLATFORM_BILLING_MESSAGE_TEMPLATE_MAX_LENGTH,
+  PLATFORM_BILLING_MESSAGE_VARIABLES,
+  type PlatformBillingMessageTemplateKey,
+  type PlatformBillingMessageTemplates,
+} from "@/lib/billing/platform-billing-messages";
 import { NeonBadge, Panel, StatusBadge, DataTable } from "./panel-primitives";
 
 type ActionState = {
@@ -46,6 +54,7 @@ type SettingsDraft = {
   notificationWhatsappEnabled: boolean;
   pixAutomaticRequired: boolean;
   checkoutMode: "subscription" | "manual_review";
+  billingMessageTemplates: PlatformBillingMessageTemplates;
 };
 
 export function PlatformBillingOperations({
@@ -65,6 +74,7 @@ export function PlatformBillingOperations({
     notificationWhatsappEnabled: catalog.settings.notificationWhatsappEnabled,
     pixAutomaticRequired: catalog.settings.pixAutomaticRequired,
     checkoutMode: catalog.settings.checkoutMode,
+    billingMessageTemplates: catalog.settings.billingMessageTemplates,
   }));
   const selectedAgent = catalog.agents.find((agent) => agent.id === draft.billingWhatsappAgentId) ?? null;
   const connectedAgents = useMemo(() => catalog.agents.filter((agent) => agent.isConnected), [catalog.agents]);
@@ -100,6 +110,7 @@ export function PlatformBillingOperations({
           notificationWhatsappEnabled: draft.notificationWhatsappEnabled,
           pixAutomaticRequired: draft.pixAutomaticRequired,
           checkoutMode: draft.checkoutMode,
+          billingMessageTemplates: draft.billingMessageTemplates,
         }),
       });
       const data = await response.json().catch(() => null) as { error?: string } | null;
@@ -312,6 +323,26 @@ export function PlatformBillingOperations({
     } finally {
       setDisconnectingBilling(false);
     }
+  }
+
+  function updateMessageTemplate(eventType: PlatformBillingMessageTemplateKey, template: string) {
+    setDraft((current) => ({
+      ...current,
+      billingMessageTemplates: {
+        ...current.billingMessageTemplates,
+        [eventType]: template,
+      },
+    }));
+  }
+
+  function resetMessageTemplate(eventType: PlatformBillingMessageTemplateKey) {
+    setDraft((current) => ({
+      ...current,
+      billingMessageTemplates: {
+        ...current.billingMessageTemplates,
+        [eventType]: DEFAULT_PLATFORM_BILLING_MESSAGE_TEMPLATES[eventType],
+      },
+    }));
   }
 
   return (
@@ -532,6 +563,12 @@ export function PlatformBillingOperations({
                   <OperationalTestResult state={testState} />
                 ) : null}
               </div>
+
+              <MessageTemplatesEditor
+                templates={draft.billingMessageTemplates}
+                onChange={updateMessageTemplate}
+                onReset={resetMessageTemplate}
+              />
 
               <div className="flex flex-wrap items-center gap-2">
                 <button
@@ -971,6 +1008,91 @@ function OperationalTestResult({ state }: { state: OperationalTestState }) {
         </div>
       ) : null}
     </div>
+  );
+}
+
+function MessageTemplatesEditor({
+  templates,
+  onChange,
+  onReset,
+}: {
+  templates: PlatformBillingMessageTemplates;
+  onChange: (eventType: PlatformBillingMessageTemplateKey, template: string) => void;
+  onReset: (eventType: PlatformBillingMessageTemplateKey) => void;
+}) {
+  return (
+    <details
+      className="rounded-xl"
+      style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}
+    >
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-3 marker:hidden [&::-webkit-details-marker]:hidden">
+        <span className="min-w-0">
+          <span className="block text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>
+            Mensagens automaticas
+          </span>
+          <span className="mt-0.5 block text-[11px] leading-4 text-slate-500">
+            Textos enviados pelo agente em cada evento de assinatura.
+          </span>
+        </span>
+        <StatusBadge status="online" label={`${PLATFORM_BILLING_MESSAGE_TEMPLATE_DEFINITIONS.length} eventos`} />
+      </summary>
+
+      <div className="grid gap-2 border-t border-white/10 p-3">
+        <div
+          className="rounded-lg px-2.5 py-2 text-[10px] leading-4 text-slate-500"
+          style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
+        >
+          Variaveis: {PLATFORM_BILLING_MESSAGE_VARIABLES.join(" ")}
+        </div>
+
+        {PLATFORM_BILLING_MESSAGE_TEMPLATE_DEFINITIONS.map((definition) => (
+          <details
+            key={definition.eventType}
+            className="rounded-lg"
+            style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
+          >
+            <summary className="flex cursor-pointer list-none items-start justify-between gap-3 px-3 py-2.5 marker:hidden [&::-webkit-details-marker]:hidden">
+              <span className="min-w-0">
+                <span className="block text-[11px] font-semibold" style={{ color: "var(--ch-text)" }}>
+                  {definition.label}
+                </span>
+                <span className="mt-0.5 block text-[10px] leading-4 text-slate-500">
+                  {definition.description}
+                </span>
+              </span>
+              <span className="shrink-0 rounded-full border border-white/10 px-2 py-1 font-mono text-[9px] uppercase text-slate-500">
+                {templates[definition.eventType].length}/{PLATFORM_BILLING_MESSAGE_TEMPLATE_MAX_LENGTH}
+              </span>
+            </summary>
+
+            <div className="grid gap-2 border-t border-white/10 p-3">
+              <textarea
+                value={templates[definition.eventType]}
+                onChange={(event) => onChange(definition.eventType, event.target.value)}
+                maxLength={PLATFORM_BILLING_MESSAGE_TEMPLATE_MAX_LENGTH}
+                rows={4}
+                className="min-h-24 w-full resize-y rounded-lg px-3 py-2 text-[12px] leading-5 outline-none"
+                style={inputStyle}
+              />
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-[10px] leading-4 text-slate-500">
+                  Evento: <span className="font-mono text-slate-400">{definition.eventType}</span>
+                </p>
+                <button
+                  type="button"
+                  onClick={() => onReset(definition.eventType)}
+                  className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg px-2.5 text-[10px] font-bold transition hover:opacity-90"
+                  style={{ background: "rgba(148,163,184,0.10)", border: "1px solid rgba(148,163,184,0.22)", color: "#cbd5e1" }}
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  Padrao
+                </button>
+              </div>
+            </div>
+          </details>
+        ))}
+      </div>
+    </details>
   );
 }
 

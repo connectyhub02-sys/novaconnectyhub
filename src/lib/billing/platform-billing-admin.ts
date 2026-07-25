@@ -7,6 +7,10 @@ import {
   buildMercadoPagoPlatformBillingRedirectUrl,
   buildMercadoPagoPlatformBillingWebhookUrl,
 } from "@/lib/sales-catalog/mercado-pago";
+import {
+  normalizePlatformBillingMessageTemplates,
+  type PlatformBillingMessageTemplates,
+} from "@/lib/billing/platform-billing-messages";
 import { createServiceClient } from "@/lib/supabase/service";
 
 type JsonRecord = Record<string, unknown>;
@@ -18,6 +22,7 @@ export type PlatformBillingSettings = {
   pixAutomaticRequired: boolean;
   checkoutMode: "subscription" | "manual_review";
   recurringProvider: "mercado_pago";
+  billingMessageTemplates: PlatformBillingMessageTemplates;
   updatedAt: string | null;
   metadata: JsonRecord;
 };
@@ -237,6 +242,7 @@ const defaultSettings: PlatformBillingSettings = {
   pixAutomaticRequired: true,
   checkoutMode: "subscription",
   recurringProvider: "mercado_pago",
+  billingMessageTemplates: normalizePlatformBillingMessageTemplates(null),
   updatedAt: null,
   metadata: {},
 };
@@ -421,6 +427,7 @@ function mapSettings(row: PlatformBillingSettingsRow | null): PlatformBillingSet
     pixAutomaticRequired: row.pix_automatic_required !== false,
     checkoutMode: row.checkout_mode === "manual_review" ? "manual_review" : "subscription",
     recurringProvider: "mercado_pago",
+    billingMessageTemplates: normalizePlatformBillingMessageTemplates(row.metadata?.billing_message_templates),
     updatedAt: row.updated_at,
     metadata: row.metadata ?? {},
   };

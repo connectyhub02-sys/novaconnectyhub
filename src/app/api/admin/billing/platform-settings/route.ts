@@ -1,6 +1,10 @@
 import { revalidatePath } from "next/cache";
 import { NextResponse, type NextRequest } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  normalizePlatformBillingMessageTemplates,
+  type PlatformBillingMessageTemplates,
+} from "@/lib/billing/platform-billing-messages";
 import { requirePlatformAdmin } from "@/lib/supabase/admin-auth";
 import { createServiceClient } from "@/lib/supabase/service";
 
@@ -14,6 +18,7 @@ type SettingsPayload = {
   notificationWhatsappEnabled: boolean;
   pixAutomaticRequired: boolean;
   checkoutMode: "subscription" | "manual_review";
+  billingMessageTemplates: PlatformBillingMessageTemplates | null;
 };
 
 export async function PATCH(request: NextRequest) {
@@ -40,6 +45,8 @@ export async function PATCH(request: NextRequest) {
   }
 
   const currentMetadata = await loadCurrentSettingsMetadata(client);
+  const billingMessageTemplates = parsed.settings.billingMessageTemplates
+    ?? normalizePlatformBillingMessageTemplates(currentMetadata.billing_message_templates);
   const { data, error } = await client
     .from("platform_billing_settings")
     .upsert(
@@ -53,6 +60,7 @@ export async function PATCH(request: NextRequest) {
         updated_by: auth.userId,
         metadata: {
           ...currentMetadata,
+          billing_message_templates: billingMessageTemplates,
           source: "admin_billing_phase_1",
           updated_from: "platform_settings_route",
         },
@@ -76,6 +84,7 @@ export async function PATCH(request: NextRequest) {
       notificationWhatsappEnabled: parsed.settings.notificationWhatsappEnabled,
       pixAutomaticRequired: parsed.settings.pixAutomaticRequired,
       checkoutMode: parsed.settings.checkoutMode,
+      billingMessageTemplatesUpdated: Boolean(parsed.settings.billingMessageTemplates),
     },
   });
 
@@ -95,6 +104,9 @@ function parseSettingsPayload(body: unknown):
 
   const billingWhatsappAgentId = readNullableUuid(record.billingWhatsappAgentId);
   const checkoutMode = record.checkoutMode === "manual_review" ? "manual_review" : "subscription";
+  const billingMessageTemplates = Object.prototype.hasOwnProperty.call(record, "billingMessageTemplates")
+    ? normalizePlatformBillingMessageTemplates(record.billingMessageTemplates)
+    : null;
 
   if (record.billingWhatsappAgentId !== null && record.billingWhatsappAgentId !== undefined && !billingWhatsappAgentId) {
     return { ok: false, error: "Escolha um agente valido." };
@@ -107,6 +119,7 @@ function parseSettingsPayload(body: unknown):
       notificationWhatsappEnabled: record.notificationWhatsappEnabled !== false,
       pixAutomaticRequired: record.pixAutomaticRequired !== false,
       checkoutMode,
+      billingMessageTemplates,
     },
   };
 }

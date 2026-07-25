@@ -7,6 +7,11 @@ import {
   mapMercadoPagoPreapprovalStatus,
   type MercadoPagoBillingSubscriptionDetails,
 } from "@/lib/billing/mercado-pago-subscriptions";
+import {
+  normalizePlatformBillingMessageTemplates,
+  renderPlatformBillingMessageTemplate,
+  type PlatformBillingMessageTemplates,
+} from "@/lib/billing/platform-billing-messages";
 import { getMercadoPagoPayment, loadMercadoPagoPlatformBillingConfig } from "@/lib/sales-catalog/mercado-pago";
 import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
 import { loadUazapiCredentials, type UazapiCredentials } from "@/lib/whatsapp/uazapi-credentials";
@@ -119,6 +124,7 @@ type MercadoPagoPaymentLike = {
 type BillingSettingsRow = {
   billing_whatsapp_agent_id: string | null;
   notification_whatsapp_enabled: boolean | null;
+  metadata: JsonRecord | null;
 };
 
 type OrganizationRecipientRow = {
@@ -830,6 +836,8 @@ async function enqueuePlatformBillingNotification(
     planName: input.planName,
     amountBrl: input.amountBrl,
     includedCredits: input.includedCredits,
+    providerStatus: input.providerStatus,
+    templates: settings?.metadata?.billing_message_templates,
   });
   const selectedAgentId = settings?.billing_whatsapp_agent_id ?? null;
   const enabled = settings?.notification_whatsapp_enabled !== false;
@@ -991,7 +999,7 @@ async function loadBillingNotificationEvent(client: SupabaseClient, eventId: str
 async function loadBillingSettings(client: SupabaseClient) {
   const { data, error } = await client
     .from("platform_billing_settings")
-    .select("billing_whatsapp_agent_id, notification_whatsapp_enabled")
+    .select("billing_whatsapp_agent_id, notification_whatsapp_enabled, metadata")
     .eq("setting_key", "default")
     .maybeSingle<BillingSettingsRow>();
 
@@ -1121,36 +1129,40 @@ function buildBillingMessage(input: {
   planName: string;
   amountBrl: number;
   includedCredits: number;
+  providerStatus: string | null;
+  templates: unknown;
 }) {
-  const name = firstName(input.customerName) ?? "Tudo certo";
-  const amount = formatMoney(input.amountBrl);
-  const credits = formatCredits(input.includedCredits);
+  const templates = normalizePlatformBillingMessageTemplates(input.templates);
+  const templateKey = getBillingMessageTemplateKey(input.eventType);
+  const customerName = input.customerName?.trim() || "Cliente";
+  const firstCustomerName = firstName(customerName) ?? "Tudo certo";
 
-  if (input.eventType === "billing_operational_test") {
-    return `${name}, esta e uma mensagem de teste da ConnectyHub para validar os avisos automaticos de cobranca. Nenhuma cobranca foi feita.`;
+  return renderPlatformBillingMessageTemplate(templates[templateKey], {
+    cliente: firstCustomerName,
+    cliente_nome: customerName,
+    plano: input.planName,
+    valor: formatMoney(input.amountBrl),
+    creditos: formatCredits(input.includedCredits),
+    evento: input.eventType,
+    status: input.providerStatus ?? "sem_status",
+    data: formatDate(new Date()),
+  });
+}
+
+function getBillingMessageTemplateKey(eventType: string): keyof PlatformBillingMessageTemplates {
+  if (
+    eventType === "billing_operational_test"
+    || eventType === "subscription_pending"
+    || eventType === "payment_pending"
+    || eventType === "payment_approved"
+    || eventType === "payment_rejected"
+    || eventType === "subscription_paused"
+    || eventType === "subscription_canceled"
+  ) {
+    return eventType;
   }
 
-  if (input.eventType === "payment_approved") {
-    return `${name}, pagamento confirmado. Seu plano ${input.planName} foi ativado na ConnectyHub com ${credits} creditos inclusos. Valor: ${amount}.`;
-  }
-
-  if (input.eventType === "payment_rejected") {
-    return `${name}, o pagamento do plano ${input.planName} nao foi aprovado. Seus dados continuam salvos, mas para liberar os atendimentos voce precisa concluir o pagamento no painel.`;
-  }
-
-  if (input.eventType === "payment_pending" || input.eventType === "subscription_pending") {
-    return `${name}, recebemos sua solicitacao do plano ${input.planName}. O pagamento ainda esta pendente. Assim que confirmar, os creditos serao liberados automaticamente.`;
-  }
-
-  if (input.eventType === "subscription_paused") {
-    return `${name}, sua assinatura ConnectyHub esta pausada. Acesse o painel para regularizar e manter os atendimentos ativos.`;
-  }
-
-  if (input.eventType === "subscription_canceled") {
-    return `${name}, sua assinatura ConnectyHub foi cancelada. O painel continua acessivel, mas recursos pagos dependem de um plano ativo.`;
-  }
-
-  return `${name}, tivemos uma atualizacao no billing ConnectyHub referente ao plano ${input.planName}. Acompanhe pelo painel.`;
+  return "billing_update";
 }
 
 function buildResult(input: Partial<PlatformBillingWebhookProcessingResult> & {
@@ -1236,6 +1248,16 @@ function formatCredits(value: number) {
   return new Intl.NumberFormat("pt-BR", {
     maximumFractionDigits: value < 10 ? 2 : 0,
   }).format(Math.max(value, 0));
+}
+
+function formatDate(value: Date) {
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(value);
 }
 
 function preview(value: string, max: number) {
