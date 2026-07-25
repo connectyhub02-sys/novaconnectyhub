@@ -327,7 +327,7 @@ function OrderBumpMediaPreview({ bump }: { bump: BillingCheckoutBump }) {
   if (!media) return null;
 
   return (
-    <div className="relative mt-3 grid h-32 place-items-center overflow-hidden rounded-[8px] border border-white/10 bg-slate-950/90 p-1 sm:h-36 xl:h-32">
+    <div className="relative mt-3 grid h-52 place-items-center overflow-hidden rounded-[8px] border border-white/10 bg-slate-950/90 p-2 sm:h-56 xl:h-52">
       {media.kind === "video" ? (
         <video
           aria-label={bump.title}
@@ -342,7 +342,7 @@ function OrderBumpMediaPreview({ bump }: { bump: BillingCheckoutBump }) {
           alt={bump.title}
           className="object-contain"
           fill
-          sizes="(max-width: 767px) 100vw, (max-width: 1279px) 50vw, 300px"
+          sizes="(max-width: 767px) 100vw, (max-width: 1279px) 50vw, 360px"
           src={media.storageUrl}
           unoptimized
         />
