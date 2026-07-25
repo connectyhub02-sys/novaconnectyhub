@@ -74,6 +74,10 @@ type BillingPlanLimitRow = {
   included_credits: number | string | null;
 };
 
+type BillingLimitsOverrideRow = {
+  metadata: Record<string, unknown> | null;
+};
+
 export type OrganizationPlanLimits = {
   planCode: string | null;
   agentLimit: number;
@@ -435,20 +439,35 @@ export async function getOrganizationPlanLimits(input: {
     };
   }
 
-  const { data: plan, error: planError } = await client
-    .from("billing_plans")
-    .select("plan_code, agent_limit, whatsapp_instance_limit, included_credits")
-    .eq("plan_code", planCode ?? "")
-    .maybeSingle<BillingPlanLimitRow>();
+  const [{ data: plan, error: planError }, { data: billingLimits, error: limitsError }] = await Promise.all([
+    client
+      .from("billing_plans")
+      .select("plan_code, agent_limit, whatsapp_instance_limit, included_credits")
+      .eq("plan_code", planCode ?? "")
+      .maybeSingle<BillingPlanLimitRow>(),
+    client
+      .from("organization_billing_limits")
+      .select("metadata")
+      .eq("organization_id", input.organizationId)
+      .maybeSingle<BillingLimitsOverrideRow>(),
+  ]);
 
   if (planError) {
     throw new Error(`Nao foi possivel carregar limites do plano: ${planError.message}`);
   }
 
+  if (limitsError) {
+    throw new Error(`Nao foi possivel carregar limites manuais do cliente: ${limitsError.message}`);
+  }
+
+  const overrides = readResourceLimitOverrides(billingLimits?.metadata);
+  const planAgentLimit = positiveLimit(plan?.agent_limit, fallbackAgentLimit(planCode));
+  const planWhatsappLimit = positiveLimit(plan?.whatsapp_instance_limit, fallbackWhatsappLimit(planCode));
+
   return {
     planCode,
-    agentLimit: positiveLimit(plan?.agent_limit, fallbackAgentLimit(planCode)),
-    whatsappInstanceLimit: positiveLimit(plan?.whatsapp_instance_limit, fallbackWhatsappLimit(planCode)),
+    agentLimit: resolveManualLimit(overrides.agentLimit, planAgentLimit),
+    whatsappInstanceLimit: resolveManualLimit(overrides.whatsappInstanceLimit, planWhatsappLimit),
     includedCredits: toNumber(plan?.included_credits),
   };
 }
@@ -488,6 +507,29 @@ function isPaidPlanExpired(status: string | null) {
 function positiveLimit(value: number | string | null | undefined, fallback: number) {
   const limit = toNumber(value);
   return limit > 0 ? limit : fallback;
+}
+
+function resolveManualLimit(value: number | null, fallback: number) {
+  return value !== null && value >= 0 ? value : fallback;
+}
+
+function readResourceLimitOverrides(metadata: Record<string, unknown> | null | undefined) {
+  const raw = metadata?.resource_overrides;
+  const record = raw && typeof raw === "object" && !Array.isArray(raw) ? raw as Record<string, unknown> : {};
+
+  return {
+    agentLimit: readNullableLimit(record.agent_limit),
+    whatsappInstanceLimit: readNullableLimit(record.whatsapp_instance_limit),
+  };
+}
+
+function readNullableLimit(value: unknown) {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? Math.trunc(parsed) : null;
 }
 
 function fallbackAgentLimit(planCode: string | null) {

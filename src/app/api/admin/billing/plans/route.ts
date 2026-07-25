@@ -4,6 +4,27 @@ import { requirePlatformAdmin } from "@/lib/supabase/admin-auth";
 
 export const runtime = "nodejs";
 
+export async function GET() {
+  const auth = await requirePlatformAdmin();
+
+  if (auth instanceof NextResponse) {
+    return auth;
+  }
+
+  const { data, error } = await auth.supabase
+    .from("billing_plans")
+    .select(PLAN_SELECT)
+    .order("sort_order", { ascending: true })
+    .order("monthly_price_brl", { ascending: true })
+    .limit(100);
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ plans: ((data ?? []) as unknown as BillingPlanRow[]).map(mapBillingPlanRow) });
+}
+
 export async function POST(request: NextRequest) {
   const auth = await requirePlatformAdmin();
 
