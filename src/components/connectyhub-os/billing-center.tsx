@@ -13,6 +13,7 @@ import {
   WalletCards,
 } from "lucide-react";
 import type { BillingCommercialCatalog } from "@/lib/billing/admin-catalog";
+import type { PlatformBillingOperationsCatalog } from "@/lib/billing/platform-billing-admin";
 import type { BillingAdminSummary } from "@/lib/billing/summary";
 import { BillingCommercialConfig } from "./billing-commercial-config";
 import { ConnectyShell } from "./connecty-shell";
@@ -24,14 +25,17 @@ import {
   StatusBadge,
   DataTable,
 } from "./panel-primitives";
+import { PlatformBillingOperations } from "./platform-billing-operations";
 
 export function BillingCenter({
   summary,
   commercialCatalog,
+  platformBillingCatalog,
   userLabel = "CEO_HUMAN_ADM",
 }: {
   summary: BillingAdminSummary;
   commercialCatalog: BillingCommercialCatalog;
+  platformBillingCatalog: PlatformBillingOperationsCatalog;
   userLabel?: string;
 }) {
   const marginPercent = getMarginPercent(summary.totals.providerCost, summary.totals.connectyRevenue);
@@ -100,6 +104,8 @@ export function BillingCenter({
           tone="amber"
         />
       </div>
+
+      <PlatformBillingOperations catalog={platformBillingCatalog} />
 
       <CommercialSalesPanel summary={summary} />
 

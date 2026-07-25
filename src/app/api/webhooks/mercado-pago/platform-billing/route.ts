@@ -1,5 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  processPlatformBillingMercadoPagoWebhook,
+  type PlatformBillingWebhookProcessingResult,
+} from "@/lib/billing/platform-billing-webhook";
 import { verifyMercadoPagoWebhookSignature } from "@/lib/sales-catalog/mercado-pago";
 import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
 import { createServiceClient } from "@/lib/supabase/service";
@@ -27,6 +31,22 @@ export async function POST(request: NextRequest) {
   const requestId = request.headers.get("x-request-id");
   const webhookSecret = await loadBillingWebhookSecret(client);
 
+  if (!dataId) {
+    await recordBillingWebhookAudit(client, {
+      providerEventId,
+      dataId,
+      eventType,
+      action,
+      requestId,
+      processingStatus: "ignored",
+      errorMessage: "Evento sem data.id.",
+      payload,
+      result: null,
+    });
+
+    return NextResponse.json({ ok: true, ignored: true });
+  }
+
   const signature = verifyMercadoPagoWebhookSignature({
     signatureHeader,
     requestId,
@@ -44,27 +64,66 @@ export async function POST(request: NextRequest) {
       processingStatus: "failed",
       errorMessage: "Assinatura Mercado Pago billing invalida.",
       payload,
+      result: null,
     });
 
     return NextResponse.json({ error: "invalid_signature" }, { status: 401 });
   }
 
-  await recordBillingWebhookAudit(client, {
-    providerEventId,
-    dataId,
-    eventType,
-    action,
-    requestId,
-    processingStatus: "received",
-    errorMessage: signature.skipped ? "Assinatura nao configurada; evento aceito para auditoria." : null,
-    payload,
-  });
+  try {
+    const result = await processPlatformBillingMercadoPagoWebhook(client, {
+      dataId,
+      eventType,
+      action,
+      providerEventId,
+      requestId,
+      payload,
+    });
 
-  return NextResponse.json({
-    ok: true,
-    received: true,
-    processing: "platform_billing_pipeline_pending",
-  });
+    await recordBillingWebhookAudit(client, {
+      providerEventId,
+      dataId,
+      eventType,
+      action,
+      requestId,
+      processingStatus: result.processingStatus,
+      errorMessage: result.reason ?? (signature.skipped ? "Assinatura nao configurada; evento aceito para processamento." : null),
+      payload,
+      result,
+    });
+
+    return NextResponse.json({
+      ok: true,
+      received: true,
+      processing: result.processingStatus,
+      reason: result.reason,
+      organizationId: result.organizationId,
+      subscriptionId: result.subscriptionId,
+      paymentId: result.paymentId,
+      notificationId: result.notificationId,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Falha ao processar webhook Mercado Pago billing.";
+
+    await recordBillingWebhookAudit(client, {
+      providerEventId,
+      dataId,
+      eventType,
+      action,
+      requestId,
+      processingStatus: "failed",
+      errorMessage: message,
+      payload,
+      result: null,
+    });
+
+    return NextResponse.json({
+      ok: true,
+      received: true,
+      processing: "deferred",
+      error: message,
+    });
+  }
 }
 
 async function loadBillingWebhookSecret(client: SupabaseClient) {
@@ -102,9 +161,10 @@ async function recordBillingWebhookAudit(
     eventType: string | null;
     action: string | null;
     requestId: string | null;
-    processingStatus: "received" | "failed";
+    processingStatus: string;
     errorMessage: string | null;
     payload: JsonRecord;
+    result: PlatformBillingWebhookProcessingResult | null;
   },
 ) {
   await client.from("maintenance_audit_logs").insert({
@@ -119,6 +179,7 @@ async function recordBillingWebhookAudit(
       requestId: input.requestId,
       processingStatus: input.processingStatus,
       errorMessage: input.errorMessage,
+      result: input.result,
       payload: input.payload,
     },
   });

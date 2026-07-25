@@ -646,21 +646,21 @@ export const maintenanceIntegrations: IntegrationDefinition[] = [
     description:
       "Credenciais da conta Mercado Pago da ConnectyHub usadas para cobrar mensalidade, pacotes e creditos excedentes dos clientes da plataforma.",
     tone: "amber",
-    modules: ["Assinaturas", "Cartao salvo", "Creditos extras", "Webhooks de billing"],
+    modules: ["Assinaturas", "Pix Automatico", "Creditos extras", "Webhooks de billing"],
     fields: [
       {
         label: "Access Token ConnectyHub",
         env: "MERCADO_PAGO_BILLING_ACCESS_TOKEN",
         kind: "secret",
         requirement: "required",
-        help: "Access Token de producao da conta Mercado Pago da ConnectyHub. Usado somente no servidor para assinaturas e pagamentos da plataforma.",
+        help: "Access Token de producao da conta Mercado Pago da ConnectyHub. Usado somente no servidor para assinaturas, Pix Automatico e pagamentos da plataforma.",
       },
       {
         label: "Public Key ConnectyHub",
         env: "MERCADO_PAGO_BILLING_PUBLIC_KEY",
         kind: "public",
         requirement: "recommended",
-        help: "Public Key da conta Mercado Pago da ConnectyHub para checkout transparente quando habilitarmos assinatura por cartao.",
+        help: "Public Key da conta Mercado Pago da ConnectyHub para experiencias de checkout que precisarem de chave publica.",
       },
       {
         label: "Webhook secret billing",

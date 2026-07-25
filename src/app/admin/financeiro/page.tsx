@@ -3,6 +3,7 @@ import { connection } from "next/server";
 import { AccessDenied } from "@/components/connectyhub-os/access-denied";
 import { BillingCenter } from "@/components/connectyhub-os/billing-center";
 import { getBillingCommercialCatalog } from "@/lib/billing/admin-catalog";
+import { getPlatformBillingOperationsCatalog } from "@/lib/billing/platform-billing-admin";
 import { getBillingAdminSummary } from "@/lib/billing/summary";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 
@@ -19,15 +20,17 @@ export default async function AdminFinanceiroPage() {
     return <AccessDenied />;
   }
 
-  const [summary, commercialCatalog] = await Promise.all([
+  const [summary, commercialCatalog, platformBillingCatalog] = await Promise.all([
     getBillingAdminSummary(),
     getBillingCommercialCatalog(),
+    getPlatformBillingOperationsCatalog(),
   ]);
 
   return (
     <BillingCenter
       summary={summary}
       commercialCatalog={commercialCatalog}
+      platformBillingCatalog={platformBillingCatalog}
       userLabel={workspace.profile.email ?? "CEO_HUMAN_ADM"}
     />
   );
