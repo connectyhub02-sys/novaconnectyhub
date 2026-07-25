@@ -3,7 +3,9 @@ import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { PricingPlansGrid } from "@/components/connectyhub-os/pricing-plans-grid";
 import { ConnectyShell } from "@/components/connectyhub-os/connecty-shell";
+import { buildDashboardBillingCheckoutPath } from "@/lib/billing/plan-checkout";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
+import { createServiceClient } from "@/lib/supabase/service";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +23,7 @@ export default async function DashboardPlanosPage() {
   }
 
   const organization = workspace.organization;
+  const pendingPlan = organization ? await loadPendingPlan(organization.id) : null;
 
   return (
     <ConnectyShell
@@ -49,8 +52,38 @@ export default async function DashboardPlanosPage() {
           </div>
         </div>
 
-        <PricingPlansGrid currentPlanCode={organization?.planCode ?? null} surface="dashboard" />
+        <PricingPlansGrid
+          currentPlanCode={organization?.planCode ?? null}
+          pendingPlan={pendingPlan}
+          surface="dashboard"
+        />
       </section>
     </ConnectyShell>
   );
+}
+
+async function loadPendingPlan(organizationId: string) {
+  const client = createServiceClient();
+  const { data, error } = await client
+    .from("organization_subscriptions")
+    .select("id, plan_code, status")
+    .eq("organization_id", organizationId)
+    .in("status", ["pending", "incomplete"])
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<{
+      id: string;
+      plan_code: string;
+      status: string;
+    }>();
+
+  if (error || !data) {
+    return null;
+  }
+
+  return {
+    subscriptionId: data.id,
+    planCode: data.plan_code,
+    checkoutUrl: buildDashboardBillingCheckoutPath(data.id),
+  };
 }

@@ -46,6 +46,7 @@ export async function POST(request: NextRequest) {
 
   const body = readRecord(await request.json().catch(() => null));
   const planCode = readPlanCode(body.planCode);
+  const replacePending = body.replacePending === true;
 
   if (!planCode) {
     return NextResponse.json({ error: "Escolha um plano pago valido." }, { status: 422 });
@@ -94,30 +95,43 @@ export async function POST(request: NextRequest) {
           });
         }
 
+        if (replacePending) {
+          await cancelPendingSubscription(client, {
+            subscription: existingSubscription,
+            organizationId: workspace.organization.id,
+            actorId: workspace.user.id,
+            nextPlanCode: plan.plan_code,
+          });
+        } else {
+          return NextResponse.json(
+            {
+              code: "pending_plan_exists",
+              error: "Ja existe uma solicitacao de plano em andamento. Conclua ou aguarde a confirmacao antes de trocar de plano.",
+              pendingPlanCode: existingSubscription.plan_code,
+              pendingSubscriptionId: existingSubscription.id,
+              pendingCheckoutUrl: buildDashboardBillingCheckoutPath(existingSubscription.id),
+            },
+            { status: 409 },
+          );
+        }
+      } else {
+        if (existingSubscription.status === "active" && existingSubscription.plan_code === plan.plan_code) {
+          return NextResponse.json({
+            ok: true,
+            subscriptionId: existingSubscription.id,
+            planCode: existingSubscription.plan_code,
+            checkoutUrl: null,
+            message: "Este plano ja esta ativo nesta empresa.",
+          });
+        }
+
         return NextResponse.json(
           {
-            error: "Ja existe uma solicitacao de plano em andamento. Conclua ou aguarde a confirmacao antes de trocar de plano.",
+            error: "Mudanca de plano com assinatura ativa sera liberada na proxima etapa, sem sair do painel.",
           },
           { status: 409 },
         );
       }
-
-      if (existingSubscription.status === "active" && existingSubscription.plan_code === plan.plan_code) {
-        return NextResponse.json({
-          ok: true,
-          subscriptionId: existingSubscription.id,
-          planCode: existingSubscription.plan_code,
-          checkoutUrl: null,
-          message: "Este plano ja esta ativo nesta empresa.",
-        });
-      }
-
-      return NextResponse.json(
-        {
-          error: "Mudanca de plano com assinatura ativa sera liberada na proxima etapa, sem sair do painel.",
-        },
-        { status: 409 },
-      );
     }
 
     const now = new Date();
@@ -285,4 +299,72 @@ async function loadBlockingSubscription(client: ReturnType<typeof createServiceC
 
 function isPendingSubscription(status: string) {
   return status === "pending" || status === "incomplete";
+}
+
+async function cancelPendingSubscription(
+  client: ReturnType<typeof createServiceClient>,
+  input: {
+    subscription: ExistingSubscriptionRow;
+    organizationId: string;
+    actorId: string;
+    nextPlanCode: string;
+  },
+) {
+  const now = new Date().toISOString();
+  const replacementMetadata = {
+    ...(input.subscription.metadata ?? {}),
+    checkout_status: "replaced_by_customer",
+    replaced_at: now,
+    replaced_by: input.actorId,
+    replaced_by_plan_code: input.nextPlanCode,
+    previous_plan_code: input.subscription.plan_code,
+  };
+
+  const [subscriptionUpdate, invoiceUpdate, paymentUpdate] = await Promise.all([
+    client
+      .from("organization_subscriptions")
+      .update({
+        status: "canceled",
+        canceled_at: now,
+        metadata: replacementMetadata,
+      })
+      .eq("id", input.subscription.id)
+      .eq("organization_id", input.organizationId)
+      .in("status", ["pending", "incomplete"]),
+    client
+      .from("billing_invoices")
+      .update({
+        status: "void",
+        metadata: replacementMetadata,
+      })
+      .eq("subscription_id", input.subscription.id)
+      .eq("organization_id", input.organizationId)
+      .in("status", ["draft", "open", "failed"]),
+    client
+      .from("billing_payments")
+      .update({
+        status: "canceled",
+        provider_status: "replaced_before_payment",
+        payload: replacementMetadata,
+      })
+      .eq("subscription_id", input.subscription.id)
+      .eq("organization_id", input.organizationId)
+      .in("status", ["pending", "rejected", "in_process"]),
+  ]);
+
+  if (subscriptionUpdate.error || invoiceUpdate.error || paymentUpdate.error) {
+    throw new Error(
+      subscriptionUpdate.error?.message
+      ?? invoiceUpdate.error?.message
+      ?? paymentUpdate.error?.message
+      ?? "Nao foi possivel trocar o plano pendente.",
+    );
+  }
+
+  await client.from("maintenance_audit_logs").insert({
+    event_type: "billing.plan_checkout.replaced",
+    target_table: "organization_subscriptions",
+    target_id: input.subscription.id,
+    metadata: replacementMetadata,
+  });
 }
