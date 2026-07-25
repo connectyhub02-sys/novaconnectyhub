@@ -200,7 +200,7 @@ export function BillingPlanCheckout({
                   disabled={!canPay}
                   onClick={() => toggleBump(bump.code)}
                   className={cn(
-                    "min-h-[168px] rounded-[8px] border p-3 text-left transition",
+                    "flex min-h-[168px] flex-col rounded-[8px] border p-3 text-left transition",
                     selected
                       ? "border-emerald-300/70 bg-emerald-400/12 shadow-lg shadow-emerald-950/30"
                       : "border-slate-700 bg-slate-900/70 hover:border-cyan-300/40",
@@ -327,11 +327,11 @@ function OrderBumpMediaPreview({ bump }: { bump: BillingCheckoutBump }) {
   if (!media) return null;
 
   return (
-    <div className="relative mt-3 aspect-[16/9] overflow-hidden rounded-[8px] border border-white/10 bg-slate-950">
+    <div className="relative mt-3 grid h-32 place-items-center overflow-hidden rounded-[8px] border border-white/10 bg-slate-950/90 p-1 sm:h-36 xl:h-32">
       {media.kind === "video" ? (
         <video
           aria-label={bump.title}
-          className="h-full w-full object-cover"
+          className="h-full w-full object-contain"
           muted
           playsInline
           preload="metadata"
@@ -340,9 +340,9 @@ function OrderBumpMediaPreview({ bump }: { bump: BillingCheckoutBump }) {
       ) : (
         <Image
           alt={bump.title}
-          className="object-cover"
+          className="object-contain"
           fill
-          sizes="(max-width: 767px) 100vw, 320px"
+          sizes="(max-width: 767px) 100vw, (max-width: 1279px) 50vw, 300px"
           src={media.storageUrl}
           unoptimized
         />
