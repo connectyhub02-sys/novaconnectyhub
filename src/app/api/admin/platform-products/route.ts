@@ -739,7 +739,7 @@ function validateFiles(files: File[]) {
 
     const contentType = normalizeContentType(file);
     if (!isAllowedProductFile(contentType, file.name)) {
-      return "Use imagens, videos, PDF, DOC, DOCX ou arquivos de texto.";
+      return "Use imagens, GIFs, videos, PDF, DOC, DOCX ou arquivos de texto.";
     }
   }
   return null;
@@ -753,7 +753,7 @@ function isAllowedProductFile(contentType: string, fileName: string) {
     "application/msword",
     "application/pdf",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  ]).has(contentType) || /\.(pdf|doc|docx|txt|md|csv)$/i.test(fileName);
+  ]).has(contentType) || /\.(png|jpe?g|webp|gif|mp4|webm|mov|pdf|doc|docx|txt|md|csv|json)$/i.test(fileName);
 }
 
 function normalizeContentType(file: File) {
@@ -767,8 +767,10 @@ function normalizeContentType(file: File) {
   if (lower.endsWith(".json")) return "application/json";
   if (lower.endsWith(".mp4")) return "video/mp4";
   if (lower.endsWith(".webm")) return "video/webm";
+  if (lower.endsWith(".mov")) return "video/quicktime";
   if (lower.endsWith(".png")) return "image/png";
   if (lower.endsWith(".webp")) return "image/webp";
+  if (lower.endsWith(".gif")) return "image/gif";
   if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
   return "text/plain";
 }

@@ -229,7 +229,7 @@ const platformProductHelpText: Record<string, string> = {
   Quantidade: "Quantidade disponivel quando o estoque e controlado.",
   "Alerta baixo": "Ponto em que o sistema deve sinalizar estoque baixo.",
   "SKUs e variacoes vendaveis": "Cadastre combinacoes vendaveis com preco, estoque e peso proprios.",
-  "Fotos, videos ou arquivos": "Envie midias e arquivos para R2 e vincule ao produto.",
+  "Fotos, GIFs, videos ou arquivos": "Envie midias e arquivos para R2 e vincule ao produto.",
   "Agente e venda": "Defina tag, prompt e notas internas usadas pelo agente no atendimento.",
   Tag: "Identificador curto para o agente reconhecer ou acionar o produto.",
   "Prompt do agente": "Orientacoes especificas que o agente deve seguir ao vender esse item.",
@@ -1001,11 +1001,11 @@ export function PlatformProductsConsole({
                         </div>
                       </Block>
 
-                      <Block icon={Upload} title="Fotos, videos ou arquivos" tone="cyan">
+                      <Block icon={Upload} title="Fotos, GIFs, videos ou arquivos" tone="cyan">
                         <label className="flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed px-3 text-center text-[12px] text-slate-400 transition hover:border-cyan-300/60 hover:text-cyan-200" style={{ borderColor: "var(--ch-border)" }}>
                           <Upload className="h-4 w-4" />
                           {files.length > 0 ? `${files.length} arquivo(s)` : "Selecionar arquivos"}
-                          <input multiple accept="image/*,video/*,.pdf,.doc,.docx,.txt,.md,.csv,.json,application/json" className="sr-only" type="file" onChange={handleFiles} />
+                          <input multiple accept="image/*,video/*,.gif,.mp4,.webm,.mov,.pdf,.doc,.docx,.txt,.md,.csv,.json,application/json" className="sr-only" type="file" onChange={handleFiles} />
                         </label>
                         {files.length > 0 ? (
                           <div className="mt-3 grid gap-2">

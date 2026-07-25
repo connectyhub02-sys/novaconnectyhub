@@ -295,7 +295,7 @@ const salesCatalogHelpText: Record<string, string> = {
   Comprimento: "Comprimento do pacote usado para calcular frete.",
   Largura: "Largura do pacote usada para calcular frete.",
   Altura: "Altura do pacote usada para calcular frete.",
-  "Fotos, videos ou arquivos": "Envie midias e materiais que o agente pode apresentar ao lead.",
+  "Fotos, GIFs, videos ou arquivos": "Envie midias e materiais que o agente pode apresentar ao lead.",
   Execucao: "Instrucoes para entrega digital, acesso, agendamento ou execucao do servico.",
   "Observacao de frete": "Detalhes que o agente deve considerar antes de prometer envio ou prazo.",
   Status: "Controle se o produto fica ativo, rascunho ou arquivado.",
@@ -2960,7 +2960,7 @@ export function SalesCatalogConsole({
 
             <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_150px]">
               <label className="block">
-                <FieldLabel>Fotos, videos ou arquivos</FieldLabel>
+                <FieldLabel>Fotos, GIFs, videos ou arquivos</FieldLabel>
                 <label
                   className="flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed px-3 text-center text-[12px] text-slate-400 transition hover:border-cyan-300/60 hover:text-cyan-200"
                   style={{ borderColor: "var(--ch-border)" }}
@@ -2969,7 +2969,7 @@ export function SalesCatalogConsole({
                   {files.length > 0 ? `${files.length} arquivo(s)` : "Selecionar arquivos"}
                   <input
                     multiple
-                    accept="image/*,video/*,.pdf,.doc,.docx,.txt,.md,.csv,.json,application/json"
+                    accept="image/*,video/*,.gif,.mp4,.webm,.mov,.pdf,.doc,.docx,.txt,.md,.csv,.json,application/json"
                     className="sr-only"
                     type="file"
                     onChange={handleFiles}
