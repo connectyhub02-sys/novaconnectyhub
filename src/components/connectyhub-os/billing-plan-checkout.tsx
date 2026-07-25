@@ -178,12 +178,15 @@ export function BillingPlanCheckout({
               <div className="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-emerald-300">
                 Order bumps
               </div>
-              <h3 className="mt-2 text-lg font-bold text-white">Aumente o carrinho</h3>
+              <h3 className="mt-2 text-lg font-bold text-white">Aumente seu saldo de creditos</h3>
+              <p className="mt-2 max-w-2xl text-xs leading-5 text-slate-400">
+                Compre mais creditos agora e mantenha seu agente online por mais tempo, sem pausar atendimentos quando o volume crescer.
+              </p>
             </div>
             <Sparkles className="h-5 w-5 text-emerald-300" />
           </div>
 
-          <div className="mt-4 grid gap-3 lg:grid-cols-3">
+          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {billingCheckoutBumps.map((bump) => {
               const selected = selectedBumpCodes.includes(bump.code);
 

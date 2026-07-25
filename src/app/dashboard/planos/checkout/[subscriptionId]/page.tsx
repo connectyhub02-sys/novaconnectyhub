@@ -91,10 +91,10 @@ export default async function DashboardBillingCheckoutPage({
                 Billing / checkout
               </div>
               <h1 className="mt-3 text-[28px] font-black leading-tight text-white sm:text-[36px]">
-                Finalize seu plano sem sair do painel.
+                Finalize sua assinatura.
               </h1>
               <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">
-                Confira o plano, escolha adicionais e pague com cartao ou Pix no checkout ConnectyHub.
+                Confira seu plano, adicione creditos promocionais e pague com cartao ou Pix no checkout ConnectyHub.
               </p>
             </div>
             <Link
