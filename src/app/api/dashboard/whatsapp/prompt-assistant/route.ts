@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireClientCompanyAccess } from "@/lib/client-os/companies";
+import { assertBillableAccess, BillingAccessError } from "@/lib/billing/trial";
 import { loadGeminiCredentials, type GeminiCredentials } from "@/lib/gemini/credentials";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
@@ -43,6 +44,7 @@ export async function POST(request: NextRequest) {
       companyId,
       client,
     });
+    await assertBillableAccess({ organizationId: company.id, client });
     const credentials = await loadGeminiCredentials(client) as GeminiCredentials;
     const pageContext = productUrl ? await fetchPageContext(productUrl) : "";
     const prompt = await generatePrompt({
@@ -55,7 +57,13 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ prompt });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Erro ao gerar prompt." }, { status: 500 });
+    return NextResponse.json(
+      {
+        error: error instanceof Error ? error.message : "Erro ao gerar prompt.",
+        ...(error instanceof BillingAccessError ? { billingAccess: error.status } : {}),
+      },
+      { status: error instanceof BillingAccessError ? 402 : 500 },
+    );
   }
 }
 

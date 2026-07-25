@@ -1,5 +1,6 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
+import { assertBillableAccess, BillingAccessError } from "@/lib/billing/trial";
 import { requireClientCompanyAccess } from "@/lib/client-os/companies";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
@@ -78,6 +79,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const company = await requireClientCompanyAccess({ userId: auth.workspace.user.id, companyId, client });
+    await assertBillableAccess({ organizationId: company.id, client });
 
     if (!["owner", "admin"].includes(company.role)) {
       return NextResponse.json({ error: "Somente dono ou admin da empresa pode criar webhooks." }, { status: 403 });
@@ -170,7 +172,13 @@ export async function POST(request: NextRequest) {
       secret,
     }, { status: 201 });
   } catch (error) {
-    return NextResponse.json({ error: readErrorMessage(error, "Nao foi possivel criar o Webhook Universal.") }, { status: 400 });
+    return NextResponse.json(
+      {
+        error: readErrorMessage(error, "Nao foi possivel criar o Webhook Universal."),
+        ...(error instanceof BillingAccessError ? { billingAccess: error.status } : {}),
+      },
+      { status: error instanceof BillingAccessError ? 402 : 400 },
+    );
   }
 }
 

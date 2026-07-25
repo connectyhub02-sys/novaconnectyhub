@@ -87,7 +87,8 @@ export type ConnectyShellNotification = {
 };
 
 type BillingAccessClientStatus = {
-  state: "trial_active" | "trial_low_credits" | "trial_no_credits" | "trial_expired" | "paid_active" | "paid_no_credits" | "inactive";
+  state: "trial_active" | "trial_low_credits" | "trial_no_credits" | "trial_expired" | "paid_active" | "paid_no_credits" | "paid_expired" | "inactive";
+  canUseBillableFeatures: boolean;
   balanceCredits: number;
   trialDaysRemaining: number | null;
   includedCredits: number;
@@ -315,9 +316,26 @@ export function ConnectyShell({
     }
 
     void loadBillingAccess();
+    const intervalId = window.setInterval(loadBillingAccess, 30_000);
+
+    function refreshOnFocus() {
+      void loadBillingAccess();
+    }
+
+    function refreshOnVisibility() {
+      if (document.visibilityState === "visible") {
+        void loadBillingAccess();
+      }
+    }
+
+    window.addEventListener("focus", refreshOnFocus);
+    document.addEventListener("visibilitychange", refreshOnVisibility);
 
     return () => {
       cancelled = true;
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", refreshOnFocus);
+      document.removeEventListener("visibilitychange", refreshOnVisibility);
     };
   }, [mode]);
 
@@ -688,6 +706,8 @@ export function ConnectyShell({
               ) : null}
             </div>
 
+            {mode === "client" ? <CreditBalancePill status={billingAccess} /> : null}
+
             {/* Mode switch */}
             {canSwitch && (
               <Link
@@ -820,9 +840,121 @@ export function ConnectyShell({
           </div>
         </main>
       </div>
+      {mode === "client" ? <BillingAccessLockOverlay status={billingAccess} /> : null}
       </div>
     </ConnectyShellNotificationsContext.Provider>
   );
+}
+
+function CreditBalancePill({ status }: { status: BillingAccessClientStatus | null }) {
+  const tone = status ? billingBannerTone(status.bannerTone) : billingBannerTone("cyan");
+  const label = status ? formatShellCredits(status.balanceCredits) : "--";
+
+  return (
+    <div
+      className="flex h-8 shrink-0 items-center gap-2 rounded-lg px-2.5 font-mono text-[10px] font-bold uppercase tracking-wide sm:px-3"
+      title="Creditos disponiveis"
+      style={{
+        background: status?.canUseBillableFeatures === false ? "rgba(251,113,133,0.14)" : "var(--ch-surface-2)",
+        border: `1px solid ${status?.canUseBillableFeatures === false ? "rgba(251,113,133,0.42)" : "var(--ch-border)"}`,
+        color: status?.canUseBillableFeatures === false ? "#fb7185" : tone.color,
+      }}
+    >
+      <Coins className="h-3.5 w-3.5" />
+      <span className="hidden sm:inline">Creditos</span>
+      <span>{label}</span>
+    </div>
+  );
+}
+
+function BillingAccessLockOverlay({ status }: { status: BillingAccessClientStatus | null }) {
+  if (!status || status.canUseBillableFeatures) {
+    return null;
+  }
+
+  const tone = billingBannerTone(status.bannerTone);
+  const reason = lockReasonLabel(status.state);
+
+  return (
+    <div
+      className="fixed inset-0 z-[10000] flex items-center justify-center px-4 py-6"
+      role="dialog"
+      aria-modal="true"
+      aria-label={status.bannerTitle}
+      style={{
+        background: "rgba(2,6,12,0.78)",
+        backdropFilter: "blur(14px)",
+      }}
+    >
+      <div
+        className="w-full max-w-[520px] rounded-2xl border p-5 shadow-2xl sm:p-6"
+        style={{
+          background: "linear-gradient(180deg, #111b2a 0%, #07111d 100%)",
+          borderColor: tone.border,
+          color: "#fbfdff",
+          boxShadow: "0 30px 120px rgba(0,0,0,0.68)",
+        }}
+      >
+        <div className="flex items-start gap-3">
+          <span
+            className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl"
+            style={{ background: tone.iconBackground, color: tone.color }}
+          >
+            <Coins className="h-6 w-6" />
+          </span>
+          <div className="min-w-0">
+            <p className="font-mono text-[10px] uppercase tracking-[0.22em]" style={{ color: tone.color }}>
+              {reason}
+            </p>
+            <h2 className="mt-1 text-[20px] font-bold leading-tight">{status.bannerTitle}</h2>
+            <p className="mt-2 text-[13px] leading-6 text-slate-300">{status.bannerDescription}</p>
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-2 sm:grid-cols-3">
+          <LockMetric label="creditos" value={formatShellCredits(status.balanceCredits)} tone={tone.color} />
+          <LockMetric label="usados" value={formatShellCredits(status.usedCredits)} tone={tone.color} />
+          <LockMetric label="dias trial" value={status.trialDaysRemaining === null ? "--" : String(status.trialDaysRemaining)} tone={tone.color} />
+        </div>
+
+        <div className="mt-5 rounded-xl border border-white/10 bg-white/[0.045] px-4 py-3 text-[12px] leading-5 text-slate-400">
+          Seus dados continuam salvos. Para voltar a criar agentes, conectar WhatsApp, usar IA, voz, campanhas e automacoes, escolha um plano ou adicione creditos.
+        </div>
+
+        <div className="mt-5 grid gap-2 sm:grid-cols-[1fr_auto]">
+          <a
+            href={status.ctaHref}
+            className="inline-flex min-h-11 items-center justify-center rounded-xl px-4 text-[13px] font-bold transition hover:opacity-90"
+            style={{ background: tone.color, color: "#061015" }}
+          >
+            {status.ctaLabel}
+          </a>
+          <a
+            href="/auth/signout"
+            className="inline-flex min-h-11 items-center justify-center rounded-xl border border-white/15 px-4 text-[13px] font-semibold text-slate-200 transition hover:bg-white/10"
+          >
+            Sair
+          </a>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LockMetric({ label, tone, value }: { label: string; tone: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/[0.045] px-3 py-2">
+      <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-slate-500">{label}</p>
+      <p className="mt-1 font-mono text-[16px] font-bold" style={{ color: tone }}>{value}</p>
+    </div>
+  );
+}
+
+function lockReasonLabel(state: BillingAccessClientStatus["state"]) {
+  if (state === "trial_expired") return "teste de 7 dias encerrado";
+  if (state === "trial_no_credits" || state === "paid_no_credits") return "creditos zerados";
+  if (state === "paid_expired") return "plano vencido";
+  return "acesso bloqueado";
 }
 
 function BillingStatusBanner({ status }: { status: BillingAccessClientStatus | null }) {

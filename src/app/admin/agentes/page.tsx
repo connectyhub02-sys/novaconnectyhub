@@ -18,7 +18,7 @@ export default async function AdminAgentesPage() {
     return <AccessDenied />;
   }
 
-  const overview = await getAutonomousAdminOverview();
+  const overview = await getAutonomousAdminOverview({ useServiceRole: true });
 
   return (
     <AutonomousCommandCenter

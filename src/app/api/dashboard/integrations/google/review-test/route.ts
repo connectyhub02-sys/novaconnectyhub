@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { assertBillableAccess, formatBillingAccessError, statusForBillingAccessError } from "@/lib/billing/trial";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { getClientTrafficOverview, type TrafficProviderSummary } from "@/lib/traffic/admin-traffic";
 
@@ -32,6 +33,15 @@ export async function POST() {
 
   if (!organizationId) {
     return NextResponse.json({ error: "Selecione uma empresa antes de testar a conexao Google." }, { status: 400 });
+  }
+
+  try {
+    await assertBillableAccess({ organizationId });
+  } catch (error) {
+    return NextResponse.json(
+      formatBillingAccessError(error, "Acesso bloqueado por plano ou creditos."),
+      { status: statusForBillingAccessError(error, 500) },
+    );
   }
 
   const overview = await getClientTrafficOverview(organizationId);

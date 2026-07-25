@@ -1,5 +1,7 @@
 import { revalidatePath } from "next/cache";
 import { NextResponse, type NextRequest } from "next/server";
+import { assertBillableAccess, BillingAccessError } from "@/lib/billing/trial";
+import { requireClientCompanyAccess } from "@/lib/client-os/companies";
 import { importPlatformProductToCompany } from "@/lib/platform-products";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
@@ -30,11 +32,19 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    const client = createServiceClient();
+    const company = await requireClientCompanyAccess({
+      userId: workspace.user.id,
+      companyId,
+      client,
+    });
+    await assertBillableAccess({ organizationId: company.id, client });
+
     const result = await importPlatformProductToCompany({
       userId: workspace.user.id,
       companyId,
       productId,
-      client: createServiceClient(),
+      client,
     });
 
     revalidatePath("/dashboard/produtos");
@@ -43,6 +53,12 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(result);
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Erro ao importar produto." }, { status: 500 });
+    return NextResponse.json(
+      {
+        error: error instanceof Error ? error.message : "Erro ao importar produto.",
+        ...(error instanceof BillingAccessError ? { billingAccess: error.status } : {}),
+      },
+      { status: error instanceof BillingAccessError ? 402 : 500 },
+    );
   }
 }

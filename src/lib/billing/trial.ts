@@ -15,6 +15,7 @@ export type BillingAccessState =
   | "trial_expired"
   | "paid_active"
   | "paid_no_credits"
+  | "paid_expired"
   | "inactive";
 
 export type BillingAccessStatus = {
@@ -66,6 +67,20 @@ type BillingCycleRow = {
   billing_plans: BillingPlanRelation;
 };
 
+type BillingPlanLimitRow = {
+  plan_code: string;
+  agent_limit: number | string | null;
+  whatsapp_instance_limit: number | string | null;
+  included_credits: number | string | null;
+};
+
+export type OrganizationPlanLimits = {
+  planCode: string | null;
+  agentLimit: number;
+  whatsappInstanceLimit: number;
+  includedCredits: number;
+};
+
 export class BillingAccessError extends Error {
   status: BillingAccessStatus;
 
@@ -74,6 +89,17 @@ export class BillingAccessError extends Error {
     this.name = "BillingAccessError";
     this.status = status;
   }
+}
+
+export function formatBillingAccessError(error: unknown, fallback: string) {
+  return {
+    error: error instanceof Error ? error.message : fallback,
+    ...(error instanceof BillingAccessError ? { billingAccess: error.status } : {}),
+  };
+}
+
+export function statusForBillingAccessError(error: unknown, fallback: number) {
+  return error instanceof BillingAccessError ? 402 : fallback;
 }
 
 export async function grantTrialCredits(input: {
@@ -170,8 +196,32 @@ export async function getOrganizationBillingAccess(input: {
   const cycle = await loadTrialCycle(client, input.organizationId);
   const planCode = organization.plan_code;
   const organizationStatus = organization.status;
-  const isTrial = planCode === TRIAL_PLAN_CODE || organizationStatus === "trial" || organizationStatus === "trial_expired";
   const balanceCredits = toNumber(wallet?.balance_credits);
+
+  if (planCode === "internal") {
+    return {
+      organizationId: organization.id,
+      planCode,
+      organizationStatus,
+      state: "paid_active",
+      canUseBillableFeatures: true,
+      balanceCredits,
+      trialStartsAt: null,
+      trialEndsAt: null,
+      trialDaysTotal: 0,
+      trialDaysRemaining: null,
+      includedCredits: 0,
+      usedCredits: 0,
+      lowCreditThreshold: 0,
+      bannerTone: "cyan",
+      bannerTitle: "Operacao interna ativa",
+      bannerDescription: "Workspace interno da ConnectyHub liberado para operacao.",
+      ctaLabel: "Painel admin",
+      ctaHref: "/admin",
+    };
+  }
+
+  const isTrial = planCode === TRIAL_PLAN_CODE || organizationStatus === "trial" || organizationStatus === "trial_expired";
   const fallbackTrialStart = organization.created_at;
   const fallbackTrialEnd = addDaysIso(fallbackTrialStart, TRIAL_DAYS);
   const trialStartsAt = cycle?.cycle_start ?? (isTrial ? fallbackTrialStart : null);
@@ -274,6 +324,29 @@ export async function getOrganizationBillingAccess(input: {
     };
   }
 
+  if (isPaidPlanExpired(organizationStatus)) {
+    return {
+      organizationId: organization.id,
+      planCode,
+      organizationStatus,
+      state: "paid_expired",
+      canUseBillableFeatures: false,
+      balanceCredits,
+      trialStartsAt: null,
+      trialEndsAt: null,
+      trialDaysTotal: 0,
+      trialDaysRemaining: null,
+      includedCredits: 0,
+      usedCredits: 0,
+      lowCreditThreshold: 0,
+      bannerTone: "rose",
+      bannerTitle: "Plano vencido",
+      bannerDescription: "Seu plano venceu. O painel continua acessivel, mas os recursos ficam bloqueados ate renovar ou migrar de plano.",
+      ctaLabel: "Renovar plano",
+      ctaHref: "/#planos",
+    };
+  }
+
   if (balanceCredits <= 0) {
     return {
       organizationId: organization.id,
@@ -336,6 +409,50 @@ export async function assertBillableAccess(input: {
   return status;
 }
 
+export async function getOrganizationPlanLimits(input: {
+  organizationId: string;
+  client?: SupabaseClient;
+}): Promise<OrganizationPlanLimits> {
+  const client = input.client ?? createServiceClient();
+  const { data: organization, error: organizationError } = await client
+    .from("organizations")
+    .select("plan_code")
+    .eq("id", input.organizationId)
+    .maybeSingle<{ plan_code: string | null }>();
+
+  if (organizationError) {
+    throw new Error(`Nao foi possivel carregar plano da empresa: ${organizationError.message}`);
+  }
+
+  const planCode = organization?.plan_code ?? null;
+
+  if (planCode === "internal") {
+    return {
+      planCode,
+      agentLimit: Number.MAX_SAFE_INTEGER,
+      whatsappInstanceLimit: Number.MAX_SAFE_INTEGER,
+      includedCredits: 0,
+    };
+  }
+
+  const { data: plan, error: planError } = await client
+    .from("billing_plans")
+    .select("plan_code, agent_limit, whatsapp_instance_limit, included_credits")
+    .eq("plan_code", planCode ?? "")
+    .maybeSingle<BillingPlanLimitRow>();
+
+  if (planError) {
+    throw new Error(`Nao foi possivel carregar limites do plano: ${planError.message}`);
+  }
+
+  return {
+    planCode,
+    agentLimit: positiveLimit(plan?.agent_limit, fallbackAgentLimit(planCode)),
+    whatsappInstanceLimit: positiveLimit(plan?.whatsapp_instance_limit, fallbackWhatsappLimit(planCode)),
+    includedCredits: toNumber(plan?.included_credits),
+  };
+}
+
 function buildInactiveStatus(organizationId: string): BillingAccessStatus {
   return {
     organizationId,
@@ -357,6 +474,36 @@ function buildInactiveStatus(organizationId: string): BillingAccessStatus {
     ctaLabel: "Ver planos",
     ctaHref: "/#planos",
   };
+}
+
+function isPaidPlanExpired(status: string | null) {
+  const normalized = (status ?? "").toLowerCase();
+  return normalized === "expired"
+    || normalized === "past_due"
+    || normalized === "cancelled"
+    || normalized === "inactive"
+    || normalized === "suspended";
+}
+
+function positiveLimit(value: number | string | null | undefined, fallback: number) {
+  const limit = toNumber(value);
+  return limit > 0 ? limit : fallback;
+}
+
+function fallbackAgentLimit(planCode: string | null) {
+  if (planCode === TRIAL_PLAN_CODE) return 1;
+  if (planCode === "starter") return 1;
+  if (planCode === "pro") return 4;
+  if (planCode === "scale") return 8;
+  return 0;
+}
+
+function fallbackWhatsappLimit(planCode: string | null) {
+  if (planCode === TRIAL_PLAN_CODE) return 1;
+  if (planCode === "starter") return 1;
+  if (planCode === "pro") return 4;
+  if (planCode === "scale") return 8;
+  return 0;
 }
 
 async function loadTrialCycle(client: SupabaseClient, organizationId: string) {

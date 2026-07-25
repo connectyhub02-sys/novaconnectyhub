@@ -1,5 +1,6 @@
 import { revalidatePath } from "next/cache";
 import { NextResponse, type NextRequest } from "next/server";
+import { assertBillableAccess } from "@/lib/billing/trial";
 import { requireClientCompanyAccess } from "@/lib/client-os/companies";
 import { encryptCredentialValue } from "@/lib/security/credentials-crypto";
 import {
@@ -67,6 +68,8 @@ export async function GET(request: NextRequest) {
       companyId: integration.organization_id,
       client,
     });
+    await assertBillableAccess({ organizationId: company.id, client });
+
     const tokens = await exchangeMercadoPagoAuthorizationCode({ code, client });
     const now = new Date().toISOString();
 

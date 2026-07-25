@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createCustomerVoiceClone, deleteCustomerVoiceClone } from "@/lib/elevenlabs/voice-cloning";
 import { listWhatsappAudioVoices } from "@/lib/elevenlabs/voices";
 import { requireClientCompanyAccess } from "@/lib/client-os/companies";
+import { assertBillableAccess, BillingAccessError } from "@/lib/billing/trial";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 
 export const dynamic = "force-dynamic";
@@ -41,6 +42,7 @@ export async function POST(request: NextRequest) {
       userId: workspace.user.id,
       companyId,
     });
+    await assertBillableAccess({ organizationId: organization.id });
     const voice = await createCustomerVoiceClone({
       organizationId: organization.id,
       userId: workspace.user.id,
@@ -86,6 +88,7 @@ export async function DELETE(request: NextRequest) {
       userId: workspace.user.id,
       companyId,
     });
+    await assertBillableAccess({ organizationId: organization.id });
     await deleteCustomerVoiceClone({ organizationId: organization.id, voiceId });
     const audio = await listWhatsappAudioVoices({ organizationId: organization.id });
 
@@ -117,10 +120,15 @@ function isFormFile(value: FormDataEntryValue): value is File {
 function formatError(error: unknown) {
   return {
     error: error instanceof Error ? error.message : "Nao foi possivel clonar a voz.",
+    ...(error instanceof BillingAccessError ? { billingAccess: error.status } : {}),
   };
 }
 
 function resolveErrorStatus(error: unknown) {
+  if (error instanceof BillingAccessError) {
+    return 402;
+  }
+
   const message = error instanceof Error ? error.message : "";
 
   if (

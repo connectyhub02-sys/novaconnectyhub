@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
+import { assertBillableAccess } from "@/lib/billing/trial";
 import { requireClientCompanyAccess } from "@/lib/client-os/companies";
 import {
   buildGoogleAuthorizationUrl,
@@ -36,6 +37,7 @@ export async function GET(request: NextRequest) {
   try {
     const client = createServiceClient();
     const company = await requireClientCompanyAccess({ userId: workspace.user.id, companyId, client });
+    await assertBillableAccess({ organizationId: company.id, client });
 
     if (!["owner", "admin"].includes(company.role)) {
       returnUrl.searchParams.set("integration", "google_error");

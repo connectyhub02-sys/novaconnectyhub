@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClientCompany, deleteClientCompany, listClientCompanies, updateClientCompany } from "@/lib/client-os/companies";
+import { assertBillableAccess, BillingAccessError } from "@/lib/billing/trial";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 
 export const dynamic = "force-dynamic";
@@ -30,6 +31,12 @@ export async function POST(request: NextRequest) {
   const body = await readJson<{ name?: unknown }>(request);
 
   try {
+    const companies = await listClientCompanies(workspace.user.id);
+
+    if (companies.length > 0) {
+      await assertBillableAccess({ organizationId: companies[0].id });
+    }
+
     const company = await createClientCompany({
       userId: workspace.user.id,
       name: typeof body?.name === "string" ? body.name : "",
@@ -37,7 +44,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ company }, { status: 201 });
   } catch (error) {
-    return NextResponse.json(formatError(error), { status: 400 });
+    return NextResponse.json(formatError(error), { status: statusForError(error, 400) });
   }
 }
 
@@ -59,7 +66,7 @@ export async function PATCH(request: NextRequest) {
 
     return NextResponse.json({ company });
   } catch (error) {
-    return NextResponse.json(formatError(error), { status: 400 });
+    return NextResponse.json(formatError(error), { status: statusForError(error, 400) });
   }
 }
 
@@ -80,7 +87,7 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ deletedCompanyId: company.id });
   } catch (error) {
-    return NextResponse.json(formatError(error), { status: 400 });
+    return NextResponse.json(formatError(error), { status: statusForError(error, 400) });
   }
 }
 
@@ -95,5 +102,10 @@ async function readJson<T>(request: NextRequest): Promise<T | null> {
 function formatError(error: unknown) {
   return {
     error: error instanceof Error ? error.message : "Erro inesperado.",
+    ...(error instanceof BillingAccessError ? { billingAccess: error.status } : {}),
   };
+}
+
+function statusForError(error: unknown, fallback: number) {
+  return error instanceof BillingAccessError ? 402 : fallback;
 }

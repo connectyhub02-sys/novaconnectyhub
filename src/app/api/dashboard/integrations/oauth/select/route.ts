@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { assertBillableAccess, BillingAccessError } from "@/lib/billing/trial";
 import { requireClientCompanyAccess } from "@/lib/client-os/companies";
 import {
   deleteOAuthCredentials,
@@ -61,6 +62,7 @@ export async function POST(request: NextRequest) {
       companyId,
       client,
     });
+    await assertBillableAccess({ organizationId: company.id, client });
 
     if (!["owner", "admin"].includes(company.role)) {
       return NextResponse.json({ error: "Somente dono ou admin da empresa pode alterar a conta selecionada." }, { status: 403 });
@@ -106,7 +108,8 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     return NextResponse.json({
       error: error instanceof Error ? error.message : "Nao foi possivel salvar a selecao.",
-    }, { status: 400 });
+      ...(error instanceof BillingAccessError ? { billingAccess: error.status } : {}),
+    }, { status: error instanceof BillingAccessError ? 402 : 400 });
   }
 }
 

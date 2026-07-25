@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getClientAgentsWorkspace, type ClientAgent } from "@/lib/client-os/agents";
+import { assertBillableAccess, BillingAccessError } from "@/lib/billing/trial";
 import { requireClientCompanyAccess, type ClientCompany } from "@/lib/client-os/companies";
 import { inngest } from "@/lib/inngest/client";
 import { getCurrentWorkspace, type CurrentOrganization } from "@/lib/supabase/profile";
@@ -87,6 +88,8 @@ export async function POST(request: NextRequest) {
   const action = asString(body?.action) ?? "";
 
   try {
+    await assertBillableAccess({ organizationId: context.organization.id });
+
     const client = createServiceClient();
     const whatsapp = await resolveClientWhatsappOperationalContext(client, context.organization.id, context.selectedAgentId);
     let result: unknown;
@@ -144,7 +147,7 @@ export async function POST(request: NextRequest) {
       notice: { tone: "success", message: notice },
     });
   } catch (error) {
-    return NextResponse.json(formatError(error), { status: 400 });
+    return NextResponse.json(formatError(error), { status: statusForError(error, 400) });
   }
 }
 
@@ -254,5 +257,10 @@ function asNumber(value: unknown) {
 function formatError(error: unknown) {
   return {
     error: error instanceof Error ? error.message : "Erro inesperado nos recursos do WhatsApp.",
+    ...(error instanceof BillingAccessError ? { billingAccess: error.status } : {}),
   };
+}
+
+function statusForError(error: unknown, fallback: number) {
+  return error instanceof BillingAccessError ? 402 : fallback;
 }

@@ -5,6 +5,7 @@ import {
   retryClientSocialDispatch,
   reviewClientSocialApproval,
 } from "@/lib/client-os/social-approvals";
+import { assertBillableAccess, BillingAccessError } from "@/lib/billing/trial";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 
 export const dynamic = "force-dynamic";
@@ -55,6 +56,12 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    if (!workspace.organization?.id) {
+      return NextResponse.json({ error: "Empresa obrigatoria." }, { status: 400 });
+    }
+
+    await assertBillableAccess({ organizationId: workspace.organization.id });
+
     if (action === "retry_dispatch") {
       const result = await retryClientSocialDispatch({
         userId: workspace.user.id,
@@ -74,7 +81,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(result);
   } catch (error) {
-    return NextResponse.json(formatError(error), { status: 400 });
+    return NextResponse.json(formatError(error), { status: error instanceof BillingAccessError ? 402 : 400 });
   }
 }
 
@@ -89,5 +96,6 @@ async function readJson<T>(request: NextRequest): Promise<T | null> {
 function formatError(error: unknown) {
   return {
     error: error instanceof Error ? error.message : "Erro inesperado nas aprovacoes sociais.",
+    ...(error instanceof BillingAccessError ? { billingAccess: error.status } : {}),
   };
 }

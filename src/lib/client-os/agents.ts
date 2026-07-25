@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
 import { defaultLeadQualificationConfig, leadQualificationConfigKey } from "@/lib/leads/qualification";
 import { defaultAgentChannelConfig, normalizeAgentChannelConfig } from "@/lib/agents/multichannel";
+import { assertBillableAccess, getOrganizationPlanLimits } from "@/lib/billing/trial";
 import { defaultWhatsappAgentPrompt, defaultWhatsappBehaviorConfig, defaultWhatsappCloneMemory, defaultWhatsappCloneProfile } from "@/lib/whatsapp/agent-behavior";
 import { deleteUazapiProviderInstance } from "@/lib/whatsapp/uazapi-instance-cleanup";
 import { loadUazapiCredentials } from "@/lib/whatsapp/uazapi-credentials";
@@ -125,6 +126,9 @@ export async function createClientAgent(input: {
     companyId: input.companyId,
     client,
   });
+
+  await assertClientCanCreateAgent(client, company.id);
+
   const name = normalizeAgentName(input.name);
   const sectorName = normalizeSectorName(input.sectorName);
   const sectorCode = createSectorCode(sectorName);
@@ -200,6 +204,9 @@ export async function updateClientAgent(input: {
     companyId: input.companyId || agent.organization_id,
     client,
   });
+
+  await assertBillableAccess({ organizationId: targetCompany.id, client });
+
   const name = normalizeAgentName(input.name);
   const sectorName = normalizeSectorName(input.sectorName);
   const sectorCode = createSectorCode(sectorName);
@@ -256,6 +263,9 @@ export async function cloneClientAgent(input: {
     companyId: input.companyId || sourceAgent.organization_id,
     client,
   });
+
+  await assertClientCanCreateAgent(client, targetCompany.id);
+
   const name = normalizeAgentName(input.name || `Copia de ${sourceAgent.name}`);
   const sectorName = normalizeSectorName(input.sectorName || sourceAgent.sector_name);
   const sectorCode = createSectorCode(sectorName);
@@ -341,6 +351,8 @@ export async function deleteClientAgent(input: {
   if (!agent || !companyIds.has(agent.organization_id)) {
     throw new Error("Escolha um agente vinculado a sua conta.");
   }
+
+  await assertBillableAccess({ organizationId: agent.organization_id, client });
 
   await deleteAgentWhatsappInstances(client, agent, input.userId);
 
@@ -475,6 +487,33 @@ async function requireClientAgentAccess(input: {
   }
 
   return { agent, companies };
+}
+
+async function assertClientCanCreateAgent(client: SupabaseClient, organizationId: string) {
+  const [limits] = await Promise.all([
+    getOrganizationPlanLimits({ organizationId, client }),
+    assertBillableAccess({ organizationId, client }),
+  ]);
+
+  const { count, error } = await client
+    .from("agent_registry")
+    .select("id", { count: "exact", head: true })
+    .eq("scope", "organization")
+    .eq("organization_id", organizationId)
+    .contains("metadata", { client_created: true, agent_kind: "whatsapp" })
+    .neq("status", "archived");
+
+  if (error) {
+    throw new Error(`Nao foi possivel validar limite de agentes: ${error.message}`);
+  }
+
+  const currentCount = count ?? 0;
+
+  if (currentCount >= limits.agentLimit) {
+    throw new Error(
+      `Seu plano permite ${limits.agentLimit} agente${limits.agentLimit === 1 ? "" : "s"} IA. Para criar outro agente, escolha um plano maior.`,
+    );
+  }
 }
 
 function mapAgent(agent: AgentRow, companyById: Map<string, ClientCompany>) {

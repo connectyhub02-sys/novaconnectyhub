@@ -17,6 +17,7 @@ import {
 } from "@/lib/meta/review-readiness";
 import { metaPageWebhookFields, summarizeMetaPageSubscription } from "@/lib/meta/webhook-activation-policy";
 import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
+import { assertBillableAccess, formatBillingAccessError, statusForBillingAccessError } from "@/lib/billing/trial";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
 
@@ -53,6 +54,15 @@ export async function POST() {
 
   if (!organizationId) {
     return NextResponse.json({ error: "Selecione uma empresa antes de testar a conexao Meta." }, { status: 400 });
+  }
+
+  try {
+    await assertBillableAccess({ organizationId });
+  } catch (error) {
+    return NextResponse.json(
+      formatBillingAccessError(error, "Acesso bloqueado por plano ou creditos."),
+      { status: statusForBillingAccessError(error, 500) },
+    );
   }
 
   const client = createServiceClient();

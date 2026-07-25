@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getClientAgentsWorkspace, type ClientAgent } from "@/lib/client-os/agents";
+import { assertBillableAccess, BillingAccessError } from "@/lib/billing/trial";
 import type { WhatsappAudioVoiceState } from "@/lib/elevenlabs/voices";
 import { requireClientCompanyAccess, type ClientCompany } from "@/lib/client-os/companies";
 import { getCurrentWorkspace, type CurrentOrganization } from "@/lib/supabase/profile";
@@ -97,6 +98,8 @@ export async function POST(request: NextRequest) {
   const action = typeof body?.action === "string" ? body.action : "";
 
   try {
+    await assertBillableAccess({ organizationId: context.organization.id });
+
     if (action === "connect") {
       const result = await connectClientWhatsapp({
         organization: context.organization,
@@ -193,7 +196,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ error: "Acao invalida." }, { status: 400 });
   } catch (error) {
-    return NextResponse.json(formatError(error), { status: 500 });
+    return NextResponse.json(formatError(error), { status: statusForError(error, 500) });
   }
 }
 
@@ -231,6 +234,8 @@ export async function PATCH(request: NextRequest) {
   const globalPrompt = typeof body?.globalPrompt === "string" ? body.globalPrompt : undefined;
 
   try {
+    await assertBillableAccess({ organizationId: context.organization.id });
+
     const state = await updateClientWhatsappPrompt({
       organization: context.organization,
       userId: context.userId,
@@ -245,7 +250,7 @@ export async function PATCH(request: NextRequest) {
 
     return NextResponse.json(attachWorkspace(context, state));
   } catch (error) {
-    return NextResponse.json(formatError(error), { status: 400 });
+    return NextResponse.json(formatError(error), { status: statusForError(error, 400) });
   }
 }
 
@@ -349,7 +354,12 @@ function attachWorkspaceToResult(context: WorkspaceContext, result: ClientWhatsa
 function formatError(error: unknown) {
   return {
     error: error instanceof Error ? error.message : "Erro inesperado no WhatsApp.",
+    ...(error instanceof BillingAccessError ? { billingAccess: error.status } : {}),
   };
+}
+
+function statusForError(error: unknown, fallback: number) {
+  return error instanceof BillingAccessError ? 402 : fallback;
 }
 
 function buildUnavailableState(): DashboardWhatsappState {

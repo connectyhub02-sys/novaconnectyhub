@@ -6,6 +6,7 @@ import {
   metaSocialDispatchLiveChannels,
   type MetaSocialDispatchLiveChannelDraft,
 } from "@/lib/meta/social-dispatch-policy";
+import { assertBillableAccess, BillingAccessError } from "@/lib/billing/trial";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
 
@@ -46,6 +47,7 @@ export async function POST(request: NextRequest) {
       companyId,
       client,
     });
+    await assertBillableAccess({ organizationId: company.id, client });
 
     if (!["owner", "admin"].includes(company.role)) {
       return NextResponse.json({ error: "Somente dono ou admin da empresa pode ativar envio live Meta." }, { status: 403 });
@@ -135,6 +137,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     return NextResponse.json({
       error: error instanceof Error ? error.message : "Nao foi possivel salvar a ativacao live Meta.",
+      ...(error instanceof BillingAccessError ? { billingAccess: error.status } : {}),
     }, { status: readErrorStatus(error) });
   }
 }
@@ -193,6 +196,10 @@ function formatDateTime(value: string) {
 }
 
 function readErrorStatus(error: unknown) {
+  if (error instanceof BillingAccessError) {
+    return 402;
+  }
+
   const message = error instanceof Error ? error.message : "";
 
   if (message.startsWith("Somente dono ou admin")) {

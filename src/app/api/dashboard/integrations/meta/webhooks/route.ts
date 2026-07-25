@@ -8,6 +8,7 @@ import {
   replayClientMetaWebhookEvent,
 } from "@/lib/meta/webhook-monitor";
 import { isMetaWebhookSimulationScenario } from "@/lib/meta/webhook-fixtures";
+import { assertBillableAccess, BillingAccessError } from "@/lib/billing/trial";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
 
@@ -64,6 +65,8 @@ export async function POST(request: NextRequest) {
   const client = createServiceClient();
 
   try {
+    await assertBillableAccess({ organizationId: companyId, client });
+
     if (action === "subscribe_page") {
       const activation = await activateClientMetaWebhookSubscription({
         client,
@@ -118,6 +121,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     return NextResponse.json({
       error: error instanceof Error ? error.message : "Nao foi possivel executar a acao de webhook Meta.",
+      ...(error instanceof BillingAccessError ? { billingAccess: error.status } : {}),
     }, { status: readErrorStatus(error) });
   }
 }
@@ -136,6 +140,10 @@ function readString(value: unknown) {
 }
 
 function readErrorStatus(error: unknown) {
+  if (error instanceof BillingAccessError) {
+    return 402;
+  }
+
   const message = error instanceof Error ? error.message : "";
 
   if (message.startsWith("Somente dono ou admin")) {

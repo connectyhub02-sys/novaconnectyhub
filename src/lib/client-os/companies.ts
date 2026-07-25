@@ -1,7 +1,7 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { grantTrialCredits, scheduleTrialConversionMessages } from "@/lib/billing/trial";
+import { assertBillableAccess, grantTrialCredits, scheduleTrialConversionMessages } from "@/lib/billing/trial";
 import { ensureClientApiClient } from "@/lib/connectyhub-api/gateway";
 import { createServiceClient } from "@/lib/supabase/service";
 
@@ -122,6 +122,8 @@ export async function deleteClientCompany(input: {
     client,
   });
 
+  await assertBillableAccess({ organizationId: company.id, client });
+
   const { data, error } = await client
     .from("organizations")
     .delete()
@@ -153,6 +155,9 @@ export async function updateClientCompany(input: {
     companyId: input.companyId,
     client,
   });
+
+  await assertBillableAccess({ organizationId: company.id, client });
+
   const name = normalizeCompanyName(input.name);
 
   const { data, error } = await client

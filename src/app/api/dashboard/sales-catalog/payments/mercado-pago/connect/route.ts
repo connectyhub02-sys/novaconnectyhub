@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
+import { assertBillableAccess } from "@/lib/billing/trial";
 import { requireClientCompanyAccess } from "@/lib/client-os/companies";
 import {
   buildMercadoPagoAuthorizationUrl,
@@ -41,6 +42,8 @@ export async function GET(request: NextRequest) {
       companyId,
       client,
     });
+    await assertBillableAccess({ organizationId: company.id, client });
+
     const state = `mp_${randomUUID()}`;
     const webhookUrl = buildMercadoPagoWebhookUrl();
     const authorizationUrl = await buildMercadoPagoAuthorizationUrl({ companyId: company.id, state, client });

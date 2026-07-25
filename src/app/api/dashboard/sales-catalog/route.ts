@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { NextResponse, type NextRequest } from "next/server";
+import { assertBillableAccess, BillingAccessError } from "@/lib/billing/trial";
 import {
   getOrganizationSalesCatalogSettings,
   mapSalesCatalogItem,
@@ -182,6 +183,7 @@ export async function POST(request: NextRequest) {
       companyId,
       client,
     });
+    await assertBillableAccess({ organizationId: company.id, client });
     const itemId = requestedItemId ?? randomUUID();
     const now = new Date().toISOString();
     let existingRow: SalesCatalogMemoryRow | null = null;
@@ -354,7 +356,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ item: mapSalesCatalogItem(data), mode: existingRow ? "updated" : "created" });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Erro ao cadastrar produto." }, { status: 500 });
+    return NextResponse.json(formatRouteError(error, "Erro ao cadastrar produto."), { status: statusForRouteError(error, 500) });
   }
 }
 
@@ -369,6 +371,12 @@ async function handleJsonPost(request: NextRequest, workspace: CurrentWorkspace)
 
   try {
     const client = createServiceClient();
+    const company = await requireClientCompanyAccess({
+      userId: workspace.user.id,
+      companyId,
+      client,
+    });
+    await assertBillableAccess({ organizationId: company.id, client });
 
     if (action === "import_whatsapp_catalog") {
       const result = await importWhatsappCatalog({
@@ -524,7 +532,7 @@ async function handleJsonPost(request: NextRequest, workspace: CurrentWorkspace)
 
     return NextResponse.json({ error: "Acao de catalogo nao reconhecida." }, { status: 422 });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Erro ao sincronizar catalogo." }, { status: 500 });
+    return NextResponse.json(formatRouteError(error, "Erro ao sincronizar catalogo."), { status: statusForRouteError(error, 500) });
   }
 }
 
@@ -1883,6 +1891,8 @@ export async function DELETE(request: NextRequest) {
   try {
     const client = createServiceClient();
     const company = await requireClientCompanyAccess({ userId: workspace.user.id, companyId, client });
+    await assertBillableAccess({ organizationId: company.id, client });
+
     const { data, error } = await client
       .from("intelligence_memory")
       .delete()
@@ -1926,7 +1936,7 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ deletedItemId: data.id });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Erro ao excluir produto." }, { status: 500 });
+    return NextResponse.json(formatRouteError(error, "Erro ao excluir produto."), { status: statusForRouteError(error, 500) });
   }
 }
 
@@ -2872,6 +2882,19 @@ function sanitizeFileName(value: string) {
 
 function isFormFile(value: FormDataEntryValue): value is File {
   return value instanceof File && value.name.trim().length > 0;
+}
+
+function formatRouteError(error: unknown, fallback: string) {
+  const message = error instanceof Error ? error.message : fallback;
+
+  return {
+    error: message || fallback,
+    ...(error instanceof BillingAccessError ? { billingAccess: error.status } : {}),
+  };
+}
+
+function statusForRouteError(error: unknown, fallback: number) {
+  return error instanceof BillingAccessError ? 402 : fallback;
 }
 
 function readFormString(value: unknown) {

@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { assertBillableAccess, BillingAccessError } from "@/lib/billing/trial";
 import { requireClientCompanyAccess } from "@/lib/client-os/companies";
 import { getClientIntegrationCredentialDefinitions, getIntegrationProviders } from "@/lib/client-os/integrations";
 import {
@@ -68,6 +69,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const company = await requireClientCompanyAccess({ userId: auth.workspace.user.id, companyId, client });
+    await assertBillableAccess({ organizationId: company.id, client });
 
     if (!["owner", "admin"].includes(company.role)) {
       return NextResponse.json({ error: "Somente dono ou admin da empresa pode alterar credenciais." }, { status: 403 });
@@ -235,7 +237,13 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
-    return NextResponse.json({ error: readErrorMessage(error, "Nao foi possivel salvar as credenciais.") }, { status: 400 });
+    return NextResponse.json(
+      {
+        error: readErrorMessage(error, "Nao foi possivel salvar as credenciais."),
+        ...(error instanceof BillingAccessError ? { billingAccess: error.status } : {}),
+      },
+      { status: error instanceof BillingAccessError ? 402 : 400 },
+    );
   }
 }
 

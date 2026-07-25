@@ -1,5 +1,6 @@
 import { revalidatePath } from "next/cache";
 import { NextResponse, type NextRequest } from "next/server";
+import { assertBillableAccess, formatBillingAccessError, statusForBillingAccessError } from "@/lib/billing/trial";
 import { requireClientCompanyAccess } from "@/lib/client-os/companies";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
@@ -57,6 +58,8 @@ export async function POST(request: NextRequest) {
       companyId,
       client,
     });
+    await assertBillableAccess({ organizationId: company.id, client });
+
     const slug = createTrackedLinkSlug(label);
 
     const { data, error } = await client
@@ -140,7 +143,10 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Erro ao criar link rastreado." }, { status: 500 });
+    return NextResponse.json(
+      formatBillingAccessError(error, "Erro ao criar link rastreado."),
+      { status: statusForBillingAccessError(error, 500) },
+    );
   }
 }
 
@@ -174,6 +180,7 @@ export async function DELETE(request: NextRequest) {
       companyId,
       client,
     });
+    await assertBillableAccess({ organizationId: company.id, client });
 
     const { data: deleted, error } = await client
       .from("intelligence_memory")
@@ -217,7 +224,10 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ deletedLinkButtonId: deleted.id });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Erro ao excluir link rastreado." }, { status: 500 });
+    return NextResponse.json(
+      formatBillingAccessError(error, "Erro ao excluir link rastreado."),
+      { status: statusForBillingAccessError(error, 500) },
+    );
   }
 }
 

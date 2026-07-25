@@ -7,6 +7,7 @@ import {
   normalizeAgentChannelConfig,
   type AgentChannelConfig,
 } from "@/lib/agents/multichannel";
+import { assertBillableAccess, getOrganizationPlanLimits } from "@/lib/billing/trial";
 import { listWhatsappAudioVoices, type WhatsappAudioVoiceState } from "@/lib/elevenlabs/voices";
 import { generateConnectyVoiceAudio, type GeneratedConnectyVoiceAudio } from "@/lib/voice/tts";
 import {
@@ -361,8 +362,15 @@ export async function connectClientWhatsapp(input: {
   client?: SupabaseClient;
 }): Promise<ClientWhatsappActionResult> {
   const client = input.client ?? createServiceClient();
-  const credentials = await loadUazapiCredentials(client);
   const agent = await requireWorkspaceWhatsappAgent(client, input.organization.id, input.agentId);
+  await assertBillableAccess({ organizationId: input.organization.id, client });
+  const existing = await getWorkspaceInstance(client, input.organization.id, agent);
+
+  if (!existing) {
+    await assertClientCanCreateWhatsappInstance(client, input.organization.id);
+  }
+
+  const credentials = await loadUazapiCredentials(client);
   const connectPhone = normalizePhone(input.connectPhone);
   const connectionMode = connectPhone ? "phone" : "qr";
   const connectStartedAt = new Date().toISOString();
@@ -371,7 +379,6 @@ export async function connectClientWhatsapp(input: {
     systemName: "ConnectyHub",
     ...(connectPhone ? { phone: connectPhone } : {}),
   };
-  const existing = await getWorkspaceInstance(client, input.organization.id, agent);
   let instance = existing?.instance_token_encrypted
     ? existing
     : existing?.provider_instance_id
@@ -491,6 +498,27 @@ export async function connectClientWhatsapp(input: {
     qrCode,
     pairCode,
   };
+}
+
+async function assertClientCanCreateWhatsappInstance(client: SupabaseClient, organizationId: string) {
+  const limits = await getOrganizationPlanLimits({ organizationId, client });
+  const { count, error } = await client
+    .from("whatsapp_instances")
+    .select("id", { count: "exact", head: true })
+    .eq("organization_id", organizationId)
+    .neq("status", "archived");
+
+  if (error) {
+    throw new Error(`Nao foi possivel validar limite de WhatsApp: ${error.message}`);
+  }
+
+  const currentCount = count ?? 0;
+
+  if (currentCount >= limits.whatsappInstanceLimit) {
+    throw new Error(
+      `Seu plano permite ${limits.whatsappInstanceLimit} WhatsApp${limits.whatsappInstanceLimit === 1 ? "" : "s"} conectado${limits.whatsappInstanceLimit === 1 ? "" : "s"}. Para conectar outro numero, escolha um plano maior.`,
+    );
+  }
 }
 
 export async function refreshClientWhatsappStatus(input: {

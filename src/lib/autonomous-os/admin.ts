@@ -1,5 +1,6 @@
 import "server-only";
 
+import { createServiceClient } from "@/lib/supabase/service";
 import { createClient } from "@/lib/supabase/server";
 
 type JsonRecord = Record<string, unknown>;
@@ -286,8 +287,12 @@ type PlanEntitlementRow = {
   text_value: string | null;
 };
 
-export async function getAutonomousAdminOverview(): Promise<AutonomousAdminOverview> {
-  const supabase = await createClient();
+export async function getAutonomousAdminOverview({
+  useServiceRole = false,
+}: {
+  useServiceRole?: boolean;
+} = {}): Promise<AutonomousAdminOverview> {
+  const supabase = useServiceRole ? createServiceClient() : await createClient();
 
   const [
     agentsResult,
