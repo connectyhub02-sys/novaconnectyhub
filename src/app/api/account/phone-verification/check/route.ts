@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(result);
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Nao foi possivel validar o WhatsApp." },
+      { error: formatWhatsappCheckError(error) },
       { status: 422 },
     );
   }
@@ -43,4 +43,23 @@ function readRecord(value: unknown): JsonRecord {
 
 function readString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function formatWhatsappCheckError(error: unknown) {
+  const message = error instanceof Error ? error.message : "";
+  const normalized = message.toLowerCase();
+
+  if (normalized.includes("missing numbers")) {
+    return "Nao foi possivel validar o WhatsApp. Revise o numero e tente novamente.";
+  }
+
+  if (normalized.includes("not connected") || normalized.includes("no active session")) {
+    return "WhatsApp do agente de validacao nao esta conectado no momento.";
+  }
+
+  if (message.trim()) {
+    return message;
+  }
+
+  return "Nao foi possivel validar o WhatsApp.";
 }

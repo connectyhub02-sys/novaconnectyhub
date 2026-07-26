@@ -711,9 +711,7 @@ async function checkSignupWhatsappNumber(
       method: "POST",
       token: transport.token,
       body: {
-        number: phoneNormalized,
-        phone: phoneNormalized,
-        chatid: `${phoneNormalized}@s.whatsapp.net`,
+        numbers: [phoneNormalized],
       },
     });
   } catch (error) {
@@ -886,6 +884,10 @@ function readWhatsappExists(value: unknown): boolean | null {
     "numberExists",
     "isWhatsapp",
     "isWhatsApp",
+    "isInWhatsapp",
+    "isInWhatsApp",
+    "inWhatsapp",
+    "inWhatsApp",
     "hasWhatsapp",
     "hasWhatsApp",
     "registered",
