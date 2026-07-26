@@ -273,6 +273,7 @@ export function ConnectyShell({
   const pageLabel = activeItem?.label ?? "Dashboard";
   const mobileDockItems = getMobileDockItems(sections, mode);
   const logoTone  = "white";
+  const isAccountPage = active === "/dashboard/minha-conta" || active.startsWith("/dashboard/minha-conta/");
   const [avatarUrl, setAvatarUrl] = useState(userAvatarUrl ?? null);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [avatarError, setAvatarError] = useState<string | null>(null);
@@ -1033,8 +1034,15 @@ export function ConnectyShell({
         {/* Content */}
         <main className="flex-1 overflow-auto">
           {mode === "client" ? <AdminImpersonationBanner /> : null}
-          {mode === "client" && !accountCompletionPending ? <BillingStatusBanner status={billingAccess} /> : null}
-          <div className="connecty-shell-content mx-auto w-full max-w-[1680px] px-3 pt-4 sm:px-4 sm:pt-5 lg:px-8 lg:py-6">
+          {mode === "client" && !accountCompletionPending && !isAccountPage ? <BillingStatusBanner status={billingAccess} /> : null}
+          <div
+            className={cn(
+              "connecty-shell-content mx-auto w-full max-w-[1680px] px-3 sm:px-4 lg:px-8",
+              isAccountPage
+                ? "connecty-shell-content--compact pt-3 sm:pt-3 lg:px-6 lg:py-3"
+                : "pt-4 sm:pt-5 lg:py-6",
+            )}
+          >
             {children}
           </div>
         </main>

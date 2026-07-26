@@ -299,31 +299,10 @@ export function AccountConsole() {
   const pendingCheckoutHref = account.actions.pendingCheckoutHref;
 
   return (
-    <section className="space-y-4">
-      <AccountHeader onRefresh={() => loadAccount("refresh")} refreshing={refreshing} />
+    <section className="space-y-2.5">
+      <AccountHeader account={account} completionSummary={completionSummary} onRefresh={() => loadAccount("refresh")} refreshing={refreshing} />
 
-      <div className="grid gap-3 md:grid-cols-3">
-        <MetricPanel
-          detail={completionSummary ?? "Cadastro"}
-          icon={ShieldCheck}
-          tone={account.profile.completion.isComplete ? "emerald" : "amber"}
-          value={account.profile.completion.isComplete ? "Liberado" : "Pendente"}
-        />
-        <MetricPanel
-          detail={statusLabel(account.organization.status)}
-          icon={CreditCard}
-          tone="cyan"
-          value={account.organization.planCode}
-        />
-        <MetricPanel
-          detail={`${formatCredits(account.wallet.lifetimeUsedCredits)} usados`}
-          icon={WalletCards}
-          tone={account.wallet.balanceCredits > 0 ? "blue" : "rose"}
-          value={`${formatCredits(account.wallet.balanceCredits)} creditos`}
-        />
-      </div>
-
-      <div className="grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
+      <div className="grid gap-2.5 xl:grid-cols-[minmax(0,1.15fr)_minmax(300px,0.85fr)]">
         <ProfilePanel
           key={[
             account.profile.phoneNormalized ?? "",
@@ -341,12 +320,12 @@ export function AccountConsole() {
 
       <SecurityPanel email={account.profile.email} onReload={() => loadAccount("refresh")} />
 
-      <div className="grid gap-3 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
+      <div className="grid gap-2.5 xl:grid-cols-[minmax(0,1.08fr)_minmax(300px,0.92fr)]">
         <PaymentsPanel payments={account.payments} />
         <CreditHistoryPanel transactions={account.creditTransactions} />
       </div>
 
-      <div className="grid gap-3 xl:grid-cols-2">
+      <div className="grid gap-2.5 xl:grid-cols-2">
         <SubscriptionsPanel subscriptions={account.subscriptions} />
         <CyclesPanel cycles={account.cycles} />
       </div>
@@ -354,22 +333,35 @@ export function AccountConsole() {
   );
 }
 
-function AccountHeader({ onRefresh, refreshing }: { onRefresh: () => void; refreshing: boolean }) {
+function AccountHeader({
+  account,
+  completionSummary,
+  onRefresh,
+  refreshing,
+}: {
+  account?: AccountData | null;
+  completionSummary?: string | null;
+  onRefresh: () => void;
+  refreshing: boolean;
+}) {
   return (
-    <div className="flex flex-col gap-3 rounded-lg border border-white/10 bg-[#0b1220]/90 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
-      <div>
-        <div className="font-mono text-[9px] font-bold uppercase tracking-[0.18em] text-cyan-300">
-          Client OS / Minha conta
+    <div className="flex flex-col gap-2 rounded-md border border-white/10 bg-[#0b1220]/90 px-3 py-2 lg:flex-row lg:items-center lg:justify-between">
+      <div className="min-w-0">
+        <div className="font-mono text-[9px] font-bold uppercase tracking-[0.16em] text-cyan-300">Client OS / Minha conta</div>
+        <div className="mt-1 flex flex-wrap items-center gap-2">
+          <h1 className="text-base font-black leading-tight text-white">Minha conta</h1>
+          {account ? <StatusBadge status={account.profile.completion.isComplete ? "approved" : "pending"} /> : null}
+          {completionSummary ? <span className="text-[11px] font-semibold text-slate-400">{completionSummary}</span> : null}
         </div>
-        <h1 className="mt-1 text-[22px] font-black leading-tight text-white">
-          Minha conta
-        </h1>
-        <p className="mt-1 max-w-3xl text-xs leading-5 text-slate-400">
-          Veja seus dados, status do cadastro, plano ativo, creditos e historico financeiro do workspace.
-        </p>
       </div>
+      {account ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <HeaderStat icon={CreditCard} label={account.organization.planCode} value={statusLabel(account.organization.status)} />
+          <HeaderStat icon={WalletCards} label={`${formatCredits(account.wallet.balanceCredits)} creditos`} value={`${formatCredits(account.wallet.lifetimeUsedCredits)} usados`} />
+        </div>
+      ) : null}
       <button
-        className="inline-flex h-9 items-center justify-center rounded-md border border-cyan-200/20 bg-cyan-300/10 px-3 text-xs font-bold text-cyan-100 transition hover:bg-cyan-300/15 disabled:cursor-wait disabled:opacity-70"
+        className="inline-flex h-8 items-center justify-center rounded-md border border-cyan-200/20 bg-cyan-300/10 px-2.5 text-[11px] font-bold text-cyan-100 transition hover:bg-cyan-300/15 disabled:cursor-wait disabled:opacity-70"
         disabled={refreshing}
         type="button"
         onClick={onRefresh}
@@ -377,6 +369,18 @@ function AccountHeader({ onRefresh, refreshing }: { onRefresh: () => void; refre
         {refreshing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
         Atualizar
       </button>
+    </div>
+  );
+}
+
+function HeaderStat({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) {
+  return (
+    <div className="flex h-7 items-center gap-2 rounded-md border border-white/10 bg-white/[0.035] px-2">
+      <Icon className="h-3.5 w-3.5 text-cyan-300" />
+      <div className="min-w-0 leading-none">
+        <p className="max-w-[150px] truncate text-[10px] font-black text-white">{label}</p>
+        <p className="mt-0.5 max-w-[150px] truncate text-[9px] font-semibold uppercase text-slate-500">{value}</p>
+      </div>
     </div>
   );
 }
@@ -398,6 +402,7 @@ function ProfilePanel({
 }) {
   const profile = account.profile;
   const [editingProfile, setEditingProfile] = useState(false);
+  const [editingWhatsapp, setEditingWhatsapp] = useState(false);
   const [fullName, setFullName] = useState(profile.fullName ?? "");
   const [companyName, setCompanyName] = useState(profile.companyName ?? account.organization.name ?? "");
   const [profileSaving, setProfileSaving] = useState(false);
@@ -618,11 +623,11 @@ function ProfilePanel({
 
   return (
     <Panel>
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
         <AccountAvatar avatarUrl={profile.avatarUrl} name={profile.fullName ?? profile.email ?? account.organization.name} />
         <div className="min-w-0 flex-1">
-          <form className="space-y-4" onSubmit={handleProfileSubmit}>
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <form className="space-y-3" onSubmit={handleProfileSubmit}>
+            <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="truncate text-base font-black text-white">{profile.fullName ?? "Usuario ConnectyHub"}</h2>
@@ -630,9 +635,9 @@ function ProfilePanel({
                 </div>
                 <p className="mt-0.5 truncate text-xs text-slate-400">{profile.email ?? "email nao informado"}</p>
               </div>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-1.5">
                 <button
-                  className="inline-flex h-8 items-center justify-center rounded-md border border-white/10 bg-white/[0.06] px-2.5 text-[11px] font-bold text-slate-100 transition hover:bg-white/[0.09]"
+                  className="inline-flex h-7 items-center justify-center rounded-md border border-white/10 bg-white/[0.06] px-2 text-[10px] font-bold text-slate-100 transition hover:bg-white/[0.09]"
                   type="button"
                   onClick={() => {
                     setEditingProfile((current) => !current);
@@ -640,12 +645,29 @@ function ProfilePanel({
                     setProfileMessage(null);
                   }}
                 >
-                  <Edit3 className="mr-2 h-3.5 w-3.5" />
+                  <Edit3 className="mr-1.5 h-3.5 w-3.5" />
                   {editingProfile ? "Cancelar" : "Editar dados"}
                 </button>
-                <label className="inline-flex h-8 cursor-pointer items-center justify-center rounded-md border border-white/10 bg-white/[0.06] px-2.5 text-[11px] font-bold text-slate-100 transition hover:bg-white/[0.09]">
-                  {avatarUploading ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <Camera className="mr-2 h-3.5 w-3.5" />}
-                  Trocar foto
+                <button
+                  className={cn(
+                    "inline-flex h-7 items-center justify-center rounded-md border px-2 text-[10px] font-bold transition",
+                    editingWhatsapp
+                      ? "border-emerald-300/30 bg-emerald-300/12 text-emerald-100"
+                      : "border-white/10 bg-white/[0.06] text-slate-100 hover:bg-white/[0.09]",
+                  )}
+                  type="button"
+                  onClick={() => {
+                    setEditingWhatsapp((current) => !current);
+                    setPhoneError(null);
+                    setPhoneMessage(null);
+                  }}
+                >
+                  <Smartphone className="mr-1.5 h-3.5 w-3.5" />
+                  WhatsApp
+                </button>
+                <label className="inline-flex h-7 cursor-pointer items-center justify-center rounded-md border border-white/10 bg-white/[0.06] px-2 text-[10px] font-bold text-slate-100 transition hover:bg-white/[0.09]">
+                  {avatarUploading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Camera className="mr-1.5 h-3.5 w-3.5" />}
+                  Foto
                   <input accept="image/jpeg,image/png,image/webp" className="hidden" type="file" onChange={onAvatarUpload} />
                 </label>
               </div>
@@ -654,11 +676,11 @@ function ProfilePanel({
             {avatarError ? <p className="text-xs font-semibold text-rose-300">{avatarError}</p> : null}
 
             {editingProfile ? (
-              <div className="grid gap-3 md:grid-cols-2">
+              <div className="grid gap-2 md:grid-cols-2">
                 <label className="block">
                   <span className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Nome</span>
                   <input
-                    className="mt-1.5 h-9 w-full rounded-md border border-white/10 bg-white/[0.055] px-3 text-xs font-semibold text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-300/45"
+                    className="mt-1 h-8 w-full rounded-md border border-white/10 bg-white/[0.055] px-2.5 text-xs font-semibold text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-300/45"
                     maxLength={120}
                     value={fullName}
                     onChange={(event) => setFullName(event.target.value)}
@@ -667,15 +689,15 @@ function ProfilePanel({
                 <label className="block">
                   <span className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Empresa</span>
                   <input
-                    className="mt-1.5 h-9 w-full rounded-md border border-white/10 bg-white/[0.055] px-3 text-xs font-semibold text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-300/45"
+                    className="mt-1 h-8 w-full rounded-md border border-white/10 bg-white/[0.055] px-2.5 text-xs font-semibold text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-300/45"
                     maxLength={120}
                     value={companyName}
                     onChange={(event) => setCompanyName(event.target.value)}
                   />
                 </label>
-                <div className="md:col-span-2 flex flex-wrap items-center gap-3">
+                <div className="md:col-span-2 flex flex-wrap items-center gap-2">
                   <button
-                    className="inline-flex h-9 items-center justify-center rounded-md bg-cyan-300 px-3 text-xs font-black text-slate-950 transition hover:bg-cyan-200 disabled:cursor-wait disabled:opacity-70"
+                    className="inline-flex h-8 items-center justify-center rounded-md bg-cyan-300 px-3 text-xs font-black text-slate-950 transition hover:bg-cyan-200 disabled:cursor-wait disabled:opacity-70"
                     disabled={profileSaving}
                     type="submit"
                   >
@@ -687,7 +709,7 @@ function ProfilePanel({
                 </div>
               </div>
             ) : (
-              <div className="grid gap-3 md:grid-cols-2">
+              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
                 <InfoTile icon={UserRound} label="WhatsApp" value={profile.phone ?? "Nao informado"} />
                 <InfoTile icon={ShieldCheck} label="CPF" value={profile.cpfPreview ?? "Pendente"} />
                 <InfoTile icon={Building2} label="Empresa" value={profile.companyName ?? account.organization.name} />
@@ -696,75 +718,70 @@ function ProfilePanel({
             )}
           </form>
 
-          <div className="mt-4 rounded-lg border border-white/10 bg-white/[0.035] p-3">
-            <div className="flex items-start gap-2.5">
-              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-emerald-300/20 bg-emerald-300/10 text-emerald-200">
-                <Smartphone className="h-4 w-4" />
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
-                  <label className="min-w-0 flex-1">
-                    <span className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Alterar WhatsApp</span>
-                    <input
-                      className="mt-1.5 h-9 w-full rounded-md border border-white/10 bg-white/[0.055] px-3 text-xs font-semibold text-white outline-none transition placeholder:text-slate-500 focus:border-emerald-300/45"
-                      inputMode="tel"
-                      placeholder="(47) 99999-9999"
-                      value={phone}
-                      onChange={(event) => handlePhoneChange(event.target.value)}
-                    />
-                  </label>
-                  <button
-                    className="inline-flex h-9 items-center justify-center rounded-md border border-emerald-300/25 bg-emerald-300/10 px-3 text-xs font-black text-emerald-100 transition hover:bg-emerald-300/15 disabled:cursor-wait disabled:opacity-70"
-                    disabled={phoneWorking}
-                    type="button"
-                    onClick={handlePhoneCheck}
-                  >
-                    {phoneWorking && phoneCheck.state === "checking" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
-                    Validar
-                  </button>
-                  <button
-                    className="inline-flex h-9 items-center justify-center rounded-md bg-emerald-300 px-3 text-xs font-black text-slate-950 transition hover:bg-emerald-200 disabled:cursor-not-allowed disabled:opacity-50"
-                    disabled={phoneWorking || phoneIsCurrent || !phoneValidated}
-                    type="button"
-                    onClick={handlePhoneSend}
-                  >
-                    {phoneWorking && phoneStep === "idle" && phoneValidated ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
-                    Enviar codigo
-                  </button>
-                </div>
-
-                {phoneCheck.message ? (
-                  <p className={cn("mt-3 text-xs font-bold", phoneCheck.state === "valid" ? "text-emerald-300" : phoneCheck.state === "not_found" || phoneCheck.state === "error" ? "text-rose-300" : "text-slate-300")}>
-                    {phoneCheck.message}
-                  </p>
-                ) : null}
-
-                {phoneStep === "code" ? (
-                  <form className="mt-4 flex flex-col gap-3 sm:flex-row" onSubmit={handlePhoneVerify}>
-                    <input
-                      className="h-9 w-full rounded-md border border-white/10 bg-white/[0.055] px-3 font-mono text-xs font-black tracking-[0.24em] text-white outline-none transition placeholder:tracking-normal placeholder:text-slate-500 focus:border-emerald-300/45 sm:max-w-[160px]"
-                      inputMode="numeric"
-                      maxLength={6}
-                      placeholder="000000"
-                      value={phoneCode}
-                      onChange={(event) => setPhoneCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
-                    />
-                    <button
-                      className="inline-flex h-9 items-center justify-center rounded-md bg-cyan-300 px-3 text-xs font-black text-slate-950 transition hover:bg-cyan-200 disabled:cursor-wait disabled:opacity-70"
-                      disabled={phoneWorking}
-                      type="submit"
-                    >
-                      {phoneWorking ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
-                      Confirmar
-                    </button>
-                  </form>
-                ) : null}
-
-                {phoneMessage ? <p className="mt-3 text-xs font-bold text-emerald-300">{phoneMessage}</p> : null}
-                {phoneError ? <p className="mt-3 text-xs font-bold text-rose-300">{phoneError}</p> : null}
+          {editingWhatsapp ? (
+            <div className="mt-3 rounded-md border border-white/10 bg-white/[0.035] p-2.5">
+              <div className="flex flex-col gap-2 lg:flex-row lg:items-end">
+                <label className="min-w-0 flex-1">
+                  <span className="font-mono text-[9px] font-bold uppercase tracking-[0.16em] text-slate-500">Alterar WhatsApp</span>
+                  <input
+                    className="mt-1 h-8 w-full rounded-md border border-white/10 bg-white/[0.055] px-2.5 text-xs font-semibold text-white outline-none transition placeholder:text-slate-500 focus:border-emerald-300/45"
+                    inputMode="tel"
+                    placeholder="(47) 99999-9999"
+                    value={phone}
+                    onChange={(event) => handlePhoneChange(event.target.value)}
+                  />
+                </label>
+                <button
+                  className="inline-flex h-8 items-center justify-center rounded-md border border-emerald-300/25 bg-emerald-300/10 px-2.5 text-xs font-black text-emerald-100 transition hover:bg-emerald-300/15 disabled:cursor-wait disabled:opacity-70"
+                  disabled={phoneWorking}
+                  type="button"
+                  onClick={handlePhoneCheck}
+                >
+                  {phoneWorking && phoneCheck.state === "checking" ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-1.5 h-4 w-4" />}
+                  Validar
+                </button>
+                <button
+                  className="inline-flex h-8 items-center justify-center rounded-md bg-emerald-300 px-2.5 text-xs font-black text-slate-950 transition hover:bg-emerald-200 disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={phoneWorking || phoneIsCurrent || !phoneValidated}
+                  type="button"
+                  onClick={handlePhoneSend}
+                >
+                  {phoneWorking && phoneStep === "idle" && phoneValidated ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Send className="mr-1.5 h-4 w-4" />}
+                  Enviar codigo
+                </button>
               </div>
+
+              {phoneCheck.message ? (
+                <p className={cn("mt-2 text-xs font-bold", phoneCheck.state === "valid" ? "text-emerald-300" : phoneCheck.state === "not_found" || phoneCheck.state === "error" ? "text-rose-300" : "text-slate-300")}>
+                  {phoneCheck.message}
+                </p>
+              ) : null}
+
+              {phoneStep === "code" ? (
+                <form className="mt-2 flex flex-col gap-2 sm:flex-row" onSubmit={handlePhoneVerify}>
+                  <input
+                    className="h-8 w-full rounded-md border border-white/10 bg-white/[0.055] px-2.5 font-mono text-xs font-black tracking-[0.24em] text-white outline-none transition placeholder:tracking-normal placeholder:text-slate-500 focus:border-emerald-300/45 sm:max-w-[150px]"
+                    inputMode="numeric"
+                    maxLength={6}
+                    placeholder="000000"
+                    value={phoneCode}
+                    onChange={(event) => setPhoneCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                  />
+                  <button
+                    className="inline-flex h-8 items-center justify-center rounded-md bg-cyan-300 px-3 text-xs font-black text-slate-950 transition hover:bg-cyan-200 disabled:cursor-wait disabled:opacity-70"
+                    disabled={phoneWorking}
+                    type="submit"
+                  >
+                    {phoneWorking ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-1.5 h-4 w-4" />}
+                    Confirmar
+                  </button>
+                </form>
+              ) : null}
+
+              {phoneMessage ? <p className="mt-2 text-xs font-bold text-emerald-300">{phoneMessage}</p> : null}
+              {phoneError ? <p className="mt-2 text-xs font-bold text-rose-300">{phoneError}</p> : null}
             </div>
-          </div>
+          ) : null}
         </div>
       </div>
     </Panel>
@@ -777,32 +794,32 @@ function BillingPanel({ account, pendingCheckoutHref }: { account: AccountData; 
 
   return (
     <Panel>
-      <div className="flex items-start justify-between gap-3">
-        <div>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
           <div className="font-mono text-[9px] font-bold uppercase tracking-[0.14em] text-cyan-300">Plano e creditos</div>
-          <h2 className="mt-1 text-base font-black text-white">{activeSubscription?.planName ?? account.organization.planCode}</h2>
-          <p className="mt-1.5 text-xs leading-5 text-slate-400">{access.bannerDescription}</p>
+          <h2 className="mt-0.5 truncate text-base font-black text-white">{activeSubscription?.planName ?? account.organization.planCode}</h2>
+          <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-slate-400">{access.bannerDescription}</p>
         </div>
         <StatusBadge status={account.organization.status} />
       </div>
 
-      <div className="mt-4 grid gap-2.5 sm:grid-cols-2">
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
         <InfoTile icon={WalletCards} label="Saldo" value={`${formatCredits(account.wallet.balanceCredits)} creditos`} />
         <InfoTile icon={ReceiptText} label="Uso atual" value={`${formatCredits(access.usedCredits)} / ${formatCredits(access.includedCredits)}`} />
         <InfoTile icon={CreditCard} label="Mensalidade" value={formatCurrency(activeSubscription?.monthlyPriceBrl ?? 0)} />
         <InfoTile icon={ShieldCheck} label="Proxima cobranca" value={activeSubscription?.nextBillingAt ? formatDate(activeSubscription.nextBillingAt) : "Nao agendada"} />
       </div>
 
-      <div className="mt-4 flex flex-wrap gap-2">
+      <div className="mt-3 flex flex-wrap gap-2">
         <Link
-          className="inline-flex h-9 items-center justify-center rounded-md bg-cyan-300 px-3 text-xs font-black text-slate-950 transition hover:bg-cyan-200"
+          className="inline-flex h-8 items-center justify-center rounded-md bg-cyan-300 px-3 text-xs font-black text-slate-950 transition hover:bg-cyan-200"
           href={account.actions.plansHref}
         >
           Ver planos
         </Link>
         {pendingCheckoutHref ? (
           <Link
-            className="inline-flex h-9 items-center justify-center rounded-md border border-amber-300/35 bg-amber-300/12 px-3 text-xs font-black text-amber-100 transition hover:bg-amber-300/18"
+            className="inline-flex h-8 items-center justify-center rounded-md border border-amber-300/35 bg-amber-300/12 px-3 text-xs font-black text-amber-100 transition hover:bg-amber-300/18"
             href={pendingCheckoutHref}
           >
             Finalizar pagamento
@@ -824,6 +841,7 @@ function SecurityPanel({ email, onReload }: { email: string | null; onReload: ()
   const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
   const [emailError, setEmailError] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [securityMode, setSecurityMode] = useState<"summary" | "email" | "password">("summary");
 
   async function handleEmailSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -903,104 +921,125 @@ function SecurityPanel({ email, onReload }: { email: string | null; onReload: ()
 
   return (
     <Panel>
-      <div className="flex flex-col gap-4 xl:flex-row">
-        <div className="xl:w-[220px]">
-          <PanelTitle icon={ShieldCheck} label="Seguranca" />
-          <p className="mt-2 text-xs leading-5 text-slate-400">
-            Gerencie acesso, email de login e senha da sua conta.
-          </p>
+      <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md border border-cyan-300/20 bg-cyan-300/10 text-cyan-200">
+            <ShieldCheck className="h-3.5 w-3.5" />
+          </span>
+          <div className="min-w-0">
+            <h2 className="text-sm font-black text-white">Seguranca</h2>
+            <p className="truncate text-xs text-slate-400">{email ?? "sem email atual"} - senha protegida</p>
+          </div>
         </div>
-
-        <div className="grid min-w-0 flex-1 gap-3 lg:grid-cols-2">
-          <form className="rounded-lg border border-white/10 bg-white/[0.035] p-3" onSubmit={handleEmailSubmit}>
-            <div className="flex items-center gap-2.5">
-              <span className="grid h-8 w-8 place-items-center rounded-md border border-cyan-300/20 bg-cyan-300/10 text-cyan-200">
-                <Mail className="h-4 w-4" />
-              </span>
-              <div>
-                <h3 className="text-xs font-black text-white">Email de acesso</h3>
-                <p className="text-xs text-slate-400">{email ?? "sem email atual"}</p>
-              </div>
-            </div>
-            <label className="mt-4 block">
-              <span className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Novo email</span>
-              <input
-                className="mt-1.5 h-9 w-full rounded-md border border-white/10 bg-white/[0.055] px-3 text-xs font-semibold text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-300/45"
-                inputMode="email"
-                type="email"
-                value={nextEmail}
-                onChange={(event) => {
-                  setNextEmail(event.target.value);
-                  setEmailError(null);
-                  setEmailMessage(null);
-                }}
-              />
-            </label>
-            <button
-              className="mt-3 inline-flex h-9 items-center justify-center rounded-md bg-cyan-300 px-3 text-xs font-black text-slate-950 transition hover:bg-cyan-200 disabled:cursor-wait disabled:opacity-70"
-              disabled={emailWorking}
-              type="submit"
-            >
-              {emailWorking ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
-              Alterar email
-            </button>
-            {emailMessage ? <p className="mt-3 text-xs font-bold text-emerald-300">{emailMessage}</p> : null}
-            {emailError ? <p className="mt-3 text-xs font-bold text-rose-300">{emailError}</p> : null}
-          </form>
-
-          <form className="rounded-lg border border-white/10 bg-white/[0.035] p-3" onSubmit={handlePasswordSubmit}>
-            <div className="flex items-center gap-2.5">
-              <span className="grid h-8 w-8 place-items-center rounded-md border border-emerald-300/20 bg-emerald-300/10 text-emerald-200">
-                <KeyRound className="h-4 w-4" />
-              </span>
-              <div>
-                <h3 className="text-xs font-black text-white">Senha</h3>
-                <p className="text-xs text-slate-400">Minimo de 6 caracteres</p>
-              </div>
-            </div>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              <label className="block">
-                <span className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Nova senha</span>
-                <input
-                  className="mt-1.5 h-9 w-full rounded-md border border-white/10 bg-white/[0.055] px-3 text-xs font-semibold text-white outline-none transition placeholder:text-slate-500 focus:border-emerald-300/45"
-                  maxLength={128}
-                  type="password"
-                  value={password}
-                  onChange={(event) => {
-                    setPassword(event.target.value);
-                    setPasswordError(null);
-                    setPasswordMessage(null);
-                  }}
-                />
-              </label>
-              <label className="block">
-                <span className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Confirmar</span>
-                <input
-                  className="mt-1.5 h-9 w-full rounded-md border border-white/10 bg-white/[0.055] px-3 text-xs font-semibold text-white outline-none transition placeholder:text-slate-500 focus:border-emerald-300/45"
-                  maxLength={128}
-                  type="password"
-                  value={passwordConfirm}
-                  onChange={(event) => {
-                    setPasswordConfirm(event.target.value);
-                    setPasswordError(null);
-                    setPasswordMessage(null);
-                  }}
-                />
-              </label>
-            </div>
-            <button
-              className="mt-3 inline-flex h-9 items-center justify-center rounded-md bg-emerald-300 px-3 text-xs font-black text-slate-950 transition hover:bg-emerald-200 disabled:cursor-wait disabled:opacity-70"
-              disabled={passwordWorking}
-              type="submit"
-            >
-              {passwordWorking ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-              Alterar senha
-            </button>
-            {passwordMessage ? <p className="mt-3 text-xs font-bold text-emerald-300">{passwordMessage}</p> : null}
-            {passwordError ? <p className="mt-3 text-xs font-bold text-rose-300">{passwordError}</p> : null}
-          </form>
+        <div className="flex flex-wrap gap-1.5">
+          <button
+            className={cn(
+              "inline-flex h-7 items-center justify-center rounded-md border px-2 text-[10px] font-bold transition",
+              securityMode === "email"
+                ? "border-cyan-300/30 bg-cyan-300/12 text-cyan-100"
+                : "border-white/10 bg-white/[0.06] text-slate-100 hover:bg-white/[0.09]",
+            )}
+            type="button"
+            onClick={() => {
+              setSecurityMode((current) => current === "email" ? "summary" : "email");
+              setEmailError(null);
+              setEmailMessage(null);
+            }}
+          >
+            <Mail className="mr-1.5 h-3.5 w-3.5" />
+            Email
+          </button>
+          <button
+            className={cn(
+              "inline-flex h-7 items-center justify-center rounded-md border px-2 text-[10px] font-bold transition",
+              securityMode === "password"
+                ? "border-emerald-300/30 bg-emerald-300/12 text-emerald-100"
+                : "border-white/10 bg-white/[0.06] text-slate-100 hover:bg-white/[0.09]",
+            )}
+            type="button"
+            onClick={() => {
+              setSecurityMode((current) => current === "password" ? "summary" : "password");
+              setPasswordError(null);
+              setPasswordMessage(null);
+            }}
+          >
+            <KeyRound className="mr-1.5 h-3.5 w-3.5" />
+            Senha
+          </button>
         </div>
       </div>
+
+      {securityMode === "email" ? (
+        <form className="mt-3 grid gap-2 rounded-md border border-white/10 bg-white/[0.035] p-2.5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end" onSubmit={handleEmailSubmit}>
+          <label className="block">
+            <span className="font-mono text-[9px] font-bold uppercase tracking-[0.16em] text-slate-500">Novo email</span>
+            <input
+              className="mt-1 h-8 w-full rounded-md border border-white/10 bg-white/[0.055] px-2.5 text-xs font-semibold text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-300/45"
+              inputMode="email"
+              type="email"
+              value={nextEmail}
+              onChange={(event) => {
+                setNextEmail(event.target.value);
+                setEmailError(null);
+                setEmailMessage(null);
+              }}
+            />
+          </label>
+          <button
+            className="inline-flex h-8 items-center justify-center rounded-md bg-cyan-300 px-3 text-xs font-black text-slate-950 transition hover:bg-cyan-200 disabled:cursor-wait disabled:opacity-70"
+            disabled={emailWorking}
+            type="submit"
+          >
+            {emailWorking ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Send className="mr-1.5 h-4 w-4" />}
+            Alterar email
+          </button>
+          {emailMessage ? <p className="text-xs font-bold text-emerald-300 lg:col-span-2">{emailMessage}</p> : null}
+          {emailError ? <p className="text-xs font-bold text-rose-300 lg:col-span-2">{emailError}</p> : null}
+        </form>
+      ) : null}
+
+      {securityMode === "password" ? (
+        <form className="mt-3 grid gap-2 rounded-md border border-white/10 bg-white/[0.035] p-2.5 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] md:items-end" onSubmit={handlePasswordSubmit}>
+          <label className="block">
+            <span className="font-mono text-[9px] font-bold uppercase tracking-[0.16em] text-slate-500">Nova senha</span>
+            <input
+              className="mt-1 h-8 w-full rounded-md border border-white/10 bg-white/[0.055] px-2.5 text-xs font-semibold text-white outline-none transition placeholder:text-slate-500 focus:border-emerald-300/45"
+              maxLength={128}
+              type="password"
+              value={password}
+              onChange={(event) => {
+                setPassword(event.target.value);
+                setPasswordError(null);
+                setPasswordMessage(null);
+              }}
+            />
+          </label>
+          <label className="block">
+            <span className="font-mono text-[9px] font-bold uppercase tracking-[0.16em] text-slate-500">Confirmar</span>
+            <input
+              className="mt-1 h-8 w-full rounded-md border border-white/10 bg-white/[0.055] px-2.5 text-xs font-semibold text-white outline-none transition placeholder:text-slate-500 focus:border-emerald-300/45"
+              maxLength={128}
+              type="password"
+              value={passwordConfirm}
+              onChange={(event) => {
+                setPasswordConfirm(event.target.value);
+                setPasswordError(null);
+                setPasswordMessage(null);
+              }}
+            />
+          </label>
+          <button
+            className="inline-flex h-8 items-center justify-center rounded-md bg-emerald-300 px-3 text-xs font-black text-slate-950 transition hover:bg-emerald-200 disabled:cursor-wait disabled:opacity-70"
+            disabled={passwordWorking}
+            type="submit"
+          >
+            {passwordWorking ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Save className="mr-1.5 h-4 w-4" />}
+            Alterar senha
+          </button>
+          {passwordMessage ? <p className="text-xs font-bold text-emerald-300 md:col-span-3">{passwordMessage}</p> : null}
+          {passwordError ? <p className="text-xs font-bold text-rose-300 md:col-span-3">{passwordError}</p> : null}
+        </form>
+      ) : null}
     </Panel>
   );
 }
@@ -1009,29 +1048,29 @@ function PaymentsPanel({ payments }: { payments: AccountData["payments"] }) {
   return (
     <Panel>
       <PanelTitle icon={ReceiptText} label="Historico de pagamentos" />
-      <div className="mt-3 divide-y divide-white/10 overflow-hidden rounded-lg border border-white/10">
+      <div className="mt-2 max-h-[150px] divide-y divide-white/10 overflow-auto rounded-md border border-white/10">
         {payments.length ? payments.map((payment) => (
-          <div key={payment.id} className="bg-white/[0.025] px-3 py-2.5 transition hover:bg-white/[0.045]">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div key={payment.id} className="bg-white/[0.025] px-2.5 py-1.5 transition hover:bg-white/[0.045]">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="font-mono text-xs font-black text-white">{formatCurrency(payment.amountBrl)}</p>
                   <StatusBadge status={payment.status} />
                 </div>
-                <p className="mt-1 truncate text-xs text-slate-400">
+                <p className="mt-0.5 truncate text-[11px] text-slate-400">
                   {payment.planCode ?? "Plano"} - {payment.providerStatus ?? payment.invoiceStatus ?? "sem status externo"}
                 </p>
               </div>
-              <div className="flex flex-wrap items-center gap-3">
-                <span className="text-xs font-semibold text-slate-300">{formatDateTime(payment.paidAt ?? payment.createdAt)}</span>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[11px] font-semibold text-slate-300">{formatDateTime(payment.paidAt ?? payment.createdAt)}</span>
                 {payment.invoiceHref ? (
-                  <Link className="rounded-md border border-cyan-300/25 bg-cyan-300/10 px-2.5 py-1.5 text-[11px] font-black text-cyan-100" href={payment.invoiceHref}>
+                  <Link className="rounded-md border border-cyan-300/25 bg-cyan-300/10 px-2 py-1 text-[10px] font-black text-cyan-100" href={payment.invoiceHref}>
                     Fatura
                   </Link>
                 ) : null}
                 {payment.receiptUrl ? (
                   <a
-                    className="rounded-md border border-emerald-300/25 bg-emerald-300/10 px-2.5 py-1.5 text-[11px] font-black text-emerald-100"
+                    className="rounded-md border border-emerald-300/25 bg-emerald-300/10 px-2 py-1 text-[10px] font-black text-emerald-100"
                     href={payment.receiptUrl}
                     rel="noreferrer"
                     target="_blank"
@@ -1040,7 +1079,7 @@ function PaymentsPanel({ payments }: { payments: AccountData["payments"] }) {
                   </a>
                 ) : null}
                 {payment.checkoutHref ? (
-                  <Link className="rounded-md bg-amber-300 px-2.5 py-1.5 text-[11px] font-black text-slate-950" href={payment.checkoutHref}>
+                  <Link className="rounded-md bg-amber-300 px-2 py-1 text-[10px] font-black text-slate-950" href={payment.checkoutHref}>
                     Pagar
                   </Link>
                 ) : null}
@@ -1057,18 +1096,18 @@ function CreditHistoryPanel({ transactions }: { transactions: AccountData["credi
   return (
     <Panel>
       <PanelTitle icon={WalletCards} label="Historico de creditos" />
-      <div className="mt-3 divide-y divide-white/10 overflow-hidden rounded-lg border border-white/10">
+      <div className="mt-2 max-h-[150px] divide-y divide-white/10 overflow-auto rounded-md border border-white/10">
         {transactions.length ? transactions.map((transaction) => {
           const positive = transaction.amountCredits > 0;
 
           return (
-            <div key={transaction.id} className="bg-white/[0.025] px-3 py-2.5 transition hover:bg-white/[0.045]">
+            <div key={transaction.id} className="bg-white/[0.025] px-2.5 py-1.5 transition hover:bg-white/[0.045]">
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <p className="truncate text-xs font-bold text-white">
                     {transaction.description ?? transactionTypeLabel(transaction.type)}
                   </p>
-                  <p className="mt-1 text-xs text-slate-400">
+                  <p className="mt-0.5 truncate text-[11px] text-slate-400">
                     Saldo depois: {formatCredits(transaction.balanceAfterCredits)} - {formatDateTime(transaction.createdAt)}
                   </p>
                 </div>
@@ -1088,13 +1127,13 @@ function SubscriptionsPanel({ subscriptions }: { subscriptions: AccountData["sub
   return (
     <Panel>
       <PanelTitle icon={CreditCard} label="Assinaturas" />
-      <div className="mt-3 divide-y divide-white/10 overflow-hidden rounded-lg border border-white/10">
+      <div className="mt-2 max-h-[128px] divide-y divide-white/10 overflow-auto rounded-md border border-white/10">
         {subscriptions.length ? subscriptions.map((subscription) => (
-          <div key={subscription.id} className="bg-white/[0.025] px-3 py-2.5 transition hover:bg-white/[0.045]">
+          <div key={subscription.id} className="bg-white/[0.025] px-2.5 py-1.5 transition hover:bg-white/[0.045]">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <p className="truncate text-xs font-black text-white">{subscription.planName}</p>
-                <p className="mt-1 text-xs text-slate-400">
+                <p className="mt-0.5 truncate text-[11px] text-slate-400">
                   {formatCurrency(subscription.monthlyPriceBrl)} - {formatCredits(subscription.includedCredits)} creditos
                 </p>
               </div>
@@ -1111,13 +1150,13 @@ function CyclesPanel({ cycles }: { cycles: AccountData["cycles"] }) {
   return (
     <Panel>
       <PanelTitle icon={ShieldCheck} label="Ciclos de uso" />
-      <div className="mt-3 divide-y divide-white/10 overflow-hidden rounded-lg border border-white/10">
+      <div className="mt-2 max-h-[128px] divide-y divide-white/10 overflow-auto rounded-md border border-white/10">
         {cycles.length ? cycles.map((cycle) => (
-          <div key={cycle.id} className="bg-white/[0.025] px-3 py-2.5 transition hover:bg-white/[0.045]">
+          <div key={cycle.id} className="bg-white/[0.025] px-2.5 py-1.5 transition hover:bg-white/[0.045]">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <p className="truncate text-xs font-black text-white">{cycle.planName ?? cycle.planCode ?? "Ciclo"}</p>
-                <p className="mt-1 text-xs text-slate-400">
+                <p className="mt-0.5 truncate text-[11px] text-slate-400">
                   {formatDate(cycle.cycleStart)} ate {formatDate(cycle.cycleEnd)}
                 </p>
               </div>
@@ -1133,43 +1172,9 @@ function CyclesPanel({ cycles }: { cycles: AccountData["cycles"] }) {
   );
 }
 
-function MetricPanel({
-  detail,
-  icon: Icon,
-  tone,
-  value,
-}: {
-  detail: string;
-  icon: LucideIcon;
-  tone: "emerald" | "amber" | "cyan" | "blue" | "rose";
-  value: string;
-}) {
-  const toneClass = {
-    amber: "border-amber-300/20 bg-amber-300/10 text-amber-200",
-    blue: "border-sky-300/20 bg-sky-300/10 text-sky-200",
-    cyan: "border-cyan-300/20 bg-cyan-300/10 text-cyan-200",
-    emerald: "border-emerald-300/20 bg-emerald-300/10 text-emerald-200",
-    rose: "border-rose-300/20 bg-rose-300/10 text-rose-200",
-  }[tone];
-
-  return (
-    <div className={cn("rounded-lg border p-3", toneClass)}>
-      <div className="flex items-center gap-2.5">
-        <span className="grid h-8 w-8 place-items-center rounded-md bg-white/10">
-          <Icon className="h-4 w-4" />
-        </span>
-        <div className="min-w-0">
-          <p className="truncate text-sm font-black text-white">{value}</p>
-          <p className="truncate text-[11px] font-semibold opacity-80">{detail}</p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function Panel({ children }: { children: ReactNode }) {
   return (
-    <div className="rounded-lg border border-white/10 bg-[#0b1220]/92 p-4 shadow-none">
+    <div className="rounded-md border border-white/10 bg-[#0b1220]/92 p-3 shadow-none">
       {children}
     </div>
   );
@@ -1178,22 +1183,22 @@ function Panel({ children }: { children: ReactNode }) {
 function PanelTitle({ icon: Icon, label }: { icon: LucideIcon; label: string }) {
   return (
     <div className="flex items-center gap-2.5">
-      <span className="grid h-8 w-8 place-items-center rounded-md border border-cyan-300/20 bg-cyan-300/10 text-cyan-200">
-        <Icon className="h-4 w-4" />
+      <span className="grid h-7 w-7 place-items-center rounded-md border border-cyan-300/20 bg-cyan-300/10 text-cyan-200">
+        <Icon className="h-3.5 w-3.5" />
       </span>
-      <h2 className="text-sm font-black text-white">{label}</h2>
+      <h2 className="text-xs font-black text-white">{label}</h2>
     </div>
   );
 }
 
 function InfoTile({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) {
   return (
-    <div className="rounded-md border border-white/10 bg-white/[0.035] p-3">
-      <div className="flex items-start gap-2.5">
+    <div className="rounded-md border border-white/10 bg-white/[0.035] p-2">
+      <div className="flex items-start gap-2">
         <Icon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-cyan-300" />
         <div className="min-w-0">
-          <p className="font-mono text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500">{label}</p>
-          <p className="mt-1 break-words text-[13px] font-bold text-slate-100">{value}</p>
+          <p className="font-mono text-[8px] font-bold uppercase tracking-[0.12em] text-slate-500">{label}</p>
+          <p className="mt-0.5 break-words text-xs font-bold text-slate-100">{value}</p>
         </div>
       </div>
     </div>
@@ -1206,7 +1211,7 @@ function AccountAvatar({ avatarUrl, name }: { avatarUrl: string | null; name: st
   const showImage = Boolean(avatarUrl && failedAvatarUrl !== avatarUrl);
 
   return (
-    <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-cyan-200/20 bg-cyan-300/12">
+    <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-md border border-cyan-200/20 bg-cyan-300/12">
       {showImage && avatarUrl ? (
         <Image
           alt=""
@@ -1217,7 +1222,7 @@ function AccountAvatar({ avatarUrl, name }: { avatarUrl: string | null; name: st
           onError={() => setFailedAvatarUrl(avatarUrl)}
         />
       ) : (
-        <div className="grid h-full w-full place-items-center text-lg font-black text-cyan-100">{initials}</div>
+        <div className="grid h-full w-full place-items-center text-base font-black text-cyan-100">{initials}</div>
       )}
     </div>
   );
@@ -1227,7 +1232,7 @@ function StatusBadge({ status }: { status: string }) {
   const tone = statusTone(status);
 
   return (
-    <span className={cn("inline-flex min-h-6 items-center rounded-full border px-2 font-mono text-[9px] font-black uppercase tracking-wide", tone)}>
+    <span className={cn("inline-flex h-5 items-center rounded-full border px-1.5 font-mono text-[8px] font-black uppercase tracking-wide", tone)}>
       {statusLabel(status)}
     </span>
   );
@@ -1243,17 +1248,13 @@ function EmptyState({ text }: { text: string }) {
 
 function AccountLoadingState() {
   return (
-    <section className="space-y-4">
+    <section className="space-y-2.5">
       <AccountHeader onRefresh={() => undefined} refreshing={true} />
-      <div className="grid gap-3 md:grid-cols-3">
-        {[0, 1, 2].map((item) => (
-          <div key={item} className="h-16 animate-pulse rounded-lg border border-white/10 bg-white/[0.05]" />
-        ))}
+      <div className="grid gap-2.5 xl:grid-cols-[minmax(0,1.15fr)_minmax(300px,0.85fr)]">
+        <div className="h-36 animate-pulse rounded-md border border-white/10 bg-white/[0.05]" />
+        <div className="h-36 animate-pulse rounded-md border border-white/10 bg-white/[0.05]" />
       </div>
-      <div className="grid gap-3 xl:grid-cols-2">
-        <div className="h-64 animate-pulse rounded-lg border border-white/10 bg-white/[0.05]" />
-        <div className="h-64 animate-pulse rounded-lg border border-white/10 bg-white/[0.05]" />
-      </div>
+      <div className="h-14 animate-pulse rounded-md border border-white/10 bg-white/[0.05]" />
     </section>
   );
 }

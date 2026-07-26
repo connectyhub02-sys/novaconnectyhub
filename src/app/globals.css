@@ -105,6 +105,10 @@ main section[id] {
   padding-bottom: calc(5.75rem + env(safe-area-inset-bottom));
 }
 
+.connecty-shell-content.connecty-shell-content--compact {
+  padding-bottom: 0.75rem;
+}
+
 .connecty-mobile-dock {
   padding-bottom: max(0.25rem, env(safe-area-inset-bottom));
 }
@@ -164,6 +168,10 @@ textarea {
 @media (min-width: 1024px) {
   .connecty-shell-content {
     padding-bottom: 1.5rem;
+  }
+
+  .connecty-shell-content.connecty-shell-content--compact {
+    padding-bottom: 0.75rem;
   }
 }
 
