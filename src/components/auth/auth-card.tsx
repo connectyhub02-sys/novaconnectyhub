@@ -97,7 +97,6 @@ export function AuthCard({
             emailRedirectTo: redirectTo,
             data: {
               full_name: fullName,
-              phone: phoneForVerification,
               password_set_at: new Date().toISOString(),
               trial_whatsapp_opt_in: trialWhatsappOptIn,
               trial_whatsapp_opt_in_at: trialWhatsappOptIn ? new Date().toISOString() : null,

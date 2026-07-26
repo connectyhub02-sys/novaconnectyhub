@@ -56,6 +56,12 @@ type WhatsappInstanceRow = {
   instance_token_encrypted: string | null;
 };
 
+type SignupWhatsappTransport = {
+  credentials: UazapiCredentials;
+  instance: WhatsappInstanceRow;
+  token: string;
+};
+
 export type AccountCompletionStatus = {
   isComplete: boolean;
   missingFields: string[];
@@ -77,6 +83,18 @@ export class AccountCompletionRequiredError extends Error {
     super("Complete seu cadastro para liberar esta acao.");
     this.name = "AccountCompletionRequiredError";
     this.status = status;
+  }
+}
+
+class UazapiSignupRequestError extends Error {
+  status: number;
+  data: unknown;
+
+  constructor(message: string, status: number, data: unknown) {
+    super(message);
+    this.name = "UazapiSignupRequestError";
+    this.status = status;
+    this.data = data;
   }
 }
 
@@ -250,6 +268,12 @@ export async function sendPhoneVerificationCode(input: {
   const now = new Date();
   const expiresAt = new Date(now.getTime() + 10 * 60 * 1000).toISOString();
   const displayPhone = formatBrazilPhone(phoneNormalized);
+  const transport = await loadSignupWhatsappTransport(client);
+  const whatsappCheck = await checkSignupWhatsappNumber(transport, phoneNormalized);
+
+  if (!whatsappCheck.exists) {
+    throw new Error("Este numero nao possui WhatsApp ativo. Revise o numero ou informe outro WhatsApp.");
+  }
 
   await client
     .from("account_phone_verification_codes")
@@ -272,6 +296,10 @@ export async function sendPhoneVerificationCode(input: {
       sent_at: now.toISOString(),
       metadata: {
         source: "signup_phone_verification",
+        whatsapp_check: {
+          exists: whatsappCheck.exists,
+          provider_response: sanitizeProviderData(whatsappCheck.providerResponse),
+        },
       },
     })
     .select("id")
@@ -283,6 +311,7 @@ export async function sendPhoneVerificationCode(input: {
 
   try {
     const providerResponse = await sendSignupVerificationWhatsapp(client, {
+      transport,
       code,
       phone: phoneNormalized,
       verificationId: inserted.id,
@@ -294,6 +323,10 @@ export async function sendPhoneVerificationCode(input: {
         provider_message_id: readProviderMessageId(providerResponse),
         metadata: {
           source: "signup_phone_verification",
+          whatsapp_check: {
+            exists: whatsappCheck.exists,
+            provider_response: sanitizeProviderData(whatsappCheck.providerResponse),
+          },
           provider_response: sanitizeProviderData(providerResponse),
         },
       })
@@ -588,31 +621,13 @@ async function loadProfileCompletion(client: SupabaseClient, userId: string) {
 async function sendSignupVerificationWhatsapp(
   client: SupabaseClient,
   input: {
+    transport: SignupWhatsappTransport;
     phone: string;
     code: string;
     verificationId: string;
   },
 ) {
-  const [settings, credentials] = await Promise.all([
-    loadBillingSettings(client),
-    loadUazapiCredentials(client),
-  ]);
-
-  if (settings?.notification_whatsapp_enabled === false) {
-    throw new Error("Envio de WhatsApp de cadastro esta desativado no painel admin.");
-  }
-
-  if (!settings?.billing_whatsapp_agent_id) {
-    throw new Error("Escolha um agente de cobranca/verificacao no painel admin.");
-  }
-
-  const instance = await loadBillingAgentWhatsappInstance(client, settings.billing_whatsapp_agent_id);
-
-  if (!instance?.instance_token_encrypted || instance.status !== "connected") {
-    throw new Error("WhatsApp do agente escolhido nao esta conectado.");
-  }
-
-  const token = decryptCredentialValue(instance.instance_token_encrypted);
+  const { credentials, instance, token } = input.transport;
 
   const response = await callUazapi(credentials, "/send/text", {
     method: "POST",
@@ -636,6 +651,70 @@ async function sendSignupVerificationWhatsapp(
     .eq("id", instance.id);
 
   return response.data;
+}
+
+async function loadSignupWhatsappTransport(client: SupabaseClient): Promise<SignupWhatsappTransport> {
+  const [settings, credentials] = await Promise.all([
+    loadBillingSettings(client),
+    loadUazapiCredentials(client),
+  ]);
+
+  if (settings?.notification_whatsapp_enabled === false) {
+    throw new Error("Envio de WhatsApp de cadastro esta desativado no painel admin.");
+  }
+
+  if (!settings?.billing_whatsapp_agent_id) {
+    throw new Error("Escolha um agente de cobranca/verificacao no painel admin.");
+  }
+
+  const instance = await loadBillingAgentWhatsappInstance(client, settings.billing_whatsapp_agent_id);
+
+  if (!instance?.instance_token_encrypted || instance.status !== "connected") {
+    throw new Error("WhatsApp do agente escolhido nao esta conectado.");
+  }
+
+  const token = decryptCredentialValue(instance.instance_token_encrypted);
+
+  return { credentials, instance, token };
+}
+
+async function checkSignupWhatsappNumber(
+  transport: SignupWhatsappTransport,
+  phoneNormalized: string,
+) {
+  let response: Awaited<ReturnType<typeof callUazapi>>;
+
+  try {
+    response = await callUazapi(transport.credentials, "/chat/check", {
+      method: "POST",
+      token: transport.token,
+      body: {
+        number: phoneNormalized,
+        phone: phoneNormalized,
+        chatid: `${phoneNormalized}@s.whatsapp.net`,
+      },
+    });
+  } catch (error) {
+    if (error instanceof UazapiSignupRequestError && isProviderMissingWhatsappError(error)) {
+      return {
+        exists: false,
+        providerResponse: error.data,
+      };
+    }
+
+    throw error;
+  }
+
+  const exists = readWhatsappExists(response.data);
+
+  if (exists === null) {
+    throw new Error("Nao foi possivel confirmar se este numero possui WhatsApp. Tente novamente.");
+  }
+
+  return {
+    exists,
+    providerResponse: response.data,
+  };
 }
 
 async function loadBillingSettings(client: SupabaseClient) {
@@ -690,7 +769,11 @@ async function callUazapi(
   const data = await readResponse(response);
 
   if (!response.ok) {
-    throw new Error(readProviderError(data) ?? `Uazapi respondeu status ${response.status}.`);
+    throw new UazapiSignupRequestError(
+      readProviderError(data) ?? `Uazapi respondeu status ${response.status}.`,
+      response.status,
+      data,
+    );
   }
 
   return { ok: response.ok, status: response.status, data };
@@ -747,6 +830,147 @@ function readProviderMessageId(value: unknown) {
   }
 
   return null;
+}
+
+function readWhatsappExists(value: unknown): boolean | null {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    return readWhatsappExistsFromText(value);
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const nested = readWhatsappExists(item);
+
+      if (nested !== null) {
+        return nested;
+      }
+    }
+
+    return null;
+  }
+
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const record = value as JsonRecord;
+  const booleanKeys = [
+    "exists",
+    "exist",
+    "numberExists",
+    "isWhatsapp",
+    "isWhatsApp",
+    "hasWhatsapp",
+    "hasWhatsApp",
+    "registered",
+    "onWhatsapp",
+    "onWhatsApp",
+    "isWAContact",
+    "canReceive",
+    "isValid",
+    "valid",
+  ];
+
+  for (const key of booleanKeys) {
+    const direct = record[key];
+
+    if (typeof direct === "boolean") {
+      return direct;
+    }
+  }
+
+  const identityCandidates = [
+    record.jid,
+    record.chatid,
+    record.chatId,
+    record.id,
+    record.wid,
+    record.number && typeof record.number === "object" ? (record.number as JsonRecord).jid : null,
+    record.key && typeof record.key === "object" ? (record.key as JsonRecord).remoteJid : null,
+  ];
+
+  if (identityCandidates.some((candidate) => isWhatsappIdentity(candidate))) {
+    return true;
+  }
+
+  for (const key of ["status", "message", "error", "detail"]) {
+    const nestedText = readWhatsappExistsFromText(record[key]);
+
+    if (nestedText !== null) {
+      return nestedText;
+    }
+  }
+
+  for (const key of ["data", "result", "response", "contact", "chat", "user", "item"]) {
+    const nested = readWhatsappExists(record[key]);
+
+    if (nested !== null) {
+      return nested;
+    }
+  }
+
+  return null;
+}
+
+function readWhatsappExistsFromText(value: unknown) {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalized = value.toLowerCase();
+
+  if (isWhatsappIdentity(value)) {
+    return true;
+  }
+
+  if (
+    normalized.includes("not found") ||
+    normalized.includes("not exist") ||
+    normalized.includes("does not exist") ||
+    normalized.includes("not registered") ||
+    normalized.includes("no whatsapp") ||
+    normalized.includes("invalid whatsapp") ||
+    normalized.includes("invalid number") ||
+    normalized.includes("numero invalido") ||
+    normalized.includes("numero nao") ||
+    normalized.includes("número não")
+  ) {
+    return false;
+  }
+
+  if (
+    normalized === "valid" ||
+    normalized === "exists" ||
+    normalized === "registered" ||
+    normalized.includes("whatsapp user")
+  ) {
+    return true;
+  }
+
+  return null;
+}
+
+function isWhatsappIdentity(value: unknown) {
+  return typeof value === "string" && (
+    value.includes("@s.whatsapp.net") ||
+    value.includes("@c.us") ||
+    value.includes("@lid")
+  );
+}
+
+function isProviderMissingWhatsappError(error: UazapiSignupRequestError) {
+  if (![400, 404, 422].includes(error.status)) {
+    return false;
+  }
+
+  const providerMessage = readProviderError(error.data) ?? error.message;
+  const exists = readWhatsappExistsFromText(providerMessage);
+
+  return exists === false;
 }
 
 function sanitizeProviderData(value: unknown) {
