@@ -313,7 +313,7 @@ export function AccountConsole() {
   const pendingCheckoutHref = account.actions.pendingCheckoutHref;
 
   return (
-    <section className="mx-auto max-w-[1380px] space-y-5">
+    <section className="mx-auto max-w-[1460px] space-y-4">
       <AccountHeader
         account={account}
         completionSummary={completionSummary}
@@ -335,9 +335,8 @@ export function AccountConsole() {
           onReload={() => loadAccount("refresh")}
         />
         <PlanUsageCard account={account} pendingCheckoutHref={pendingCheckoutHref} />
+        <SecurityAccessCard email={account.profile.email} onReload={() => loadAccount("refresh")} />
       </div>
-
-      <SecurityAccessCard email={account.profile.email} onReload={() => loadAccount("refresh")} />
 
       <BillingWorkspace
         account={account}
@@ -363,29 +362,28 @@ function AccountHeader({
   const status = account ? (account.profile.completion.isComplete ? "approved" : "pending") : null;
 
   return (
-    <header className="flex flex-col gap-4 rounded-lg border border-white/10 bg-[#0a111d]/95 px-5 py-4 shadow-[0_18px_50px_rgba(0,0,0,0.18)] lg:flex-row lg:items-center lg:justify-between">
-      <div className="min-w-0">
-        <div className="flex flex-wrap items-center gap-2">
+    <header className="flex flex-col gap-4 py-1 lg:flex-row lg:items-start lg:justify-between">
+      <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-start">
+        <div className="min-w-0">
           <h1 className="text-[22px] font-semibold leading-tight text-white sm:text-2xl">Minha conta</h1>
-          {status ? <StatusBadge status={status} /> : null}
+          <p className="mt-1 text-sm leading-5 text-slate-400">
+            Gerencie seus dados, seguranca, plano e faturamento.
+          </p>
+          {completionSummary ? <p className="mt-1 text-xs font-medium text-slate-500">{completionSummary}</p> : null}
+        </div>
+        <div className="flex flex-wrap gap-2 lg:pt-0.5">
+          {status ? <HeaderPill icon={CheckCircle2} tone="success" value={statusLabel(status)} /> : null}
           {trialText ? (
-            <span className="inline-flex h-7 items-center gap-1.5 rounded-full border border-emerald-300/20 bg-emerald-300/10 px-2.5 text-xs font-semibold text-emerald-100">
-              <CheckCircle2 className="h-3.5 w-3.5" />
-              Teste gratis: {trialText}
-            </span>
+            <HeaderPill icon={CalendarDays} tone="info" value={`Teste gratis ativo - ${trialText}`} />
           ) : null}
         </div>
-        <p className="mt-1 text-sm leading-5 text-slate-400">
-          Gerencie seus dados, seguranca, plano e faturamento.
-        </p>
-        {completionSummary ? <p className="mt-1 text-xs font-medium text-slate-500">{completionSummary}</p> : null}
       </div>
 
       <ActionButton
         icon={RefreshCw}
         loading={refreshing}
         type="button"
-        variant="secondary"
+        variant="primary"
         onClick={onRefresh}
       >
         Atualizar
@@ -631,20 +629,10 @@ function AccountDetailsCard({
   }
 
   return (
-    <Surface className="xl:col-span-8">
+    <Surface className="xl:col-span-5">
       <div className="flex flex-col gap-5">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="flex min-w-0 items-start gap-4">
-            <AccountAvatar avatarUrl={profile.avatarUrl} name={profile.fullName ?? profile.email ?? account.organization.name} />
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <h2 className="truncate text-xl font-semibold text-white">{profile.fullName ?? "Usuario ConnectyHub"}</h2>
-                <StatusBadge status={profile.completion.isComplete ? "approved" : "pending"} />
-              </div>
-              <p className="mt-1 break-all text-sm text-slate-400">{profile.email ?? "email nao informado"}</p>
-            </div>
-          </div>
-
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <h2 className="text-base font-semibold text-white">Dados da conta</h2>
           <div className="flex flex-wrap gap-2">
             <ActionButton
               icon={Edit3}
@@ -656,7 +644,7 @@ function AccountDetailsCard({
                 setProfileMessage(null);
               }}
             >
-              {editingProfile ? "Cancelar edicao" : "Editar dados"}
+              {editingProfile ? "Cancelar" : "Editar dados"}
             </ActionButton>
             <ActionButton
               icon={Smartphone}
@@ -675,6 +663,19 @@ function AccountDetailsCard({
               Foto
               <input accept="image/jpeg,image/png,image/webp" className="hidden" type="file" onChange={onAvatarUpload} />
             </label>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+          <div className="flex min-w-0 items-center gap-4">
+            <AccountAvatar avatarUrl={profile.avatarUrl} name={profile.fullName ?? profile.email ?? account.organization.name} />
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="truncate text-xl font-semibold text-white">{profile.fullName ?? "Usuario ConnectyHub"}</h2>
+                <StatusBadge status={profile.completion.isComplete ? "approved" : "pending"} />
+              </div>
+              <p className="mt-1 break-all text-sm text-slate-400">{profile.email ?? "email nao informado"}</p>
+            </div>
           </div>
         </div>
 
@@ -709,7 +710,7 @@ function AccountDetailsCard({
             </div>
           </form>
         ) : (
-          <dl className="grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-4">
+          <dl className="grid overflow-hidden rounded-lg border border-white/10 bg-[#081322]/70 sm:grid-cols-2">
             <AccountFact label="WhatsApp" value={profile.phone ?? "Nao informado"} />
             <AccountFact label="CPF/CNPJ" value={profile.cpfPreview ?? "Pendente"} />
             <AccountFact label="Empresa" value={profile.companyName ?? account.organization.name} />
@@ -800,47 +801,57 @@ function PlanUsageCard({ account, pendingCheckoutHref }: { account: AccountData;
 
   return (
     <Surface className="xl:col-span-4">
-      <div className="flex h-full flex-col gap-5">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-cyan-200">Plano e utilizacao</p>
-            <h2 className="mt-2 truncate text-2xl font-semibold text-white">{planName}</h2>
+      <div className="flex h-full flex-col gap-4">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-cyan-300/10 text-cyan-200">
+              <WalletCards className="h-4 w-4" />
+            </span>
+            <h2 className="truncate text-base font-semibold text-white">Plano e utilizacao</h2>
           </div>
           <StatusBadge status={account.organization.status} />
         </div>
 
-        {trialText ? (
-          <div className="rounded-md bg-emerald-300/10 px-3 py-2 text-sm font-medium text-emerald-100">
-            Teste gratis ativo: {trialText}
-          </div>
-        ) : null}
-
-        <div>
-          <div className="flex items-end justify-between gap-3">
-            <div>
-              <p className="text-sm text-slate-400">Creditos disponiveis</p>
-              <p className="mt-1 text-2xl font-semibold text-white">{formatCredits(account.wallet.balanceCredits)}</p>
-            </div>
-            <div className="text-right">
-              <p className="text-sm text-slate-400">Uso do ciclo</p>
-              <p className="mt-1 text-lg font-semibold text-white">
-                {formatCredits(access.usedCredits)} / {formatCredits(access.includedCredits)}
+        <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_112px] sm:items-center">
+          <div className="min-w-0">
+            <h3 className="truncate text-2xl font-semibold text-white">{planName}</h3>
+            <p className="mt-1 text-sm text-slate-300">{formatCredits(access.includedCredits)} creditos</p>
+            {trialText ? (
+              <p className="mt-4 inline-flex rounded-full border border-cyan-300/15 bg-cyan-300/10 px-2.5 py-1 text-xs font-semibold text-cyan-100">
+                Teste gratis: {trialText}
               </p>
-            </div>
+            ) : null}
           </div>
-          <ProgressBar value={usagePercent} />
-          <p className="mt-2 text-xs text-slate-500">
-            {formatCredits(account.wallet.lifetimeUsedCredits)} creditos usados no historico da conta.
-          </p>
+          <UsageRing value={usagePercent} />
         </div>
 
-        <dl className="grid gap-y-3 text-sm">
-          <PlanFact label="Mensalidade" value={formatCurrency(monthlyPrice)} />
-          <PlanFact label="Proxima cobranca" value={nextBillingAt ? formatDate(nextBillingAt) : "Nao agendada"} />
-          <PlanFact label="Status da carteira" value={statusLabel(account.wallet.status)} />
-        </dl>
+        <div>
+          <div className="flex items-center justify-between gap-3 text-sm">
+            <span className="text-slate-400">
+              <span className="font-semibold text-cyan-200">{formatCredits(access.usedCredits)}</span> de {formatCredits(access.includedCredits)} creditos utilizados
+            </span>
+            <span className="font-semibold text-slate-200">{Math.round(clamp(usagePercent, 0, 100))}%</span>
+          </div>
+          <ProgressBar value={usagePercent} />
+        </div>
 
-        <div className="mt-auto flex flex-wrap gap-2">
+        <div className="grid gap-2 sm:grid-cols-3">
+          <PlanMetric label="Creditos disponiveis" value={formatCredits(account.wallet.balanceCredits)} />
+          <PlanMetric label="Creditos utilizados" value={formatCredits(access.usedCredits)} />
+          <PlanMetric label="Valor mensal" value={formatCurrency(monthlyPrice)} />
+        </div>
+
+        <div className="rounded-lg border border-white/10 bg-[#081322]/70 p-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm text-slate-400">Proxima cobranca</p>
+              <p className="mt-1 font-semibold text-white">{nextBillingAt ? formatDate(nextBillingAt) : "Nao agendada"}</p>
+            </div>
+            <CalendarDays className="h-5 w-5 shrink-0 text-slate-500" />
+          </div>
+        </div>
+
+        <div className="mt-auto grid gap-2 sm:grid-cols-2">
           <ActionLink href={primaryHref} icon={pendingCheckoutHref ? ExternalLink : CreditCard} variant={primaryTone}>
             {primaryLabel}
           </ActionLink>
@@ -944,48 +955,57 @@ function SecurityAccessCard({ email, onReload }: { email: string | null; onReloa
   }
 
   return (
-    <Surface>
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex min-w-0 items-start gap-3">
-          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-cyan-300/10 text-cyan-200">
-            <ShieldCheck className="h-5 w-5" />
+    <Surface className="xl:col-span-3">
+      <div className="flex h-full flex-col gap-5">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-cyan-300/10 text-cyan-200">
+            <ShieldCheck className="h-4 w-4" />
           </span>
-          <div className="min-w-0">
-            <h2 className="text-base font-semibold text-white">Seguranca e acesso</h2>
-            <p className="mt-1 break-all text-sm text-slate-400">{email ?? "sem email atual"}</p>
-            <p className="mt-1 text-sm text-slate-500">Senha protegida na sua conta ConnectyHub.</p>
+          <h2 className="text-base font-semibold text-white">Seguranca e acesso</h2>
+        </div>
+
+        <div className="space-y-5">
+          <div className="border-t border-white/10 pt-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">E-mail de acesso</p>
+            <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between xl:flex-col xl:items-start">
+              <p className="break-all text-sm font-semibold text-white">{email ?? "sem email atual"}</p>
+              <ActionButton
+                icon={Mail}
+                type="button"
+                variant={securityMode === "email" ? "primary" : "secondary"}
+                onClick={() => {
+                  setSecurityMode((current) => current === "email" ? "summary" : "email");
+                  setEmailError(null);
+                  setEmailMessage(null);
+                }}
+              >
+                Alterar e-mail
+              </ActionButton>
+            </div>
+          </div>
+
+          <div className="border-t border-white/10 pt-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">Senha</p>
+            <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between xl:flex-col xl:items-start">
+              <p className="text-sm font-semibold text-white">************</p>
+              <ActionButton
+                icon={KeyRound}
+                type="button"
+                variant={securityMode === "password" ? "primary" : "secondary"}
+                onClick={() => {
+                  setSecurityMode((current) => current === "password" ? "summary" : "password");
+                  setPasswordError(null);
+                  setPasswordMessage(null);
+                }}
+              >
+                Alterar senha
+              </ActionButton>
+            </div>
           </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <ActionButton
-            icon={Mail}
-            type="button"
-            variant={securityMode === "email" ? "primary" : "secondary"}
-            onClick={() => {
-              setSecurityMode((current) => current === "email" ? "summary" : "email");
-              setEmailError(null);
-              setEmailMessage(null);
-            }}
-          >
-            Alterar e-mail
-          </ActionButton>
-          <ActionButton
-            icon={KeyRound}
-            type="button"
-            variant={securityMode === "password" ? "primary" : "secondary"}
-            onClick={() => {
-              setSecurityMode((current) => current === "password" ? "summary" : "password");
-              setPasswordError(null);
-              setPasswordMessage(null);
-            }}
-          >
-            Alterar senha
-          </ActionButton>
-        </div>
-      </div>
 
-      {securityMode === "email" ? (
-        <form className="mt-5 grid gap-3 rounded-md bg-white/[0.035] p-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end" onSubmit={handleEmailSubmit}>
+        {securityMode === "email" ? (
+        <form className="grid gap-3 rounded-md bg-white/[0.035] p-4" onSubmit={handleEmailSubmit}>
           <Field label="Novo e-mail">
             <input
               className={inputClassName}
@@ -1008,7 +1028,7 @@ function SecurityAccessCard({ email, onReload }: { email: string | null; onReloa
       ) : null}
 
       {securityMode === "password" ? (
-        <form className="mt-5 grid gap-3 rounded-md bg-white/[0.035] p-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] md:items-end" onSubmit={handlePasswordSubmit}>
+        <form className="grid gap-3 rounded-md bg-white/[0.035] p-4" onSubmit={handlePasswordSubmit}>
           <Field label="Nova senha">
             <input
               className={inputClassName}
@@ -1042,6 +1062,16 @@ function SecurityAccessCard({ email, onReload }: { email: string | null; onReloa
           {passwordError ? <Feedback tone="error">{passwordError}</Feedback> : null}
         </form>
       ) : null}
+
+        <div className="mt-auto rounded-lg border border-white/10 bg-white/[0.035] p-3">
+          <div className="flex items-start gap-3">
+            <KeyRound className="mt-0.5 h-4 w-4 shrink-0 text-cyan-200" />
+            <p className="text-sm leading-5 text-slate-300">
+              Mantenha seus dados sempre seguros. Recomendamos alterar sua senha regularmente.
+            </p>
+          </div>
+        </div>
+      </div>
     </Surface>
   );
 }
@@ -1058,13 +1088,13 @@ function BillingWorkspace({
   return (
     <Surface>
       <div className="flex flex-col gap-1">
-        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-cyan-200">Faturamento e consumo</p>
-        <h2 className="text-xl font-semibold text-white">Historico financeiro da conta</h2>
+        <h2 className="text-xl font-semibold text-white">Faturamento e consumo</h2>
+        <p className="text-sm text-slate-400">Acompanhe seus pagamentos, assinaturas, creditos e ciclos de uso.</p>
       </div>
 
       <Tabs className="mt-5 gap-4" value={activeTab} onValueChange={(value) => onTabChange(value as BillingTab)}>
         <div className="overflow-x-auto overflow-y-hidden pb-1">
-          <TabsList className="w-max min-w-full justify-start gap-1 bg-transparent p-0" variant="line">
+          <TabsList className="w-max min-w-full justify-start gap-0 border-b border-white/10 bg-transparent p-0" variant="line">
             {billingTabs.map((tab) => {
               const Icon = tab.icon;
               const count = billingTabCount(account, tab.value);
@@ -1072,7 +1102,7 @@ function BillingWorkspace({
               return (
                 <TabsTrigger
                   key={tab.value}
-                  className="h-10 rounded-md border border-white/10 bg-white/[0.035] px-3 text-sm font-semibold text-slate-300 hover:text-white data-active:border-cyan-300/40 data-active:bg-cyan-300 data-active:text-slate-950"
+                  className="h-11 min-w-[132px] rounded-none border-0 border-b-2 border-transparent bg-transparent px-4 text-sm font-semibold text-slate-400 hover:bg-white/[0.025] hover:text-white data-active:border-cyan-300 data-active:bg-transparent data-active:text-cyan-200"
                   value={tab.value}
                 >
                   <Icon className="h-4 w-4" />
@@ -1111,15 +1141,15 @@ function PaymentsTab({ payments }: { payments: AccountData["payments"] }) {
   return (
     <div className="space-y-4">
       <div className="hidden overflow-x-auto overflow-y-hidden sm:block">
-        <table className="w-full min-w-[760px] border-separate border-spacing-0 text-left">
-          <thead>
-            <tr className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">
-              <th className="border-b border-white/10 pb-3 pr-4">Valor</th>
-              <th className="border-b border-white/10 pb-3 pr-4">Plano</th>
-              <th className="border-b border-white/10 pb-3 pr-4">Status</th>
-              <th className="border-b border-white/10 pb-3 pr-4">Data</th>
-              <th className="border-b border-white/10 pb-3 pr-4">Fatura</th>
-              <th className="border-b border-white/10 pb-3 text-right">Acao</th>
+        <table className="w-full min-w-[760px] overflow-hidden rounded-lg border border-white/10 bg-[#081322]/55 text-left">
+          <thead className="bg-white/[0.035]">
+            <tr className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-400">
+              <th className="border-b border-white/10 px-4 py-3">Valor</th>
+              <th className="border-b border-white/10 px-4 py-3">Plano</th>
+              <th className="border-b border-white/10 px-4 py-3">Status</th>
+              <th className="border-b border-white/10 px-4 py-3">Data</th>
+              <th className="border-b border-white/10 px-4 py-3">Fatura</th>
+              <th className="border-b border-white/10 px-4 py-3 text-right">Acao</th>
             </tr>
           </thead>
           <tbody>
@@ -1146,20 +1176,20 @@ function PaymentTableRow({ payment }: { payment: AccountData["payments"][number]
 
   return (
     <tr className="group">
-      <td className="border-b border-white/10 py-3 pr-4 align-top text-sm font-semibold text-white">
+      <td className="border-b border-white/10 px-4 py-3 align-top text-sm font-semibold text-white">
         {formatCurrency(payment.amountBrl)}
       </td>
-      <td className="border-b border-white/10 py-3 pr-4 align-top">
+      <td className="border-b border-white/10 px-4 py-3 align-top">
         <p className="text-sm font-semibold text-white">{formatPlanName(payment.planCode ?? "Plano")}</p>
         {reference ? <InternalReference value={reference} /> : null}
       </td>
-      <td className="border-b border-white/10 py-3 pr-4 align-top">
+      <td className="border-b border-white/10 px-4 py-3 align-top">
         <StatusBadge status={payment.status} />
       </td>
-      <td className="border-b border-white/10 py-3 pr-4 align-top text-sm text-slate-300">
+      <td className="border-b border-white/10 px-4 py-3 align-top text-sm text-slate-300">
         {formatDateTime(payment.paidAt ?? payment.createdAt)}
       </td>
-      <td className="border-b border-white/10 py-3 pr-4 align-top">
+      <td className="border-b border-white/10 px-4 py-3 align-top">
         {payment.invoiceHref ? (
           <ActionLink href={payment.invoiceHref} variant="ghost">
             Ver fatura
@@ -1168,7 +1198,7 @@ function PaymentTableRow({ payment }: { payment: AccountData["payments"][number]
           <span className="text-sm text-slate-500">Nao disponivel</span>
         )}
       </td>
-      <td className="border-b border-white/10 py-3 align-top">
+      <td className="border-b border-white/10 px-4 py-3 align-top">
         <PaymentActions payment={payment} />
       </td>
     </tr>
@@ -1379,9 +1409,25 @@ function CyclesTab({ cycles }: { cycles: AccountData["cycles"] }) {
 
 function Surface({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <section className={cn("rounded-lg border border-white/10 bg-[#0b1220]/95 p-5 shadow-[0_18px_50px_rgba(0,0,0,0.16)]", className)}>
+    <section className={cn("rounded-lg border border-white/10 bg-[#07101d] p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.035),0_22px_60px_rgba(0,0,0,0.2)]", className)}>
       {children}
     </section>
+  );
+}
+
+function HeaderPill({ icon: Icon, tone, value }: { icon: LucideIcon; tone: "info" | "success"; value: string }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex min-h-10 items-center gap-2 rounded-md border px-3 text-sm font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]",
+        tone === "success"
+          ? "border-emerald-300/15 bg-emerald-300/10 text-emerald-200"
+          : "border-sky-300/15 bg-sky-300/10 text-sky-100",
+      )}
+    >
+      <Icon className="h-4 w-4" />
+      {value}
+    </span>
   );
 }
 
@@ -1478,9 +1524,37 @@ const inputClassName = "h-10 w-full rounded-md border border-white/10 bg-[#16223
 
 function AccountFact({ label, value }: { label: string; value: string }) {
   return (
-    <div className="min-w-0">
+    <div className="min-w-0 border-b border-white/10 p-4 last:border-b-0 sm:[&:nth-child(2n+1)]:border-r sm:[&:nth-last-child(-n+2)]:border-b-0">
       <dt className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">{label}</dt>
       <dd className="mt-1 break-words text-sm font-semibold text-slate-100">{value}</dd>
+    </div>
+  );
+}
+
+function PlanMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-white/10 bg-[#081322]/70 p-3">
+      <p className="text-xs text-slate-500">{label}</p>
+      <p className="mt-1 text-base font-semibold text-white">{value}</p>
+    </div>
+  );
+}
+
+function UsageRing({ value }: { value: number }) {
+  const percent = Math.round(clamp(value, 0, 100));
+
+  return (
+    <div
+      className="grid h-28 w-28 place-items-center rounded-full"
+      style={{ background: `conic-gradient(#22d3ee ${percent * 3.6}deg, rgba(148,163,184,0.2) 0deg)` }}
+      aria-label={`${percent}% utilizado`}
+    >
+      <div className="grid h-[84px] w-[84px] place-items-center rounded-full bg-[#07101d] text-center">
+        <div>
+          <p className="text-2xl font-semibold text-white">{percent}%</p>
+          <p className="text-xs text-slate-400">utilizado</p>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1523,7 +1597,7 @@ function AccountAvatar({ avatarUrl, name }: { avatarUrl: string | null; name: st
   const showImage = Boolean(avatarUrl && failedAvatarUrl !== avatarUrl);
 
   return (
-    <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-cyan-200/20 bg-cyan-300/12">
+    <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-full border border-white/15 bg-cyan-300/12 shadow-[inset_0_0_0_1px_rgba(34,211,238,0.1)]">
       {showImage && avatarUrl ? (
         <Image
           alt=""
@@ -1534,7 +1608,7 @@ function AccountAvatar({ avatarUrl, name }: { avatarUrl: string | null; name: st
           onError={() => setFailedAvatarUrl(avatarUrl)}
         />
       ) : (
-        <div className="grid h-full w-full place-items-center text-xl font-semibold text-cyan-100">{initials}</div>
+        <div className="grid h-full w-full place-items-center text-3xl font-semibold text-cyan-300">{initials}</div>
       )}
     </div>
   );
