@@ -1,16 +1,22 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
-import { ArrowRight, CheckCircle2, Loader2, LockKeyhole, Mail, Phone, UserRound } from "lucide-react";
+import { AlertTriangle, ArrowRight, CheckCircle2, Loader2, LockKeyhole, Mail, Phone, UserRound } from "lucide-react";
 import { ConnectyLogo } from "@/components/brand/connecty-logo";
 import { formatBrazilPhoneInput, formatCpfInput, normalizeBrazilPhoneForApi } from "@/lib/account/input-format";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
 type AuthMode = "login" | "signup";
+
+type WhatsappCheckState = {
+  state: "idle" | "incomplete" | "checking" | "valid" | "not_found" | "error";
+  phoneNormalized: string | null;
+  message: string | null;
+};
 
 export function AuthCard({
   mode,
@@ -34,9 +40,116 @@ export function AuthCard({
   const [trialWhatsappOptIn, setTrialWhatsappOptIn] = useState(true);
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
+  const [remoteWhatsappCheck, setRemoteWhatsappCheck] = useState<WhatsappCheckState | null>(null);
 
   const isSignup = mode === "signup";
   const benefitItems = ["Sessao persistente", "Painel do cliente", "Credenciais seguras"];
+  const currentPhoneForVerification = normalizeBrazilPhoneForApi(phone);
+  const whatsappCheck = useMemo<WhatsappCheckState>(() => {
+    if (!isSignup || awaitingPhoneVerification) {
+      return {
+        state: "idle",
+        phoneNormalized: null,
+        message: null,
+      };
+    }
+
+    if (!phone.trim()) {
+      return {
+        state: "idle",
+        phoneNormalized: null,
+        message: "Digite DDD + numero para validar o WhatsApp.",
+      };
+    }
+
+    if (!currentPhoneForVerification) {
+      const localLength = getBrazilPhoneLocalDigitCount(phone);
+
+      return {
+        state: "incomplete",
+        phoneNormalized: null,
+        message: localLength >= 10
+          ? "Use um WhatsApp valido com DDD. Ex.: (47) 99999-9999."
+          : "Complete o WhatsApp com DDD para validar.",
+      };
+    }
+
+    if (remoteWhatsappCheck?.phoneNormalized === currentPhoneForVerification) {
+      return remoteWhatsappCheck;
+    }
+
+    return {
+      state: "idle",
+      phoneNormalized: currentPhoneForVerification,
+      message: "Aguardando validacao do WhatsApp.",
+    };
+  }, [awaitingPhoneVerification, currentPhoneForVerification, isSignup, phone, remoteWhatsappCheck]);
+  const whatsappValidated = !isSignup
+    || awaitingPhoneVerification
+    || (whatsappCheck.state === "valid" && whatsappCheck.phoneNormalized === currentPhoneForVerification);
+
+  useEffect(() => {
+    if (!isSignup || awaitingPhoneVerification || !currentPhoneForVerification) {
+      return;
+    }
+
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setRemoteWhatsappCheck({
+        state: "checking",
+        phoneNormalized: currentPhoneForVerification,
+        message: "Verificando se este numero possui WhatsApp...",
+      });
+
+      try {
+        const response = await fetch("/api/account/phone-verification/public-check", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ phone: currentPhoneForVerification }),
+          signal: controller.signal,
+        });
+        const data = (await response.json().catch(() => null)) as {
+          exists?: boolean;
+          error?: string;
+          phoneNormalized?: string;
+        } | null;
+
+        if (!response.ok) {
+          throw new Error(data?.error ?? "Nao foi possivel validar o WhatsApp.");
+        }
+
+        if (data?.exists) {
+          setRemoteWhatsappCheck({
+            state: "valid",
+            phoneNormalized: data.phoneNormalized ?? currentPhoneForVerification,
+            message: "WhatsApp encontrado. Agora voce pode criar a conta.",
+          });
+          return;
+        }
+
+        setRemoteWhatsappCheck({
+          state: "not_found",
+          phoneNormalized: currentPhoneForVerification,
+          message: "Nao encontramos WhatsApp ativo neste numero.",
+        });
+      } catch (error) {
+        if (error instanceof Error && error.name === "AbortError") {
+          return;
+        }
+
+        setRemoteWhatsappCheck({
+          state: "error",
+          phoneNormalized: currentPhoneForVerification,
+          message: error instanceof Error ? error.message : "Nao foi possivel validar o WhatsApp.",
+        });
+      }
+    }, 650);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, [awaitingPhoneVerification, currentPhoneForVerification, isSignup]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -86,6 +199,12 @@ export function AuthCard({
         if (!phoneForVerification) {
           setStatus("error");
           setMessage("Informe um WhatsApp valido com DDD. Ex.: (47) 99999-9999.");
+          return;
+        }
+
+        if (!whatsappValidated) {
+          setStatus("error");
+          setMessage("Valide um WhatsApp ativo antes de criar a conta.");
           return;
         }
 
@@ -300,11 +419,15 @@ export function AuthCard({
                       name="phone"
                       inputMode="tel"
                       maxLength={19}
-                      onChange={(value) => setPhone(formatBrazilPhoneInput(value))}
+                      onChange={(value) => {
+                        setPhone(formatBrazilPhoneInput(value));
+                        setMessage("");
+                      }}
                       placeholder="(47) 99999-9999"
                       type="tel"
                       value={phone}
                     />
+                    <SignupWhatsappCheck check={whatsappCheck} />
                     <FormField
                       icon={CheckCircle2}
                       label="CPF"
@@ -401,11 +524,19 @@ export function AuthCard({
 
             <button
               className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-md bg-[#0aff0a] px-4 font-mono text-xs font-bold uppercase text-black transition hover:bg-[#5cff5c] disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={status === "loading"}
+              disabled={status === "loading" || (isSignup && !awaitingPhoneVerification && !whatsappValidated)}
               type="submit"
             >
               {status === "loading" ? <Loader2 size={16} className="animate-spin" /> : <ArrowRight size={16} />}
-              {awaitingPhoneVerification ? "Confirmar WhatsApp" : isSignup ? "Criar conta e validar" : "Entrar no painel"}
+              {awaitingPhoneVerification
+                ? "Confirmar WhatsApp"
+                : isSignup
+                  ? whatsappCheck.state === "checking"
+                    ? "Verificando WhatsApp"
+                    : whatsappValidated
+                      ? "Criar conta e validar"
+                      : "Aguardando WhatsApp valido"
+                  : "Entrar no painel"}
             </button>
           </form>
 
@@ -429,6 +560,31 @@ export function AuthCard({
           ))}
         </section>
       </main>
+    </div>
+  );
+}
+
+function SignupWhatsappCheck({ check }: { check: WhatsappCheckState }) {
+  if (!check.message) {
+    return null;
+  }
+
+  const isValid = check.state === "valid";
+  const isChecking = check.state === "checking";
+  const isNeutral = check.state === "idle" || check.state === "incomplete";
+  const Icon = isValid ? CheckCircle2 : isChecking ? Loader2 : AlertTriangle;
+
+  return (
+    <div className={cn(
+      "flex items-start gap-2 rounded-md border p-3 text-xs leading-5",
+      isValid
+        ? "border-[#0aff0a]/25 bg-[#0aff0a]/8 text-[#b7ffb7]"
+        : isNeutral
+          ? "border-[#00f3ff]/20 bg-[#00f3ff]/8 text-cyan-100"
+          : "border-rose-300/25 bg-rose-300/8 text-rose-100",
+    )}>
+      <Icon className={cn("mt-0.5 h-4 w-4 shrink-0", isChecking && "animate-spin")} />
+      <span>{check.message}</span>
     </div>
   );
 }
@@ -517,6 +673,13 @@ function resolvePostLoginPath(nextPath: string, rolePath?: string) {
   }
 
   return rolePath ?? nextPath;
+}
+
+function getBrazilPhoneLocalDigitCount(value: string) {
+  const digits = value.replace(/\D/g, "");
+  const local = digits.startsWith("55") ? digits.slice(2) : digits;
+
+  return local.length;
 }
 
 function FormField({
