@@ -2,6 +2,10 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
+  buildDashboardBillingCheckoutPath,
+  buildDashboardBillingCheckoutUrl,
+} from "@/lib/billing/plan-checkout";
+import {
   getMercadoPagoBillingSubscription,
   isMercadoPagoPreapprovalActive,
   mapMercadoPagoPreapprovalStatus,
@@ -65,6 +69,21 @@ export type PlatformTrialNotificationInput = {
   includedCredits: number;
   milestoneCredits?: number | null;
   trialDaysRemaining?: number | null;
+  metadata?: JsonRecord;
+};
+
+export type PlatformSubscriptionPendingNotificationInput = {
+  organizationId: string;
+  subscriptionId: string;
+  invoiceId: string | null;
+  paymentId: string | null;
+  planCode: string;
+  planName: string;
+  amountBrl: number;
+  includedCredits: number;
+  dedupeKey?: string;
+  providerStatus?: string | null;
+  providerReference?: string | null;
   metadata?: JsonRecord;
 };
 
@@ -272,6 +291,40 @@ export async function sendPlatformTrialNotification(
       included_credits: input.includedCredits,
       milestone_credits: input.milestoneCredits ?? null,
       trial_days_remaining: input.trialDaysRemaining ?? null,
+      ...(input.metadata ?? {}),
+    },
+  });
+  const event = notification?.id ? await loadBillingNotificationEvent(client, notification.id) : null;
+
+  return {
+    notificationId: notification?.id ?? null,
+    status: event?.status ?? notification?.status ?? "skipped",
+    selectedAgentId: event?.selected_agent_id ?? null,
+    recipientPhone: event?.recipient_phone ?? null,
+    messagePreview: event?.message_preview ?? null,
+    errorMessage: event?.error_message ?? null,
+  };
+}
+
+export async function sendPlatformSubscriptionPendingNotification(
+  client: SupabaseClient,
+  input: PlatformSubscriptionPendingNotificationInput,
+): Promise<PlatformBillingOperationalTestResult> {
+  const notification = await enqueuePlatformBillingNotification(client, {
+    organizationId: input.organizationId,
+    subscriptionId: input.subscriptionId,
+    invoiceId: input.invoiceId,
+    paymentId: input.paymentId,
+    planCode: input.planCode,
+    planName: input.planName,
+    amountBrl: input.amountBrl,
+    includedCredits: input.includedCredits,
+    eventType: "subscription_pending",
+    dedupeKey: input.dedupeKey ?? `billing:${input.subscriptionId}:subscription:pending`,
+    providerStatus: input.providerStatus ?? "pending",
+    providerReference: input.providerReference ?? null,
+    metadata: {
+      source: "dashboard_plan_checkout_created",
       ...(input.metadata ?? {}),
     },
   });
@@ -949,6 +1002,7 @@ async function enqueuePlatformBillingNotification(
     milestoneCredits: input.milestoneCredits ?? null,
     trialDaysRemaining: input.trialDaysRemaining ?? null,
     providerStatus: input.providerStatus,
+    checkoutUrl: readString(input.metadata.checkout_public_url) ?? readString(input.metadata.checkout_url),
     templates: settings?.metadata?.billing_message_templates,
     templateOverride: automation?.messageTemplate ?? null,
   });
@@ -1042,6 +1096,9 @@ export async function processPendingPlatformBillingNotifications(
   input: { limit?: number } = {},
 ) {
   const limit = Math.min(Math.max(input.limit ?? 25, 1), 100);
+  const enqueuedPendingCheckouts = await enqueueMissingPendingCheckoutNotifications(client, {
+    limit: Math.min(limit, 25),
+  });
   const { data, error } = await client
     .from("billing_notification_events")
     .select("id, selected_agent_id, recipient_phone, message_preview, attempts, metadata")
@@ -1089,9 +1146,93 @@ export async function processPendingPlatformBillingNotifications(
 
   return {
     checked: rows.length,
+    enqueuedPendingCheckouts,
     sent,
     skipped,
   };
+}
+
+async function enqueueMissingPendingCheckoutNotifications(
+  client: SupabaseClient,
+  input: { limit: number },
+) {
+  const { data: subscriptions, error } = await client
+    .from("organization_subscriptions")
+    .select("id, organization_id")
+    .in("status", ["pending", "incomplete"])
+    .order("created_at", { ascending: false })
+    .limit(input.limit)
+    .returns<Array<{ id: string; organization_id: string }>>();
+
+  if (error) {
+    throw new Error(`Nao foi possivel carregar checkouts pendentes: ${error.message}`);
+  }
+
+  const subscriptionIds = (subscriptions ?? []).map((subscription) => subscription.id);
+
+  if (subscriptionIds.length === 0) {
+    return 0;
+  }
+
+  const { data: existingNotifications, error: existingError } = await client
+    .from("billing_notification_events")
+    .select("subscription_id")
+    .eq("event_type", "subscription_pending")
+    .in("subscription_id", subscriptionIds)
+    .returns<Array<{ subscription_id: string | null }>>();
+
+  if (existingError) {
+    throw new Error(`Nao foi possivel validar notificacoes pendentes: ${existingError.message}`);
+  }
+
+  const notifiedSubscriptionIds = new Set(
+    (existingNotifications ?? [])
+      .map((item) => item.subscription_id)
+      .filter((subscriptionId): subscriptionId is string => Boolean(subscriptionId)),
+  );
+  let enqueued = 0;
+
+  for (const subscription of subscriptions ?? []) {
+    if (notifiedSubscriptionIds.has(subscription.id)) {
+      continue;
+    }
+
+    const record = await loadBillingRecord(client, { subscriptionId: subscription.id });
+
+    if (!record.subscription) {
+      continue;
+    }
+
+    const checkoutPath = readString(record.subscription.metadata?.checkout_url)
+      ?? buildDashboardBillingCheckoutPath(record.subscription.id);
+    const checkoutUrl = readString(record.subscription.metadata?.checkout_public_url)
+      ?? buildDashboardBillingCheckoutUrl(record.subscription.id);
+
+    await enqueuePlatformBillingNotification(client, {
+      organizationId: record.subscription.organization_id,
+      subscriptionId: record.subscription.id,
+      invoiceId: record.invoice?.id ?? null,
+      paymentId: record.payment?.id ?? null,
+      planCode: record.subscription.plan_code,
+      planName: record.plan?.name ?? record.subscription.plan_code,
+      amountBrl: toNumber(record.invoice?.total_brl ?? record.payment?.amount_brl ?? record.plan?.monthly_price_brl),
+      includedCredits: toNumber(record.plan?.included_credits),
+      eventType: "subscription_pending",
+      dedupeKey: `billing:${record.subscription.id}:subscription:pending`,
+      providerStatus: "pending",
+      providerReference: record.subscription.provider_subscription_id,
+      metadata: {
+        source: "billing_pending_checkout_backfill",
+        checkout_url: checkoutPath,
+        checkout_public_url: checkoutUrl,
+        checkout_model: "connectyhub_plan_checkout",
+        subscription_status: record.subscription.status,
+      },
+    });
+    enqueued += 1;
+  }
+
+  return enqueued;
 }
 
 async function sendBillingNotificationNow(
@@ -1324,6 +1465,7 @@ function buildBillingMessage(input: {
   milestoneCredits: number | null;
   trialDaysRemaining: number | null;
   providerStatus: string | null;
+  checkoutUrl: string | null;
   templates: unknown;
   templateOverride?: string | null;
 }) {
@@ -1346,6 +1488,7 @@ function buildBillingMessage(input: {
     evento: input.eventType,
     status: input.providerStatus ?? "sem_status",
     data: formatDate(new Date()),
+    checkout_url: input.checkoutUrl ?? "acesse o painel",
   });
 }
 

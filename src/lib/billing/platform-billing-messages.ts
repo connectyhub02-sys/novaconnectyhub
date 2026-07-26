@@ -13,6 +13,7 @@ export const PLATFORM_BILLING_MESSAGE_VARIABLES = [
   "{evento}",
   "{status}",
   "{data}",
+  "{checkout_url}",
 ] as const;
 
 export const PLATFORM_BILLING_MESSAGE_TEMPLATE_DEFINITIONS = [
@@ -82,7 +83,7 @@ export const DEFAULT_PLATFORM_BILLING_MESSAGE_TEMPLATES: PlatformBillingMessageT
   billing_operational_test:
     "{cliente}, esta e uma mensagem de teste da ConnectyHub para validar os avisos automaticos de cobranca. Nenhuma cobranca foi feita.",
   subscription_pending:
-    "{cliente}, recebemos sua solicitacao do plano {plano}. O pagamento ainda esta pendente. Assim que confirmar, os creditos serao liberados automaticamente.",
+    "{cliente}, recebemos sua solicitacao do plano {plano}. O pagamento ainda esta pendente. Finalize por aqui: {checkout_url}. Assim que confirmar, os creditos serao liberados automaticamente.",
   trial_started:
     "{cliente}, parabens. Seu teste gratis ConnectyHub foi liberado com {creditos} creditos. Assine um plano durante o teste e o saldo restante soma aos creditos do plano escolhido.",
   trial_credit_milestone:

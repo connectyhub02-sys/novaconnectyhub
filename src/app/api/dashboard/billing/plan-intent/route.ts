@@ -10,6 +10,7 @@ import {
   buildDashboardBillingCheckoutUrl,
   buildPlatformBillingExternalReference,
 } from "@/lib/billing/plan-checkout";
+import { sendPlatformSubscriptionPendingNotification } from "@/lib/billing/platform-billing-webhook";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
 
@@ -93,11 +94,28 @@ export async function POST(request: NextRequest) {
     if (existingSubscription) {
       if (isPendingSubscription(existingSubscription.status)) {
         if (existingSubscription.plan_code === plan.plan_code) {
+          const notification = await notifySubscriptionPendingSafely(client, {
+            organizationId: workspace.organization.id,
+            actorId: workspace.user.id,
+            subscriptionId: existingSubscription.id,
+            invoiceId: null,
+            paymentId: null,
+            planCode: plan.plan_code,
+            planName: plan.name,
+            amountBrl,
+            includedCredits: toNumber(plan.included_credits),
+            checkoutPath: buildDashboardBillingCheckoutPath(existingSubscription.id),
+            checkoutUrl: buildDashboardBillingCheckoutUrl(existingSubscription.id),
+            source: "dashboard_plan_intent_existing_pending",
+          });
+
           return NextResponse.json({
             ok: true,
             subscriptionId: existingSubscription.id,
             planCode: existingSubscription.plan_code,
             checkoutUrl: buildDashboardBillingCheckoutPath(existingSubscription.id),
+            notificationStatus: notification.status,
+            notificationError: notification.errorMessage,
             message: "Ja existe um checkout deste plano em aberto. Vamos te levar para concluir pelo painel.",
           });
         }
@@ -252,6 +270,21 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    const notification = await notifySubscriptionPendingSafely(client, {
+      organizationId: workspace.organization.id,
+      actorId: workspace.user.id,
+      subscriptionId,
+      invoiceId,
+      paymentId,
+      planCode: plan.plan_code,
+      planName: plan.name,
+      amountBrl,
+      includedCredits: toNumber(plan.included_credits),
+      checkoutPath,
+      checkoutUrl,
+      source: "dashboard_plan_intent_created",
+    });
+
     return NextResponse.json({
       ok: true,
       subscriptionId,
@@ -259,6 +292,8 @@ export async function POST(request: NextRequest) {
       paymentId,
       planCode: plan.plan_code,
       checkoutUrl: checkoutPath,
+      notificationStatus: notification.status,
+      notificationError: notification.errorMessage,
       message: "Checkout criado. Finalize o pagamento para ativar seu plano.",
     });
   } catch (error) {
@@ -378,4 +413,68 @@ async function cancelPendingSubscription(
     target_id: input.subscription.id,
     metadata: replacementMetadata,
   });
+}
+
+async function notifySubscriptionPendingSafely(
+  client: ReturnType<typeof createServiceClient>,
+  input: {
+    organizationId: string;
+    actorId: string;
+    subscriptionId: string;
+    invoiceId: string | null;
+    paymentId: string | null;
+    planCode: string;
+    planName: string;
+    amountBrl: number;
+    includedCredits: number;
+    checkoutPath: string;
+    checkoutUrl: string;
+    source: string;
+  },
+) {
+  try {
+    return await sendPlatformSubscriptionPendingNotification(client, {
+      organizationId: input.organizationId,
+      subscriptionId: input.subscriptionId,
+      invoiceId: input.invoiceId,
+      paymentId: input.paymentId,
+      planCode: input.planCode,
+      planName: input.planName,
+      amountBrl: input.amountBrl,
+      includedCredits: input.includedCredits,
+      dedupeKey: `billing:${input.subscriptionId}:subscription:pending`,
+      providerStatus: "pending",
+      metadata: {
+        source: input.source,
+        actor_id: input.actorId,
+        checkout_url: input.checkoutPath,
+        checkout_public_url: input.checkoutUrl,
+        checkout_model: "connectyhub_plan_checkout",
+      },
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : "Falha ao disparar automacao de assinatura pendente.";
+
+    await client.from("maintenance_audit_logs").insert({
+      event_type: "billing.plan_checkout.notification_failed",
+      target_table: "organization_subscriptions",
+      target_id: input.subscriptionId,
+      metadata: {
+        source: input.source,
+        actor_id: input.actorId,
+        organization_id: input.organizationId,
+        plan_code: input.planCode,
+        error: errorMessage,
+      },
+    });
+
+    return {
+      notificationId: null,
+      status: "failed",
+      selectedAgentId: null,
+      recipientPhone: null,
+      messagePreview: null,
+      errorMessage,
+    };
+  }
 }
