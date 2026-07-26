@@ -362,6 +362,28 @@ export async function sendPhoneVerificationCode(input: {
   };
 }
 
+export async function checkPhoneWhatsappAvailability(input: {
+  phone: string;
+  client?: SupabaseClient;
+}) {
+  const client = input.client ?? createServiceClient();
+  const phoneNormalized = normalizeBrazilPhone(input.phone);
+
+  if (!phoneNormalized) {
+    throw new Error("Informe um WhatsApp valido com DDD.");
+  }
+
+  const transport = await loadSignupWhatsappTransport(client);
+  const whatsappCheck = await checkSignupWhatsappNumber(transport, phoneNormalized);
+
+  return {
+    exists: whatsappCheck.exists,
+    phone: formatBrazilPhone(phoneNormalized),
+    phoneNormalized,
+    checkedAt: new Date().toISOString(),
+  };
+}
+
 export async function verifyPhoneCompletionCode(input: {
   userId: string;
   code: string;

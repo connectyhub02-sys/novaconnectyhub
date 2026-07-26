@@ -8,6 +8,7 @@ import { usePathname } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
 import {
   ArrowLeft,
+  AlertTriangle,
   BarChart3,
   Bell,
   Bot,
@@ -15,6 +16,7 @@ import {
   Building2,
   Camera,
   ChevronDown,
+  CheckCircle2,
   CircleDollarSign,
   Coins,
   FileCode2,
@@ -113,6 +115,12 @@ type AccountCompletionClientStatus = {
   cpfPreview: string | null;
   signupCompletedAt: string | null;
   isPlatformAdmin: boolean;
+};
+
+type WhatsappCheckState = {
+  state: "idle" | "incomplete" | "checking" | "valid" | "not_found" | "error";
+  phoneNormalized: string | null;
+  message: string | null;
 };
 
 type ConnectyShellNotificationsContextValue = {
@@ -1008,6 +1016,132 @@ function AccountCompletionModal({
   const [working, setWorking] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [remoteWhatsappCheck, setRemoteWhatsappCheck] = useState<WhatsappCheckState | null>(null);
+
+  const currentPhoneForVerification = normalizeBrazilPhoneForApi(phone);
+  const whatsappCheck = useMemo<WhatsappCheckState>(() => {
+    if (!phone.trim()) {
+      return {
+        state: "idle",
+        phoneNormalized: null,
+        message: "Digite DDD + numero para validar o WhatsApp.",
+      };
+    }
+
+    if (!currentPhoneForVerification) {
+      const localLength = getBrazilPhoneLocalDigitCount(phone);
+
+      return {
+        state: "incomplete",
+        phoneNormalized: null,
+        message: localLength >= 10
+          ? "Use um WhatsApp valido com DDD. Ex.: (47) 99999-9999."
+          : "Complete o WhatsApp com DDD para validar.",
+      };
+    }
+
+    if (status?.phoneVerified && status.phoneWhatsappExists && status.phoneNormalized === currentPhoneForVerification) {
+      return {
+        state: "valid",
+        phoneNormalized: currentPhoneForVerification,
+        message: "WhatsApp ja confirmado neste cadastro.",
+      };
+    }
+
+    if (remoteWhatsappCheck?.phoneNormalized === currentPhoneForVerification) {
+      return remoteWhatsappCheck;
+    }
+
+    return {
+      state: "idle",
+      phoneNormalized: currentPhoneForVerification,
+      message: "Aguardando validacao do WhatsApp.",
+    };
+  }, [
+    currentPhoneForVerification,
+    phone,
+    remoteWhatsappCheck,
+    status?.phoneNormalized,
+    status?.phoneVerified,
+    status?.phoneWhatsappExists,
+  ]);
+  const whatsappValidated = whatsappCheck.state === "valid" && whatsappCheck.phoneNormalized === currentPhoneForVerification;
+
+  useEffect(() => {
+    if (!status || status.isComplete || dismissed || step !== "profile" || !currentPhoneForVerification) {
+      return;
+    }
+
+    if (status.phoneVerified && status.phoneWhatsappExists && status.phoneNormalized === currentPhoneForVerification) {
+      return;
+    }
+
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setRemoteWhatsappCheck({
+        state: "checking",
+        phoneNormalized: currentPhoneForVerification,
+        message: "Verificando se este numero possui WhatsApp...",
+      });
+
+      try {
+        const response = await fetch("/api/account/phone-verification/check", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ phone: currentPhoneForVerification }),
+          signal: controller.signal,
+        });
+        const data = (await response.json().catch(() => null)) as {
+          exists?: boolean;
+          error?: string;
+          phoneNormalized?: string;
+        } | null;
+
+        if (!response.ok) {
+          throw new Error(data?.error ?? "Nao foi possivel validar o WhatsApp.");
+        }
+
+        if (data?.exists) {
+          setRemoteWhatsappCheck({
+            state: "valid",
+            phoneNormalized: data.phoneNormalized ?? currentPhoneForVerification,
+            message: "WhatsApp encontrado. Agora voce pode enviar o codigo.",
+          });
+          return;
+        }
+
+        setRemoteWhatsappCheck({
+          state: "not_found",
+          phoneNormalized: currentPhoneForVerification,
+          message: "Nao encontramos WhatsApp ativo neste numero.",
+        });
+      } catch (checkError) {
+        if (checkError instanceof Error && checkError.name === "AbortError") {
+          return;
+        }
+
+        setRemoteWhatsappCheck({
+          state: "error",
+          phoneNormalized: currentPhoneForVerification,
+          message: checkError instanceof Error ? checkError.message : "Nao foi possivel validar o WhatsApp.",
+        });
+      }
+    }, 650);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, [
+    currentPhoneForVerification,
+    dismissed,
+    status,
+    status?.isComplete,
+    status?.phoneNormalized,
+    status?.phoneVerified,
+    status?.phoneWhatsappExists,
+    step,
+  ]);
 
   if (!status || status.isComplete || dismissed) {
     return null;
@@ -1024,6 +1158,10 @@ function AccountCompletionModal({
 
       if (!phoneForVerification) {
         throw new Error("Informe um WhatsApp valido com DDD. Ex.: (47) 99999-9999.");
+      }
+
+      if (whatsappCheck.state !== "valid" || whatsappCheck.phoneNormalized !== phoneForVerification) {
+        throw new Error("Valide um WhatsApp ativo antes de enviar o codigo.");
       }
 
       if (password.trim()) {
@@ -1165,11 +1303,15 @@ function AccountCompletionModal({
               inputMode="tel"
               label="WhatsApp"
               maxLength={19}
-              onChange={(value) => setPhone(formatBrazilPhoneInput(value))}
+              onChange={(value) => {
+                setPhone(formatBrazilPhoneInput(value));
+                setMessage(null);
+              }}
               placeholder="(47) 99999-9999"
               type="tel"
               value={phone}
             />
+            <AccountCompletionWhatsappCheck check={whatsappCheck} />
             <AccountCompletionInput
               inputMode="numeric"
               label="CPF"
@@ -1188,11 +1330,11 @@ function AccountCompletionModal({
             <AccountCompletionFeedback error={error} message={message} />
             <button
               className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-rose-400 px-4 font-mono text-[11px] font-black uppercase tracking-wide text-slate-950 transition hover:bg-rose-300 disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={working}
+              disabled={working || !whatsappValidated}
               type="submit"
             >
               {working ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
-              Salvar e enviar codigo
+              {whatsappCheck.state === "checking" ? "Verificando WhatsApp" : whatsappValidated ? "Salvar e enviar codigo" : "Aguardando WhatsApp valido"}
             </button>
           </form>
         ) : (
@@ -1226,6 +1368,27 @@ function AccountCompletionModal({
           </form>
         )}
       </div>
+    </div>
+  );
+}
+
+function AccountCompletionWhatsappCheck({ check }: { check: WhatsappCheckState }) {
+  const isValid = check.state === "valid";
+  const isChecking = check.state === "checking";
+  const isNeutral = check.state === "idle" || check.state === "incomplete";
+  const Icon = isValid ? CheckCircle2 : isChecking ? Loader2 : AlertTriangle;
+
+  return (
+    <div className={cn(
+      "flex items-start gap-2 rounded-xl border px-3 py-2 text-xs leading-5",
+      isValid
+        ? "border-emerald-300/25 bg-emerald-300/10 text-emerald-100"
+        : isNeutral
+          ? "border-cyan-300/20 bg-cyan-300/8 text-cyan-100"
+          : "border-rose-300/30 bg-rose-300/10 text-rose-100",
+    )}>
+      <Icon className={cn("mt-0.5 h-4 w-4 shrink-0", isChecking && "animate-spin")} />
+      <span>{check.message}</span>
     </div>
   );
 }
@@ -1277,6 +1440,13 @@ function AccountCompletionInput({
       />
     </label>
   );
+}
+
+function getBrazilPhoneLocalDigitCount(value: string) {
+  const digits = value.replace(/\D/g, "");
+  const local = digits.startsWith("55") ? digits.slice(2) : digits;
+
+  return local.length;
 }
 
 function AccountCompletionFeedback({ error, message }: { error: string | null; message: string | null }) {
