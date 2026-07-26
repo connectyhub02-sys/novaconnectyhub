@@ -5,16 +5,24 @@ import { useRouter } from "next/navigation";
 import {
   Activity,
   Bot,
+  ChevronDown,
+  ChevronRight,
+  Filter,
   MessageCircle,
+  MessageSquareText,
   PauseCircle,
   PlayCircle,
   Plus,
   Save,
   Send,
   Sparkles,
+  Target,
+  Users,
   Zap,
+  type LucideIcon,
 } from "lucide-react";
 import type {
+  PlatformAutomationAgentOption,
   PlatformAutomationAudience,
   PlatformAutomationFlow,
   PlatformAutomationStatus,
@@ -209,14 +217,7 @@ export function PlatformAutomationsCenter({
                 </div>
                 <p className="mt-2 line-clamp-2 text-[11px] leading-4 text-slate-400">{flow.description}</p>
                 <div className="mt-3 flex flex-wrap gap-1.5">
-                  {flow.labels.slice(0, 4).map((label) => (
-                    <span
-                      key={label}
-                      className="rounded-full border border-slate-700 px-2 py-1 font-mono text-[8px] uppercase tracking-widest text-slate-400"
-                    >
-                      {label}
-                    </span>
-                  ))}
+                  <MiniFlowChain flow={flow} />
                 </div>
               </button>
             ))}
@@ -255,6 +256,12 @@ export function PlatformAutomationsCenter({
                   {state.message}
                 </div>
               )}
+
+              <FlowJourneyCanvas
+                draft={draft}
+                selectedEvent={selectedEvent}
+                selectedAgent={selectedAgent}
+              />
 
               <div className="grid gap-3 lg:grid-cols-[1.2fr_0.8fr]">
                 <Field label="Nome">
@@ -562,6 +569,226 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
+function FlowJourneyCanvas({
+  draft,
+  selectedEvent,
+  selectedAgent,
+}: {
+  draft: AutomationDraft;
+  selectedEvent: PlatformAutomationsCatalog["eventDefinitions"][number] | undefined;
+  selectedAgent: PlatformAutomationAgentOption | null;
+}) {
+  const conditionsSummary = buildConditionsSummary(draft);
+  const waitSummary = buildWaitSummary(draft);
+  const messagePreview = previewText(draft.messageTemplate, 92) || "Mensagem WhatsApp personalizada";
+  const agentName = selectedAgent?.name ?? (draft.selectedAgentId ? "Agente desconectado" : "Agente global");
+  const agentDetail = selectedAgent?.isConnected
+    ? "WhatsApp conectado"
+    : draft.selectedAgentId
+      ? "Troque por um agente conectado"
+      : "Usa fallback do financeiro";
+
+  const steps: FlowStep[] = [
+    {
+      key: "trigger",
+      eyebrow: "gatilho",
+      title: selectedEvent?.label ?? "Evento do sistema",
+      detail: selectedEvent?.description ?? "Quando este evento acontecer, o fluxo inicia.",
+      icon: Zap,
+      tone: "cyan",
+    },
+    {
+      key: "audience",
+      eyebrow: "publico",
+      title: audienceLabels[draft.audienceType],
+      detail: conditionsSummary,
+      icon: Users,
+      tone: "violet",
+    },
+    {
+      key: "rules",
+      eyebrow: "regras",
+      title: waitSummary.title,
+      detail: waitSummary.detail,
+      icon: Filter,
+      tone: "amber",
+    },
+    {
+      key: "message",
+      eyebrow: "acao",
+      title: "Enviar WhatsApp",
+      detail: messagePreview,
+      icon: MessageSquareText,
+      tone: "green",
+    },
+    {
+      key: "agent",
+      eyebrow: "remetente",
+      title: agentName,
+      detail: agentDetail,
+      icon: Bot,
+      tone: selectedAgent?.isConnected || !draft.selectedAgentId ? "cyan" : "rose",
+    },
+    {
+      key: "goal",
+      eyebrow: "objetivo",
+      title: selectedEvent?.category ? categoryLabels[selectedEvent.category] : "Receita",
+      detail: selectedEvent?.revenueGoal ?? "Converter, recuperar ou manter o cliente ativo.",
+      icon: Target,
+      tone: "green",
+    },
+  ];
+
+  return (
+    <div
+      className="rounded-2xl border p-3"
+      style={{
+        borderColor: "rgba(34,211,238,0.24)",
+        background: "linear-gradient(180deg, rgba(34,211,238,0.08), rgba(15,23,42,0.28))",
+      }}
+    >
+      <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-cyan-300">jornada visual</p>
+          <p className="mt-1 text-[13px] font-semibold text-slate-100">Como este fluxo se conecta</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <NeonBadge tone={draft.status === "active" ? "green" : draft.status === "paused" ? "amber" : "zinc"}>
+            {draft.status === "active" ? "Ativa" : draft.status === "paused" ? "Pausada" : "Rascunho"}
+          </NeonBadge>
+          <NeonBadge tone="violet">{draft.maxSendsPerContact || "1"} envios max.</NeonBadge>
+        </div>
+      </div>
+
+      <div className="grid gap-2 xl:grid-cols-[minmax(0,1fr)_26px_minmax(0,1fr)_26px_minmax(0,1fr)_26px_minmax(0,1fr)_26px_minmax(0,1fr)_26px_minmax(0,1fr)]">
+        {steps.map((step, index) => (
+          <FragmentWithConnector key={step.key} showConnector={index < steps.length - 1}>
+            <FlowStepCard step={step} index={index + 1} />
+          </FragmentWithConnector>
+        ))}
+      </div>
+
+      <div className="mt-3 rounded-xl border border-slate-700/70 bg-slate-950/35 p-3">
+        <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0">
+            <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">logica do fluxo</p>
+            <p className="mt-1 text-[12px] leading-5 text-slate-300">
+              Se o evento acontecer e as regras baterem, o agente envia a mensagem. Se as regras nao baterem, o envio para antes de gastar atendimento.
+            </p>
+          </div>
+          <div className="grid shrink-0 grid-cols-3 gap-2 text-center">
+            <SmallInfo label="Atraso" value={`${parseInteger(draft.delayMinutes, 0)}m`} tone="cyan" />
+            <SmallInfo label="Cooldown" value={`${parseInteger(draft.cooldownMinutes, 0)}m`} tone="green" />
+            <SmallInfo label="Prioridade" value={draft.priority || "100" } tone="cyan" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+type FlowStep = {
+  key: string;
+  eyebrow: string;
+  title: string;
+  detail: string;
+  icon: LucideIcon;
+  tone: "cyan" | "green" | "amber" | "violet" | "rose";
+};
+
+function FragmentWithConnector({
+  children,
+  showConnector,
+}: {
+  children: ReactNode;
+  showConnector: boolean;
+}) {
+  return (
+    <>
+      {children}
+      {showConnector && <FlowConnector />}
+    </>
+  );
+}
+
+function FlowStepCard({ step, index }: { step: FlowStep; index: number }) {
+  const palette = metricPalette[step.tone];
+  const Icon = step.icon;
+
+  return (
+    <div
+      className="min-h-[138px] rounded-xl border p-3"
+      style={{
+        borderColor: `${palette.fill}55`,
+        background: `linear-gradient(180deg, ${palette.fill}14, rgba(2,6,23,0.42))`,
+      }}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl" style={{ background: `${palette.fill}18` }}>
+          <Icon className="h-4 w-4" style={{ color: palette.fill }} />
+        </div>
+        <span
+          className="rounded-full border px-2 py-1 font-mono text-[8px] font-bold uppercase tracking-widest"
+          style={{ borderColor: `${palette.fill}45`, color: palette.fill, background: `${palette.fill}10` }}
+        >
+          {String(index).padStart(2, "0")}
+        </span>
+      </div>
+      <p className="mt-3 font-mono text-[8px] uppercase tracking-[0.18em] text-slate-500">{step.eyebrow}</p>
+      <p className="mt-1 line-clamp-2 text-[13px] font-semibold leading-4 text-slate-100">{step.title}</p>
+      <p className="mt-2 line-clamp-3 text-[11px] leading-4 text-slate-400">{step.detail}</p>
+    </div>
+  );
+}
+
+function FlowConnector() {
+  return (
+    <div className="relative flex h-7 items-center justify-center xl:h-auto">
+      <div className="h-px w-full bg-cyan-400/35 xl:block" />
+      <div className="absolute grid h-6 w-6 place-items-center rounded-full border border-cyan-400/35 bg-slate-950 text-cyan-200 shadow-[0_0_18px_rgba(34,211,238,0.18)]">
+        <ChevronDown className="h-3.5 w-3.5 xl:hidden" />
+        <ChevronRight className="hidden h-3.5 w-3.5 xl:block" />
+      </div>
+    </div>
+  );
+}
+
+function MiniFlowChain({ flow }: { flow: PlatformAutomationFlow }) {
+  const labels = [
+    shortEventLabel(flow.eventLabel),
+    flow.delayMinutes > 0 ? `${flow.delayMinutes}m` : "agora",
+    flow.selectedAgentId ? "agente" : "global",
+    "whatsapp",
+  ];
+
+  return (
+    <div className="flex w-full min-w-0 items-center gap-1 overflow-hidden">
+      {labels.map((label, index) => (
+        <FragmentWithMiniConnector key={`${label}-${index}`} showConnector={index < labels.length - 1}>
+          <span className="max-w-[92px] truncate rounded-full border border-slate-700 bg-slate-950/45 px-2 py-1 font-mono text-[8px] uppercase tracking-widest text-slate-400">
+            {label}
+          </span>
+        </FragmentWithMiniConnector>
+      ))}
+    </div>
+  );
+}
+
+function FragmentWithMiniConnector({
+  children,
+  showConnector,
+}: {
+  children: ReactNode;
+  showConnector: boolean;
+}) {
+  return (
+    <>
+      {children}
+      {showConnector && <span className="h-px min-w-3 flex-1 bg-cyan-400/25" />}
+    </>
+  );
+}
+
 function AutomationMetric({
   icon: Icon,
   label,
@@ -655,6 +882,88 @@ const metricPalette = {
   violet: { fill: "#a78bfa" },
   rose: { fill: "#fb7185" },
 };
+
+const audienceLabels: Record<PlatformAutomationAudience, string> = {
+  all_clients: "Todos os clientes",
+  trial_users: "Teste gratis",
+  paid_users: "Clientes pagos",
+  custom: "Publico personalizado",
+};
+
+const categoryLabels: Record<PlatformAutomationsCatalog["eventDefinitions"][number]["category"], string> = {
+  trial: "Converter teste",
+  billing: "Receber pagamento",
+  retention: "Reter cliente",
+  internal: "Operacao interna",
+};
+
+function buildConditionsSummary(draft: AutomationDraft) {
+  const items = [
+    draft.planCodesText ? `planos ${draft.planCodesText}` : "",
+    draft.minBalanceCredits ? `saldo acima de ${draft.minBalanceCredits}` : "",
+    draft.maxBalanceCredits ? `saldo ate ${draft.maxBalanceCredits}` : "",
+    draft.minUsedCredits ? `usou ao menos ${draft.minUsedCredits}` : "",
+    draft.maxUsedCredits ? `usou ate ${draft.maxUsedCredits}` : "",
+    draft.milestoneStepCredits ? `a cada ${draft.milestoneStepCredits} creditos` : "",
+  ].filter(Boolean);
+
+  return items.length > 0
+    ? items.join(" / ")
+    : "Entra quando o evento acontecer para o publico escolhido.";
+}
+
+function buildWaitSummary(draft: AutomationDraft) {
+  const delay = parseInteger(draft.delayMinutes, 0);
+  const cooldown = parseInteger(draft.cooldownMinutes, 0);
+  const hasDelay = delay > 0;
+  const hasCooldown = cooldown > 0;
+
+  if (hasDelay && hasCooldown) {
+    return {
+      title: `Esperar ${delay} min.`,
+      detail: `Depois respeita ${cooldown} min. antes de repetir para o mesmo cliente.`,
+    };
+  }
+
+  if (hasDelay) {
+    return {
+      title: `Esperar ${delay} min.`,
+      detail: "Depois do atraso, valida as condicoes e segue para a mensagem.",
+    };
+  }
+
+  if (hasCooldown) {
+    return {
+      title: "Enviar no momento",
+      detail: `Nao repete para o mesmo cliente antes de ${cooldown} min.`,
+    };
+  }
+
+  return {
+    title: "Enviar no momento",
+    detail: "Sem espera configurada. Valida as regras e dispara a mensagem.",
+  };
+}
+
+function previewText(value: string, maxLength: number) {
+  const normalized = value.replace(/\s+/g, " ").trim();
+
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, maxLength - 3)}...`;
+}
+
+function shortEventLabel(value: string) {
+  const words = value
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(" ")
+    .filter(Boolean);
+
+  return words.slice(0, 2).join(" ") || "evento";
+}
 
 function draftFromFlow(flow: PlatformAutomationFlow): AutomationDraft {
   return {
