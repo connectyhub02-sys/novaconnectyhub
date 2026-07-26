@@ -19,7 +19,7 @@ import {
 } from "@/lib/billing/platform-billing-messages";
 import { findPlatformAutomationForNotification } from "@/lib/automations/platform-automations";
 import { grantCredits } from "@/lib/billing/cost-center";
-import { getMercadoPagoPayment, loadMercadoPagoPlatformBillingConfig } from "@/lib/sales-catalog/mercado-pago";
+import { getAppBaseUrl, getMercadoPagoPayment, loadMercadoPagoPlatformBillingConfig } from "@/lib/sales-catalog/mercado-pago";
 import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
 import { loadUazapiCredentials, type UazapiCredentials } from "@/lib/whatsapp/uazapi-credentials";
 
@@ -224,6 +224,12 @@ const rejectedPaymentStatuses = new Set(["rejected", "cancelled", "canceled", "c
 const knownBillingMessageTemplateKeys: ReadonlySet<string> = new Set(
   PLATFORM_BILLING_MESSAGE_TEMPLATE_DEFINITIONS.map((definition) => definition.eventType),
 );
+const checkoutButtonEventTypes = new Set([
+  "subscription_pending",
+  "subscription_replaced",
+  "checkout_cart_updated",
+  "checkout_payment_started",
+]);
 
 export async function processPlatformBillingMercadoPagoWebhook(
   client: SupabaseClient,
@@ -1308,9 +1314,10 @@ async function sendBillingNotificationNow(
   const nextAttempts = Math.max(0, input.attempts ?? 0) + 1;
 
   try {
-    const [credentials, instance] = await Promise.all([
+    const [credentials, instance, currentEvent] = await Promise.all([
       loadUazapiCredentials(client),
       loadBillingAgentWhatsappInstance(client, input.agentId),
+      loadBillingNotificationDeliveryContext(client, input.eventId),
     ]);
 
     if (!instance?.instance_token_encrypted || instance.status !== "connected") {
@@ -1318,22 +1325,18 @@ async function sendBillingNotificationNow(
     }
 
     const token = decryptCredentialValue(instance.instance_token_encrypted);
-    const providerResponse = await callUazapi(credentials, "/send/text", {
-      method: "POST",
-      token,
-      body: {
-        number: input.phone,
-        text: input.message,
-        linkPreview: false,
-        track_source: "connectyhub",
-        track_id: `billing_notice_${input.eventId}_${Date.now()}`,
-      },
+    const button = buildCheckoutActionButton({
+      eventType: currentEvent?.event_type ?? null,
+      metadata: currentEvent?.metadata ?? null,
     });
-    const { data: currentEvent } = await client
-      .from("billing_notification_events")
-      .select("metadata")
-      .eq("id", input.eventId)
-      .maybeSingle<{ metadata: JsonRecord | null }>();
+    const sendResult = await sendBillingWhatsappNotice({
+      credentials,
+      token,
+      phone: input.phone,
+      message: input.message,
+      button,
+      trackId: `billing_notice_${input.eventId}_${Date.now()}`,
+    });
 
     await Promise.all([
       client
@@ -1342,10 +1345,17 @@ async function sendBillingNotificationNow(
           status: "sent",
           attempts: nextAttempts,
           sent_at: new Date().toISOString(),
-          provider_message_id: readProviderMessageId(providerResponse.data),
+          provider_message_id: readProviderMessageId(sendResult.providerResponse.data),
           metadata: {
             ...(currentEvent?.metadata ?? {}),
-            provider_response: sanitizeProviderData(providerResponse.data),
+            delivery_mode: sendResult.deliveryMode,
+            sent_message_body: sendResult.message,
+            checkout_button: sendResult.button,
+            fallback_error: sendResult.fallbackError,
+            provider_response: sanitizeProviderData({
+              mode: sendResult.deliveryMode,
+              response: sendResult.providerResponse.data,
+            }),
           },
         })
         .eq("id", input.eventId),
@@ -1364,6 +1374,177 @@ async function sendBillingNotificationNow(
       })
       .eq("id", input.eventId);
   }
+}
+
+type BillingCheckoutActionButton = {
+  label: string;
+  url: string;
+};
+
+type BillingWhatsappNoticeResult = {
+  providerResponse: Awaited<ReturnType<typeof callUazapi>>;
+  deliveryMode: "button" | "text" | "text_fallback";
+  message: string;
+  button: BillingCheckoutActionButton | null;
+  fallbackError: string | null;
+};
+
+async function loadBillingNotificationDeliveryContext(client: SupabaseClient, eventId: string) {
+  const { data, error } = await client
+    .from("billing_notification_events")
+    .select("event_type, subscription_id, metadata")
+    .eq("id", eventId)
+    .maybeSingle<{
+      event_type: string | null;
+      subscription_id: string | null;
+      metadata: JsonRecord | null;
+    }>();
+
+  if (error) {
+    throw new Error(`Nao foi possivel carregar contexto da notificacao: ${error.message}`);
+  }
+
+  return data ?? null;
+}
+
+async function sendBillingWhatsappNotice(input: {
+  credentials: UazapiCredentials;
+  token: string;
+  phone: string;
+  message: string;
+  button: BillingCheckoutActionButton | null;
+  trackId: string;
+}): Promise<BillingWhatsappNoticeResult> {
+  if (input.button) {
+    const buttonMessage = buildCheckoutButtonMessage(input.message, input.button.url);
+
+    try {
+      const providerResponse = await callUazapi(input.credentials, "/send/menu", {
+        method: "POST",
+        token: input.token,
+        body: {
+          number: input.phone,
+          type: "button",
+          text: buttonMessage,
+          choices: [`${input.button.label}|${input.button.url}`],
+          footerText: "ConnectyHub",
+          readchat: true,
+          readmessages: true,
+          track_source: "connectyhub",
+          track_id: input.trackId,
+        },
+      });
+
+      return {
+        providerResponse,
+        deliveryMode: "button",
+        message: buttonMessage,
+        button: input.button,
+        fallbackError: null,
+      };
+    } catch (error) {
+      const fallbackError = error instanceof Error ? error.message : "Falha ao enviar botao WhatsApp.";
+      const providerResponse = await callUazapi(input.credentials, "/send/text", {
+        method: "POST",
+        token: input.token,
+        body: {
+          number: input.phone,
+          text: input.message,
+          linkPreview: false,
+          track_source: "connectyhub",
+          track_id: `${input.trackId}_fallback`,
+        },
+      });
+
+      return {
+        providerResponse,
+        deliveryMode: "text_fallback",
+        message: input.message,
+        button: input.button,
+        fallbackError,
+      };
+    }
+  }
+
+  const providerResponse = await callUazapi(input.credentials, "/send/text", {
+    method: "POST",
+    token: input.token,
+    body: {
+      number: input.phone,
+      text: input.message,
+      linkPreview: false,
+      track_source: "connectyhub",
+      track_id: input.trackId,
+    },
+  });
+
+  return {
+    providerResponse,
+    deliveryMode: "text",
+    message: input.message,
+    button: null,
+    fallbackError: null,
+  };
+}
+
+function buildCheckoutActionButton(input: {
+  eventType: string | null;
+  metadata: JsonRecord | null;
+}): BillingCheckoutActionButton | null {
+  if (!input.eventType || !checkoutButtonEventTypes.has(input.eventType)) {
+    return null;
+  }
+
+  const url = resolveCheckoutActionUrl(input.metadata);
+
+  if (!url) {
+    return null;
+  }
+
+  return {
+    label: "Finalizar pagamento",
+    url,
+  };
+}
+
+function resolveCheckoutActionUrl(metadata: JsonRecord | null | undefined) {
+  const rawUrl = readString(metadata?.checkout_public_url) ?? readString(metadata?.checkout_url);
+
+  if (!rawUrl) {
+    return null;
+  }
+
+  if (/^https?:\/\//i.test(rawUrl)) {
+    return rawUrl;
+  }
+
+  if (rawUrl.startsWith("/")) {
+    return `${getAppBaseUrl()}${rawUrl}`;
+  }
+
+  return null;
+}
+
+function buildCheckoutButtonMessage(message: string, checkoutUrl: string) {
+  const escapedUrl = escapeRegExp(checkoutUrl);
+  const withoutUrl = message
+    .replace(new RegExp(escapedUrl, "g"), "")
+    .replace(/https?:\/\/\S+/gi, "")
+    .replace(/\s+([,.!?;:])/g, "$1")
+    .replace(/\b(?:Finalize|Conclua|Acesse|Abra)\s+(?:por aqui|no painel|pelo painel)?\s*:?\s*\.?/gi, "Toque no botao abaixo para continuar.")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+  if (!withoutUrl) {
+    return "Tudo certo. Toque no botao abaixo para continuar.";
+  }
+
+  if (/\bbotao abaixo\b/i.test(withoutUrl) || /\bcheckout\b/i.test(withoutUrl)) {
+    return withoutUrl;
+  }
+
+  return `${withoutUrl}\n\nToque no botao abaixo para continuar.`;
 }
 
 async function loadBillingNotificationEvent(client: SupabaseClient, eventId: string) {
@@ -1710,6 +1891,10 @@ function formatDate(value: Date) {
 
 function preview(value: string, max: number) {
   return value.length > max ? `${value.slice(0, max - 3)}...` : value;
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 async function readResponse(response: Response) {
