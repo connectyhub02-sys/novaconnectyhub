@@ -321,7 +321,7 @@ export function AccountConsole() {
         refreshing={refreshing}
       />
 
-      <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-12">
+      <div className="grid grid-cols-1 items-stretch gap-4 xl:grid-cols-12">
         <AccountDetailsCard
           key={[
             account.profile.phoneNormalized ?? "",
@@ -629,8 +629,8 @@ function AccountDetailsCard({
   }
 
   return (
-    <Surface className="xl:col-span-5">
-      <div className="flex flex-col gap-5">
+    <Surface className="flex xl:col-span-5">
+      <div className="flex min-h-full flex-1 flex-col gap-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h2 className="text-base font-semibold text-white">Dados da conta</h2>
           <div className="flex flex-wrap gap-2">
@@ -800,8 +800,8 @@ function PlanUsageCard({ account, pendingCheckoutHref }: { account: AccountData;
   const primaryTone: ActionTone = pendingCheckoutHref ? "warning" : "primary";
 
   return (
-    <Surface className="xl:col-span-4">
-      <div className="flex h-full flex-col gap-4">
+    <Surface className="flex xl:col-span-4">
+      <div className="flex min-h-full flex-1 flex-col gap-4">
         <div className="flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2">
             <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-cyan-300/10 text-cyan-200">
@@ -955,8 +955,8 @@ function SecurityAccessCard({ email, onReload }: { email: string | null; onReloa
   }
 
   return (
-    <Surface className="xl:col-span-3">
-      <div className="flex h-full flex-col gap-5">
+    <Surface className="flex xl:col-span-3">
+      <div className="flex min-h-full flex-1 flex-col gap-5">
         <div className="flex min-w-0 items-center gap-2">
           <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-cyan-300/10 text-cyan-200">
             <ShieldCheck className="h-4 w-4" />
