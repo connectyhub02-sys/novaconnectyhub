@@ -6,6 +6,7 @@ import { grantTrialCredits, scheduleTrialConversionMessages, TRIAL_PLAN_CODE } f
 import { sendTrialStartedNotification } from "@/lib/billing/trial-notifications";
 import { decryptCredentialValue, encryptCredentialValue, hashCredentialValue } from "@/lib/security/credentials-crypto";
 import { createServiceClient } from "@/lib/supabase/service";
+import { readWhatsappInstanceProfileImageUrl } from "@/lib/whatsapp/instance-profile-image";
 import { loadUazapiCredentials, type UazapiCredentials } from "@/lib/whatsapp/uazapi-credentials";
 
 type JsonRecord = Record<string, unknown>;
@@ -61,6 +62,12 @@ type SignupWhatsappTransport = {
   credentials: UazapiCredentials;
   instance: WhatsappInstanceRow;
   token: string;
+};
+
+type WhatsappAvatarLookupResult = {
+  profileImageUrl: string;
+  source: string;
+  providerData: unknown;
 };
 
 export type AccountCompletionStatus = {
@@ -338,6 +345,7 @@ export async function sendPhoneVerificationCode(input: {
       .update({
         phone: displayPhone,
         phone_normalized: phoneNormalized,
+        phone_verified_at: null,
         phone_whatsapp_exists: true,
         phone_whatsapp_checked_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
@@ -464,6 +472,11 @@ export async function verifyPhoneCompletionCode(input: {
       })
       .eq("id", input.userId),
   ]);
+
+  await syncVerifiedPhoneWhatsappAvatar(client, {
+    userId: input.userId,
+    phoneNormalized: verification.phone_normalized,
+  }).catch(() => null);
 
   await markSignupCompleteIfReady(client, {
     userId: input.userId,
@@ -743,6 +756,112 @@ async function checkSignupWhatsappNumber(
   };
 }
 
+async function syncVerifiedPhoneWhatsappAvatar(
+  client: SupabaseClient,
+  input: {
+    userId: string;
+    phoneNormalized: string;
+  },
+) {
+  const transport = await loadSignupWhatsappTransport(client);
+  const lookup = await lookupSignupWhatsappAvatar(transport, input.phoneNormalized);
+  const syncedAt = new Date().toISOString();
+  const currentUser = await client.auth.admin.getUserById(input.userId);
+
+  if (currentUser.error || !currentUser.data.user) {
+    return null;
+  }
+
+  const currentMetadata = readRecord(currentUser.data.user.user_metadata) ?? {};
+  const avatarUrl = normalizeProfileAvatarUrl(lookup?.profileImageUrl);
+  const nextMetadata: JsonRecord = {
+    ...currentMetadata,
+    whatsapp_avatar_status: avatarUrl ? "synced" : "not_found",
+    whatsapp_avatar_last_attempt_at: syncedAt,
+    ...(avatarUrl
+      ? {
+          avatar_url: avatarUrl,
+          avatar_source: "whatsapp_profile",
+          whatsapp_avatar_url: avatarUrl,
+          whatsapp_avatar_source: lookup?.source ?? "uazapi",
+          whatsapp_avatar_synced_at: syncedAt,
+        }
+      : {}),
+  };
+
+  const updateResult = await client.auth.admin.updateUserById(input.userId, {
+    user_metadata: nextMetadata,
+  });
+
+  if (updateResult.error) {
+    return null;
+  }
+
+  if (avatarUrl) {
+    await client.from("maintenance_audit_logs").insert({
+      actor_id: input.userId,
+      event_type: "profile.whatsapp_avatar_synced",
+      target_table: "profiles",
+      target_id: input.userId,
+      metadata: {
+        source: lookup?.source ?? null,
+        phonePreview: formatPhonePreview(input.phoneNormalized),
+      },
+    }).then(undefined, () => null);
+  }
+
+  return avatarUrl;
+}
+
+async function lookupSignupWhatsappAvatar(
+  transport: SignupWhatsappTransport,
+  phoneNormalized: string,
+): Promise<WhatsappAvatarLookupResult | null> {
+  const attempts = [
+    {
+      source: "chat_details",
+      path: "/chat/details",
+      body: {
+        number: phoneNormalized,
+        preview: true,
+      },
+    },
+    {
+      source: "contact_avatar",
+      path: "/contact/avatar",
+      body: {
+        number: phoneNormalized,
+      },
+    },
+  ];
+
+  for (const attempt of attempts) {
+    let response: Awaited<ReturnType<typeof callUazapi>>;
+
+    try {
+      response = await callUazapi(transport.credentials, attempt.path, {
+        method: "POST",
+        token: transport.token,
+        body: attempt.body,
+      });
+    } catch {
+      continue;
+    }
+
+    const profileImageUrl = readWhatsappInstanceProfileImageUrl(response.data);
+
+    if (profileImageUrl) {
+      return {
+        profileImageUrl,
+        source: attempt.source,
+        providerData: sanitizeProviderData(response.data),
+      };
+    }
+  }
+
+  return null;
+}
+
 async function loadBillingSettings(client: SupabaseClient) {
   const { data, error } = await client
     .from("platform_billing_settings")
@@ -1001,6 +1120,24 @@ function isProviderMissingWhatsappError(error: UazapiSignupRequestError) {
   const exists = readWhatsappExistsFromText(providerMessage);
 
   return exists === false;
+}
+
+function normalizeProfileAvatarUrl(value: string | null | undefined) {
+  const url = value?.trim();
+
+  if (!url || url.length > 2048 || !/^https?:\/\//i.test(url)) {
+    return null;
+  }
+
+  return url;
+}
+
+function formatPhonePreview(phoneNormalized: string) {
+  return `${phoneNormalized.slice(0, 4)}****${phoneNormalized.slice(-4)}`;
+}
+
+function readRecord(value: unknown): JsonRecord | null {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value) ? value as JsonRecord : null;
 }
 
 function sanitizeProviderData(value: unknown) {

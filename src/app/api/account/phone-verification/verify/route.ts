@@ -35,7 +35,9 @@ export async function POST(request: NextRequest) {
       await ensureTrialForCompletedSignup({ userId: workspace.user.id, client }).catch(() => null);
     }
 
-    return NextResponse.json({ accountCompletion });
+    const avatarUrl = await loadAuthAvatarUrl(client, workspace.user.id);
+
+    return NextResponse.json({ accountCompletion, avatarUrl });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Nao foi possivel validar o codigo." },
@@ -50,4 +52,17 @@ function readRecord(value: unknown): JsonRecord {
 
 function readString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+async function loadAuthAvatarUrl(client: ReturnType<typeof createServiceClient>, userId: string) {
+  const { data, error } = await client.auth.admin.getUserById(userId);
+
+  if (error || !data.user) {
+    return null;
+  }
+
+  const metadata = readRecord(data.user.user_metadata);
+  const value = readString(metadata.avatar_url) ?? readString(metadata.picture);
+
+  return value && /^https?:\/\//i.test(value) ? value : null;
 }

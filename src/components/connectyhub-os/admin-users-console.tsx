@@ -1,8 +1,10 @@
 "use client";
 
 import { type FormEvent, type ReactNode, useEffect, useState } from "react";
+import Image from "next/image";
 import {
   Ban,
+  Camera,
   CheckCircle2,
   Coins,
   ExternalLink,
@@ -26,7 +28,14 @@ type PlatformUser = {
   id: string;
   email: string | null;
   fullName: string | null;
+  phone: string | null;
+  phoneNormalized: string | null;
+  phoneWhatsappExists: boolean | null;
   companyName: string | null;
+  avatarUrl: string | null;
+  avatarSource: string | null;
+  avatarSyncedAt: string | null;
+  avatarSyncStatus: string | null;
   isPlatformAdmin: boolean;
   organizationId: string | null;
   orgName: string | null;
@@ -117,6 +126,7 @@ export function AdminUsersConsole() {
   const [notice, setNotice] = useState<Notice | null>(null);
   const [actionUserId, setActionUserId] = useState<string | null>(null);
   const [linkUserId, setLinkUserId] = useState<string | null>(null);
+  const [avatarUserId, setAvatarUserId] = useState<string | null>(null);
   const [copiedUserId, setCopiedUserId] = useState<string | null>(null);
   const [controlUser, setControlUser] = useState<PlatformUser | null>(null);
   const [controlDraft, setControlDraft] = useState<ControlDraft | null>(null);
@@ -246,6 +256,44 @@ export function AdminUsersConsole() {
     }
   }
 
+  async function handleSyncWhatsappAvatar(userId: string) {
+    setAvatarUserId(userId);
+    setNotice(null);
+
+    try {
+      const response = await fetch("/api/admin/users/avatar-from-whatsapp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId }),
+      });
+      const data = (await response.json().catch(() => null)) as { user?: Partial<PlatformUser> & { message?: string }; message?: string; error?: string } | null;
+
+      if (!response.ok || !data?.user) {
+        throw new Error(data?.error ?? "Nao foi possivel buscar a foto do WhatsApp.");
+      }
+
+      const syncedUser = data.user;
+
+      setUsers((current) => current.map((user) => (
+        user.id === userId
+          ? {
+              ...user,
+              ...syncedUser,
+              avatarUrl: syncedUser.avatarUrl ?? user.avatarUrl,
+            }
+          : user
+      )));
+      setNotice({
+        tone: syncedUser.avatarUrl ? "success" : "warning",
+        message: data.message ?? (syncedUser.avatarUrl ? "Foto sincronizada." : "Foto publica nao encontrada."),
+      });
+    } catch (error) {
+      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao buscar foto do WhatsApp." });
+    } finally {
+      setAvatarUserId(null);
+    }
+  }
+
   function openCustomerControl(user: PlatformUser) {
     const defaultPlan = user.planCode && plans.some((plan) => plan.planCode === user.planCode)
       ? user.planCode
@@ -329,6 +377,8 @@ export function AdminUsersConsole() {
         const q = search.toLowerCase();
         return (
           u.email?.toLowerCase().includes(q) ||
+          u.phone?.toLowerCase().includes(q) ||
+          u.phoneNormalized?.toLowerCase().includes(q) ||
           u.fullName?.toLowerCase().includes(q) ||
           u.orgName?.toLowerCase().includes(q) ||
           u.companyName?.toLowerCase().includes(q)
@@ -390,9 +440,11 @@ export function AdminUsersConsole() {
                 user={user}
                 isAccessingPanel={actionUserId === user.id}
                 isSendingLink={linkUserId === user.id}
+                isSyncingAvatar={avatarUserId === user.id}
                 isCopied={copiedUserId === user.id}
                 onAccessPanel={() => handleAccessPanel(user.id)}
                 onSendLink={() => handleSendLink(user.id)}
+                onSyncWhatsappAvatar={() => handleSyncWhatsappAvatar(user.id)}
                 onOpenControl={() => openCustomerControl(user)}
               />
             ))}
@@ -716,21 +768,27 @@ function UserRow({
   user,
   isAccessingPanel,
   isSendingLink,
+  isSyncingAvatar,
   isCopied,
   onAccessPanel,
   onSendLink,
+  onSyncWhatsappAvatar,
   onOpenControl,
 }: {
   user: PlatformUser;
   isAccessingPanel: boolean;
   isSendingLink: boolean;
+  isSyncingAvatar: boolean;
   isCopied: boolean;
   onAccessPanel: () => void;
   onSendLink: () => void;
+  onSyncWhatsappAvatar: () => void;
   onOpenControl: () => void;
 }) {
   const displayName = user.fullName || user.companyName || user.email?.split("@")[0] || "—";
   const statusColor = STATUS_COLORS[user.orgStatus ?? ""] ?? STATUS_COLORS["inactive"];
+  const canSyncAvatar = Boolean(user.phoneNormalized || user.phone);
+  const hasWhatsappAvatar = user.avatarSource === "whatsapp_profile";
   const initials = displayName
     .split(" ")
     .slice(0, 2)
@@ -743,10 +801,7 @@ function UserRow({
       className="flex min-h-[68px] items-center gap-3 rounded-xl border px-4"
       style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}
     >
-      <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-[13px] font-bold"
-        style={{ background: user.isPlatformAdmin ? "rgba(34,211,238,0.12)" : "rgba(100,116,139,0.12)", color: user.isPlatformAdmin ? "rgb(103,232,249)" : "rgb(148,163,184)" }}>
-        {initials || <User className="h-4 w-4" />}
-      </div>
+      <UserAvatar user={user} displayName={displayName} initials={initials} />
 
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
@@ -759,6 +814,9 @@ function UserRow({
         </div>
         <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5">
           <p className="font-mono text-[10px] text-slate-500">{user.email}</p>
+          {user.phoneNormalized && (
+            <p className="font-mono text-[10px] text-cyan-300/70">{formatPhonePreview(user.phoneNormalized)}</p>
+          )}
           {user.orgName && (
             <p className="font-mono text-[10px] text-slate-600">{user.orgName}</p>
           )}
@@ -770,6 +828,11 @@ function UserRow({
           {user.planCode && (
             <span className="font-mono text-[9px] uppercase tracking-wide text-slate-600">
               {user.planCode}
+            </span>
+          )}
+          {user.avatarSource === "whatsapp_profile" && (
+            <span className="rounded-full border border-emerald-400/25 bg-emerald-400/10 px-2 py-px font-mono text-[9px] font-semibold uppercase tracking-wide text-emerald-300">
+              foto wa
             </span>
           )}
         </div>
@@ -784,7 +847,23 @@ function UserRow({
       <div className="flex shrink-0 items-center gap-2">
         <button
           type="button"
-          disabled={!user.organizationId || isAccessingPanel || isSendingLink}
+          disabled={!canSyncAvatar || isSyncingAvatar || isSendingLink || isAccessingPanel}
+          onClick={onSyncWhatsappAvatar}
+          title={!canSyncAvatar ? "Cliente sem WhatsApp salvo" : hasWhatsappAvatar ? "Atualizar foto do WhatsApp" : "Buscar foto do WhatsApp"}
+          aria-label={!canSyncAvatar ? "Cliente sem WhatsApp salvo" : hasWhatsappAvatar ? "Atualizar foto do WhatsApp" : "Buscar foto do WhatsApp"}
+          className={cn(
+            "grid h-8 w-8 place-items-center rounded-lg border transition disabled:cursor-not-allowed disabled:opacity-40",
+            hasWhatsappAvatar
+              ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-200 hover:bg-emerald-400/15"
+              : "border-cyan-400/25 bg-cyan-400/10 text-cyan-300 hover:bg-cyan-400/15",
+          )}
+        >
+          {isSyncingAvatar ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : hasWhatsappAvatar ? <RefreshCw className="h-3.5 w-3.5" /> : <Camera className="h-3.5 w-3.5" />}
+        </button>
+
+        <button
+          type="button"
+          disabled={!user.organizationId || isAccessingPanel || isSendingLink || isSyncingAvatar}
           onClick={onOpenControl}
           className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-amber-400/25 bg-amber-400/10 px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-amber-200 transition hover:bg-amber-400/15 disabled:cursor-not-allowed disabled:opacity-40"
         >
@@ -794,7 +873,7 @@ function UserRow({
 
         <button
           type="button"
-          disabled={isSendingLink || isAccessingPanel}
+          disabled={isSendingLink || isAccessingPanel || isSyncingAvatar}
           onClick={onSendLink}
           className={cn(
             "inline-flex min-h-8 items-center gap-1.5 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide transition disabled:cursor-not-allowed disabled:opacity-50",
@@ -813,7 +892,7 @@ function UserRow({
 
         <button
           type="button"
-          disabled={isAccessingPanel || isSendingLink}
+          disabled={isAccessingPanel || isSendingLink || isSyncingAvatar}
           onClick={onAccessPanel}
           className="inline-flex min-h-8 items-center gap-1.5 rounded-lg bg-cyan-300 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-40"
         >
@@ -827,6 +906,46 @@ function UserRow({
       </div>
     </div>
   );
+}
+
+function UserAvatar({ user, displayName, initials }: { user: PlatformUser; displayName: string; initials: string }) {
+  const [failedAvatarUrl, setFailedAvatarUrl] = useState<string | null>(null);
+  const showImage = Boolean(user.avatarUrl && failedAvatarUrl !== user.avatarUrl);
+
+  return (
+    <div
+      className="relative grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-xl border text-[13px] font-bold"
+      style={{
+        background: user.isPlatformAdmin ? "rgba(34,211,238,0.12)" : "rgba(100,116,139,0.12)",
+        borderColor: user.avatarSource === "whatsapp_profile" ? "rgba(52,211,153,0.35)" : "rgba(148,163,184,0.14)",
+        color: user.isPlatformAdmin ? "rgb(103,232,249)" : "rgb(148,163,184)",
+      }}
+    >
+      {showImage ? (
+        <Image
+          alt={`Foto de ${displayName}`}
+          className="object-cover"
+          fill
+          onError={() => setFailedAvatarUrl(user.avatarUrl)}
+          sizes="40px"
+          src={user.avatarUrl!}
+          unoptimized
+        />
+      ) : (
+        initials || <User className="h-4 w-4" />
+      )}
+    </div>
+  );
+}
+
+function formatPhonePreview(value: string) {
+  const digits = value.replace(/\D/g, "");
+
+  if (digits.length < 8) {
+    return value;
+  }
+
+  return `+${digits.slice(0, 2)} ${digits.slice(2, 4)} ****-${digits.slice(-4)}`;
 }
 
 function formatShortDate(value: string) {

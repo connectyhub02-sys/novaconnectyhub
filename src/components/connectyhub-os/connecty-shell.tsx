@@ -19,6 +19,7 @@ import {
   CheckCircle2,
   CircleDollarSign,
   Coins,
+  CreditCard,
   FileCode2,
   GitBranch,
   Globe2,
@@ -227,6 +228,7 @@ const clientSections: NavSection[] = [
       { label: "Integrações",     href: "/dashboard/integracoes",      icon: PlugZap, tone: "teal" },
       { label: "API WhatsApp",     href: "/dashboard/api-whatsapp",     icon: PlugZap, tone: "emerald" },
       { label: "Planos",           href: "/dashboard/planos",           icon: Coins, tone: "amber" },
+      { label: "Minha Conta",      href: "/dashboard/minha-conta",      icon: CreditCard, tone: "blue" },
       { label: "Configurações",   href: "/dashboard/configuracoes",    icon: Settings, tone: "slate" },
     ],
   },
@@ -284,6 +286,21 @@ export function ConnectyShell({
     key: null,
     dismissed: null,
   });
+
+  useEffect(() => {
+    function handleAvatarUpdated(event: Event) {
+      const detail = (event as CustomEvent<{ avatarUrl?: string | null }>).detail;
+
+      if (detail?.avatarUrl) {
+        setAvatarUrl(detail.avatarUrl);
+      }
+    }
+
+    window.addEventListener("connectyhub:avatar-updated", handleAvatarUpdated);
+
+    return () => window.removeEventListener("connectyhub:avatar-updated", handleAvatarUpdated);
+  }, []);
+
   const accountCompletionPending = mode === "client" && accountCompletion?.isComplete === false;
   const trialReminderStatus = billingAccess
     && billingAccess.balanceCredits > 0
@@ -667,6 +684,18 @@ export function ConnectyShell({
               <DropdownMenuSeparator className="my-2" style={{ background: "rgba(224,233,246,0.18)" }} />
               {mode === "client" && (
                 <DropdownMenuItem asChild className="cursor-pointer rounded-xl p-0 text-[13px]">
+                  <Link
+                    href="/dashboard/minha-conta"
+                    className="mb-1 flex h-11 w-full items-center rounded-xl px-3 font-semibold"
+                    style={{ background: "rgba(255,255,255,0.075)", color: "#fbfdff", border: "1px solid rgba(224,233,246,0.12)" }}
+                  >
+                    <CreditCard className="mr-2 h-3.5 w-3.5" />
+                    Minha conta
+                  </Link>
+                </DropdownMenuItem>
+              )}
+              {mode === "client" && (
+                <DropdownMenuItem asChild className="cursor-pointer rounded-xl p-0 text-[13px]">
                   <label
                     className="flex h-11 w-full items-center rounded-xl px-3 font-semibold"
                     style={{ background: "rgba(255,255,255,0.075)", color: "#fbfdff", border: "1px solid rgba(224,233,246,0.12)" }}
@@ -924,6 +953,18 @@ export function ConnectyShell({
                 <DropdownMenuSeparator className="my-2" style={{ background: "rgba(224,233,246,0.18)" }} />
                 {mode === "client" && (
                   <DropdownMenuItem asChild className="cursor-pointer rounded-xl p-0 text-[13px]">
+                    <Link
+                      href="/dashboard/minha-conta"
+                      className="mb-1 flex h-11 w-full items-center rounded-xl px-3 font-semibold"
+                      style={{ background: "rgba(255,255,255,0.075)", color: "#fbfdff", border: "1px solid rgba(224,233,246,0.12)" }}
+                    >
+                      <CreditCard className="mr-2 h-3.5 w-3.5" />
+                      Minha conta
+                    </Link>
+                  </DropdownMenuItem>
+                )}
+                {mode === "client" && (
+                  <DropdownMenuItem asChild className="cursor-pointer rounded-xl p-0 text-[13px]">
                     <label
                       className="flex h-11 w-full items-center rounded-xl px-3 font-semibold"
                       style={{ background: "rgba(255,255,255,0.075)", color: "#fbfdff", border: "1px solid rgba(224,233,246,0.12)" }}
@@ -1014,6 +1055,7 @@ export function ConnectyShell({
           dismissed={accountCompletionDismissed}
           status={accountCompletion}
           onClose={() => setAccountCompletionDismissed(true)}
+          onAvatarSynced={setAvatarUrl}
           onCompleted={(nextStatus) => {
             setAccountCompletion(nextStatus);
             setAccountCompletionDismissed(nextStatus.isComplete);
@@ -1074,11 +1116,13 @@ function AccountCompletionPill() {
 function AccountCompletionModal({
   dismissed,
   status,
+  onAvatarSynced,
   onClose,
   onCompleted,
 }: {
   dismissed: boolean;
   status: AccountCompletionClientStatus | null;
+  onAvatarSynced: (avatarUrl: string) => void;
   onClose: () => void;
   onCompleted: (status: AccountCompletionClientStatus) => void;
 }) {
@@ -1310,11 +1354,16 @@ function AccountCompletionModal({
       });
       const data = (await response.json().catch(() => null)) as {
         accountCompletion?: AccountCompletionClientStatus;
+        avatarUrl?: string | null;
         error?: string;
       } | null;
 
       if (!response.ok || !data?.accountCompletion) {
         throw new Error(data?.error ?? "Nao foi possivel validar o codigo.");
+      }
+
+      if (data.avatarUrl) {
+        onAvatarSynced(data.avatarUrl);
       }
 
       onCompleted(data.accountCompletion);

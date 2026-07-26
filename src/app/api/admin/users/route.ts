@@ -8,6 +8,9 @@ type ProfileRow = {
   id: string;
   full_name: string | null;
   email: string | null;
+  phone: string | null;
+  phone_normalized: string | null;
+  phone_whatsapp_exists: boolean | null;
   company_name: string | null;
   is_platform_admin: boolean | null;
 };
@@ -76,7 +79,7 @@ export async function GET() {
 
   const [authResult, profilesResult, membershipsResult] = await Promise.all([
     service.auth.admin.listUsers({ perPage: 1000 }),
-    service.from("profiles").select("id, full_name, email, company_name, is_platform_admin"),
+    service.from("profiles").select("id, full_name, email, phone, phone_normalized, phone_whatsapp_exists, company_name, is_platform_admin"),
     service
       .from("organization_members")
       .select("user_id, role, created_at, organizations(id, name, status, plan_code)")
@@ -174,7 +177,14 @@ export async function GET() {
         id: u.id,
         email: u.email ?? null,
         fullName: profile?.full_name ?? null,
+        phone: profile?.phone ?? null,
+        phoneNormalized: profile?.phone_normalized ?? normalizeBrazilPhone(profile?.phone),
+        phoneWhatsappExists: profile?.phone_whatsapp_exists ?? null,
         companyName: profile?.company_name ?? membership?.orgName ?? null,
+        avatarUrl: readUserAvatarUrl(u.user_metadata),
+        avatarSource: readUserAvatarSource(u.user_metadata),
+        avatarSyncedAt: readUserAvatarSyncedAt(u.user_metadata),
+        avatarSyncStatus: readUserAvatarSyncStatus(u.user_metadata),
         isPlatformAdmin: Boolean(profile?.is_platform_admin),
         organizationId: membership?.organizationId ?? null,
         orgName: membership?.orgName ?? null,
@@ -228,6 +238,54 @@ function readResourceOverrides(metadata: JsonRecord | null | undefined) {
     whatsappInstanceLimit: toNullableNumber(record.whatsapp_instance_limit),
     userLimit: toNullableNumber(record.user_limit),
   };
+}
+
+function readUserAvatarUrl(metadata: unknown) {
+  const record = readRecord(metadata) ?? {};
+  const value = readString(record.avatar_url) ?? readString(record.picture) ?? readString(record.whatsapp_avatar_url);
+
+  if (!value || !/^https?:\/\//i.test(value)) {
+    return null;
+  }
+
+  return value;
+}
+
+function readUserAvatarSource(metadata: unknown) {
+  const record = readRecord(metadata) ?? {};
+  return readString(record.avatar_source) ?? readString(record.whatsapp_avatar_source);
+}
+
+function readUserAvatarSyncedAt(metadata: unknown) {
+  const record = readRecord(metadata) ?? {};
+  return readString(record.whatsapp_avatar_synced_at);
+}
+
+function readUserAvatarSyncStatus(metadata: unknown) {
+  const record = readRecord(metadata) ?? {};
+  return readString(record.whatsapp_avatar_status);
+}
+
+function normalizeBrazilPhone(value: string | null | undefined) {
+  let digits = String(value ?? "").replace(/\D/g, "");
+
+  if (!digits) {
+    return null;
+  }
+
+  if ((digits.length === 10 || digits.length === 11) && !digits.startsWith("55")) {
+    digits = `55${digits}`;
+  }
+
+  return digits.startsWith("55") && (digits.length === 12 || digits.length === 13) ? digits : null;
+}
+
+function readRecord(value: unknown): JsonRecord | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as JsonRecord : null;
+}
+
+function readString(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 function daysRemaining(value: string) {
