@@ -618,6 +618,9 @@ function getEventRevenueGoal(eventType: string) {
   if (eventType === "trial_started") return "Mostrar bonus e acelerar a primeira assinatura.";
   if (eventType === "trial_credit_milestone") return "Criar urgencia conforme o saldo de teste diminui.";
   if (eventType === "trial_no_credits") return "Recuperar usuarios sem saldo antes de perder o momento de compra.";
+  if (eventType === "subscription_replaced") return "Manter a troca de plano no checkout e evitar perda da venda.";
+  if (eventType === "checkout_cart_updated") return "Aumentar ticket medio com adicionais e pacotes de credito.";
+  if (eventType === "checkout_payment_started") return "Recuperar pagamento iniciado antes de abandono do checkout.";
   if (eventType.includes("rejected") || eventType.includes("pending")) return "Recuperar checkout pendente ou recusado.";
   if (eventType.includes("approved")) return "Confirmar valor entregue e preparar expansao de creditos.";
   if (eventType.includes("canceled") || eventType.includes("paused")) return "Reduzir cancelamento e reativar assinatura.";

@@ -14,6 +14,9 @@ export const PLATFORM_BILLING_MESSAGE_VARIABLES = [
   "{status}",
   "{data}",
   "{checkout_url}",
+  "{metodo_pagamento}",
+  "{adicionais}",
+  "{plano_anterior}",
 ] as const;
 
 export const PLATFORM_BILLING_MESSAGE_TEMPLATE_DEFINITIONS = [
@@ -26,6 +29,21 @@ export const PLATFORM_BILLING_MESSAGE_TEMPLATE_DEFINITIONS = [
     eventType: "subscription_pending",
     label: "Assinatura pendente",
     description: "Cliente iniciou uma assinatura e ainda precisa concluir.",
+  },
+  {
+    eventType: "subscription_replaced",
+    label: "Troca de plano",
+    description: "Cliente cancelou um checkout pendente e escolheu outro plano.",
+  },
+  {
+    eventType: "checkout_cart_updated",
+    label: "Carrinho atualizado",
+    description: "Cliente marcou ou removeu adicionais no checkout do plano.",
+  },
+  {
+    eventType: "checkout_payment_started",
+    label: "Pagamento iniciado",
+    description: "Cliente iniciou pagamento do plano por Pix ou cartao.",
   },
   {
     eventType: "trial_started",
@@ -84,6 +102,12 @@ export const DEFAULT_PLATFORM_BILLING_MESSAGE_TEMPLATES: PlatformBillingMessageT
     "{cliente}, esta e uma mensagem de teste da ConnectyHub para validar os avisos automaticos de cobranca. Nenhuma cobranca foi feita.",
   subscription_pending:
     "{cliente}, recebemos sua solicitacao do plano {plano}. O pagamento ainda esta pendente. Finalize por aqui: {checkout_url}. Assim que confirmar, os creditos serao liberados automaticamente.",
+  subscription_replaced:
+    "{cliente}, trocamos sua solicitacao para o plano {plano}. O checkout anterior do plano {plano_anterior} foi cancelado para evitar cobranca duplicada. Finalize por aqui: {checkout_url}.",
+  checkout_cart_updated:
+    "{cliente}, atualizamos seu checkout do plano {plano}. Adicionais escolhidos: {adicionais}. Total atual: {valor}. Finalize por aqui: {checkout_url}.",
+  checkout_payment_started:
+    "{cliente}, recebemos sua tentativa de pagamento do plano {plano} por {metodo_pagamento}. Se ainda nao confirmou, conclua no painel: {checkout_url}.",
   trial_started:
     "{cliente}, parabens. Seu teste gratis ConnectyHub foi liberado com {creditos} creditos. Assine um plano durante o teste e o saldo restante soma aos creditos do plano escolhido.",
   trial_credit_milestone:

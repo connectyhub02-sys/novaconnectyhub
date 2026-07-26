@@ -12,6 +12,7 @@ import {
   type MercadoPagoBillingSubscriptionDetails,
 } from "@/lib/billing/mercado-pago-subscriptions";
 import {
+  PLATFORM_BILLING_MESSAGE_TEMPLATE_DEFINITIONS,
   normalizePlatformBillingMessageTemplates,
   renderPlatformBillingMessageTemplate,
   type PlatformBillingMessageTemplates,
@@ -82,6 +83,27 @@ export type PlatformSubscriptionPendingNotificationInput = {
   amountBrl: number;
   includedCredits: number;
   dedupeKey?: string;
+  providerStatus?: string | null;
+  providerReference?: string | null;
+  metadata?: JsonRecord;
+};
+
+export type PlatformPlanInteractionNotificationType =
+  | "subscription_replaced"
+  | "checkout_cart_updated"
+  | "checkout_payment_started";
+
+export type PlatformPlanInteractionNotificationInput = {
+  organizationId: string;
+  subscriptionId: string;
+  invoiceId: string | null;
+  paymentId: string | null;
+  planCode: string;
+  planName: string;
+  amountBrl: number;
+  includedCredits: number;
+  eventType: PlatformPlanInteractionNotificationType;
+  dedupeKey: string;
   providerStatus?: string | null;
   providerReference?: string | null;
   metadata?: JsonRecord;
@@ -199,6 +221,9 @@ type PendingBillingNotificationRow = {
 const activePaymentStatuses = new Set(["approved", "authorized"]);
 const pendingPaymentStatuses = new Set(["pending", "in_process", "in_mediation"]);
 const rejectedPaymentStatuses = new Set(["rejected", "cancelled", "canceled", "charged_back", "refunded"]);
+const knownBillingMessageTemplateKeys: ReadonlySet<string> = new Set(
+  PLATFORM_BILLING_MESSAGE_TEMPLATE_DEFINITIONS.map((definition) => definition.eventType),
+);
 
 export async function processPlatformBillingMercadoPagoWebhook(
   client: SupabaseClient,
@@ -325,6 +350,40 @@ export async function sendPlatformSubscriptionPendingNotification(
     providerReference: input.providerReference ?? null,
     metadata: {
       source: "dashboard_plan_checkout_created",
+      ...(input.metadata ?? {}),
+    },
+  });
+  const event = notification?.id ? await loadBillingNotificationEvent(client, notification.id) : null;
+
+  return {
+    notificationId: notification?.id ?? null,
+    status: event?.status ?? notification?.status ?? "skipped",
+    selectedAgentId: event?.selected_agent_id ?? null,
+    recipientPhone: event?.recipient_phone ?? null,
+    messagePreview: event?.message_preview ?? null,
+    errorMessage: event?.error_message ?? null,
+  };
+}
+
+export async function sendPlatformPlanInteractionNotification(
+  client: SupabaseClient,
+  input: PlatformPlanInteractionNotificationInput,
+): Promise<PlatformBillingOperationalTestResult> {
+  const notification = await enqueuePlatformBillingNotification(client, {
+    organizationId: input.organizationId,
+    subscriptionId: input.subscriptionId,
+    invoiceId: input.invoiceId,
+    paymentId: input.paymentId,
+    planCode: input.planCode,
+    planName: input.planName,
+    amountBrl: input.amountBrl,
+    includedCredits: input.includedCredits,
+    eventType: input.eventType,
+    dedupeKey: input.dedupeKey,
+    providerStatus: input.providerStatus ?? input.eventType,
+    providerReference: input.providerReference ?? null,
+    metadata: {
+      source: "dashboard_plan_interaction",
       ...(input.metadata ?? {}),
     },
   });
@@ -1003,6 +1062,7 @@ async function enqueuePlatformBillingNotification(
     trialDaysRemaining: input.trialDaysRemaining ?? null,
     providerStatus: input.providerStatus,
     checkoutUrl: readString(input.metadata.checkout_public_url) ?? readString(input.metadata.checkout_url),
+    metadata: input.metadata,
     templates: settings?.metadata?.billing_message_templates,
     templateOverride: automation?.messageTemplate ?? null,
   });
@@ -1466,6 +1526,7 @@ function buildBillingMessage(input: {
   trialDaysRemaining: number | null;
   providerStatus: string | null;
   checkoutUrl: string | null;
+  metadata: JsonRecord;
   templates: unknown;
   templateOverride?: string | null;
 }) {
@@ -1489,26 +1550,36 @@ function buildBillingMessage(input: {
     status: input.providerStatus ?? "sem_status",
     data: formatDate(new Date()),
     checkout_url: input.checkoutUrl ?? "acesse o painel",
+    metodo_pagamento: readString(input.metadata.payment_method_label)
+      ?? readString(input.metadata.payment_method)
+      ?? "pagamento",
+    adicionais: formatSelectedBumpTitles(input.metadata),
+    plano_anterior: readString(input.metadata.previous_plan_name)
+      ?? readString(input.metadata.previous_plan_code)
+      ?? "anterior",
   });
 }
 
 function getBillingMessageTemplateKey(eventType: string): keyof PlatformBillingMessageTemplates {
-  if (
-    eventType === "billing_operational_test"
-    || eventType === "subscription_pending"
-    || eventType === "trial_started"
-    || eventType === "trial_credit_milestone"
-    || eventType === "trial_no_credits"
-    || eventType === "payment_pending"
-    || eventType === "payment_approved"
-    || eventType === "payment_rejected"
-    || eventType === "subscription_paused"
-    || eventType === "subscription_canceled"
-  ) {
-    return eventType;
+  if (knownBillingMessageTemplateKeys.has(eventType)) {
+    return eventType as keyof PlatformBillingMessageTemplates;
   }
 
   return "billing_update";
+}
+
+function formatSelectedBumpTitles(metadata: JsonRecord) {
+  const explicitTitles = readStringList(metadata.selected_bump_titles);
+
+  if (explicitTitles.length > 0) {
+    return explicitTitles.join(", ");
+  }
+
+  const selectedBumps = readSelectedBumps(metadata)
+    .map((bump) => readString(bump.title) ?? readString(bump.name))
+    .filter((title): title is string => Boolean(title));
+
+  return selectedBumps.length > 0 ? selectedBumps.join(", ") : "nenhum adicional";
 }
 
 function readSelectedBumpCreditAmount(metadata: JsonRecord | null | undefined) {
@@ -1563,6 +1634,17 @@ function sanitizePayment(payment: MercadoPagoPaymentLike): JsonRecord {
 
 function readString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function readStringList(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 
 function readDate(value: unknown) {

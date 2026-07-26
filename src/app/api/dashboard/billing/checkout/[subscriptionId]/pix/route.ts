@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   assertAccountComplete,
   formatAccountCompletionError,
@@ -20,7 +20,10 @@ import {
   normalizeBillingCheckoutBumpCodesForCatalog,
   syncBillingCheckoutCart,
 } from "@/lib/billing/plan-checkout";
-import { processPlatformBillingMercadoPagoWebhook } from "@/lib/billing/platform-billing-webhook";
+import {
+  processPlatformBillingMercadoPagoWebhook,
+  sendPlatformPlanInteractionNotification,
+} from "@/lib/billing/platform-billing-webhook";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
 
@@ -74,6 +77,23 @@ export async function POST(
 
   try {
     const cart = await syncBillingCheckoutCart(client, intent, selectedBumpCodes, availableBumps);
+    await notifyPaymentStartedSafely(client, {
+      organizationId: workspace.organization.id,
+      actorId: workspace.user.id,
+      subscriptionId: intent.subscription.id,
+      invoiceId: intent.invoice.id,
+      paymentId: intent.payment.id,
+      planCode: intent.plan.plan_code,
+      planName: intent.plan.name,
+      amountBrl: cart.totalAmount,
+      includedCredits: toNumber(intent.plan.included_credits),
+      checkoutPath: cart.checkoutPath,
+      checkoutUrl: cart.checkoutUrl,
+      paymentMethod: "pix",
+      paymentMethodLabel: "Pix",
+      selectedBumpCodes: cart.selectedBumps.map((bump) => bump.code),
+      selectedBumpTitles: cart.selectedBumps.map((bump) => bump.title),
+    });
     const config = await loadMercadoPagoPlatformBillingConfig({ client });
     const additionalInfo = buildMercadoPagoAdditionalInfo({
       payerName: workspace.profile.fullName ?? workspace.organization.name,
@@ -180,4 +200,77 @@ function normalizeBillingPaymentStatus(value: string) {
   if (value === "refunded") return "refunded";
   if (value === "pending") return "pending";
   return "in_process";
+}
+
+async function notifyPaymentStartedSafely(
+  client: ReturnType<typeof createServiceClient>,
+  input: {
+    organizationId: string;
+    actorId: string;
+    subscriptionId: string;
+    invoiceId: string;
+    paymentId: string;
+    planCode: string;
+    planName: string;
+    amountBrl: number;
+    includedCredits: number;
+    checkoutPath: string;
+    checkoutUrl: string;
+    paymentMethod: string;
+    paymentMethodLabel: string;
+    selectedBumpCodes: string[];
+    selectedBumpTitles: string[];
+  },
+) {
+  try {
+    const hash = createHash("sha1")
+      .update(`${input.paymentMethod}:${input.selectedBumpCodes.join("|") || "empty"}`)
+      .digest("hex")
+      .slice(0, 16);
+
+    return await sendPlatformPlanInteractionNotification(client, {
+      organizationId: input.organizationId,
+      subscriptionId: input.subscriptionId,
+      invoiceId: input.invoiceId,
+      paymentId: input.paymentId,
+      planCode: input.planCode,
+      planName: input.planName,
+      amountBrl: input.amountBrl,
+      includedCredits: input.includedCredits,
+      eventType: "checkout_payment_started",
+      dedupeKey: `billing:${input.subscriptionId}:payment_started:${hash}`,
+      providerStatus: "payment_started",
+      metadata: {
+        source: "dashboard_billing_pix_payment_started",
+        actor_id: input.actorId,
+        checkout_url: input.checkoutPath,
+        checkout_public_url: input.checkoutUrl,
+        payment_method: input.paymentMethod,
+        payment_method_label: input.paymentMethodLabel,
+        selected_bump_codes: input.selectedBumpCodes,
+        selected_bump_titles: input.selectedBumpTitles,
+      },
+    });
+  } catch (error) {
+    await client.from("maintenance_audit_logs").insert({
+      event_type: "billing.plan_checkout.payment_started_notification_failed",
+      target_table: "billing_payments",
+      target_id: input.paymentId,
+      metadata: {
+        source: "dashboard_billing_pix_payment_started",
+        actor_id: input.actorId,
+        organization_id: input.organizationId,
+        subscription_id: input.subscriptionId,
+        plan_code: input.planCode,
+        error: error instanceof Error ? error.message : "Falha ao disparar automacao de pagamento iniciado.",
+      },
+    });
+
+    return null;
+  }
+}
+
+function toNumber(value: number | string | null | undefined) {
+  const number = typeof value === "number" ? value : Number(value ?? 0);
+  return Number.isFinite(number) ? number : 0;
 }

@@ -10,7 +10,10 @@ import {
   buildDashboardBillingCheckoutUrl,
   buildPlatformBillingExternalReference,
 } from "@/lib/billing/plan-checkout";
-import { sendPlatformSubscriptionPendingNotification } from "@/lib/billing/platform-billing-webhook";
+import {
+  sendPlatformPlanInteractionNotification,
+  sendPlatformSubscriptionPendingNotification,
+} from "@/lib/billing/platform-billing-webhook";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
 
@@ -89,6 +92,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Este plano ainda nao tem valor mensal configurado." }, { status: 422 });
     }
 
+    let replacedSubscription: ExistingSubscriptionRow | null = null;
     const existingSubscription = await loadBlockingSubscription(client, workspace.organization.id);
 
     if (existingSubscription) {
@@ -127,6 +131,7 @@ export async function POST(request: NextRequest) {
             actorId: workspace.user.id,
             nextPlanCode: plan.plan_code,
           });
+          replacedSubscription = existingSubscription;
         } else {
           return NextResponse.json(
             {
@@ -284,6 +289,23 @@ export async function POST(request: NextRequest) {
       checkoutUrl,
       source: "dashboard_plan_intent_created",
     });
+    const replacementNotification = replacedSubscription
+      ? await notifySubscriptionReplacedSafely(client, {
+          organizationId: workspace.organization.id,
+          actorId: workspace.user.id,
+          previousSubscriptionId: replacedSubscription.id,
+          previousPlanCode: replacedSubscription.plan_code,
+          subscriptionId,
+          invoiceId,
+          paymentId,
+          planCode: plan.plan_code,
+          planName: plan.name,
+          amountBrl,
+          includedCredits: toNumber(plan.included_credits),
+          checkoutPath,
+          checkoutUrl,
+        })
+      : null;
 
     return NextResponse.json({
       ok: true,
@@ -294,6 +316,8 @@ export async function POST(request: NextRequest) {
       checkoutUrl: checkoutPath,
       notificationStatus: notification.status,
       notificationError: notification.errorMessage,
+      replacementNotificationStatus: replacementNotification?.status ?? null,
+      replacementNotificationError: replacementNotification?.errorMessage ?? null,
       message: "Checkout criado. Finalize o pagamento para ativar seu plano.",
     });
   } catch (error) {
@@ -477,4 +501,83 @@ async function notifySubscriptionPendingSafely(
       errorMessage,
     };
   }
+}
+
+async function notifySubscriptionReplacedSafely(
+  client: ReturnType<typeof createServiceClient>,
+  input: {
+    organizationId: string;
+    actorId: string;
+    previousSubscriptionId: string;
+    previousPlanCode: string;
+    subscriptionId: string;
+    invoiceId: string;
+    paymentId: string;
+    planCode: string;
+    planName: string;
+    amountBrl: number;
+    includedCredits: number;
+    checkoutPath: string;
+    checkoutUrl: string;
+  },
+) {
+  try {
+    return await sendPlatformPlanInteractionNotification(client, {
+      organizationId: input.organizationId,
+      subscriptionId: input.subscriptionId,
+      invoiceId: input.invoiceId,
+      paymentId: input.paymentId,
+      planCode: input.planCode,
+      planName: input.planName,
+      amountBrl: input.amountBrl,
+      includedCredits: input.includedCredits,
+      eventType: "subscription_replaced",
+      dedupeKey: `billing:${input.subscriptionId}:subscription_replaced:${input.previousSubscriptionId}`,
+      providerStatus: "replaced_before_payment",
+      metadata: {
+        source: "dashboard_plan_checkout_replaced",
+        actor_id: input.actorId,
+        previous_subscription_id: input.previousSubscriptionId,
+        previous_plan_code: input.previousPlanCode,
+        previous_plan_name: formatPlanName(input.previousPlanCode),
+        checkout_url: input.checkoutPath,
+        checkout_public_url: input.checkoutUrl,
+        checkout_model: "connectyhub_plan_checkout",
+      },
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : "Falha ao disparar automacao de troca de plano.";
+
+    await client.from("maintenance_audit_logs").insert({
+      event_type: "billing.plan_checkout.replaced_notification_failed",
+      target_table: "organization_subscriptions",
+      target_id: input.subscriptionId,
+      metadata: {
+        source: "dashboard_plan_checkout_replaced",
+        actor_id: input.actorId,
+        organization_id: input.organizationId,
+        previous_subscription_id: input.previousSubscriptionId,
+        previous_plan_code: input.previousPlanCode,
+        plan_code: input.planCode,
+        error: errorMessage,
+      },
+    });
+
+    return {
+      notificationId: null,
+      status: "failed",
+      selectedAgentId: null,
+      recipientPhone: null,
+      messagePreview: null,
+      errorMessage,
+    };
+  }
+}
+
+function formatPlanName(planCode: string) {
+  if (planCode === "starter") return "Start";
+  if (planCode === "pro") return "Pro";
+  if (planCode === "scale") return "Scale";
+  if (planCode === "trial") return "Teste gratis";
+  return planCode;
 }

@@ -67,6 +67,7 @@ export function BillingPlanCheckout({
     ticketUrl: initialPixTicketUrl,
   });
   const [pixLoading, setPixLoading] = useState(false);
+  const [cartSyncing, setCartSyncing] = useState(false);
   const [copied, setCopied] = useState(false);
   const [notice, setNotice] = useState<NoticeState>(null);
   const selectedBumps = useMemo(
@@ -81,15 +82,40 @@ export function BillingPlanCheckout({
   );
 
   function toggleBump(code: BillingCheckoutBumpCode) {
-    setSelectedBumpCodes((current) => {
-      const next = current.includes(code)
-        ? current.filter((item) => item !== code)
-        : [...current, code];
+    const next = selectedBumpCodes.includes(code)
+      ? selectedBumpCodes.filter((item) => item !== code)
+      : [...selectedBumpCodes, code];
 
-      return next;
-    });
+    setSelectedBumpCodes(next);
     setPix({ qrCode: null, qrCodeBase64: null, ticketUrl: null });
     setNotice(null);
+    void syncCartSelection(next);
+  }
+
+  async function syncCartSelection(nextSelectedBumpCodes: BillingCheckoutBumpCode[]) {
+    if (!canPay) return;
+
+    setCartSyncing(true);
+
+    try {
+      const response = await fetch(`/api/dashboard/billing/checkout/${subscriptionId}/cart`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ selectedBumpCodes: nextSelectedBumpCodes }),
+      });
+      const data = await response.json().catch(() => null) as { error?: string } | null;
+
+      if (!response.ok) {
+        throw new Error(data?.error ?? "Nao foi possivel salvar o carrinho.");
+      }
+    } catch (error) {
+      setNotice({
+        tone: "error",
+        message: error instanceof Error ? error.message : "Nao foi possivel salvar o carrinho.",
+      });
+    } finally {
+      setCartSyncing(false);
+    }
   }
 
   async function generatePix() {
@@ -198,6 +224,9 @@ export function BillingPlanCheckout({
           <div className="relative mt-4 flex items-center gap-3">
             <span className="h-px flex-1 bg-gradient-to-r from-emerald-300/50 via-cyan-300/20 to-transparent" />
             <span className="font-mono text-[9px] font-bold uppercase tracking-[0.18em] text-emerald-100/80">1 clique para adicionar</span>
+            {cartSyncing ? (
+              <span className="font-mono text-[9px] font-bold uppercase tracking-[0.18em] text-cyan-100/80">salvando</span>
+            ) : null}
           </div>
 
           <div className="relative mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
