@@ -3,6 +3,7 @@ import "server-only";
 import { randomInt } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { grantTrialCredits, scheduleTrialConversionMessages, TRIAL_PLAN_CODE } from "@/lib/billing/trial";
+import { sendTrialStartedNotification } from "@/lib/billing/trial-notifications";
 import { decryptCredentialValue, encryptCredentialValue, hashCredentialValue } from "@/lib/security/credentials-crypto";
 import { createServiceClient } from "@/lib/supabase/service";
 import { loadUazapiCredentials, type UazapiCredentials } from "@/lib/whatsapp/uazapi-credentials";
@@ -550,6 +551,11 @@ export async function ensureTrialForCompletedSignup(input: {
     optIn: true,
     client,
   }).catch(() => 0);
+
+  await sendTrialStartedNotification({
+    organizationId: organization.id,
+    client,
+  }).catch(() => null);
 
   return organization;
 }

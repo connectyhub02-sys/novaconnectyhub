@@ -34,7 +34,9 @@ import {
   type WhatsappFollowUpEventData,
   whatsappFollowUpEventName,
 } from "@/lib/whatsapp/proactive-followup";
+import { processPendingPlatformBillingNotifications } from "@/lib/billing/platform-billing-webhook";
 import { runConnectyHubGatewayHealthCheck } from "@/lib/connectyhub-api/gateway";
+import { createServiceClient } from "@/lib/supabase/service";
 import { syncUazapiInstances } from "@/lib/whatsapp/uazapi-sync";
 import { runGrowthAgentMission, type GrowthAgentCode } from "@/lib/growth/growth-agent-runner";
 
@@ -383,6 +385,25 @@ export const connectyhubWhatsappFollowUp = inngest.createFunction(
     ),
 );
 
+export const connectyhubPlatformAutomationSweep = inngest.createFunction(
+  {
+    id: "connectyhub-platform-automation-sweep",
+    name: "ConnectyHub Platform Automation Sweep",
+    retries: 1,
+    triggers: [{ cron: "*/5 * * * *" }],
+  },
+  async ({ step }) => {
+    const summary = await step.run("process-pending-platform-automations", () =>
+      processPendingPlatformBillingNotifications(createServiceClient(), { limit: 25 }),
+    );
+
+    return {
+      status: "swept",
+      summary,
+    };
+  },
+);
+
 const growthAgentSchedules: Array<{
   id: string;
   name: string;
@@ -487,5 +508,6 @@ export const functions = [
   connectyhubWhatsappHandoffNotifier,
   connectyhubWhatsappCloneProfileImport,
   connectyhubWhatsappFollowUp,
+  connectyhubPlatformAutomationSweep,
   ...connectyhubGrowthAgentFunctions,
 ];

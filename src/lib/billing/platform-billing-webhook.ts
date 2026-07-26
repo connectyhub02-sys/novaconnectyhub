@@ -12,6 +12,7 @@ import {
   renderPlatformBillingMessageTemplate,
   type PlatformBillingMessageTemplates,
 } from "@/lib/billing/platform-billing-messages";
+import { findPlatformAutomationForNotification } from "@/lib/automations/platform-automations";
 import { grantCredits } from "@/lib/billing/cost-center";
 import { getMercadoPagoPayment, loadMercadoPagoPlatformBillingConfig } from "@/lib/sales-catalog/mercado-pago";
 import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
@@ -48,6 +49,23 @@ export type PlatformBillingOperationalTestResult = {
   recipientPhone: string | null;
   messagePreview: string | null;
   errorMessage: string | null;
+};
+
+export type PlatformTrialNotificationType =
+  | "trial_started"
+  | "trial_credit_milestone"
+  | "trial_no_credits";
+
+export type PlatformTrialNotificationInput = {
+  organizationId: string;
+  eventType: PlatformTrialNotificationType;
+  dedupeKey: string;
+  balanceCredits: number;
+  usedCredits: number;
+  includedCredits: number;
+  milestoneCredits?: number | null;
+  trialDaysRemaining?: number | null;
+  metadata?: JsonRecord;
 };
 
 type ParsedExternalReference = {
@@ -150,6 +168,15 @@ type WhatsappInstanceRow = {
   metadata: JsonRecord | null;
 };
 
+type PendingBillingNotificationRow = {
+  id: string;
+  selected_agent_id: string | null;
+  recipient_phone: string | null;
+  message_preview: string | null;
+  attempts: number | string | null;
+  metadata: JsonRecord | null;
+};
+
 const activePaymentStatuses = new Set(["approved", "authorized"]);
 const pendingPaymentStatuses = new Set(["pending", "in_process", "in_mediation"]);
 const rejectedPaymentStatuses = new Set(["rejected", "cancelled", "canceled", "charged_back", "refunded"]);
@@ -203,6 +230,49 @@ export async function sendPlatformBillingOperationalTest(
       source: "admin_billing_operational_test",
       actor_id: input.actorId,
       safe_test: true,
+    },
+  });
+  const event = notification?.id ? await loadBillingNotificationEvent(client, notification.id) : null;
+
+  return {
+    notificationId: notification?.id ?? null,
+    status: event?.status ?? notification?.status ?? "skipped",
+    selectedAgentId: event?.selected_agent_id ?? null,
+    recipientPhone: event?.recipient_phone ?? null,
+    messagePreview: event?.message_preview ?? null,
+    errorMessage: event?.error_message ?? null,
+  };
+}
+
+export async function sendPlatformTrialNotification(
+  client: SupabaseClient,
+  input: PlatformTrialNotificationInput,
+): Promise<PlatformBillingOperationalTestResult> {
+  const notification = await enqueuePlatformBillingNotification(client, {
+    organizationId: input.organizationId,
+    subscriptionId: null,
+    invoiceId: null,
+    paymentId: null,
+    planCode: "trial",
+    planName: "Teste gratis",
+    amountBrl: 0,
+    includedCredits: input.includedCredits,
+    balanceCredits: input.balanceCredits,
+    usedCredits: input.usedCredits,
+    milestoneCredits: input.milestoneCredits ?? null,
+    trialDaysRemaining: input.trialDaysRemaining ?? null,
+    eventType: input.eventType,
+    dedupeKey: input.dedupeKey,
+    providerStatus: "trial",
+    providerReference: null,
+    metadata: {
+      source: "trial_conversion_notification",
+      balance_credits: input.balanceCredits,
+      used_credits: input.usedCredits,
+      included_credits: input.includedCredits,
+      milestone_credits: input.milestoneCredits ?? null,
+      trial_days_remaining: input.trialDaysRemaining ?? null,
+      ...(input.metadata ?? {}),
     },
   });
   const event = notification?.id ? await loadBillingNotificationEvent(client, notification.id) : null;
@@ -843,6 +913,10 @@ async function enqueuePlatformBillingNotification(
     planName: string;
     amountBrl: number;
     includedCredits: number;
+    balanceCredits?: number;
+    usedCredits?: number;
+    milestoneCredits?: number | null;
+    trialDaysRemaining?: number | null;
     eventType: string;
     dedupeKey: string;
     providerStatus: string | null;
@@ -850,9 +924,19 @@ async function enqueuePlatformBillingNotification(
     metadata: JsonRecord;
   },
 ) {
-  const [settings, recipient] = await Promise.all([
+  const [settings, recipient, automation] = await Promise.all([
     loadBillingSettings(client),
     loadBillingRecipient(client, input.organizationId),
+    findPlatformAutomationForNotification(client, {
+      organizationId: input.organizationId,
+      eventType: input.eventType,
+      channel: "whatsapp",
+      planCode: input.planCode,
+      balanceCredits: input.balanceCredits ?? null,
+      usedCredits: input.usedCredits ?? null,
+      milestoneCredits: input.milestoneCredits ?? null,
+      metadata: input.metadata,
+    }),
   ]);
   const message = buildBillingMessage({
     eventType: input.eventType,
@@ -860,12 +944,22 @@ async function enqueuePlatformBillingNotification(
     planName: input.planName,
     amountBrl: input.amountBrl,
     includedCredits: input.includedCredits,
+    balanceCredits: input.balanceCredits ?? null,
+    usedCredits: input.usedCredits ?? null,
+    milestoneCredits: input.milestoneCredits ?? null,
+    trialDaysRemaining: input.trialDaysRemaining ?? null,
     providerStatus: input.providerStatus,
     templates: settings?.metadata?.billing_message_templates,
+    templateOverride: automation?.messageTemplate ?? null,
   });
-  const selectedAgentId = settings?.billing_whatsapp_agent_id ?? null;
+  const selectedAgentId = automation?.selectedAgentId
+    ?? (automation?.fallbackToBillingAgent !== false ? settings?.billing_whatsapp_agent_id ?? null : null);
   const enabled = settings?.notification_whatsapp_enabled !== false;
   const recipientPhone = normalizePhone(recipient.profile?.phone);
+  const delayMinutes = Math.max(0, automation?.delayMinutes ?? 0);
+  const nextAttemptAt = delayMinutes > 0
+    ? new Date(Date.now() + delayMinutes * 60 * 1000).toISOString()
+    : new Date().toISOString();
   const initialError = !enabled
     ? "Notificacoes WhatsApp de billing desativadas."
     : !selectedAgentId
@@ -873,31 +967,42 @@ async function enqueuePlatformBillingNotification(
       : !recipientPhone
         ? "Cliente sem telefone no perfil."
         : null;
+  const insertPayload: JsonRecord = {
+    organization_id: input.organizationId,
+    invoice_id: input.invoiceId,
+    payment_id: input.paymentId,
+    subscription_id: input.subscriptionId,
+    event_type: input.eventType,
+    dedupe_key: input.dedupeKey,
+    channel: "whatsapp",
+    status: initialError ? "skipped" : "pending",
+    selected_agent_id: selectedAgentId,
+    recipient_phone: recipientPhone,
+    message_preview: preview(message, 480),
+    next_attempt_at: initialError ? null : nextAttemptAt,
+    error_message: initialError,
+    metadata: {
+      ...input.metadata,
+      automation_flow_id: automation?.id ?? null,
+      automation_flow_key: automation?.flowKey ?? null,
+      automation_flow_name: automation?.name ?? null,
+      automation_delay_minutes: delayMinutes,
+      message_body: message,
+      provider_status: input.providerStatus,
+      provider_reference: input.providerReference,
+      plan_code: input.planCode,
+      amount_brl: input.amountBrl,
+      included_credits: input.includedCredits,
+    },
+  };
+
+  if (automation?.id) {
+    insertPayload.automation_flow_id = automation.id;
+  }
+
   const insert = await client
     .from("billing_notification_events")
-    .insert({
-      organization_id: input.organizationId,
-      invoice_id: input.invoiceId,
-      payment_id: input.paymentId,
-      subscription_id: input.subscriptionId,
-      event_type: input.eventType,
-      dedupe_key: input.dedupeKey,
-      channel: "whatsapp",
-      status: initialError ? "skipped" : "pending",
-      selected_agent_id: selectedAgentId,
-      recipient_phone: recipientPhone,
-      message_preview: preview(message, 480),
-      next_attempt_at: initialError ? null : new Date().toISOString(),
-      error_message: initialError,
-      metadata: {
-        ...input.metadata,
-        provider_status: input.providerStatus,
-        provider_reference: input.providerReference,
-        plan_code: input.planCode,
-        amount_brl: input.amountBrl,
-        included_credits: input.includedCredits,
-      },
-    })
+    .insert(insertPayload)
     .select("id, status")
     .maybeSingle<{ id: string; status: string }>();
 
@@ -917,7 +1022,7 @@ async function enqueuePlatformBillingNotification(
 
   const event = insert.data;
 
-  if (!event || initialError || !selectedAgentId || !recipientPhone) {
+  if (!event || initialError || !selectedAgentId || !recipientPhone || delayMinutes > 0) {
     return event ?? null;
   }
 
@@ -926,9 +1031,67 @@ async function enqueuePlatformBillingNotification(
     agentId: selectedAgentId,
     phone: recipientPhone,
     message,
+    attempts: 0,
   });
 
   return event;
+}
+
+export async function processPendingPlatformBillingNotifications(
+  client: SupabaseClient,
+  input: { limit?: number } = {},
+) {
+  const limit = Math.min(Math.max(input.limit ?? 25, 1), 100);
+  const { data, error } = await client
+    .from("billing_notification_events")
+    .select("id, selected_agent_id, recipient_phone, message_preview, attempts, metadata")
+    .eq("status", "pending")
+    .lte("next_attempt_at", new Date().toISOString())
+    .lt("attempts", 5)
+    .order("next_attempt_at", { ascending: true })
+    .limit(limit)
+    .returns<PendingBillingNotificationRow[]>();
+
+  if (error) {
+    throw new Error(`Nao foi possivel carregar automacoes pendentes: ${error.message}`);
+  }
+
+  const rows = data ?? [];
+  let sent = 0;
+  let skipped = 0;
+
+  for (const row of rows) {
+    const message = readString(row.metadata?.message_body) ?? row.message_preview;
+    const agentId = row.selected_agent_id;
+    const phone = row.recipient_phone;
+
+    if (!message || !agentId || !phone) {
+      skipped += 1;
+      await client
+        .from("billing_notification_events")
+        .update({
+          status: "skipped",
+          error_message: "Automacao pendente sem agente, telefone ou mensagem.",
+        })
+        .eq("id", row.id);
+      continue;
+    }
+
+    await sendBillingNotificationNow(client, {
+      eventId: row.id,
+      agentId,
+      phone,
+      message,
+      attempts: toNumber(row.attempts),
+    });
+    sent += 1;
+  }
+
+  return {
+    checked: rows.length,
+    sent,
+    skipped,
+  };
 }
 
 async function sendBillingNotificationNow(
@@ -938,8 +1101,11 @@ async function sendBillingNotificationNow(
     agentId: string;
     phone: string;
     message: string;
+    attempts?: number;
   },
 ) {
+  const nextAttempts = Math.max(0, input.attempts ?? 0) + 1;
+
   try {
     const [credentials, instance] = await Promise.all([
       loadUazapiCredentials(client),
@@ -973,7 +1139,7 @@ async function sendBillingNotificationNow(
         .from("billing_notification_events")
         .update({
           status: "sent",
-          attempts: 1,
+          attempts: nextAttempts,
           sent_at: new Date().toISOString(),
           provider_message_id: readProviderMessageId(providerResponse.data),
           metadata: {
@@ -992,7 +1158,7 @@ async function sendBillingNotificationNow(
       .from("billing_notification_events")
       .update({
         status: "failed",
-        attempts: 1,
+        attempts: nextAttempts,
         error_message: error instanceof Error ? error.message : "Falha ao enviar WhatsApp de billing.",
       })
       .eq("id", input.eventId);
@@ -1153,20 +1319,30 @@ function buildBillingMessage(input: {
   planName: string;
   amountBrl: number;
   includedCredits: number;
+  balanceCredits: number | null;
+  usedCredits: number | null;
+  milestoneCredits: number | null;
+  trialDaysRemaining: number | null;
   providerStatus: string | null;
   templates: unknown;
+  templateOverride?: string | null;
 }) {
   const templates = normalizePlatformBillingMessageTemplates(input.templates);
   const templateKey = getBillingMessageTemplateKey(input.eventType);
+  const template = input.templateOverride?.trim() || templates[templateKey];
   const customerName = input.customerName?.trim() || "Cliente";
   const firstCustomerName = firstName(customerName) ?? "Tudo certo";
 
-  return renderPlatformBillingMessageTemplate(templates[templateKey], {
+  return renderPlatformBillingMessageTemplate(template, {
     cliente: firstCustomerName,
     cliente_nome: customerName,
     plano: input.planName,
     valor: formatMoney(input.amountBrl),
     creditos: formatCredits(input.includedCredits),
+    creditos_restantes: formatCredits(input.balanceCredits ?? 0),
+    creditos_usados: formatCredits(input.usedCredits ?? 0),
+    marco_creditos: formatCredits(input.milestoneCredits ?? input.usedCredits ?? 0),
+    dias_restantes: input.trialDaysRemaining ?? "--",
     evento: input.eventType,
     status: input.providerStatus ?? "sem_status",
     data: formatDate(new Date()),
@@ -1177,6 +1353,9 @@ function getBillingMessageTemplateKey(eventType: string): keyof PlatformBillingM
   if (
     eventType === "billing_operational_test"
     || eventType === "subscription_pending"
+    || eventType === "trial_started"
+    || eventType === "trial_credit_milestone"
+    || eventType === "trial_no_credits"
     || eventType === "payment_pending"
     || eventType === "payment_approved"
     || eventType === "payment_rejected"

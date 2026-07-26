@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { getOrganizationBillingAccess, type BillingAccessStatus } from "@/lib/billing/trial";
 
 export const billingProviders = [
   "gemini",
@@ -190,6 +191,13 @@ export async function grantCredits(client: SupabaseClient, input: CreditGrantInp
 }
 
 export async function debitCredits(client: SupabaseClient, input: CreditDebitInput) {
+  const trialStatusBeforeDebit = shouldSendTrialUsageNotification(input.metadata)
+    ? await getOrganizationBillingAccess({
+        client,
+        organizationId: input.organizationId,
+      }).catch(() => null)
+    : null;
+
   const { data, error } = await client.rpc("debit_credit_wallet", {
     p_organization_id: input.organizationId,
     p_amount_credits: input.amountCredits,
@@ -201,6 +209,16 @@ export async function debitCredits(client: SupabaseClient, input: CreditDebitInp
 
   if (error) {
     throw new Error(`Nao foi possivel debitar creditos: ${error.message}`);
+  }
+
+  if (trialStatusBeforeDebit && isTrialUsageNotificationCandidate(trialStatusBeforeDebit)) {
+    await import("@/lib/billing/trial-notifications")
+      .then(({ sendTrialUsageNotificationAfterDebit }) => sendTrialUsageNotificationAfterDebit({
+        client,
+        organizationId: input.organizationId,
+        beforeStatus: trialStatusBeforeDebit,
+      }))
+      .catch(() => null);
   }
 
   return String(data);
@@ -271,6 +289,19 @@ export async function recordUsageAndDebitCredits(
   }
 
   return event;
+}
+
+function shouldSendTrialUsageNotification(metadata: Record<string, unknown> | undefined) {
+  return metadata?.suppressTrialNotification !== true
+    && metadata?.manual_credit_removal !== true
+    && metadata?.safe_test !== true;
+}
+
+function isTrialUsageNotificationCandidate(status: BillingAccessStatus) {
+  return status.planCode === "trial"
+    || status.organizationStatus === "trial"
+    || status.organizationStatus === "trial_pending"
+    || status.state.startsWith("trial_");
 }
 
 function roundUsageUnits(value: number) {

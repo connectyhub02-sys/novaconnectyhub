@@ -6,6 +6,10 @@ export const PLATFORM_BILLING_MESSAGE_VARIABLES = [
   "{plano}",
   "{valor}",
   "{creditos}",
+  "{creditos_restantes}",
+  "{creditos_usados}",
+  "{marco_creditos}",
+  "{dias_restantes}",
   "{evento}",
   "{status}",
   "{data}",
@@ -21,6 +25,21 @@ export const PLATFORM_BILLING_MESSAGE_TEMPLATE_DEFINITIONS = [
     eventType: "subscription_pending",
     label: "Assinatura pendente",
     description: "Cliente iniciou uma assinatura e ainda precisa concluir.",
+  },
+  {
+    eventType: "trial_started",
+    label: "Teste iniciado",
+    description: "Cliente concluiu cadastro, recebeu creditos de teste e pode converter com saldo acumulado.",
+  },
+  {
+    eventType: "trial_credit_milestone",
+    label: "Consumo do teste",
+    description: "Cliente cruzou um novo bloco de consumo durante o teste gratis.",
+  },
+  {
+    eventType: "trial_no_credits",
+    label: "Teste sem creditos",
+    description: "Creditos do teste acabaram e os atendimentos automaticos precisam de plano ou creditos.",
   },
   {
     eventType: "payment_pending",
@@ -64,6 +83,12 @@ export const DEFAULT_PLATFORM_BILLING_MESSAGE_TEMPLATES: PlatformBillingMessageT
     "{cliente}, esta e uma mensagem de teste da ConnectyHub para validar os avisos automaticos de cobranca. Nenhuma cobranca foi feita.",
   subscription_pending:
     "{cliente}, recebemos sua solicitacao do plano {plano}. O pagamento ainda esta pendente. Assim que confirmar, os creditos serao liberados automaticamente.",
+  trial_started:
+    "{cliente}, parabens. Seu teste gratis ConnectyHub foi liberado com {creditos} creditos. Assine um plano durante o teste e o saldo restante soma aos creditos do plano escolhido.",
+  trial_credit_milestone:
+    "{cliente}, voce ja usou {marco_creditos} creditos do teste e ainda tem {creditos_restantes}. Assine um plano durante o teste para somar esse saldo aos creditos do plano escolhido.",
+  trial_no_credits:
+    "{cliente}, seus creditos do teste acabaram. Para reativar atendimentos automaticos, IA e voz, escolha um plano no painel ConnectyHub.",
   payment_pending:
     "{cliente}, seu pagamento do plano {plano} ainda esta pendente. Assim que o Mercado Pago confirmar, seus creditos serao liberados automaticamente.",
   payment_approved:

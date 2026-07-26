@@ -182,6 +182,7 @@ const adminSections: NavSection[] = [
     items: [
       { label: "Clientes",          href: "/admin/clientes",          icon: Users, tone: "sky", badge: "142" },
       { label: "CRM Leads",         href: "/admin/leads",             icon: UserCheck, tone: "emerald" },
+      { label: "Automacoes",         href: "/admin/automacoes",        icon: Zap, tone: "violet" },
       { label: "Planos",            href: "/admin/planos",            icon: Coins, tone: "amber" },
       { label: "Produtos CH",       href: "/admin/produtos-connectyhub", icon: ShoppingBag, tone: "amber" },
       { label: "WhatsApp Clientes", href: "/admin/clientes/whatsapp", icon: MessageCircle, tone: "teal" },
@@ -279,7 +280,42 @@ export function ConnectyShell({
   const [billingAccess, setBillingAccess] = useState<BillingAccessClientStatus | null>(null);
   const [accountCompletion, setAccountCompletion] = useState<AccountCompletionClientStatus | null>(null);
   const [accountCompletionDismissed, setAccountCompletionDismissed] = useState(false);
+  const [trialReminderState, setTrialReminderState] = useState<{ key: string | null; dismissed: boolean | null }>({
+    key: null,
+    dismissed: null,
+  });
   const accountCompletionPending = mode === "client" && accountCompletion?.isComplete === false;
+  const trialReminderStatus = billingAccess
+    && billingAccess.balanceCredits > 0
+    && (billingAccess.state === "trial_active" || billingAccess.state === "trial_low_credits")
+    ? billingAccess
+    : null;
+  const trialReminderMilestone = trialReminderStatus
+    ? Math.floor(Math.max(trialReminderStatus.usedCredits, 0) / 100) * 100
+    : 0;
+  const trialReminderStorageKey = useMemo(() => {
+    if (mode !== "client" || !accountCompletion?.isComplete || !accountCompletion.signupCompletedAt) {
+      return null;
+    }
+
+    const identity = accountCompletion.email ?? accountCompletion.phoneNormalized ?? accountCompletion.phone ?? "client";
+
+    return `connectyhub:trial-bonus-reminder:${identity}:${accountCompletion.signupCompletedAt}:${trialReminderMilestone}`;
+  }, [
+    accountCompletion?.email,
+    accountCompletion?.isComplete,
+    accountCompletion?.phone,
+    accountCompletion?.phoneNormalized,
+    accountCompletion?.signupCompletedAt,
+    mode,
+    trialReminderMilestone,
+  ]);
+  const trialReminderReady = trialReminderState.key === trialReminderStorageKey && trialReminderState.dismissed === false;
+  const showTrialReminder = mode === "client"
+    && !accountCompletionPending
+    && accountCompletion?.isComplete === true
+    && trialReminderReady
+    && trialReminderStatus !== null;
 
   const setNotificationGroup = useCallback((source: string, notifications: ConnectyShellNotification[]) => {
     setNotificationGroups((current) => {
@@ -426,6 +462,38 @@ export function ConnectyShell({
       window.fetch = originalFetch;
     };
   }, [mode]);
+
+  useEffect(() => {
+    if (mode !== "client" || !trialReminderStorageKey) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      let dismissed = false;
+
+      try {
+        dismissed = window.localStorage.getItem(trialReminderStorageKey) === "1";
+      } catch {
+        dismissed = false;
+      }
+
+      setTrialReminderState({ key: trialReminderStorageKey, dismissed });
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, [mode, trialReminderStorageKey]);
+
+  const handleTrialReminderClose = useCallback(() => {
+    if (trialReminderStorageKey) {
+      try {
+        window.localStorage.setItem(trialReminderStorageKey, "1");
+      } catch {
+        // Ignore local storage failures; the modal can be dismissed for this session.
+      }
+    }
+
+    setTrialReminderState({ key: trialReminderStorageKey, dismissed: true });
+  }, [trialReminderStorageKey]);
 
   async function handleAvatarUpload(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0] ?? null;
@@ -952,6 +1020,13 @@ export function ConnectyShell({
           }}
         />
       ) : null}
+      {showTrialReminder && trialReminderStatus ? (
+        <TrialWelcomeModal
+          status={trialReminderStatus}
+          milestoneCredits={trialReminderMilestone}
+          onClose={handleTrialReminderClose}
+        />
+      ) : null}
       </div>
     </ConnectyShellNotificationsContext.Provider>
   );
@@ -1368,6 +1443,130 @@ function AccountCompletionModal({
           </form>
         )}
       </div>
+    </div>
+  );
+}
+
+function TrialWelcomeModal({
+  status,
+  milestoneCredits,
+  onClose,
+}: {
+  status: BillingAccessClientStatus;
+  milestoneCredits: number;
+  onClose: () => void;
+}) {
+  const bonusCredits = Math.max(status.includedCredits, status.balanceCredits + status.usedCredits);
+  const daysRemaining = status.trialDaysRemaining ?? 7;
+  const tone = billingBannerTone("green");
+  const isUsageReminder = milestoneCredits >= 100;
+  const title = isUsageReminder
+    ? `Voce ja usou ${formatShellCredits(milestoneCredits)} creditos`
+    : "Bem-vindo ao seu teste gratis";
+  const description = isUsageReminder
+    ? `Ainda restam ${formatShellCredits(status.balanceCredits)} creditos do teste. Assine durante o periodo gratis para somar esse saldo ao plano escolhido.`
+    : `Voce recebeu ${formatShellCredits(bonusCredits)} creditos para testar a ConnectyHub por ${daysRemaining} dias.`;
+
+  return (
+    <div
+      className="fixed inset-0 z-[10000] grid place-items-center bg-black/70 px-4 py-6 backdrop-blur-md"
+      role="dialog"
+      aria-modal="true"
+      aria-label={isUsageReminder ? "Lembrete de creditos do teste" : "Bem-vindo ao teste gratis"}
+    >
+      <div
+        className="w-full max-w-[620px] rounded-2xl p-5 shadow-2xl sm:p-6"
+        style={{
+          background: "linear-gradient(180deg, #111b2a 0%, #07111d 100%)",
+          border: "1px solid rgba(52,211,153,0.34)",
+          color: "#fbfdff",
+          boxShadow: "0 34px 120px rgba(0,0,0,0.70)",
+        }}
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex min-w-0 gap-3">
+            <span
+              className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl"
+              style={{ background: tone.iconBackground, color: tone.color }}
+            >
+              <Coins className="h-6 w-6" />
+            </span>
+            <div className="min-w-0">
+              <p className="font-mono text-[10px] font-bold uppercase tracking-[0.22em]" style={{ color: tone.color }}>
+                {isUsageReminder ? "Bonus em uso" : "Bonus ativado"}
+              </p>
+              <h2 className="mt-1 text-2xl font-bold leading-8 text-white">{title}</h2>
+              <p className="mt-2 text-sm leading-6 text-slate-300">
+                {description}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            aria-label="Fechar boas-vindas"
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-white/12 bg-white/6 text-slate-300 transition hover:bg-white/10"
+            onClick={onClose}
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="mt-5 grid gap-2 sm:grid-cols-3">
+          <TrialWelcomeMetric
+            label={isUsageReminder ? "creditos usados" : "bonus inicial"}
+            value={formatShellCredits(isUsageReminder ? milestoneCredits : bonusCredits)}
+          />
+          <TrialWelcomeMetric label="saldo atual" value={formatShellCredits(status.balanceCredits)} />
+          <TrialWelcomeMetric label="dias restantes" value={String(daysRemaining)} />
+        </div>
+
+        <div className="mt-5 rounded-2xl border border-emerald-300/24 bg-emerald-300/10 px-4 py-3 text-sm leading-6 text-emerald-50">
+          Se voce contratar um plano durante o teste, o saldo que sobrar soma aos creditos do plano escolhido. Depois que o teste acabar,
+          esse saldo promocional pode nao entrar automaticamente.
+        </div>
+
+        <div className="mt-4 grid gap-2 text-[12px] leading-5 text-slate-300 sm:grid-cols-3">
+          <TrialWelcomePoint>Teste atendimento, agentes e WhatsApp antes de assinar.</TrialWelcomePoint>
+          <TrialWelcomePoint>Os creditos restantes do teste nao somem se voce assinar dentro dos 7 dias.</TrialWelcomePoint>
+          <TrialWelcomePoint>Ao escolher Start, Pro ou Scale, os novos creditos entram junto com o saldo atual.</TrialWelcomePoint>
+        </div>
+
+        <div className="mt-6 grid gap-2 sm:grid-cols-[1fr_auto]">
+          <Link
+            href="/dashboard/planos"
+            className="inline-flex min-h-12 items-center justify-center rounded-xl px-4 text-sm font-bold transition hover:opacity-90"
+            onClick={onClose}
+            style={{ background: tone.color, color: "#061015" }}
+          >
+            Ver planos e acumular saldo
+          </Link>
+          <button
+            type="button"
+            className="inline-flex min-h-12 items-center justify-center rounded-xl border border-cyan-300/30 px-4 font-mono text-[10px] font-bold uppercase tracking-wide text-cyan-200 transition hover:bg-cyan-300/10"
+            onClick={onClose}
+          >
+            Continuar testando
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TrialWelcomeMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/[0.045] px-3 py-2">
+      <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-slate-500">{label}</p>
+      <p className="mt-1 font-mono text-[16px] font-bold text-emerald-300">{value}</p>
+    </div>
+  );
+}
+
+function TrialWelcomePoint({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2.5">
+      <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-300" />
+      <span>{children}</span>
     </div>
   );
 }

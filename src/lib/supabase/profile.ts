@@ -6,6 +6,7 @@ import { createClient } from "./server";
 import { createServiceClient } from "./service";
 import { isAccountSignupComplete } from "@/lib/account/signup-completion";
 import { grantTrialCredits, scheduleTrialConversionMessages, TRIAL_PLAN_CODE } from "@/lib/billing/trial";
+import { sendTrialStartedNotification } from "@/lib/billing/trial-notifications";
 import { ensureClientApiClient } from "@/lib/connectyhub-api/gateway";
 
 export type CurrentProfile = {
@@ -319,6 +320,13 @@ async function ensureTrialSetup(input: {
     optIn: input.optIn,
     client: input.client,
   }).catch(() => 0);
+
+  if (input.optIn) {
+    await sendTrialStartedNotification({
+      organizationId: input.organizationId,
+      client: input.client,
+    }).catch(() => null);
+  }
 }
 
 function readAvatarUrl(user: User) {
