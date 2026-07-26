@@ -277,9 +277,9 @@ export function AccountConsole() {
 
   if (error) {
     return (
-      <section className="space-y-6">
+      <section className="space-y-4">
         <AccountHeader onRefresh={() => loadAccount("refresh")} refreshing={refreshing} />
-        <div className="rounded-2xl border border-rose-300/25 bg-rose-400/10 p-5 text-rose-100">
+        <div className="rounded-lg border border-rose-300/25 bg-rose-400/10 p-4 text-rose-100">
           <div className="flex items-start gap-3">
             <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
             <div>
@@ -299,7 +299,7 @@ export function AccountConsole() {
   const pendingCheckoutHref = account.actions.pendingCheckoutHref;
 
   return (
-    <section className="space-y-6">
+    <section className="space-y-4">
       <AccountHeader onRefresh={() => loadAccount("refresh")} refreshing={refreshing} />
 
       <div className="grid gap-3 md:grid-cols-3">
@@ -323,7 +323,7 @@ export function AccountConsole() {
         />
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
         <ProfilePanel
           key={[
             account.profile.phoneNormalized ?? "",
@@ -341,12 +341,12 @@ export function AccountConsole() {
 
       <SecurityPanel email={account.profile.email} onReload={() => loadAccount("refresh")} />
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
         <PaymentsPanel payments={account.payments} />
         <CreditHistoryPanel transactions={account.creditTransactions} />
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-2">
+      <div className="grid gap-3 xl:grid-cols-2">
         <SubscriptionsPanel subscriptions={account.subscriptions} />
         <CyclesPanel cycles={account.cycles} />
       </div>
@@ -356,20 +356,20 @@ export function AccountConsole() {
 
 function AccountHeader({ onRefresh, refreshing }: { onRefresh: () => void; refreshing: boolean }) {
   return (
-    <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+    <div className="flex flex-col gap-3 rounded-lg border border-white/10 bg-[#0b1220]/90 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
       <div>
-        <div className="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-cyan-300">
+        <div className="font-mono text-[9px] font-bold uppercase tracking-[0.18em] text-cyan-300">
           Client OS / Minha conta
         </div>
-        <h1 className="mt-3 text-[28px] font-black leading-tight text-white sm:text-[36px]">
+        <h1 className="mt-1 text-[22px] font-black leading-tight text-white">
           Minha conta
         </h1>
-        <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">
+        <p className="mt-1 max-w-3xl text-xs leading-5 text-slate-400">
           Veja seus dados, status do cadastro, plano ativo, creditos e historico financeiro do workspace.
         </p>
       </div>
       <button
-        className="inline-flex h-11 items-center justify-center rounded-xl border border-cyan-200/20 bg-cyan-300/10 px-4 text-sm font-bold text-cyan-100 transition hover:bg-cyan-300/15 disabled:cursor-wait disabled:opacity-70"
+        className="inline-flex h-9 items-center justify-center rounded-md border border-cyan-200/20 bg-cyan-300/10 px-3 text-xs font-bold text-cyan-100 transition hover:bg-cyan-300/15 disabled:cursor-wait disabled:opacity-70"
         disabled={refreshing}
         type="button"
         onClick={onRefresh}
@@ -618,21 +618,21 @@ function ProfilePanel({
 
   return (
     <Panel>
-      <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
         <AccountAvatar avatarUrl={profile.avatarUrl} name={profile.fullName ?? profile.email ?? account.organization.name} />
         <div className="min-w-0 flex-1">
-          <form className="space-y-5" onSubmit={handleProfileSubmit}>
+          <form className="space-y-4" onSubmit={handleProfileSubmit}>
             <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="truncate text-xl font-black text-white">{profile.fullName ?? "Usuario ConnectyHub"}</h2>
+                  <h2 className="truncate text-base font-black text-white">{profile.fullName ?? "Usuario ConnectyHub"}</h2>
                   <StatusBadge status={profile.completion.isComplete ? "approved" : "pending"} />
                 </div>
-                <p className="mt-1 truncate text-sm text-slate-400">{profile.email ?? "email nao informado"}</p>
+                <p className="mt-0.5 truncate text-xs text-slate-400">{profile.email ?? "email nao informado"}</p>
               </div>
               <div className="flex flex-wrap gap-2">
                 <button
-                  className="inline-flex h-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.06] px-3 text-xs font-bold text-slate-100 transition hover:bg-white/[0.09]"
+                  className="inline-flex h-8 items-center justify-center rounded-md border border-white/10 bg-white/[0.06] px-2.5 text-[11px] font-bold text-slate-100 transition hover:bg-white/[0.09]"
                   type="button"
                   onClick={() => {
                     setEditingProfile((current) => !current);
@@ -643,7 +643,7 @@ function ProfilePanel({
                   <Edit3 className="mr-2 h-3.5 w-3.5" />
                   {editingProfile ? "Cancelar" : "Editar dados"}
                 </button>
-                <label className="inline-flex h-10 cursor-pointer items-center justify-center rounded-xl border border-white/10 bg-white/[0.06] px-3 text-xs font-bold text-slate-100 transition hover:bg-white/[0.09]">
+                <label className="inline-flex h-8 cursor-pointer items-center justify-center rounded-md border border-white/10 bg-white/[0.06] px-2.5 text-[11px] font-bold text-slate-100 transition hover:bg-white/[0.09]">
                   {avatarUploading ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <Camera className="mr-2 h-3.5 w-3.5" />}
                   Trocar foto
                   <input accept="image/jpeg,image/png,image/webp" className="hidden" type="file" onChange={onAvatarUpload} />
@@ -658,7 +658,7 @@ function ProfilePanel({
                 <label className="block">
                   <span className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Nome</span>
                   <input
-                    className="mt-2 h-11 w-full rounded-xl border border-white/10 bg-white/[0.06] px-3 text-sm font-semibold text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-300/45"
+                    className="mt-1.5 h-9 w-full rounded-md border border-white/10 bg-white/[0.055] px-3 text-xs font-semibold text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-300/45"
                     maxLength={120}
                     value={fullName}
                     onChange={(event) => setFullName(event.target.value)}
@@ -667,7 +667,7 @@ function ProfilePanel({
                 <label className="block">
                   <span className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Empresa</span>
                   <input
-                    className="mt-2 h-11 w-full rounded-xl border border-white/10 bg-white/[0.06] px-3 text-sm font-semibold text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-300/45"
+                    className="mt-1.5 h-9 w-full rounded-md border border-white/10 bg-white/[0.055] px-3 text-xs font-semibold text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-300/45"
                     maxLength={120}
                     value={companyName}
                     onChange={(event) => setCompanyName(event.target.value)}
@@ -675,7 +675,7 @@ function ProfilePanel({
                 </label>
                 <div className="md:col-span-2 flex flex-wrap items-center gap-3">
                   <button
-                    className="inline-flex h-11 items-center justify-center rounded-xl bg-cyan-300 px-4 text-sm font-black text-slate-950 transition hover:bg-cyan-200 disabled:cursor-wait disabled:opacity-70"
+                    className="inline-flex h-9 items-center justify-center rounded-md bg-cyan-300 px-3 text-xs font-black text-slate-950 transition hover:bg-cyan-200 disabled:cursor-wait disabled:opacity-70"
                     disabled={profileSaving}
                     type="submit"
                   >
@@ -696,17 +696,17 @@ function ProfilePanel({
             )}
           </form>
 
-          <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.045] p-4">
-            <div className="flex items-start gap-3">
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-emerald-300/20 bg-emerald-300/10 text-emerald-200">
-                <Smartphone className="h-5 w-5" />
+          <div className="mt-4 rounded-lg border border-white/10 bg-white/[0.035] p-3">
+            <div className="flex items-start gap-2.5">
+              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-emerald-300/20 bg-emerald-300/10 text-emerald-200">
+                <Smartphone className="h-4 w-4" />
               </span>
               <div className="min-w-0 flex-1">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
                   <label className="min-w-0 flex-1">
                     <span className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Alterar WhatsApp</span>
                     <input
-                      className="mt-2 h-11 w-full rounded-xl border border-white/10 bg-white/[0.06] px-3 text-sm font-semibold text-white outline-none transition placeholder:text-slate-500 focus:border-emerald-300/45"
+                      className="mt-1.5 h-9 w-full rounded-md border border-white/10 bg-white/[0.055] px-3 text-xs font-semibold text-white outline-none transition placeholder:text-slate-500 focus:border-emerald-300/45"
                       inputMode="tel"
                       placeholder="(47) 99999-9999"
                       value={phone}
@@ -714,7 +714,7 @@ function ProfilePanel({
                     />
                   </label>
                   <button
-                    className="inline-flex h-11 items-center justify-center rounded-xl border border-emerald-300/25 bg-emerald-300/10 px-4 text-sm font-black text-emerald-100 transition hover:bg-emerald-300/15 disabled:cursor-wait disabled:opacity-70"
+                    className="inline-flex h-9 items-center justify-center rounded-md border border-emerald-300/25 bg-emerald-300/10 px-3 text-xs font-black text-emerald-100 transition hover:bg-emerald-300/15 disabled:cursor-wait disabled:opacity-70"
                     disabled={phoneWorking}
                     type="button"
                     onClick={handlePhoneCheck}
@@ -723,7 +723,7 @@ function ProfilePanel({
                     Validar
                   </button>
                   <button
-                    className="inline-flex h-11 items-center justify-center rounded-xl bg-emerald-300 px-4 text-sm font-black text-slate-950 transition hover:bg-emerald-200 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="inline-flex h-9 items-center justify-center rounded-md bg-emerald-300 px-3 text-xs font-black text-slate-950 transition hover:bg-emerald-200 disabled:cursor-not-allowed disabled:opacity-50"
                     disabled={phoneWorking || phoneIsCurrent || !phoneValidated}
                     type="button"
                     onClick={handlePhoneSend}
@@ -742,7 +742,7 @@ function ProfilePanel({
                 {phoneStep === "code" ? (
                   <form className="mt-4 flex flex-col gap-3 sm:flex-row" onSubmit={handlePhoneVerify}>
                     <input
-                      className="h-11 w-full rounded-xl border border-white/10 bg-white/[0.06] px-3 font-mono text-sm font-black tracking-[0.28em] text-white outline-none transition placeholder:tracking-normal placeholder:text-slate-500 focus:border-emerald-300/45 sm:max-w-[180px]"
+                      className="h-9 w-full rounded-md border border-white/10 bg-white/[0.055] px-3 font-mono text-xs font-black tracking-[0.24em] text-white outline-none transition placeholder:tracking-normal placeholder:text-slate-500 focus:border-emerald-300/45 sm:max-w-[160px]"
                       inputMode="numeric"
                       maxLength={6}
                       placeholder="000000"
@@ -750,7 +750,7 @@ function ProfilePanel({
                       onChange={(event) => setPhoneCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
                     />
                     <button
-                      className="inline-flex h-11 items-center justify-center rounded-xl bg-cyan-300 px-4 text-sm font-black text-slate-950 transition hover:bg-cyan-200 disabled:cursor-wait disabled:opacity-70"
+                      className="inline-flex h-9 items-center justify-center rounded-md bg-cyan-300 px-3 text-xs font-black text-slate-950 transition hover:bg-cyan-200 disabled:cursor-wait disabled:opacity-70"
                       disabled={phoneWorking}
                       type="submit"
                     >
@@ -779,30 +779,30 @@ function BillingPanel({ account, pendingCheckoutHref }: { account: AccountData; 
     <Panel>
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-cyan-300">Plano e creditos</div>
-          <h2 className="mt-2 text-xl font-black text-white">{activeSubscription?.planName ?? account.organization.planCode}</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-400">{access.bannerDescription}</p>
+          <div className="font-mono text-[9px] font-bold uppercase tracking-[0.14em] text-cyan-300">Plano e creditos</div>
+          <h2 className="mt-1 text-base font-black text-white">{activeSubscription?.planName ?? account.organization.planCode}</h2>
+          <p className="mt-1.5 text-xs leading-5 text-slate-400">{access.bannerDescription}</p>
         </div>
         <StatusBadge status={account.organization.status} />
       </div>
 
-      <div className="mt-5 grid gap-3 sm:grid-cols-2">
+      <div className="mt-4 grid gap-2.5 sm:grid-cols-2">
         <InfoTile icon={WalletCards} label="Saldo" value={`${formatCredits(account.wallet.balanceCredits)} creditos`} />
         <InfoTile icon={ReceiptText} label="Uso atual" value={`${formatCredits(access.usedCredits)} / ${formatCredits(access.includedCredits)}`} />
         <InfoTile icon={CreditCard} label="Mensalidade" value={formatCurrency(activeSubscription?.monthlyPriceBrl ?? 0)} />
         <InfoTile icon={ShieldCheck} label="Proxima cobranca" value={activeSubscription?.nextBillingAt ? formatDate(activeSubscription.nextBillingAt) : "Nao agendada"} />
       </div>
 
-      <div className="mt-5 flex flex-wrap gap-3">
+      <div className="mt-4 flex flex-wrap gap-2">
         <Link
-          className="inline-flex h-11 items-center justify-center rounded-xl bg-cyan-300 px-4 text-sm font-black text-slate-950 transition hover:bg-cyan-200"
+          className="inline-flex h-9 items-center justify-center rounded-md bg-cyan-300 px-3 text-xs font-black text-slate-950 transition hover:bg-cyan-200"
           href={account.actions.plansHref}
         >
           Ver planos
         </Link>
         {pendingCheckoutHref ? (
           <Link
-            className="inline-flex h-11 items-center justify-center rounded-xl border border-amber-300/35 bg-amber-300/12 px-4 text-sm font-black text-amber-100 transition hover:bg-amber-300/18"
+            className="inline-flex h-9 items-center justify-center rounded-md border border-amber-300/35 bg-amber-300/12 px-3 text-xs font-black text-amber-100 transition hover:bg-amber-300/18"
             href={pendingCheckoutHref}
           >
             Finalizar pagamento
@@ -903,29 +903,29 @@ function SecurityPanel({ email, onReload }: { email: string | null; onReload: ()
 
   return (
     <Panel>
-      <div className="flex flex-col gap-5 xl:flex-row">
-        <div className="xl:w-[260px]">
+      <div className="flex flex-col gap-4 xl:flex-row">
+        <div className="xl:w-[220px]">
           <PanelTitle icon={ShieldCheck} label="Seguranca" />
-          <p className="mt-3 text-sm leading-6 text-slate-400">
+          <p className="mt-2 text-xs leading-5 text-slate-400">
             Gerencie acesso, email de login e senha da sua conta.
           </p>
         </div>
 
-        <div className="grid min-w-0 flex-1 gap-4 lg:grid-cols-2">
-          <form className="rounded-2xl border border-white/10 bg-white/[0.045] p-4" onSubmit={handleEmailSubmit}>
-            <div className="flex items-center gap-3">
-              <span className="grid h-10 w-10 place-items-center rounded-xl border border-cyan-300/20 bg-cyan-300/10 text-cyan-200">
-                <Mail className="h-5 w-5" />
+        <div className="grid min-w-0 flex-1 gap-3 lg:grid-cols-2">
+          <form className="rounded-lg border border-white/10 bg-white/[0.035] p-3" onSubmit={handleEmailSubmit}>
+            <div className="flex items-center gap-2.5">
+              <span className="grid h-8 w-8 place-items-center rounded-md border border-cyan-300/20 bg-cyan-300/10 text-cyan-200">
+                <Mail className="h-4 w-4" />
               </span>
               <div>
-                <h3 className="text-sm font-black text-white">Email de acesso</h3>
+                <h3 className="text-xs font-black text-white">Email de acesso</h3>
                 <p className="text-xs text-slate-400">{email ?? "sem email atual"}</p>
               </div>
             </div>
             <label className="mt-4 block">
               <span className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Novo email</span>
               <input
-                className="mt-2 h-11 w-full rounded-xl border border-white/10 bg-white/[0.06] px-3 text-sm font-semibold text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-300/45"
+                className="mt-1.5 h-9 w-full rounded-md border border-white/10 bg-white/[0.055] px-3 text-xs font-semibold text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-300/45"
                 inputMode="email"
                 type="email"
                 value={nextEmail}
@@ -937,7 +937,7 @@ function SecurityPanel({ email, onReload }: { email: string | null; onReload: ()
               />
             </label>
             <button
-              className="mt-4 inline-flex h-11 items-center justify-center rounded-xl bg-cyan-300 px-4 text-sm font-black text-slate-950 transition hover:bg-cyan-200 disabled:cursor-wait disabled:opacity-70"
+              className="mt-3 inline-flex h-9 items-center justify-center rounded-md bg-cyan-300 px-3 text-xs font-black text-slate-950 transition hover:bg-cyan-200 disabled:cursor-wait disabled:opacity-70"
               disabled={emailWorking}
               type="submit"
             >
@@ -948,21 +948,21 @@ function SecurityPanel({ email, onReload }: { email: string | null; onReload: ()
             {emailError ? <p className="mt-3 text-xs font-bold text-rose-300">{emailError}</p> : null}
           </form>
 
-          <form className="rounded-2xl border border-white/10 bg-white/[0.045] p-4" onSubmit={handlePasswordSubmit}>
-            <div className="flex items-center gap-3">
-              <span className="grid h-10 w-10 place-items-center rounded-xl border border-emerald-300/20 bg-emerald-300/10 text-emerald-200">
-                <KeyRound className="h-5 w-5" />
+          <form className="rounded-lg border border-white/10 bg-white/[0.035] p-3" onSubmit={handlePasswordSubmit}>
+            <div className="flex items-center gap-2.5">
+              <span className="grid h-8 w-8 place-items-center rounded-md border border-emerald-300/20 bg-emerald-300/10 text-emerald-200">
+                <KeyRound className="h-4 w-4" />
               </span>
               <div>
-                <h3 className="text-sm font-black text-white">Senha</h3>
+                <h3 className="text-xs font-black text-white">Senha</h3>
                 <p className="text-xs text-slate-400">Minimo de 6 caracteres</p>
               </div>
             </div>
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
               <label className="block">
                 <span className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Nova senha</span>
                 <input
-                  className="mt-2 h-11 w-full rounded-xl border border-white/10 bg-white/[0.06] px-3 text-sm font-semibold text-white outline-none transition placeholder:text-slate-500 focus:border-emerald-300/45"
+                  className="mt-1.5 h-9 w-full rounded-md border border-white/10 bg-white/[0.055] px-3 text-xs font-semibold text-white outline-none transition placeholder:text-slate-500 focus:border-emerald-300/45"
                   maxLength={128}
                   type="password"
                   value={password}
@@ -976,7 +976,7 @@ function SecurityPanel({ email, onReload }: { email: string | null; onReload: ()
               <label className="block">
                 <span className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Confirmar</span>
                 <input
-                  className="mt-2 h-11 w-full rounded-xl border border-white/10 bg-white/[0.06] px-3 text-sm font-semibold text-white outline-none transition placeholder:text-slate-500 focus:border-emerald-300/45"
+                  className="mt-1.5 h-9 w-full rounded-md border border-white/10 bg-white/[0.055] px-3 text-xs font-semibold text-white outline-none transition placeholder:text-slate-500 focus:border-emerald-300/45"
                   maxLength={128}
                   type="password"
                   value={passwordConfirm}
@@ -989,7 +989,7 @@ function SecurityPanel({ email, onReload }: { email: string | null; onReload: ()
               </label>
             </div>
             <button
-              className="mt-4 inline-flex h-11 items-center justify-center rounded-xl bg-emerald-300 px-4 text-sm font-black text-slate-950 transition hover:bg-emerald-200 disabled:cursor-wait disabled:opacity-70"
+              className="mt-3 inline-flex h-9 items-center justify-center rounded-md bg-emerald-300 px-3 text-xs font-black text-slate-950 transition hover:bg-emerald-200 disabled:cursor-wait disabled:opacity-70"
               disabled={passwordWorking}
               type="submit"
             >
@@ -1009,13 +1009,13 @@ function PaymentsPanel({ payments }: { payments: AccountData["payments"] }) {
   return (
     <Panel>
       <PanelTitle icon={ReceiptText} label="Historico de pagamentos" />
-      <div className="mt-4 space-y-3">
+      <div className="mt-3 divide-y divide-white/10 overflow-hidden rounded-lg border border-white/10">
         {payments.length ? payments.map((payment) => (
-          <div key={payment.id} className="rounded-2xl border border-white/10 bg-white/[0.045] p-4">
+          <div key={payment.id} className="bg-white/[0.025] px-3 py-2.5 transition hover:bg-white/[0.045]">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <p className="font-mono text-sm font-black text-white">{formatCurrency(payment.amountBrl)}</p>
+                  <p className="font-mono text-xs font-black text-white">{formatCurrency(payment.amountBrl)}</p>
                   <StatusBadge status={payment.status} />
                 </div>
                 <p className="mt-1 truncate text-xs text-slate-400">
@@ -1025,13 +1025,13 @@ function PaymentsPanel({ payments }: { payments: AccountData["payments"] }) {
               <div className="flex flex-wrap items-center gap-3">
                 <span className="text-xs font-semibold text-slate-300">{formatDateTime(payment.paidAt ?? payment.createdAt)}</span>
                 {payment.invoiceHref ? (
-                  <Link className="rounded-lg border border-cyan-300/25 bg-cyan-300/10 px-3 py-2 text-xs font-black text-cyan-100" href={payment.invoiceHref}>
+                  <Link className="rounded-md border border-cyan-300/25 bg-cyan-300/10 px-2.5 py-1.5 text-[11px] font-black text-cyan-100" href={payment.invoiceHref}>
                     Fatura
                   </Link>
                 ) : null}
                 {payment.receiptUrl ? (
                   <a
-                    className="rounded-lg border border-emerald-300/25 bg-emerald-300/10 px-3 py-2 text-xs font-black text-emerald-100"
+                    className="rounded-md border border-emerald-300/25 bg-emerald-300/10 px-2.5 py-1.5 text-[11px] font-black text-emerald-100"
                     href={payment.receiptUrl}
                     rel="noreferrer"
                     target="_blank"
@@ -1040,7 +1040,7 @@ function PaymentsPanel({ payments }: { payments: AccountData["payments"] }) {
                   </a>
                 ) : null}
                 {payment.checkoutHref ? (
-                  <Link className="rounded-lg bg-amber-300 px-3 py-2 text-xs font-black text-slate-950" href={payment.checkoutHref}>
+                  <Link className="rounded-md bg-amber-300 px-2.5 py-1.5 text-[11px] font-black text-slate-950" href={payment.checkoutHref}>
                     Pagar
                   </Link>
                 ) : null}
@@ -1057,15 +1057,15 @@ function CreditHistoryPanel({ transactions }: { transactions: AccountData["credi
   return (
     <Panel>
       <PanelTitle icon={WalletCards} label="Historico de creditos" />
-      <div className="mt-4 space-y-3">
+      <div className="mt-3 divide-y divide-white/10 overflow-hidden rounded-lg border border-white/10">
         {transactions.length ? transactions.map((transaction) => {
           const positive = transaction.amountCredits > 0;
 
           return (
-            <div key={transaction.id} className="rounded-2xl border border-white/10 bg-white/[0.045] p-4">
+            <div key={transaction.id} className="bg-white/[0.025] px-3 py-2.5 transition hover:bg-white/[0.045]">
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-bold text-white">
+                  <p className="truncate text-xs font-bold text-white">
                     {transaction.description ?? transactionTypeLabel(transaction.type)}
                   </p>
                   <p className="mt-1 text-xs text-slate-400">
@@ -1088,12 +1088,12 @@ function SubscriptionsPanel({ subscriptions }: { subscriptions: AccountData["sub
   return (
     <Panel>
       <PanelTitle icon={CreditCard} label="Assinaturas" />
-      <div className="mt-4 space-y-3">
+      <div className="mt-3 divide-y divide-white/10 overflow-hidden rounded-lg border border-white/10">
         {subscriptions.length ? subscriptions.map((subscription) => (
-          <div key={subscription.id} className="rounded-2xl border border-white/10 bg-white/[0.045] p-4">
+          <div key={subscription.id} className="bg-white/[0.025] px-3 py-2.5 transition hover:bg-white/[0.045]">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
-                <p className="truncate text-sm font-black text-white">{subscription.planName}</p>
+                <p className="truncate text-xs font-black text-white">{subscription.planName}</p>
                 <p className="mt-1 text-xs text-slate-400">
                   {formatCurrency(subscription.monthlyPriceBrl)} - {formatCredits(subscription.includedCredits)} creditos
                 </p>
@@ -1111,12 +1111,12 @@ function CyclesPanel({ cycles }: { cycles: AccountData["cycles"] }) {
   return (
     <Panel>
       <PanelTitle icon={ShieldCheck} label="Ciclos de uso" />
-      <div className="mt-4 space-y-3">
+      <div className="mt-3 divide-y divide-white/10 overflow-hidden rounded-lg border border-white/10">
         {cycles.length ? cycles.map((cycle) => (
-          <div key={cycle.id} className="rounded-2xl border border-white/10 bg-white/[0.045] p-4">
+          <div key={cycle.id} className="bg-white/[0.025] px-3 py-2.5 transition hover:bg-white/[0.045]">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
-                <p className="truncate text-sm font-black text-white">{cycle.planName ?? cycle.planCode ?? "Ciclo"}</p>
+                <p className="truncate text-xs font-black text-white">{cycle.planName ?? cycle.planCode ?? "Ciclo"}</p>
                 <p className="mt-1 text-xs text-slate-400">
                   {formatDate(cycle.cycleStart)} ate {formatDate(cycle.cycleEnd)}
                 </p>
@@ -1153,14 +1153,14 @@ function MetricPanel({
   }[tone];
 
   return (
-    <div className={cn("rounded-2xl border p-4", toneClass)}>
-      <div className="flex items-center gap-3">
-        <span className="grid h-10 w-10 place-items-center rounded-xl bg-white/10">
-          <Icon className="h-5 w-5" />
+    <div className={cn("rounded-lg border p-3", toneClass)}>
+      <div className="flex items-center gap-2.5">
+        <span className="grid h-8 w-8 place-items-center rounded-md bg-white/10">
+          <Icon className="h-4 w-4" />
         </span>
         <div className="min-w-0">
-          <p className="truncate text-lg font-black text-white">{value}</p>
-          <p className="truncate text-xs font-semibold opacity-80">{detail}</p>
+          <p className="truncate text-sm font-black text-white">{value}</p>
+          <p className="truncate text-[11px] font-semibold opacity-80">{detail}</p>
         </div>
       </div>
     </div>
@@ -1169,7 +1169,7 @@ function MetricPanel({
 
 function Panel({ children }: { children: ReactNode }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-[#0c1422]/88 p-5 shadow-[0_22px_80px_rgba(0,0,0,0.24)]">
+    <div className="rounded-lg border border-white/10 bg-[#0b1220]/92 p-4 shadow-none">
       {children}
     </div>
   );
@@ -1177,23 +1177,23 @@ function Panel({ children }: { children: ReactNode }) {
 
 function PanelTitle({ icon: Icon, label }: { icon: LucideIcon; label: string }) {
   return (
-    <div className="flex items-center gap-3">
-      <span className="grid h-10 w-10 place-items-center rounded-xl border border-cyan-300/20 bg-cyan-300/10 text-cyan-200">
-        <Icon className="h-5 w-5" />
+    <div className="flex items-center gap-2.5">
+      <span className="grid h-8 w-8 place-items-center rounded-md border border-cyan-300/20 bg-cyan-300/10 text-cyan-200">
+        <Icon className="h-4 w-4" />
       </span>
-      <h2 className="text-lg font-black text-white">{label}</h2>
+      <h2 className="text-sm font-black text-white">{label}</h2>
     </div>
   );
 }
 
 function InfoTile({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.045] p-4">
-      <div className="flex items-start gap-3">
-        <Icon className="mt-0.5 h-4 w-4 shrink-0 text-cyan-300" />
+    <div className="rounded-md border border-white/10 bg-white/[0.035] p-3">
+      <div className="flex items-start gap-2.5">
+        <Icon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-cyan-300" />
         <div className="min-w-0">
-          <p className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">{label}</p>
-          <p className="mt-1 break-words text-sm font-bold text-slate-100">{value}</p>
+          <p className="font-mono text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500">{label}</p>
+          <p className="mt-1 break-words text-[13px] font-bold text-slate-100">{value}</p>
         </div>
       </div>
     </div>
@@ -1206,18 +1206,18 @@ function AccountAvatar({ avatarUrl, name }: { avatarUrl: string | null; name: st
   const showImage = Boolean(avatarUrl && failedAvatarUrl !== avatarUrl);
 
   return (
-    <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-2xl border border-cyan-200/20 bg-cyan-300/12">
+    <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-cyan-200/20 bg-cyan-300/12">
       {showImage && avatarUrl ? (
         <Image
           alt=""
           className="h-full w-full object-cover"
-          height={96}
+          height={64}
           src={avatarUrl}
-          width={96}
+          width={64}
           onError={() => setFailedAvatarUrl(avatarUrl)}
         />
       ) : (
-        <div className="grid h-full w-full place-items-center text-2xl font-black text-cyan-100">{initials}</div>
+        <div className="grid h-full w-full place-items-center text-lg font-black text-cyan-100">{initials}</div>
       )}
     </div>
   );
@@ -1227,7 +1227,7 @@ function StatusBadge({ status }: { status: string }) {
   const tone = statusTone(status);
 
   return (
-    <span className={cn("inline-flex min-h-7 items-center rounded-full border px-2.5 font-mono text-[10px] font-black uppercase tracking-wide", tone)}>
+    <span className={cn("inline-flex min-h-6 items-center rounded-full border px-2 font-mono text-[9px] font-black uppercase tracking-wide", tone)}>
       {statusLabel(status)}
     </span>
   );
@@ -1235,7 +1235,7 @@ function StatusBadge({ status }: { status: string }) {
 
 function EmptyState({ text }: { text: string }) {
   return (
-    <div className="rounded-2xl border border-dashed border-white/12 bg-white/[0.035] p-5 text-sm font-semibold text-slate-400">
+    <div className="rounded-lg border border-dashed border-white/12 bg-white/[0.03] p-4 text-xs font-semibold text-slate-400">
       {text}
     </div>
   );
@@ -1243,16 +1243,16 @@ function EmptyState({ text }: { text: string }) {
 
 function AccountLoadingState() {
   return (
-    <section className="space-y-6">
+    <section className="space-y-4">
       <AccountHeader onRefresh={() => undefined} refreshing={true} />
       <div className="grid gap-3 md:grid-cols-3">
         {[0, 1, 2].map((item) => (
-          <div key={item} className="h-24 animate-pulse rounded-2xl border border-white/10 bg-white/[0.05]" />
+          <div key={item} className="h-16 animate-pulse rounded-lg border border-white/10 bg-white/[0.05]" />
         ))}
       </div>
-      <div className="grid gap-4 xl:grid-cols-2">
-        <div className="h-80 animate-pulse rounded-2xl border border-white/10 bg-white/[0.05]" />
-        <div className="h-80 animate-pulse rounded-2xl border border-white/10 bg-white/[0.05]" />
+      <div className="grid gap-3 xl:grid-cols-2">
+        <div className="h-64 animate-pulse rounded-lg border border-white/10 bg-white/[0.05]" />
+        <div className="h-64 animate-pulse rounded-lg border border-white/10 bg-white/[0.05]" />
       </div>
     </section>
   );
