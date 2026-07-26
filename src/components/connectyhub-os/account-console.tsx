@@ -1,11 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type FormEvent, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ButtonHTMLAttributes,
+  type ChangeEvent,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 import Image from "next/image";
 import Link from "next/link";
 import {
   AlertTriangle,
-  Building2,
+  CalendarDays,
   Camera,
   CheckCircle2,
   CreditCard,
@@ -20,10 +29,10 @@ import {
   Send,
   ShieldCheck,
   Smartphone,
-  UserRound,
   WalletCards,
   type LucideIcon,
 } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatBrazilPhoneInput, normalizeBrazilPhoneForApi } from "@/lib/account/input-format";
 import { cn } from "@/lib/utils";
 
@@ -167,6 +176,9 @@ type WhatsappCheckState = {
   message: string | null;
 };
 
+type BillingTab = "payments" | "subscriptions" | "credits" | "cycles";
+type ActionTone = "primary" | "secondary" | "success" | "warning" | "ghost";
+
 const currencyFormatter = new Intl.NumberFormat("pt-BR", {
   currency: "BRL",
   style: "currency",
@@ -176,6 +188,15 @@ const creditsFormatter = new Intl.NumberFormat("pt-BR", {
   maximumFractionDigits: 0,
 });
 
+const billingTabs: Array<{ icon: LucideIcon; label: string; value: BillingTab }> = [
+  { icon: ReceiptText, label: "Pagamentos", value: "payments" },
+  { icon: CreditCard, label: "Assinaturas", value: "subscriptions" },
+  { icon: WalletCards, label: "Creditos", value: "credits" },
+  { icon: CalendarDays, label: "Ciclos de uso", value: "cycles" },
+];
+
+const LIST_LIMIT = 6;
+
 export function AccountConsole() {
   const [account, setAccount] = useState<AccountData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -183,6 +204,7 @@ export function AccountConsole() {
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [avatarError, setAvatarError] = useState<string | null>(null);
+  const [activeBillingTab, setActiveBillingTab] = useState<BillingTab>("payments");
 
   const loadAccount = useCallback(async (mode: "initial" | "refresh" = "initial") => {
     if (mode === "initial") {
@@ -277,17 +299,9 @@ export function AccountConsole() {
 
   if (error) {
     return (
-      <section className="space-y-4">
+      <section className="mx-auto max-w-[1380px] space-y-4">
         <AccountHeader onRefresh={() => loadAccount("refresh")} refreshing={refreshing} />
-        <div className="rounded-lg border border-rose-300/25 bg-rose-400/10 p-4 text-rose-100">
-          <div className="flex items-start gap-3">
-            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
-            <div>
-              <h2 className="text-sm font-black uppercase tracking-[0.18em]">Conta indisponivel</h2>
-              <p className="mt-2 text-sm leading-6 text-rose-100/80">{error}</p>
-            </div>
-          </div>
-        </div>
+        <ErrorState message={error} refreshing={refreshing} onRetry={() => loadAccount("refresh")} />
       </section>
     );
   }
@@ -299,11 +313,16 @@ export function AccountConsole() {
   const pendingCheckoutHref = account.actions.pendingCheckoutHref;
 
   return (
-    <section className="space-y-2.5">
-      <AccountHeader account={account} completionSummary={completionSummary} onRefresh={() => loadAccount("refresh")} refreshing={refreshing} />
+    <section className="mx-auto max-w-[1380px] space-y-5">
+      <AccountHeader
+        account={account}
+        completionSummary={completionSummary}
+        onRefresh={() => loadAccount("refresh")}
+        refreshing={refreshing}
+      />
 
-      <div className="grid gap-2.5 xl:grid-cols-[minmax(0,1.15fr)_minmax(300px,0.85fr)]">
-        <ProfilePanel
+      <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-12">
+        <AccountDetailsCard
           key={[
             account.profile.phoneNormalized ?? "",
             account.profile.phoneVerified ? "verified" : "pending",
@@ -311,24 +330,20 @@ export function AccountConsole() {
           account={account}
           avatarUploading={avatarUploading}
           avatarError={avatarError}
-          onAvatarUpload={handleAvatarUpload}
           onAccountChange={setAccount}
+          onAvatarUpload={handleAvatarUpload}
           onReload={() => loadAccount("refresh")}
         />
-        <BillingPanel account={account} pendingCheckoutHref={pendingCheckoutHref} />
+        <PlanUsageCard account={account} pendingCheckoutHref={pendingCheckoutHref} />
       </div>
 
-      <SecurityPanel email={account.profile.email} onReload={() => loadAccount("refresh")} />
+      <SecurityAccessCard email={account.profile.email} onReload={() => loadAccount("refresh")} />
 
-      <div className="grid gap-2.5 xl:grid-cols-[minmax(0,1.08fr)_minmax(300px,0.92fr)]">
-        <PaymentsPanel payments={account.payments} />
-        <CreditHistoryPanel transactions={account.creditTransactions} />
-      </div>
-
-      <div className="grid gap-2.5 xl:grid-cols-2">
-        <SubscriptionsPanel subscriptions={account.subscriptions} />
-        <CyclesPanel cycles={account.cycles} />
-      </div>
+      <BillingWorkspace
+        account={account}
+        activeTab={activeBillingTab}
+        onTabChange={setActiveBillingTab}
+      />
     </section>
   );
 }
@@ -344,48 +359,42 @@ function AccountHeader({
   onRefresh: () => void;
   refreshing: boolean;
 }) {
+  const trialText = account ? trialSummary(account.billingAccess) : null;
+  const status = account ? (account.profile.completion.isComplete ? "approved" : "pending") : null;
+
   return (
-    <div className="flex flex-col gap-2 rounded-md border border-white/10 bg-[#0b1220]/90 px-3 py-2 lg:flex-row lg:items-center lg:justify-between">
+    <header className="flex flex-col gap-4 rounded-lg border border-white/10 bg-[#0a111d]/95 px-5 py-4 shadow-[0_18px_50px_rgba(0,0,0,0.18)] lg:flex-row lg:items-center lg:justify-between">
       <div className="min-w-0">
-        <div className="font-mono text-[9px] font-bold uppercase tracking-[0.16em] text-cyan-300">Client OS / Minha conta</div>
-        <div className="mt-1 flex flex-wrap items-center gap-2">
-          <h1 className="text-base font-black leading-tight text-white">Minha conta</h1>
-          {account ? <StatusBadge status={account.profile.completion.isComplete ? "approved" : "pending"} /> : null}
-          {completionSummary ? <span className="text-[11px] font-semibold text-slate-400">{completionSummary}</span> : null}
-        </div>
-      </div>
-      {account ? (
         <div className="flex flex-wrap items-center gap-2">
-          <HeaderStat icon={CreditCard} label={account.organization.planCode} value={statusLabel(account.organization.status)} />
-          <HeaderStat icon={WalletCards} label={`${formatCredits(account.wallet.balanceCredits)} creditos`} value={`${formatCredits(account.wallet.lifetimeUsedCredits)} usados`} />
+          <h1 className="text-[22px] font-semibold leading-tight text-white sm:text-2xl">Minha conta</h1>
+          {status ? <StatusBadge status={status} /> : null}
+          {trialText ? (
+            <span className="inline-flex h-7 items-center gap-1.5 rounded-full border border-emerald-300/20 bg-emerald-300/10 px-2.5 text-xs font-semibold text-emerald-100">
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              Teste gratis: {trialText}
+            </span>
+          ) : null}
         </div>
-      ) : null}
-      <button
-        className="inline-flex h-8 items-center justify-center rounded-md border border-cyan-200/20 bg-cyan-300/10 px-2.5 text-[11px] font-bold text-cyan-100 transition hover:bg-cyan-300/15 disabled:cursor-wait disabled:opacity-70"
-        disabled={refreshing}
+        <p className="mt-1 text-sm leading-5 text-slate-400">
+          Gerencie seus dados, seguranca, plano e faturamento.
+        </p>
+        {completionSummary ? <p className="mt-1 text-xs font-medium text-slate-500">{completionSummary}</p> : null}
+      </div>
+
+      <ActionButton
+        icon={RefreshCw}
+        loading={refreshing}
         type="button"
+        variant="secondary"
         onClick={onRefresh}
       >
-        {refreshing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
         Atualizar
-      </button>
-    </div>
+      </ActionButton>
+    </header>
   );
 }
 
-function HeaderStat({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) {
-  return (
-    <div className="flex h-7 items-center gap-2 rounded-md border border-white/10 bg-white/[0.035] px-2">
-      <Icon className="h-3.5 w-3.5 text-cyan-300" />
-      <div className="min-w-0 leading-none">
-        <p className="max-w-[150px] truncate text-[10px] font-black text-white">{label}</p>
-        <p className="mt-0.5 max-w-[150px] truncate text-[9px] font-semibold uppercase text-slate-500">{value}</p>
-      </div>
-    </div>
-  );
-}
-
-function ProfilePanel({
+function AccountDetailsCard({
   account,
   avatarUploading,
   avatarError,
@@ -622,216 +631,231 @@ function ProfilePanel({
   }
 
   return (
-    <Panel>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
-        <AccountAvatar avatarUrl={profile.avatarUrl} name={profile.fullName ?? profile.email ?? account.organization.name} />
-        <div className="min-w-0 flex-1">
-          <form className="space-y-3" onSubmit={handleProfileSubmit}>
-            <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="truncate text-base font-black text-white">{profile.fullName ?? "Usuario ConnectyHub"}</h2>
-                  <StatusBadge status={profile.completion.isComplete ? "approved" : "pending"} />
-                </div>
-                <p className="mt-0.5 truncate text-xs text-slate-400">{profile.email ?? "email nao informado"}</p>
+    <Surface className="xl:col-span-8">
+      <div className="flex flex-col gap-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="flex min-w-0 items-start gap-4">
+            <AccountAvatar avatarUrl={profile.avatarUrl} name={profile.fullName ?? profile.email ?? account.organization.name} />
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="truncate text-xl font-semibold text-white">{profile.fullName ?? "Usuario ConnectyHub"}</h2>
+                <StatusBadge status={profile.completion.isComplete ? "approved" : "pending"} />
               </div>
-              <div className="flex flex-wrap gap-1.5">
-                <button
-                  className="inline-flex h-7 items-center justify-center rounded-md border border-white/10 bg-white/[0.06] px-2 text-[10px] font-bold text-slate-100 transition hover:bg-white/[0.09]"
-                  type="button"
-                  onClick={() => {
-                    setEditingProfile((current) => !current);
-                    setProfileError(null);
-                    setProfileMessage(null);
-                  }}
-                >
-                  <Edit3 className="mr-1.5 h-3.5 w-3.5" />
-                  {editingProfile ? "Cancelar" : "Editar dados"}
-                </button>
-                <button
-                  className={cn(
-                    "inline-flex h-7 items-center justify-center rounded-md border px-2 text-[10px] font-bold transition",
-                    editingWhatsapp
-                      ? "border-emerald-300/30 bg-emerald-300/12 text-emerald-100"
-                      : "border-white/10 bg-white/[0.06] text-slate-100 hover:bg-white/[0.09]",
-                  )}
-                  type="button"
-                  onClick={() => {
-                    setEditingWhatsapp((current) => !current);
-                    setPhoneError(null);
-                    setPhoneMessage(null);
-                  }}
-                >
-                  <Smartphone className="mr-1.5 h-3.5 w-3.5" />
-                  WhatsApp
-                </button>
-                <label className="inline-flex h-7 cursor-pointer items-center justify-center rounded-md border border-white/10 bg-white/[0.06] px-2 text-[10px] font-bold text-slate-100 transition hover:bg-white/[0.09]">
-                  {avatarUploading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Camera className="mr-1.5 h-3.5 w-3.5" />}
-                  Foto
-                  <input accept="image/jpeg,image/png,image/webp" className="hidden" type="file" onChange={onAvatarUpload} />
-                </label>
-              </div>
+              <p className="mt-1 break-all text-sm text-slate-400">{profile.email ?? "email nao informado"}</p>
             </div>
+          </div>
 
-            {avatarError ? <p className="text-xs font-semibold text-rose-300">{avatarError}</p> : null}
+          <div className="flex flex-wrap gap-2">
+            <ActionButton
+              icon={Edit3}
+              type="button"
+              variant={editingProfile ? "primary" : "secondary"}
+              onClick={() => {
+                setEditingProfile((current) => !current);
+                setProfileError(null);
+                setProfileMessage(null);
+              }}
+            >
+              {editingProfile ? "Cancelar edicao" : "Editar dados"}
+            </ActionButton>
+            <ActionButton
+              icon={Smartphone}
+              type="button"
+              variant={editingWhatsapp ? "success" : "secondary"}
+              onClick={() => {
+                setEditingWhatsapp((current) => !current);
+                setPhoneError(null);
+                setPhoneMessage(null);
+              }}
+            >
+              WhatsApp
+            </ActionButton>
+            <label className={cn(actionButtonClass("secondary"), "cursor-pointer")}>
+              {avatarUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
+              Foto
+              <input accept="image/jpeg,image/png,image/webp" className="hidden" type="file" onChange={onAvatarUpload} />
+            </label>
+          </div>
+        </div>
 
-            {editingProfile ? (
-              <div className="grid gap-2 md:grid-cols-2">
-                <label className="block">
-                  <span className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Nome</span>
-                  <input
-                    className="mt-1 h-8 w-full rounded-md border border-white/10 bg-white/[0.055] px-2.5 text-xs font-semibold text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-300/45"
-                    maxLength={120}
-                    value={fullName}
-                    onChange={(event) => setFullName(event.target.value)}
-                  />
-                </label>
-                <label className="block">
-                  <span className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Empresa</span>
-                  <input
-                    className="mt-1 h-8 w-full rounded-md border border-white/10 bg-white/[0.055] px-2.5 text-xs font-semibold text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-300/45"
-                    maxLength={120}
-                    value={companyName}
-                    onChange={(event) => setCompanyName(event.target.value)}
-                  />
-                </label>
-                <div className="md:col-span-2 flex flex-wrap items-center gap-2">
-                  <button
-                    className="inline-flex h-8 items-center justify-center rounded-md bg-cyan-300 px-3 text-xs font-black text-slate-950 transition hover:bg-cyan-200 disabled:cursor-wait disabled:opacity-70"
-                    disabled={profileSaving}
-                    type="submit"
-                  >
-                    {profileSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                    Salvar dados
-                  </button>
-                  {profileMessage ? <span className="text-xs font-bold text-emerald-300">{profileMessage}</span> : null}
-                  {profileError ? <span className="text-xs font-bold text-rose-300">{profileError}</span> : null}
-                </div>
-              </div>
-            ) : (
-              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                <InfoTile icon={UserRound} label="WhatsApp" value={profile.phone ?? "Nao informado"} />
-                <InfoTile icon={ShieldCheck} label="CPF" value={profile.cpfPreview ?? "Pendente"} />
-                <InfoTile icon={Building2} label="Empresa" value={profile.companyName ?? account.organization.name} />
-                <InfoTile icon={CheckCircle2} label="Cadastro" value={profile.signupCompletedAt ? formatDate(profile.signupCompletedAt) : "Em andamento"} />
-              </div>
-            )}
+        {avatarError ? <Feedback tone="error">{avatarError}</Feedback> : null}
+
+        {editingProfile ? (
+          <form className="rounded-md bg-white/[0.035] p-4" onSubmit={handleProfileSubmit}>
+            <div className="grid gap-4 md:grid-cols-2">
+              <Field label="Nome">
+                <input
+                  className={inputClassName}
+                  maxLength={120}
+                  value={fullName}
+                  onChange={(event) => setFullName(event.target.value)}
+                />
+              </Field>
+              <Field label="Empresa">
+                <input
+                  className={inputClassName}
+                  maxLength={120}
+                  value={companyName}
+                  onChange={(event) => setCompanyName(event.target.value)}
+                />
+              </Field>
+            </div>
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <ActionButton icon={Save} loading={profileSaving} type="submit" variant="primary">
+                Salvar dados
+              </ActionButton>
+              {profileMessage ? <Feedback tone="success">{profileMessage}</Feedback> : null}
+              {profileError ? <Feedback tone="error">{profileError}</Feedback> : null}
+            </div>
           </form>
+        ) : (
+          <dl className="grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-4">
+            <AccountFact label="WhatsApp" value={profile.phone ?? "Nao informado"} />
+            <AccountFact label="CPF/CNPJ" value={profile.cpfPreview ?? "Pendente"} />
+            <AccountFact label="Empresa" value={profile.companyName ?? account.organization.name} />
+            <AccountFact label="Cadastro" value={profile.signupCompletedAt ? formatDate(profile.signupCompletedAt) : "Em andamento"} />
+          </dl>
+        )}
 
-          {editingWhatsapp ? (
-            <div className="mt-3 rounded-md border border-white/10 bg-white/[0.035] p-2.5">
-              <div className="flex flex-col gap-2 lg:flex-row lg:items-end">
-                <label className="min-w-0 flex-1">
-                  <span className="font-mono text-[9px] font-bold uppercase tracking-[0.16em] text-slate-500">Alterar WhatsApp</span>
-                  <input
-                    className="mt-1 h-8 w-full rounded-md border border-white/10 bg-white/[0.055] px-2.5 text-xs font-semibold text-white outline-none transition placeholder:text-slate-500 focus:border-emerald-300/45"
-                    inputMode="tel"
-                    placeholder="(47) 99999-9999"
-                    value={phone}
-                    onChange={(event) => handlePhoneChange(event.target.value)}
-                  />
-                </label>
-                <button
-                  className="inline-flex h-8 items-center justify-center rounded-md border border-emerald-300/25 bg-emerald-300/10 px-2.5 text-xs font-black text-emerald-100 transition hover:bg-emerald-300/15 disabled:cursor-wait disabled:opacity-70"
-                  disabled={phoneWorking}
-                  type="button"
-                  onClick={handlePhoneCheck}
-                >
-                  {phoneWorking && phoneCheck.state === "checking" ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-1.5 h-4 w-4" />}
-                  Validar
-                </button>
-                <button
-                  className="inline-flex h-8 items-center justify-center rounded-md bg-emerald-300 px-2.5 text-xs font-black text-slate-950 transition hover:bg-emerald-200 disabled:cursor-not-allowed disabled:opacity-50"
-                  disabled={phoneWorking || phoneIsCurrent || !phoneValidated}
-                  type="button"
-                  onClick={handlePhoneSend}
-                >
-                  {phoneWorking && phoneStep === "idle" && phoneValidated ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Send className="mr-1.5 h-4 w-4" />}
-                  Enviar codigo
-                </button>
-              </div>
-
-              {phoneCheck.message ? (
-                <p className={cn("mt-2 text-xs font-bold", phoneCheck.state === "valid" ? "text-emerald-300" : phoneCheck.state === "not_found" || phoneCheck.state === "error" ? "text-rose-300" : "text-slate-300")}>
-                  {phoneCheck.message}
-                </p>
-              ) : null}
-
-              {phoneStep === "code" ? (
-                <form className="mt-2 flex flex-col gap-2 sm:flex-row" onSubmit={handlePhoneVerify}>
-                  <input
-                    className="h-8 w-full rounded-md border border-white/10 bg-white/[0.055] px-2.5 font-mono text-xs font-black tracking-[0.24em] text-white outline-none transition placeholder:tracking-normal placeholder:text-slate-500 focus:border-emerald-300/45 sm:max-w-[150px]"
-                    inputMode="numeric"
-                    maxLength={6}
-                    placeholder="000000"
-                    value={phoneCode}
-                    onChange={(event) => setPhoneCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
-                  />
-                  <button
-                    className="inline-flex h-8 items-center justify-center rounded-md bg-cyan-300 px-3 text-xs font-black text-slate-950 transition hover:bg-cyan-200 disabled:cursor-wait disabled:opacity-70"
-                    disabled={phoneWorking}
-                    type="submit"
-                  >
-                    {phoneWorking ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-1.5 h-4 w-4" />}
-                    Confirmar
-                  </button>
-                </form>
-              ) : null}
-
-              {phoneMessage ? <p className="mt-2 text-xs font-bold text-emerald-300">{phoneMessage}</p> : null}
-              {phoneError ? <p className="mt-2 text-xs font-bold text-rose-300">{phoneError}</p> : null}
+        {editingWhatsapp ? (
+          <div className="rounded-md bg-emerald-300/[0.035] p-4">
+            <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto_auto] lg:items-end">
+              <Field label="Alterar WhatsApp">
+                <input
+                  className={inputClassName}
+                  inputMode="tel"
+                  placeholder="(47) 99999-9999"
+                  value={phone}
+                  onChange={(event) => handlePhoneChange(event.target.value)}
+                />
+              </Field>
+              <ActionButton
+                icon={ShieldCheck}
+                loading={phoneWorking && phoneCheck.state === "checking"}
+                type="button"
+                variant="secondary"
+                onClick={handlePhoneCheck}
+              >
+                Validar
+              </ActionButton>
+              <ActionButton
+                icon={Send}
+                disabled={phoneWorking || phoneIsCurrent || !phoneValidated}
+                loading={phoneWorking && phoneStep === "idle" && phoneValidated}
+                type="button"
+                variant="success"
+                onClick={handlePhoneSend}
+              >
+                Enviar codigo
+              </ActionButton>
             </div>
+
+            {phoneCheck.message ? (
+              <Feedback tone={phoneCheck.state === "valid" ? "success" : phoneCheck.state === "not_found" || phoneCheck.state === "error" ? "error" : "neutral"}>
+                {phoneCheck.message}
+              </Feedback>
+            ) : null}
+
+            {phoneStep === "code" ? (
+              <form className="mt-4 flex flex-col gap-2 sm:flex-row" onSubmit={handlePhoneVerify}>
+                <input
+                  className={cn(inputClassName, "font-semibold tracking-[0.18em] sm:max-w-[170px]")}
+                  inputMode="numeric"
+                  maxLength={6}
+                  placeholder="000000"
+                  value={phoneCode}
+                  onChange={(event) => setPhoneCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                />
+                <ActionButton icon={CheckCircle2} loading={phoneWorking} type="submit" variant="primary">
+                  Confirmar
+                </ActionButton>
+              </form>
+            ) : null}
+
+            {phoneMessage ? <Feedback tone="success">{phoneMessage}</Feedback> : null}
+            {phoneError ? <Feedback tone="error">{phoneError}</Feedback> : null}
+          </div>
+        ) : null}
+      </div>
+    </Surface>
+  );
+}
+
+function PlanUsageCard({ account, pendingCheckoutHref }: { account: AccountData; pendingCheckoutHref: string | null }) {
+  const access = account.billingAccess;
+  const activeSubscription = getPrimarySubscription(account.subscriptions);
+  const planName = activeSubscription?.planName ?? formatPlanName(account.organization.planCode);
+  const monthlyPrice = activeSubscription?.monthlyPriceBrl ?? 0;
+  const nextBillingAt = activeSubscription?.nextBillingAt ?? null;
+  const usagePercent = usagePercentage(access.usedCredits, access.includedCredits);
+  const trialText = trialSummary(access);
+  const hasActiveSubscription = Boolean(activeSubscription && isActiveSubscription(activeSubscription.status));
+  const primaryHref = pendingCheckoutHref ?? account.actions.plansHref;
+  const primaryLabel = pendingCheckoutHref
+    ? "Finalizar pagamento"
+    : hasActiveSubscription
+      ? "Gerenciar assinatura"
+      : "Ver planos";
+  const primaryTone: ActionTone = pendingCheckoutHref ? "warning" : "primary";
+
+  return (
+    <Surface className="xl:col-span-4">
+      <div className="flex h-full flex-col gap-5">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-cyan-200">Plano e utilizacao</p>
+            <h2 className="mt-2 truncate text-2xl font-semibold text-white">{planName}</h2>
+          </div>
+          <StatusBadge status={account.organization.status} />
+        </div>
+
+        {trialText ? (
+          <div className="rounded-md bg-emerald-300/10 px-3 py-2 text-sm font-medium text-emerald-100">
+            Teste gratis ativo: {trialText}
+          </div>
+        ) : null}
+
+        <div>
+          <div className="flex items-end justify-between gap-3">
+            <div>
+              <p className="text-sm text-slate-400">Creditos disponiveis</p>
+              <p className="mt-1 text-2xl font-semibold text-white">{formatCredits(account.wallet.balanceCredits)}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-sm text-slate-400">Uso do ciclo</p>
+              <p className="mt-1 text-lg font-semibold text-white">
+                {formatCredits(access.usedCredits)} / {formatCredits(access.includedCredits)}
+              </p>
+            </div>
+          </div>
+          <ProgressBar value={usagePercent} />
+          <p className="mt-2 text-xs text-slate-500">
+            {formatCredits(account.wallet.lifetimeUsedCredits)} creditos usados no historico da conta.
+          </p>
+        </div>
+
+        <dl className="grid gap-y-3 text-sm">
+          <PlanFact label="Mensalidade" value={formatCurrency(monthlyPrice)} />
+          <PlanFact label="Proxima cobranca" value={nextBillingAt ? formatDate(nextBillingAt) : "Nao agendada"} />
+          <PlanFact label="Status da carteira" value={statusLabel(account.wallet.status)} />
+        </dl>
+
+        <div className="mt-auto flex flex-wrap gap-2">
+          <ActionLink href={primaryHref} icon={pendingCheckoutHref ? ExternalLink : CreditCard} variant={primaryTone}>
+            {primaryLabel}
+          </ActionLink>
+          {pendingCheckoutHref ? (
+            <ActionLink href={account.actions.plansHref} variant="secondary">
+              Ver planos
+            </ActionLink>
           ) : null}
         </div>
       </div>
-    </Panel>
+    </Surface>
   );
 }
 
-function BillingPanel({ account, pendingCheckoutHref }: { account: AccountData; pendingCheckoutHref: string | null }) {
-  const access = account.billingAccess;
-  const activeSubscription = account.subscriptions[0] ?? null;
-
-  return (
-    <Panel>
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className="font-mono text-[9px] font-bold uppercase tracking-[0.14em] text-cyan-300">Plano e creditos</div>
-          <h2 className="mt-0.5 truncate text-base font-black text-white">{activeSubscription?.planName ?? account.organization.planCode}</h2>
-          <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-slate-400">{access.bannerDescription}</p>
-        </div>
-        <StatusBadge status={account.organization.status} />
-      </div>
-
-      <div className="mt-3 grid gap-2 sm:grid-cols-2">
-        <InfoTile icon={WalletCards} label="Saldo" value={`${formatCredits(account.wallet.balanceCredits)} creditos`} />
-        <InfoTile icon={ReceiptText} label="Uso atual" value={`${formatCredits(access.usedCredits)} / ${formatCredits(access.includedCredits)}`} />
-        <InfoTile icon={CreditCard} label="Mensalidade" value={formatCurrency(activeSubscription?.monthlyPriceBrl ?? 0)} />
-        <InfoTile icon={ShieldCheck} label="Proxima cobranca" value={activeSubscription?.nextBillingAt ? formatDate(activeSubscription.nextBillingAt) : "Nao agendada"} />
-      </div>
-
-      <div className="mt-3 flex flex-wrap gap-2">
-        <Link
-          className="inline-flex h-8 items-center justify-center rounded-md bg-cyan-300 px-3 text-xs font-black text-slate-950 transition hover:bg-cyan-200"
-          href={account.actions.plansHref}
-        >
-          Ver planos
-        </Link>
-        {pendingCheckoutHref ? (
-          <Link
-            className="inline-flex h-8 items-center justify-center rounded-md border border-amber-300/35 bg-amber-300/12 px-3 text-xs font-black text-amber-100 transition hover:bg-amber-300/18"
-            href={pendingCheckoutHref}
-          >
-            Finalizar pagamento
-            <ExternalLink className="ml-2 h-4 w-4" />
-          </Link>
-        ) : null}
-      </div>
-    </Panel>
-  );
-}
-
-function SecurityPanel({ email, onReload }: { email: string | null; onReload: () => Promise<void> }) {
+function SecurityAccessCard({ email, onReload }: { email: string | null; onReload: () => Promise<void> }) {
   const [nextEmail, setNextEmail] = useState(email ?? "");
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
@@ -920,61 +944,51 @@ function SecurityPanel({ email, onReload }: { email: string | null; onReload: ()
   }
 
   return (
-    <Panel>
-      <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex min-w-0 items-center gap-2.5">
-          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md border border-cyan-300/20 bg-cyan-300/10 text-cyan-200">
-            <ShieldCheck className="h-3.5 w-3.5" />
+    <Surface>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex min-w-0 items-start gap-3">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-cyan-300/10 text-cyan-200">
+            <ShieldCheck className="h-5 w-5" />
           </span>
           <div className="min-w-0">
-            <h2 className="text-sm font-black text-white">Seguranca</h2>
-            <p className="truncate text-xs text-slate-400">{email ?? "sem email atual"} - senha protegida</p>
+            <h2 className="text-base font-semibold text-white">Seguranca e acesso</h2>
+            <p className="mt-1 break-all text-sm text-slate-400">{email ?? "sem email atual"}</p>
+            <p className="mt-1 text-sm text-slate-500">Senha protegida na sua conta ConnectyHub.</p>
           </div>
         </div>
-        <div className="flex flex-wrap gap-1.5">
-          <button
-            className={cn(
-              "inline-flex h-7 items-center justify-center rounded-md border px-2 text-[10px] font-bold transition",
-              securityMode === "email"
-                ? "border-cyan-300/30 bg-cyan-300/12 text-cyan-100"
-                : "border-white/10 bg-white/[0.06] text-slate-100 hover:bg-white/[0.09]",
-            )}
+        <div className="flex flex-wrap gap-2">
+          <ActionButton
+            icon={Mail}
             type="button"
+            variant={securityMode === "email" ? "primary" : "secondary"}
             onClick={() => {
               setSecurityMode((current) => current === "email" ? "summary" : "email");
               setEmailError(null);
               setEmailMessage(null);
             }}
           >
-            <Mail className="mr-1.5 h-3.5 w-3.5" />
-            Email
-          </button>
-          <button
-            className={cn(
-              "inline-flex h-7 items-center justify-center rounded-md border px-2 text-[10px] font-bold transition",
-              securityMode === "password"
-                ? "border-emerald-300/30 bg-emerald-300/12 text-emerald-100"
-                : "border-white/10 bg-white/[0.06] text-slate-100 hover:bg-white/[0.09]",
-            )}
+            Alterar e-mail
+          </ActionButton>
+          <ActionButton
+            icon={KeyRound}
             type="button"
+            variant={securityMode === "password" ? "primary" : "secondary"}
             onClick={() => {
               setSecurityMode((current) => current === "password" ? "summary" : "password");
               setPasswordError(null);
               setPasswordMessage(null);
             }}
           >
-            <KeyRound className="mr-1.5 h-3.5 w-3.5" />
-            Senha
-          </button>
+            Alterar senha
+          </ActionButton>
         </div>
       </div>
 
       {securityMode === "email" ? (
-        <form className="mt-3 grid gap-2 rounded-md border border-white/10 bg-white/[0.035] p-2.5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end" onSubmit={handleEmailSubmit}>
-          <label className="block">
-            <span className="font-mono text-[9px] font-bold uppercase tracking-[0.16em] text-slate-500">Novo email</span>
+        <form className="mt-5 grid gap-3 rounded-md bg-white/[0.035] p-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end" onSubmit={handleEmailSubmit}>
+          <Field label="Novo e-mail">
             <input
-              className="mt-1 h-8 w-full rounded-md border border-white/10 bg-white/[0.055] px-2.5 text-xs font-semibold text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-300/45"
+              className={inputClassName}
               inputMode="email"
               type="email"
               value={nextEmail}
@@ -984,26 +998,20 @@ function SecurityPanel({ email, onReload }: { email: string | null; onReload: ()
                 setEmailMessage(null);
               }}
             />
-          </label>
-          <button
-            className="inline-flex h-8 items-center justify-center rounded-md bg-cyan-300 px-3 text-xs font-black text-slate-950 transition hover:bg-cyan-200 disabled:cursor-wait disabled:opacity-70"
-            disabled={emailWorking}
-            type="submit"
-          >
-            {emailWorking ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Send className="mr-1.5 h-4 w-4" />}
-            Alterar email
-          </button>
-          {emailMessage ? <p className="text-xs font-bold text-emerald-300 lg:col-span-2">{emailMessage}</p> : null}
-          {emailError ? <p className="text-xs font-bold text-rose-300 lg:col-span-2">{emailError}</p> : null}
+          </Field>
+          <ActionButton icon={Send} loading={emailWorking} type="submit" variant="primary">
+            Enviar alteracao
+          </ActionButton>
+          {emailMessage ? <Feedback tone="success">{emailMessage}</Feedback> : null}
+          {emailError ? <Feedback tone="error">{emailError}</Feedback> : null}
         </form>
       ) : null}
 
       {securityMode === "password" ? (
-        <form className="mt-3 grid gap-2 rounded-md border border-white/10 bg-white/[0.035] p-2.5 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] md:items-end" onSubmit={handlePasswordSubmit}>
-          <label className="block">
-            <span className="font-mono text-[9px] font-bold uppercase tracking-[0.16em] text-slate-500">Nova senha</span>
+        <form className="mt-5 grid gap-3 rounded-md bg-white/[0.035] p-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] md:items-end" onSubmit={handlePasswordSubmit}>
+          <Field label="Nova senha">
             <input
-              className="mt-1 h-8 w-full rounded-md border border-white/10 bg-white/[0.055] px-2.5 text-xs font-semibold text-white outline-none transition placeholder:text-slate-500 focus:border-emerald-300/45"
+              className={inputClassName}
               maxLength={128}
               type="password"
               value={password}
@@ -1013,11 +1021,10 @@ function SecurityPanel({ email, onReload }: { email: string | null; onReload: ()
                 setPasswordMessage(null);
               }}
             />
-          </label>
-          <label className="block">
-            <span className="font-mono text-[9px] font-bold uppercase tracking-[0.16em] text-slate-500">Confirmar</span>
+          </Field>
+          <Field label="Confirmar senha">
             <input
-              className="mt-1 h-8 w-full rounded-md border border-white/10 bg-white/[0.055] px-2.5 text-xs font-semibold text-white outline-none transition placeholder:text-slate-500 focus:border-emerald-300/45"
+              className={inputClassName}
               maxLength={128}
               type="password"
               value={passwordConfirm}
@@ -1027,180 +1034,485 @@ function SecurityPanel({ email, onReload }: { email: string | null; onReload: ()
                 setPasswordMessage(null);
               }}
             />
-          </label>
-          <button
-            className="inline-flex h-8 items-center justify-center rounded-md bg-emerald-300 px-3 text-xs font-black text-slate-950 transition hover:bg-emerald-200 disabled:cursor-wait disabled:opacity-70"
-            disabled={passwordWorking}
-            type="submit"
-          >
-            {passwordWorking ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Save className="mr-1.5 h-4 w-4" />}
-            Alterar senha
-          </button>
-          {passwordMessage ? <p className="text-xs font-bold text-emerald-300 md:col-span-3">{passwordMessage}</p> : null}
-          {passwordError ? <p className="text-xs font-bold text-rose-300 md:col-span-3">{passwordError}</p> : null}
+          </Field>
+          <ActionButton icon={Save} loading={passwordWorking} type="submit" variant="success">
+            Salvar senha
+          </ActionButton>
+          {passwordMessage ? <Feedback tone="success">{passwordMessage}</Feedback> : null}
+          {passwordError ? <Feedback tone="error">{passwordError}</Feedback> : null}
         </form>
       ) : null}
-    </Panel>
+    </Surface>
   );
 }
 
-function PaymentsPanel({ payments }: { payments: AccountData["payments"] }) {
+function BillingWorkspace({
+  account,
+  activeTab,
+  onTabChange,
+}: {
+  account: AccountData;
+  activeTab: BillingTab;
+  onTabChange: (tab: BillingTab) => void;
+}) {
   return (
-    <Panel>
-      <PanelTitle icon={ReceiptText} label="Historico de pagamentos" />
-      <div className="mt-2 max-h-[150px] divide-y divide-white/10 overflow-auto rounded-md border border-white/10">
-        {payments.length ? payments.map((payment) => (
-          <div key={payment.id} className="bg-white/[0.025] px-2.5 py-1.5 transition hover:bg-white/[0.045]">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="font-mono text-xs font-black text-white">{formatCurrency(payment.amountBrl)}</p>
-                  <StatusBadge status={payment.status} />
-                </div>
-                <p className="mt-0.5 truncate text-[11px] text-slate-400">
-                  {payment.planCode ?? "Plano"} - {payment.providerStatus ?? payment.invoiceStatus ?? "sem status externo"}
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-[11px] font-semibold text-slate-300">{formatDateTime(payment.paidAt ?? payment.createdAt)}</span>
-                {payment.invoiceHref ? (
-                  <Link className="rounded-md border border-cyan-300/25 bg-cyan-300/10 px-2 py-1 text-[10px] font-black text-cyan-100" href={payment.invoiceHref}>
-                    Fatura
-                  </Link>
-                ) : null}
-                {payment.receiptUrl ? (
-                  <a
-                    className="rounded-md border border-emerald-300/25 bg-emerald-300/10 px-2 py-1 text-[10px] font-black text-emerald-100"
-                    href={payment.receiptUrl}
-                    rel="noreferrer"
-                    target="_blank"
-                  >
-                    Comprovante
-                  </a>
-                ) : null}
-                {payment.checkoutHref ? (
-                  <Link className="rounded-md bg-amber-300 px-2 py-1 text-[10px] font-black text-slate-950" href={payment.checkoutHref}>
-                    Pagar
-                  </Link>
-                ) : null}
-              </div>
-            </div>
-          </div>
-        )) : <EmptyState text="Nenhum pagamento encontrado para esta conta." />}
+    <Surface>
+      <div className="flex flex-col gap-1">
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-cyan-200">Faturamento e consumo</p>
+        <h2 className="text-xl font-semibold text-white">Historico financeiro da conta</h2>
       </div>
-    </Panel>
+
+      <Tabs className="mt-5 gap-4" value={activeTab} onValueChange={(value) => onTabChange(value as BillingTab)}>
+        <div className="overflow-x-auto overflow-y-hidden pb-1">
+          <TabsList className="w-max min-w-full justify-start gap-1 bg-transparent p-0" variant="line">
+            {billingTabs.map((tab) => {
+              const Icon = tab.icon;
+              const count = billingTabCount(account, tab.value);
+
+              return (
+                <TabsTrigger
+                  key={tab.value}
+                  className="h-10 rounded-md border border-white/10 bg-white/[0.035] px-3 text-sm font-semibold text-slate-300 hover:text-white data-active:border-cyan-300/40 data-active:bg-cyan-300 data-active:text-slate-950"
+                  value={tab.value}
+                >
+                  <Icon className="h-4 w-4" />
+                  {tab.label}
+                  <span className="rounded-full bg-white/10 px-1.5 py-0.5 text-[11px]">{count}</span>
+                </TabsTrigger>
+              );
+            })}
+          </TabsList>
+        </div>
+
+        <TabsContent className="mt-0 data-[state=inactive]:hidden" forceMount value="payments">
+          <PaymentsTab payments={account.payments} />
+        </TabsContent>
+        <TabsContent className="mt-0 data-[state=inactive]:hidden" forceMount value="subscriptions">
+          <SubscriptionsTab plansHref={account.actions.plansHref} subscriptions={account.subscriptions} />
+        </TabsContent>
+        <TabsContent className="mt-0 data-[state=inactive]:hidden" forceMount value="credits">
+          <CreditsTab transactions={account.creditTransactions} />
+        </TabsContent>
+        <TabsContent className="mt-0 data-[state=inactive]:hidden" forceMount value="cycles">
+          <CyclesTab cycles={account.cycles} />
+        </TabsContent>
+      </Tabs>
+    </Surface>
   );
 }
 
-function CreditHistoryPanel({ transactions }: { transactions: AccountData["creditTransactions"] }) {
-  return (
-    <Panel>
-      <PanelTitle icon={WalletCards} label="Historico de creditos" />
-      <div className="mt-2 max-h-[150px] divide-y divide-white/10 overflow-auto rounded-md border border-white/10">
-        {transactions.length ? transactions.map((transaction) => {
-          const positive = transaction.amountCredits > 0;
+function PaymentsTab({ payments }: { payments: AccountData["payments"] }) {
+  const { hasMore, setExpanded, visibleItems } = useVisibleItems(payments);
 
-          return (
-            <div key={transaction.id} className="bg-white/[0.025] px-2.5 py-1.5 transition hover:bg-white/[0.045]">
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="truncate text-xs font-bold text-white">
-                    {transaction.description ?? transactionTypeLabel(transaction.type)}
-                  </p>
-                  <p className="mt-0.5 truncate text-[11px] text-slate-400">
-                    Saldo depois: {formatCredits(transaction.balanceAfterCredits)} - {formatDateTime(transaction.createdAt)}
-                  </p>
-                </div>
-                <span className={cn("font-mono text-sm font-black", positive ? "text-emerald-300" : "text-rose-300")}>
-                  {positive ? "+" : ""}{formatCredits(transaction.amountCredits)}
-                </span>
-              </div>
-            </div>
-          );
-        }) : <EmptyState text="Nenhuma movimentacao de creditos ainda." />}
+  if (!payments.length) {
+    return <EmptyState text="Nenhum pagamento encontrado para esta conta." />;
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="hidden overflow-x-auto overflow-y-hidden sm:block">
+        <table className="w-full min-w-[760px] border-separate border-spacing-0 text-left">
+          <thead>
+            <tr className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">
+              <th className="border-b border-white/10 pb-3 pr-4">Valor</th>
+              <th className="border-b border-white/10 pb-3 pr-4">Plano</th>
+              <th className="border-b border-white/10 pb-3 pr-4">Status</th>
+              <th className="border-b border-white/10 pb-3 pr-4">Data</th>
+              <th className="border-b border-white/10 pb-3 pr-4">Fatura</th>
+              <th className="border-b border-white/10 pb-3 text-right">Acao</th>
+            </tr>
+          </thead>
+          <tbody>
+            {visibleItems.map((payment) => (
+              <PaymentTableRow key={payment.id} payment={payment} />
+            ))}
+          </tbody>
+        </table>
       </div>
-    </Panel>
+
+      <div className="space-y-3 sm:hidden">
+        {visibleItems.map((payment) => (
+          <PaymentMobileRow key={payment.id} payment={payment} />
+        ))}
+      </div>
+
+      {hasMore ? <ShowMoreButton total={payments.length} onClick={() => setExpanded(true)} /> : null}
+    </div>
   );
 }
 
-function SubscriptionsPanel({ subscriptions }: { subscriptions: AccountData["subscriptions"] }) {
+function PaymentTableRow({ payment }: { payment: AccountData["payments"][number] }) {
+  const reference = internalReference([payment.planCode, payment.providerStatus ?? payment.invoiceStatus]);
+
   return (
-    <Panel>
-      <PanelTitle icon={CreditCard} label="Assinaturas" />
-      <div className="mt-2 max-h-[128px] divide-y divide-white/10 overflow-auto rounded-md border border-white/10">
-        {subscriptions.length ? subscriptions.map((subscription) => (
-          <div key={subscription.id} className="bg-white/[0.025] px-2.5 py-1.5 transition hover:bg-white/[0.045]">
-            <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <p className="truncate text-xs font-black text-white">{subscription.planName}</p>
-                <p className="mt-0.5 truncate text-[11px] text-slate-400">
-                  {formatCurrency(subscription.monthlyPriceBrl)} - {formatCredits(subscription.includedCredits)} creditos
-                </p>
+    <tr className="group">
+      <td className="border-b border-white/10 py-3 pr-4 align-top text-sm font-semibold text-white">
+        {formatCurrency(payment.amountBrl)}
+      </td>
+      <td className="border-b border-white/10 py-3 pr-4 align-top">
+        <p className="text-sm font-semibold text-white">{formatPlanName(payment.planCode ?? "Plano")}</p>
+        {reference ? <InternalReference value={reference} /> : null}
+      </td>
+      <td className="border-b border-white/10 py-3 pr-4 align-top">
+        <StatusBadge status={payment.status} />
+      </td>
+      <td className="border-b border-white/10 py-3 pr-4 align-top text-sm text-slate-300">
+        {formatDateTime(payment.paidAt ?? payment.createdAt)}
+      </td>
+      <td className="border-b border-white/10 py-3 pr-4 align-top">
+        {payment.invoiceHref ? (
+          <ActionLink href={payment.invoiceHref} variant="ghost">
+            Ver fatura
+          </ActionLink>
+        ) : (
+          <span className="text-sm text-slate-500">Nao disponivel</span>
+        )}
+      </td>
+      <td className="border-b border-white/10 py-3 align-top">
+        <PaymentActions payment={payment} />
+      </td>
+    </tr>
+  );
+}
+
+function PaymentMobileRow({ payment }: { payment: AccountData["payments"][number] }) {
+  const reference = internalReference([payment.planCode, payment.providerStatus ?? payment.invoiceStatus]);
+
+  return (
+    <article className="rounded-md bg-white/[0.035] p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-base font-semibold text-white">{formatCurrency(payment.amountBrl)}</p>
+          <p className="mt-1 text-sm text-slate-400">{formatPlanName(payment.planCode ?? "Plano")}</p>
+        </div>
+        <StatusBadge status={payment.status} />
+      </div>
+      <p className="mt-3 text-sm text-slate-300">{formatDateTime(payment.paidAt ?? payment.createdAt)}</p>
+      {reference ? <InternalReference value={reference} /> : null}
+      <div className="mt-3 flex flex-wrap gap-2">
+        {payment.invoiceHref ? (
+          <ActionLink href={payment.invoiceHref} variant="ghost">
+            Ver fatura
+          </ActionLink>
+        ) : null}
+        <PaymentActions payment={payment} align="left" />
+      </div>
+    </article>
+  );
+}
+
+function PaymentActions({ align = "right", payment }: { align?: "left" | "right"; payment: AccountData["payments"][number] }) {
+  return (
+    <div className={cn("flex flex-wrap gap-2", align === "right" ? "justify-end" : "justify-start")}>
+      {payment.receiptUrl ? (
+        <ActionLink external href={payment.receiptUrl} variant="secondary">
+          Comprovante
+        </ActionLink>
+      ) : null}
+      {payment.checkoutHref ? (
+        <ActionLink href={payment.checkoutHref} icon={ExternalLink} variant="warning">
+          Pagar
+        </ActionLink>
+      ) : null}
+      {!payment.receiptUrl && !payment.checkoutHref ? <span className="text-sm text-slate-500">Sem acao</span> : null}
+    </div>
+  );
+}
+
+function SubscriptionsTab({
+  plansHref,
+  subscriptions,
+}: {
+  plansHref: string;
+  subscriptions: AccountData["subscriptions"];
+}) {
+  const { hasMore, setExpanded, visibleItems } = useVisibleItems(subscriptions);
+
+  if (!subscriptions.length) {
+    return <EmptyState text="Nenhuma assinatura registrada nesta conta." />;
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="hidden overflow-x-auto overflow-y-hidden sm:block">
+        <table className="w-full min-w-[820px] border-separate border-spacing-0 text-left">
+          <thead>
+            <tr className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">
+              <th className="border-b border-white/10 pb-3 pr-4">Plano</th>
+              <th className="border-b border-white/10 pb-3 pr-4">Valor</th>
+              <th className="border-b border-white/10 pb-3 pr-4">Creditos</th>
+              <th className="border-b border-white/10 pb-3 pr-4">Status</th>
+              <th className="border-b border-white/10 pb-3 pr-4">Inicio</th>
+              <th className="border-b border-white/10 pb-3 pr-4">Renovacao</th>
+              <th className="border-b border-white/10 pb-3 text-right">Acao</th>
+            </tr>
+          </thead>
+          <tbody>
+            {visibleItems.map((subscription, index) => (
+              <tr key={subscription.id} className={cn(isCurrentSubscription(subscription, index) ? "bg-cyan-300/[0.035]" : "")}>
+                <td className="border-b border-white/10 py-3 pl-2 pr-4 align-top">
+                  <p className="text-sm font-semibold text-white">{subscription.planName}</p>
+                  {isCurrentSubscription(subscription, index) ? <p className="mt-1 text-xs font-semibold text-cyan-200">Assinatura atual</p> : null}
+                </td>
+                <td className="border-b border-white/10 py-3 pr-4 align-top text-sm text-slate-300">{formatCurrency(subscription.monthlyPriceBrl)}</td>
+                <td className="border-b border-white/10 py-3 pr-4 align-top text-sm text-slate-300">{formatCredits(subscription.includedCredits)}</td>
+                <td className="border-b border-white/10 py-3 pr-4 align-top"><StatusBadge status={subscription.status} /></td>
+                <td className="border-b border-white/10 py-3 pr-4 align-top text-sm text-slate-300">{formatDate(subscription.currentPeriodStart ?? subscription.createdAt)}</td>
+                <td className="border-b border-white/10 py-3 pr-4 align-top text-sm text-slate-300">{subscription.nextBillingAt ? formatDate(subscription.nextBillingAt) : "Nao agendada"}</td>
+                <td className="border-b border-white/10 py-3 text-right align-top">
+                  <ActionLink href={subscription.checkoutHref ?? plansHref} icon={ExternalLink} variant={subscription.checkoutHref ? "warning" : "ghost"}>
+                    {subscription.checkoutHref ? "Finalizar pagamento" : "Gerenciar"}
+                  </ActionLink>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="space-y-3 sm:hidden">
+        {visibleItems.map((subscription, index) => (
+          <article key={subscription.id} className={cn("rounded-md bg-white/[0.035] p-4", isCurrentSubscription(subscription, index) ? "ring-1 ring-cyan-300/25" : "")}>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-base font-semibold text-white">{subscription.planName}</p>
+                <p className="mt-1 text-sm text-slate-400">{formatCurrency(subscription.monthlyPriceBrl)} - {formatCredits(subscription.includedCredits)} creditos</p>
               </div>
               <StatusBadge status={subscription.status} />
             </div>
-          </div>
-        )) : <EmptyState text="Nenhuma assinatura registrada." />}
-      </div>
-    </Panel>
-  );
-}
-
-function CyclesPanel({ cycles }: { cycles: AccountData["cycles"] }) {
-  return (
-    <Panel>
-      <PanelTitle icon={ShieldCheck} label="Ciclos de uso" />
-      <div className="mt-2 max-h-[128px] divide-y divide-white/10 overflow-auto rounded-md border border-white/10">
-        {cycles.length ? cycles.map((cycle) => (
-          <div key={cycle.id} className="bg-white/[0.025] px-2.5 py-1.5 transition hover:bg-white/[0.045]">
-            <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <p className="truncate text-xs font-black text-white">{cycle.planName ?? cycle.planCode ?? "Ciclo"}</p>
-                <p className="mt-0.5 truncate text-[11px] text-slate-400">
-                  {formatDate(cycle.cycleStart)} ate {formatDate(cycle.cycleEnd)}
-                </p>
-              </div>
-              <div className="text-right">
-                <p className="font-mono text-sm font-black text-white">{formatCredits(cycle.usedCredits)}</p>
-                <p className="text-[11px] text-slate-400">de {formatCredits(cycle.includedCredits)}</p>
-              </div>
+            <dl className="mt-3 grid gap-2 text-sm text-slate-300">
+              <PlanFact label="Inicio" value={formatDate(subscription.currentPeriodStart ?? subscription.createdAt)} />
+              <PlanFact label="Renovacao" value={subscription.nextBillingAt ? formatDate(subscription.nextBillingAt) : "Nao agendada"} />
+            </dl>
+            <div className="mt-3">
+              <ActionLink href={subscription.checkoutHref ?? plansHref} icon={ExternalLink} variant={subscription.checkoutHref ? "warning" : "ghost"}>
+                {subscription.checkoutHref ? "Finalizar pagamento" : "Gerenciar"}
+              </ActionLink>
             </div>
-          </div>
-        )) : <EmptyState text="Nenhum ciclo de uso encontrado." />}
+          </article>
+        ))}
       </div>
-    </Panel>
-  );
-}
 
-function Panel({ children }: { children: ReactNode }) {
-  return (
-    <div className="rounded-md border border-white/10 bg-[#0b1220]/92 p-3 shadow-none">
-      {children}
+      {hasMore ? <ShowMoreButton total={subscriptions.length} onClick={() => setExpanded(true)} /> : null}
     </div>
   );
 }
 
-function PanelTitle({ icon: Icon, label }: { icon: LucideIcon; label: string }) {
+function CreditsTab({ transactions }: { transactions: AccountData["creditTransactions"] }) {
+  const { hasMore, setExpanded, visibleItems } = useVisibleItems(transactions);
+
+  if (!transactions.length) {
+    return <EmptyState text="Nenhuma movimentacao de creditos foi registrada ainda." />;
+  }
+
   return (
-    <div className="flex items-center gap-2.5">
-      <span className="grid h-7 w-7 place-items-center rounded-md border border-cyan-300/20 bg-cyan-300/10 text-cyan-200">
-        <Icon className="h-3.5 w-3.5" />
-      </span>
-      <h2 className="text-xs font-black text-white">{label}</h2>
+    <div className="space-y-3">
+      {visibleItems.map((transaction) => {
+        const positive = transaction.amountCredits >= 0;
+        const sign = positive ? "+" : "-";
+
+        return (
+          <article key={transaction.id} className="flex flex-col gap-3 border-b border-white/10 pb-3 last:border-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-white">{transaction.description ?? transactionTypeLabel(transaction.type)}</p>
+              <p className="mt-1 text-sm text-slate-400">{formatDateTime(transaction.createdAt)}</p>
+              <p className="mt-1 text-xs text-slate-500">Saldo apos movimentacao: {formatCredits(transaction.balanceAfterCredits)} creditos</p>
+            </div>
+            <div className="text-left sm:text-right">
+              <p className={cn("text-lg font-semibold", positive ? "text-emerald-300" : "text-rose-300")}>
+                {sign}{formatCredits(Math.abs(transaction.amountCredits))}
+              </p>
+              <p className="text-xs text-slate-500">{positive ? "Entrada" : "Saida"}</p>
+            </div>
+          </article>
+        );
+      })}
+
+      {hasMore ? <ShowMoreButton total={transactions.length} onClick={() => setExpanded(true)} /> : null}
     </div>
   );
 }
 
-function InfoTile({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) {
+function CyclesTab({ cycles }: { cycles: AccountData["cycles"] }) {
+  const { hasMore, setExpanded, visibleItems } = useVisibleItems(cycles);
+
+  if (!cycles.length) {
+    return <EmptyState text="Nenhum ciclo de uso encontrado para esta conta." />;
+  }
+
   return (
-    <div className="rounded-md border border-white/10 bg-white/[0.035] p-2">
-      <div className="flex items-start gap-2">
-        <Icon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-cyan-300" />
-        <div className="min-w-0">
-          <p className="font-mono text-[8px] font-bold uppercase tracking-[0.12em] text-slate-500">{label}</p>
-          <p className="mt-0.5 break-words text-xs font-bold text-slate-100">{value}</p>
+    <div className="grid gap-3 lg:grid-cols-2">
+      {visibleItems.map((cycle) => {
+        const percent = usagePercentage(cycle.usedCredits, cycle.includedCredits);
+
+        return (
+          <article key={cycle.id} className="rounded-md bg-white/[0.035] p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="truncate text-base font-semibold text-white">{cycle.planName ?? formatPlanName(cycle.planCode ?? "Ciclo")}</p>
+                <p className="mt-1 text-sm text-slate-400">{formatDate(cycle.cycleStart)} ate {formatDate(cycle.cycleEnd)}</p>
+              </div>
+              <StatusBadge status={cycle.status} />
+            </div>
+            <div className="mt-4">
+              <div className="flex items-center justify-between gap-3 text-sm">
+                <span className="font-medium text-slate-300">{formatCredits(cycle.usedCredits)} de {formatCredits(cycle.includedCredits)} creditos utilizados</span>
+                <span className="font-semibold text-white">{Math.round(percent)}%</span>
+              </div>
+              <ProgressBar value={percent} />
+              {cycle.overageCredits > 0 ? (
+                <p className="mt-2 text-xs font-semibold text-amber-200">Excedente: {formatCredits(cycle.overageCredits)} creditos</p>
+              ) : null}
+            </div>
+          </article>
+        );
+      })}
+
+      {hasMore ? (
+        <div className="lg:col-span-2">
+          <ShowMoreButton total={cycles.length} onClick={() => setExpanded(true)} />
         </div>
-      </div>
+      ) : null}
+    </div>
+  );
+}
+
+function Surface({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <section className={cn("rounded-lg border border-white/10 bg-[#0b1220]/95 p-5 shadow-[0_18px_50px_rgba(0,0,0,0.16)]", className)}>
+      {children}
+    </section>
+  );
+}
+
+function ActionButton({
+  children,
+  className,
+  disabled,
+  icon: Icon,
+  loading = false,
+  variant = "secondary",
+  ...props
+}: {
+  children: ReactNode;
+  icon?: LucideIcon;
+  loading?: boolean;
+  variant?: ActionTone;
+} & ButtonHTMLAttributes<HTMLButtonElement>) {
+  return (
+    <button
+      className={actionButtonClass(variant, className)}
+      disabled={disabled || loading}
+      {...props}
+    >
+      {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : Icon ? <Icon className="h-4 w-4" /> : null}
+      {children}
+    </button>
+  );
+}
+
+function ActionLink({
+  children,
+  className,
+  external = false,
+  href,
+  icon: Icon,
+  variant = "secondary",
+}: {
+  children: ReactNode;
+  className?: string;
+  external?: boolean;
+  href: string;
+  icon?: LucideIcon;
+  variant?: ActionTone;
+}) {
+  const content = (
+    <>
+      {Icon ? <Icon className="h-4 w-4" /> : null}
+      {children}
+    </>
+  );
+  const linkClassName = actionButtonClass(variant, className);
+
+  if (external) {
+    return (
+      <a className={linkClassName} href={href} rel="noreferrer" target="_blank">
+        {content}
+      </a>
+    );
+  }
+
+  return (
+    <Link className={linkClassName} href={href}>
+      {content}
+    </Link>
+  );
+}
+
+function actionButtonClass(variant: ActionTone, className?: string) {
+  const variantClass = {
+    ghost: "border-transparent bg-transparent text-cyan-100 hover:bg-cyan-300/10",
+    primary: "border-cyan-300 bg-cyan-300 text-slate-950 hover:bg-cyan-200",
+    secondary: "border-white/10 bg-white/[0.055] text-slate-100 hover:bg-white/[0.085]",
+    success: "border-emerald-300 bg-emerald-300 text-slate-950 hover:bg-emerald-200",
+    warning: "border-amber-300 bg-amber-300 text-slate-950 hover:bg-amber-200",
+  }[variant];
+
+  return cn(
+    "inline-flex min-h-9 items-center justify-center gap-2 rounded-md border px-3 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/45 disabled:pointer-events-none disabled:opacity-55",
+    variantClass,
+    className,
+  );
+}
+
+function Field({ children, label }: { children: ReactNode; label: string }) {
+  return (
+    <label className="block min-w-0">
+      <span className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">{label}</span>
+      <div className="mt-1.5">{children}</div>
+    </label>
+  );
+}
+
+const inputClassName = "h-10 w-full rounded-md border border-white/10 bg-[#162238] px-3 text-sm font-medium text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-300/50 focus:ring-2 focus:ring-cyan-300/15";
+
+function AccountFact({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">{label}</dt>
+      <dd className="mt-1 break-words text-sm font-semibold text-slate-100">{value}</dd>
+    </div>
+  );
+}
+
+function PlanFact({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-start justify-between gap-4">
+      <dt className="text-slate-500">{label}</dt>
+      <dd className="text-right font-semibold text-slate-100">{value}</dd>
+    </div>
+  );
+}
+
+function Feedback({ children, tone }: { children: ReactNode; tone: "error" | "neutral" | "success" }) {
+  return (
+    <p
+      className={cn(
+        "mt-3 text-sm font-medium",
+        tone === "success" ? "text-emerald-300" : tone === "error" ? "text-rose-300" : "text-slate-300",
+      )}
+    >
+      {children}
+    </p>
+  );
+}
+
+function ProgressBar({ value }: { value: number }) {
+  const percent = clamp(value, 0, 100);
+
+  return (
+    <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/10" aria-label={`Uso de ${Math.round(percent)}%`}>
+      <div className="h-full rounded-full bg-cyan-300" style={{ width: `${percent}%` }} />
     </div>
   );
 }
@@ -1211,18 +1523,18 @@ function AccountAvatar({ avatarUrl, name }: { avatarUrl: string | null; name: st
   const showImage = Boolean(avatarUrl && failedAvatarUrl !== avatarUrl);
 
   return (
-    <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-md border border-cyan-200/20 bg-cyan-300/12">
+    <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-cyan-200/20 bg-cyan-300/12">
       {showImage && avatarUrl ? (
         <Image
           alt=""
           className="h-full w-full object-cover"
-          height={64}
+          height={80}
           src={avatarUrl}
-          width={64}
+          width={80}
           onError={() => setFailedAvatarUrl(avatarUrl)}
         />
       ) : (
-        <div className="grid h-full w-full place-items-center text-base font-black text-cyan-100">{initials}</div>
+        <div className="grid h-full w-full place-items-center text-xl font-semibold text-cyan-100">{initials}</div>
       )}
     </div>
   );
@@ -1232,31 +1544,140 @@ function StatusBadge({ status }: { status: string }) {
   const tone = statusTone(status);
 
   return (
-    <span className={cn("inline-flex h-5 items-center rounded-full border px-1.5 font-mono text-[8px] font-black uppercase tracking-wide", tone)}>
+    <span className={cn("inline-flex min-h-6 items-center rounded-full border px-2.5 text-xs font-semibold", tone)}>
       {statusLabel(status)}
     </span>
   );
 }
 
+function InternalReference({ value }: { value: string }) {
+  return (
+    <p className="mt-1 text-xs text-slate-500">
+      Referencia interna: <span className="font-mono">{value}</span>
+    </p>
+  );
+}
+
 function EmptyState({ text }: { text: string }) {
   return (
-    <div className="rounded-lg border border-dashed border-white/12 bg-white/[0.03] p-4 text-xs font-semibold text-slate-400">
+    <div className="rounded-md border border-dashed border-white/12 bg-white/[0.025] p-5 text-sm font-medium text-slate-400">
       {text}
     </div>
   );
 }
 
+function ShowMoreButton({ onClick, total }: { onClick: () => void; total: number }) {
+  return (
+    <div className="flex justify-center">
+      <ActionButton type="button" variant="secondary" onClick={onClick}>
+        Mostrar todos ({total})
+      </ActionButton>
+    </div>
+  );
+}
+
+function ErrorState({
+  message,
+  onRetry,
+  refreshing,
+}: {
+  message: string;
+  onRetry: () => void;
+  refreshing: boolean;
+}) {
+  return (
+    <Surface>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex items-start gap-3">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-rose-400/10 text-rose-200">
+            <AlertTriangle className="h-5 w-5" />
+          </span>
+          <div>
+            <h2 className="text-base font-semibold text-white">Conta indisponivel</h2>
+            <p className="mt-1 text-sm leading-6 text-slate-400">{message}</p>
+          </div>
+        </div>
+        <ActionButton icon={RefreshCw} loading={refreshing} type="button" variant="secondary" onClick={onRetry}>
+          Tentar novamente
+        </ActionButton>
+      </div>
+    </Surface>
+  );
+}
+
 function AccountLoadingState() {
   return (
-    <section className="space-y-2.5">
-      <AccountHeader onRefresh={() => undefined} refreshing={true} />
-      <div className="grid gap-2.5 xl:grid-cols-[minmax(0,1.15fr)_minmax(300px,0.85fr)]">
-        <div className="h-36 animate-pulse rounded-md border border-white/10 bg-white/[0.05]" />
-        <div className="h-36 animate-pulse rounded-md border border-white/10 bg-white/[0.05]" />
+    <section className="mx-auto max-w-[1380px] space-y-5">
+      <div className="rounded-lg border border-white/10 bg-[#0a111d]/95 p-5">
+        <div className="h-6 w-48 animate-pulse rounded-md bg-white/10" />
+        <div className="mt-3 h-4 w-80 max-w-full animate-pulse rounded-md bg-white/10" />
       </div>
-      <div className="h-14 animate-pulse rounded-md border border-white/10 bg-white/[0.05]" />
+      <div className="grid gap-4 xl:grid-cols-12">
+        <div className="h-64 animate-pulse rounded-lg border border-white/10 bg-white/[0.05] xl:col-span-8" />
+        <div className="h-64 animate-pulse rounded-lg border border-white/10 bg-white/[0.05] xl:col-span-4" />
+      </div>
+      <div className="h-28 animate-pulse rounded-lg border border-white/10 bg-white/[0.05]" />
+      <div className="h-72 animate-pulse rounded-lg border border-white/10 bg-white/[0.05]" />
     </section>
   );
+}
+
+function useVisibleItems<T>(items: T[], limit = LIST_LIMIT) {
+  const [expanded, setExpanded] = useState(false);
+
+  return {
+    expanded,
+    hasMore: !expanded && items.length > limit,
+    setExpanded,
+    visibleItems: expanded ? items : items.slice(0, limit),
+  };
+}
+
+function billingTabCount(account: AccountData, tab: BillingTab) {
+  if (tab === "payments") return account.payments.length;
+  if (tab === "subscriptions") return account.subscriptions.length;
+  if (tab === "credits") return account.creditTransactions.length;
+  return account.cycles.length;
+}
+
+function getPrimarySubscription(subscriptions: AccountData["subscriptions"]) {
+  return subscriptions.find((subscription) => isActiveSubscription(subscription.status) || ["pending", "in_process", "trial_pending"].includes(subscription.status))
+    ?? subscriptions[0]
+    ?? null;
+}
+
+function isActiveSubscription(status: string) {
+  return ["active", "paid_active", "trial", "trial_active"].includes(status);
+}
+
+function isCurrentSubscription(subscription: AccountData["subscriptions"][number], index: number) {
+  return isActiveSubscription(subscription.status) || (index === 0 && !["canceled", "cancelled", "rejected", "refunded"].includes(subscription.status));
+}
+
+function trialSummary(access: BillingAccessClientStatus) {
+  const isTrial = access.state.startsWith("trial") || access.organizationStatus === "trial";
+
+  if (!isTrial) {
+    return null;
+  }
+
+  if (typeof access.trialDaysRemaining === "number") {
+    return `${access.trialDaysRemaining} dia${access.trialDaysRemaining === 1 ? "" : "s"} restante${access.trialDaysRemaining === 1 ? "" : "s"}`;
+  }
+
+  return statusLabel(access.state);
+}
+
+function usagePercentage(used: number, included: number) {
+  if (!Number.isFinite(used) || !Number.isFinite(included) || included <= 0) {
+    return 0;
+  }
+
+  return (used / included) * 100;
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
 }
 
 function initialsFromName(value: string) {
@@ -1315,22 +1736,55 @@ function formatDateTime(value: string | null) {
   });
 }
 
+function formatPlanName(value: string | null | undefined) {
+  const normalized = String(value ?? "").trim();
+
+  if (!normalized) {
+    return "Plano";
+  }
+
+  return normalized
+    .split(/[\s_-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function internalReference(values: Array<string | null | undefined>) {
+  const cleaned = values
+    .map((value) => String(value ?? "").trim())
+    .filter(Boolean);
+
+  return Array.from(new Set(cleaned)).join(" - ");
+}
+
 function statusLabel(status: string | null | undefined) {
   const labels: Record<string, string> = {
     active: "Ativo",
     approved: "Aprovado",
+    blocked: "Bloqueado",
     canceled: "Cancelado",
+    cancelled: "Cancelado",
     complete: "Completo",
     incomplete: "Incompleto",
+    inactive: "Inativo",
     in_process: "Processando",
+    open: "Aberto",
     paid: "Pago",
+    paid_active: "Ativo",
+    paid_expired: "Pagamento expirado",
+    paid_no_credits: "Sem creditos",
     past_due: "Atrasado",
     paused: "Pausado",
     pending: "Pendente",
     rejected: "Recusado",
     refunded: "Reembolsado",
+    replaced_before_payment: "Substituido antes do pagamento",
     trial: "Teste",
+    trial_active: "Teste ativo",
     trial_expired: "Teste expirado",
+    trial_low_credits: "Teste com poucos creditos",
+    trial_no_credits: "Teste sem creditos",
     trial_pending: "Teste pendente",
   };
 
@@ -1354,15 +1808,23 @@ function transactionTypeLabel(type: string) {
 }
 
 function statusTone(status: string) {
-  if (["active", "approved", "paid", "trial", "complete"].includes(status)) {
+  if (["active", "approved", "paid", "paid_active", "trial", "trial_active", "complete"].includes(status)) {
     return "border-emerald-300/30 bg-emerald-300/12 text-emerald-200";
   }
 
-  if (["pending", "incomplete", "in_process", "trial_pending"].includes(status)) {
+  if (["pending", "incomplete", "in_process", "trial_pending", "trial_low_credits"].includes(status)) {
     return "border-amber-300/30 bg-amber-300/12 text-amber-200";
   }
 
-  if (["rejected", "canceled", "past_due", "trial_expired"].includes(status)) {
+  if (["open", "paused"].includes(status)) {
+    return "border-sky-300/30 bg-sky-300/12 text-sky-200";
+  }
+
+  if (["refunded"].includes(status)) {
+    return "border-violet-300/30 bg-violet-300/12 text-violet-200";
+  }
+
+  if (["blocked", "rejected", "canceled", "cancelled", "past_due", "paid_expired", "trial_expired", "trial_no_credits"].includes(status)) {
     return "border-rose-300/30 bg-rose-300/12 text-rose-200";
   }
 
