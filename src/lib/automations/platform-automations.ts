@@ -173,6 +173,28 @@ export const PLATFORM_AUTOMATION_EVENT_DEFINITIONS: PlatformAutomationEventDefin
     revenueGoal: getEventRevenueGoal(definition.eventType),
   }));
 
+const PLATFORM_AUTOMATION_TIMING_POLICY: Record<string, {
+  delayMinutes: number;
+  cooldownMinutes: number;
+  maxSendsPerContact: number;
+  priority: number;
+}> = {
+  trial_started: { delayMinutes: 0, cooldownMinutes: 1440, maxSendsPerContact: 1, priority: 10 },
+  trial_credit_milestone: { delayMinutes: 5, cooldownMinutes: 60, maxSendsPerContact: 8, priority: 20 },
+  trial_no_credits: { delayMinutes: 2, cooldownMinutes: 720, maxSendsPerContact: 2, priority: 30 },
+  subscription_pending: { delayMinutes: 8, cooldownMinutes: 240, maxSendsPerContact: 0, priority: 40 },
+  subscription_replaced: { delayMinutes: 2, cooldownMinutes: 180, maxSendsPerContact: 0, priority: 42 },
+  checkout_cart_updated: { delayMinutes: 15, cooldownMinutes: 180, maxSendsPerContact: 0, priority: 45 },
+  checkout_payment_started: { delayMinutes: 12, cooldownMinutes: 240, maxSendsPerContact: 0, priority: 48 },
+  payment_pending: { delayMinutes: 10, cooldownMinutes: 360, maxSendsPerContact: 0, priority: 50 },
+  payment_approved: { delayMinutes: 0, cooldownMinutes: 60, maxSendsPerContact: 0, priority: 60 },
+  payment_rejected: { delayMinutes: 10, cooldownMinutes: 360, maxSendsPerContact: 0, priority: 70 },
+  subscription_paused: { delayMinutes: 60, cooldownMinutes: 1440, maxSendsPerContact: 0, priority: 80 },
+  subscription_canceled: { delayMinutes: 120, cooldownMinutes: 1440, maxSendsPerContact: 0, priority: 90 },
+  billing_update: { delayMinutes: 15, cooldownMinutes: 360, maxSendsPerContact: 0, priority: 100 },
+  billing_operational_test: { delayMinutes: 0, cooldownMinutes: 0, maxSendsPerContact: 50, priority: 110 },
+};
+
 export async function getPlatformAutomationsCatalog(): Promise<PlatformAutomationsCatalog> {
   const client = createServiceClient();
   const flowsResult = await client
@@ -360,32 +382,41 @@ export function getDefaultAutomationTemplate(eventType: string) {
 }
 
 export function getDefaultAutomationFlows(): PlatformAutomationFlow[] {
-  return PLATFORM_AUTOMATION_EVENT_DEFINITIONS.map((definition, index) => ({
-    id: definition.eventType,
-    flowKey: definition.eventType,
-    name: definition.label,
-    description: definition.description,
-    eventType: definition.eventType,
-    eventLabel: definition.label,
-    channel: "whatsapp",
-    status: "draft",
-    selectedAgentId: null,
-    fallbackToBillingAgent: true,
-    audienceType: definition.category === "trial" ? "trial_users" : "all_clients",
-    conditions: definition.eventType === "trial_credit_milestone"
-      ? { milestone_step_credits: 100 }
-      : {},
-    triggerConfig: { kind: definition.category },
-    messageTemplate: getDefaultAutomationTemplate(definition.eventType),
-    delayMinutes: 0,
-    cooldownMinutes: 0,
-    maxSendsPerContact: definition.eventType === "trial_credit_milestone" ? 20 : 3,
-    priority: (index + 1) * 10,
-    labels: [definition.category],
-    metadata: { preview: true },
-    createdAt: null,
-    updatedAt: null,
-  }));
+  return PLATFORM_AUTOMATION_EVENT_DEFINITIONS.map((definition, index) => {
+    const timing = PLATFORM_AUTOMATION_TIMING_POLICY[definition.eventType] ?? {
+      delayMinutes: 0,
+      cooldownMinutes: 0,
+      maxSendsPerContact: definition.eventType === "trial_credit_milestone" ? 20 : 3,
+      priority: (index + 1) * 10,
+    };
+
+    return {
+      id: definition.eventType,
+      flowKey: definition.eventType,
+      name: definition.label,
+      description: definition.description,
+      eventType: definition.eventType,
+      eventLabel: definition.label,
+      channel: "whatsapp",
+      status: "draft",
+      selectedAgentId: null,
+      fallbackToBillingAgent: true,
+      audienceType: definition.category === "trial" ? "trial_users" : "all_clients",
+      conditions: definition.eventType === "trial_credit_milestone"
+        ? { milestone_step_credits: 100 }
+        : {},
+      triggerConfig: { kind: definition.category },
+      messageTemplate: getDefaultAutomationTemplate(definition.eventType),
+      delayMinutes: timing.delayMinutes,
+      cooldownMinutes: timing.cooldownMinutes,
+      maxSendsPerContact: timing.maxSendsPerContact,
+      priority: timing.priority,
+      labels: [definition.category],
+      metadata: { preview: true, timingPolicy: "0038_platform_automation_timing_policy" },
+      createdAt: null,
+      updatedAt: null,
+    };
+  });
 }
 
 function mapFlow(row: FlowRow): PlatformAutomationFlow {
