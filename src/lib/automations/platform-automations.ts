@@ -173,26 +173,135 @@ export const PLATFORM_AUTOMATION_EVENT_DEFINITIONS: PlatformAutomationEventDefin
     revenueGoal: getEventRevenueGoal(definition.eventType),
   }));
 
-const PLATFORM_AUTOMATION_TIMING_POLICY: Record<string, {
+const PAID_PLAN_CODES = ["starter", "pro", "scale"];
+
+type PlatformAutomationTriggerPolicy = {
   delayMinutes: number;
   cooldownMinutes: number;
   maxSendsPerContact: number;
   priority: number;
-}> = {
-  trial_started: { delayMinutes: 0, cooldownMinutes: 1440, maxSendsPerContact: 1, priority: 10 },
-  trial_credit_milestone: { delayMinutes: 5, cooldownMinutes: 60, maxSendsPerContact: 8, priority: 20 },
-  trial_no_credits: { delayMinutes: 2, cooldownMinutes: 720, maxSendsPerContact: 2, priority: 30 },
-  subscription_pending: { delayMinutes: 8, cooldownMinutes: 240, maxSendsPerContact: 0, priority: 40 },
-  subscription_replaced: { delayMinutes: 2, cooldownMinutes: 180, maxSendsPerContact: 0, priority: 42 },
-  checkout_cart_updated: { delayMinutes: 15, cooldownMinutes: 180, maxSendsPerContact: 0, priority: 45 },
-  checkout_payment_started: { delayMinutes: 12, cooldownMinutes: 240, maxSendsPerContact: 0, priority: 48 },
-  payment_pending: { delayMinutes: 10, cooldownMinutes: 360, maxSendsPerContact: 0, priority: 50 },
-  payment_approved: { delayMinutes: 0, cooldownMinutes: 60, maxSendsPerContact: 0, priority: 60 },
-  payment_rejected: { delayMinutes: 10, cooldownMinutes: 360, maxSendsPerContact: 0, priority: 70 },
-  subscription_paused: { delayMinutes: 60, cooldownMinutes: 1440, maxSendsPerContact: 0, priority: 80 },
-  subscription_canceled: { delayMinutes: 120, cooldownMinutes: 1440, maxSendsPerContact: 0, priority: 90 },
-  billing_update: { delayMinutes: 15, cooldownMinutes: 360, maxSendsPerContact: 0, priority: 100 },
-  billing_operational_test: { delayMinutes: 0, cooldownMinutes: 0, maxSendsPerContact: 50, priority: 110 },
+  conditions?: JsonRecord;
+  triggerConfig?: JsonRecord;
+};
+
+const PLATFORM_AUTOMATION_TIMING_POLICY: Record<string, PlatformAutomationTriggerPolicy> = {
+  trial_started: {
+    delayMinutes: 0,
+    cooldownMinutes: 1440,
+    maxSendsPerContact: 1,
+    priority: 10,
+    conditions: { plan_codes: ["trial"], min_balance_credits: 1 },
+    triggerConfig: { kind: "trial_started", source: "signup_completion" },
+  },
+  trial_credit_milestone: {
+    delayMinutes: 5,
+    cooldownMinutes: 60,
+    maxSendsPerContact: 8,
+    priority: 20,
+    conditions: {
+      plan_codes: ["trial"],
+      min_balance_credits: 1,
+      min_used_credits: 100,
+      milestone_step_credits: 100,
+    },
+    triggerConfig: { kind: "usage_milestone", step_credits: 100 },
+  },
+  trial_no_credits: {
+    delayMinutes: 2,
+    cooldownMinutes: 720,
+    maxSendsPerContact: 2,
+    priority: 30,
+    conditions: { plan_codes: ["trial"], max_balance_credits: 0 },
+    triggerConfig: { kind: "wallet_empty" },
+  },
+  subscription_pending: {
+    delayMinutes: 8,
+    cooldownMinutes: 240,
+    maxSendsPerContact: 0,
+    priority: 40,
+    conditions: { plan_codes: PAID_PLAN_CODES },
+    triggerConfig: { kind: "checkout_open", source: "dashboard_plan_checkout" },
+  },
+  subscription_replaced: {
+    delayMinutes: 2,
+    cooldownMinutes: 180,
+    maxSendsPerContact: 0,
+    priority: 42,
+    conditions: { plan_codes: PAID_PLAN_CODES },
+    triggerConfig: { kind: "plan_switch", source: "dashboard_plan_intent" },
+  },
+  checkout_cart_updated: {
+    delayMinutes: 15,
+    cooldownMinutes: 180,
+    maxSendsPerContact: 0,
+    priority: 45,
+    conditions: { plan_codes: PAID_PLAN_CODES },
+    triggerConfig: { kind: "cart_update", source: "dashboard_plan_checkout" },
+  },
+  checkout_payment_started: {
+    delayMinutes: 12,
+    cooldownMinutes: 240,
+    maxSendsPerContact: 0,
+    priority: 48,
+    conditions: { plan_codes: PAID_PLAN_CODES },
+    triggerConfig: { kind: "payment_attempt", source: "dashboard_plan_checkout" },
+  },
+  payment_pending: {
+    delayMinutes: 10,
+    cooldownMinutes: 360,
+    maxSendsPerContact: 0,
+    priority: 50,
+    conditions: { plan_codes: PAID_PLAN_CODES },
+    triggerConfig: { kind: "billing_status", status: "pending" },
+  },
+  payment_approved: {
+    delayMinutes: 0,
+    cooldownMinutes: 60,
+    maxSendsPerContact: 0,
+    priority: 60,
+    conditions: { plan_codes: PAID_PLAN_CODES },
+    triggerConfig: { kind: "billing_status", status: "approved" },
+  },
+  payment_rejected: {
+    delayMinutes: 10,
+    cooldownMinutes: 360,
+    maxSendsPerContact: 0,
+    priority: 70,
+    conditions: { plan_codes: PAID_PLAN_CODES },
+    triggerConfig: { kind: "billing_status", status: "rejected" },
+  },
+  subscription_paused: {
+    delayMinutes: 60,
+    cooldownMinutes: 1440,
+    maxSendsPerContact: 0,
+    priority: 80,
+    conditions: { plan_codes: PAID_PLAN_CODES },
+    triggerConfig: { kind: "billing_status", status: "paused" },
+  },
+  subscription_canceled: {
+    delayMinutes: 120,
+    cooldownMinutes: 1440,
+    maxSendsPerContact: 0,
+    priority: 90,
+    conditions: { plan_codes: PAID_PLAN_CODES },
+    triggerConfig: { kind: "billing_status", status: "canceled" },
+  },
+  billing_update: {
+    delayMinutes: 15,
+    cooldownMinutes: 360,
+    maxSendsPerContact: 0,
+    priority: 100,
+    conditions: { plan_codes: PAID_PLAN_CODES },
+    triggerConfig: { kind: "billing_status", status: "update" },
+  },
+  billing_operational_test: {
+    delayMinutes: 0,
+    cooldownMinutes: 0,
+    maxSendsPerContact: 50,
+    priority: 110,
+    conditions: {},
+    triggerConfig: { kind: "admin_test" },
+  },
 };
 
 export async function getPlatformAutomationsCatalog(): Promise<PlatformAutomationsCatalog> {
@@ -402,17 +511,25 @@ export function getDefaultAutomationFlows(): PlatformAutomationFlow[] {
       selectedAgentId: null,
       fallbackToBillingAgent: true,
       audienceType: definition.category === "trial" ? "trial_users" : "all_clients",
-      conditions: definition.eventType === "trial_credit_milestone"
-        ? { milestone_step_credits: 100 }
-        : {},
-      triggerConfig: { kind: definition.category },
+      conditions: {
+        ...(timing.conditions ?? (
+          definition.eventType === "trial_credit_milestone"
+            ? { milestone_step_credits: 100 }
+            : {}
+        )),
+      },
+      triggerConfig: { kind: definition.category, ...(timing.triggerConfig ?? {}) },
       messageTemplate: getDefaultAutomationTemplate(definition.eventType),
       delayMinutes: timing.delayMinutes,
       cooldownMinutes: timing.cooldownMinutes,
       maxSendsPerContact: timing.maxSendsPerContact,
       priority: timing.priority,
       labels: [definition.category],
-      metadata: { preview: true, timingPolicy: "0038_platform_automation_timing_policy" },
+      metadata: {
+        preview: true,
+        timingPolicy: "0038_platform_automation_timing_policy",
+        triggerPolicy: "0039_platform_automation_trigger_defaults",
+      },
       createdAt: null,
       updatedAt: null,
     };
@@ -559,6 +676,16 @@ function automationConditionsMatch(
 
   if (!numberConditionMatches(input.milestoneCredits, conditions.min_milestone_credits, conditions.max_milestone_credits)) {
     return false;
+  }
+
+  const milestoneStep = readNumber(conditions.milestone_step_credits);
+
+  if (milestoneStep !== null && milestoneStep > 0) {
+    const milestoneCredits = input.milestoneCredits ?? input.usedCredits ?? null;
+
+    if (milestoneCredits === null || milestoneCredits <= 0 || milestoneCredits % milestoneStep !== 0) {
+      return false;
+    }
   }
 
   return true;
