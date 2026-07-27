@@ -4780,6 +4780,11 @@ function VoiceSelector({
   const selectedVoiceId = behavior.audioVoiceId || defaultVoiceId || "";
   const selectedVoice = voices.find((voice) => voice.voiceId === selectedVoiceId) ?? voices[0] ?? null;
   const canClone = Boolean(companyId && cloneName.trim() && cloneFiles.length > 0 && cloneConsent && !cloneSaving);
+  const economyVoice = voices.find((voice) => voice.source === "gemini") ?? null;
+  const defaultVoice = defaultVoiceId ? voices.find((voice) => voice.voiceId === defaultVoiceId) ?? null : null;
+  const premiumVoice = defaultVoice && defaultVoice.source !== "gemini"
+    ? defaultVoice
+    : voices.find((voice) => voice.source !== "gemini") ?? null;
   const visibleVoices = useMemo(() => {
     const search = normalizeVoiceSearch(voiceSearch);
 
@@ -4886,8 +4891,8 @@ function VoiceSelector({
             {voices.length.toLocaleString("pt-BR")} vozes liberadas
           </p>
         </div>
-        <NeonBadge tone={behavior.responseMode === "audio" ? "green" : "amber"}>
-          {behavior.responseMode === "audio" ? "audio ativo" : "texto ativo"}
+        <NeonBadge tone={behavior.responseMode === "audio" ? "green" : behavior.responseMode === "mirror" ? "cyan" : "amber"}>
+          {formatResponseMode(behavior.responseMode)}
         </NeonBadge>
       </div>
 
@@ -4909,6 +4914,23 @@ function VoiceSelector({
           {errorMessage}
         </div>
       ) : null}
+
+      <div className="mt-3 grid gap-2 md:grid-cols-2">
+        <VoiceProviderButton
+          active={selectedVoice?.source === "gemini"}
+          disabled={!economyVoice}
+          detail={economyVoice ? "Menor custo por audio" : "Configure Gemini TTS no cofre"}
+          label="Google economico"
+          onClick={() => economyVoice && onSelect(economyVoice)}
+        />
+        <VoiceProviderButton
+          active={Boolean(selectedVoice && selectedVoice.source !== "gemini")}
+          disabled={!premiumVoice}
+          detail={premiumVoice ? "Voz premium ou clonada" : "Configure ElevenLabs no cofre"}
+          label="ElevenLabs premium"
+          onClick={() => premiumVoice && onSelect(premiumVoice)}
+        />
+      </div>
 
       {cloneEnabled ? (
       <div className="mt-3 rounded-lg border" style={{ borderColor: "var(--ch-border)" }}>
@@ -5134,6 +5156,40 @@ function VoiceSelector({
         </div>
       )}
     </div>
+  );
+}
+
+function VoiceProviderButton({
+  active,
+  detail,
+  disabled,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  detail: string;
+  disabled: boolean;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={cn(
+        "min-h-14 rounded-lg border px-3 py-2 text-left transition disabled:cursor-not-allowed disabled:opacity-50",
+        active ? "border-cyan-300/40 bg-cyan-300/10" : "border-white/10 bg-slate-950/20 hover:bg-cyan-400/5",
+      )}
+      disabled={disabled}
+      onClick={onClick}
+    >
+      <span className="flex items-center justify-between gap-2">
+        <span className="text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>{label}</span>
+        <span className={cn("rounded-md px-2 py-1 font-mono text-[8px] uppercase tracking-widest", active ? "bg-cyan-300/15 text-cyan-200" : "bg-slate-800/80 text-slate-400")}>
+          {active ? "ativo" : "selecionar"}
+        </span>
+      </span>
+      <span className="mt-1 block text-[11px] leading-4 text-slate-500">{detail}</span>
+    </button>
   );
 }
 

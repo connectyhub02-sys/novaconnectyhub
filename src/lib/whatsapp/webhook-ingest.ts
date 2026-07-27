@@ -1145,28 +1145,79 @@ function resolveMessageType(messageRecord: JsonRecord) {
 
 function inferMessageTypeFromContent(messageRecord: JsonRecord) {
   const content = isRecord(messageRecord.content) ? messageRecord.content : null;
+  const signature = normalizeMessageSignature(messageRecord);
   const mimeType = [
     findString(messageRecord, ["mimetype", "mimeType"]),
     content ? findString(content, ["mimetype", "mimeType"]) : null,
   ].filter(Boolean).join(" ").toLowerCase();
 
-  if (findBoolean(content ?? {}, ["PTT", "ptt"]) || mimeType.includes("audio")) {
+  if (
+    findBoolean(content ?? {}, ["PTT", "ptt"])
+    || mimeType.includes("audio")
+    || isAudioSignature(signature)
+  ) {
     return "AudioMessage";
   }
 
-  if (mimeType.includes("image")) {
+  if (mimeType.includes("image") || signature.includes("imagemessage") || signature.includes("image message")) {
     return "ImageMessage";
   }
 
-  if (mimeType.includes("video")) {
+  if (mimeType.includes("video") || signature.includes("videomessage") || signature.includes("video message")) {
     return "VideoMessage";
   }
 
-  if (mimeType.includes("pdf") || mimeType.includes("document") || mimeType.includes("application/")) {
+  if (
+    mimeType.includes("pdf")
+    || mimeType.includes("document")
+    || mimeType.includes("application/")
+    || signature.includes("documentmessage")
+    || signature.includes("document message")
+  ) {
     return "DocumentMessage";
   }
 
   return null;
+}
+
+function isAudioSignature(signature: string) {
+  return signature.includes("audio")
+    || signature.includes("voice")
+    || signature.includes("ptt")
+    || signature.includes("opus")
+    || signature.includes("ogg")
+    || signature.includes("audiomessage")
+    || signature.includes("audio message")
+    || signature.includes("pttmessage")
+    || signature.includes("ptt message");
+}
+
+function normalizeMessageSignature(value: unknown, depth = 0): string {
+  if (depth > 3 || !value) {
+    return "";
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => normalizeMessageSignature(item, depth + 1)).join(" ");
+  }
+
+  if (!isRecord(value)) {
+    return typeof value === "string" ? value.toLowerCase() : "";
+  }
+
+  const parts: string[] = [];
+
+  for (const [key, item] of Object.entries(value)) {
+    parts.push(key);
+
+    if (typeof item === "string" || typeof item === "number" || typeof item === "boolean") {
+      parts.push(String(item));
+    } else if (depth < 2) {
+      parts.push(normalizeMessageSignature(item, depth + 1));
+    }
+  }
+
+  return parts.join(" ").toLowerCase();
 }
 
 function findMessageRecord(payload: JsonRecord) {

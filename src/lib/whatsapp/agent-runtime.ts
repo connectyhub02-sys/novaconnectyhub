@@ -4353,13 +4353,24 @@ function shouldSendAudioResponse(
   const shouldSendAudio = context.behavior.responseMode === "audio"
     || (context.behavior.responseMode === "mirror" && (inboundType.includes("audio") || isAudioMessage(latestInbound)));
 
-  if (!shouldSendAudio && context.behavior.spontaneousAudio && context.behavior.audioVoiceId) {
+  if (!shouldSendAudio && context.behavior.spontaneousAudio && hasConfiguredAudioVoice(context.behavior)) {
     if (Math.random() * 100 < context.behavior.spontaneousAudioProbability) {
       return !visualMediaKind;
     }
   }
 
   return shouldSendAudio && !visualMediaKind;
+}
+
+function hasConfiguredAudioVoice(behavior: WhatsappBehaviorConfig) {
+  return Boolean(
+    behavior.audioVoiceId
+    || behavior.audioVoiceSource
+    || behavior.audioVoiceName
+    || behavior.audioModelId
+    || behavior.responseMode === "audio"
+    || behavior.responseMode === "mirror",
+  );
 }
 
 function responseContainsLinkButtonReference(
@@ -7336,9 +7347,51 @@ function isAudioMessage(message: ConversationMessageRow | null) {
     asString(content?.mimetype),
     asString(content?.mimeType),
     providerMessage?.PTT === true || content?.PTT === true ? "ptt" : "",
+    buildProviderMessageKeySignature(providerMessage),
   ].filter(Boolean).join(" "));
 
-  return signature.includes("audio") || signature.includes("opus") || signature.includes("ptt");
+  return isAudioSignature(signature);
+}
+
+function isAudioSignature(signature: string) {
+  return signature.includes("audio")
+    || signature.includes("voice")
+    || signature.includes("opus")
+    || signature.includes("ptt")
+    || signature.includes("ogg")
+    || signature.includes("audiomessage")
+    || signature.includes("audio message")
+    || signature.includes("pttmessage")
+    || signature.includes("ptt message");
+}
+
+function buildProviderMessageKeySignature(value: unknown, depth = 0): string {
+  if (depth > 3 || !value) {
+    return "";
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => buildProviderMessageKeySignature(item, depth + 1)).join(" ");
+  }
+
+  if (!readRecord(value)) {
+    return typeof value === "string" ? value : "";
+  }
+
+  const record = value as JsonRecord;
+  const parts: string[] = [];
+
+  for (const [key, item] of Object.entries(record)) {
+    parts.push(key);
+
+    if (typeof item === "string" || typeof item === "number" || typeof item === "boolean") {
+      parts.push(String(item));
+    } else if (depth < 2) {
+      parts.push(buildProviderMessageKeySignature(item, depth + 1));
+    }
+  }
+
+  return parts.join(" ");
 }
 
 function describeMessageType(message: ConversationMessageRow) {
