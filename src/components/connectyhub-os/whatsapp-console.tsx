@@ -4785,14 +4785,19 @@ function VoiceSelector({
   const premiumVoice = defaultVoice && defaultVoice.source !== "gemini"
     ? defaultVoice
     : voices.find((voice) => voice.source !== "gemini") ?? null;
+  const activeVoiceTier = selectedVoice?.source === "gemini" ? "low_cost" : "premium";
   const visibleVoices = useMemo(() => {
     const search = normalizeVoiceSearch(voiceSearch);
+    const tierVoices = voices.filter((voice) =>
+      activeVoiceTier === "low_cost" ? voice.source === "gemini" : voice.source !== "gemini",
+    );
+    const sourceVoices = tierVoices.length > 0 ? tierVoices : voices;
 
     if (!search) {
-      return voices;
+      return sourceVoices;
     }
 
-    return voices.filter((voice) => {
+    return sourceVoices.filter((voice) => {
       const haystack = normalizeVoiceSearch([
         voice.name,
         voice.category,
@@ -4807,7 +4812,7 @@ function VoiceSelector({
 
       return haystack.includes(search);
     });
-  }, [voiceSearch, voices]);
+  }, [activeVoiceTier, voiceSearch, voices]);
 
   async function submitVoiceClone() {
     if (!canClone) {
@@ -4917,14 +4922,14 @@ function VoiceSelector({
 
       <div className="mt-3 grid gap-2 md:grid-cols-2">
         <VoiceProviderButton
-          active={selectedVoice?.source === "gemini"}
+          active={activeVoiceTier === "low_cost"}
           disabled={!economyVoice}
           detail={economyVoice ? "Menor consumo de creditos por audio" : "Configure a voz de baixo custo no cofre"}
           label="Audio baixo custo"
           onClick={() => economyVoice && onSelect(economyVoice)}
         />
         <VoiceProviderButton
-          active={Boolean(selectedVoice && selectedVoice.source !== "gemini")}
+          active={activeVoiceTier === "premium"}
           disabled={!premiumVoice}
           detail={premiumVoice ? "Mais qualidade ou voz clonada" : "Configure a voz premium no cofre"}
           label="Audio premium"
@@ -5140,7 +5145,7 @@ function VoiceSelector({
 
           {visibleVoices.length === 0 ? (
             <div className="mt-3 rounded-lg border border-amber-300/20 bg-amber-300/10 px-3 py-2 text-[12px] leading-5 text-amber-100">
-              Nenhuma voz encontrada para esta busca.
+              Nenhuma voz encontrada neste grupo.
             </div>
           ) : null}
 
