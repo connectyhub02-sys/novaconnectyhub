@@ -4779,6 +4779,9 @@ function VoiceSelector({
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const selectedVoiceId = behavior.audioVoiceId || defaultVoiceId || "";
   const selectedVoice = voices.find((voice) => voice.voiceId === selectedVoiceId) ?? voices[0] ?? null;
+  const selectedPreviewUrl = selectedVoice
+    ? resolveVoicePreviewUrl(selectedVoice, { companyId, endpoint, entityIdKey })
+    : null;
   const canClone = Boolean(companyId && cloneName.trim() && cloneFiles.length > 0 && cloneConsent && !cloneSaving);
   const economyVoice = voices.find((voice) => voice.source === "gemini") ?? null;
   const defaultVoice = defaultVoiceId ? voices.find((voice) => voice.voiceId === defaultVoiceId) ?? null : null;
@@ -5149,9 +5152,9 @@ function VoiceSelector({
             </div>
           ) : null}
 
-          {selectedVoice?.previewUrl ? (
+          {selectedPreviewUrl ? (
             <div className="mt-3 rounded-lg border px-3 py-2" style={{ borderColor: "var(--ch-border)" }}>
-              <audio className="h-9 w-full" controls preload="none" src={selectedVoice.previewUrl} />
+              <audio className="h-9 w-full" controls preload="none" src={selectedPreviewUrl} />
             </div>
           ) : null}
         </>
@@ -5948,6 +5951,30 @@ function formatVoiceSource(voice: AudioVoiceOption) {
 function formatVoiceDetails(voice: AudioVoiceOption) {
   const category = voice.source === "customer" ? "voz propria" : voice.category;
   return [category, voice.language, voice.accent, voice.gender, voice.useCase].filter(Boolean).join(" / ") || "voz padrao";
+}
+
+function resolveVoicePreviewUrl(
+  voice: AudioVoiceOption,
+  input: {
+    companyId: string;
+    endpoint: string;
+    entityIdKey: "companyId" | "sectorId";
+  },
+) {
+  if (voice.previewUrl) {
+    return voice.previewUrl;
+  }
+
+  if (voice.source !== "gemini" || !input.companyId) {
+    return null;
+  }
+
+  const params = new URLSearchParams({
+    [input.entityIdKey]: input.companyId,
+    voiceId: voice.voiceId,
+  });
+
+  return `${input.endpoint}/preview?${params.toString()}`;
 }
 
 function formatBytes(bytes: number | null | undefined) {
