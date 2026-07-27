@@ -107,6 +107,10 @@ const agentResponseMaxOutputTokens = 1600;
 const assistantResponseMaxLength = 8000;
 const outboundChunkMaxLength = 420;
 const outboundChunkLimit = 12;
+const inboundAudioDownloadTimeoutMs = 20000;
+const inboundAudioFileFetchTimeoutMs = 25000;
+const inboundAudioTranscriptionTimeoutMs = 45000;
+const outboundAudioDeliveryTimeoutMs = 30000;
 const linkButtonTagRegex = /\{\{\s*link_[^{}]+?\s*\}\}/gi;
 
 type AgentRunRow = {
@@ -226,8 +230,11 @@ type InboundMediaKind = "image" | "video" | "document";
 type OutboundMessage = {
   text: string;
   mode: "text" | "audio";
+  intendedMode?: "text" | "audio";
   providerResponse: unknown;
   generatedAudio?: GeneratedConnectyVoiceAudio;
+  audioFallback?: boolean;
+  fallbackReason?: string;
   chunkIndex?: number;
   chunksTotal?: number;
   persisted?: boolean;
@@ -3471,54 +3478,71 @@ async function sendAgentResponse(input: {
         await setChatPresence(context.credentials, input.token, input.phone, "recording", 60000);
       }
 
-      const generatedAudio = await generateConnectyVoiceAudio({
-        organizationId: context.organization.id,
-        userId: null,
-        text: sanitizeTextForTts(text),
-        voiceId: context.behavior.audioVoiceId || null,
-        voicePublicOwnerId: context.behavior.audioVoicePublicOwnerId || null,
-        voiceName: context.behavior.audioVoiceName || null,
-        voiceSource: context.behavior.audioVoiceSource || null,
-        modelId: context.behavior.audioModelId || null,
-        source: "whatsapp_agent",
-        metadata: {
-          agentId: context.agent.id,
-          agentRunId: context.run.id,
-          conversationId: context.conversationId,
-          leadId: context.lead?.id ?? null,
-          whatsappInstanceId: context.instance.id,
-          agentScope: resolveWhatsappAgentUsageScope(context),
-          audioChunkIndex: chunkIndex,
-          audioChunksTotal: chunksTotal,
-        },
-        client: input.client,
-      });
-      const providerResponse = await callUazapi(context.credentials, "/send/media", {
-        method: "POST",
-        token: input.token,
-        body: {
-          number: input.phone,
-          type: "ptt",
-          file: generatedAudio.audioUrl,
-          ...(replyTargets[index]?.provider_message_id ? { replyid: replyTargets[index]?.provider_message_id } : {}),
-          ...(resolveGroupMentions(context) ? { mentions: resolveGroupMentions(context) } : {}),
-          track_source: "connectyhub",
-          track_id: `agent_audio_${context.run.id}_${chunkIndex}`,
-        },
-      });
+      try {
+        const generatedAudio = await generateConnectyVoiceAudio({
+          organizationId: context.organization.id,
+          userId: null,
+          text: sanitizeTextForTts(text),
+          voiceId: context.behavior.audioVoiceId || null,
+          voicePublicOwnerId: context.behavior.audioVoicePublicOwnerId || null,
+          voiceName: context.behavior.audioVoiceName || null,
+          voiceSource: context.behavior.audioVoiceSource || null,
+          modelId: context.behavior.audioModelId || null,
+          source: "whatsapp_agent",
+          metadata: {
+            agentId: context.agent.id,
+            agentRunId: context.run.id,
+            conversationId: context.conversationId,
+            leadId: context.lead?.id ?? null,
+            whatsappInstanceId: context.instance.id,
+            agentScope: resolveWhatsappAgentUsageScope(context),
+            audioChunkIndex: chunkIndex,
+            audioChunksTotal: chunksTotal,
+          },
+          client: input.client,
+        });
+        const providerResponse = await callUazapi(context.credentials, "/send/media", {
+          method: "POST",
+          token: input.token,
+          timeoutMs: outboundAudioDeliveryTimeoutMs,
+          body: {
+            number: input.phone,
+            type: "ptt",
+            file: generatedAudio.audioUrl,
+            ...(replyTargets[index]?.provider_message_id ? { replyid: replyTargets[index]?.provider_message_id } : {}),
+            ...(resolveGroupMentions(context) ? { mentions: resolveGroupMentions(context) } : {}),
+            track_source: "connectyhub",
+            track_id: `agent_audio_${context.run.id}_${chunkIndex}`,
+          },
+        });
 
-      const message: OutboundMessage = {
-        text,
-        mode: "audio",
-        providerResponse,
-        generatedAudio,
-        chunkIndex,
-        chunksTotal,
-      };
+        const message: OutboundMessage = {
+          text,
+          mode: "audio",
+          providerResponse,
+          generatedAudio,
+          chunkIndex,
+          chunksTotal,
+        };
 
-      await saveOutboundMessage(input.client, context, message);
-      persistedChunks.add(chunkIndex);
-      outbound.push({ ...message, persisted: true });
+        await saveOutboundMessage(input.client, context, message);
+        persistedChunks.add(chunkIndex);
+        outbound.push({ ...message, persisted: true });
+      } catch (error) {
+        const fallbackMessage = await sendAudioReplyFallbackText({
+          client: input.client,
+          context,
+          token: input.token,
+          phone: input.phone,
+          text,
+          chunkIndex,
+          chunksTotal,
+          replyId: replyTargets[index]?.provider_message_id ?? undefined,
+          error,
+        });
+        persistedChunks.add(chunkIndex);
+        outbound.push(fallbackMessage);
+      }
     }
 
     const paymentLink = await recordSalesCatalogOrderIntent({
@@ -3641,6 +3665,93 @@ async function sendAgentResponse(input: {
   }
 
   return outbound;
+}
+
+async function sendAudioReplyFallbackText(input: {
+  client: SupabaseClient;
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
+  token: string;
+  phone: string;
+  text: string;
+  chunkIndex: number;
+  chunksTotal: number;
+  replyId?: string;
+  error: unknown;
+}) {
+  const errorMessage = describeRuntimeError(input.error, "Falha desconhecida ao enviar resposta em audio.");
+
+  await setChatPresence(input.context.credentials, input.token, input.phone, "composing", 10000).catch(() => {});
+
+  const textProviderResponse = await sendWhatsappText({
+    credentials: input.context.credentials,
+    token: input.token,
+    phone: input.phone,
+    text: input.text,
+    trackId: `agent_audio_fallback_${input.context.run.id}_${input.chunkIndex}`,
+    replyId: input.replyId,
+    mentions: resolveGroupMentions(input.context),
+  });
+
+  const message: OutboundMessage = {
+    text: input.text,
+    mode: "text",
+    intendedMode: "audio",
+    providerResponse: {
+      fallback: true,
+      reason: "audio_reply_failed",
+      error: errorMessage,
+      textProviderResponse,
+    },
+    audioFallback: true,
+    fallbackReason: "audio_reply_failed",
+    chunkIndex: input.chunkIndex,
+    chunksTotal: input.chunksTotal,
+  };
+
+  await saveOutboundMessage(input.client, input.context, message);
+  await persistAudioReplyFallbackEvent(input.client, input.context, {
+    chunkIndex: input.chunkIndex,
+    chunksTotal: input.chunksTotal,
+    errorMessage,
+    providerResponse: textProviderResponse,
+  }).catch(() => {});
+
+  return { ...message, persisted: true };
+}
+
+async function persistAudioReplyFallbackEvent(
+  client: SupabaseClient,
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+  input: {
+    chunkIndex: number;
+    chunksTotal: number;
+    errorMessage: string;
+    providerResponse: unknown;
+  },
+) {
+  await client.from("intelligence_events").insert({
+    scope: "organization",
+    organization_id: context.organization.id,
+    source_type: "whatsapp",
+    source_id: context.conversationId,
+    producer_agent_id: context.agent.id,
+    event_type: "whatsapp.media.audio_reply_fallback_text",
+    title: "Resposta em audio enviada como texto",
+    summary: preview(input.errorMessage, 500),
+    confidence: 0.72,
+    visibility: "organization",
+    tags: ["whatsapp", "media", "audio", "fallback", "text"],
+    payload: {
+      agentRunId: context.run.id,
+      conversationId: context.conversationId,
+      leadId: context.lead?.id ?? null,
+      whatsappInstanceId: context.instance.id,
+      chunkIndex: input.chunkIndex,
+      chunksTotal: input.chunksTotal,
+      errorMessage: input.errorMessage,
+      providerResponse: sanitizeProviderData(input.providerResponse),
+    },
+  });
 }
 
 function renderSalesCatalogTags(text: string, items: RuntimeSalesCatalogItem[]) {
@@ -4284,12 +4395,20 @@ async function loadPersistedOutboundChunks(client: SupabaseClient, runId: string
     .from("conversation_messages")
     .select("payload")
     .eq("direction", "outbound")
-    .eq("payload->>agent_run_id", runId)
-    .eq("payload->>delivery_mode", mode);
+    .eq("payload->>agent_run_id", runId);
   const chunks = new Set<number>();
 
   for (const row of (data ?? []) as Array<{ payload: JsonRecord | null }>) {
     const payload = readRecord(row.payload);
+    const deliveryMode = asString(payload?.delivery_mode);
+    const intendedMode = asString(payload?.intended_delivery_mode);
+    const matchesMode = deliveryMode === mode;
+    const matchesAudioFallback = mode === "audio" && intendedMode === "audio" && payload?.audio_fallback === true;
+
+    if (!matchesMode && !matchesAudioFallback) {
+      continue;
+    }
+
     const chunkIndex = readPositiveInteger(payload?.chunk_index);
 
     if (chunkIndex) {
@@ -4775,6 +4894,9 @@ async function saveOutboundMessage(
   const payload = {
     provider_response: sanitizeProviderData(message.providerResponse),
     delivery_mode: message.mode,
+    intended_delivery_mode: message.intendedMode ?? message.mode,
+    audio_fallback: message.audioFallback === true,
+    fallback_reason: message.fallbackReason ?? null,
     generated_audio_media_id: message.generatedAudio?.mediaId ?? null,
     generated_audio_object_key: message.generatedAudio?.objectKey ?? null,
     agent_run_id: context.run.id,
@@ -6757,6 +6879,26 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit, timeoutMs: number, label: string) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(input, {
+      ...init,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (isAbortError(error)) {
+      throw new Error(`${label} excedeu ${Math.round(timeoutMs / 1000)}s.`);
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function callUazapi(
   credentials: UazapiCredentials,
   path: string,
@@ -6766,9 +6908,10 @@ async function callUazapi(
     token?: string;
     admin?: boolean;
     tolerateError?: boolean;
+    timeoutMs?: number;
   },
 ) {
-  const response = await fetch(`${credentials.baseUrl}${path}`, {
+  const fetchInit = {
     method: options.method,
     headers: {
       Accept: "application/json",
@@ -6778,7 +6921,10 @@ async function callUazapi(
     },
     body: options.body ? JSON.stringify(options.body) : undefined,
     cache: "no-store",
-  });
+  } satisfies RequestInit;
+  const response = options.timeoutMs
+    ? await fetchWithTimeout(`${credentials.baseUrl}${path}`, fetchInit, options.timeoutMs, `Uazapi ${path}`)
+    : await fetch(`${credentials.baseUrl}${path}`, fetchInit);
   const data = await readProviderResponse(response);
 
   if (!response.ok && !options.tolerateError) {
@@ -6807,6 +6953,7 @@ async function downloadInboundAudio(input: {
       token: input.token,
       body,
       tolerateError: true,
+      timeoutMs: inboundAudioDownloadTimeoutMs,
     });
 
     if (response.ok) {
@@ -6964,7 +7111,7 @@ async function transcribeDownloadedAudioWithGemini(input: {
   const url = new URL(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(normalizeGeminiModel(input.model))}:generateContent`);
   url.searchParams.set("key", input.credentials.apiKey);
 
-  const response = await fetch(url, {
+  const response = await fetchWithTimeout(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -6992,7 +7139,7 @@ async function transcribeDownloadedAudioWithGemini(input: {
       safetySettings: geminiSafetySettings,
     }),
     cache: "no-store",
-  });
+  }, inboundAudioTranscriptionTimeoutMs, "Transcricao Gemini de audio");
   const data = await readProviderResponse(response);
 
   if (!response.ok) {
@@ -7012,7 +7159,12 @@ async function fetchDownloadedAudio(fileUrl: string, fallbackMimeType: string) {
     throw new Error("Link de audio invalido para transcricao.");
   }
 
-  const response = await fetch(url.toString(), { cache: "no-store" });
+  const response = await fetchWithTimeout(
+    url.toString(),
+    { cache: "no-store" },
+    inboundAudioFileFetchTimeoutMs,
+    "Download do arquivo de audio",
+  );
 
   if (!response.ok) {
     throw new Error(`Nao foi possivel baixar arquivo de audio. Status ${response.status}.`);
@@ -8169,6 +8321,16 @@ async function readProviderResponse(response: Response) {
 
 function readProviderError(value: unknown) {
   return findString(value, ["error", "message", "detail"]);
+}
+
+function describeRuntimeError(error: unknown, fallback: string) {
+  return error instanceof Error && error.message.trim() ? error.message : fallback;
+}
+
+function isAbortError(error: unknown) {
+  return error instanceof DOMException
+    ? error.name === "AbortError"
+    : readRecord(error)?.name === "AbortError";
 }
 
 function findString(value: unknown, keys: string[]): string | null {
