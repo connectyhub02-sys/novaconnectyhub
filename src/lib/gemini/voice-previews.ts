@@ -9,7 +9,12 @@ type GeneratedMediaPreviewRow = {
   storage_url: string | null;
 };
 
+type PreviewOrganizationRow = {
+  id: string;
+};
+
 const geminiVoicePreviewSource = "gemini_voice_preview";
+const previewOrganizationSlug = "connectyhub-voice-previews";
 const previewText = "Oi, esta e uma previa da voz de baixo custo para atendimento no WhatsApp.";
 
 export async function getOrCreateGeminiVoicePreviewUrl(input: {
@@ -25,14 +30,15 @@ export async function getOrCreateGeminiVoicePreviewUrl(input: {
     throw new Error("Voz de baixo custo invalida.");
   }
 
-  const cachedUrl = await findCachedPreviewUrl(client, input.organizationId, voice.voiceId);
+  const cacheOrganizationId = await getOrCreatePreviewOrganizationId(client, input.userId ?? null);
+  const cachedUrl = await findCachedPreviewUrl(client, cacheOrganizationId, voice.voiceId);
 
   if (cachedUrl) {
     return cachedUrl;
   }
 
   const generated = await generateConnectyVoiceAudio({
-    organizationId: input.organizationId,
+    organizationId: cacheOrganizationId,
     userId: input.userId ?? null,
     text: previewText,
     voiceId: voice.voiceId,
@@ -47,12 +53,64 @@ export async function getOrCreateGeminiVoicePreviewUrl(input: {
       voiceId: voice.voiceId,
       voiceName: voice.voiceName,
       voiceDisplayName: voice.displayName,
+      cacheScope: "global",
+      requestedOrganizationId: input.organizationId,
       suppressTrialNotification: true,
     },
     client,
   });
 
   return generated.audioUrl;
+}
+
+async function getOrCreatePreviewOrganizationId(client: SupabaseClient, userId: string | null) {
+  const { data: existing, error: existingError } = await client
+    .from("organizations")
+    .select("id")
+    .eq("slug", previewOrganizationSlug)
+    .maybeSingle<PreviewOrganizationRow>();
+
+  if (existingError) {
+    throw new Error(`Nao foi possivel carregar o cache global de vozes: ${existingError.message}`);
+  }
+
+  if (existing?.id) {
+    return existing.id;
+  }
+
+  if (!userId) {
+    throw new Error("Nao foi possivel criar o cache global de vozes sem usuario autenticado.");
+  }
+
+  const { data, error } = await client
+    .from("organizations")
+    .insert({
+      name: "ConnectyHub Voice Previews",
+      slug: previewOrganizationSlug,
+      owner_id: userId,
+      plan_code: "internal",
+      status: "active",
+    })
+    .select("id")
+    .single<PreviewOrganizationRow>();
+
+  if (!error && data?.id) {
+    return data.id;
+  }
+
+  if (error?.code === "23505") {
+    const { data: createdByRace, error: raceError } = await client
+      .from("organizations")
+      .select("id")
+      .eq("slug", previewOrganizationSlug)
+      .maybeSingle<PreviewOrganizationRow>();
+
+    if (!raceError && createdByRace?.id) {
+      return createdByRace.id;
+    }
+  }
+
+  throw new Error(error?.message ?? "Nao foi possivel criar o cache global de vozes.");
 }
 
 async function findCachedPreviewUrl(client: SupabaseClient, organizationId: string, voiceId: string) {
