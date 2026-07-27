@@ -4937,7 +4937,7 @@ function VoiceSelector({
         />
       </div>
 
-      {cloneEnabled ? (
+      {cloneEnabled && activeVoiceTier === "premium" ? (
       <div className="mt-3 rounded-lg border" style={{ borderColor: "var(--ch-border)" }}>
         <button
           type="button"
@@ -4948,10 +4948,10 @@ function VoiceSelector({
             <Mic className="h-4 w-4 text-cyan-300" />
             <span>
               <span className="flex items-center gap-1.5 text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>
-                Clonar minha voz
-                <InfoHint text="Cria uma voz propria usando audios enviados pelo usuario com consentimento." />
+                Clonar minha voz premium
+                <InfoHint text="Cria uma voz propria usando audios enviados pelo usuario com consentimento. Voz clonada entra no grupo Audio premium." />
               </span>
-              <span className="block text-[11px] text-slate-500">Clonagem de voz com consentimento do usuario.</span>
+              <span className="block text-[11px] text-slate-500">Clone de voz entra como Audio premium.</span>
             </span>
           </span>
           <span className="font-mono text-[9px] uppercase tracking-widest text-cyan-200">{cloneOpen ? "fechar" : "abrir"}</span>
@@ -5938,7 +5938,7 @@ function formatPresenceMode(value: WhatsappPresenceMode) {
 
 function formatVoiceSource(voice: AudioVoiceOption) {
   if (voice.isDefault) return "padrao";
-  if (voice.source === "customer") return "voz propria";
+  if (voice.source === "customer") return "premium";
   if (voice.source === "gemini") return "baixo custo";
   if (voice.source === "library") return "premium";
   if (voice.category) return voice.category;
@@ -5946,7 +5946,8 @@ function formatVoiceSource(voice: AudioVoiceOption) {
 }
 
 function formatVoiceDetails(voice: AudioVoiceOption) {
-  return [voice.category, voice.language, voice.accent, voice.gender, voice.useCase].filter(Boolean).join(" / ") || "voz padrao";
+  const category = voice.source === "customer" ? "voz propria" : voice.category;
+  return [category, voice.language, voice.accent, voice.gender, voice.useCase].filter(Boolean).join(" / ") || "voz padrao";
 }
 
 function formatBytes(bytes: number | null | undefined) {
