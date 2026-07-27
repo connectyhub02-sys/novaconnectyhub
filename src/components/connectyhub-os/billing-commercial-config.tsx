@@ -425,7 +425,7 @@ export function BillingCommercialConfig({ catalog }: { catalog: BillingCommercia
                 A manutencao conecta apenas o token. Aqui voce decide o produto vendido.
               </p>
               <p className="mt-1 text-[12px] leading-5 text-slate-500">
-                Use estes controles para definir quais planos enxergam atendimento IA, voz economica,
+                Use estes controles para definir quais planos enxergam atendimento IA, voz de baixo custo,
                 voz premium, clonagem autorizada e ferramentas avancadas no painel do usuario.
               </p>
             </div>

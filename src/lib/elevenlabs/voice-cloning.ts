@@ -3,6 +3,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { meterUsageEvent } from "@/lib/billing/metered-usage";
 import { createServiceClient } from "@/lib/supabase/service";
 import { loadR2Config, putR2Object } from "@/lib/storage/r2";
 import { loadElevenLabsCredentials, type ElevenLabsCredentials } from "./credentials";
@@ -125,10 +126,21 @@ export async function createCustomerVoiceClone(input: {
     throw new Error(`Voz criada, mas nao foi possivel salvar no ConnectyHub: ${error.message}`);
   }
 
+  await meterVoiceCloneCreation(client, { ...input, name }, {
+    voiceRecordId: data?.id ?? null,
+    providerVoiceId: response.voiceId,
+    status,
+    createdAt,
+    files,
+  }).catch((meteringError: unknown) =>
+    appendCustomerVoiceMeteringError(client, data?.id ?? null, meteringError),
+  );
+
   generateVoicePreview(client, elevenLabs, credentials, {
     voiceId: response.voiceId,
     voiceRecordId: data?.id ?? null,
     organizationId: input.organizationId,
+    userId: input.userId,
   }).catch(() => {});
 
   return {
@@ -225,7 +237,7 @@ async function generateVoicePreview(
   client: SupabaseClient,
   elevenLabs: ElevenLabsClient,
   credentials: ElevenLabsCredentials,
-  input: { voiceId: string; voiceRecordId: string | null; organizationId: string },
+  input: { voiceId: string; voiceRecordId: string | null; organizationId: string; userId: string },
 ) {
   await new Promise((resolve) => setTimeout(resolve, previewDelayMs));
 
@@ -288,4 +300,108 @@ async function generateVoicePreview(
       })
       .eq("id", input.voiceRecordId);
   }
+
+  await meterUsageEvent(client, {
+    organizationId: input.organizationId,
+    userId: input.userId,
+    provider: "elevenlabs",
+    featureCode: "text_to_speech",
+    modelId: credentials.defaultModelId,
+    billingMode: "platform_absorbed",
+    characters: previewText.length,
+    outputUnits: previewText.length,
+    requestId: `voice-preview:elevenlabs:${objectKey}`,
+    debitDescription: "Preview de voz ConnectyHub",
+    metadata: {
+      source: "voice_clone_preview",
+      includedInVoiceCloneCharge: true,
+      voiceRecordId: input.voiceRecordId,
+      voiceId: input.voiceId,
+      objectKey,
+      bytesSize: bytes.byteLength,
+      outputFormat: credentials.outputFormat,
+      characters: previewText.length,
+    },
+  }).catch((meteringError: unknown) =>
+    appendCustomerVoiceMeteringError(client, input.voiceRecordId, meteringError),
+  );
+}
+
+async function meterVoiceCloneCreation(
+  client: SupabaseClient,
+  input: {
+    organizationId: string;
+    userId: string;
+    name: string;
+    removeBackgroundNoise: boolean;
+  },
+  clone: {
+    voiceRecordId: string | null;
+    providerVoiceId: string;
+    status: string;
+    createdAt: string;
+    files: CloneVoiceFile[];
+  },
+) {
+  const totalBytes = clone.files.reduce((sum, file) => sum + file.size, 0);
+
+  return meterUsageEvent(client, {
+    organizationId: input.organizationId,
+    userId: input.userId,
+    provider: "elevenlabs",
+    featureCode: "voice_clone",
+    requests: 1,
+    quantity: 1,
+    requestId: `voice-clone:elevenlabs:${clone.providerVoiceId}`,
+    debitDescription: "Clone de voz ConnectyHub",
+    metadata: {
+      source: "voice_clone",
+      voiceRecordId: clone.voiceRecordId,
+      voiceId: clone.providerVoiceId,
+      status: clone.status,
+      createdAt: clone.createdAt,
+      voiceName: input.name,
+      removeBackgroundNoise: input.removeBackgroundNoise,
+      sampleCount: clone.files.length,
+      sampleBytesTotal: totalBytes,
+      sampleFiles: clone.files.map((file) => ({
+        name: file.filename,
+        contentType: file.contentType,
+        bytesSize: file.size,
+      })),
+    },
+  });
+}
+
+async function appendCustomerVoiceMeteringError(
+  client: SupabaseClient,
+  voiceRecordId: string | null,
+  error: unknown,
+) {
+  if (!voiceRecordId) return;
+
+  const message = error instanceof Error ? error.message : "Falha desconhecida no metering da voz.";
+  const { data } = await client
+    .from("customer_voices")
+    .select("metadata")
+    .eq("id", voiceRecordId)
+    .maybeSingle<{ metadata: Record<string, unknown> | null }>();
+  const metadata = data?.metadata ?? {};
+  const errors = Array.isArray(metadata.metering_errors) ? metadata.metering_errors : [];
+
+  await client
+    .from("customer_voices")
+    .update({
+      metadata: {
+        ...metadata,
+        metering_errors: [
+          ...errors.slice(-4),
+          {
+            errorMessage: message.slice(0, 500),
+            occurredAt: new Date().toISOString(),
+          },
+        ],
+      },
+    })
+    .eq("id", voiceRecordId);
 }

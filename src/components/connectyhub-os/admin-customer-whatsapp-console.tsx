@@ -228,7 +228,7 @@ function buildCustomerWhatsappNotifications(workspace: AdminCustomerWhatsappWork
           id: `customer-whatsapp-${alert.runId}`,
           title: "Protecao entre instancias",
           description: `${instance.organizationName}: ${alert.inputPreview || alert.outputSummary || "Conversa interna ignorada."}`,
-          meta: `${alert.phoneNumber ?? alert.providerChatId ?? instance.phoneNumber ?? "numero nao informado"} / ${formatDate(alert.occurredAt)} / Gemini nao acionada`,
+          meta: `${alert.phoneNumber ?? alert.providerChatId ?? instance.phoneNumber ?? "numero nao informado"} / ${formatDate(alert.occurredAt)} / IA nao acionada`,
           occurredAt: alert.occurredAt,
           tone: "amber" as const,
         }));
@@ -238,7 +238,7 @@ function buildCustomerWhatsappNotifications(workspace: AdminCustomerWhatsappWork
         id: `customer-whatsapp-${instance.id}`,
         title: "Protecao entre instancias",
         description: `${instance.organizationName}: conversa interna ignorada.`,
-        meta: `${instance.lastInternalInstanceBlockedPhone ?? instance.phoneNumber ?? "numero nao informado"} / ${formatDate(instance.lastInternalInstanceBlockedAt)} / Gemini nao acionada`,
+        meta: `${instance.lastInternalInstanceBlockedPhone ?? instance.phoneNumber ?? "numero nao informado"} / ${formatDate(instance.lastInternalInstanceBlockedAt)} / IA nao acionada`,
         occurredAt: instance.lastInternalInstanceBlockedAt,
         tone: "amber" as const,
       }];

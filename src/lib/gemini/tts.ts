@@ -42,14 +42,14 @@ export type GeneratedGeminiAudio = {
 export const geminiTtsVoicePrefix = "gemini:";
 
 export const geminiTtsVoices: GeminiTtsVoice[] = [
-  { voiceId: "gemini:kore", voiceName: "Kore", displayName: "Voz Economica - Clara", tone: "firme", useCase: "atendimento direto" },
-  { voiceId: "gemini:puck", voiceName: "Puck", displayName: "Voz Economica - Energia", tone: "animada", useCase: "vendas e reativacao" },
-  { voiceId: "gemini:zephyr", voiceName: "Zephyr", displayName: "Voz Economica - Leve", tone: "clara", useCase: "respostas rapidas" },
-  { voiceId: "gemini:charon", voiceName: "Charon", displayName: "Voz Economica - Consultiva", tone: "informativa", useCase: "explicacoes" },
-  { voiceId: "gemini:aoede", voiceName: "Aoede", displayName: "Voz Economica - Natural", tone: "arejada", useCase: "conversa comum" },
-  { voiceId: "gemini:iapetus", voiceName: "Iapetus", displayName: "Voz Economica - Precisa", tone: "limpa", useCase: "suporte e pos-venda" },
-  { voiceId: "gemini:callirrhoe", voiceName: "Callirrhoe", displayName: "Voz Economica - Calma", tone: "tranquila", useCase: "acolhimento" },
-  { voiceId: "gemini:orus", voiceName: "Orus", displayName: "Voz Economica - Autoridade", tone: "firme", useCase: "negociacao" },
+  { voiceId: "gemini:kore", voiceName: "Kore", displayName: "Baixo custo - Clara", tone: "firme", useCase: "atendimento direto" },
+  { voiceId: "gemini:puck", voiceName: "Puck", displayName: "Baixo custo - Energia", tone: "animada", useCase: "vendas e reativacao" },
+  { voiceId: "gemini:zephyr", voiceName: "Zephyr", displayName: "Baixo custo - Leve", tone: "clara", useCase: "respostas rapidas" },
+  { voiceId: "gemini:charon", voiceName: "Charon", displayName: "Baixo custo - Consultiva", tone: "informativa", useCase: "explicacoes" },
+  { voiceId: "gemini:aoede", voiceName: "Aoede", displayName: "Baixo custo - Natural", tone: "arejada", useCase: "conversa comum" },
+  { voiceId: "gemini:iapetus", voiceName: "Iapetus", displayName: "Baixo custo - Precisa", tone: "limpa", useCase: "suporte e pos-venda" },
+  { voiceId: "gemini:callirrhoe", voiceName: "Callirrhoe", displayName: "Baixo custo - Calma", tone: "tranquila", useCase: "acolhimento" },
+  { voiceId: "gemini:orus", voiceName: "Orus", displayName: "Baixo custo - Autoridade", tone: "firme", useCase: "negociacao" },
 ];
 
 const maxAudioTextLength = 4800;

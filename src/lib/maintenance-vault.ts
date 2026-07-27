@@ -132,7 +132,7 @@ export const maintenanceIntegrations: IntegrationDefinition[] = [
         env: "GEMINI_TTS_MODEL",
         kind: "identifier",
         requirement: "recommended",
-        help: "Modelo padrao para a Voz Economica do painel de agentes. Use um modelo Gemini TTS compativel.",
+        help: "Modelo padrao para a voz de baixo custo do painel de agentes. Use um modelo TTS compativel.",
       },
     ],
   },

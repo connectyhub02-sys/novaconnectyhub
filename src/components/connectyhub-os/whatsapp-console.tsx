@@ -2734,7 +2734,7 @@ function buildRuntimeAlertNotifications(alerts: RuntimeAlert[]): ConnectyShellNo
     description: alert.inputPreview
       ? `Mensagem recebida: ${alert.inputPreview}`
       : alert.outputSummary || alert.message,
-    meta: `${formatPhone(alert.phoneNumber ?? alert.providerChatId)} / ${formatDate(alert.occurredAt)} / Gemini nao acionada`,
+    meta: `${formatPhone(alert.phoneNumber ?? alert.providerChatId)} / ${formatDate(alert.occurredAt)} / IA nao acionada`,
     occurredAt: alert.occurredAt,
     tone: "amber",
   }));
@@ -4919,15 +4919,15 @@ function VoiceSelector({
         <VoiceProviderButton
           active={selectedVoice?.source === "gemini"}
           disabled={!economyVoice}
-          detail={economyVoice ? "Menor custo por audio" : "Configure Gemini TTS no cofre"}
-          label="Google economico"
+          detail={economyVoice ? "Menor consumo de creditos por audio" : "Configure a voz de baixo custo no cofre"}
+          label="Audio baixo custo"
           onClick={() => economyVoice && onSelect(economyVoice)}
         />
         <VoiceProviderButton
           active={Boolean(selectedVoice && selectedVoice.source !== "gemini")}
           disabled={!premiumVoice}
-          detail={premiumVoice ? "Voz premium ou clonada" : "Configure ElevenLabs no cofre"}
-          label="ElevenLabs premium"
+          detail={premiumVoice ? "Mais qualidade ou voz clonada" : "Configure a voz premium no cofre"}
+          label="Audio premium"
           onClick={() => premiumVoice && onSelect(premiumVoice)}
         />
       </div>
@@ -5934,8 +5934,8 @@ function formatPresenceMode(value: WhatsappPresenceMode) {
 function formatVoiceSource(voice: AudioVoiceOption) {
   if (voice.isDefault) return "padrao";
   if (voice.source === "customer") return "voz propria";
-  if (voice.source === "gemini") return "economica";
-  if (voice.source === "library") return "biblioteca";
+  if (voice.source === "gemini") return "baixo custo";
+  if (voice.source === "library") return "premium";
   if (voice.category) return voice.category;
   return "premium";
 }

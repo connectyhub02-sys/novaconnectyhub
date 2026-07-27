@@ -332,18 +332,42 @@ export async function recordUsageAndDebitCredits(
     : false;
 
   if (charge > 0 && event.status === "completed" && !alreadyDebited) {
-    await debitCredits(client, {
-      organizationId: usage.organizationId,
-      amountCredits: charge,
-      provider: usage.provider,
-      usageEventId: event.id,
-      description: debitDescription,
-      metadata: {
-        featureCode: usage.featureCode,
-        modelId: usage.modelId ?? null,
-        requestId: usage.requestId ?? null,
-      },
-    });
+    try {
+      await debitCredits(client, {
+        organizationId: usage.organizationId,
+        amountCredits: charge,
+        provider: usage.provider,
+        usageEventId: event.id,
+        description: debitDescription,
+        metadata: {
+          featureCode: usage.featureCode,
+          modelId: usage.modelId ?? null,
+          requestId: usage.requestId ?? null,
+        },
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Falha desconhecida ao debitar creditos.";
+
+      await client
+        .from("usage_events")
+        .update({
+          connecty_charge_credits: 0,
+          connecty_revenue_estimate: 0,
+          gross_margin_estimate: 0,
+          error_message: `Falha ao debitar creditos: ${message}`.slice(0, 1000),
+          metadata: {
+            ...(usage.metadata ?? {}),
+            debit_failure: {
+              attemptedChargeCredits: charge,
+              occurredAt: new Date().toISOString(),
+              message: message.slice(0, 500),
+            },
+          },
+        })
+        .eq("id", event.id);
+
+      throw error;
+    }
   }
 
   return event;

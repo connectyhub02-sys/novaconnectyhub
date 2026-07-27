@@ -65,7 +65,7 @@ export async function listWhatsappAudioVoices(input: {
   });
   const geminiCredentials = await loadGeminiCredentials(client).catch((error: unknown) => {
     return {
-      errorMessage: error instanceof Error ? error.message : "Voz economica Gemini nao configurada.",
+      errorMessage: error instanceof Error ? error.message : "Voz de baixo custo nao configurada.",
     };
   });
 
@@ -139,7 +139,7 @@ export async function listWhatsappAudioVoices(input: {
         name: voice.displayName,
         source: "gemini",
         previewUrl: null,
-        category: "voz economica",
+        category: "baixo custo",
         status: "ready",
         publicOwnerId: null,
         language: "pt-BR",
