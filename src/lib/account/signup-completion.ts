@@ -2,6 +2,7 @@ import "server-only";
 
 import { randomInt } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { normalizeProfileAvatarUrl, syncAuthUserWhatsappAvatar } from "@/lib/account/profile-avatar-sync";
 import { grantTrialCredits, scheduleTrialConversionMessages, TRIAL_PLAN_CODE } from "@/lib/billing/trial";
 import { sendTrialStartedNotification } from "@/lib/billing/trial-notifications";
 import { decryptCredentialValue, encryptCredentialValue, hashCredentialValue } from "@/lib/security/credentials-crypto";
@@ -756,7 +757,7 @@ async function checkSignupWhatsappNumber(
   };
 }
 
-async function syncVerifiedPhoneWhatsappAvatar(
+export async function syncVerifiedPhoneWhatsappAvatar(
   client: SupabaseClient,
   input: {
     userId: string;
@@ -766,36 +767,14 @@ async function syncVerifiedPhoneWhatsappAvatar(
   const transport = await loadSignupWhatsappTransport(client);
   const lookup = await lookupSignupWhatsappAvatar(transport, input.phoneNormalized);
   const syncedAt = new Date().toISOString();
-  const currentUser = await client.auth.admin.getUserById(input.userId);
-
-  if (currentUser.error || !currentUser.data.user) {
-    return null;
-  }
-
-  const currentMetadata = readRecord(currentUser.data.user.user_metadata) ?? {};
   const avatarUrl = normalizeProfileAvatarUrl(lookup?.profileImageUrl);
-  const nextMetadata: JsonRecord = {
-    ...currentMetadata,
-    whatsapp_avatar_status: avatarUrl ? "synced" : "not_found",
-    whatsapp_avatar_last_attempt_at: syncedAt,
-    ...(avatarUrl
-      ? {
-          avatar_url: avatarUrl,
-          avatar_source: "whatsapp_profile",
-          whatsapp_avatar_url: avatarUrl,
-          whatsapp_avatar_source: lookup?.source ?? "uazapi",
-          whatsapp_avatar_synced_at: syncedAt,
-        }
-      : {}),
-  };
-
-  const updateResult = await client.auth.admin.updateUserById(input.userId, {
-    user_metadata: nextMetadata,
+  const syncedAvatarUrl = await syncAuthUserWhatsappAvatar({
+    client,
+    userId: input.userId,
+    avatarUrl,
+    providerSource: lookup?.source ?? "uazapi",
+    syncedAt,
   });
-
-  if (updateResult.error) {
-    return null;
-  }
 
   if (avatarUrl) {
     await client.from("maintenance_audit_logs").insert({
@@ -810,7 +789,7 @@ async function syncVerifiedPhoneWhatsappAvatar(
     }).then(undefined, () => null);
   }
 
-  return avatarUrl;
+  return syncedAvatarUrl;
 }
 
 async function lookupSignupWhatsappAvatar(
@@ -1122,22 +1101,8 @@ function isProviderMissingWhatsappError(error: UazapiSignupRequestError) {
   return exists === false;
 }
 
-function normalizeProfileAvatarUrl(value: string | null | undefined) {
-  const url = value?.trim();
-
-  if (!url || url.length > 2048 || !/^https?:\/\//i.test(url)) {
-    return null;
-  }
-
-  return url;
-}
-
 function formatPhonePreview(phoneNormalized: string) {
   return `${phoneNormalized.slice(0, 4)}****${phoneNormalized.slice(-4)}`;
-}
-
-function readRecord(value: unknown): JsonRecord | null {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value) ? value as JsonRecord : null;
 }
 
 function sanitizeProviderData(value: unknown) {

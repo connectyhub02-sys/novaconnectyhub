@@ -1,6 +1,11 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  normalizeProfileAvatarUrl,
+  readAuthUserAvatarSource,
+  syncAuthUserWhatsappAvatar,
+} from "@/lib/account/profile-avatar-sync";
 import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
 import { loadUazapiCredentials, type UazapiCredentials } from "@/lib/whatsapp/uazapi-credentials";
 import { readWhatsappInstanceProfileImageUrl } from "@/lib/whatsapp/instance-profile-image";
@@ -74,27 +79,17 @@ export async function syncAdminUserWhatsappAvatar(input: {
 
   const currentMetadata = readRecord(currentUser.data.user.user_metadata) ?? {};
   const avatarUrl = lookup ? normalizeProfileAvatarUrl(lookup.profileImageUrl) : null;
-  const nextMetadata: JsonRecord = {
-    ...currentMetadata,
-    whatsapp_avatar_status: avatarUrl ? "synced" : "not_found",
-    whatsapp_avatar_last_attempt_at: syncedAt,
-    ...(avatarUrl
-      ? {
-          avatar_url: avatarUrl,
-          avatar_source: "whatsapp_profile",
-          whatsapp_avatar_url: avatarUrl,
-          whatsapp_avatar_source: lookup?.source ?? "uazapi",
-          whatsapp_avatar_synced_at: syncedAt,
-        }
-      : {}),
-  };
 
-  const updateResult = await input.client.auth.admin.updateUserById(input.userId, {
-    user_metadata: nextMetadata,
+  const syncedAvatarUrl = await syncAuthUserWhatsappAvatar({
+    client: input.client,
+    userId: input.userId,
+    avatarUrl,
+    providerSource: lookup?.source ?? "uazapi",
+    syncedAt,
   });
 
-  if (updateResult.error) {
-    throw new Error(`Nao foi possivel salvar a foto no perfil: ${updateResult.error.message}`);
+  if (avatarUrl && !syncedAvatarUrl) {
+    throw new Error("Nao foi possivel salvar a foto no perfil.");
   }
 
   if (avatarUrl) {
@@ -126,8 +121,8 @@ export async function syncAdminUserWhatsappAvatar(input: {
     phone: profile.phone,
     phoneNormalized,
     phoneWhatsappExists: avatarUrl ? true : profile.phone_whatsapp_exists,
-    avatarUrl,
-    avatarSource: avatarUrl ? "whatsapp_profile" : readString(currentMetadata.avatar_source),
+    avatarUrl: syncedAvatarUrl,
+    avatarSource: avatarUrl && syncedAvatarUrl === avatarUrl ? "whatsapp_profile" : readAuthUserAvatarSource(currentMetadata),
     avatarSyncedAt: avatarUrl ? syncedAt : null,
     avatarSyncStatus: avatarUrl ? "synced" : "not_found",
     message: avatarUrl
@@ -308,16 +303,6 @@ function normalizeBrazilPhone(value: string | null | undefined) {
   return digits.startsWith("55") && (digits.length === 12 || digits.length === 13) ? digits : null;
 }
 
-function normalizeProfileAvatarUrl(value: string | null | undefined) {
-  const url = value?.trim();
-
-  if (!url || url.length > 2048 || !/^https?:\/\//i.test(url)) {
-    return null;
-  }
-
-  return url;
-}
-
 function formatPhonePreview(phoneNormalized: string) {
   return `${phoneNormalized.slice(0, 4)}****${phoneNormalized.slice(-4)}`;
 }
@@ -350,8 +335,4 @@ function sanitizeProviderData(value: unknown): unknown {
 
 function readRecord(value: unknown): JsonRecord | null {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value) ? value as JsonRecord : null;
-}
-
-function readString(value: unknown) {
-  return typeof value === "string" && value.trim() ? value.trim() : null;
 }

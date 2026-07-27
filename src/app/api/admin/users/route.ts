@@ -1,4 +1,10 @@
 import { NextResponse } from "next/server";
+import {
+  readAuthUserAvatarSource,
+  readAuthUserAvatarUrl,
+  readAuthUserWhatsappAvatarStatus,
+  readAuthUserWhatsappAvatarSyncedAt,
+} from "@/lib/account/profile-avatar-sync";
 import { requirePlatformAdmin } from "@/lib/supabase/admin-auth";
 import { createServiceClient } from "@/lib/supabase/service";
 
@@ -181,10 +187,10 @@ export async function GET() {
         phoneNormalized: profile?.phone_normalized ?? normalizeBrazilPhone(profile?.phone),
         phoneWhatsappExists: profile?.phone_whatsapp_exists ?? null,
         companyName: profile?.company_name ?? membership?.orgName ?? null,
-        avatarUrl: readUserAvatarUrl(u.user_metadata),
-        avatarSource: readUserAvatarSource(u.user_metadata),
-        avatarSyncedAt: readUserAvatarSyncedAt(u.user_metadata),
-        avatarSyncStatus: readUserAvatarSyncStatus(u.user_metadata),
+        avatarUrl: readAuthUserAvatarUrl(u),
+        avatarSource: readAuthUserAvatarSource(u),
+        avatarSyncedAt: readAuthUserWhatsappAvatarSyncedAt(u),
+        avatarSyncStatus: readAuthUserWhatsappAvatarStatus(u),
         isPlatformAdmin: Boolean(profile?.is_platform_admin),
         organizationId: membership?.organizationId ?? null,
         orgName: membership?.orgName ?? null,
@@ -240,32 +246,6 @@ function readResourceOverrides(metadata: JsonRecord | null | undefined) {
   };
 }
 
-function readUserAvatarUrl(metadata: unknown) {
-  const record = readRecord(metadata) ?? {};
-  const value = readString(record.avatar_url) ?? readString(record.picture) ?? readString(record.whatsapp_avatar_url);
-
-  if (!value || !/^https?:\/\//i.test(value)) {
-    return null;
-  }
-
-  return value;
-}
-
-function readUserAvatarSource(metadata: unknown) {
-  const record = readRecord(metadata) ?? {};
-  return readString(record.avatar_source) ?? readString(record.whatsapp_avatar_source);
-}
-
-function readUserAvatarSyncedAt(metadata: unknown) {
-  const record = readRecord(metadata) ?? {};
-  return readString(record.whatsapp_avatar_synced_at);
-}
-
-function readUserAvatarSyncStatus(metadata: unknown) {
-  const record = readRecord(metadata) ?? {};
-  return readString(record.whatsapp_avatar_status);
-}
-
 function normalizeBrazilPhone(value: string | null | undefined) {
   let digits = String(value ?? "").replace(/\D/g, "");
 
@@ -278,14 +258,6 @@ function normalizeBrazilPhone(value: string | null | undefined) {
   }
 
   return digits.startsWith("55") && (digits.length === 12 || digits.length === 13) ? digits : null;
-}
-
-function readRecord(value: unknown): JsonRecord | null {
-  return value && typeof value === "object" && !Array.isArray(value) ? value as JsonRecord : null;
-}
-
-function readString(value: unknown) {
-  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 function daysRemaining(value: string) {

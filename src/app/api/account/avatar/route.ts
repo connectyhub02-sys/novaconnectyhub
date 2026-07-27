@@ -58,15 +58,18 @@ export async function POST(request: NextRequest) {
   }
 
   const avatarUrl = uploadResult.publicUrl;
+  const uploadedAt = new Date().toISOString();
   const nextMetadata = {
     ...(user.user_metadata ?? {}),
     avatar_url: avatarUrl,
+    avatar_source: "manual_upload",
+    avatar_synced_at: uploadedAt,
     avatar_storage: {
       provider: "cloudflare-r2",
       key: objectKey,
       content_type: avatar.type,
       size: avatar.size,
-      uploaded_at: new Date().toISOString(),
+      uploaded_at: uploadedAt,
     },
   };
 

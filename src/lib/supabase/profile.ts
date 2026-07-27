@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { User } from "@supabase/supabase-js";
+import { readAuthUserAvatarUrl } from "@/lib/account/profile-avatar-sync";
 import { isSupabaseAuthConfigured } from "./env";
 import { createClient } from "./server";
 import { createServiceClient } from "./service";
@@ -330,18 +331,7 @@ async function ensureTrialSetup(input: {
 }
 
 function readAvatarUrl(user: User) {
-  const metadata = user.user_metadata ?? {};
-  const value = typeof metadata.avatar_url === "string"
-    ? metadata.avatar_url
-    : typeof metadata.picture === "string"
-      ? metadata.picture
-      : null;
-
-  if (!value || !/^https?:\/\//i.test(value)) {
-    return null;
-  }
-
-  return value;
+  return readAuthUserAvatarUrl(user);
 }
 
 function readBoolean(value: unknown) {

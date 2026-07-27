@@ -1605,6 +1605,7 @@ function AccountAvatar({ avatarUrl, name }: { avatarUrl: string | null; name: st
           height={80}
           src={avatarUrl}
           width={80}
+          unoptimized
           onError={() => setFailedAvatarUrl(avatarUrl)}
         />
       ) : (

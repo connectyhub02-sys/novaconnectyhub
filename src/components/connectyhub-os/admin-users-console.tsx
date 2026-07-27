@@ -284,7 +284,7 @@ export function AdminUsersConsole() {
           : user
       )));
       setNotice({
-        tone: syncedUser.avatarUrl ? "success" : "warning",
+        tone: syncedUser.avatarSyncStatus === "synced" ? "success" : "warning",
         message: data.message ?? (syncedUser.avatarUrl ? "Foto sincronizada." : "Foto publica nao encontrada."),
       });
     } catch (error) {

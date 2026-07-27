@@ -2,7 +2,12 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { getAccountCompletionStatusForUser } from "@/lib/account/signup-completion";
+import {
+  loadAuthUserAvatarState,
+  shouldAttemptWhatsappAvatarSync,
+  syncAuthUserEmailAvatarIfMissing,
+} from "@/lib/account/profile-avatar-sync";
+import { getAccountCompletionStatusForUser, syncVerifiedPhoneWhatsappAvatar } from "@/lib/account/signup-completion";
 import { buildDashboardBillingCheckoutPath } from "@/lib/billing/plan-checkout";
 import { getOrganizationBillingAccess } from "@/lib/billing/trial";
 import { ensureStarterOrganization, getCurrentWorkspace } from "@/lib/supabase/profile";
@@ -125,7 +130,6 @@ export async function GET() {
     const [
       accountCompletion,
       billingAccess,
-      avatarUrl,
       walletResult,
       subscriptionsResult,
       paymentsResult,
@@ -134,7 +138,6 @@ export async function GET() {
     ] = await Promise.all([
       getAccountCompletionStatusForUser({ userId: workspace.user.id, client }),
       getOrganizationBillingAccess({ organizationId: organization.id, client }),
-      loadAuthAvatarUrl(client, workspace.user.id),
       client
         .from("credit_wallets")
         .select("balance_credits, reserved_credits, lifetime_purchased_credits, lifetime_used_credits, status, updated_at")
@@ -193,6 +196,13 @@ export async function GET() {
     const subscriptions = (subscriptionsResult.data ?? []).map(mapSubscription);
     const pendingSubscription = subscriptions.find((subscription) => isPendingSubscription(subscription.status)) ?? null;
     const payments = (paymentsResult.data ?? []).map((payment) => mapPayment(payment));
+    const avatarUrl = await resolveAccountAvatarUrl({
+      accountCompletion,
+      client,
+      fallbackEmail: workspace.profile.email ?? workspace.user.email,
+      fallbackUrl: workspace.profile.avatarUrl,
+      userId: workspace.user.id,
+    });
 
     return NextResponse.json({
       account: {
@@ -339,17 +349,42 @@ export async function PATCH(request: NextRequest) {
   }
 }
 
-async function loadAuthAvatarUrl(client: SupabaseClient, userId: string) {
-  const { data, error } = await client.auth.admin.getUserById(userId);
+async function resolveAccountAvatarUrl(input: {
+  accountCompletion: Awaited<ReturnType<typeof getAccountCompletionStatusForUser>>;
+  client: SupabaseClient;
+  fallbackEmail: string | null | undefined;
+  fallbackUrl: string | null;
+  userId: string;
+}) {
+  const avatarState = await loadAuthUserAvatarState(input.client, input.userId).catch(() => null);
+  let avatarUrl = avatarState?.avatarUrl ?? input.fallbackUrl;
 
-  if (error || !data.user) {
-    return null;
+  if (
+    avatarState
+    && input.accountCompletion.phoneVerified
+    && input.accountCompletion.phoneNormalized
+    && shouldAttemptWhatsappAvatarSync(avatarState.metadata)
+  ) {
+    const whatsappAvatarUrl = await syncVerifiedPhoneWhatsappAvatar(input.client, {
+      userId: input.userId,
+      phoneNormalized: input.accountCompletion.phoneNormalized,
+    }).catch(() => null);
+
+    avatarUrl = whatsappAvatarUrl ?? avatarUrl;
   }
 
-  const metadata = readRecord(data.user.user_metadata);
-  const value = readString(metadata.avatar_url) ?? readString(metadata.picture);
+  if (!avatarUrl) {
+    const emailAvatarUrl = await syncAuthUserEmailAvatarIfMissing({
+      client: input.client,
+      email: input.fallbackEmail,
+      state: avatarState,
+      userId: input.userId,
+    }).catch(() => null);
 
-  return value && /^https?:\/\//i.test(value) ? value : null;
+    avatarUrl = emailAvatarUrl ?? avatarUrl;
+  }
+
+  return avatarUrl;
 }
 
 function mapWallet(row: WalletRow | null, balanceCredits: number) {
