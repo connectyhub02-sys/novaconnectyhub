@@ -147,6 +147,16 @@ type AccountData = {
     description: string | null;
     createdAt: string | null;
   }>;
+  usageEvents: Array<{
+    id: string;
+    provider: string | null;
+    featureCode: string | null;
+    modelId: string | null;
+    inputUnits: number;
+    outputUnits: number;
+    chargeCredits: number;
+    createdAt: string | null;
+  }>;
   cycles: Array<{
     id: string;
     planCode: string | null;
@@ -1121,7 +1131,7 @@ function BillingWorkspace({
           <SubscriptionsTab plansHref={account.actions.plansHref} subscriptions={account.subscriptions} />
         </TabsContent>
         <TabsContent className="mt-0 data-[state=inactive]:hidden" forceMount value="credits">
-          <CreditsTab transactions={account.creditTransactions} />
+          <CreditsTab transactions={account.creditTransactions} usageEvents={account.usageEvents} />
         </TabsContent>
         <TabsContent className="mt-0 data-[state=inactive]:hidden" forceMount value="cycles">
           <CyclesTab cycles={account.cycles} />
@@ -1328,39 +1338,96 @@ function SubscriptionsTab({
   );
 }
 
-function CreditsTab({ transactions }: { transactions: AccountData["creditTransactions"] }) {
+function CreditsTab({
+  transactions,
+  usageEvents,
+}: {
+  transactions: AccountData["creditTransactions"];
+  usageEvents: AccountData["usageEvents"];
+}) {
   const { hasMore, setExpanded, visibleItems } = useVisibleItems(transactions);
 
-  if (!transactions.length) {
+  if (!transactions.length && !usageEvents.length) {
     return <EmptyState text="Nenhuma movimentacao de creditos foi registrada ainda." />;
   }
 
   return (
-    <div className="space-y-3">
-      {visibleItems.map((transaction) => {
-        const positive = transaction.amountCredits >= 0;
-        const sign = positive ? "+" : "-";
+    <div className="space-y-5">
+      <div className="space-y-3">
+        <SectionLabel>Movimentacoes da carteira</SectionLabel>
+        {transactions.length ? visibleItems.map((transaction) => {
+          const positive = transaction.amountCredits >= 0;
+          const sign = positive ? "+" : "-";
 
-        return (
-          <article key={transaction.id} className="flex flex-col gap-3 border-b border-white/10 pb-3 last:border-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between">
+          return (
+            <article key={transaction.id} className="flex flex-col gap-3 border-b border-white/10 pb-3 last:border-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-white">{transaction.description ?? transactionTypeLabel(transaction.type)}</p>
+                <p className="mt-1 text-sm text-slate-400">{formatDateTime(transaction.createdAt)}</p>
+                <p className="mt-1 text-xs text-slate-500">Saldo apos movimentacao: {formatCredits(transaction.balanceAfterCredits)} creditos</p>
+              </div>
+              <div className="text-left sm:text-right">
+                <p className={cn("text-lg font-semibold", positive ? "text-emerald-300" : "text-rose-300")}>
+                  {sign}{formatCredits(Math.abs(transaction.amountCredits))}
+                </p>
+                <p className="text-xs text-slate-500">{positive ? "Entrada" : "Saida"}</p>
+              </div>
+            </article>
+          );
+        }) : <EmptyState text="Nenhuma movimentacao de carteira encontrada." />}
+
+        {hasMore ? <ShowMoreButton total={transactions.length} onClick={() => setExpanded(true)} /> : null}
+      </div>
+
+      <div className="space-y-3">
+        <SectionLabel>Consumo recente dos agentes</SectionLabel>
+        {usageEvents.length ? usageEvents.map((event) => (
+          <article key={event.id} className="flex flex-col gap-3 rounded-md bg-white/[0.035] p-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
-              <p className="text-sm font-semibold text-white">{transaction.description ?? transactionTypeLabel(transaction.type)}</p>
-              <p className="mt-1 text-sm text-slate-400">{formatDateTime(transaction.createdAt)}</p>
-              <p className="mt-1 text-xs text-slate-500">Saldo apos movimentacao: {formatCredits(transaction.balanceAfterCredits)} creditos</p>
+              <p className="text-sm font-semibold text-white">{usageFeatureLabel(event.featureCode)}</p>
+              <p className="mt-1 text-sm text-slate-400">{formatDateTime(event.createdAt)}</p>
+              <p className="mt-1 truncate text-xs text-slate-500">
+                {[event.provider, event.modelId].filter(Boolean).join(" / ") || "Provedor nao informado"}
+              </p>
             </div>
             <div className="text-left sm:text-right">
-              <p className={cn("text-lg font-semibold", positive ? "text-emerald-300" : "text-rose-300")}>
-                {sign}{formatCredits(Math.abs(transaction.amountCredits))}
-              </p>
-              <p className="text-xs text-slate-500">{positive ? "Entrada" : "Saida"}</p>
+              <p className="text-lg font-semibold text-rose-300">-{formatCredits(event.chargeCredits)}</p>
+              <p className="text-xs text-slate-500">{formatUsageUnits(event)}</p>
             </div>
           </article>
-        );
-      })}
-
-      {hasMore ? <ShowMoreButton total={transactions.length} onClick={() => setExpanded(true)} /> : null}
+        )) : <EmptyState text="Nenhum consumo de agente encontrado ainda." />}
+      </div>
     </div>
   );
+}
+
+function SectionLabel({ children }: { children: ReactNode }) {
+  return (
+    <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+      {children}
+    </p>
+  );
+}
+
+function usageFeatureLabel(featureCode: string | null) {
+  const labels: Record<string, string> = {
+    chat_completion: "Resposta do agente",
+    voice_reply_whatsapp: "Resposta por audio",
+    text_to_speech: "Audio gerado",
+    lead_analysis: "Analise de lead",
+    conversation_summary: "Resumo de conversa",
+    content_generation: "Conteudo gerado",
+    traffic_agent: "Agente de trafego",
+    embedding_memory: "Memoria semantica",
+  };
+
+  return labels[featureCode ?? ""] ?? featureCode ?? "Consumo de agente";
+}
+
+function formatUsageUnits(event: AccountData["usageEvents"][number]) {
+  const input = event.inputUnits > 0 ? `${formatCredits(event.inputUnits)} entrada` : null;
+  const output = event.outputUnits > 0 ? `${formatCredits(event.outputUnits)} saida` : null;
+  return [input, output].filter(Boolean).join(" / ") || "unidades registradas";
 }
 
 function CyclesTab({ cycles }: { cycles: AccountData["cycles"] }) {
@@ -1711,7 +1778,7 @@ function useVisibleItems<T>(items: T[], limit = LIST_LIMIT) {
 function billingTabCount(account: AccountData, tab: BillingTab) {
   if (tab === "payments") return account.payments.length;
   if (tab === "subscriptions") return account.subscriptions.length;
-  if (tab === "credits") return account.creditTransactions.length;
+  if (tab === "credits") return account.creditTransactions.length + account.usageEvents.length;
   return account.cycles.length;
 }
 

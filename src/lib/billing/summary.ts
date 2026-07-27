@@ -2,7 +2,7 @@ import "server-only";
 
 import { createClient } from "@/lib/supabase/server";
 import type { SalesCatalogCommercialFlowType, SalesCatalogRevenueOwnerType } from "@/lib/sales-catalog/shared";
-import type { BillingProvider } from "./cost-center";
+import type { BillingProvider, UsageAgentScope, UsageBillingMode } from "./cost-center";
 
 export type CommerceFlowSummary = {
   flow: SalesCatalogCommercialFlowType;
@@ -43,6 +43,22 @@ export type BillingProviderSummary = {
   chargeCredits: number;
 };
 
+export type BillingModeSummary = {
+  mode: UsageBillingMode | "unknown";
+  label: string;
+  events: number;
+  providerCost: number;
+  connectyRevenue: number;
+  chargeCredits: number;
+};
+
+export type BillingAgentScopeSummary = {
+  scope: UsageAgentScope | "unknown";
+  label: string;
+  events: number;
+  chargeCredits: number;
+};
+
 export type BillingAdminSummary = {
   schemaReady: boolean;
   periodLabel: string;
@@ -53,11 +69,18 @@ export type BillingAdminSummary = {
     connectyRevenue: number;
     grossMargin: number;
     chargeCredits: number;
+    customerBillableCredits: number;
+    trialBillableCredits: number;
+    internalShadowCredits: number;
+    platformAbsorbedCredits: number;
+    freeCredits: number;
     walletBalanceCredits: number;
     activeCostCenters: number;
     activeRates: number;
   };
   providers: BillingProviderSummary[];
+  billingModes: BillingModeSummary[];
+  agentScopes: BillingAgentScopeSummary[];
   commerce: CommerceRevenueSummary;
   warnings: string[];
 };
@@ -68,6 +91,8 @@ type UsageRow = {
   connecty_revenue_estimate: number | string | null;
   gross_margin_estimate: number | string | null;
   connecty_charge_credits: number | string | null;
+  billing_mode?: UsageBillingMode | string | null;
+  agent_scope?: UsageAgentScope | string | null;
 };
 
 type WalletRow = {
@@ -117,6 +142,22 @@ const providerNames: Record<string, string> = {
   custom: "Custom",
 };
 
+const billingModeLabels: Record<string, string> = {
+  customer_billable: "Clientes cobrados",
+  trial_billable: "Trial cobrado em creditos",
+  internal_shadow: "ConnectyHub interno",
+  platform_absorbed: "Absorvido pela plataforma",
+  free: "Gratis / isento",
+  unknown: "Sem modo",
+};
+
+const agentScopeLabels: Record<string, string> = {
+  customer: "Agentes de clientes",
+  platform: "Agentes admin/plataforma",
+  internal: "Organizacao interna",
+  unknown: "Sem escopo",
+};
+
 export async function getBillingAdminSummary(): Promise<BillingAdminSummary> {
   const supabase = await createClient();
   const since = new Date();
@@ -126,7 +167,7 @@ export async function getBillingAdminSummary(): Promise<BillingAdminSummary> {
   const [usageResult, walletResult, costCenterResult, rateResult, commerce] = await Promise.all([
     supabase
       .from("usage_events")
-      .select("provider, provider_cost, connecty_revenue_estimate, gross_margin_estimate, connecty_charge_credits")
+      .select("provider, provider_cost, connecty_revenue_estimate, gross_margin_estimate, connecty_charge_credits, billing_mode, agent_scope")
       .gte("occurred_at", sinceIso)
       .limit(5000),
     supabase
@@ -172,9 +213,13 @@ export async function getBillingAdminSummary(): Promise<BillingAdminSummary> {
   }
 
   const providerMap = new Map<string, BillingProviderSummary>();
+  const billingModeMap = new Map<string, BillingModeSummary>();
+  const agentScopeMap = new Map<string, BillingAgentScopeSummary>();
 
   for (const row of usageRows) {
     const provider = row.provider || "unknown";
+    const billingMode = row.billing_mode || "unknown";
+    const agentScope = row.agent_scope || "unknown";
     const current = providerMap.get(provider) ?? {
       provider: provider as BillingProvider | "unknown",
       label: providerLabels.get(provider) ?? providerNames[provider] ?? provider,
@@ -191,6 +236,32 @@ export async function getBillingAdminSummary(): Promise<BillingAdminSummary> {
     current.grossMargin += toNumber(row.gross_margin_estimate);
     current.chargeCredits += toNumber(row.connecty_charge_credits);
     providerMap.set(provider, current);
+
+    const modeSummary = billingModeMap.get(billingMode) ?? {
+      mode: billingMode as UsageBillingMode | "unknown",
+      label: billingModeLabels[billingMode] ?? billingMode,
+      events: 0,
+      providerCost: 0,
+      connectyRevenue: 0,
+      chargeCredits: 0,
+    };
+
+    modeSummary.events += 1;
+    modeSummary.providerCost += toNumber(row.provider_cost);
+    modeSummary.connectyRevenue += toNumber(row.connecty_revenue_estimate);
+    modeSummary.chargeCredits += toNumber(row.connecty_charge_credits);
+    billingModeMap.set(billingMode, modeSummary);
+
+    const scopeSummary = agentScopeMap.get(agentScope) ?? {
+      scope: agentScope as UsageAgentScope | "unknown",
+      label: agentScopeLabels[agentScope] ?? agentScope,
+      events: 0,
+      chargeCredits: 0,
+    };
+
+    scopeSummary.events += 1;
+    scopeSummary.chargeCredits += toNumber(row.connecty_charge_credits);
+    agentScopeMap.set(agentScope, scopeSummary);
   }
 
   const providers = Array.from(providerMap.values())
@@ -202,6 +273,20 @@ export async function getBillingAdminSummary(): Promise<BillingAdminSummary> {
       chargeCredits: roundCredits(provider.chargeCredits),
     }))
     .sort((a, b) => b.connectyRevenue - a.connectyRevenue);
+  const billingModes = Array.from(billingModeMap.values())
+    .map((mode) => ({
+      ...mode,
+      providerCost: roundMoney(mode.providerCost),
+      connectyRevenue: roundMoney(mode.connectyRevenue),
+      chargeCredits: roundCredits(mode.chargeCredits),
+    }))
+    .sort((a, b) => b.chargeCredits - a.chargeCredits);
+  const agentScopes = Array.from(agentScopeMap.values())
+    .map((scope) => ({
+      ...scope,
+      chargeCredits: roundCredits(scope.chargeCredits),
+    }))
+    .sort((a, b) => b.chargeCredits - a.chargeCredits);
 
   const totals = providers.reduce(
     (acc, provider) => {
@@ -218,9 +303,31 @@ export async function getBillingAdminSummary(): Promise<BillingAdminSummary> {
       connectyRevenue: 0,
       grossMargin: 0,
       chargeCredits: 0,
+      customerBillableCredits: 0,
+      trialBillableCredits: 0,
+      internalShadowCredits: 0,
+      platformAbsorbedCredits: 0,
+      freeCredits: 0,
       walletBalanceCredits: 0,
       activeCostCenters: costCenterRows.filter((row) => row.enabled).length,
       activeRates: rateRows.filter((row) => row.active).length,
+    },
+  );
+  const modeTotals = billingModes.reduce(
+    (acc, mode) => {
+      if (mode.mode === "customer_billable") acc.customerBillableCredits += mode.chargeCredits;
+      if (mode.mode === "trial_billable") acc.trialBillableCredits += mode.chargeCredits;
+      if (mode.mode === "internal_shadow") acc.internalShadowCredits += mode.chargeCredits;
+      if (mode.mode === "platform_absorbed") acc.platformAbsorbedCredits += mode.chargeCredits;
+      if (mode.mode === "free") acc.freeCredits += mode.chargeCredits;
+      return acc;
+    },
+    {
+      customerBillableCredits: 0,
+      trialBillableCredits: 0,
+      internalShadowCredits: 0,
+      platformAbsorbedCredits: 0,
+      freeCredits: 0,
     },
   );
 
@@ -236,9 +343,16 @@ export async function getBillingAdminSummary(): Promise<BillingAdminSummary> {
       connectyRevenue: roundMoney(totals.connectyRevenue),
       grossMargin: roundMoney(totals.grossMargin),
       chargeCredits: roundCredits(totals.chargeCredits),
+      customerBillableCredits: roundCredits(modeTotals.customerBillableCredits),
+      trialBillableCredits: roundCredits(modeTotals.trialBillableCredits),
+      internalShadowCredits: roundCredits(modeTotals.internalShadowCredits),
+      platformAbsorbedCredits: roundCredits(modeTotals.platformAbsorbedCredits),
+      freeCredits: roundCredits(modeTotals.freeCredits),
       walletBalanceCredits: roundCredits(totals.walletBalanceCredits),
     },
     providers,
+    billingModes,
+    agentScopes,
     commerce,
     warnings: commerce.warnings,
   };
@@ -376,11 +490,18 @@ function emptySummary({
       connectyRevenue: 0,
       grossMargin: 0,
       chargeCredits: 0,
+      customerBillableCredits: 0,
+      trialBillableCredits: 0,
+      internalShadowCredits: 0,
+      platformAbsorbedCredits: 0,
+      freeCredits: 0,
       walletBalanceCredits: 0,
       activeCostCenters: 0,
       activeRates: 0,
     },
     providers: [],
+    billingModes: [],
+    agentScopes: [],
     commerce: commerce ?? emptyCommerceSummary(false, []),
     warnings,
   };

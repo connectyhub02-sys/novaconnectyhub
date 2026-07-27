@@ -865,6 +865,8 @@ export async function sendClientWhatsappTest(input: {
       modelId: behavior.audioModelId || null,
       source: "whatsapp_test",
       metadata: {
+        agentId: agent.id,
+        agentScope: "customer",
         whatsappInstanceId: instance.id,
         testPhone: phone,
         audioVoiceName: behavior.audioVoiceName || null,

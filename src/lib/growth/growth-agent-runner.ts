@@ -1,6 +1,12 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  estimateTokensFromText,
+  extractGeminiUsageMetadata,
+  meterUsageEvent,
+  type GeminiTokenUsage,
+} from "@/lib/billing/metered-usage";
 import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
 import { createServiceClient } from "@/lib/supabase/service";
 
@@ -41,7 +47,7 @@ type RunGrowthAgentInput = {
 };
 
 type LlmResult =
-  | { status: "generated"; text: string; model: string }
+  | { status: "generated"; text: string; model: string; usage: GeminiTokenUsage | null }
   | { status: "unavailable"; reason: string; model: string };
 
 const defaultGeminiModel = "gemini-2.5-flash";
@@ -167,6 +173,18 @@ export async function runGrowthAgentMission(input: RunGrowthAgentInput, client: 
     await recordContentPipelineItem(client, agent, mission, llm);
   }
 
+  const metering = await meterGrowthAgentUsage({
+    client,
+    agent,
+    mission,
+    llm,
+    runId,
+    input,
+  }).catch(async (error: unknown) => {
+    await appendGrowthRunMeteringError(client, runId, error);
+    return null;
+  });
+
   const runStatus = agent.requires_human_approval === false ? "completed" : "needs_approval";
   await finishAgentRun(client, runId, {
     status: runStatus,
@@ -177,6 +195,9 @@ export async function runGrowthAgentMission(input: RunGrowthAgentInput, client: 
       llmStatus: llm.status,
       model: llm.model,
       intelligenceEventId: eventId,
+      usageEventId: metering?.usageEventId ?? null,
+      usageBillingMode: metering?.billingMode ?? null,
+      usageChargeCredits: metering?.chargeCredits ?? null,
     },
   });
 
@@ -240,6 +261,13 @@ async function finishAgentRun(
 ) {
   if (!runId) return;
 
+  const { data } = await client
+    .from("agent_runs")
+    .select("metadata")
+    .eq("id", runId)
+    .maybeSingle<{ metadata: JsonRecord | null }>();
+  const currentMetadata = readRecord(data?.metadata) ?? {};
+
   await client
     .from("agent_runs")
     .update({
@@ -247,7 +275,10 @@ async function finishAgentRun(
       output_summary: input.outputSummary,
       error_message: input.errorMessage ?? null,
       finished_at: new Date().toISOString(),
-      metadata: input.metadata ?? {},
+      metadata: {
+        ...currentMetadata,
+        ...(input.metadata ?? {}),
+      },
     })
     .eq("id", runId);
 }
@@ -349,6 +380,7 @@ async function generateGrowthBriefing(
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 20000);
+  const prompt = buildGrowthPrompt(agent, mission);
 
   try {
     const response = await fetch(url, {
@@ -359,7 +391,7 @@ async function generateGrowthBriefing(
           {
             parts: [
               {
-                text: buildGrowthPrompt(agent, mission),
+                text: prompt,
               },
             ],
           },
@@ -388,7 +420,7 @@ async function generateGrowthBriefing(
       return { status: "unavailable", reason: "Gemini nao retornou texto utilizavel.", model };
     }
 
-    return { status: "generated", text, model };
+    return { status: "generated", text, model, usage: extractGeminiUsageMetadata(data) };
   } catch (error) {
     return {
       status: "unavailable",
@@ -400,6 +432,78 @@ async function generateGrowthBriefing(
   } finally {
     clearTimeout(timeout);
   }
+}
+
+async function meterGrowthAgentUsage(input: {
+  client: SupabaseClient;
+  agent: GrowthAgentRow;
+  mission: GrowthMission;
+  llm: Extract<LlmResult, { status: "generated" }>;
+  runId: string | null;
+  input: RunGrowthAgentInput;
+}) {
+  const prompt = buildGrowthPrompt(input.agent, input.mission);
+  const inputTokens = input.llm.usage?.inputTokens ?? estimateTokensFromText(prompt);
+  const outputTokens = input.llm.usage?.outputTokens ?? estimateTokensFromText(input.llm.text);
+  const totalTokens = input.llm.usage?.totalTokens ?? inputTokens + outputTokens;
+
+  return meterUsageEvent(input.client, {
+    provider: "gemini",
+    featureCode: "content_generation",
+    modelId: input.llm.model,
+    agentId: input.agent.id,
+    agentRunId: input.runId,
+    agentScope: "platform",
+    billingMode: "internal_shadow",
+    inputUnits: inputTokens,
+    outputUnits: outputTokens,
+    inputTokens,
+    outputTokens,
+    totalTokens,
+    requestId: `growth-agent:${input.runId ?? input.input.inngestRunId ?? input.agent.agent_code}:${input.mission.eventType}:gemini`,
+    debitDescription: "Agente interno ConnectyHub",
+    metadata: {
+      source: "growth_agent",
+      agentCode: input.agent.agent_code,
+      mission: input.mission.title,
+      eventType: input.mission.eventType,
+      triggerSource: input.input.triggerSource,
+      inngestRunId: input.input.inngestRunId ?? null,
+      geminiUsage: input.llm.usage,
+    },
+  });
+}
+
+async function appendGrowthRunMeteringError(client: SupabaseClient, runId: string | null, error: unknown) {
+  if (!runId) {
+    return;
+  }
+
+  const { data } = await client
+    .from("agent_runs")
+    .select("metadata")
+    .eq("id", runId)
+    .maybeSingle<{ metadata: JsonRecord | null }>();
+  const metadata = readRecord(data?.metadata) ?? {};
+  const errors = Array.isArray(metadata.metering_errors) ? metadata.metering_errors : [];
+  const errorMessage = error instanceof Error ? error.message : "Falha desconhecida ao registrar metering.";
+
+  await client
+    .from("agent_runs")
+    .update({
+      metadata: {
+        ...metadata,
+        metering_errors: [
+          ...errors.slice(-4),
+          {
+            featureCode: "content_generation",
+            errorMessage: errorMessage.slice(0, 500),
+            occurredAt: new Date().toISOString(),
+          },
+        ],
+      },
+    })
+    .eq("id", runId);
 }
 
 function buildGrowthPrompt(agent: GrowthAgentRow, mission: GrowthMission) {

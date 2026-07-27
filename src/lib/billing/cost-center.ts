@@ -34,6 +34,15 @@ export type BillingUnit =
 
 export type UsageEventStatus = "pending" | "completed" | "failed" | "refunded";
 
+export type UsageBillingMode =
+  | "customer_billable"
+  | "trial_billable"
+  | "internal_shadow"
+  | "platform_absorbed"
+  | "free";
+
+export type UsageAgentScope = "customer" | "platform" | "internal" | "unknown";
+
 export type UsageChargeInput = {
   inputUnits?: number;
   outputUnits?: number;
@@ -49,11 +58,17 @@ export type UsageEventInput = {
   featureCode: string;
   modelId?: string | null;
   agentId?: string | null;
+  agentRunId?: string | null;
   conversationId?: string | null;
   leadId?: string | null;
+  billingMode?: UsageBillingMode;
+  agentScope?: UsageAgentScope;
   status?: UsageEventStatus;
   inputUnits?: number;
   outputUnits?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
   providerCost?: number;
   connectyChargeCredits?: number;
   connectyRevenueEstimate?: number;
@@ -79,6 +94,7 @@ export type UsageEventRow = {
   connecty_revenue_estimate: number;
   gross_margin_estimate: number;
   created_at: string;
+  deduplicated?: boolean;
 };
 
 export type CreditGrantInput = {
@@ -225,40 +241,79 @@ export async function debitCredits(client: SupabaseClient, input: CreditDebitInp
 }
 
 export async function recordUsageEvent(client: SupabaseClient, input: UsageEventInput) {
+  if (input.requestId) {
+    const existing = await findUsageEventByRequestId(client, input);
+
+    if (existing) {
+      return { ...existing, deduplicated: true };
+    }
+  }
+
   const providerCost = roundMoney(input.providerCost ?? 0);
   const connectyRevenue = roundMoney(input.connectyRevenueEstimate ?? input.connectyChargeCredits ?? 0);
   const grossMargin = roundMoney(input.grossMarginEstimate ?? calculateGrossMargin(providerCost, connectyRevenue));
+  const insertPayload: Record<string, unknown> = {
+    organization_id: input.organizationId,
+    user_id: input.userId ?? null,
+    provider: input.provider,
+    feature_code: input.featureCode,
+    model_id: input.modelId ?? null,
+    agent_id: input.agentId ?? null,
+    conversation_id: input.conversationId ?? null,
+    lead_id: input.leadId ?? null,
+    status: input.status ?? "completed",
+    input_units: roundUsageUnits(input.inputUnits ?? 0),
+    output_units: roundUsageUnits(input.outputUnits ?? 0),
+    provider_cost: providerCost,
+    connecty_charge_credits: roundCredits(input.connectyChargeCredits ?? 0),
+    connecty_revenue_estimate: connectyRevenue,
+    gross_margin_estimate: grossMargin,
+    currency: input.currency ?? "BRL",
+    request_id: input.requestId ?? null,
+    error_message: input.errorMessage ?? null,
+    metadata: input.metadata ?? {},
+    occurred_at: input.occurredAt ?? new Date().toISOString(),
+  };
+
+  if (input.billingMode) {
+    insertPayload.billing_mode = input.billingMode;
+  }
+
+  if (input.agentScope) {
+    insertPayload.agent_scope = input.agentScope;
+  }
+
+  if (input.agentRunId) {
+    insertPayload.agent_run_id = input.agentRunId;
+  }
+
+  if (input.inputTokens !== undefined) {
+    insertPayload.input_tokens = roundUsageUnits(input.inputTokens);
+  }
+
+  if (input.outputTokens !== undefined) {
+    insertPayload.output_tokens = roundUsageUnits(input.outputTokens);
+  }
+
+  if (input.totalTokens !== undefined) {
+    insertPayload.total_tokens = roundUsageUnits(input.totalTokens);
+  }
 
   const { data, error } = await client
     .from("usage_events")
-    .insert({
-      organization_id: input.organizationId,
-      user_id: input.userId ?? null,
-      provider: input.provider,
-      feature_code: input.featureCode,
-      model_id: input.modelId ?? null,
-      agent_id: input.agentId ?? null,
-      conversation_id: input.conversationId ?? null,
-      lead_id: input.leadId ?? null,
-      status: input.status ?? "completed",
-      input_units: roundUsageUnits(input.inputUnits ?? 0),
-      output_units: roundUsageUnits(input.outputUnits ?? 0),
-      provider_cost: providerCost,
-      connecty_charge_credits: roundCredits(input.connectyChargeCredits ?? 0),
-      connecty_revenue_estimate: connectyRevenue,
-      gross_margin_estimate: grossMargin,
-      currency: input.currency ?? "BRL",
-      request_id: input.requestId ?? null,
-      error_message: input.errorMessage ?? null,
-      metadata: input.metadata ?? {},
-      occurred_at: input.occurredAt ?? new Date().toISOString(),
-    })
-    .select(
-      "id, organization_id, provider, feature_code, model_id, status, input_units, output_units, provider_cost, connecty_charge_credits, connecty_revenue_estimate, gross_margin_estimate, created_at",
-    )
+    .insert(insertPayload)
+    .select(usageEventSelect)
     .single();
 
   if (error) {
+    if (input.requestId && error.code === "23505") {
+      const existing = await findUsageEventByRequestId(client, input);
+
+      if (existing) {
+        return { ...existing, deduplicated: true };
+      }
+    }
+
     throw new Error(`Nao foi possivel registrar evento de uso: ${error.message}`);
   }
 
@@ -272,8 +327,11 @@ export async function recordUsageAndDebitCredits(
 ) {
   const event = await recordUsageEvent(client, usage);
   const charge = Number(event.connecty_charge_credits ?? 0);
+  const alreadyDebited = event.deduplicated
+    ? await hasDebitTransactionForUsageEvent(client, event.id)
+    : false;
 
-  if (charge > 0 && event.status === "completed") {
+  if (charge > 0 && event.status === "completed" && !alreadyDebited) {
     await debitCredits(client, {
       organizationId: usage.organizationId,
       amountCredits: charge,
@@ -289,6 +347,42 @@ export async function recordUsageAndDebitCredits(
   }
 
   return event;
+}
+
+const usageEventSelect =
+  "id, organization_id, provider, feature_code, model_id, status, input_units, output_units, provider_cost, connecty_charge_credits, connecty_revenue_estimate, gross_margin_estimate, created_at";
+
+async function findUsageEventByRequestId(client: SupabaseClient, input: UsageEventInput) {
+  const { data, error } = await client
+    .from("usage_events")
+    .select(usageEventSelect)
+    .eq("organization_id", input.organizationId)
+    .eq("provider", input.provider)
+    .eq("feature_code", input.featureCode)
+    .eq("request_id", input.requestId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Nao foi possivel verificar evento de uso existente: ${error.message}`);
+  }
+
+  return data as UsageEventRow | null;
+}
+
+async function hasDebitTransactionForUsageEvent(client: SupabaseClient, usageEventId: string) {
+  const { data, error } = await client
+    .from("credit_transactions")
+    .select("id")
+    .eq("usage_event_id", usageEventId)
+    .eq("transaction_type", "debit")
+    .limit(1)
+    .maybeSingle<{ id: string }>();
+
+  if (error) {
+    throw new Error(`Nao foi possivel verificar debito de uso existente: ${error.message}`);
+  }
+
+  return Boolean(data?.id);
 }
 
 function shouldSendTrialUsageNotification(metadata: Record<string, unknown> | undefined) {

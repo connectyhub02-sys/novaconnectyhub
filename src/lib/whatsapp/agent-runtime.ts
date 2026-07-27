@@ -2,6 +2,13 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { buildAgentChannelRuntimeInstruction } from "@/lib/agents/multichannel";
+import {
+  estimateTokensFromText,
+  extractGeminiUsageMetadata,
+  meterUsageEvent,
+  type GeminiTokenUsage,
+  type MeteredUsageResult,
+} from "@/lib/billing/metered-usage";
 import { assertBillableAccess, BillingAccessError } from "@/lib/billing/trial";
 import { generateConnectyVoiceAudio, type GeneratedConnectyVoiceAudio } from "@/lib/voice/tts";
 import {
@@ -79,6 +86,13 @@ type HumanHandoffIntent = {
   source: "keyword" | "ai_context";
   confidence: number;
   reason: string;
+};
+
+type AgentResponseResult = {
+  text: string;
+  modelId: string;
+  usage: GeminiTokenUsage | null;
+  fromCache?: boolean;
 };
 
 const geminiSafetySettings = [
@@ -533,14 +547,14 @@ export async function processWhatsappAgentRun(input: {
 
     await maybeSetInstanceAvailable(context, token, "before");
 
-    const cachedAiText = readCachedRunResponseText(context.run.metadata);
+    const cachedAiResponse = readCachedRunResponse(context.run.metadata);
     const salesCatalogShippingQuotes = buildRuntimeSalesCatalogShippingQuoteContext({
       items: context.salesCatalog,
       orders: context.salesCatalogOrders,
       settings: context.salesCatalogShippingSettings,
       userText,
     });
-    const aiText = cachedAiText ?? await generateAgentResponse({
+    const aiResponse = cachedAiResponse ?? await generateAgentResponse({
       credentials: context.geminiCredentials,
       organization,
       agent,
@@ -561,9 +575,10 @@ export async function processWhatsappAgentRun(input: {
       userText,
       conversationMetadata: context.conversationMetadata,
     });
+    const aiText = aiResponse.text;
 
-    if (!cachedAiText) {
-      await cacheRunResponseText(client, run.id, aiText);
+    if (!cachedAiResponse) {
+      await cacheRunResponse(client, run.id, aiResponse);
     }
 
     if (latestInbound?.provider_message_id) {
@@ -598,6 +613,18 @@ export async function processWhatsappAgentRun(input: {
       }
     }
 
+    const textMetering = await meterWhatsappAgentTextUsage({
+      client,
+      context,
+      response: aiResponse,
+      outboundMessages: outbound.length,
+      userText,
+    }).catch(async (error: unknown) => {
+      const message = error instanceof Error ? error.message : "Falha desconhecida ao registrar metering.";
+      await appendRunMeteringError(client, run.id, "chat_completion", message);
+      return null;
+    });
+
     if (behavior.cloneRealTestMode) {
       await persistCloneRealTestTurn(client, context, {
         userText,
@@ -626,6 +653,9 @@ export async function processWhatsappAgentRun(input: {
       sent: true,
       messages: outbound.length,
       mode: outbound[0]?.mode ?? "text",
+      text_usage_event_id: textMetering?.usageEventId ?? null,
+      text_usage_billing_mode: textMetering?.billingMode ?? null,
+      text_usage_charge_credits: textMetering?.chargeCredits ?? null,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Erro desconhecido no agente WhatsApp.";
@@ -1560,8 +1590,9 @@ async function generateAgentResponse(input: {
   latestInbound: ConversationMessageRow | null;
   userText: string;
   conversationMetadata: Record<string, unknown> | null;
-}) {
-  const url = new URL(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(input.agent.model_id || input.credentials.model)}:generateContent`);
+}): Promise<AgentResponseResult> {
+  const modelId = normalizeGeminiModel(input.agent.model_id || input.credentials.model);
+  const url = new URL(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelId)}:generateContent`);
   url.searchParams.set("key", input.credentials.apiKey);
 
   const response = await fetch(url, {
@@ -1596,10 +1627,16 @@ async function generateAgentResponse(input: {
       : "Gemini nao retornou uma resposta para o lead.");
   }
 
-  return enforceIdentityGuard(
+  const renderedText = enforceIdentityGuard(
     normalizeAssistantText(renderLinkButtonTags(text, input.linkButtons, input)),
     input.behavior,
   );
+
+  return {
+    text: renderedText,
+    modelId,
+    usage: extractGeminiUsageMetadata(data),
+  };
 }
 
 function buildSystemInstruction(input: {
@@ -3445,9 +3482,12 @@ async function sendAgentResponse(input: {
         modelId: context.behavior.audioModelId || null,
         source: "whatsapp_agent",
         metadata: {
+          agentId: context.agent.id,
           agentRunId: context.run.id,
           conversationId: context.conversationId,
+          leadId: context.lead?.id ?? null,
           whatsappInstanceId: context.instance.id,
+          agentScope: resolveWhatsappAgentUsageScope(context),
           audioChunkIndex: chunkIndex,
           audioChunksTotal: chunksTotal,
         },
@@ -6237,12 +6277,23 @@ async function scheduleProactiveFollowUp(
   } catch {}
 }
 
-function readCachedRunResponseText(metadata: JsonRecord | null) {
-  const text = asString(readRecord(metadata)?.runtime_response_text);
-  return text && text.length > 0 ? text : null;
+function readCachedRunResponse(metadata: JsonRecord | null): AgentResponseResult | null {
+  const record = readRecord(metadata);
+  const text = asString(record?.runtime_response_text);
+
+  if (!text || text.length <= 0) {
+    return null;
+  }
+
+  return {
+    text,
+    modelId: asString(record?.runtime_response_model_id) ?? "gemini-2.5-flash",
+    usage: readCachedGeminiUsage(record?.runtime_response_usage),
+    fromCache: true,
+  };
 }
 
-async function cacheRunResponseText(client: SupabaseClient, runId: string, text: string) {
+async function cacheRunResponse(client: SupabaseClient, runId: string, response: AgentResponseResult) {
   const { data } = await client
     .from("agent_runs")
     .select("metadata")
@@ -6255,11 +6306,145 @@ async function cacheRunResponseText(client: SupabaseClient, runId: string, text:
     .update({
       metadata: {
         ...(currentMetadata ?? {}),
-        runtime_response_text: text.slice(0, 8000),
+        runtime_response_text: response.text.slice(0, 8000),
+        runtime_response_model_id: response.modelId,
+        runtime_response_usage: serializeGeminiUsage(response.usage),
         runtime_response_cached_at: new Date().toISOString(),
       },
     })
     .eq("id", runId);
+}
+
+async function meterWhatsappAgentTextUsage(input: {
+  client: SupabaseClient;
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
+  response: AgentResponseResult;
+  outboundMessages: number;
+  userText: string;
+}): Promise<MeteredUsageResult> {
+  const usage = input.response.usage;
+  const outputTokens = usage?.outputTokens ?? estimateTokensFromText(input.response.text);
+  const inputTokens = usage?.inputTokens ?? estimateTokensFromText(buildMeteringPromptEstimate(input.context, input.userText));
+  const totalTokens = usage?.totalTokens ?? inputTokens + outputTokens;
+
+  return meterUsageEvent(input.client, {
+    organizationId: input.context.organization.id,
+    provider: "gemini",
+    featureCode: "chat_completion",
+    modelId: input.response.modelId,
+    agentId: input.context.agent.id,
+    agentRunId: input.context.run.id,
+    conversationId: input.context.conversationId,
+    leadId: input.context.lead?.id ?? null,
+    agentScope: resolveWhatsappAgentUsageScope(input.context),
+    inputUnits: inputTokens,
+    outputUnits: outputTokens,
+    inputTokens,
+    outputTokens,
+    totalTokens,
+    requestId: `whatsapp-agent:${input.context.run.id}:gemini:chat_completion`,
+    debitDescription: "Resposta IA WhatsApp",
+    metadata: {
+      source: "whatsapp_agent",
+      channel: "whatsapp",
+      responseMode: input.context.behavior.responseMode,
+      outboundMessages: input.outboundMessages,
+      fromCache: input.response.fromCache === true,
+      geminiUsage: serializeGeminiUsage(usage),
+    },
+  });
+}
+
+async function appendRunMeteringError(client: SupabaseClient, runId: string, featureCode: string, errorMessage: string) {
+  const { data } = await client
+    .from("agent_runs")
+    .select("metadata")
+    .eq("id", runId)
+    .maybeSingle<{ metadata: JsonRecord | null }>();
+  const currentMetadata = readRecord(data?.metadata) ?? {};
+  const errors = Array.isArray(currentMetadata.metering_errors) ? currentMetadata.metering_errors : [];
+
+  await client
+    .from("agent_runs")
+    .update({
+      metadata: {
+        ...currentMetadata,
+        metering_errors: [
+          ...errors.slice(-4),
+          {
+            featureCode,
+            errorMessage: errorMessage.slice(0, 500),
+            occurredAt: new Date().toISOString(),
+          },
+        ],
+      },
+    })
+    .eq("id", runId);
+}
+
+function buildMeteringPromptEstimate(
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+  userText: string,
+) {
+  return [
+    context.run.input_summary ?? "",
+    userText,
+    ...context.messages.slice(-8).map((message) => message.text_content ?? ""),
+  ].join("\n");
+}
+
+function resolveWhatsappAgentUsageScope(
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+) {
+  if (isPlatformWhatsappContext(context)) {
+    return "platform";
+  }
+
+  if (context.organization.plan_code === "internal") {
+    return "internal";
+  }
+
+  return "customer";
+}
+
+function serializeGeminiUsage(usage: GeminiTokenUsage | null | undefined) {
+  if (!usage) {
+    return null;
+  }
+
+  return {
+    inputTokens: usage.inputTokens,
+    outputTokens: usage.outputTokens,
+    totalTokens: usage.totalTokens,
+    cachedTokens: usage.cachedTokens,
+    thoughtsTokens: usage.thoughtsTokens,
+    raw: usage.raw,
+  };
+}
+
+function readCachedGeminiUsage(value: unknown): GeminiTokenUsage | null {
+  const record = readRecord(value);
+
+  if (!record) {
+    return null;
+  }
+
+  const inputTokens = asNumber(record.inputTokens) ?? 0;
+  const outputTokens = asNumber(record.outputTokens) ?? 0;
+  const totalTokens = (asNumber(record.totalTokens) ?? 0) || inputTokens + outputTokens;
+
+  if (inputTokens <= 0 && outputTokens <= 0 && totalTokens <= 0) {
+    return null;
+  }
+
+  return {
+    inputTokens,
+    outputTokens,
+    totalTokens,
+    cachedTokens: asNumber(record.cachedTokens) ?? 0,
+    thoughtsTokens: asNumber(record.thoughtsTokens) ?? 0,
+    raw: readRecord(record.raw) ?? {},
+  };
 }
 
 async function pauseConversationForHuman(

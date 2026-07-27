@@ -100,6 +100,17 @@ type CreditTransactionRow = {
   created_at: string | null;
 };
 
+type UsageEventRow = {
+  id: string;
+  provider: string | null;
+  feature_code: string | null;
+  model_id: string | null;
+  input_units: number | string | null;
+  output_units: number | string | null;
+  connecty_charge_credits: number | string | null;
+  created_at: string | null;
+};
+
 type BillingCycleRow = {
   id: string;
   cycle_start: string | null;
@@ -134,6 +145,7 @@ export async function GET() {
       subscriptionsResult,
       paymentsResult,
       creditTransactionsResult,
+      usageEventsResult,
       cyclesResult,
     ] = await Promise.all([
       getAccountCompletionStatusForUser({ userId: workspace.user.id, client }),
@@ -165,6 +177,14 @@ export async function GET() {
         .limit(12)
         .returns<CreditTransactionRow[]>(),
       client
+        .from("usage_events")
+        .select("id, provider, feature_code, model_id, input_units, output_units, connecty_charge_credits, created_at")
+        .eq("organization_id", organization.id)
+        .eq("status", "completed")
+        .order("created_at", { ascending: false })
+        .limit(12)
+        .returns<UsageEventRow[]>(),
+      client
         .from("billing_cycles")
         .select("id, cycle_start, cycle_end, included_credits, used_credits, overage_credits, status, created_at, billing_plans(plan_code, name)")
         .eq("organization_id", organization.id)
@@ -187,6 +207,10 @@ export async function GET() {
 
     if (creditTransactionsResult.error) {
       throw new Error(`Nao foi possivel carregar historico de creditos: ${creditTransactionsResult.error.message}`);
+    }
+
+    if (usageEventsResult.error) {
+      throw new Error(`Nao foi possivel carregar consumo recente: ${usageEventsResult.error.message}`);
     }
 
     if (cyclesResult.error) {
@@ -233,6 +257,7 @@ export async function GET() {
         subscriptions,
         payments,
         creditTransactions: (creditTransactionsResult.data ?? []).map(mapCreditTransaction),
+        usageEvents: (usageEventsResult.data ?? []).map(mapUsageEvent),
         cycles: (cyclesResult.data ?? []).map(mapCycle),
         actions: {
           plansHref: "/dashboard/planos",
@@ -458,6 +483,19 @@ function mapCreditTransaction(row: CreditTransactionRow) {
     balanceAfterCredits: toNumber(row.balance_after_credits),
     provider: row.provider,
     description: row.description,
+    createdAt: row.created_at,
+  };
+}
+
+function mapUsageEvent(row: UsageEventRow) {
+  return {
+    id: row.id,
+    provider: row.provider,
+    featureCode: row.feature_code,
+    modelId: row.model_id,
+    inputUnits: toNumber(row.input_units),
+    outputUnits: toNumber(row.output_units),
+    chargeCredits: toNumber(row.connecty_charge_credits),
     createdAt: row.created_at,
   };
 }

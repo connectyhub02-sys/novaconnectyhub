@@ -39,6 +39,8 @@ export function BillingCenter({
   userLabel?: string;
 }) {
   const marginPercent = getMarginPercent(summary.totals.providerCost, summary.totals.connectyRevenue);
+  const billableCredits = summary.totals.customerBillableCredits + summary.totals.trialBillableCredits;
+  const absorbedCredits = summary.totals.platformAbsorbedCredits + summary.totals.freeCredits;
 
   return (
     <ConnectyShell mode="admin" isPlatformAdmin userLabel={userLabel} activeHref="/admin/financeiro">
@@ -105,9 +107,65 @@ export function BillingCenter({
         />
       </div>
 
+      <div className="mb-4 grid grid-cols-2 gap-2 xl:grid-cols-4">
+        <BillingMetric
+          icon={HandCoins}
+          label="Debitado clientes"
+          value={formatCredits(billableCredits)}
+          detail={`${formatCredits(summary.totals.customerBillableCredits)} cliente / ${formatCredits(summary.totals.trialBillableCredits)} trial`}
+          tone="green"
+        />
+        <BillingMetric
+          icon={BrainCircuit}
+          label="Uso interno CH"
+          value={formatCredits(summary.totals.internalShadowCredits)}
+          detail="Credito equivalente sem debitar cliente"
+          tone="violet"
+        />
+        <BillingMetric
+          icon={ReceiptText}
+          label="Absorvido/isento"
+          value={formatCredits(absorbedCredits)}
+          detail="Plataforma absorvida ou gratis"
+          tone="amber"
+        />
+        <BillingMetric
+          icon={UserRound}
+          label="Escopos ativos"
+          value={formatNumber(summary.agentScopes.length)}
+          detail="Clientes, admin e interno separados"
+          tone="cyan"
+        />
+      </div>
+
       <PlatformBillingOperations catalog={platformBillingCatalog} />
 
       <CommercialSalesPanel summary={summary} />
+
+      {summary.billingModes.length > 0 && (
+        <Panel className="mb-4" title="Consumo por modo" eyebrow="clientes / trial / interno" compact collapsible>
+          <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_360px]">
+            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+              {summary.billingModes.map((mode) => (
+                <ProviderValue
+                  key={mode.mode}
+                  label={`${mode.label} / ${formatNumber(mode.events)} eventos`}
+                  value={`${formatCredits(mode.chargeCredits)} creditos`}
+                />
+              ))}
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
+              {summary.agentScopes.map((scope) => (
+                <ProviderValue
+                  key={scope.scope}
+                  label={`${scope.label} / ${formatNumber(scope.events)} eventos`}
+                  value={`${formatCredits(scope.chargeCredits)} creditos`}
+                />
+              ))}
+            </div>
+          </div>
+        </Panel>
+      )}
 
       <div className="mb-4 grid gap-3 xl:grid-cols-[1fr_360px]">
         <Panel title="Provedores faturaveis" eyebrow="custo real / cobranca connectyhub" compact collapsible>
@@ -128,7 +186,7 @@ export function BillingCenter({
                           {provider.label}
                         </p>
                         <p className="mt-1 font-mono text-[10px] uppercase tracking-wider text-slate-500">
-                          {formatNumber(provider.events)} eventos / {formatCredits(provider.chargeCredits)} creditos cobrados
+                          {formatNumber(provider.events)} eventos / {formatCredits(provider.chargeCredits)} creditos apurados
                         </p>
                       </div>
                       <StatusBadge status={providerMargin >= 60 ? "online" : providerMargin > 0 ? "warning" : "idle"} />

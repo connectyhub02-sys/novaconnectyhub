@@ -989,6 +989,8 @@ export async function sendPlatformWhatsappConsoleTest(input: {
       modelId: behavior.audioModelId || null,
       source: "whatsapp_internal_test",
       metadata: {
+        agentId: agent.id,
+        agentScope: "platform",
         whatsappInstanceId: instance.id,
         sectorId: sector.id,
         sectorCode: sector.sector_code,
