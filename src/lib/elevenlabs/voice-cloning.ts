@@ -25,6 +25,7 @@ export type CustomerVoiceClone = {
 
 export async function deleteCustomerVoiceClone(input: {
   organizationId: string;
+  ownerUserId?: string | null;
   voiceId: string;
   client?: SupabaseClient;
 }) {
@@ -32,22 +33,28 @@ export async function deleteCustomerVoiceClone(input: {
   const credentials = await loadElevenLabsCredentials(client);
   const elevenLabs = new ElevenLabsClient({ apiKey: credentials.apiKey });
 
-  await elevenLabs.voices.delete(input.voiceId).catch(() => {});
-
-  const { data: voice } = await client
+  let query = client
     .from("customer_voices")
     .select("id")
     .eq("organization_id", input.organizationId)
     .eq("provider_voice_id", input.voiceId)
-    .eq("provider", "elevenlabs")
+    .eq("provider", "elevenlabs");
+  if (input.ownerUserId) {
+    query = query.eq("owner_user_id", input.ownerUserId);
+  }
+  const { data: voice } = await query
     .maybeSingle<{ id: string }>();
 
-  if (voice) {
-    await client
-      .from("customer_voices")
-      .update({ status: "deleted" })
-      .eq("id", voice.id);
+  if (!voice) {
+    return;
   }
+
+  await elevenLabs.voices.delete(input.voiceId).catch(() => {});
+
+  await client
+    .from("customer_voices")
+    .update({ status: "deleted" })
+    .eq("id", voice.id);
 }
 
 const maxVoiceNameLength = 80;
@@ -85,6 +92,7 @@ export async function createCustomerVoiceClone(input: {
     labels: {
       source: "connectyhub",
       consent: "accepted",
+      visibility: "owner_only",
     },
   });
 
@@ -93,6 +101,8 @@ export async function createCustomerVoiceClone(input: {
     clone_type: "instant_voice_clone",
     provider: "elevenlabs",
     created_from: "dashboard_whatsapp",
+    visibility: "owner_only",
+    owner_user_id: input.userId,
     remove_background_noise: input.removeBackgroundNoise,
     requires_verification: response.requiresVerification,
     consent_text: input.consentText,

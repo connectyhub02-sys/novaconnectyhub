@@ -302,7 +302,7 @@ export async function getClientWhatsappState(input: {
 
   const behavior = getBehaviorConfig(globalAgent, instance, agent);
   const [audio, runtimeAlerts] = await Promise.all([
-    listWhatsappAudioVoices({ organizationId: input.organization.id, client }),
+    listWhatsappAudioVoices({ organizationId: input.organization.id, ownerUserId: input.userId, client }),
     listWhatsappRuntimeAlerts(client, {
       organizationId: input.organization.id,
       agentId: agent?.id ?? null,
@@ -1113,6 +1113,13 @@ export async function updateClientWhatsappPrompt(input: {
   ]);
   const resolvedInstance = instance && agent ? await ensureInstanceAgentMetadata(client, instance, input.organization, agent) : instance;
   const nextBehavior = normalizeWhatsappBehaviorConfig(input.behavior ?? getBehaviorConfig(globalAgent, resolvedInstance, agent));
+  if (input.behavior !== undefined) {
+    await assertWhatsappBehaviorVoiceAccess(client, {
+      organizationId: input.organization.id,
+      userId: input.userId,
+      behavior: nextBehavior,
+    });
+  }
   const hasCloneProfile = input.cloneProfile !== undefined;
   const nextCloneProfile = hasCloneProfile
     ? normalizeWhatsappCloneProfile(input.cloneProfile)
@@ -1221,6 +1228,32 @@ export async function updateClientWhatsappPrompt(input: {
 
   revalidatePath("/dashboard/whatsapp");
   return getClientWhatsappState({ organization: input.organization, userId: input.userId, agentId: agent.id, client });
+}
+
+async function assertWhatsappBehaviorVoiceAccess(
+  client: SupabaseClient,
+  input: {
+    organizationId: string;
+    userId: string;
+    behavior: WhatsappBehaviorConfig;
+  },
+) {
+  const voiceId = input.behavior.audioVoiceId?.trim();
+
+  if (!voiceId) {
+    return;
+  }
+
+  const audio = await listWhatsappAudioVoices({
+    organizationId: input.organizationId,
+    ownerUserId: input.userId,
+    client,
+  });
+  const allowed = audio.voices.some((voice) => voice.voiceId === voiceId);
+
+  if (!allowed) {
+    throw new Error("Esta voz nao pertence a sua conta ou nao esta liberada para este usuario.");
+  }
 }
 
 async function createProviderInstance(

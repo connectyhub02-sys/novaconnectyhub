@@ -37,6 +37,7 @@ export type WhatsappAudioVoiceState = {
 type CustomerVoiceRow = {
   provider_voice_id: string | null;
   name: string;
+  owner_user_id: string | null;
   status: string | null;
   consent_status: string | null;
   default_for_agents: boolean | null;
@@ -55,6 +56,7 @@ const remoteVoiceTimeoutFallback = {
 
 export async function listWhatsappAudioVoices(input: {
   organizationId: string;
+  ownerUserId?: string | null;
   client?: SupabaseClient;
 }): Promise<WhatsappAudioVoiceState> {
   const client = input.client ?? createServiceClient();
@@ -81,14 +83,26 @@ export async function listWhatsappAudioVoices(input: {
           errorMessage: elevenCredentialsErrorMessage,
         })
       : withTimeout(listRemoteVoices(elevenCredentials.apiKey), remoteVoiceTimeoutMs, remoteVoiceTimeoutFallback),
-    elevenCredentials ? listCustomerVoices(client, input.organizationId) : Promise.resolve([] as CustomerVoiceRow[]),
-    elevenCredentials ? listClonedVoicePreviews(client) : Promise.resolve(new Map<string, string>()),
+    elevenCredentials ? listCustomerVoices(client, input.organizationId, input.ownerUserId) : Promise.resolve([] as CustomerVoiceRow[]),
+    elevenCredentials ? listClonedVoicePreviews(client, input.organizationId, input.ownerUserId) : Promise.resolve(new Map<string, string>()),
   ]);
   const voices = new Map<string, WhatsappAudioVoiceOption>();
+  const visibleCustomerVoiceIds = new Set<string>();
+  for (const voice of customerVoices) {
+    const voiceId = voice.provider_voice_id?.trim();
+    if (voiceId) visibleCustomerVoiceIds.add(voiceId);
+  }
 
   if (elevenCredentials) {
     for (const voice of remoteVoices.voices) {
       if (!voice.voiceId) {
+        continue;
+      }
+
+      if (isPrivateRemoteVoice(voice, {
+        defaultVoiceId: elevenCredentials.defaultVoiceId,
+        visibleCustomerVoiceIds,
+      })) {
         continue;
       }
 
@@ -288,13 +302,18 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, fallback: 
   }
 }
 
-async function listClonedVoicePreviews(client: SupabaseClient) {
-  const { data } = await client
+async function listClonedVoicePreviews(client: SupabaseClient, organizationId: string, ownerUserId?: string | null) {
+  let query = client
     .from("customer_voices")
     .select("provider_voice_id, metadata")
+    .eq("organization_id", organizationId)
     .eq("provider", "elevenlabs")
     .not("provider_voice_id", "is", null)
     .not("metadata", "is", null);
+  if (ownerUserId) {
+    query = query.or(`owner_user_id.is.null,owner_user_id.eq.${ownerUserId}`);
+  }
+  const { data } = await query;
 
   const index = new Map<string, string>();
 
@@ -310,13 +329,17 @@ async function listClonedVoicePreviews(client: SupabaseClient) {
   return index;
 }
 
-async function listCustomerVoices(client: SupabaseClient, organizationId: string) {
-  const { data, error } = await client
+async function listCustomerVoices(client: SupabaseClient, organizationId: string, ownerUserId?: string | null) {
+  let query = client
     .from("customer_voices")
-    .select("provider_voice_id, name, status, consent_status, default_for_agents, metadata")
+    .select("provider_voice_id, name, owner_user_id, status, consent_status, default_for_agents, metadata")
     .eq("organization_id", organizationId)
     .eq("provider", "elevenlabs")
-    .not("provider_voice_id", "is", null)
+    .not("provider_voice_id", "is", null);
+  if (ownerUserId) {
+    query = query.or(`owner_user_id.is.null,owner_user_id.eq.${ownerUserId}`);
+  }
+  const { data, error } = await query
     .order("default_for_agents", { ascending: false })
     .order("updated_at", { ascending: false });
 
@@ -330,6 +353,26 @@ async function listCustomerVoices(client: SupabaseClient, organizationId: string
 
     return status !== "archived" && status !== "deleted" && consent !== "rejected";
   });
+}
+
+function isPrivateRemoteVoice(
+  voice: ElevenLabs.Voice,
+  input: {
+    defaultVoiceId: string;
+    visibleCustomerVoiceIds: Set<string>;
+  },
+) {
+  const voiceId = voice.voiceId?.trim();
+
+  if (!voiceId || voiceId === input.defaultVoiceId || input.visibleCustomerVoiceIds.has(voiceId)) {
+    return false;
+  }
+
+  const category = voice.category?.toLowerCase() ?? "";
+  const source = readLabel(voice.labels, "source")?.toLowerCase() ?? "";
+  const consent = readLabel(voice.labels, "consent")?.toLowerCase() ?? "";
+
+  return category.includes("clon") || source === "connectyhub" || consent === "accepted";
 }
 
 function sortVoices(left: WhatsappAudioVoiceOption, right: WhatsappAudioVoiceOption) {

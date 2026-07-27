@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
       consentText,
       removeBackgroundNoise,
     });
-    const audio = await listWhatsappAudioVoices({ organizationId: organization.id });
+    const audio = await listWhatsappAudioVoices({ organizationId: organization.id, ownerUserId: workspace.user.id });
 
     return NextResponse.json({
       voice,
@@ -89,8 +89,8 @@ export async function DELETE(request: NextRequest) {
       companyId,
     });
     await assertBillableAccess({ organizationId: organization.id });
-    await deleteCustomerVoiceClone({ organizationId: organization.id, voiceId });
-    const audio = await listWhatsappAudioVoices({ organizationId: organization.id });
+    await deleteCustomerVoiceClone({ organizationId: organization.id, ownerUserId: workspace.user.id, voiceId });
+    const audio = await listWhatsappAudioVoices({ organizationId: organization.id, ownerUserId: workspace.user.id });
 
     return NextResponse.json({
       audio,
