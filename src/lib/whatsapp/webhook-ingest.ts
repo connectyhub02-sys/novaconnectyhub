@@ -755,7 +755,7 @@ async function enqueueWhatsappAgentRun(
     .select("id")
     .eq("agent_id", agent.id)
     .eq("trigger_source", "connectyhub/whatsapp.message.received")
-    .in("run_status", ["queued", "running"])
+    .eq("run_status", "queued")
     .contains("metadata", { conversationId: input.conversationId })
     .gte("created_at", groupingCutoff)
     .order("created_at", { ascending: false })
@@ -763,7 +763,7 @@ async function enqueueWhatsappAgentRun(
     .maybeSingle<{ id: string }>();
 
   if (recentRun) {
-    await client
+    const { data: updatedRun, error: updateError } = await client
       .from("agent_runs")
       .update({
         input_summary: preview(input.textContent, 240) ?? "Mensagem WhatsApp recebida.",
@@ -797,9 +797,17 @@ async function enqueueWhatsappAgentRun(
         },
       })
       .eq("id", recentRun.id)
-      .eq("run_status", "queued");
+      .eq("run_status", "queued")
+      .select("id")
+      .maybeSingle<{ id: string }>();
 
-    return { id: recentRun.id, metadata: null };
+    if (updateError) {
+      throw new Error(`Nao foi possivel atualizar execucao WhatsApp agrupada: ${updateError.message}`);
+    }
+
+    if (updatedRun?.id) {
+      return { id: updatedRun.id, metadata: null };
+    }
   }
 
   const { data, error } = await client
