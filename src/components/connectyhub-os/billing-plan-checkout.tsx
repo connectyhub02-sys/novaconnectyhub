@@ -59,6 +59,7 @@ export function BillingPlanCheckout({
 }: BillingPlanCheckoutProps) {
   const canPay = ["pending", "incomplete", "past_due"].includes(subscriptionStatus)
     && ["pending", "rejected", "in_process"].includes(paymentStatus);
+  const paymentRejected = paymentStatus === "rejected";
   const [selectedBumpCodes, setSelectedBumpCodes] = useState<BillingCheckoutBumpCode[]>(initialSelectedBumpCodes);
   const [method, setMethod] = useState<PaymentMethod>(cardPublicKey ? "card" : "pix");
   const [pix, setPix] = useState<PixState>({
@@ -74,12 +75,14 @@ export function BillingPlanCheckout({
     () => availableBumps.filter((bump) => selectedBumpCodes.includes(bump.code)),
     [availableBumps, selectedBumpCodes],
   );
+  const paymentStatusNotice = useMemo(() => buildPaymentStatusNotice(paymentStatus), [paymentStatus]);
   const bumpsAmount = selectedBumps.reduce((total, bump) => total + bump.priceBrl, 0);
   const totalAmount = Math.round((planAmountBrl + bumpsAmount) * 100) / 100;
   const cardExtraPayload = useMemo(
     () => ({ selectedBumpCodes }),
     [selectedBumpCodes],
   );
+  const activeNotice = notice ?? paymentStatusNotice;
 
   function toggleBump(code: BillingCheckoutBumpCode) {
     const next = selectedBumpCodes.includes(code)
@@ -191,11 +194,13 @@ export function BillingPlanCheckout({
             </div>
             <span className={cn(
               "rounded-full border px-3 py-1 font-mono text-[10px] font-bold uppercase tracking-wide",
-              canPay
+              paymentRejected
+                ? "border-rose-300/35 bg-rose-400/10 text-rose-100"
+                : canPay
                 ? "border-emerald-300/30 bg-emerald-400/10 text-emerald-200"
                 : "border-cyan-300/30 bg-cyan-400/10 text-cyan-100",
             )}>
-              {canPay ? "Aguardando pagamento" : "Checkout fechado"}
+              {paymentRejected ? "Pagamento recusado" : canPay ? "Aguardando pagamento" : "Checkout fechado"}
             </span>
           </div>
         </div>
@@ -332,6 +337,7 @@ export function BillingPlanCheckout({
                 extraPayload={cardExtraPayload}
                 successMessage="Pagamento aprovado. Seu plano sera ativado agora."
                 pendingMessage="Pagamento enviado. Assim que confirmar, os creditos serao liberados."
+                rejectedMessage="Pagamento recusado. Nenhuma cobranca foi concluida. Confira os dados do cartao, tente outro cartao ou use Pix."
               />
             ) : (
               <PixPanel
@@ -352,16 +358,16 @@ export function BillingPlanCheckout({
           </div>
         )}
 
-        {notice ? (
+        {activeNotice ? (
           <div className={cn(
             "mt-4 rounded-[8px] border px-3 py-2 text-sm leading-5",
-            notice.tone === "success"
+            activeNotice.tone === "success"
               ? "border-emerald-300/40 bg-emerald-400/12 text-emerald-100"
-              : notice.tone === "warning"
+              : activeNotice.tone === "warning"
                 ? "border-amber-300/40 bg-amber-400/12 text-amber-100"
                 : "border-rose-300/40 bg-rose-400/12 text-rose-100",
           )}>
-            {notice.message}
+            {activeNotice.message}
           </div>
         ) : null}
       </aside>
@@ -437,6 +443,24 @@ function CartRow({ label, value }: { label: string; value: string }) {
       <span className="font-mono text-xs font-bold text-cyan-100">{value}</span>
     </div>
   );
+}
+
+function buildPaymentStatusNotice(paymentStatus: string): NoticeState {
+  if (paymentStatus === "rejected") {
+    return {
+      tone: "error",
+      message: "Pagamento recusado. Nenhuma cobranca foi concluida. Confira os dados do cartao, tente outro cartao ou use Pix.",
+    };
+  }
+
+  if (paymentStatus === "in_process") {
+    return {
+      tone: "warning",
+      message: "Pagamento em analise. Assim que o Mercado Pago confirmar, os creditos serao liberados.",
+    };
+  }
+
+  return null;
 }
 
 function PixPanel({

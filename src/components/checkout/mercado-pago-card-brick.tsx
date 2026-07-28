@@ -55,6 +55,7 @@ type CardBrickProps = {
   extraPayload?: JsonRecord;
   successMessage?: string;
   pendingMessage?: string;
+  rejectedMessage?: string;
 };
 
 let mercadoPagoSdkPromise: Promise<void> | null = null;
@@ -92,6 +93,7 @@ export function MercadoPagoCardBrick({
   extraPayload,
   successMessage = "Pagamento aprovado. Vamos atualizar seu pedido.",
   pendingMessage = "Pagamento enviado. A confirmacao pode levar alguns instantes.",
+  rejectedMessage = "Pagamento recusado. Nenhuma cobranca foi concluida. Confira os dados do cartao ou tente outro meio de pagamento.",
 }: CardBrickProps) {
   const containerId = useMemo(() => `mp-card-${sessionId.replace(/[^a-zA-Z0-9_-]/g, "")}`, [sessionId]);
   const controllerRef = useRef<MercadoPagoBrickController | null>(null);
@@ -163,21 +165,27 @@ export function MercadoPagoCardBrick({
                 checkoutUrl?: string;
                 status?: string;
                 providerStatus?: string;
+                providerStatusDetail?: string | null;
               } | null;
 
               if (!response.ok) {
                 throw new Error(data?.error ?? "Nao foi possivel processar o cartao.");
               }
 
-              const approved = data?.status === "approved";
+              const paymentStatus = normalizePaymentStatus(data?.status);
+              const providerStatus = normalizePaymentStatus(data?.providerStatus);
+              const approved = paymentStatus === "approved" || providerStatus === "approved";
+              const rejected = isRejectedPaymentStatus(paymentStatus) || isRejectedPaymentStatus(providerStatus);
               setResult({
-                tone: approved ? "success" : "warning",
+                tone: approved ? "success" : rejected ? "error" : "warning",
                 message: approved
                   ? successMessage
+                  : rejected
+                    ? formatRejectedPaymentMessage(data?.providerStatusDetail, rejectedMessage)
                   : pendingMessage,
               });
 
-              if (data?.checkoutUrl) {
+              if (data?.checkoutUrl && !rejected) {
                 window.setTimeout(() => {
                   window.location.href = data.checkoutUrl!;
                 }, 1200);
@@ -211,7 +219,7 @@ export function MercadoPagoCardBrick({
       controllerRef.current?.unmount();
       controllerRef.current = null;
     };
-  }, [amount, containerId, extraPayload, payerEmail, pendingMessage, publicKey, sessionId, submitPath, successMessage]);
+  }, [amount, containerId, extraPayload, payerEmail, pendingMessage, publicKey, rejectedMessage, sessionId, submitPath, successMessage]);
 
   return (
     <div className="mt-6 rounded-[8px] border border-slate-700 bg-slate-900/70 p-4">
@@ -228,13 +236,13 @@ export function MercadoPagoCardBrick({
 
       {result ? (
         <div className={cn(
-          "mt-4 rounded-[8px] border px-3 py-2 text-sm",
+          "mt-4 rounded-[8px] border px-3 py-2 text-sm leading-5",
           result.tone === "success"
             ? "border-emerald-300/40 bg-emerald-400/12 text-emerald-100"
             : result.tone === "warning"
               ? "border-amber-300/40 bg-amber-400/12 text-amber-100"
               : "border-rose-300/40 bg-rose-400/12 text-rose-100",
-        )}>
+        )} role="status" aria-live="polite">
           {result.message}
         </div>
       ) : null}
@@ -260,6 +268,64 @@ function styleMercadoPagoSecureFields(containerId: string) {
     iframe.style.setProperty("border-radius", "6px", "important");
     iframe.style.setProperty("color-scheme", "dark", "important");
   });
+}
+
+function normalizePaymentStatus(status: string | null | undefined) {
+  return typeof status === "string" ? status.trim().toLowerCase() : null;
+}
+
+function isRejectedPaymentStatus(status: string | null) {
+  return status === "rejected" || status === "cancelled" || status === "canceled" || status === "expired" || status === "error";
+}
+
+function formatRejectedPaymentMessage(statusDetail: string | null | undefined, fallback: string) {
+  const detail = normalizePaymentStatus(statusDetail);
+
+  if (detail === "cc_rejected_insufficient_amount") {
+    return "Pagamento recusado: o cartao nao tem saldo ou limite suficiente. Nenhuma cobranca foi concluida. Tente outro cartao ou Pix.";
+  }
+
+  if (detail === "cc_rejected_bad_filled_card_number") {
+    return "Pagamento recusado: revise o numero do cartao e tente novamente. Nenhuma cobranca foi concluida.";
+  }
+
+  if (detail === "cc_rejected_bad_filled_date") {
+    return "Pagamento recusado: revise a data de vencimento e tente novamente. Nenhuma cobranca foi concluida.";
+  }
+
+  if (detail === "cc_rejected_bad_filled_security_code") {
+    return "Pagamento recusado: revise o codigo de seguranca e tente novamente. Nenhuma cobranca foi concluida.";
+  }
+
+  if (detail === "cc_rejected_bad_filled_other") {
+    return "Pagamento recusado: revise os dados do cartao e tente novamente. Nenhuma cobranca foi concluida.";
+  }
+
+  if (detail === "cc_rejected_card_disabled") {
+    return "Pagamento recusado: o cartao esta bloqueado ou desabilitado para compras online. Nenhuma cobranca foi concluida.";
+  }
+
+  if (detail === "cc_rejected_call_for_authorize") {
+    return "Pagamento recusado: o banco pediu autorizacao para esta compra. Fale com o banco ou tente outro cartao.";
+  }
+
+  if (detail === "cc_rejected_duplicated_payment") {
+    return "Pagamento recusado por tentativa duplicada. Aguarde alguns instantes antes de tentar novamente.";
+  }
+
+  if (detail === "cc_rejected_invalid_installments") {
+    return "Pagamento recusado: o numero de parcelas nao foi aceito. Tente outra opcao de pagamento.";
+  }
+
+  if (detail === "cc_rejected_max_attempts") {
+    return "Pagamento recusado: muitas tentativas foram feitas com este cartao. Tente outro cartao ou Pix.";
+  }
+
+  if (detail === "cc_rejected_blacklist" || detail === "cc_rejected_high_risk" || detail === "cc_rejected_other_reason") {
+    return "Pagamento recusado por seguranca do Mercado Pago ou do banco emissor. Nenhuma cobranca foi concluida. Tente outro cartao ou Pix.";
+  }
+
+  return fallback;
 }
 
 function loadMercadoPagoSdk() {
