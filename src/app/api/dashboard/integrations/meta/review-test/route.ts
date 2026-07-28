@@ -15,6 +15,7 @@ import {
   type MetaReviewReadinessSummary,
   type MetaReviewTestResult,
 } from "@/lib/meta/review-readiness";
+import { loadMetaWebhookRuntimeConfig } from "@/lib/meta/runtime-config";
 import { metaPageWebhookFields, summarizeMetaPageSubscription } from "@/lib/meta/webhook-activation-policy";
 import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
 import { assertBillableAccess, formatBillingAccessError, statusForBillingAccessError } from "@/lib/billing/trial";
@@ -67,6 +68,7 @@ export async function POST() {
 
   const client = createServiceClient();
   const config = await loadMetaGuidedOAuthConfig({ client });
+  const webhookRuntime = await loadMetaWebhookRuntimeConfig({ client });
   const credentials = await loadOrganizationMetaCredentials(client, organizationId);
   const integration = await loadOrganizationMetaIntegration(client, organizationId);
   const accessToken = credentials.get("META_ACCESS_TOKEN");
@@ -211,8 +213,8 @@ export async function POST() {
     }),
     Promise.resolve(runWebhookRuntimeCheck({
       appBaseUrl: getAppBaseUrl(),
-      appSecretConfigured: Boolean(config.appSecret),
-      verifyTokenConfigured: Boolean(process.env.META_WEBHOOK_VERIFY_TOKEN || process.env.META_VERIFY_TOKEN),
+      appSecretConfigured: Boolean(webhookRuntime.appSecret),
+      verifyTokenConfigured: Boolean(webhookRuntime.verifyToken),
     })),
   ]);
 

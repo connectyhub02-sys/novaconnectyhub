@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireClientCompanyAccess } from "@/lib/client-os/companies";
 import { createServiceClient } from "@/lib/supabase/service";
 import { buildMetaCrmSnapshot, normalizeMetaEventToCrm } from "./event-normalizer";
+import { loadMetaWebhookRuntimeConfig } from "./runtime-config";
 import {
   isMetaSocialChannel,
   metaSocialCommentReceivedEventName,
@@ -177,6 +178,7 @@ export async function loadClientMetaWebhookMonitor(input: {
     loadMetaAgentRunRows(client, company.id),
     loadMetaActionRows(client, company.id),
   ]);
+  const webhookRuntime = await loadMetaWebhookRuntimeConfig({ client });
   const events = eventRows.map(mapMetaWebhookEventRow);
   const summary = summarizeMetaWebhookMonitorEvents(events);
   const agentQueue = summarizeAgentRuns(agentRows);
@@ -191,6 +193,7 @@ export async function loadClientMetaWebhookMonitor(input: {
       agentQueue,
       integration,
       summary,
+      webhookRuntimeReady: Boolean(webhookRuntime.appSecret && webhookRuntime.verifyToken),
     }),
     events,
     recentActions: actionRows.map((row) => ({
@@ -501,19 +504,18 @@ function buildDiagnostics(input: {
   agentQueue: MetaWebhookMonitorAgentQueue;
   integration: OrganizationIntegrationRow | null;
   summary: MetaWebhookMonitorSummary;
+  webhookRuntimeReady: boolean;
 }): MetaWebhookMonitorDiagnostic[] {
   const metadata = readRecord(input.integration?.metadata);
   const activation = readRecord(metadata.webhook_activation);
   const activationOk = readBoolean(activation.ok);
-  const verifyTokenReady = Boolean(process.env.META_WEBHOOK_VERIFY_TOKEN || process.env.META_VERIFY_TOKEN);
-  const appSecretReady = Boolean(process.env.META_APP_SECRET);
 
   return [
     {
       id: "runtime",
       label: "Runtime Meta",
-      status: verifyTokenReady && appSecretReady ? "ok" : "critical",
-      detail: verifyTokenReady && appSecretReady
+      status: input.webhookRuntimeReady ? "ok" : "critical",
+      detail: input.webhookRuntimeReady
         ? "Verify token e App Secret configurados."
         : "Configure META_WEBHOOK_VERIFY_TOKEN e META_APP_SECRET antes de operar eventos reais.",
     },

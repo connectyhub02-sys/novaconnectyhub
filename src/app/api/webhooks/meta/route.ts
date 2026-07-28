@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { loadMetaWebhookRuntimeConfig } from "@/lib/meta/runtime-config";
 import { ingestMetaWebhook, verifyMetaWebhookSignature } from "@/lib/meta/webhook";
 
 export const dynamic = "force-dynamic";
@@ -8,7 +9,7 @@ export async function GET(request: NextRequest) {
   const mode = request.nextUrl.searchParams.get("hub.mode");
   const token = request.nextUrl.searchParams.get("hub.verify_token");
   const challenge = request.nextUrl.searchParams.get("hub.challenge");
-  const verifyToken = process.env.META_WEBHOOK_VERIFY_TOKEN || process.env.META_VERIFY_TOKEN;
+  const { verifyToken } = await loadMetaWebhookRuntimeConfig();
 
   if (!verifyToken) {
     return NextResponse.json({ error: "META_WEBHOOK_VERIFY_TOKEN nao configurado." }, { status: 503 });
@@ -25,7 +26,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const appSecret = process.env.META_APP_SECRET;
+  const { appSecret } = await loadMetaWebhookRuntimeConfig();
 
   if (!appSecret) {
     return NextResponse.json({ error: "META_APP_SECRET nao configurado." }, { status: 503 });
