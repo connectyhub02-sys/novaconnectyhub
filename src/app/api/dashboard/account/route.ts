@@ -490,7 +490,7 @@ function mapPayment(row: PaymentRow) {
     invoiceTotalBrl: toNumber(invoice?.total_brl),
     providerInvoiceId: invoice?.provider_invoice_id ?? null,
     planCode: subscription?.plan_code ?? null,
-    invoiceHref: row.invoice_id ? `/dashboard/minha-conta/faturas/${encodeURIComponent(row.invoice_id)}` : null,
+    invoiceHref: row.invoice_id && invoice ? `/dashboard/minha-conta/faturas/${encodeURIComponent(row.invoice_id)}` : null,
     receiptUrl: readPublicReceiptUrl(row.payload),
     checkoutHref: row.subscription_id && isPendingSubscription(row.status)
       ? buildDashboardBillingCheckoutPath(row.subscription_id)

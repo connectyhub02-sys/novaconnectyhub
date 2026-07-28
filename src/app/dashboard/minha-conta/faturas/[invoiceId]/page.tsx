@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { connection } from "next/server";
+import type { ReactNode } from "react";
 import { AccountInvoiceActions } from "@/components/connectyhub-os/account-invoice-actions";
 import { ConnectyShell } from "@/components/connectyhub-os/connecty-shell";
 import { ensureStarterOrganization, getCurrentWorkspace } from "@/lib/supabase/profile";
@@ -108,19 +109,30 @@ export default async function DashboardInvoicePage({
       .returns<PaymentRow[]>(),
   ]);
 
-  if (invoiceError || itemsError || paymentsError || !invoice) {
-    notFound();
+  if (invoiceError || !invoice) {
+    return (
+      <InvoiceShell
+        isPlatformAdmin={workspace.profile.isPlatformAdmin}
+        userAvatarUrl={workspace.profile.avatarUrl}
+        userLabel={workspace.profile.email ?? undefined}
+        workspaceName={organization.name ?? workspace.profile.companyName ?? "Workspace"}
+      >
+        <InvoiceUnavailableState />
+      </InvoiceShell>
+    );
   }
 
   const subscription = invoice.subscription_id
     ? await loadSubscription(client, organization.id, invoice.subscription_id)
     : null;
+  const invoiceItems = itemsError ? [] : (items ?? []);
+  const invoicePayments = paymentsError ? [] : (payments ?? []);
+  const detailLoadError = itemsError || paymentsError;
 
   return (
-    <ConnectyShell
+    <InvoiceShell
       activeHref="/dashboard/minha-conta"
       isPlatformAdmin={workspace.profile.isPlatformAdmin}
-      mode="client"
       userAvatarUrl={workspace.profile.avatarUrl}
       userLabel={workspace.profile.email ?? undefined}
       workspaceName={organization.name ?? workspace.profile.companyName ?? "Workspace"}
@@ -140,6 +152,12 @@ export default async function DashboardInvoicePage({
           </div>
           <AccountInvoiceActions />
         </div>
+
+        {detailLoadError ? (
+          <div className="rounded-[8px] border border-amber-300/35 bg-amber-400/10 px-4 py-3 text-sm leading-6 text-amber-100">
+            A fatura foi encontrada, mas alguns detalhes complementares nao carregaram agora. Tente atualizar a pagina em alguns instantes.
+          </div>
+        ) : null}
 
         <div className="rounded-2xl border border-white/10 bg-[#0c1422]/88 p-5 shadow-[0_22px_80px_rgba(0,0,0,0.24)] print:border-slate-300 print:bg-white print:text-slate-950 print:shadow-none">
           <div className="flex flex-col gap-5 border-b border-white/10 pb-5 print:border-slate-200 sm:flex-row sm:items-start sm:justify-between">
@@ -169,7 +187,7 @@ export default async function DashboardInvoicePage({
               <span className="text-right">Qtd</span>
               <span className="text-right">Total</span>
             </div>
-            {(items ?? []).length ? (items ?? []).map((item) => (
+            {invoiceItems.length ? invoiceItems.map((item) => (
               <div key={item.id} className="grid grid-cols-[1fr_90px_120px] gap-3 border-t border-white/10 px-4 py-4 text-sm print:border-slate-200">
                 <div className="min-w-0">
                   <p className="font-bold text-white print:text-slate-950">{item.description}</p>
@@ -193,11 +211,11 @@ export default async function DashboardInvoicePage({
             <Info label="Total" value={formatMoney(invoice.total_brl)} highlight />
           </div>
 
-          {payments?.length ? (
+          {invoicePayments.length ? (
             <div className="mt-6">
               <h3 className="text-sm font-black uppercase tracking-[0.18em] text-slate-400 print:text-slate-600">Pagamentos</h3>
               <div className="mt-3 space-y-3">
-                {payments.map((payment) => (
+                {invoicePayments.map((payment) => (
                   <div key={payment.id} className="rounded-2xl border border-white/10 bg-white/[0.045] p-4 print:border-slate-200 print:bg-white">
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                       <div>
@@ -219,7 +237,51 @@ export default async function DashboardInvoicePage({
           </div>
         </div>
       </section>
+    </InvoiceShell>
+  );
+}
+
+function InvoiceShell({
+  activeHref = "/dashboard/minha-conta",
+  children,
+  isPlatformAdmin,
+  userAvatarUrl,
+  userLabel,
+  workspaceName,
+}: {
+  activeHref?: string;
+  children: ReactNode;
+  isPlatformAdmin: boolean;
+  userAvatarUrl: string | null;
+  userLabel?: string;
+  workspaceName: string;
+}) {
+  return (
+    <ConnectyShell
+      activeHref={activeHref}
+      isPlatformAdmin={isPlatformAdmin}
+      mode="client"
+      userAvatarUrl={userAvatarUrl}
+      userLabel={userLabel}
+      workspaceName={workspaceName}
+    >
+      {children}
     </ConnectyShell>
+  );
+}
+
+function InvoiceUnavailableState() {
+  return (
+    <section className="rounded-[8px] border border-rose-300/25 bg-rose-950/20 p-6">
+      <div className="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-rose-200">
+        Minha conta / Fatura
+      </div>
+      <h1 className="mt-3 text-2xl font-black text-white">Fatura indisponivel</h1>
+      <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">
+        Nao encontramos esta fatura para a sua empresa. Volte para Minha Conta e tente abrir novamente.
+      </p>
+      <AccountInvoiceActions />
+    </section>
   );
 }
 
