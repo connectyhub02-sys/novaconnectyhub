@@ -235,6 +235,8 @@ type OutboundMessage = {
   generatedAudio?: GeneratedConnectyVoiceAudio;
   audioFallback?: boolean;
   fallbackReason?: string;
+  interactiveButton?: boolean;
+  buttonFallback?: boolean;
   chunkIndex?: number;
   chunksTotal?: number;
   persisted?: boolean;
@@ -2555,9 +2557,9 @@ function buildLinkButtonLines(
   return [
     "",
     "LINKS RASTREADOS DISPONIVEIS:",
-    "- Quando o lead pedir ou aceitar um produto/link, use a tag ou URL exata abaixo. Se botoes de link estiverem ativos, o sistema transforma em botao rastreado.",
+    "- Quando o lead pedir ou aceitar um produto/link, use a tag ou URL exata abaixo. O sistema transforma link rastreado em botao quando o WhatsApp aceitar; se falhar, envia o link como texto.",
     "- Nunca deixe tags internas como {{link_produto}} visiveis para o lead. Tags de link sao marcadores internos e precisam virar botao ou URL antes do envio.",
-    "- Nunca envie ou leia links em audio. Quando a resposta tiver link, produto com botao ou tag de link, responda em texto para o sistema anexar o botao/link.",
+    "- Nunca leia URLs em audio. Quando a resposta tiver link, produto com botao ou tag de link, mantenha a conversa natural e deixe o sistema separar audio, botao e texto.",
     "- Nao invente nem encurte tags. Se nao souber a tag, fale do produto pelo nome e peca confirmacao.",
     "- Se recomendar 2 ou 3 produtos na mesma resposta, inclua a tag/URL de cada produto recomendado. Nao cite duas opcoes e envie link de apenas uma.",
     "- Se o lead pedir link, outro link, mandar de novo ou disser que nao recebeu, responda incluindo novamente a tag/URL do produto citado.",
@@ -3446,11 +3448,79 @@ async function sendAgentResponse(input: {
   const renderedCatalog = renderSalesCatalogTags(renderedLinks, context.salesCatalog);
   const cleanText = normalizeAssistantText(ensureLinkPromiseIsActionable(renderedCatalog.text, context));
   const { chunks, shouldSendAudio } = resolveOutboundDelivery(context, latestInbound, cleanText, renderedCatalog.items.length > 0);
+  const mixedCandidateChunks = shouldSendAudioResponse(context, latestInbound) && renderedCatalog.items.length === 0
+    ? splitChunksAroundLinkLines(chunks, context)
+    : chunks;
+  const shouldUseMixedAudio = shouldUseMixedAudioDelivery(context, latestInbound, mixedCandidateChunks, renderedCatalog.items.length > 0);
+  const outbound: OutboundMessage[] = [];
+  const catalogAttachments = collectSalesCatalogAttachments(renderedCatalog.items);
+
+  if (shouldUseMixedAudio) {
+    const replyTargets = await resolveOutboundReplyTargets(context, mixedCandidateChunks).catch(() => []);
+    const persistedAudioChunks = await loadPersistedOutboundChunks(input.client, context.run.id, "audio");
+    const persistedTextChunks = await loadPersistedOutboundChunks(input.client, context.run.id, "text");
+    const persistedAnyChunks = new Set([...persistedAudioChunks, ...persistedTextChunks]);
+    const chunksTotal = mixedCandidateChunks.length;
+
+    for (let index = 0; index < mixedCandidateChunks.length; index++) {
+      const text = mixedCandidateChunks[index];
+      const chunkIndex = index + 1;
+      const sendAsAudio = shouldSendAudioChunk(context, latestInbound, text);
+      const persistedChunks = sendAsAudio ? persistedAudioChunks : persistedTextChunks;
+
+      if (persistedAnyChunks.has(chunkIndex)) {
+        outbound.push({
+          text,
+          mode: sendAsAudio ? "audio" : "text",
+          providerResponse: { skipped: true, reason: "chunk_already_persisted", chunkIndex },
+          chunkIndex,
+          chunksTotal,
+          persisted: true,
+        });
+        continue;
+      }
+
+      if (index > 0) {
+        const delayMs = sendAsAudio ? resolveAudioChunkDelayMs(text, context.behavior) : resolveChunkDelayMs(text, context.behavior);
+        await setChatPresence(context.credentials, input.token, input.phone, sendAsAudio ? "recording" : "composing", delayMs + 10000);
+        await sleep(delayMs);
+      } else {
+        await setChatPresence(context.credentials, input.token, input.phone, sendAsAudio ? "recording" : "composing", sendAsAudio ? 60000 : 10000);
+      }
+
+      const message = sendAsAudio
+        ? await sendAudioOutboundChunk({
+            client: input.client,
+            context,
+            token: input.token,
+            phone: input.phone,
+            text,
+            chunkIndex,
+            chunksTotal,
+            replyId: replyTargets[index]?.provider_message_id ?? undefined,
+          })
+        : await sendTextOutboundChunk({
+            client: input.client,
+            context,
+            token: input.token,
+            phone: input.phone,
+            text,
+            chunkIndex,
+            chunksTotal,
+            replyId: replyTargets[index]?.provider_message_id ?? undefined,
+            trackIdPrefix: "agent_text_mixed",
+          });
+
+      persistedChunks.add(chunkIndex);
+      outbound.push(message);
+    }
+
+    return outbound;
+  }
+
   const correctedChunks = shouldSendAudio ? chunks : applyMidMessageCorrection(chunks, context.behavior);
   const replyTargets = await resolveOutboundReplyTargets(context, correctedChunks).catch(() => []);
   const persistedChunks = await loadPersistedOutboundChunks(input.client, context.run.id, shouldSendAudio ? "audio" : "text");
-  const outbound: OutboundMessage[] = [];
-  const catalogAttachments = collectSalesCatalogAttachments(renderedCatalog.items);
 
   if (shouldSendAudio) {
     for (let index = 0; index < chunks.length; index++) {
@@ -3478,71 +3548,18 @@ async function sendAgentResponse(input: {
         await setChatPresence(context.credentials, input.token, input.phone, "recording", 60000);
       }
 
-      try {
-        const generatedAudio = await generateConnectyVoiceAudio({
-          organizationId: context.organization.id,
-          userId: null,
-          text: sanitizeTextForTts(text),
-          voiceId: context.behavior.audioVoiceId || null,
-          voicePublicOwnerId: context.behavior.audioVoicePublicOwnerId || null,
-          voiceName: context.behavior.audioVoiceName || null,
-          voiceSource: context.behavior.audioVoiceSource || null,
-          modelId: context.behavior.audioModelId || null,
-          source: "whatsapp_agent",
-          metadata: {
-            agentId: context.agent.id,
-            agentRunId: context.run.id,
-            conversationId: context.conversationId,
-            leadId: context.lead?.id ?? null,
-            whatsappInstanceId: context.instance.id,
-            agentScope: resolveWhatsappAgentUsageScope(context),
-            audioChunkIndex: chunkIndex,
-            audioChunksTotal: chunksTotal,
-          },
-          client: input.client,
-        });
-        const providerResponse = await callUazapi(context.credentials, "/send/media", {
-          method: "POST",
-          token: input.token,
-          timeoutMs: outboundAudioDeliveryTimeoutMs,
-          body: {
-            number: input.phone,
-            type: "ptt",
-            file: generatedAudio.audioUrl,
-            ...(replyTargets[index]?.provider_message_id ? { replyid: replyTargets[index]?.provider_message_id } : {}),
-            ...(resolveGroupMentions(context) ? { mentions: resolveGroupMentions(context) } : {}),
-            track_source: "connectyhub",
-            track_id: `agent_audio_${context.run.id}_${chunkIndex}`,
-          },
-        });
-
-        const message: OutboundMessage = {
-          text,
-          mode: "audio",
-          providerResponse,
-          generatedAudio,
-          chunkIndex,
-          chunksTotal,
-        };
-
-        await saveOutboundMessage(input.client, context, message);
-        persistedChunks.add(chunkIndex);
-        outbound.push({ ...message, persisted: true });
-      } catch (error) {
-        const fallbackMessage = await sendAudioReplyFallbackText({
-          client: input.client,
-          context,
-          token: input.token,
-          phone: input.phone,
-          text,
-          chunkIndex,
-          chunksTotal,
-          replyId: replyTargets[index]?.provider_message_id ?? undefined,
-          error,
-        });
-        persistedChunks.add(chunkIndex);
-        outbound.push(fallbackMessage);
-      }
+      const message = await sendAudioOutboundChunk({
+        client: input.client,
+        context,
+        token: input.token,
+        phone: input.phone,
+        text,
+        chunkIndex,
+        chunksTotal,
+        replyId: replyTargets[index]?.provider_message_id ?? undefined,
+      });
+      persistedChunks.add(chunkIndex);
+      outbound.push(message);
     }
 
     const paymentLink = await recordSalesCatalogOrderIntent({
@@ -3593,40 +3610,19 @@ async function sendAgentResponse(input: {
       await sleep(delayMs);
     }
 
-    const interactiveMenu = buildInteractiveLinkMenu(text, context);
-    const replyId = replyTargets[index]?.provider_message_id ?? undefined;
-    const providerResponse = interactiveMenu
-      ? await sendWhatsappInteractiveButtons({
-          credentials: context.credentials,
-          token: input.token,
-          phone: input.phone,
-          text: interactiveMenu.text,
-          choices: interactiveMenu.choices,
-          trackId: `agent_menu_${context.run.id}_${chunkIndex}`,
-          replyId,
-          mentions: resolveGroupMentions(context),
-        })
-      : await sendWhatsappText({
-          credentials: context.credentials,
-          token: input.token,
-          phone: input.phone,
-          text,
-          trackId: `agent_text_${context.run.id}_${chunkIndex}`,
-          replyId,
-          mentions: resolveGroupMentions(context),
-        });
-
-    const message: OutboundMessage = {
+    const message = await sendTextOutboundChunk({
+      client: input.client,
+      context,
+      token: input.token,
+      phone: input.phone,
       text,
-      mode: "text",
-      providerResponse,
       chunkIndex,
       chunksTotal,
-    };
-
-    await saveOutboundMessage(input.client, context, message);
+      replyId: replyTargets[index]?.provider_message_id ?? undefined,
+      trackIdPrefix: "agent_text",
+    });
     persistedChunks.add(chunkIndex);
-    outbound.push({ ...message, persisted: true });
+    outbound.push(message);
   }
 
   if (catalogAttachments.length > 0) {
@@ -3665,6 +3661,223 @@ async function sendAgentResponse(input: {
   }
 
   return outbound;
+}
+
+function shouldUseMixedAudioDelivery(
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+  latestInbound: ConversationMessageRow | null,
+  chunks: string[],
+  forceText: boolean,
+) {
+  if (forceText || !shouldSendAudioResponse(context, latestInbound)) {
+    return false;
+  }
+
+  const audioChunks = chunks.filter((chunk) => shouldSendAudioChunk(context, latestInbound, chunk));
+
+  return audioChunks.length > 0 && audioChunks.length < chunks.length;
+}
+
+function shouldSendAudioChunk(
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+  latestInbound: ConversationMessageRow | null,
+  text: string,
+) {
+  return shouldSendAudioResponse(context, latestInbound) && !responseContainsLinkButtonReference(text, context);
+}
+
+function splitChunksAroundLinkLines(
+  chunks: string[],
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+) {
+  const output: string[] = [];
+
+  for (const chunk of chunks) {
+    const lines = chunk.split(/\n+/).map((line) => line.trim()).filter(Boolean);
+
+    if (lines.length <= 1) {
+      output.push(chunk);
+      continue;
+    }
+
+    let buffer: string[] = [];
+
+    for (const line of lines) {
+      if (responseContainsLinkButtonReference(line, context)) {
+        if (buffer.length > 0) {
+          output.push(buffer.join("\n"));
+          buffer = [];
+        }
+
+        output.push(line);
+      } else {
+        buffer.push(line);
+      }
+    }
+
+    if (buffer.length > 0) {
+      output.push(buffer.join("\n"));
+    }
+  }
+
+  return output;
+}
+
+async function sendAudioOutboundChunk(input: {
+  client: SupabaseClient;
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
+  token: string;
+  phone: string;
+  text: string;
+  chunkIndex: number;
+  chunksTotal: number;
+  replyId?: string;
+}) {
+  const { context } = input;
+
+  try {
+    const generatedAudio = await generateConnectyVoiceAudio({
+      organizationId: context.organization.id,
+      userId: null,
+      text: sanitizeTextForTts(input.text),
+      voiceId: context.behavior.audioVoiceId || null,
+      voicePublicOwnerId: context.behavior.audioVoicePublicOwnerId || null,
+      voiceName: context.behavior.audioVoiceName || null,
+      voiceSource: context.behavior.audioVoiceSource || null,
+      modelId: context.behavior.audioModelId || null,
+      source: "whatsapp_agent",
+      metadata: {
+        agentId: context.agent.id,
+        agentRunId: context.run.id,
+        conversationId: context.conversationId,
+        leadId: context.lead?.id ?? null,
+        whatsappInstanceId: context.instance.id,
+        agentScope: resolveWhatsappAgentUsageScope(context),
+        audioChunkIndex: input.chunkIndex,
+        audioChunksTotal: input.chunksTotal,
+      },
+      client: input.client,
+    });
+    const providerResponse = await callUazapi(context.credentials, "/send/media", {
+      method: "POST",
+      token: input.token,
+      timeoutMs: outboundAudioDeliveryTimeoutMs,
+      body: {
+        number: input.phone,
+        type: "ptt",
+        file: generatedAudio.audioUrl,
+        ...(input.replyId ? { replyid: input.replyId } : {}),
+        ...(resolveGroupMentions(context) ? { mentions: resolveGroupMentions(context) } : {}),
+        track_source: "connectyhub",
+        track_id: `agent_audio_${context.run.id}_${input.chunkIndex}`,
+      },
+    });
+
+    const message: OutboundMessage = {
+      text: input.text,
+      mode: "audio",
+      providerResponse,
+      generatedAudio,
+      chunkIndex: input.chunkIndex,
+      chunksTotal: input.chunksTotal,
+    };
+
+    await saveOutboundMessage(input.client, context, message);
+    return { ...message, persisted: true };
+  } catch (error) {
+    return sendAudioReplyFallbackText({
+      client: input.client,
+      context,
+      token: input.token,
+      phone: input.phone,
+      text: input.text,
+      chunkIndex: input.chunkIndex,
+      chunksTotal: input.chunksTotal,
+      replyId: input.replyId,
+      error,
+    });
+  }
+}
+
+async function sendTextOutboundChunk(input: {
+  client: SupabaseClient;
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
+  token: string;
+  phone: string;
+  text: string;
+  chunkIndex: number;
+  chunksTotal: number;
+  replyId?: string;
+  trackIdPrefix: string;
+}) {
+  const interactiveMenu = buildInteractiveLinkMenu(input.text, input.context);
+  let providerResponse: unknown;
+  let interactiveButton = false;
+  let buttonFallback = false;
+
+  if (interactiveMenu) {
+    try {
+      providerResponse = await sendWhatsappInteractiveButtons({
+        credentials: input.context.credentials,
+        token: input.token,
+        phone: input.phone,
+        text: interactiveMenu.text,
+        choices: interactiveMenu.choices,
+        trackId: `agent_menu_${input.context.run.id}_${input.chunkIndex}`,
+        replyId: input.replyId,
+        mentions: resolveGroupMentions(input.context),
+      });
+      interactiveButton = true;
+    } catch (error) {
+      const errorMessage = describeRuntimeError(error, "Falha desconhecida ao enviar botao WhatsApp.");
+      const textProviderResponse = await sendWhatsappText({
+        credentials: input.context.credentials,
+        token: input.token,
+        phone: input.phone,
+        text: input.text,
+        trackId: `agent_button_fallback_${input.context.run.id}_${input.chunkIndex}`,
+        replyId: input.replyId,
+        mentions: resolveGroupMentions(input.context),
+      });
+
+      providerResponse = {
+        fallback: true,
+        reason: "interactive_button_failed",
+        error: errorMessage,
+        textProviderResponse,
+      };
+      buttonFallback = true;
+      await persistInteractiveButtonFallbackEvent(input.client, input.context, {
+        chunkIndex: input.chunkIndex,
+        chunksTotal: input.chunksTotal,
+        errorMessage,
+        providerResponse: textProviderResponse,
+      }).catch(() => {});
+    }
+  } else {
+    providerResponse = await sendWhatsappText({
+      credentials: input.context.credentials,
+      token: input.token,
+      phone: input.phone,
+      text: input.text,
+      trackId: `${input.trackIdPrefix}_${input.context.run.id}_${input.chunkIndex}`,
+      replyId: input.replyId,
+      mentions: resolveGroupMentions(input.context),
+    });
+  }
+
+  const message: OutboundMessage = {
+    text: input.text,
+    mode: "text",
+    providerResponse,
+    interactiveButton,
+    buttonFallback,
+    chunkIndex: input.chunkIndex,
+    chunksTotal: input.chunksTotal,
+  };
+
+  await saveOutboundMessage(input.client, input.context, message);
+  return { ...message, persisted: true };
 }
 
 async function sendAudioReplyFallbackText(input: {
@@ -3741,6 +3954,41 @@ async function persistAudioReplyFallbackEvent(
     confidence: 0.72,
     visibility: "organization",
     tags: ["whatsapp", "media", "audio", "fallback", "text"],
+    payload: {
+      agentRunId: context.run.id,
+      conversationId: context.conversationId,
+      leadId: context.lead?.id ?? null,
+      whatsappInstanceId: context.instance.id,
+      chunkIndex: input.chunkIndex,
+      chunksTotal: input.chunksTotal,
+      errorMessage: input.errorMessage,
+      providerResponse: sanitizeProviderData(input.providerResponse),
+    },
+  });
+}
+
+async function persistInteractiveButtonFallbackEvent(
+  client: SupabaseClient,
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+  input: {
+    chunkIndex: number;
+    chunksTotal: number;
+    errorMessage: string;
+    providerResponse: unknown;
+  },
+) {
+  await client.from("intelligence_events").insert({
+    scope: "organization",
+    organization_id: context.organization.id,
+    source_type: "whatsapp",
+    source_id: context.conversationId,
+    producer_agent_id: context.agent.id,
+    event_type: "whatsapp.button.fallback_text",
+    title: "Botao WhatsApp enviado como texto",
+    summary: preview(input.errorMessage, 500),
+    confidence: 0.72,
+    visibility: "organization",
+    tags: ["whatsapp", "button", "fallback", "text"],
     payload: {
       agentRunId: context.run.id,
       conversationId: context.conversationId,
@@ -4709,13 +4957,18 @@ function buildInteractiveLinkMenu(
   text: string,
   context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
 ) {
-  if (!context.behavior.interactiveMessages || context.linkButtons.length === 0) {
+  if (context.linkButtons.length === 0) {
     return null;
   }
 
   let cleanedText = text;
   const choices: string[] = [];
   const matches = collectInteractiveLinkMatches(text, context.linkButtons, { lead: context.lead });
+  const hasExplicitTrackedLink = matches.some((match) => match.directIndex !== null);
+
+  if (!context.behavior.interactiveMessages && !hasExplicitTrackedLink) {
+    return null;
+  }
 
   for (const match of matches) {
     const { link, trackingUrl } = match;
@@ -4897,6 +5150,8 @@ async function saveOutboundMessage(
     intended_delivery_mode: message.intendedMode ?? message.mode,
     audio_fallback: message.audioFallback === true,
     fallback_reason: message.fallbackReason ?? null,
+    interactive_button: message.interactiveButton === true,
+    button_fallback: message.buttonFallback === true,
     generated_audio_media_id: message.generatedAudio?.mediaId ?? null,
     generated_audio_object_key: message.generatedAudio?.objectKey ?? null,
     agent_run_id: context.run.id,
