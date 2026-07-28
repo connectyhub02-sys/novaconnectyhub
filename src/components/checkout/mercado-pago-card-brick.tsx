@@ -33,8 +33,10 @@ type MercadoPagoBricksBuilder = {
   ) => Promise<MercadoPagoBrickController>;
 };
 
+type MercadoPagoBrickTheme = "dark" | "default" | "bootstrap" | "flat";
+
 type MercadoPagoInstance = {
-  bricks: () => MercadoPagoBricksBuilder;
+  bricks: (options?: { theme?: MercadoPagoBrickTheme }) => MercadoPagoBricksBuilder;
 };
 
 declare global {
@@ -57,19 +59,20 @@ type CardBrickProps = {
 
 let mercadoPagoSdkPromise: Promise<void> | null = null;
 
+const cardBrickSecureFieldBackgroundColor = "#111827";
+
 const cardBrickCustomVariables: JsonRecord = {
   baseColor: "#67e8f9",
   baseColorFirstVariant: "#22d3ee",
   baseColorSecondVariant: "#0891b2",
   textPrimaryColor: "#f8fafc",
   textSecondaryColor: "#cbd5e1",
-  inputBackgroundColor: "#111827",
+  inputBackgroundColor: cardBrickSecureFieldBackgroundColor,
   formBackgroundColor: "#1e293b",
   outlinePrimaryColor: "#64748b",
   outlineSecondaryColor: "#94a3b8",
   errorColor: "#fb7185",
   successColor: "#34d399",
-  successSecondaryColor: "#064e3b",
   buttonTextColor: "#020617",
   inputFocusedBoxShadow: "0 0 0 1px rgba(103, 232, 249, 0.72)",
   inputErrorFocusedBoxShadow: "0 0 0 1px rgba(251, 113, 133, 0.72)",
@@ -92,6 +95,7 @@ export function MercadoPagoCardBrick({
 }: CardBrickProps) {
   const containerId = useMemo(() => `mp-card-${sessionId.replace(/[^a-zA-Z0-9_-]/g, "")}`, [sessionId]);
   const controllerRef = useRef<MercadoPagoBrickController | null>(null);
+  const secureFieldObserverRef = useRef<MutationObserver | null>(null);
   const [ready, setReady] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<{ tone: "success" | "warning" | "error"; message: string } | null>(null);
@@ -106,8 +110,15 @@ export function MercadoPagoCardBrick({
 
       if (!mounted || !window.MercadoPago) return;
 
+      secureFieldObserverRef.current?.disconnect();
+      const container = document.getElementById(containerId);
+      if (container && typeof MutationObserver !== "undefined") {
+        secureFieldObserverRef.current = new MutationObserver(() => styleMercadoPagoSecureFields(containerId));
+        secureFieldObserverRef.current.observe(container, { childList: true, subtree: true });
+      }
+
       const mercadoPago = new window.MercadoPago(publicKey, { locale: "pt-BR" });
-      const bricksBuilder = mercadoPago.bricks();
+      const bricksBuilder = mercadoPago.bricks({ theme: "dark" });
       controllerRef.current = await bricksBuilder.create("cardPayment", containerId, {
         initialization: {
           amount,
@@ -129,6 +140,8 @@ export function MercadoPagoCardBrick({
         },
         callbacks: {
           onReady: () => {
+            styleMercadoPagoSecureFields(containerId);
+            window.setTimeout(() => styleMercadoPagoSecureFields(containerId), 250);
             if (mounted) setReady(true);
           },
           onSubmit: async (formData, additionalData) => {
@@ -193,6 +206,8 @@ export function MercadoPagoCardBrick({
 
     return () => {
       mounted = false;
+      secureFieldObserverRef.current?.disconnect();
+      secureFieldObserverRef.current = null;
       controllerRef.current?.unmount();
       controllerRef.current = null;
     };
@@ -208,7 +223,7 @@ export function MercadoPagoCardBrick({
         {!ready || submitting ? <Loader2 className="h-4 w-4 animate-spin text-cyan-200" /> : null}
       </div>
 
-      <div id={containerId} className="mt-4 min-h-[260px]" />
+      <div id={containerId} className="mercado-pago-card-brick mt-4 min-h-[260px]" />
       <input id="deviceId" name="deviceId" type="hidden" />
 
       {result ? (
@@ -233,6 +248,18 @@ function readMercadoPagoDeviceSessionId() {
   const globalValue = window.MP_DEVICE_SESSION_ID?.trim() ?? "";
 
   return globalValue || hiddenValue || null;
+}
+
+function styleMercadoPagoSecureFields(containerId: string) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+
+  container.querySelectorAll<HTMLIFrameElement>("iframe").forEach((iframe) => {
+    iframe.style.setProperty("background", cardBrickSecureFieldBackgroundColor, "important");
+    iframe.style.setProperty("background-color", cardBrickSecureFieldBackgroundColor, "important");
+    iframe.style.setProperty("border-radius", "6px", "important");
+    iframe.style.setProperty("color-scheme", "dark", "important");
+  });
 }
 
 function loadMercadoPagoSdk() {

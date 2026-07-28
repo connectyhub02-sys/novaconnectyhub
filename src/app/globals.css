@@ -145,6 +145,25 @@ textarea {
   touch-action: manipulation;
 }
 
+.mercado-pago-card-brick {
+  color-scheme: dark;
+}
+
+.mercado-pago-card-brick iframe,
+.mercado-pago-card-brick div:has(> iframe) {
+  background: #111827 !important;
+  background-color: #111827 !important;
+  border-radius: 6px !important;
+  color-scheme: dark !important;
+}
+
+.mercado-pago-card-brick #card-number-container,
+.mercado-pago-card-brick #expiration-date-container,
+.mercado-pago-card-brick #security-code-container {
+  color: #0f172a !important;
+  --text-secondary-color: #64748b !important;
+}
+
 @media (max-width: 640px) {
   .connecty-shell-content {
     overflow-x: clip;
