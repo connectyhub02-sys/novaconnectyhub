@@ -161,7 +161,6 @@ export async function POST(
       payerName: order.customer_name,
       payerPhone: order.customer_phone,
       payerZipCode: order.destination_cep,
-      shippingTotal: order.shipping_total,
       items: items.map((item) => ({
         id: item.id,
         title: item.title,

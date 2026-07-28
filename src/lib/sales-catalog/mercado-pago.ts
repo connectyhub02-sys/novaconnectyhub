@@ -28,7 +28,6 @@ export type MercadoPagoAdditionalInfoInput = {
   payerName?: string | null;
   payerPhone?: string | null;
   payerZipCode?: string | null;
-  shippingTotal?: string | number | null;
   items?: MercadoPagoAdditionalInfoItemInput[];
 };
 
@@ -1015,12 +1014,7 @@ export function buildMercadoPagoAdditionalInfo(input: MercadoPagoAdditionalInfoI
     address: payerAddress,
   };
   const items = buildMercadoPagoAdditionalInfoItems(input.items ?? []);
-  const shippingCost = normalizeCurrencyAmount(input.shippingTotal);
-  const shipments = {
-    mode: "custom",
-    cost: shippingCost ?? undefined,
-    receiver_address: payerAddress,
-  };
+  const shipments = payerAddress ? { receiver_address: payerAddress } : undefined;
   const additionalInfo: AdditionalInfo = {
     items: items.length > 0 ? items : undefined,
     payer: hasObjectValues(payer) ? payer : undefined,
@@ -1107,7 +1101,6 @@ function buildMercadoPagoAdditionalInfoItems(items: MercadoPagoAdditionalInfoIte
       title,
       description: sanitizeMercadoPagoText(item.skuCode ? `SKU ${item.skuCode}` : item.title, 256) ?? undefined,
       quantity,
-      currency_id: "BRL",
       unit_price: unitPrice,
     }];
   });
