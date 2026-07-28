@@ -57,6 +57,29 @@ type CardBrickProps = {
 
 let mercadoPagoSdkPromise: Promise<void> | null = null;
 
+const cardBrickCustomVariables: JsonRecord = {
+  baseColor: "#67e8f9",
+  baseColorFirstVariant: "#22d3ee",
+  baseColorSecondVariant: "#0891b2",
+  textPrimaryColor: "#f8fafc",
+  textSecondaryColor: "#cbd5e1",
+  inputBackgroundColor: "#111827",
+  formBackgroundColor: "#1e293b",
+  outlinePrimaryColor: "#64748b",
+  outlineSecondaryColor: "#94a3b8",
+  errorColor: "#fb7185",
+  successColor: "#34d399",
+  successSecondaryColor: "#064e3b",
+  buttonTextColor: "#020617",
+  inputFocusedBoxShadow: "0 0 0 1px rgba(103, 232, 249, 0.72)",
+  inputErrorFocusedBoxShadow: "0 0 0 1px rgba(251, 113, 133, 0.72)",
+  inputBorderWidth: "1px",
+  inputFocusedBorderWidth: "1px",
+  borderRadiusSmall: "6px",
+  borderRadiusMedium: "8px",
+  borderRadiusLarge: "10px",
+};
+
 export function MercadoPagoCardBrick({
   publicKey,
   sessionId,
@@ -96,6 +119,7 @@ export function MercadoPagoCardBrick({
           visual: {
             style: {
               theme: "dark",
+              customVariables: cardBrickCustomVariables,
             },
           },
           paymentMethods: {
