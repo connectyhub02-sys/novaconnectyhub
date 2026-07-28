@@ -149,14 +149,28 @@ type AccountData = {
   }>;
   usageEvents: Array<{
     id: string;
-    provider: string | null;
     featureCode: string | null;
-    modelId: string | null;
+    publicCategory: string;
     inputUnits: number;
     outputUnits: number;
     chargeCredits: number;
     createdAt: string | null;
   }>;
+  usageSummary: {
+    balanceCredits: number;
+    includedCredits: number;
+    usedCredits: number;
+    remainingCredits: number;
+    totalChargeCredits30d: number;
+    todayChargeCredits: number;
+    eventCount30d: number;
+    lastEventAt: string | null;
+    byCategory: Array<{
+      category: string;
+      chargeCredits: number;
+      events: number;
+    }>;
+  };
   cycles: Array<{
     id: string;
     planCode: string | null;
@@ -216,14 +230,16 @@ export function AccountConsole() {
   const [avatarError, setAvatarError] = useState<string | null>(null);
   const [activeBillingTab, setActiveBillingTab] = useState<BillingTab>("payments");
 
-  const loadAccount = useCallback(async (mode: "initial" | "refresh" = "initial") => {
+  const loadAccount = useCallback(async (mode: "initial" | "refresh" | "silent" = "initial") => {
     if (mode === "initial") {
       setLoading(true);
-    } else {
+    } else if (mode === "refresh") {
       setRefreshing(true);
     }
 
-    setError(null);
+    if (mode !== "silent") {
+      setError(null);
+    }
 
     try {
       const response = await fetch("/api/dashboard/account", { cache: "no-store" });
@@ -234,11 +250,17 @@ export function AccountConsole() {
       }
 
       setAccount(data.account);
+      window.dispatchEvent(new CustomEvent("connectyhub:billing-status", { detail: data.account.billingAccess }));
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "Erro ao carregar sua conta.");
+      if (mode !== "silent") {
+        setError(loadError instanceof Error ? loadError.message : "Erro ao carregar sua conta.");
+      }
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (mode === "initial") {
+        setLoading(false);
+      } else if (mode === "refresh") {
+        setRefreshing(false);
+      }
     }
   }, []);
 
@@ -248,6 +270,27 @@ export function AccountConsole() {
     }, 0);
 
     return () => window.clearTimeout(timer);
+  }, [loadAccount]);
+
+  useEffect(() => {
+    function refreshAccountSilently() {
+      if (document.visibilityState === "visible") {
+        void loadAccount("silent");
+      }
+    }
+
+    const intervalId = window.setInterval(refreshAccountSilently, 15_000);
+
+    window.addEventListener("focus", refreshAccountSilently);
+    window.addEventListener("connectyhub:billing-refresh", refreshAccountSilently);
+    document.addEventListener("visibilitychange", refreshAccountSilently);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", refreshAccountSilently);
+      window.removeEventListener("connectyhub:billing-refresh", refreshAccountSilently);
+      document.removeEventListener("visibilitychange", refreshAccountSilently);
+    };
   }, [loadAccount]);
 
   async function handleAvatarUpload(event: ChangeEvent<HTMLInputElement>) {
@@ -794,6 +837,7 @@ function AccountDetailsCard({
 
 function PlanUsageCard({ account, pendingCheckoutHref }: { account: AccountData; pendingCheckoutHref: string | null }) {
   const access = account.billingAccess;
+  const usageSummary = account.usageSummary;
   const activeSubscription = getPrimarySubscription(account.subscriptions);
   const planName = activeSubscription?.planName ?? formatPlanName(account.organization.planCode);
   const monthlyPrice = activeSubscription?.monthlyPriceBrl ?? 0;
@@ -847,15 +891,23 @@ function PlanUsageCard({ account, pendingCheckoutHref }: { account: AccountData;
 
         <div className="grid gap-2 sm:grid-cols-3">
           <PlanMetric label="Creditos disponiveis" value={formatCredits(account.wallet.balanceCredits)} />
-          <PlanMetric label="Creditos utilizados" value={formatCredits(access.usedCredits)} />
+          <PlanMetric label="Usados no ciclo" value={formatCredits(access.usedCredits)} />
+          <PlanMetric label="Gasto hoje" value={formatCredits(usageSummary.todayChargeCredits)} />
+        </div>
+
+        <div className="grid gap-2 sm:grid-cols-3">
+          <PlanMetric label="Ultimos 30 dias" value={formatCredits(usageSummary.totalChargeCredits30d)} />
+          <PlanMetric label="Eventos 30 dias" value={formatCredits(usageSummary.eventCount30d)} />
           <PlanMetric label="Valor mensal" value={formatCurrency(monthlyPrice)} />
         </div>
 
         <div className="rounded-lg border border-white/10 bg-[#081322]/70 p-3">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="text-sm text-slate-400">Proxima cobranca</p>
-              <p className="mt-1 font-semibold text-white">{nextBillingAt ? formatDate(nextBillingAt) : "Nao agendada"}</p>
+              <p className="text-sm text-slate-400">Ultimo consumo / proxima cobranca</p>
+              <p className="mt-1 font-semibold text-white">
+                {usageSummary.lastEventAt ? formatDateTime(usageSummary.lastEventAt) : "Sem consumo recente"} / {nextBillingAt ? formatDate(nextBillingAt) : "Nao agendada"}
+              </p>
             </div>
             <CalendarDays className="h-5 w-5 shrink-0 text-slate-500" />
           </div>
@@ -1131,7 +1183,11 @@ function BillingWorkspace({
           <SubscriptionsTab plansHref={account.actions.plansHref} subscriptions={account.subscriptions} />
         </TabsContent>
         <TabsContent className="mt-0 data-[state=inactive]:hidden" forceMount value="credits">
-          <CreditsTab transactions={account.creditTransactions} usageEvents={account.usageEvents} />
+          <CreditsTab
+            transactions={account.creditTransactions}
+            usageEvents={account.usageEvents}
+            usageSummary={account.usageSummary}
+          />
         </TabsContent>
         <TabsContent className="mt-0 data-[state=inactive]:hidden" forceMount value="cycles">
           <CyclesTab cycles={account.cycles} />
@@ -1341,9 +1397,11 @@ function SubscriptionsTab({
 function CreditsTab({
   transactions,
   usageEvents,
+  usageSummary,
 }: {
   transactions: AccountData["creditTransactions"];
   usageEvents: AccountData["usageEvents"];
+  usageSummary: AccountData["usageSummary"];
 }) {
   const { hasMore, setExpanded, visibleItems } = useVisibleItems(transactions);
 
@@ -1353,6 +1411,32 @@ function CreditsTab({
 
   return (
     <div className="space-y-5">
+      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        <PlanMetric label="Saldo agora" value={formatCredits(usageSummary.balanceCredits)} />
+        <PlanMetric label="Usado no ciclo" value={formatCredits(usageSummary.usedCredits)} />
+        <PlanMetric label="Gasto hoje" value={formatCredits(usageSummary.todayChargeCredits)} />
+        <PlanMetric label="Gasto 30 dias" value={formatCredits(usageSummary.totalChargeCredits30d)} />
+      </div>
+
+      {usageSummary.byCategory.length ? (
+        <div className="space-y-3 rounded-md border border-white/10 bg-white/[0.025] p-4">
+          <SectionLabel>Resumo por tipo de consumo</SectionLabel>
+          <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+            {usageSummary.byCategory.map((item) => (
+              <div key={item.category} className="rounded-md bg-[#081322]/70 p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-white">{item.category}</p>
+                    <p className="mt-1 text-xs text-slate-500">{formatCredits(item.events)} evento{item.events === 1 ? "" : "s"}</p>
+                  </div>
+                  <p className="shrink-0 text-sm font-semibold text-rose-300">-{formatCredits(item.chargeCredits)}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
       <div className="space-y-3">
         <SectionLabel>Movimentacoes da carteira</SectionLabel>
         {transactions.length ? visibleItems.map((transaction) => {
@@ -1387,7 +1471,7 @@ function CreditsTab({
               <p className="text-sm font-semibold text-white">{usageFeatureLabel(event.featureCode)}</p>
               <p className="mt-1 text-sm text-slate-400">{formatDateTime(event.createdAt)}</p>
               <p className="mt-1 truncate text-xs text-slate-500">
-                {[event.provider, event.modelId].filter(Boolean).join(" / ") || "Provedor nao informado"}
+                {event.publicCategory}
               </p>
             </div>
             <div className="text-left sm:text-right">
@@ -1414,6 +1498,18 @@ function usageFeatureLabel(featureCode: string | null) {
     chat_completion: "Resposta do agente",
     voice_reply_whatsapp: "Resposta por audio",
     text_to_speech: "Audio gerado",
+    audio_transcription: "Transcricao de audio",
+    media_image_analysis: "Leitura de imagem",
+    media_video_analysis: "Leitura de video",
+    media_document_analysis: "Leitura de documento",
+    human_handoff_detection: "Analise de atendimento",
+    conversation_learning: "Memoria de conversa",
+    lead_memory: "Memoria do lead",
+    clone_memory: "Memoria do agente",
+    conversation_state: "Contexto da conversa",
+    follow_up_generation: "Follow-up automatico",
+    prompt_assistant: "Assistente de prompt",
+    clone_profile_import: "Importacao de DNA",
     lead_analysis: "Analise de lead",
     conversation_summary: "Resumo de conversa",
     content_generation: "Conteudo gerado",

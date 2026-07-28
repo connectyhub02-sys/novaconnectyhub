@@ -1,6 +1,8 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { meterGeminiGenerationUsage } from "@/lib/billing/gemini-metering";
+import { assertBillableAccess } from "@/lib/billing/trial";
 import { inngest } from "@/lib/inngest/client";
 import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
 import { createServiceClient } from "@/lib/supabase/service";
@@ -43,6 +45,13 @@ type SalesCatalogFollowUpOrder = {
     quantity: number | null;
     total: string | null;
   }>;
+};
+
+type FollowUpGenerationResult = {
+  text: string;
+  prompt: string;
+  modelId: string;
+  responseData: unknown;
 };
 
 export const whatsappFollowUpEventName = "connectyhub/whatsapp.followup.scheduled";
@@ -92,6 +101,14 @@ export async function processWhatsappProactiveFollowUp(input: {
     return { status: "skipped", reason: "outside_time_window" };
   }
 
+  const billable = await assertBillableAccess({ organizationId: eventData.organizationId, client })
+    .then(() => true)
+    .catch(() => false);
+
+  if (!billable) {
+    return { status: "skipped", reason: "billing_blocked" };
+  }
+
   const token = decryptInstanceToken(instance);
   if (!token) return { status: "skipped", reason: "missing_token" };
 
@@ -137,11 +154,43 @@ export async function processWhatsappProactiveFollowUp(input: {
   const geminiCredentials = await loadGeminiCredentials(client);
   if (!geminiCredentials) return { status: "skipped", reason: "missing_gemini" };
 
-  const followUpText = await generateFollowUpMessage(geminiCredentials, agent, conversationText, {
+  const followUpGeneration = await generateFollowUpMessage(geminiCredentials, agent, conversationText, {
     salesCatalogOrder,
     salesCatalogFollowUpKind: eventData.salesCatalogFollowUpKind ?? null,
   });
+  const followUpText = followUpGeneration?.text ?? null;
   if (!followUpText) return { status: "skipped", reason: "empty_generation" };
+
+  const followUpMetering = followUpGeneration
+    ? await meterGeminiGenerationUsage({
+        client,
+        organizationId: eventData.organizationId,
+        featureCode: "follow_up_generation",
+        modelId: followUpGeneration.modelId,
+        agentId: eventData.agentId,
+        agentRunId: eventData.agentRunId,
+        conversationId: eventData.conversationId,
+        leadId: eventData.leadId,
+        agentScope: "customer",
+        promptText: followUpGeneration.prompt,
+        outputText: followUpGeneration.text,
+        responseData: followUpGeneration.responseData,
+        requestId: `whatsapp-followup:${eventData.agentRunId}:gemini:follow_up_generation`,
+        debitDescription: "Follow-up automatico WhatsApp",
+        metadata: {
+          source: "whatsapp_proactive_followup",
+          channel: "whatsapp",
+          salesCatalogOrderId: eventData.salesCatalogOrderId ?? null,
+          salesCatalogFollowUpKind: eventData.salesCatalogFollowUpKind ?? null,
+        },
+      }).then((result) => ({
+        usageEventId: result.usageEventId,
+        billingMode: result.billingMode,
+        chargeCredits: result.chargeCredits,
+      })).catch((error: unknown) => ({
+        error: error instanceof Error ? error.message : "Falha ao medir follow-up.",
+      }))
+    : null;
 
   const lead = await loadLead(client, eventData.leadId);
   const phone = lead?.phone_number;
@@ -175,6 +224,7 @@ export async function processWhatsappProactiveFollowUp(input: {
       agent_run_id: eventData.agentRunId,
       sales_catalog_order_id: eventData.salesCatalogOrderId ?? null,
       sales_catalog_follow_up_kind: eventData.salesCatalogFollowUpKind ?? null,
+      metering: followUpMetering,
       provider_response: sanitize(providerResponse),
     },
   });
@@ -218,6 +268,7 @@ export async function processWhatsappProactiveFollowUp(input: {
       agent_run_id: eventData.agentRunId,
       sales_catalog_order_id: eventData.salesCatalogOrderId ?? null,
       sales_catalog_follow_up_kind: eventData.salesCatalogFollowUpKind ?? null,
+      metering: followUpMetering,
       provider_response: sanitize(providerResponse),
     },
   });
@@ -249,7 +300,7 @@ async function generateFollowUpMessage(
     salesCatalogOrder?: SalesCatalogFollowUpOrder | null;
     salesCatalogFollowUpKind?: SalesCatalogFollowUpKind | null;
   } = {},
-): Promise<string | null> {
+): Promise<FollowUpGenerationResult | null> {
   const prompt = [
     "Voce e um vendedor brasileiro de WhatsApp. O lead parou de responder.",
     "Gere UMA mensagem curta (1-2 frases) de follow-up natural e contextual.",
@@ -266,7 +317,8 @@ async function generateFollowUpMessage(
     "Responda somente a mensagem de follow-up, sem JSON, sem aspas.",
   ].join("\n");
 
-  const url = new URL(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(agent.model_id || geminiCredentials.model)}:generateContent`);
+  const modelId = agent.model_id || geminiCredentials.model;
+  const url = new URL(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelId)}:generateContent`);
   url.searchParams.set("key", geminiCredentials.apiKey);
 
   const response = await fetch(url, {
@@ -286,7 +338,16 @@ async function generateFollowUpMessage(
   if (!response.ok) return null;
 
   const data = await readProviderResponse(response);
-  return extractGeminiText(data) || null;
+  const text = extractGeminiText(data);
+
+  return text
+    ? {
+        text,
+        prompt,
+        modelId,
+        responseData: data,
+      }
+    : null;
 }
 
 function findFollowUpReferenceIndex(messages: ConversationMessageRow[], agentRunId: string) {

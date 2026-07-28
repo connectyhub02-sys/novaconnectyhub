@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { meterGeminiGenerationUsage } from "@/lib/billing/gemini-metering";
 import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
 import { isSupabaseAuthConfigured } from "@/lib/supabase/env";
 import { createClient } from "@/lib/supabase/server";
@@ -63,6 +64,26 @@ export async function POST() {
   }
 
   const testResult = await testGeminiConnection(apiKey, model);
+  const { responseData, promptText, outputText, ...publicTestResult } = testResult;
+
+  if (testResult.status === "online") {
+    await meterGeminiGenerationUsage({
+      client: auth.supabase,
+      featureCode: "content_generation",
+      modelId: model,
+      userId: auth.userId,
+      agentScope: "platform",
+      billingMode: "internal_shadow",
+      promptText,
+      outputText,
+      responseData,
+      debitDescription: "Teste interno Gemini",
+      metadata: {
+        source: "admin_gemini_integration_test",
+        integrationId: "gemini",
+      },
+    }).catch(() => null);
+  }
 
   await auth.supabase.from("maintenance_audit_logs").insert({
     actor_id: auth.userId,
@@ -72,12 +93,12 @@ export async function POST() {
     metadata: {
       integrationId: "gemini",
       model,
-      status: testResult.status,
-      httpStatus: testResult.httpStatus,
+      status: publicTestResult.status,
+      httpStatus: publicTestResult.httpStatus,
     },
   });
 
-  return NextResponse.json(testResult, { status: testResult.status === "online" ? 200 : 502 });
+  return NextResponse.json(publicTestResult, { status: publicTestResult.status === "online" ? 200 : 502 });
 }
 
 async function requirePlatformAdmin() {
@@ -132,6 +153,7 @@ function normalizeGeminiModel(value: string) {
 
 async function testGeminiConnection(apiKey: string, model: string) {
   const checkedAt = new Date().toISOString();
+  const promptText = "Responda apenas: ok";
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 12000);
   const url = new URL(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`);
@@ -142,7 +164,7 @@ async function testGeminiConnection(apiKey: string, model: string) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: "Responda apenas: ok" }] }],
+        contents: [{ parts: [{ text: promptText }] }],
         generationConfig: {
           maxOutputTokens: 8,
           temperature: 0,
@@ -170,6 +192,9 @@ async function testGeminiConnection(apiKey: string, model: string) {
       httpStatus: response.status,
       model,
       checkedAt,
+      promptText,
+      outputText: extractGeminiText(data),
+      responseData: data,
     };
   } catch (error) {
     return {
@@ -199,6 +224,28 @@ async function readResponse(response: Response) {
   } catch {
     return text;
   }
+}
+
+function extractGeminiText(data: unknown) {
+  if (!data || typeof data !== "object") {
+    return "";
+  }
+
+  const candidates = (data as { candidates?: unknown }).candidates;
+
+  if (!Array.isArray(candidates)) {
+    return "";
+  }
+
+  return candidates
+    .flatMap((candidate) => {
+      const parts = (candidate as { content?: { parts?: unknown } }).content?.parts;
+      return Array.isArray(parts) ? parts : [];
+    })
+    .map((part) => (part as { text?: unknown }).text)
+    .filter((text): text is string => typeof text === "string")
+    .join("\n")
+    .trim();
 }
 
 function resolveGeminiErrorMessage(status: number, data: unknown) {

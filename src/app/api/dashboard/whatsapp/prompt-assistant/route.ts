@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { meterGeminiGenerationUsage } from "@/lib/billing/gemini-metering";
 import { requireClientCompanyAccess } from "@/lib/client-os/companies";
 import { assertBillableAccess, BillingAccessError } from "@/lib/billing/trial";
 import { loadGeminiCredentials, type GeminiCredentials } from "@/lib/gemini/credentials";
@@ -47,15 +48,34 @@ export async function POST(request: NextRequest) {
     await assertBillableAccess({ organizationId: company.id, client });
     const credentials = await loadGeminiCredentials(client) as GeminiCredentials;
     const pageContext = productUrl ? await fetchPageContext(productUrl) : "";
-    const prompt = await generatePrompt({
+    const generated = await generatePrompt({
       credentials,
       companyName: company.name,
       pageContext,
       productUrl,
       notes,
     });
+    await meterGeminiGenerationUsage({
+      client,
+      organizationId: company.id,
+      userId: workspace.user.id,
+      featureCode: "prompt_assistant",
+      modelId: generated.modelId,
+      agentScope: "customer",
+      promptText: [generated.systemInstruction, generated.prompt],
+      outputText: generated.text,
+      responseData: generated.responseData,
+      debitDescription: "Assistente de prompt ConnectyHub",
+      metadata: {
+        source: "dashboard_prompt_assistant",
+        companyId,
+        hasProductUrl: Boolean(productUrl),
+        notesChars: notes.length,
+        pageContextChars: pageContext.length,
+      },
+    });
 
-    return NextResponse.json({ prompt });
+    return NextResponse.json({ prompt: generated.text });
   } catch (error) {
     return NextResponse.json(
       {
@@ -104,7 +124,21 @@ async function generatePrompt(input: {
   productUrl: string | null;
   notes: string;
 }) {
-  const url = new URL(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(input.credentials.model)}:generateContent`);
+  const modelId = input.credentials.model;
+  const systemInstruction = [
+    "Voce cria prompts de atendimento comercial por WhatsApp para agentes de IA.",
+    "Entregue somente o prompt final em portugues do Brasil.",
+    "O prompt deve ser claro, direto, operacional e ter no maximo 3500 caracteres.",
+    "Inclua as tags {{lead_name}}, {{empresa}} e {{agente}} quando fizer sentido.",
+    "Nao crie template fixo de mensagem; crie comportamento, tom, limites, perguntas e proximo passo.",
+  ].join("\n");
+  const prompt = [
+    `Empresa: ${input.companyName}`,
+    input.productUrl ? `Link analisado: ${input.productUrl}` : "",
+    input.notes ? `Notas do usuario: ${input.notes}` : "",
+    input.pageContext ? `Conteudo da pagina: ${input.pageContext}` : "",
+  ].filter(Boolean).join("\n\n");
+  const url = new URL(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelId)}:generateContent`);
   url.searchParams.set("key", input.credentials.apiKey);
 
   const response = await fetch(url, {
@@ -113,24 +147,13 @@ async function generatePrompt(input: {
     body: JSON.stringify({
       systemInstruction: {
         parts: [{
-          text: [
-            "Voce cria prompts de atendimento comercial por WhatsApp para agentes de IA.",
-            "Entregue somente o prompt final em portugues do Brasil.",
-            "O prompt deve ser claro, direto, operacional e ter no maximo 3500 caracteres.",
-            "Inclua as tags {{lead_name}}, {{empresa}} e {{agente}} quando fizer sentido.",
-            "Nao crie template fixo de mensagem; crie comportamento, tom, limites, perguntas e proximo passo.",
-          ].join("\n"),
+          text: systemInstruction,
         }],
       },
       contents: [{
         role: "user",
         parts: [{
-          text: [
-            `Empresa: ${input.companyName}`,
-            input.productUrl ? `Link analisado: ${input.productUrl}` : "",
-            input.notes ? `Notas do usuario: ${input.notes}` : "",
-            input.pageContext ? `Conteudo da pagina: ${input.pageContext}` : "",
-          ].filter(Boolean).join("\n\n"),
+          text: prompt,
         }],
       }],
       generationConfig: {
@@ -153,7 +176,13 @@ async function generatePrompt(input: {
     throw new Error("Gemini nao retornou um prompt.");
   }
 
-  return text.slice(0, 3600);
+  return {
+    text: text.slice(0, 3600),
+    systemInstruction,
+    prompt,
+    modelId,
+    responseData: data,
+  };
 }
 
 function extractVisibleText(html: string) {

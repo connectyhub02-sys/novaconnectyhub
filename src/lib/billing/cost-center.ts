@@ -151,7 +151,7 @@ export function calculateUsageCharge(input: UsageChargeInput) {
 }
 
 export function calculateGrossMargin(providerCost: number, connectyRevenue: number) {
-  return roundMoney(Math.max(connectyRevenue - providerCost, 0));
+  return roundMoney(connectyRevenue - providerCost);
 }
 
 export function calculateMarginPercent(providerCost: number, connectyRevenue: number) {

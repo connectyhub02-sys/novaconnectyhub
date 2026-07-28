@@ -9,6 +9,7 @@ import {
   type GeminiTokenUsage,
   type MeteredUsageResult,
 } from "@/lib/billing/metered-usage";
+import { mediaAnalysisFeatureCode, meterGeminiGenerationUsage } from "@/lib/billing/gemini-metering";
 import { assertBillableAccess, BillingAccessError } from "@/lib/billing/trial";
 import { generateConnectyVoiceAudio, type GeneratedConnectyVoiceAudio } from "@/lib/voice/tts";
 import {
@@ -522,7 +523,7 @@ export async function processWhatsappAgentRun(input: {
     const humanRequestText = getLeadAuthoredHumanRequestText(latestInbound, userText);
 
     const humanHandoffIntent = behavior.humanIntervention && behavior.detectHumanRequest
-      ? await detectHumanHandoffIntent({ context, text: humanRequestText, useAiContext: behavior.humanHandoffAiDetection }).catch(() => null)
+      ? await detectHumanHandoffIntent({ client, context, text: humanRequestText, useAiContext: behavior.humanHandoffAiDetection }).catch(() => null)
       : null;
 
     if (humanHandoffIntent?.handoff) {
@@ -2335,7 +2336,30 @@ async function analyzeAndPersistLeadQualification(
     throw new Error(readProviderError(data) ?? `Gemini respondeu status ${response.status}.`);
   }
 
-  const analysis = normalizeLeadQualificationAnalysis(parseJsonObject(extractGeminiText(data)), context.qualification);
+  const outputText = extractGeminiText(data);
+  await meterGeminiGenerationUsage({
+    client,
+    organizationId: context.organization.id,
+    featureCode: "lead_analysis",
+    modelId: context.agent.model_id || context.geminiCredentials.model,
+    agentId: context.agent.id,
+    agentRunId: context.run.id,
+    conversationId: context.conversationId,
+    leadId: context.lead.id,
+    agentScope: resolveWhatsappAgentUsageScope(context),
+    promptText: prompt,
+    outputText,
+    responseData: data,
+    requestId: `whatsapp-agent:${context.run.id}:gemini:lead_analysis`,
+    debitDescription: "Analise de lead WhatsApp",
+    metadata: {
+      source: "whatsapp_agent",
+      channel: "whatsapp",
+      qualificationEnabled: context.qualification.enabled,
+    },
+  }).catch((error: unknown) => appendRunMeteringError(client, context.run.id, "lead_analysis", error instanceof Error ? error.message : "Falha ao medir analise de lead."));
+
+  const analysis = normalizeLeadQualificationAnalysis(parseJsonObject(outputText), context.qualification);
   await persistLeadQualification(client, context, analysis);
 
   return analysis;
@@ -3293,11 +3317,12 @@ async function transcribeAndPersistInboundAudio(input: {
     message: input.latestInbound,
     providerChatId: input.context.providerChatId,
   });
+  const transcriptionModel = input.context.agent.model_id || input.context.geminiCredentials.model;
   const geminiTranscription = downloaded.transcript
     ? null
     : await transcribeDownloadedAudioWithGemini({
         credentials: input.context.geminiCredentials,
-        model: input.context.agent.model_id || input.context.geminiCredentials.model,
+        model: transcriptionModel,
         fileUrl: downloaded.fileUrl,
         mimeType: downloaded.mimeType,
       });
@@ -3308,10 +3333,40 @@ async function transcribeAndPersistInboundAudio(input: {
     return null;
   }
 
+  if (geminiTranscription) {
+    await meterGeminiGenerationUsage({
+      client: input.client,
+      organizationId: input.context.organization.id,
+      featureCode: "audio_transcription",
+      modelId: transcriptionModel,
+      agentId: input.context.agent.id,
+      agentRunId: input.context.run.id,
+      conversationId: input.context.conversationId,
+      leadId: input.context.lead?.id ?? null,
+      agentScope: resolveWhatsappAgentUsageScope(input.context),
+      promptText: inboundAudioTranscriptionPrompt,
+      outputText: geminiTranscription.text,
+      usage: geminiTranscription.usage,
+      media: 1,
+      megabytes: bytesToMegabytes(geminiTranscription.byteLength),
+      requestId: `whatsapp-agent:${input.context.run.id}:gemini:audio_transcription:${input.latestInbound.id}`,
+      debitDescription: "Transcricao de audio WhatsApp",
+      metadata: {
+        source: "whatsapp_agent",
+        channel: "whatsapp",
+        mediaKind: "audio",
+        messageId: input.latestInbound.id,
+        providerMessageId: input.latestInbound.provider_message_id,
+        mimeType: downloaded.mimeType,
+        byteLength: geminiTranscription.byteLength,
+      },
+    }).catch((error: unknown) => appendRunMeteringError(input.client, input.context.run.id, "audio_transcription", error instanceof Error ? error.message : "Falha ao medir transcricao de audio."));
+  }
+
   const now = new Date().toISOString();
   const mediaTranscription = {
     provider: downloaded.transcript ? "uazapi" : "gemini",
-    model: downloaded.transcript ? null : normalizeGeminiModel(input.context.agent.model_id || input.context.geminiCredentials.model),
+    model: downloaded.transcript ? null : normalizeGeminiModel(transcriptionModel),
     mime_type: downloaded.mimeType,
     byte_length: downloaded.byteLength ?? geminiTranscription?.byteLength ?? null,
     transcribed_at: now,
@@ -3363,6 +3418,8 @@ async function analyzeAndPersistInboundMedia(input: {
   latestInbound: ConversationMessageRow;
   kind: InboundMediaKind;
 }) {
+  const modelId = input.context.agent.model_id || input.context.geminiCredentials.model;
+  const caption = extractMessageCaption(input.latestInbound);
   const downloaded = await downloadInboundMedia({
     credentials: input.context.credentials,
     token: input.token,
@@ -3372,11 +3429,11 @@ async function analyzeAndPersistInboundMedia(input: {
   });
   const analyzed = await analyzeDownloadedMediaWithGemini({
     credentials: input.context.geminiCredentials,
-    model: input.context.agent.model_id || input.context.geminiCredentials.model,
+    model: modelId,
     fileUrl: downloaded.fileUrl,
     mimeType: downloaded.mimeType,
     kind: input.kind,
-    caption: extractMessageCaption(input.latestInbound),
+    caption,
   });
   const analysis = normalizeMediaAnalysisText(analyzed.text);
 
@@ -3384,10 +3441,38 @@ async function analyzeAndPersistInboundMedia(input: {
     return null;
   }
 
+  await meterGeminiGenerationUsage({
+    client: input.client,
+    organizationId: input.context.organization.id,
+    featureCode: mediaAnalysisFeatureCode(input.kind),
+    modelId,
+    agentId: input.context.agent.id,
+    agentRunId: input.context.run.id,
+    conversationId: input.context.conversationId,
+    leadId: input.context.lead?.id ?? null,
+    agentScope: resolveWhatsappAgentUsageScope(input.context),
+    promptText: buildMediaAnalysisPrompt(input.kind, caption),
+    outputText: analyzed.text,
+    usage: analyzed.usage,
+    media: 1,
+    megabytes: bytesToMegabytes(analyzed.byteLength),
+    requestId: `whatsapp-agent:${input.context.run.id}:gemini:media_${input.kind}:${input.latestInbound.id}`,
+    debitDescription: `${formatMediaKind(input.kind)} analisado no WhatsApp`,
+    metadata: {
+      source: "whatsapp_agent",
+      channel: "whatsapp",
+      mediaKind: input.kind,
+      messageId: input.latestInbound.id,
+      providerMessageId: input.latestInbound.provider_message_id,
+      mimeType: analyzed.mimeType,
+      byteLength: analyzed.byteLength,
+    },
+  }).catch((error: unknown) => appendRunMeteringError(input.client, input.context.run.id, mediaAnalysisFeatureCode(input.kind), error instanceof Error ? error.message : "Falha ao medir analise de midia."));
+
   const now = new Date().toISOString();
   const mediaAnalysis = {
     provider: "gemini",
-    model: normalizeGeminiModel(input.context.agent.model_id || input.context.geminiCredentials.model),
+    model: normalizeGeminiModel(modelId),
     kind: input.kind,
     mime_type: analyzed.mimeType,
     byte_length: analyzed.byteLength,
@@ -3456,7 +3541,7 @@ async function sendAgentResponse(input: {
   const catalogAttachments = collectSalesCatalogAttachments(renderedCatalog.items);
 
   if (shouldUseMixedAudio) {
-    const replyTargets = await resolveOutboundReplyTargets(context, mixedCandidateChunks).catch(() => []);
+    const replyTargets = await resolveOutboundReplyTargets(input.client, context, mixedCandidateChunks).catch(() => []);
     const persistedAudioChunks = await loadPersistedOutboundChunks(input.client, context.run.id, "audio");
     const persistedTextChunks = await loadPersistedOutboundChunks(input.client, context.run.id, "text");
     const persistedAnyChunks = new Set([...persistedAudioChunks, ...persistedTextChunks]);
@@ -3519,7 +3604,7 @@ async function sendAgentResponse(input: {
   }
 
   const correctedChunks = shouldSendAudio ? chunks : applyMidMessageCorrection(chunks, context.behavior);
-  const replyTargets = await resolveOutboundReplyTargets(context, correctedChunks).catch(() => []);
+  const replyTargets = await resolveOutboundReplyTargets(input.client, context, correctedChunks).catch(() => []);
   const persistedChunks = await loadPersistedOutboundChunks(input.client, context.run.id, shouldSendAudio ? "audio" : "text");
 
   if (shouldSendAudio) {
@@ -4509,6 +4594,7 @@ function buildSalesCatalogMediaCaption(item: RuntimeSalesCatalogItem, media: Sal
 }
 
 async function resolveOutboundReplyTargets(
+  client: SupabaseClient,
   context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
   chunks: string[],
 ): Promise<Array<ConversationMessageRow | null>> {
@@ -4528,7 +4614,7 @@ async function resolveOutboundReplyTargets(
     return chunks.map(() => null);
   }
 
-  const aiTargets = await classifySmartReplyTargets({ context, candidates, chunks }).catch(() => null);
+  const aiTargets = await classifySmartReplyTargets({ client, context, candidates, chunks }).catch(() => null);
 
   if (aiTargets) {
     return aiTargets;
@@ -4538,6 +4624,7 @@ async function resolveOutboundReplyTargets(
 }
 
 async function classifySmartReplyTargets(input: {
+  client: SupabaseClient;
   context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
   candidates: ConversationMessageRow[];
   chunks: string[];
@@ -4545,6 +4632,13 @@ async function classifySmartReplyTargets(input: {
   const model = input.context.agent.model_id || input.context.geminiCredentials.model;
   const url = new URL(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`);
   url.searchParams.set("key", input.context.geminiCredentials.apiKey);
+  const promptText = [
+    "Mensagens recentes do lead:",
+    ...input.candidates.map((message, index) => `${index + 1}. ${formatMessageForQuoteClassifier(message)}`),
+    "",
+    "Resposta que o agente vai enviar, separada por blocos:",
+    ...input.chunks.map((chunk, index) => `${index + 1}. ${preview(chunk, 500)}`),
+  ].join("\n");
 
   const response = await fetch(url, {
     method: "POST",
@@ -4556,13 +4650,7 @@ async function classifySmartReplyTargets(input: {
       contents: [{
         role: "user",
         parts: [{
-          text: [
-            "Mensagens recentes do lead:",
-            ...input.candidates.map((message, index) => `${index + 1}. ${formatMessageForQuoteClassifier(message)}`),
-            "",
-            "Resposta que o agente vai enviar, separada por blocos:",
-            ...input.chunks.map((chunk, index) => `${index + 1}. ${preview(chunk, 500)}`),
-          ].join("\n"),
+          text: promptText,
         }],
       }],
       generationConfig: {
@@ -4581,7 +4669,32 @@ async function classifySmartReplyTargets(input: {
     throw new Error(readProviderError(data) ?? `Gemini respondeu status ${response.status}.`);
   }
 
-  const record = readRecord(parseJsonObject(extractGeminiText(data)));
+  const outputText = extractGeminiText(data);
+  await meterGeminiGenerationUsage({
+    client: input.client,
+    organizationId: input.context.organization.id,
+    featureCode: "conversation_state",
+    modelId: model,
+    agentId: input.context.agent.id,
+    agentRunId: input.context.run.id,
+    conversationId: input.context.conversationId,
+    leadId: input.context.lead?.id ?? null,
+    agentScope: resolveWhatsappAgentUsageScope(input.context),
+    promptText: [buildSmartQuoteClassifierInstruction(), promptText],
+    outputText,
+    responseData: data,
+    requestId: `whatsapp-agent:${input.context.run.id}:gemini:smart_reply_targets`,
+    debitDescription: "Analise de resposta WhatsApp",
+    metadata: {
+      source: "whatsapp_agent",
+      channel: "whatsapp",
+      stateKind: "smart_reply_targets",
+      candidates: input.candidates.length,
+      chunks: input.chunks.length,
+    },
+  }).catch((error: unknown) => appendRunMeteringError(input.client, input.context.run.id, "conversation_state", error instanceof Error ? error.message : "Falha ao medir alvos de resposta."));
+
+  const record = readRecord(parseJsonObject(outputText));
   const shouldQuote = record?.quote === true || record?.should_quote === true;
 
   if (!shouldQuote) {
@@ -5355,6 +5468,28 @@ async function evaluateTuringScore(
 
   const text = extractGeminiText(data);
   if (!text) return;
+
+  await meterGeminiGenerationUsage({
+    client,
+    organizationId: context.organization.id,
+    featureCode: "conversation_state",
+    modelId: context.agent.model_id || context.geminiCredentials.model,
+    agentId: context.agent.id,
+    agentRunId: context.run.id,
+    conversationId: context.conversationId,
+    leadId: context.lead?.id ?? null,
+    agentScope: resolveWhatsappAgentUsageScope(context),
+    promptText: prompt,
+    outputText: text,
+    responseData: data,
+    requestId: `whatsapp-agent:${context.run.id}:gemini:turing_benchmark`,
+    debitDescription: "Benchmark de humanidade WhatsApp",
+    metadata: {
+      source: "whatsapp_agent",
+      channel: "whatsapp",
+      stateKind: "turing_benchmark",
+    },
+  }).catch((error: unknown) => appendRunMeteringError(client, context.run.id, "conversation_state", error instanceof Error ? error.message : "Falha ao medir benchmark de Turing."));
 
   let parsed: { score?: number; strengths?: string[]; weaknesses?: string[]; verdict?: string };
   try {
@@ -6297,6 +6432,28 @@ async function extractConversationLearning(
 
   const data = await readProviderResponse(response);
   const text = extractGeminiText(data)?.trim();
+  await meterGeminiGenerationUsage({
+    client,
+    organizationId: context.organization.id,
+    featureCode: "conversation_learning",
+    modelId: context.agent.model_id || context.geminiCredentials.model,
+    agentId: context.agent.id,
+    agentRunId: context.run.id,
+    conversationId: context.conversationId,
+    leadId: context.lead?.id ?? null,
+    agentScope: resolveWhatsappAgentUsageScope(context),
+    promptText: prompt,
+    outputText: text,
+    responseData: data,
+    requestId: `whatsapp-agent:${context.run.id}:gemini:conversation_learning`,
+    debitDescription: "Aprendizado de conversa WhatsApp",
+    metadata: {
+      source: "whatsapp_agent",
+      channel: "whatsapp",
+      memoryType: "social_proof",
+    },
+  }).catch((error: unknown) => appendRunMeteringError(client, context.run.id, "conversation_learning", error instanceof Error ? error.message : "Falha ao medir aprendizado de conversa."));
+
   if (!text || text.toUpperCase().includes("NENHUM") || text.length > 200) return;
 
   await client.from("intelligence_memory").insert({
@@ -6383,7 +6540,30 @@ async function extractLeadMemory(
   if (!response.ok) return;
 
   const data = await readProviderResponse(response);
-  const nextMemory = normalizeLeadMemory(parseJsonObject(extractGeminiText(data)));
+  const outputText = extractGeminiText(data);
+  await meterGeminiGenerationUsage({
+    client,
+    organizationId: context.organization.id,
+    featureCode: "lead_memory",
+    modelId: context.agent.model_id || context.geminiCredentials.model,
+    agentId: context.agent.id,
+    agentRunId: context.run.id,
+    conversationId: context.conversationId,
+    leadId: context.lead.id,
+    agentScope: resolveWhatsappAgentUsageScope(context),
+    promptText: prompt,
+    outputText,
+    responseData: data,
+    requestId: `whatsapp-agent:${context.run.id}:gemini:lead_memory`,
+    debitDescription: "Memoria de lead WhatsApp",
+    metadata: {
+      source: "whatsapp_agent",
+      channel: "whatsapp",
+      memoryType: "lead_memory",
+    },
+  }).catch((error: unknown) => appendRunMeteringError(client, context.run.id, "lead_memory", error instanceof Error ? error.message : "Falha ao medir memoria de lead."));
+
+  const nextMemory = normalizeLeadMemory(parseJsonObject(outputText));
 
   if (!hasLeadMemoryContent(nextMemory)) return;
 
@@ -6486,7 +6666,30 @@ async function extractCloneMemory(
   if (!response.ok) return;
 
   const data = await readProviderResponse(response);
-  const nextMemory = normalizeWhatsappCloneMemory(parseJsonObject(extractGeminiText(data)));
+  const outputText = extractGeminiText(data);
+  await meterGeminiGenerationUsage({
+    client,
+    organizationId: context.organization.id,
+    featureCode: "clone_memory",
+    modelId: context.agent.model_id || context.geminiCredentials.model,
+    agentId: context.agent.id,
+    agentRunId: context.run.id,
+    conversationId: context.conversationId,
+    leadId: context.lead?.id ?? null,
+    agentScope: resolveWhatsappAgentUsageScope(context),
+    promptText: prompt,
+    outputText,
+    responseData: data,
+    requestId: `whatsapp-agent:${context.run.id}:gemini:clone_memory`,
+    debitDescription: "Memoria de agente WhatsApp",
+    metadata: {
+      source: "whatsapp_agent",
+      channel: "whatsapp",
+      memoryType: "clone_memory",
+    },
+  }).catch((error: unknown) => appendRunMeteringError(client, context.run.id, "clone_memory", error instanceof Error ? error.message : "Falha ao medir memoria do agente."));
+
+  const nextMemory = normalizeWhatsappCloneMemory(parseJsonObject(outputText));
 
   if (!hasCloneMemoryContent(nextMemory)) return;
 
@@ -6553,7 +6756,30 @@ async function extractConversationArcSummary(
   if (!response.ok) return;
 
   const data = await readProviderResponse(response);
-  const parsed = readRecord(parseJsonObject(extractGeminiText(data)));
+  const outputText = extractGeminiText(data);
+  await meterGeminiGenerationUsage({
+    client,
+    organizationId: context.organization.id,
+    featureCode: "conversation_state",
+    modelId: context.agent.model_id || context.geminiCredentials.model,
+    agentId: context.agent.id,
+    agentRunId: context.run.id,
+    conversationId: context.conversationId,
+    leadId: context.lead?.id ?? null,
+    agentScope: resolveWhatsappAgentUsageScope(context),
+    promptText: prompt,
+    outputText,
+    responseData: data,
+    requestId: `whatsapp-agent:${context.run.id}:gemini:conversation_arc_summary`,
+    debitDescription: "Resumo de conversa WhatsApp",
+    metadata: {
+      source: "whatsapp_agent",
+      channel: "whatsapp",
+      stateKind: "conversation_arc_summary",
+    },
+  }).catch((error: unknown) => appendRunMeteringError(client, context.run.id, "conversation_state", error instanceof Error ? error.message : "Falha ao medir resumo de conversa."));
+
+  const parsed = readRecord(parseJsonObject(outputText));
   const arcSummary = typeof parsed?.arc_summary === "string" ? parsed.arc_summary.trim().slice(0, 1000) : null;
   if (!arcSummary) return;
 
@@ -6619,7 +6845,30 @@ async function extractNegotiationState(
   if (!response.ok) return;
 
   const data = await readProviderResponse(response);
-  const parsed = readRecord(parseJsonObject(extractGeminiText(data)));
+  const outputText = extractGeminiText(data);
+  await meterGeminiGenerationUsage({
+    client,
+    organizationId: context.organization.id,
+    featureCode: "conversation_state",
+    modelId: context.agent.model_id || context.geminiCredentials.model,
+    agentId: context.agent.id,
+    agentRunId: context.run.id,
+    conversationId: context.conversationId,
+    leadId: context.lead?.id ?? null,
+    agentScope: resolveWhatsappAgentUsageScope(context),
+    promptText: prompt,
+    outputText,
+    responseData: data,
+    requestId: `whatsapp-agent:${context.run.id}:gemini:negotiation_state`,
+    debitDescription: "Estado de negociacao WhatsApp",
+    metadata: {
+      source: "whatsapp_agent",
+      channel: "whatsapp",
+      stateKind: "negotiation_state",
+    },
+  }).catch((error: unknown) => appendRunMeteringError(client, context.run.id, "conversation_state", error instanceof Error ? error.message : "Falha ao medir estado da conversa."));
+
+  const parsed = readRecord(parseJsonObject(outputText));
   const stage = typeof parsed?.stage === "string" && negotiationStages.has(parsed.stage) ? parsed.stage : null;
   if (!stage) return;
 
@@ -7349,8 +7598,11 @@ async function analyzeDownloadedMediaWithGemini(input: {
     text: extractGeminiText(data),
     byteLength: media.byteLength,
     mimeType: media.mimeType,
+    usage: extractGeminiUsageMetadata(data),
   };
 }
+
+const inboundAudioTranscriptionPrompt = "Transcreva o audio em portugues do Brasil. Retorne somente o texto falado, sem comentarios. Se nao houver fala compreensivel, retorne vazio.";
 
 async function transcribeDownloadedAudioWithGemini(input: {
   credentials: GeminiCredentials;
@@ -7375,7 +7627,7 @@ async function transcribeDownloadedAudioWithGemini(input: {
           role: "user",
           parts: [
             {
-              text: "Transcreva o audio em portugues do Brasil. Retorne somente o texto falado, sem comentarios. Se nao houver fala compreensivel, retorne vazio.",
+              text: inboundAudioTranscriptionPrompt,
             },
             {
               inlineData: {
@@ -7404,7 +7656,16 @@ async function transcribeDownloadedAudioWithGemini(input: {
   return {
     text: extractGeminiText(data),
     byteLength: audio.byteLength,
+    usage: extractGeminiUsageMetadata(data),
   };
+}
+
+function bytesToMegabytes(value: number | null | undefined) {
+  if (!value || value <= 0) {
+    return undefined;
+  }
+
+  return value / 1_000_000;
 }
 
 async function fetchDownloadedAudio(fileUrl: string, fallbackMimeType: string) {
@@ -8034,6 +8295,7 @@ function isHumanRequest(value: string) {
 }
 
 async function detectHumanHandoffIntent(input: {
+  client: SupabaseClient;
   context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
   text: string;
   useAiContext: boolean;
@@ -8066,12 +8328,20 @@ function shouldSkipHumanHandoffAiClassifier(text: string) {
 }
 
 async function classifyHumanHandoffIntentWithGemini(input: {
+  client: SupabaseClient;
   context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
   text: string;
 }): Promise<HumanHandoffIntent> {
   const model = input.context.agent.model_id || input.context.geminiCredentials.model;
   const url = new URL(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`);
   url.searchParams.set("key", input.context.geminiCredentials.apiKey);
+  const promptText = [
+    "Mensagem atual do lead:",
+    input.text,
+    "",
+    "Historico recente:",
+    buildHumanHandoffConversationContext(input.context.messages),
+  ].join("\n");
 
   const response = await fetch(url, {
     method: "POST",
@@ -8083,13 +8353,7 @@ async function classifyHumanHandoffIntentWithGemini(input: {
       contents: [{
         role: "user",
         parts: [{
-          text: [
-            "Mensagem atual do lead:",
-            input.text,
-            "",
-            "Historico recente:",
-            buildHumanHandoffConversationContext(input.context.messages),
-          ].join("\n"),
+          text: promptText,
         }],
       }],
       generationConfig: {
@@ -8107,6 +8371,28 @@ async function classifyHumanHandoffIntentWithGemini(input: {
   if (!response.ok) {
     throw new Error(readProviderError(data) ?? `Gemini respondeu status ${response.status}.`);
   }
+
+  await meterGeminiGenerationUsage({
+    client: input.client,
+    organizationId: input.context.organization.id,
+    featureCode: "human_handoff_detection",
+    modelId: model,
+    agentId: input.context.agent.id,
+    agentRunId: input.context.run.id,
+    conversationId: input.context.conversationId,
+    leadId: input.context.lead?.id ?? null,
+    agentScope: resolveWhatsappAgentUsageScope(input.context),
+    promptText: [buildHumanHandoffClassifierInstruction(), promptText],
+    outputText: extractGeminiText(data),
+    responseData: data,
+    requestId: `whatsapp-agent:${input.context.run.id}:gemini:human_handoff_detection`,
+    debitDescription: "Analise de intervencao humana WhatsApp",
+    metadata: {
+      source: "whatsapp_agent",
+      channel: "whatsapp",
+      classifier: "human_handoff",
+    },
+  }).catch((error: unknown) => appendRunMeteringError(input.client, input.context.run.id, "human_handoff_detection", error instanceof Error ? error.message : "Falha ao medir deteccao humana."));
 
   const record = readRecord(parseJsonObject(extractGeminiText(data)));
   const handoff = record?.handoff === true || record?.should_handoff === true || record?.human_handoff === true;

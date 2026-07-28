@@ -397,7 +397,7 @@ export function ConnectyShell({
     }
 
     void loadBillingAccess();
-    const intervalId = window.setInterval(loadBillingAccess, 30_000);
+    const intervalId = window.setInterval(loadBillingAccess, 15_000);
 
     function refreshOnFocus() {
       void loadBillingAccess();
@@ -409,13 +409,29 @@ export function ConnectyShell({
       }
     }
 
+    function refreshOnBillingEvent() {
+      void loadBillingAccess();
+    }
+
+    function syncBillingStatus(event: Event) {
+      const detail = event instanceof CustomEvent ? event.detail : null;
+
+      if (detail && typeof detail === "object" && typeof detail.state === "string") {
+        setBillingAccess(detail as BillingAccessClientStatus);
+      }
+    }
+
     window.addEventListener("focus", refreshOnFocus);
+    window.addEventListener("connectyhub:billing-refresh", refreshOnBillingEvent);
+    window.addEventListener("connectyhub:billing-status", syncBillingStatus);
     document.addEventListener("visibilitychange", refreshOnVisibility);
 
     return () => {
       cancelled = true;
       window.clearInterval(intervalId);
       window.removeEventListener("focus", refreshOnFocus);
+      window.removeEventListener("connectyhub:billing-refresh", refreshOnBillingEvent);
+      window.removeEventListener("connectyhub:billing-status", syncBillingStatus);
       document.removeEventListener("visibilitychange", refreshOnVisibility);
     };
   }, [mode]);
@@ -462,14 +478,19 @@ export function ConnectyShell({
     window.fetch = async (...args: Parameters<typeof fetch>) => {
       const response = await originalFetch(...args);
 
-      if (response.status === 428) {
+      if (response.status === 402 || response.status === 428) {
         const data = (await response.clone().json().catch(() => null)) as {
           accountCompletion?: AccountCompletionClientStatus;
+          billingAccess?: BillingAccessClientStatus;
         } | null;
 
-        if (data?.accountCompletion) {
+        if (response.status === 428 && data?.accountCompletion) {
           setAccountCompletion(data.accountCompletion);
           setAccountCompletionDismissed(false);
+        }
+
+        if (data?.billingAccess) {
+          setBillingAccess(data.billingAccess);
         }
       }
 
@@ -1517,12 +1538,16 @@ function TrialWelcomeModal({
   const daysRemaining = status.trialDaysRemaining ?? 7;
   const tone = billingBannerTone("green");
   const isUsageReminder = milestoneCredits >= 100;
+  const usedCredits = Math.max(status.usedCredits, milestoneCredits);
+  const usagePercent = status.includedCredits > 0
+    ? Math.round(Math.min(100, Math.max(0, (usedCredits / status.includedCredits) * 100)))
+    : 0;
   const title = isUsageReminder
-    ? `Voce ja usou ${formatShellCredits(milestoneCredits)} creditos`
+    ? `Voce ja usou ${formatShellCredits(usedCredits)} creditos`
     : "Bem-vindo ao seu teste gratis";
   const description = isUsageReminder
-    ? `Ainda restam ${formatShellCredits(status.balanceCredits)} creditos do teste. Assine durante o periodo gratis para somar esse saldo ao plano escolhido.`
-    : `Voce recebeu ${formatShellCredits(bonusCredits)} creditos para testar a ConnectyHub por ${daysRemaining} dias.`;
+    ? `Ainda restam ${formatShellCredits(status.balanceCredits)} creditos do teste. Se voce assinar antes de acabar, esse saldo entra junto com os creditos do plano.`
+    : `Voce recebeu ${formatShellCredits(bonusCredits)} creditos para testar a ConnectyHub por ${daysRemaining} dias. O saldo que sobrar pode acumular com o plano escolhido.`;
 
   return (
     <div
@@ -1568,18 +1593,18 @@ function TrialWelcomeModal({
           </button>
         </div>
 
-        <div className="mt-5 grid gap-2 sm:grid-cols-3">
+        <div className="mt-5 grid gap-2 sm:grid-cols-4">
           <TrialWelcomeMetric
             label={isUsageReminder ? "creditos usados" : "bonus inicial"}
-            value={formatShellCredits(isUsageReminder ? milestoneCredits : bonusCredits)}
+            value={formatShellCredits(isUsageReminder ? usedCredits : bonusCredits)}
           />
-          <TrialWelcomeMetric label="saldo atual" value={formatShellCredits(status.balanceCredits)} />
+          <TrialWelcomeMetric label="saldo que acumula" value={formatShellCredits(status.balanceCredits)} />
+          <TrialWelcomeMetric label="consumo" value={`${usagePercent}%`} />
           <TrialWelcomeMetric label="dias restantes" value={String(daysRemaining)} />
         </div>
 
         <div className="mt-5 rounded-2xl border border-emerald-300/24 bg-emerald-300/10 px-4 py-3 text-sm leading-6 text-emerald-50">
-          Se voce contratar um plano durante o teste, o saldo que sobrar soma aos creditos do plano escolhido. Depois que o teste acabar,
-          esse saldo promocional pode nao entrar automaticamente.
+          Voce ainda tem {formatShellCredits(status.balanceCredits)} creditos. Contratando durante o teste, esse saldo e preservado e soma aos creditos do plano escolhido.
         </div>
 
         <div className="mt-4 grid gap-2 text-[12px] leading-5 text-slate-300 sm:grid-cols-3">
@@ -1595,7 +1620,7 @@ function TrialWelcomeModal({
             onClick={onClose}
             style={{ background: tone.color, color: "#061015" }}
           >
-            Ver planos e acumular saldo
+            Ver planos e guardar saldo
           </Link>
           <button
             type="button"
@@ -1828,6 +1853,7 @@ function BillingStatusBanner({ status }: { status: BillingAccessClientStatus | n
   }
 
   const tone = billingBannerTone(status.bannerTone);
+  const progressLabel = billingProgressLabel(status);
   const progress = status.includedCredits > 0
     ? Math.max(0, Math.min(100, ((status.includedCredits - status.usedCredits) / status.includedCredits) * 100))
     : 0;
@@ -1865,7 +1891,7 @@ function BillingStatusBanner({ status }: { status: BillingAccessClientStatus | n
                 <div className="h-full rounded-full" style={{ width: `${progress}%`, background: tone.color }} />
               </div>
               <span className="font-mono text-[10px] uppercase tracking-wide text-slate-400">
-                {formatShellCredits(status.balanceCredits)} / {formatShellCredits(status.includedCredits)} creditos
+                {progressLabel}
               </span>
             </div>
           ) : null}
@@ -1881,6 +1907,14 @@ function BillingStatusBanner({ status }: { status: BillingAccessClientStatus | n
       </div>
     </div>
   );
+}
+
+function billingProgressLabel(status: BillingAccessClientStatus) {
+  if (status.state.startsWith("trial")) {
+    return `${formatShellCredits(status.balanceCredits)} restam / ${formatShellCredits(status.usedCredits)} usados`;
+  }
+
+  return `${formatShellCredits(status.usedCredits)} usados / ${formatShellCredits(status.includedCredits)} do ciclo`;
 }
 
 function AdminImpersonationBanner() {

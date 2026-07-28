@@ -2,6 +2,7 @@ import { createHash, createHmac } from "node:crypto";
 import { Inngest } from "inngest";
 import { NextResponse } from "next/server";
 import { createClient as createSupabaseServiceClient } from "@supabase/supabase-js";
+import { meterGeminiGenerationUsage } from "@/lib/billing/gemini-metering";
 import { maintenanceIntegrations, type CredentialDefinition } from "@/lib/maintenance-vault";
 import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
 import {
@@ -30,6 +31,9 @@ type ConnectionTestResult = {
   instanceCount?: number | null;
   model?: string;
   details?: string[];
+  promptText?: string;
+  outputText?: string;
+  responseData?: unknown;
 };
 
 const defaultGeminiModel = "gemini-2.5-flash";
@@ -72,6 +76,26 @@ export async function POST(
   }
 
   const result = await testIntegration(integration.id, credentialResult.credentials);
+  const { promptText, outputText, responseData, ...publicResult } = result;
+
+  if (integration.id === "gemini" && result.status === "online") {
+    await meterGeminiGenerationUsage({
+      client: auth.supabase,
+      featureCode: "content_generation",
+      modelId: result.model ?? defaultGeminiModel,
+      userId: auth.userId,
+      agentScope: "platform",
+      billingMode: "internal_shadow",
+      promptText,
+      outputText,
+      responseData,
+      debitDescription: "Teste interno Gemini",
+      metadata: {
+        source: "admin_generic_integration_test",
+        integrationId: integration.id,
+      },
+    }).catch(() => null);
+  }
 
   await auth.supabase.from("maintenance_audit_logs").insert({
     actor_id: auth.userId,
@@ -80,13 +104,13 @@ export async function POST(
     target_id: null,
     metadata: {
       integrationId: integration.id,
-      status: result.status,
-      httpStatus: result.httpStatus,
-      details: result.details,
+      status: publicResult.status,
+      httpStatus: publicResult.httpStatus,
+      details: publicResult.details,
     },
   });
 
-  return NextResponse.json(result, { status: result.status === "online" ? 200 : 502 });
+  return NextResponse.json(publicResult, { status: publicResult.status === "online" ? 200 : 502 });
 }
 
 async function requirePlatformAdmin() {
@@ -231,12 +255,13 @@ async function testGemini(credentials: CredentialBag): Promise<ConnectionTestRes
 
   const url = new URL(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`);
   url.searchParams.set("key", apiKey);
+  const promptText = "Responda apenas: ok";
 
   const result = await fetchJson(url.toString(), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      contents: [{ parts: [{ text: "Responda apenas: ok" }] }],
+      contents: [{ parts: [{ text: promptText }] }],
       generationConfig: { maxOutputTokens: 8, temperature: 0 },
     }),
   });
@@ -245,7 +270,13 @@ async function testGemini(credentials: CredentialBag): Promise<ConnectionTestRes
     return offline(resolveGeminiErrorMessage(result.httpStatus, result.data), { httpStatus: result.httpStatus, model });
   }
 
-  return online("Gemini online. API Key e modelo validados.", { httpStatus: result.httpStatus, model });
+  return online("Gemini online. API Key e modelo validados.", {
+    httpStatus: result.httpStatus,
+    model,
+    promptText,
+    outputText: extractGeminiText(result.data),
+    responseData: result.data,
+  });
 }
 
 async function testElevenLabs(credentials: CredentialBag): Promise<ConnectionTestResult> {
@@ -795,6 +826,28 @@ function resolveGeminiErrorMessage(status: number | undefined, data: unknown) {
   }
 
   return message || `Gemini respondeu com status ${status ?? "desconhecido"}.`;
+}
+
+function extractGeminiText(data: unknown) {
+  if (!data || typeof data !== "object") {
+    return "";
+  }
+
+  const candidates = (data as { candidates?: unknown }).candidates;
+
+  if (!Array.isArray(candidates)) {
+    return "";
+  }
+
+  return candidates
+    .flatMap((candidate) => {
+      const parts = (candidate as { content?: { parts?: unknown } }).content?.parts;
+      return Array.isArray(parts) ? parts : [];
+    })
+    .map((part) => (part as { text?: unknown }).text)
+    .filter((text): text is string => typeof text === "string")
+    .join("\n")
+    .trim();
 }
 
 function resolveProviderErrorMessage(data: unknown) {

@@ -63,12 +63,17 @@ export type BillingAdminSummary = {
   schemaReady: boolean;
   periodLabel: string;
   sinceIso: string;
+  generatedAt: string;
   totals: {
     usageEvents: number;
+    todayUsageEvents: number;
     providerCost: number;
+    todayProviderCost: number;
     connectyRevenue: number;
+    todayConnectyRevenue: number;
     grossMargin: number;
     chargeCredits: number;
+    todayChargeCredits: number;
     customerBillableCredits: number;
     trialBillableCredits: number;
     internalShadowCredits: number;
@@ -91,6 +96,7 @@ type UsageRow = {
   connecty_revenue_estimate: number | string | null;
   gross_margin_estimate: number | string | null;
   connecty_charge_credits: number | string | null;
+  occurred_at: string | null;
   billing_mode?: UsageBillingMode | string | null;
   agent_scope?: UsageAgentScope | string | null;
 };
@@ -160,14 +166,17 @@ const agentScopeLabels: Record<string, string> = {
 
 export async function getBillingAdminSummary(): Promise<BillingAdminSummary> {
   const supabase = await createClient();
+  const generatedAt = new Date();
   const since = new Date();
   since.setDate(since.getDate() - 30);
   const sinceIso = since.toISOString();
+  const todayStart = new Date(generatedAt);
+  todayStart.setHours(0, 0, 0, 0);
 
   const [usageResult, walletResult, costCenterResult, rateResult, commerce] = await Promise.all([
     supabase
       .from("usage_events")
-      .select("provider, provider_cost, connecty_revenue_estimate, gross_margin_estimate, connecty_charge_credits, billing_mode, agent_scope")
+      .select("provider, provider_cost, connecty_revenue_estimate, gross_margin_estimate, connecty_charge_credits, occurred_at, billing_mode, agent_scope")
       .gte("occurred_at", sinceIso)
       .limit(5000),
     supabase
@@ -191,6 +200,7 @@ export async function getBillingAdminSummary(): Promise<BillingAdminSummary> {
   if (errors.length > 0) {
     return emptySummary({
       sinceIso,
+      generatedAt: generatedAt.toISOString(),
       schemaReady: false,
       commerce,
       warnings: [
@@ -215,6 +225,12 @@ export async function getBillingAdminSummary(): Promise<BillingAdminSummary> {
   const providerMap = new Map<string, BillingProviderSummary>();
   const billingModeMap = new Map<string, BillingModeSummary>();
   const agentScopeMap = new Map<string, BillingAgentScopeSummary>();
+  const todayTotals = {
+    usageEvents: 0,
+    providerCost: 0,
+    connectyRevenue: 0,
+    chargeCredits: 0,
+  };
 
   for (const row of usageRows) {
     const provider = row.provider || "unknown";
@@ -262,6 +278,13 @@ export async function getBillingAdminSummary(): Promise<BillingAdminSummary> {
     scopeSummary.events += 1;
     scopeSummary.chargeCredits += toNumber(row.connecty_charge_credits);
     agentScopeMap.set(agentScope, scopeSummary);
+
+    if (isOnOrAfter(row.occurred_at, todayStart)) {
+      todayTotals.usageEvents += 1;
+      todayTotals.providerCost += toNumber(row.provider_cost);
+      todayTotals.connectyRevenue += toNumber(row.connecty_revenue_estimate);
+      todayTotals.chargeCredits += toNumber(row.connecty_charge_credits);
+    }
   }
 
   const providers = Array.from(providerMap.values())
@@ -299,10 +322,14 @@ export async function getBillingAdminSummary(): Promise<BillingAdminSummary> {
     },
     {
       usageEvents: 0,
+      todayUsageEvents: todayTotals.usageEvents,
       providerCost: 0,
+      todayProviderCost: todayTotals.providerCost,
       connectyRevenue: 0,
+      todayConnectyRevenue: todayTotals.connectyRevenue,
       grossMargin: 0,
       chargeCredits: 0,
+      todayChargeCredits: todayTotals.chargeCredits,
       customerBillableCredits: 0,
       trialBillableCredits: 0,
       internalShadowCredits: 0,
@@ -337,12 +364,16 @@ export async function getBillingAdminSummary(): Promise<BillingAdminSummary> {
     schemaReady: true,
     periodLabel: "Ultimos 30 dias",
     sinceIso,
+    generatedAt: generatedAt.toISOString(),
     totals: {
       ...totals,
       providerCost: roundMoney(totals.providerCost),
+      todayProviderCost: roundMoney(totals.todayProviderCost),
       connectyRevenue: roundMoney(totals.connectyRevenue),
+      todayConnectyRevenue: roundMoney(totals.todayConnectyRevenue),
       grossMargin: roundMoney(totals.grossMargin),
       chargeCredits: roundCredits(totals.chargeCredits),
+      todayChargeCredits: roundCredits(totals.todayChargeCredits),
       customerBillableCredits: roundCredits(modeTotals.customerBillableCredits),
       trialBillableCredits: roundCredits(modeTotals.trialBillableCredits),
       internalShadowCredits: roundCredits(modeTotals.internalShadowCredits),
@@ -471,11 +502,13 @@ async function getCommerceRevenueSummary(
 
 function emptySummary({
   sinceIso,
+  generatedAt,
   schemaReady,
   commerce,
   warnings,
 }: {
   sinceIso: string;
+  generatedAt: string;
   schemaReady: boolean;
   commerce?: CommerceRevenueSummary;
   warnings: string[];
@@ -484,12 +517,17 @@ function emptySummary({
     schemaReady,
     periodLabel: "Ultimos 30 dias",
     sinceIso,
+    generatedAt,
     totals: {
       usageEvents: 0,
+      todayUsageEvents: 0,
       providerCost: 0,
+      todayProviderCost: 0,
       connectyRevenue: 0,
+      todayConnectyRevenue: 0,
       grossMargin: 0,
       chargeCredits: 0,
+      todayChargeCredits: 0,
       customerBillableCredits: 0,
       trialBillableCredits: 0,
       internalShadowCredits: 0,
@@ -577,6 +615,15 @@ function createCommerceFlowMap() {
 function toNumber(value: number | string | null | undefined) {
   const parsed = typeof value === "number" ? value : Number(value ?? 0);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function isOnOrAfter(value: string | null | undefined, threshold: Date) {
+  if (!value) {
+    return false;
+  }
+
+  const time = new Date(value).getTime();
+  return Number.isFinite(time) && time >= threshold.getTime();
 }
 
 function readRecord(value: unknown): Record<string, unknown> {

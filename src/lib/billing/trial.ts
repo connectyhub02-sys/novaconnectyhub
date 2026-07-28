@@ -54,8 +54,10 @@ type WalletBillingRow = {
 
 type BillingPlanRelation = {
   plan_code: string | null;
+  included_credits?: number | string | null;
 } | Array<{
   plan_code: string | null;
+  included_credits?: number | string | null;
 }> | null;
 
 type BillingCycleRow = {
@@ -198,7 +200,7 @@ export async function getOrganizationBillingAccess(input: {
     return buildInactiveStatus(input.organizationId);
   }
 
-  const cycle = await loadTrialCycle(client, input.organizationId);
+  const cycles = await loadBillingCycles(client, input.organizationId);
   const planCode = organization.plan_code;
   const organizationStatus = organization.status;
   const balanceCredits = toNumber(wallet?.balance_credits);
@@ -227,15 +229,26 @@ export async function getOrganizationBillingAccess(input: {
   }
 
   const isTrial = planCode === TRIAL_PLAN_CODE || organizationStatus === "trial" || organizationStatus === "trial_expired";
+  const currentCycle = findCurrentBillingCycle(cycles, now) ?? cycles[0] ?? null;
+  const trialCycle = cycles.find((cycle) => readPlanCode(cycle.billing_plans) === TRIAL_PLAN_CODE) ?? null;
+  const cycle = isTrial ? trialCycle ?? currentCycle : currentCycle;
   const fallbackTrialStart = organization.created_at;
   const fallbackTrialEnd = addDaysIso(fallbackTrialStart, TRIAL_DAYS);
   const trialStartsAt = cycle?.cycle_start ?? (isTrial ? fallbackTrialStart : null);
   const trialEndsAt = cycle?.cycle_end ?? (isTrial ? fallbackTrialEnd : null);
-  const includedCredits = toNumber(cycle?.included_credits) || (isTrial ? TRIAL_INCLUDED_CREDITS : 0);
-  const usedCredits = toNumber(cycle?.used_credits) || Math.max(TRIAL_INCLUDED_CREDITS - balanceCredits, 0);
+  const includedCredits = toNumber(cycle?.included_credits) || readPlanIncludedCredits(cycle?.billing_plans) || (isTrial ? TRIAL_INCLUDED_CREDITS : 0);
+  const usedCredits = resolveCycleUsedCredits({
+    balanceCredits,
+    cycle,
+    includedCredits,
+    isTrial,
+  });
   const lowCreditThreshold = includedCredits > 0 ? includedCredits * (LOW_CREDIT_PERCENT / 100) : 0;
   const expired = Boolean(isTrial && trialEndsAt && new Date(trialEndsAt).getTime() <= now.getTime());
   const trialDaysRemaining = isTrial && trialEndsAt ? Math.max(Math.ceil((new Date(trialEndsAt).getTime() - now.getTime()) / 86_400_000), 0) : null;
+  const paidUsageDescription = includedCredits > 0
+    ? ` ${formatCredits(usedCredits)} de ${formatCredits(includedCredits)} creditos do ciclo ja foram utilizados.`
+    : "";
 
   if (isTrial && expired) {
     return {
@@ -343,8 +356,8 @@ export async function getOrganizationBillingAccess(input: {
       trialEndsAt: null,
       trialDaysTotal: 0,
       trialDaysRemaining: null,
-      includedCredits: 0,
-      usedCredits: 0,
+      includedCredits,
+      usedCredits,
       lowCreditThreshold: 0,
       bannerTone: "rose",
       bannerTitle: "Plano vencido",
@@ -368,8 +381,8 @@ export async function getOrganizationBillingAccess(input: {
       trialEndsAt: null,
       trialDaysTotal: 0,
       trialDaysRemaining: null,
-      includedCredits: 0,
-      usedCredits: 0,
+      includedCredits,
+      usedCredits,
       lowCreditThreshold: 0,
       bannerTone: "amber",
       bannerTitle: "Creditos acabaram",
@@ -390,12 +403,12 @@ export async function getOrganizationBillingAccess(input: {
     trialEndsAt: null,
     trialDaysTotal: 0,
     trialDaysRemaining: null,
-    includedCredits: 0,
-    usedCredits: 0,
+    includedCredits,
+    usedCredits,
     lowCreditThreshold: 0,
     bannerTone: "cyan",
     bannerTitle: "Plano ativo",
-    bannerDescription: `${formatCredits(balanceCredits)} creditos acumulados disponiveis para IA, voz e atendimentos automaticos.`,
+    bannerDescription: `${formatCredits(balanceCredits)} creditos acumulados disponiveis para IA, voz e atendimentos automaticos.${paidUsageDescription}`,
     ctaLabel: "Comprar creditos",
     ctaHref: "/dashboard/planos",
   };
@@ -558,25 +571,65 @@ function fallbackWhatsappLimit(planCode: string | null) {
   return 0;
 }
 
-async function loadTrialCycle(client: SupabaseClient, organizationId: string) {
+async function loadBillingCycles(client: SupabaseClient, organizationId: string) {
   const { data, error } = await client
     .from("billing_cycles")
-    .select("id, cycle_start, cycle_end, included_credits, used_credits, status, billing_plans(plan_code)")
+    .select("id, cycle_start, cycle_end, included_credits, used_credits, status, billing_plans(plan_code, included_credits)")
     .eq("organization_id", organizationId)
     .order("cycle_end", { ascending: false })
-    .limit(5)
+    .limit(8)
     .returns<BillingCycleRow[]>();
 
   if (error) {
-    throw new Error(`Nao foi possivel carregar ciclo do teste gratis: ${error.message}`);
+    throw new Error(`Nao foi possivel carregar ciclos de billing: ${error.message}`);
   }
 
-  return (data ?? []).find((cycle) => readPlanCode(cycle.billing_plans) === TRIAL_PLAN_CODE) ?? null;
+  return data ?? [];
+}
+
+function findCurrentBillingCycle(cycles: BillingCycleRow[], now: Date) {
+  const nowTime = now.getTime();
+
+  return cycles.find((cycle) => {
+    const startsAt = new Date(cycle.cycle_start ?? 0).getTime();
+    const endsAt = new Date(cycle.cycle_end ?? 0).getTime();
+
+    return cycle.status === "open"
+      && Number.isFinite(startsAt)
+      && Number.isFinite(endsAt)
+      && startsAt <= nowTime
+      && endsAt > nowTime;
+  }) ?? null;
+}
+
+function resolveCycleUsedCredits({
+  balanceCredits,
+  cycle,
+  includedCredits,
+  isTrial,
+}: {
+  balanceCredits: number;
+  cycle: BillingCycleRow | null;
+  includedCredits: number;
+  isTrial: boolean;
+}) {
+  const cycleUsedCredits = toNumber(cycle?.used_credits);
+
+  if (cycleUsedCredits > 0 || !isTrial) {
+    return cycleUsedCredits;
+  }
+
+  return Math.max(includedCredits - balanceCredits, 0);
 }
 
 function readPlanCode(relation: BillingPlanRelation) {
   const plan = Array.isArray(relation) ? relation[0] : relation;
   return plan?.plan_code ?? null;
+}
+
+function readPlanIncludedCredits(relation: BillingPlanRelation | undefined) {
+  const plan = Array.isArray(relation) ? relation[0] : relation;
+  return toNumber(plan?.included_credits);
 }
 
 function addDaysIso(value: string | null | undefined, days: number) {

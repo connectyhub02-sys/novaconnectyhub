@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { meterGeminiGenerationUsage } from "@/lib/billing/gemini-metering";
 import { requirePlatformWhatsappSector } from "@/lib/admin/platform-whatsapp-console";
 import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
 import { requirePlatformAdmin } from "@/lib/supabase/admin-auth";
@@ -48,7 +49,7 @@ export async function POST(request: NextRequest) {
     const sector = await requirePlatformWhatsappSector(client, sectorId);
     const credentials = await loadGeminiCredentials(client);
     const pageContext = productUrl ? await fetchPageContext(productUrl) : "";
-    const prompt = await generatePrompt({
+    const generated = await generatePrompt({
       credentials,
       sectorName: sector.name,
       sectorDescription: sector.description,
@@ -56,8 +57,27 @@ export async function POST(request: NextRequest) {
       productUrl,
       notes,
     });
+    await meterGeminiGenerationUsage({
+      client,
+      featureCode: "prompt_assistant",
+      modelId: generated.modelId,
+      agentScope: "platform",
+      billingMode: "internal_shadow",
+      promptText: [generated.systemInstruction, generated.prompt],
+      outputText: generated.text,
+      responseData: generated.responseData,
+      debitDescription: "Assistente de prompt interno ConnectyHub",
+      metadata: {
+        source: "admin_whatsapp_prompt_assistant",
+        sectorId: sector.id,
+        sectorCode: sector.sector_code,
+        hasProductUrl: Boolean(productUrl),
+        notesChars: notes.length,
+        pageContextChars: pageContext.length,
+      },
+    }).catch(() => null);
 
-    return NextResponse.json({ prompt });
+    return NextResponse.json({ prompt: generated.text });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Erro ao gerar prompt." }, { status: 500 });
   }
@@ -145,7 +165,22 @@ async function generatePrompt(input: {
   productUrl: string | null;
   notes: string;
 }) {
-  const url = new URL(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(input.credentials.model)}:generateContent`);
+  const modelId = input.credentials.model;
+  const systemInstruction = [
+    "Voce cria prompts de atendimento comercial por WhatsApp para agentes internos da ConnectyHub.",
+    "Entregue somente o prompt final em portugues do Brasil.",
+    "O prompt deve ser operacional, claro e ter no maximo 3500 caracteres.",
+    "Inclua as tags {{lead_name}}, {{setor}} e {{agente}} quando fizer sentido.",
+    "Nao crie template fixo de mensagem; crie comportamento, tom, limites, perguntas, dados a coletar e proximo passo.",
+  ].join("\n");
+  const prompt = [
+    `Setor da ConnectyHub: ${input.sectorName}`,
+    input.sectorDescription ? `Contexto do setor: ${input.sectorDescription}` : "",
+    input.productUrl ? `Link analisado: ${input.productUrl}` : "",
+    input.notes ? `Notas do administrador: ${input.notes}` : "",
+    input.pageContext ? `Conteudo da pagina: ${input.pageContext}` : "",
+  ].filter(Boolean).join("\n\n");
+  const url = new URL(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelId)}:generateContent`);
   url.searchParams.set("key", input.credentials.apiKey);
 
   const response = await fetch(url, {
@@ -154,25 +189,13 @@ async function generatePrompt(input: {
     body: JSON.stringify({
       systemInstruction: {
         parts: [{
-          text: [
-            "Voce cria prompts de atendimento comercial por WhatsApp para agentes internos da ConnectyHub.",
-            "Entregue somente o prompt final em portugues do Brasil.",
-            "O prompt deve ser operacional, claro e ter no maximo 3500 caracteres.",
-            "Inclua as tags {{lead_name}}, {{setor}} e {{agente}} quando fizer sentido.",
-            "Nao crie template fixo de mensagem; crie comportamento, tom, limites, perguntas, dados a coletar e proximo passo.",
-          ].join("\n"),
+          text: systemInstruction,
         }],
       },
       contents: [{
         role: "user",
         parts: [{
-          text: [
-            `Setor da ConnectyHub: ${input.sectorName}`,
-            input.sectorDescription ? `Contexto do setor: ${input.sectorDescription}` : "",
-            input.productUrl ? `Link analisado: ${input.productUrl}` : "",
-            input.notes ? `Notas do administrador: ${input.notes}` : "",
-            input.pageContext ? `Conteudo da pagina: ${input.pageContext}` : "",
-          ].filter(Boolean).join("\n\n"),
+          text: prompt,
         }],
       }],
       generationConfig: {
@@ -195,7 +218,13 @@ async function generatePrompt(input: {
     throw new Error("Gemini nao retornou um prompt.");
   }
 
-  return text.slice(0, 3600);
+  return {
+    text: text.slice(0, 3600),
+    systemInstruction,
+    prompt,
+    modelId,
+    responseData: data,
+  };
 }
 
 function extractVisibleText(html: string) {

@@ -16,6 +16,7 @@ import type { BillingCommercialCatalog } from "@/lib/billing/admin-catalog";
 import type { PlatformBillingOperationsCatalog } from "@/lib/billing/platform-billing-admin";
 import type { BillingAdminSummary } from "@/lib/billing/summary";
 import { BillingCommercialConfig } from "./billing-commercial-config";
+import { BillingRealtimeRefresh } from "./billing-realtime-refresh";
 import { ConnectyShell } from "./connecty-shell";
 import {
   NeonBadge,
@@ -54,6 +55,7 @@ export function BillingCenter({
               {summary.schemaReady ? "Schema pronto" : "Aguardando SQL"}
             </NeonBadge>
             <NeonBadge tone="cyan">{summary.periodLabel}</NeonBadge>
+            <BillingRealtimeRefresh updatedAt={summary.generatedAt} />
           </div>
         }
       />
@@ -81,21 +83,21 @@ export function BillingCenter({
           icon={DatabaseZap}
           label="Eventos de uso"
           value={formatNumber(summary.totals.usageEvents)}
-          detail="Chamadas registradas pelos agentes"
+          detail={`${formatNumber(summary.totals.todayUsageEvents)} hoje / chamadas registradas`}
           tone="cyan"
         />
         <BillingMetric
           icon={Banknote}
           label="Custo provedor"
           value={formatMoney(summary.totals.providerCost)}
-          detail="Gemini, ElevenLabs e futuros provedores"
+          detail={`${formatMoney(summary.totals.todayProviderCost)} hoje`}
           tone="violet"
         />
         <BillingMetric
           icon={TrendingUp}
           label="Receita estimada"
           value={formatMoney(summary.totals.connectyRevenue)}
-          detail={`${marginPercent}% de margem bruta`}
+          detail={`${formatMoney(summary.totals.todayConnectyRevenue)} hoje / ${marginPercent}% margem`}
           tone="green"
         />
         <BillingMetric
@@ -112,7 +114,7 @@ export function BillingCenter({
           icon={HandCoins}
           label="Debitado clientes"
           value={formatCredits(billableCredits)}
-          detail={`${formatCredits(summary.totals.customerBillableCredits)} cliente / ${formatCredits(summary.totals.trialBillableCredits)} trial`}
+          detail={`${formatCredits(summary.totals.todayChargeCredits)} hoje / ${formatCredits(summary.totals.trialBillableCredits)} trial`}
           tone="green"
         />
         <BillingMetric
@@ -199,7 +201,7 @@ export function BillingCenter({
                     </div>
 
                     <div className="mt-3">
-                      <ProgressBar value={Math.min(providerMargin, 100)} tone={providerMargin >= 60 ? "green" : "amber"} />
+                      <ProgressBar value={Math.max(0, Math.min(providerMargin, 100))} tone={providerMargin >= 60 ? "green" : "amber"} />
                     </div>
                   </div>
                 );

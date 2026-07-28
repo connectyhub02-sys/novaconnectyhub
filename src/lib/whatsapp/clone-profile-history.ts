@@ -1,6 +1,8 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { meterGeminiGenerationUsage } from "@/lib/billing/gemini-metering";
+import { assertBillableAccess } from "@/lib/billing/trial";
 import { inngest } from "@/lib/inngest/client";
 import { loadGeminiCredentials, normalizeGeminiModel } from "@/lib/gemini/credentials";
 import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
@@ -177,6 +179,10 @@ export async function processWhatsappCloneProfileImport(input: {
       throw new Error("A instancia WhatsApp nao possui token valido para consultar historico.");
     }
 
+    if (input.data.scope === "client" && input.data.organizationId) {
+      await assertBillableAccess({ organizationId: input.data.organizationId, client });
+    }
+
     const sample = await collectOutboundHistorySample({
       credentials,
       token,
@@ -188,11 +194,35 @@ export async function processWhatsappCloneProfileImport(input: {
       throw new Error("Historico insuficiente. Encontrei poucas mensagens humanas de saida para montar um DNA confiavel.");
     }
 
-    const profile = await generateCloneProfileFromSamples({
+    const generatedProfile = await generateCloneProfileFromSamples({
       apiKey: geminiCredentials.apiKey,
       model: agent.model_id || geminiCredentials.model,
       agentName: agent.persona_name?.trim() || agent.name,
       samples: sample.outboundTexts,
+    });
+    await meterGeminiGenerationUsage({
+      client,
+      organizationId: input.data.organizationId,
+      userId: input.data.requestedBy,
+      featureCode: "clone_profile_import",
+      modelId: generatedProfile.modelId,
+      agentId: agent.id,
+      agentScope: input.data.scope === "platform" ? "platform" : "customer",
+      billingMode: input.data.scope === "platform" ? "internal_shadow" : undefined,
+      promptText: [generatedProfile.systemInstruction, generatedProfile.prompt],
+      outputText: generatedProfile.outputText,
+      responseData: generatedProfile.responseData,
+      requestId: `whatsapp-clone-profile-import:${agent.id}:${startedAt}`,
+      debitDescription: "Importacao de DNA por historico",
+      metadata: {
+        source: "whatsapp_clone_profile_import",
+        scope: input.data.scope,
+        sectorId: input.data.sectorId,
+        instanceId: input.data.instanceId,
+        sampledChats: sample.sampledChats,
+        sampledMessages: sample.sampledMessages,
+        outboundSamples: sample.outboundTexts.length,
+      },
     });
     const completedAt = new Date().toISOString();
 
@@ -207,7 +237,7 @@ export async function processWhatsappCloneProfileImport(input: {
       sampledMessages: sample.sampledMessages,
       outboundSamples: sample.outboundTexts.length,
       error: null,
-    }, profile);
+    }, generatedProfile.profile);
 
     return {
       status: "succeeded",
@@ -322,7 +352,10 @@ async function generateCloneProfileFromSamples(input: {
   agentName: string;
   samples: string[];
 }) {
-  const url = new URL(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(normalizeGeminiModel(input.model))}:generateContent`);
+  const modelId = normalizeGeminiModel(input.model);
+  const systemInstruction = "Voce analisa historico de atendimento e retorna somente JSON valido, sem markdown.";
+  const prompt = buildCloneProfileAnalysisPrompt(input.agentName, input.samples);
+  const url = new URL(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelId)}:generateContent`);
   url.searchParams.set("key", input.apiKey);
 
   const response = await fetch(url, {
@@ -330,12 +363,12 @@ async function generateCloneProfileFromSamples(input: {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       systemInstruction: {
-        parts: [{ text: "Voce analisa historico de atendimento e retorna somente JSON valido, sem markdown." }],
+        parts: [{ text: systemInstruction }],
       },
       contents: [
         {
           role: "user",
-          parts: [{ text: buildCloneProfileAnalysisPrompt(input.agentName, input.samples) }],
+          parts: [{ text: prompt }],
         },
       ],
       generationConfig: {
@@ -360,28 +393,36 @@ async function generateCloneProfileFromSamples(input: {
     throw new Error(readProviderError(data) ?? `Gemini respondeu status ${response.status}.`);
   }
 
-  const record = readRecord(parseJsonObject(extractGeminiText(data)));
+  const outputText = extractGeminiText(data);
+  const record = readRecord(parseJsonObject(outputText));
 
   if (!record) {
     throw new Error("Gemini nao retornou um JSON valido para o DNA.");
   }
 
-  return normalizeWhatsappCloneProfile({
-    enabled: true,
-    source: "history",
-    displayName: readString(record.displayName) ?? input.agentName,
-    roleIdentity: record.roleIdentity,
-    tone: record.tone,
-    vocabulary: record.vocabulary,
-    responseRhythm: record.responseRhythm,
-    salesStyle: record.salesStyle,
-    objectionStyle: record.objectionStyle,
-    closingStyle: record.closingStyle,
-    emojiStyle: record.emojiStyle,
-    audioStyle: record.audioStyle,
-    forbiddenPatterns: record.forbiddenPatterns,
-    notes: record.notes,
-  });
+  return {
+    profile: normalizeWhatsappCloneProfile({
+      enabled: true,
+      source: "history",
+      displayName: readString(record.displayName) ?? input.agentName,
+      roleIdentity: record.roleIdentity,
+      tone: record.tone,
+      vocabulary: record.vocabulary,
+      responseRhythm: record.responseRhythm,
+      salesStyle: record.salesStyle,
+      objectionStyle: record.objectionStyle,
+      closingStyle: record.closingStyle,
+      emojiStyle: record.emojiStyle,
+      audioStyle: record.audioStyle,
+      forbiddenPatterns: record.forbiddenPatterns,
+      notes: record.notes,
+    }),
+    systemInstruction,
+    prompt,
+    outputText,
+    modelId,
+    responseData: data,
+  };
 }
 
 function buildCloneProfileAnalysisPrompt(agentName: string, samples: string[]) {

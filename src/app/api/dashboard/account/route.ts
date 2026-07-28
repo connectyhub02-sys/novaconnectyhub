@@ -102,12 +102,18 @@ type CreditTransactionRow = {
 
 type UsageEventRow = {
   id: string;
-  provider: string | null;
   feature_code: string | null;
-  model_id: string | null;
   input_units: number | string | null;
   output_units: number | string | null;
   connecty_charge_credits: number | string | null;
+  occurred_at: string | null;
+  created_at: string | null;
+};
+
+type UsageSummaryEventRow = {
+  feature_code: string | null;
+  connecty_charge_credits: number | string | null;
+  occurred_at: string | null;
   created_at: string | null;
 };
 
@@ -138,6 +144,8 @@ export async function GET() {
 
   try {
     const client = createServiceClient();
+    const usageSummarySince = new Date();
+    usageSummarySince.setDate(usageSummarySince.getDate() - 30);
     const [
       accountCompletion,
       billingAccess,
@@ -146,6 +154,7 @@ export async function GET() {
       paymentsResult,
       creditTransactionsResult,
       usageEventsResult,
+      usageSummaryEventsResult,
       cyclesResult,
     ] = await Promise.all([
       getAccountCompletionStatusForUser({ userId: workspace.user.id, client }),
@@ -178,12 +187,21 @@ export async function GET() {
         .returns<CreditTransactionRow[]>(),
       client
         .from("usage_events")
-        .select("id, provider, feature_code, model_id, input_units, output_units, connecty_charge_credits, created_at")
+        .select("id, feature_code, input_units, output_units, connecty_charge_credits, occurred_at, created_at")
         .eq("organization_id", organization.id)
         .eq("status", "completed")
-        .order("created_at", { ascending: false })
-        .limit(12)
+        .order("occurred_at", { ascending: false })
+        .limit(30)
         .returns<UsageEventRow[]>(),
+      client
+        .from("usage_events")
+        .select("feature_code, connecty_charge_credits, occurred_at, created_at")
+        .eq("organization_id", organization.id)
+        .eq("status", "completed")
+        .gte("occurred_at", usageSummarySince.toISOString())
+        .order("occurred_at", { ascending: false })
+        .limit(1000)
+        .returns<UsageSummaryEventRow[]>(),
       client
         .from("billing_cycles")
         .select("id, cycle_start, cycle_end, included_credits, used_credits, overage_credits, status, created_at, billing_plans(plan_code, name)")
@@ -211,6 +229,10 @@ export async function GET() {
 
     if (usageEventsResult.error) {
       throw new Error(`Nao foi possivel carregar consumo recente: ${usageEventsResult.error.message}`);
+    }
+
+    if (usageSummaryEventsResult.error) {
+      throw new Error(`Nao foi possivel carregar resumo de consumo: ${usageSummaryEventsResult.error.message}`);
     }
 
     if (cyclesResult.error) {
@@ -258,6 +280,7 @@ export async function GET() {
         payments,
         creditTransactions: (creditTransactionsResult.data ?? []).map(mapCreditTransaction),
         usageEvents: (usageEventsResult.data ?? []).map(mapUsageEvent),
+        usageSummary: mapUsageSummary(usageSummaryEventsResult.data ?? [], billingAccess),
         cycles: (cyclesResult.data ?? []).map(mapCycle),
         actions: {
           plansHref: "/dashboard/planos",
@@ -490,14 +513,74 @@ function mapCreditTransaction(row: CreditTransactionRow) {
 function mapUsageEvent(row: UsageEventRow) {
   return {
     id: row.id,
-    provider: row.provider,
     featureCode: row.feature_code,
-    modelId: row.model_id,
+    publicCategory: usagePublicCategory(row.feature_code),
     inputUnits: toNumber(row.input_units),
     outputUnits: toNumber(row.output_units),
     chargeCredits: toNumber(row.connecty_charge_credits),
-    createdAt: row.created_at,
+    createdAt: row.occurred_at ?? row.created_at,
   };
+}
+
+function mapUsageSummary(rows: UsageSummaryEventRow[], billingAccess: Awaited<ReturnType<typeof getOrganizationBillingAccess>>) {
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const categoryMap = new Map<string, { category: string; chargeCredits: number; events: number }>();
+  let totalChargeCredits = 0;
+  let todayChargeCredits = 0;
+  let eventCount = 0;
+  let lastEventAt: string | null = null;
+  let lastEventTime = 0;
+
+  for (const row of rows) {
+    const chargeCredits = toNumber(row.connecty_charge_credits);
+    const occurredAt = row.occurred_at ?? row.created_at;
+    const occurredTime = occurredAt ? new Date(occurredAt).getTime() : 0;
+    const category = usagePublicCategory(row.feature_code);
+    const current = categoryMap.get(category) ?? { category, chargeCredits: 0, events: 0 };
+
+    current.chargeCredits += chargeCredits;
+    current.events += 1;
+    categoryMap.set(category, current);
+    totalChargeCredits += chargeCredits;
+    eventCount += 1;
+
+    if (Number.isFinite(occurredTime) && occurredTime >= todayStart.getTime()) {
+      todayChargeCredits += chargeCredits;
+    }
+
+    if (Number.isFinite(occurredTime) && occurredTime > lastEventTime) {
+      lastEventTime = occurredTime;
+      lastEventAt = occurredAt;
+    }
+  }
+
+  return {
+    balanceCredits: billingAccess.balanceCredits,
+    includedCredits: billingAccess.includedCredits,
+    usedCredits: billingAccess.usedCredits,
+    remainingCredits: billingAccess.balanceCredits,
+    totalChargeCredits30d: roundCredits(totalChargeCredits),
+    todayChargeCredits: roundCredits(todayChargeCredits),
+    eventCount30d: eventCount,
+    lastEventAt,
+    byCategory: Array.from(categoryMap.values())
+      .map((item) => ({
+        ...item,
+        chargeCredits: roundCredits(item.chargeCredits),
+      }))
+      .sort((left, right) => right.chargeCredits - left.chargeCredits)
+      .slice(0, 6),
+  };
+}
+
+function usagePublicCategory(featureCode: string | null) {
+  if (!featureCode) return "Consumo da plataforma";
+  if (featureCode.includes("audio") || featureCode === "voice_reply_whatsapp" || featureCode === "text_to_speech") return "Audio";
+  if (featureCode.includes("media") || featureCode.includes("image") || featureCode.includes("video") || featureCode.includes("document")) return "Midia recebida";
+  if (featureCode.includes("memory") || featureCode.includes("summary") || featureCode.includes("state")) return "Memoria e contexto";
+  if (featureCode.includes("prompt") || featureCode.includes("clone_profile")) return "Painel";
+  return "Atendimento IA";
 }
 
 function mapCycle(row: BillingCycleRow) {
@@ -589,6 +672,10 @@ function findStringByKeys(value: unknown, keys: string[], depth = 0): string | n
 function toNumber(value: number | string | null | undefined) {
   const number = typeof value === "number" ? value : Number(value ?? 0);
   return Number.isFinite(number) ? number : 0;
+}
+
+function roundCredits(value: number) {
+  return Math.round((Number.isFinite(value) ? value : 0) * 1_000_000) / 1_000_000;
 }
 
 function readRecord(value: unknown): JsonRecord {
