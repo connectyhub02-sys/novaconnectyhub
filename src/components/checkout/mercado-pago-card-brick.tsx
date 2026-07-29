@@ -58,6 +58,12 @@ type CardBrickProps = {
   rejectedMessage?: string;
 };
 
+type ThreeDSChallenge = {
+  externalResourceUrl: string;
+  creq: string;
+  checkoutUrl: string | null;
+};
+
 let mercadoPagoSdkPromise: Promise<void> | null = null;
 
 const cardBrickSecureFieldBackgroundColor = "#111827";
@@ -101,6 +107,37 @@ export function MercadoPagoCardBrick({
   const [ready, setReady] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<{ tone: "success" | "warning" | "error"; message: string } | null>(null);
+  const [threeDSChallenge, setThreeDSChallenge] = useState<ThreeDSChallenge | null>(null);
+
+  useEffect(() => {
+    if (!threeDSChallenge) return;
+
+    const activeChallenge = threeDSChallenge;
+
+    function handleThreeDSMessage(event: MessageEvent) {
+      if (readThreeDSMessageStatus(event.data) !== "COMPLETE") {
+        return;
+      }
+
+      setThreeDSChallenge(null);
+      setResult({
+        tone: "warning",
+        message: "Autenticacao concluida. Estamos verificando o status do pagamento.",
+      });
+
+      window.setTimeout(() => {
+        if (activeChallenge.checkoutUrl) {
+          window.location.href = activeChallenge.checkoutUrl;
+        } else {
+          window.location.reload();
+        }
+      }, 1500);
+    }
+
+    window.addEventListener("message", handleThreeDSMessage);
+
+    return () => window.removeEventListener("message", handleThreeDSMessage);
+  }, [threeDSChallenge]);
 
   useEffect(() => {
     let mounted = true;
@@ -149,6 +186,7 @@ export function MercadoPagoCardBrick({
           onSubmit: async (formData, additionalData) => {
             setSubmitting(true);
             setResult(null);
+            setThreeDSChallenge(null);
 
             try {
               const deviceSessionId = readMercadoPagoDeviceSessionId();
@@ -166,6 +204,10 @@ export function MercadoPagoCardBrick({
                 status?: string;
                 providerStatus?: string;
                 providerStatusDetail?: string | null;
+                threeDSChallenge?: {
+                  externalResourceUrl?: string;
+                  creq?: string;
+                } | null;
               } | null;
 
               if (!response.ok) {
@@ -176,6 +218,17 @@ export function MercadoPagoCardBrick({
               const providerStatus = normalizePaymentStatus(data?.providerStatus);
               const approved = paymentStatus === "approved" || providerStatus === "approved";
               const rejected = isRejectedPaymentStatus(paymentStatus) || isRejectedPaymentStatus(providerStatus);
+              const challenge = readThreeDSChallenge(data?.threeDSChallenge, data?.checkoutUrl ?? null);
+
+              if (challenge) {
+                setThreeDSChallenge(challenge);
+                setResult({
+                  tone: "warning",
+                  message: "Confirme sua identidade no banco para continuar o pagamento.",
+                });
+                return;
+              }
+
               setResult({
                 tone: approved ? "success" : rejected ? "error" : "warning",
                 message: approved
@@ -234,6 +287,13 @@ export function MercadoPagoCardBrick({
       <div id={containerId} className="mercado-pago-card-brick mt-4 min-h-[260px]" />
       <input id="deviceId" name="deviceId" type="hidden" />
 
+      {threeDSChallenge ? (
+        <MercadoPagoThreeDSChallenge
+          challenge={threeDSChallenge}
+          frameName={`${containerId}-3ds`}
+        />
+      ) : null}
+
       {result ? (
         <div className={cn(
           "mt-4 rounded-[8px] border px-3 py-2 text-sm leading-5",
@@ -256,6 +316,39 @@ function readMercadoPagoDeviceSessionId() {
   const globalValue = window.MP_DEVICE_SESSION_ID?.trim() ?? "";
 
   return globalValue || hiddenValue || null;
+}
+
+function MercadoPagoThreeDSChallenge({
+  challenge,
+  frameName,
+}: {
+  challenge: ThreeDSChallenge;
+  frameName: string;
+}) {
+  const formRef = useRef<HTMLFormElement | null>(null);
+
+  useEffect(() => {
+    formRef.current?.submit();
+  }, [challenge]);
+
+  return (
+    <div className="mt-4 overflow-hidden rounded-[8px] border border-amber-300/35 bg-slate-950/80">
+      <iframe
+        className="h-[520px] w-full border-0 bg-white"
+        name={frameName}
+        title="Autenticacao 3DS do cartao"
+      />
+      <form
+        ref={formRef}
+        action={challenge.externalResourceUrl}
+        className="hidden"
+        method="post"
+        target={frameName}
+      >
+        <input name="creq" type="hidden" value={challenge.creq} />
+      </form>
+    </div>
+  );
 }
 
 function styleMercadoPagoSecureFields(containerId: string) {
@@ -326,6 +419,36 @@ function formatRejectedPaymentMessage(statusDetail: string | null | undefined, f
   }
 
   return fallback;
+}
+
+function readThreeDSChallenge(value: unknown, checkoutUrl: string | null): ThreeDSChallenge | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  const record = value as JsonRecord;
+  const externalResourceUrl = typeof record.externalResourceUrl === "string" ? record.externalResourceUrl.trim() : "";
+  const creq = typeof record.creq === "string" ? record.creq.trim() : "";
+
+  if (!externalResourceUrl || !creq) {
+    return null;
+  }
+
+  return { externalResourceUrl, creq, checkoutUrl };
+}
+
+function readThreeDSMessageStatus(value: unknown) {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  const status = (value as JsonRecord).status;
+
+  return typeof status === "string" ? status : null;
 }
 
 function loadMercadoPagoSdk() {

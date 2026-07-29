@@ -94,6 +94,22 @@ export async function POST(
       return NextResponse.json({ error: "Valor recebido nao confere com o carrinho." }, { status: 400 });
     }
 
+    const payerName = workspace.profile.fullName ?? workspace.organization.name;
+    const payerPhone = workspace.profile.phone;
+    const payerIdentificationType = readString(payerIdentification?.type) ?? (fallbackCpfNumber ? "CPF" : null);
+    const payerIdentificationNumber = readString(payerIdentification?.number) ?? fallbackCpfNumber;
+
+    await recordPaymentAttemptContextSafely(client, {
+      paymentId: intent.payment.id,
+      organizationId: workspace.organization.id,
+      currentPayload: intent.payment.payload,
+      cartMetadata: cart.metadata,
+      deviceSessionSent: Boolean(deviceSessionId),
+      payerPhoneSent: Boolean(payerPhone),
+      payerIdentificationSent: Boolean(payerIdentificationNumber),
+      selectedBumpCodes: cart.selectedBumps.map((bump) => bump.code),
+    });
+
     await notifyPaymentStartedSafely(client, {
       organizationId: workspace.organization.id,
       actorId: workspace.user.id,
@@ -114,7 +130,8 @@ export async function POST(
 
     const config = await loadMercadoPagoPlatformBillingConfig({ client });
     const additionalInfo = buildMercadoPagoAdditionalInfo({
-      payerName: workspace.profile.fullName ?? workspace.organization.name,
+      payerName,
+      payerPhone,
       items: [
         {
           id: intent.plan.plan_code,
@@ -142,10 +159,12 @@ export async function POST(
       paymentMethodId,
       installments,
       issuerId: readString(formData.issuer_id) ?? readNumber(formData.issuer_id),
-      payerName: workspace.profile.fullName ?? workspace.organization.name,
+      payerName,
+      payerPhone,
+      payerDocument: payerIdentificationNumber,
       payerIdentification: {
-        type: readString(payerIdentification?.type) ?? (fallbackCpfNumber ? "CPF" : null),
-        number: readString(payerIdentification?.number) ?? fallbackCpfNumber,
+        type: payerIdentificationType,
+        number: payerIdentificationNumber,
       },
       notificationUrl: buildMercadoPagoPlatformBillingWebhookUrl(),
       idempotencyKey: randomUUID(),
@@ -175,6 +194,8 @@ export async function POST(
       status: paymentData.status,
       providerStatus: paymentData.providerStatus,
       providerStatusDetail: paymentData.providerStatusDetail,
+      threeDSChallenge: paymentData.threeDSChallenge,
+      deviceSessionSent: Boolean(deviceSessionId),
       checkoutUrl: cart.checkoutPath,
     });
   } catch (error) {
@@ -273,6 +294,53 @@ async function notifyPaymentStartedSafely(
     });
 
     return null;
+  }
+}
+
+async function recordPaymentAttemptContextSafely(
+  client: ReturnType<typeof createServiceClient>,
+  input: {
+    paymentId: string;
+    organizationId: string;
+    currentPayload: JsonRecord | null;
+    cartMetadata: JsonRecord;
+    deviceSessionSent: boolean;
+    payerPhoneSent: boolean;
+    payerIdentificationSent: boolean;
+    selectedBumpCodes: string[];
+  },
+) {
+  const updateResult = await client
+    .from("billing_payments")
+    .update({
+      payload: {
+        ...(input.currentPayload ?? {}),
+        ...input.cartMetadata,
+        mercado_pago_device_session_sent: input.deviceSessionSent,
+        mercado_pago_device_session_missing: !input.deviceSessionSent,
+        mercado_pago_three_d_secure_mode: "optional",
+        mercado_pago_antifraud_context: {
+          payer_phone_sent: input.payerPhoneSent,
+          payer_identification_sent: input.payerIdentificationSent,
+          additional_info_items_sent: true,
+          selected_bump_count: input.selectedBumpCodes.length,
+        },
+      },
+    })
+    .eq("id", input.paymentId)
+    .eq("organization_id", input.organizationId);
+
+  if (updateResult.error) {
+    await client.from("maintenance_audit_logs").insert({
+      event_type: "billing.plan_checkout.payment_attempt_context_failed",
+      target_table: "billing_payments",
+      target_id: input.paymentId,
+      metadata: {
+        source: "dashboard_billing_card_checkout",
+        organization_id: input.organizationId,
+        error: updateResult.error.message,
+      },
+    });
   }
 }
 

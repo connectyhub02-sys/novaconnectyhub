@@ -203,6 +203,8 @@ export async function POST(
           payment_method_id: paymentMethodId,
           installments,
           mercado_pago_device_session_sent: Boolean(deviceSessionId),
+          mercado_pago_three_d_secure_mode: "optional",
+          mercado_pago_three_ds_challenge_required: false,
           payment_owner: connectyHubOwned ? "connectyhub" : "seller",
           commercial_flow_type: commercialFlowType,
           revenue_owner_type: revenueOwnerType,
@@ -262,6 +264,8 @@ export async function POST(
           payment_method_id: paymentMethodId,
           installments,
           mercado_pago_device_session_sent: Boolean(deviceSessionId),
+          mercado_pago_three_d_secure_mode: "optional",
+          mercado_pago_three_ds_challenge_required: Boolean(paymentData.threeDSChallenge),
           payment_owner: connectyHubOwned ? "connectyhub" : "seller",
           commercial_flow_type: commercialFlowType,
           revenue_owner_type: revenueOwnerType,
@@ -337,6 +341,8 @@ export async function POST(
       status: paymentData.status,
       providerStatus: paymentData.providerStatus,
       providerStatusDetail: paymentData.providerStatusDetail,
+      threeDSChallenge: paymentData.threeDSChallenge,
+      deviceSessionSent: Boolean(deviceSessionId),
     });
   } catch (error) {
     if (cardSessionId) {

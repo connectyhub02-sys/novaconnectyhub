@@ -56,6 +56,10 @@ type MercadoPagoPaymentResponse = {
   external_reference?: string;
   transaction_amount?: number;
   date_approved?: string;
+  three_ds_info?: {
+    external_resource_url?: string;
+    creq?: string;
+  };
   point_of_interaction?: {
     transaction_data?: {
       qr_code?: string;
@@ -858,6 +862,9 @@ export async function createMercadoPagoCardPayment(input: {
       issuer_id: normalizeMercadoPagoNumber(input.issuerId) ?? undefined,
       external_reference: input.externalReference,
       notification_url: input.notificationUrl ?? undefined,
+      three_d_secure_mode: "optional",
+      capture: true,
+      binary_mode: false,
       payer: buildCardPayer(input),
       additional_info: input.additionalInfo ?? undefined,
     },
@@ -946,6 +953,8 @@ export function mapMercadoPagoPaymentStatus(status: string | null | undefined): 
 
 export function extractMercadoPagoPixData(payment: MercadoPagoPaymentResponse) {
   const transactionData = payment.point_of_interaction?.transaction_data;
+  const threeDSExternalResourceUrl = readOptionalString(payment.three_ds_info?.external_resource_url);
+  const threeDSCreq = readOptionalString(payment.three_ds_info?.creq);
 
   return {
     providerPaymentId: payment.id ? String(payment.id) : null,
@@ -955,6 +964,9 @@ export function extractMercadoPagoPixData(payment: MercadoPagoPaymentResponse) {
     pixQrCode: transactionData?.qr_code ?? null,
     pixQrCodeBase64: transactionData?.qr_code_base64 ?? null,
     pixTicketUrl: transactionData?.ticket_url ?? null,
+    threeDSChallenge: threeDSExternalResourceUrl && threeDSCreq
+      ? { externalResourceUrl: threeDSExternalResourceUrl, creq: threeDSCreq }
+      : null,
     paidAt: payment.date_approved ?? null,
   };
 }
