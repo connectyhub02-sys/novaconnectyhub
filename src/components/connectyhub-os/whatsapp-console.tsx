@@ -1302,11 +1302,30 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
 
       applyWhatsappState(data);
       setNotice({ tone: "success", message: "Configuracao do agente salva." });
+      return true;
     } catch (error) {
       setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao salvar configuracao." });
+      return false;
     } finally {
       setRunning(null);
     }
+  }
+
+  async function saveAndOpenMultichannel() {
+    const saved = settingsChanged ? await saveAgentSettings() : true;
+
+    if (!saved) {
+      return;
+    }
+
+    setActiveTab("multichannel");
+    void loadChannelOperations();
+    setNotice({
+      tone: "success",
+      message: settingsChanged
+        ? "Configuracao salva. Agora use Buscar grupos ou Buscar canais para sincronizar os destinos."
+        : "Agora use Buscar grupos ou Buscar canais para sincronizar os destinos.",
+    });
   }
 
   async function generatePromptWithAI() {
@@ -2308,7 +2327,6 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
                   <ToggleTile icon={UserRound} label="Teste entre instancias" description="Permite testar mensagens entre numeros internos sem bloquear a automacao." checked={behaviorDraft.allowInternalInstanceMessages} onChange={() => updateBehavior("allowInternalInstanceMessages", !behaviorDraft.allowInternalInstanceMessages)} />
                   <ToggleTile icon={CheckCircle2} label="Teste real do clone" description="Registra respostas reais do WhatsApp como eventos de avaliacao para ajustar o clone depois." checked={behaviorDraft.cloneRealTestMode} onChange={() => updateBehavior("cloneRealTestMode", !behaviorDraft.cloneRealTestMode)} />
                   <ToggleTile icon={Crosshair} label="Turing benchmark" description="Avalia cada resposta de teste com score 0-100 de humanidade via IA. Requer teste real do clone ativo." checked={behaviorDraft.turingBenchmark} onChange={() => updateBehavior("turingBenchmark", !behaviorDraft.turingBenchmark)} />
-                  <ToggleTile icon={MessageCircle} label="Atender grupos" description="Permite que o agente responda mensagens em grupos do WhatsApp. Desligado, grupos sao ignorados." checked={behaviorDraft.allowGroupChats} onChange={() => updateBehavior("allowGroupChats", !behaviorDraft.allowGroupChats)} />
                   <ToggleTile icon={Clock3} label="Janela da IA ativa" description="Faz o agente responder apenas dentro do horario configurado na Janela da IA." checked={behaviorDraft.aiScheduleEnabled} onChange={() => updateBehavior("aiScheduleEnabled", !behaviorDraft.aiScheduleEnabled)} />
                   </div>
                 </div>
@@ -2316,6 +2334,24 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
 
               <BehaviorSection title="Grupos, status e canais" description="Libera recursos avancados do WhatsApp com controles separados para grupos, Status, newsletters e campanhas.">
                 <div className="grid gap-3">
+                  <div className="rounded-lg border px-3 py-3" style={{ background: "rgba(var(--ch-accent-rgb),0.07)", borderColor: "rgba(var(--ch-accent-rgb),0.28)" }}>
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                      <div className="min-w-0">
+                        <p className="font-mono text-[9px] font-bold uppercase tracking-widest text-cyan-100">Como usar depois de habilitar</p>
+                        <p className="mt-1 text-[11px] leading-5 text-slate-300">
+                          Habilite os recursos, salve o comportamento e abra Multicanal. La voce usa Buscar grupos/Buscar canais para listar os destinos e configurar campanhas ou respostas por grupo.
+                        </p>
+                      </div>
+                      <ActionButton
+                        icon={Forward}
+                        label={settingsChanged ? "Salvar e abrir Multicanal" : "Abrir Multicanal"}
+                        description="Salva as permissoes pendentes e abre o painel onde grupos, canais, status e campanhas sao usados."
+                        disabled={!state?.agent || promptTooLong || (settingsChanged && !state.capability.schemaReady)}
+                        loading={running === "save_settings"}
+                        onClick={saveAndOpenMultichannel}
+                      />
+                    </div>
+                  </div>
                   <ModeSelector<WhatsappGroupReplyMode>
                     value={behaviorDraft.groupReplyMode}
                     options={[
@@ -2325,7 +2361,8 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
                     ]}
                     onChange={(value) => updateBehavior("groupReplyMode", value)}
                   />
-                  <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                  <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+                    <ToggleTile icon={MessageCircle} label="Atender grupos" description="Permite que o agente responda mensagens em grupos do WhatsApp. Desligado, grupos sao ignorados." checked={behaviorDraft.allowGroupChats} onChange={() => updateBehavior("allowGroupChats", !behaviorDraft.allowGroupChats)} />
                     <ToggleTile icon={MessageCircle} label="Mencionar todos" description="Permite usar mencao geral em mensagens operacionais de grupo quando a Uazapi aceitar." checked={behaviorDraft.groupMentionAll} onChange={() => updateBehavior("groupMentionAll", !behaviorDraft.groupMentionAll)} />
                     <ToggleTile icon={Globe2} label="Status WhatsApp" description="Permite publicar stories/status pelo painel usando processamento Inngest." checked={behaviorDraft.statusBroadcasts} onChange={() => updateBehavior("statusBroadcasts", !behaviorDraft.statusBroadcasts)} />
                     <ToggleTile icon={FileText} label="Canais" description="Permite postar em canais/newsletters do WhatsApp pelo painel." checked={behaviorDraft.newsletterBroadcasts} onChange={() => updateBehavior("newsletterBroadcasts", !behaviorDraft.newsletterBroadcasts)} />
@@ -2514,10 +2551,30 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
         <Panel
           title="Operacao multicanal"
           eyebrow="grupos / status / canais / campanhas"
-          action={<NeonBadge tone={channelOps ? "green" : "amber"}>{channelOps ? "sincronizado" : "pendente"}</NeonBadge>}
+          action={<NeonBadge tone={behaviorChanged || !channelOps ? "amber" : "green"}>{behaviorChanged ? "salve primeiro" : channelOps ? "sincronizado" : "pendente"}</NeonBadge>}
         >
+          {behaviorChanged ? (
+            <div className="mb-3 rounded-lg border px-3 py-3" style={{ background: "rgba(251,191,36,0.08)", borderColor: "rgba(251,191,36,0.30)" }}>
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div className="min-w-0">
+                  <p className="font-mono text-[9px] font-bold uppercase tracking-widest text-amber-100">Permissoes ainda nao salvas</p>
+                  <p className="mt-1 text-[11px] leading-5 text-slate-300">
+                    Status, canais, grupos e campanhas usam a configuracao salva do agente. Salve antes de buscar destinos ou agendar posts.
+                  </p>
+                </div>
+                <ActionButton
+                  icon={Wand2}
+                  label="Salvar permissoes"
+                  description="Grava o comportamento do agente antes de usar os recursos multicanal."
+                  disabled={!state?.capability.schemaReady || promptTooLong}
+                  loading={running === "save_settings"}
+                  onClick={saveAgentSettings}
+                />
+              </div>
+            </div>
+          ) : null}
           <WhatsappChannelOperationsPanel
-            behavior={behaviorDraft}
+            behavior={normalizeWhatsappBehaviorConfig(state.behavior)}
             channelAction={channelAction}
             channelOps={channelOps}
             campaignNumbers={campaignNumbers}
