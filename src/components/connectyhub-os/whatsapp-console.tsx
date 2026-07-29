@@ -384,6 +384,13 @@ type WhatsappChannelOutboundItem = {
   createdAt: string;
   providerStatus: string | null;
   error: string | null;
+  recurrence: {
+    frequency: "daily" | "weekly";
+    occurrenceIndex: number;
+    maxOccurrences: number;
+    nextScheduledFor: string | null;
+    seriesId: string | null;
+  } | null;
 };
 
 type WhatsappChannelTargetItem = {
@@ -5738,9 +5745,12 @@ function WhatsappChannelOperationsPanel({
   const [targetCampaignTitle, setTargetCampaignTitle] = useState("");
   const [targetCampaignText, setTargetCampaignText] = useState("");
   const [targetMentionAll, setTargetMentionAll] = useState(false);
+  const [targetRecurrenceFrequency, setTargetRecurrenceFrequency] = useState<"none" | "daily" | "weekly">("none");
+  const [targetRecurrenceOccurrences, setTargetRecurrenceOccurrences] = useState(7);
   const selectedTargets = targets.filter((target) => selectedTargetIds.includes(target.id));
   const selectedValidTargetIds = selectedTargets.map((target) => target.id);
   const selectedHasNewsletter = selectedTargets.some((target) => target.type === "newsletter");
+  const targetRecurring = targetRecurrenceFrequency !== "none";
   const targetCampaignReady = selectedTargets.length > 0
     && targetCampaignText.trim().length > 0
     && (campaignEnabled || newsletterEnabled)
@@ -5979,6 +5989,38 @@ function WhatsappChannelOperationsPanel({
                 Remova canais da selecao para usar mencao geral.
               </p>
             ) : null}
+            <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_112px]">
+              <label className="block">
+                <span className="mb-1 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Recorrencia</span>
+                <select
+                  className="h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                  value={targetRecurrenceFrequency}
+                  onChange={(event) => setTargetRecurrenceFrequency(event.target.value as "none" | "daily" | "weekly")}
+                >
+                  <option value="none">Unico</option>
+                  <option value="daily">Diario</option>
+                  <option value="weekly">Semanal</option>
+                </select>
+              </label>
+              <label className="block">
+                <span className="mb-1 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Envios</span>
+                <input
+                  className="h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none disabled:opacity-50"
+                  type="number"
+                  min={2}
+                  max={365}
+                  value={targetRecurrenceOccurrences}
+                  disabled={!targetRecurring}
+                  onChange={(event) => setTargetRecurrenceOccurrences(Math.min(365, Math.max(2, Number(event.target.value) || 2)))}
+                />
+              </label>
+            </div>
+            {targetRecurring ? (
+              <p className="mt-2 flex items-center gap-1.5 text-[11px] leading-4 text-cyan-100">
+                <Repeat className="h-3.5 w-3.5" />
+                {formatTargetRecurrenceSummary(targetRecurrenceFrequency, targetRecurrenceOccurrences)}
+              </p>
+            ) : null}
             <div className="mt-3">
               <ActionButton
                 icon={Send}
@@ -5992,6 +6034,8 @@ function WhatsappChannelOperationsPanel({
                   targetIds: selectedValidTargetIds,
                   mentionAll: targetMentionAll,
                   scheduledFor,
+                  recurrenceFrequency: targetRecurrenceFrequency,
+                  recurrenceOccurrences: targetRecurring ? targetRecurrenceOccurrences : null,
                 })}
               />
             </div>
@@ -6125,6 +6169,12 @@ function WhatsappChannelOperationsPanel({
                 <p className="mt-2 font-mono text-[9px] uppercase tracking-widest text-slate-500">
                   {formatChannelOperation(item.operation)} / {formatDate(item.scheduledFor ?? item.createdAt)}
                 </p>
+                {item.recurrence ? (
+                  <p className="mt-2 flex items-center gap-1.5 rounded-md border border-cyan-300/20 bg-cyan-300/10 px-2 py-1 text-[11px] leading-4 text-cyan-100">
+                    <Repeat className="h-3.5 w-3.5 shrink-0" />
+                    <span>{formatOutboundRecurrence(item)}</span>
+                  </p>
+                ) : null}
                 {item.error ? (
                   <p className="mt-2 rounded-md border border-rose-400/20 bg-rose-400/10 px-2 py-1 text-[11px] leading-4 text-rose-100">{item.error}</p>
                 ) : null}
@@ -6232,6 +6282,22 @@ function formatChannelOperation(value: string) {
   if (value === "campaign_simple") return "Campanha";
   if (value === "newsletter_text") return "Canal";
   return value || "WhatsApp";
+}
+
+function formatTargetRecurrenceSummary(frequency: "none" | "daily" | "weekly", occurrences: number) {
+  if (frequency === "daily") return `${occurrences} envios diarios no total`;
+  if (frequency === "weekly") return `${occurrences} envios semanais no total`;
+  return "Envio unico";
+}
+
+function formatOutboundRecurrence(item: WhatsappChannelOutboundItem) {
+  if (!item.recurrence) return "";
+
+  const frequency = item.recurrence.frequency === "weekly" ? "semanal" : "diaria";
+  const progress = `${item.recurrence.occurrenceIndex}/${item.recurrence.maxOccurrences}`;
+  const next = item.recurrence.nextScheduledFor ? ` / prox. ${formatDate(item.recurrence.nextScheduledFor)}` : "";
+
+  return `Recorrencia ${frequency} ${progress}${next}`;
 }
 
 function formatChannelTargetType(value: WhatsappChannelTargetItem["type"]) {

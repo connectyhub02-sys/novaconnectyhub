@@ -45,6 +45,8 @@ type ChannelActionBody = {
   backgroundColor?: unknown;
   targetIds?: unknown;
   mentionAll?: unknown;
+  recurrenceFrequency?: unknown;
+  recurrenceOccurrences?: unknown;
   targetId?: unknown;
   enabled?: unknown;
   campaignEnabled?: unknown;
@@ -156,6 +158,8 @@ export async function POST(request: NextRequest) {
         targetIds: readStringList(body?.targetIds),
         scheduledFor: asString(body?.scheduledFor),
         mentionAll: asBoolean(body?.mentionAll),
+        recurrenceFrequency: asString(body?.recurrenceFrequency),
+        recurrenceOccurrences: asNumber(body?.recurrenceOccurrences) ?? null,
       });
       await dispatchOutboundIfDue(item);
       result = { item };

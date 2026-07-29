@@ -12,6 +12,7 @@ type WhatsappOutboundOperation = "status" | "campaign_simple" | "newsletter_text
 type WhatsappTargetType = "group" | "newsletter";
 type WhatsappTargetReplyMode = "off" | "all" | "mentions" | "admins" | "observer";
 type WhatsappTargetMentionMode = "none" | "author" | "all";
+type WhatsappCampaignRecurrenceFrequency = "daily" | "weekly";
 
 type WhatsappInstanceRow = {
   id: string;
@@ -111,6 +112,13 @@ export type WhatsappOutboundItem = {
   createdAt: string;
   providerStatus: string | null;
   error: string | null;
+  recurrence: {
+    frequency: WhatsappCampaignRecurrenceFrequency;
+    occurrenceIndex: number;
+    maxOccurrences: number;
+    nextScheduledFor: string | null;
+    seriesId: string | null;
+  } | null;
 };
 
 const instanceSelect = "id, organization_id, provider_instance_id, phone_number, display_name, status, instance_token_encrypted, metadata";
@@ -374,6 +382,8 @@ export async function queueWhatsappTargetTextCampaign(
     targetIds: string[];
     scheduledFor?: string | null;
     mentionAll?: boolean;
+    recurrenceFrequency?: string | null;
+    recurrenceOccurrences?: number | null;
   },
 ) {
   if (!context.behavior.campaignBroadcasts && !context.behavior.newsletterBroadcasts) {
@@ -417,6 +427,10 @@ export async function queueWhatsappTargetTextCampaign(
       })),
       mentions: mentionAll ? "all" : undefined,
     },
+    recurrence: normalizeCampaignRecurrence({
+      frequency: input.recurrenceFrequency,
+      occurrences: input.recurrenceOccurrences,
+    }),
   });
 }
 
@@ -585,6 +599,15 @@ async function processWhatsappOutboundItem(client: SupabaseClient, item: Content
     }
 
     const publishedAt = new Date().toISOString();
+    let nextOccurrence: WhatsappOutboundItem | null = null;
+    let recurrenceError: string | null = null;
+
+    try {
+      nextOccurrence = await scheduleNextRecurringWhatsappOutbound(client, claimed, metadata, publishedAt);
+    } catch (nextError) {
+      recurrenceError = nextError instanceof Error ? nextError.message : "Nao foi possivel agendar a proxima recorrencia.";
+    }
+
     await client
       .from("content_pipeline_items")
       .update({
@@ -595,12 +618,13 @@ async function processWhatsappOutboundItem(client: SupabaseClient, item: Content
           provider_status: "sent",
           provider_response: sanitizeProviderData(providerResponse),
           processed_at: publishedAt,
+          recurrence: buildPublishedRecurrenceMetadata(metadata.recurrence, item.id, nextOccurrence, publishedAt, recurrenceError),
         },
       })
       .eq("id", item.id);
 
     await recordOutboundEvent(client, context, item, "whatsapp.outbound.sent", "Envio WhatsApp processado", providerResponse);
-    return { id: item.id, status: "published" };
+    return { id: item.id, status: "published", nextOccurrenceId: nextOccurrence?.id ?? null, recurrenceError };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Erro desconhecido no envio WhatsApp.";
     await client
@@ -758,6 +782,7 @@ async function queueWhatsappOutbound(
     body: string;
     scheduledFor?: string | null;
     payload: JsonRecord;
+    recurrence?: JsonRecord | null;
   },
 ) {
   const scheduledFor = normalizeScheduledFor(input.scheduledFor);
@@ -787,6 +812,7 @@ async function queueWhatsappOutbound(
         sector_id: context.sectorId ?? null,
         queued_from: "connectyhub_panel",
         queued_at: new Date().toISOString(),
+        recurrence: input.recurrence ?? null,
       },
     })
     .select("id, scope, organization_id, content_type, status, title, summary, body, scheduled_for, published_at, tags, metadata, created_at")
@@ -794,6 +820,65 @@ async function queueWhatsappOutbound(
 
   if (error || !data) {
     throw new Error(error?.message ?? "Nao foi possivel agendar o envio WhatsApp.");
+  }
+
+  return mapOutboundItem(data);
+}
+
+async function scheduleNextRecurringWhatsappOutbound(
+  client: SupabaseClient,
+  item: ContentPipelineRow,
+  metadata: JsonRecord,
+  publishedAt: string,
+): Promise<WhatsappOutboundItem | null> {
+  const recurrence = readStoredRecurrence(metadata.recurrence);
+  if (!recurrence || recurrence.occurrenceIndex >= recurrence.maxOccurrences) {
+    return null;
+  }
+
+  const nextScheduledFor = nextRecurrenceDate(item.scheduled_for ?? publishedAt, recurrence.frequency);
+  const nextMetadata: JsonRecord = {
+    ...metadata,
+    recurrence: {
+      enabled: true,
+      frequency: recurrence.frequency,
+      occurrence_index: recurrence.occurrenceIndex + 1,
+      max_occurrences: recurrence.maxOccurrences,
+      series_id: recurrence.seriesId ?? item.id,
+      previous_item_id: item.id,
+    },
+  };
+
+  for (const key of [
+    "provider_status",
+    "provider_response",
+    "provider_error",
+    "processed_at",
+    "failed_at",
+    "processing_started_at",
+  ]) {
+    delete nextMetadata[key];
+  }
+
+  const { data, error } = await client
+    .from("content_pipeline_items")
+    .insert({
+      scope: item.scope,
+      organization_id: item.organization_id,
+      content_type: item.content_type,
+      status: "scheduled",
+      title: item.title,
+      summary: item.summary,
+      body: item.body,
+      scheduled_for: nextScheduledFor,
+      tags: item.tags ?? ["whatsapp", "uazapi", asString(metadata.operation) ?? "campaign_simple"],
+      metadata: nextMetadata,
+    })
+    .select("id, scope, organization_id, content_type, status, title, summary, body, scheduled_for, published_at, tags, metadata, created_at")
+    .single<ContentPipelineRow>();
+
+  if (error || !data) {
+    throw new Error(error?.message ?? "Nao foi possivel agendar a proxima recorrencia WhatsApp.");
   }
 
   return mapOutboundItem(data);
@@ -1029,6 +1114,8 @@ async function readResponse(response: Response) {
 
 function mapOutboundItem(row: ContentPipelineRow): WhatsappOutboundItem {
   const metadata = readRecord(row.metadata) ?? {};
+  const recurrence = readStoredRecurrence(metadata.recurrence);
+  const recurrenceRecord = readRecord(metadata.recurrence);
   return {
     id: row.id,
     operation: asString(metadata.operation) ?? row.content_type,
@@ -1040,6 +1127,15 @@ function mapOutboundItem(row: ContentPipelineRow): WhatsappOutboundItem {
     createdAt: row.created_at,
     providerStatus: asString(metadata.provider_status),
     error: asString(metadata.provider_error),
+    recurrence: recurrence
+      ? {
+        frequency: recurrence.frequency,
+        occurrenceIndex: recurrence.occurrenceIndex,
+        maxOccurrences: recurrence.maxOccurrences,
+        nextScheduledFor: asString(recurrenceRecord?.next_scheduled_for),
+        seriesId: recurrence.seriesId,
+      }
+      : null,
   };
 }
 
@@ -1146,6 +1242,75 @@ function normalizeScheduledFor(value: string | null | undefined) {
   if (!value) return new Date().toISOString();
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString();
+}
+
+function normalizeCampaignRecurrence(input: {
+  frequency?: string | null;
+  occurrences?: number | null;
+}): JsonRecord | null {
+  const frequency = input.frequency === "daily" || input.frequency === "weekly" ? input.frequency : null;
+  if (!frequency) return null;
+
+  return {
+    enabled: true,
+    frequency,
+    occurrence_index: 1,
+    max_occurrences: clamp(Math.round(input.occurrences ?? (frequency === "daily" ? 7 : 4)), 2, 365),
+  };
+}
+
+function buildPublishedRecurrenceMetadata(
+  value: unknown,
+  currentItemId: string,
+  nextOccurrence: WhatsappOutboundItem | null,
+  publishedAt: string,
+  recurrenceError: string | null,
+) {
+  const recurrence = readStoredRecurrence(value);
+  if (!recurrence) return null;
+
+  return cleanPayload({
+    enabled: true,
+    frequency: recurrence.frequency,
+    occurrence_index: recurrence.occurrenceIndex,
+    max_occurrences: recurrence.maxOccurrences,
+    series_id: recurrence.seriesId ?? nextOccurrence?.recurrence?.seriesId ?? currentItemId,
+    last_published_at: publishedAt,
+    next_item_id: nextOccurrence?.id,
+    next_scheduled_for: nextOccurrence?.scheduledFor,
+    finished_at: !nextOccurrence && recurrence.occurrenceIndex >= recurrence.maxOccurrences ? publishedAt : undefined,
+    schedule_error: recurrenceError,
+  });
+}
+
+function readStoredRecurrence(value: unknown): {
+  frequency: WhatsappCampaignRecurrenceFrequency;
+  occurrenceIndex: number;
+  maxOccurrences: number;
+  seriesId: string | null;
+} | null {
+  const record = readRecord(value);
+  if (!record || record.enabled !== true) return null;
+
+  const frequency = record.frequency === "daily" || record.frequency === "weekly" ? record.frequency : null;
+  if (!frequency) return null;
+
+  const occurrenceIndex = clamp(readInteger(record.occurrence_index, 1), 1, 365);
+  const maxOccurrences = clamp(readInteger(record.max_occurrences, 1), 1, 365);
+
+  return {
+    frequency,
+    occurrenceIndex,
+    maxOccurrences,
+    seriesId: asString(record.series_id),
+  };
+}
+
+function nextRecurrenceDate(value: string, frequency: WhatsappCampaignRecurrenceFrequency) {
+  const base = new Date(value);
+  const date = Number.isNaN(base.getTime()) ? new Date() : base;
+  date.setUTCDate(date.getUTCDate() + (frequency === "weekly" ? 7 : 1));
+  return date.toISOString();
 }
 
 function normalizeRecipientList(value: unknown) {
@@ -1311,6 +1476,11 @@ function readRecord(value: unknown): JsonRecord | null {
 
 function asString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function readInteger(value: unknown, fallback: number) {
+  const number = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+  return Number.isFinite(number) ? Math.round(number) : fallback;
 }
 
 function preview(value: string, maxLength: number) {
