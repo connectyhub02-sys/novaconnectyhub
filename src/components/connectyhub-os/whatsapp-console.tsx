@@ -386,6 +386,25 @@ type WhatsappChannelOutboundItem = {
   error: string | null;
 };
 
+type WhatsappChannelTargetItem = {
+  id: string;
+  type: "group" | "newsletter";
+  jid: string;
+  name: string;
+  description: string | null;
+  participantCount: number | null;
+  isAdmin: boolean | null;
+  isAnnouncement: boolean | null;
+  enabled: boolean;
+  campaignEnabled: boolean;
+  replyMode: WhatsappGroupReplyMode | "off" | "observer";
+  mentionMode: "none" | "author" | "all";
+  requireApproval: boolean;
+  maxRepliesPerHour: number;
+  muteUntil: string | null;
+  lastSyncedAt: string | null;
+};
+
 type WhatsappChannelOperationsState = {
   instance: {
     id: string;
@@ -405,6 +424,7 @@ type WhatsappChannelOperationsState = {
     campaignDelayMinSeconds: number;
     campaignDelayMaxSeconds: number;
   };
+  targets?: WhatsappChannelTargetItem[];
   history: WhatsappChannelOutboundItem[];
 };
 
@@ -5713,6 +5733,24 @@ function WhatsappChannelOperationsPanel({
   const statusReady = statusEnabled && statusText.trim().length > 0;
   const campaignReady = campaignEnabled && campaignText.trim().length > 0 && campaignNumbers.trim().length > 0;
   const newsletterReady = newsletterEnabled && newsletterText.trim().length > 0 && newsletterJid.trim().length > 0;
+  const targets = channelOps?.targets ?? [];
+  const [selectedTargetIds, setSelectedTargetIds] = useState<string[]>([]);
+  const [targetCampaignTitle, setTargetCampaignTitle] = useState("");
+  const [targetCampaignText, setTargetCampaignText] = useState("");
+  const [targetMentionAll, setTargetMentionAll] = useState(false);
+  const selectedTargets = targets.filter((target) => selectedTargetIds.includes(target.id));
+  const selectedValidTargetIds = selectedTargets.map((target) => target.id);
+  const selectedHasNewsletter = selectedTargets.some((target) => target.type === "newsletter");
+  const targetCampaignReady = selectedTargets.length > 0
+    && targetCampaignText.trim().length > 0
+    && (campaignEnabled || newsletterEnabled)
+    && (!targetMentionAll || !selectedHasNewsletter);
+
+  function toggleTargetSelection(targetId: string) {
+    setSelectedTargetIds((current) => current.includes(targetId)
+      ? current.filter((id) => id !== targetId)
+      : [...current, targetId]);
+  }
 
   return (
     <div className="grid gap-3 sm:gap-4 2xl:grid-cols-[minmax(0,1fr)_320px]">
@@ -5774,6 +5812,111 @@ function WhatsappChannelOperationsPanel({
             onChange={(event) => onChannelScheduledForChange(event.target.value)}
           />
         </label>
+
+        <div className="grid gap-3 rounded-xl border p-3 sm:p-4 xl:grid-cols-[minmax(0,1fr)_360px]" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
+          <div>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
+                Grupos e canais sincronizados
+                <InfoHint text="Use Buscar grupos e Buscar canais para carregar os destinos desta instancia. Selecione destinos para campanhas agendadas." />
+              </p>
+              <div className="flex gap-1.5">
+                <NeonBadge tone="cyan">{targets.filter((target) => target.type === "group").length} grupos</NeonBadge>
+                <NeonBadge tone="violet">{targets.filter((target) => target.type === "newsletter").length} canais</NeonBadge>
+              </div>
+            </div>
+            <div className="mt-3 grid max-h-[320px] gap-2 overflow-y-auto pr-1 md:grid-cols-2">
+              {targets.length ? (
+                targets.map((target) => {
+                  const selected = selectedTargetIds.includes(target.id);
+                  return (
+                    <label
+                      key={target.id}
+                      className="flex min-h-[82px] cursor-pointer gap-3 rounded-lg border p-3 transition"
+                      style={{
+                        background: selected ? "rgba(34,211,238,0.10)" : "var(--ch-surface)",
+                        borderColor: selected ? "rgba(34,211,238,0.45)" : "var(--ch-border)",
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        className="mt-1 h-4 w-4 shrink-0 accent-cyan-300"
+                        checked={selected}
+                        onChange={() => toggleTargetSelection(target.id)}
+                      />
+                      <span className="min-w-0">
+                        <span className="flex min-w-0 items-center gap-2">
+                          <span className="truncate text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>{target.name}</span>
+                          <span className="shrink-0 rounded-md bg-slate-800/80 px-1.5 py-0.5 font-mono text-[8px] uppercase tracking-widest text-slate-300">{formatChannelTargetType(target.type)}</span>
+                        </span>
+                        <span className="mt-1 block truncate font-mono text-[9px] text-slate-500">{target.jid}</span>
+                        <span className="mt-2 flex flex-wrap gap-1.5">
+                          {target.participantCount !== null ? <NeonBadge tone="zinc">{target.participantCount} membros</NeonBadge> : null}
+                          {target.isAdmin ? <NeonBadge tone="green">admin</NeonBadge> : null}
+                          {target.isAnnouncement ? <NeonBadge tone="amber">avisos</NeonBadge> : null}
+                          <NeonBadge tone={target.campaignEnabled ? "cyan" : "zinc"}>{target.campaignEnabled ? "campanha ok" : "campanha off"}</NeonBadge>
+                        </span>
+                      </span>
+                    </label>
+                  );
+                })
+              ) : (
+                <div className="rounded-lg border px-3 py-8 text-center text-[12px] text-slate-500 md:col-span-2" style={{ borderColor: "var(--ch-border)" }}>
+                  Nenhum grupo ou canal sincronizado ainda. Use Buscar grupos e Buscar canais.
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="rounded-lg border p-3" style={{ background: "var(--ch-surface)", borderColor: "var(--ch-border)" }}>
+            <p className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
+              Post para grupos/canais
+              <InfoHint text="Agenda uma mensagem de texto para os destinos selecionados. Voz clonada e IA entram numa proxima etapa sobre essa base." />
+            </p>
+            <input
+              className="mt-3 h-10 w-full rounded-lg border px-3 text-[12px] outline-none"
+              value={targetCampaignTitle}
+              onChange={(event) => setTargetCampaignTitle(event.target.value.slice(0, 90))}
+              placeholder="Nome da campanha"
+            />
+            <textarea
+              className="mt-3 min-h-36 w-full resize-y rounded-lg border px-3 py-2 text-[12px] leading-5 outline-none"
+              value={targetCampaignText}
+              onChange={(event) => setTargetCampaignText(event.target.value.slice(0, 1400))}
+              placeholder="Mensagem para grupos e canais selecionados."
+            />
+            <label className="mt-3 flex items-start gap-2 rounded-lg border px-3 py-2 text-[11px] leading-4 text-slate-300" style={{ borderColor: "var(--ch-border)" }}>
+              <input
+                type="checkbox"
+                className="mt-0.5 h-4 w-4 accent-cyan-300"
+                checked={targetMentionAll}
+                onChange={(event) => setTargetMentionAll(event.target.checked)}
+              />
+              <span>Mencionar todos nos grupos selecionados</span>
+            </label>
+            {targetMentionAll && selectedHasNewsletter ? (
+              <p className="mt-2 rounded-md border border-amber-300/25 bg-amber-300/10 px-2 py-1 text-[11px] leading-4 text-amber-100">
+                Remova canais da selecao para usar mencao geral.
+              </p>
+            ) : null}
+            <div className="mt-3">
+              <ActionButton
+                icon={Send}
+                label={`Agendar post (${selectedTargets.length})`}
+                description="Agenda a mensagem para grupos/canais selecionados."
+                disabled={!targetCampaignReady}
+                loading={channelAction === "send_target_campaign"}
+                onClick={() => onRunAction("send_target_campaign", {
+                  title: targetCampaignTitle,
+                  text: targetCampaignText,
+                  targetIds: selectedValidTargetIds,
+                  mentionAll: targetMentionAll,
+                  scheduledFor,
+                })}
+              />
+            </div>
+          </div>
+        </div>
 
         <div className="grid gap-3 sm:gap-4 xl:grid-cols-3">
           <div className="rounded-xl border p-3 sm:p-4" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
@@ -6009,6 +6152,10 @@ function formatChannelOperation(value: string) {
   if (value === "campaign_simple") return "Campanha";
   if (value === "newsletter_text") return "Canal";
   return value || "WhatsApp";
+}
+
+function formatChannelTargetType(value: WhatsappChannelTargetItem["type"]) {
+  return value === "newsletter" ? "canal" : "grupo";
 }
 
 function localDatetimeToIso(value: string) {

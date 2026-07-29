@@ -9,6 +9,9 @@ import { loadUazapiCredentials, type UazapiCredentials } from "./uazapi-credenti
 type JsonRecord = Record<string, unknown>;
 type WhatsappScope = "platform" | "organization";
 type WhatsappOutboundOperation = "status" | "campaign_simple" | "newsletter_text";
+type WhatsappTargetType = "group" | "newsletter";
+type WhatsappTargetReplyMode = "off" | "all" | "mentions" | "admins" | "observer";
+type WhatsappTargetMentionMode = "none" | "author" | "all";
 
 type WhatsappInstanceRow = {
   id: string;
@@ -39,6 +42,52 @@ type ContentPipelineRow = {
   tags: string[] | null;
   metadata: JsonRecord | null;
   created_at: string;
+};
+
+type WhatsappChannelTargetRow = {
+  id: string;
+  scope: WhatsappScope;
+  organization_id: string | null;
+  whatsapp_instance_id: string;
+  agent_id: string | null;
+  provider: string;
+  target_type: string;
+  provider_jid: string;
+  display_name: string | null;
+  description: string | null;
+  participant_count: number | null;
+  is_admin: boolean | null;
+  is_announcement: boolean | null;
+  enabled: boolean | null;
+  campaign_enabled: boolean | null;
+  reply_mode: string | null;
+  mention_mode: string | null;
+  require_approval: boolean | null;
+  max_replies_per_hour: number | null;
+  mute_until: string | null;
+  last_synced_at: string | null;
+  metadata: JsonRecord | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type WhatsappChannelTarget = {
+  id: string;
+  type: WhatsappTargetType;
+  jid: string;
+  name: string;
+  description: string | null;
+  participantCount: number | null;
+  isAdmin: boolean | null;
+  isAnnouncement: boolean | null;
+  enabled: boolean;
+  campaignEnabled: boolean;
+  replyMode: WhatsappTargetReplyMode;
+  mentionMode: WhatsappTargetMentionMode;
+  requireApproval: boolean;
+  maxRepliesPerHour: number;
+  muteUntil: string | null;
+  lastSyncedAt: string | null;
 };
 
 export type WhatsappOperationalContext = {
@@ -149,6 +198,7 @@ export async function getWhatsappOperationsDashboard(
       campaignDelayMinSeconds: context.behavior.whatsappCampaignDelayMinSeconds,
       campaignDelayMaxSeconds: context.behavior.whatsappCampaignDelayMaxSeconds,
     },
+    targets: await listWhatsappChannelTargets(client, context),
     history,
   };
 }
@@ -158,10 +208,12 @@ export async function fetchWhatsappGroups(context: WhatsappOperationalContext) {
     method: "GET",
     query: { noparticipants: true },
   });
+  const targets = await syncWhatsappChannelTargets(createServiceClient(), context, "group", result.data);
 
   return {
     fetchedAt: new Date().toISOString(),
-    count: countProviderItems(result.data),
+    count: targets.length,
+    targets,
     data: sanitizeProviderData(result.data),
   };
 }
@@ -170,10 +222,12 @@ export async function fetchWhatsappNewsletters(context: WhatsappOperationalConte
   const result = await callUazapi(context, "/newsletter/list", {
     method: "GET",
   });
+  const targets = await syncWhatsappChannelTargets(createServiceClient(), context, "newsletter", result.data);
 
   return {
     fetchedAt: new Date().toISOString(),
-    count: countProviderItems(result.data),
+    count: targets.length,
+    targets,
     data: sanitizeProviderData(result.data),
   };
 }
@@ -311,6 +365,61 @@ export async function queueWhatsappNewsletterText(
   });
 }
 
+export async function queueWhatsappTargetTextCampaign(
+  client: SupabaseClient,
+  context: WhatsappOperationalContext,
+  input: {
+    title: string;
+    text: string;
+    targetIds: string[];
+    scheduledFor?: string | null;
+    mentionAll?: boolean;
+  },
+) {
+  if (!context.behavior.campaignBroadcasts && !context.behavior.newsletterBroadcasts) {
+    throw new Error("Ative Campanhas ou Canais no comportamento do agente antes de agendar posts para grupos/canais.");
+  }
+
+  const text = input.text.trim();
+  if (!text) throw new Error("Escreva a mensagem da campanha.");
+
+  const targets = await listWhatsappChannelTargetsByIds(client, context, input.targetIds);
+  if (targets.length === 0) {
+    throw new Error("Selecione pelo menos um grupo ou canal sincronizado.");
+  }
+
+  const blocked = targets.filter((target) => !target.campaignEnabled);
+  if (blocked.length > 0) {
+    throw new Error(`Destino sem campanhas liberadas: ${blocked[0]?.name ?? blocked[0]?.jid}.`);
+  }
+
+  const mentionAll = Boolean(input.mentionAll);
+  if (mentionAll && targets.some((target) => target.type !== "group")) {
+    throw new Error("Mencionar todos so pode ser usado em grupos.");
+  }
+
+  const title = input.title.trim() || `Campanha WhatsApp - ${new Date().toLocaleDateString("pt-BR")}`;
+  return queueWhatsappOutbound(client, context, {
+    operation: "campaign_simple",
+    title,
+    summary: `${targets.length} destino(s): ${preview(text, 140)}`,
+    body: text,
+    scheduledFor: input.scheduledFor,
+    payload: {
+      type: "text",
+      text,
+      target_mode: "whatsapp_targets",
+      targets: targets.map((target) => ({
+        id: target.id,
+        type: target.type,
+        jid: target.jid,
+        name: target.name,
+      })),
+      mentions: mentionAll ? "all" : undefined,
+    },
+  });
+}
+
 export async function processScheduledWhatsappOutbounds(input: {
   itemId?: string;
   limit?: number;
@@ -371,20 +480,41 @@ async function processWhatsappOutboundItem(client: SupabaseClient, item: Content
         }),
       }).then((result) => result.data);
     } else if (operation === "campaign_simple") {
-      providerResponse = await callUazapi(context, "/sender/simple", {
-        method: "POST",
-        body: cleanPayload({
-          numbers: payload.numbers,
-          type: payload.type ?? "text",
-          text: payload.text ?? item.body,
-          folder: payload.folder ?? item.title,
-          delayMin: payload.delayMin,
-          delayMax: payload.delayMax,
-          scheduled_for: 1,
-          info: payload.info,
-          linkPreview: true,
-        }),
-      }).then((result) => result.data);
+      const targetRecipients = readCampaignTargetRecipients(payload);
+
+      if (targetRecipients) {
+        const responses = [];
+        for (const recipient of targetRecipients) {
+          const sent = await callUazapi(context, "/send/text", {
+            method: "POST",
+            body: cleanPayload({
+              number: recipient,
+              text: payload.text ?? item.body,
+              mentions: payload.mentions,
+              linkPreview: true,
+              track_source: "connectyhub",
+              track_id: `campaign_${item.id}`,
+            }),
+          }).then((result) => result.data);
+          responses.push({ recipient, response: sanitizeProviderData(sent) });
+        }
+        providerResponse = { target_mode: "whatsapp_targets", sent: responses };
+      } else {
+        providerResponse = await callUazapi(context, "/sender/simple", {
+          method: "POST",
+          body: cleanPayload({
+            numbers: payload.numbers,
+            type: payload.type ?? "text",
+            text: payload.text ?? item.body,
+            folder: payload.folder ?? item.title,
+            delayMin: payload.delayMin,
+            delayMax: payload.delayMax,
+            scheduled_for: 1,
+            info: payload.info,
+            linkPreview: true,
+          }),
+        }).then((result) => result.data);
+      }
     } else if (operation === "newsletter_text") {
       providerResponse = await callUazapi(context, "/send/text", {
         method: "POST",
@@ -615,6 +745,96 @@ async function queueWhatsappOutbound(
   return mapOutboundItem(data);
 }
 
+async function listWhatsappChannelTargets(
+  client: SupabaseClient,
+  context: WhatsappOperationalContext,
+): Promise<WhatsappChannelTarget[]> {
+  const { data, error } = await client
+    .from("whatsapp_channel_targets")
+    .select("id, scope, organization_id, whatsapp_instance_id, agent_id, provider, target_type, provider_jid, display_name, description, participant_count, is_admin, is_announcement, enabled, campaign_enabled, reply_mode, mention_mode, require_approval, max_replies_per_hour, mute_until, last_synced_at, metadata, created_at, updated_at")
+    .eq("whatsapp_instance_id", context.instance.id)
+    .order("target_type", { ascending: true })
+    .order("display_name", { ascending: true });
+
+  if (error) {
+    if (isMissingWhatsappChannelTargetsTable(error)) {
+      return [];
+    }
+    throw new Error(`Nao foi possivel listar grupos e canais WhatsApp: ${error.message}`);
+  }
+
+  return ((data ?? []) as WhatsappChannelTargetRow[]).map(mapWhatsappChannelTarget);
+}
+
+async function listWhatsappChannelTargetsByIds(
+  client: SupabaseClient,
+  context: WhatsappOperationalContext,
+  ids: string[],
+) {
+  const uniqueIds = Array.from(new Set(ids.map((id) => id.trim()).filter(Boolean))).slice(0, 100);
+  if (uniqueIds.length === 0) return [];
+
+  const { data, error } = await client
+    .from("whatsapp_channel_targets")
+    .select("id, scope, organization_id, whatsapp_instance_id, agent_id, provider, target_type, provider_jid, display_name, description, participant_count, is_admin, is_announcement, enabled, campaign_enabled, reply_mode, mention_mode, require_approval, max_replies_per_hour, mute_until, last_synced_at, metadata, created_at, updated_at")
+    .eq("whatsapp_instance_id", context.instance.id)
+    .in("id", uniqueIds);
+
+  if (error) {
+    throw new Error(`Nao foi possivel carregar destinos da campanha: ${error.message}`);
+  }
+
+  return ((data ?? []) as WhatsappChannelTargetRow[]).map(mapWhatsappChannelTarget);
+}
+
+async function syncWhatsappChannelTargets(
+  client: SupabaseClient,
+  context: WhatsappOperationalContext,
+  type: WhatsappTargetType,
+  providerData: unknown,
+) {
+  const now = new Date().toISOString();
+  const items = extractProviderTargetItems(providerData, type);
+  if (items.length === 0) return [];
+
+  const rows = items.map((item) => ({
+    scope: context.scope,
+    organization_id: context.scope === "organization" ? context.organizationId : null,
+    whatsapp_instance_id: context.instance.id,
+    agent_id: asString(readRecord(context.instance.metadata)?.agent_id),
+    provider: "uazapi",
+    target_type: type,
+    provider_jid: item.jid,
+    display_name: item.name,
+    description: item.description,
+    participant_count: item.participantCount,
+    is_admin: item.isAdmin,
+    is_announcement: item.isAnnouncement,
+    last_synced_at: now,
+    metadata: {
+      provider_payload: sanitizeProviderData(item.raw),
+      synced_from: type === "group" ? "group_list" : "newsletter_list",
+    },
+  }));
+
+  const { data, error } = await client
+    .from("whatsapp_channel_targets")
+    .upsert(rows, {
+      onConflict: "whatsapp_instance_id,target_type,provider_jid",
+      ignoreDuplicates: false,
+    })
+    .select("id, scope, organization_id, whatsapp_instance_id, agent_id, provider, target_type, provider_jid, display_name, description, participant_count, is_admin, is_announcement, enabled, campaign_enabled, reply_mode, mention_mode, require_approval, max_replies_per_hour, mute_until, last_synced_at, metadata, created_at, updated_at");
+
+  if (error) {
+    if (isMissingWhatsappChannelTargetsTable(error)) {
+      throw new Error("Aplique a migration whatsapp_channel_targets antes de sincronizar grupos e canais.");
+    }
+    throw new Error(`Nao foi possivel salvar ${type === "group" ? "grupos" : "canais"} WhatsApp: ${error.message}`);
+  }
+
+  return ((data ?? []) as WhatsappChannelTargetRow[]).map(mapWhatsappChannelTarget);
+}
+
 async function listWhatsappOutboundItems(
   client: SupabaseClient,
   context: WhatsappOperationalContext,
@@ -750,6 +970,95 @@ function mapOutboundItem(row: ContentPipelineRow): WhatsappOutboundItem {
   };
 }
 
+function isMissingWhatsappChannelTargetsTable(error: unknown) {
+  const record = readRecord(error);
+  const code = asString(record?.code);
+  const message = asString(record?.message)?.toLowerCase() ?? "";
+  return code === "42P01" || message.includes("whatsapp_channel_targets");
+}
+
+function mapWhatsappChannelTarget(row: WhatsappChannelTargetRow): WhatsappChannelTarget {
+  const type = row.target_type === "newsletter" ? "newsletter" : "group";
+  return {
+    id: row.id,
+    type,
+    jid: row.provider_jid,
+    name: row.display_name?.trim() || row.provider_jid,
+    description: row.description,
+    participantCount: row.participant_count,
+    isAdmin: row.is_admin,
+    isAnnouncement: row.is_announcement,
+    enabled: row.enabled === true,
+    campaignEnabled: row.campaign_enabled !== false,
+    replyMode: normalizeTargetReplyMode(row.reply_mode),
+    mentionMode: normalizeTargetMentionMode(row.mention_mode),
+    requireApproval: row.require_approval === true,
+    maxRepliesPerHour: clamp(Math.round(row.max_replies_per_hour ?? 6), 0, 120),
+    muteUntil: row.mute_until,
+    lastSyncedAt: row.last_synced_at,
+  };
+}
+
+function extractProviderTargetItems(value: unknown, type: WhatsappTargetType) {
+  return extractProviderItems(value, type === "group" ? ["groups", "data", "items", "response"] : ["newsletters", "channels", "data", "items", "response"])
+    .map((item) => normalizeProviderTargetItem(item, type))
+    .filter((item): item is NonNullable<ReturnType<typeof normalizeProviderTargetItem>> => Boolean(item));
+}
+
+function extractProviderItems(value: unknown, preferredKeys: string[]): unknown[] {
+  if (Array.isArray(value)) return value;
+  const record = readRecord(value);
+  if (!record) return [];
+
+  for (const key of preferredKeys) {
+    const item = record[key];
+    if (Array.isArray(item)) return item;
+  }
+
+  for (const item of Object.values(record)) {
+    if (Array.isArray(item)) return item;
+  }
+
+  return [];
+}
+
+function normalizeProviderTargetItem(value: unknown, type: WhatsappTargetType) {
+  const record = readRecord(value);
+  if (!record) return null;
+
+  const jid = findString(record, type === "group"
+    ? ["jid", "id", "groupJid", "groupjid", "groupId", "group_id", "chatId", "chatid"]
+    : ["jid", "id", "newsletterJid", "newsletterjid", "newsletterId", "newsletter_id", "threadId", "thread_id"]);
+  const normalizedJid = normalizeTargetJid(jid, type);
+  if (!normalizedJid) return null;
+
+  const participants = findValue(record, (key, item) => {
+    const normalizedKey = key.toLowerCase().replace(/[_-]/g, "");
+    return ["participants", "members", "participantcount", "membercount", "subscribers", "subscribercount"].includes(normalizedKey)
+      && (Array.isArray(item) || typeof item === "number" || typeof item === "string");
+  });
+
+  return {
+    jid: normalizedJid,
+    name: findString(record, ["name", "subject", "title", "displayName", "display_name"]) ?? normalizedJid,
+    description: findString(record, ["description", "desc", "about"]),
+    participantCount: readCount(participants),
+    isAdmin: findBoolean(record, ["isAdmin", "is_admin", "IsAdmin", "isSenderAdmin", "isOwner"]),
+    isAnnouncement: findBoolean(record, ["announce", "isAnnounce", "is_announcement", "IsAnnounce", "isReadOnly", "readOnly"]),
+    raw: record,
+  };
+}
+
+function readCampaignTargetRecipients(payload: JsonRecord) {
+  const targets = Array.isArray(payload.targets) ? payload.targets : [];
+  const recipients = targets
+    .map((item) => readRecord(item))
+    .map((item) => asString(item?.jid))
+    .filter((item): item is string => Boolean(item));
+
+  return recipients.length > 0 ? Array.from(new Set(recipients)) : null;
+}
+
 function decryptInstanceToken(instance: WhatsappInstanceRow) {
   if (!instance.instance_token_encrypted) return null;
 
@@ -797,6 +1106,32 @@ function normalizeNewsletterJid(value: string) {
   return id ? `${id}@newsletter` : null;
 }
 
+function normalizeTargetJid(value: string | null, type: WhatsappTargetType) {
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+  if (type === "group") {
+    if (trimmed.endsWith("@g.us")) return trimmed;
+    const digits = trimmed.replace(/[^\d-]/g, "");
+    return digits ? `${digits}@g.us` : null;
+  }
+
+  return normalizeNewsletterJid(trimmed);
+}
+
+function normalizeTargetReplyMode(value: unknown): WhatsappTargetReplyMode {
+  if (value === "off" || value === "all" || value === "mentions" || value === "admins" || value === "observer") {
+    return value;
+  }
+  return "mentions";
+}
+
+function normalizeTargetMentionMode(value: unknown): WhatsappTargetMentionMode {
+  if (value === "none" || value === "author" || value === "all") {
+    return value;
+  }
+  return "none";
+}
+
 function cleanPayload(value: JsonRecord) {
   return Object.fromEntries(
     Object.entries(value).filter(([, item]) => {
@@ -831,6 +1166,22 @@ function findString(value: unknown, keys: string[]): string | null {
   return typeof found === "string" ? found.trim() : null;
 }
 
+function findBoolean(value: unknown, keys: string[]): boolean | null {
+  const normalizedKeys = new Set(keys.map((key) => key.toLowerCase().replace(/[_-]/g, "")));
+  const found = findValue(value, (key, item) => normalizedKeys.has(key.toLowerCase().replace(/[_-]/g, ""))
+    && (typeof item === "boolean" || typeof item === "string" || typeof item === "number"));
+
+  if (typeof found === "boolean") return found;
+  if (typeof found === "number") return found === 1;
+  if (typeof found === "string") {
+    const normalized = found.trim().toLowerCase();
+    if (["true", "1", "yes", "sim", "admin", "owner"].includes(normalized)) return true;
+    if (["false", "0", "no", "nao", "não", "member"].includes(normalized)) return false;
+  }
+
+  return null;
+}
+
 function findValue(value: unknown, predicate: (key: string, value: unknown) => boolean): unknown {
   if (!value || typeof value !== "object") return null;
   if (Array.isArray(value)) {
@@ -847,6 +1198,16 @@ function findValue(value: unknown, predicate: (key: string, value: unknown) => b
     if (found) return found;
   }
 
+  return null;
+}
+
+function readCount(value: unknown): number | null {
+  if (Array.isArray(value)) return value.length;
+  if (typeof value === "number" && Number.isFinite(value)) return Math.max(0, Math.round(value));
+  if (typeof value === "string") {
+    const parsed = Number(value.replace(/[^\d]/g, ""));
+    return Number.isFinite(parsed) ? parsed : null;
+  }
   return null;
 }
 

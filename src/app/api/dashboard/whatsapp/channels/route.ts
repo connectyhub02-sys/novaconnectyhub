@@ -14,6 +14,7 @@ import {
   queueWhatsappNewsletterText,
   queueWhatsappSimpleCampaign,
   queueWhatsappStatusBroadcast,
+  queueWhatsappTargetTextCampaign,
   resolveClientWhatsappOperationalContext,
   type WhatsappOutboundItem,
 } from "@/lib/whatsapp/channel-operations";
@@ -41,6 +42,8 @@ type ChannelActionBody = {
   scheduledFor?: unknown;
   maxRecipients?: unknown;
   backgroundColor?: unknown;
+  targetIds?: unknown;
+  mentionAll?: unknown;
 };
 
 export async function GET(request: NextRequest) {
@@ -137,6 +140,17 @@ export async function POST(request: NextRequest) {
       await dispatchOutboundIfDue(item);
       result = { item };
       notice = "Post no canal/newsletter agendado pelo Inngest.";
+    } else if (action === "send_target_campaign") {
+      const item = await queueWhatsappTargetTextCampaign(client, whatsapp, {
+        title: asString(body?.title) ?? "",
+        text: asString(body?.text) ?? "",
+        targetIds: readStringList(body?.targetIds),
+        scheduledFor: asString(body?.scheduledFor),
+        mentionAll: asBoolean(body?.mentionAll),
+      });
+      await dispatchOutboundIfDue(item);
+      result = { item };
+      notice = "Campanha para grupos/canais agendada pelo Inngest.";
     } else {
       return NextResponse.json({ error: "Acao invalida." }, { status: 400 });
     }
@@ -252,6 +266,12 @@ function asString(value: unknown) {
 function asNumber(value: unknown) {
   const number = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
   return Number.isFinite(number) ? number : undefined;
+}
+
+function asBoolean(value: unknown) {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") return ["true", "1", "yes", "sim"].includes(value.trim().toLowerCase());
+  return false;
 }
 
 function formatError(error: unknown) {
