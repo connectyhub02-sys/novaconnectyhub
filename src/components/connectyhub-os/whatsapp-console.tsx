@@ -2498,6 +2498,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
             channelScheduledFor={channelScheduledFor}
             newsletterJid={newsletterJid}
             newsletterText={newsletterText}
+            salesCatalog={state.salesCatalog}
             statusMaxRecipients={statusMaxRecipients}
             statusText={statusText}
             onCampaignNumbersChange={setCampaignNumbers}
@@ -5710,6 +5711,7 @@ function WhatsappChannelOperationsPanel({
   channelScheduledFor,
   newsletterJid,
   newsletterText,
+  salesCatalog,
   statusMaxRecipients,
   statusText,
   onCampaignNumbersChange,
@@ -5732,6 +5734,7 @@ function WhatsappChannelOperationsPanel({
   channelScheduledFor: string;
   newsletterJid: string;
   newsletterText: string;
+  salesCatalog: ClientSalesCatalogItem[];
   statusMaxRecipients: number;
   statusText: string;
   onCampaignNumbersChange: (value: string) => void;
@@ -5761,9 +5764,17 @@ function WhatsappChannelOperationsPanel({
   const [targetRecurrenceOccurrences, setTargetRecurrenceOccurrences] = useState(7);
   const [targetAiBrief, setTargetAiBrief] = useState("");
   const [targetAiChecklist, setTargetAiChecklist] = useState<string[]>([]);
+  const [targetDeliveryMode, setTargetDeliveryMode] = useState<"text" | "audio" | "text_audio">("text");
+  const [targetMediaUrl, setTargetMediaUrl] = useState("");
+  const [targetMediaKind, setTargetMediaKind] = useState<"image" | "video" | "document">("image");
+  const [targetMediaCaption, setTargetMediaCaption] = useState("");
+  const [selectedCatalogItemIds, setSelectedCatalogItemIds] = useState<string[]>([]);
   const selectedTargets = targets.filter((target) => selectedTargetIds.includes(target.id));
   const selectedValidTargetIds = selectedTargets.map((target) => target.id);
   const selectedHasNewsletter = selectedTargets.some((target) => target.type === "newsletter");
+  const selectedCatalogItems = salesCatalog.filter((item) => selectedCatalogItemIds.includes(item.id));
+  const selectedValidCatalogItemIds = selectedCatalogItems.map((item) => item.id);
+  const targetAttachmentCount = (targetMediaUrl.trim() ? 1 : 0) + selectedCatalogItems.filter((item) => item.media.length > 0).length;
   const targetRecurring = targetRecurrenceFrequency !== "none";
   const targetAiReady = selectedTargets.length > 0
     && (targetAiBrief.trim().length > 0 || targetCampaignTitle.trim().length > 0 || targetCampaignText.trim().length > 0)
@@ -5780,9 +5791,16 @@ function WhatsappChannelOperationsPanel({
       : [...current, targetId]);
   }
 
+  function toggleCatalogItemSelection(itemId: string) {
+    setSelectedCatalogItemIds((current) => current.includes(itemId)
+      ? current.filter((id) => id !== itemId)
+      : [...current, itemId].slice(-6));
+  }
+
   async function generateTargetCampaignDraft() {
     const response = await onRunAction("generate_target_campaign_draft", {
       targetIds: selectedValidTargetIds,
+      catalogItemIds: selectedValidCatalogItemIds,
       brief: targetAiBrief,
       currentTitle: targetCampaignTitle,
       currentText: targetCampaignText,
@@ -5998,7 +6016,7 @@ function WhatsappChannelOperationsPanel({
           <div className="rounded-lg border p-3" style={{ background: "var(--ch-surface)", borderColor: "var(--ch-border)" }}>
             <p className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
               Post para grupos/canais
-              <InfoHint text="Gere um rascunho com IA, revise o texto e aprove manualmente ao agendar para os destinos selecionados. Voz e midia entram na proxima fase." />
+              <InfoHint text="Gere um rascunho com IA, revise o texto, adicione voz/midia/produtos e aprove manualmente ao agendar para os destinos selecionados." />
             </p>
             <textarea
               className="mt-3 min-h-24 w-full resize-y rounded-lg border px-3 py-2 text-[12px] leading-5 outline-none"
@@ -6041,6 +6059,95 @@ function WhatsappChannelOperationsPanel({
               onChange={(event) => setTargetCampaignText(event.target.value.slice(0, 1400))}
               placeholder="Mensagem para grupos e canais selecionados."
             />
+            <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_112px]">
+              <label className="block">
+                <span className="mb-1 flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
+                  Entrega
+                  <InfoHint text="Texto envia a mensagem normal. Audio gera uma nota de voz com a voz ativa do agente. Texto + audio envia os dois." />
+                </span>
+                <select
+                  className="h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                  value={targetDeliveryMode}
+                  onChange={(event) => setTargetDeliveryMode(event.target.value as "text" | "audio" | "text_audio")}
+                >
+                  <option value="text">Texto</option>
+                  <option value="audio">Audio</option>
+                  <option value="text_audio">Texto + audio</option>
+                </select>
+              </label>
+              <label className="block">
+                <span className="mb-1 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Midia</span>
+                <select
+                  className="h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                  value={targetMediaKind}
+                  onChange={(event) => setTargetMediaKind(event.target.value as "image" | "video" | "document")}
+                >
+                  <option value="image">Imagem</option>
+                  <option value="video">Video</option>
+                  <option value="document">Arquivo</option>
+                </select>
+              </label>
+            </div>
+            <input
+              className="mt-2 h-10 w-full rounded-lg border px-3 text-[12px] outline-none"
+              value={targetMediaUrl}
+              onChange={(event) => setTargetMediaUrl(event.target.value.slice(0, 600))}
+              placeholder="URL publica da imagem, video ou arquivo"
+            />
+            {targetMediaUrl.trim() ? (
+              <input
+                className="mt-2 h-10 w-full rounded-lg border px-3 text-[12px] outline-none"
+                value={targetMediaCaption}
+                onChange={(event) => setTargetMediaCaption(event.target.value.slice(0, 300))}
+                placeholder="Legenda opcional da midia"
+              />
+            ) : null}
+            {salesCatalog.length ? (
+              <div className="mt-3 rounded-lg border px-3 py-2" style={{ borderColor: "var(--ch-border)" }}>
+                <p className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
+                  Produtos do catalogo
+                  <InfoHint text="Seleciona produtos cadastrados. A primeira midia de cada produto entra como anexo da campanha." />
+                </p>
+                <div className="mt-2 grid max-h-36 gap-1.5 overflow-y-auto pr-1">
+                  {salesCatalog.slice(0, 10).map((item) => {
+                    const selected = selectedCatalogItemIds.includes(item.id);
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        className="flex min-h-10 items-center gap-2 rounded-md border px-2 text-left transition hover:bg-cyan-400/10"
+                        style={{
+                          borderColor: selected ? "rgba(34,211,238,0.45)" : "var(--ch-border)",
+                          background: selected ? "rgba(34,211,238,0.10)" : "transparent",
+                        }}
+                        onClick={() => toggleCatalogItemSelection(item.id)}
+                      >
+                        <input
+                          type="checkbox"
+                          className="h-3.5 w-3.5 shrink-0 accent-cyan-300"
+                          checked={selected}
+                          readOnly
+                        />
+                        <Package className="h-3.5 w-3.5 shrink-0 text-cyan-300" />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-[11px] font-semibold text-slate-100">{item.title}</span>
+                          <span className="block truncate text-[9px] text-slate-500">{formatSalesCatalogPromptItemMeta(item)}</span>
+                        </span>
+                        <span className="shrink-0 rounded-md bg-slate-800/80 px-1.5 py-0.5 font-mono text-[8px] uppercase tracking-widest text-slate-300">
+                          {item.media.length}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
+            {targetDeliveryMode !== "text" || targetAttachmentCount > 0 ? (
+              <p className="mt-2 flex items-center gap-1.5 text-[11px] leading-4 text-cyan-100">
+                {targetDeliveryMode !== "text" ? <Mic className="h-3.5 w-3.5" /> : <ImageIcon className="h-3.5 w-3.5" />}
+                {formatTargetMediaSummary(targetDeliveryMode, targetAttachmentCount)}
+              </p>
+            ) : null}
             <label className="mt-3 flex items-start gap-2 rounded-lg border px-3 py-2 text-[11px] leading-4 text-slate-300" style={{ borderColor: "var(--ch-border)" }}>
               <input
                 type="checkbox"
@@ -6098,10 +6205,15 @@ function WhatsappChannelOperationsPanel({
                   title: targetCampaignTitle,
                   text: targetCampaignText,
                   targetIds: selectedValidTargetIds,
+                  catalogItemIds: selectedValidCatalogItemIds,
                   mentionAll: targetMentionAll,
                   scheduledFor,
                   recurrenceFrequency: targetRecurrenceFrequency,
                   recurrenceOccurrences: targetRecurring ? targetRecurrenceOccurrences : null,
+                  deliveryMode: targetDeliveryMode,
+                  mediaUrl: targetMediaUrl,
+                  mediaKind: targetMediaKind,
+                  mediaCaption: targetMediaCaption,
                 })}
               />
             </div>
@@ -6354,6 +6466,15 @@ function formatTargetRecurrenceSummary(frequency: "none" | "daily" | "weekly", o
   if (frequency === "daily") return `${occurrences} envios diarios no total`;
   if (frequency === "weekly") return `${occurrences} envios semanais no total`;
   return "Envio unico";
+}
+
+function formatTargetMediaSummary(deliveryMode: "text" | "audio" | "text_audio", attachmentCount: number) {
+  const delivery = deliveryMode === "audio" ? "audio" : deliveryMode === "text_audio" ? "texto + audio" : "texto";
+  const media = attachmentCount === 1 ? "1 anexo" : `${attachmentCount} anexos`;
+
+  if (deliveryMode === "text" && attachmentCount > 0) return media;
+  if (attachmentCount > 0) return `${delivery} / ${media}`;
+  return delivery;
 }
 
 function formatOutboundRecurrence(item: WhatsappChannelOutboundItem) {

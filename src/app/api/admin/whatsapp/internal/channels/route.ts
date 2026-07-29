@@ -41,6 +41,11 @@ type ChannelActionBody = {
   brief?: unknown;
   currentTitle?: unknown;
   currentText?: unknown;
+  deliveryMode?: unknown;
+  mediaUrl?: unknown;
+  mediaKind?: unknown;
+  mediaCaption?: unknown;
+  catalogItemIds?: unknown;
   targetId?: unknown;
   enabled?: unknown;
   campaignEnabled?: unknown;
@@ -151,6 +156,7 @@ export async function POST(request: NextRequest) {
         mentionAll: asBoolean(body?.mentionAll),
         recurrenceFrequency: asString(body?.recurrenceFrequency),
         recurrenceOccurrences: asNumber(body?.recurrenceOccurrences) ?? null,
+        catalogItemIds: readStringList(body?.catalogItemIds),
       });
       await meterGeminiGenerationUsage({
         client,
@@ -180,6 +186,11 @@ export async function POST(request: NextRequest) {
         mentionAll: asBoolean(body?.mentionAll),
         recurrenceFrequency: asString(body?.recurrenceFrequency),
         recurrenceOccurrences: asNumber(body?.recurrenceOccurrences) ?? null,
+        deliveryMode: asString(body?.deliveryMode),
+        mediaUrl: asString(body?.mediaUrl),
+        mediaKind: asString(body?.mediaKind),
+        mediaCaption: asString(body?.mediaCaption),
+        catalogItemIds: readStringList(body?.catalogItemIds),
       });
       await dispatchOutboundIfDue(item);
       result = { item };

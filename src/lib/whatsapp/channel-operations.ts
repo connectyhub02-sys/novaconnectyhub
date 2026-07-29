@@ -2,8 +2,11 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
+import { mapSalesCatalogItem } from "@/lib/client-os/sales-catalog";
+import type { ClientSalesCatalogItem, SalesCatalogMedia, SalesCatalogMediaKind } from "@/lib/sales-catalog/shared";
 import { loadGeminiCredentials, type GeminiCredentials } from "@/lib/gemini/credentials";
 import { createServiceClient } from "@/lib/supabase/service";
+import { generateConnectyVoiceAudio } from "@/lib/voice/tts";
 import { normalizeWhatsappBehaviorConfig, type WhatsappBehaviorConfig } from "./agent-behavior";
 import { loadUazapiCredentials, type UazapiCredentials } from "./uazapi-credentials";
 
@@ -14,6 +17,8 @@ type WhatsappTargetType = "group" | "newsletter";
 type WhatsappTargetReplyMode = "off" | "all" | "mentions" | "admins" | "observer";
 type WhatsappTargetMentionMode = "none" | "author" | "all";
 type WhatsappCampaignRecurrenceFrequency = "daily" | "weekly";
+type WhatsappCampaignDeliveryMode = "text" | "audio" | "text_audio";
+type SalesCatalogItemMapperInput = Parameters<typeof mapSalesCatalogItem>[0];
 
 type WhatsappInstanceRow = {
   id: string;
@@ -44,6 +49,16 @@ type ContentPipelineRow = {
   tags: string[] | null;
   metadata: JsonRecord | null;
   created_at: string;
+};
+
+type SalesCatalogMemoryRow = {
+  id: string;
+  organization_id: string | null;
+  title: string;
+  content: string;
+  metadata: JsonRecord | null;
+  created_at: string | null;
+  updated_at: string | null;
 };
 
 type WhatsappChannelTargetRow = {
@@ -397,6 +412,11 @@ export async function queueWhatsappTargetTextCampaign(
     mentionAll?: boolean;
     recurrenceFrequency?: string | null;
     recurrenceOccurrences?: number | null;
+    deliveryMode?: string | null;
+    mediaUrl?: string | null;
+    mediaKind?: string | null;
+    mediaCaption?: string | null;
+    catalogItemIds?: string[];
   },
 ) {
   if (!context.behavior.campaignBroadcasts && !context.behavior.newsletterBroadcasts) {
@@ -421,16 +441,27 @@ export async function queueWhatsappTargetTextCampaign(
     throw new Error("Mencionar todos so pode ser usado em grupos.");
   }
 
+  const deliveryMode = normalizeCampaignDeliveryMode(input.deliveryMode);
+  if ((deliveryMode === "audio" || deliveryMode === "text_audio") && !context.organizationId) {
+    throw new Error("Campanhas em audio exigem uma organizacao para salvar e medir a voz gerada.");
+  }
+
+  const catalogItems = await listSalesCatalogCampaignItems(client, context, input.catalogItemIds ?? []);
+  const mediaAttachments = [
+    ...normalizeManualCampaignAttachments(input.mediaUrl, input.mediaKind, input.mediaCaption),
+    ...buildCatalogCampaignAttachments(catalogItems),
+  ].slice(0, 6);
   const title = input.title.trim() || `Campanha WhatsApp - ${new Date().toLocaleDateString("pt-BR")}`;
   return queueWhatsappOutbound(client, context, {
     operation: "campaign_simple",
     title,
-    summary: `${targets.length} destino(s): ${preview(text, 140)}`,
+    summary: `${targets.length} destino(s), ${mediaAttachments.length} anexo(s): ${preview(text, 140)}`,
     body: text,
     scheduledFor: input.scheduledFor,
     payload: {
       type: "text",
       text,
+      delivery_mode: deliveryMode,
       target_mode: "whatsapp_targets",
       targets: targets.map((target) => ({
         id: target.id,
@@ -439,6 +470,15 @@ export async function queueWhatsappTargetTextCampaign(
         name: target.name,
       })),
       mentions: mentionAll ? "all" : undefined,
+      media_attachments: mediaAttachments,
+      catalog_items: catalogItems.map((item) => ({
+        id: item.id,
+        title: item.title,
+        tag: item.tag,
+        price: item.price,
+        currency: item.currency,
+        media_count: item.media.length,
+      })),
     },
     recurrence: normalizeCampaignRecurrence({
       frequency: input.recurrenceFrequency,
@@ -458,6 +498,7 @@ export async function generateWhatsappTargetCampaignDraft(
     recurrenceFrequency?: string | null;
     recurrenceOccurrences?: number | null;
     mentionAll?: boolean;
+    catalogItemIds?: string[];
   },
 ): Promise<WhatsappTargetCampaignDraft> {
   if (!context.behavior.campaignBroadcasts && !context.behavior.newsletterBroadcasts) {
@@ -482,6 +523,7 @@ export async function generateWhatsappTargetCampaignDraft(
   const brief = input.brief?.trim().slice(0, 1200) ?? "";
   const currentTitle = input.currentTitle?.trim().slice(0, 120) ?? "";
   const currentText = input.currentText?.trim().slice(0, 1600) ?? "";
+  const catalogItems = await listSalesCatalogCampaignItems(client, context, input.catalogItemIds ?? []);
 
   if (!brief && !currentTitle && !currentText) {
     throw new Error("Informe um tema, oferta ou mensagem inicial para a IA criar o rascunho.");
@@ -513,6 +555,8 @@ export async function generateWhatsappTargetCampaignDraft(
     ].filter(Boolean).join(" / ")).join("\n"),
     recurrence ? `Recorrencia planejada: ${recurrence.frequency === "weekly" ? "semanal" : "diaria"}, ${readInteger(recurrence.max_occurrences, 1)} envios no total.` : "Recorrencia planejada: envio unico.",
     mentionAll ? "Controle de mencao: mencionar todos nos grupos selecionados." : "Controle de mencao: nao mencionar todos por padrao.",
+    catalogItems.length ? "Produtos do catalogo selecionados:" : "",
+    catalogItems.map((item, index) => formatCampaignCatalogPromptItem(item, index)).join("\n"),
     brief ? `Briefing do usuario: ${brief}` : "",
     currentTitle ? `Titulo atual para aproveitar ou melhorar: ${currentTitle}` : "",
     currentText ? `Texto atual para aproveitar ou melhorar: ${currentText}` : "",
@@ -661,18 +705,8 @@ async function processWhatsappOutboundItem(client: SupabaseClient, item: Content
       if (targetRecipients) {
         const responses = [];
         for (const recipient of targetRecipients) {
-          const sent = await callUazapi(context, "/send/text", {
-            method: "POST",
-            body: cleanPayload({
-              number: recipient,
-              text: payload.text ?? item.body,
-              mentions: payload.mentions,
-              linkPreview: true,
-              track_source: "connectyhub",
-              track_id: `campaign_${item.id}`,
-            }),
-          }).then((result) => result.data);
-          responses.push({ recipient, response: sanitizeProviderData(sent) });
+          const sent = await sendTargetCampaignPayloadToRecipient(client, context, item, payload, recipient);
+          responses.push({ recipient, responses: sanitizeProviderData(sent) });
         }
         providerResponse = { target_mode: "whatsapp_targets", sent: responses };
       } else {
@@ -750,6 +784,121 @@ async function processWhatsappOutboundItem(client: SupabaseClient, item: Content
 
     return { id: item.id, status: "failed", error: message };
   }
+}
+
+async function sendTargetCampaignPayloadToRecipient(
+  client: SupabaseClient,
+  context: WhatsappOperationalContext,
+  item: ContentPipelineRow,
+  payload: JsonRecord,
+  recipient: string,
+) {
+  const text = asString(payload.text) ?? item.body ?? "";
+  const deliveryMode = normalizeCampaignDeliveryMode(payload.delivery_mode);
+  const mentions = payload.mentions;
+  const responses: Array<JsonRecord> = [];
+
+  if ((deliveryMode === "text" || deliveryMode === "text_audio") && text) {
+    const textResponse = await callUazapi(context, "/send/text", {
+      method: "POST",
+      body: cleanPayload({
+        number: recipient,
+        text,
+        mentions,
+        linkPreview: true,
+        track_source: "connectyhub",
+        track_id: `campaign_${item.id}_text`,
+      }),
+    }).then((result) => result.data);
+    responses.push({ mode: "text", response: sanitizeProviderData(textResponse) as JsonRecord });
+  }
+
+  if ((deliveryMode === "audio" || deliveryMode === "text_audio") && text) {
+    const audioResponse = await sendCampaignAudioToRecipient(client, context, item, recipient, text, mentions);
+    responses.push(audioResponse);
+  }
+
+  const attachments = readCampaignMediaAttachments(payload.media_attachments);
+  for (let index = 0; index < attachments.length; index++) {
+    const attachment = attachments[index];
+    const mediaResponse = await callUazapi(context, "/send/media", {
+      method: "POST",
+      body: cleanPayload({
+        number: recipient,
+        type: attachment.type,
+        file: attachment.file,
+        text: attachment.text,
+        mentions,
+        track_source: "connectyhub",
+        track_id: `campaign_${item.id}_media_${index + 1}`,
+      }),
+    }).then((result) => result.data);
+    responses.push({
+      mode: "media",
+      mediaType: attachment.type,
+      source: attachment.source,
+      catalogItemId: attachment.catalogItemId,
+      response: sanitizeProviderData(mediaResponse) as JsonRecord,
+    });
+  }
+
+  return responses;
+}
+
+async function sendCampaignAudioToRecipient(
+  client: SupabaseClient,
+  context: WhatsappOperationalContext,
+  item: ContentPipelineRow,
+  recipient: string,
+  text: string,
+  mentions: unknown,
+) {
+  if (!context.organizationId) {
+    throw new Error("Campanhas em audio exigem uma organizacao vinculada.");
+  }
+
+  const generatedAudio = await generateConnectyVoiceAudio({
+    organizationId: context.organizationId,
+    userId: null,
+    text,
+    voiceId: context.behavior.audioVoiceId || null,
+    voicePublicOwnerId: context.behavior.audioVoicePublicOwnerId || null,
+    voiceName: context.behavior.audioVoiceName || null,
+    voiceSource: context.behavior.audioVoiceSource || null,
+    modelId: context.behavior.audioModelId || null,
+    source: "whatsapp_campaign",
+    metadata: {
+      whatsappInstanceId: context.instance.id,
+      contentPipelineItemId: item.id,
+      recipient,
+      agentScope: "customer",
+      deliveryMode: "campaign_audio",
+    },
+    client,
+  });
+  const providerResponse = await callUazapi(context, "/send/media", {
+    method: "POST",
+    body: cleanPayload({
+      number: recipient,
+      type: "ptt",
+      file: generatedAudio.audioUrl,
+      mentions,
+      track_source: "connectyhub",
+      track_id: `campaign_${item.id}_audio`,
+    }),
+  }).then((result) => result.data);
+
+  return {
+    mode: "audio",
+    generatedAudio: {
+      mediaId: generatedAudio.mediaId,
+      bytesSize: generatedAudio.bytesSize,
+      voiceId: generatedAudio.voiceId,
+      modelId: generatedAudio.modelId,
+      chargeCredits: generatedAudio.chargeCredits ?? null,
+    },
+    response: sanitizeProviderData(providerResponse) as JsonRecord,
+  };
 }
 
 async function buildOperationalContext(
@@ -1051,6 +1200,31 @@ async function loadWhatsappChannelTargetById(
   }
 
   return data ?? null;
+}
+
+async function listSalesCatalogCampaignItems(
+  client: SupabaseClient,
+  context: WhatsappOperationalContext,
+  ids: string[],
+): Promise<ClientSalesCatalogItem[]> {
+  const uniqueIds = Array.from(new Set(ids.map((id) => id.trim()).filter(Boolean))).slice(0, 6);
+  if (uniqueIds.length === 0 || context.scope !== "organization" || !context.organizationId) return [];
+
+  const { data, error } = await client
+    .from("intelligence_memory")
+    .select("id, organization_id, title, content, metadata, created_at, updated_at")
+    .eq("scope", "organization")
+    .eq("memory_type", "sales_catalog_item")
+    .eq("organization_id", context.organizationId)
+    .in("id", uniqueIds);
+
+  if (error) {
+    throw new Error(`Nao foi possivel carregar produtos da campanha: ${error.message}`);
+  }
+
+  return ((data ?? []) as SalesCatalogMemoryRow[])
+    .map((row) => mapSalesCatalogItem(row as SalesCatalogItemMapperInput))
+    .filter((item) => item.status === "active");
 }
 
 async function syncWhatsappChannelTargets(
@@ -1460,6 +1634,112 @@ function nextRecurrenceDate(value: string, frequency: WhatsappCampaignRecurrence
   const date = Number.isNaN(base.getTime()) ? new Date() : base;
   date.setUTCDate(date.getUTCDate() + (frequency === "weekly" ? 7 : 1));
   return date.toISOString();
+}
+
+function normalizeCampaignDeliveryMode(value: unknown): WhatsappCampaignDeliveryMode {
+  if (value === "audio" || value === "text_audio") return value;
+  return "text";
+}
+
+function normalizeManualCampaignAttachments(
+  mediaUrl: string | null | undefined,
+  mediaKind: string | null | undefined,
+  mediaCaption: string | null | undefined,
+) {
+  const file = normalizePublicMediaUrl(mediaUrl);
+  const type = normalizeCampaignMediaKind(mediaKind);
+
+  if (!file || !type) return [];
+
+  return [{
+    type,
+    file,
+    text: mediaCaption?.trim().slice(0, 500) || null,
+    source: "manual_url",
+    catalogItemId: null,
+    catalogItemTitle: null,
+  }];
+}
+
+function buildCatalogCampaignAttachments(items: ClientSalesCatalogItem[]) {
+  return items
+    .map((item) => {
+      const media = item.media.find((entry) => normalizeCampaignMediaKind(entry.kind) && normalizePublicMediaUrl(entry.storageUrl));
+      if (!media) return null;
+
+      return {
+        type: media.kind,
+        file: media.storageUrl,
+        text: buildCampaignCatalogCaption(item, media),
+        source: "sales_catalog",
+        catalogItemId: item.id,
+        catalogItemTitle: item.title,
+      };
+    })
+    .filter((item): item is NonNullable<typeof item> => Boolean(item));
+}
+
+function readCampaignMediaAttachments(value: unknown) {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item) => readRecord(item))
+    .map((item) => {
+      const file = normalizePublicMediaUrl(asString(item?.file));
+      const type = normalizeCampaignMediaKind(asString(item?.type));
+      if (!file || !type) return null;
+
+      return {
+        type,
+        file,
+        text: asString(item?.text),
+        source: asString(item?.source),
+        catalogItemId: asString(item?.catalogItemId),
+      };
+    })
+    .filter((item): item is NonNullable<typeof item> => Boolean(item))
+    .slice(0, 6);
+}
+
+function normalizeCampaignMediaKind(value: unknown): SalesCatalogMediaKind | null {
+  if (value === "image" || value === "video" || value === "document") return value;
+  return null;
+}
+
+function normalizePublicMediaUrl(value: string | null | undefined) {
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+
+  try {
+    const url = new URL(trimmed);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+function buildCampaignCatalogCaption(item: ClientSalesCatalogItem, media: SalesCatalogMedia) {
+  const parts = [
+    item.title,
+    item.price ? `${item.price} ${item.currency}` : "",
+    item.highlightLabel,
+    media.kind === "document" ? media.fileName : "",
+  ];
+
+  return parts.filter(Boolean).join(" | ").slice(0, 500);
+}
+
+function formatCampaignCatalogPromptItem(item: ClientSalesCatalogItem, index: number) {
+  return [
+    `${index + 1}. ${item.title}`,
+    item.price ? `Preco: ${item.price} ${item.currency}` : "",
+    item.category ? `Categoria: ${item.category}` : "",
+    item.highlightLabel ? `Destaque: ${item.highlightLabel}` : "",
+    item.offer.callToAction ? `CTA: ${item.offer.callToAction}` : "",
+    item.description ? `Descricao: ${preview(item.description, 420)}` : "",
+    item.media.length ? `Midias disponiveis: ${item.media.length}` : "Sem midia cadastrada",
+  ].filter(Boolean).join(" / ");
 }
 
 function normalizeRecipientList(value: unknown) {
