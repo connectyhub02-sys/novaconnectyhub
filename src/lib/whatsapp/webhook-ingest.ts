@@ -21,6 +21,16 @@ import {
 
 type JsonRecord = Record<string, unknown>;
 
+type WhatsappGroupTargetPolicy = {
+  groupTargetId: string;
+  groupTargetName: string | null;
+  groupReplyMode: "all" | "mentions" | "admins" | "observer";
+  groupMentionMode: "none" | "author" | "all";
+  groupRequireApproval: boolean;
+  groupMaxRepliesPerHour: number;
+  groupMuteUntil: string | null;
+};
+
 type WhatsappInstanceRow = {
   id: string;
   organization_id: string;
@@ -744,6 +754,29 @@ async function enqueueWhatsappAgentRun(
     return null;
   }
 
+  const groupTargetDecision = isGroupChat
+    ? await loadWhatsappGroupTargetDecision(client, {
+        whatsappInstanceId: input.whatsappInstanceId,
+        providerChatId: input.providerChatId,
+      })
+    : null;
+
+  if (groupTargetDecision && !groupTargetDecision.allowed) {
+    return null;
+  }
+
+  const groupTargetMetadata = groupTargetDecision?.policy
+    ? {
+        groupTargetId: groupTargetDecision.policy.groupTargetId,
+        groupTargetName: groupTargetDecision.policy.groupTargetName,
+        groupReplyMode: groupTargetDecision.policy.groupReplyMode,
+        groupMentionMode: groupTargetDecision.policy.groupMentionMode,
+        groupRequireApproval: groupTargetDecision.policy.groupRequireApproval,
+        groupMaxRepliesPerHour: groupTargetDecision.policy.groupMaxRepliesPerHour,
+        groupMuteUntil: groupTargetDecision.policy.groupMuteUntil,
+      }
+    : {};
+
   if (!isGroupChat && isWhatsappHandoffNotificationRecipient(behavior, input.phoneNumber)) {
     return null;
   }
@@ -776,6 +809,7 @@ async function enqueueWhatsappAgentRun(
           providerChatId: input.providerChatId,
           isGroupChat,
           chatKind: isGroupChat ? "group" : "direct",
+          ...groupTargetMetadata,
           phoneNumber: input.phoneNumber,
           messageType: input.messageType,
           providerEventType: input.eventType,
@@ -827,6 +861,7 @@ async function enqueueWhatsappAgentRun(
         providerChatId: input.providerChatId,
         isGroupChat,
         chatKind: isGroupChat ? "group" : "direct",
+        ...groupTargetMetadata,
         phoneNumber: input.phoneNumber,
         messageType: input.messageType,
         providerEventType: input.eventType,
@@ -863,6 +898,76 @@ async function loadWhatsappInstanceMetadata(client: SupabaseClient, whatsappInst
     .maybeSingle<{ metadata: JsonRecord | null }>();
 
   return isRecord(data?.metadata) ? data.metadata : null;
+}
+
+async function loadWhatsappGroupTargetDecision(
+  client: SupabaseClient,
+  input: {
+    whatsappInstanceId: string;
+    providerChatId: string | null;
+  },
+): Promise<{ allowed: boolean; reason: string | null; policy: WhatsappGroupTargetPolicy | null }> {
+  const providerJid = normalizeGroupJid(input.providerChatId);
+  if (!providerJid) {
+    return { allowed: false, reason: "group_missing_chat_id", policy: null };
+  }
+
+  const { data, error } = await client
+    .from("whatsapp_channel_targets")
+    .select("id, provider_jid, display_name, enabled, reply_mode, mention_mode, require_approval, max_replies_per_hour, mute_until")
+    .eq("whatsapp_instance_id", input.whatsappInstanceId)
+    .eq("target_type", "group")
+    .eq("provider_jid", providerJid)
+    .maybeSingle<{
+      id: string;
+      provider_jid: string;
+      display_name: string | null;
+      enabled: boolean | null;
+      reply_mode: string | null;
+      mention_mode: string | null;
+      require_approval: boolean | null;
+      max_replies_per_hour: number | null;
+      mute_until: string | null;
+    }>();
+
+  if (error) {
+    if (isMissingWhatsappChannelTargetsTable(error)) {
+      return { allowed: true, reason: "group_target_table_missing", policy: null };
+    }
+    return { allowed: false, reason: "group_target_lookup_failed", policy: null };
+  }
+
+  if (!data) {
+    return { allowed: false, reason: "group_target_not_configured", policy: null };
+  }
+
+  if (data.enabled !== true) {
+    return { allowed: false, reason: "group_target_disabled", policy: null };
+  }
+
+  const muteUntil = parseFutureIsoDate(data.mute_until);
+  if (muteUntil) {
+    return { allowed: false, reason: "group_target_muted", policy: null };
+  }
+
+  const replyMode = normalizeGroupTargetReplyMode(data.reply_mode);
+  if (replyMode === "off") {
+    return { allowed: false, reason: "group_target_off", policy: null };
+  }
+
+  return {
+    allowed: true,
+    reason: null,
+    policy: {
+      groupTargetId: data.id,
+      groupTargetName: data.display_name,
+      groupReplyMode: replyMode,
+      groupMentionMode: normalizeGroupTargetMentionMode(data.mention_mode),
+      groupRequireApproval: data.require_approval === true,
+      groupMaxRepliesPerHour: clampInteger(data.max_replies_per_hour, 0, 120, 6),
+      groupMuteUntil: data.mute_until,
+    },
+  };
 }
 
 async function findPlatformSectorWhatsappAgent(client: SupabaseClient, sectorId: string) {
@@ -1467,8 +1572,47 @@ function normalizePhone(value: string | null) {
   return digits.length >= 8 ? digits : null;
 }
 
+function normalizeGroupJid(value: string | null | undefined) {
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+  if (isWhatsappGroupChatId(trimmed)) return trimmed;
+  const digits = trimmed.replace(/[^\d-]/g, "");
+  return digits ? `${digits}@g.us` : null;
+}
+
 function isWhatsappGroupChatId(value: string | null | undefined) {
   return typeof value === "string" && /@g\.us(?:$|[^\w.-])/i.test(value.trim());
+}
+
+function normalizeGroupTargetReplyMode(value: unknown): WhatsappGroupTargetPolicy["groupReplyMode"] | "off" {
+  if (value === "off" || value === "all" || value === "mentions" || value === "admins" || value === "observer") {
+    return value;
+  }
+  return "mentions";
+}
+
+function normalizeGroupTargetMentionMode(value: unknown): WhatsappGroupTargetPolicy["groupMentionMode"] {
+  if (value === "none" || value === "author" || value === "all") return value;
+  return "none";
+}
+
+function parseFutureIsoDate(value: string | null | undefined) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.getTime() > Date.now() ? date : null;
+}
+
+function clampInteger(value: number | null | undefined, min: number, max: number, fallback: number) {
+  const number = Number.isFinite(value) ? Math.round(value as number) : fallback;
+  return Math.min(max, Math.max(min, number));
+}
+
+function isMissingWhatsappChannelTargetsTable(error: unknown) {
+  const record = readRecord(error);
+  const code = asString(record?.code);
+  const message = asString(record?.message)?.toLowerCase() ?? "";
+  return code === "42P01" || message.includes("whatsapp_channel_targets");
 }
 
 function preview(value: string | null | undefined, maxLength: number) {

@@ -5830,34 +5830,114 @@ function WhatsappChannelOperationsPanel({
                 targets.map((target) => {
                   const selected = selectedTargetIds.includes(target.id);
                   return (
-                    <label
+                    <div
                       key={target.id}
-                      className="flex min-h-[82px] cursor-pointer gap-3 rounded-lg border p-3 transition"
+                      className="grid min-h-[82px] gap-3 rounded-lg border p-3 transition"
                       style={{
                         background: selected ? "rgba(34,211,238,0.10)" : "var(--ch-surface)",
                         borderColor: selected ? "rgba(34,211,238,0.45)" : "var(--ch-border)",
                       }}
                     >
-                      <input
-                        type="checkbox"
-                        className="mt-1 h-4 w-4 shrink-0 accent-cyan-300"
-                        checked={selected}
-                        onChange={() => toggleTargetSelection(target.id)}
-                      />
-                      <span className="min-w-0">
-                        <span className="flex min-w-0 items-center gap-2">
-                          <span className="truncate text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>{target.name}</span>
-                          <span className="shrink-0 rounded-md bg-slate-800/80 px-1.5 py-0.5 font-mono text-[8px] uppercase tracking-widest text-slate-300">{formatChannelTargetType(target.type)}</span>
-                        </span>
-                        <span className="mt-1 block truncate font-mono text-[9px] text-slate-500">{target.jid}</span>
-                        <span className="mt-2 flex flex-wrap gap-1.5">
-                          {target.participantCount !== null ? <NeonBadge tone="zinc">{target.participantCount} membros</NeonBadge> : null}
-                          {target.isAdmin ? <NeonBadge tone="green">admin</NeonBadge> : null}
-                          {target.isAnnouncement ? <NeonBadge tone="amber">avisos</NeonBadge> : null}
-                          <NeonBadge tone={target.campaignEnabled ? "cyan" : "zinc"}>{target.campaignEnabled ? "campanha ok" : "campanha off"}</NeonBadge>
-                        </span>
-                      </span>
-                    </label>
+                      <div className="flex gap-3">
+                        <input
+                          type="checkbox"
+                          className="mt-1 h-4 w-4 shrink-0 accent-cyan-300"
+                          checked={selected}
+                          onChange={() => toggleTargetSelection(target.id)}
+                        />
+                        <div className="min-w-0 flex-1">
+                          <span className="flex min-w-0 items-center gap-2">
+                            <span className="truncate text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>{target.name}</span>
+                            <span className="shrink-0 rounded-md bg-slate-800/80 px-1.5 py-0.5 font-mono text-[8px] uppercase tracking-widest text-slate-300">{formatChannelTargetType(target.type)}</span>
+                          </span>
+                          <span className="mt-1 block truncate font-mono text-[9px] text-slate-500">{target.jid}</span>
+                          <span className="mt-2 flex flex-wrap gap-1.5">
+                            {target.participantCount !== null ? <NeonBadge tone="zinc">{target.participantCount} membros</NeonBadge> : null}
+                            {target.isAdmin ? <NeonBadge tone="green">admin</NeonBadge> : null}
+                            {target.isAnnouncement ? <NeonBadge tone="amber">avisos</NeonBadge> : null}
+                            {target.type === "group" ? <NeonBadge tone={target.enabled ? "green" : "zinc"}>{target.enabled ? "ia ativa" : "ia off"}</NeonBadge> : null}
+                            <NeonBadge tone={target.campaignEnabled ? "cyan" : "zinc"}>{target.campaignEnabled ? "campanha ok" : "campanha off"}</NeonBadge>
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="grid gap-2">
+                        <div className="flex flex-wrap gap-1.5">
+                          {target.type === "group" ? (
+                            <button
+                              type="button"
+                              className="rounded-md border px-2 py-1 font-mono text-[9px] uppercase tracking-widest text-slate-200"
+                              style={{ borderColor: "var(--ch-border)" }}
+                              disabled={channelAction === "update_target_settings"}
+                              onClick={() => onRunAction("update_target_settings", { targetId: target.id, enabled: !target.enabled })}
+                            >
+                              {target.enabled ? "Pausar IA" : "Ativar IA"}
+                            </button>
+                          ) : null}
+                          <button
+                            type="button"
+                            className="rounded-md border px-2 py-1 font-mono text-[9px] uppercase tracking-widest text-slate-200"
+                            style={{ borderColor: "var(--ch-border)" }}
+                            disabled={channelAction === "update_target_settings"}
+                            onClick={() => onRunAction("update_target_settings", { targetId: target.id, campaignEnabled: !target.campaignEnabled })}
+                          >
+                            {target.campaignEnabled ? "Bloquear campanha" : "Liberar campanha"}
+                          </button>
+                          {target.type === "group" ? (
+                            <button
+                              type="button"
+                              className="rounded-md border px-2 py-1 font-mono text-[9px] uppercase tracking-widest text-slate-200"
+                              style={{ borderColor: "var(--ch-border)" }}
+                              disabled={channelAction === "update_target_settings"}
+                              onClick={() => onRunAction("update_target_settings", {
+                                targetId: target.id,
+                                muteUntil: target.muteUntil ? null : addHoursIso(24),
+                              })}
+                            >
+                              {target.muteUntil ? "Retomar grupo" : "Pausar 24h"}
+                            </button>
+                          ) : null}
+                        </div>
+                        {target.type === "group" ? (
+                          <div className="grid gap-2 sm:grid-cols-3">
+                            <select
+                              className="h-8 rounded-md border bg-transparent px-2 text-[11px] outline-none"
+                              value={target.replyMode}
+                              disabled={channelAction === "update_target_settings"}
+                              onChange={(event) => onRunAction("update_target_settings", { targetId: target.id, replyMode: event.target.value })}
+                            >
+                              <option value="mentions">So mencoes</option>
+                              <option value="observer">Observador</option>
+                              <option value="admins">Admins</option>
+                              <option value="all">Todas</option>
+                              <option value="off">Desligado</option>
+                            </select>
+                            <select
+                              className="h-8 rounded-md border bg-transparent px-2 text-[11px] outline-none"
+                              value={target.mentionMode}
+                              disabled={channelAction === "update_target_settings"}
+                              onChange={(event) => onRunAction("update_target_settings", { targetId: target.id, mentionMode: event.target.value })}
+                            >
+                              <option value="none">Sem @</option>
+                              <option value="author">@ autor</option>
+                              <option value="all">@ todos</option>
+                            </select>
+                            <select
+                              className="h-8 rounded-md border bg-transparent px-2 text-[11px] outline-none"
+                              value={target.maxRepliesPerHour}
+                              disabled={channelAction === "update_target_settings"}
+                              onChange={(event) => onRunAction("update_target_settings", { targetId: target.id, maxRepliesPerHour: Number(event.target.value) })}
+                            >
+                              <option value={0}>0/h</option>
+                              <option value={3}>3/h</option>
+                              <option value={6}>6/h</option>
+                              <option value={12}>12/h</option>
+                              <option value={24}>24/h</option>
+                            </select>
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
                   );
                 })
               ) : (
@@ -6156,6 +6236,10 @@ function formatChannelOperation(value: string) {
 
 function formatChannelTargetType(value: WhatsappChannelTargetItem["type"]) {
   return value === "newsletter" ? "canal" : "grupo";
+}
+
+function addHoursIso(hours: number) {
+  return new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
 }
 
 function localDatetimeToIso(value: string) {

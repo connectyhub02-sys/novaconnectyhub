@@ -420,6 +420,60 @@ export async function queueWhatsappTargetTextCampaign(
   });
 }
 
+export async function updateWhatsappChannelTargetSettings(
+  client: SupabaseClient,
+  context: WhatsappOperationalContext,
+  input: {
+    targetId: string;
+    enabled?: boolean;
+    campaignEnabled?: boolean;
+    replyMode?: string | null;
+    mentionMode?: string | null;
+    requireApproval?: boolean;
+    maxRepliesPerHour?: number | null;
+    muteUntil?: string | null;
+  },
+) {
+  const targetId = input.targetId.trim();
+  if (!targetId) throw new Error("Selecione um grupo ou canal para configurar.");
+
+  const current = await loadWhatsappChannelTargetById(client, context, targetId);
+  if (!current) throw new Error("Grupo ou canal nao encontrado para esta instancia.");
+
+  const patch: JsonRecord = {
+    metadata: {
+      ...(current.metadata ?? {}),
+      settings_updated_at: new Date().toISOString(),
+    },
+  };
+
+  if (typeof input.enabled === "boolean") patch.enabled = input.enabled;
+  if (typeof input.campaignEnabled === "boolean") patch.campaign_enabled = input.campaignEnabled;
+  if (input.replyMode !== undefined) patch.reply_mode = normalizeTargetReplyMode(input.replyMode);
+  if (input.mentionMode !== undefined) patch.mention_mode = normalizeTargetMentionMode(input.mentionMode);
+  if (typeof input.requireApproval === "boolean") patch.require_approval = input.requireApproval;
+  if (input.maxRepliesPerHour !== undefined && input.maxRepliesPerHour !== null) {
+    patch.max_replies_per_hour = clamp(Math.round(input.maxRepliesPerHour), 0, 120);
+  }
+  if (input.muteUntil !== undefined) {
+    patch.mute_until = normalizeMuteUntil(input.muteUntil);
+  }
+
+  const { data, error } = await client
+    .from("whatsapp_channel_targets")
+    .update(patch)
+    .eq("id", targetId)
+    .eq("whatsapp_instance_id", context.instance.id)
+    .select("id, scope, organization_id, whatsapp_instance_id, agent_id, provider, target_type, provider_jid, display_name, description, participant_count, is_admin, is_announcement, enabled, campaign_enabled, reply_mode, mention_mode, require_approval, max_replies_per_hour, mute_until, last_synced_at, metadata, created_at, updated_at")
+    .single<WhatsappChannelTargetRow>();
+
+  if (error || !data) {
+    throw new Error(error?.message ?? "Nao foi possivel salvar a regra do grupo/canal.");
+  }
+
+  return mapWhatsappChannelTarget(data);
+}
+
 export async function processScheduledWhatsappOutbounds(input: {
   itemId?: string;
   limit?: number;
@@ -787,6 +841,25 @@ async function listWhatsappChannelTargetsByIds(
   return ((data ?? []) as WhatsappChannelTargetRow[]).map(mapWhatsappChannelTarget);
 }
 
+async function loadWhatsappChannelTargetById(
+  client: SupabaseClient,
+  context: WhatsappOperationalContext,
+  targetId: string,
+) {
+  const { data, error } = await client
+    .from("whatsapp_channel_targets")
+    .select("id, scope, organization_id, whatsapp_instance_id, agent_id, provider, target_type, provider_jid, display_name, description, participant_count, is_admin, is_announcement, enabled, campaign_enabled, reply_mode, mention_mode, require_approval, max_replies_per_hour, mute_until, last_synced_at, metadata, created_at, updated_at")
+    .eq("id", targetId)
+    .eq("whatsapp_instance_id", context.instance.id)
+    .maybeSingle<WhatsappChannelTargetRow>();
+
+  if (error) {
+    throw new Error(`Nao foi possivel carregar regra do grupo/canal: ${error.message}`);
+  }
+
+  return data ?? null;
+}
+
 async function syncWhatsappChannelTargets(
   client: SupabaseClient,
   context: WhatsappOperationalContext,
@@ -1130,6 +1203,12 @@ function normalizeTargetMentionMode(value: unknown): WhatsappTargetMentionMode {
     return value;
   }
   return "none";
+}
+
+function normalizeMuteUntil(value: string | null) {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
 function cleanPayload(value: JsonRecord) {

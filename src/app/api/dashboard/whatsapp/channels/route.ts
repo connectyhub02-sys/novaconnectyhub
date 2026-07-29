@@ -17,6 +17,7 @@ import {
   queueWhatsappTargetTextCampaign,
   resolveClientWhatsappOperationalContext,
   type WhatsappOutboundItem,
+  updateWhatsappChannelTargetSettings,
 } from "@/lib/whatsapp/channel-operations";
 
 export const dynamic = "force-dynamic";
@@ -44,6 +45,14 @@ type ChannelActionBody = {
   backgroundColor?: unknown;
   targetIds?: unknown;
   mentionAll?: unknown;
+  targetId?: unknown;
+  enabled?: unknown;
+  campaignEnabled?: unknown;
+  replyMode?: unknown;
+  mentionMode?: unknown;
+  requireApproval?: unknown;
+  maxRepliesPerHour?: unknown;
+  muteUntil?: unknown;
 };
 
 export async function GET(request: NextRequest) {
@@ -151,6 +160,20 @@ export async function POST(request: NextRequest) {
       await dispatchOutboundIfDue(item);
       result = { item };
       notice = "Campanha para grupos/canais agendada pelo Inngest.";
+    } else if (action === "update_target_settings") {
+      result = {
+        target: await updateWhatsappChannelTargetSettings(client, whatsapp, {
+          targetId: asString(body?.targetId) ?? "",
+          enabled: readOptionalBoolean(body?.enabled),
+          campaignEnabled: readOptionalBoolean(body?.campaignEnabled),
+          replyMode: readOptionalString(body?.replyMode),
+          mentionMode: readOptionalString(body?.mentionMode),
+          requireApproval: readOptionalBoolean(body?.requireApproval),
+          maxRepliesPerHour: asNumber(body?.maxRepliesPerHour) ?? null,
+          muteUntil: Object.prototype.hasOwnProperty.call(body ?? {}, "muteUntil") ? asString(body?.muteUntil) : undefined,
+        }),
+      };
+      notice = "Regra do grupo/canal salva.";
     } else {
       return NextResponse.json({ error: "Acao invalida." }, { status: 400 });
     }
@@ -272,6 +295,16 @@ function asBoolean(value: unknown) {
   if (typeof value === "boolean") return value;
   if (typeof value === "string") return ["true", "1", "yes", "sim"].includes(value.trim().toLowerCase());
   return false;
+}
+
+function readOptionalBoolean(value: unknown) {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") return ["true", "1", "yes", "sim"].includes(value.trim().toLowerCase());
+  return undefined;
+}
+
+function readOptionalString(value: unknown) {
+  return typeof value === "string" ? value.trim() || null : undefined;
 }
 
 function formatError(error: unknown) {

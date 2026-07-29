@@ -455,6 +455,11 @@ export async function processWhatsappAgentRun(input: {
       if (groupSkipReason) {
         return await completeRun(client, run.id, "Mensagem em grupo fora do modo de resposta configurado.", { skipped: true, reason: groupSkipReason });
       }
+
+      const groupRateLimitReason = await getGroupRateLimitSkipReason(client, context);
+      if (groupRateLimitReason) {
+        return await completeRun(client, run.id, "Limite de respostas do grupo atingido.", { skipped: true, reason: groupRateLimitReason });
+      }
     }
 
     const behaviorSignals = detectBehaviorSignals({
@@ -507,7 +512,7 @@ export async function processWhatsappAgentRun(input: {
         text: optOutText,
         trackId: `lead_opt_out_${run.id}`,
         replyId: latestInbound?.provider_message_id ?? undefined,
-        mentions: resolveGroupMentions(context),
+        mentions: resolveGroupMentions(context, latestInbound),
       });
       await pauseConversationForHuman(client, context.conversationId, behavior, "lead_opt_out");
       await archiveLeadForOptOut(client, context, userText);
@@ -3583,6 +3588,7 @@ async function sendAgentResponse(input: {
             chunkIndex,
             chunksTotal,
             replyId: replyTargets[index]?.provider_message_id ?? undefined,
+            mentionMessage: replyTargets[index] ?? latestInbound,
           })
         : await sendTextOutboundChunk({
             client: input.client,
@@ -3593,6 +3599,7 @@ async function sendAgentResponse(input: {
             chunkIndex,
             chunksTotal,
             replyId: replyTargets[index]?.provider_message_id ?? undefined,
+            mentionMessage: replyTargets[index] ?? latestInbound,
             trackIdPrefix: "agent_text_mixed",
           });
 
@@ -3642,6 +3649,7 @@ async function sendAgentResponse(input: {
         chunkIndex,
         chunksTotal,
         replyId: replyTargets[index]?.provider_message_id ?? undefined,
+        mentionMessage: replyTargets[index] ?? latestInbound,
       });
       persistedChunks.add(chunkIndex);
       outbound.push(message);
@@ -3704,6 +3712,7 @@ async function sendAgentResponse(input: {
       chunkIndex,
       chunksTotal,
       replyId: replyTargets[index]?.provider_message_id ?? undefined,
+      mentionMessage: replyTargets[index] ?? latestInbound,
       trackIdPrefix: "agent_text",
     });
     persistedChunks.add(chunkIndex);
@@ -3817,6 +3826,7 @@ async function sendAudioOutboundChunk(input: {
   chunkIndex: number;
   chunksTotal: number;
   replyId?: string;
+  mentionMessage?: ConversationMessageRow | null;
 }) {
   const { context } = input;
 
@@ -3852,7 +3862,7 @@ async function sendAudioOutboundChunk(input: {
         type: "ptt",
         file: generatedAudio.audioUrl,
         ...(input.replyId ? { replyid: input.replyId } : {}),
-        ...(resolveGroupMentions(context) ? { mentions: resolveGroupMentions(context) } : {}),
+        ...(resolveGroupMentions(context, input.mentionMessage) ? { mentions: resolveGroupMentions(context, input.mentionMessage) } : {}),
         track_source: "connectyhub",
         track_id: `agent_audio_${context.run.id}_${input.chunkIndex}`,
       },
@@ -3879,6 +3889,7 @@ async function sendAudioOutboundChunk(input: {
       chunkIndex: input.chunkIndex,
       chunksTotal: input.chunksTotal,
       replyId: input.replyId,
+      mentionMessage: input.mentionMessage,
       error,
     });
   }
@@ -3893,6 +3904,7 @@ async function sendTextOutboundChunk(input: {
   chunkIndex: number;
   chunksTotal: number;
   replyId?: string;
+  mentionMessage?: ConversationMessageRow | null;
   trackIdPrefix: string;
 }) {
   const interactiveMenu = buildInteractiveLinkMenu(input.text, input.context);
@@ -3910,7 +3922,7 @@ async function sendTextOutboundChunk(input: {
         choices: interactiveMenu.choices,
         trackId: `agent_menu_${input.context.run.id}_${input.chunkIndex}`,
         replyId: input.replyId,
-        mentions: resolveGroupMentions(input.context),
+        mentions: resolveGroupMentions(input.context, input.mentionMessage),
       });
       interactiveButton = true;
     } catch (error) {
@@ -3922,7 +3934,7 @@ async function sendTextOutboundChunk(input: {
         text: input.text,
         trackId: `agent_button_fallback_${input.context.run.id}_${input.chunkIndex}`,
         replyId: input.replyId,
-        mentions: resolveGroupMentions(input.context),
+        mentions: resolveGroupMentions(input.context, input.mentionMessage),
       });
 
       providerResponse = {
@@ -3947,7 +3959,7 @@ async function sendTextOutboundChunk(input: {
       text: input.text,
       trackId: `${input.trackIdPrefix}_${input.context.run.id}_${input.chunkIndex}`,
       replyId: input.replyId,
-      mentions: resolveGroupMentions(input.context),
+      mentions: resolveGroupMentions(input.context, input.mentionMessage),
     });
   }
 
@@ -3974,6 +3986,7 @@ async function sendAudioReplyFallbackText(input: {
   chunkIndex: number;
   chunksTotal: number;
   replyId?: string;
+  mentionMessage?: ConversationMessageRow | null;
   error: unknown;
 }) {
   const errorMessage = describeRuntimeError(input.error, "Falha desconhecida ao enviar resposta em audio.");
@@ -3987,7 +4000,7 @@ async function sendAudioReplyFallbackText(input: {
     text: input.text,
     trackId: `agent_audio_fallback_${input.context.run.id}_${input.chunkIndex}`,
     replyId: input.replyId,
-    mentions: resolveGroupMentions(input.context),
+    mentions: resolveGroupMentions(input.context, input.mentionMessage),
   });
 
   const message: OutboundMessage = {
@@ -5111,8 +5124,51 @@ function buildInteractiveLinkMenu(
   };
 }
 
-function resolveGroupMentions(context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>) {
-  return isWhatsappGroupChatContext(context) && context.behavior.groupMentionAll ? "all" : undefined;
+function resolveGroupMentions(
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+  message?: ConversationMessageRow | null,
+) {
+  if (!isWhatsappGroupChatContext(context)) {
+    return undefined;
+  }
+
+  const policy = readGroupRuntimePolicy(context);
+
+  if (policy.mentionMode === "all" || context.behavior.groupMentionAll) {
+    return "all";
+  }
+
+  if (policy.mentionMode === "author") {
+    return resolveGroupAuthorMention(message);
+  }
+
+  return undefined;
+}
+
+function resolveGroupAuthorMention(message?: ConversationMessageRow | null) {
+  if (!message) return undefined;
+
+  const providerMessage = readProviderMessageRecord(message);
+  const candidates = [
+    asString(providerMessage?.participant),
+    asString(providerMessage?.participantId),
+    asString(providerMessage?.participant_id),
+    asString(providerMessage?.sender),
+    asString(providerMessage?.senderId),
+    asString(providerMessage?.sender_id),
+    asString(providerMessage?.author),
+    asString(providerMessage?.from),
+    asString(providerMessage?.remoteJid),
+    asString(readRecord(providerMessage?.key)?.participant),
+    asString(readRecord(providerMessage?.key)?.remoteJid),
+  ];
+
+  for (const candidate of candidates) {
+    const phone = normalizePhone(candidate);
+    if (phone) return phone;
+  }
+
+  return undefined;
 }
 
 function resolvePreSendPresenceDelayMs(behavior: WhatsappBehaviorConfig, text: string, audio: boolean) {
@@ -6053,7 +6109,7 @@ async function handleLeadHumanHandoffRequest(input: {
     text: handoffText,
     trackId: `human_handoff_${context.run.id}`,
     replyId: latestInbound?.provider_message_id ?? undefined,
-    mentions: resolveGroupMentions(context),
+    mentions: resolveGroupMentions(context, latestInbound),
   });
 
   const pausedUntil = await pauseConversationForHuman(client, context.conversationId, context.behavior, "lead_requested_human", {
@@ -8507,10 +8563,25 @@ function getGroupMessageSkipReason(
   latestInbound: ConversationMessageRow | null,
   userText: string,
 ) {
-  const mode = context.behavior.groupReplyMode;
+  const policy = readGroupRuntimePolicy(context);
+  const mutedUntil = parseFutureDate(policy.muteUntil);
+
+  if (mutedUntil) {
+    return "group_target_muted";
+  }
+
+  const mode = policy.replyMode;
+
+  if (mode === "off") {
+    return "group_target_off";
+  }
 
   if (mode === "all") {
     return null;
+  }
+
+  if (mode === "observer") {
+    return isGroupObserverOpportunity(context, latestInbound, userText) ? null : "group_observer_no_opportunity";
   }
 
   if (mode === "mentions") {
@@ -8522,6 +8593,89 @@ function getGroupMessageSkipReason(
   }
 
   return null;
+}
+
+async function getGroupRateLimitSkipReason(
+  client: SupabaseClient,
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+) {
+  const policy = readGroupRuntimePolicy(context);
+  const maxReplies = policy.maxRepliesPerHour;
+
+  if (maxReplies === null) return null;
+  if (maxReplies <= 0) return "group_rate_limited";
+  if (!context.providerChatId) return null;
+
+  const since = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const { count, error } = await client
+    .from("conversation_messages")
+    .select("id", { count: "exact", head: true })
+    .eq("whatsapp_instance_id", context.instance.id)
+    .eq("provider_chat_id", context.providerChatId)
+    .eq("direction", "outbound")
+    .gte("occurred_at", since);
+
+  if (error) {
+    return null;
+  }
+
+  return (count ?? 0) >= maxReplies ? "group_rate_limited" : null;
+}
+
+function readGroupRuntimePolicy(context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>) {
+  const metadata = readRecord(context.run.metadata) ?? {};
+  const replyMode = normalizeGroupRuntimeReplyMode(metadata.groupReplyMode) ?? context.behavior.groupReplyMode;
+  const mentionMode = normalizeGroupRuntimeMentionMode(metadata.groupMentionMode)
+    ?? (context.behavior.groupMentionAll ? "all" : "none");
+  const maxReplies = asNumber(metadata.groupMaxRepliesPerHour);
+
+  return {
+    targetId: asString(metadata.groupTargetId),
+    replyMode,
+    mentionMode,
+    requireApproval: metadata.groupRequireApproval === true,
+    maxRepliesPerHour: maxReplies === null ? null : Math.round(clampNumber(maxReplies, 0, 120)),
+    muteUntil: asString(metadata.groupMuteUntil),
+  };
+}
+
+function normalizeGroupRuntimeReplyMode(value: unknown): "off" | "all" | "mentions" | "admins" | "observer" | null {
+  if (value === "off" || value === "all" || value === "mentions" || value === "admins" || value === "observer") {
+    return value;
+  }
+  return null;
+}
+
+function normalizeGroupRuntimeMentionMode(value: unknown): "none" | "author" | "all" | null {
+  if (value === "none" || value === "author" || value === "all") return value;
+  return null;
+}
+
+function parseFutureDate(value: string | null) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.getTime() > Date.now() ? date : null;
+}
+
+function isGroupObserverOpportunity(
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+  latestInbound: ConversationMessageRow | null,
+  userText: string,
+) {
+  if (isGroupMentionForAgent(context, latestInbound, userText)) {
+    return true;
+  }
+
+  const normalized = normalizeSearch(userText);
+  if (!normalized || normalized.length < 8) {
+    return false;
+  }
+
+  const questionLike = /(\?|como|quanto|qual|quais|quando|onde|alguem|alguém|tem como|preciso|sabe|duvida|dúvida)/i.test(normalized);
+  const salesLike = /(comprar|preco|preço|valor|orcamento|orçamento|pedido|produto|plano|pagamento|link|checkout|boleto|pix|cartao|cartão|entrega|garantia|contratar|assinar)/i.test(normalized);
+
+  return questionLike || salesLike;
 }
 
 function isGroupMentionForAgent(
