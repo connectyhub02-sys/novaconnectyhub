@@ -137,6 +137,35 @@ export type WhatsappOutboundItem = {
   } | null;
 };
 
+export type WhatsappOperationsAnalytics = {
+  summary: {
+    total: number;
+    scheduled: number;
+    published: number;
+    failed: number;
+    recurring: number;
+    withMedia: number;
+    withAudio: number;
+    totalRecipients: number;
+  };
+  calendar: Array<{
+    id: string;
+    title: string;
+    operation: string;
+    scheduledFor: string;
+    targetCount: number;
+    attachmentCount: number;
+    deliveryMode: WhatsappCampaignDeliveryMode;
+    recurring: boolean;
+  }>;
+  optimization: {
+    nextSuggestedFor: string;
+    recommendedHour: number;
+    confidence: "low" | "medium" | "high";
+    reasons: string[];
+  };
+};
+
 export type WhatsappTargetCampaignDraft = {
   title: string;
   text: string;
@@ -213,7 +242,8 @@ export async function getWhatsappOperationsDashboard(
   client: SupabaseClient,
   context: WhatsappOperationalContext,
 ) {
-  const history = await listWhatsappOutboundItems(client, context);
+  const rows = await listWhatsappOutboundRows(client, context, 80);
+  const history = rows.slice(0, 12).map(mapOutboundItem);
 
   return {
     instance: {
@@ -236,6 +266,7 @@ export async function getWhatsappOperationsDashboard(
     },
     targets: await listWhatsappChannelTargets(client, context),
     history,
+    analytics: buildWhatsappOperationsAnalytics(rows),
   };
 }
 
@@ -1275,11 +1306,11 @@ async function syncWhatsappChannelTargets(
   return ((data ?? []) as WhatsappChannelTargetRow[]).map(mapWhatsappChannelTarget);
 }
 
-async function listWhatsappOutboundItems(
+async function listWhatsappOutboundRows(
   client: SupabaseClient,
   context: WhatsappOperationalContext,
   limit = 12,
-): Promise<WhatsappOutboundItem[]> {
+): Promise<ContentPipelineRow[]> {
   const { data, error } = await client
     .from("content_pipeline_items")
     .select("id, scope, organization_id, content_type, status, title, summary, body, scheduled_for, published_at, tags, metadata, created_at")
@@ -1292,7 +1323,76 @@ async function listWhatsappOutboundItems(
     throw new Error(`Nao foi possivel listar envios WhatsApp: ${error.message}`);
   }
 
-  return ((data ?? []) as ContentPipelineRow[]).map(mapOutboundItem);
+  return (data ?? []) as ContentPipelineRow[];
+}
+
+function buildWhatsappOperationsAnalytics(rows: ContentPipelineRow[]): WhatsappOperationsAnalytics {
+  const now = Date.now();
+  const summary = {
+    total: rows.length,
+    scheduled: 0,
+    published: 0,
+    failed: 0,
+    recurring: 0,
+    withMedia: 0,
+    withAudio: 0,
+    totalRecipients: 0,
+  };
+  const publishedHours = new Map<number, number>();
+
+  for (const row of rows) {
+    const metadata = readRecord(row.metadata) ?? {};
+    const payload = readRecord(metadata.payload) ?? {};
+    const providerStatus = asString(metadata.provider_status);
+    const deliveryMode = normalizeCampaignDeliveryMode(payload.delivery_mode);
+    const attachmentCount = readCampaignMediaAttachments(payload.media_attachments).length;
+    const targetCount = readCampaignTargetCount(payload);
+
+    if (row.status === "scheduled") summary.scheduled += 1;
+    if (row.status === "published") summary.published += 1;
+    if (row.status === "review" || providerStatus === "failed") summary.failed += 1;
+    if (readStoredRecurrence(metadata.recurrence)) summary.recurring += 1;
+    if (attachmentCount > 0) summary.withMedia += 1;
+    if (deliveryMode === "audio" || deliveryMode === "text_audio") summary.withAudio += 1;
+    summary.totalRecipients += targetCount;
+
+    if (row.status === "published" && row.published_at) {
+      const hour = getSaoPauloHour(row.published_at);
+      if (hour !== null) publishedHours.set(hour, (publishedHours.get(hour) ?? 0) + 1);
+    }
+  }
+
+  const recommendedHour = resolveRecommendedCampaignHour(publishedHours);
+  const calendar = rows
+    .filter((row) => row.status === "scheduled" && isFutureIso(row.scheduled_for, now))
+    .sort((a, b) => new Date(a.scheduled_for ?? 0).getTime() - new Date(b.scheduled_for ?? 0).getTime())
+    .slice(0, 10)
+    .map((row) => {
+      const metadata = readRecord(row.metadata) ?? {};
+      const payload = readRecord(metadata.payload) ?? {};
+
+      return {
+        id: row.id,
+        title: row.title,
+        operation: asString(metadata.operation) ?? row.content_type,
+        scheduledFor: row.scheduled_for ?? new Date().toISOString(),
+        targetCount: readCampaignTargetCount(payload),
+        attachmentCount: readCampaignMediaAttachments(payload.media_attachments).length,
+        deliveryMode: normalizeCampaignDeliveryMode(payload.delivery_mode),
+        recurring: Boolean(readStoredRecurrence(metadata.recurrence)),
+      };
+    });
+
+  return {
+    summary,
+    calendar,
+    optimization: {
+      nextSuggestedFor: buildNextSuggestedCampaignSlot(recommendedHour),
+      recommendedHour,
+      confidence: publishedHours.size >= 3 ? "high" : rows.length >= 8 ? "medium" : "low",
+      reasons: buildCampaignOptimizationReasons(summary, calendar.length, publishedHours, recommendedHour),
+    },
+  };
 }
 
 async function claimOutboundItem(client: SupabaseClient, item: ContentPipelineRow) {
@@ -1636,6 +1736,13 @@ function nextRecurrenceDate(value: string, frequency: WhatsappCampaignRecurrence
   return date.toISOString();
 }
 
+function readCampaignTargetCount(payload: JsonRecord) {
+  if (Array.isArray(payload.targets)) return payload.targets.length;
+  if (Array.isArray(payload.numbers)) return payload.numbers.length;
+  if (asString(payload.jid)) return 1;
+  return 0;
+}
+
 function normalizeCampaignDeliveryMode(value: unknown): WhatsappCampaignDeliveryMode {
   if (value === "audio" || value === "text_audio") return value;
   return "text";
@@ -1740,6 +1847,86 @@ function formatCampaignCatalogPromptItem(item: ClientSalesCatalogItem, index: nu
     item.description ? `Descricao: ${preview(item.description, 420)}` : "",
     item.media.length ? `Midias disponiveis: ${item.media.length}` : "Sem midia cadastrada",
   ].filter(Boolean).join(" / ");
+}
+
+function isFutureIso(value: string | null, now: number) {
+  if (!value) return false;
+  const date = new Date(value);
+  return !Number.isNaN(date.getTime()) && date.getTime() >= now;
+}
+
+function getSaoPauloHour(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+
+  const hour = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    hour: "2-digit",
+    hour12: false,
+  }).formatToParts(date).find((part) => part.type === "hour")?.value;
+  const parsed = hour ? Number(hour) : NaN;
+
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function resolveRecommendedCampaignHour(hours: Map<number, number>) {
+  if (hours.size === 0) return 10;
+
+  return Array.from(hours.entries())
+    .filter(([hour]) => hour >= 8 && hour <= 21)
+    .sort((a, b) => b[1] - a[1] || a[0] - b[0])[0]?.[0] ?? 10;
+}
+
+function buildNextSuggestedCampaignSlot(hourBrt: number) {
+  const now = new Date();
+  const next = new Date(now);
+  const utcHour = (clamp(Math.round(hourBrt), 6, 22) + 3) % 24;
+
+  next.setUTCHours(utcHour, 0, 0, 0);
+  if (next.getTime() <= now.getTime() + 60 * 60 * 1000) {
+    next.setUTCDate(next.getUTCDate() + 1);
+  }
+
+  while (next.getUTCDay() === 0) {
+    next.setUTCDate(next.getUTCDate() + 1);
+  }
+
+  return next.toISOString();
+}
+
+function buildCampaignOptimizationReasons(
+  summary: WhatsappOperationsAnalytics["summary"],
+  upcomingCount: number,
+  publishedHours: Map<number, number>,
+  recommendedHour: number,
+) {
+  const reasons = [];
+
+  if (publishedHours.size > 0) {
+    reasons.push(`Melhor janela observada: ${String(recommendedHour).padStart(2, "0")}:00 em Sao Paulo.`);
+  } else {
+    reasons.push("Sem historico suficiente: usando 10:00 como janela inicial segura.");
+  }
+
+  if (upcomingCount > 0) {
+    reasons.push(`${upcomingCount} envio(s) ja estao no calendario.`);
+  } else {
+    reasons.push("Nenhum envio futuro agendado; programe o proximo post para manter cadencia.");
+  }
+
+  if (summary.failed > 0) {
+    reasons.push(`${summary.failed} envio(s) precisam revisao antes de aumentar volume.`);
+  }
+
+  if (summary.recurring === 0 && summary.published > 0) {
+    reasons.push("Use recorrencia em campanhas que funcionam para manter presenca sem retrabalho.");
+  }
+
+  if (summary.withMedia === 0 && summary.published > 0) {
+    reasons.push("Teste anexos de produto ou imagem em parte das campanhas para comparar resposta.");
+  }
+
+  return reasons.slice(0, 4);
 }
 
 function normalizeRecipientList(value: unknown) {

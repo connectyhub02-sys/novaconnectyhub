@@ -442,6 +442,34 @@ type WhatsappChannelOperationsState = {
   };
   targets?: WhatsappChannelTargetItem[];
   history: WhatsappChannelOutboundItem[];
+  analytics?: {
+    summary: {
+      total: number;
+      scheduled: number;
+      published: number;
+      failed: number;
+      recurring: number;
+      withMedia: number;
+      withAudio: number;
+      totalRecipients: number;
+    };
+    calendar: Array<{
+      id: string;
+      title: string;
+      operation: string;
+      scheduledFor: string;
+      targetCount: number;
+      attachmentCount: number;
+      deliveryMode: "text" | "audio" | "text_audio";
+      recurring: boolean;
+    }>;
+    optimization: {
+      nextSuggestedFor: string;
+      recommendedHour: number;
+      confidence: "low" | "medium" | "high";
+      reasons: string[];
+    };
+  };
 };
 
 type ChannelActionResponse = {
@@ -6333,38 +6361,144 @@ function WhatsappChannelOperationsPanel({
         </div>
       </div>
 
-      <div className="rounded-xl border p-3 sm:p-4" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
-        <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Historico multicanal</p>
-        <div className="mt-4 grid gap-2">
-          {channelOps?.history.length ? (
-            channelOps.history.map((item) => (
-              <div key={item.id} className="rounded-lg border px-3 py-2" style={{ background: "var(--ch-surface)", borderColor: "var(--ch-border)" }}>
-                <div className="flex items-start justify-between gap-2">
-                  <p className="min-w-0 truncate text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>{item.title}</p>
-                  <span className="shrink-0 rounded-md bg-slate-800/80 px-2 py-1 font-mono text-[8px] uppercase tracking-widest text-slate-300">{item.status}</span>
-                </div>
-                <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-slate-500">{item.summary ?? formatChannelOperation(item.operation)}</p>
-                <p className="mt-2 font-mono text-[9px] uppercase tracking-widest text-slate-500">
-                  {formatChannelOperation(item.operation)} / {formatDate(item.scheduledFor ?? item.createdAt)}
-                </p>
-                {item.recurrence ? (
-                  <p className="mt-2 flex items-center gap-1.5 rounded-md border border-cyan-300/20 bg-cyan-300/10 px-2 py-1 text-[11px] leading-4 text-cyan-100">
-                    <Repeat className="h-3.5 w-3.5 shrink-0" />
-                    <span>{formatOutboundRecurrence(item)}</span>
+      <div className="grid gap-3 sm:gap-4">
+        <CampaignAnalyticsPanel
+          analytics={channelOps?.analytics}
+          onUseSuggestedTime={(value) => onChannelScheduledForChange(isoToLocalDatetimeInput(value))}
+        />
+
+        <div className="rounded-xl border p-3 sm:p-4" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
+          <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Historico multicanal</p>
+          <div className="mt-4 grid gap-2">
+            {channelOps?.history.length ? (
+              channelOps.history.map((item) => (
+                <div key={item.id} className="rounded-lg border px-3 py-2" style={{ background: "var(--ch-surface)", borderColor: "var(--ch-border)" }}>
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="min-w-0 truncate text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>{item.title}</p>
+                    <span className="shrink-0 rounded-md bg-slate-800/80 px-2 py-1 font-mono text-[8px] uppercase tracking-widest text-slate-300">{item.status}</span>
+                  </div>
+                  <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-slate-500">{item.summary ?? formatChannelOperation(item.operation)}</p>
+                  <p className="mt-2 font-mono text-[9px] uppercase tracking-widest text-slate-500">
+                    {formatChannelOperation(item.operation)} / {formatDate(item.scheduledFor ?? item.createdAt)}
                   </p>
-                ) : null}
-                {item.error ? (
-                  <p className="mt-2 rounded-md border border-rose-400/20 bg-rose-400/10 px-2 py-1 text-[11px] leading-4 text-rose-100">{item.error}</p>
-                ) : null}
+                  {item.recurrence ? (
+                    <p className="mt-2 flex items-center gap-1.5 rounded-md border border-cyan-300/20 bg-cyan-300/10 px-2 py-1 text-[11px] leading-4 text-cyan-100">
+                      <Repeat className="h-3.5 w-3.5 shrink-0" />
+                      <span>{formatOutboundRecurrence(item)}</span>
+                    </p>
+                  ) : null}
+                  {item.error ? (
+                    <p className="mt-2 rounded-md border border-rose-400/20 bg-rose-400/10 px-2 py-1 text-[11px] leading-4 text-rose-100">{item.error}</p>
+                  ) : null}
+                </div>
+              ))
+            ) : (
+              <div className="rounded-lg border px-3 py-6 text-center text-[12px] text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
+                Nenhum envio multicanal registrado ainda.
               </div>
-            ))
-          ) : (
-            <div className="rounded-lg border px-3 py-6 text-center text-[12px] text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
-              Nenhum envio multicanal registrado ainda.
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function CampaignAnalyticsPanel({
+  analytics,
+  onUseSuggestedTime,
+}: {
+  analytics: WhatsappChannelOperationsState["analytics"] | undefined;
+  onUseSuggestedTime: (value: string) => void;
+}) {
+  const summary = analytics?.summary;
+
+  return (
+    <div className="rounded-xl border p-3 sm:p-4" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
+          Calendario e metricas
+          <InfoHint text="Resumo dos envios recentes, proximas campanhas agendadas e sugestao de horario baseada no historico local." />
+        </p>
+        {analytics ? <NeonBadge tone={analytics.optimization.confidence === "high" ? "green" : analytics.optimization.confidence === "medium" ? "cyan" : "amber"}>{formatOptimizationConfidence(analytics.optimization.confidence)}</NeonBadge> : null}
+      </div>
+
+      {summary ? (
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <MetricMiniCard icon={Calendar} label="Agenda" value={summary.scheduled} />
+          <MetricMiniCard icon={CheckCircle2} label="Enviados" value={summary.published} />
+          <MetricMiniCard icon={ShieldCheck} label="Falhas" value={summary.failed} />
+          <MetricMiniCard icon={Repeat} label="Recorr." value={summary.recurring} />
+          <MetricMiniCard icon={ImageIcon} label="Midia" value={summary.withMedia} />
+          <MetricMiniCard icon={Mic} label="Audio" value={summary.withAudio} />
+        </div>
+      ) : (
+        <div className="mt-3 rounded-lg border px-3 py-5 text-center text-[12px] text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
+          Atualize o painel para carregar metricas.
+        </div>
+      )}
+
+      {analytics ? (
+        <>
+          <div className="mt-3 rounded-lg border p-3" style={{ background: "var(--ch-surface)", borderColor: "var(--ch-border)" }}>
+            <div className="flex items-center justify-between gap-3">
+              <span className="min-w-0">
+                <span className="block font-mono text-[9px] uppercase tracking-widest text-slate-500">Proximo horario</span>
+                <span className="mt-1 block text-[13px] font-semibold text-cyan-100">{formatDate(analytics.optimization.nextSuggestedFor)}</span>
+              </span>
+              <button
+                type="button"
+                className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border px-3 text-[11px] font-semibold text-cyan-100 transition hover:bg-cyan-400/10"
+                style={{ borderColor: "rgba(34,211,238,0.35)" }}
+                onClick={() => onUseSuggestedTime(analytics.optimization.nextSuggestedFor)}
+              >
+                <Clock3 className="h-3.5 w-3.5" />
+                Usar
+              </button>
+            </div>
+            <div className="mt-2 grid gap-1">
+              {analytics.optimization.reasons.map((reason, index) => (
+                <p key={`${reason}-${index}`} className="text-[11px] leading-4 text-slate-400">{reason}</p>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-3">
+            <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Proximos posts</p>
+            <div className="mt-2 grid gap-1.5">
+              {analytics.calendar.length ? (
+                analytics.calendar.slice(0, 5).map((item) => (
+                  <div key={item.id} className="rounded-lg border px-2.5 py-2" style={{ borderColor: "var(--ch-border)" }}>
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="min-w-0 truncate text-[11px] font-semibold text-slate-200">{item.title}</span>
+                      <span className="shrink-0 font-mono text-[9px] text-cyan-200">{formatDate(item.scheduledFor)}</span>
+                    </div>
+                    <p className="mt-1 font-mono text-[9px] uppercase tracking-widest text-slate-500">
+                      {formatChannelOperation(item.operation)} / {formatDeliveryMode(item.deliveryMode)} / {item.targetCount || 1} destino(s)
+                    </p>
+                  </div>
+                ))
+              ) : (
+                <div className="rounded-lg border px-3 py-4 text-center text-[12px] text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
+                  Nenhum envio futuro no calendario.
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+function MetricMiniCard({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: number }) {
+  return (
+    <div className="rounded-lg border px-2.5 py-2" style={{ background: "var(--ch-surface)", borderColor: "var(--ch-border)" }}>
+      <div className="flex items-center gap-1.5 text-slate-400">
+        <Icon className="h-3.5 w-3.5 text-cyan-300" />
+        <span className="font-mono text-[8px] uppercase tracking-widest">{label}</span>
+      </div>
+      <p className="mt-1 text-[16px] font-semibold text-slate-100">{value.toLocaleString("pt-BR")}</p>
     </div>
   );
 }
@@ -6477,6 +6611,18 @@ function formatTargetMediaSummary(deliveryMode: "text" | "audio" | "text_audio",
   return delivery;
 }
 
+function formatDeliveryMode(value: "text" | "audio" | "text_audio") {
+  if (value === "audio") return "audio";
+  if (value === "text_audio") return "texto+audio";
+  return "texto";
+}
+
+function formatOptimizationConfidence(value: "low" | "medium" | "high") {
+  if (value === "high") return "alta confianca";
+  if (value === "medium") return "media confianca";
+  return "aprendendo";
+}
+
 function formatOutboundRecurrence(item: WhatsappChannelOutboundItem) {
   if (!item.recurrence) return "";
 
@@ -6537,6 +6683,14 @@ function localDatetimeToIso(value: string) {
   if (!value) return null;
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+function isoToLocalDatetimeInput(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 16);
 }
 
 function normalizeConnectPhoneInput(value: string) {
