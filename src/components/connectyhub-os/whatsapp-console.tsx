@@ -393,6 +393,15 @@ type WhatsappChannelOutboundItem = {
   } | null;
 };
 
+type WhatsappTargetCampaignDraft = {
+  title: string;
+  text: string;
+  approvalChecklist: string[];
+  targetCount: number;
+  targetNames: string[];
+  modelId: string;
+};
+
 type WhatsappChannelTargetItem = {
   id: string;
   type: "group" | "newsletter";
@@ -1196,7 +1205,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
   async function runChannelAction(action: string, payload: Record<string, unknown> = {}) {
     if (!selectedCompanyId) {
       setNotice({ tone: "warning", message: `Escolha um ${variant.entitySingular} antes de usar os canais.` });
-      return;
+      return null;
     }
 
     setChannelAction(action);
@@ -1230,8 +1239,11 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
       } else if (action === "post_newsletter") {
         setNewsletterText("");
       }
+
+      return data;
     } catch (error) {
       setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro inesperado no recurso do WhatsApp." });
+      return null;
     } finally {
       setChannelAction(null);
     }
@@ -5729,7 +5741,7 @@ function WhatsappChannelOperationsPanel({
   onNewsletterJidChange: (value: string) => void;
   onNewsletterTextChange: (value: string) => void;
   onRefresh: () => void;
-  onRunAction: (action: string, payload?: Record<string, unknown>) => void;
+  onRunAction: (action: string, payload?: Record<string, unknown>) => Promise<ChannelActionResponse | null>;
   onStatusMaxRecipientsChange: (value: number) => void;
   onStatusTextChange: (value: string) => void;
 }) {
@@ -5747,10 +5759,16 @@ function WhatsappChannelOperationsPanel({
   const [targetMentionAll, setTargetMentionAll] = useState(false);
   const [targetRecurrenceFrequency, setTargetRecurrenceFrequency] = useState<"none" | "daily" | "weekly">("none");
   const [targetRecurrenceOccurrences, setTargetRecurrenceOccurrences] = useState(7);
+  const [targetAiBrief, setTargetAiBrief] = useState("");
+  const [targetAiChecklist, setTargetAiChecklist] = useState<string[]>([]);
   const selectedTargets = targets.filter((target) => selectedTargetIds.includes(target.id));
   const selectedValidTargetIds = selectedTargets.map((target) => target.id);
   const selectedHasNewsletter = selectedTargets.some((target) => target.type === "newsletter");
   const targetRecurring = targetRecurrenceFrequency !== "none";
+  const targetAiReady = selectedTargets.length > 0
+    && (targetAiBrief.trim().length > 0 || targetCampaignTitle.trim().length > 0 || targetCampaignText.trim().length > 0)
+    && (campaignEnabled || newsletterEnabled)
+    && (!targetMentionAll || !selectedHasNewsletter);
   const targetCampaignReady = selectedTargets.length > 0
     && targetCampaignText.trim().length > 0
     && (campaignEnabled || newsletterEnabled)
@@ -5760,6 +5778,25 @@ function WhatsappChannelOperationsPanel({
     setSelectedTargetIds((current) => current.includes(targetId)
       ? current.filter((id) => id !== targetId)
       : [...current, targetId]);
+  }
+
+  async function generateTargetCampaignDraft() {
+    const response = await onRunAction("generate_target_campaign_draft", {
+      targetIds: selectedValidTargetIds,
+      brief: targetAiBrief,
+      currentTitle: targetCampaignTitle,
+      currentText: targetCampaignText,
+      mentionAll: targetMentionAll,
+      recurrenceFrequency: targetRecurrenceFrequency,
+      recurrenceOccurrences: targetRecurring ? targetRecurrenceOccurrences : null,
+    });
+    const draft = readTargetCampaignDraftResult(response?.result);
+
+    if (!draft) return;
+
+    setTargetCampaignTitle(draft.title);
+    setTargetCampaignText(draft.text);
+    setTargetAiChecklist(draft.approvalChecklist);
   }
 
   return (
@@ -5961,8 +5998,37 @@ function WhatsappChannelOperationsPanel({
           <div className="rounded-lg border p-3" style={{ background: "var(--ch-surface)", borderColor: "var(--ch-border)" }}>
             <p className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
               Post para grupos/canais
-              <InfoHint text="Agenda uma mensagem de texto para os destinos selecionados. Voz clonada e IA entram numa proxima etapa sobre essa base." />
+              <InfoHint text="Gere um rascunho com IA, revise o texto e aprove manualmente ao agendar para os destinos selecionados. Voz e midia entram na proxima fase." />
             </p>
+            <textarea
+              className="mt-3 min-h-24 w-full resize-y rounded-lg border px-3 py-2 text-[12px] leading-5 outline-none"
+              value={targetAiBrief}
+              onChange={(event) => setTargetAiBrief(event.target.value.slice(0, 1200))}
+              placeholder="Briefing para IA: tema, produto, oferta, objetivo e cuidados do post."
+            />
+            <div className="mt-3">
+              <SecondaryAction
+                icon={Wand2}
+                label="Criar rascunho IA"
+                description="Gera titulo, texto e checklist para revisar antes de aprovar o envio."
+                disabled={!targetAiReady}
+                loading={channelAction === "generate_target_campaign_draft"}
+                onClick={generateTargetCampaignDraft}
+              />
+            </div>
+            {targetAiChecklist.length ? (
+              <div className="mt-3 rounded-lg border border-cyan-300/20 bg-cyan-300/10 px-3 py-2">
+                <p className="font-mono text-[9px] uppercase tracking-widest text-cyan-100">Checklist antes de aprovar</p>
+                <div className="mt-2 grid gap-1">
+                  {targetAiChecklist.map((item, index) => (
+                    <p key={`${item}-${index}`} className="flex gap-2 text-[11px] leading-4 text-cyan-50">
+                      <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-cyan-200" />
+                      <span>{item}</span>
+                    </p>
+                  ))}
+                </div>
+              </div>
+            ) : null}
             <input
               className="mt-3 h-10 w-full rounded-lg border px-3 text-[12px] outline-none"
               value={targetCampaignTitle}
@@ -6298,6 +6364,44 @@ function formatOutboundRecurrence(item: WhatsappChannelOutboundItem) {
   const next = item.recurrence.nextScheduledFor ? ` / prox. ${formatDate(item.recurrence.nextScheduledFor)}` : "";
 
   return `Recorrencia ${frequency} ${progress}${next}`;
+}
+
+function readTargetCampaignDraftResult(value: unknown): WhatsappTargetCampaignDraft | null {
+  const record = readUnknownRecord(value);
+  const draft = readUnknownRecord(record?.draft);
+
+  if (!draft) return null;
+
+  const title = readUnknownString(draft.title);
+  const text = readUnknownString(draft.text);
+
+  if (!title && !text) return null;
+
+  return {
+    title,
+    text,
+    approvalChecklist: readUnknownStringArray(draft.approvalChecklist),
+    targetCount: readUnknownNumber(draft.targetCount),
+    targetNames: readUnknownStringArray(draft.targetNames),
+    modelId: readUnknownString(draft.modelId),
+  };
+}
+
+function readUnknownRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+}
+
+function readUnknownString(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function readUnknownStringArray(value: unknown) {
+  return Array.isArray(value) ? value.map((item) => String(item).trim()).filter(Boolean) : [];
+}
+
+function readUnknownNumber(value: unknown) {
+  const number = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+  return Number.isFinite(number) ? number : 0;
 }
 
 function formatChannelTargetType(value: WhatsappChannelTargetItem["type"]) {

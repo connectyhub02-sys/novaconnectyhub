@@ -2,6 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
+import { loadGeminiCredentials, type GeminiCredentials } from "@/lib/gemini/credentials";
 import { createServiceClient } from "@/lib/supabase/service";
 import { normalizeWhatsappBehaviorConfig, type WhatsappBehaviorConfig } from "./agent-behavior";
 import { loadUazapiCredentials, type UazapiCredentials } from "./uazapi-credentials";
@@ -119,6 +120,18 @@ export type WhatsappOutboundItem = {
     nextScheduledFor: string | null;
     seriesId: string | null;
   } | null;
+};
+
+export type WhatsappTargetCampaignDraft = {
+  title: string;
+  text: string;
+  approvalChecklist: string[];
+  targetCount: number;
+  targetNames: string[];
+  modelId: string;
+  systemInstruction: string;
+  prompt: string;
+  responseData: unknown;
 };
 
 const instanceSelect = "id, organization_id, provider_instance_id, phone_number, display_name, status, instance_token_encrypted, metadata";
@@ -432,6 +445,101 @@ export async function queueWhatsappTargetTextCampaign(
       occurrences: input.recurrenceOccurrences,
     }),
   });
+}
+
+export async function generateWhatsappTargetCampaignDraft(
+  client: SupabaseClient,
+  context: WhatsappOperationalContext,
+  input: {
+    targetIds: string[];
+    brief?: string | null;
+    currentTitle?: string | null;
+    currentText?: string | null;
+    recurrenceFrequency?: string | null;
+    recurrenceOccurrences?: number | null;
+    mentionAll?: boolean;
+  },
+): Promise<WhatsappTargetCampaignDraft> {
+  if (!context.behavior.campaignBroadcasts && !context.behavior.newsletterBroadcasts) {
+    throw new Error("Ative Campanhas ou Canais no comportamento do agente antes de criar rascunhos com IA.");
+  }
+
+  const targets = await listWhatsappChannelTargetsByIds(client, context, input.targetIds);
+  if (targets.length === 0) {
+    throw new Error("Selecione pelo menos um grupo ou canal para a IA contextualizar a campanha.");
+  }
+
+  const blocked = targets.filter((target) => !target.campaignEnabled);
+  if (blocked.length > 0) {
+    throw new Error(`Destino sem campanhas liberadas: ${blocked[0]?.name ?? blocked[0]?.jid}.`);
+  }
+
+  const mentionAll = Boolean(input.mentionAll);
+  if (mentionAll && targets.some((target) => target.type !== "group")) {
+    throw new Error("Mencionar todos so pode ser usado em grupos.");
+  }
+
+  const brief = input.brief?.trim().slice(0, 1200) ?? "";
+  const currentTitle = input.currentTitle?.trim().slice(0, 120) ?? "";
+  const currentText = input.currentText?.trim().slice(0, 1600) ?? "";
+
+  if (!brief && !currentTitle && !currentText) {
+    throw new Error("Informe um tema, oferta ou mensagem inicial para a IA criar o rascunho.");
+  }
+
+  const credentials = await loadGeminiCredentials(client);
+  const recurrence = normalizeCampaignRecurrence({
+    frequency: input.recurrenceFrequency,
+    occurrences: input.recurrenceOccurrences,
+  });
+  const systemInstruction = [
+    "Voce cria rascunhos de campanhas para grupos e canais do WhatsApp.",
+    "Escreva em portugues do Brasil, com tom comercial natural, claro e sem parecer spam.",
+    "Nao invente desconto, garantia, preco, prazo, estoque, link ou bonus que nao esteja no briefing.",
+    "Nao use markdown pesado. Evite excesso de emojis e evite caixa alta.",
+    "Se houver grupos, a mensagem deve funcionar em conversa coletiva. Se houver canais, deve funcionar como post de broadcast.",
+    "Retorne somente JSON valido com as chaves title, text e approvalChecklist.",
+    "title deve ter no maximo 90 caracteres. text deve ter no maximo 1400 caracteres.",
+  ].join("\n");
+  const prompt = [
+    `Escopo: ${context.scope === "platform" ? "campanha interna ConnectyHub" : "campanha de cliente ConnectyHub"}`,
+    `WhatsApp conectado: ${context.instance.display_name ?? context.instance.phone_number ?? context.instance.provider_instance_id ?? "sem nome"}`,
+    `Destinos selecionados (${targets.length}):`,
+    targets.map((target, index) => [
+      `${index + 1}. ${target.type === "newsletter" ? "Canal" : "Grupo"}: ${target.name}`,
+      target.participantCount !== null ? `${target.participantCount} membros` : "",
+      target.isAdmin ? "numero e admin" : "",
+      target.isAnnouncement ? "somente avisos" : "",
+    ].filter(Boolean).join(" / ")).join("\n"),
+    recurrence ? `Recorrencia planejada: ${recurrence.frequency === "weekly" ? "semanal" : "diaria"}, ${readInteger(recurrence.max_occurrences, 1)} envios no total.` : "Recorrencia planejada: envio unico.",
+    mentionAll ? "Controle de mencao: mencionar todos nos grupos selecionados." : "Controle de mencao: nao mencionar todos por padrao.",
+    brief ? `Briefing do usuario: ${brief}` : "",
+    currentTitle ? `Titulo atual para aproveitar ou melhorar: ${currentTitle}` : "",
+    currentText ? `Texto atual para aproveitar ou melhorar: ${currentText}` : "",
+    "Checklist esperado: 3 a 5 itens curtos que o humano deve conferir antes de aprovar o envio.",
+  ].filter(Boolean).join("\n\n");
+  const responseData = await callGeminiGenerateContent(credentials, systemInstruction, prompt, {
+    temperature: 0.7,
+    maxOutputTokens: 900,
+  });
+  const rawText = extractGeminiText(responseData);
+  const parsed = parseGeminiCampaignDraft(rawText);
+
+  if (!parsed.text) {
+    throw new Error("Gemini nao retornou texto para a campanha.");
+  }
+
+  return {
+    title: (parsed.title || currentTitle || `Campanha WhatsApp - ${new Date().toLocaleDateString("pt-BR")}`).slice(0, 90),
+    text: parsed.text.slice(0, 1400),
+    approvalChecklist: parsed.approvalChecklist.slice(0, 5),
+    targetCount: targets.length,
+    targetNames: targets.map((target) => target.name).slice(0, 12),
+    modelId: credentials.model,
+    systemInstruction,
+    prompt,
+    responseData,
+  };
 }
 
 export async function updateWhatsappChannelTargetSettings(
@@ -1101,6 +1209,47 @@ async function callUazapi(
   return { status: response.status, data };
 }
 
+async function callGeminiGenerateContent(
+  credentials: GeminiCredentials,
+  systemInstruction: string,
+  prompt: string,
+  options: {
+    temperature: number;
+    maxOutputTokens: number;
+  },
+) {
+  const url = new URL(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(credentials.model)}:generateContent`);
+  url.searchParams.set("key", credentials.apiKey);
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      systemInstruction: {
+        parts: [{ text: systemInstruction }],
+      },
+      contents: [{
+        role: "user",
+        parts: [{ text: prompt }],
+      }],
+      generationConfig: {
+        temperature: options.temperature,
+        topP: 0.9,
+        maxOutputTokens: options.maxOutputTokens,
+        responseMimeType: "application/json",
+      },
+    }),
+    cache: "no-store",
+  });
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(readGeminiError(data) ?? `Gemini respondeu status ${response.status}.`);
+  }
+
+  return data;
+}
+
 async function readResponse(response: Response) {
   const text = await response.text().catch(() => "");
   if (!text) return null;
@@ -1402,6 +1551,78 @@ function countProviderItems(value: unknown): number | null {
 function readProviderError(value: unknown) {
   if (typeof value === "string") return value.trim() || null;
   return findString(value, ["error", "message", "detail"]);
+}
+
+function parseGeminiCampaignDraft(value: string) {
+  const cleaned = stripCodeFence(value).trim();
+  const jsonText = extractJsonObject(cleaned) ?? cleaned;
+  const parsed = parseJsonObject(jsonText);
+  const title = asString(parsed?.title) ?? asString(parsed?.titulo) ?? "";
+  const text = asString(parsed?.text) ?? asString(parsed?.texto) ?? asString(parsed?.message) ?? (parsed ? "" : cleaned);
+  const checklist = readStringArray(parsed?.approvalChecklist ?? parsed?.checklist ?? parsed?.approval_checklist)
+    .map((item) => item.slice(0, 160));
+
+  return {
+    title,
+    text,
+    approvalChecklist: checklist.length > 0
+      ? checklist
+      : [
+        "Confirmar se a oferta e as condicoes estao corretas.",
+        "Conferir se o tom combina com o grupo ou canal.",
+        "Remover qualquer promessa que nao esteja aprovada.",
+      ],
+  };
+}
+
+function extractGeminiText(value: unknown) {
+  const candidates = readRecord(value)?.candidates;
+
+  if (!Array.isArray(candidates)) {
+    return "";
+  }
+
+  return candidates
+    .flatMap((candidate) => {
+      const parts = readRecord(readRecord(candidate)?.content)?.parts;
+      return Array.isArray(parts) ? parts : [];
+    })
+    .map((part) => readRecord(part)?.text)
+    .filter((text): text is string => typeof text === "string")
+    .join("\n")
+    .trim();
+}
+
+function readGeminiError(value: unknown) {
+  const error = readRecord(readRecord(value)?.error);
+  const message = error?.message;
+  return typeof message === "string" ? message : null;
+}
+
+function stripCodeFence(value: string) {
+  return value
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
+}
+
+function extractJsonObject(value: string) {
+  const start = value.indexOf("{");
+  const end = value.lastIndexOf("}");
+  return start >= 0 && end > start ? value.slice(start, end + 1) : null;
+}
+
+function parseJsonObject(value: string) {
+  try {
+    return readRecord(JSON.parse(value));
+  } catch {
+    return null;
+  }
+}
+
+function readStringArray(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => String(item).trim()).filter(Boolean);
 }
 
 function findString(value: unknown, keys: string[]): string | null {

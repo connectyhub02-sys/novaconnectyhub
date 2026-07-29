@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getClientAgentsWorkspace, type ClientAgent } from "@/lib/client-os/agents";
+import { meterGeminiGenerationUsage } from "@/lib/billing/gemini-metering";
 import { assertBillableAccess, BillingAccessError } from "@/lib/billing/trial";
 import { requireClientCompanyAccess, type ClientCompany } from "@/lib/client-os/companies";
 import { inngest } from "@/lib/inngest/client";
@@ -10,6 +11,7 @@ import {
   fetchWhatsappGroups,
   fetchWhatsappMessageLimits,
   fetchWhatsappNewsletters,
+  generateWhatsappTargetCampaignDraft,
   getWhatsappOperationsDashboard,
   queueWhatsappNewsletterText,
   queueWhatsappSimpleCampaign,
@@ -47,6 +49,9 @@ type ChannelActionBody = {
   mentionAll?: unknown;
   recurrenceFrequency?: unknown;
   recurrenceOccurrences?: unknown;
+  brief?: unknown;
+  currentTitle?: unknown;
+  currentText?: unknown;
   targetId?: unknown;
   enabled?: unknown;
   campaignEnabled?: unknown;
@@ -151,6 +156,36 @@ export async function POST(request: NextRequest) {
       await dispatchOutboundIfDue(item);
       result = { item };
       notice = "Post no canal/newsletter agendado pelo Inngest.";
+    } else if (action === "generate_target_campaign_draft") {
+      const draft = await generateWhatsappTargetCampaignDraft(client, whatsapp, {
+        targetIds: readStringList(body?.targetIds),
+        brief: asString(body?.brief),
+        currentTitle: asString(body?.currentTitle),
+        currentText: asString(body?.currentText),
+        mentionAll: asBoolean(body?.mentionAll),
+        recurrenceFrequency: asString(body?.recurrenceFrequency),
+        recurrenceOccurrences: asNumber(body?.recurrenceOccurrences) ?? null,
+      });
+      await meterGeminiGenerationUsage({
+        client,
+        organizationId: context.organization.id,
+        userId: context.userId,
+        featureCode: "whatsapp_campaign_ai_draft",
+        modelId: draft.modelId,
+        agentScope: "customer",
+        promptText: [draft.systemInstruction, draft.prompt],
+        outputText: draft.text,
+        responseData: draft.responseData,
+        debitDescription: "Rascunho IA de campanha WhatsApp",
+        metadata: {
+          source: "dashboard_whatsapp_channels",
+          companyId: context.organization.id,
+          agentId: context.selectedAgentId,
+          targetCount: draft.targetCount,
+        },
+      });
+      result = { draft: toSafeCampaignDraft(draft) };
+      notice = "Rascunho IA criado. Revise o texto e clique em Agendar post para aprovar.";
     } else if (action === "send_target_campaign") {
       const item = await queueWhatsappTargetTextCampaign(client, whatsapp, {
         title: asString(body?.title) ?? "",
@@ -320,4 +355,22 @@ function formatError(error: unknown) {
 
 function statusForError(error: unknown, fallback: number) {
   return error instanceof BillingAccessError ? 402 : fallback;
+}
+
+function toSafeCampaignDraft(draft: {
+  title: string;
+  text: string;
+  approvalChecklist: string[];
+  targetCount: number;
+  targetNames: string[];
+  modelId: string;
+}) {
+  return {
+    title: draft.title,
+    text: draft.text,
+    approvalChecklist: draft.approvalChecklist,
+    targetCount: draft.targetCount,
+    targetNames: draft.targetNames,
+    modelId: draft.modelId,
+  };
 }
