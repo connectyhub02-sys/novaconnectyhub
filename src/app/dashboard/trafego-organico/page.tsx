@@ -2,7 +2,9 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { ConnectyShell } from "@/components/connectyhub-os/connecty-shell";
+import { FeatureUpgradePanel } from "@/components/connectyhub-os/feature-upgrade-panel";
 import { MetaOrganicConsole } from "@/components/connectyhub-os/meta-organic-console";
+import { resolvePlanFeatureEntitlement } from "@/lib/billing/plan-entitlements";
 import { getClientMetaOrganicOverview } from "@/lib/meta/organic-publishing";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 
@@ -23,6 +25,32 @@ export default async function OrganicTrafficPage() {
     redirect("/dashboard/empresa");
   }
 
+  const shellProps = {
+    activeHref: "/dashboard/trafego-organico",
+    isPlatformAdmin: workspace.profile.isPlatformAdmin,
+    mode: "client" as const,
+    userAvatarUrl: workspace.profile.avatarUrl,
+    userLabel: workspace.profile.email ?? undefined,
+    workspaceName: workspace.organization.name ?? workspace.profile.companyName ?? "Workspace",
+  };
+  const entitlement = resolvePlanFeatureEntitlement("meta_organic_insights", {
+    isPlatformAdmin: workspace.profile.isPlatformAdmin,
+    organizationStatus: workspace.organization.status,
+    planCode: workspace.organization.planCode,
+  });
+
+  if (!entitlement.allowed) {
+    return (
+      <ConnectyShell {...shellProps}>
+        <FeatureUpgradePanel
+          entitlement={entitlement}
+          title="Organico Meta"
+          description="Publicacoes, leitura organica e preparacao de campanhas para Instagram e Facebook ficam liberadas no Pro e Scale. O teste gratis continua com acesso completo por 7 dias."
+        />
+      </ConnectyShell>
+    );
+  }
+
   const overview = await getClientMetaOrganicOverview({
     organizationId: workspace.organization.id,
     userId: workspace.user.id,
@@ -41,14 +69,7 @@ export default async function OrganicTrafficPage() {
   }));
 
   return (
-    <ConnectyShell
-      activeHref="/dashboard/trafego-organico"
-      isPlatformAdmin={workspace.profile.isPlatformAdmin}
-      mode="client"
-      userAvatarUrl={workspace.profile.avatarUrl}
-      userLabel={workspace.profile.email ?? undefined}
-      workspaceName={workspace.organization.name ?? workspace.profile.companyName ?? "Workspace"}
-    >
+    <ConnectyShell {...shellProps}>
       <MetaOrganicConsole overview={overview} />
     </ConnectyShell>
   );
