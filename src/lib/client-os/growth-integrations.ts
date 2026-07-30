@@ -10,7 +10,11 @@ export type GrowthAssetType =
   | "instagram_business_account"
   | "google_ads_customer"
   | "google_business_profile"
-  | "google_search_console_site";
+  | "google_search_console_site"
+  | "meta_campaign"
+  | "google_campaign"
+  | "meta_post"
+  | "google_keyword";
 
 export type GrowthIntegrationAsset = {
   id: string;
@@ -524,7 +528,11 @@ function isGrowthAssetType(value: string): value is GrowthAssetType {
   return selectedAssetTypesByProvider["meta-ads"].includes(value as GrowthAssetType)
     || selectedAssetTypesByProvider["google-growth"].includes(value as GrowthAssetType)
     || value === "google_business_profile"
-    || value === "google_search_console_site";
+    || value === "google_search_console_site"
+    || value === "meta_campaign"
+    || value === "google_campaign"
+    || value === "meta_post"
+    || value === "google_keyword";
 }
 
 function normalizeAssetStatus(value: string | null): GrowthIntegrationAsset["status"] {

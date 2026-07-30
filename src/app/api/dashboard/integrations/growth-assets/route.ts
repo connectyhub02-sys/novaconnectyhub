@@ -1,13 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { assertBillableAccess, BillingAccessError } from "@/lib/billing/trial";
 import { requireClientCompanyAccess } from "@/lib/client-os/companies";
-import { logIntegrationAction } from "@/lib/client-os/guided-oauth";
 import {
   getGrowthIntegrationAssets,
   isGrowthProviderId,
-  queueGrowthIntegrationSyncJob,
   summarizeGrowthAssets,
 } from "@/lib/client-os/growth-integrations";
+import { executeGrowthIntegrationSync } from "@/lib/client-os/growth-sync";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
 
@@ -86,31 +85,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Somente dono ou admin pode solicitar sincronizacao." }, { status: 403 });
     }
 
-    const job = await queueGrowthIntegrationSyncJob({
+    const sync = await executeGrowthIntegrationSync({
       actorId: workspace.user.id,
       client,
-      jobType: "full_sync",
-      metadata: {
-        source: "dashboard_integrations",
-        requested_by: workspace.user.id,
-      },
       organizationId: company.id,
       providerId,
-    });
-    await logIntegrationAction({
-      client,
-      organizationId: company.id,
-      organizationIntegrationId: null,
-      providerId,
-      actorId: workspace.user.id,
-      action: "growth.sync.queued",
-      metadata: {
-        sync_job_id: job.id,
-        job_type: "full_sync",
-      },
     });
 
-    return NextResponse.json({ job });
+    return NextResponse.json({ sync });
   } catch (error) {
     return NextResponse.json({
       error: error instanceof Error ? error.message : "Nao foi possivel criar sincronizacao.",

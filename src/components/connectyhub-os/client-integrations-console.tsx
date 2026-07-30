@@ -68,10 +68,15 @@ type GuidedSelectionResponse = {
 };
 
 type GrowthSyncResponse = {
-  job?: {
-    id: string;
-    status: string;
-    createdAt: string | null;
+  sync?: {
+    assetsWritten: number;
+    finishedAt: string;
+    jobId: string;
+    providerId: "meta-ads" | "google-growth";
+    snapshotsWritten: number;
+    startedAt: string;
+    status: "success" | "warning" | "failed";
+    warnings: string[];
   };
   error?: string;
 };
@@ -812,30 +817,30 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
       });
       const data = await response.json().catch(() => null) as GrowthSyncResponse | null;
 
-      if (!response.ok || !data?.job) {
-        throw new Error(data?.error ?? "Nao foi possivel preparar a sincronizacao.");
+      if (!response.ok || !data?.sync) {
+        throw new Error(data?.error ?? "Nao foi possivel sincronizar os dados.");
       }
 
-      const createdAt = data.job.createdAt ?? new Date().toISOString();
+      const sync = data.sync;
       setActionLogs((current) => [{
-        id: `local-growth-sync-${data.job!.id}`,
-        action: "growth.sync.queued",
+        id: `local-growth-sync-${sync.jobId}`,
+        action: "growth.sync.completed",
         companyId: selectedCompanyId,
-        createdAt,
-        metadata: data.job!,
+        createdAt: sync.finishedAt,
+        metadata: sync,
         providerId,
-        status: "success" as const,
+        status: sync.status === "failed" ? "error" as const : sync.status === "warning" ? "warning" as const : "success" as const,
       }, ...current].slice(0, 80));
       setNotice({
-        tone: "success",
+        tone: sync.status === "failed" ? "error" : sync.status === "warning" ? "warning" : "success",
         message: providerId === "meta-ads"
-          ? "Sincronizacao Meta preparada para a proxima fase."
-          : "Sincronizacao Google preparada para a proxima fase.",
+          ? `Meta sincronizado: ${sync.snapshotsWritten} snapshot(s) gravado(s).`
+          : `Google sincronizado: ${sync.snapshotsWritten} snapshot(s) gravado(s).`,
       });
     } catch (error) {
       setNotice({
         tone: "error",
-        message: error instanceof Error ? error.message : "Erro ao preparar sincronizacao.",
+        message: error instanceof Error ? error.message : "Erro ao sincronizar dados.",
       });
     } finally {
       setSyncingGrowthProvider(null);
@@ -2258,7 +2263,7 @@ function GrowthAssetsPanel({
         style={{ borderColor: "var(--ch-border)" }}
       >
         {syncing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <BarChart3 className="h-3.5 w-3.5" />}
-        Preparar sincronizacao
+        Sincronizar dados
       </button>
     </div>
   );
@@ -3280,6 +3285,10 @@ function formatGrowthAssetType(assetType: ClientGrowthIntegrationAsset["assetTyp
   if (assetType === "google_ads_customer") return "Conta Google Ads";
   if (assetType === "google_business_profile") return "Google Business";
   if (assetType === "google_search_console_site") return "Search Console";
+  if (assetType === "google_campaign") return "Campanha Google";
+  if (assetType === "google_keyword") return "Keyword Google";
+  if (assetType === "meta_campaign") return "Campanha Meta";
+  if (assetType === "meta_post") return "Post Meta";
   return assetType;
 }
 
