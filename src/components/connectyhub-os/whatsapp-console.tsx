@@ -1311,23 +1311,6 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
     }
   }
 
-  async function saveAndOpenMultichannel() {
-    const saved = settingsChanged ? await saveAgentSettings() : true;
-
-    if (!saved) {
-      return;
-    }
-
-    setActiveTab("multichannel");
-    void loadChannelOperations();
-    setNotice({
-      tone: "success",
-      message: settingsChanged
-        ? "Configuracao salva. Agora use Buscar grupos ou Buscar canais para sincronizar os destinos."
-        : "Agora use Buscar grupos ou Buscar canais para sincronizar os destinos.",
-    });
-  }
-
   async function generatePromptWithAI() {
     if (!selectedCompanyId) {
       setNotice({ tone: "warning", message: `Escolha um ${variant.entitySingular} antes de gerar o prompt.` });
@@ -2332,51 +2315,6 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
                 </div>
               </BehaviorSection>
 
-              <BehaviorSection title="Grupos, status e canais" description="Libera recursos avancados do WhatsApp com controles separados para grupos, Status, newsletters e campanhas.">
-                <div className="grid gap-3">
-                  <div className="rounded-lg border px-3 py-3" style={{ background: "rgba(var(--ch-accent-rgb),0.07)", borderColor: "rgba(var(--ch-accent-rgb),0.28)" }}>
-                    <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                      <div className="min-w-0">
-                        <p className="font-mono text-[9px] font-bold uppercase tracking-widest text-cyan-100">Como usar depois de habilitar</p>
-                        <p className="mt-1 text-[11px] leading-5 text-slate-300">
-                          Habilite os recursos, salve o comportamento e abra Multicanal. La voce usa Buscar grupos/Buscar canais para listar os destinos e configurar campanhas ou respostas por grupo.
-                        </p>
-                      </div>
-                      <ActionButton
-                        icon={Forward}
-                        label={settingsChanged ? "Salvar e abrir Multicanal" : "Abrir Multicanal"}
-                        description="Salva as permissoes pendentes e abre o painel onde grupos, canais, status e campanhas sao usados."
-                        disabled={!state?.agent || promptTooLong || (settingsChanged && !state.capability.schemaReady)}
-                        loading={running === "save_settings"}
-                        onClick={saveAndOpenMultichannel}
-                      />
-                    </div>
-                  </div>
-                  <ModeSelector<WhatsappGroupReplyMode>
-                    value={behaviorDraft.groupReplyMode}
-                    options={[
-                      { value: "all", label: "Todos", description: "Responde toda mensagem", help: "Quando Atender grupos estiver ligado, qualquer mensagem do grupo pode acionar o agente." },
-                      { value: "mentions", label: "Mencoes", description: "So quando citado", help: "O agente responde grupos apenas quando detectar mencao, nome do agente ou referencia direta." },
-                      { value: "admins", label: "Admins", description: "Somente admins", help: "Responde so quando o webhook trouxer sinal de administrador no grupo." },
-                    ]}
-                    onChange={(value) => updateBehavior("groupReplyMode", value)}
-                  />
-                  <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-5">
-                    <ToggleTile icon={MessageCircle} label="Atender grupos" description="Permite que o agente responda mensagens em grupos do WhatsApp. Desligado, grupos sao ignorados." checked={behaviorDraft.allowGroupChats} onChange={() => updateBehavior("allowGroupChats", !behaviorDraft.allowGroupChats)} />
-                    <ToggleTile icon={MessageCircle} label="Mencionar todos" description="Permite usar mencao geral em mensagens operacionais de grupo quando a Uazapi aceitar." checked={behaviorDraft.groupMentionAll} onChange={() => updateBehavior("groupMentionAll", !behaviorDraft.groupMentionAll)} />
-                    <ToggleTile icon={Globe2} label="Status WhatsApp" description="Permite publicar stories/status pelo painel usando processamento Inngest." checked={behaviorDraft.statusBroadcasts} onChange={() => updateBehavior("statusBroadcasts", !behaviorDraft.statusBroadcasts)} />
-                    <ToggleTile icon={FileText} label="Canais" description="Permite postar em canais/newsletters do WhatsApp pelo painel." checked={behaviorDraft.newsletterBroadcasts} onChange={() => updateBehavior("newsletterBroadcasts", !behaviorDraft.newsletterBroadcasts)} />
-                    <ToggleTile icon={Forward} label="Campanhas" description="Permite criar disparos em lote via Uazapi Sender, sempre processados pelo Inngest." checked={behaviorDraft.campaignBroadcasts} onChange={() => updateBehavior("campaignBroadcasts", !behaviorDraft.campaignBroadcasts)} />
-                  </div>
-                  <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-                    <NumberField label="Max status" description="Limite maximo de contatos usados em cada publicacao de Status." value={behaviorDraft.whatsappMaxStatusRecipients} min={1} max={500} onChange={(value) => updateBehavior("whatsappMaxStatusRecipients", value)} />
-                    <NumberField label="Lote campanha" description="Quantidade maxima de numeros aceitos por campanha simples." value={behaviorDraft.whatsappCampaignBatchSize} min={1} max={500} onChange={(value) => updateBehavior("whatsappCampaignBatchSize", value)} />
-                    <NumberField label="Delay min" description="Intervalo minimo entre mensagens da campanha." value={behaviorDraft.whatsappCampaignDelayMinSeconds} min={5} max={600} onChange={(value) => updateBehavior("whatsappCampaignDelayMinSeconds", value)} />
-                    <NumberField label="Delay max" description="Intervalo maximo entre mensagens da campanha." value={behaviorDraft.whatsappCampaignDelayMaxSeconds} min={5} max={900} onChange={(value) => updateBehavior("whatsappCampaignDelayMaxSeconds", value)} />
-                  </div>
-                </div>
-              </BehaviorSection>
-
               <BehaviorSection title="Cenarios especiais do lead" description="Eventos que a IA deve reconhecer para alimentar CRM, memoria e proximos passos.">
                 <div className="grid gap-3">
                   <div className="grid gap-2">
@@ -2553,26 +2491,46 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
           eyebrow="grupos / status / canais / campanhas"
           action={<NeonBadge tone={behaviorChanged || !channelOps ? "amber" : "green"}>{behaviorChanged ? "salve primeiro" : channelOps ? "sincronizado" : "pendente"}</NeonBadge>}
         >
-          {behaviorChanged ? (
-            <div className="mb-3 rounded-lg border px-3 py-3" style={{ background: "rgba(251,191,36,0.08)", borderColor: "rgba(251,191,36,0.30)" }}>
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                <div className="min-w-0">
-                  <p className="font-mono text-[9px] font-bold uppercase tracking-widest text-amber-100">Permissoes ainda nao salvas</p>
-                  <p className="mt-1 text-[11px] leading-5 text-slate-300">
-                    Status, canais, grupos e campanhas usam a configuracao salva do agente. Salve antes de buscar destinos ou agendar posts.
-                  </p>
-                </div>
-                <ActionButton
-                  icon={Wand2}
-                  label="Salvar permissoes"
-                  description="Grava o comportamento do agente antes de usar os recursos multicanal."
-                  disabled={!state?.capability.schemaReady || promptTooLong}
-                  loading={running === "save_settings"}
-                  onClick={saveAgentSettings}
-                />
+          <div className="mb-3 grid gap-3 rounded-xl border p-3 sm:p-4" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div className="min-w-0">
+                <p className="font-mono text-[9px] font-bold uppercase tracking-widest text-slate-500">Permissoes multicanal</p>
+                <p className="mt-1 text-[11px] leading-5 text-slate-300">
+                  Grupos, Status, canais/newsletters e campanhas deste WhatsApp.
+                </p>
               </div>
+              <ActionButton
+                icon={Wand2}
+                label={behaviorChanged ? "Salvar permissoes" : "Permissoes salvas"}
+                description="Grava os controles multicanal do agente."
+                disabled={!state?.capability.schemaReady || !behaviorChanged || promptTooLong}
+                loading={running === "save_settings"}
+                onClick={saveAgentSettings}
+              />
             </div>
-          ) : null}
+            <ModeSelector<WhatsappGroupReplyMode>
+              value={behaviorDraft.groupReplyMode}
+              options={[
+                { value: "all", label: "Todos", description: "Responde toda mensagem", help: "Quando Atender grupos estiver ligado, qualquer mensagem do grupo pode acionar o agente." },
+                { value: "mentions", label: "Mencoes", description: "So quando citado", help: "O agente responde grupos apenas quando detectar mencao, nome do agente ou referencia direta." },
+                { value: "admins", label: "Admins", description: "Somente admins", help: "Responde so quando o webhook trouxer sinal de administrador no grupo." },
+              ]}
+              onChange={(value) => updateBehavior("groupReplyMode", value)}
+            />
+            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+              <ToggleTile icon={MessageCircle} label="Atender grupos" description="Permite que o agente responda mensagens em grupos do WhatsApp. Desligado, grupos sao ignorados." checked={behaviorDraft.allowGroupChats} onChange={() => updateBehavior("allowGroupChats", !behaviorDraft.allowGroupChats)} />
+              <ToggleTile icon={MessageCircle} label="Mencionar todos" description="Permite usar mencao geral em mensagens operacionais de grupo quando a Uazapi aceitar." checked={behaviorDraft.groupMentionAll} onChange={() => updateBehavior("groupMentionAll", !behaviorDraft.groupMentionAll)} />
+              <ToggleTile icon={Globe2} label="Status WhatsApp" description="Permite publicar stories/status pelo painel usando processamento Inngest." checked={behaviorDraft.statusBroadcasts} onChange={() => updateBehavior("statusBroadcasts", !behaviorDraft.statusBroadcasts)} />
+              <ToggleTile icon={FileText} label="Canais" description="Permite postar em canais/newsletters do WhatsApp pelo painel." checked={behaviorDraft.newsletterBroadcasts} onChange={() => updateBehavior("newsletterBroadcasts", !behaviorDraft.newsletterBroadcasts)} />
+              <ToggleTile icon={Forward} label="Campanhas" description="Permite criar disparos em lote via Uazapi Sender, sempre processados pelo Inngest." checked={behaviorDraft.campaignBroadcasts} onChange={() => updateBehavior("campaignBroadcasts", !behaviorDraft.campaignBroadcasts)} />
+            </div>
+            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+              <NumberField label="Max status" description="Limite maximo de contatos usados em cada publicacao de Status." value={behaviorDraft.whatsappMaxStatusRecipients} min={1} max={500} onChange={(value) => updateBehavior("whatsappMaxStatusRecipients", value)} />
+              <NumberField label="Lote campanha" description="Quantidade maxima de numeros aceitos por campanha simples." value={behaviorDraft.whatsappCampaignBatchSize} min={1} max={500} onChange={(value) => updateBehavior("whatsappCampaignBatchSize", value)} />
+              <NumberField label="Delay min" description="Intervalo minimo entre mensagens da campanha." value={behaviorDraft.whatsappCampaignDelayMinSeconds} min={5} max={600} onChange={(value) => updateBehavior("whatsappCampaignDelayMinSeconds", value)} />
+              <NumberField label="Delay max" description="Intervalo maximo entre mensagens da campanha." value={behaviorDraft.whatsappCampaignDelayMaxSeconds} min={5} max={900} onChange={(value) => updateBehavior("whatsappCampaignDelayMaxSeconds", value)} />
+            </div>
+          </div>
           <WhatsappChannelOperationsPanel
             behavior={normalizeWhatsappBehaviorConfig(state.behavior)}
             channelAction={channelAction}
