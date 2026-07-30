@@ -23,14 +23,30 @@ type MetaSyncResponse = {
   error?: string;
 };
 
+type GrowthSyncResult = {
+  providerId: "meta-ads" | "google-growth";
+  status: "success" | "warning" | "failed";
+  snapshotsWritten: number;
+  assetsWritten: number;
+  warnings: string[];
+  finishedAt: string;
+};
+
+type GrowthSyncResponse = {
+  sync?: GrowthSyncResult;
+  error?: string;
+};
+
 export function AdsDashboardSyncButton({
   label = "Sincronizar",
+  organizationId,
   refreshingLabel = "Sincronizando",
   successLabel = "Atualizado",
   provider = "google",
   tone = "cyan",
 }: {
   label?: string;
+  organizationId?: string | null;
   refreshingLabel?: string;
   successLabel?: string;
   provider?: SyncProvider;
@@ -80,7 +96,25 @@ export function AdsDashboardSyncButton({
     setDetail(null);
 
     try {
-      if (provider === "meta") {
+      if (organizationId) {
+        const body = await runGrowthSync({
+          organizationId,
+          provider,
+        });
+        const sync = body.sync;
+
+        if (!sync) {
+          throw new Error(body.error ?? "Sincronizacao nao retornou resultado.");
+        }
+
+        if (sync.status === "failed") {
+          throw new Error(sync.warnings[0] ?? "A fonte conectada recusou a sincronizacao.");
+        }
+
+        setState(sync.status === "warning" ? "warning" : "success");
+        setMessage(`${sync.snapshotsWritten} snapshots`);
+        setDetail(formatGrowthSyncDetail(sync));
+      } else if (provider === "meta") {
         const body = await runMetaSync();
         const results = body.results ?? [];
         const successCount = results.filter((result) => result.ok).length;
@@ -167,6 +201,30 @@ async function runMetaSync() {
   return body ?? {};
 }
 
+async function runGrowthSync(input: {
+  organizationId: string;
+  provider: SyncProvider;
+}) {
+  const response = await fetch("/api/dashboard/integrations/growth-assets", {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      companyId: input.organizationId,
+      providerId: input.provider === "meta" ? "meta-ads" : "google-growth",
+    }),
+  });
+  const body = await response.json().catch(() => null) as GrowthSyncResponse | null;
+
+  if (!response.ok) {
+    throw new Error(body?.error ?? "Nao foi possivel sincronizar esta fonte.");
+  }
+
+  return body ?? {};
+}
+
 function getDisplayLabel({
   label,
   loading,
@@ -195,6 +253,19 @@ function formatFailedLabel(results: MetaSyncResult[]) {
   if (results.length > 1) return `${results.length} pendencias`;
 
   return shortPermissionName(results[0]?.permission);
+}
+
+function formatGrowthSyncDetail(sync: GrowthSyncResult) {
+  const pieces = [
+    `${sync.snapshotsWritten} snapshot(s) de metricas`,
+    `${sync.assetsWritten} asset(s) atualizado(s)`,
+  ];
+
+  if (sync.warnings.length) {
+    pieces.push(sync.warnings.join(" | "));
+  }
+
+  return pieces.join(" - ");
 }
 
 function formatFailedDetail(results: MetaSyncResult[], fallback?: string) {

@@ -20,6 +20,20 @@ type LeadAttributionRow = {
   created_at: string | null;
 };
 
+type MetricSnapshotRow = {
+  organization_id: string | null;
+  provider_id: string | null;
+  resource_type: string | null;
+  external_id: string | null;
+  label: string | null;
+  date_start: string | null;
+  date_stop: string | null;
+  metrics: JsonRecord | null;
+  dimensions: JsonRecord | null;
+  raw_payload: JsonRecord | null;
+  collected_at: string | null;
+};
+
 type CredentialMap = Map<string, string>;
 
 type TrafficRange = {
@@ -136,6 +150,10 @@ type ProviderFetchResult = {
   warnings?: string[];
 };
 
+type SnapshotProviderFetchResult = ProviderFetchResult & {
+  hasRows: boolean;
+};
+
 const credentialEnvNames = [
   "META_ACCESS_TOKEN",
   "META_APP_SECRET",
@@ -170,6 +188,17 @@ async function getTrafficOverview(credentialScope: TrafficCredentialScope): Prom
   const range = buildTrafficRange();
   const warnings: string[] = [];
   const credentials = await loadTrafficCredentials(warnings, credentialScope);
+  const snapshotOverview = await loadSnapshotTrafficOverview({
+    credentialScope,
+    credentials,
+    range,
+    warnings,
+  });
+
+  if (snapshotOverview) {
+    return snapshotOverview;
+  }
+
   const googleAccessToken = await exchangeGoogleRefreshToken(credentials, warnings, credentialScope);
 
   const [metaPaid, googlePaid, metaOrganic, googleOrganic, leadAttribution] = await Promise.all([
@@ -228,6 +257,275 @@ async function getTrafficOverview(credentialScope: TrafficCredentialScope): Prom
     ],
     warnings: [...new Set(warnings.filter(Boolean))],
   };
+}
+
+async function loadSnapshotTrafficOverview(input: {
+  credentialScope: TrafficCredentialScope;
+  credentials: CredentialMap;
+  range: TrafficRange;
+  warnings: string[];
+}): Promise<AdminTrafficOverview | null> {
+  const rows = await loadTrafficMetricSnapshots(input.range, input.warnings, input.credentialScope);
+
+  if (rows.length === 0) {
+    return null;
+  }
+
+  const metaPaid = buildSnapshotPaidTraffic({
+    base: buildEmptyMetaPaidProvider(input.credentialScope),
+    credentialScope: input.credentialScope,
+    platform: "Meta",
+    providerId: "meta-ads",
+    rows,
+  });
+  const googlePaid = buildSnapshotPaidTraffic({
+    base: buildEmptyGooglePaidProvider(input.credentialScope),
+    credentialScope: input.credentialScope,
+    platform: "Google",
+    providerId: "google-growth",
+    rows,
+  });
+  const metaOrganic = buildSnapshotOrganicTraffic({
+    base: buildEmptyMetaOrganicProvider(input.credentialScope),
+    providerId: "meta-ads",
+    resourceTypes: ["post", "page", "instagram_account"],
+    rows,
+  });
+  const googleOrganic = buildSnapshotOrganicTraffic({
+    base: buildEmptyGoogleOrganicProvider(input.credentialScope),
+    providerId: "google-growth",
+    resourceTypes: ["site", "keyword"],
+    rows,
+  });
+  const paidProviders = [metaPaid.provider, googlePaid.provider];
+  const organicProviders = [metaOrganic.provider, googleOrganic.provider];
+  const campaigns = [...(metaPaid.campaigns ?? []), ...(googlePaid.campaigns ?? [])]
+    .sort((left, right) => right.spend - left.spend)
+    .slice(0, 50);
+  const paidClickSeries = mergeSeries([metaPaid.series ?? [], googlePaid.series ?? []]);
+  const organicClickSeries = mergeSeries([metaOrganic.series ?? [], googleOrganic.series ?? []]);
+  const leadAttribution = await loadTrafficLeadAttribution(
+    input.range,
+    input.warnings,
+    input.credentialScope.scope === "organization" ? input.credentialScope.organizationId : null,
+  );
+
+  return {
+    generatedAt: latestSnapshotCollectedAt(rows) ?? new Date().toISOString(),
+    range: input.range,
+    summary: {
+      paidSpend: sum(paidProviders, "spend"),
+      paidClicks: sum(paidProviders, "clicks"),
+      paidImpressions: sum(paidProviders, "impressions"),
+      paidConversions: sum(paidProviders, "conversions"),
+      organicClicks: sum(organicProviders, "clicks"),
+      organicImpressions: sum(organicProviders, "impressions"),
+      organicEngagements: sum(organicProviders, "engagements"),
+    },
+    paidProviders,
+    organicProviders,
+    campaigns,
+    platformSeries: {
+      metaPaidClicks: metaPaid.series ?? [],
+      googlePaidClicks: googlePaid.series ?? [],
+      metaOrganicClicks: metaOrganic.series ?? [],
+      googleOrganicClicks: googleOrganic.series ?? [],
+    },
+    tracking: buildTrafficTrackingSnapshot(input.credentials),
+    leadAttribution,
+    paidClickSeries,
+    organicClickSeries,
+    sourceStatus: [
+      providerToSourceStatus(metaPaid.provider),
+      providerToSourceStatus(googlePaid.provider),
+      providerToSourceStatus(metaOrganic.provider),
+      providerToSourceStatus(googleOrganic.provider),
+    ],
+    warnings: [...new Set(input.warnings.filter(Boolean))],
+  };
+}
+
+async function loadTrafficMetricSnapshots(
+  range: TrafficRange,
+  warnings: string[],
+  credentialScope: TrafficCredentialScope,
+): Promise<MetricSnapshotRow[]> {
+  try {
+    const client = createServiceClient();
+    let query = client
+      .from("integration_metric_snapshots")
+      .select("organization_id, provider_id, resource_type, external_id, label, date_start, date_stop, metrics, dimensions, raw_payload, collected_at")
+      .in("provider_id", ["meta-ads", "google-growth"])
+      .gte("date_start", range.since)
+      .lte("date_start", range.until)
+      .order("date_start", { ascending: true })
+      .limit(5000);
+
+    if (credentialScope.scope === "organization") {
+      query = query.eq("organization_id", credentialScope.organizationId);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      warnings.push(`Snapshots de trafego indisponiveis: ${error.message}`);
+      return [];
+    }
+
+    return ((data ?? []) as MetricSnapshotRow[]).filter((row) => Boolean(row.provider_id && row.resource_type && row.external_id));
+  } catch (error) {
+    warnings.push(error instanceof Error ? error.message : "Nao foi possivel carregar snapshots de trafego.");
+    return [];
+  }
+}
+
+function buildSnapshotPaidTraffic(input: {
+  base: TrafficProviderSummary;
+  credentialScope: TrafficCredentialScope;
+  platform: "Meta" | "Google";
+  providerId: "meta-ads" | "google-growth";
+  rows: MetricSnapshotRow[];
+}): SnapshotProviderFetchResult {
+  const providerRows = input.rows.filter((row) => row.provider_id === input.providerId && row.resource_type === "campaign");
+  const campaigns = buildSnapshotCampaigns(providerRows, input.platform, input.credentialScope);
+  const provider = providerFromCampaigns({
+    ...input.base,
+    status: providerRows.length ? "online" : "warning",
+    detail: providerRows.length
+      ? `${providerRows.length} snapshot(s) de campanhas carregado(s).`
+      : input.base.detail,
+  }, campaigns);
+
+  return {
+    campaigns,
+    hasRows: providerRows.length > 0,
+    provider,
+    series: buildSnapshotSeries(providerRows, "paid"),
+  };
+}
+
+function buildSnapshotCampaigns(
+  rows: MetricSnapshotRow[],
+  platform: "Meta" | "Google",
+  credentialScope: TrafficCredentialScope,
+) {
+  const campaignsById = new Map<string, TrafficCampaign>();
+
+  for (const row of rows) {
+    const externalId = row.external_id ?? `${platform.toLowerCase()}-campaign`;
+    const id = credentialScope.scope === "platform"
+      ? `${row.organization_id ?? "organization"}:${externalId}`
+      : externalId;
+    const metrics = readRecord(row.metrics);
+    const dimensions = readRecord(row.dimensions);
+    const spend = readSnapshotMetric(metrics, ["spend", "cost", "amount_spent"]);
+    const clicks = readSnapshotMetric(metrics, ["clicks", "link_clicks"]);
+    const impressions = readSnapshotMetric(metrics, ["impressions"]);
+    const conversions = readSnapshotMetric(metrics, ["conversions", "leads", "results"]);
+    const current = campaignsById.get(id) ?? {
+      id,
+      name: row.label ?? `Campanha ${platform}`,
+      platform,
+      status: readString(readAny(dimensions, ["status", "effective_status"])) ?? "snapshot",
+      spend: 0,
+      impressions: 0,
+      clicks: 0,
+      conversions: 0,
+      ctr: 0,
+      cpc: 0,
+    };
+
+    current.spend += spend;
+    current.clicks += clicks;
+    current.impressions += impressions;
+    current.conversions += conversions;
+    current.ctr = ratioPercent(current.clicks, current.impressions);
+    current.cpc = ratio(current.spend, current.clicks);
+    campaignsById.set(id, current);
+  }
+
+  return [...campaignsById.values()];
+}
+
+function buildSnapshotOrganicTraffic(input: {
+  base: TrafficProviderSummary;
+  providerId: "meta-ads" | "google-growth";
+  resourceTypes: string[];
+  rows: MetricSnapshotRow[];
+}): SnapshotProviderFetchResult {
+  const allowedResourceTypes = new Set(input.resourceTypes);
+  const providerRows = input.rows.filter((row) => (
+    row.provider_id === input.providerId
+    && Boolean(row.resource_type && allowedResourceTypes.has(row.resource_type))
+  ));
+  let clicks = 0;
+  let impressions = 0;
+  let engagements = 0;
+  let weightedPosition = 0;
+  let positionWeight = 0;
+
+  for (const row of providerRows) {
+    const metrics = readRecord(row.metrics);
+    const rowClicks = readSnapshotMetric(metrics, ["clicks", "website_clicks", "profile_views"]);
+    const rowImpressions = readSnapshotMetric(metrics, ["impressions", "reach"]);
+    const rowEngagements = readSnapshotEngagements(metrics);
+    const position = readSnapshotMetric(metrics, ["position", "average_position"]);
+    const weight = Math.max(rowImpressions, 1);
+
+    clicks += rowClicks;
+    impressions += rowImpressions;
+    engagements += rowEngagements;
+
+    if (position > 0) {
+      weightedPosition += position * weight;
+      positionWeight += weight;
+    }
+  }
+
+  const provider: TrafficProviderSummary = {
+    ...input.base,
+    status: providerRows.length ? "online" : "warning",
+    clicks,
+    impressions,
+    engagements,
+    ctr: ratioPercent(clicks, impressions),
+    averagePosition: positionWeight > 0 ? weightedPosition / positionWeight : null,
+    detail: providerRows.length
+      ? `${providerRows.length} snapshot(s) organico(s) carregado(s).`
+      : input.base.detail,
+  };
+
+  return {
+    hasRows: providerRows.length > 0,
+    provider,
+    series: buildSnapshotSeries(providerRows, "organic"),
+  };
+}
+
+function buildSnapshotSeries(rows: MetricSnapshotRow[], kind: TrafficProviderKind) {
+  const seriesByDate = new Map<string, number>();
+
+  for (const row of rows) {
+    const date = readString(row.date_start) ?? readString(row.collected_at)?.slice(0, 10);
+    const metrics = readRecord(row.metrics);
+    const value = kind === "paid"
+      ? readSnapshotMetric(metrics, ["clicks", "link_clicks"])
+      : readSnapshotMetric(metrics, ["clicks", "website_clicks", "profile_views"]) || readSnapshotEngagements(metrics);
+
+    if (date) {
+      seriesByDate.set(date, (seriesByDate.get(date) ?? 0) + value);
+    }
+  }
+
+  return mapSeries(seriesByDate);
+}
+
+function latestSnapshotCollectedAt(rows: MetricSnapshotRow[]) {
+  return rows
+    .map((row) => row.collected_at)
+    .filter((value): value is string => Boolean(value))
+    .sort()
+    .at(-1) ?? null;
 }
 
 async function loadTrafficCredentials(warnings: string[], credentialScope: TrafficCredentialScope) {
@@ -1153,6 +1451,32 @@ function readAny(record: JsonRecord | null | undefined, keys: string[]) {
   }
 
   return undefined;
+}
+
+function readSnapshotMetric(record: JsonRecord | null | undefined, keys: string[]) {
+  if (!record) return 0;
+
+  for (const key of keys) {
+    const value = readNumber(record[key]);
+
+    if (value !== 0 || key in record) {
+      return value;
+    }
+  }
+
+  return 0;
+}
+
+function readSnapshotEngagements(record: JsonRecord | null | undefined) {
+  const direct = readSnapshotMetric(record, ["engagements", "post_engaged_users", "page_post_engagements"]);
+
+  if (direct > 0) {
+    return direct;
+  }
+
+  return readSnapshotMetric(record, ["comments"])
+    + readSnapshotMetric(record, ["likes", "like_count"])
+    + readSnapshotMetric(record, ["saved"]);
 }
 
 function readRecord(value: unknown): JsonRecord | null {

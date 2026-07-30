@@ -60,6 +60,7 @@ export default async function ClientMetaAdsPage() {
       credentialPrimaryLabel="Abrir integracoes"
       credentialSecondaryLabel="Salvar em integracoes"
       isPlatformAdmin={shellProps.isPlatformAdmin}
+      organizationId={workspace.organization.id}
       overview={overview}
       platform="meta"
       shellMode="client"

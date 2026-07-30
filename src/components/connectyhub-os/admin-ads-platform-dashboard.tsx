@@ -83,6 +83,7 @@ export function AdminAdsPlatformDashboard({
   credentialPrimaryLabel = "Abrir conexoes",
   credentialSecondaryLabel = "Salvar na manutencao",
   isPlatformAdmin = true,
+  organizationId,
   overview,
   platform,
   shellMode = "admin",
@@ -95,6 +96,7 @@ export function AdminAdsPlatformDashboard({
   credentialPrimaryLabel?: string;
   credentialSecondaryLabel?: string;
   isPlatformAdmin?: boolean;
+  organizationId?: string | null;
   overview: AdminTrafficOverview;
   platform: AdsDashboardPlatform;
   shellMode?: "admin" | "client";
@@ -145,7 +147,7 @@ export function AdminAdsPlatformDashboard({
         actions={
           <div className="flex min-w-max items-center gap-2">
             <ToolbarButton icon={CalendarDays} label="Hoje" />
-            <AdsDashboardSyncButton provider={platform} />
+            <AdsDashboardSyncButton organizationId={organizationId} provider={platform} />
             {platform === "meta" ? <MetaReviewTestButton /> : <GoogleReviewTestButton />}
             <ToolbarButton icon={BrainCircuit} label="Analisar com IA" tone="violet" />
             <ToolbarButton icon={Activity} label="Gestor IA" tone="amber" />
