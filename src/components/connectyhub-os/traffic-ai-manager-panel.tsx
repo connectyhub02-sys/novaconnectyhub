@@ -6,10 +6,12 @@ import {
   BrainCircuit,
   CheckCircle2,
   Clock3,
+  FileText,
   ListChecks,
   Loader2,
   RefreshCcw,
   Send,
+  ShieldCheck,
   Sparkles,
   Target,
   Zap,
@@ -26,6 +28,8 @@ import type {
   TrafficAiActionItem,
   TrafficAiActionStatus,
   TrafficAiAnalysisHistoryItem,
+  TrafficAiExecutionDraft,
+  TrafficAiExecutionDraftStatus,
 } from "@/lib/traffic/traffic-ai-operations";
 import { cn } from "@/lib/utils";
 import { NeonBadge, toneClass } from "./panel-primitives";
@@ -47,6 +51,9 @@ type TrafficAiOperationsPayload = {
   message?: string | null;
   analyses?: TrafficAiAnalysisHistoryItem[];
   actionItems?: TrafficAiActionItem[];
+  executionDrafts?: TrafficAiExecutionDraft[];
+  executionMessage?: string | null;
+  executionReady?: boolean;
 };
 
 type TrafficAiOperationsResponse = TrafficAiOperationsPayload & {
@@ -79,17 +86,28 @@ export function TrafficAiManagerPanel({
   const [operationsMessage, setOperationsMessage] = useState<string | null>(null);
   const [analysisHistory, setAnalysisHistory] = useState<TrafficAiAnalysisHistoryItem[]>([]);
   const [actionItems, setActionItems] = useState<TrafficAiActionItem[]>([]);
+  const [executionDrafts, setExecutionDrafts] = useState<TrafficAiExecutionDraft[]>([]);
+  const [executionReady, setExecutionReady] = useState(true);
+  const [executionMessage, setExecutionMessage] = useState<string | null>(null);
   const queuedRecommendationIds = useMemo(() => new Set(
     actionItems
       .filter((item) => !["done", "dismissed"].includes(item.status))
       .map((item) => item.recommendationId),
   ), [actionItems]);
+  const draftedActionIds = useMemo(() => new Set(
+    executionDrafts
+      .filter((draft) => !["applied", "cancelled", "failed"].includes(draft.status))
+      .map((draft) => draft.actionItemId),
+  ), [executionDrafts]);
 
   const applyOperations = useCallback((body: TrafficAiOperationsPayload) => {
     setOperationsReady(body.ready !== false);
     setOperationsMessage(body.message ?? null);
     setAnalysisHistory(body.analyses ?? []);
     setActionItems(body.actionItems ?? []);
+    setExecutionReady(body.executionReady !== false);
+    setExecutionMessage(body.executionMessage ?? null);
+    setExecutionDrafts(body.executionDrafts ?? []);
   }, []);
 
   const refreshOperations = useCallback(async () => {
@@ -253,6 +271,85 @@ export function TrafficAiManagerPanel({
     }
   }
 
+  async function prepareExecutionDraft(actionItemId: string) {
+    if (!organizationId) return;
+
+    setActionBusyId(actionItemId);
+
+    try {
+      const response = await fetch("/api/dashboard/traffic/execution", {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          actionItemId,
+          companyId: organizationId,
+          platform,
+        }),
+      });
+      const body = await response.json().catch(() => null) as TrafficAiOperationsResponse | null;
+
+      if (!response.ok) {
+        throw new Error(body?.error ?? "Nao foi possivel preparar o rascunho.");
+      }
+
+      applyOperations(body?.operations ?? body ?? {});
+      setNotice({
+        tone: "green",
+        message: body?.notice?.message ?? "Rascunho de execucao preparado.",
+      });
+    } catch (error) {
+      setNotice({
+        tone: "rose",
+        message: error instanceof Error ? error.message : "Falha ao preparar rascunho.",
+      });
+    } finally {
+      setActionBusyId(null);
+    }
+  }
+
+  async function updateExecutionDraftStatus(draftId: string, status: TrafficAiExecutionDraftStatus) {
+    if (!organizationId) return;
+
+    setActionBusyId(draftId);
+
+    try {
+      const response = await fetch("/api/dashboard/traffic/execution", {
+        method: "PATCH",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          companyId: organizationId,
+          draftId,
+          platform,
+          status,
+        }),
+      });
+      const body = await response.json().catch(() => null) as TrafficAiOperationsResponse | null;
+
+      if (!response.ok) {
+        throw new Error(body?.error ?? "Nao foi possivel atualizar o rascunho.");
+      }
+
+      applyOperations(body?.operations ?? body ?? {});
+      setNotice({
+        tone: "green",
+        message: body?.notice?.message ?? "Rascunho atualizado.",
+      });
+    } catch (error) {
+      setNotice({
+        tone: "rose",
+        message: error instanceof Error ? error.message : "Falha ao atualizar rascunho.",
+      });
+    } finally {
+      setActionBusyId(null);
+    }
+  }
+
   return (
     <div className="grid gap-4">
       <div className="grid gap-3 xl:grid-cols-[minmax(0,0.86fr)_minmax(300px,0.64fr)]">
@@ -355,9 +452,11 @@ export function TrafficAiManagerPanel({
         <ActionQueuePanel
           actionItems={actionItems}
           busyId={actionBusyId}
+          draftedActionIds={draftedActionIds}
           loading={operationsLoading}
           ready={operationsReady}
           schemaMessage={operationsMessage}
+          onPrepareDraft={prepareExecutionDraft}
           onRefresh={refreshOperations}
           onStatusChange={updateActionStatus}
         />
@@ -368,6 +467,14 @@ export function TrafficAiManagerPanel({
           schemaMessage={operationsMessage}
         />
       </div>
+
+      <ExecutionDraftsPanel
+        busyId={actionBusyId}
+        drafts={executionDrafts}
+        executionMessage={executionMessage}
+        executionReady={executionReady}
+        onStatusChange={updateExecutionDraftStatus}
+      />
     </div>
   );
 }
@@ -450,7 +557,9 @@ function RecommendationRow({
 function ActionQueuePanel({
   actionItems,
   busyId,
+  draftedActionIds,
   loading,
+  onPrepareDraft,
   onRefresh,
   onStatusChange,
   ready,
@@ -458,7 +567,9 @@ function ActionQueuePanel({
 }: {
   actionItems: TrafficAiActionItem[];
   busyId: string | null;
+  draftedActionIds: Set<string>;
   loading: boolean;
+  onPrepareDraft: (actionItemId: string) => void;
   onRefresh: () => void;
   onStatusChange: (actionItemId: string, status: TrafficAiActionStatus) => void;
   ready: boolean;
@@ -493,7 +604,9 @@ function ActionQueuePanel({
             <ActionItemRow
               key={item.id}
               busy={busyId === item.id}
+              drafted={draftedActionIds.has(item.id)}
               item={item}
+              onPrepareDraft={() => onPrepareDraft(item.id)}
               onStatusChange={(status) => onStatusChange(item.id, status)}
             />
           ))}
@@ -507,11 +620,15 @@ function ActionQueuePanel({
 
 function ActionItemRow({
   busy,
+  drafted,
   item,
+  onPrepareDraft,
   onStatusChange,
 }: {
   busy: boolean;
+  drafted: boolean;
   item: TrafficAiActionItem;
+  onPrepareDraft: () => void;
   onStatusChange: (status: TrafficAiActionStatus) => void;
 }) {
   const tone = statusActionTone(item.status);
@@ -527,6 +644,7 @@ function ActionItemRow({
           <p className="mt-2 text-[11px] leading-4 text-slate-500">{item.action}</p>
         </div>
         <div className="flex shrink-0 flex-wrap gap-1">
+          <QueueButton busy={busy} disabled={drafted || item.status === "done" || item.status === "dismissed"} label={drafted ? "Preparado" : "Preparar"} onClick={onPrepareDraft} tone="violet" />
           <QueueButton busy={busy} disabled={item.status === "approved"} label="Aprovar" onClick={() => onStatusChange("approved")} tone="amber" />
           <QueueButton busy={busy} disabled={item.status === "in_progress"} label="Iniciar" onClick={() => onStatusChange("in_progress")} tone="cyan" />
           <QueueButton busy={busy} disabled={item.status === "done"} label="Concluir" onClick={() => onStatusChange("done")} tone="green" />
@@ -575,6 +693,106 @@ function AnalysisHistoryPanel({
       ) : (
         <EmptyMiniState text="As analises geradas pelo botao Analisar com IA aparecem aqui." />
       )}
+    </div>
+  );
+}
+
+function ExecutionDraftsPanel({
+  busyId,
+  drafts,
+  executionMessage,
+  executionReady,
+  onStatusChange,
+}: {
+  busyId: string | null;
+  drafts: TrafficAiExecutionDraft[];
+  executionMessage: string | null;
+  executionReady: boolean;
+  onStatusChange: (draftId: string, status: TrafficAiExecutionDraftStatus) => void;
+}) {
+  return (
+    <div className="rounded-xl p-3" style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}>
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <FileText className={cn("h-4 w-4 shrink-0", toneClass("violet").text)} />
+          <div className="min-w-0">
+            <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-slate-500">execucao assistida</p>
+            <p className="truncate text-[13px] font-semibold text-white">{drafts.length} rascunho(s)</p>
+          </div>
+        </div>
+        <NeonBadge tone={executionReady ? "violet" : "amber"}>{executionReady ? "aprovacao humana" : "migration"}</NeonBadge>
+      </div>
+
+      {!executionReady ? (
+        <SchemaNotice message={executionMessage} />
+      ) : drafts.length ? (
+        <div className="grid gap-3 lg:grid-cols-2">
+          {drafts.map((draft) => (
+            <ExecutionDraftCard
+              key={draft.id}
+              busy={busyId === draft.id}
+              draft={draft}
+              onStatusChange={(status) => onStatusChange(draft.id, status)}
+            />
+          ))}
+        </div>
+      ) : (
+        <EmptyMiniState text="Ao clicar em Preparar numa acao, o plano de execucao aparece aqui antes de qualquer aplicacao real." />
+      )}
+    </div>
+  );
+}
+
+function ExecutionDraftCard({
+  busy,
+  draft,
+  onStatusChange,
+}: {
+  busy: boolean;
+  draft: TrafficAiExecutionDraft;
+  onStatusChange: (status: TrafficAiExecutionDraftStatus) => void;
+}) {
+  const tone = executionStatusTone(draft.status);
+
+  return (
+    <div className="rounded-xl px-3 py-3" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}>
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div className="min-w-0">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <NeonBadge tone={tone}>{executionStatusLabel(draft.status)}</NeonBadge>
+            <NeonBadge tone={riskTone(draft.riskLevel)}>risco {riskLabel(draft.riskLevel)}</NeonBadge>
+          </div>
+          <p className="mt-2 text-[13px] font-semibold text-white">{draft.title}</p>
+          <p className="mt-2 text-[12px] leading-5 text-slate-500">{draft.objective}</p>
+        </div>
+        <div className="flex shrink-0 flex-wrap gap-1">
+          <QueueButton busy={busy} disabled={draft.status === "approved" || draft.status === "applied" || draft.status === "cancelled"} label="Aprovar" onClick={() => onStatusChange("approved")} tone="cyan" />
+          <QueueButton busy={busy} disabled={draft.status !== "approved"} label="Aplicado" onClick={() => onStatusChange("applied")} tone="green" />
+          <QueueButton busy={busy} disabled={draft.status === "cancelled" || draft.status === "applied"} label="Cancelar" onClick={() => onStatusChange("cancelled")} tone="rose" />
+        </div>
+      </div>
+
+      <div className="mt-3 grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(180px,0.58fr)]">
+        <div className="rounded-lg px-3 py-2" style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}>
+          <div className="mb-2 flex items-center gap-2">
+            <ShieldCheck className={cn("h-3.5 w-3.5", toneClass("green").text)} />
+            <p className="font-mono text-[9px] uppercase tracking-[0.12em] text-slate-500">passos</p>
+          </div>
+          <div className="grid gap-1">
+            {draft.steps.slice(0, 4).map((step, index) => (
+              <p key={`${draft.id}-step-${index}`} className="text-[11px] leading-4 text-slate-300">{index + 1}. {step}</p>
+            ))}
+          </div>
+        </div>
+        <div className="rounded-lg px-3 py-2" style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}>
+          <p className="font-mono text-[9px] uppercase tracking-[0.12em] text-slate-500">payload proposto</p>
+          <p className="mt-2 line-clamp-4 font-mono text-[10px] leading-4 text-slate-400">{formatPayloadPreview(draft.proposedPayload)}</p>
+        </div>
+      </div>
+
+      <div className="mt-2 rounded-lg px-3 py-2 text-[11px] leading-4 text-slate-500" style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}>
+        {draft.rollbackPlan}
+      </div>
     </div>
   );
 }
@@ -661,6 +879,37 @@ function statusActionLabel(status: TrafficAiActionStatus) {
   if (status === "dismissed") return "descartada";
   if (status === "suggested") return "sugerida";
   return "na fila";
+}
+
+function executionStatusTone(status: TrafficAiExecutionDraftStatus): Tone {
+  if (status === "approved") return "cyan";
+  if (status === "applied") return "green";
+  if (status === "cancelled" || status === "failed") return "rose";
+  return "violet";
+}
+
+function executionStatusLabel(status: TrafficAiExecutionDraftStatus) {
+  if (status === "approved") return "aprovado";
+  if (status === "applied") return "aplicado";
+  if (status === "cancelled") return "cancelado";
+  if (status === "failed") return "falhou";
+  return "rascunho";
+}
+
+function riskTone(riskLevel: TrafficAiExecutionDraft["riskLevel"]): Tone {
+  if (riskLevel === "high") return "rose";
+  if (riskLevel === "low") return "green";
+  return "amber";
+}
+
+function riskLabel(riskLevel: TrafficAiExecutionDraft["riskLevel"]) {
+  if (riskLevel === "high") return "alto";
+  if (riskLevel === "low") return "baixo";
+  return "medio";
+}
+
+function formatPayloadPreview(payload: Record<string, unknown>) {
+  return JSON.stringify(payload).slice(0, 260);
 }
 
 function formatDateTime(value: string) {
