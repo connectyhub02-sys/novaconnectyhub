@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getClientAgentsWorkspace, type ClientAgent } from "@/lib/client-os/agents";
+import { resolveMetaSocialChannelsEntitlement } from "@/lib/billing/plan-entitlements";
 import { assertBillableAccess, BillingAccessError } from "@/lib/billing/trial";
 import type { WhatsappAudioVoiceState } from "@/lib/elevenlabs/voices";
 import { requireClientCompanyAccess, type ClientCompany } from "@/lib/client-os/companies";
@@ -397,6 +398,10 @@ function buildUnavailableState(): DashboardWhatsappState {
       canConnect: false,
       schemaReady: false,
       message: "Cadastre uma empresa em Minha Empresa antes de configurar o WhatsApp.",
+      metaSocialChannels: resolveMetaSocialChannelsEntitlement({
+        planCode: null,
+        organizationStatus: null,
+      }),
     },
   };
 }

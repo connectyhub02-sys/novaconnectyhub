@@ -1,6 +1,8 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { resolveMetaSocialChannelsEntitlement } from "@/lib/billing/plan-entitlements";
+import { getOrganizationBillingAccess } from "@/lib/billing/trial";
 import {
   buildAgentChannelRuntimeInstruction,
   normalizeAgentChannelConfig,
@@ -13,6 +15,7 @@ import {
   isMetaSocialChannel,
   metaSocialCommentReceivedEventName,
   metaSocialMessageReceivedEventName,
+  resolveMetaSocialTrigger,
   resolveMetaSocialQueueDecision,
   type MetaSocialAgentEventName,
   type MetaSocialChannel,
@@ -52,7 +55,7 @@ export type MetaSocialAgentQueueResult =
     }
   | {
       status: "skipped";
-      reason: "non_inbound" | "no_agent" | "channel_disabled";
+      reason: "non_inbound" | "no_agent" | "channel_disabled" | "plan_blocked";
       triggerSource?: MetaSocialAgentEventName;
     };
 
@@ -73,6 +76,16 @@ export async function enqueueMetaSocialAgentRun(input: {
 }): Promise<MetaSocialAgentQueueResult> {
   if (input.snapshot.direction !== "inbound") {
     return { status: "skipped", reason: "non_inbound" };
+  }
+
+  const entitlement = await loadMetaSocialChannelsEntitlement(input.client, input.integration.organization_id);
+
+  if (!entitlement.allowed) {
+    return {
+      status: "skipped",
+      reason: "plan_blocked",
+      triggerSource: resolveMetaSocialTrigger(input.snapshot.channel),
+    };
   }
 
   const agent = await findOrganizationMultichannelAgent(input.client, {
@@ -197,6 +210,28 @@ export async function processMetaSocialAgentRun(input: {
   if (!channel) {
     await failMetaSocialAgentRun(client, run, "Canal Meta ausente nos metadados da fila.");
     return { status: "failed", reason: "missing_channel", runId: run.id };
+  }
+
+  if (!run.organization_id) {
+    await failMetaSocialAgentRun(client, run, "Organizacao ausente na fila social Meta.");
+    return { status: "failed", reason: "missing_organization", runId: run.id };
+  }
+
+  const entitlement = await loadMetaSocialChannelsEntitlement(client, run.organization_id);
+
+  if (!entitlement.allowed) {
+    await cancelMetaSocialAgentRun(client, run, {
+      channel,
+      reason: entitlement.reason,
+      summary: entitlement.description,
+    });
+
+    return {
+      status: "cancelled",
+      reason: "plan_blocked",
+      runId: run.id,
+      channel,
+    };
   }
 
   const agent = await loadAgent(client, run.agent_id);
@@ -479,13 +514,14 @@ async function cancelMetaSocialAgentRun(
   input: {
     channel: MetaSocialChannel;
     reason: string;
+    summary?: string;
   },
 ) {
   await client
     .from("agent_runs")
     .update({
       run_status: "cancelled",
-      output_summary: "Canal social Meta desabilitado antes do processamento.",
+      output_summary: input.summary ?? "Canal social Meta desabilitado antes do processamento.",
       finished_at: new Date().toISOString(),
       metadata: {
         ...(run.metadata ?? {}),
@@ -495,6 +531,15 @@ async function cancelMetaSocialAgentRun(
       },
     })
     .eq("id", run.id);
+}
+
+async function loadMetaSocialChannelsEntitlement(client: SupabaseClient, organizationId: string) {
+  const billing = await getOrganizationBillingAccess({ client, organizationId });
+  return resolveMetaSocialChannelsEntitlement({
+    planCode: billing.planCode,
+    organizationStatus: billing.organizationStatus,
+    billingState: billing.state,
+  });
 }
 
 function buildMetaSocialRunMetadata(

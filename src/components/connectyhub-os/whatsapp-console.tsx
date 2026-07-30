@@ -96,6 +96,7 @@ import {
   type AgentChannelConfigItem,
   type AgentChannelId,
 } from "@/lib/agents/multichannel";
+import type { PlanFeatureEntitlement } from "@/lib/billing/plan-entitlements";
 import { cn } from "@/lib/utils";
 
 type WhatsappStatus = "draft" | "qr_pending" | "connected" | "disconnected" | "blocked" | "error" | "archived";
@@ -279,6 +280,7 @@ type WhatsappState = {
     canConnect: boolean;
     schemaReady: boolean;
     message: string | null;
+    metaSocialChannels: PlanFeatureEntitlement;
   };
 };
 
@@ -2454,13 +2456,15 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
             <AgentChannelSettingsPanel
               config={channelConfigDraft}
               changed={channelConfigChanged}
+              entitlement={state.capability.metaSocialChannels}
               onChange={(channelId, patch) => updateAgentChannelConfig(channelId, patch)}
             />
             <div className="grid content-start gap-2">
               <InfoTile label="Canal principal" value="WhatsApp" />
-              <InfoTile label="Meta ativos" value={`${countEnabledMetaChannels(channelConfigDraft)} / 4`} />
-              <InfoTile label="Comentarios" value={countEnabledPublicChannels(channelConfigDraft) ? "Preparado" : "Pausado"} />
-              <InfoTile label="Directs" value={countEnabledPrivateMetaChannels(channelConfigDraft) ? "Preparado" : "Pausado"} />
+              <InfoTile label="Meta Social" value={state.capability.metaSocialChannels.allowed ? state.capability.metaSocialChannels.title : "Bloqueado"} />
+              <InfoTile label="Meta ativos" value={state.capability.metaSocialChannels.allowed ? `${countEnabledMetaChannels(channelConfigDraft)} / 4` : "0 / 4"} />
+              <InfoTile label="Comentarios" value={state.capability.metaSocialChannels.allowed && countEnabledPublicChannels(channelConfigDraft) ? "Preparado" : "Pausado"} />
+              <InfoTile label="Directs" value={state.capability.metaSocialChannels.allowed && countEnabledPrivateMetaChannels(channelConfigDraft) ? "Preparado" : "Pausado"} />
               <div className="flex flex-wrap gap-2 pt-1">
                 <SecondaryAction
                   icon={RefreshCcw}
@@ -2644,10 +2648,12 @@ function countEnabledPrivateMetaChannels(config: AgentChannelConfig) {
 function AgentChannelSettingsPanel({
   config,
   changed,
+  entitlement,
   onChange,
 }: {
   config: AgentChannelConfig;
   changed: boolean;
+  entitlement: PlanFeatureEntitlement;
   onChange: (channelId: AgentChannelId, patch: Partial<AgentChannelConfigItem>) => void;
 }) {
   const normalized = normalizeAgentChannelConfig(config);
@@ -2661,7 +2667,8 @@ function AgentChannelSettingsPanel({
         <div className="grid gap-2 md:grid-cols-2">
           {agentChannelDefinitions.map((definition) => {
             const channel = normalized.channels[definition.id];
-            const enabled = channel.enabled;
+            const lockedByPlan = definition.provider === "meta" && !entitlement.allowed;
+            const enabled = channel.enabled && !lockedByPlan;
 
             return (
               <div
@@ -2673,10 +2680,15 @@ function AgentChannelSettingsPanel({
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="text-[13px] font-semibold leading-5" style={{ color: "var(--ch-text)" }}>{definition.label}</p>
-                      <NeonBadge tone={enabled ? "green" : "amber"}>{enabled ? "ativo" : "pausado"}</NeonBadge>
+                      <NeonBadge tone={lockedByPlan ? "zinc" : enabled ? "green" : "amber"}>{lockedByPlan ? "plano pro/scale" : enabled ? "ativo" : "pausado"}</NeonBadge>
                       {definition.primary ? <NeonBadge tone="cyan">principal</NeonBadge> : null}
                     </div>
                     <p className="mt-1 text-[11px] leading-5 text-slate-500">{definition.description}</p>
+                    {lockedByPlan ? (
+                      <p className="mt-2 rounded-md border border-amber-300/20 bg-amber-300/10 px-2 py-1 text-[11px] leading-4 text-amber-100">
+                        {entitlement.description}
+                      </p>
+                    ) : null}
                   </div>
                 </div>
 
@@ -2692,6 +2704,7 @@ function AgentChannelSettingsPanel({
                       label={`Ativar ${definition.shortLabel}`}
                       description="Habilita este canal para o mesmo agente atender quando a integracao Meta permitir."
                       checked={enabled}
+                      disabled={lockedByPlan}
                       onChange={() => onChange(definition.id, { enabled: !enabled })}
                     />
                   )}
@@ -2702,21 +2715,24 @@ function AgentChannelSettingsPanel({
                         icon={MessageCircle}
                         label="Comentario publico"
                         description="Permite registrar e preparar resposta publica em comentarios."
-                        checked={channel.allowPublicReplies}
+                        checked={channel.allowPublicReplies && !lockedByPlan}
+                        disabled={lockedByPlan}
                         onChange={() => onChange(definition.id, { allowPublicReplies: !channel.allowPublicReplies })}
                       />
                       <ToggleTile
                         icon={Send}
                         label="Direct privado"
                         description="Permite continuar a conversa no privado quando a Meta liberar private reply/direct."
-                        checked={channel.allowPrivateReplies}
+                        checked={channel.allowPrivateReplies && !lockedByPlan}
+                        disabled={lockedByPlan}
                         onChange={() => onChange(definition.id, { allowPrivateReplies: !channel.allowPrivateReplies })}
                       />
                       <ToggleTile
                         icon={ShieldCheck}
                         label="Aprovacao humana"
                         description="Segura respostas sensiveis de comentario antes de publicar."
-                        checked={channel.requiresHumanApproval}
+                        checked={channel.requiresHumanApproval && !lockedByPlan}
+                        disabled={lockedByPlan}
                         onChange={() => onChange(definition.id, { requiresHumanApproval: !channel.requiresHumanApproval })}
                       />
                     </div>
@@ -2726,14 +2742,16 @@ function AgentChannelSettingsPanel({
                         icon={Bot}
                         label="Resposta automatica"
                         description="Permite que o agente responda no canal privado sem criar outro prompt."
-                        checked={channel.autoReply}
+                        checked={channel.autoReply && !lockedByPlan}
+                        disabled={lockedByPlan}
                         onChange={() => onChange(definition.id, { autoReply: !channel.autoReply })}
                       />
                       <ToggleTile
                         icon={ShieldCheck}
                         label="Aprovacao humana"
                         description="Segura conversas privadas quando houver risco ou regra comercial sensivel."
-                        checked={channel.requiresHumanApproval}
+                        checked={channel.requiresHumanApproval && !lockedByPlan}
+                        disabled={lockedByPlan}
                         onChange={() => onChange(definition.id, { requiresHumanApproval: !channel.requiresHumanApproval })}
                       />
                     </div>
@@ -2749,9 +2767,10 @@ function AgentChannelSettingsPanel({
         title="Politica de atendimento"
         description="O historico continua centralizado em leads, conversas e mensagens. Meta entra como novo canal, nao como novo agente."
       >
-        <div className="grid gap-2 md:grid-cols-3">
+        <div className="grid gap-2 md:grid-cols-4">
           <InfoTile label="Prompt" value="Unico por agente" />
           <InfoTile label="Memoria" value="Unificada por lead" />
+          <InfoTile label="Plano" value={entitlement.allowed ? entitlement.title : "Pro ou Scale"} />
           <InfoTile label="Status" value={changed ? "Alteracoes pendentes" : "Configuracao salva"} />
         </div>
       </BehaviorSection>
@@ -4738,12 +4757,14 @@ function ToggleTile({
   label,
   description,
   checked,
+  disabled = false,
   onChange,
 }: {
   icon: LucideIcon;
   label: string;
   description?: string;
   checked: boolean;
+  disabled?: boolean;
   onChange: () => void;
 }) {
   const tone = controlToneStyles[resolveControlTone(label, description)];
@@ -4751,8 +4772,9 @@ function ToggleTile({
   return (
     <button
       type="button"
+      disabled={disabled}
       onClick={onChange}
-      className="flex min-h-12 items-center justify-between gap-2 rounded-lg border px-2.5 py-2 text-left transition hover:bg-white/10 sm:min-h-11 sm:gap-3 sm:px-3"
+      className="flex min-h-12 items-center justify-between gap-2 rounded-lg border px-2.5 py-2 text-left transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-55 disabled:hover:bg-transparent sm:min-h-11 sm:gap-3 sm:px-3"
       style={{
         background: checked ? `linear-gradient(135deg, rgba(${tone.rgb},0.17), rgba(${tone.rgb},0.07))` : "var(--ch-panel-2)",
         borderColor: checked ? `rgba(${tone.rgb},0.48)` : `rgba(${tone.rgb},0.22)`,

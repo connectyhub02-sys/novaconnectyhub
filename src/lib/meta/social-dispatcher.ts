@@ -2,6 +2,8 @@ import "server-only";
 
 import { createHmac } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { resolveMetaSocialChannelsEntitlement } from "@/lib/billing/plan-entitlements";
+import { getOrganizationBillingAccess } from "@/lib/billing/trial";
 import {
   fetchMetaPageAccessToken,
   loadMetaGuidedOAuthConfig,
@@ -133,6 +135,18 @@ export async function processApprovedMetaSocialDispatch(input: {
   if (!organizationId || !channel || !approvedText) {
     await markDispatchFailed(client, run, "Run Meta aprovado sem organizacao, canal ou texto.");
     return { status: "failed", reason: "missing_dispatch_context", runId: run.id };
+  }
+
+  const entitlement = await loadMetaSocialChannelsEntitlement(client, organizationId);
+
+  if (!entitlement.allowed) {
+    await markDispatchPlanBlocked(client, run, entitlement.description);
+    return {
+      status: "blocked",
+      reason: "plan_blocked",
+      runId: run.id,
+      channel,
+    };
   }
 
   const startedAt = new Date().toISOString();
@@ -616,6 +630,40 @@ async function markDispatchBlocked(
       }),
     })
     .eq("id", input.run.id);
+}
+
+async function markDispatchPlanBlocked(client: SupabaseClient, run: AgentRunRow, message: string) {
+  const metadata = readRecord(run.metadata) ?? {};
+  const blockedAt = new Date().toISOString();
+
+  await client
+    .from("agent_runs")
+    .update({
+      error_message: null,
+      metadata: appendMetaDispatchAudit({
+        ...metadata,
+        meta_dispatch_status: "blocked_by_plan",
+        meta_dispatch_blocked_at: blockedAt,
+        meta_dispatch_block_reason: "plan_blocked",
+        meta_dispatch_block_detail: message,
+        ready_for_meta_dispatch: false,
+      }, {
+        at: blockedAt,
+        type: "dispatch_blocked",
+        status: "blocked_by_plan",
+        message,
+      }),
+    })
+    .eq("id", run.id);
+}
+
+async function loadMetaSocialChannelsEntitlement(client: SupabaseClient, organizationId: string) {
+  const billing = await getOrganizationBillingAccess({ client, organizationId });
+  return resolveMetaSocialChannelsEntitlement({
+    planCode: billing.planCode,
+    organizationStatus: billing.organizationStatus,
+    billingState: billing.state,
+  });
 }
 
 function readProviderMessageId(data: unknown): string | null {

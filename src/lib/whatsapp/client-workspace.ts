@@ -4,9 +4,14 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
 import {
   defaultAgentChannelConfig,
+  disableMetaAgentChannels,
   normalizeAgentChannelConfig,
   type AgentChannelConfig,
 } from "@/lib/agents/multichannel";
+import {
+  resolveMetaSocialChannelsEntitlement,
+  type PlanFeatureEntitlement,
+} from "@/lib/billing/plan-entitlements";
 import { assertBillableAccess, getOrganizationPlanLimits } from "@/lib/billing/trial";
 import { listWhatsappAudioVoices, type WhatsappAudioVoiceState } from "@/lib/elevenlabs/voices";
 import { generateConnectyVoiceAudio, type GeneratedConnectyVoiceAudio } from "@/lib/voice/tts";
@@ -249,6 +254,7 @@ export type ClientWhatsappState = {
     canConnect: boolean;
     schemaReady: boolean;
     message: string | null;
+    metaSocialChannels: PlanFeatureEntitlement;
   };
 };
 
@@ -310,7 +316,7 @@ export async function getClientWhatsappState(input: {
     }),
   ]);
 
-  return buildState(instance, agent, globalAgent, behavior, audio, knowledgeFiles, linkButtons, salesCatalog, cloneTest, runtimeAlerts);
+  return buildState(input.organization, instance, agent, globalAgent, behavior, audio, knowledgeFiles, linkButtons, salesCatalog, cloneTest, runtimeAlerts);
 }
 
 export async function listWhatsappRuntimeAlerts(
@@ -1129,9 +1135,21 @@ export async function updateClientWhatsappPrompt(input: {
     ? normalizeLeadQualificationConfig(input.qualificationConfig)
     : getLeadQualificationConfig(agent);
   const hasChannelConfig = input.channelConfig !== undefined;
-  const nextChannelConfig = hasChannelConfig
+  let nextChannelConfig = hasChannelConfig
     ? normalizeAgentChannelConfig(input.channelConfig)
     : getAgentChannelConfig(agent);
+
+  if (hasChannelConfig) {
+    const metaEntitlement = resolveMetaSocialChannelsEntitlement({
+      planCode: input.organization.planCode,
+      organizationStatus: input.organization.status,
+    });
+
+    if (!metaEntitlement.allowed) {
+      nextChannelConfig = disableMetaAgentChannels(nextChannelConfig);
+    }
+  }
+
   const now = new Date().toISOString();
 
   if (hasAgentPrompt || hasQualificationConfig || input.behavior !== undefined || hasCloneProfile || hasChannelConfig) {
@@ -2328,6 +2346,7 @@ async function readResponse(response: Response) {
 }
 
 function buildState(
+  organization: CurrentOrganization,
   instance: WhatsappInstanceRow | null,
   agent: AgentRow | null,
   globalAgent: AgentRow,
@@ -2342,6 +2361,10 @@ function buildState(
   const agentPrompt = agent?.prompt?.trim() || defaultWhatsappAgentPrompt;
   const globalPrompt = globalAgent.prompt?.trim() || defaultWhatsappGlobalPrompt;
   const profileImageUrl = readProfileImageUrl(instance);
+  const metaSocialChannels = resolveMetaSocialChannelsEntitlement({
+    planCode: organization.planCode,
+    organizationStatus: organization.status,
+  });
 
   return {
     instance: instance
@@ -2400,6 +2423,7 @@ function buildState(
       canConnect: true,
       schemaReady: true,
       message: null,
+      metaSocialChannels,
     },
   };
 }

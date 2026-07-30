@@ -86,6 +86,13 @@ export const agentChannelDefinitions: AgentChannelDefinition[] = [
   },
 ];
 
+export const metaAgentChannelIds = [
+  "instagram_direct",
+  "instagram_comments",
+  "facebook_messenger",
+  "facebook_comments",
+] as const satisfies readonly AgentChannelId[];
+
 export const defaultAgentChannelConfig: AgentChannelConfig = {
   version: 1,
   primaryChannel: "whatsapp",
@@ -161,6 +168,24 @@ export function normalizeAgentChannelConfig(value: unknown): AgentChannelConfig 
 
 export function isAgentChannelEnabled(config: unknown, channelId: AgentChannelId) {
   return normalizeAgentChannelConfig(config).channels[channelId].enabled;
+}
+
+export function disableMetaAgentChannels(config: AgentChannelConfig): AgentChannelConfig {
+  return {
+    ...config,
+    channels: Object.fromEntries(
+      Object.entries(config.channels).map(([channelId, channel]) => [
+        channelId,
+        (metaAgentChannelIds as readonly string[]).includes(channelId)
+          ? {
+              ...channel,
+              enabled: false,
+              autoReply: false,
+            }
+          : channel,
+      ]),
+    ) as AgentChannelConfig["channels"],
+  };
 }
 
 export function buildAgentChannelRuntimeInstruction(input: {

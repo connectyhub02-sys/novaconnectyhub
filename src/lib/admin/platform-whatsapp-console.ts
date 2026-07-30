@@ -2,6 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
+import { resolveMetaSocialChannelsEntitlement } from "@/lib/billing/plan-entitlements";
 import { listWhatsappAudioVoices, type WhatsappAudioVoiceState } from "@/lib/elevenlabs/voices";
 import { generateConnectyVoiceAudio, type GeneratedConnectyVoiceAudio } from "@/lib/voice/tts";
 import { defaultAgentChannelConfig, normalizeAgentChannelConfig } from "@/lib/agents/multichannel";
@@ -1328,6 +1329,10 @@ function buildState(
       canConnect: Boolean(agent),
       schemaReady: true,
       message: agent ? null : "Crie o agente do setor antes de conectar o WhatsApp interno.",
+      metaSocialChannels: resolveMetaSocialChannelsEntitlement({
+        planCode: "internal",
+        organizationStatus: "active",
+      }),
     },
   };
 }
@@ -2294,6 +2299,10 @@ function buildUnavailableState(): PlatformWhatsappConsoleState {
       canConnect: false,
       schemaReady: true,
       message: "Cadastre um setor em Setores antes de configurar o WhatsApp interno.",
+      metaSocialChannels: resolveMetaSocialChannelsEntitlement({
+        planCode: "internal",
+        organizationStatus: "active",
+      }),
     },
   };
 }
