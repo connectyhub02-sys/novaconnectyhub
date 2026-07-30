@@ -28,12 +28,17 @@ import type {
   TrafficProviderSummary,
   TrafficSeriesPoint,
 } from "@/lib/traffic/admin-traffic";
+import {
+  buildTrafficManagerPlan,
+  type TrafficManagerStatus,
+} from "@/lib/traffic/traffic-ai-manager";
 import { cn } from "@/lib/utils";
 import { AdsDashboardSyncButton } from "./ads-dashboard-sync-button";
 import { AreaChartPanel, BarChartPanel } from "./charts";
 import { ConnectyShell } from "./connecty-shell";
 import { GoogleReviewTestButton, MetaReviewTestButton } from "./meta-review-test-button";
 import { DataTable, NeonBadge, PageHeader, Panel, StatusBadge, toneClass } from "./panel-primitives";
+import { TrafficAiManagerPanel } from "./traffic-ai-manager-panel";
 
 export type AdsDashboardPlatform = "meta" | "google";
 
@@ -122,6 +127,7 @@ export function AdminAdsPlatformDashboard({
   const risk = resolveRisk(paidProvider, trackingConfigured);
   const platformWarnings = filterPlatformWarnings(overview.warnings, platform);
   const trackingStatus = resolveTrackingStatus(paidProvider, trackingConfigured);
+  const trafficManagerPlan = buildTrafficManagerPlan(overview, platform);
   const connectionGuidance = buildConnectionGuidance({
     isClient: shellMode === "client",
     organicProvider,
@@ -149,8 +155,8 @@ export function AdminAdsPlatformDashboard({
             <ToolbarButton icon={CalendarDays} label="Hoje" />
             <AdsDashboardSyncButton organizationId={organizationId} provider={platform} />
             {platform === "meta" ? <MetaReviewTestButton /> : <GoogleReviewTestButton />}
-            <ToolbarButton icon={BrainCircuit} label="Analisar com IA" tone="violet" />
-            <ToolbarButton icon={Activity} label="Gestor IA" tone="amber" />
+            <ToolbarButton href="#gestor-ia" icon={BrainCircuit} label="Analisar com IA" tone="violet" />
+            <ToolbarButton href="#gestor-ia" icon={Activity} label="Gestor IA" tone="amber" />
             <ToolbarButton icon={Plus} label="Nova campanha" tone="amber" disabled />
           </div>
         }
@@ -271,6 +277,22 @@ export function AdminAdsPlatformDashboard({
         </Panel>
       </div>
 
+      <Panel
+        id="gestor-ia"
+        className="mb-4"
+        title="Gestor IA"
+        eyebrow="trafego pago / recomendacoes / creditos"
+        action={<NeonBadge tone={trafficManagerStatusTone(trafficManagerPlan.status)}>{trafficManagerPlan.score}/100</NeonBadge>}
+        tone={trafficManagerStatusTone(trafficManagerPlan.status)}
+      >
+        <TrafficAiManagerPanel
+          organizationId={organizationId}
+          plan={trafficManagerPlan}
+          platform={platform}
+          tone={config.tone}
+        />
+      </Panel>
+
       <div className="mb-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(320px,0.62fr)]">
         <AreaChartPanel
           title="Cliques por dia"
@@ -340,27 +362,39 @@ function TrackingField({ label, value }: { label: string; value: string | null }
 
 function ToolbarButton({
   disabled = false,
+  href,
   icon: Icon,
   label,
   tone = "cyan",
 }: {
   disabled?: boolean;
+  href?: string;
   icon: LucideIcon;
   label: string;
   tone?: Tone;
 }) {
   const t = toneClass(tone);
+  const className = cn(
+    "inline-flex h-9 shrink-0 items-center gap-2 rounded-xl border px-3 text-[12px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-55",
+    t.border,
+    t.bg,
+    t.text,
+  );
+
+  if (href && !disabled) {
+    return (
+      <Link href={href} className={className}>
+        <Icon className="h-4 w-4" />
+        <span>{label}</span>
+      </Link>
+    );
+  }
 
   return (
     <button
       type="button"
       disabled={disabled}
-      className={cn(
-        "inline-flex h-9 shrink-0 items-center gap-2 rounded-xl border px-3 text-[12px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-55",
-        t.border,
-        t.bg,
-        t.text,
-      )}
+      className={className}
     >
       <Icon className="h-4 w-4" />
       <span>{label}</span>
@@ -692,6 +726,13 @@ function scoreProvider(provider: TrafficProviderSummary, trackingConfigured: boo
   if (provider.ctr >= 2) score += 4;
 
   return Math.max(0, Math.min(score, 100));
+}
+
+function trafficManagerStatusTone(status: TrafficManagerStatus): Tone {
+  if (status === "critical") return "rose";
+  if (status === "attention") return "amber";
+  if (status === "growth") return "green";
+  return "cyan";
 }
 
 function filterPlatformWarnings(warnings: string[], platform: AdsDashboardPlatform) {
