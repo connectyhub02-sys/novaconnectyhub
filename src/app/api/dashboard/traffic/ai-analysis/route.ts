@@ -7,6 +7,7 @@ import { loadGeminiCredentials, type GeminiCredentials } from "@/lib/gemini/cred
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
 import { getClientTrafficOverview } from "@/lib/traffic/admin-traffic";
+import { saveTrafficAiAnalysis } from "@/lib/traffic/traffic-ai-operations";
 import {
   buildTrafficManagerPlan,
   type TrafficManagerPlan,
@@ -92,9 +93,19 @@ export async function POST(request: NextRequest) {
         recommendationIds: plan.recommendations.map((item) => item.id),
       },
     });
+    const analysisHistory = await saveTrafficAiAnalysis({
+      analysisText: generated.text,
+      client,
+      organizationId: company.id,
+      plan,
+      platform,
+      usageEventId: usage.usageEventId,
+      userId: workspace.user.id,
+    });
 
     return NextResponse.json({
       analysis: {
+        id: analysisHistory?.id ?? null,
         text: generated.text,
         generatedAt: new Date().toISOString(),
         usage: {

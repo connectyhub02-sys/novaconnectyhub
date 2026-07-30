@@ -1,11 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   BrainCircuit,
   CheckCircle2,
+  Clock3,
+  ListChecks,
   Loader2,
+  RefreshCcw,
+  Send,
   Sparkles,
   Target,
   Zap,
@@ -18,6 +22,11 @@ import type {
   TrafficManagerRecommendation,
   TrafficManagerStatus,
 } from "@/lib/traffic/traffic-ai-manager";
+import type {
+  TrafficAiActionItem,
+  TrafficAiActionStatus,
+  TrafficAiAnalysisHistoryItem,
+} from "@/lib/traffic/traffic-ai-operations";
 import { cn } from "@/lib/utils";
 import { NeonBadge, toneClass } from "./panel-primitives";
 
@@ -29,6 +38,22 @@ type TrafficAiAnalysisResponse = {
       chargeCredits: number;
       debited: boolean;
     };
+  };
+  error?: string;
+};
+
+type TrafficAiOperationsPayload = {
+  ready?: boolean;
+  message?: string | null;
+  analyses?: TrafficAiAnalysisHistoryItem[];
+  actionItems?: TrafficAiActionItem[];
+};
+
+type TrafficAiOperationsResponse = TrafficAiOperationsPayload & {
+  operations?: TrafficAiOperationsPayload;
+  notice?: {
+    tone?: string;
+    message?: string;
   };
   error?: string;
 };
@@ -45,9 +70,66 @@ export function TrafficAiManagerPanel({
   tone: Tone;
 }) {
   const [loading, setLoading] = useState(false);
+  const [operationsLoading, setOperationsLoading] = useState(false);
+  const [actionBusyId, setActionBusyId] = useState<string | null>(null);
   const [analysisText, setAnalysisText] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ tone: Tone; message: string } | null>(null);
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);
+  const [operationsReady, setOperationsReady] = useState(true);
+  const [operationsMessage, setOperationsMessage] = useState<string | null>(null);
+  const [analysisHistory, setAnalysisHistory] = useState<TrafficAiAnalysisHistoryItem[]>([]);
+  const [actionItems, setActionItems] = useState<TrafficAiActionItem[]>([]);
+  const queuedRecommendationIds = useMemo(() => new Set(
+    actionItems
+      .filter((item) => !["done", "dismissed"].includes(item.status))
+      .map((item) => item.recommendationId),
+  ), [actionItems]);
+
+  const applyOperations = useCallback((body: TrafficAiOperationsPayload) => {
+    setOperationsReady(body.ready !== false);
+    setOperationsMessage(body.message ?? null);
+    setAnalysisHistory(body.analyses ?? []);
+    setActionItems(body.actionItems ?? []);
+  }, []);
+
+  const refreshOperations = useCallback(async () => {
+    if (!organizationId) return;
+
+    await Promise.resolve();
+    setOperationsLoading(true);
+
+    try {
+      const params = new URLSearchParams({
+        companyId: organizationId,
+        platform,
+      });
+      const response = await fetch(`/api/dashboard/traffic/actions?${params.toString()}`, {
+        headers: { Accept: "application/json" },
+      });
+      const body = await response.json().catch(() => null) as TrafficAiOperationsResponse | null;
+
+      if (!response.ok) {
+        throw new Error(body?.error ?? "Nao foi possivel carregar a fila do Gestor IA.");
+      }
+
+      applyOperations(body ?? {});
+    } catch (error) {
+      setOperationsReady(false);
+      setOperationsMessage(error instanceof Error ? error.message : "Fila do Gestor IA indisponivel.");
+    } finally {
+      setOperationsLoading(false);
+    }
+  }, [applyOperations, organizationId, platform]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void refreshOperations();
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [refreshOperations]);
 
   async function runAnalysis() {
     if (!organizationId || loading) return;
@@ -81,6 +163,7 @@ export function TrafficAiManagerPanel({
           ? `Analise gerada e ${formatCredits(body.analysis.usage.chargeCredits)} credito(s) registrados.`
           : "Analise gerada.",
       });
+      await refreshOperations();
     } catch (error) {
       setNotice({
         tone: "rose",
@@ -88,6 +171,85 @@ export function TrafficAiManagerPanel({
       });
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function queueRecommendation(recommendation: TrafficManagerRecommendation) {
+    if (!organizationId) return;
+
+    setActionBusyId(recommendation.id);
+
+    try {
+      const response = await fetch("/api/dashboard/traffic/actions", {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          companyId: organizationId,
+          platform,
+          recommendation,
+        }),
+      });
+      const body = await response.json().catch(() => null) as TrafficAiOperationsResponse | null;
+
+      if (!response.ok) {
+        throw new Error(body?.error ?? "Nao foi possivel enviar a acao para fila.");
+      }
+
+      applyOperations(body?.operations ?? body ?? {});
+      setNotice({
+        tone: "green",
+        message: body?.notice?.message ?? "Acao enviada para a fila.",
+      });
+    } catch (error) {
+      setNotice({
+        tone: "rose",
+        message: error instanceof Error ? error.message : "Falha ao criar acao.",
+      });
+    } finally {
+      setActionBusyId(null);
+    }
+  }
+
+  async function updateActionStatus(actionItemId: string, status: TrafficAiActionStatus) {
+    if (!organizationId) return;
+
+    setActionBusyId(actionItemId);
+
+    try {
+      const response = await fetch("/api/dashboard/traffic/actions", {
+        method: "PATCH",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          actionItemId,
+          companyId: organizationId,
+          platform,
+          status,
+        }),
+      });
+      const body = await response.json().catch(() => null) as TrafficAiOperationsResponse | null;
+
+      if (!response.ok) {
+        throw new Error(body?.error ?? "Nao foi possivel atualizar a acao.");
+      }
+
+      applyOperations(body?.operations ?? body ?? {});
+      setNotice({
+        tone: "green",
+        message: body?.notice?.message ?? "Acao atualizada.",
+      });
+    } catch (error) {
+      setNotice({
+        tone: "rose",
+        message: error instanceof Error ? error.message : "Falha ao atualizar acao.",
+      });
+    } finally {
+      setActionBusyId(null);
     }
   }
 
@@ -165,7 +327,13 @@ export function TrafficAiManagerPanel({
       <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="grid gap-2">
           {plan.recommendations.map((recommendation) => (
-            <RecommendationRow key={recommendation.id} recommendation={recommendation} />
+            <RecommendationRow
+              key={recommendation.id}
+              busy={actionBusyId === recommendation.id}
+              queued={queuedRecommendationIds.has(recommendation.id)}
+              recommendation={recommendation}
+              onQueue={() => queueRecommendation(recommendation)}
+            />
           ))}
         </div>
 
@@ -181,6 +349,24 @@ export function TrafficAiManagerPanel({
             </div>
           ))}
         </div>
+      </div>
+
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(320px,0.75fr)]">
+        <ActionQueuePanel
+          actionItems={actionItems}
+          busyId={actionBusyId}
+          loading={operationsLoading}
+          ready={operationsReady}
+          schemaMessage={operationsMessage}
+          onRefresh={refreshOperations}
+          onStatusChange={updateActionStatus}
+        />
+        <AnalysisHistoryPanel
+          analyses={analysisHistory}
+          loading={operationsLoading}
+          ready={operationsReady}
+          schemaMessage={operationsMessage}
+        />
       </div>
     </div>
   );
@@ -206,7 +392,17 @@ function DiagnosticTile({
   );
 }
 
-function RecommendationRow({ recommendation }: { recommendation: TrafficManagerRecommendation }) {
+function RecommendationRow({
+  busy,
+  onQueue,
+  queued,
+  recommendation,
+}: {
+  busy: boolean;
+  onQueue: () => void;
+  queued: boolean;
+  recommendation: TrafficManagerRecommendation;
+}) {
   const tone = priorityTone(recommendation.priority);
 
   return (
@@ -231,8 +427,201 @@ function RecommendationRow({ recommendation }: { recommendation: TrafficManagerR
           <p className="truncate font-mono text-[9px] uppercase tracking-[0.12em] text-slate-500">{recommendation.metricLabel}</p>
           <p className={cn("truncate font-mono text-[16px] font-bold", toneClass(tone).text)}>{recommendation.metricValue}</p>
           <p className="truncate text-[10px] text-slate-500">{recommendation.impact}</p>
+          <button
+            type="button"
+            onClick={onQueue}
+            disabled={queued || busy}
+            className={cn(
+              "mt-1 inline-flex h-7 items-center justify-center gap-1 rounded-lg border px-2 text-[10px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-60",
+              toneClass(queued ? "green" : tone).border,
+              toneClass(queued ? "green" : tone).bg,
+              toneClass(queued ? "green" : tone).text,
+            )}
+          >
+            {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : queued ? <CheckCircle2 className="h-3 w-3" /> : <Send className="h-3 w-3" />}
+            <span>{queued ? "Na fila" : "Fila"}</span>
+          </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function ActionQueuePanel({
+  actionItems,
+  busyId,
+  loading,
+  onRefresh,
+  onStatusChange,
+  ready,
+  schemaMessage,
+}: {
+  actionItems: TrafficAiActionItem[];
+  busyId: string | null;
+  loading: boolean;
+  onRefresh: () => void;
+  onStatusChange: (actionItemId: string, status: TrafficAiActionStatus) => void;
+  ready: boolean;
+  schemaMessage: string | null;
+}) {
+  return (
+    <div className="rounded-xl p-3" style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}>
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <ListChecks className={cn("h-4 w-4 shrink-0", toneClass("cyan").text)} />
+          <div className="min-w-0">
+            <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-slate-500">fila operacional</p>
+            <p className="truncate text-[13px] font-semibold text-white">{actionItems.length} acao(oes)</p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onRefresh}
+          disabled={loading}
+          className={cn("grid h-8 w-8 shrink-0 place-items-center rounded-lg border", toneClass("cyan").border, toneClass("cyan").bg, toneClass("cyan").text)}
+          title="Atualizar fila"
+        >
+          <RefreshCcw className={cn("h-4 w-4", loading && "animate-spin")} />
+        </button>
+      </div>
+
+      {!ready ? (
+        <SchemaNotice message={schemaMessage} />
+      ) : actionItems.length ? (
+        <div className="grid gap-2">
+          {actionItems.map((item) => (
+            <ActionItemRow
+              key={item.id}
+              busy={busyId === item.id}
+              item={item}
+              onStatusChange={(status) => onStatusChange(item.id, status)}
+            />
+          ))}
+        </div>
+      ) : (
+        <EmptyMiniState text="Envie uma recomendacao para a fila para acompanhar aprovacao, execucao e conclusao." />
+      )}
+    </div>
+  );
+}
+
+function ActionItemRow({
+  busy,
+  item,
+  onStatusChange,
+}: {
+  busy: boolean;
+  item: TrafficAiActionItem;
+  onStatusChange: (status: TrafficAiActionStatus) => void;
+}) {
+  const tone = statusActionTone(item.status);
+
+  return (
+    <div className="rounded-lg px-3 py-3" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}>
+      <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+        <div className="min-w-0">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <NeonBadge tone={tone}>{statusActionLabel(item.status)}</NeonBadge>
+            <p className="truncate text-[12px] font-semibold text-white">{item.title}</p>
+          </div>
+          <p className="mt-2 text-[11px] leading-4 text-slate-500">{item.action}</p>
+        </div>
+        <div className="flex shrink-0 flex-wrap gap-1">
+          <QueueButton busy={busy} disabled={item.status === "approved"} label="Aprovar" onClick={() => onStatusChange("approved")} tone="amber" />
+          <QueueButton busy={busy} disabled={item.status === "in_progress"} label="Iniciar" onClick={() => onStatusChange("in_progress")} tone="cyan" />
+          <QueueButton busy={busy} disabled={item.status === "done"} label="Concluir" onClick={() => onStatusChange("done")} tone="green" />
+          <QueueButton busy={busy} disabled={item.status === "dismissed"} label="Descartar" onClick={() => onStatusChange("dismissed")} tone="rose" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AnalysisHistoryPanel({
+  analyses,
+  loading,
+  ready,
+  schemaMessage,
+}: {
+  analyses: TrafficAiAnalysisHistoryItem[];
+  loading: boolean;
+  ready: boolean;
+  schemaMessage: string | null;
+}) {
+  return (
+    <div className="rounded-xl p-3" style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}>
+      <div className="mb-3 flex items-center gap-2">
+        <Clock3 className={cn("h-4 w-4", toneClass("violet").text)} />
+        <div className="min-w-0">
+          <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-slate-500">historico de analises</p>
+          <p className="truncate text-[13px] font-semibold text-white">{loading ? "Carregando" : `${analyses.length} registro(s)`}</p>
+        </div>
+      </div>
+
+      {!ready ? (
+        <SchemaNotice message={schemaMessage} />
+      ) : analyses.length ? (
+        <div className="grid gap-2">
+          {analyses.map((analysis) => (
+            <div key={analysis.id} className="rounded-lg px-3 py-3" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}>
+              <div className="flex items-center justify-between gap-3">
+                <p className="font-mono text-[11px] font-semibold text-cyan-200">{analysis.score}/100</p>
+                <p className="shrink-0 text-[10px] text-slate-500">{formatDateTime(analysis.createdAt)}</p>
+              </div>
+              <p className="mt-2 line-clamp-2 text-[11px] leading-4 text-slate-300">{analysis.summary}</p>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <EmptyMiniState text="As analises geradas pelo botao Analisar com IA aparecem aqui." />
+      )}
+    </div>
+  );
+}
+
+function QueueButton({
+  busy,
+  disabled,
+  label,
+  onClick,
+  tone,
+}: {
+  busy: boolean;
+  disabled: boolean;
+  label: string;
+  onClick: () => void;
+  tone: Tone;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={busy || disabled}
+      className={cn(
+        "inline-flex h-7 items-center gap-1 rounded-lg border px-2 text-[10px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-55",
+        toneClass(tone).border,
+        toneClass(tone).bg,
+        toneClass(tone).text,
+      )}
+    >
+      {busy && <Loader2 className="h-3 w-3 animate-spin" />}
+      {label}
+    </button>
+  );
+}
+
+function SchemaNotice({ message }: { message: string | null }) {
+  return (
+    <div className={cn("rounded-xl border px-3 py-3 text-[12px] leading-5", toneClass("amber").border, toneClass("amber").bg, toneClass("amber").text)}>
+      {message ?? "Aplique a migration 0046 para habilitar historico e fila operacional."}
+    </div>
+  );
+}
+
+function EmptyMiniState({ text }: { text: string }) {
+  return (
+    <div className="rounded-xl border border-dashed px-3 py-5 text-center text-[12px] leading-5 text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
+      {text}
     </div>
   );
 }
@@ -256,6 +645,22 @@ function priorityLabel(priority: TrafficManagerPriority) {
   if (priority === "high") return "alto";
   if (priority === "medium") return "medio";
   return "baixo";
+}
+
+function statusActionTone(status: TrafficAiActionStatus): Tone {
+  if (status === "done") return "green";
+  if (status === "dismissed") return "rose";
+  if (status === "approved" || status === "in_progress") return "cyan";
+  return "amber";
+}
+
+function statusActionLabel(status: TrafficAiActionStatus) {
+  if (status === "approved") return "aprovada";
+  if (status === "in_progress") return "em execucao";
+  if (status === "done") return "concluida";
+  if (status === "dismissed") return "descartada";
+  if (status === "suggested") return "sugerida";
+  return "na fila";
 }
 
 function formatDateTime(value: string) {
