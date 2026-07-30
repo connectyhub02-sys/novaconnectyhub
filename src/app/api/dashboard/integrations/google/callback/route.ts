@@ -12,6 +12,7 @@ import {
   saveOAuthCredentials,
   upsertGuidedOAuthConnection,
 } from "@/lib/client-os/guided-oauth";
+import { queueGrowthIntegrationSyncJob, syncGoogleOAuthAssets } from "@/lib/client-os/growth-integrations";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
 
@@ -140,6 +141,16 @@ export async function GET(request: NextRequest) {
       },
     });
 
+    await syncGoogleGrowthAssetsBestEffort({
+      accessibleCustomers,
+      actorId: workspace.user.id,
+      client,
+      companyId: company.id,
+      integrationId,
+      scopes: tokens.scope ? tokens.scope.split(/\s+/).filter(Boolean) : config.scopes,
+      selectedCustomerId,
+    });
+
     revalidatePath("/dashboard/integracoes");
     revalidatePath("/dashboard/trafego/google-ads");
 
@@ -163,4 +174,60 @@ export async function GET(request: NextRequest) {
 
 function readRecord(value: unknown): JsonRecord {
   return value && typeof value === "object" && !Array.isArray(value) ? value as JsonRecord : {};
+}
+
+async function syncGoogleGrowthAssetsBestEffort(input: {
+  accessibleCustomers: string[];
+  actorId: string;
+  client: ReturnType<typeof createServiceClient>;
+  companyId: string;
+  integrationId: string;
+  scopes: string[];
+  selectedCustomerId: string;
+}) {
+  try {
+    const sync = await syncGoogleOAuthAssets({
+      accessibleCustomers: input.accessibleCustomers,
+      client: input.client,
+      organizationId: input.companyId,
+      organizationIntegrationId: input.integrationId,
+      scopes: input.scopes,
+      selectedCustomerId: input.selectedCustomerId,
+    });
+    const job = await queueGrowthIntegrationSyncJob({
+      actorId: input.actorId,
+      client: input.client,
+      jobType: "traffic_snapshot",
+      metadata: { source: "oauth_callback", provider: "google" },
+      organizationId: input.companyId,
+      organizationIntegrationId: input.integrationId,
+      providerId: "google-growth",
+    }).catch(() => null);
+
+    await logIntegrationAction({
+      client: input.client,
+      organizationId: input.companyId,
+      organizationIntegrationId: input.integrationId,
+      providerId: "google-growth",
+      actorId: input.actorId,
+      action: "growth.assets.synced",
+      metadata: {
+        ...sync,
+        sync_job_id: job?.id ?? null,
+      },
+    });
+  } catch (error) {
+    await logIntegrationAction({
+      client: input.client,
+      organizationId: input.companyId,
+      organizationIntegrationId: input.integrationId,
+      providerId: "google-growth",
+      actorId: input.actorId,
+      action: "growth.assets.sync_skipped",
+      status: "warning",
+      metadata: {
+        reason: error instanceof Error ? error.message : "Falha ao sincronizar assets Google.",
+      },
+    });
+  }
 }

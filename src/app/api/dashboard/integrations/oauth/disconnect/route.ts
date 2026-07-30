@@ -5,6 +5,7 @@ import {
   disconnectGuidedOAuth,
   type GuidedOAuthProviderId,
 } from "@/lib/client-os/guided-oauth";
+import { disableGrowthProviderAssets } from "@/lib/client-os/growth-integrations";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
 
@@ -47,6 +48,11 @@ export async function POST(request: NextRequest) {
       providerId,
       actorId: workspace.user.id,
     });
+    await disableGrowthProviderAssets({
+      client,
+      organizationId: company.id,
+      providerId,
+    }).catch(() => null);
 
     return NextResponse.json({
       connection: {

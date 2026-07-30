@@ -12,6 +12,7 @@ import {
   upsertGuidedOAuthConnection,
   type GuidedOAuthProviderId,
 } from "@/lib/client-os/guided-oauth";
+import { markSelectedGrowthAssets } from "@/lib/client-os/growth-integrations";
 import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
@@ -179,6 +180,13 @@ async function saveGoogleSelection(input: {
     metadata: { selected_customer_id: customerId, credential_envs: savedCredentials },
   });
 
+  await markSelectedGrowthAssetsBestEffort({
+    client: input.client,
+    companyId: input.companyId,
+    providerId: "google-growth",
+    selected: { google_ads_customer: customerId },
+  });
+
   return {
     connection: buildConnection({
       providerId: "google-growth",
@@ -322,6 +330,17 @@ async function saveMetaSelection(input: {
     },
   });
 
+  await markSelectedGrowthAssetsBestEffort({
+    client: input.client,
+    companyId: input.companyId,
+    providerId: "meta-ads",
+    selected: {
+      facebook_page: pageId || null,
+      instagram_business_account: instagramBusinessId || null,
+      meta_ad_account: adAccountId || null,
+    },
+  });
+
   return {
     connection: buildConnection({
       providerId: "meta-ads",
@@ -359,6 +378,24 @@ async function resolveSelectedMetaPageAccessToken(input: {
     config,
     pageId: input.pageId,
   });
+}
+
+async function markSelectedGrowthAssetsBestEffort(input: {
+  client: ReturnType<typeof createServiceClient>;
+  companyId: string;
+  providerId: GuidedOAuthProviderId;
+  selected: Parameters<typeof markSelectedGrowthAssets>[0]["selected"];
+}) {
+  try {
+    await markSelectedGrowthAssets({
+      client: input.client,
+      organizationId: input.companyId,
+      providerId: input.providerId,
+      selected: input.selected,
+    });
+  } catch {
+    // The OAuth selection must keep working while migration 0045 is being applied.
+  }
 }
 
 async function loadOrganizationSecret(input: {

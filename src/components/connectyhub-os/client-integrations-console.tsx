@@ -27,6 +27,7 @@ import type {
   ClientIntegrationConnection,
   ClientIntegrationCredentialDefinition,
   ClientIntegrationCredentialSnapshot,
+  ClientGrowthIntegrationAsset,
   ClientIntegrationHubState,
   ClientIntegrationProvider,
   ClientIntegrationWebhookEndpoint,
@@ -63,6 +64,15 @@ type GuidedSelectionDraft = {
 
 type GuidedSelectionResponse = {
   connection?: ClientIntegrationConnection;
+  error?: string;
+};
+
+type GrowthSyncResponse = {
+  job?: {
+    id: string;
+    status: string;
+    createdAt: string | null;
+  };
   error?: string;
 };
 
@@ -374,6 +384,7 @@ const metaSocialLiveChannels: { id: MetaSocialLiveChannelId; label: string; shor
 export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationHubState }) {
   const [selectedCompanyId, setSelectedCompanyId] = useState(state.selectedCompanyId ?? state.companies[0]?.id ?? "");
   const [connections, setConnections] = useState(state.connections);
+  const [growthAssets, setGrowthAssets] = useState(state.growthAssets);
   const [credentialSnapshots, setCredentialSnapshots] = useState(state.credentialSnapshots);
   const [actionLogs, setActionLogs] = useState(state.actionLogs);
   const [credentialDrafts, setCredentialDrafts] = useState<Record<string, string>>({});
@@ -385,6 +396,7 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
   const [connectingGuidedProvider, setConnectingGuidedProvider] = useState<string | null>(null);
   const [disconnectingGuidedProvider, setDisconnectingGuidedProvider] = useState<string | null>(null);
   const [savingSelectionProvider, setSavingSelectionProvider] = useState<string | null>(null);
+  const [syncingGrowthProvider, setSyncingGrowthProvider] = useState<string | null>(null);
   const [metaWebhookAction, setMetaWebhookAction] = useState<string | null>(null);
   const [savingMetaLiveActivation, setSavingMetaLiveActivation] = useState(false);
   const [runningMetaCanary, setRunningMetaCanary] = useState(false);
@@ -403,6 +415,10 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
   const selectedEndpoints = useMemo(
     () => webhookEndpoints.filter((endpoint) => endpoint.companyId === selectedCompanyId),
     [webhookEndpoints, selectedCompanyId],
+  );
+  const selectedGrowthAssets = useMemo(
+    () => growthAssets.filter((asset) => asset.companyId === selectedCompanyId),
+    [growthAssets, selectedCompanyId],
   );
   const connectionByProvider = useMemo(
     () => new Map(selectedConnections.map((connection) => [connection.providerId, connection])),
@@ -712,6 +728,11 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
         data.connection!,
         ...current.filter((connection) => !(connection.companyId === selectedCompanyId && connection.providerId === providerId)),
       ]);
+      setGrowthAssets((current) => current.map((asset) => (
+        asset.companyId === selectedCompanyId && asset.providerId === providerId
+          ? { ...asset, isSelected: false, status: "disabled" as const }
+          : asset
+      )));
       setCredentialSnapshots((current) => current.filter((credential) => !(credential.companyId === selectedCompanyId && credential.providerId === providerId)));
       if (providerId === "meta-ads") {
         setMetaWebhookMonitor(null);
@@ -754,6 +775,7 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
         data.connection!,
         ...current.filter((connection) => !(connection.companyId === selectedCompanyId && connection.providerId === providerId)),
       ]);
+      setGrowthAssets((current) => markLocalSelectedGrowthAssets(current, selectedCompanyId, providerId, selection));
       setGuidedSelectionDrafts((current) => {
         const next = { ...current };
         delete next[guidedSelectionKey(selectedCompanyId, providerId)];
@@ -770,6 +792,53 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
       setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao salvar selecao." });
     } finally {
       setSavingSelectionProvider(null);
+    }
+  }
+
+  async function queueGrowthSync(providerId: "meta-ads" | "google-growth") {
+    if (!selectedCompanyId || syncingGrowthProvider) return;
+
+    setSyncingGrowthProvider(providerId);
+    setNotice(null);
+
+    try {
+      const response = await fetch("/api/dashboard/integrations/growth-assets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyId: selectedCompanyId,
+          providerId,
+        }),
+      });
+      const data = await response.json().catch(() => null) as GrowthSyncResponse | null;
+
+      if (!response.ok || !data?.job) {
+        throw new Error(data?.error ?? "Nao foi possivel preparar a sincronizacao.");
+      }
+
+      const createdAt = data.job.createdAt ?? new Date().toISOString();
+      setActionLogs((current) => [{
+        id: `local-growth-sync-${data.job!.id}`,
+        action: "growth.sync.queued",
+        companyId: selectedCompanyId,
+        createdAt,
+        metadata: data.job!,
+        providerId,
+        status: "success" as const,
+      }, ...current].slice(0, 80));
+      setNotice({
+        tone: "success",
+        message: providerId === "meta-ads"
+          ? "Sincronizacao Meta preparada para a proxima fase."
+          : "Sincronizacao Google preparada para a proxima fase.",
+      });
+    } catch (error) {
+      setNotice({
+        tone: "error",
+        message: error instanceof Error ? error.message : "Erro ao preparar sincronizacao.",
+      });
+    } finally {
+      setSyncingGrowthProvider(null);
     }
   }
 
@@ -1304,6 +1373,7 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
             connecting={connectingGuidedProvider === "meta-ads"}
             disconnecting={disconnectingGuidedProvider === "meta-ads"}
             kind="meta"
+            assets={selectedGrowthAssets.filter((asset) => asset.providerId === "meta-ads")}
             actionLogs={metaActionLogs}
             loadingMetaOperationalChecklist={loadingMetaOperationalChecklist}
             loadingMetaWebhookMonitor={loadingMetaWebhookMonitor}
@@ -1313,6 +1383,7 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
             runningMetaCanary={runningMetaCanary}
             savingMetaLiveActivation={savingMetaLiveActivation}
             savingSelection={savingSelectionProvider === "meta-ads"}
+            syncingAssets={syncingGrowthProvider === "meta-ads"}
             selectionDraft={guidedSelectionDrafts[guidedSelectionKey(selectedCompanyId, "meta-ads")] ?? {}}
             selectedCompanyId={selectedCompanyId}
             selectedCompanyName={selectedCompany?.name ?? null}
@@ -1326,6 +1397,7 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
             onRunMetaCanary={runMetaSocialCanary}
             onSaveMetaLiveActivation={saveMetaLiveDispatchActivation}
             onSaveSelection={(selection) => saveGuidedSelection("meta-ads", selection)}
+            onQueueAssetSync={() => queueGrowthSync("meta-ads")}
             onSelectionChange={(selection) => {
               setGuidedSelectionDrafts((current) => ({
                 ...current,
@@ -1342,10 +1414,12 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
             connecting={connectingGuidedProvider === "google-growth"}
             disconnecting={disconnectingGuidedProvider === "google-growth"}
             kind="google"
+            assets={selectedGrowthAssets.filter((asset) => asset.providerId === "google-growth")}
             actionLogs={[]}
             runningMetaCanary={false}
             savingMetaLiveActivation={false}
             savingSelection={savingSelectionProvider === "google-growth"}
+            syncingAssets={syncingGrowthProvider === "google-growth"}
             selectionDraft={guidedSelectionDrafts[guidedSelectionKey(selectedCompanyId, "google-growth")] ?? {}}
             selectedCompanyId={selectedCompanyId}
             selectedCompanyName={selectedCompany?.name ?? null}
@@ -1355,6 +1429,7 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
             onRunMetaCanary={undefined}
             onSaveMetaLiveActivation={undefined}
             onSaveSelection={(selection) => saveGuidedSelection("google-growth", selection)}
+            onQueueAssetSync={() => queueGrowthSync("google-growth")}
             onSelectionChange={(selection) => {
               setGuidedSelectionDrafts((current) => ({
                 ...current,
@@ -1843,6 +1918,7 @@ function MercadoPagoGuidedCard({
 function GuidedOAuthCard({
   accountLabel,
   actionLogs,
+  assets,
   connected,
   connection,
   connecting,
@@ -1856,6 +1932,7 @@ function GuidedOAuthCard({
   runningMetaCanary,
   savingMetaLiveActivation,
   savingSelection,
+  syncingAssets,
   selectionDraft,
   selectedCompanyId,
   selectedCompanyName,
@@ -1869,11 +1946,13 @@ function GuidedOAuthCard({
   onRunMetaCanary,
   onSaveMetaLiveActivation,
   onSaveSelection,
+  onQueueAssetSync,
   onSelectionChange,
   onSimulateMetaWebhook,
 }: {
   accountLabel: string | null;
   actionLogs: ClientIntegrationActionLog[];
+  assets: ClientGrowthIntegrationAsset[];
   connected: boolean;
   connection?: ClientIntegrationConnection;
   connecting: boolean;
@@ -1887,6 +1966,7 @@ function GuidedOAuthCard({
   runningMetaCanary: boolean;
   savingMetaLiveActivation: boolean;
   savingSelection: boolean;
+  syncingAssets: boolean;
   selectionDraft: GuidedSelectionDraft;
   selectedCompanyId: string;
   selectedCompanyName: string | null;
@@ -1900,6 +1980,7 @@ function GuidedOAuthCard({
   onRunMetaCanary?: (draft: MetaSocialCanaryDraft) => Promise<MetaSocialCanarySnapshot>;
   onSaveMetaLiveActivation?: (draft: MetaSocialLiveActivationDraft) => void;
   onSaveSelection: (selection: GuidedSelectionDraft) => void;
+  onQueueAssetSync: () => void;
   onSelectionChange: (selection: GuidedSelectionDraft) => void;
   onSimulateMetaWebhook?: (scenario: MetaWebhookSimulationScenario) => void;
 }) {
@@ -1945,6 +2026,7 @@ function GuidedOAuthCard({
   const metaWebhookActivation = kind === "meta" ? readMetaWebhookActivation(connection?.metadata?.webhook_activation) : null;
   const metaWebhookSimulation = kind === "meta" ? readMetaWebhookSimulation(connection?.metadata?.webhook_simulation) : null;
   const metaLiveActivation = kind === "meta" ? readMetaSocialLiveActivation(connection?.metadata?.meta_social_dispatch_activation) : null;
+  const assetSummary = summarizeClientGrowthAssets(assets);
 
   return (
     <section id={config.id} className="rounded-2xl p-4" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}>
@@ -1970,7 +2052,10 @@ function GuidedOAuthCard({
             <p className="text-[13px] font-semibold text-slate-100">Conta {config.providerLabel}</p>
             <p className="mt-1 truncate text-[11px] text-slate-500">{accountLine}</p>
           </div>
-          <NeonBadge tone={primaryAccountReady ? "green" : "amber"}>{primaryAccountReady ? "conectado" : connected ? "autorizado" : "pendente"}</NeonBadge>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <NeonBadge tone={assets.length > 0 ? "cyan" : "zinc"}>{assets.length} assets</NeonBadge>
+            <NeonBadge tone={primaryAccountReady ? "green" : "amber"}>{primaryAccountReady ? "conectado" : connected ? "autorizado" : "pendente"}</NeonBadge>
+          </div>
         </div>
 
         {connection?.lastError ? (
@@ -2068,6 +2153,16 @@ function GuidedOAuthCard({
           </div>
         ) : null}
 
+        {connected && assets.length > 0 ? (
+          <GrowthAssetsPanel
+            assets={assets}
+            kind={kind}
+            syncing={syncingAssets}
+            summary={assetSummary}
+            onQueueSync={onQueueAssetSync}
+          />
+        ) : null}
+
         {kind === "meta" ? (
           <MetaReadinessPanel
             actionLogs={actionLogs}
@@ -2095,6 +2190,86 @@ function GuidedOAuthCard({
         ) : null}
       </div>
     </section>
+  );
+}
+
+function GrowthAssetsPanel({
+  assets,
+  kind,
+  syncing,
+  summary,
+  onQueueSync,
+}: {
+  assets: ClientGrowthIntegrationAsset[];
+  kind: "meta" | "google";
+  syncing: boolean;
+  summary: ReturnType<typeof summarizeClientGrowthAssets>;
+  onQueueSync: () => void;
+}) {
+  const selectedAssets = assets.filter((asset) => asset.isSelected);
+  const visibleAssets = [...selectedAssets, ...assets.filter((asset) => !asset.isSelected)].slice(0, 6);
+
+  return (
+    <div className="mt-3 rounded-xl border p-3" style={{ background: "var(--ch-surface)", borderColor: "var(--ch-border)" }}>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0">
+          <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-slate-500">assets normalizados</p>
+          <p className="mt-1 text-[11px] leading-4 text-slate-500">
+            {kind === "meta"
+              ? "Contas, paginas e Instagram descobertos no OAuth."
+              : "Contas Google Ads descobertas no OAuth."}
+          </p>
+        </div>
+        <NeonBadge tone={summary.selected > 0 ? "green" : "cyan"}>{summary.selected} selecionado(s)</NeonBadge>
+      </div>
+
+      <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <MiniAssetMetric label="Total" value={summary.total} />
+        <MiniAssetMetric label="Anuncios" value={kind === "meta" ? summary.metaAdAccounts : summary.googleAdsCustomers} />
+        <MiniAssetMetric label="Paginas" value={summary.facebookPages} />
+        <MiniAssetMetric label="Instagram" value={summary.instagramBusinessAccounts} />
+      </div>
+
+      <div className="grid gap-2">
+        {visibleAssets.map((asset) => (
+          <div
+            key={asset.id}
+            className={cn(
+              "grid gap-2 rounded-lg border px-3 py-2 sm:grid-cols-[minmax(0,1fr)_auto]",
+              asset.isSelected ? "border-emerald-300/25 bg-emerald-300/10" : "border-white/10 bg-white/[0.02]",
+            )}
+          >
+            <div className="min-w-0">
+              <p className="truncate text-[12px] font-semibold text-slate-100">{asset.label}</p>
+              <p className="mt-0.5 truncate text-[10px] text-slate-500">
+                {formatGrowthAssetType(asset.assetType)} / {asset.externalId}
+              </p>
+            </div>
+            <NeonBadge tone={asset.isSelected ? "green" : "zinc"}>{asset.isSelected ? "selecionado" : "disponivel"}</NeonBadge>
+          </div>
+        ))}
+      </div>
+
+      <button
+        type="button"
+        disabled={syncing}
+        onClick={onQueueSync}
+        className="mt-3 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border px-4 font-mono text-[10px] font-bold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10 disabled:cursor-not-allowed disabled:opacity-60"
+        style={{ borderColor: "var(--ch-border)" }}
+      >
+        {syncing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <BarChart3 className="h-3.5 w-3.5" />}
+        Preparar sincronizacao
+      </button>
+    </div>
+  );
+}
+
+function MiniAssetMetric({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-lg border border-white/10 bg-white/[0.02] px-2 py-2">
+      <p className="font-mono text-[8px] uppercase tracking-[0.12em] text-slate-500">{label}</p>
+      <p className="mt-1 text-[13px] font-bold text-slate-100">{value}</p>
+    </div>
   );
 }
 
@@ -3052,6 +3227,60 @@ function buildGuidedSelectionGroups(
   }
 
   return groups;
+}
+
+function markLocalSelectedGrowthAssets(
+  assets: ClientGrowthIntegrationAsset[],
+  companyId: string,
+  providerId: "meta-ads" | "google-growth",
+  selection: GuidedSelectionDraft,
+) {
+  const selectedByType: Record<string, string | null | undefined> = providerId === "google-growth"
+    ? {
+        google_ads_customer: normalizeGoogleCustomerId(selection.customerId ?? null),
+      }
+    : {
+        facebook_page: selection.pageId,
+        instagram_business_account: selection.instagramBusinessId,
+        meta_ad_account: normalizeMetaAdAccountId(selection.adAccountId ?? null),
+      };
+  const affectedTypes = new Set(Object.keys(selectedByType));
+
+  return assets.map((asset) => {
+    if (asset.companyId !== companyId || asset.providerId !== providerId || !affectedTypes.has(asset.assetType)) {
+      return asset;
+    }
+
+    const selectedId = selectedByType[asset.assetType];
+    const isSelected = Boolean(selectedId && asset.externalId === selectedId);
+
+    return {
+      ...asset,
+      isSelected,
+      status: isSelected ? "selected" as const : "available" as const,
+    };
+  });
+}
+
+function summarizeClientGrowthAssets(assets: ClientGrowthIntegrationAsset[]) {
+  return {
+    total: assets.length,
+    selected: assets.filter((asset) => asset.isSelected).length,
+    metaAdAccounts: assets.filter((asset) => asset.assetType === "meta_ad_account").length,
+    facebookPages: assets.filter((asset) => asset.assetType === "facebook_page").length,
+    instagramBusinessAccounts: assets.filter((asset) => asset.assetType === "instagram_business_account").length,
+    googleAdsCustomers: assets.filter((asset) => asset.assetType === "google_ads_customer").length,
+  };
+}
+
+function formatGrowthAssetType(assetType: ClientGrowthIntegrationAsset["assetType"]) {
+  if (assetType === "meta_ad_account") return "Conta Meta Ads";
+  if (assetType === "facebook_page") return "Pagina Facebook";
+  if (assetType === "instagram_business_account") return "Instagram Business";
+  if (assetType === "google_ads_customer") return "Conta Google Ads";
+  if (assetType === "google_business_profile") return "Google Business";
+  if (assetType === "google_search_console_site") return "Search Console";
+  return assetType;
 }
 
 function hasGuidedPrimaryAccount(kind: "meta" | "google", connection: ClientIntegrationConnection | undefined) {

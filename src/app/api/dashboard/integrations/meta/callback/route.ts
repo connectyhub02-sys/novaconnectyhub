@@ -12,6 +12,7 @@ import {
   saveOAuthCredentials,
   upsertGuidedOAuthConnection,
 } from "@/lib/client-os/guided-oauth";
+import { queueGrowthIntegrationSyncJob, syncMetaOAuthAssets } from "@/lib/client-os/growth-integrations";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
 
@@ -177,6 +178,15 @@ export async function GET(request: NextRequest) {
       },
     });
 
+    await syncMetaGrowthAssetsBestEffort({
+      actorId: workspace.user.id,
+      assets,
+      client,
+      companyId: company.id,
+      integrationId,
+      permissions: config.permissions,
+    });
+
     revalidatePath("/dashboard/integracoes");
     revalidatePath("/dashboard/trafego/meta-ads");
 
@@ -200,4 +210,58 @@ export async function GET(request: NextRequest) {
 
 function readRecord(value: unknown): JsonRecord {
   return value && typeof value === "object" && !Array.isArray(value) ? value as JsonRecord : {};
+}
+
+async function syncMetaGrowthAssetsBestEffort(input: {
+  actorId: string;
+  assets: Awaited<ReturnType<typeof listMetaConnectionAssets>>;
+  client: ReturnType<typeof createServiceClient>;
+  companyId: string;
+  integrationId: string;
+  permissions: string[];
+}) {
+  try {
+    const sync = await syncMetaOAuthAssets({
+      assets: input.assets,
+      client: input.client,
+      organizationId: input.companyId,
+      organizationIntegrationId: input.integrationId,
+      permissions: input.permissions,
+    });
+    const job = await queueGrowthIntegrationSyncJob({
+      actorId: input.actorId,
+      client: input.client,
+      jobType: "traffic_snapshot",
+      metadata: { source: "oauth_callback", provider: "meta" },
+      organizationId: input.companyId,
+      organizationIntegrationId: input.integrationId,
+      providerId: "meta-ads",
+    }).catch(() => null);
+
+    await logIntegrationAction({
+      client: input.client,
+      organizationId: input.companyId,
+      organizationIntegrationId: input.integrationId,
+      providerId: "meta-ads",
+      actorId: input.actorId,
+      action: "growth.assets.synced",
+      metadata: {
+        ...sync,
+        sync_job_id: job?.id ?? null,
+      },
+    });
+  } catch (error) {
+    await logIntegrationAction({
+      client: input.client,
+      organizationId: input.companyId,
+      organizationIntegrationId: input.integrationId,
+      providerId: "meta-ads",
+      actorId: input.actorId,
+      action: "growth.assets.sync_skipped",
+      status: "warning",
+      metadata: {
+        reason: error instanceof Error ? error.message : "Falha ao sincronizar assets Meta.",
+      },
+    });
+  }
 }

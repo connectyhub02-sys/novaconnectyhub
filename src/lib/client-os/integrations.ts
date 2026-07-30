@@ -7,6 +7,11 @@ import { listClientSalesCatalogPaymentIntegrations } from "@/lib/client-os/sales
 import { maintenanceIntegrations, type CredentialKind, type CredentialRequirement } from "@/lib/maintenance-vault";
 import type { ClientSalesCatalogPaymentIntegration } from "@/lib/sales-catalog/shared";
 import { createServiceClient } from "@/lib/supabase/service";
+import {
+  getGrowthIntegrationAssets,
+  summarizeGrowthAssets,
+  type GrowthIntegrationAsset,
+} from "./growth-integrations";
 
 export type IntegrationCategory =
   | "payments"
@@ -107,6 +112,8 @@ export type ClientIntegrationActionLog = {
   createdAt: string | null;
 };
 
+export type ClientGrowthIntegrationAsset = GrowthIntegrationAsset;
+
 export type ClientIntegrationHubState = {
   schemaReady: boolean;
   schemaMessage: string | null;
@@ -119,6 +126,8 @@ export type ClientIntegrationHubState = {
   credentialSnapshots: ClientIntegrationCredentialSnapshot[];
   actionLogs: ClientIntegrationActionLog[];
   webhookEndpoints: ClientIntegrationWebhookEndpoint[];
+  growthAssets: ClientGrowthIntegrationAsset[];
+  growthAssetsReady: boolean;
 };
 
 type OrganizationIntegrationRow = {
@@ -281,24 +290,25 @@ export async function getClientIntegrationHub(input: {
   const selectedCompanyId = resolveSelectedCompanyId(companies, input.preferredCompanyId);
   const companyIds = companies.map((company) => company.id);
 
-  const [paymentIntegrations, genericResult, webhookResult, credentialResult, actionLogResult] = await Promise.all([
+  const [paymentIntegrations, genericResult, webhookResult, credentialResult, actionLogResult, growthAssetResult] = await Promise.all([
     listClientSalesCatalogPaymentIntegrations({ userId: input.userId, client }).catch(() => []),
     loadOrganizationIntegrations(client, companyIds),
     loadWebhookEndpoints(client, companyIds),
     loadOrganizationCredentials(client, companyIds),
     loadIntegrationActionLogs(client, companyIds),
+    getGrowthIntegrationAssets({ client, organizationIds: companyIds }),
   ]);
 
-  const connections = [
+  const connections = attachGrowthAssetSummaries([
     ...buildMercadoPagoConnections(companies, paymentIntegrations),
     ...buildGenericConnections(companies, genericResult.rows),
     ...buildFallbackConnections(companies, genericResult.rows, webhookResult.rows),
-  ];
-  const schemaReady = genericResult.ready && webhookResult.ready && actionLogResult.ready;
+  ], growthAssetResult.rows);
+  const schemaReady = genericResult.ready && webhookResult.ready && actionLogResult.ready && growthAssetResult.ready;
 
   return {
     schemaReady,
-    schemaMessage: schemaReady ? null : "A migration 0028 ainda precisa ser aplicada no Supabase para ativar conexoes novas e Webhook Universal.",
+    schemaMessage: schemaReady ? null : "As migrations 0028 e 0045 precisam estar aplicadas no Supabase para ativar conexoes, Webhook Universal e assets Meta/Google normalizados.",
     appBaseUrl: resolveAppBaseUrl(),
     companies,
     selectedCompanyId,
@@ -308,6 +318,8 @@ export async function getClientIntegrationHub(input: {
     credentialSnapshots: credentialResult.rows.map((row) => mapCredentialSnapshot(row)),
     actionLogs: actionLogResult.rows.map((row) => mapIntegrationActionLog(row)),
     webhookEndpoints: webhookResult.rows.map((row) => mapWebhookEndpoint(row)),
+    growthAssets: growthAssetResult.rows,
+    growthAssetsReady: growthAssetResult.ready,
   };
 }
 
@@ -433,6 +445,30 @@ function buildFallbackConnections(
   }
 
   return connections;
+}
+
+function attachGrowthAssetSummaries(
+  connections: ClientIntegrationConnection[],
+  assets: ClientGrowthIntegrationAsset[],
+): ClientIntegrationConnection[] {
+  return connections.map((connection) => {
+    if (connection.providerId !== "meta-ads" && connection.providerId !== "google-growth") {
+      return connection;
+    }
+
+    const providerAssets = assets.filter((asset) =>
+      asset.companyId === connection.companyId
+      && asset.providerId === connection.providerId,
+    );
+
+    return {
+      ...connection,
+      metadata: {
+        ...connection.metadata,
+        growth_asset_summary: summarizeGrowthAssets(providerAssets),
+      },
+    };
+  });
 }
 
 async function loadOrganizationIntegrations(client: SupabaseClient, companyIds: string[]) {
