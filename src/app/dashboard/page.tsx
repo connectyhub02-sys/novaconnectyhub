@@ -8,6 +8,8 @@ export const metadata: Metadata = {
   description: "Painel do cliente ConnectyHub para leads, conversas, agentes, links rastreaveis e automacoes.",
 };
 
+export const dynamic = "force-dynamic";
+
 type DashboardPageProps = {
   searchParams?: Promise<{
     view?: string;
@@ -18,18 +20,26 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   const params = (await searchParams) ?? {};
   const workspace = await getCurrentWorkspace();
 
+  if (!workspace) {
+    redirect("/login?next=%2Fdashboard");
+  }
+
   if (workspace?.profile.isPlatformAdmin && params.view !== "client") {
     redirect("/admin");
   }
 
-  const profile = workspace?.profile;
-  const organization = workspace?.organization;
+  if (!workspace.organization && !workspace.profile.isPlatformAdmin) {
+    redirect("/dashboard/empresa");
+  }
+
+  const profile = workspace.profile;
+  const organization = workspace.organization;
 
   return (
     <ClientDashboard
-      isPlatformAdmin={profile?.isPlatformAdmin ?? false}
-      userAvatarUrl={profile?.avatarUrl ?? null}
-      userLabel={profile?.email ?? undefined}
+      isPlatformAdmin={profile.isPlatformAdmin}
+      userAvatarUrl={profile.avatarUrl}
+      userLabel={profile.email ?? undefined}
       workspaceName={organization?.name ?? profile?.companyName ?? "Workspace"}
     />
   );
