@@ -1,6 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { assertBillableAccess, BillingAccessError } from "@/lib/billing/trial";
 import { requireClientCompanyAccess } from "@/lib/client-os/companies";
+import {
+  resolveDashboardCompanyId,
+  statusForDashboardCompanyScopeError,
+} from "@/lib/client-os/dashboard-route-scope";
 import { getClientIntegrationCredentialDefinitions, getIntegrationProviders } from "@/lib/client-os/integrations";
 import {
   encryptCredentialValue,
@@ -46,11 +50,11 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await readJson(request);
-  const companyId = readString(body?.companyId);
+  const requestedCompanyId = readString(body?.companyId);
   const providerId = readString(body?.providerId);
   const inputs = readCredentialInputs(body?.credentials);
 
-  if (!companyId || !providerId) {
+  if (!providerId) {
     return NextResponse.json({ error: "Informe empresa e provedor." }, { status: 400 });
   }
 
@@ -68,6 +72,11 @@ export async function POST(request: NextRequest) {
   const client = createServiceClient();
 
   try {
+    const companyId = resolveDashboardCompanyId({
+      workspace: auth.workspace,
+      requestedCompanyId,
+      missingMessage: "Informe empresa e provedor.",
+    });
     const company = await requireClientCompanyAccess({ userId: auth.workspace.user.id, companyId, client });
     await assertBillableAccess({ organizationId: company.id, client });
 
@@ -242,7 +251,7 @@ export async function POST(request: NextRequest) {
         error: readErrorMessage(error, "Nao foi possivel salvar as credenciais."),
         ...(error instanceof BillingAccessError ? { billingAccess: error.status } : {}),
       },
-      { status: error instanceof BillingAccessError ? 402 : 400 },
+      { status: statusForDashboardCompanyScopeError(error, error instanceof BillingAccessError ? 402 : 400) },
     );
   }
 }

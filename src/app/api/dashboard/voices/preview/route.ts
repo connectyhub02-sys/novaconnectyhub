@@ -1,6 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { assertBillableAccess, BillingAccessError } from "@/lib/billing/trial";
 import { requireClientCompanyAccess } from "@/lib/client-os/companies";
+import {
+  resolveDashboardCompanyId,
+  statusForDashboardCompanyScopeError,
+} from "@/lib/client-os/dashboard-route-scope";
 import { getOrCreateGeminiVoicePreviewUrl } from "@/lib/gemini/voice-previews";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 
@@ -14,14 +18,19 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Sessao obrigatoria." }, { status: 401 });
   }
 
-  const companyId = asString(request.nextUrl.searchParams.get("companyId"));
+  const requestedCompanyId = asString(request.nextUrl.searchParams.get("companyId"));
   const voiceId = asString(request.nextUrl.searchParams.get("voiceId"));
 
-  if (!companyId || !voiceId) {
+  if (!voiceId) {
     return NextResponse.json({ error: "Informe a empresa e a voz para ouvir a previa." }, { status: 422 });
   }
 
   try {
+    const companyId = resolveDashboardCompanyId({
+      workspace,
+      requestedCompanyId,
+      missingMessage: "Informe a empresa e a voz para ouvir a previa.",
+    });
     const organization = await requireClientCompanyAccess({
       userId: workspace.user.id,
       companyId,
@@ -52,6 +61,12 @@ function formatError(error: unknown) {
 }
 
 function resolveErrorStatus(error: unknown) {
+  const scopeStatus = statusForDashboardCompanyScopeError(error, 0);
+
+  if (scopeStatus) {
+    return scopeStatus;
+  }
+
   if (error instanceof BillingAccessError) {
     return 402;
   }

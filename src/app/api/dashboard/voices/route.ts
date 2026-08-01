@@ -2,6 +2,10 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createCustomerVoiceClone, deleteCustomerVoiceClone } from "@/lib/elevenlabs/voice-cloning";
 import { listWhatsappAudioVoices } from "@/lib/elevenlabs/voices";
 import { requireClientCompanyAccess } from "@/lib/client-os/companies";
+import {
+  resolveDashboardCompanyId,
+  statusForDashboardCompanyScopeError,
+} from "@/lib/client-os/dashboard-route-scope";
 import { assertBillableAccess, BillingAccessError } from "@/lib/billing/trial";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 
@@ -23,21 +27,22 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Envie os dados da voz em multipart/form-data." }, { status: 400 });
   }
 
-  const companyId = asString(formData.get("companyId"));
+  const requestedCompanyId = asString(formData.get("companyId"));
   const name = asString(formData.get("name"));
   const consentAccepted = asBoolean(formData.get("consentAccepted"));
   const removeBackgroundNoise = asBoolean(formData.get("removeBackgroundNoise"));
   const files = formData.getAll("files").filter(isFormFile);
-
-  if (!companyId) {
-    return NextResponse.json({ error: "Escolha uma empresa antes de clonar a voz." }, { status: 422 });
-  }
 
   if (!consentAccepted) {
     return NextResponse.json({ error: "Confirme que voce tem direito e consentimento para clonar esta voz." }, { status: 422 });
   }
 
   try {
+    const companyId = resolveDashboardCompanyId({
+      workspace,
+      requestedCompanyId,
+      missingMessage: "Escolha uma empresa antes de clonar a voz.",
+    });
     const organization = await requireClientCompanyAccess({
       userId: workspace.user.id,
       companyId,
@@ -76,14 +81,19 @@ export async function DELETE(request: NextRequest) {
   }
 
   const body = await request.json().catch(() => null) as { companyId?: string; voiceId?: string } | null;
-  const companyId = body?.companyId?.trim();
+  const requestedCompanyId = body?.companyId?.trim();
   const voiceId = body?.voiceId?.trim();
 
-  if (!companyId || !voiceId) {
+  if (!voiceId) {
     return NextResponse.json({ error: "Informe a empresa e a voz para excluir." }, { status: 422 });
   }
 
   try {
+    const companyId = resolveDashboardCompanyId({
+      workspace,
+      requestedCompanyId,
+      missingMessage: "Informe a empresa e a voz para excluir.",
+    });
     const organization = await requireClientCompanyAccess({
       userId: workspace.user.id,
       companyId,
@@ -97,7 +107,7 @@ export async function DELETE(request: NextRequest) {
       notice: { tone: "success", message: "Voz excluida." },
     });
   } catch (error) {
-    return NextResponse.json(formatError(error), { status: 500 });
+    return NextResponse.json(formatError(error), { status: resolveErrorStatus(error) });
   }
 }
 
@@ -125,6 +135,12 @@ function formatError(error: unknown) {
 }
 
 function resolveErrorStatus(error: unknown) {
+  const scopeStatus = statusForDashboardCompanyScopeError(error, 0);
+
+  if (scopeStatus) {
+    return scopeStatus;
+  }
+
   if (error instanceof BillingAccessError) {
     return 402;
   }

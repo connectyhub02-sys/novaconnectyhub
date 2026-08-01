@@ -1,5 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireClientCompanyAccess } from "@/lib/client-os/companies";
+import {
+  resolveDashboardCompanyId,
+  statusForDashboardCompanyScopeError,
+} from "@/lib/client-os/dashboard-route-scope";
 import { buildMetaOperationalChecklist } from "@/lib/meta/operational-checklist-policy";
 import { resolveMetaSocialDispatchMode } from "@/lib/meta/social-dispatch-policy";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
@@ -24,15 +28,16 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Sessao obrigatoria." }, { status: 401 });
   }
 
-  const companyId = request.nextUrl.searchParams.get("companyId")?.trim();
-
-  if (!companyId) {
-    return NextResponse.json({ error: "Informe a empresa." }, { status: 400 });
-  }
+  const requestedCompanyId = request.nextUrl.searchParams.get("companyId");
 
   const client = createServiceClient();
 
   try {
+    const companyId = resolveDashboardCompanyId({
+      workspace,
+      requestedCompanyId,
+      missingMessage: "Informe a empresa.",
+    });
     const company = await requireClientCompanyAccess({
       userId: workspace.user.id,
       companyId,
@@ -70,6 +75,9 @@ export async function GET(request: NextRequest) {
 }
 
 function readErrorStatus(error: unknown) {
+  const scopeStatus = statusForDashboardCompanyScopeError(error, 0);
+  if (scopeStatus) return scopeStatus;
+
   const message = error instanceof Error ? error.message : "";
 
   if (message.startsWith("Somente dono ou admin") || message.includes("acesso")) {

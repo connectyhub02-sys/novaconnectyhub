@@ -2,6 +2,7 @@ import { revalidatePath } from "next/cache";
 import { NextResponse, type NextRequest } from "next/server";
 import { assertBillableAccess } from "@/lib/billing/trial";
 import { requireClientCompanyAccess } from "@/lib/client-os/companies";
+import { resolveDashboardCompanyId } from "@/lib/client-os/dashboard-route-scope";
 import {
   exchangeMetaAuthorizationCode,
   getAppBaseUrl,
@@ -62,9 +63,13 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    const companyId = resolveDashboardCompanyId({
+      workspace,
+      requestedCompanyId: integration.organization_id,
+    });
     const company = await requireClientCompanyAccess({
       userId: workspace.user.id,
-      companyId: integration.organization_id,
+      companyId,
       client,
     });
     await assertBillableAccess({ organizationId: company.id, client });

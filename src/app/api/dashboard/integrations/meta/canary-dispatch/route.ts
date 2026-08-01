@@ -1,5 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireClientCompanyAccess } from "@/lib/client-os/companies";
+import {
+  resolveDashboardCompanyId,
+  statusForDashboardCompanyScopeError,
+} from "@/lib/client-os/dashboard-route-scope";
 import { logIntegrationAction } from "@/lib/client-os/guided-oauth";
 import {
   buildMetaSocialCanaryProviderChatId,
@@ -52,15 +56,16 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await readJson(request);
-  const companyId = readString(body?.companyId);
-
-  if (!companyId) {
-    return NextResponse.json({ error: "Informe a empresa." }, { status: 400 });
-  }
+  const requestedCompanyId = readString(body?.companyId);
 
   const client = createServiceClient();
 
   try {
+    const companyId = resolveDashboardCompanyId({
+      workspace,
+      requestedCompanyId,
+      missingMessage: "Informe a empresa.",
+    });
     const company = await requireClientCompanyAccess({
       userId: workspace.user.id,
       companyId,
@@ -427,6 +432,9 @@ function readNumber(value: unknown) {
 }
 
 function readErrorStatus(error: unknown) {
+  const scopeStatus = statusForDashboardCompanyScopeError(error, 0);
+  if (scopeStatus) return scopeStatus;
+
   if (error instanceof BillingAccessError) {
     return 402;
   }

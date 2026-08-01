@@ -3,6 +3,10 @@ import { meterGeminiGenerationUsage } from "@/lib/billing/gemini-metering";
 import { resolvePlanFeatureEntitlement } from "@/lib/billing/plan-entitlements";
 import { assertBillableAccess, BillingAccessError } from "@/lib/billing/trial";
 import { requireClientCompanyAccess } from "@/lib/client-os/companies";
+import {
+  resolveDashboardCompanyId,
+  statusForDashboardCompanyScopeError,
+} from "@/lib/client-os/dashboard-route-scope";
 import { loadGeminiCredentials, type GeminiCredentials } from "@/lib/gemini/credentials";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
@@ -30,12 +34,8 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json().catch(() => null) as TrafficAnalysisBody | null;
-  const companyId = readString(body?.companyId);
+  const requestedCompanyId = readString(body?.companyId);
   const platform = normalizePlatform(readString(body?.platform));
-
-  if (!companyId) {
-    return NextResponse.json({ error: "Informe a empresa para analisar." }, { status: 422 });
-  }
 
   if (!platform) {
     return NextResponse.json({ error: "Informe a plataforma Meta ou Google." }, { status: 400 });
@@ -44,6 +44,11 @@ export async function POST(request: NextRequest) {
   const client = createServiceClient();
 
   try {
+    const companyId = resolveDashboardCompanyId({
+      workspace,
+      requestedCompanyId,
+      missingMessage: "Informe a empresa para analisar.",
+    });
     const company = await requireClientCompanyAccess({
       userId: workspace.user.id,
       companyId,
@@ -121,7 +126,7 @@ export async function POST(request: NextRequest) {
         error: error instanceof Error ? error.message : "Nao foi possivel gerar analise de trafego.",
         ...(error instanceof BillingAccessError ? { billingAccess: error.status } : {}),
       },
-      { status: error instanceof BillingAccessError ? 402 : 500 },
+      { status: statusForDashboardCompanyScopeError(error, error instanceof BillingAccessError ? 402 : 500) },
     );
   }
 }

@@ -2,6 +2,10 @@ import { NextResponse, type NextRequest } from "next/server";
 import { resolvePlanFeatureEntitlement } from "@/lib/billing/plan-entitlements";
 import { assertBillableAccess, BillingAccessError } from "@/lib/billing/trial";
 import { requireClientCompanyAccess } from "@/lib/client-os/companies";
+import {
+  resolveDashboardCompanyId,
+  statusForDashboardCompanyScopeError,
+} from "@/lib/client-os/dashboard-route-scope";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
 import {
@@ -32,15 +36,20 @@ export async function POST(request: NextRequest) {
 
   const body = await readJson(request);
   const actionItemId = readString(body?.actionItemId);
-  const companyId = readString(body?.companyId);
+  const requestedCompanyId = readString(body?.companyId);
   const platform = normalizePlatform(readString(body?.platform));
 
-  if (!actionItemId || !companyId || !platform) {
+  if (!actionItemId || !platform) {
     return NextResponse.json({ error: "Informe empresa, plataforma e acao." }, { status: 400 });
   }
 
   try {
     const client = createServiceClient();
+    const companyId = resolveDashboardCompanyId({
+      workspace,
+      requestedCompanyId,
+      missingMessage: "Informe empresa, plataforma e acao.",
+    });
     const company = await requireWritableTrafficCompany({
       client,
       companyId,
@@ -77,17 +86,22 @@ export async function PATCH(request: NextRequest) {
   }
 
   const body = await readJson(request);
-  const companyId = readString(body?.companyId);
+  const requestedCompanyId = readString(body?.companyId);
   const draftId = readString(body?.draftId);
   const platform = normalizePlatform(readString(body?.platform));
   const status = normalizeExecutionStatus(readString(body?.status));
 
-  if (!companyId || !draftId || !platform || !status) {
+  if (!draftId || !platform || !status) {
     return NextResponse.json({ error: "Informe empresa, plataforma, rascunho e status." }, { status: 400 });
   }
 
   try {
     const client = createServiceClient();
+    const companyId = resolveDashboardCompanyId({
+      workspace,
+      requestedCompanyId,
+      missingMessage: "Informe empresa, plataforma, rascunho e status.",
+    });
     const company = await requireWritableTrafficCompany({
       client,
       companyId,
@@ -180,6 +194,12 @@ function formatError(error: unknown) {
 }
 
 function statusForError(error: unknown) {
+  const scopeStatus = statusForDashboardCompanyScopeError(error, 0);
+
+  if (scopeStatus) {
+    return scopeStatus;
+  }
+
   if (error instanceof BillingAccessError) {
     return 402;
   }

@@ -9,6 +9,10 @@ import {
 } from "@/lib/meta/webhook-monitor";
 import { isMetaWebhookSimulationScenario } from "@/lib/meta/webhook-fixtures";
 import { assertBillableAccess, BillingAccessError } from "@/lib/billing/trial";
+import {
+  resolveDashboardCompanyId,
+  statusForDashboardCompanyScopeError,
+} from "@/lib/client-os/dashboard-route-scope";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
 
@@ -24,15 +28,16 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Sessao obrigatoria." }, { status: 401 });
   }
 
-  const companyId = request.nextUrl.searchParams.get("companyId")?.trim();
-
-  if (!companyId) {
-    return NextResponse.json({ error: "Informe a empresa." }, { status: 400 });
-  }
+  const requestedCompanyId = request.nextUrl.searchParams.get("companyId");
 
   const client = createServiceClient();
 
   try {
+    const companyId = resolveDashboardCompanyId({
+      workspace,
+      requestedCompanyId,
+      missingMessage: "Informe a empresa.",
+    });
     const monitor = await loadClientMetaWebhookMonitor({
       client,
       organizationId: companyId,
@@ -55,16 +60,17 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await readJson(request);
-  const companyId = readString(body?.companyId);
+  const requestedCompanyId = readString(body?.companyId);
   const action = readString(body?.action);
-
-  if (!companyId) {
-    return NextResponse.json({ error: "Informe a empresa." }, { status: 400 });
-  }
 
   const client = createServiceClient();
 
   try {
+    const companyId = resolveDashboardCompanyId({
+      workspace,
+      requestedCompanyId,
+      missingMessage: "Informe a empresa.",
+    });
     await assertBillableAccess({ organizationId: companyId, client });
 
     if (action === "subscribe_page") {
@@ -140,6 +146,9 @@ function readString(value: unknown) {
 }
 
 function readErrorStatus(error: unknown) {
+  const scopeStatus = statusForDashboardCompanyScopeError(error, 0);
+  if (scopeStatus) return scopeStatus;
+
   if (error instanceof BillingAccessError) {
     return 402;
   }

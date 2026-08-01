@@ -1,6 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { meterGeminiGenerationUsage } from "@/lib/billing/gemini-metering";
 import { requireClientCompanyAccess } from "@/lib/client-os/companies";
+import {
+  resolveDashboardCompanyId,
+  statusForDashboardCompanyScopeError,
+} from "@/lib/client-os/dashboard-route-scope";
 import { assertBillableAccess, BillingAccessError } from "@/lib/billing/trial";
 import { loadGeminiCredentials, type GeminiCredentials } from "@/lib/gemini/credentials";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
@@ -26,13 +30,9 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json().catch(() => null) as PromptAssistantBody | null;
-  const companyId = asString(body?.companyId);
+  const requestedCompanyId = asString(body?.companyId);
   const productUrl = asString(body?.productUrl);
   const notes = asString(body?.notes)?.slice(0, maxNotesChars) ?? "";
-
-  if (!companyId) {
-    return NextResponse.json({ error: "Escolha uma empresa antes de gerar o prompt." }, { status: 422 });
-  }
 
   if (!productUrl && !notes) {
     return NextResponse.json({ error: "Informe um link ou notas do produto." }, { status: 400 });
@@ -40,6 +40,11 @@ export async function POST(request: NextRequest) {
 
   try {
     const client = createServiceClient();
+    const companyId = resolveDashboardCompanyId({
+      workspace,
+      requestedCompanyId,
+      missingMessage: "Escolha uma empresa antes de gerar o prompt.",
+    });
     const company = await requireClientCompanyAccess({
       userId: workspace.user.id,
       companyId,
@@ -82,7 +87,7 @@ export async function POST(request: NextRequest) {
         error: error instanceof Error ? error.message : "Erro ao gerar prompt.",
         ...(error instanceof BillingAccessError ? { billingAccess: error.status } : {}),
       },
-      { status: error instanceof BillingAccessError ? 402 : 500 },
+      { status: statusForDashboardCompanyScopeError(error, error instanceof BillingAccessError ? 402 : 500) },
     );
   }
 }

@@ -2,6 +2,10 @@ import { NextResponse, type NextRequest } from "next/server";
 import { assertBillableAccess, BillingAccessError } from "@/lib/billing/trial";
 import { requireClientCompanyAccess } from "@/lib/client-os/companies";
 import {
+  resolveDashboardCompanyId,
+  statusForDashboardCompanyScopeError,
+} from "@/lib/client-os/dashboard-route-scope";
+import {
   disconnectGuidedOAuth,
   type GuidedOAuthProviderId,
 } from "@/lib/client-os/guided-oauth";
@@ -21,16 +25,21 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await readJson(request);
-  const companyId = readString(body?.companyId);
+  const requestedCompanyId = readString(body?.companyId);
   const providerId = normalizeProviderId(readString(body?.providerId));
 
-  if (!companyId || !providerId) {
+  if (!providerId) {
     return NextResponse.json({ error: "Informe empresa e provedor." }, { status: 400 });
   }
 
   const client = createServiceClient();
 
   try {
+    const companyId = resolveDashboardCompanyId({
+      workspace,
+      requestedCompanyId,
+      missingMessage: "Informe empresa e provedor.",
+    });
     const company = await requireClientCompanyAccess({
       userId: workspace.user.id,
       companyId,
@@ -73,7 +82,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       error: error instanceof Error ? error.message : "Nao foi possivel desconectar a integracao.",
       ...(error instanceof BillingAccessError ? { billingAccess: error.status } : {}),
-    }, { status: error instanceof BillingAccessError ? 402 : 400 });
+    }, { status: statusForDashboardCompanyScopeError(error, error instanceof BillingAccessError ? 402 : 400) });
   }
 }
 

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { assertBillableAccess } from "@/lib/billing/trial";
 import { requireClientCompanyAccess } from "@/lib/client-os/companies";
+import { resolveDashboardCompanyId } from "@/lib/client-os/dashboard-route-scope";
 import {
   buildGoogleAuthorizationUrl,
   getAppBaseUrl,
@@ -26,16 +27,14 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  const companyId = request.nextUrl.searchParams.get("companyId")?.trim();
-
-  if (!companyId) {
-    returnUrl.searchParams.set("integration", "google_error");
-    returnUrl.searchParams.set("reason", "missing_company");
-    return NextResponse.redirect(returnUrl);
-  }
+  const requestedCompanyId = request.nextUrl.searchParams.get("companyId");
 
   try {
     const client = createServiceClient();
+    const companyId = resolveDashboardCompanyId({
+      workspace,
+      requestedCompanyId,
+    });
     const company = await requireClientCompanyAccess({ userId: workspace.user.id, companyId, client });
     await assertBillableAccess({ organizationId: company.id, client });
 

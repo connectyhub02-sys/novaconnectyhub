@@ -2,6 +2,10 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { assertBillableAccess, BillingAccessError } from "@/lib/billing/trial";
 import { requireClientCompanyAccess } from "@/lib/client-os/companies";
+import {
+  resolveDashboardCompanyId,
+  statusForDashboardCompanyScopeError,
+} from "@/lib/client-os/dashboard-route-scope";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
 
@@ -31,15 +35,16 @@ export async function GET(request: NextRequest) {
     return auth;
   }
 
-  const companyId = request.nextUrl.searchParams.get("companyId");
-
-  if (!companyId) {
-    return NextResponse.json({ error: "Informe a empresa." }, { status: 400 });
-  }
+  const requestedCompanyId = request.nextUrl.searchParams.get("companyId");
 
   const client = createServiceClient();
 
   try {
+    const companyId = resolveDashboardCompanyId({
+      workspace: auth.workspace,
+      requestedCompanyId,
+      missingMessage: "Informe a empresa.",
+    });
     const company = await requireClientCompanyAccess({ userId: auth.workspace.user.id, companyId, client });
     const { data, error } = await client
       .from("integration_webhook_endpoints")
@@ -55,7 +60,10 @@ export async function GET(request: NextRequest) {
       endpoints: ((data ?? []) as WebhookEndpointRow[]).map((row) => mapEndpoint(row)),
     });
   } catch (error) {
-    return NextResponse.json({ error: readErrorMessage(error, "Nao foi possivel carregar webhooks.") }, { status: 400 });
+    return NextResponse.json(
+      { error: readErrorMessage(error, "Nao foi possivel carregar webhooks.") },
+      { status: statusForDashboardCompanyScopeError(error, 400) },
+    );
   }
 }
 
@@ -67,17 +75,18 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await readJson(request);
-  const companyId = readString(body?.companyId);
+  const requestedCompanyId = readString(body?.companyId);
   const label = readString(body?.label) ?? "Webhook Universal";
   const events = normalizeEvents(body?.events);
-
-  if (!companyId) {
-    return NextResponse.json({ error: "Informe a empresa." }, { status: 400 });
-  }
 
   const client = createServiceClient();
 
   try {
+    const companyId = resolveDashboardCompanyId({
+      workspace: auth.workspace,
+      requestedCompanyId,
+      missingMessage: "Informe a empresa.",
+    });
     const company = await requireClientCompanyAccess({ userId: auth.workspace.user.id, companyId, client });
     await assertBillableAccess({ organizationId: company.id, client });
 
@@ -177,7 +186,7 @@ export async function POST(request: NextRequest) {
         error: readErrorMessage(error, "Nao foi possivel criar o Webhook Universal."),
         ...(error instanceof BillingAccessError ? { billingAccess: error.status } : {}),
       },
-      { status: error instanceof BillingAccessError ? 402 : 400 },
+      { status: statusForDashboardCompanyScopeError(error, error instanceof BillingAccessError ? 402 : 400) },
     );
   }
 }

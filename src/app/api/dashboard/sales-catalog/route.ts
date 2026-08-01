@@ -16,6 +16,10 @@ import {
 } from "@/lib/client-os/sales-catalog";
 import { requireClientCompanyAccess } from "@/lib/client-os/companies";
 import {
+  resolveDashboardCompanyId,
+  statusForDashboardCompanyScopeError,
+} from "@/lib/client-os/dashboard-route-scope";
+import {
   brazilianStates,
   buildSalesCatalogContent,
   createDefaultSalesCatalogCommerceSettings,
@@ -142,7 +146,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Envie os dados do produto em multipart/form-data." }, { status: 400 });
   }
 
-  const companyId = readFormString(formData.get("companyId"));
+  const requestedCompanyId = readFormString(formData.get("companyId"));
   const requestedItemId = normalizeUuid(readFormString(formData.get("itemId")));
   const title = normalizeTitle(readFormString(formData.get("title")));
   const description = normalizeDescription(readFormString(formData.get("description")));
@@ -159,10 +163,6 @@ export async function POST(request: NextRequest) {
   const files = formData.getAll("files").filter(isFormFile);
   const keepMediaIds = readKeepMediaIds(formData.get("keepMediaIds"));
 
-  if (!companyId) {
-    return NextResponse.json({ error: "Escolha uma empresa antes de cadastrar o produto." }, { status: 422 });
-  }
-
   if (!title) {
     return NextResponse.json({ error: "Informe o nome do produto ou oferta." }, { status: 422 });
   }
@@ -178,6 +178,11 @@ export async function POST(request: NextRequest) {
 
   try {
     const client = createServiceClient();
+    const companyId = resolveDashboardCompanyId({
+      workspace,
+      requestedCompanyId,
+      missingMessage: "Escolha uma empresa antes de cadastrar o produto.",
+    });
     const company = await requireClientCompanyAccess({
       userId: workspace.user.id,
       companyId,
@@ -365,14 +370,15 @@ export async function POST(request: NextRequest) {
 async function handleJsonPost(request: NextRequest, workspace: CurrentWorkspace) {
   const body = readRecord(await request.json().catch(() => null));
   const action = readFormString(body?.action);
-  const companyId = readFormString(body?.companyId);
-
-  if (!companyId) {
-    return NextResponse.json({ error: "Escolha uma empresa antes de sincronizar o catalogo." }, { status: 422 });
-  }
+  const requestedCompanyId = readFormString(body?.companyId);
 
   try {
     const client = createServiceClient();
+    const companyId = resolveDashboardCompanyId({
+      workspace,
+      requestedCompanyId,
+      missingMessage: "Escolha uma empresa antes de sincronizar o catalogo.",
+    });
     const company = await requireClientCompanyAccess({
       userId: workspace.user.id,
       companyId,
@@ -1883,15 +1889,20 @@ export async function DELETE(request: NextRequest) {
   }
 
   const body = await request.json().catch(() => null) as { companyId?: unknown; itemId?: unknown } | null;
-  const companyId = readFormString(body?.companyId);
+  const requestedCompanyId = readFormString(body?.companyId);
   const itemId = readFormString(body?.itemId);
 
-  if (!companyId || !itemId) {
+  if (!itemId) {
     return NextResponse.json({ error: "Informe a empresa e o produto para excluir." }, { status: 422 });
   }
 
   try {
     const client = createServiceClient();
+    const companyId = resolveDashboardCompanyId({
+      workspace,
+      requestedCompanyId,
+      missingMessage: "Informe a empresa e o produto para excluir.",
+    });
     const company = await requireClientCompanyAccess({ userId: workspace.user.id, companyId, client });
     await assertBillableAccess({ organizationId: company.id, client });
 
@@ -2902,6 +2913,9 @@ function formatRouteError(error: unknown, fallback: string) {
 }
 
 function statusForRouteError(error: unknown, fallback: number) {
+  const scopeStatus = statusForDashboardCompanyScopeError(error, 0);
+  if (scopeStatus) return scopeStatus;
+
   return error instanceof BillingAccessError ? 402 : fallback;
 }
 

@@ -7,6 +7,10 @@ import {
 import { cloneClientAgent, createClientAgent, deleteClientAgent, getClientAgentsWorkspace, updateClientAgent } from "@/lib/client-os/agents";
 import { BillingAccessError } from "@/lib/billing/trial";
 import { currentOrganizationToClientCompany } from "@/lib/client-os/current-company";
+import {
+  resolveDashboardCompanyId,
+  statusForDashboardCompanyScopeError,
+} from "@/lib/client-os/dashboard-route-scope";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
 
@@ -51,15 +55,18 @@ export async function POST(request: NextRequest) {
 
   try {
     await assertAccountComplete({ userId: workspace.user.id, client: createServiceClient() });
-    const companyId = typeof body?.companyId === "string" && body.companyId.trim()
-      ? body.companyId
-      : workspace.organization?.id ?? "";
+    const companyId = resolveDashboardCompanyId({
+      workspace,
+      requestedCompanyId: typeof body?.companyId === "string" ? body.companyId : null,
+      missingMessage: "Cadastre uma empresa antes de criar agentes.",
+    });
 
     if (body?.action === "clone") {
       const agent = await cloneClientAgent({
         userId: workspace.user.id,
         sourceAgentId: typeof body?.sourceAgentId === "string" ? body.sourceAgentId : "",
         companyId,
+        organizationId: companyId,
         name: typeof body?.name === "string" ? body.name : undefined,
         sectorName: typeof body?.sectorName === "string" ? body.sectorName : undefined,
         roleTitle: typeof body?.roleTitle === "string" ? body.roleTitle : undefined,
@@ -102,14 +109,17 @@ export async function PATCH(request: NextRequest) {
 
   try {
     await assertAccountComplete({ userId: workspace.user.id, client: createServiceClient() });
-    const companyId = typeof body?.companyId === "string" && body.companyId.trim()
-      ? body.companyId
-      : workspace.organization?.id ?? "";
+    const companyId = resolveDashboardCompanyId({
+      workspace,
+      requestedCompanyId: typeof body?.companyId === "string" ? body.companyId : null,
+      missingMessage: "Cadastre uma empresa antes de editar agentes.",
+    });
 
     const agent = await updateClientAgent({
       userId: workspace.user.id,
       agentId: typeof body?.agentId === "string" ? body.agentId : "",
       companyId,
+      organizationId: companyId,
       name: typeof body?.name === "string" ? body.name : "",
       sectorName: typeof body?.sectorName === "string" ? body.sectorName : undefined,
       roleTitle: typeof body?.roleTitle === "string" ? body.roleTitle : undefined,
@@ -132,9 +142,14 @@ export async function DELETE(request: NextRequest) {
   const body = await readJson<{ agentId?: unknown }>(request);
 
   try {
+    const companyId = resolveDashboardCompanyId({
+      workspace,
+      missingMessage: "Cadastre uma empresa antes de excluir agentes.",
+    });
     const agent = await deleteClientAgent({
       userId: workspace.user.id,
       agentId: typeof body?.agentId === "string" ? body.agentId : "",
+      organizationId: companyId,
     });
 
     return NextResponse.json({ deletedAgentId: agent.id });
@@ -159,6 +174,9 @@ function formatError(error: unknown) {
 }
 
 function statusForError(error: unknown, fallback: number) {
+  const scopeStatus = statusForDashboardCompanyScopeError(error, 0);
+  if (scopeStatus) return scopeStatus;
+
   const accountStatus = statusForAccountCompletionError(error, fallback);
 
   if (accountStatus !== fallback) {

@@ -225,6 +225,7 @@ export async function updateClientAgent(input: {
   userId: string;
   agentId: string;
   companyId: string;
+  organizationId?: string | null;
   name: string;
   sectorName?: string;
   roleTitle?: string;
@@ -237,6 +238,11 @@ export async function updateClientAgent(input: {
     agentId: input.agentId,
     client,
   });
+
+  if (input.organizationId && agent.organization_id !== input.organizationId) {
+    throw new Error("Agente fora do workspace atual.");
+  }
+
   const targetCompany = await requireClientCompanyAccess({
     userId: input.userId,
     companyId: input.companyId || agent.organization_id,
@@ -284,6 +290,7 @@ export async function cloneClientAgent(input: {
   userId: string;
   sourceAgentId: string;
   companyId: string;
+  organizationId?: string | null;
   name?: string;
   sectorName?: string;
   roleTitle?: string;
@@ -296,6 +303,11 @@ export async function cloneClientAgent(input: {
     agentId: input.sourceAgentId,
     client,
   });
+
+  if (input.organizationId && sourceAgent.organization_id !== input.organizationId) {
+    throw new Error("Agente fora do workspace atual.");
+  }
+
   const targetCompany = await requireClientCompanyAccess({
     userId: input.userId,
     companyId: input.companyId || sourceAgent.organization_id,
@@ -364,11 +376,16 @@ export async function cloneClientAgent(input: {
 export async function deleteClientAgent(input: {
   userId: string;
   agentId: string;
+  organizationId?: string | null;
   client?: SupabaseClient;
 }) {
   const client = input.client ?? createServiceClient();
   const companies = await listClientCompanies(input.userId, client);
-  const companyIds = new Set(companies.map((company) => company.id));
+  const companyIds = new Set(
+    input.organizationId
+      ? companies.filter((company) => company.id === input.organizationId).map((company) => company.id)
+      : companies.map((company) => company.id),
+  );
 
   if (companyIds.size === 0) {
     throw new Error("Nenhuma empresa cadastrada para excluir agentes.");

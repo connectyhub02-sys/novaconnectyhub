@@ -2,6 +2,10 @@ import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { NextResponse, type NextRequest } from "next/server";
 import { requireClientCompanyAccess } from "@/lib/client-os/companies";
+import {
+  resolveDashboardCompanyId,
+  statusForDashboardCompanyScopeError,
+} from "@/lib/client-os/dashboard-route-scope";
 import { assertBillableAccess, BillingAccessError } from "@/lib/billing/trial";
 import { loadR2Config, putR2Object } from "@/lib/storage/r2";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
@@ -30,12 +34,8 @@ export async function POST(request: NextRequest) {
   }
 
   const formData = await request.formData().catch(() => null);
-  const companyId = formData?.get("companyId");
+  const requestedCompanyId = formData?.get("companyId");
   const file = formData?.get("file");
-
-  if (typeof companyId !== "string" || !companyId.trim()) {
-    return NextResponse.json({ error: "Escolha uma empresa antes de anexar arquivo." }, { status: 422 });
-  }
 
   if (!(file instanceof File)) {
     return NextResponse.json({ error: "Envie um arquivo valido." }, { status: 400 });
@@ -53,9 +53,14 @@ export async function POST(request: NextRequest) {
 
   try {
     const client = createServiceClient();
+    const companyId = resolveDashboardCompanyId({
+      workspace,
+      requestedCompanyId: typeof requestedCompanyId === "string" ? requestedCompanyId : null,
+      missingMessage: "Escolha uma empresa antes de anexar arquivo.",
+    });
     const company = await requireClientCompanyAccess({
       userId: workspace.user.id,
-      companyId: companyId.trim(),
+      companyId,
       client,
     });
     await assertBillableAccess({ organizationId: company.id, client });
@@ -130,7 +135,7 @@ export async function POST(request: NextRequest) {
         error: error instanceof Error ? error.message : "Erro ao anexar arquivo.",
         ...(error instanceof BillingAccessError ? { billingAccess: error.status } : {}),
       },
-      { status: error instanceof BillingAccessError ? 402 : 500 },
+      { status: statusForDashboardCompanyScopeError(error, error instanceof BillingAccessError ? 402 : 500) },
     );
   }
 }
