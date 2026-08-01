@@ -317,6 +317,7 @@ const dashboardRowLimit = 5000;
 export async function getClientDashboardOverview(input: {
   userId: string;
   organizationId?: string | null;
+  company?: ClientCompany | null;
   client?: SupabaseClient;
   now?: Date;
 }): Promise<ClientDashboardOverview> {
@@ -336,9 +337,25 @@ export async function getClientDashboardOverview(input: {
     });
   }
 
-  let company: ClientCompany | null = null;
+  const trustedCompany = input.company ?? null;
 
-  if (input.organizationId) {
+  if (trustedCompany && input.organizationId && trustedCompany.id !== input.organizationId) {
+    return buildClientDashboardOverviewFromRows({
+      company: null,
+      companies,
+      now,
+      rows: {},
+      warnings: ["Empresa selecionada nao corresponde ao workspace atual."],
+    });
+  }
+
+  if (trustedCompany && !companies.some((company) => company.id === trustedCompany.id)) {
+    companies = [trustedCompany, ...companies];
+  }
+
+  let company: ClientCompany | null = trustedCompany;
+
+  if (!company && input.organizationId) {
     try {
       company = await requireClientCompanyAccess({
         userId: input.userId,

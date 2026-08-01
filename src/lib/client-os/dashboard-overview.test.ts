@@ -9,9 +9,10 @@ vi.mock("./companies", () => ({
 
 import {
   buildClientDashboardOverviewFromRows,
+  getClientDashboardOverview,
   type ClientDashboardOverviewRows,
 } from "./dashboard-overview";
-import type { ClientCompany } from "./companies";
+import { listClientCompanies, type ClientCompany } from "./companies";
 
 const companyA: ClientCompany = {
   id: "org-a",
@@ -36,6 +37,22 @@ const companyB: ClientCompany = {
 const now = new Date("2026-08-01T15:00:00.000Z");
 
 describe("buildClientDashboardOverviewFromRows", () => {
+  it("refuses a trusted company that does not match the selected organization", async () => {
+    vi.mocked(listClientCompanies).mockResolvedValue([companyA, companyB]);
+
+    const overview = await getClientDashboardOverview({
+      userId: "user-a",
+      organizationId: companyB.id,
+      company: companyA,
+      client: {} as never,
+      now,
+    });
+
+    expect(overview.company).toBeNull();
+    expect(overview.metrics.leads.total).toBe(0);
+    expect(overview.warnings).toContain("Empresa selecionada nao corresponde ao workspace atual.");
+  });
+
   it("keeps dashboard metrics scoped to the selected organization", () => {
     const overview = buildClientDashboardOverviewFromRows({
       company: companyA,
