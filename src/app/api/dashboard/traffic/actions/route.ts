@@ -33,12 +33,18 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Sessao obrigatoria." }, { status: 401 });
   }
 
-  const companyId = readString(request.nextUrl.searchParams.get("companyId"));
+  const requestedCompanyId = readString(request.nextUrl.searchParams.get("companyId"));
   const platform = normalizePlatform(readString(request.nextUrl.searchParams.get("platform")));
 
-  if (!companyId) {
+  if (!workspace.organization?.id) {
     return NextResponse.json({ error: "Informe a empresa." }, { status: 422 });
   }
+
+  if (requestedCompanyId && requestedCompanyId !== workspace.organization.id) {
+    return NextResponse.json({ error: "Empresa fora do workspace atual." }, { status: 403 });
+  }
+
+  const companyId = requestedCompanyId || workspace.organization.id;
 
   try {
     const client = createServiceClient();
@@ -69,11 +75,21 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await readJson(request);
-  const companyId = readString(body?.companyId);
+  const requestedCompanyId = readString(body?.companyId);
   const platform = normalizePlatform(readString(body?.platform));
   const recommendation = readRecommendation(body?.recommendation);
 
-  if (!companyId || !platform || !recommendation) {
+  if (!workspace.organization?.id) {
+    return NextResponse.json({ error: "Informe empresa, plataforma e recomendacao." }, { status: 400 });
+  }
+
+  if (requestedCompanyId && requestedCompanyId !== workspace.organization.id) {
+    return NextResponse.json({ error: "Empresa fora do workspace atual." }, { status: 403 });
+  }
+
+  const companyId = requestedCompanyId || workspace.organization.id;
+
+  if (!platform || !recommendation) {
     return NextResponse.json({ error: "Informe empresa, plataforma e recomendacao." }, { status: 400 });
   }
 
@@ -116,12 +132,22 @@ export async function PATCH(request: NextRequest) {
   }
 
   const body = await readJson(request);
-  const companyId = readString(body?.companyId);
+  const requestedCompanyId = readString(body?.companyId);
   const platform = normalizePlatform(readString(body?.platform));
   const actionItemId = readString(body?.actionItemId);
   const status = normalizeActionStatus(readString(body?.status));
 
-  if (!companyId || !platform || !actionItemId || !status) {
+  if (!workspace.organization?.id) {
+    return NextResponse.json({ error: "Informe empresa, plataforma, acao e status." }, { status: 400 });
+  }
+
+  if (requestedCompanyId && requestedCompanyId !== workspace.organization.id) {
+    return NextResponse.json({ error: "Empresa fora do workspace atual." }, { status: 403 });
+  }
+
+  const companyId = requestedCompanyId || workspace.organization.id;
+
+  if (!platform || !actionItemId || !status) {
     return NextResponse.json({ error: "Informe empresa, plataforma, acao e status." }, { status: 400 });
   }
 

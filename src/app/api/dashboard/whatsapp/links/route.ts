@@ -32,12 +32,18 @@ export async function POST(request: NextRequest) {
     url?: unknown;
   }>(request);
 
-  const companyId = typeof body?.companyId === "string" ? body.companyId.trim() : "";
+  const requestedCompanyId = typeof body?.companyId === "string" ? body.companyId.trim() : "";
   const label = normalizeLabel(typeof body?.label === "string" ? body.label : "");
 
-  if (!companyId) {
+  if (!workspace.organization?.id) {
     return NextResponse.json({ error: "Escolha uma empresa antes de criar o link." }, { status: 422 });
   }
+
+  if (requestedCompanyId && requestedCompanyId !== workspace.organization.id) {
+    return NextResponse.json({ error: "Empresa fora do workspace atual." }, { status: 403 });
+  }
+
+  const companyId = requestedCompanyId || workspace.organization.id;
 
   if (!label) {
     return NextResponse.json({ error: "Informe o nome do botao." }, { status: 422 });
@@ -162,12 +168,18 @@ export async function DELETE(request: NextRequest) {
     linkButtonId?: unknown;
   }>(request);
 
-  const companyId = typeof body?.companyId === "string" ? body.companyId.trim() : "";
+  const requestedCompanyId = typeof body?.companyId === "string" ? body.companyId.trim() : "";
   const linkButtonId = typeof body?.linkButtonId === "string" ? body.linkButtonId.trim() : "";
 
-  if (!companyId) {
+  if (!workspace.organization?.id) {
     return NextResponse.json({ error: "Escolha uma empresa antes de excluir o link." }, { status: 422 });
   }
+
+  if (requestedCompanyId && requestedCompanyId !== workspace.organization.id) {
+    return NextResponse.json({ error: "Empresa fora do workspace atual." }, { status: 403 });
+  }
+
+  const companyId = requestedCompanyId || workspace.organization.id;
 
   if (!linkButtonId) {
     return NextResponse.json({ error: "Informe o link rastreado para excluir." }, { status: 422 });

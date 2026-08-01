@@ -25,9 +25,19 @@ export async function POST(request: NextRequest) {
   }
 
   const productId = typeof record?.productId === "string" ? record.productId.trim() : "";
-  const companyId = typeof record?.companyId === "string" ? record.companyId.trim() : "";
+  const requestedCompanyId = typeof record?.companyId === "string" ? record.companyId.trim() : "";
 
-  if (!productId || !companyId) {
+  if (!workspace.organization?.id) {
+    return NextResponse.json({ error: "Cadastre uma empresa antes de importar produtos." }, { status: 422 });
+  }
+
+  if (requestedCompanyId && requestedCompanyId !== workspace.organization.id) {
+    return NextResponse.json({ error: "Empresa fora do workspace atual." }, { status: 403 });
+  }
+
+  const companyId = requestedCompanyId || workspace.organization.id;
+
+  if (!productId) {
     return NextResponse.json({ error: "Escolha o produto e a empresa para importar." }, { status: 422 });
   }
 
