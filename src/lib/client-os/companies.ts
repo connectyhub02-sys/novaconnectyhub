@@ -56,6 +56,15 @@ export async function createClientCompany(input: {
 }) {
   const client = input.client ?? createServiceClient();
   const name = normalizeCompanyName(input.name);
+  const existingCompany = await findExistingClientCompanyByName({
+    client,
+    name,
+    userId: input.userId,
+  });
+
+  if (existingCompany) {
+    return existingCompany;
+  }
 
   const { data: organization, error: organizationError } = await client
     .from("organizations")
@@ -108,6 +117,17 @@ export async function createClientCompany(input: {
     role: "owner",
     createdAt: organization.created_at,
   } satisfies ClientCompany;
+}
+
+async function findExistingClientCompanyByName(input: {
+  client: SupabaseClient;
+  name: string;
+  userId: string;
+}) {
+  const companies = await listClientCompanies(input.userId, input.client);
+  const normalizedName = normalizeCompanyNameForComparison(input.name);
+
+  return companies.find((company) => normalizeCompanyNameForComparison(company.name) === normalizedName) ?? null;
 }
 
 export async function deleteClientCompany(input: {
@@ -295,4 +315,13 @@ function createCompanySlug(value: string) {
 
 function isClientCreatedCompany(company: ClientCompany) {
   return Boolean(company.slug?.startsWith(clientCompanySlugPrefix));
+}
+
+function normalizeCompanyNameForComparison(value: string) {
+  return value
+    .trim()
+    .replace(/\s+/g, " ")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
 }

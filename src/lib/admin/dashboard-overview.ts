@@ -32,6 +32,7 @@ type ProfileRow = {
   email: string | null;
   full_name: string | null;
   company_name: string | null;
+  is_platform_admin: boolean | null;
 };
 
 type MembershipRow = {
@@ -215,6 +216,13 @@ type InfraStat = {
   value: string;
 };
 
+type ClientOrganizationRecord = {
+  organization: OrganizationRow;
+  ownerId: string;
+  duplicateCount: number;
+  signalScore: number;
+};
+
 export type AdminDashboardOverview = {
   generatedAt: string;
   warnings: string[];
@@ -299,7 +307,7 @@ export async function getAdminDashboardOverview(
       .limit(10000)),
     safeRows<ProfileRow>("profiles", client
       .from("profiles")
-      .select("id, email, full_name, company_name")
+      .select("id, email, full_name, company_name, is_platform_admin")
       .limit(10000)),
     safeRows<MembershipRow>("organization_members", client
       .from("organization_members")
@@ -418,6 +426,35 @@ export async function getAdminDashboardOverview(
   const walletByOrg = new Map(walletsResult.rows.map((wallet) => [wallet.organization_id, wallet]));
   const agentsByOrg = groupBy(agentsResult.rows.filter((agent) => agent.organization_id), (agent) => agent.organization_id!);
   const conversationsByOrg = groupBy(conversationsResult.rows, (conversation) => conversation.organization_id);
+  const paymentsByOrg = groupBy(paymentsResult.rows, (payment) => payment.organization_id);
+  const leadsByOrg = groupBy(leadsResult.rows, (lead) => lead.organization_id);
+  const instancesByOrg = groupBy(instancesResult.rows.filter(hasOrganizationId), (instance) => instance.organization_id);
+  const usageByOrg = groupBy(usageResult.rows.filter(hasOrganizationId), (row) => row.organization_id);
+  const runsByOrg = groupBy(runsResult.rows.filter(hasOrganizationId), (row) => row.organization_id);
+  const clientRecords = buildClientOrganizationRecords({
+    agentsByOrg,
+    conversationsByOrg,
+    instancesByOrg,
+    leadsByOrg,
+    organizations,
+    ownersByOrg,
+    paymentsByOrg,
+    profilesById,
+    runsByOrg,
+    subscriptionByOrg,
+    usageByOrg,
+    walletsByOrg: walletByOrg,
+  });
+  const clientOrganizations = clientRecords.map((record) => record.organization);
+  const duplicateClientWorkspaces = clientRecords.reduce(
+    (total, record) => total + Math.max(0, record.duplicateCount - 1),
+    0,
+  );
+
+  if (duplicateClientWorkspaces > 0) {
+    warnings.push(`Higiene de clientes: ${formatInteger(duplicateClientWorkspaces)} workspaces duplicados foram agrupados por dono.`);
+  }
+
   const payments = paymentsResult.rows;
   const approvedPayments = payments.filter((payment) => payment.status === "approved");
   const currentPayments30 = approvedPayments.filter((payment) => isOnOrAfter(payment.paid_at ?? payment.created_at, since30));
@@ -427,18 +464,18 @@ export async function getAdminDashboardOverview(
   });
   const paidRevenue30 = sum(currentPayments30, (payment) => toNumber(payment.amount_brl));
   const previousRevenue30 = sum(previousPayments30, (payment) => toNumber(payment.amount_brl));
-  const activeClients = organizations.filter((organization) => isActiveOrganization(organization.status)).length;
-  const inactiveClients = organizations.filter((organization) => isInactiveOrganization(organization.status)).length;
-  const paidClients = organizations.filter((organization) => {
+  const activeClients = clientOrganizations.filter((organization) => isActiveOrganization(organization.status)).length;
+  const inactiveClients = clientOrganizations.filter((organization) => isInactiveOrganization(organization.status)).length;
+  const paidClients = clientOrganizations.filter((organization) => {
     const subscription = subscriptionByOrg.get(organization.id);
     return subscription ? paidSubscriptionStatuses.has(subscription.status ?? "") : paidPlanCode(organization.plan_code);
   }).length;
-  const onboardingClients = organizations.filter((organization) => {
+  const onboardingClients = clientOrganizations.filter((organization) => {
     const status = organization.status ?? "";
     const subscription = subscriptionByOrg.get(organization.id);
     return status === "trial" || status === "trial_pending" || subscription?.status === "pending" || subscription?.status === "incomplete";
   }).length;
-  const mrr = organizations.reduce((total, organization) => {
+  const mrr = clientOrganizations.reduce((total, organization) => {
     const subscription = subscriptionByOrg.get(organization.id);
     const planCode = subscription?.plan_code ?? organization.plan_code ?? "starter";
 
@@ -477,9 +514,9 @@ export async function getAdminDashboardOverview(
   const organizationAgents = agentsResult.rows.filter((agent) => agent.organization_id);
   const pendingApprovals = runsResult.rows.filter((run) => run.run_status === "needs_approval").length + approvals.length;
   const leadSeries = bucketByDays(lastDays(now, 7), leadsResult.rows, (lead) => lead.created_at);
-  const activationSeries = bucketByDays(lastDays(now, 7), organizations, (organization) => organization.created_at);
+  const activationSeries = bucketByDays(lastDays(now, 7), clientOrganizations, (organization) => organization.created_at);
   const revenueSeries = bucketByMonths(lastMonths(now, 7), approvedPayments, (payment) => payment.paid_at ?? payment.created_at, (payment) => toNumber(payment.amount_brl));
-  const retentionSeries = buildRetentionSeries(lastMonths(now, 7), organizations);
+  const retentionSeries = buildRetentionSeries(lastMonths(now, 7), clientOrganizations);
 
   return {
     generatedAt: now.toISOString(),
@@ -496,9 +533,9 @@ export async function getAdminDashboardOverview(
       pastDueSubscriptions: subscriptionsResult.rows.filter((subscription) => subscription.status === "past_due").length,
     }),
     hero: {
-      totalClients: formatInteger(organizations.length),
+      totalClients: formatInteger(clientOrganizations.length),
       activeClients: formatInteger(activeClients),
-      newClients7d: signedInteger(organizations.filter((organization) => isOnOrAfter(organization.created_at, since7)).length),
+      newClients7d: signedInteger(clientOrganizations.filter((organization) => isOnOrAfter(organization.created_at, since7)).length),
       series: activationSeries.map((point) => point.value),
     },
     activationSeries,
@@ -509,7 +546,7 @@ export async function getAdminDashboardOverview(
       series: revenueSeries,
     },
     retention: {
-      value: `${formatDecimal(retentionPercent(activeClients, organizations.length), 1)}%`,
+      value: `${formatDecimal(retentionPercent(activeClients, clientOrganizations.length), 1)}%`,
       trend: inactiveClients > 0 ? `-${formatInteger(inactiveClients)} risco` : "+0 risco",
       series: retentionSeries,
     },
@@ -557,8 +594,7 @@ export async function getAdminDashboardOverview(
     clients: buildClientRows({
       agentsByOrg,
       conversationsByOrg,
-      organizations,
-      ownersByOrg,
+      clientRecords,
       planPrices: plansByCode,
       profilesById,
       subscriptionByOrg,
@@ -572,7 +608,7 @@ export async function getAdminDashboardOverview(
       pendingApprovals,
       problemWhatsapps,
       rejectedPayments30,
-      totalClients: organizations.length,
+      totalClients: clientOrganizations.length,
       usageMarginPercent: marginPercent,
     }),
     approvals,
@@ -647,21 +683,122 @@ function latestSubscriptionByOrg(rows: SubscriptionRow[]) {
   return map;
 }
 
+function buildClientOrganizationRecords(input: {
+  agentsByOrg: Map<string, AgentRow[]>;
+  conversationsByOrg: Map<string, ConversationRow[]>;
+  instancesByOrg: Map<string, WhatsappInstanceRow[]>;
+  leadsByOrg: Map<string, LeadRow[]>;
+  organizations: OrganizationRow[];
+  ownersByOrg: Map<string, MembershipRow>;
+  paymentsByOrg: Map<string, PaymentRow[]>;
+  profilesById: Map<string, ProfileRow>;
+  runsByOrg: Map<string, AgentRunRow[]>;
+  subscriptionByOrg: Map<string, SubscriptionRow>;
+  usageByOrg: Map<string, UsageRow[]>;
+  walletsByOrg: Map<string, WalletRow>;
+}): ClientOrganizationRecord[] {
+  const byOwner = new Map<string, ClientOrganizationRecord>();
+  const duplicateCountByOwner = new Map<string, number>();
+
+  for (const organization of input.organizations) {
+    const ownerId = organization.owner_id ?? input.ownersByOrg.get(organization.id)?.user_id ?? null;
+
+    if (!ownerId || input.profilesById.get(ownerId)?.is_platform_admin || isInternalOrganization(organization)) {
+      continue;
+    }
+
+    duplicateCountByOwner.set(ownerId, (duplicateCountByOwner.get(ownerId) ?? 0) + 1);
+
+    const record = {
+      organization,
+      ownerId,
+      duplicateCount: 1,
+      signalScore: scoreClientOrganization({
+        agents: input.agentsByOrg.get(organization.id) ?? [],
+        conversations: input.conversationsByOrg.get(organization.id) ?? [],
+        instances: input.instancesByOrg.get(organization.id) ?? [],
+        leads: input.leadsByOrg.get(organization.id) ?? [],
+        organization,
+        payments: input.paymentsByOrg.get(organization.id) ?? [],
+        runs: input.runsByOrg.get(organization.id) ?? [],
+        subscription: input.subscriptionByOrg.get(organization.id),
+        usageEvents: input.usageByOrg.get(organization.id) ?? [],
+        wallet: input.walletsByOrg.get(organization.id),
+      }),
+    };
+    const current = byOwner.get(ownerId);
+
+    if (!current || isBetterClientOrganization(record, current)) {
+      byOwner.set(ownerId, record);
+    }
+  }
+
+  return Array.from(byOwner.values())
+    .map((record) => ({
+      ...record,
+      duplicateCount: duplicateCountByOwner.get(record.ownerId) ?? 1,
+    }))
+    .sort((left, right) => parseDateMs(right.organization.created_at) - parseDateMs(left.organization.created_at));
+}
+
+function scoreClientOrganization(input: {
+  agents: AgentRow[];
+  conversations: ConversationRow[];
+  instances: WhatsappInstanceRow[];
+  leads: LeadRow[];
+  organization: OrganizationRow;
+  payments: PaymentRow[];
+  runs: AgentRunRow[];
+  subscription: SubscriptionRow | undefined;
+  usageEvents: UsageRow[];
+  wallet: WalletRow | undefined;
+}) {
+  const subscriptionStatus = input.subscription?.status ?? "";
+  let score = 0;
+
+  if (input.subscription && paidSubscriptionStatuses.has(subscriptionStatus)) score += 90;
+  else if (input.subscription && activeSubscriptionStatuses.has(subscriptionStatus)) score += 75;
+  else if (input.subscription) score += 40;
+
+  if (input.wallet) score += 35;
+  if (input.payments.some((payment) => payment.status === "approved")) score += 30;
+  else if (input.payments.length > 0) score += 18;
+
+  if (input.instances.some((instance) => instance.status === "connected")) score += 22;
+  else if (input.instances.length > 0) score += 12;
+
+  if (input.conversations.length > 0) score += 18;
+  if (input.leads.length > 0) score += 12;
+  if (input.agents.length > 0) score += 10;
+  if (input.runs.length > 0) score += 8;
+  if (input.usageEvents.length > 0) score += 8;
+  if (isActiveOrganization(input.organization.status)) score += 4;
+
+  return score;
+}
+
+function isBetterClientOrganization(candidate: ClientOrganizationRecord, current: ClientOrganizationRecord) {
+  if (candidate.signalScore !== current.signalScore) {
+    return candidate.signalScore > current.signalScore;
+  }
+
+  return parseDateMs(candidate.organization.created_at) < parseDateMs(current.organization.created_at);
+}
+
 function buildClientRows(input: {
   agentsByOrg: Map<string, AgentRow[]>;
   conversationsByOrg: Map<string, ConversationRow[]>;
-  organizations: OrganizationRow[];
-  ownersByOrg: Map<string, MembershipRow>;
+  clientRecords: ClientOrganizationRecord[];
   planPrices: Map<string, BillingPlanRow>;
   profilesById: Map<string, ProfileRow>;
   subscriptionByOrg: Map<string, SubscriptionRow>;
   walletsByOrg: Map<string, WalletRow>;
 }): ClientAccount[] {
-  return input.organizations
+  return input.clientRecords
     .slice(0, 12)
-    .map((organization, index) => {
-      const ownerId = organization.owner_id ?? input.ownersByOrg.get(organization.id)?.user_id ?? null;
-      const owner = ownerId ? input.profilesById.get(ownerId) : null;
+    .map((record, index) => {
+      const organization = record.organization;
+      const owner = input.profilesById.get(record.ownerId);
       const subscription = input.subscriptionByOrg.get(organization.id);
       const planCode = subscription?.plan_code ?? organization.plan_code ?? "starter";
       const wallet = input.walletsByOrg.get(organization.id);
@@ -670,13 +807,17 @@ function buildClientRows(input: {
       const used = toNumber(wallet?.lifetime_used_credits);
       const purchased = toNumber(wallet?.lifetime_purchased_credits);
       const balance = toNumber(wallet?.balance_credits);
+      const health = clientHealthLabel(organization, subscription, wallet, conversations);
+      const duplicateDetail = record.duplicateCount > 1
+        ? ` · ${formatInteger(record.duplicateCount - 1)} workspace(s) duplicado(s)`
+        : "";
 
       return {
         id: `CLI-${String(index + 1).padStart(3, "0")}`,
         company: organization.name,
         owner: owner?.full_name ?? owner?.email ?? owner?.company_name ?? "Responsavel nao identificado",
         plan: planLabel(planCode, input.planPrices),
-        health: clientHealthLabel(organization, subscription, wallet, conversations),
+        health: `${health}${duplicateDetail}`,
         mrr: formatMoney(subscription && !activeSubscriptionStatuses.has(subscription.status ?? "") ? 0 : planPrice(planCode, input.planPrices)),
         tokens: `${formatCompact(balance)} saldo / ${formatCompact(Math.max(purchased, used))} total`,
         agents: agents.length,
@@ -969,6 +1110,10 @@ function groupBy<T>(rows: T[], readKey: (row: T) => string) {
   return map;
 }
 
+function hasOrganizationId<T extends { organization_id: string | null }>(row: T): row is T & { organization_id: string } {
+  return Boolean(row.organization_id);
+}
+
 function clientHealthLabel(
   organization: OrganizationRow,
   subscription: SubscriptionRow | undefined,
@@ -1009,6 +1154,10 @@ function isActiveOrganization(status: string | null | undefined) {
 
 function isInactiveOrganization(status: string | null | undefined) {
   return inactiveOrganizationStatuses.has(status ?? "");
+}
+
+function isInternalOrganization(organization: OrganizationRow) {
+  return organization.plan_code === "internal" || organization.slug === "connectyhub-internal";
 }
 
 function paidPlanCode(planCode: string | null | undefined) {

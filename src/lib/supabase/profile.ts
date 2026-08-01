@@ -61,6 +61,15 @@ type OrganizationMembershipRow = {
   } | null;
 };
 
+type OwnedOrganizationRow = {
+  id: string;
+  name: string;
+  slug: string | null;
+  plan_code: string;
+  status: string;
+  created_at: string | null;
+};
+
 export async function getCurrentWorkspace(): Promise<CurrentWorkspace | null> {
   if (!isSupabaseAuthConfigured()) {
     return null;
@@ -121,6 +130,39 @@ export async function ensureStarterOrganization() {
     return workspace.organization;
   }
 
+  if (workspace.profile.isPlatformAdmin) {
+    return null;
+  }
+
+  const existingOrganization = await findExistingOwnedOrganization(supabase, workspace.user.id);
+
+  if (existingOrganization) {
+    await ensureOwnerMembership({
+      client: supabase,
+      organizationId: existingOrganization.id,
+      userId: workspace.user.id,
+    });
+
+    if (existingOrganization.plan_code === TRIAL_PLAN_CODE && signupComplete) {
+      if (existingOrganization.status === "trial_pending") {
+        await supabase
+          .from("organizations")
+          .update({ status: "trial", updated_at: new Date().toISOString() })
+          .eq("id", existingOrganization.id);
+        existingOrganization.status = "trial";
+      }
+
+      await ensureTrialSetup({
+        organizationId: existingOrganization.id,
+        userId: workspace.user.id,
+        optIn: workspace.profile.trialWhatsappOptIn,
+        client: supabase,
+      });
+    }
+
+    return mapOwnedOrganization(existingOrganization);
+  }
+
   const name = workspace.profile.companyName || workspace.profile.fullName || workspace.profile.email || "Minha empresa";
   const slug = slugify(name);
 
@@ -140,10 +182,10 @@ export async function ensureStarterOrganization() {
     return null;
   }
 
-  await supabase.from("organization_members").insert({
-    organization_id: organization.id,
-    user_id: workspace.user.id,
-    role: "owner",
+  await ensureOwnerMembership({
+    client: supabase,
+    organizationId: organization.id,
+    userId: workspace.user.id,
   });
 
   if (!workspace.profile.isPlatformAdmin) {
@@ -166,6 +208,59 @@ export async function ensureStarterOrganization() {
     }
   }
 
+  return {
+    id: organization.id,
+    name: organization.name,
+    slug: organization.slug,
+    planCode: organization.plan_code,
+    status: organization.status,
+    role: "owner",
+  };
+}
+
+async function findExistingOwnedOrganization(
+  client: Awaited<ReturnType<typeof createWorkspaceDataClient>>,
+  userId: string,
+) {
+  const { data } = await client
+    .from("organizations")
+    .select("id, name, slug, plan_code, status, created_at")
+    .eq("owner_id", userId)
+    .order("created_at", { ascending: true })
+    .limit(50);
+
+  const organizations = ((data ?? []) as OwnedOrganizationRow[])
+    .filter((organization) => organization.plan_code !== "internal");
+
+  return organizations.find((organization) => !isInactiveOrganizationStatus(organization.status))
+    ?? organizations[0]
+    ?? null;
+}
+
+async function ensureOwnerMembership(input: {
+  client: Awaited<ReturnType<typeof createWorkspaceDataClient>>;
+  organizationId: string;
+  userId: string;
+}) {
+  const { data } = await input.client
+    .from("organization_members")
+    .select("organization_id")
+    .eq("organization_id", input.organizationId)
+    .eq("user_id", input.userId)
+    .maybeSingle<{ organization_id: string }>();
+
+  if (data) {
+    return;
+  }
+
+  await input.client.from("organization_members").insert({
+    organization_id: input.organizationId,
+    user_id: input.userId,
+    role: "owner",
+  });
+}
+
+function mapOwnedOrganization(organization: OwnedOrganizationRow): CurrentOrganization {
   return {
     id: organization.id,
     name: organization.name,
@@ -336,6 +431,10 @@ function readAvatarUrl(user: User) {
 
 function readBoolean(value: unknown) {
   return value === true || value === "true";
+}
+
+function isInactiveOrganizationStatus(status: string | null | undefined) {
+  return ["archived", "blocked", "cancelled", "canceled"].includes(status ?? "");
 }
 
 async function createWorkspaceDataClient() {
