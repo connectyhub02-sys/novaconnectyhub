@@ -1,6 +1,7 @@
 import "server-only";
 
-import { createClient } from "@/lib/supabase/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { createServiceClient } from "@/lib/supabase/service";
 import type { SalesCatalogCommercialFlowType, SalesCatalogRevenueOwnerType } from "@/lib/sales-catalog/shared";
 import type { BillingProvider, UsageAgentScope, UsageBillingMode } from "./cost-center";
 
@@ -164,8 +165,9 @@ const agentScopeLabels: Record<string, string> = {
   unknown: "Sem escopo",
 };
 
-export async function getBillingAdminSummary(): Promise<BillingAdminSummary> {
-  const supabase = await createClient();
+export async function getBillingAdminSummary(
+  supabase: SupabaseClient = createServiceClient(),
+): Promise<BillingAdminSummary> {
   const generatedAt = new Date();
   const since = new Date();
   since.setDate(since.getDate() - 30);
@@ -390,7 +392,7 @@ export async function getBillingAdminSummary(): Promise<BillingAdminSummary> {
 }
 
 async function getCommerceRevenueSummary(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: SupabaseClient,
   sinceIso: string,
 ): Promise<CommerceRevenueSummary> {
   const [sessionsResult, commissionsResult] = await Promise.all([

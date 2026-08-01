@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, type ReactNode, useEffect, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import {
   Ban,
@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { NeonBadge, PageHeader, Panel } from "./panel-primitives";
 import { clearAdminImpersonationReturn, saveAdminImpersonationReturn } from "@/lib/admin-impersonation";
+import type { AdminUsersSnapshot } from "@/lib/admin/users";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
@@ -119,11 +120,15 @@ const STATUS_COLORS: Record<string, string> = {
   suspended: "text-rose-300 border-rose-400/30 bg-rose-400/10",
 };
 
-export function AdminUsersConsole() {
-  const [users, setUsers] = useState<PlatformUser[]>([]);
-  const [plans, setPlans] = useState<BillingPlanOption[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [notice, setNotice] = useState<Notice | null>(null);
+export function AdminUsersConsole({ initialSnapshot }: { initialSnapshot?: AdminUsersSnapshot }) {
+  const [users, setUsers] = useState<PlatformUser[]>(() => initialSnapshot?.users ?? []);
+  const [plans, setPlans] = useState<BillingPlanOption[]>(() => (initialSnapshot?.plans ?? []).filter((plan) => plan.status !== "archived"));
+  const [loading, setLoading] = useState(!initialSnapshot);
+  const [notice, setNotice] = useState<Notice | null>(() => (
+    initialSnapshot?.warnings.length
+      ? { tone: "warning", message: initialSnapshot.warnings.slice(0, 3).join(" / ") }
+      : null
+  ));
   const [actionUserId, setActionUserId] = useState<string | null>(null);
   const [linkUserId, setLinkUserId] = useState<string | null>(null);
   const [avatarUserId, setAvatarUserId] = useState<string | null>(null);
@@ -134,6 +139,10 @@ export function AdminUsersConsole() {
   const [search, setSearch] = useState("");
 
   useEffect(() => {
+    if (initialSnapshot) {
+      return;
+    }
+
     let cancelled = false;
 
     async function loadInitialData() {
@@ -142,7 +151,7 @@ export function AdminUsersConsole() {
           fetch("/api/admin/users", { cache: "no-store" }),
           fetch("/api/admin/billing/plans", { cache: "no-store" }),
         ]);
-        const usersData = (await usersResponse.json().catch(() => null)) as { users?: PlatformUser[]; error?: string } | null;
+        const usersData = (await usersResponse.json().catch(() => null)) as { users?: PlatformUser[]; warnings?: string[]; error?: string } | null;
         const plansData = (await plansResponse.json().catch(() => null)) as { plans?: BillingPlanOption[]; error?: string } | null;
 
         if (!usersResponse.ok || !usersData) {
@@ -156,6 +165,10 @@ export function AdminUsersConsole() {
         if (!cancelled) {
           setUsers(usersData.users ?? []);
           setPlans((plansData.plans ?? []).filter((plan) => plan.status !== "archived"));
+
+          if (usersData.warnings?.length) {
+            setNotice({ tone: "warning", message: usersData.warnings.slice(0, 3).join(" / ") });
+          }
         }
       } catch (error) {
         if (!cancelled) {
@@ -173,17 +186,21 @@ export function AdminUsersConsole() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [initialSnapshot]);
 
   async function refreshUsers() {
     const response = await fetch("/api/admin/users", { cache: "no-store" });
-    const data = (await response.json().catch(() => null)) as { users?: PlatformUser[]; error?: string } | null;
+    const data = (await response.json().catch(() => null)) as { users?: PlatformUser[]; warnings?: string[]; error?: string } | null;
 
     if (!response.ok || !data) {
       throw new Error(data?.error ?? "Nao foi possivel atualizar os usuarios.");
     }
 
     setUsers(data.users ?? []);
+
+    if (data.warnings?.length) {
+      setNotice({ tone: "warning", message: data.warnings.slice(0, 3).join(" / ") });
+    }
   }
 
   async function getAccessLink(userId: string): Promise<string | null> {
@@ -385,6 +402,7 @@ export function AdminUsersConsole() {
         );
       })
     : users;
+  const summary = useMemo(() => buildUsersSummary(users), [users]);
 
   return (
     <>
@@ -406,6 +424,15 @@ export function AdminUsersConsole() {
           {notice.message}
         </div>
       )}
+
+      <div className="mb-5 grid gap-2 sm:grid-cols-2 xl:grid-cols-6">
+        <UsersStatCard label="Usuarios" value={summary.totalUsers} tone="cyan" />
+        <UsersStatCard label="Admins" value={summary.platformAdmins} tone="amber" />
+        <UsersStatCard label="Empresas" value={summary.linkedOrganizations} tone="green" />
+        <UsersStatCard label="Ativas" value={summary.activeOrganizations} tone="green" />
+        <UsersStatCard label="Trial" value={summary.trialOrganizations} tone="amber" />
+        <UsersStatCard label="Bloqueadas" value={summary.blockedOrganizations} tone={summary.blockedOrganizations > 0 ? "rose" : "zinc"} />
+      </div>
 
       <Panel
         title={`${filtered.length} usuario${filtered.length !== 1 ? "s" : ""}`}
@@ -482,6 +509,62 @@ const CONTROL_ACTIONS: Array<{ action: ControlAction; label: string; description
   { action: "unblock_access", label: "Desbloquear", description: "Reativa o cliente.", icon: CheckCircle2 },
   { action: "update_limits", label: "Limites", description: "Ajusta recursos manuais.", icon: Settings2 },
 ];
+
+function UsersStatCard({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: number;
+  tone: "green" | "cyan" | "amber" | "rose" | "zinc";
+}) {
+  return (
+    <div
+      className="min-w-0 rounded-xl px-3 py-3"
+      style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
+    >
+      <p className="truncate font-mono text-[8px] uppercase tracking-[0.16em] text-slate-500">{label}</p>
+      <p className={cn("mt-1 truncate font-mono text-[20px] font-bold leading-none", statToneClass(tone))}>
+        {formatNumber(value)}
+      </p>
+    </div>
+  );
+}
+
+function buildUsersSummary(users: PlatformUser[]) {
+  const linkedOrganizationIds = new Set(users.map((user) => user.organizationId).filter(Boolean));
+
+  return {
+    totalUsers: users.length,
+    platformAdmins: users.filter((user) => user.isPlatformAdmin).length,
+    linkedOrganizations: linkedOrganizationIds.size,
+    activeOrganizations: countOrganizationsByStatus(users, ["active"]),
+    trialOrganizations: countOrganizationsByStatus(users, ["trial", "trial_pending"]),
+    blockedOrganizations: countOrganizationsByStatus(users, ["inactive", "suspended", "blocked", "archived"]),
+  };
+}
+
+function countOrganizationsByStatus(users: PlatformUser[], statuses: string[]) {
+  const ids = new Set<string>();
+  const statusSet = new Set(statuses);
+
+  for (const user of users) {
+    if (user.organizationId && user.orgStatus && statusSet.has(user.orgStatus)) {
+      ids.add(user.organizationId);
+    }
+  }
+
+  return ids.size;
+}
+
+function statToneClass(tone: "green" | "cyan" | "amber" | "rose" | "zinc") {
+  if (tone === "green") return "text-emerald-400";
+  if (tone === "cyan") return "text-cyan-400";
+  if (tone === "amber") return "text-amber-400";
+  if (tone === "rose") return "text-rose-400";
+  return "text-slate-400";
+}
 
 function CustomerControlModal({
   user,
@@ -745,6 +828,10 @@ function numberOrNull(value: string) {
 
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function formatNumber(value: number) {
+  return new Intl.NumberFormat("pt-BR").format(value);
 }
 
 function formatCredits(value: number) {

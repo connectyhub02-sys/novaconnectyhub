@@ -3,6 +3,7 @@ import { connection } from "next/server";
 import { AccessDenied } from "@/components/connectyhub-os/access-denied";
 import { AdminUsersConsole } from "@/components/connectyhub-os/admin-users-console";
 import { ConnectyShell } from "@/components/connectyhub-os/connecty-shell";
+import { getAdminUsersSnapshot } from "@/lib/admin/users";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 
 export const metadata: Metadata = {
@@ -18,6 +19,8 @@ export default async function AdminClientesPage() {
     return <AccessDenied />;
   }
 
+  const snapshot = await getAdminUsersSnapshot();
+
   return (
     <ConnectyShell
       activeHref="/admin/clientes"
@@ -26,7 +29,7 @@ export default async function AdminClientesPage() {
       userAvatarUrl={workspace.profile.avatarUrl}
       userLabel={workspace.profile.email ?? "CEO_HUMAN_ADM"}
     >
-      <AdminUsersConsole />
+      <AdminUsersConsole initialSnapshot={snapshot} />
     </ConnectyShell>
   );
 }
