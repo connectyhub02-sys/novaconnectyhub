@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { AccessDenied } from "@/components/connectyhub-os/access-denied";
 import { AdminConsole } from "@/components/connectyhub-os/admin-console";
+import { getAdminDashboardOverview } from "@/lib/admin/dashboard-overview";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { getAdminMarketingOverview } from "@/lib/tracking/admin-marketing";
 
@@ -16,7 +17,10 @@ export default async function AdminPage() {
     return <AccessDenied />;
   }
 
-  const marketing = await getAdminMarketingOverview();
+  const [overview, marketing] = await Promise.all([
+    getAdminDashboardOverview(),
+    getAdminMarketingOverview(),
+  ]);
 
-  return <AdminConsole userLabel={workspace.profile.email ?? "CEO_HUMAN_ADM"} marketing={marketing} />;
+  return <AdminConsole userLabel={workspace.profile.email ?? "CEO_HUMAN_ADM"} overview={overview} marketing={marketing} />;
 }

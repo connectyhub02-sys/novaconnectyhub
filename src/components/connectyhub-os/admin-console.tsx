@@ -16,16 +16,12 @@ import {
   Wrench,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import {
-  adminMetrics,
-  approvals,
-  auditEvents,
-  clients,
-  internalAgents,
-  maintenanceItems,
-  platformHealth,
-} from "@/lib/connectyhub-os-data";
+import type { AdminDashboardOverview } from "@/lib/admin/dashboard-overview";
+import type { Tone } from "@/lib/connectyhub-os-data";
+import type { AdminMarketingBucket, AdminMarketingOverview } from "@/lib/tracking/admin-marketing";
+import { cn } from "@/lib/utils";
 import { AreaChartPanel, BarChartPanel } from "./charts";
+import { ConnectyShell } from "./connecty-shell";
 import {
   AgentCard,
   CommandButton,
@@ -42,46 +38,35 @@ import {
   TelemetryFeed,
   toneClass,
 } from "./panel-primitives";
-import { ConnectyShell } from "./connecty-shell";
-import { cn } from "@/lib/utils";
-import type { AdminMarketingOverview, AdminMarketingBucket } from "@/lib/tracking/admin-marketing";
 
 const metricIcons = [CircleDollarSign, Coins, Users, ShieldCheck];
 
-const revenueData = [
-  { label: "Mar", value: 28000 },
-  { label: "Abr", value: 31000 },
-  { label: "Mai", value: 29500 },
-  { label: "Jun", value: 38000 },
-  { label: "Jul", value: 42000 },
-  { label: "Ago", value: 39000 },
-  { label: "Set", value: 47200 },
-];
-
-const clientsBarData = [
-  { label: "Seg", value: 8 },
-  { label: "Ter", value: 12 },
-  { label: "Qua", value: 7 },
-  { label: "Qui", value: 15 },
-  { label: "Sex", value: 11 },
-  { label: "Sáb", value: 4 },
-  { label: "Dom", value: 6 },
-];
+const infraIcons: Record<AdminDashboardOverview["infraStats"][number]["id"], LucideIcon> = {
+  audit: LockKeyhole,
+  database: DatabaseZap,
+  keys: KeyRound,
+  storage: ServerCog,
+};
 
 export function AdminConsole({
   userLabel = "CEO_HUMAN_ADM",
+  overview,
   marketing,
 }: {
   userLabel?: string;
+  overview: AdminDashboardOverview;
   marketing?: AdminMarketingOverview;
 }) {
+  const ceoTone = overview.ceoInsight.kpis.some((kpi) => kpi.tone === "amber" || kpi.tone === "rose")
+    ? "amber"
+    : "green";
+
   return (
     <ConnectyShell mode="admin" isPlatformAdmin userLabel={userLabel}>
-
       <PageHeader
-        eyebrow="ConnectyHub · Admin OS"
+        eyebrow="ConnectyHub / Admin OS"
         title="CRM Dashboard"
-        description="Acompanhe clientes, agentes, margem e operação autônoma da plataforma."
+        description="Acompanhe clientes, agentes, margem e operacao autonoma da plataforma."
         actions={
           <div className="flex gap-2">
             <button
@@ -89,98 +74,105 @@ export function AdminConsole({
               className="flex h-9 items-center gap-2 rounded-xl px-4 text-[12px] font-medium text-slate-400 transition hover:text-white"
               style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}
             >
-              Esta semana ↓
+              Atualizado {formatShortDate(overview.generatedAt)}
             </button>
             <button
               type="button"
               className="flex h-9 items-center gap-2 rounded-xl px-4 text-[12px] font-medium text-white"
               style={{ background: "var(--ch-accent)", color: "#000" }}
             >
-              ↓ Exportar dados
+              Exportar dados
             </button>
           </div>
         }
       />
 
-      {/* Status bar */}
-      <StatusBar items={platformHealth.map((h) => ({ label: h.name, status: h.status }))} />
+      <StatusBar items={overview.platformHealth.map((item) => ({ label: item.name, status: item.status }))} />
+
+      {overview.warnings.length ? (
+        <Panel
+          title="Alertas de dados"
+          eyebrow="consultas admin"
+          action={<NeonBadge tone="amber">{overview.warnings.length}</NeonBadge>}
+          className="mb-4"
+        >
+          <div className="grid gap-2 md:grid-cols-2">
+            {overview.warnings.slice(0, 4).map((warning) => (
+              <div
+                key={warning}
+                className="rounded-xl p-3 text-[11px] leading-4 text-amber-300"
+                style={{ background: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.22)" }}
+              >
+                {warning}
+              </div>
+            ))}
+          </div>
+        </Panel>
+      ) : null}
 
       {marketing && <AdminMarketingPanel marketing={marketing} />}
 
-      {/* Top row: Hero metric + bar chart + leads bar */}
       <div className="mb-4 grid gap-4 lg:grid-cols-3">
         <HeroMetricCard
           icon={Users}
           label="Total de Clientes"
-          value="142"
+          value={overview.hero.totalClients}
           sub1Label="Ativos"
-          sub1Value="128"
+          sub1Value={overview.hero.activeClients}
           sub2Label="Esta semana"
-          sub2Value="+11"
-          series={adminMetrics[2]?.series ?? [60, 75, 80, 95, 100, 110, 128]}
+          sub2Value={overview.hero.newClients7d}
+          series={overview.hero.series}
           accent="emerald"
         />
         <BarChartPanel
-          title="Tempo médio de ativação"
-          eyebrow="onboarding · dias"
-          data={clientsBarData}
+          title="Novos clientes"
+          eyebrow="cadastros / 7 dias"
+          data={overview.activationSeries}
           color="#34d399"
           filters={["1S", "1M", "3M"]}
         />
         <BarChartPanel
-          title="Leads por vendas"
-          eyebrow="leads · conversão"
-          data={[
-            { label: "Seg", value: 32 },
-            { label: "Ter", value: 48 },
-            { label: "Qua", value: 27 },
-            { label: "Qui", value: 55 },
-            { label: "Sex", value: 41 },
-            { label: "Sáb", value: 18 },
-            { label: "Dom", value: 22 },
-          ]}
+          title="Leads captados"
+          eyebrow="clientes / 7 dias"
+          data={overview.leadSeries}
           color="#22d3ee"
-          filters={["Esta semana ↓"]}
+          filters={["Esta semana"]}
         />
       </div>
 
-      {/* Revenue area chart */}
       <div className="mb-4">
         <AreaChartPanel
           title="Receita"
-          eyebrow="faturamento mensal · MRR"
-          value="R$ 47.200"
-          trend="+22%"
-          data={revenueData}
+          eyebrow="faturamento mensal / MRR"
+          value={overview.revenue.value}
+          trend={overview.revenue.trend}
+          data={overview.revenue.series}
           color="#34d399"
           filters={["1D", "1S", "1M", "6M", "1A", "TODOS"]}
         />
       </div>
 
-      {/* Metrics row */}
       <div className="mb-4 grid grid-cols-4 gap-1.5 sm:gap-2 md:gap-4">
-        {adminMetrics.map((metric, i) => (
-          <MetricCard key={metric.label} icon={metricIcons[i]} {...metric} />
+        {overview.metrics.map((metric, index) => (
+          <MetricCard key={metric.label} icon={metricIcons[index] ?? Activity} {...metric} />
         ))}
       </div>
 
-      {/* Leads management + Retention + Team Activity */}
       <div className="mb-4 grid gap-4 lg:grid-cols-3">
-        {/* Leads management */}
-        <Panel title="Gestão de Clientes" eyebrow="status · planos · saúde">
+        <Panel title="Gestao de Clientes" eyebrow="status / planos / saude">
           <div className="mb-4 flex gap-2">
-            {["Status", "Planos", "Saúde"].map((tab, i) => (
+            {["Status", "Planos", "Saude"].map((tab, index) => (
               <button
                 key={tab}
                 type="button"
                 className="rounded-lg px-3 py-1.5 font-mono text-[10px] uppercase tracking-wide transition"
-                style={i === 0 ? {
+                style={index === 0 ? {
                   background: "var(--ch-accent)",
-                  color:      "#000",
+                  color: "#000",
                 } : {
                   background: "var(--ch-surface-2)",
-                  border:     "1px solid var(--ch-border)",
-                  color:      "var(--ch-muted)",
+                  border: "1px solid var(--ch-border)",
+                  color: "var(--ch-muted)",
                 }}
               >
                 {tab}
@@ -188,173 +180,161 @@ export function AdminConsole({
             ))}
           </div>
           <div className="grid grid-cols-4 gap-1.5 sm:gap-2">
-            {[
-              ["Ativos",    "128", "green"],
-              ["Em setup",  "14",  "amber"],
-              ["Inativos",  "0",   "zinc"],
-              ["Convertidos","47", "cyan"],
-            ].map(([label, value, tone]) => (
+            {overview.clientStatus.map((item) => (
               <div
-                key={label}
+                key={item.label}
                 className="min-w-0 rounded-xl px-2 py-2 sm:p-3"
                 style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
               >
-                <div className="truncate font-mono text-[8px] uppercase tracking-[0.11em] text-slate-500 sm:text-[9px]">{label}</div>
-                <div className={cn(
-                  "mt-1 truncate font-mono text-[15px] font-bold leading-none sm:text-[20px]",
-                  tone === "green" ? "text-emerald-400" :
-                  tone === "amber" ? "text-amber-400" :
-                  tone === "cyan"  ? "text-cyan-400" : "text-slate-400"
-                )}>{value}</div>
-                <div className="font-mono text-[9px] text-slate-600">leads</div>
+                <div className="truncate font-mono text-[8px] uppercase tracking-[0.11em] text-slate-500 sm:text-[9px]">{item.label}</div>
+                <div className={cn("mt-1 truncate font-mono text-[15px] font-bold leading-none sm:text-[20px]", toneTextClass(item.tone))}>
+                  {item.value}
+                </div>
+                <div className="font-mono text-[9px] text-slate-600">{item.detail}</div>
               </div>
             ))}
           </div>
         </Panel>
 
-        {/* Retention */}
         <AreaChartPanel
-          title="Taxa de Retenção"
-          eyebrow="churn · renovação"
-          value="94.2%"
-          trend="+3.1%"
-          data={[
-            { label: "Jan", value: 88 },
-            { label: "Fev", value: 89 },
-            { label: "Mar", value: 91 },
-            { label: "Abr", value: 90 },
-            { label: "Mai", value: 92 },
-            { label: "Jun", value: 93 },
-            { label: "Jul", value: 94.2 },
-          ]}
+          title="Taxa de Retencao"
+          eyebrow="churn / renovacao"
+          value={overview.retention.value}
+          trend={overview.retention.trend}
+          data={overview.retention.series}
           color="#22d3ee"
           filters={["PME", "Startups", "Enterprise"]}
         />
 
-        {/* CEO activity */}
-        <Panel title="Atividade CEO IA" eyebrow="decisões · relatórios">
+        <Panel title="Atividade CEO IA" eyebrow="decisoes / relatorios">
           <div className="divide-y divide-white/5">
-            {[
-              { label: "Plano Growth otimizado",       time: "14:00", icon: "◈" },
-              { label: "Relatório de margem enviado",   time: "11:30", icon: "◆" },
-              { label: "3 upgrades aprovados",          time: "09:45", icon: "▲" },
-              { label: "Alerta de token disparado",     time: "08:20", icon: "⚡" },
-            ].map((item) => (
-              <div key={item.label} className="flex items-start justify-between gap-3 py-3 first:pt-0 last:pb-0">
-                <div className="flex items-start gap-2.5">
+            {overview.ceoActivity.length ? overview.ceoActivity.map((item) => (
+              <div key={`${item.time}-${item.label}`} className="flex items-start justify-between gap-3 py-3 first:pt-0 last:pb-0">
+                <div className="flex min-w-0 items-start gap-2.5">
                   <div
-                    className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-[10px]"
+                    className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg font-mono text-[10px]"
                     style={{ background: "rgba(52,211,153,0.12)", color: "#34d399" }}
                   >
                     {item.icon}
                   </div>
-                  <span className="text-[12px] text-slate-300">{item.label}</span>
+                  <span className="min-w-0 text-[12px] text-slate-300">{item.label}</span>
                 </div>
                 <span className="shrink-0 font-mono text-[10px] text-slate-600">{item.time}</span>
               </div>
-            ))}
+            )) : (
+              <p className="py-4 text-[12px] text-slate-500">Nenhuma decisao operacional registrada ainda.</p>
+            )}
           </div>
         </Panel>
       </div>
 
-      {/* Clients table */}
       <div className="mb-4">
         <Panel
           id="clientes"
-          title="Clientes · Planos · Margem"
-          eyebrow="contas SaaS · faturamento"
+          title="Clientes / Planos / Margem"
+          eyebrow="contas SaaS / faturamento"
           action={<CommandButton tone="cyan">Novo cliente</CommandButton>}
         >
-          <DataTable
-            columns={["Cliente", "Plano", "MRR", "Tokens", "Agentes", "Status"]}
-            rows={clients.map((c) => [
-              <div key="n">
-                <div className="text-[13px] font-medium text-white">{c.company}</div>
-                <div className="font-mono text-[10px] text-slate-600">{c.id} · {c.owner}</div>
-              </div>,
-              <span key="p" className="font-mono text-[11px] text-slate-400">{c.plan}</span>,
-              <span key="m" className="font-mono text-[12px] text-emerald-400">{c.mrr}</span>,
-              <span key="t" className="font-mono text-[11px] text-slate-500">{c.tokens}</span>,
-              <span key="a" className="font-mono text-[12px] text-slate-300">{c.agents}</span>,
-              <StatusBadge key="s" status={c.status} />,
-            ])}
-          />
+          {overview.clients.length ? (
+            <DataTable
+              columns={["Cliente", "Plano", "MRR", "Creditos", "Agentes", "Status"]}
+              rows={overview.clients.map((client) => [
+                <div key="client">
+                  <div className="text-[13px] font-medium text-white">{client.company}</div>
+                  <div className="font-mono text-[10px] text-slate-600">{client.id} / {client.owner}</div>
+                  <div className="font-mono text-[9px] text-slate-700">{client.health}</div>
+                </div>,
+                <span key="plan" className="font-mono text-[11px] text-slate-400">{client.plan}</span>,
+                <span key="mrr" className="font-mono text-[12px] text-emerald-400">{client.mrr}</span>,
+                <span key="credits" className="font-mono text-[11px] text-slate-500">{client.tokens}</span>,
+                <span key="agents" className="font-mono text-[12px] text-slate-300">{client.agents}</span>,
+                <StatusBadge key="status" status={client.status} />,
+              ])}
+            />
+          ) : (
+            <p className="py-6 text-[12px] text-slate-500">Nenhum cliente encontrado no banco.</p>
+          )}
         </Panel>
       </div>
 
-      {/* Agents + CEO report */}
       <div className="mb-4 grid gap-4 xl:grid-cols-[1fr_320px]">
         <Panel id="agentes" title="Agentes internos" eyebrow="empresa operada por IA">
-          <div className="grid gap-3 sm:grid-cols-2">
-            {internalAgents.map((agent) => (
-              <AgentCard
-                key={agent.name}
-                name={agent.name}
-                role={`${agent.sector} · ${agent.role}`}
-                status={agent.status}
-                accuracy={agent.accuracy}
-                current={agent.task}
-                accent="green"
-              />
-            ))}
-          </div>
+          {overview.internalAgents.length ? (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {overview.internalAgents.map((agent) => (
+                <AgentCard
+                  key={agent.name}
+                  name={agent.name}
+                  role={`${agent.sector} / ${agent.role}`}
+                  status={agent.status}
+                  accuracy={agent.accuracy}
+                  current={agent.task}
+                  accent="green"
+                />
+              ))}
+            </div>
+          ) : (
+            <p className="py-6 text-[12px] text-slate-500">Nenhum agente interno ou de cliente registrado ainda.</p>
+          )}
         </Panel>
 
-        <Panel title="CEO IA · Parecer" eyebrow="recomendações executivas">
-          <NeonBadge tone="green">Autonomia: 42%</NeonBadge>
-          <p className="mt-3 text-[13px] font-semibold leading-snug text-white">
-            A plataforma está pronta para escalar, mas precisa de aprovação humana em gastos.
-          </p>
+        <Panel title="CEO IA / Parecer" eyebrow="recomendacoes executivas">
+          <NeonBadge tone={ceoTone}>{overview.ceoInsight.autonomyLabel}</NeonBadge>
+          <p className="mt-3 text-[13px] font-semibold leading-snug text-white">{overview.ceoInsight.headline}</p>
           <div className="mt-4 space-y-2.5">
-            {[
-              "Subir budget em campanhas com lead score &gt; 78.",
-              "Alertar clientes que atingirem 85% dos tokens.",
-              "Oferecer upgrade para contas com ROAS &gt; 4x.",
-            ].map((item) => (
+            {overview.ceoInsight.recommendations.map((item) => (
               <div key={item} className="flex gap-2.5">
                 <div className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-emerald-500/15">
                   <Check className="h-2.5 w-2.5 text-emerald-400" />
                 </div>
-                <span className="text-[12px] leading-4 text-slate-400" dangerouslySetInnerHTML={{ __html: item }} />
+                <span className="text-[12px] leading-4 text-slate-400">{item}</span>
               </div>
             ))}
           </div>
           <div className="mt-4 grid grid-cols-3 gap-2">
-            <KpiStat label="Economia IA" value="R$7.8k" tone="green" />
-            <KpiStat label="Riscos"      value="23"     tone="amber" />
-            <KpiStat label="Upgrades"    value="11"     tone="cyan"  />
+            {overview.ceoInsight.kpis.map((kpi) => (
+              <KpiStat key={kpi.label} label={kpi.label} value={kpi.value} tone={kpi.tone} />
+            ))}
           </div>
-          <Panel
+
+          <div
             id="aprovacoes"
-            title="Aprovações pendentes"
-            eyebrow=""
-            action={<NeonBadge tone="amber">17</NeonBadge>}
-            className="mt-4"
+            className="mt-4 rounded-2xl"
+            style={{ background: "var(--ch-panel-2)", border: "1px solid var(--ch-border)" }}
           >
-            <div className="divide-y divide-white/5">
-              {approvals.slice(0, 3).map((a) => {
-                const t = toneClass(a.risk);
+            <div className="flex items-center justify-between gap-3 border-b border-white/5 px-3 py-3">
+              <div>
+                <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-600">controle humano</p>
+                <p className="text-[13px] font-semibold text-white">Aprovacoes pendentes</p>
+              </div>
+              <NeonBadge tone={overview.approvals.length ? "amber" : "green"}>{overview.approvals.length}</NeonBadge>
+            </div>
+            <div className="divide-y divide-white/5 p-3">
+              {overview.approvals.length ? overview.approvals.slice(0, 3).map((approval) => {
+                const colors = toneClass(approval.risk);
+
                 return (
-                  <div key={a.id} className="py-2.5 first:pt-0 last:pb-0">
+                  <div key={approval.id} className="py-2.5 first:pt-0 last:pb-0">
                     <div className="flex justify-between gap-2">
-                      <span className="font-mono text-[9px] text-slate-600">{a.id}</span>
-                      <span className={cn("font-mono text-[9px]", t.text)}>{a.submitted}</span>
+                      <span className="font-mono text-[9px] text-slate-600">{approval.id}</span>
+                      <span className={cn("font-mono text-[9px]", colors.text)}>{approval.submitted}</span>
                     </div>
-                    <div className="text-[12px] font-medium text-white">{a.client}</div>
-                    <p className="mt-0.5 text-[11px] text-slate-500">{a.request}</p>
+                    <div className="text-[12px] font-medium text-white">{approval.client}</div>
+                    <p className="mt-0.5 text-[11px] text-slate-500">{approval.request}</p>
                   </div>
                 );
-              })}
+              }) : (
+                <p className="py-4 text-[12px] text-slate-500">Nenhuma aprovacao pendente.</p>
+              )}
             </div>
-          </Panel>
+          </div>
         </Panel>
       </div>
 
-      {/* Maintenance + Audit */}
       <div className="grid gap-4 xl:grid-cols-[360px_1fr]">
-        <Panel id="manutencao" title="Sala de manutenção" eyebrow="APIs · webhooks · conexões">
+        <Panel id="manutencao" title="Sala de manutencao" eyebrow="APIs / webhooks / conexoes">
           <div className="grid gap-2 sm:grid-cols-2">
-            {maintenanceItems.map((item) => (
+            {overview.maintenanceItems.map((item) => (
               <div
                 key={item.area}
                 className="rounded-xl p-3"
@@ -372,39 +352,38 @@ export function AdminConsole({
           </div>
         </Panel>
 
-        <Panel id="auditoria" title="Auditoria viva" eyebrow="logs · custos · eventos">
+        <Panel id="auditoria" title="Auditoria viva" eyebrow="logs / custos / eventos">
           <div className="grid gap-4 lg:grid-cols-[1fr_200px]">
-            <TelemetryFeed items={auditEvents} />
+            {overview.auditEvents.length ? (
+              <TelemetryFeed items={overview.auditEvents} />
+            ) : (
+              <p className="py-6 text-[12px] text-slate-500">Nenhum evento recente de auditoria.</p>
+            )}
             <div className="space-y-2">
-              {[
-                [DatabaseZap, "Supabase",   "2.8 GB"],
-                [ServerCog,   "R2 Storage", "18.4 GB"],
-                [KeyRound,    "API Keys",   "36"],
-                [LockKeyhole, "Audit",      "100%"],
-              ].map(([Icon, label, value]) => {
-                const I = Icon as typeof Activity;
+              {overview.infraStats.map((stat) => {
+                const Icon = infraIcons[stat.id];
+
                 return (
                   <div
-                    key={label as string}
+                    key={stat.id}
                     className="flex items-center justify-between rounded-xl px-3 py-2.5"
                     style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
                   >
                     <div className="flex items-center gap-2">
-                      <I className="h-3.5 w-3.5 text-slate-600" />
-                      <span className="text-[11px] text-slate-400">{label as string}</span>
+                      <Icon className="h-3.5 w-3.5 text-slate-600" />
+                      <span className="text-[11px] text-slate-400">{stat.label}</span>
                     </div>
-                    <span className="font-mono text-[12px] text-white">{value as string}</span>
+                    <span className="font-mono text-[12px] text-white">{stat.value}</span>
                   </div>
                 );
               })}
               <div className="mt-2 rounded-xl p-3" style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}>
-                <LoadingLine label="Calculando margem de tokens" />
+                <LoadingLine label="Calculando margem operacional" />
               </div>
             </div>
           </div>
         </Panel>
       </div>
-
     </ConnectyShell>
   );
 }
@@ -415,11 +394,9 @@ function AdminMarketingPanel({ marketing }: { marketing: AdminMarketingOverview 
       title="Marketing e rastreamento"
       eyebrow="plataforma / clientes / leads"
       action={
-        <div className="flex items-center gap-2">
-          <NeonBadge tone={marketing.warnings.length ? "amber" : "green"}>
-            {marketing.warnings.length ? "Aguardando dados" : "Ao vivo"}
-          </NeonBadge>
-        </div>
+        <NeonBadge tone={marketing.warnings.length ? "amber" : "green"}>
+          {marketing.warnings.length ? "Aguardando dados" : "Ao vivo"}
+        </NeonBadge>
       }
       className="mb-4"
     >
@@ -455,6 +432,7 @@ function AdminMarketingPanel({ marketing }: { marketing: AdminMarketingOverview 
           <div className="divide-y divide-white/5">
             {marketing.recentEvents.length ? marketing.recentEvents.map((event) => {
               const tone = toneClass(event.tone);
+
               return (
                 <div key={event.id} className="flex items-start justify-between gap-3 py-2.5 first:pt-0 last:pb-0">
                   <div className="min-w-0">
@@ -503,9 +481,10 @@ function MarketingStat({
   icon: LucideIcon;
   label: string;
   value: number;
-  tone: "green" | "cyan" | "amber" | "rose" | "zinc";
+  tone: Tone;
 }) {
   const colors = toneClass(tone);
+
   return (
     <div
       className="min-w-0 rounded-xl px-2 py-2 sm:p-3"
@@ -541,6 +520,15 @@ function MarketingBucketList({ title, items }: { title: string; items: AdminMark
       </div>
     </div>
   );
+}
+
+function toneTextClass(tone: Tone) {
+  if (tone === "green") return "text-emerald-400";
+  if (tone === "amber") return "text-amber-400";
+  if (tone === "cyan") return "text-cyan-400";
+  if (tone === "rose") return "text-rose-400";
+  if (tone === "violet") return "text-violet-400";
+  return "text-slate-400";
 }
 
 function formatNumber(value: number) {
