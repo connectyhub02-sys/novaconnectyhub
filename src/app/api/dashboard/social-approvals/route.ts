@@ -6,6 +6,7 @@ import {
   reviewClientSocialApproval,
 } from "@/lib/client-os/social-approvals";
 import { assertBillableAccess, BillingAccessError } from "@/lib/billing/trial";
+import { currentOrganizationToClientCompany } from "@/lib/client-os/current-company";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 
 export const dynamic = "force-dynamic";
@@ -19,9 +20,22 @@ export async function GET() {
   }
 
   try {
+    if (!workspace.organization?.id) {
+      return NextResponse.json({ error: "Empresa obrigatoria." }, { status: 400 });
+    }
+
+    const company = currentOrganizationToClientCompany(workspace.organization);
     const [approvals, dispatchMonitor] = await Promise.all([
-      listClientSocialApprovals({ userId: workspace.user.id }),
-      listClientSocialDispatchMonitor({ userId: workspace.user.id }),
+      listClientSocialApprovals({
+        userId: workspace.user.id,
+        organizationId: workspace.organization.id,
+        company,
+      }),
+      listClientSocialDispatchMonitor({
+        userId: workspace.user.id,
+        organizationId: workspace.organization.id,
+        company,
+      }),
     ]);
 
     return NextResponse.json({ approvals, dispatchMonitor });
@@ -60,12 +74,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Empresa obrigatoria." }, { status: 400 });
     }
 
+    const company = currentOrganizationToClientCompany(workspace.organization);
     await assertBillableAccess({ organizationId: workspace.organization.id });
 
     if (action === "retry_dispatch") {
       const result = await retryClientSocialDispatch({
         userId: workspace.user.id,
         runId: typeof body?.runId === "string" ? body.runId : "",
+        company,
       });
 
       return NextResponse.json(result);
@@ -77,6 +93,7 @@ export async function POST(request: NextRequest) {
       action,
       responseText: body?.responseText,
       note: body?.note,
+      company,
     });
 
     return NextResponse.json(result);

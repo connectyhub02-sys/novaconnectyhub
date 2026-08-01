@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { ConnectyShell } from "@/components/connectyhub-os/connecty-shell";
 import { LeadCrmConsole } from "@/components/connectyhub-os/leads-crm-console";
+import { currentOrganizationToClientCompany } from "@/lib/client-os/current-company";
 import { getClientLeadCrmWorkspace } from "@/lib/client-os/leads-crm";
 import {
   listClientSocialApprovals,
@@ -29,9 +30,22 @@ export default async function ConversationsPage() {
 
   const profile = workspace.profile;
   const organization = workspace.organization;
-  const leadWorkspace = await getClientLeadCrmWorkspace({ userId: workspace.user.id });
-  const socialApprovals = await listClientSocialApprovals({ userId: workspace.user.id }).catch(() => []);
-  const socialDispatchMonitor = await listClientSocialDispatchMonitor({ userId: workspace.user.id }).catch(() => null);
+  const company = currentOrganizationToClientCompany(organization);
+  const leadWorkspace = await getClientLeadCrmWorkspace({
+    userId: workspace.user.id,
+    organizationId: organization.id,
+    company,
+  });
+  const socialApprovals = await listClientSocialApprovals({
+    userId: workspace.user.id,
+    organizationId: organization.id,
+    company,
+  }).catch(() => []);
+  const socialDispatchMonitor = await listClientSocialDispatchMonitor({
+    userId: workspace.user.id,
+    organizationId: organization.id,
+    company,
+  }).catch(() => null);
 
   return (
     <ConnectyShell

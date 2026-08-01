@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { ClientDashboard } from "@/components/connectyhub-os/client-dashboard";
+import { currentOrganizationToClientCompany } from "@/lib/client-os/current-company";
 import { getClientDashboardOverview } from "@/lib/client-os/dashboard-overview";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 
@@ -35,20 +36,11 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
 
   const profile = workspace.profile;
   const organization = workspace.organization;
+  const company = currentOrganizationToClientCompany(organization);
   const overview = await getClientDashboardOverview({
     userId: workspace.user.id,
     organizationId: organization?.id,
-    company: organization
-      ? {
-          id: organization.id,
-          name: organization.name,
-          slug: organization.slug,
-          planCode: organization.planCode,
-          status: organization.status,
-          role: organization.role,
-          createdAt: null,
-        }
-      : null,
+    company,
   });
 
   return (

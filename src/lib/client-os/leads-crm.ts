@@ -228,6 +228,8 @@ export type ClientLeadCrmWorkspace = {
 
 export async function getClientLeadCrmWorkspace(input: {
   userId: string;
+  organizationId?: string | null;
+  company?: ClientCompany | null;
   client?: SupabaseClient;
 }): Promise<ClientLeadCrmWorkspace> {
   const client = input.client ?? createServiceClient();
@@ -239,9 +241,19 @@ export async function getClientLeadCrmWorkspace(input: {
     return buildEmptyWorkspace([], [toLoadWarning("empresas", error)]);
   }
 
+  const resolvedCompanies = resolveClientWorkspaceCompanies({
+    companies,
+    organizationId: input.organizationId,
+    company: input.company,
+  });
+
+  if (resolvedCompanies.warning) {
+    return buildEmptyWorkspace(resolvedCompanies.companies, [resolvedCompanies.warning]);
+  }
+
   return getLeadCrmWorkspaceForCompanies({
     client,
-    companies,
+    companies: resolvedCompanies.companies,
   });
 }
 
@@ -301,6 +313,54 @@ function buildEmptyWorkspace(companies: ClientCompany[], warnings: string[] = []
   };
 }
 
+function resolveClientWorkspaceCompanies(input: {
+  companies: ClientCompany[];
+  organizationId?: string | null;
+  company?: ClientCompany | null;
+}) {
+  let companies = input.companies;
+  const trustedCompany = input.company ?? null;
+
+  if (trustedCompany && input.organizationId && trustedCompany.id !== input.organizationId) {
+    return {
+      companies: [],
+      warning: "Empresa selecionada nao corresponde ao workspace atual.",
+    };
+  }
+
+  if (trustedCompany) {
+    if (!companies.some((company) => company.id === trustedCompany.id)) {
+      companies = [trustedCompany, ...companies];
+    }
+
+    return {
+      companies: [trustedCompany],
+      warning: null,
+    };
+  }
+
+  if (input.organizationId) {
+    const selectedCompany = companies.find((company) => company.id === input.organizationId) ?? null;
+
+    if (!selectedCompany) {
+      return {
+        companies: [],
+        warning: "Empresa selecionada nao esta vinculada a sua conta.",
+      };
+    }
+
+    return {
+      companies: [selectedCompany],
+      warning: null,
+    };
+  }
+
+  return {
+    companies,
+    warning: null,
+  };
+}
+
 async function getLeadCrmWorkspaceForCompanies(input: {
   client: SupabaseClient;
   companies: ClientCompany[];
@@ -343,6 +403,7 @@ async function getLeadCrmWorkspaceForCompanies(input: {
         ? input.client
             .from("conversations")
             .select("id, organization_id, lead_id, whatsapp_instance_id, channel, provider, provider_chat_id, status, last_message_preview, last_message_at, metadata, created_at, updated_at")
+            .in("organization_id", companyIds)
             .in("lead_id", leadIds)
             .order("updated_at", { ascending: false })
             .limit(Math.max(240, (input.leadLimit ?? 160) * 2))
@@ -392,6 +453,7 @@ async function getLeadCrmWorkspaceForCompanies(input: {
       const messagesResult = await input.client
         .from("conversation_messages")
         .select("id, organization_id, conversation_id, lead_id, whatsapp_instance_id, provider, provider_message_id, provider_chat_id, direction, message_type, text_content, payload, occurred_at, created_at")
+        .in("organization_id", companyIds)
         .in("conversation_id", conversationIds)
         .order("occurred_at", { ascending: true })
         .limit(Math.max(1200, conversationIds.length * 30));
@@ -502,9 +564,11 @@ async function syncMissingLeadAvatarsForCrm(input: {
     return updatedMetadata;
   }
 
+  const organizationIds = Array.from(new Set(input.leads.map((lead) => lead.organization_id).filter(Boolean)));
   const { data, error } = await input.client
     .from("whatsapp_instances")
     .select("id, instance_token_encrypted, metadata")
+    .in("organization_id", organizationIds)
     .in("id", instanceIds);
 
   if (error) {

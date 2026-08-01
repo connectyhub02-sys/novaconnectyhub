@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { ConnectyShell } from "@/components/connectyhub-os/connecty-shell";
 import { LeadCrmConsole } from "@/components/connectyhub-os/leads-crm-console";
+import { currentOrganizationToClientCompany } from "@/lib/client-os/current-company";
 import { getClientLeadCrmWorkspace } from "@/lib/client-os/leads-crm";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 
@@ -25,7 +26,11 @@ export default async function LeadsPage() {
 
   const profile = workspace.profile;
   const organization = workspace.organization;
-  const leadWorkspace = await getClientLeadCrmWorkspace({ userId: workspace.user.id });
+  const leadWorkspace = await getClientLeadCrmWorkspace({
+    userId: workspace.user.id,
+    organizationId: organization.id,
+    company: currentOrganizationToClientCompany(organization),
+  });
 
   return (
     <ConnectyShell

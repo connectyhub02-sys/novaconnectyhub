@@ -40,6 +40,7 @@ type AgentRunRow = {
 
 type AgentRow = {
   id: string;
+  organization_id: string | null;
   name: string;
   persona_name: string | null;
   avatar_url: string | null;
@@ -47,6 +48,7 @@ type AgentRow = {
 
 type LeadRow = {
   id: string;
+  organization_id: string | null;
   display_name: string | null;
   phone_number: string | null;
   status: string | null;
@@ -56,6 +58,7 @@ type LeadRow = {
 
 type ConversationRow = {
   id: string;
+  organization_id: string | null;
   channel: string | null;
   provider: string | null;
   provider_chat_id: string | null;
@@ -67,6 +70,7 @@ type ConversationRow = {
 
 type MessageRow = {
   id: string;
+  organization_id: string | null;
   direction: string | null;
   message_type: string | null;
   text_content: string | null;
@@ -172,13 +176,60 @@ const socialApprovalTriggerSources = [
   metaSocialCommentReceivedEventName,
 ];
 
+function resolveClientSocialCompanies(input: {
+  companies: ClientCompany[];
+  organizationId?: string | null;
+  company?: ClientCompany | null;
+}) {
+  const trustedCompany = input.company ?? null;
+
+  if (trustedCompany && input.organizationId && trustedCompany.id !== input.organizationId) {
+    return [];
+  }
+
+  if (trustedCompany) {
+    return [trustedCompany];
+  }
+
+  if (input.organizationId) {
+    const selectedCompany = input.companies.find((company) => company.id === input.organizationId);
+    return selectedCompany ? [selectedCompany] : [];
+  }
+
+  return input.companies;
+}
+
+async function assertClientSocialRunAccess(input: {
+  userId: string;
+  organizationId: string;
+  company?: ClientCompany | null;
+  client: SupabaseClient;
+}) {
+  if (input.company?.id === input.organizationId) {
+    return;
+  }
+
+  await requireClientCompanyAccess({
+    userId: input.userId,
+    companyId: input.organizationId,
+    client: input.client,
+  });
+}
+
 export async function listClientSocialApprovals(input: {
   userId: string;
+  organizationId?: string | null;
+  company?: ClientCompany | null;
   client?: SupabaseClient;
   limit?: number;
 }): Promise<ClientSocialApproval[]> {
   const client = input.client ?? createServiceClient();
-  const companies = await listClientCompanies(input.userId, client);
+  const listedCompanies = await listClientCompanies(input.userId, client);
+  const companies = resolveClientSocialCompanies({
+    companies: listedCompanies,
+    organizationId: input.organizationId,
+    company: input.company,
+  });
   const companyIds = companies.map((company) => company.id);
 
   if (!companyIds.length) {
@@ -206,10 +257,10 @@ export async function listClientSocialApprovals(input: {
   }
 
   const [agents, leads, conversations, messages] = await Promise.all([
-    loadAgents(client, uniqueStrings(runs.map((run) => run.agent_id))),
-    loadLeads(client, uniqueStrings(runs.map((run) => asString(readRecord(run.metadata)?.leadId)))),
-    loadConversations(client, uniqueStrings(runs.map((run) => asString(readRecord(run.metadata)?.conversationId)))),
-    loadMessages(client, uniqueStrings(runs.map((run) => asString(readRecord(run.metadata)?.messageId)))),
+    loadAgents(client, uniqueStrings(runs.map((run) => run.agent_id)), companyIds),
+    loadLeads(client, uniqueStrings(runs.map((run) => asString(readRecord(run.metadata)?.leadId))), companyIds),
+    loadConversations(client, uniqueStrings(runs.map((run) => asString(readRecord(run.metadata)?.conversationId))), companyIds),
+    loadMessages(client, uniqueStrings(runs.map((run) => asString(readRecord(run.metadata)?.messageId))), companyIds),
   ]);
 
   const companyById = new Map(companies.map((company) => [company.id, company]));
@@ -227,11 +278,18 @@ export async function listClientSocialApprovals(input: {
 
 export async function listClientSocialDispatchMonitor(input: {
   userId: string;
+  organizationId?: string | null;
+  company?: ClientCompany | null;
   client?: SupabaseClient;
   limit?: number;
 }): Promise<ClientSocialDispatchMonitor> {
   const client = input.client ?? createServiceClient();
-  const companies = await listClientCompanies(input.userId, client);
+  const listedCompanies = await listClientCompanies(input.userId, client);
+  const companies = resolveClientSocialCompanies({
+    companies: listedCompanies,
+    organizationId: input.organizationId,
+    company: input.company,
+  });
   const companyIds = companies.map((company) => company.id);
 
   if (!companyIds.length) {
@@ -259,9 +317,9 @@ export async function listClientSocialDispatchMonitor(input: {
   }
 
   const [agents, leads, conversations] = await Promise.all([
-    loadAgents(client, uniqueStrings(runs.map((run) => run.agent_id))),
-    loadLeads(client, uniqueStrings(runs.map((run) => asString(readRecord(run.metadata)?.leadId)))),
-    loadConversations(client, uniqueStrings(runs.map((run) => asString(readRecord(run.metadata)?.conversationId)))),
+    loadAgents(client, uniqueStrings(runs.map((run) => run.agent_id)), companyIds),
+    loadLeads(client, uniqueStrings(runs.map((run) => asString(readRecord(run.metadata)?.leadId))), companyIds),
+    loadConversations(client, uniqueStrings(runs.map((run) => asString(readRecord(run.metadata)?.conversationId))), companyIds),
   ]);
   const companyById = new Map(companies.map((company) => [company.id, company]));
   const items = runs
@@ -279,6 +337,7 @@ export async function listClientSocialDispatchMonitor(input: {
 export async function retryClientSocialDispatch(input: {
   userId: string;
   runId: string;
+  company?: ClientCompany | null;
   client?: SupabaseClient;
 }): Promise<ClientSocialDispatchRetryResult> {
   const client = input.client ?? createServiceClient();
@@ -288,9 +347,10 @@ export async function retryClientSocialDispatch(input: {
     throw new Error("Envio social Meta nao encontrado.");
   }
 
-  await requireClientCompanyAccess({
+  await assertClientSocialRunAccess({
     userId: input.userId,
-    companyId: run.organization_id,
+    organizationId: run.organization_id,
+    company: input.company,
     client,
   });
 
@@ -362,6 +422,7 @@ export async function reviewClientSocialApproval(input: {
   action: "approve" | "reject";
   responseText?: unknown;
   note?: unknown;
+  company?: ClientCompany | null;
   client?: SupabaseClient;
 }): Promise<ClientSocialApprovalReviewResult> {
   const client = input.client ?? createServiceClient();
@@ -375,9 +436,10 @@ export async function reviewClientSocialApproval(input: {
     throw new Error("Esta aprovacao social ja foi revisada.");
   }
 
-  await requireClientCompanyAccess({
+  await assertClientSocialRunAccess({
     userId: input.userId,
-    companyId: run.organization_id,
+    organizationId: run.organization_id,
+    company: input.company,
     client,
   });
 
@@ -670,45 +732,49 @@ async function loadAgentRun(client: SupabaseClient, runId: string) {
   return data ?? null;
 }
 
-async function loadAgents(client: SupabaseClient, ids: string[]) {
+async function loadAgents(client: SupabaseClient, ids: string[], organizationIds: string[]) {
   if (!ids.length) return new Map<string, AgentRow>();
 
   const { data } = await client
     .from("agent_registry")
-    .select("id, name, persona_name, avatar_url")
+    .select("id, organization_id, name, persona_name, avatar_url")
+    .in("organization_id", organizationIds)
     .in("id", ids);
 
   return new Map(((data ?? []) as AgentRow[]).map((row) => [row.id, row]));
 }
 
-async function loadLeads(client: SupabaseClient, ids: string[]) {
+async function loadLeads(client: SupabaseClient, ids: string[], organizationIds: string[]) {
   if (!ids.length) return new Map<string, LeadRow>();
 
   const { data } = await client
     .from("leads")
-    .select("id, display_name, phone_number, status, source, metadata")
+    .select("id, organization_id, display_name, phone_number, status, source, metadata")
+    .in("organization_id", organizationIds)
     .in("id", ids);
 
   return new Map(((data ?? []) as LeadRow[]).map((row) => [row.id, row]));
 }
 
-async function loadConversations(client: SupabaseClient, ids: string[]) {
+async function loadConversations(client: SupabaseClient, ids: string[], organizationIds: string[]) {
   if (!ids.length) return new Map<string, ConversationRow>();
 
   const { data } = await client
     .from("conversations")
-    .select("id, channel, provider, provider_chat_id, status, last_message_preview, last_message_at, metadata")
+    .select("id, organization_id, channel, provider, provider_chat_id, status, last_message_preview, last_message_at, metadata")
+    .in("organization_id", organizationIds)
     .in("id", ids);
 
   return new Map(((data ?? []) as ConversationRow[]).map((row) => [row.id, row]));
 }
 
-async function loadMessages(client: SupabaseClient, ids: string[]) {
+async function loadMessages(client: SupabaseClient, ids: string[], organizationIds: string[]) {
   if (!ids.length) return new Map<string, MessageRow>();
 
   const { data } = await client
     .from("conversation_messages")
-    .select("id, direction, message_type, text_content, occurred_at")
+    .select("id, organization_id, direction, message_type, text_content, occurred_at")
+    .in("organization_id", organizationIds)
     .in("id", ids);
 
   return new Map(((data ?? []) as MessageRow[]).map((row) => [row.id, row]));
