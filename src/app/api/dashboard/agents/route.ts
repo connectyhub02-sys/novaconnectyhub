@@ -6,6 +6,7 @@ import {
 } from "@/lib/account/signup-completion";
 import { cloneClientAgent, createClientAgent, deleteClientAgent, getClientAgentsWorkspace, updateClientAgent } from "@/lib/client-os/agents";
 import { BillingAccessError } from "@/lib/billing/trial";
+import { currentOrganizationToClientCompany } from "@/lib/client-os/current-company";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
 
@@ -20,7 +21,11 @@ export async function GET() {
   }
 
   try {
-    const data = await getClientAgentsWorkspace(workspace.user.id);
+    const data = await getClientAgentsWorkspace({
+      userId: workspace.user.id,
+      organizationId: workspace.organization?.id,
+      company: currentOrganizationToClientCompany(workspace.organization),
+    });
     return NextResponse.json(data);
   } catch (error) {
     return NextResponse.json(formatError(error), { status: 500 });
@@ -46,12 +51,15 @@ export async function POST(request: NextRequest) {
 
   try {
     await assertAccountComplete({ userId: workspace.user.id, client: createServiceClient() });
+    const companyId = typeof body?.companyId === "string" && body.companyId.trim()
+      ? body.companyId
+      : workspace.organization?.id ?? "";
 
     if (body?.action === "clone") {
       const agent = await cloneClientAgent({
         userId: workspace.user.id,
         sourceAgentId: typeof body?.sourceAgentId === "string" ? body.sourceAgentId : "",
-        companyId: typeof body?.companyId === "string" ? body.companyId : "",
+        companyId,
         name: typeof body?.name === "string" ? body.name : undefined,
         sectorName: typeof body?.sectorName === "string" ? body.sectorName : undefined,
         roleTitle: typeof body?.roleTitle === "string" ? body.roleTitle : undefined,
@@ -63,7 +71,7 @@ export async function POST(request: NextRequest) {
 
     const agent = await createClientAgent({
       userId: workspace.user.id,
-      companyId: typeof body?.companyId === "string" ? body.companyId : "",
+      companyId,
       name: typeof body?.name === "string" ? body.name : "",
       sectorName: typeof body?.sectorName === "string" ? body.sectorName : undefined,
       roleTitle: typeof body?.roleTitle === "string" ? body.roleTitle : undefined,
@@ -94,11 +102,14 @@ export async function PATCH(request: NextRequest) {
 
   try {
     await assertAccountComplete({ userId: workspace.user.id, client: createServiceClient() });
+    const companyId = typeof body?.companyId === "string" && body.companyId.trim()
+      ? body.companyId
+      : workspace.organization?.id ?? "";
 
     const agent = await updateClientAgent({
       userId: workspace.user.id,
       agentId: typeof body?.agentId === "string" ? body.agentId : "",
-      companyId: typeof body?.companyId === "string" ? body.companyId : "",
+      companyId,
       name: typeof body?.name === "string" ? body.name : "",
       sectorName: typeof body?.sectorName === "string" ? body.sectorName : undefined,
       roleTitle: typeof body?.roleTitle === "string" ? body.roleTitle : undefined,

@@ -2,7 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getClientAgentsWorkspace, type ClientAgent } from "@/lib/client-os/agents";
 import { meterGeminiGenerationUsage } from "@/lib/billing/gemini-metering";
 import { assertBillableAccess, BillingAccessError } from "@/lib/billing/trial";
-import { requireClientCompanyAccess, type ClientCompany } from "@/lib/client-os/companies";
+import type { ClientCompany } from "@/lib/client-os/companies";
+import { currentOrganizationToClientCompany } from "@/lib/client-os/current-company";
 import { inngest } from "@/lib/inngest/client";
 import { getCurrentWorkspace, type CurrentOrganization } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
@@ -249,40 +250,37 @@ async function requireWorkspaceContext(
     return NextResponse.json({ error: "Sessao obrigatoria." }, { status: 401 });
   }
 
-  const { companies, agents } = await getClientAgentsWorkspace(workspace.user.id);
+  if (!workspace.organization) {
+    return allowMissingCompany ? null : NextResponse.json({ error: "Cadastre uma empresa antes de usar canais do WhatsApp." }, { status: 422 });
+  }
+
+  if (requestedCompanyId && requestedCompanyId !== workspace.organization.id) {
+    return NextResponse.json({ error: "Empresa fora do workspace atual." }, { status: 422 });
+  }
+
+  const { companies, agents } = await getClientAgentsWorkspace({
+    userId: workspace.user.id,
+    organizationId: workspace.organization.id,
+    company: currentOrganizationToClientCompany(workspace.organization),
+  });
 
   if (companies.length === 0) {
     return allowMissingCompany ? null : NextResponse.json({ error: "Cadastre uma empresa antes de usar canais do WhatsApp." }, { status: 422 });
   }
 
-  const selectedAgent = resolveSelectedAgent(agents, requestedAgentId, requestedCompanyId);
+  const selectedAgent = resolveSelectedAgent(agents, requestedAgentId, workspace.organization.id);
 
   if (requestedAgentId && !selectedAgent) {
     return NextResponse.json({ error: "Escolha um agente vinculado a sua conta." }, { status: 422 });
   }
 
-  const companyId = selectedAgent?.companyId || requestedCompanyId || companies[0]?.id;
-
-  if (!companyId) {
-    return allowMissingCompany ? null : NextResponse.json({ error: "Escolha uma empresa." }, { status: 422 });
-  }
-
-  try {
-    const organization = await requireClientCompanyAccess({
-      userId: workspace.user.id,
-      companyId,
-    });
-
-    return {
-      organization,
-      userId: workspace.user.id,
-      companies,
-      agents,
-      selectedAgentId: selectedAgent?.id ?? null,
-    };
-  } catch (error) {
-    return NextResponse.json(formatError(error), { status: 422 });
-  }
+  return {
+    organization: workspace.organization,
+    userId: workspace.user.id,
+    companies,
+    agents,
+    selectedAgentId: selectedAgent?.id ?? null,
+  };
 }
 
 function resolveSelectedAgent(agents: ClientAgent[], requestedAgentId: string | null, requestedCompanyId: string | null) {

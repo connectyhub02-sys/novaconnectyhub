@@ -85,8 +85,23 @@ const maxPromptLength = 8000;
 const agentListSelectColumns = "id, organization_id, sector_code, sector_name, agent_code, name, persona_name, role_title, description, prompt, status, autonomy_level, updated_at, created_at";
 const agentFullSelectColumns = `${agentListSelectColumns}, avatar_url, avatar_alt, profile_bio, llm_provider, model_id, requires_human_approval, tools, triggers, schedule_rrule, inngest_event_name, memory_access_level, monthly_budget_credits, metadata`;
 
-export async function getClientAgentsWorkspace(userId: string, client: SupabaseClient = createServiceClient()) {
-  const companies = await listClientCompanies(userId, client);
+export async function getClientAgentsWorkspace(
+  input: string | {
+    userId: string;
+    organizationId?: string | null;
+    company?: ClientCompany | null;
+    client?: SupabaseClient;
+  },
+  fallbackClient: SupabaseClient = createServiceClient(),
+) {
+  const userId = typeof input === "string" ? input : input.userId;
+  const client = typeof input === "string" ? fallbackClient : input.client ?? createServiceClient();
+  const listedCompanies = await listClientCompanies(userId, client);
+  const companies = resolveClientAgentCompanies({
+    companies: listedCompanies,
+    organizationId: typeof input === "string" ? null : input.organizationId,
+    company: typeof input === "string" ? null : input.company,
+  });
   const companyIds = companies.map((company) => company.id);
 
   if (companyIds.length === 0) {
@@ -109,6 +124,29 @@ export async function getClientAgentsWorkspace(userId: string, client: SupabaseC
   const agents = ((data ?? []) as AgentRow[]).map((agent) => mapAgent(agent, companyById));
 
   return { companies, agents };
+}
+
+function resolveClientAgentCompanies(input: {
+  companies: ClientCompany[];
+  organizationId?: string | null;
+  company?: ClientCompany | null;
+}) {
+  const trustedCompany = input.company ?? null;
+
+  if (trustedCompany && input.organizationId && trustedCompany.id !== input.organizationId) {
+    return [];
+  }
+
+  if (trustedCompany) {
+    return [trustedCompany];
+  }
+
+  if (input.organizationId) {
+    const selectedCompany = input.companies.find((company) => company.id === input.organizationId);
+    return selectedCompany ? [selectedCompany] : [];
+  }
+
+  return input.companies;
 }
 
 export async function createClientAgent(input: {
