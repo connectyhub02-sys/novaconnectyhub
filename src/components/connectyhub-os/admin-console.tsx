@@ -278,7 +278,7 @@ export function AdminConsole({
           )}
         </Panel>
 
-        <Panel title="CEO IA / Parecer" eyebrow="recomendacoes executivas">
+        <Panel id="ceo" title="CEO IA / Parecer" eyebrow="recomendacoes executivas">
           <NeonBadge tone={ceoTone}>{overview.ceoInsight.autonomyLabel}</NeonBadge>
           <p className="mt-3 text-[13px] font-semibold leading-snug text-white">{overview.ceoInsight.headline}</p>
           <div className="mt-4 space-y-2.5">

@@ -6,22 +6,17 @@ import {
   hashCredentialValue,
   previewCredentialValue,
 } from "@/lib/security/credentials-crypto";
-import { createClient } from "@/lib/supabase/server";
-import { isSupabaseAuthConfigured } from "@/lib/supabase/env";
+import { requirePlatformAdmin } from "@/lib/supabase/admin-auth";
 
 export const runtime = "nodejs";
 
 const allowedScopes = new Set(["platform", "organization"]);
 
 export async function GET() {
-  const auth = await requireAuthenticatedSupabase();
+  const auth = await requirePlatformAdmin();
 
   if (auth instanceof NextResponse) {
     return auth;
-  }
-
-  if (!auth.isPlatformAdmin) {
-    return NextResponse.json({ error: "Apenas administradores podem listar credenciais da plataforma." }, { status: 403 });
   }
 
   const { data, error } = await auth.supabase
@@ -50,7 +45,7 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const auth = await requireAuthenticatedSupabase();
+  const auth = await requirePlatformAdmin();
 
   if (auth instanceof NextResponse) {
     return auth;
@@ -68,10 +63,6 @@ export async function POST(request: NextRequest) {
 
   if (!parsed.ok) {
     return NextResponse.json({ error: parsed.error }, { status: 400 });
-  }
-
-  if (!auth.isPlatformAdmin) {
-    return NextResponse.json({ error: "Apenas administradores podem gravar credenciais da plataforma." }, { status: 403 });
   }
 
   const encryptedValue = encryptCredentialValue(parsed.value);
@@ -143,14 +134,10 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const auth = await requireAuthenticatedSupabase();
+  const auth = await requirePlatformAdmin();
 
   if (auth instanceof NextResponse) {
     return auth;
-  }
-
-  if (!auth.isPlatformAdmin) {
-    return NextResponse.json({ error: "Apenas administradores podem remover credenciais." }, { status: 403 });
   }
 
   const id = new URL(request.url).searchParams.get("id");
@@ -192,30 +179,6 @@ export async function DELETE(request: NextRequest) {
   });
 
   return NextResponse.json({ ok: true });
-}
-
-async function requireAuthenticatedSupabase() {
-  if (!isSupabaseAuthConfigured()) {
-    return NextResponse.json({ error: "Supabase Auth nao configurado." }, { status: 503 });
-  }
-
-  const supabase = await createClient();
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser();
-
-  if (error || !user) {
-    return NextResponse.json({ error: "Sessao obrigatoria." }, { status: 401 });
-  }
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("is_platform_admin")
-    .eq("id", user.id)
-    .maybeSingle<{ is_platform_admin: boolean | null }>();
-
-  return { supabase, userId: user.id, isPlatformAdmin: Boolean(profile?.is_platform_admin) };
 }
 
 async function readJson(request: NextRequest) {

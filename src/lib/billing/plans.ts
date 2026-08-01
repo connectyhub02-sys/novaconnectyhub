@@ -1,6 +1,7 @@
 import "server-only";
 
-import { createClient } from "@/lib/supabase/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { createServiceClient } from "@/lib/supabase/service";
 
 export type BillingPlanStatus = "draft" | "active" | "archived";
 
@@ -63,8 +64,9 @@ export type BillingPlanRow = {
   updated_at: string;
 };
 
-export async function getBillingPlanCatalog(): Promise<BillingPlanCatalog> {
-  const supabase = await createClient();
+export async function getBillingPlanCatalog(
+  supabase: SupabaseClient = createServiceClient(),
+): Promise<BillingPlanCatalog> {
   const result = await supabase
     .from("billing_plans")
     .select(

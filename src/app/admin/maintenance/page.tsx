@@ -3,8 +3,8 @@ import { connection } from "next/server";
 import { AccessDenied } from "@/components/connectyhub-os/access-denied";
 import { MaintenanceRoom } from "@/components/connectyhub-os/maintenance-room";
 import type { MaintenanceStoredCredential } from "@/lib/maintenance-vault";
-import { createClient } from "@/lib/supabase/server";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
+import { createServiceClient } from "@/lib/supabase/service";
 
 export const metadata: Metadata = {
   title: "Sala de Manutencao | ConnectyHub",
@@ -25,7 +25,7 @@ export default async function AdminMaintenancePage() {
 }
 
 async function getStoredPlatformCredentials(): Promise<MaintenanceStoredCredential[]> {
-  const supabase = await createClient();
+  const supabase = createServiceClient();
   const { data } = await supabase
     .from("integration_credentials")
     .select("integration_id, env_name, value_preview")

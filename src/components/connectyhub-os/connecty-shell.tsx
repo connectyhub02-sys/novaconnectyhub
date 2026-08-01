@@ -167,7 +167,7 @@ const adminSections: NavSection[] = [
       { label: "Criativos IA", href: "/admin/conteudo",     icon: Globe2, tone: "sky" },
       { label: "Setores",     href: "/admin/setores",      icon: GitBranch, tone: "teal" },
       { label: "CEO IA",      href: "/admin/ceo",          icon: Wand2, tone: "fuchsia" },
-      { label: "Aprovações",  href: "/admin/aprovacoes",   icon: ShieldCheck, tone: "amber", badge: "17", badgeTone: "amber" },
+      { label: "Aprovações",  href: "/admin/aprovacoes",   icon: ShieldCheck, tone: "amber" },
     ],
   },
   {
@@ -181,7 +181,7 @@ const adminSections: NavSection[] = [
   {
     label: "Clientes",
     items: [
-      { label: "Clientes",          href: "/admin/clientes",          icon: Users, tone: "sky", badge: "142" },
+      { label: "Clientes",          href: "/admin/clientes",          icon: Users, tone: "sky" },
       { label: "CRM Leads",         href: "/admin/leads",             icon: UserCheck, tone: "emerald" },
       { label: "Automacoes",         href: "/admin/automacoes",        icon: Zap, tone: "violet" },
       { label: "Planos",            href: "/admin/planos",            icon: Coins, tone: "amber" },
@@ -194,7 +194,7 @@ const adminSections: NavSection[] = [
   {
     label: "Sistema",
     items: [
-      { label: "Manutenção",    href: "/admin/maintenance",  icon: Wrench, tone: "rose", badge: "!", badgeTone: "rose" },
+      { label: "Manutenção",    href: "/admin/maintenance",  icon: Wrench, tone: "rose" },
       { label: "Auditoria",     href: "/admin/auditoria",    icon: FileCode2, tone: "slate" },
       { label: "Financeiro",    href: "/admin/financeiro",   icon: CircleDollarSign, tone: "amber" },
       { label: "Configurações", href: "/admin/configuracoes",icon: SlidersHorizontal, tone: "blue" },

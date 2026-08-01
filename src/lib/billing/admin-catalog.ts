@@ -1,6 +1,7 @@
 import "server-only";
 
-import { createClient } from "@/lib/supabase/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { createServiceClient } from "@/lib/supabase/service";
 import type { BillingProvider, BillingUnit } from "./cost-center";
 
 export type BillingCatalogRate = {
@@ -107,8 +108,9 @@ type WalletRow = {
   lifetime_used_credits: number | string | null;
 };
 
-export async function getBillingCommercialCatalog(): Promise<BillingCommercialCatalog> {
-  const supabase = await createClient();
+export async function getBillingCommercialCatalog(
+  supabase: SupabaseClient = createServiceClient(),
+): Promise<BillingCommercialCatalog> {
 
   const [costCentersResult, featuresResult, modelsResult, ratesResult, organizationsResult, walletsResult] = await Promise.all([
     supabase.from("provider_cost_centers").select("id, provider, name").order("name", { ascending: true }).limit(100),

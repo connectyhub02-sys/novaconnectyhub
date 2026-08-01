@@ -4,15 +4,15 @@ import { AccessDenied } from "@/components/connectyhub-os/access-denied";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 
 export const metadata: Metadata = {
-  title: "WhatsApp dos clientes | ConnectyHub",
+  title: "Aprovacoes | Admin OS",
 };
 
-export default async function AdminInstanciasPage() {
+export default async function AdminAprovacoesPage() {
   const workspace = await getCurrentWorkspace();
 
   if (!workspace?.profile.isPlatformAdmin) {
     return <AccessDenied />;
   }
 
-  redirect("/admin/clientes/whatsapp");
+  redirect("/admin#aprovacoes");
 }
