@@ -18,11 +18,11 @@ import { cn } from "@/lib/utils";
 // ─── AreaChartPanel ───────────────────────────────────────────────────────────
 
 export function AreaChartPanel({
-  title, eyebrow, value, trend, data, color = "#22d3ee", filters,
+  title, eyebrow, value, trend, data, color = "#22d3ee", filters, compact = false,
 }: {
   title: string; eyebrow?: string; value: string; trend?: string;
   data: { label: string; value: number }[];
-  color?: string; filters?: string[];
+  color?: string; filters?: string[]; compact?: boolean;
 }) {
   const isUp = trend?.startsWith("+");
   const gradId = `grad-${color.replace("#", "")}`;
@@ -37,7 +37,10 @@ export function AreaChartPanel({
       }}
     >
       <div
-        className="flex flex-wrap items-center justify-between gap-3 px-5 py-4"
+        className={cn(
+          "flex flex-wrap items-center justify-between",
+          compact ? "gap-2 px-3 py-2.5" : "gap-3 px-5 py-4",
+        )}
         style={{
           background: "linear-gradient(90deg, rgba(var(--ch-accent-rgb),0.08), transparent 70%)",
           borderBottom: "1px solid var(--ch-border-strong)",
@@ -47,12 +50,13 @@ export function AreaChartPanel({
           {eyebrow && (
             <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">{eyebrow}</p>
           )}
-          <p className="text-[14px] font-semibold text-white">{title}</p>
+          <p className={cn("font-semibold text-white", compact ? "text-[13px]" : "text-[14px]")}>{title}</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className={cn("flex items-center", compact ? "gap-1.5" : "gap-3")}>
           {trend && (
             <span className={cn(
-              "flex items-center gap-1 rounded-lg px-2.5 py-1 font-mono text-[11px]",
+              "flex items-center gap-1 rounded-lg font-mono",
+              compact ? "px-2 py-0.5 text-[9px]" : "px-2.5 py-1 text-[11px]",
               isUp ? "bg-emerald-500/10 text-emerald-400" : "bg-rose-500/10 text-rose-400",
             )}>
               {isUp ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
@@ -66,7 +70,8 @@ export function AreaChartPanel({
                   key={f}
                   type="button"
                   className={cn(
-                    "rounded-lg px-2.5 py-1 font-mono text-[10px] transition",
+                    "rounded-lg font-mono transition",
+                    compact ? "px-2 py-0.5 text-[9px]" : "px-2.5 py-1 text-[10px]",
                     i === 0 ? "text-white" : "text-slate-500 hover:text-slate-300",
                   )}
                   style={i === 0 ? { background: "var(--ch-panel-2)", border: "1px solid var(--ch-border-strong)" } : {}}
@@ -78,10 +83,10 @@ export function AreaChartPanel({
           )}
         </div>
       </div>
-      <div className="px-5 pb-1 pt-4">
-        <p className="font-mono text-[26px] font-bold text-white">{value}</p>
+      <div className={compact ? "px-3 pb-0 pt-2" : "px-5 pb-1 pt-4"}>
+        <p className={cn("font-mono font-bold text-white", compact ? "text-[20px]" : "text-[26px]")}>{value}</p>
       </div>
-      <div className="h-[180px] px-2 pb-3">
+      <div className={cn("px-2", compact ? "h-[116px] pb-2" : "h-[180px] pb-3")}>
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={data} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
             <defs>
@@ -109,11 +114,11 @@ export function AreaChartPanel({
 // ─── BarChartPanel ────────────────────────────────────────────────────────────
 
 export function BarChartPanel({
-  title, eyebrow, data, color = "#22d3ee", filters, action,
+  title, eyebrow, data, color = "#22d3ee", filters, action, compact = false,
 }: {
   title: string; eyebrow?: string;
   data: { label: string; value: number }[];
-  color?: string; filters?: string[]; action?: ReactNode;
+  color?: string; filters?: string[]; action?: ReactNode; compact?: boolean;
 }) {
   return (
     <div
@@ -125,7 +130,10 @@ export function BarChartPanel({
       }}
     >
       <div
-        className="flex flex-wrap items-center justify-between gap-3 px-5 py-4"
+        className={cn(
+          "flex flex-wrap items-center justify-between",
+          compact ? "gap-2 px-3 py-2.5" : "gap-3 px-5 py-4",
+        )}
         style={{
           background: "linear-gradient(90deg, rgba(var(--ch-accent-rgb),0.08), transparent 70%)",
           borderBottom: "1px solid var(--ch-border-strong)",
@@ -135,7 +143,7 @@ export function BarChartPanel({
           {eyebrow && (
             <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">{eyebrow}</p>
           )}
-          <p className="text-[14px] font-semibold text-white">{title}</p>
+          <p className={cn("font-semibold text-white", compact ? "text-[13px]" : "text-[14px]")}>{title}</p>
         </div>
         <div className="flex items-center gap-2">
           {filters && (
@@ -144,7 +152,11 @@ export function BarChartPanel({
                 <button
                   key={f}
                   type="button"
-                  className={cn("rounded-lg px-2.5 py-1 font-mono text-[10px] transition", i === 0 ? "text-white" : "text-slate-500")}
+                  className={cn(
+                    "rounded-lg font-mono transition",
+                    compact ? "px-2 py-0.5 text-[9px]" : "px-2.5 py-1 text-[10px]",
+                    i === 0 ? "text-white" : "text-slate-500",
+                  )}
                   style={i === 0 ? { background: "var(--ch-panel-2)", border: "1px solid var(--ch-border-strong)" } : {}}
                 >
                   {f}
@@ -155,9 +167,9 @@ export function BarChartPanel({
           {action}
         </div>
       </div>
-      <div className="h-[160px] px-2 py-4">
+      <div className={cn("px-2", compact ? "h-[112px] py-2" : "h-[160px] py-4")}>
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data} margin={{ top: 4, right: 8, left: -20, bottom: 0 }} barSize={18}>
+          <BarChart data={data} margin={{ top: 4, right: 8, left: -20, bottom: 0 }} barSize={compact ? 13 : 18}>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
             <XAxis dataKey="label" tick={{ fill: "#475569", fontSize: 10, fontFamily: "monospace" }} axisLine={false} tickLine={false} />
             <YAxis tick={{ fill: "#475569", fontSize: 10, fontFamily: "monospace" }} axisLine={false} tickLine={false} />
