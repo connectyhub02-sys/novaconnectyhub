@@ -440,7 +440,6 @@ export function SalesCatalogConsole({
   const [catalogImportDefaultDestination, setCatalogImportDefaultDestination] = useState<SalesCatalogImportDestination>("connectyhub_checkout");
   const [catalogImportTitle, setCatalogImportTitle] = useState("");
   const [catalogImportText, setCatalogImportText] = useState("");
-  const [catalogImportSourceUrl, setCatalogImportSourceUrl] = useState("");
   const [catalogImportFiles, setCatalogImportFiles] = useState<File[]>([]);
   const [catalogImportPatches, setCatalogImportPatches] = useState<CatalogImportPatchMap>({});
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -640,7 +639,6 @@ export function SalesCatalogConsole({
     setOrderTotal("");
     setCatalogImportTitle("");
     setCatalogImportText("");
-    setCatalogImportSourceUrl("");
     setCatalogImportFiles([]);
     setCatalogImportPatches({});
     setSelectedCatalogImportInstanceId("");
@@ -1354,14 +1352,13 @@ export function SalesCatalogConsole({
   async function createCatalogImport() {
     if (!selectedCompanyId || creatingCatalogImport) return;
 
-    const hasSource = Boolean(catalogImportText.trim() || catalogImportSourceUrl.trim() || catalogImportFiles.length > 0);
-    if (!hasSource) {
-      setNotice({ tone: "warning", message: "Envie uma URL, cole um catalogo ou anexe um arquivo para importar." });
+    if (catalogImportFiles.length === 0) {
+      setNotice({ tone: "warning", message: "Anexe um arquivo legivel para importar produtos com IA." });
       return;
     }
 
-    if (catalogImportSourceKind === "site" && !catalogImportSourceUrl.trim()) {
-      setNotice({ tone: "warning", message: "Informe o link do site antes de importar." });
+    if (catalogImportSourceKind === "site") {
+      setNotice({ tone: "warning", message: "Importacao por link foi desativada. Anexe um arquivo do catalogo." });
       return;
     }
 
@@ -1376,7 +1373,6 @@ export function SalesCatalogConsole({
       formData.set("defaultSalesDestination", catalogImportDefaultDestination);
       formData.set("title", catalogImportTitle);
       formData.set("text", catalogImportText);
-      formData.set("sourceUrl", catalogImportSourceUrl);
 
       for (const file of catalogImportFiles) {
         formData.append("files", file);
@@ -2920,7 +2916,6 @@ export function SalesCatalogConsole({
             savingJobId={savingCatalogImportId}
             sourceKind={catalogImportSourceKind}
             sourceText={catalogImportText}
-            sourceUrl={catalogImportSourceUrl}
             targetMode={catalogImportTargetMode}
             title={catalogImportTitle}
             onChangeDefaultDestination={setCatalogImportDefaultDestination}
@@ -2928,7 +2923,6 @@ export function SalesCatalogConsole({
             onChangeItem={updateCatalogImportItem}
             onChangeSourceKind={setCatalogImportSourceKind}
             onChangeSourceText={setCatalogImportText}
-            onChangeSourceUrl={setCatalogImportSourceUrl}
             onChangeTargetMode={setCatalogImportTargetMode}
             onChangeTitle={setCatalogImportTitle}
             onCreate={createCatalogImport}
@@ -3872,7 +3866,6 @@ function SalesCatalogImportPanel({
   savingJobId,
   sourceKind,
   sourceText,
-  sourceUrl,
   targetMode,
   title,
   onChangeDefaultDestination,
@@ -3880,7 +3873,6 @@ function SalesCatalogImportPanel({
   onChangeItem,
   onChangeSourceKind,
   onChangeSourceText,
-  onChangeSourceUrl,
   onChangeTargetMode,
   onChangeTitle,
   onCreate,
@@ -3898,7 +3890,6 @@ function SalesCatalogImportPanel({
   savingJobId: string | null;
   sourceKind: SalesCatalogImportSourceKind;
   sourceText: string;
-  sourceUrl: string;
   targetMode: SalesCatalogImportTargetMode;
   title: string;
   onChangeDefaultDestination: (value: SalesCatalogImportDestination) => void;
@@ -3906,7 +3897,6 @@ function SalesCatalogImportPanel({
   onChangeItem: (itemId: string, patch: Omit<SalesCatalogImportItemPatch, "id">) => void;
   onChangeSourceKind: (value: SalesCatalogImportSourceKind) => void;
   onChangeSourceText: (value: string) => void;
-  onChangeSourceUrl: (value: string) => void;
   onChangeTargetMode: (value: SalesCatalogImportTargetMode) => void;
   onChangeTitle: (value: string) => void;
   onCreate: () => void;
@@ -3914,7 +3904,7 @@ function SalesCatalogImportPanel({
   onRefresh: () => void;
   onSaveReview: (job: ClientSalesCatalogImportJob) => void;
 }) {
-  const hasInput = Boolean(sourceText.trim() || sourceUrl.trim() || files.length > 0);
+  const hasInput = files.length > 0;
   const canCreate = hasInput && !creating;
 
   return (
@@ -3929,10 +3919,9 @@ function SalesCatalogImportPanel({
               className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
               style={{ borderColor: "var(--ch-border)" }}
             >
-              <option value="text">Texto</option>
+              <option value="text">TXT / Texto</option>
               <option value="csv">CSV</option>
               <option value="excel">Excel</option>
-              <option value="site">Site</option>
               <option value="pdf">PDF</option>
               <option value="image">Imagem</option>
               <option value="mixed">Misto</option>
@@ -3944,7 +3933,7 @@ function SalesCatalogImportPanel({
               value={title}
               onChange={(event) => onChangeTitle(event.target.value.slice(0, 140))}
               className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
-              placeholder="Cardapio, catalogo ou site"
+              placeholder="Cardapio, catalogo ou lista de produtos"
               style={{ borderColor: "var(--ch-border)" }}
             />
           </label>
@@ -3999,23 +3988,12 @@ function SalesCatalogImportPanel({
         </div>
 
         <label className="block">
-          <FieldLabel>URL</FieldLabel>
-          <input
-            value={sourceUrl}
-            onChange={(event) => onChangeSourceUrl(event.target.value.slice(0, 1000))}
-            className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
-            placeholder="https://..."
-            style={{ borderColor: "var(--ch-border)" }}
-          />
-        </label>
-
-        <label className="block">
-          <FieldLabel>Catalogo</FieldLabel>
+          <FieldLabel>Observacoes opcionais</FieldLabel>
           <textarea
             value={sourceText}
             onChange={(event) => onChangeSourceText(event.target.value.slice(0, 60000))}
             className="min-h-28 w-full resize-y rounded-lg border bg-transparent px-3 py-2 text-[12px] leading-5 outline-none"
-            placeholder="Cole produtos, precos, categorias, adicionais, frete ou regras comerciais."
+            placeholder="Use apenas para orientar a leitura do arquivo, como regras de frete, categorias ou observacoes comerciais."
             style={{ borderColor: "var(--ch-border)" }}
           />
         </label>

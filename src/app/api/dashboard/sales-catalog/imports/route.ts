@@ -96,12 +96,12 @@ export async function POST(request: NextRequest) {
     });
     await assertBillableAccess({ organizationId: company.id, client });
 
-    if (!payload.sourceUrl && !payload.text?.trim() && payload.files.length === 0) {
-      return NextResponse.json({ error: "Envie uma URL, texto do cardapio ou arquivo para importar." }, { status: 422 });
+    if (payload.sourceUrl || payload.sourceKind === "site") {
+      return NextResponse.json({ error: "Importacao por link foi desativada. Anexe um arquivo do catalogo para importar." }, { status: 422 });
     }
 
-    if (payload.sourceKind === "site" && !payload.sourceUrl) {
-      return NextResponse.json({ error: "Informe o link do site ou pagina do produto." }, { status: 422 });
+    if (payload.files.length === 0) {
+      return NextResponse.json({ error: "Anexe um arquivo legivel para importar produtos com IA." }, { status: 422 });
     }
 
     const importJob = await createSalesCatalogImportJob({
