@@ -236,7 +236,7 @@ export function BillingCenter({
             />
             <RuleCard
               icon={ServerCog}
-              title="WiseUp/Uazapi"
+              title="Uazapi"
               text="Hoje entra como custo fixo: R$ 138 por mes para ate 100 dispositivos, rateado pelas instancias WhatsApp conectadas."
             />
             <RuleCard
@@ -373,7 +373,7 @@ function CurrentCostCenterPanel({ summary }: { summary: BillingAdminSummary }) {
     <Panel
       className="mb-4"
       title="Centro de custos atual"
-      eyebrow="Gemini / ElevenLabs / WiseUp"
+      eyebrow="Gemini / ElevenLabs / Uazapi"
       compact
       action={
         <div className="flex flex-wrap gap-2">
@@ -421,7 +421,7 @@ function CurrentCostCenterPanel({ summary }: { summary: BillingAdminSummary }) {
           <div className="mb-3 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <ServerCog className="h-4 w-4 text-cyan-500" />
-              <p className="text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>WiseUp/Uazapi</p>
+              <p className="text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>Uazapi</p>
             </div>
             <StatusBadge status={current.activeConnectedWhatsappInstances > 0 ? "online" : "idle"} />
           </div>

@@ -242,13 +242,13 @@ type CommerceCommissionRow = {
 const CONNECTY_CREDIT_UNIT_BRL = 0.01;
 const COST_PERIOD_DAYS = 30;
 const CURRENT_COST_PROVIDERS = new Set(["gemini", "elevenlabs"]);
-const WISEUP_UAZAPI_MONTHLY_COST_BRL = 138;
-const WISEUP_UAZAPI_CAPACITY_UNITS = 100;
+const UAZAPI_MONTHLY_COST_BRL = 138;
+const UAZAPI_CAPACITY_UNITS = 100;
 
 const providerNames: Record<string, string> = {
   gemini: "Gemini / Google AI Core",
   elevenlabs: "ElevenLabs / Voz",
-  uazapi: "WiseUp/Uazapi / WhatsApp",
+  uazapi: "Uazapi / WhatsApp",
   meta: "Meta / Instagram",
   google_ads: "Google Ads",
   r2: "Cloudflare R2",
@@ -584,7 +584,7 @@ function buildCurrentCostCenterSummary({
   }
 
   const activeWhatsappOrganizations = connectedInstancesByOrganization.size;
-  const fixedProvider = buildWiseUpFixedCostSummary(activeWhatsappInstances.length, activeWhatsappOrganizations);
+  const fixedProvider = buildUazapiFixedCostSummary(activeWhatsappInstances.length, activeWhatsappOrganizations);
   const providerMap = new Map<string, CostCenterProviderEconomics>();
   const customerMap = new Map<string, CostCenterCustomerEconomics>();
   let consumedCredits = 0;
@@ -717,7 +717,7 @@ function buildCurrentCostCenterSummary({
 
   return {
     periodLabel: "Ultimos 30 dias",
-    scopeLabel: "Custos atuais: Gemini, ElevenLabs e WiseUp/Uazapi",
+    scopeLabel: "Custos atuais: Gemini, ElevenLabs e Uazapi",
     creditUnitPriceBrl: CONNECTY_CREDIT_UNIT_BRL,
     approvedRevenueBrl: roundMoney(approvedRevenueBrl),
     todayApprovedRevenueBrl: roundMoney(todayApprovedRevenueBrl),
@@ -905,11 +905,11 @@ function emptySummary({
 }
 
 function emptyCurrentCostCenterSummary(): CurrentCostCenterSummary {
-  const fixedProvider = buildWiseUpFixedCostSummary(0, 0);
+  const fixedProvider = buildUazapiFixedCostSummary(0, 0);
 
   return {
     periodLabel: "Ultimos 30 dias",
-    scopeLabel: "Custos atuais: Gemini, ElevenLabs e WiseUp/Uazapi",
+    scopeLabel: "Custos atuais: Gemini, ElevenLabs e Uazapi",
     creditUnitPriceBrl: CONNECTY_CREDIT_UNIT_BRL,
     approvedRevenueBrl: 0,
     todayApprovedRevenueBrl: 0,
@@ -974,18 +974,18 @@ function emptyCommerceSummary(schemaReady: boolean, warnings: string[]): Commerc
   };
 }
 
-function buildWiseUpFixedCostSummary(activeUnits: number, activeOrganizations: number): FixedProviderCostSummary {
+function buildUazapiFixedCostSummary(activeUnits: number, activeOrganizations: number): FixedProviderCostSummary {
   return {
     provider: "uazapi",
     label: providerNames.uazapi,
-    monthlyCostBrl: roundMoney(WISEUP_UAZAPI_MONTHLY_COST_BRL),
-    periodCostBrl: roundMoney(WISEUP_UAZAPI_MONTHLY_COST_BRL),
-    todayCostBrl: roundMoney(WISEUP_UAZAPI_MONTHLY_COST_BRL / COST_PERIOD_DAYS),
-    capacityUnits: WISEUP_UAZAPI_CAPACITY_UNITS,
+    monthlyCostBrl: roundMoney(UAZAPI_MONTHLY_COST_BRL),
+    periodCostBrl: roundMoney(UAZAPI_MONTHLY_COST_BRL),
+    todayCostBrl: roundMoney(UAZAPI_MONTHLY_COST_BRL / COST_PERIOD_DAYS),
+    capacityUnits: UAZAPI_CAPACITY_UNITS,
     activeUnits,
     activeOrganizations,
-    plannedCostPerUnitBrl: roundMoney(WISEUP_UAZAPI_MONTHLY_COST_BRL / WISEUP_UAZAPI_CAPACITY_UNITS),
-    effectiveCostPerUnitBrl: roundMoney(activeUnits > 0 ? WISEUP_UAZAPI_MONTHLY_COST_BRL / activeUnits : 0),
+    plannedCostPerUnitBrl: roundMoney(UAZAPI_MONTHLY_COST_BRL / UAZAPI_CAPACITY_UNITS),
+    effectiveCostPerUnitBrl: roundMoney(activeUnits > 0 ? UAZAPI_MONTHLY_COST_BRL / activeUnits : 0),
     unitLabel: "instancia WhatsApp conectada",
     allocationLabel: "R$ 138/mes ate 100 dispositivos; rateio pelas instancias conectadas.",
   };
