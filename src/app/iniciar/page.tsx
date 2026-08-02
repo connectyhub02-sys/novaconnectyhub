@@ -29,9 +29,8 @@ export default async function IniciarPage({ searchParams }: IniciarPageProps) {
 }
 
 function normalizePlanParam(value: string | undefined) {
-  if (value === "trial" || value === "starter" || value === "pro" || value === "scale") {
-    return value;
-  }
+  const normalized = value?.trim().toLowerCase() ?? "";
+  if (/^[a-z0-9_-]{2,60}$/.test(normalized)) return normalized;
 
   return null;
 }

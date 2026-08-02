@@ -4,6 +4,7 @@ import { connection } from "next/server";
 import { PricingPlansGrid } from "@/components/connectyhub-os/pricing-plans-grid";
 import { ConnectyShell } from "@/components/connectyhub-os/connecty-shell";
 import { buildDashboardBillingCheckoutPath } from "@/lib/billing/plan-checkout";
+import { loadPublicPricingPlans } from "@/lib/billing/public-pricing-server";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
 
@@ -23,7 +24,11 @@ export default async function DashboardPlanosPage() {
   }
 
   const organization = workspace.organization;
-  const pendingPlan = organization ? await loadPendingPlan(organization.id) : null;
+  const client = createServiceClient();
+  const [pendingPlan, pricingPlans] = await Promise.all([
+    organization ? loadPendingPlan(client, organization.id) : null,
+    loadPublicPricingPlans(client),
+  ]);
 
   return (
     <ConnectyShell
@@ -54,6 +59,7 @@ export default async function DashboardPlanosPage() {
 
         <PricingPlansGrid
           currentPlanCode={organization?.planCode ?? null}
+          initialPlans={pricingPlans}
           pendingPlan={pendingPlan}
           surface="dashboard"
         />
@@ -62,8 +68,7 @@ export default async function DashboardPlanosPage() {
   );
 }
 
-async function loadPendingPlan(organizationId: string) {
-  const client = createServiceClient();
+async function loadPendingPlan(client: ReturnType<typeof createServiceClient>, organizationId: string) {
   const { data, error } = await client
     .from("organization_subscriptions")
     .select("id, plan_code, status")

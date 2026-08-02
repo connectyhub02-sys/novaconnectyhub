@@ -1,29 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
+import type { PublicPricingPlan } from "@/lib/billing/public-pricing";
 
 const G = "#00ff88";
 
-export type CommercialPlanCode = "trial" | "starter" | "pro" | "scale";
+type PricingPlan = PublicPricingPlan;
 
-type PricingPlan = {
-  code: CommercialPlanCode;
-  name: string;
-  price: string;
-  priceValue: number;
-  period: string;
-  description: string;
-  tagline: string;
-  included: string[];
-  locked: string[];
-  cta: string;
-  trial?: boolean;
-  popular?: boolean;
-  premium?: boolean;
-};
-
-const plans: PricingPlan[] = [
+const fallbackPlans: PricingPlan[] = [
   {
     code: "trial",
     name: "Teste gratis",
@@ -127,7 +112,7 @@ const plans: PricingPlan[] = [
 ];
 
 type IntentState = {
-  planCode: CommercialPlanCode;
+  planCode: string;
   tone: "success" | "error";
   message: string;
 } | null;
@@ -145,24 +130,71 @@ type SwitchPromptState = {
 
 export function PricingPlansGrid({
   currentPlanCode = null,
+  initialPlans = [],
+  liveCatalog = true,
   pendingPlan = null,
   surface = "public",
 }: {
   currentPlanCode?: string | null;
+  initialPlans?: PricingPlan[];
+  liveCatalog?: boolean;
   pendingPlan?: PendingPlanInfo;
   surface?: "public" | "dashboard";
 }) {
-  const [loadingPlanCode, setLoadingPlanCode] = useState<CommercialPlanCode | null>(null);
+  const [catalogPlans, setCatalogPlans] = useState<PricingPlan[]>(() => normalizePricingPlans(initialPlans));
+  const [catalogLoading, setCatalogLoading] = useState(liveCatalog && initialPlans.length === 0);
+  const [catalogFailed, setCatalogFailed] = useState(false);
+  const [loadingPlanCode, setLoadingPlanCode] = useState<string | null>(null);
   const [intent, setIntent] = useState<IntentState>(null);
   const [switchPrompt, setSwitchPrompt] = useState<SwitchPromptState>(null);
+  const visiblePlans = useMemo(() => {
+    if (catalogPlans.length > 0) return catalogPlans;
+    if (catalogLoading) return [];
+    if (!catalogFailed && liveCatalog) return [];
+    return fallbackPlans;
+  }, [catalogFailed, catalogLoading, catalogPlans, liveCatalog]);
   const currentPlan = useMemo(
-    () => plans.find((plan) => plan.code === currentPlanCode) ?? null,
-    [currentPlanCode],
+    () => visiblePlans.find((plan) => plan.code === currentPlanCode) ?? null,
+    [currentPlanCode, visiblePlans],
   );
   const pendingPricingPlan = useMemo(
-    () => plans.find((plan) => plan.code === pendingPlan?.planCode) ?? null,
-    [pendingPlan?.planCode],
+    () => visiblePlans.find((plan) => plan.code === pendingPlan?.planCode) ?? null,
+    [pendingPlan?.planCode, visiblePlans],
   );
+
+  useEffect(() => {
+    if (!liveCatalog) return;
+
+    let ignore = false;
+    fetch("/api/billing/plans", { cache: "no-store" })
+      .then(async (response) => {
+        const data = await response.json().catch(() => null) as { plans?: PricingPlan[] } | null;
+
+        if (!response.ok || !data?.plans) {
+          throw new Error("Nao foi possivel carregar planos.");
+        }
+
+        if (!ignore) {
+          const nextPlans = normalizePricingPlans(data.plans);
+          setCatalogPlans(nextPlans);
+          setCatalogFailed(false);
+        }
+      })
+      .catch(() => {
+        if (!ignore) {
+          setCatalogFailed(true);
+        }
+      })
+      .finally(() => {
+        if (!ignore) {
+          setCatalogLoading(false);
+        }
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, [liveCatalog]);
 
   async function requestPlan(plan: PricingPlan, options: { replacePending?: boolean } = {}) {
     if (surface !== "dashboard" || plan.code === currentPlanCode || plan.code === "trial") {
@@ -202,7 +234,7 @@ export function PricingPlansGrid({
 
       if (!response.ok) {
         if (data?.code === "pending_plan_exists") {
-          const fromPlan = plans.find((item) => item.code === data.pendingPlanCode);
+          const fromPlan = visiblePlans.find((item) => item.code === data.pendingPlanCode);
           setSwitchPrompt({
             fromPlanName: fromPlan?.name ?? data.pendingPlanCode ?? "plano pendente",
             toPlan: plan,
@@ -245,7 +277,11 @@ export function PricingPlansGrid({
   return (
     <>
       <div className="pricing-plans-grid">
-        {plans.map((plan) => {
+        {visiblePlans.length === 0 && catalogLoading ? (
+          <PricingPlanSkeleton />
+        ) : visiblePlans.length === 0 ? (
+          <PricingPlansEmptyState />
+        ) : visiblePlans.map((plan) => {
           const isCurrent = currentPlanCode === plan.code;
           const isPending = pendingPlan?.planCode === plan.code;
           const buttonLabel = surface === "dashboard"
@@ -320,6 +356,12 @@ export function PricingPlansGrid({
         })}
       </div>
 
+      {catalogFailed && catalogPlans.length === 0 ? (
+        <p className="mt-3 text-center font-mono text-[11px] text-amber-200">
+          Planos exibidos em modo reserva. O checkout valida o valor atual antes do pagamento.
+        </p>
+      ) : null}
+
       {switchPrompt ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-[8px] border border-amber-300/30 bg-slate-950 p-5 shadow-2xl shadow-black/40">
@@ -381,4 +423,48 @@ function dashboardButtonLabel({
   if (plan.priceValue > currentPlan.priceValue) return `Upgrade para ${plan.name}`;
   if (plan.priceValue < currentPlan.priceValue) return `Downgrade para ${plan.name}`;
   return plan.cta;
+}
+
+function PricingPlanSkeleton() {
+  return (
+    <>
+      {Array.from({ length: 4 }).map((_, index) => (
+        <div key={index} className="pricing-card animate-pulse">
+          <div className="h-5 w-24 rounded bg-white/10" />
+          <div className="mt-6 h-11 w-32 rounded bg-white/10" />
+          <div className="mt-4 h-3 w-full rounded bg-white/10" />
+          <div className="mt-2 h-3 w-4/5 rounded bg-white/10" />
+          <div className="mt-8 grid gap-3">
+            <div className="h-3 w-full rounded bg-white/10" />
+            <div className="h-3 w-11/12 rounded bg-white/10" />
+            <div className="h-3 w-10/12 rounded bg-white/10" />
+            <div className="h-3 w-8/12 rounded bg-white/10" />
+          </div>
+          <div className="mt-auto h-11 rounded border border-white/10 bg-white/5" />
+        </div>
+      ))}
+    </>
+  );
+}
+
+function PricingPlansEmptyState() {
+  return (
+    <div className="pricing-card flex min-h-[320px] items-center justify-center text-center md:col-span-2 xl:col-span-4">
+      <div>
+        <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-cyan-200/70">Planos</p>
+        <p className="mt-3 text-sm text-white/70">Nenhum plano ativo disponivel no momento.</p>
+      </div>
+    </div>
+  );
+}
+
+function normalizePricingPlans(plans: PricingPlan[]) {
+  return plans
+    .filter((plan) => plan.code && plan.name)
+    .map((plan) => ({
+      ...plan,
+      code: plan.code.trim().toLowerCase(),
+      included: Array.isArray(plan.included) ? plan.included : [],
+      locked: Array.isArray(plan.locked) ? plan.locked : [],
+    }));
 }

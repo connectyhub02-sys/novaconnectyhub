@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { mapBillingPlanRow, type BillingPlanRow } from "@/lib/billing/plans";
 import { requirePlatformAdmin } from "@/lib/supabase/admin-auth";
 
@@ -200,6 +201,8 @@ export async function POST() {
       includedCredits: COMMERCIAL_PLAN_PRESETS.map((plan) => plan.included_credits),
     },
   });
+  revalidatePath("/");
+  revalidatePath("/dashboard/planos");
 
   const { data: plans, error: listError } = await auth.supabase
     .from("billing_plans")

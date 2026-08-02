@@ -40,8 +40,6 @@ type ExistingSubscriptionRow = {
   created_at: string;
 };
 
-const allowedPlanCodes = new Set(["starter", "pro", "scale"]);
-
 export async function POST(request: NextRequest) {
   const workspace = await getCurrentWorkspace();
 
@@ -70,7 +68,7 @@ export async function POST(request: NextRequest) {
       .from("billing_plans")
       .select("id, plan_code, name, monthly_price_brl, included_credits, mercado_pago_preapproval_plan_id")
       .eq("plan_code", planCode)
-      .in("status", ["active", "draft"])
+      .eq("status", "active")
       .maybeSingle<BillingPlanIntentRow>();
 
     if (planError) {
@@ -78,7 +76,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (!plan) {
-      return NextResponse.json({ error: "Plano nao encontrado ou indisponivel." }, { status: 404 });
+      return NextResponse.json({ error: "Plano nao encontrado, inativo ou indisponivel." }, { status: 404 });
     }
 
     const amountBrl = toNumber(plan.monthly_price_brl);
@@ -342,7 +340,9 @@ function readPlanCode(value: unknown) {
   }
 
   const normalized = value.trim().toLowerCase();
-  return allowedPlanCodes.has(normalized) ? normalized : null;
+  if (normalized === "trial") return null;
+
+  return /^[a-z0-9_-]{2,60}$/.test(normalized) ? normalized : null;
 }
 
 function toNumber(value: number | string | null | undefined) {

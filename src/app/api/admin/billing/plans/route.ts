@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { revalidatePath } from "next/cache";
 import { mapBillingPlanRow, type BillingPlanRow, type BillingPlanStatus } from "@/lib/billing/plans";
 import { requirePlatformAdmin } from "@/lib/supabase/admin-auth";
 
@@ -60,6 +61,7 @@ export async function POST(request: NextRequest) {
       includedCredits: data.included_credits,
     },
   });
+  revalidateBillingPlanSurfaces();
 
   return NextResponse.json({ plan: mapBillingPlanRow(data) }, { status: 201 });
 }
@@ -101,6 +103,7 @@ export async function PATCH(request: NextRequest) {
       includedCredits: data.included_credits,
     },
   });
+  revalidateBillingPlanSurfaces();
 
   return NextResponse.json({ plan: mapBillingPlanRow(data) });
 }
@@ -245,6 +248,11 @@ function toPlanDatabasePayload(plan: ParsedPlanPayload) {
     module_codes: plan.moduleCodes,
     mercado_pago_preapproval_plan_id: plan.mercadoPagoPreapprovalPlanId,
   };
+}
+
+function revalidateBillingPlanSurfaces() {
+  revalidatePath("/");
+  revalidatePath("/dashboard/planos");
 }
 
 function normalizeStatus(value: unknown): BillingPlanStatus {
