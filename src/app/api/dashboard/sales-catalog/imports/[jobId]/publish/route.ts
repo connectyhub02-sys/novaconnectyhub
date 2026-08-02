@@ -124,6 +124,8 @@ function readItemPatches(value: unknown): SalesCatalogImportItemPatch[] {
       if (record && "category" in record) patch.category = readNullableString(record.category);
       if (record && "price" in record) patch.price = readNullableString(record.price);
       if (record && "productUrl" in record) patch.productUrl = readNullableString(record.productUrl);
+      if (record && "imageUrl" in record) patch.imageUrl = readNullableString(record.imageUrl);
+      if (record && "importExternalImage" in record) patch.importExternalImage = readBoolean(record.importExternalImage) ?? false;
 
       return patch;
     })
@@ -152,6 +154,10 @@ function readStringList(value: unknown) {
 
 function readNullableString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function readBoolean(value: unknown) {
+  return typeof value === "boolean" ? value : null;
 }
 
 function formatRouteError(error: unknown, fallback: string) {

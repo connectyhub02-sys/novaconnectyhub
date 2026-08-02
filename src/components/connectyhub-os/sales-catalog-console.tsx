@@ -4135,10 +4135,11 @@ function CatalogImportJobCard({
         <NeonBadge tone={importJobStatusTone(job.status)}>{formatImportJobStatus(job.status)}</NeonBadge>
       </div>
 
-      <div className="mt-3 grid gap-2 sm:grid-cols-3">
+      <div className="mt-3 grid gap-2 sm:grid-cols-4">
         <MiniStat label="itens" value={String(job.items.length)} />
         <MiniStat label="prontos" value={String(readyItems)} />
         <MiniStat label="externos" value={String(job.items.filter((item) => item.salesDestination === "external_site").length)} />
+        <MiniStat label="imagens" value={String(job.items.filter((item) => item.imageUrl).length)} />
       </div>
 
       {job.errorMessage ? (
@@ -4191,6 +4192,8 @@ function CatalogImportItemEditor({
   item: ClientSalesCatalogImportItem;
   onChange: (patch: Omit<SalesCatalogImportItemPatch, "id">) => void;
 }) {
+  const canImportImage = Boolean(item.imageUrl) && item.salesDestination === "connectyhub_checkout";
+
   return (
     <div className="rounded-lg border p-2.5" style={{ borderColor: "var(--ch-border)", background: "var(--ch-panel)" }}>
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
@@ -4224,7 +4227,13 @@ function CatalogImportItemEditor({
       <div className="mt-2 grid gap-2 sm:grid-cols-3">
         <select
           value={item.salesDestination}
-          onChange={(event) => onChange({ salesDestination: event.target.value as SalesCatalogImportDestination })}
+          onChange={(event) => {
+            const salesDestination = event.target.value as SalesCatalogImportDestination;
+            onChange({
+              salesDestination,
+              ...(item.imageUrl ? { importExternalImage: salesDestination === "connectyhub_checkout" } : {}),
+            });
+          }}
           className="h-10 rounded-lg border bg-transparent px-3 text-[12px] outline-none"
           style={{ borderColor: "var(--ch-border)" }}
         >
@@ -4259,6 +4268,54 @@ function CatalogImportItemEditor({
         placeholder="URL do produto"
         style={{ borderColor: "var(--ch-border)" }}
       />
+
+      {item.imageUrl ? (
+        <div className="mt-2 rounded-lg border p-2" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="inline-flex min-w-0 items-center gap-2 text-[11px] font-semibold text-cyan-100">
+              <ImageIcon className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate">Imagem detectada</span>
+            </span>
+            {item.imageImportStatus ? (
+              <NeonBadge tone={imageImportStatusTone(item.imageImportStatus)}>{formatImageImportStatus(item.imageImportStatus)}</NeonBadge>
+            ) : null}
+          </div>
+          <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,1fr)_180px]">
+            <input
+              value={item.imageUrl}
+              onChange={(event) => {
+                const imageUrl = event.target.value.slice(0, 1000);
+                onChange({
+                  imageUrl,
+                  importExternalImage: item.salesDestination === "connectyhub_checkout" && Boolean(imageUrl.trim()),
+                });
+              }}
+              className="h-10 min-w-0 rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+              placeholder="URL da imagem"
+              style={{ borderColor: "var(--ch-border)" }}
+            />
+            <label
+              className={cn(
+                "inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border px-3 text-[11px] font-semibold text-slate-300",
+                canImportImage ? "cursor-pointer hover:bg-cyan-400/10 hover:text-cyan-100" : "cursor-not-allowed opacity-55",
+              )}
+              style={{ borderColor: "var(--ch-border)" }}
+            >
+              <input
+                type="checkbox"
+                checked={canImportImage && item.importExternalImage}
+                disabled={!canImportImage}
+                onChange={(event) => onChange({ importExternalImage: event.target.checked })}
+                className="h-4 w-4 accent-cyan-300"
+              />
+              Trazer para R2
+            </label>
+          </div>
+          {item.imageImportError ? (
+            <p className="mt-2 text-[11px] text-amber-200">{item.imageImportError}</p>
+          ) : null}
+        </div>
+      ) : null}
 
       <textarea
         value={item.description ?? ""}
@@ -5320,6 +5377,13 @@ function formatImportItemStatus(value: ClientSalesCatalogImportItem["status"]) {
   return "erro";
 }
 
+function formatImageImportStatus(value: NonNullable<ClientSalesCatalogImportItem["imageImportStatus"]>) {
+  if (value === "pending") return "pendente";
+  if (value === "imported") return "r2";
+  if (value === "skipped") return "sem r2";
+  return "falhou";
+}
+
 function importJobStatusTone(value: ClientSalesCatalogImportJob["status"]): SalesCatalogTone {
   if (value === "published" || value === "ready_to_publish") return "green";
   if (value === "review_required") return "amber";
@@ -5339,6 +5403,13 @@ function importDestinationTone(value: SalesCatalogImportDestination): SalesCatal
   if (value === "external_site") return "violet";
   if (value === "manual_handoff") return "amber";
   return "cyan";
+}
+
+function imageImportStatusTone(value: NonNullable<ClientSalesCatalogImportItem["imageImportStatus"]>): SalesCatalogTone {
+  if (value === "imported") return "green";
+  if (value === "failed") return "rose";
+  if (value === "pending") return "cyan";
+  return "zinc";
 }
 
 function salesDestinationTone(value: SalesCatalogSalesDestination): SalesCatalogTone {

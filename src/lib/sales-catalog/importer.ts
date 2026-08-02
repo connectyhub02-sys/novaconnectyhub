@@ -30,12 +30,14 @@ import {
   createTrackedLinkTag,
   normalizeHttpUrl,
 } from "@/lib/tracking/tracked-links";
+import { loadR2Config, putR2Object } from "@/lib/storage/r2";
 
 export type SalesCatalogImportSourceKind = "text" | "csv" | "excel" | "site" | "pdf" | "image" | "mixed";
 export type SalesCatalogImportTargetMode = "connectyhub_checkout" | "external_site" | "review";
 export type SalesCatalogImportDestination = "connectyhub_checkout" | "external_site" | "manual_handoff";
 export type SalesCatalogImportJobStatus = "uploaded" | "extracting" | "review_required" | "ready_to_publish" | "publishing" | "published" | "failed";
 export type SalesCatalogImportItemStatus = "draft" | "ready" | "published" | "discarded" | "error";
+export type SalesCatalogImportImageImportStatus = "pending" | "imported" | "skipped" | "failed";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -138,6 +140,9 @@ export type ClientSalesCatalogImportItem = {
   currency: string;
   productUrl: string | null;
   imageUrl: string | null;
+  importExternalImage: boolean;
+  imageImportStatus: SalesCatalogImportImageImportStatus | null;
+  imageImportError: string | null;
   attributes: SalesCatalogItemAttribute[];
   skus: SalesCatalogSku[];
   inventory: SalesCatalogProductInventory;
@@ -193,6 +198,7 @@ export type SalesCatalogImportDraft = {
   currency: string;
   productUrl: string | null;
   imageUrl: string | null;
+  importExternalImage: boolean;
   attributes: SalesCatalogItemAttribute[];
   skus: SalesCatalogSku[];
   inventory: SalesCatalogProductInventory;
@@ -214,6 +220,8 @@ export type SalesCatalogImportItemPatch = {
   category?: string | null;
   price?: string | null;
   productUrl?: string | null;
+  imageUrl?: string | null;
+  importExternalImage?: boolean;
 };
 
 export type SalesCatalogImportFileInput = {
@@ -228,6 +236,7 @@ const maxImportTextChars = 60000;
 const maxPageChars = 45000;
 const maxDraftItems = 120;
 const maxGeminiOutputTokens = 7000;
+const maxImportedImageBytes = 8 * 1024 * 1024;
 
 export const salesCatalogImportProcessRequestedEventName = "connectyhub/sales-catalog.import.process_requested";
 
@@ -562,6 +571,27 @@ export async function updateSalesCatalogImportItems(input: {
     if ("category" in patch) payload.category = patch.category;
     if ("price" in patch) payload.price = patch.price;
     if ("productUrl" in patch) payload.product_url = patch.productUrl;
+    if ("imageUrl" in patch) payload.image_url = patch.imageUrl;
+
+    const metadataPatch = buildImportItemPatchMetadata(patch);
+    if (metadataPatch) {
+      const { data: currentItem, error: metadataError } = await input.client
+        .from("sales_catalog_import_items")
+        .select("metadata")
+        .eq("id", patch.id)
+        .eq("import_job_id", input.jobId)
+        .eq("organization_id", input.companyId)
+        .maybeSingle<{ metadata: JsonRecord | null }>();
+
+      if (metadataError) {
+        throw new Error(`Nao foi possivel preparar imagem importada: ${metadataError.message}`);
+      }
+
+      payload.metadata = {
+        ...(readRecord(currentItem?.metadata) ?? {}),
+        ...metadataPatch,
+      };
+    }
 
     const { error } = await input.client
       .from("sales_catalog_import_items")
@@ -778,6 +808,11 @@ async function processSalesCatalogImportJob(input: {
       metadata: {
         created_from: "sales_catalog_ai_import",
         import_version: 1,
+        import_external_image: draft.importExternalImage,
+        image_import_status: draft.imageUrl
+          ? draft.importExternalImage ? "pending" : "skipped"
+          : null,
+        image_import_error: null,
       },
     }));
 
@@ -1142,7 +1177,13 @@ function parseDelimitedDrafts(input: {
       const title = normalizeTitle(row[titleIndex]);
       if (!title) return null;
 
-      const productUrl = normalizeDraftUrl(row[urlIndex]) ?? (input.targetMode === "external_site" ? input.sourceUrl ?? null : null);
+      const links = classifyImportLinks({
+        productValues: urlIndex >= 0 ? [row[urlIndex]] : [],
+        imageValues: imageIndex >= 0 ? [row[imageIndex]] : [],
+        searchableValues: row,
+        fallbackProductUrl: input.targetMode === "external_site" ? input.sourceUrl ?? null : null,
+      });
+      const productUrl = links.productUrl;
       const price = normalizePrice(row[priceIndex]);
       const destination = resolveDraftDestination({
         explicit: null,
@@ -1164,11 +1205,15 @@ function parseDelimitedDrafts(input: {
         category: normalizeOptionalText(row[categoryIndex], 80),
         price,
         productUrl,
-        imageUrl: normalizeDraftUrl(row[imageIndex]),
+        imageUrl: links.imageUrl,
         salesDestination: destination,
         confidence: warnings.length ? 0.68 : 0.84,
         warnings,
-        sourceEvidence: { row: index + 2 },
+        sourceEvidence: {
+          row: index + 2,
+          ...(links.imageUrl ? { image_url_detected: true } : {}),
+          ...(links.productUrl ? { product_url_detected: true } : {}),
+        },
         skus: [{
           ...createDraftSku({ title, skuCode, price, stockQuantity }),
         }],
@@ -1204,7 +1249,13 @@ function parseLineDrafts(input: {
     }
 
     const priceMatch = findPriceInText(line);
-    const maybeUrl = findUrlInText(line) ?? (input.targetMode === "external_site" ? input.sourceUrl ?? null : null);
+    const links = classifyImportLinks({
+      productValues: [line],
+      imageValues: [],
+      searchableValues: [line],
+      fallbackProductUrl: input.targetMode === "external_site" ? input.sourceUrl ?? null : null,
+    });
+    const maybeUrl = links.productUrl;
     const title = normalizeTitle(priceMatch ? line.slice(0, priceMatch.index) : line.replace(/https?:\/\/\S+/gi, ""));
 
     if (!title || title.length < 2) continue;
@@ -1224,11 +1275,15 @@ function parseLineDrafts(input: {
       category,
       price,
       productUrl: maybeUrl,
-      imageUrl: null,
+      imageUrl: links.imageUrl,
       salesDestination: destination,
       confidence: price ? 0.7 : 0.55,
       warnings: price ? warnings : Array.from(new Set([...warnings, "Preco nao identificado na linha."])),
-      sourceEvidence: { line },
+      sourceEvidence: {
+        line,
+        ...(links.imageUrl ? { image_url_detected: true } : {}),
+        ...(links.productUrl ? { product_url_detected: true } : {}),
+      },
       skus: [createDraftSku({ title, skuCode: createSkuCode(title, drafts.length + 1), price })],
     }));
   }
@@ -1271,7 +1326,14 @@ async function publishImportItemAsCatalogItem(input: {
   const itemId = randomUUID();
   const now = new Date().toISOString();
   const tag = createSalesCatalogTag(input.item.title, itemId);
-  const media = buildImportedMedia(input.item);
+  const mediaResult = await buildImportedMedia({
+    client: input.client,
+    companyId: input.companyId,
+    itemId,
+    item: input.item,
+    now,
+  });
+  const media = mediaResult.media;
   const inventory = input.item.inventory;
   const offer = input.item.offer;
   const itemFulfillment = input.item.fulfillment;
@@ -1315,6 +1377,10 @@ async function publishImportItemAsCatalogItem(input: {
     source: "ai_import",
     sales_destination: input.item.salesDestination,
     source_product_url: input.item.productUrl,
+    source_image_url: input.item.imageUrl,
+    import_external_image: input.item.importExternalImage,
+    image_import_status: mediaResult.imageImportStatus,
+    image_import_error: mediaResult.imageImportError,
     link_button_id: input.linkButton?.id ?? null,
     link_button_label: input.linkButton?.label ?? null,
     link_button_tag: input.linkButton?.tag ?? null,
@@ -1381,6 +1447,10 @@ async function publishImportItemAsCatalogItem(input: {
     .update({
       status: "published",
       published_catalog_item_id: data.id,
+      warnings: mediaResult.imageImportStatus === "failed"
+        ? Array.from(new Set([...input.item.warnings, `Imagem nao importada: ${mediaResult.imageImportError ?? "falha no download."}`]))
+        : input.item.warnings,
+      metadata: buildPublishedImportItemMetadata(input.item, mediaResult),
       published_at: now,
       updated_at: now,
     })
@@ -1669,6 +1739,7 @@ function buildDraft(input: {
   productUrl: string | null;
   imageUrl: string | null;
   salesDestination: SalesCatalogImportDestination;
+  importExternalImage?: boolean;
   confidence: number;
   warnings: string[];
   sourceEvidence: JsonRecord;
@@ -1686,6 +1757,10 @@ function buildDraft(input: {
     currency: "BRL",
     productUrl: input.productUrl,
     imageUrl: input.imageUrl,
+    importExternalImage: input.importExternalImage ?? shouldImportExternalImage({
+      destination: input.salesDestination,
+      imageUrl: input.imageUrl,
+    }),
     attributes: mergeAttributesFromSkus(input.skus),
     skus: input.skus,
     inventory: input.inventory ?? emptySalesCatalogProductInventory(),
@@ -1710,7 +1785,27 @@ function normalizeDraft(value: unknown, input: {
   const title = normalizeTitle(readString(record.title));
   if (!title) return null;
 
-  const productUrl = normalizeDraftUrl(readString(record.productUrl) ?? readString(record.product_url)) ?? (input.targetMode === "external_site" ? input.sourceUrl ?? null : null);
+  const links = classifyImportLinks({
+    productValues: [
+      record.productUrl,
+      record.product_url,
+      record.url,
+      record.link,
+      record.productLink,
+      record.product_link,
+    ],
+    imageValues: [
+      record.imageUrl,
+      record.image_url,
+      record.image,
+      record.imagem,
+      record.foto,
+      record.photo,
+    ],
+    searchableValues: Object.values(record).filter((item) => typeof item === "string"),
+    fallbackProductUrl: input.targetMode === "external_site" ? input.sourceUrl ?? null : null,
+  });
+  const productUrl = links.productUrl;
   const price = normalizePrice(readString(record.price));
   const explicitDestination = readOptionalSalesDestination(readString(record.salesDestination) ?? readString(record.sales_destination));
   const salesDestination = resolveDraftDestination({
@@ -1733,7 +1828,11 @@ function normalizeDraft(value: unknown, input: {
     price,
     currency: normalizeCurrency(readString(record.currency)),
     productUrl,
-    imageUrl: normalizeDraftUrl(readString(record.imageUrl) ?? readString(record.image_url)),
+    imageUrl: links.imageUrl,
+    importExternalImage: shouldImportExternalImage({
+      destination: salesDestination,
+      imageUrl: links.imageUrl,
+    }),
     attributes,
     skus,
     inventory: readInventory(record.inventory),
@@ -1794,32 +1893,207 @@ function createDraftSku(input: {
   };
 }
 
-function buildImportedMedia(item: ClientSalesCatalogImportItem): SalesCatalogMedia[] {
-  if (!item.imageUrl) return [];
+type ImportedMediaBuildResult = {
+  media: SalesCatalogMedia[];
+  imageImportStatus: SalesCatalogImportImageImportStatus | null;
+  imageImportError: string | null;
+};
 
-  let fileName = "imagem-importada";
-  try {
-    const url = new URL(item.imageUrl);
-    fileName = url.pathname.split("/").filter(Boolean).pop() ?? fileName;
-  } catch {
-    fileName = "imagem-importada";
+async function buildImportedMedia(input: {
+  client: SupabaseClient;
+  companyId: string;
+  itemId: string;
+  item: ClientSalesCatalogImportItem;
+  now: string;
+}): Promise<ImportedMediaBuildResult> {
+  if (!input.item.imageUrl) {
+    return { media: [], imageImportStatus: null, imageImportError: null };
   }
 
-  const contentType = /\.(png)$/i.test(fileName)
-    ? "image/png"
-    : /\.(webp)$/i.test(fileName)
-      ? "image/webp"
-      : "image/jpeg";
+  if (!shouldImportExternalImage({
+    destination: input.item.salesDestination,
+    imageUrl: input.item.imageUrl,
+    enabled: input.item.importExternalImage,
+  })) {
+    return { media: [], imageImportStatus: "skipped", imageImportError: null };
+  }
 
-  return [{
+  try {
+    const media = await importExternalImageToR2({
+      client: input.client,
+      companyId: input.companyId,
+      itemId: input.itemId,
+      itemTitle: input.item.title,
+      imageUrl: input.item.imageUrl,
+      now: input.now,
+    });
+
+    return { media: [media], imageImportStatus: "imported", imageImportError: null };
+  } catch (error) {
+    return {
+      media: [],
+      imageImportStatus: "failed",
+      imageImportError: error instanceof Error ? error.message : "Falha ao importar imagem externa.",
+    };
+  }
+}
+
+async function importExternalImageToR2(input: {
+  client: SupabaseClient;
+  companyId: string;
+  itemId: string;
+  itemTitle: string;
+  imageUrl: string;
+  now: string;
+}): Promise<SalesCatalogMedia> {
+  const imageUrl = normalizeDraftUrl(input.imageUrl);
+  if (!imageUrl) {
+    throw new Error("URL de imagem invalida.");
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+
+  let response: Response;
+  try {
+    response = await fetch(imageUrl, {
+      headers: {
+        "User-Agent": "ConnectyHub Catalog Image Importer/1.0",
+        accept: "image/avif,image/webp,image/png,image/jpeg,image/*;q=0.8,*/*;q=0.5",
+      },
+      signal: controller.signal,
+      cache: "no-store",
+    });
+  } catch (error) {
+    throw new Error(error instanceof Error && error.name === "AbortError"
+      ? "Tempo esgotado ao baixar imagem."
+      : "Nao foi possivel baixar imagem externa.");
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  if (!response.ok) {
+    throw new Error(`Imagem respondeu status ${response.status}.`);
+  }
+
+  const declaredBytes = Number(response.headers.get("content-length"));
+  if (Number.isFinite(declaredBytes) && declaredBytes > maxImportedImageBytes) {
+    throw new Error("Imagem maior que 8 MB.");
+  }
+
+  const contentType = normalizeImportedImageContentType(response.headers.get("content-type"), imageUrl);
+  if (!contentType) {
+    throw new Error("URL nao retornou uma imagem valida.");
+  }
+
+  const body = new Uint8Array(await response.arrayBuffer());
+  if (body.byteLength > maxImportedImageBytes) {
+    throw new Error("Imagem maior que 8 MB.");
+  }
+
+  const configResult = await loadR2Config(input.client);
+  if (!configResult.ok) {
+    throw new Error(configResult.error);
+  }
+
+  const extension = extensionForImageContentType(contentType) ?? extensionFromImageUrl(imageUrl) ?? "jpg";
+  const sourceFileName = fileNameFromUrl(imageUrl) ?? `${input.itemTitle}.${extension}`;
+  const fileName = ensureFileExtension(sanitizeFileName(sourceFileName), extension);
+  const objectKey = [
+    "sales-catalog",
+    input.companyId,
+    "imports",
+    input.itemId,
+    `${randomUUID()}-${fileName}`,
+  ].join("/");
+  const upload = await putR2Object(configResult.config, objectKey, body, contentType);
+
+  if (!upload.ok) {
+    throw new Error(upload.error);
+  }
+
+  return {
     id: randomUUID(),
-    fileName: sanitizeFileName(fileName),
+    fileName,
     contentType,
-    size: 0,
-    storageUrl: item.imageUrl,
+    size: upload.bytesSize,
+    storageUrl: upload.publicUrl,
     kind: resolveSalesCatalogMediaKind(contentType, fileName),
-    createdAt: new Date().toISOString(),
-  }];
+    createdAt: input.now,
+  };
+}
+
+function buildImportItemPatchMetadata(patch: NormalizedItemPatch): JsonRecord | null {
+  const metadata: JsonRecord = {};
+  let changed = false;
+
+  if ("imageUrl" in patch) {
+    changed = true;
+    metadata.image_import_error = null;
+
+    if (!patch.imageUrl) {
+      metadata.import_external_image = false;
+      metadata.image_import_status = null;
+    }
+  }
+
+  if ("importExternalImage" in patch) {
+    changed = true;
+    metadata.import_external_image = patch.importExternalImage === true;
+    metadata.image_import_status = patch.importExternalImage ? "pending" : "skipped";
+    metadata.image_import_error = null;
+  }
+
+  if (patch.salesDestination === "external_site" || patch.salesDestination === "manual_handoff") {
+    changed = true;
+    metadata.import_external_image = false;
+    metadata.image_import_status = "skipped";
+    metadata.image_import_error = null;
+  }
+
+  return changed ? metadata : null;
+}
+
+function buildPublishedImportItemMetadata(
+  item: ClientSalesCatalogImportItem,
+  mediaResult: ImportedMediaBuildResult,
+): JsonRecord {
+  return {
+    created_from: "sales_catalog_ai_import",
+    import_version: 1,
+    import_external_image: item.importExternalImage,
+    image_import_status: mediaResult.imageImportStatus,
+    image_import_error: mediaResult.imageImportError,
+    source_image_url: item.imageUrl,
+    imported_media_count: mediaResult.media.length,
+  };
+}
+
+function shouldImportExternalImage(input: {
+  destination: SalesCatalogImportDestination;
+  imageUrl: string | null;
+  enabled?: boolean | null;
+}) {
+  if (!input.imageUrl || input.destination !== "connectyhub_checkout") return false;
+  if (typeof input.enabled === "boolean") return input.enabled;
+  return true;
+}
+
+function normalizeImportExternalImage(input: {
+  value: boolean | null;
+  destination: SalesCatalogImportDestination;
+  imageUrl: string | null;
+}) {
+  return shouldImportExternalImage({
+    destination: input.destination,
+    imageUrl: input.imageUrl,
+    enabled: input.value,
+  });
+}
+
+function normalizeImageImportStatus(value: unknown): SalesCatalogImportImageImportStatus | null {
+  if (value === "pending" || value === "imported" || value === "skipped" || value === "failed") return value;
+  return null;
 }
 
 function buildFallbackDescription(item: ClientSalesCatalogImportItem) {
@@ -2018,6 +2292,13 @@ function mapImportJob(job: ImportJobRow, items: ImportItemRow[], events: ImportE
 }
 
 function mapImportItem(row: ImportItemRow): ClientSalesCatalogImportItem {
+  const metadata = readRecord(row.metadata) ?? {};
+  const importExternalImage = normalizeImportExternalImage({
+    value: readBoolean(metadata.import_external_image),
+    destination: row.sales_destination,
+    imageUrl: row.image_url,
+  });
+
   return {
     id: row.id,
     jobId: row.import_job_id,
@@ -2031,6 +2312,9 @@ function mapImportItem(row: ImportItemRow): ClientSalesCatalogImportItem {
     currency: normalizeCurrency(row.currency),
     productUrl: row.product_url,
     imageUrl: row.image_url,
+    importExternalImage,
+    imageImportStatus: normalizeImageImportStatus(readString(metadata.image_import_status)),
+    imageImportError: readString(metadata.image_import_error),
     attributes: readAttributes(row.attributes),
     skus: readSkus(row.skus, { title: row.title, price: row.price, attributes: readAttributes(row.attributes) }),
     inventory: readInventory(row.inventory),
@@ -2069,6 +2353,8 @@ type NormalizedItemPatch = {
   category?: string | null;
   price?: string | null;
   productUrl?: string | null;
+  imageUrl?: string | null;
+  importExternalImage?: boolean;
 };
 
 function normalizeItemPatch(patch: SalesCatalogImportItemPatch): NormalizedItemPatch | null {
@@ -2087,6 +2373,8 @@ function normalizeItemPatch(patch: SalesCatalogImportItemPatch): NormalizedItemP
   if ("category" in patch) normalized.category = normalizeOptionalText(patch.category, 80);
   if ("price" in patch) normalized.price = normalizePrice(patch.price);
   if ("productUrl" in patch) normalized.productUrl = normalizeDraftUrl(patch.productUrl);
+  if ("imageUrl" in patch) normalized.imageUrl = normalizeDraftUrl(patch.imageUrl);
+  if ("importExternalImage" in patch) normalized.importExternalImage = readBoolean(patch.importExternalImage) ?? false;
 
   return normalized;
 }
@@ -2389,7 +2677,7 @@ function normalizePrice(value: unknown) {
 }
 
 function normalizeDraftUrl(value: unknown) {
-  const text = readString(value);
+  const text = cleanUrlCandidate(readString(value));
   if (!text) return null;
 
   try {
@@ -2397,6 +2685,74 @@ function normalizeDraftUrl(value: unknown) {
   } catch {
     return null;
   }
+}
+
+function classifyImportLinks(input: {
+  productValues: unknown[];
+  imageValues: unknown[];
+  searchableValues: unknown[];
+  fallbackProductUrl?: string | null;
+}) {
+  const explicitImageUrls = uniqueStrings(input.imageValues.flatMap(extractUrlsFromValue));
+  const explicitProductUrls = uniqueStrings(input.productValues.flatMap(extractUrlsFromValue));
+  const allUrls = uniqueStrings(input.searchableValues.flatMap(extractUrlsFromValue));
+  const imageUrl = explicitImageUrls.find((url) => isLikelyImageUrl(url))
+    ?? explicitImageUrls[0]
+    ?? allUrls.find((url) => isLikelyImageUrl(url))
+    ?? null;
+  const productUrl = explicitProductUrls.find((url) => !isLikelyImageUrl(url))
+    ?? allUrls.find((url) => !isLikelyImageUrl(url))
+    ?? normalizeDraftUrl(input.fallbackProductUrl)
+    ?? null;
+
+  return { productUrl, imageUrl };
+}
+
+function extractUrlsFromValue(value: unknown) {
+  const text = readString(value);
+  if (!text) return [];
+
+  return extractUrlsFromText(text);
+}
+
+function extractUrlsFromText(text: string) {
+  return Array.from(text.matchAll(/https?:\/\/[^\s<>"']+/gi))
+    .map((match) => normalizeDraftUrl(match[0]))
+    .filter((url): url is string => Boolean(url));
+}
+
+function cleanUrlCandidate(value: string | null) {
+  return value
+    ?.trim()
+    .replace(/^[("'[\{]+/g, "")
+    .replace(/[)"'\].,;:\}]+$/g, "")
+    .trim() ?? null;
+}
+
+function isLikelyImageUrl(value: unknown) {
+  const normalized = normalizeDraftUrl(value);
+  if (!normalized) return false;
+
+  try {
+    const url = new URL(normalized);
+    const pathname = decodeURIComponent(url.pathname).toLowerCase();
+    const host = url.hostname.toLowerCase();
+    const format = (url.searchParams.get("format") ?? url.searchParams.get("fm") ?? url.searchParams.get("ext") ?? "").toLowerCase();
+
+    if (/\.(?:avif|bmp|gif|jpe?g|png|svg|webp)$/i.test(pathname)) return true;
+    if (/^(?:avif|gif|jpe?g|png|webp)$/i.test(format)) return true;
+    if (pathname.includes("/wp-content/uploads/")) return true;
+    if (host.includes("cloudinary") && pathname.includes("/image/")) return true;
+    if (/(?:^|\.)images?\./i.test(host) && /\/(?:image|img|media|upload|photo|foto)s?\//i.test(pathname)) return true;
+
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function uniqueStrings(values: string[]) {
+  return Array.from(new Set(values.filter(Boolean)));
 }
 
 function normalizeCurrency(value: unknown) {
@@ -2540,10 +2896,6 @@ function findPriceInText(text: string) {
     : null;
 }
 
-function findUrlInText(text: string) {
-  return normalizeDraftUrl(text.match(/https?:\/\/\S+/i)?.[0]);
-}
-
 function flattenJsonLd(value: unknown): JsonRecord[] {
   if (Array.isArray(value)) return value.flatMap(flattenJsonLd);
   const record = readRecord(value);
@@ -2645,6 +2997,59 @@ function sanitizeFileName(value: string) {
     .replace(/[^a-zA-Z0-9._-]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 96) || "imagem-importada.jpg";
+}
+
+function normalizeImportedImageContentType(value: string | null, imageUrl: string) {
+  const contentType = value?.split(";")[0]?.trim().toLowerCase() ?? "";
+
+  if (contentType === "image/jpg") return "image/jpeg";
+  if (contentType === "image/jpeg" || contentType === "image/png" || contentType === "image/webp" || contentType === "image/gif" || contentType === "image/avif") {
+    return contentType;
+  }
+
+  const extension = extensionFromImageUrl(imageUrl);
+  if (extension === "jpg" || extension === "jpeg") return "image/jpeg";
+  if (extension === "png") return "image/png";
+  if (extension === "webp") return "image/webp";
+  if (extension === "gif") return "image/gif";
+  if (extension === "avif") return "image/avif";
+
+  return null;
+}
+
+function extensionForImageContentType(contentType: string) {
+  if (contentType === "image/jpeg") return "jpg";
+  if (contentType === "image/png") return "png";
+  if (contentType === "image/webp") return "webp";
+  if (contentType === "image/gif") return "gif";
+  if (contentType === "image/avif") return "avif";
+  return null;
+}
+
+function extensionFromImageUrl(value: string) {
+  try {
+    const pathname = new URL(value).pathname.toLowerCase();
+    const match = pathname.match(/\.([a-z0-9]{2,5})$/i);
+    const extension = match?.[1]?.toLowerCase();
+    return extension && ["jpg", "jpeg", "png", "webp", "gif", "avif"].includes(extension) ? extension : null;
+  } catch {
+    return null;
+  }
+}
+
+function fileNameFromUrl(value: string) {
+  try {
+    const pathname = new URL(value).pathname;
+    const fileName = decodeURIComponent(pathname.split("/").filter(Boolean).pop() ?? "");
+    return fileName || null;
+  } catch {
+    return null;
+  }
+}
+
+function ensureFileExtension(fileName: string, extension: string) {
+  if (/\.(?:avif|gif|jpe?g|png|webp)$/i.test(fileName)) return fileName;
+  return `${fileName.replace(/\.+$/g, "")}.${extension}`;
 }
 
 function decodeHtml(value: string) {
