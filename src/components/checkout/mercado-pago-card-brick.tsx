@@ -56,6 +56,7 @@ type CardBrickProps = {
   successMessage?: string;
   pendingMessage?: string;
   rejectedMessage?: string;
+  showRejectionModal?: boolean;
   onPaymentStatusChange?: (result: CardPaymentStatusChange) => void;
   onAlternativePaymentRequest?: () => void;
   onThreeDSComplete?: () => void;
@@ -67,7 +68,7 @@ type ThreeDSChallenge = {
   checkoutUrl: string | null;
 };
 
-type RejectedPaymentCopy = {
+export type RejectedPaymentCopy = {
   inlineMessage: string;
   title: string;
   description: string;
@@ -87,6 +88,7 @@ export type CardPaymentStatusChange = {
   rejected: boolean;
   pending: boolean;
   hasThreeDSChallenge: boolean;
+  rejection: RejectedPaymentCopy | null;
 };
 
 let mercadoPagoSdkPromise: Promise<void> | null = null;
@@ -125,6 +127,7 @@ export function MercadoPagoCardBrick({
   successMessage = "Pagamento aprovado. Vamos atualizar seu pedido.",
   pendingMessage = "Pagamento enviado. A confirmacao pode levar alguns instantes.",
   rejectedMessage = "Pagamento recusado. Nenhuma cobranca foi concluida. Confira os dados do cartao ou tente outro meio de pagamento.",
+  showRejectionModal = true,
   onPaymentStatusChange,
   onAlternativePaymentRequest,
   onThreeDSComplete,
@@ -252,6 +255,7 @@ export function MercadoPagoCardBrick({
               const approved = paymentStatus === "approved" || providerStatus === "approved";
               const rejected = isRejectedPaymentStatus(paymentStatus) || isRejectedPaymentStatus(providerStatus);
               const challenge = readThreeDSChallenge(data?.threeDSChallenge, data?.checkoutUrl ?? null);
+              const rejectionCopy = rejected ? buildRejectedPaymentCopy(data?.providerStatusDetail, rejectedMessage) : null;
 
               onPaymentStatusChange?.({
                 status: data?.status ?? null,
@@ -263,6 +267,7 @@ export function MercadoPagoCardBrick({
                 rejected,
                 pending: !approved && !rejected,
                 hasThreeDSChallenge: Boolean(challenge),
+                rejection: rejectionCopy,
               });
 
               if (challenge) {
@@ -274,8 +279,6 @@ export function MercadoPagoCardBrick({
                 return;
               }
 
-              const rejectionCopy = rejected ? buildRejectedPaymentCopy(data?.providerStatusDetail, rejectedMessage) : null;
-
               setResult({
                 tone: approved ? "success" : rejected ? "error" : "warning",
                 message: approved
@@ -285,7 +288,7 @@ export function MercadoPagoCardBrick({
                   : pendingMessage,
               });
 
-              if (rejectionCopy) {
+              if (showRejectionModal && rejectionCopy) {
                 setRejectionModal(rejectionCopy);
               }
 
@@ -323,7 +326,7 @@ export function MercadoPagoCardBrick({
       controllerRef.current?.unmount();
       controllerRef.current = null;
     };
-  }, [amount, containerId, extraPayload, onPaymentStatusChange, payerEmail, pendingMessage, publicKey, rejectedMessage, sessionId, submitPath, successMessage]);
+  }, [amount, containerId, extraPayload, onPaymentStatusChange, payerEmail, pendingMessage, publicKey, rejectedMessage, sessionId, showRejectionModal, submitPath, successMessage]);
 
   return (
     <div className="mt-6 rounded-[8px] border border-slate-700 bg-slate-900/70 p-4">
@@ -430,7 +433,7 @@ function isRejectedPaymentStatus(status: string | null) {
   return status === "rejected" || status === "cancelled" || status === "canceled" || status === "expired" || status === "error";
 }
 
-function buildRejectedPaymentCopy(statusDetail: string | null | undefined, fallback: string): RejectedPaymentCopy {
+export function buildRejectedPaymentCopy(statusDetail: string | null | undefined, fallback: string): RejectedPaymentCopy {
   const detail = normalizePaymentStatus(statusDetail);
   const commonSteps = [
     "Confira numero, validade, codigo de seguranca, CPF e nome do titular.",

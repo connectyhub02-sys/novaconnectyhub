@@ -1,13 +1,15 @@
 "use client";
 
 import Image from "next/image";
-import { Copy, CreditCard, Loader2, QrCode, Sparkles } from "lucide-react";
+import { CheckCircle2, Copy, CreditCard, Loader2, QrCode, RefreshCw, Rocket, ShieldAlert, Sparkles, Trophy, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import {
+  buildRejectedPaymentCopy,
   MercadoPagoCardBrick,
   type CardPaymentStatusChange,
+  type RejectedPaymentCopy,
 } from "@/components/checkout/mercado-pago-card-brick";
 import {
   type BillingCheckoutBump,
@@ -46,6 +48,25 @@ type NoticeState = {
   message: string;
 } | null;
 
+type PaymentFeedbackModalState =
+  | {
+      kind: "success";
+      title: string;
+      description: string;
+      planName: string;
+      credits: number;
+      amountBrl: number;
+    }
+  | {
+      kind: "rejected";
+      rejection: RejectedPaymentCopy;
+    }
+  | {
+      kind: "processing";
+      title: string;
+      description: string;
+    };
+
 type CheckoutStatusResponse = {
   ok?: boolean;
   error?: string;
@@ -79,6 +100,7 @@ export function BillingPlanCheckout({
 }: BillingPlanCheckoutProps) {
   const router = useRouter();
   const approvalRefreshQueuedRef = useRef(false);
+  const shownFeedbackKeysRef = useRef(new Set<string>());
   const [subscriptionStatusOverride, setSubscriptionStatusOverride] = useState<string | null>(null);
   const [paymentStatusOverride, setPaymentStatusOverride] = useState<string | null>(null);
   const [providerPaymentId, setProviderPaymentId] = useState<string | null>(initialProviderPaymentId);
@@ -97,6 +119,7 @@ export function BillingPlanCheckout({
   const [cartSyncing, setCartSyncing] = useState(false);
   const [copied, setCopied] = useState(false);
   const [notice, setNotice] = useState<NoticeState>(null);
+  const [feedbackModal, setFeedbackModal] = useState<PaymentFeedbackModalState | null>(null);
   const currentSubscriptionStatus = subscriptionStatusOverride ?? subscriptionStatus;
   const currentPaymentStatus = paymentStatusOverride ?? paymentStatus;
   const canPay = ["pending", "incomplete", "past_due"].includes(currentSubscriptionStatus)
@@ -124,8 +147,38 @@ export function BillingPlanCheckout({
     if (approvalRefreshQueuedRef.current) return;
 
     approvalRefreshQueuedRef.current = true;
-    window.setTimeout(() => router.refresh(), 800);
+    window.setTimeout(() => router.refresh(), 1800);
   }, [router]);
+
+  const openApprovedFeedback = useCallback(() => {
+    const feedbackKey = `approved:${providerPaymentId ?? subscriptionId}`;
+    if (shownFeedbackKeysRef.current.has(feedbackKey)) return;
+
+    shownFeedbackKeysRef.current.add(feedbackKey);
+    setFeedbackModal({
+      kind: "success",
+      title: "Pagamento aprovado. Agora e hora de vender.",
+      description: "Parabens pela ativacao. Seus creditos foram liberados e sua operacao ja pode seguir para atender mais leads, responder mais rapido e transformar conversas em vendas.",
+      planName,
+      credits: includedCredits,
+      amountBrl: totalAmount,
+    });
+  }, [includedCredits, planName, providerPaymentId, subscriptionId, totalAmount]);
+
+  const openRejectedFeedback = useCallback((rejection?: RejectedPaymentCopy | null) => {
+    const fallbackRejection = buildRejectedPaymentCopy(
+      null,
+      "Pagamento recusado. Nenhuma cobranca foi concluida. Tente outro cartao ou use Pix.",
+    );
+    const feedbackKey = `rejected:${providerPaymentId ?? subscriptionId}:${rejection?.statusDetail ?? "unknown"}`;
+    if (shownFeedbackKeysRef.current.has(feedbackKey)) return;
+
+    shownFeedbackKeysRef.current.add(feedbackKey);
+    setFeedbackModal({
+      kind: "rejected",
+      rejection: rejection ?? fallbackRejection,
+    });
+  }, [providerPaymentId, subscriptionId]);
 
   const checkPaymentStatus = useCallback(async ({ manual = false }: { manual?: boolean } = {}) => {
     if (manual) {
@@ -166,6 +219,7 @@ export function BillingPlanCheckout({
           tone: "success",
           message: "Pagamento confirmado. Plano ativo e creditos liberados.",
         });
+        openApprovedFeedback();
         setCardStatusPolling(false);
         queueCheckoutRefresh();
         return;
@@ -173,6 +227,7 @@ export function BillingPlanCheckout({
 
       if (data?.paymentStatus === "rejected") {
         setCardStatusPolling(false);
+        openRejectedFeedback();
       }
 
       if (manual) {
@@ -195,7 +250,18 @@ export function BillingPlanCheckout({
         setStatusChecking(false);
       }
     }
-  }, [queueCheckoutRefresh, subscriptionId]);
+  }, [openApprovedFeedback, openRejectedFeedback, queueCheckoutRefresh, subscriptionId]);
+
+  useEffect(() => {
+    if (checkoutConfirmed) {
+      openApprovedFeedback();
+      return;
+    }
+
+    if (paymentRejected) {
+      openRejectedFeedback();
+    }
+  }, [checkoutConfirmed, openApprovedFeedback, openRejectedFeedback, paymentRejected]);
 
   useEffect(() => {
     const shouldPollPixStatus = method === "pix" && Boolean(pix.qrCode);
@@ -231,6 +297,7 @@ export function BillingPlanCheckout({
         tone: "success",
         message: "Pagamento confirmado. Plano ativo e creditos liberados.",
       });
+      openApprovedFeedback();
       queueCheckoutRefresh();
       return;
     }
@@ -241,6 +308,7 @@ export function BillingPlanCheckout({
         tone: "error",
         message: "Pagamento recusado. Nenhuma cobranca foi concluida. Veja a orientacao na tela ou escolha Pix para liberar o plano.",
       });
+      openRejectedFeedback(result.rejection);
       return;
     }
 
@@ -255,7 +323,7 @@ export function BillingPlanCheckout({
     window.setTimeout(() => {
       void checkPaymentStatus();
     }, 2500);
-  }, [checkPaymentStatus, queueCheckoutRefresh]);
+  }, [checkPaymentStatus, openApprovedFeedback, openRejectedFeedback, queueCheckoutRefresh]);
 
   const handleCardThreeDSComplete = useCallback(() => {
     setCardStatusPolling(true);
@@ -348,6 +416,7 @@ export function BillingPlanCheckout({
           : "Pix gerado. Assim que o pagamento cair, os creditos serao liberados.",
       });
       if (data?.status === "approved") {
+        openApprovedFeedback();
         queueCheckoutRefresh();
       }
     } catch (error) {
@@ -387,6 +456,7 @@ export function BillingPlanCheckout({
   }
 
   return (
+    <>
     <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_400px]">
       <section className="space-y-4">
         <div className="rounded-[8px] border border-cyan-400/25 bg-slate-950/72 p-5 shadow-xl shadow-black/20">
@@ -548,6 +618,7 @@ export function BillingPlanCheckout({
                 successMessage="Pagamento aprovado. Seu plano sera ativado agora."
                 pendingMessage="Pagamento enviado. Assim que confirmar, os creditos serao liberados."
                 rejectedMessage="Pagamento recusado. Nenhuma cobranca foi concluida. Confira os dados do cartao, tente outro cartao ou use Pix."
+                showRejectionModal={false}
                 onPaymentStatusChange={handleCardPaymentStatusChange}
                 onAlternativePaymentRequest={switchToPixAndGenerate}
                 onThreeDSComplete={handleCardThreeDSComplete}
@@ -590,6 +661,304 @@ export function BillingPlanCheckout({
           </div>
         ) : null}
       </aside>
+    </div>
+    {feedbackModal ? (
+      <CheckoutPaymentFeedbackModal
+        feedback={feedbackModal}
+        onClose={() => setFeedbackModal(null)}
+        onRetryCard={() => {
+          setMethod("card");
+          setFeedbackModal(null);
+        }}
+        onUsePix={switchToPixAndGenerate}
+        onGoDashboard={() => router.push("/dashboard")}
+      />
+    ) : null}
+    </>
+  );
+}
+
+function CheckoutPaymentFeedbackModal({
+  feedback,
+  onClose,
+  onGoDashboard,
+  onRetryCard,
+  onUsePix,
+}: {
+  feedback: PaymentFeedbackModalState;
+  onClose: () => void;
+  onGoDashboard: () => void;
+  onRetryCard: () => void;
+  onUsePix: () => void;
+}) {
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
+  if (feedback.kind === "success") {
+    return (
+      <div
+        className="fixed inset-0 z-[10000] grid place-items-center overflow-hidden bg-black/75 px-4 py-6 backdrop-blur-md"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="billing-success-title"
+      >
+        <SuccessCelebration />
+        <div className="relative w-full max-w-[680px] overflow-hidden rounded-[8px] border border-emerald-200/30 bg-slate-950 shadow-2xl shadow-black/50">
+          <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-emerald-300 via-cyan-300 to-amber-200" />
+          <button
+            type="button"
+            onClick={onClose}
+            className="absolute right-4 top-4 z-10 grid h-9 w-9 place-items-center rounded-[8px] border border-slate-600 text-slate-300 transition hover:border-slate-400 hover:text-white"
+            aria-label="Fechar aviso"
+          >
+            <X className="h-4 w-4" />
+          </button>
+
+          <div className="px-5 pb-5 pt-8 text-center sm:px-8">
+            <div className="mx-auto grid h-16 w-16 place-items-center rounded-[8px] border border-emerald-300/40 bg-emerald-400/15 text-emerald-100 shadow-lg shadow-emerald-950/30">
+              <Trophy className="h-8 w-8" />
+            </div>
+            <p className="mt-5 font-mono text-[10px] font-black uppercase tracking-[0.24em] text-emerald-200">
+              Pagamento aprovado
+            </p>
+            <h2 id="billing-success-title" className="mx-auto mt-2 max-w-xl text-[28px] font-black leading-tight text-white sm:text-[34px]">
+              {feedback.title}
+            </h2>
+            <p className="mx-auto mt-3 max-w-[560px] text-sm leading-6 text-slate-300">
+              {feedback.description}
+            </p>
+
+            <div className="mt-6 grid gap-3 sm:grid-cols-3">
+              <SuccessMetric label="Plano ativo" value={feedback.planName} />
+              <SuccessMetric label="Creditos liberados" value={formatCredits(feedback.credits)} />
+              <SuccessMetric label="Total pago" value={formatMoney(feedback.amountBrl)} />
+            </div>
+
+            <div className="mt-6 rounded-[8px] border border-cyan-300/25 bg-cyan-400/10 p-4 text-left">
+              <div className="flex items-start gap-3">
+                <Rocket className="mt-0.5 h-5 w-5 shrink-0 text-cyan-200" />
+                <div>
+                  <p className="text-sm font-bold text-white">Boas vendas a partir de agora</p>
+                  <p className="mt-1 text-sm leading-6 text-cyan-50/80">
+                    Sua estrutura esta ativa. Use os creditos para atender melhor, responder com velocidade e transformar cada conversa em uma oportunidade real de crescimento.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-2 border-t border-slate-700/80 p-5 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="inline-flex min-h-11 items-center justify-center rounded-[7px] border border-slate-600 px-4 text-sm font-bold text-slate-100 transition hover:border-cyan-300/60 hover:bg-cyan-300/10"
+            >
+              Continuar no checkout
+            </button>
+            <button
+              type="button"
+              onClick={onGoDashboard}
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-[7px] bg-emerald-300 px-4 text-sm font-black text-slate-950 transition hover:bg-emerald-200"
+            >
+              <CheckCircle2 className="h-4 w-4" />
+              Ir para o painel
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (feedback.kind === "rejected") {
+    const rejection = feedback.rejection;
+
+    return (
+      <div
+        className="fixed inset-0 z-[10000] grid place-items-center bg-black/75 px-4 py-6 backdrop-blur-md"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="billing-rejection-title"
+      >
+        <div className="w-full max-w-[640px] overflow-hidden rounded-[8px] border border-rose-200/25 bg-slate-950 shadow-2xl shadow-black/50">
+          <div className="flex items-start justify-between gap-4 border-b border-slate-700/80 p-5">
+            <div className="flex items-start gap-3">
+              <div className="grid h-11 w-11 shrink-0 place-items-center rounded-[8px] border border-rose-300/35 bg-rose-400/12 text-rose-100">
+                <ShieldAlert className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-rose-200">
+                  Pagamento recusado
+                </p>
+                <h2 id="billing-rejection-title" className="mt-1 text-[22px] font-black leading-tight text-white">
+                  {rejection.title}
+                </h2>
+                <p className="mt-2 text-sm leading-6 text-slate-300">
+                  {rejection.description}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-[8px] border border-slate-600 text-slate-300 transition hover:border-slate-400 hover:text-white"
+              aria-label="Fechar aviso"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          <div className="space-y-4 p-5">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <FeedbackFact
+                label="Cobranca"
+                tone="success"
+                value="Nenhuma cobranca foi concluida"
+              />
+              <FeedbackFact
+                label="Motivo provavel"
+                tone="error"
+                value={rejection.reason}
+              />
+            </div>
+
+            <div className="rounded-[8px] border border-amber-300/35 bg-amber-300/10 p-4">
+              <p className="text-sm font-bold text-amber-100">O que fazer agora</p>
+              <p className="mt-2 text-sm leading-6 text-amber-50/85">
+                {rejection.recommendation}
+              </p>
+            </div>
+
+            <div className="rounded-[8px] border border-slate-700 bg-slate-900/70 p-4">
+              <p className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-cyan-200">
+                Proximos passos
+              </p>
+              <div className="mt-3 space-y-2">
+                {rejection.nextSteps.map((step) => (
+                  <div key={step} className="flex gap-2 text-sm leading-5 text-slate-300">
+                    <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-cyan-300" />
+                    <span>{step}</span>
+                  </div>
+                ))}
+              </div>
+              {rejection.statusDetail ? (
+                <p className="mt-3 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                  Codigo do provedor: {rejection.statusDetail}
+                </p>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="grid gap-2 border-t border-slate-700/80 p-5 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={onRetryCard}
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-[7px] border border-slate-600 px-4 text-sm font-bold text-slate-100 transition hover:border-cyan-300/60 hover:bg-cyan-300/10"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Tentar outro cartao
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                onUsePix();
+                onClose();
+              }}
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-[7px] bg-cyan-300 px-4 text-sm font-black text-slate-950 transition hover:bg-cyan-200"
+            >
+              <QrCode className="h-4 w-4" />
+              Usar Pix agora
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-[10000] grid place-items-center bg-black/75 px-4 py-6 backdrop-blur-md"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="billing-processing-title"
+    >
+      <div className="w-full max-w-[520px] rounded-[8px] border border-amber-200/25 bg-slate-950 p-5 shadow-2xl shadow-black/50">
+        <div className="flex items-start gap-3">
+          <Loader2 className="mt-1 h-5 w-5 animate-spin text-amber-200" />
+          <div>
+            <h2 id="billing-processing-title" className="text-lg font-black text-white">{feedback.title}</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-300">{feedback.description}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SuccessCelebration() {
+  const pieces = [
+    "left-[12%] top-[12%] h-3 w-1.5 bg-emerald-300",
+    "left-[20%] top-[28%] h-2 w-6 bg-cyan-300",
+    "left-[32%] top-[10%] h-4 w-1.5 bg-amber-200",
+    "left-[68%] top-[14%] h-2 w-6 bg-emerald-200",
+    "left-[82%] top-[26%] h-4 w-1.5 bg-cyan-200",
+    "left-[90%] top-[11%] h-3 w-3 bg-amber-300",
+    "left-[15%] bottom-[18%] h-4 w-1.5 bg-cyan-300",
+    "left-[74%] bottom-[14%] h-3 w-3 bg-emerald-300",
+  ];
+
+  return (
+    <div className="pointer-events-none absolute inset-0">
+      <div className="absolute left-1/2 top-20 h-28 w-28 -translate-x-1/2 animate-ping rounded-full border border-emerald-300/35" />
+      <div className="absolute left-[22%] top-[18%] h-20 w-20 animate-ping rounded-full border border-cyan-300/25" />
+      <div className="absolute right-[18%] top-[20%] h-24 w-24 animate-ping rounded-full border border-amber-200/25" />
+      {pieces.map((className) => (
+        <span
+          key={className}
+          className={cn("absolute animate-bounce rounded-sm shadow-lg shadow-black/25", className)}
+        />
+      ))}
+    </div>
+  );
+}
+
+function SuccessMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-[8px] border border-emerald-300/25 bg-emerald-400/10 p-3 text-left">
+      <p className="font-mono text-[9px] font-bold uppercase tracking-[0.18em] text-emerald-200">{label}</p>
+      <p className="mt-2 truncate text-sm font-black text-white">{value}</p>
+    </div>
+  );
+}
+
+function FeedbackFact({
+  label,
+  tone,
+  value,
+}: {
+  label: string;
+  tone: "success" | "error";
+  value: string;
+}) {
+  return (
+    <div className={cn(
+      "rounded-[8px] border p-3",
+      tone === "success"
+        ? "border-emerald-300/30 bg-emerald-400/10"
+        : "border-rose-300/30 bg-rose-400/10",
+    )}>
+      <p className={cn(
+        "font-mono text-[10px] font-bold uppercase tracking-[0.18em]",
+        tone === "success" ? "text-emerald-200" : "text-rose-200",
+      )}>
+        {label}
+      </p>
+      <p className="mt-2 text-sm font-semibold leading-5 text-white">{value}</p>
     </div>
   );
 }
