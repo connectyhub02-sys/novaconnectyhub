@@ -39,6 +39,7 @@ import {
   type SalesCatalogOrderRow,
 } from "@/lib/client-os/sales-catalog";
 import { createSalesCatalogPixPaymentSession } from "@/lib/sales-catalog/payment-sessions";
+import { normalizeCurrencyAmount } from "@/lib/sales-catalog/mercado-pago";
 import {
   formatSalesCatalogFulfillmentMode,
   formatSalesCatalogFulfillmentStatus,
@@ -4176,10 +4177,21 @@ async function recordSalesCatalogOrderIntent(input: {
         })
       : null;
     const customerPhone = input.context.lead?.phone_number ?? input.context.phoneNumber ?? null;
-    const primaryItem = items[0];
-    const primarySku = resolveRuntimeOrderSku(primaryItem);
-    const primaryTotal = primarySku?.salePrice ?? primarySku?.price ?? primaryItem.offer.salePrice ?? primaryItem.price;
-    const total = items.length === 1 ? primaryTotal : null;
+    const orderSelections = items.map((item) => {
+      const sku = resolveRuntimeOrderSku(item);
+      const unitPrice = sku?.price ?? item.price;
+      const salePrice = sku?.salePrice ?? item.offer.salePrice;
+
+      return {
+        item,
+        sku,
+        unitPrice,
+        salePrice,
+        total: salePrice ?? unitPrice,
+      };
+    });
+    const primaryItem = orderSelections[0].item;
+    const total = sumRuntimeOrderTotal(orderSelections);
     const containsPlatformProducts = items.some((item) => Boolean(item.platformProductId));
     const commercialFlowType = containsPlatformProducts
       ? items.some((item) => item.commercialFlowType === "connectyhub_direct") ? "connectyhub_direct" : "connectyhub_resale"
@@ -4228,11 +4240,7 @@ async function recordSalesCatalogOrderIntent(input: {
       return null;
     }
 
-    const orderItems = items.map((item) => {
-      const sku = resolveRuntimeOrderSku(item);
-      const unitPrice = sku?.price ?? item.price;
-      const salePrice = sku?.salePrice ?? item.offer.salePrice;
-
+    const orderItems = orderSelections.map(({ item, sku, unitPrice, salePrice, total: itemTotal }) => {
       return {
         order_id: order.id,
         organization_id: input.context.organization.id,
@@ -4244,7 +4252,7 @@ async function recordSalesCatalogOrderIntent(input: {
         quantity: 1,
         unit_price: unitPrice,
         sale_price: salePrice,
-        total: salePrice ?? unitPrice,
+        total: itemTotal,
         product_origin_type: item.productOriginType,
         commercial_flow_type: item.commercialFlowType,
         revenue_owner_type: item.revenueOwnerType,
@@ -4377,24 +4385,56 @@ async function sendSalesCatalogPaymentLink(input: {
   phone: string;
   payment: SalesCatalogPaymentLinkResult;
 }): Promise<OutboundMessage> {
-  const text = [
-    "Perfeito, gerei um checkout seguro para concluir seu pedido pelo Pix:",
-    input.payment.checkoutUrl,
-    "",
-    "Assim que o pagamento for confirmado, eu acompanho por aqui no WhatsApp.",
-  ].join("\n");
-  const providerResponse = await sendWhatsappText({
-    credentials: input.context.credentials,
-    token: input.token,
-    phone: input.phone,
-    text,
-    trackId: `agent_payment_${input.context.run.id}_${input.payment.orderId.slice(0, 8)}`,
-    mentions: resolveGroupMentions(input.context),
-  });
+  const text = "Perfeito, gerei um checkout seguro para concluir seu pedido pelo Pix.";
+  let providerResponse: unknown;
+  let messageText = text;
+  let interactiveButton = false;
+  let buttonFallback = false;
+
+  try {
+    providerResponse = await sendWhatsappInteractiveButtons({
+      credentials: input.context.credentials,
+      token: input.token,
+      phone: input.phone,
+      text,
+      choices: [`Pagar agora|${input.payment.checkoutUrl}`],
+      trackId: `agent_payment_button_${input.context.run.id}_${input.payment.orderId.slice(0, 8)}`,
+      mentions: resolveGroupMentions(input.context),
+    });
+    interactiveButton = true;
+  } catch (error) {
+    const errorMessage = describeRuntimeError(error, "Falha desconhecida ao enviar botao de pagamento.");
+    messageText = "Gerei o checkout, mas o WhatsApp nao abriu o botao de pagamento agora. Vou continuar por aqui e te ajudo a finalizar.";
+    const textProviderResponse = await sendWhatsappText({
+      credentials: input.context.credentials,
+      token: input.token,
+      phone: input.phone,
+      text: messageText,
+      trackId: `agent_payment_button_fallback_${input.context.run.id}_${input.payment.orderId.slice(0, 8)}`,
+      mentions: resolveGroupMentions(input.context),
+    });
+
+    providerResponse = {
+      fallback: true,
+      reason: "payment_interactive_button_failed",
+      error: errorMessage,
+      checkoutUrl: input.payment.checkoutUrl,
+      textProviderResponse,
+    };
+    buttonFallback = true;
+    await persistInteractiveButtonFallbackEvent(input.client, input.context, {
+      chunkIndex: 1,
+      chunksTotal: 1,
+      errorMessage,
+      providerResponse,
+    });
+  }
   const message: OutboundMessage = {
-    text,
+    text: messageText,
     mode: "text",
     providerResponse,
+    interactiveButton,
+    buttonFallback,
     persisted: true,
   };
 
@@ -4410,6 +4450,20 @@ function resolveRuntimeOrderSku(item: RuntimeSalesCatalogItem): RuntimeSalesCata
   ));
 
   return activeSkus.length === 1 ? activeSkus[0] : null;
+}
+
+function sumRuntimeOrderTotal(items: Array<{ total: string | null }>) {
+  let total = 0;
+
+  for (const item of items) {
+    const amount = normalizeCurrencyAmount(item.total);
+    if (!amount) return null;
+    total += amount;
+  }
+
+  return total > 0
+    ? total.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    : null;
 }
 
 async function scheduleSalesCatalogOrderAbandonedFollowUp(input: {

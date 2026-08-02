@@ -36,6 +36,10 @@ import {
 } from "@/lib/whatsapp/proactive-followup";
 import { processPendingPlatformBillingNotifications } from "@/lib/billing/platform-billing-webhook";
 import { runConnectyHubGatewayHealthCheck } from "@/lib/connectyhub-api/gateway";
+import {
+  processQueuedSalesCatalogImportJobs,
+  salesCatalogImportProcessRequestedEventName,
+} from "@/lib/sales-catalog/importer";
 import { createServiceClient } from "@/lib/supabase/service";
 import { syncUazapiInstances } from "@/lib/whatsapp/uazapi-sync";
 import { runGrowthAgentMission, type GrowthAgentCode } from "@/lib/growth/growth-agent-runner";
@@ -404,6 +408,33 @@ export const connectyhubPlatformAutomationSweep = inngest.createFunction(
   },
 );
 
+export const connectyhubSalesCatalogImportSweep = inngest.createFunction(
+  {
+    id: "connectyhub-sales-catalog-import-sweep",
+    name: "ConnectyHub Sales Catalog Import Sweep",
+    retries: 1,
+    triggers: [
+      { event: salesCatalogImportProcessRequestedEventName },
+      { cron: "* * * * *" },
+    ],
+  },
+  async ({ event, step }) => {
+    const data = event.data as { jobId?: string } | undefined;
+    const summary = await step.run("process-sales-catalog-import-jobs", () =>
+      processQueuedSalesCatalogImportJobs({
+        client: createServiceClient(),
+        jobId: data?.jobId,
+        limit: data?.jobId ? 1 : 3,
+      }),
+    );
+
+    return {
+      status: "swept",
+      summary,
+    };
+  },
+);
+
 const growthAgentSchedules: Array<{
   id: string;
   name: string;
@@ -509,5 +540,6 @@ export const functions = [
   connectyhubWhatsappCloneProfileImport,
   connectyhubWhatsappFollowUp,
   connectyhubPlatformAutomationSweep,
+  connectyhubSalesCatalogImportSweep,
   ...connectyhubGrowthAgentFunctions,
 ];

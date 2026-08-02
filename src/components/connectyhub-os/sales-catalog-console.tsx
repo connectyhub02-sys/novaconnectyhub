@@ -83,6 +83,14 @@ import {
   type SalesCatalogStockStatus,
   type SalesCatalogWhatsAppMessageTemplates,
 } from "@/lib/sales-catalog/shared";
+import type {
+  ClientSalesCatalogImportJob,
+  ClientSalesCatalogImportItem,
+  SalesCatalogImportDestination,
+  SalesCatalogImportItemPatch,
+  SalesCatalogImportSourceKind,
+  SalesCatalogImportTargetMode,
+} from "@/lib/sales-catalog/importer";
 import { cn } from "@/lib/utils";
 
 type Notice = {
@@ -104,6 +112,7 @@ type SalesCatalogConsoleProps = {
 type CatalogTab = "setup" | "shipping" | "products" | "orders" | "payments" | "whatsapp";
 type SalesCatalogProductFormTab = "essential" | "pricing" | "media" | "stock" | "delivery";
 type CommercialFlowFilter = "all" | SalesCatalogCommercialFlowType;
+type CatalogImportPatchMap = Record<string, SalesCatalogImportItemPatch>;
 
 type SettingsDraft = {
   businessType: SalesCatalogBusinessType;
@@ -408,6 +417,19 @@ export function SalesCatalogConsole({
   const [creatingPaymentSessionId, setCreatingPaymentSessionId] = useState<string | null>(null);
   const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
+  const [catalogImportJobs, setCatalogImportJobs] = useState<ClientSalesCatalogImportJob[]>([]);
+  const [loadingCatalogImports, setLoadingCatalogImports] = useState(false);
+  const [creatingCatalogImport, setCreatingCatalogImport] = useState(false);
+  const [savingCatalogImportId, setSavingCatalogImportId] = useState<string | null>(null);
+  const [publishingCatalogImportId, setPublishingCatalogImportId] = useState<string | null>(null);
+  const [catalogImportSourceKind, setCatalogImportSourceKind] = useState<SalesCatalogImportSourceKind>("text");
+  const [catalogImportTargetMode, setCatalogImportTargetMode] = useState<SalesCatalogImportTargetMode>("review");
+  const [catalogImportDefaultDestination, setCatalogImportDefaultDestination] = useState<SalesCatalogImportDestination>("connectyhub_checkout");
+  const [catalogImportTitle, setCatalogImportTitle] = useState("");
+  const [catalogImportText, setCatalogImportText] = useState("");
+  const [catalogImportSourceUrl, setCatalogImportSourceUrl] = useState("");
+  const [catalogImportFiles, setCatalogImportFiles] = useState<File[]>([]);
+  const [catalogImportPatches, setCatalogImportPatches] = useState<CatalogImportPatchMap>({});
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [visibilityId, setVisibilityId] = useState<string | null>(null);
@@ -501,6 +523,69 @@ export function SalesCatalogConsole({
     return () => window.clearTimeout(timeoutId);
   }, []);
 
+  useEffect(() => {
+    if (!selectedCompanyId) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadImports() {
+      setLoadingCatalogImports(true);
+
+      try {
+        const response = await fetch(`/api/dashboard/sales-catalog/imports?companyId=${encodeURIComponent(selectedCompanyId)}`);
+        const data = await response.json().catch(() => null) as { importJobs?: ClientSalesCatalogImportJob[]; error?: string } | null;
+
+        if (cancelled) return;
+
+        if (!response.ok || !data?.importJobs) {
+          throw new Error(data?.error ?? "Nao foi possivel carregar importacoes.");
+        }
+
+        setCatalogImportJobs(data.importJobs);
+      } catch (error) {
+        if (!cancelled) {
+          setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao carregar importacoes." });
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingCatalogImports(false);
+        }
+      }
+    }
+
+    void loadImports();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedCompanyId]);
+
+  useEffect(() => {
+    const hasQueuedImport = catalogImportJobs.some((job) => job.status === "uploaded" || job.status === "extracting");
+    if (!selectedCompanyId || activeTab !== "products" || !hasQueuedImport) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      void (async () => {
+        try {
+          const response = await fetch(`/api/dashboard/sales-catalog/imports?companyId=${encodeURIComponent(selectedCompanyId)}`);
+          const data = await response.json().catch(() => null) as { importJobs?: ClientSalesCatalogImportJob[] } | null;
+
+          if (response.ok && data?.importJobs) {
+            setCatalogImportJobs(data.importJobs);
+          }
+        } catch {
+          return;
+        }
+      })();
+    }, 12000);
+
+    return () => window.clearInterval(intervalId);
+  }, [activeTab, catalogImportJobs, selectedCompanyId]);
+
   function changeCompany(companyId: string) {
     const nextSettings = settings.find((entry) => entry.companyId === companyId) ?? null;
     const nextShippingSettings = shippingSettings.find((entry) => entry.companyId === companyId) ?? null;
@@ -518,6 +603,11 @@ export function SalesCatalogConsole({
     setOrderItemId("");
     setOrderSkuId("");
     setOrderTotal("");
+    setCatalogImportTitle("");
+    setCatalogImportText("");
+    setCatalogImportSourceUrl("");
+    setCatalogImportFiles([]);
+    setCatalogImportPatches({});
     if (!nextSettings?.configured) {
       setActiveTab("setup");
     }
@@ -1176,6 +1266,207 @@ export function SalesCatalogConsole({
     } finally {
       setUpdatingOrderId(null);
     }
+  }
+
+  async function refreshCatalogImports() {
+    if (!selectedCompanyId || loadingCatalogImports) return;
+
+    setLoadingCatalogImports(true);
+    setNotice(null);
+
+    try {
+      const response = await fetch(`/api/dashboard/sales-catalog/imports?companyId=${encodeURIComponent(selectedCompanyId)}`);
+      const data = await response.json().catch(() => null) as { importJobs?: ClientSalesCatalogImportJob[]; error?: string } | null;
+
+      if (!response.ok || !data?.importJobs) {
+        throw new Error(data?.error ?? "Nao foi possivel carregar importacoes.");
+      }
+
+      setCatalogImportJobs(data.importJobs);
+    } catch (error) {
+      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao carregar importacoes." });
+    } finally {
+      setLoadingCatalogImports(false);
+    }
+  }
+
+  function updateCatalogImportItem(itemId: string, patch: Omit<SalesCatalogImportItemPatch, "id">) {
+    setCatalogImportPatches((current) => ({
+      ...current,
+      [itemId]: {
+        ...(current[itemId] ?? { id: itemId }),
+        ...patch,
+      },
+    }));
+    setCatalogImportJobs((current) => current.map((job) => ({
+      ...job,
+      items: job.items.map((item) => (item.id === itemId ? { ...item, ...patch } : item)),
+    })));
+  }
+
+  function handleCatalogImportFiles(event: ChangeEvent<HTMLInputElement>) {
+    const selectedFiles = Array.from(event.target.files ?? []).slice(0, 6);
+    setCatalogImportFiles(selectedFiles);
+
+    if (selectedFiles.length > 0 && catalogImportSourceKind === "text") {
+      setCatalogImportSourceKind(inferImportSourceKindFromFile(selectedFiles[0]));
+    }
+  }
+
+  async function createCatalogImport() {
+    if (!selectedCompanyId || creatingCatalogImport) return;
+
+    const hasSource = Boolean(catalogImportText.trim() || catalogImportSourceUrl.trim() || catalogImportFiles.length > 0);
+    if (!hasSource) {
+      setNotice({ tone: "warning", message: "Envie uma URL, cole um catalogo ou anexe um arquivo para importar." });
+      return;
+    }
+
+    if (catalogImportSourceKind === "site" && !catalogImportSourceUrl.trim()) {
+      setNotice({ tone: "warning", message: "Informe o link do site antes de importar." });
+      return;
+    }
+
+    setCreatingCatalogImport(true);
+    setNotice(null);
+
+    try {
+      const formData = new FormData();
+      formData.set("companyId", selectedCompanyId);
+      formData.set("sourceKind", catalogImportSourceKind);
+      formData.set("targetMode", catalogImportTargetMode);
+      formData.set("defaultSalesDestination", catalogImportDefaultDestination);
+      formData.set("title", catalogImportTitle);
+      formData.set("text", catalogImportText);
+      formData.set("sourceUrl", catalogImportSourceUrl);
+
+      for (const file of catalogImportFiles) {
+        formData.append("files", file);
+      }
+
+      const response = await fetch("/api/dashboard/sales-catalog/imports", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await response.json().catch(() => null) as { importJob?: ClientSalesCatalogImportJob; error?: string } | null;
+
+      if (!response.ok || !data?.importJob) {
+        throw new Error(data?.error ?? "Nao foi possivel importar produtos.");
+      }
+
+      setCatalogImportJobs((current) => [data.importJob!, ...current.filter((job) => job.id !== data.importJob!.id)]);
+      setCatalogImportText("");
+      setCatalogImportFiles([]);
+      setNotice({
+        tone: data.importJob.status === "failed" ? "error" : "success",
+        message: data.importJob.status === "failed"
+          ? data.importJob.errorMessage ?? "Importacao criada, mas a extracao falhou."
+          : data.importJob.items.length > 0
+            ? `Importacao pronta para revisar: ${data.importJob.items.length} item(ns) encontrados.`
+            : "Importacao enfileirada. O cron vai extrair os produtos em instantes.",
+      });
+    } catch (error) {
+      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao importar produtos." });
+    } finally {
+      setCreatingCatalogImport(false);
+    }
+  }
+
+  async function saveCatalogImportReview(job: ClientSalesCatalogImportJob) {
+    if (!selectedCompanyId || savingCatalogImportId) return;
+
+    const patches = getCatalogImportPatchesForJob(job);
+    if (patches.length === 0) {
+      setNotice({ tone: "warning", message: "Nenhuma alteracao para salvar nesta importacao." });
+      return;
+    }
+
+    setSavingCatalogImportId(job.id);
+    setNotice(null);
+
+    try {
+      const response = await fetch(`/api/dashboard/sales-catalog/imports/${encodeURIComponent(job.id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyId: selectedCompanyId,
+          patches,
+        }),
+      });
+      const data = await response.json().catch(() => null) as { importJob?: ClientSalesCatalogImportJob; error?: string } | null;
+
+      if (!response.ok || !data?.importJob) {
+        throw new Error(data?.error ?? "Nao foi possivel salvar a revisao.");
+      }
+
+      setCatalogImportJobs((current) => current.map((entry) => (entry.id === data.importJob!.id ? data.importJob! : entry)));
+      clearCatalogImportPatches(patches);
+      setNotice({ tone: "success", message: "Revisao salva." });
+    } catch (error) {
+      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao salvar revisao." });
+    } finally {
+      setSavingCatalogImportId(null);
+    }
+  }
+
+  async function publishCatalogImport(job: ClientSalesCatalogImportJob) {
+    if (!selectedCompanyId || publishingCatalogImportId) return;
+
+    setPublishingCatalogImportId(job.id);
+    setNotice(null);
+
+    try {
+      const patches = getCatalogImportPatchesForJob(job);
+      const response = await fetch(`/api/dashboard/sales-catalog/imports/${encodeURIComponent(job.id)}/publish`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyId: selectedCompanyId,
+          patches,
+        }),
+      });
+      const data = await response.json().catch(() => null) as {
+        importJob?: ClientSalesCatalogImportJob;
+        items?: ClientSalesCatalogItem[];
+        error?: string;
+      } | null;
+
+      if (!response.ok || !data?.importJob) {
+        throw new Error(data?.error ?? "Nao foi possivel publicar a importacao.");
+      }
+
+      setCatalogImportJobs((current) => current.map((entry) => (entry.id === data.importJob!.id ? data.importJob! : entry)));
+      if (data.items?.length) {
+        setItems((current) => {
+          const nextIds = new Set(data.items!.map((item) => item.id));
+          return [...data.items!, ...current.filter((item) => !nextIds.has(item.id))];
+        });
+      }
+      clearCatalogImportPatches(patches);
+      setNotice({
+        tone: data.importJob.errorMessage ? "warning" : "success",
+        message: data.importJob.errorMessage ?? `Importacao publicada: ${data.importJob.items.filter((item) => item.status === "published").length} item(ns).`,
+      });
+    } catch (error) {
+      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao publicar importacao." });
+    } finally {
+      setPublishingCatalogImportId(null);
+    }
+  }
+
+  function getCatalogImportPatchesForJob(job: ClientSalesCatalogImportJob) {
+    return job.items
+      .map((item) => catalogImportPatches[item.id])
+      .filter((patch): patch is SalesCatalogImportItemPatch => Boolean(patch));
+  }
+
+  function clearCatalogImportPatches(patches: SalesCatalogImportItemPatch[]) {
+    if (patches.length === 0) return;
+
+    const ids = new Set(patches.map((patch) => patch.id));
+    setCatalogImportPatches((current) => Object.fromEntries(
+      Object.entries(current).filter(([itemId]) => !ids.has(itemId)),
+    ));
   }
 
   async function importWhatsappCatalog() {
@@ -2496,6 +2787,34 @@ export function SalesCatalogConsole({
         <div className="grid gap-4 xl:grid-cols-[minmax(320px,0.72fr)_minmax(0,1fr)]">
         <div className="space-y-4">
           {activeTab === "products" ? (
+          <>
+          <SalesCatalogImportPanel
+            companyName={selectedCompany?.name ?? "empresa"}
+            creating={creatingCatalogImport}
+            defaultDestination={catalogImportDefaultDestination}
+            files={catalogImportFiles}
+            jobs={catalogImportJobs}
+            loading={loadingCatalogImports}
+            publishingJobId={publishingCatalogImportId}
+            savingJobId={savingCatalogImportId}
+            sourceKind={catalogImportSourceKind}
+            sourceText={catalogImportText}
+            sourceUrl={catalogImportSourceUrl}
+            targetMode={catalogImportTargetMode}
+            title={catalogImportTitle}
+            onChangeDefaultDestination={setCatalogImportDefaultDestination}
+            onChangeFiles={handleCatalogImportFiles}
+            onChangeItem={updateCatalogImportItem}
+            onChangeSourceKind={setCatalogImportSourceKind}
+            onChangeSourceText={setCatalogImportText}
+            onChangeSourceUrl={setCatalogImportSourceUrl}
+            onChangeTargetMode={setCatalogImportTargetMode}
+            onChangeTitle={setCatalogImportTitle}
+            onCreate={createCatalogImport}
+            onPublish={publishCatalogImport}
+            onRefresh={refreshCatalogImports}
+            onSaveReview={saveCatalogImportReview}
+          />
           <Panel id="sales-catalog-tour-products" title={editingItemId ? "Editar item" : "Novo item"} eyebrow={selectedCompany?.name ?? "empresa"} tone="cyan" compact>
             <div className="space-y-3">
             <SalesProductFormTabs activeTab={productFormTab} onChange={setProductFormTab} tabs={salesCatalogProductFormTabs} />
@@ -3136,6 +3455,7 @@ export function SalesCatalogConsole({
             </div>
             </div>
           </Panel>
+          </>
           ) : (
           <Panel title="Catalogo WhatsApp" eyebrow={selectedCompany?.name ?? "sincronizacao"} tone="violet" compact>
             <div className="space-y-3">
@@ -3203,6 +3523,448 @@ export function SalesCatalogConsole({
       </div>
       )}
     </>
+  );
+}
+
+function SalesCatalogImportPanel({
+  companyName,
+  creating,
+  defaultDestination,
+  files,
+  jobs,
+  loading,
+  publishingJobId,
+  savingJobId,
+  sourceKind,
+  sourceText,
+  sourceUrl,
+  targetMode,
+  title,
+  onChangeDefaultDestination,
+  onChangeFiles,
+  onChangeItem,
+  onChangeSourceKind,
+  onChangeSourceText,
+  onChangeSourceUrl,
+  onChangeTargetMode,
+  onChangeTitle,
+  onCreate,
+  onPublish,
+  onRefresh,
+  onSaveReview,
+}: {
+  companyName: string;
+  creating: boolean;
+  defaultDestination: SalesCatalogImportDestination;
+  files: File[];
+  jobs: ClientSalesCatalogImportJob[];
+  loading: boolean;
+  publishingJobId: string | null;
+  savingJobId: string | null;
+  sourceKind: SalesCatalogImportSourceKind;
+  sourceText: string;
+  sourceUrl: string;
+  targetMode: SalesCatalogImportTargetMode;
+  title: string;
+  onChangeDefaultDestination: (value: SalesCatalogImportDestination) => void;
+  onChangeFiles: (event: ChangeEvent<HTMLInputElement>) => void;
+  onChangeItem: (itemId: string, patch: Omit<SalesCatalogImportItemPatch, "id">) => void;
+  onChangeSourceKind: (value: SalesCatalogImportSourceKind) => void;
+  onChangeSourceText: (value: string) => void;
+  onChangeSourceUrl: (value: string) => void;
+  onChangeTargetMode: (value: SalesCatalogImportTargetMode) => void;
+  onChangeTitle: (value: string) => void;
+  onCreate: () => void;
+  onPublish: (job: ClientSalesCatalogImportJob) => void;
+  onRefresh: () => void;
+  onSaveReview: (job: ClientSalesCatalogImportJob) => void;
+}) {
+  const hasInput = Boolean(sourceText.trim() || sourceUrl.trim() || files.length > 0);
+  const canCreate = hasInput && !creating;
+
+  return (
+    <Panel id="sales-catalog-ai-importer" title="Importador IA" eyebrow={companyName} tone="green" compact>
+      <div className="space-y-3">
+        <div className="grid gap-2 sm:grid-cols-2">
+          <label className="block">
+            <FieldLabel>Origem</FieldLabel>
+            <select
+              value={sourceKind}
+              onChange={(event) => onChangeSourceKind(event.target.value as SalesCatalogImportSourceKind)}
+              className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+              style={{ borderColor: "var(--ch-border)" }}
+            >
+              <option value="text">Texto</option>
+              <option value="csv">CSV</option>
+              <option value="excel">Excel</option>
+              <option value="site">Site</option>
+              <option value="pdf">PDF</option>
+              <option value="image">Imagem</option>
+              <option value="mixed">Misto</option>
+            </select>
+          </label>
+          <label className="block">
+            <FieldLabel>Titulo</FieldLabel>
+            <input
+              value={title}
+              onChange={(event) => onChangeTitle(event.target.value.slice(0, 140))}
+              className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+              placeholder="Cardapio, catalogo ou site"
+              style={{ borderColor: "var(--ch-border)" }}
+            />
+          </label>
+        </div>
+
+        <div className="grid gap-2">
+          <FieldLabel>Destino da venda</FieldLabel>
+          <div className="grid gap-1.5 sm:grid-cols-3">
+            <ImportChoiceButton
+              active={targetMode === "review"}
+              icon={SlidersHorizontal}
+              label="Revisar"
+              onClick={() => onChangeTargetMode("review")}
+            />
+            <ImportChoiceButton
+              active={targetMode === "connectyhub_checkout"}
+              icon={CreditCard}
+              label="Checkout"
+              onClick={() => onChangeTargetMode("connectyhub_checkout")}
+            />
+            <ImportChoiceButton
+              active={targetMode === "external_site"}
+              icon={ExternalLink}
+              label="Site externo"
+              onClick={() => onChangeTargetMode("external_site")}
+            />
+          </div>
+        </div>
+
+        <div className="grid gap-2">
+          <FieldLabel>Padrao dos itens</FieldLabel>
+          <div className="grid gap-1.5 sm:grid-cols-3">
+            <ImportChoiceButton
+              active={defaultDestination === "connectyhub_checkout"}
+              icon={CreditCard}
+              label="Checkout"
+              onClick={() => onChangeDefaultDestination("connectyhub_checkout")}
+            />
+            <ImportChoiceButton
+              active={defaultDestination === "external_site"}
+              icon={ExternalLink}
+              label="Site"
+              onClick={() => onChangeDefaultDestination("external_site")}
+            />
+            <ImportChoiceButton
+              active={defaultDestination === "manual_handoff"}
+              icon={MessageSquareText}
+              label="Humano"
+              onClick={() => onChangeDefaultDestination("manual_handoff")}
+            />
+          </div>
+        </div>
+
+        <label className="block">
+          <FieldLabel>URL</FieldLabel>
+          <input
+            value={sourceUrl}
+            onChange={(event) => onChangeSourceUrl(event.target.value.slice(0, 1000))}
+            className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+            placeholder="https://..."
+            style={{ borderColor: "var(--ch-border)" }}
+          />
+        </label>
+
+        <label className="block">
+          <FieldLabel>Catalogo</FieldLabel>
+          <textarea
+            value={sourceText}
+            onChange={(event) => onChangeSourceText(event.target.value.slice(0, 60000))}
+            className="min-h-28 w-full resize-y rounded-lg border bg-transparent px-3 py-2 text-[12px] leading-5 outline-none"
+            placeholder="Cole produtos, precos, categorias, adicionais, frete ou regras comerciais."
+            style={{ borderColor: "var(--ch-border)" }}
+          />
+        </label>
+
+        <label className="flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-lg border px-3 text-[12px] font-bold text-cyan-100 transition hover:bg-cyan-400/10" style={{ borderColor: "var(--ch-border)" }}>
+          <Upload className="h-4 w-4" />
+          {files.length > 0 ? `${files.length} arquivo(s)` : "Anexar arquivo"}
+          <input
+            type="file"
+            multiple
+            accept=".txt,.md,.csv,.tsv,.json,.pdf,.xls,.xlsx,image/*,application/pdf,text/plain,text/csv,application/json"
+            className="sr-only"
+            onChange={onChangeFiles}
+          />
+        </label>
+
+        {files.length > 0 ? (
+          <div className="grid gap-1.5">
+            {files.map((file, index) => (
+              <div key={`${file.name}-${index}`} className="flex min-w-0 items-center justify-between gap-3 rounded-lg border px-3 py-2 text-[11px]" style={{ borderColor: "var(--ch-border)", background: "var(--ch-panel)" }}>
+                <span className="flex min-w-0 items-center gap-2 text-slate-300">
+                  <FileText className="h-3.5 w-3.5 shrink-0 text-cyan-300" />
+                  <span className="truncate">{file.name}</span>
+                </span>
+                <span className="shrink-0 font-mono text-slate-500">{formatFileSize(file.size)}</span>
+              </div>
+            ))}
+          </div>
+        ) : null}
+
+        <button
+          type="button"
+          disabled={!canCreate}
+          onClick={onCreate}
+          className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-emerald-300 px-4 text-[12px] font-bold text-slate-950 transition hover:bg-emerald-200 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <PackagePlus className="h-4 w-4" />}
+          Importar com IA
+        </button>
+
+        <div className="flex items-center justify-between gap-3 pt-2">
+          <div className="min-w-0">
+            <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">importacoes</p>
+            <p className="mt-1 text-[11px] text-slate-500">{jobs.length} job(s) recentes</p>
+          </div>
+          <button
+            type="button"
+            disabled={loading}
+            onClick={onRefresh}
+            className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-slate-300 transition hover:bg-cyan-400/10 hover:text-cyan-100 disabled:opacity-50"
+            style={{ borderColor: "var(--ch-border)" }}
+          >
+            {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+            Atualizar
+          </button>
+        </div>
+
+        {jobs.length > 0 ? (
+          <div className="grid max-h-[760px] gap-3 overflow-y-auto pr-1">
+            {jobs.map((job) => (
+              <CatalogImportJobCard
+                key={job.id}
+                job={job}
+                publishing={publishingJobId === job.id}
+                saving={savingJobId === job.id}
+                onChangeItem={onChangeItem}
+                onPublish={() => onPublish(job)}
+                onSaveReview={() => onSaveReview(job)}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-xl border border-dashed px-4 py-8 text-center text-[12px] text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
+            Nenhuma importacao criada para esta empresa.
+          </div>
+        )}
+      </div>
+    </Panel>
+  );
+}
+
+function ImportChoiceButton({
+  active,
+  icon: Icon,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  icon: LucideIcon;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "inline-flex min-h-9 min-w-0 items-center justify-center gap-2 rounded-lg border px-2 font-mono text-[10px] font-bold uppercase tracking-wide transition",
+        active ? "border-emerald-300/50 bg-emerald-300/15 text-emerald-100" : "text-slate-500 hover:bg-emerald-400/10 hover:text-emerald-100",
+      )}
+      style={{ borderColor: active ? undefined : "var(--ch-border)" }}
+    >
+      <Icon className="h-3.5 w-3.5 shrink-0" />
+      <span className="truncate">{label}</span>
+    </button>
+  );
+}
+
+function CatalogImportJobCard({
+  job,
+  publishing,
+  saving,
+  onChangeItem,
+  onPublish,
+  onSaveReview,
+}: {
+  job: ClientSalesCatalogImportJob;
+  publishing: boolean;
+  saving: boolean;
+  onChangeItem: (itemId: string, patch: Omit<SalesCatalogImportItemPatch, "id">) => void;
+  onPublish: () => void;
+  onSaveReview: () => void;
+}) {
+  const pendingItems = job.items.filter((item) => item.status !== "published" && item.status !== "discarded");
+  const readyItems = pendingItems.filter((item) => item.status === "ready").length;
+  const canPublish = pendingItems.length > 0 && !publishing;
+
+  return (
+    <div className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate text-[13px] font-semibold text-slate-100">{job.title ?? formatImportSourceKind(job.sourceKind)}</p>
+          <p className="mt-1 flex flex-wrap gap-2 text-[11px] text-slate-500">
+            {job.createdAt ? <span>{formatDateTime(job.createdAt)}</span> : null}
+            <span>{formatImportTargetMode(job.targetMode)}</span>
+            {job.inputUrl ? <span className="max-w-[190px] truncate">{job.inputUrl}</span> : null}
+          </p>
+        </div>
+        <NeonBadge tone={importJobStatusTone(job.status)}>{formatImportJobStatus(job.status)}</NeonBadge>
+      </div>
+
+      <div className="mt-3 grid gap-2 sm:grid-cols-3">
+        <MiniStat label="itens" value={String(job.items.length)} />
+        <MiniStat label="prontos" value={String(readyItems)} />
+        <MiniStat label="externos" value={String(job.items.filter((item) => item.salesDestination === "external_site").length)} />
+      </div>
+
+      {job.errorMessage ? (
+        <div className="mt-3 rounded-lg border border-rose-400/25 bg-rose-400/10 px-3 py-2 text-[11px] text-rose-100">
+          {job.errorMessage}
+        </div>
+      ) : null}
+
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button
+          type="button"
+          disabled={saving || publishing}
+          onClick={onSaveReview}
+          className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-slate-300 transition hover:bg-cyan-400/10 hover:text-cyan-100 disabled:opacity-50"
+          style={{ borderColor: "var(--ch-border)" }}
+        >
+          {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+          Salvar revisao
+        </button>
+        <button
+          type="button"
+          disabled={!canPublish}
+          onClick={onPublish}
+          className="inline-flex min-h-9 items-center gap-2 rounded-lg bg-cyan-300 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {publishing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+          Publicar
+        </button>
+      </div>
+
+      {job.items.length > 0 ? (
+        <div className="mt-3 grid gap-2">
+          {job.items.map((item) => (
+            <CatalogImportItemEditor
+              key={item.id}
+              item={item}
+              onChange={(patch) => onChangeItem(item.id, patch)}
+            />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function CatalogImportItemEditor({
+  item,
+  onChange,
+}: {
+  item: ClientSalesCatalogImportItem;
+  onChange: (patch: Omit<SalesCatalogImportItemPatch, "id">) => void;
+}) {
+  return (
+    <div className="rounded-lg border p-2.5" style={{ borderColor: "var(--ch-border)", background: "var(--ch-panel)" }}>
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap gap-1.5">
+          <NeonBadge tone={importItemStatusTone(item.status)}>{formatImportItemStatus(item.status)}</NeonBadge>
+          <NeonBadge tone={importDestinationTone(item.salesDestination)}>{formatImportDestination(item.salesDestination)}</NeonBadge>
+          <span className="inline-flex items-center rounded-md border px-2 py-1 font-mono text-[10px] text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
+            {Math.round(item.confidence * 100)}%
+          </span>
+        </div>
+        {item.price ? <span className="font-mono text-[12px] font-semibold text-emerald-200">R$ {item.price}</span> : null}
+      </div>
+
+      <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_105px]">
+        <input
+          value={item.title}
+          onChange={(event) => onChange({ title: event.target.value.slice(0, 160) })}
+          className="h-10 min-w-0 rounded-lg border bg-transparent px-3 text-[12px] font-semibold text-slate-100 outline-none"
+          placeholder="Nome do item"
+          style={{ borderColor: "var(--ch-border)" }}
+        />
+        <input
+          value={item.price ?? ""}
+          onChange={(event) => onChange({ price: event.target.value.slice(0, 60) })}
+          className="h-10 rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+          placeholder="Preco"
+          style={{ borderColor: "var(--ch-border)" }}
+        />
+      </div>
+
+      <div className="mt-2 grid gap-2 sm:grid-cols-3">
+        <select
+          value={item.salesDestination}
+          onChange={(event) => onChange({ salesDestination: event.target.value as SalesCatalogImportDestination })}
+          className="h-10 rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+          style={{ borderColor: "var(--ch-border)" }}
+        >
+          <option value="connectyhub_checkout">Checkout</option>
+          <option value="external_site">Site externo</option>
+          <option value="manual_handoff">Humano</option>
+        </select>
+        <select
+          value={item.status}
+          onChange={(event) => onChange({ status: event.target.value as ClientSalesCatalogImportItem["status"] })}
+          className="h-10 rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+          style={{ borderColor: "var(--ch-border)" }}
+        >
+          <option value="draft">Rascunho</option>
+          <option value="ready">Pronto</option>
+          <option value="discarded">Ignorar</option>
+          <option value="published">Publicado</option>
+        </select>
+        <input
+          value={item.category ?? ""}
+          onChange={(event) => onChange({ category: event.target.value.slice(0, 80) })}
+          className="h-10 rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+          placeholder="Categoria"
+          style={{ borderColor: "var(--ch-border)" }}
+        />
+      </div>
+
+      <input
+        value={item.productUrl ?? ""}
+        onChange={(event) => onChange({ productUrl: event.target.value.slice(0, 1000) })}
+        className="mt-2 h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+        placeholder="URL do produto"
+        style={{ borderColor: "var(--ch-border)" }}
+      />
+
+      <textarea
+        value={item.description ?? ""}
+        onChange={(event) => onChange({ description: event.target.value.slice(0, 1400) })}
+        className="mt-2 min-h-16 w-full resize-y rounded-lg border bg-transparent px-3 py-2 text-[12px] leading-5 outline-none"
+        placeholder="Descricao"
+        style={{ borderColor: "var(--ch-border)" }}
+      />
+
+      {item.warnings.length > 0 ? (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {item.warnings.map((warning) => (
+            <span key={warning} className="inline-flex max-w-full rounded-md border border-amber-400/25 bg-amber-400/10 px-2 py-1 text-[10px] text-amber-100">
+              <span className="truncate">{warning}</span>
+            </span>
+          ))}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -4139,6 +4901,84 @@ function FileIcon({ contentType, fileName }: { contentType: string; fileName: st
   if (lowerType.startsWith("image/") || /\.(png|jpe?g|webp|gif)$/i.test(lowerName)) return <ImageIcon className="h-3 w-3" />;
   if (lowerType.startsWith("video/") || /\.(mp4|webm|mov)$/i.test(lowerName)) return <Video className="h-3 w-3" />;
   return <FileText className="h-3 w-3" />;
+}
+
+function inferImportSourceKindFromFile(file: File): SalesCatalogImportSourceKind {
+  const type = file.type.toLowerCase();
+  const name = file.name.toLowerCase();
+
+  if (type.includes("pdf") || name.endsWith(".pdf")) return "pdf";
+  if (type.startsWith("image/") || /\.(png|jpe?g|webp|gif)$/i.test(name)) return "image";
+  if (type.includes("spreadsheet") || /\.(xlsx?|ods)$/i.test(name)) return "excel";
+  if (type.includes("csv") || name.endsWith(".csv") || name.endsWith(".tsv")) return "csv";
+  return "text";
+}
+
+function formatFileSize(size: number) {
+  if (size >= 1024 * 1024) return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+  if (size >= 1024) return `${Math.ceil(size / 1024)} KB`;
+  return `${size} B`;
+}
+
+function formatImportSourceKind(value: SalesCatalogImportSourceKind) {
+  if (value === "csv") return "CSV";
+  if (value === "excel") return "Excel";
+  if (value === "site") return "Site";
+  if (value === "pdf") return "PDF";
+  if (value === "image") return "Imagem";
+  if (value === "mixed") return "Misto";
+  return "Texto";
+}
+
+function formatImportTargetMode(value: SalesCatalogImportTargetMode) {
+  if (value === "connectyhub_checkout") return "Checkout ConnectyHub";
+  if (value === "external_site") return "Site externo";
+  return "Revisao";
+}
+
+function formatImportDestination(value: SalesCatalogImportDestination) {
+  if (value === "external_site") return "site";
+  if (value === "manual_handoff") return "humano";
+  return "checkout";
+}
+
+function formatImportJobStatus(value: ClientSalesCatalogImportJob["status"]) {
+  if (value === "uploaded") return "recebido";
+  if (value === "extracting") return "extraindo";
+  if (value === "review_required") return "revisar";
+  if (value === "ready_to_publish") return "pronto";
+  if (value === "publishing") return "publicando";
+  if (value === "published") return "publicado";
+  return "falhou";
+}
+
+function formatImportItemStatus(value: ClientSalesCatalogImportItem["status"]) {
+  if (value === "draft") return "rascunho";
+  if (value === "ready") return "pronto";
+  if (value === "published") return "publicado";
+  if (value === "discarded") return "ignorado";
+  return "erro";
+}
+
+function importJobStatusTone(value: ClientSalesCatalogImportJob["status"]): SalesCatalogTone {
+  if (value === "published" || value === "ready_to_publish") return "green";
+  if (value === "review_required") return "amber";
+  if (value === "failed") return "rose";
+  if (value === "publishing" || value === "extracting") return "cyan";
+  return "zinc";
+}
+
+function importItemStatusTone(value: ClientSalesCatalogImportItem["status"]): SalesCatalogTone {
+  if (value === "published" || value === "ready") return "green";
+  if (value === "draft") return "amber";
+  if (value === "error") return "rose";
+  return "zinc";
+}
+
+function importDestinationTone(value: SalesCatalogImportDestination): SalesCatalogTone {
+  if (value === "external_site") return "violet";
+  if (value === "manual_handoff") return "amber";
+  return "cyan";
 }
 
 function formatStatus(status: SalesCatalogItemStatus) {
