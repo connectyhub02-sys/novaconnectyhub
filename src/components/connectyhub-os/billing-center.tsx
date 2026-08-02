@@ -144,6 +144,7 @@ export function BillingCenter({
       </div>
 
       <CurrentCostCenterPanel summary={summary} />
+      <SupplierTariffsPanel catalog={commercialCatalog} summary={summary} />
 
       <PlatformBillingOperations catalog={platformBillingCatalog} />
 
@@ -522,6 +523,137 @@ function CurrentCostCenterPanel({ summary }: { summary: BillingAdminSummary }) {
   );
 }
 
+function SupplierTariffsPanel({
+  catalog,
+  summary,
+}: {
+  catalog: BillingCommercialCatalog;
+  summary: BillingAdminSummary;
+}) {
+  const fixedProvider = summary.currentCostCenter.fixedProviders[0];
+  const creditUnitPrice = summary.currentCostCenter.creditUnitPriceBrl;
+  const sortedRates = [...catalog.rates].sort((a, b) => {
+    const providerCompare = a.providerLabel.localeCompare(b.providerLabel, "pt-BR");
+
+    if (providerCompare !== 0) {
+      return providerCompare;
+    }
+
+    return `${a.featureName}${a.modelName ?? ""}`.localeCompare(`${b.featureName}${b.modelName ?? ""}`, "pt-BR");
+  });
+  const rows = [
+    [
+      <TariffName key="provider" title="Uazapi" detail="Fornecedor fixo WhatsApp" muted={!fixedProvider} />,
+      <TariffName key="model" title="WhatsApp conectado" detail="ate 100 dispositivos no plano atual" />,
+      <span key="unit" className="font-mono text-slate-300">instancia/mes</span>,
+      <TariffName
+        key="cost"
+        title={formatMoney(fixedProvider?.monthlyCostBrl ?? 0)}
+        detail={`${formatMoney(fixedProvider?.plannedCostPerUnitBrl ?? 0)} planejado por dispositivo`}
+      />,
+      <span key="cost1k" className="font-mono text-slate-500">-</span>,
+      <span key="cost1m" className="font-mono text-slate-500">-</span>,
+      <TariffName key="price" title="custo fixo" detail="nao debita credito por unidade" />,
+      <span key="minimum" className="font-mono text-slate-500">-</span>,
+      <span key="margin" className="font-mono text-slate-500">rateio</span>,
+    ],
+    ...sortedRates.map((rate) => {
+      const priceBrl = rate.connectyPricePerUnit * creditUnitPrice;
+      const marginPercent = getRateMarginPercent(rate.providerCostPerUnit, priceBrl);
+
+      return [
+        <TariffName
+          key="provider"
+          title={rate.providerLabel}
+          detail={rate.active ? "ativa" : "inativa"}
+          muted={!rate.active}
+        />,
+        <TariffName
+          key="model"
+          title={rate.modelName ?? rate.featureName}
+          detail={rate.modelName ? rate.featureName : rate.featureCode}
+        />,
+        <span key="unit" className="font-mono text-slate-300">{formatUnit(rate.unit)}</span>,
+        <span key="cost" className="font-mono text-amber-300">{formatUnitMoney(rate.providerCostPerUnit)}</span>,
+        <span key="cost1k" className="font-mono text-slate-300">{formatScaledSupplierCost(rate.providerCostPerUnit, rate.unit, 1000)}</span>,
+        <span key="cost1m" className="font-mono text-slate-300">{formatScaledSupplierCost(rate.providerCostPerUnit, rate.unit, 1000000)}</span>,
+        <TariffName
+          key="price"
+          title={`${formatCredits(rate.connectyPricePerUnit)} cr/un`}
+          detail={`~ ${formatUnitMoney(priceBrl)}`}
+        />,
+        <span key="minimum" className="font-mono text-slate-300">{formatCredits(rate.minimumChargeCredits)}</span>,
+        <TariffName
+          key="margin"
+          title={marginPercent === null ? "sem custo" : formatPercent(marginPercent)}
+          detail={rate.marginMultiplier ? `alvo ${formatNumber(rate.marginMultiplier)}x` : "sem alvo"}
+        />,
+      ];
+    }),
+  ];
+
+  return (
+    <Panel
+      className="mb-4"
+      title="Tarifas de fornecedores"
+      eyebrow="preco base / creditos / margem"
+      compact
+      collapsible
+      action={
+        <div className="flex flex-wrap gap-2">
+          <NeonBadge tone={catalog.schemaReady ? "green" : "amber"}>
+            {catalog.schemaReady ? `${formatNumber(sortedRates.length)} tarifas` : "catalogo pendente"}
+          </NeonBadge>
+          <NeonBadge tone="cyan">1 credito = {formatUnitMoney(creditUnitPrice)}</NeonBadge>
+        </div>
+      }
+    >
+      <div
+        className="mb-3 rounded-xl p-3 text-[12px] leading-5 text-slate-500"
+        style={{ background: "rgba(6,182,212,0.07)", border: "1px solid rgba(6,182,212,0.18)" }}
+      >
+        Esta tabela mostra a regua de custo e preco que transforma consumo de fornecedores em creditos para o cliente.
+        Gemini e ElevenLabs entram por unidade de uso. Uazapi entra como custo fixo mensal da operacao.
+      </div>
+
+      {rows.length > 0 ? (
+        <div className="overflow-x-auto">
+          <DataTable
+            columns={["Fornecedor", "Modelo/Recurso", "Unidade", "Custo fornecedor", "Custo 1k", "Custo 1M", "Preco CH", "Min. cr", "Margem"]}
+            rows={rows}
+          />
+        </div>
+      ) : (
+        <div
+          className="rounded-xl p-5 text-[13px] leading-6 text-slate-500"
+          style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
+        >
+          Nenhuma tarifa foi encontrada no catalogo financeiro.
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+function TariffName({
+  title,
+  detail,
+  muted = false,
+}: {
+  title: string;
+  detail?: string;
+  muted?: boolean;
+}) {
+  return (
+    <span className="block min-w-[130px]">
+      <span className="block truncate font-semibold" style={{ color: muted ? "var(--ch-muted)" : "var(--ch-text)" }}>
+        {title}
+      </span>
+      {detail ? <span className="mt-0.5 block truncate text-[10px] text-slate-500">{detail}</span> : null}
+    </span>
+  );
+}
+
 function BillingMetric({
   icon: Icon,
   label,
@@ -637,6 +769,40 @@ function getMarginPercent(providerCost: number, revenue: number) {
   }
 
   return Math.round(((revenue - providerCost) / revenue) * 10000) / 100;
+}
+
+function getRateMarginPercent(providerCost: number, priceBrl: number) {
+  if (providerCost <= 0 || priceBrl <= 0) {
+    return null;
+  }
+
+  return Math.round(((priceBrl - providerCost) / priceBrl) * 10000) / 100;
+}
+
+function formatScaledSupplierCost(providerCostPerUnit: number, unit: string, scale: number) {
+  if (!["input_token", "output_token", "character"].includes(unit)) {
+    return "-";
+  }
+
+  return formatUnitMoney(providerCostPerUnit * scale);
+}
+
+function formatUnit(unit: string) {
+  const labels: Record<string, string> = {
+    input_token: "token entrada",
+    output_token: "token saida",
+    character: "caractere",
+    credit: "credito",
+    request: "request",
+    minute: "minuto",
+    megabyte: "MB",
+    instance: "instancia",
+    message: "mensagem",
+    media: "midia",
+    custom: "custom",
+  };
+
+  return labels[unit] ?? unit;
 }
 
 function formatMoney(value: number) {
