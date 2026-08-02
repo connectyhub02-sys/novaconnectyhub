@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Activity,
+  AlertTriangle,
   BellRing,
   Clock3,
   Coins,
@@ -21,6 +22,7 @@ import {
   Send,
   ShieldAlert,
   Webhook,
+  X,
 } from "lucide-react";
 import type { PlatformBillingOperationsCatalog, PlatformBillingPaymentItem } from "@/lib/billing/platform-billing-admin";
 import {
@@ -60,6 +62,11 @@ type SettingsDraft = {
   billingOrderBumpProductIds: string[];
 };
 
+type RefundDialogState = {
+  payment: PlatformBillingPaymentItem;
+  reason: string;
+};
+
 export function PlatformBillingOperations({
   catalog,
 }: {
@@ -70,6 +77,7 @@ export function PlatformBillingOperations({
   const [testing, setTesting] = useState<"health" | "notification" | null>(null);
   const [reconcilingId, setReconcilingId] = useState<string | null>(null);
   const [refundingId, setRefundingId] = useState<string | null>(null);
+  const [refundDialog, setRefundDialog] = useState<RefundDialogState | null>(null);
   const [disconnectingBilling, setDisconnectingBilling] = useState(false);
   const [state, setState] = useState<ActionState>({ tone: "idle", message: "" });
   const [testState, setTestState] = useState<OperationalTestState>({ tone: "idle", message: "", checks: [] });
@@ -305,23 +313,26 @@ export function PlatformBillingOperations({
     }
   }
 
-  async function refundBillingPayment(payment: PlatformBillingPaymentItem) {
+  function refundBillingPayment(payment: PlatformBillingPaymentItem) {
     if (!canRefundPayment(payment)) {
       setState({ tone: "error", message: "Somente pagamentos aprovados com ID Mercado Pago podem ser estornados." });
       return;
     }
 
-    const reason = window.prompt(`Motivo do estorno de ${payment.organizationName} (${formatMoney(payment.amountBrl)}):`);
+    setState({ tone: "idle", message: "" });
+    setRefundDialog({ payment, reason: "" });
+  }
 
-    if (!reason?.trim()) {
+  async function confirmRefundPayment() {
+    if (!refundDialog) {
       return;
     }
 
-    const confirmed = window.confirm(
-      `Confirmar estorno total de ${formatMoney(payment.amountBrl)} para ${payment.organizationName}? O plano sera cancelado e os creditos do plano serao removidos.`,
-    );
+    const payment = refundDialog.payment;
+    const reason = refundDialog.reason.trim();
 
-    if (!confirmed) {
+    if (!reason) {
+      setState({ tone: "warning", message: "Informe o motivo do estorno antes de confirmar." });
       return;
     }
 
@@ -334,7 +345,7 @@ export function PlatformBillingOperations({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           paymentId: payment.id,
-          reason: reason.trim(),
+          reason,
         }),
       });
       const data = await response.json().catch(() => null) as {
@@ -364,6 +375,7 @@ export function PlatformBillingOperations({
         tone: uncoveredCredits > 0 || data?.result?.providerSubscriptionCancelError ? "warning" : "success",
         message: `Estorno de ${formatMoney(data?.result?.amountBrl ?? payment.amountBrl)} realizado. ${formatCredits(reversedCredits)} creditos removidos.${uncoveredCredits > 0 ? ` ${formatCredits(uncoveredCredits)} creditos ja tinham sido usados e ficaram descobertos.` : ""}${recurrenceWarning}`,
       });
+      setRefundDialog(null);
       router.refresh();
     } catch (error) {
       setState({
@@ -434,27 +446,28 @@ export function PlatformBillingOperations({
   }
 
   return (
-    <div className="mb-4 space-y-3">
-      <Panel
-        title="Cobranca ConnectyHub"
-        eyebrow="Mercado Pago / Pix Automatico / WhatsApp"
-        tone="amber"
-        compact
-        collapsible
-        action={
-          <div className="flex flex-wrap gap-2">
-            <NeonBadge tone={catalog.credentialReadiness === 100 ? "green" : "amber"}>
-              MP {catalog.credentialReadiness}%
-            </NeonBadge>
-            <NeonBadge tone={connectedAgents.length > 0 ? "green" : "rose"}>
-              {connectedAgents.length} agente{connectedAgents.length === 1 ? "" : "s"} online
-            </NeonBadge>
-            <NeonBadge tone={catalog.settings.pixAutomaticRequired ? "cyan" : "amber"}>
-              Pix Automatico
-            </NeonBadge>
-          </div>
-        }
-      >
+    <>
+      <div className="mb-4 space-y-3">
+        <Panel
+          title="Cobranca ConnectyHub"
+          eyebrow="Mercado Pago / Pix Automatico / WhatsApp"
+          tone="amber"
+          compact
+          collapsible
+          action={
+            <div className="flex flex-wrap gap-2">
+              <NeonBadge tone={catalog.credentialReadiness === 100 ? "green" : "amber"}>
+                MP {catalog.credentialReadiness}%
+              </NeonBadge>
+              <NeonBadge tone={connectedAgents.length > 0 ? "green" : "rose"}>
+                {connectedAgents.length} agente{connectedAgents.length === 1 ? "" : "s"} online
+              </NeonBadge>
+              <NeonBadge tone={catalog.settings.pixAutomaticRequired ? "cyan" : "amber"}>
+                Pix Automatico
+              </NeonBadge>
+            </div>
+          }
+        >
         <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
           <BillingOpsMetric
             icon={PlugZap}
@@ -730,8 +743,24 @@ export function PlatformBillingOperations({
             />
           </div>
         </div>
-      </Panel>
-    </div>
+        </Panel>
+      </div>
+
+      {refundDialog ? (
+        <RefundConfirmationModal
+          loading={refundingId === refundDialog.payment.id}
+          payment={refundDialog.payment}
+          reason={refundDialog.reason}
+          onChangeReason={(reason) => setRefundDialog((current) => current ? { ...current, reason } : current)}
+          onClose={() => {
+            if (refundingId !== refundDialog.payment.id) {
+              setRefundDialog(null);
+            }
+          }}
+          onConfirm={confirmRefundPayment}
+        />
+      ) : null}
+    </>
   );
 }
 
@@ -991,6 +1020,151 @@ function HistoryPanels({
           <EmptyState icon={<Webhook className="h-4 w-4" />} text="Nenhum webhook de billing recebido." />
         )}
       </Panel>
+    </div>
+  );
+}
+
+function RefundConfirmationModal({
+  payment,
+  reason,
+  loading,
+  onChangeReason,
+  onClose,
+  onConfirm,
+}: {
+  payment: PlatformBillingPaymentItem;
+  reason: string;
+  loading: boolean;
+  onChangeReason: (reason: string) => void;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  const canConfirm = reason.trim().length > 0 && !loading;
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (canConfirm) {
+      onConfirm();
+    }
+  }
+
+  return (
+    <div
+      aria-labelledby="billing-refund-title"
+      aria-modal="true"
+      className="fixed inset-0 z-50 grid place-items-center bg-black/72 px-4 py-6 backdrop-blur-sm"
+      onClick={onClose}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") {
+          onClose();
+        }
+      }}
+      role="dialog"
+      tabIndex={0}
+    >
+      <form
+        onSubmit={submit}
+        className="w-full max-w-xl overflow-hidden rounded-2xl border shadow-2xl shadow-black/50"
+        style={{ background: "var(--ch-panel)", borderColor: "var(--ch-border-strong)" }}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div
+          className="flex items-start justify-between gap-4 border-b px-5 py-4"
+          style={{ borderColor: "var(--ch-border)" }}
+        >
+          <div className="min-w-0">
+            <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-rose-300">estorno mercado pago</p>
+            <h2 id="billing-refund-title" className="mt-1 text-[20px] font-black text-white">Confirmar estorno</h2>
+            <p className="mt-1 text-[12px] leading-5 text-slate-400">
+              Esta acao estorna o pagamento, cancela a recorrencia e remove os creditos do plano quando houver saldo.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={loading}
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border text-slate-300 transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40"
+            style={{ borderColor: "var(--ch-border)" }}
+            aria-label="Fechar estorno"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="grid gap-4 px-5 py-4">
+          <div className="grid gap-2 sm:grid-cols-3">
+            <RefundSummaryStat label="Cliente" value={payment.organizationName} />
+            <RefundSummaryStat label="Plano" value={payment.planCode ?? "sem plano"} />
+            <RefundSummaryStat label="Valor" value={formatMoney(payment.amountBrl)} accent />
+          </div>
+
+          <div
+            className="rounded-xl border p-3 text-[12px] leading-5 text-amber-100"
+            style={{ background: "rgba(245,158,11,0.10)", borderColor: "rgba(245,158,11,0.28)" }}
+          >
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-200" />
+              <p>
+                Confira antes de confirmar. O pagamento {payment.providerPaymentId ? `MP ${payment.providerPaymentId}` : "sem ID MP"} sera estornado e o plano do cliente ficara cancelado ate uma nova compra.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid gap-2 rounded-xl border p-3 sm:grid-cols-2" style={{ borderColor: "var(--ch-border)" }}>
+            <MiniValue label="Status" value={formatStatus(payment.status)} />
+            <MiniValue label="Pago em" value={formatDate(payment.paidAt)} />
+          </div>
+
+          <FieldLabel label="Motivo do estorno">
+            <textarea
+              autoFocus
+              disabled={loading}
+              value={reason}
+              onChange={(event) => onChangeReason(event.target.value)}
+              placeholder="Ex: teste interno, solicitacao do cliente, cobranca indevida..."
+              className="min-h-24 w-full resize-y rounded-xl px-3 py-3 text-[12px] leading-5 outline-none transition disabled:cursor-not-allowed disabled:opacity-60"
+              style={inputStyle}
+            />
+          </FieldLabel>
+        </div>
+
+        <div
+          className="grid gap-2 border-t px-5 py-4 sm:grid-cols-[1fr_auto]"
+          style={{ borderColor: "var(--ch-border)" }}
+        >
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={loading}
+            className="min-h-11 rounded-xl border px-4 text-[12px] font-bold text-slate-200 transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50"
+            style={{ borderColor: "var(--ch-border)" }}
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            disabled={!canConfirm}
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-4 text-[12px] font-black transition disabled:cursor-not-allowed disabled:opacity-45"
+            style={{ background: "rgba(244,63,94,0.92)", color: "#fff" }}
+          >
+            <RotateCcw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+            {loading ? "Estornando" : `Estornar ${formatMoney(payment.amountBrl)}`}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function RefundSummaryStat({ label, value, accent = false }: { label: string; value: string; accent?: boolean }) {
+  return (
+    <div
+      className="min-w-0 rounded-xl border p-3"
+      style={{ background: accent ? "rgba(244,63,94,0.10)" : "var(--ch-surface-2)", borderColor: accent ? "rgba(244,63,94,0.24)" : "var(--ch-border)" }}
+    >
+      <p className="font-mono text-[8px] uppercase tracking-widest text-slate-500">{label}</p>
+      <p className={`mt-1 truncate font-mono text-[12px] font-black ${accent ? "text-rose-100" : "text-slate-100"}`}>{value}</p>
     </div>
   );
 }
