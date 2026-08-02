@@ -1780,7 +1780,6 @@ export function SalesCatalogConsole({
         <TabButton active={activeTab === "products"} icon={PackagePlus} label="Produtos" onClick={() => setActiveTab("products")} />
         <TabButton active={activeTab === "orders"} icon={ClipboardList} label="Pedidos WhatsApp" mobileLabel="Pedidos" onClick={() => setActiveTab("orders")} />
         <TabButton active={activeTab === "payments"} icon={CreditCard} label="Pagamentos" mobileLabel="Pagto." onClick={() => setActiveTab("payments")} />
-        <TabButton active={activeTab === "whatsapp"} icon={CloudDownload} label="WhatsApp" onClick={() => setActiveTab("whatsapp")} />
       </div>
 
       {activeTab === "setup" ? (
@@ -2855,6 +2854,16 @@ export function SalesCatalogConsole({
             onRefresh={refreshCatalogImports}
             onSaveReview={saveCatalogImportReview}
           />
+          <WhatsAppCatalogImportPanel
+            catalogJid={catalogJid}
+            companies={companies}
+            companyName={selectedCompany?.name ?? "empresa"}
+            importing={importing}
+            selectedCompanyId={selectedCompanyId}
+            onChangeCatalogJid={setCatalogJid}
+            onChangeCompany={changeCompany}
+            onImport={importWhatsappCatalog}
+          />
           <Panel id="sales-catalog-tour-products" title={editingItemId ? "Editar item" : "Novo item"} eyebrow={selectedCompany?.name ?? "empresa"} tone="cyan" compact>
             <div className="space-y-3">
             <SalesProductFormTabs activeTab={productFormTab} onChange={setProductFormTab} tabs={salesCatalogProductFormTabs} />
@@ -3546,43 +3555,16 @@ export function SalesCatalogConsole({
           </Panel>
           </>
           ) : (
-          <Panel title="Catalogo WhatsApp" eyebrow={selectedCompany?.name ?? "sincronizacao"} tone="violet" compact>
-            <div className="space-y-3">
-              <label className="block">
-                <FieldLabel>Empresa</FieldLabel>
-                <select
-                  value={selectedCompanyId}
-                  onChange={(event) => changeCompany(event.target.value)}
-                  className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
-                  style={{ borderColor: "var(--ch-border)" }}
-                >
-                  {companies.map((company) => (
-                    <option key={company.id} value={company.id}>{company.name}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="block">
-                <FieldLabel>Telefone ou JID opcional</FieldLabel>
-                <input
-                  value={catalogJid}
-                  onChange={(event) => setCatalogJid(event.target.value.slice(0, 80))}
-                  className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
-                  placeholder="5511999999999 ou 5511999999999@s.whatsapp.net"
-                  style={{ borderColor: "var(--ch-border)" }}
-                />
-              </label>
-              <button
-                type="button"
-                disabled={!selectedCompanyId || importing}
-                onClick={importWhatsappCatalog}
-                className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border px-4 text-[12px] font-bold text-cyan-100 transition hover:bg-cyan-400/10 disabled:cursor-not-allowed disabled:opacity-50"
-                style={{ borderColor: "var(--ch-border)" }}
-              >
-                {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                Importar / sincronizar
-              </button>
-            </div>
-          </Panel>
+          <WhatsAppCatalogImportPanel
+            catalogJid={catalogJid}
+            companies={companies}
+            companyName={selectedCompany?.name ?? "empresa"}
+            importing={importing}
+            selectedCompanyId={selectedCompanyId}
+            onChangeCatalogJid={setCatalogJid}
+            onChangeCompany={changeCompany}
+            onImport={importWhatsappCatalog}
+          />
           )}
         </div>
 
@@ -3612,6 +3594,68 @@ export function SalesCatalogConsole({
       </div>
       )}
     </>
+  );
+}
+
+function WhatsAppCatalogImportPanel({
+  catalogJid,
+  companies,
+  companyName,
+  importing,
+  selectedCompanyId,
+  onChangeCatalogJid,
+  onChangeCompany,
+  onImport,
+}: {
+  catalogJid: string;
+  companies: ClientCompany[];
+  companyName: string;
+  importing: boolean;
+  selectedCompanyId: string;
+  onChangeCatalogJid: (value: string) => void;
+  onChangeCompany: (companyId: string) => void;
+  onImport: () => void;
+}) {
+  return (
+    <Panel title="Importar do catalogo WhatsApp" eyebrow={companyName} tone="violet" compact>
+      <div className="space-y-3">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="block">
+            <FieldLabel>Empresa</FieldLabel>
+            <select
+              value={selectedCompanyId}
+              onChange={(event) => onChangeCompany(event.target.value)}
+              className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+              style={{ borderColor: "var(--ch-border)" }}
+            >
+              {companies.map((company) => (
+                <option key={company.id} value={company.id}>{company.name}</option>
+              ))}
+            </select>
+          </label>
+          <label className="block">
+            <FieldLabel>Telefone ou JID opcional</FieldLabel>
+            <input
+              value={catalogJid}
+              onChange={(event) => onChangeCatalogJid(event.target.value.slice(0, 80))}
+              className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+              placeholder="5511999999999 ou 5511999999999@s.whatsapp.net"
+              style={{ borderColor: "var(--ch-border)" }}
+            />
+          </label>
+        </div>
+        <button
+          type="button"
+          disabled={!selectedCompanyId || importing}
+          onClick={onImport}
+          className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border px-4 text-[12px] font-bold text-cyan-100 transition hover:bg-cyan-400/10 disabled:cursor-not-allowed disabled:opacity-50"
+          style={{ borderColor: "var(--ch-border)" }}
+        >
+          {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+          Importar / sincronizar catalogo WhatsApp
+        </button>
+      </div>
+    </Panel>
   );
 }
 
