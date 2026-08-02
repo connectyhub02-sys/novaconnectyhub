@@ -1,9 +1,11 @@
 import "server-only";
 
+import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireClientCompanyAccess, listClientCompanies } from "@/lib/client-os/companies";
 import { createServiceClient } from "@/lib/supabase/service";
 import {
+  buildSalesCatalogContent,
   createDefaultSalesCatalogShippingServices,
   createDefaultSalesCatalogCommerceSettings,
   defaultSalesCatalogShippingRules,
@@ -62,6 +64,7 @@ import {
   type SalesCatalogWhatsappExportStatus,
   type SalesCatalogWhatsappExportTarget,
 } from "@/lib/sales-catalog/shared";
+import { buildTrackedLinkUrl, createTrackedLinkTag } from "@/lib/tracking/tracked-links";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -73,6 +76,10 @@ type SalesCatalogMemoryRow = {
   metadata: JsonRecord | null;
   created_at: string | null;
   updated_at: string | null;
+};
+
+type TrackedLinkButtonMemoryRow = SalesCatalogMemoryRow & {
+  tags: string[] | null;
 };
 
 export type SalesCatalogOrderRow = {
@@ -242,6 +249,8 @@ export async function listClientSalesCatalog(input: {
   if (companyIds.length === 0) {
     return [];
   }
+
+  await promoteLegacyTrackedLinkButtonsToSalesCatalog(client, companyIds).catch(() => undefined);
 
   const { data, error } = await client
     .from("intelligence_memory")
@@ -553,7 +562,12 @@ export async function listOrganizationSalesCatalog(
   client: SupabaseClient,
   organizationId: string,
   limit = 80,
+  options: { promoteLegacyLinkButtons?: boolean } = {},
 ) {
+  if (options.promoteLegacyLinkButtons) {
+    await promoteLegacyTrackedLinkButtonsToSalesCatalog(client, [organizationId]).catch(() => undefined);
+  }
+
   const { data, error } = await client
     .from("intelligence_memory")
     .select("id, organization_id, title, content, metadata, created_at, updated_at")
@@ -569,6 +583,263 @@ export async function listOrganizationSalesCatalog(
   }
 
   return attachSalesCatalogSkus(client, ((data ?? []) as SalesCatalogMemoryRow[]).map(mapSalesCatalogItem));
+}
+
+async function promoteLegacyTrackedLinkButtonsToSalesCatalog(client: SupabaseClient, companyIds: string[]) {
+  const organizationIds = uniqueStrings(companyIds);
+
+  if (organizationIds.length === 0) {
+    return;
+  }
+
+  const { data, error } = await client
+    .from("intelligence_memory")
+    .select("id, organization_id, title, content, tags, metadata, created_at, updated_at")
+    .eq("scope", "organization")
+    .eq("memory_type", "tracked_link_button")
+    .in("organization_id", organizationIds)
+    .contains("tags", ["tracked_link_button"])
+    .order("created_at", { ascending: false })
+    .limit(500);
+
+  if (error) {
+    throw new Error(`Nao foi possivel preparar links antigos como produtos: ${error.message}`);
+  }
+
+  const now = new Date().toISOString();
+  const promotions = ((data ?? []) as TrackedLinkButtonMemoryRow[])
+    .map((row) => buildLegacyLinkButtonPromotion(row, now))
+    .filter((promotion): promotion is NonNullable<typeof promotion> => Boolean(promotion));
+
+  if (promotions.length === 0) {
+    return;
+  }
+
+  const { data: existingItems, error: existingError } = await client
+    .from("intelligence_memory")
+    .select("id")
+    .eq("scope", "organization")
+    .eq("memory_type", "sales_catalog_item")
+    .in("id", promotions.map((promotion) => promotion.itemId))
+    .returns<Array<{ id: string }>>();
+
+  if (existingError) {
+    throw new Error(`Nao foi possivel verificar produtos importados: ${existingError.message}`);
+  }
+
+  const existingItemIds = new Set((existingItems ?? []).map((item) => item.id));
+  const productPayloads = promotions
+    .filter((promotion) => !existingItemIds.has(promotion.itemId))
+    .map((promotion) => promotion.productPayload);
+
+  if (productPayloads.length > 0) {
+    const { error: upsertError } = await client
+      .from("intelligence_memory")
+      .upsert(productPayloads, { onConflict: "id" });
+
+    if (upsertError) {
+      throw new Error(`Nao foi possivel mover links antigos para produtos: ${upsertError.message}`);
+    }
+  }
+
+  await Promise.all(promotions.map((promotion) => markLegacyLinkButtonAsSalesCatalogProduct(client, promotion, now)));
+}
+
+type LegacyLinkButtonPromotion = {
+  row: TrackedLinkButtonMemoryRow;
+  organizationId: string;
+  itemId: string;
+  title: string;
+  description: string;
+  category: string;
+  productUrl: string;
+  linkTag: string;
+  trackingUrl: string;
+  itemTag: string;
+  productPayload: JsonRecord;
+};
+
+function buildLegacyLinkButtonPromotion(
+  row: TrackedLinkButtonMemoryRow,
+  now: string,
+): LegacyLinkButtonPromotion | null {
+  const metadata = readRecord(row.metadata) ?? {};
+  const tags = new Set(readStringList(row.tags, []));
+
+  if (tags.has("sales_catalog_item") || tags.has("external_site_product") || tags.has("platform_whatsapp_sector")) {
+    return null;
+  }
+
+  if (
+    readString(metadata.catalog_item_id)
+    || readString(metadata.sales_catalog_item_id)
+    || readString(metadata.link_button_catalog_item_id)
+    || readString(metadata.source) === "sales_catalog_product"
+  ) {
+    return null;
+  }
+
+  const organizationId = readString(row.organization_id);
+  const title = readString(metadata.label) ?? readString(metadata.title) ?? readString(row.title);
+  const productUrl = normalizeLegacyTrackedLinkButtonUrl(readString(metadata.url) ?? readString(row.content));
+
+  if (!organizationId || !title || !productUrl) {
+    return null;
+  }
+
+  const itemId = createLegacySalesCatalogItemId(row.id);
+  const itemTag = createSalesCatalogTag(title, itemId);
+  const linkTag = readString(metadata.tag) ?? createTrackedLinkTag(title, row.id);
+  const trackingUrl = readString(metadata.tracking_url) ?? buildTrackedLinkUrl(row.id);
+  const category = readString(metadata.product_category) ?? readString(metadata.category) ?? "Links importados";
+  const description = readString(metadata.product_description)
+    ?? "Produto importado dos botoes antigos do agente. Revise preco, descricao e midias no Catalogo de Vendas.";
+  const media: SalesCatalogMedia[] = [];
+  const inventory = emptySalesCatalogProductInventory();
+  const offer = emptySalesCatalogProductOffer();
+  const fulfillment = emptySalesCatalogProductFulfillment();
+  const shipping = emptySalesCatalogProductShipping();
+  const content = buildSalesCatalogContent({
+    title,
+    description,
+    category,
+    price: null,
+    currency: "BRL",
+    media,
+    attributes: [],
+    inventory,
+    offer,
+    fulfillment,
+    shipping,
+    salesDestination: "external_site",
+    productUrl,
+    externalLinkButtonTag: linkTag,
+  });
+  const productMetadata: JsonRecord = {
+    title,
+    description,
+    category,
+    price: null,
+    currency: "BRL",
+    status: "active",
+    tag: itemTag,
+    highlight_label: null,
+    attributes: [],
+    inventory,
+    offer,
+    fulfillment,
+    shipping,
+    media,
+    skus: [],
+    source: "manual",
+    sales_destination: "external_site",
+    source_product_url: productUrl,
+    product_url: productUrl,
+    link_button_id: row.id,
+    link_button_label: title,
+    link_button_tag: linkTag,
+    link_button_tracking_url: trackingUrl,
+    external_link_button_id: row.id,
+    external_link_button_label: title,
+    external_link_button_tag: linkTag,
+    external_link_button_tracking_url: trackingUrl,
+    legacy_link_button_id: row.id,
+    migrated_from: "agent_link_button",
+    migrated_at: now,
+    readiness: getSalesCatalogReadiness({ description, media }),
+    created_by: readString(metadata.created_by),
+    updated_from: "legacy_agent_button_migration",
+  };
+
+  return {
+    row,
+    organizationId,
+    itemId,
+    title,
+    description,
+    category,
+    productUrl,
+    linkTag,
+    trackingUrl,
+    itemTag,
+    productPayload: {
+      id: itemId,
+      scope: "organization",
+      organization_id: organizationId,
+      memory_type: "sales_catalog_item",
+      title,
+      content,
+      importance: 0.78,
+      tags: ["sales_catalog_item", "sales_catalog", "external_site_product", "legacy_agent_button", "whatsapp_agent", "lead_tracking"],
+      metadata: productMetadata,
+      created_at: row.created_at ?? now,
+      updated_at: now,
+    },
+  };
+}
+
+async function markLegacyLinkButtonAsSalesCatalogProduct(
+  client: SupabaseClient,
+  promotion: LegacyLinkButtonPromotion,
+  now: string,
+) {
+  const metadata = readRecord(promotion.row.metadata) ?? {};
+  const tags = uniqueStrings([
+    ...readStringList(promotion.row.tags, []),
+    "sales_catalog_item",
+    "external_site_product",
+    "legacy_agent_button",
+    "whatsapp_agent",
+    "lead_tracking",
+  ]);
+
+  await client
+    .from("intelligence_memory")
+    .update({
+      tags,
+      metadata: {
+        ...metadata,
+        label: promotion.title,
+        url: promotion.productUrl,
+        tag: promotion.linkTag,
+        tracking_url: promotion.trackingUrl,
+        sales_destination: "external_site",
+        source: "sales_catalog_product",
+        catalog_item_id: promotion.itemId,
+        sales_catalog_item_id: promotion.itemId,
+        product_title: promotion.title,
+        product_description: promotion.description,
+        product_category: promotion.category,
+        product_currency: "BRL",
+        migrated_to_sales_catalog_at: now,
+        migrated_to_sales_catalog_from: "agent_link_button",
+      },
+      updated_at: now,
+    })
+    .eq("id", promotion.row.id)
+    .eq("scope", "organization")
+    .eq("organization_id", promotion.organizationId)
+    .eq("memory_type", "tracked_link_button");
+}
+
+function createLegacySalesCatalogItemId(linkButtonId: string) {
+  const hash = createHash("sha256").update(`sales_catalog_link_button:${linkButtonId}`).digest("hex").slice(0, 32).split("");
+  hash[12] = "5";
+  hash[16] = (((Number.parseInt(hash[16] ?? "8", 16) & 0x3) | 0x8)).toString(16);
+  const value = hash.join("");
+
+  return `${value.slice(0, 8)}-${value.slice(8, 12)}-${value.slice(12, 16)}-${value.slice(16, 20)}-${value.slice(20, 32)}`;
+}
+
+function normalizeLegacyTrackedLinkButtonUrl(value: string | null) {
+  if (!value) return null;
+
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:" ? url.toString() : null;
+  } catch {
+    return null;
+  }
 }
 
 export async function getOrganizationSalesCatalogSettings(

@@ -671,11 +671,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
   const [internalEditRoleTitle, setInternalEditRoleTitle] = useState("");
   const [internalEditDescription, setInternalEditDescription] = useState("");
   const [internalEditAutomationRoles, setInternalEditAutomationRoles] = useState<AgentAutomationRoles>(createEmptyAgentAutomationRoles());
-  const [linkButtonLabel, setLinkButtonLabel] = useState("");
-  const [linkButtonUrl, setLinkButtonUrl] = useState("");
   const [knowledgeUploading, setKnowledgeUploading] = useState(false);
-  const [creatingLinkButton, setCreatingLinkButton] = useState(false);
-  const [deletingLinkButtonId, setDeletingLinkButtonId] = useState<string | null>(null);
   const [channelOps, setChannelOps] = useState<WhatsappChannelOperationsState | null>(null);
   const [channelAction, setChannelAction] = useState<string | null>(null);
   const [statusText, setStatusText] = useState("");
@@ -1339,43 +1335,6 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
     }
   }
 
-  async function createTrackedLinkButton() {
-    if (!selectedCompanyId) {
-      setNotice({ tone: "warning", message: `Escolha um ${variant.entitySingular} antes de criar o link.` });
-      return;
-    }
-
-    setCreatingLinkButton(true);
-    setNotice(null);
-
-    try {
-      const response = await fetch(variant.endpoints.links, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          [variant.entityIdKey]: selectedCompanyId,
-          label: linkButtonLabel,
-          url: linkButtonUrl,
-        }),
-      });
-      const data = (await response.json().catch(() => null)) as { linkButton?: TrackedLinkButton; error?: string } | null;
-
-      if (!response.ok || !data?.linkButton) {
-        throw new Error(data?.error ?? "Nao foi possivel criar o link rastreado.");
-      }
-
-      const nextState = await fetchWhatsappState(variant, selectedWhatsappEntityId);
-      applyWhatsappState(nextState, { preserveDrafts: true });
-      setLinkButtonLabel("");
-      setLinkButtonUrl("");
-      setNotice({ tone: "success", message: `Link criado. Use a tag ${data.linkButton.tag} no prompt quando quiser enviar esse botao.` });
-    } catch (error) {
-      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao criar link rastreado." });
-    } finally {
-      setCreatingLinkButton(false);
-    }
-  }
-
   async function copyTrackedLinkButtonTag(link: TrackedLinkButton) {
     try {
       await navigator.clipboard.writeText(link.tag);
@@ -1386,53 +1345,13 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
   }
 
   async function copySalesCatalogItemTag(item: ClientSalesCatalogItem) {
+    const tag = getSalesCatalogPromptTag(item);
+
     try {
-      await navigator.clipboard.writeText(item.tag);
-      setNotice({ tone: "success", message: `Tag copiada: ${item.tag}` });
+      await navigator.clipboard.writeText(tag);
+      setNotice({ tone: "success", message: `Tag copiada: ${tag}` });
     } catch {
       setNotice({ tone: "error", message: "Nao foi possivel copiar a tag. Selecione a tag e copie manualmente." });
-    }
-  }
-
-  async function deleteTrackedLinkButton(link: TrackedLinkButton) {
-    if (!selectedCompanyId) {
-      setNotice({ tone: "warning", message: `Escolha um ${variant.entitySingular} antes de excluir o link.` });
-      return;
-    }
-
-    const confirmed = window.confirm(
-      `Excluir o link "${link.label}"?\n\nSe a tag ${link.tag} estiver no prompt, remova ela antes de salvar o agente.`,
-    );
-
-    if (!confirmed) {
-      return;
-    }
-
-    setDeletingLinkButtonId(link.id);
-    setNotice(null);
-
-    try {
-      const response = await fetch(variant.endpoints.links, {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          [variant.entityIdKey]: selectedCompanyId,
-          linkButtonId: link.id,
-        }),
-      });
-      const data = (await response.json().catch(() => null)) as { deletedLinkButtonId?: string; error?: string } | null;
-
-      if (!response.ok || data?.deletedLinkButtonId !== link.id) {
-        throw new Error(data?.error ?? "Nao foi possivel excluir o link rastreado.");
-      }
-
-      const nextState = await fetchWhatsappState(variant, selectedWhatsappEntityId);
-      applyWhatsappState(nextState, { preserveDrafts: true });
-      setNotice({ tone: "success", message: `Link "${link.label}" excluido.` });
-    } catch (error) {
-      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao excluir link rastreado." });
-    } finally {
-      setDeletingLinkButtonId(null);
     }
   }
 
@@ -2048,19 +1967,9 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
                 <PromptToolsPanel
                   linkButtons={state.linkButtons}
                   salesCatalog={state.salesCatalog}
-                  linkButtonLabel={linkButtonLabel}
-                  linkButtonUrl={linkButtonUrl}
-                  linkButtonsEnabled={behaviorDraft.interactiveMessages}
-                  creatingLinkButton={creatingLinkButton}
-                  deletingLinkButtonId={deletingLinkButtonId}
                   onCopyLinkButtonTag={copyTrackedLinkButtonTag}
                   onCopyCatalogItemTag={copySalesCatalogItemTag}
-                  onCreateLinkButton={createTrackedLinkButton}
-                  onDeleteLinkButton={deleteTrackedLinkButton}
                   onInsertTag={insertPromptTag}
-                  onLinkButtonLabelChange={setLinkButtonLabel}
-                  onLinkButtonUrlChange={setLinkButtonUrl}
-                  onLinkButtonsEnabledChange={(value) => updateBehavior("interactiveMessages", value)}
                   promptTags={promptTags}
                   entitySingular={variant.entitySingular}
                 />
@@ -4138,40 +4047,27 @@ function CloneMemoryPanel({
 function PromptToolsPanel({
   linkButtons,
   salesCatalog,
-  linkButtonLabel,
-  linkButtonUrl,
-  linkButtonsEnabled,
-  creatingLinkButton,
-  deletingLinkButtonId,
   onCopyCatalogItemTag,
   onCopyLinkButtonTag,
-  onCreateLinkButton,
-  onDeleteLinkButton,
   onInsertTag,
-  onLinkButtonLabelChange,
-  onLinkButtonUrlChange,
-  onLinkButtonsEnabledChange,
   promptTags,
   entitySingular,
 }: {
   linkButtons: TrackedLinkButton[];
   salesCatalog: ClientSalesCatalogItem[];
-  linkButtonLabel: string;
-  linkButtonUrl: string;
-  linkButtonsEnabled: boolean;
-  creatingLinkButton: boolean;
-  deletingLinkButtonId: string | null;
   onCopyCatalogItemTag: (item: ClientSalesCatalogItem) => void;
   onCopyLinkButtonTag: (link: TrackedLinkButton) => void;
-  onCreateLinkButton: () => void;
-  onDeleteLinkButton: (link: TrackedLinkButton) => void;
   onInsertTag: (token: string) => void;
-  onLinkButtonLabelChange: (value: string) => void;
-  onLinkButtonUrlChange: (value: string) => void;
-  onLinkButtonsEnabledChange: (value: boolean) => void;
   promptTags: Array<{ token: string; label: string; description: string }>;
   entitySingular: string;
 }) {
+  const catalogExternalLinkIds = new Set(
+    salesCatalog
+      .map((item) => item.externalLinkButtonId)
+      .filter((id): id is string => Boolean(id)),
+  );
+  const generalLinkButtons = linkButtons.filter((link) => !catalogExternalLinkIds.has(link.id));
+
   return (
     <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(280px,0.62fr)]">
       <div className="rounded-xl border p-3" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
@@ -4218,50 +4114,54 @@ function PromptToolsPanel({
           </div>
           {salesCatalog.length > 0 ? (
             <div className="mt-3 grid max-h-[320px] gap-2 overflow-y-auto pr-1">
-              {salesCatalog.slice(0, 24).map((item) => (
-                <div
-                  key={item.id}
-                  className="grid gap-2 rounded-lg border p-2 text-left transition hover:bg-cyan-400/10"
-                  style={{ borderColor: "var(--ch-border)" }}
-                  title={item.tag}
-                >
-                  <span className="flex min-w-0 items-center justify-between gap-2">
-                    <span className="flex min-w-0 items-center gap-1.5 text-[12px] font-semibold text-slate-100">
-                      <Package className="h-3.5 w-3.5 shrink-0 text-cyan-300" />
-                      <span className="truncate">{item.title}</span>
+              {salesCatalog.slice(0, 24).map((item) => {
+                const promptTag = getSalesCatalogPromptTag(item);
+
+                return (
+                  <div
+                    key={item.id}
+                    className="grid gap-2 rounded-lg border p-2 text-left transition hover:bg-cyan-400/10"
+                    style={{ borderColor: "var(--ch-border)" }}
+                    title={promptTag}
+                  >
+                    <span className="flex min-w-0 items-center justify-between gap-2">
+                      <span className="flex min-w-0 items-center gap-1.5 text-[12px] font-semibold text-slate-100">
+                        <Package className="h-3.5 w-3.5 shrink-0 text-cyan-300" />
+                        <span className="truncate">{item.title}</span>
+                      </span>
+                      <span className="shrink-0 rounded-full bg-cyan-400/10 px-2 py-1 font-mono text-[8px] uppercase tracking-widest text-cyan-200">
+                        {item.media.length} midia
+                      </span>
                     </span>
-                    <span className="shrink-0 rounded-full bg-cyan-400/10 px-2 py-1 font-mono text-[8px] uppercase tracking-widest text-cyan-200">
-                      {item.media.length} midia
+                    <span className="truncate font-mono text-[10px] text-cyan-300">{promptTag}</span>
+                    <span className="truncate text-[10px] text-slate-500">
+                      {formatSalesCatalogPromptItemMeta(item)}
                     </span>
-                  </span>
-                  <span className="truncate font-mono text-[10px] text-cyan-300">{item.tag}</span>
-                  <span className="truncate text-[10px] text-slate-500">
-                    {formatSalesCatalogPromptItemMeta(item)}
-                  </span>
-                  <div className="mt-1 flex flex-wrap gap-1.5">
-                    <button
-                      type="button"
-                      className="inline-flex min-h-8 items-center gap-1.5 rounded-md border px-2 font-mono text-[9px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10"
-                      style={{ borderColor: "var(--ch-border)" }}
-                      title="Inserir tag do item"
-                      onClick={() => onInsertTag(item.tag)}
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                      Inserir
-                    </button>
-                    <button
-                      type="button"
-                      className="inline-flex min-h-8 items-center gap-1.5 rounded-md border px-2 font-mono text-[9px] font-semibold uppercase tracking-wide text-emerald-100 transition hover:bg-emerald-400/10"
-                      style={{ borderColor: "var(--ch-border)" }}
-                      title="Copiar tag do produto"
-                      onClick={() => onCopyCatalogItemTag(item)}
-                    >
-                      <Copy className="h-3.5 w-3.5" />
-                      Copiar
-                    </button>
+                    <div className="mt-1 flex flex-wrap gap-1.5">
+                      <button
+                        type="button"
+                        className="inline-flex min-h-8 items-center gap-1.5 rounded-md border px-2 font-mono text-[9px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10"
+                        style={{ borderColor: "var(--ch-border)" }}
+                        title="Inserir tag do item"
+                        onClick={() => onInsertTag(promptTag)}
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                        Inserir
+                      </button>
+                      <button
+                        type="button"
+                        className="inline-flex min-h-8 items-center gap-1.5 rounded-md border px-2 font-mono text-[9px] font-semibold uppercase tracking-wide text-emerald-100 transition hover:bg-emerald-400/10"
+                        style={{ borderColor: "var(--ch-border)" }}
+                        title="Copiar tag do produto"
+                        onClick={() => onCopyCatalogItemTag(item)}
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                        Copiar
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div className="mt-3 rounded-lg border border-dashed px-3 py-5 text-center text-[12px] leading-5 text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
@@ -4282,132 +4182,81 @@ function PromptToolsPanel({
       <div className="rounded-xl border p-3" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
-            Links e botoes gerais
-            <InfoHint text="Use para links que nao sao produtos, como agenda, suporte, site institucional ou orcamento. Produto com preco/link externo deve ser cadastrado em Catalogo de Vendas." />
+            Tags gerais cadastradas
+            <InfoHint text="Tags ja cadastradas fora do Catalogo de Vendas. Produtos, precos e links externos devem ser gerenciados em Produtos." />
           </p>
+          <span className="rounded-full border px-2 py-1 font-mono text-[9px] uppercase tracking-widest text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
+            {generalLinkButtons.length.toLocaleString("pt-BR")}
+          </span>
         </div>
 
-        <div className="mt-3 grid gap-3">
-          <ToggleTile
-            icon={MessageSquare}
-            label="Enviar como botao"
-            description="Ligado: links gerais podem virar botoes no WhatsApp. Desligado: os links continuam salvos, mas nao viram botao."
-            checked={linkButtonsEnabled}
-            onChange={() => onLinkButtonsEnabledChange(!linkButtonsEnabled)}
-          />
-          <label className="block">
-            <span className="mb-2 flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
-              Nome do botao
-              <InfoHint text="Nome curto que o usuario entende, como Roupas infantil, Catalogo ou Oferta do dia." />
-            </span>
-            <input
-              value={linkButtonLabel}
-              onChange={(event) => onLinkButtonLabelChange(event.target.value.slice(0, 48))}
-              className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
-              placeholder="Roupas infantil"
-              style={{ borderColor: "var(--ch-border)" }}
-            />
-          </label>
-          <label className="block">
-            <span className="mb-2 flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
-              URL de destino
-              <InfoHint text="Destino geral rastreado. Para produto, cadastre em Catalogo de Vendas e use a tag do produto." />
-            </span>
-            <div className="relative">
-              <Link2 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-cyan-300" />
-              <input
-                value={linkButtonUrl}
-                onChange={(event) => onLinkButtonUrlChange(event.target.value.slice(0, 500))}
-                className="h-11 w-full rounded-lg border bg-transparent pl-10 pr-3 text-[12px] outline-none"
-                placeholder="https://site.com/pagina"
-                style={{ borderColor: "var(--ch-border)" }}
-              />
-            </div>
-          </label>
-          <ActionButton
-            icon={Plus}
-            label="Criar botao"
-            description="Salva o link rastreado na biblioteca de botoes gerais."
-            disabled={!linkButtonLabel.trim() || !linkButtonUrl.trim()}
-            loading={creatingLinkButton}
-            onClick={onCreateLinkButton}
-          />
-
-          <div className="rounded-lg border p-2.5" style={{ background: "var(--ch-surface)", borderColor: "var(--ch-border)" }}>
-            <div className="flex items-center justify-between gap-2">
-              <p className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
-                Biblioteca de botoes
-                <InfoHint text="Use a tag quando quiser orientar o agente a enviar um botao especifico no prompt." />
-              </p>
-              <span className="rounded-full border px-2 py-1 font-mono text-[9px] uppercase tracking-widest text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
-                {linkButtons.length.toLocaleString("pt-BR")}
-              </span>
-            </div>
-
-            {linkButtons.length > 0 ? (
-              <div className="mt-3 grid max-h-[340px] gap-2 overflow-y-auto pr-1">
-                {linkButtons.map((link) => (
-                  <div
-                    key={link.id}
-                    className="grid gap-2 rounded-lg border p-2"
-                    style={{ borderColor: "var(--ch-border)", background: "var(--ch-panel-2)" }}
-                  >
-                    <div className="min-w-0">
-                      <div className="flex min-w-0 items-center justify-between gap-2">
-                        <p className="truncate text-[12px] font-semibold text-slate-100" title={link.label}>{link.label}</p>
-                        <span className="shrink-0 rounded-full bg-cyan-400/10 px-2 py-1 font-mono text-[9px] uppercase tracking-widest text-cyan-200">
-                          {link.clicks.toLocaleString("pt-BR")} cliques
-                        </span>
-                      </div>
-                      <p className="mt-1 truncate font-mono text-[10px] text-cyan-300" title={link.tag}>{link.tag}</p>
-                      <p className="mt-1 truncate text-[10px] text-slate-500" title={link.url}>{link.url}</p>
-                    </div>
-                    <div className="flex flex-wrap gap-1.5">
-                      <button
-                        type="button"
-                        className="inline-flex min-h-8 items-center gap-1.5 rounded-md border px-2 font-mono text-[9px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10"
-                        style={{ borderColor: "var(--ch-border)" }}
-                        title="Inserir tag no prompt"
-                        onClick={() => onInsertTag(link.tag)}
-                      >
-                        <Plus className="h-3.5 w-3.5" />
-                        Inserir
-                      </button>
-                      <button
-                        type="button"
-                        className="grid h-8 w-8 place-items-center rounded-md border text-cyan-200 transition hover:bg-cyan-400/10 disabled:cursor-not-allowed disabled:opacity-45"
-                        style={{ borderColor: "var(--ch-border)" }}
-                        title="Copiar tag"
-                        aria-label={`Copiar tag ${link.tag}`}
-                        onClick={() => onCopyLinkButtonTag(link)}
-                      >
-                        <Copy className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        className="grid h-8 w-8 place-items-center rounded-md border text-red-200 transition hover:bg-red-400/10 disabled:cursor-not-allowed disabled:opacity-45"
-                        style={{ borderColor: "rgba(251,113,133,0.25)" }}
-                        title="Excluir link"
-                        aria-label={`Excluir link ${link.label}`}
-                        disabled={deletingLinkButtonId === link.id}
-                        onClick={() => onDeleteLinkButton(link)}
-                      >
-                        {deletingLinkButtonId === link.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-                      </button>
-                    </div>
+        {generalLinkButtons.length > 0 ? (
+          <div className="mt-3 grid max-h-[420px] gap-2 overflow-y-auto pr-1">
+            {generalLinkButtons.map((link) => (
+              <div
+                key={link.id}
+                className="grid gap-2 rounded-lg border p-2"
+                style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface)" }}
+              >
+                <div className="min-w-0">
+                  <div className="flex min-w-0 items-center justify-between gap-2">
+                    <p className="truncate text-[12px] font-semibold text-slate-100" title={link.label}>{link.label}</p>
+                    <span className="shrink-0 rounded-full bg-cyan-400/10 px-2 py-1 font-mono text-[9px] uppercase tracking-widest text-cyan-200">
+                      {link.clicks.toLocaleString("pt-BR")} cliques
+                    </span>
                   </div>
-                ))}
+                  <p className="mt-1 truncate font-mono text-[10px] text-cyan-300" title={link.tag}>{link.tag}</p>
+                  <p className="mt-1 truncate text-[10px] text-slate-500" title={link.url}>{link.url}</p>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    type="button"
+                    className="inline-flex min-h-8 items-center gap-1.5 rounded-md border px-2 font-mono text-[9px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10"
+                    style={{ borderColor: "var(--ch-border)" }}
+                    title="Inserir tag no prompt"
+                    onClick={() => onInsertTag(link.tag)}
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Inserir
+                  </button>
+                  <button
+                    type="button"
+                    className="grid h-8 w-8 place-items-center rounded-md border text-cyan-200 transition hover:bg-cyan-400/10"
+                    style={{ borderColor: "var(--ch-border)" }}
+                    title="Copiar tag"
+                    aria-label={`Copiar tag ${link.tag}`}
+                    onClick={() => onCopyLinkButtonTag(link)}
+                  >
+                    <Copy className="h-3.5 w-3.5" />
+                  </button>
+                </div>
               </div>
-            ) : (
-              <div className="mt-3 rounded-lg border border-dashed px-3 py-5 text-center text-[12px] leading-5 text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
-                Nenhum botao cadastrado ainda.
-              </div>
-            )}
+            ))}
           </div>
-        </div>
+        ) : (
+          <div className="mt-3 rounded-lg border border-dashed px-3 py-6 text-center text-[12px] leading-5 text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
+            Nenhuma tag geral cadastrada fora do Catalogo de Vendas.
+          </div>
+        )}
+        <Link
+          href="/dashboard/links"
+          className="mt-3 inline-flex min-h-9 w-full items-center justify-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10"
+          style={{ borderColor: "var(--ch-border)" }}
+        >
+          <Package className="h-3.5 w-3.5" />
+          Gerenciar produtos
+        </Link>
       </div>
     </div>
   );
+}
+
+function getSalesCatalogPromptTag(item: ClientSalesCatalogItem) {
+  if (item.salesDestination === "external_site" && item.externalLinkButtonTag) {
+    return item.externalLinkButtonTag;
+  }
+
+  return item.tag;
 }
 
 function formatSalesCatalogPromptItemMeta(item: ClientSalesCatalogItem) {

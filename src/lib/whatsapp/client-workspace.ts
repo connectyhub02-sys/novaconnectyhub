@@ -291,16 +291,16 @@ export async function getClientWhatsappState(input: {
 }): Promise<ClientWhatsappState> {
   const client = input.client ?? createServiceClient();
   const agent = await getWorkspaceWhatsappAgent(client, input.organization.id, input.agentId);
-  const [rawInstance, globalAgent, knowledgeFiles, linkButtons, salesCatalog, cloneTest] = await Promise.all([
+  const [rawInstance, globalAgent, knowledgeFiles, salesCatalog, cloneTest] = await Promise.all([
     getWorkspaceInstance(client, input.organization.id, agent),
     getOrCreateWorkspaceGlobalAgent(client, input.organization, input.userId),
     listWorkspaceKnowledge(client, input.organization.id),
-    listWorkspaceLinkButtons(client, input.organization.id),
-    listOrganizationSalesCatalog(client, input.organization.id),
+    listOrganizationSalesCatalog(client, input.organization.id, 80, { promoteLegacyLinkButtons: true }),
     agent
       ? listOrganizationCloneRealTests(client, input.organization.id, agent.id)
       : Promise.resolve(emptyCloneRealTestSummary()),
   ]);
+  const linkButtons = await listWorkspaceLinkButtons(client, input.organization.id);
 
   const instance = rawInstance?.instance_token_encrypted && rawInstance.status !== "connected"
     ? await syncClientInstanceStatus(client, rawInstance).catch(() => rawInstance)
@@ -2111,7 +2111,22 @@ async function listWorkspaceLinkButtons(client: SupabaseClient, organizationId: 
     throw new Error(`Nao foi possivel carregar links rastreados: ${error.message}`);
   }
 
-  return ((data ?? []) as KnowledgeMemoryRow[]).map(mapTrackedLinkButton);
+  return ((data ?? []) as KnowledgeMemoryRow[])
+    .filter((row) => !isSalesCatalogTrackedLinkButton(row))
+    .map(mapTrackedLinkButton);
+}
+
+function isSalesCatalogTrackedLinkButton(row: KnowledgeMemoryRow) {
+  const metadata = readRecord(row.metadata) ?? {};
+  const tags = new Set(readStringList(row.tags, 12));
+
+  return (
+    tags.has("sales_catalog_item")
+    || tags.has("external_site_product")
+    || readString(metadata.catalog_item_id) !== null
+    || readString(metadata.sales_catalog_item_id) !== null
+    || readString(metadata.source) === "sales_catalog_product"
+  );
 }
 
 type CloneRealTestEventRow = {
