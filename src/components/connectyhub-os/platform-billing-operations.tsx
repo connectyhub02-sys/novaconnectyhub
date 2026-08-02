@@ -16,12 +16,13 @@ import {
   PlugZap,
   ReceiptText,
   RefreshCw,
+  RotateCcw,
   Save,
   Send,
   ShieldAlert,
   Webhook,
 } from "lucide-react";
-import type { PlatformBillingOperationsCatalog } from "@/lib/billing/platform-billing-admin";
+import type { PlatformBillingOperationsCatalog, PlatformBillingPaymentItem } from "@/lib/billing/platform-billing-admin";
 import {
   DEFAULT_PLATFORM_BILLING_MESSAGE_TEMPLATES,
   PLATFORM_BILLING_MESSAGE_TEMPLATE_DEFINITIONS,
@@ -68,6 +69,7 @@ export function PlatformBillingOperations({
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState<"health" | "notification" | null>(null);
   const [reconcilingId, setReconcilingId] = useState<string | null>(null);
+  const [refundingId, setRefundingId] = useState<string | null>(null);
   const [disconnectingBilling, setDisconnectingBilling] = useState(false);
   const [state, setState] = useState<ActionState>({ tone: "idle", message: "" });
   const [testState, setTestState] = useState<OperationalTestState>({ tone: "idle", message: "", checks: [] });
@@ -300,6 +302,76 @@ export function PlatformBillingOperations({
       });
     } finally {
       setReconcilingId(null);
+    }
+  }
+
+  async function refundBillingPayment(payment: PlatformBillingPaymentItem) {
+    if (!canRefundPayment(payment)) {
+      setState({ tone: "error", message: "Somente pagamentos aprovados com ID Mercado Pago podem ser estornados." });
+      return;
+    }
+
+    const reason = window.prompt(`Motivo do estorno de ${payment.organizationName} (${formatMoney(payment.amountBrl)}):`);
+
+    if (!reason?.trim()) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Confirmar estorno total de ${formatMoney(payment.amountBrl)} para ${payment.organizationName}? O plano sera cancelado e os creditos do plano serao removidos.`,
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setRefundingId(payment.id);
+    setState({ tone: "idle", message: "" });
+
+    try {
+      const response = await fetch("/api/admin/billing/refunds", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          paymentId: payment.id,
+          reason: reason.trim(),
+        }),
+      });
+      const data = await response.json().catch(() => null) as {
+        result?: {
+          amountBrl?: number;
+          reversedCredits?: number;
+          uncoveredCredits?: number;
+          providerSubscriptionCanceled?: boolean;
+          providerSubscriptionCancelError?: string | null;
+        };
+        error?: string;
+      } | null;
+
+      if (!response.ok) {
+        throw new Error(data?.error ?? "Nao foi possivel realizar o estorno.");
+      }
+
+      const reversedCredits = data?.result?.reversedCredits ?? 0;
+      const uncoveredCredits = data?.result?.uncoveredCredits ?? 0;
+      const recurrenceWarning = data?.result?.providerSubscriptionCancelError
+        ? ` Atencao: o estorno saiu, mas a recorrencia no Mercado Pago precisa ser revisada: ${data.result.providerSubscriptionCancelError}`
+        : data?.result?.providerSubscriptionCanceled
+          ? " Recorrencia Mercado Pago cancelada."
+          : "";
+
+      setState({
+        tone: uncoveredCredits > 0 || data?.result?.providerSubscriptionCancelError ? "warning" : "success",
+        message: `Estorno de ${formatMoney(data?.result?.amountBrl ?? payment.amountBrl)} realizado. ${formatCredits(reversedCredits)} creditos removidos.${uncoveredCredits > 0 ? ` ${formatCredits(uncoveredCredits)} creditos ja tinham sido usados e ficaram descobertos.` : ""}${recurrenceWarning}`,
+      });
+      router.refresh();
+    } catch (error) {
+      setState({
+        tone: "error",
+        message: error instanceof Error ? error.message : "Falha ao realizar estorno.",
+      });
+    } finally {
+      setRefundingId(null);
     }
   }
 
@@ -652,7 +724,9 @@ export function PlatformBillingOperations({
             <HistoryPanels
               catalog={catalog}
               onReconcile={reconcileBillingRecord}
+              onRefund={refundBillingPayment}
               reconcilingId={reconcilingId}
+              refundingId={refundingId}
             />
           </div>
         </div>
@@ -800,11 +874,15 @@ function CredentialStatusGrid({
 function HistoryPanels({
   catalog,
   onReconcile,
+  onRefund,
   reconcilingId,
+  refundingId,
 }: {
   catalog: PlatformBillingOperationsCatalog;
   onReconcile: (input: { subscriptionId?: string | null; paymentId?: string | null }) => void;
+  onRefund: (payment: PlatformBillingPaymentItem) => void;
   reconcilingId: string | null;
+  refundingId: string | null;
 }) {
   return (
     <div className="grid gap-3">
@@ -829,6 +907,9 @@ function HistoryPanels({
                 disabled={!payment.subscriptionId || !canReconcileStatus(payment.status)}
                 loading={Boolean(payment.subscriptionId && reconcilingId === payment.subscriptionId)}
                 onReconcile={() => onReconcile({ subscriptionId: payment.subscriptionId, paymentId: payment.id })}
+                refundDisabled={!canRefundPayment(payment)}
+                refundLoading={refundingId === payment.id}
+                onRefund={() => onRefund(payment)}
               />,
             ])}
           />
@@ -854,13 +935,15 @@ function HistoryPanels({
                 <span key="next" className="font-mono text-slate-500">{formatDate(subscription.nextBillingAt ?? subscription.currentPeriodEnd)}</span>,
                 <BillingSyncActions
                   key="actions"
-                  checkoutUrl={subscription.checkoutUrl}
-                  disabled={!subscription.providerSubscriptionId || !canReconcileStatus(subscription.status)}
-                  loading={reconcilingId === subscription.id}
-                  onReconcile={() => onReconcile({ subscriptionId: subscription.id })}
-                />,
-              ])}
-            />
+                checkoutUrl={subscription.checkoutUrl}
+                disabled={!subscription.providerSubscriptionId || !canReconcileStatus(subscription.status)}
+                loading={reconcilingId === subscription.id}
+                onReconcile={() => onReconcile({ subscriptionId: subscription.id })}
+                refundDisabled
+                refundLoading={false}
+              />,
+            ])}
+          />
           ) : (
             <EmptyState icon={<CreditCard className="h-4 w-4" />} text="Sem assinaturas ativas ou recorrencias confirmadas." />
           )}
@@ -1233,14 +1316,20 @@ function BillingSyncActions({
   disabled,
   loading,
   onReconcile,
+  refundDisabled = true,
+  refundLoading = false,
+  onRefund,
 }: {
   checkoutUrl: string | null;
   disabled: boolean;
   loading: boolean;
   onReconcile: () => void;
+  refundDisabled?: boolean;
+  refundLoading?: boolean;
+  onRefund?: () => void;
 }) {
   return (
-    <div className="flex min-w-[150px] flex-wrap items-center gap-1.5">
+    <div className={`flex ${onRefund ? "min-w-[190px]" : "min-w-[150px]"} flex-wrap items-center gap-1.5`}>
       {checkoutUrl ? (
         <a
           href={checkoutUrl}
@@ -1263,6 +1352,18 @@ function BillingSyncActions({
         <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
         {loading ? "Sync" : "Sincronizar"}
       </button>
+      {onRefund ? (
+        <button
+          type="button"
+          onClick={onRefund}
+          disabled={refundDisabled || refundLoading}
+          className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg px-2.5 text-[10px] font-bold transition disabled:cursor-not-allowed disabled:opacity-45"
+          style={{ background: "rgba(244,63,94,0.10)", border: "1px solid rgba(244,63,94,0.26)", color: "#fda4af" }}
+        >
+          <RotateCcw className={`h-3.5 w-3.5 ${refundLoading ? "animate-spin" : ""}`} />
+          {refundLoading ? "Estornando" : "Estornar"}
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -1304,6 +1405,12 @@ const inputStyle = {
 
 function canReconcileStatus(status: string) {
   return ["pending", "in_process", "incomplete", "past_due"].includes(status);
+}
+
+function canRefundPayment(payment: PlatformBillingPaymentItem) {
+  return payment.status === "approved"
+    && Boolean(payment.providerPaymentId)
+    && payment.amountBrl > 0;
 }
 
 function getActionMessageStyle(tone: ActionState["tone"]) {
@@ -1363,7 +1470,7 @@ function getStatusTone(status: string) {
     return "warning";
   }
 
-  if (["rejected", "failed", "canceled", "cancelled"].includes(status)) {
+  if (["rejected", "failed", "canceled", "cancelled", "refunded"].includes(status)) {
     return "critical";
   }
 
@@ -1385,6 +1492,7 @@ function formatStatus(value: string) {
     failed: "falhou",
     canceled: "cancelado",
     cancelled: "cancelado",
+    refunded: "estornado",
     skipped: "ignorado",
   };
 

@@ -69,6 +69,19 @@ type MercadoPagoPaymentResponse = {
   };
 };
 
+type MercadoPagoRefundResponse = {
+  id?: number | string;
+  payment_id?: number | string;
+  amount?: number;
+  status?: string;
+  source?: JsonRecord;
+  date_created?: string;
+  message?: string;
+  error?: string;
+  error_description?: string;
+  cause?: unknown;
+};
+
 type IntegrationSecrets = {
   id: string;
   organizationId: string;
@@ -940,6 +953,45 @@ export async function getMercadoPagoPayment(input: {
   }
 
   return body;
+}
+
+export async function createMercadoPagoPaymentRefund(input: {
+  accessToken: string;
+  paymentId: string;
+  amount?: number | null;
+  idempotencyKey?: string | null;
+}) {
+  const refundAmount = normalizeCurrencyAmount(input.amount);
+  const headers: Record<string, string> = {
+    accept: "application/json",
+    Authorization: `Bearer ${input.accessToken}`,
+    "X-Idempotency-Key": input.idempotencyKey?.trim() || randomUUID(),
+  };
+  let body: string | undefined;
+
+  if (refundAmount && refundAmount > 0) {
+    headers["Content-Type"] = "application/json";
+    body = JSON.stringify({ amount: refundAmount });
+  }
+
+  const response = await fetch(`${mercadoPagoApiBaseUrl}/v1/payments/${encodeURIComponent(input.paymentId)}/refunds`, {
+    method: "POST",
+    headers,
+    body,
+  });
+  const payload = await response.json().catch(() => null) as MercadoPagoRefundResponse | null;
+
+  if (!response.ok || !payload?.id) {
+    throw new Error(
+      readOptionalString(payload?.message)
+      ?? readOptionalString(payload?.error_description)
+      ?? readOptionalString(payload?.error)
+      ?? readMercadoPagoCauseMessage(payload?.cause)
+      ?? "Nao foi possivel estornar o pagamento no Mercado Pago.",
+    );
+  }
+
+  return payload;
 }
 
 export function mapMercadoPagoPaymentStatus(status: string | null | undefined): SalesCatalogPaymentSessionStatus {

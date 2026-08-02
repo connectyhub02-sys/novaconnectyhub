@@ -214,6 +214,59 @@ export async function getMercadoPagoBillingSubscription(input: {
   };
 }
 
+export async function cancelMercadoPagoBillingSubscription(input: {
+  client?: SupabaseClient;
+  subscriptionId: string;
+  idempotencyKey?: string | null;
+}): Promise<MercadoPagoBillingSubscriptionDetails> {
+  const subscriptionId = input.subscriptionId.trim();
+
+  if (!subscriptionId) {
+    throw new MercadoPagoBillingSubscriptionError("Identificador da assinatura Mercado Pago ausente.");
+  }
+
+  const config = await loadMercadoPagoPlatformBillingConfig({ client: input.client });
+  const response = await fetch(`${mercadoPagoApiBaseUrl}/preapproval/${encodeURIComponent(subscriptionId)}`, {
+    method: "PUT",
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${config.accessToken}`,
+      "Content-Type": "application/json",
+      "X-Idempotency-Key": input.idempotencyKey?.trim() || randomUUID(),
+    },
+    body: JSON.stringify({ status: "canceled" }),
+  });
+  const payload = await response.json().catch(() => null) as MercadoPagoPreapprovalResponse | null;
+
+  if (!response.ok || !payload?.id) {
+    throw createMercadoPagoSubscriptionError(
+      payload,
+      response.status,
+      "Nao foi possivel cancelar a assinatura no Mercado Pago.",
+    );
+  }
+
+  return {
+    id: payload.id,
+    status: readOptionalString(payload.status),
+    externalReference: readOptionalString(payload.external_reference),
+    payerEmail: readOptionalString(payload.payer_email),
+    nextPaymentDate: readOptionalString(payload.next_payment_date),
+    amountBrl: normalizeAmount(Number(payload.auto_recurring?.transaction_amount ?? 0)),
+    currencyId: readOptionalString(payload.auto_recurring?.currency_id),
+    raw: {
+      id: payload.id,
+      status: payload.status ?? null,
+      external_reference: payload.external_reference ?? null,
+      payer_email: payload.payer_email ?? null,
+      next_payment_date: payload.next_payment_date ?? null,
+      auto_recurring: payload.auto_recurring ?? null,
+      date_created: payload.date_created ?? null,
+      last_modified: payload.last_modified ?? null,
+    },
+  };
+}
+
 export function mapMercadoPagoPreapprovalStatus(status: string | null | undefined) {
   const normalized = status?.trim().toLowerCase();
 

@@ -115,6 +115,21 @@ export type CreditDebitInput = {
   metadata?: Record<string, unknown>;
 };
 
+export type CreditRefundReversalInput = {
+  organizationId: string;
+  amountCredits: number;
+  description?: string;
+  externalReference?: string;
+  metadata?: Record<string, unknown>;
+};
+
+export type CreditRefundReversalResult = {
+  transactionId: string | null;
+  reversedCredits: number;
+  uncoveredCredits: number;
+  balanceAfterCredits: number;
+};
+
 export type WalletRow = {
   id: string;
   organization_id: string;
@@ -204,6 +219,29 @@ export async function grantCredits(client: SupabaseClient, input: CreditGrantInp
   }
 
   return String(data);
+}
+
+export async function reverseCreditsForRefund(client: SupabaseClient, input: CreditRefundReversalInput): Promise<CreditRefundReversalResult> {
+  const { data, error } = await client.rpc("reverse_credit_wallet_for_refund", {
+    p_organization_id: input.organizationId,
+    p_amount_credits: input.amountCredits,
+    p_description: input.description ?? null,
+    p_external_reference: input.externalReference ?? null,
+    p_metadata: input.metadata ?? {},
+  });
+
+  if (error) {
+    throw new Error(`Nao foi possivel reverter creditos do estorno: ${error.message}`);
+  }
+
+  const row = Array.isArray(data) ? data[0] : data;
+
+  return {
+    transactionId: row?.transaction_id ? String(row.transaction_id) : null,
+    reversedCredits: toNumber(row?.reversed_credits),
+    uncoveredCredits: toNumber(row?.uncovered_credits),
+    balanceAfterCredits: toNumber(row?.balance_after_credits),
+  };
 }
 
 export async function debitCredits(client: SupabaseClient, input: CreditDebitInput) {
@@ -424,6 +462,16 @@ function isTrialUsageNotificationCandidate(status: BillingAccessStatus) {
 
 function roundUsageUnits(value: number) {
   return round(value, 6);
+}
+
+function toNumber(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  return 0;
 }
 
 function roundCredits(value: number) {

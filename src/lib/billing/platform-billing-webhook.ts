@@ -845,7 +845,7 @@ async function updatePaymentProviderState(
       ? client
           .from("billing_invoices")
           .update({
-            status: paymentStatus === "approved" ? "paid" : paymentStatus === "pending" ? "open" : "failed",
+            status: mapInvoiceStatusFromPaymentStatus(paymentStatus),
             paid_at: paidAt,
             provider_payment_id: paymentId ?? undefined,
             metadata: {
@@ -1702,6 +1702,15 @@ function mapPaymentStatus(providerStatus: string) {
   }
 
   return "in_process";
+}
+
+function mapInvoiceStatusFromPaymentStatus(paymentStatus: string) {
+  if (paymentStatus === "approved") return "paid";
+  if (paymentStatus === "pending") return "open";
+  if (paymentStatus === "refunded") return "refunded";
+  if (paymentStatus === "canceled") return "void";
+
+  return "failed";
 }
 
 function buildBillingMessage(input: {
