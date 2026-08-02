@@ -2,12 +2,15 @@ import {
   BadgePercent,
   Banknote,
   BrainCircuit,
+  Calculator,
   Coins,
   DatabaseZap,
+  Gauge,
   HandCoins,
   Mic2,
   PackageCheck,
   ReceiptText,
+  ServerCog,
   TrendingUp,
   UserRound,
   WalletCards,
@@ -140,6 +143,8 @@ export function BillingCenter({
         />
       </div>
 
+      <CurrentCostCenterPanel summary={summary} />
+
       <PlatformBillingOperations catalog={platformBillingCatalog} />
 
       <CommercialSalesPanel summary={summary} />
@@ -222,22 +227,27 @@ export function BillingCenter({
             <RuleCard
               icon={BrainCircuit}
               title="Gemini"
-              text="Tokens de entrada e saida serao registrados por agente, cliente, conversa e modelo usado."
+              text="Hoje entra como custo variavel de IA: texto, voz, transcricao e qualquer evento Gemini medido no uso dos agentes."
             />
             <RuleCard
               icon={Mic2}
               title="ElevenLabs"
-              text="Voz, clonagem autorizada e respostas por audio serao cobradas por caracteres, requests ou credito configurado."
+              text="Hoje entra como custo variavel de voz: caracteres, requests e eventos de audio que forem registrados no consumo."
+            />
+            <RuleCard
+              icon={ServerCog}
+              title="WiseUp/Uazapi"
+              text="Hoje entra como custo fixo: R$ 138 por mes para ate 100 dispositivos, rateado pelas instancias WhatsApp conectadas."
             />
             <RuleCard
               icon={Coins}
               title="Planos + creditos"
-              text="O cliente paga assinatura e pode comprar creditos extras. O painel calcula custo real, receita e margem."
+              text="A leitura compara pagamentos aprovados, creditos comprados, creditos consumidos, custo real e margem bruta."
             />
             <RuleCard
               icon={ReceiptText}
-              title="Auditoria"
-              text="Cada consumo vira evento de uso e pode gerar debito na carteira da empresa do cliente."
+              title="Custos futuros"
+              text="Vercel, Supabase, Cloudflare, storage, hospedagem e aquisicao ficam fora desta fase ate virarem custo real da operacao."
             />
           </div>
         </Panel>
@@ -348,6 +358,166 @@ function CommercialSalesPanel({ summary }: { summary: BillingAdminSummary }) {
           {commerce.warnings.slice(0, 2).join(" ")}
         </div>
       ) : null}
+    </Panel>
+  );
+}
+
+function CurrentCostCenterPanel({ summary }: { summary: BillingAdminSummary }) {
+  const current = summary.currentCostCenter;
+  const fixedProvider = current.fixedProviders[0];
+  const creditCostDetail = current.consumedCredits > 0
+    ? `venda atual ${formatUnitMoney(current.creditUnitPriceBrl)}`
+    : "aguardando consumo medido";
+
+  return (
+    <Panel
+      className="mb-4"
+      title="Centro de custos atual"
+      eyebrow="Gemini / ElevenLabs / WiseUp"
+      compact
+      action={
+        <div className="flex flex-wrap gap-2">
+          <NeonBadge tone="cyan">{current.periodLabel}</NeonBadge>
+          <NeonBadge tone="amber">MVP de custos reais</NeonBadge>
+        </div>
+      }
+    >
+      <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
+        <BillingMetric
+          icon={Calculator}
+          label="Custo operacional"
+          value={formatMoney(current.totalCostBrl)}
+          detail={`${formatMoney(current.todayTotalCostBrl)} hoje`}
+          tone="amber"
+        />
+        <BillingMetric
+          icon={Banknote}
+          label="Receita aprovada"
+          value={formatMoney(current.approvedRevenueBrl)}
+          detail={`${formatMoney(current.todayApprovedRevenueBrl)} hoje`}
+          tone="green"
+        />
+        <BillingMetric
+          icon={Coins}
+          label="Creditos comprados"
+          value={formatCredits(current.purchasedCredits)}
+          detail={`${formatCredits(current.todayPurchasedCredits)} hoje / ${formatCredits(current.consumedCredits)} consumidos`}
+          tone="cyan"
+        />
+        <BillingMetric
+          icon={Gauge}
+          label="Custo real/credito"
+          value={formatUnitMoney(current.realCostPerConsumedCreditBrl)}
+          detail={creditCostDetail}
+          tone={current.realCostPerConsumedCreditBrl > current.creditUnitPriceBrl ? "amber" : "violet"}
+        />
+      </div>
+
+      <div className="mt-3 grid gap-3 xl:grid-cols-[330px_minmax(0,1fr)]">
+        <div
+          className="rounded-xl p-3"
+          style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
+        >
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <ServerCog className="h-4 w-4 text-cyan-500" />
+              <p className="text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>WiseUp/Uazapi</p>
+            </div>
+            <StatusBadge status={current.activeConnectedWhatsappInstances > 0 ? "online" : "idle"} />
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
+            <ProviderValue label="Custo mensal" value={formatMoney(fixedProvider?.monthlyCostBrl ?? 0)} />
+            <ProviderValue label="Capacidade" value={`${formatNumber(fixedProvider?.capacityUnits ?? 0)} dispositivos`} />
+            <ProviderValue label="Instancias conectadas" value={formatNumber(current.activeConnectedWhatsappInstances)} />
+            <ProviderValue label="Empresas com WhatsApp" value={formatNumber(current.activeWhatsappOrganizations)} />
+            <ProviderValue label="Custo planejado/unidade" value={formatMoney(fixedProvider?.plannedCostPerUnitBrl ?? 0)} />
+            <ProviderValue label="Custo real/unidade ativa" value={formatMoney(fixedProvider?.effectiveCostPerUnitBrl ?? 0)} />
+          </div>
+          <p className="mt-2 text-[11px] leading-4 text-slate-500">
+            {fixedProvider?.allocationLabel ?? "Custo fixo de WhatsApp ainda sem instancia conectada."}
+          </p>
+        </div>
+
+        <div
+          className="rounded-xl p-3"
+          style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
+        >
+          <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>Leitura de margem</p>
+              <p className="mt-1 font-mono text-[10px] uppercase tracking-wider text-slate-500">
+                {current.scopeLabel}
+              </p>
+            </div>
+            <NeonBadge tone={current.grossProfitBrl >= 0 ? "green" : "amber"}>
+              {formatPercent(current.grossMarginPercent)} margem
+            </NeonBadge>
+          </div>
+          <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
+            <ProviderValue label="Custo variavel" value={formatMoney(current.variableCostBrl)} />
+            <ProviderValue label="Custo fixo" value={formatMoney(current.fixedCostBrl)} />
+            <ProviderValue label="Lucro bruto" value={formatMoney(current.grossProfitBrl)} />
+            <ProviderValue label="Receita dos creditos" value={formatMoney(current.creditRevenueBrl)} />
+            <ProviderValue label="Preco sugerido 60%" value={formatUnitMoney(current.suggestedCreditPrice60MarginBrl)} />
+            <ProviderValue label="Preco sugerido 70%" value={formatUnitMoney(current.suggestedCreditPrice70MarginBrl)} />
+            <ProviderValue label="Hoje custo IA" value={formatMoney(current.todayVariableCostBrl)} />
+            <ProviderValue label="Hoje lucro bruto" value={formatMoney(current.todayGrossProfitBrl)} />
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-3 grid gap-3 xl:grid-cols-2">
+        <div
+          className="rounded-xl p-3"
+          style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
+        >
+          <div className="mb-3 flex items-center gap-2">
+            <DatabaseZap className="h-4 w-4 text-cyan-500" />
+            <p className="text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>Fornecedores atuais</p>
+          </div>
+          <DataTable
+            columns={["Fornecedor", "Custo", "Creditos", "Receita", "Margem"]}
+            rows={current.providers.map((provider) => [
+              <span key="provider" className="font-semibold" style={{ color: "var(--ch-text)" }}>{provider.label}</span>,
+              <span key="cost" className="font-mono text-amber-300">{formatMoney(provider.totalCostBrl)}</span>,
+              <span key="credits" className="font-mono text-slate-300">{formatCredits(provider.chargeCredits)}</span>,
+              <span key="revenue" className="font-mono text-emerald-300">{formatMoney(provider.creditRevenueBrl)}</span>,
+              <span key="margin" className="font-mono text-slate-300">{formatMoney(provider.marginBrl)}</span>,
+            ])}
+          />
+        </div>
+
+        <div
+          className="rounded-xl p-3"
+          style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
+        >
+          <div className="mb-3 flex items-center gap-2">
+            <UserRound className="h-4 w-4 text-emerald-500" />
+            <p className="text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>Clientes por custo</p>
+          </div>
+          {current.customers.length > 0 ? (
+            <DataTable
+              columns={["Cliente", "Receita", "Custo", "Creditos", "Margem"]}
+              rows={current.customers.map((customer) => [
+                <span key="customer" className="font-semibold" style={{ color: "var(--ch-text)" }}>
+                  {customer.name}
+                </span>,
+                <span key="revenue" className="font-mono text-emerald-300">{formatMoney(customer.revenueBrl)}</span>,
+                <span key="cost" className="font-mono text-amber-300">{formatMoney(customer.totalCostBrl)}</span>,
+                <span key="credits" className="font-mono text-slate-300">{formatCredits(customer.chargeCredits)}</span>,
+                <span key="margin" className="font-mono text-slate-300">{formatMoney(customer.marginBrl)}</span>,
+              ])}
+            />
+          ) : (
+            <div
+              className="rounded-xl p-5 text-[13px] leading-6 text-slate-500"
+              style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}
+            >
+              Nenhum cliente teve pagamento, consumo ou instancia WhatsApp conectada no periodo.
+            </div>
+          )}
+        </div>
+      </div>
     </Panel>
   );
 }
@@ -475,6 +645,21 @@ function formatMoney(value: number) {
     currency: "BRL",
     maximumFractionDigits: 2,
   }).format(value);
+}
+
+function formatUnitMoney(value: number) {
+  return new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    minimumFractionDigits: value > 0 && value < 0.01 ? 4 : 2,
+    maximumFractionDigits: 4,
+  }).format(value);
+}
+
+function formatPercent(value: number) {
+  return `${new Intl.NumberFormat("pt-BR", {
+    maximumFractionDigits: 2,
+  }).format(value)}%`;
 }
 
 function formatCredits(value: number) {

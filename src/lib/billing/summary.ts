@@ -60,6 +60,80 @@ export type BillingAgentScopeSummary = {
   chargeCredits: number;
 };
 
+export type FixedProviderCostSummary = {
+  provider: string;
+  label: string;
+  monthlyCostBrl: number;
+  periodCostBrl: number;
+  todayCostBrl: number;
+  capacityUnits: number;
+  activeUnits: number;
+  activeOrganizations: number;
+  plannedCostPerUnitBrl: number;
+  effectiveCostPerUnitBrl: number;
+  unitLabel: string;
+  allocationLabel: string;
+};
+
+export type CostCenterProviderEconomics = {
+  provider: string;
+  label: string;
+  events: number;
+  variableCostBrl: number;
+  fixedCostBrl: number;
+  totalCostBrl: number;
+  chargeCredits: number;
+  creditRevenueBrl: number;
+  marginBrl: number;
+  marginPercent: number;
+};
+
+export type CostCenterCustomerEconomics = {
+  organizationId: string;
+  name: string;
+  planCode: string;
+  status: string;
+  revenueBrl: number;
+  variableCostBrl: number;
+  fixedCostBrl: number;
+  totalCostBrl: number;
+  chargeCredits: number;
+  connectedWhatsappInstances: number;
+  marginBrl: number;
+  marginPercent: number;
+};
+
+export type CurrentCostCenterSummary = {
+  periodLabel: string;
+  scopeLabel: string;
+  creditUnitPriceBrl: number;
+  approvedRevenueBrl: number;
+  todayApprovedRevenueBrl: number;
+  purchasedCredits: number;
+  todayPurchasedCredits: number;
+  consumedCredits: number;
+  todayConsumedCredits: number;
+  variableCostBrl: number;
+  todayVariableCostBrl: number;
+  fixedCostBrl: number;
+  todayFixedCostBrl: number;
+  totalCostBrl: number;
+  todayTotalCostBrl: number;
+  creditRevenueBrl: number;
+  todayCreditRevenueBrl: number;
+  grossProfitBrl: number;
+  todayGrossProfitBrl: number;
+  grossMarginPercent: number;
+  realCostPerConsumedCreditBrl: number;
+  suggestedCreditPrice60MarginBrl: number;
+  suggestedCreditPrice70MarginBrl: number;
+  activeConnectedWhatsappInstances: number;
+  activeWhatsappOrganizations: number;
+  providers: CostCenterProviderEconomics[];
+  fixedProviders: FixedProviderCostSummary[];
+  customers: CostCenterCustomerEconomics[];
+};
+
 export type BillingAdminSummary = {
   schemaReady: boolean;
   periodLabel: string;
@@ -87,11 +161,13 @@ export type BillingAdminSummary = {
   providers: BillingProviderSummary[];
   billingModes: BillingModeSummary[];
   agentScopes: BillingAgentScopeSummary[];
+  currentCostCenter: CurrentCostCenterSummary;
   commerce: CommerceRevenueSummary;
   warnings: string[];
 };
 
 type UsageRow = {
+  organization_id: string | null;
   provider: BillingProvider | string | null;
   provider_cost: number | string | null;
   connecty_revenue_estimate: number | string | null;
@@ -116,6 +192,36 @@ type RateRow = {
   active: boolean | null;
 };
 
+type BillingPaymentRow = {
+  organization_id: string | null;
+  status: string | null;
+  amount_brl: number | string | null;
+  paid_at: string | null;
+  created_at: string | null;
+};
+
+type CreditTransactionRow = {
+  organization_id: string | null;
+  transaction_type: string | null;
+  amount_credits: number | string | null;
+  created_at: string | null;
+};
+
+type OrganizationRow = {
+  id: string;
+  name: string | null;
+  slug: string | null;
+  plan_code: string | null;
+  status: string | null;
+};
+
+type WhatsappInstanceRow = {
+  id: string;
+  organization_id: string | null;
+  provider: string | null;
+  status: string | null;
+};
+
 type CommerceSessionRow = {
   id: string;
   amount: number | string | null;
@@ -133,10 +239,16 @@ type CommerceCommissionRow = {
   metadata: Record<string, unknown> | null;
 };
 
+const CONNECTY_CREDIT_UNIT_BRL = 0.01;
+const COST_PERIOD_DAYS = 30;
+const CURRENT_COST_PROVIDERS = new Set(["gemini", "elevenlabs"]);
+const WISEUP_UAZAPI_MONTHLY_COST_BRL = 138;
+const WISEUP_UAZAPI_CAPACITY_UNITS = 100;
+
 const providerNames: Record<string, string> = {
   gemini: "Gemini / Google AI Core",
   elevenlabs: "ElevenLabs / Voz",
-  uazapi: "Uazapi / WhatsApp",
+  uazapi: "WiseUp/Uazapi / WhatsApp",
   meta: "Meta / Instagram",
   google_ads: "Google Ads",
   r2: "Cloudflare R2",
@@ -175,10 +287,20 @@ export async function getBillingAdminSummary(
   const todayStart = new Date(generatedAt);
   todayStart.setHours(0, 0, 0, 0);
 
-  const [usageResult, walletResult, costCenterResult, rateResult, commerce] = await Promise.all([
+  const [
+    usageResult,
+    walletResult,
+    costCenterResult,
+    rateResult,
+    paymentResult,
+    creditTransactionResult,
+    organizationResult,
+    whatsappInstanceResult,
+    commerce,
+  ] = await Promise.all([
     supabase
       .from("usage_events")
-      .select("provider, provider_cost, connecty_revenue_estimate, gross_margin_estimate, connecty_charge_credits, occurred_at, billing_mode, agent_scope")
+      .select("organization_id, provider, provider_cost, connecty_revenue_estimate, gross_margin_estimate, connecty_charge_credits, occurred_at, billing_mode, agent_scope")
       .gte("occurred_at", sinceIso)
       .limit(5000),
     supabase
@@ -194,10 +316,35 @@ export async function getBillingAdminSummary(
       .select("active")
       .eq("active", true)
       .limit(5000),
+    supabase
+      .from("billing_payments")
+      .select("organization_id, status, amount_brl, paid_at, created_at")
+      .gte("created_at", sinceIso)
+      .limit(5000),
+    supabase
+      .from("credit_transactions")
+      .select("organization_id, transaction_type, amount_credits, created_at")
+      .gte("created_at", sinceIso)
+      .limit(5000),
+    supabase
+      .from("organizations")
+      .select("id, name, slug, plan_code, status")
+      .limit(1000),
+    supabase
+      .from("whatsapp_instances")
+      .select("id, organization_id, provider, status")
+      .eq("provider", "uazapi")
+      .limit(5000),
     getCommerceRevenueSummary(supabase, sinceIso),
   ]);
 
   const errors = [usageResult.error, walletResult.error, costCenterResult.error, rateResult.error].filter(Boolean);
+  const nonBlockingWarnings = [
+    paymentResult.error?.message,
+    creditTransactionResult.error?.message,
+    organizationResult.error?.message,
+    whatsappInstanceResult.error?.message,
+  ].filter((message): message is string => Boolean(message));
 
   if (errors.length > 0) {
     return emptySummary({
@@ -216,6 +363,10 @@ export async function getBillingAdminSummary(
   const walletRows = (walletResult.data ?? []) as WalletRow[];
   const costCenterRows = (costCenterResult.data ?? []) as CostCenterRow[];
   const rateRows = (rateResult.data ?? []) as RateRow[];
+  const paymentRows = paymentResult.error ? [] : (paymentResult.data ?? []) as BillingPaymentRow[];
+  const creditTransactionRows = creditTransactionResult.error ? [] : (creditTransactionResult.data ?? []) as CreditTransactionRow[];
+  const organizationRows = organizationResult.error ? [] : (organizationResult.data ?? []) as OrganizationRow[];
+  const whatsappInstanceRows = whatsappInstanceResult.error ? [] : (whatsappInstanceResult.data ?? []) as WhatsappInstanceRow[];
   const providerLabels = new Map<string, string>();
 
   for (const row of costCenterRows) {
@@ -361,6 +512,15 @@ export async function getBillingAdminSummary(
   );
 
   totals.walletBalanceCredits = walletRows.reduce((sum, row) => sum + toNumber(row.balance_credits), 0);
+  const currentCostCenter = buildCurrentCostCenterSummary({
+    usageRows,
+    paymentRows,
+    creditTransactionRows,
+    organizationRows,
+    whatsappInstanceRows,
+    todayStart,
+    providerLabels,
+  });
 
   return {
     schemaReady: true,
@@ -386,8 +546,204 @@ export async function getBillingAdminSummary(
     providers,
     billingModes,
     agentScopes,
+    currentCostCenter,
     commerce,
-    warnings: commerce.warnings,
+    warnings: [...nonBlockingWarnings, ...commerce.warnings],
+  };
+}
+
+function buildCurrentCostCenterSummary({
+  usageRows,
+  paymentRows,
+  creditTransactionRows,
+  organizationRows,
+  whatsappInstanceRows,
+  todayStart,
+  providerLabels,
+}: {
+  usageRows: UsageRow[];
+  paymentRows: BillingPaymentRow[];
+  creditTransactionRows: CreditTransactionRow[];
+  organizationRows: OrganizationRow[];
+  whatsappInstanceRows: WhatsappInstanceRow[];
+  todayStart: Date;
+  providerLabels: Map<string, string>;
+}): CurrentCostCenterSummary {
+  const organizationById = new Map(organizationRows.map((organization) => [organization.id, organization]));
+  const activeWhatsappInstances = whatsappInstanceRows.filter(
+    (instance) => instance.provider === "uazapi" && instance.status === "connected" && Boolean(instance.organization_id),
+  );
+  const connectedInstancesByOrganization = new Map<string, number>();
+
+  for (const instance of activeWhatsappInstances) {
+    if (!instance.organization_id) continue;
+    connectedInstancesByOrganization.set(
+      instance.organization_id,
+      (connectedInstancesByOrganization.get(instance.organization_id) ?? 0) + 1,
+    );
+  }
+
+  const activeWhatsappOrganizations = connectedInstancesByOrganization.size;
+  const fixedProvider = buildWiseUpFixedCostSummary(activeWhatsappInstances.length, activeWhatsappOrganizations);
+  const providerMap = new Map<string, CostCenterProviderEconomics>();
+  const customerMap = new Map<string, CostCenterCustomerEconomics>();
+  let consumedCredits = 0;
+  let todayConsumedCredits = 0;
+  let variableCostBrl = 0;
+  let todayVariableCostBrl = 0;
+  let creditRevenueBrl = 0;
+  let todayCreditRevenueBrl = 0;
+
+  for (const provider of CURRENT_COST_PROVIDERS) {
+    providerMap.set(provider, createProviderEconomics(provider, providerLabels));
+  }
+
+  for (const row of usageRows) {
+    const provider = row.provider ?? "unknown";
+
+    if (!isCurrentCostProvider(provider)) {
+      continue;
+    }
+
+    const providerCost = toNumber(row.provider_cost);
+    const chargeCredits = toNumber(row.connecty_charge_credits);
+    const creditRevenue = toNumber(row.connecty_revenue_estimate);
+    const today = isOnOrAfter(row.occurred_at, todayStart);
+    const providerSummary = providerMap.get(provider) ?? createProviderEconomics(provider, providerLabels);
+
+    providerSummary.events += 1;
+    providerSummary.variableCostBrl += providerCost;
+    providerSummary.totalCostBrl += providerCost;
+    providerSummary.chargeCredits += chargeCredits;
+    providerSummary.creditRevenueBrl += creditRevenue;
+    providerSummary.marginBrl += creditRevenue - providerCost;
+    providerMap.set(provider, providerSummary);
+
+    consumedCredits += chargeCredits;
+    variableCostBrl += providerCost;
+    creditRevenueBrl += creditRevenue;
+
+    if (today) {
+      todayConsumedCredits += chargeCredits;
+      todayVariableCostBrl += providerCost;
+      todayCreditRevenueBrl += creditRevenue;
+    }
+
+    if (row.organization_id) {
+      const customer = getOrCreateCustomerEconomics(customerMap, row.organization_id, organizationById);
+      customer.variableCostBrl += providerCost;
+      customer.totalCostBrl += providerCost;
+      customer.chargeCredits += chargeCredits;
+    }
+  }
+
+  let approvedRevenueBrl = 0;
+  let todayApprovedRevenueBrl = 0;
+
+  for (const payment of paymentRows) {
+    if (payment.status !== "approved") {
+      continue;
+    }
+
+    const amount = toNumber(payment.amount_brl);
+    const paidAt = payment.paid_at ?? payment.created_at;
+
+    approvedRevenueBrl += amount;
+    if (isOnOrAfter(paidAt, todayStart)) {
+      todayApprovedRevenueBrl += amount;
+    }
+
+    if (payment.organization_id) {
+      const customer = getOrCreateCustomerEconomics(customerMap, payment.organization_id, organizationById);
+      customer.revenueBrl += amount;
+    }
+  }
+
+  let purchasedCredits = 0;
+  let todayPurchasedCredits = 0;
+
+  for (const transaction of creditTransactionRows) {
+    if (transaction.transaction_type !== "purchase") {
+      continue;
+    }
+
+    const amountCredits = Math.max(0, toNumber(transaction.amount_credits));
+    purchasedCredits += amountCredits;
+
+    if (isOnOrAfter(transaction.created_at, todayStart)) {
+      todayPurchasedCredits += amountCredits;
+    }
+  }
+
+  for (const [organizationId, connectedWhatsappInstances] of connectedInstancesByOrganization.entries()) {
+    const fixedShare = activeWhatsappInstances.length > 0
+      ? (fixedProvider.periodCostBrl * connectedWhatsappInstances) / activeWhatsappInstances.length
+      : 0;
+    const customer = getOrCreateCustomerEconomics(customerMap, organizationId, organizationById);
+
+    customer.connectedWhatsappInstances = connectedWhatsappInstances;
+    customer.fixedCostBrl += fixedShare;
+    customer.totalCostBrl += fixedShare;
+  }
+
+  const fixedCostBrl = fixedProvider.periodCostBrl;
+  const todayFixedCostBrl = fixedProvider.todayCostBrl;
+  const totalCostBrl = variableCostBrl + fixedCostBrl;
+  const todayTotalCostBrl = todayVariableCostBrl + todayFixedCostBrl;
+  const grossProfitBrl = approvedRevenueBrl - totalCostBrl;
+  const todayGrossProfitBrl = todayApprovedRevenueBrl - todayTotalCostBrl;
+  const realCostPerConsumedCreditBrl = consumedCredits > 0 ? totalCostBrl / consumedCredits : 0;
+  const providers = Array.from(providerMap.values())
+    .map(roundProviderEconomics)
+    .concat([
+      roundProviderEconomics({
+        provider: fixedProvider.provider,
+        label: fixedProvider.label,
+        events: fixedProvider.activeUnits,
+        variableCostBrl: 0,
+        fixedCostBrl: fixedProvider.periodCostBrl,
+        totalCostBrl: fixedProvider.periodCostBrl,
+        chargeCredits: 0,
+        creditRevenueBrl: 0,
+        marginBrl: -fixedProvider.periodCostBrl,
+        marginPercent: 0,
+      }),
+    ])
+    .sort((a, b) => b.totalCostBrl - a.totalCostBrl);
+  const customers = Array.from(customerMap.values())
+    .map(roundCustomerEconomics)
+    .sort((a, b) => b.totalCostBrl - a.totalCostBrl)
+    .slice(0, 8);
+
+  return {
+    periodLabel: "Ultimos 30 dias",
+    scopeLabel: "Custos atuais: Gemini, ElevenLabs e WiseUp/Uazapi",
+    creditUnitPriceBrl: CONNECTY_CREDIT_UNIT_BRL,
+    approvedRevenueBrl: roundMoney(approvedRevenueBrl),
+    todayApprovedRevenueBrl: roundMoney(todayApprovedRevenueBrl),
+    purchasedCredits: roundCredits(purchasedCredits),
+    todayPurchasedCredits: roundCredits(todayPurchasedCredits),
+    consumedCredits: roundCredits(consumedCredits),
+    todayConsumedCredits: roundCredits(todayConsumedCredits),
+    variableCostBrl: roundMoney(variableCostBrl),
+    todayVariableCostBrl: roundMoney(todayVariableCostBrl),
+    fixedCostBrl: roundMoney(fixedCostBrl),
+    todayFixedCostBrl: roundMoney(todayFixedCostBrl),
+    totalCostBrl: roundMoney(totalCostBrl),
+    todayTotalCostBrl: roundMoney(todayTotalCostBrl),
+    creditRevenueBrl: roundMoney(creditRevenueBrl),
+    todayCreditRevenueBrl: roundMoney(todayCreditRevenueBrl),
+    grossProfitBrl: roundMoney(grossProfitBrl),
+    todayGrossProfitBrl: roundMoney(todayGrossProfitBrl),
+    grossMarginPercent: calculateMarginPercent(totalCostBrl, approvedRevenueBrl),
+    realCostPerConsumedCreditBrl: roundMoney(realCostPerConsumedCreditBrl),
+    suggestedCreditPrice60MarginBrl: roundMoney(suggestCreditPrice(realCostPerConsumedCreditBrl, 60)),
+    suggestedCreditPrice70MarginBrl: roundMoney(suggestCreditPrice(realCostPerConsumedCreditBrl, 70)),
+    activeConnectedWhatsappInstances: activeWhatsappInstances.length,
+    activeWhatsappOrganizations,
+    providers,
+    fixedProviders: [fixedProvider],
+    customers,
   };
 }
 
@@ -542,8 +898,59 @@ function emptySummary({
     providers: [],
     billingModes: [],
     agentScopes: [],
+    currentCostCenter: emptyCurrentCostCenterSummary(),
     commerce: commerce ?? emptyCommerceSummary(false, []),
     warnings,
+  };
+}
+
+function emptyCurrentCostCenterSummary(): CurrentCostCenterSummary {
+  const fixedProvider = buildWiseUpFixedCostSummary(0, 0);
+
+  return {
+    periodLabel: "Ultimos 30 dias",
+    scopeLabel: "Custos atuais: Gemini, ElevenLabs e WiseUp/Uazapi",
+    creditUnitPriceBrl: CONNECTY_CREDIT_UNIT_BRL,
+    approvedRevenueBrl: 0,
+    todayApprovedRevenueBrl: 0,
+    purchasedCredits: 0,
+    todayPurchasedCredits: 0,
+    consumedCredits: 0,
+    todayConsumedCredits: 0,
+    variableCostBrl: 0,
+    todayVariableCostBrl: 0,
+    fixedCostBrl: fixedProvider.periodCostBrl,
+    todayFixedCostBrl: fixedProvider.todayCostBrl,
+    totalCostBrl: fixedProvider.periodCostBrl,
+    todayTotalCostBrl: fixedProvider.todayCostBrl,
+    creditRevenueBrl: 0,
+    todayCreditRevenueBrl: 0,
+    grossProfitBrl: -fixedProvider.periodCostBrl,
+    todayGrossProfitBrl: -fixedProvider.todayCostBrl,
+    grossMarginPercent: 0,
+    realCostPerConsumedCreditBrl: 0,
+    suggestedCreditPrice60MarginBrl: 0,
+    suggestedCreditPrice70MarginBrl: 0,
+    activeConnectedWhatsappInstances: 0,
+    activeWhatsappOrganizations: 0,
+    providers: [
+      roundProviderEconomics(createProviderEconomics("gemini", new Map())),
+      roundProviderEconomics(createProviderEconomics("elevenlabs", new Map())),
+      roundProviderEconomics({
+        provider: fixedProvider.provider,
+        label: fixedProvider.label,
+        events: 0,
+        variableCostBrl: 0,
+        fixedCostBrl: fixedProvider.periodCostBrl,
+        totalCostBrl: fixedProvider.periodCostBrl,
+        chargeCredits: 0,
+        creditRevenueBrl: 0,
+        marginBrl: -fixedProvider.periodCostBrl,
+        marginPercent: 0,
+      }),
+    ],
+    fixedProviders: [fixedProvider],
+    customers: [],
   };
 }
 
@@ -564,6 +971,102 @@ function emptyCommerceSummary(schemaReady: boolean, warnings: string[]): Commerc
     netConnectyHubRevenue: 0,
     flows: [],
     warnings,
+  };
+}
+
+function buildWiseUpFixedCostSummary(activeUnits: number, activeOrganizations: number): FixedProviderCostSummary {
+  return {
+    provider: "uazapi",
+    label: providerNames.uazapi,
+    monthlyCostBrl: roundMoney(WISEUP_UAZAPI_MONTHLY_COST_BRL),
+    periodCostBrl: roundMoney(WISEUP_UAZAPI_MONTHLY_COST_BRL),
+    todayCostBrl: roundMoney(WISEUP_UAZAPI_MONTHLY_COST_BRL / COST_PERIOD_DAYS),
+    capacityUnits: WISEUP_UAZAPI_CAPACITY_UNITS,
+    activeUnits,
+    activeOrganizations,
+    plannedCostPerUnitBrl: roundMoney(WISEUP_UAZAPI_MONTHLY_COST_BRL / WISEUP_UAZAPI_CAPACITY_UNITS),
+    effectiveCostPerUnitBrl: roundMoney(activeUnits > 0 ? WISEUP_UAZAPI_MONTHLY_COST_BRL / activeUnits : 0),
+    unitLabel: "instancia WhatsApp conectada",
+    allocationLabel: "R$ 138/mes ate 100 dispositivos; rateio pelas instancias conectadas.",
+  };
+}
+
+function createProviderEconomics(
+  provider: string,
+  providerLabels: Map<string, string>,
+): CostCenterProviderEconomics {
+  return {
+    provider,
+    label: providerLabels.get(provider) ?? providerNames[provider] ?? provider,
+    events: 0,
+    variableCostBrl: 0,
+    fixedCostBrl: 0,
+    totalCostBrl: 0,
+    chargeCredits: 0,
+    creditRevenueBrl: 0,
+    marginBrl: 0,
+    marginPercent: 0,
+  };
+}
+
+function roundProviderEconomics(provider: CostCenterProviderEconomics): CostCenterProviderEconomics {
+  const totalCostBrl = provider.variableCostBrl + provider.fixedCostBrl;
+
+  return {
+    ...provider,
+    variableCostBrl: roundMoney(provider.variableCostBrl),
+    fixedCostBrl: roundMoney(provider.fixedCostBrl),
+    totalCostBrl: roundMoney(totalCostBrl),
+    chargeCredits: roundCredits(provider.chargeCredits),
+    creditRevenueBrl: roundMoney(provider.creditRevenueBrl),
+    marginBrl: roundMoney(provider.creditRevenueBrl - totalCostBrl),
+    marginPercent: calculateMarginPercent(totalCostBrl, provider.creditRevenueBrl),
+  };
+}
+
+function getOrCreateCustomerEconomics(
+  customers: Map<string, CostCenterCustomerEconomics>,
+  organizationId: string,
+  organizationById: Map<string, OrganizationRow>,
+) {
+  const current = customers.get(organizationId);
+
+  if (current) {
+    return current;
+  }
+
+  const organization = organizationById.get(organizationId);
+  const customer: CostCenterCustomerEconomics = {
+    organizationId,
+    name: organization?.name || organization?.slug || `Cliente ${organizationId.slice(0, 8)}`,
+    planCode: organization?.plan_code || "sem_plano",
+    status: organization?.status || "sem_status",
+    revenueBrl: 0,
+    variableCostBrl: 0,
+    fixedCostBrl: 0,
+    totalCostBrl: 0,
+    chargeCredits: 0,
+    connectedWhatsappInstances: 0,
+    marginBrl: 0,
+    marginPercent: 0,
+  };
+
+  customers.set(organizationId, customer);
+  return customer;
+}
+
+function roundCustomerEconomics(customer: CostCenterCustomerEconomics): CostCenterCustomerEconomics {
+  const totalCostBrl = customer.variableCostBrl + customer.fixedCostBrl;
+
+  return {
+    ...customer,
+    revenueBrl: roundMoney(customer.revenueBrl),
+    variableCostBrl: roundMoney(customer.variableCostBrl),
+    fixedCostBrl: roundMoney(customer.fixedCostBrl),
+    totalCostBrl: roundMoney(totalCostBrl),
+    chargeCredits: roundCredits(customer.chargeCredits),
+    marginBrl: roundMoney(customer.revenueBrl - totalCostBrl),
+    marginPercent: calculateMarginPercent(totalCostBrl, customer.revenueBrl),
   };
 }
 
@@ -644,6 +1147,26 @@ function normalizeCommercialFlowType(value: string | null | undefined): SalesCat
 function normalizeRevenueOwnerType(value: string | null | undefined): SalesCatalogRevenueOwnerType {
   if (value === "connectyhub" || value === "split" || value === "external_provider") return value;
   return "client";
+}
+
+function isCurrentCostProvider(provider: string | null | undefined) {
+  return Boolean(provider && CURRENT_COST_PROVIDERS.has(provider));
+}
+
+function calculateMarginPercent(cost: number, revenue: number) {
+  if (revenue <= 0) {
+    return 0;
+  }
+
+  return Math.round(((revenue - cost) / revenue) * 10000) / 100;
+}
+
+function suggestCreditPrice(realCostPerCredit: number, targetMarginPercent: number) {
+  if (realCostPerCredit <= 0 || targetMarginPercent >= 100) {
+    return 0;
+  }
+
+  return realCostPerCredit / (1 - targetMarginPercent / 100);
 }
 
 function roundMoney(value: number) {
