@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { mapBillingPlanRow, type BillingPlanRow } from "@/lib/billing/plans";
 import { requirePlatformAdmin } from "@/lib/supabase/admin-auth";
 
@@ -179,17 +180,7 @@ export async function POST() {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  await auth.supabase
-    .from("billing_plans")
-    .update({
-      status: "archived",
-      highlighted: false,
-      metadata: {
-        superseded_by: "starter",
-        archived_by: "commercial_credit_catalog",
-      },
-    })
-    .eq("plan_code", "basic");
+  await removeUnusedBasicPlan(auth.supabase);
 
   await auth.supabase.from("maintenance_audit_logs").insert({
     actor_id: auth.userId,
@@ -218,4 +209,58 @@ export async function POST() {
   return NextResponse.json({
     plans: (plans ?? []).map(mapBillingPlanRow),
   });
+}
+
+async function removeUnusedBasicPlan(supabase: SupabaseClient) {
+  const { data: basicPlan } = await supabase
+    .from("billing_plans")
+    .select("id")
+    .eq("plan_code", "basic")
+    .maybeSingle<{ id: string }>();
+
+  if (!basicPlan) {
+    return;
+  }
+
+  const [organizations, subscriptionCodes, subscriptionIds, billingCycles] = await Promise.all([
+    countRows(supabase, "organizations", "plan_code", "basic"),
+    countRows(supabase, "organization_subscriptions", "plan_code", "basic"),
+    countRows(supabase, "organization_subscriptions", "plan_id", basicPlan.id),
+    countRows(supabase, "billing_cycles", "plan_id", basicPlan.id),
+  ]);
+  const isUsed = organizations + subscriptionCodes + subscriptionIds + billingCycles > 0;
+
+  if (isUsed) {
+    await supabase
+      .from("billing_plans")
+      .update({
+        status: "archived",
+        highlighted: false,
+        metadata: {
+          superseded_by: "starter",
+          archived_by: "commercial_credit_catalog",
+        },
+      })
+      .eq("id", basicPlan.id);
+    return;
+  }
+
+  await supabase
+    .from("billing_plans")
+    .delete()
+    .eq("id", basicPlan.id);
+}
+
+async function countRows(
+  supabase: SupabaseClient,
+  table: string,
+  column: string,
+  value: string,
+) {
+  const { count } = await supabase
+    .from(table)
+    .select("*", { count: "exact", head: true })
+    .eq(column, value);
+
+  return count ?? 0;
 }
