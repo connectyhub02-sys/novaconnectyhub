@@ -46,6 +46,7 @@ import {
   formatSalesCatalogInline,
   formatSalesCatalogOrderStatus,
   formatSalesCatalogPaymentStatus,
+  formatSalesCatalogSalesDestination,
   formatSalesCatalogStockStatus,
   type ClientSalesCatalogItem,
   type ClientSalesCatalogOrder,
@@ -2611,6 +2612,8 @@ function buildSalesCatalogLines(items: RuntimeSalesCatalogItem[]) {
     "- Quando o lead pedir um produto, servico, catalogo, foto, video, PDF, preco ou proposta, escolha o item exato abaixo e use a tag correspondente.",
     "- Nunca invente produto, preco, arquivo ou condicao que nao esteja no catalogo.",
     "- Se o lead pedir algo generico, recomende no maximo 3 itens do catalogo e inclua a tag de cada um.",
+    "- Para destino site externo, use a tag do botao externo do produto e nao gere pedido ou checkout ConnectyHub.",
+    "- Para destino atendimento humano, colete o minimo necessario e acione humano; nao gere checkout automatico.",
     "- Nunca invente desconto, cupom, prazo promocional ou condicao comercial; use somente oferta/cupom cadastrado no item.",
     "- Quando houver preco promocional ou CTA cadastrado, use isso para conduzir o fechamento sem parecer texto automatico.",
     "- Se o item estiver esgotado, nao venda como disponivel; ofereca alternativa ou pergunte se pode avisar quando voltar.",
@@ -2640,7 +2643,15 @@ function buildSalesCatalogLines(items: RuntimeSalesCatalogItem[]) {
         item.fulfillment.schedulingRequired ? "precisa agendar" : "",
         item.fulfillment.serviceDuration ? `duracao/prazo ${item.fulfillment.serviceDuration}` : "",
       ].filter(Boolean).join(", ");
-      return `- ${item.tag} (${item.title})${item.price ? ` | ${item.price} ${item.currency}` : ""}${item.category ? ` | ${item.category}` : ""}${offerSummary ? ` | ${offerSummary}` : ""} | execucao: ${fulfillmentSummary} | estoque: ${inventorySummary} | ${mediaSummary}: ${preview(item.description, 420)}`;
+      const destinationSummary = formatSalesCatalogSalesDestination(item.salesDestination);
+      const externalSummary = item.salesDestination === "external_site"
+        ? item.externalLinkButtonTag
+          ? ` | botao externo: ${item.externalLinkButtonTag}`
+          : item.productUrl
+            ? ` | site externo: ${item.productUrl}`
+            : " | botao externo pendente"
+        : "";
+      return `- ${item.tag} (${item.title})${item.price ? ` | ${item.price} ${item.currency}` : ""}${item.category ? ` | ${item.category}` : ""} | destino: ${destinationSummary}${externalSummary}${offerSummary ? ` | ${offerSummary}` : ""} | execucao: ${fulfillmentSummary} | estoque: ${inventorySummary} | ${mediaSummary}: ${preview(item.description, 420)}`;
     }),
   ];
 }
@@ -2769,12 +2780,13 @@ function buildRuntimeSalesCatalogShippingQuoteContext(input: {
   settings: ClientSalesCatalogShippingSettings | null;
   userText: string;
 }): RuntimeSalesCatalogShippingQuote[] {
-  if (!input.settings?.configured || input.items.length === 0) return [];
+  const checkoutItems = input.items.filter((item) => item.salesDestination === "connectyhub_checkout");
+  if (!input.settings?.configured || checkoutItems.length === 0) return [];
 
   const cep = extractFirstBrazilianCep(input.userText);
   if (!cep) return [];
 
-  const selectedItems = selectSalesCatalogItemsForShipping(input.items, input.orders, input.userText);
+  const selectedItems = selectSalesCatalogItemsForShipping(checkoutItems, input.orders, input.userText);
   if (selectedItems.length === 0) {
     return [{
       itemId: "unknown",
@@ -4141,8 +4153,9 @@ async function recordSalesCatalogOrderIntent(input: {
   items: RuntimeSalesCatalogItem[];
   text: string;
 }): Promise<SalesCatalogPaymentLinkResult | null> {
-  const unavailableItems = input.items.filter((item) => item.status === "active" && !isSalesCatalogItemSellable(item));
-  const items = input.items.filter((item) => item.status === "active" && isSalesCatalogItemSellable(item)).slice(0, 8);
+  const checkoutCatalogItems = input.items.filter((item) => item.salesDestination === "connectyhub_checkout");
+  const unavailableItems = checkoutCatalogItems.filter((item) => item.status === "active" && !isSalesCatalogItemSellable(item));
+  const items = checkoutCatalogItems.filter((item) => item.status === "active" && isSalesCatalogItemSellable(item)).slice(0, 8);
 
   if (items.length === 0 || !hasSalesCatalogOrderIntent(input.text)) {
     if (unavailableItems.length > 0 && hasSalesCatalogOrderIntent(input.text)) {

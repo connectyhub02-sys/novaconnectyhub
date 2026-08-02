@@ -39,6 +39,14 @@ export type SalesCatalogImportItemStatus = "draft" | "ready" | "published" | "di
 
 type JsonRecord = Record<string, unknown>;
 
+type PublishedTrackedLinkButton = {
+  id: string;
+  label: string;
+  url: string;
+  tag: string;
+  trackingUrl: string;
+};
+
 type ImportJobRow = {
   id: string;
   organization_id: string;
@@ -616,14 +624,24 @@ export async function publishSalesCatalogImportJob(input: {
   for (const item of candidates) {
     try {
       if (item.salesDestination === "external_site") {
-        await publishImportItemAsTrackedLink({
+        const linkButton = await publishImportItemAsTrackedLink({
           client: input.client,
           companyId: input.companyId,
           userId: input.userId,
           jobId: input.jobId,
           item,
         });
+        await publishImportItemAsCatalogItem({
+          client: input.client,
+          companyId: input.companyId,
+          userId: input.userId,
+          jobId: input.jobId,
+          item,
+          manualHandoff: false,
+          linkButton,
+        });
         linkButtons += 1;
+        catalogItems += 1;
       } else {
         await publishImportItemAsCatalogItem({
           client: input.client,
@@ -632,6 +650,7 @@ export async function publishSalesCatalogImportJob(input: {
           jobId: input.jobId,
           item,
           manualHandoff: item.salesDestination === "manual_handoff",
+          linkButton: null,
         });
         if (item.salesDestination === "manual_handoff") {
           manualItems += 1;
@@ -1247,6 +1266,7 @@ async function publishImportItemAsCatalogItem(input: {
   jobId: string;
   item: ClientSalesCatalogImportItem;
   manualHandoff: boolean;
+  linkButton: PublishedTrackedLinkButton | null;
 }) {
   const itemId = randomUUID();
   const now = new Date().toISOString();
@@ -1272,6 +1292,9 @@ async function publishImportItemAsCatalogItem(input: {
     offer,
     fulfillment,
     shipping,
+    salesDestination: input.item.salesDestination,
+    productUrl: input.item.productUrl,
+    externalLinkButtonTag: input.linkButton?.tag ?? null,
   });
   const metadata = {
     title: input.item.title,
@@ -1292,6 +1315,10 @@ async function publishImportItemAsCatalogItem(input: {
     source: "ai_import",
     sales_destination: input.item.salesDestination,
     source_product_url: input.item.productUrl,
+    link_button_id: input.linkButton?.id ?? null,
+    link_button_label: input.linkButton?.label ?? null,
+    link_button_tag: input.linkButton?.tag ?? null,
+    link_button_tracking_url: input.linkButton?.trackingUrl ?? null,
     import_job_id: input.jobId,
     import_item_id: input.item.id,
     readiness: getSalesCatalogReadiness({
@@ -1319,6 +1346,7 @@ async function publishImportItemAsCatalogItem(input: {
         "ai_import",
         "whatsapp_agent",
         "lead_tracking",
+        ...(input.item.salesDestination === "external_site" ? ["external_site_product"] : []),
         ...(input.manualHandoff ? ["manual_handoff"] : []),
       ],
       metadata,
@@ -1374,6 +1402,8 @@ async function publishImportItemAsCatalogItem(input: {
       import_job_id: input.jobId,
       import_item_id: input.item.id,
       catalog_item_id: data.id,
+      link_button_id: input.linkButton?.id ?? null,
+      link_button_tag: input.linkButton?.tag ?? null,
       sales_destination: input.item.salesDestination,
     },
   });
@@ -1385,7 +1415,7 @@ async function publishImportItemAsTrackedLink(input: {
   userId: string;
   jobId: string;
   item: ClientSalesCatalogImportItem;
-}) {
+}): Promise<PublishedTrackedLinkButton> {
   if (!input.item.productUrl) {
     throw new Error("Produto externo precisa ter URL de destino.");
   }
@@ -1479,6 +1509,14 @@ async function publishImportItemAsTrackedLink(input: {
       sales_destination: "external_site",
     },
   });
+
+  return {
+    id: data.id,
+    label: input.item.title,
+    url,
+    tag,
+    trackingUrl,
+  };
 }
 
 async function persistImportedSkus(input: {

@@ -85,6 +85,7 @@ import {
 import type { CloneHumanizationMetric } from "@/lib/whatsapp/clone-humanization";
 import {
   formatSalesCatalogFulfillmentMode,
+  formatSalesCatalogSalesDestination,
   formatSalesCatalogStockStatus,
   type ClientSalesCatalogItem,
 } from "@/lib/sales-catalog/shared";
@@ -4472,14 +4473,20 @@ function PromptToolsPanel({
 }
 
 function buildSalesCatalogPromptRule(item: ClientSalesCatalogItem) {
+  const requiredTag = item.salesDestination === "external_site" && item.externalLinkButtonTag ? item.externalLinkButtonTag : item.tag;
   const lines = [
     "",
     `REGRA DE VENDA DO CATALOGO: ${item.title}`,
-    `- Tag obrigatoria para enviar este item no WhatsApp: ${item.tag}`,
+    `- Tag obrigatoria para enviar este item no WhatsApp: ${requiredTag}`,
+    `- Destino da venda: ${formatSalesCatalogSalesDestination(item.salesDestination)}.`,
     "- Quando o lead pedir este produto, demonstrar interesse claro ou aceitar a oferta, responda naturalmente e inclua a tag acima na mesma resposta.",
     "- Nao prometa que vai enviar foto, video, PDF, catalogo, preco ou proposta sem incluir a tag correspondente na mesma resposta.",
     "- Se o lead pedir algo generico, ofereca este item somente quando ele combinar com a necessidade declarada.",
   ];
+
+  if (item.salesDestination === "external_site") {
+    lines.push("- Este produto vende no site externo; envie o botao cadastrado e nao tente gerar checkout ConnectyHub.");
+  }
 
   appendSalesCatalogPromptRuleLine(lines, "Categoria", item.category);
   appendSalesCatalogPromptRuleLine(lines, "Preco base", item.price ? `${item.price} ${item.currency}` : null);
@@ -4516,6 +4523,7 @@ function appendSalesCatalogPromptRuleLine(lines: string[], label: string, value:
 function formatSalesCatalogPromptItemMeta(item: ClientSalesCatalogItem) {
   return [
     item.category,
+    formatSalesCatalogSalesDestination(item.salesDestination),
     formatSalesCatalogPromptPrice(item),
     formatSalesCatalogStockStatus(item.inventory.status),
   ].filter(Boolean).join(" / ") || "produto cadastrado";

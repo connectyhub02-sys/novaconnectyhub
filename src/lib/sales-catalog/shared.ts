@@ -1,6 +1,7 @@
 export type SalesCatalogItemStatus = "active" | "draft" | "archived";
 export type SalesCatalogMediaKind = "image" | "video" | "document";
 export type SalesCatalogSource = "manual" | "whatsapp_catalog";
+export type SalesCatalogSalesDestination = "connectyhub_checkout" | "external_site" | "manual_handoff";
 export type SalesCatalogBusinessType = "simple" | "fashion" | "physical" | "services" | "digital" | "food";
 export type SalesCatalogShippingProfile = "default" | "free" | "custom";
 export type SalesCatalogShippingProvider = "correios" | "carrier";
@@ -184,6 +185,12 @@ export type ClientSalesCatalogItem = {
   platformProductCommissionPercentage: number | null;
   platformProductCommissionReleaseDays: number | null;
   platformProductAgentPrompt: string | null;
+  salesDestination: SalesCatalogSalesDestination;
+  productUrl: string | null;
+  externalLinkButtonId: string | null;
+  externalLinkButtonLabel: string | null;
+  externalLinkButtonTag: string | null;
+  externalLinkButtonTrackingUrl: string | null;
   source: SalesCatalogSource;
   whatsappCatalogId: string | null;
   whatsappCatalogJid: string | null;
@@ -482,6 +489,9 @@ export type SalesCatalogContentInput = {
   offer?: SalesCatalogProductOffer | null;
   fulfillment?: SalesCatalogProductFulfillment | null;
   shipping?: SalesCatalogProductShipping | null;
+  salesDestination?: SalesCatalogSalesDestination | null;
+  productUrl?: string | null;
+  externalLinkButtonTag?: string | null;
 };
 
 export const brazilianStates: Array<{ uf: string; state: string }> = [
@@ -779,11 +789,20 @@ export function formatSalesCatalogShippingProfile(profile: SalesCatalogShippingP
   return "usar tabela de frete por estado";
 }
 
+export function formatSalesCatalogSalesDestination(destination: SalesCatalogSalesDestination) {
+  if (destination === "external_site") return "site externo";
+  if (destination === "manual_handoff") return "atendimento humano";
+  return "checkout ConnectyHub";
+}
+
 export function buildSalesCatalogContent(input: SalesCatalogContentInput) {
   const lines = [
     `Produto/oferta: ${input.title}`,
     input.category ? `Categoria: ${input.category}` : "",
     input.price ? `Preco: ${input.price}${input.currency ? ` ${input.currency}` : ""}` : "",
+    input.salesDestination ? `Destino da venda: ${formatSalesCatalogSalesDestination(input.salesDestination)}` : "",
+    input.productUrl ? `Link externo: ${input.productUrl}` : "",
+    input.externalLinkButtonTag ? `Botao externo do agente: ${input.externalLinkButtonTag}` : "",
     input.description ? `Descricao: ${input.description}` : "",
   ];
   const attributes = input.attributes ?? [];
@@ -846,6 +865,13 @@ export function formatSalesCatalogInline(item: ClientSalesCatalogItem) {
   const lines = [
     item.title,
     item.price ? `Valor: ${item.price}${item.currency ? ` ${item.currency}` : ""}` : "",
+    `Destino da venda: ${formatSalesCatalogSalesDestination(item.salesDestination)}`,
+    item.salesDestination === "external_site" && item.externalLinkButtonTag
+      ? `Botao para enviar ao lead: ${item.externalLinkButtonTag}`
+      : "",
+    item.salesDestination === "external_site" && item.productUrl
+      ? `Site do produto: ${item.productUrl}`
+      : "",
     item.description,
   ];
   const attributes = item.attributes.filter((attribute) => attribute.values.length > 0);

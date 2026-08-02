@@ -55,6 +55,7 @@ import {
   type SalesCatalogStockStatus,
   type SalesCatalogWhatsAppMessageTemplates,
   type SalesCatalogSource,
+  type SalesCatalogSalesDestination,
   type SalesCatalogSku,
   type SalesCatalogSkuStatus,
 } from "@/lib/sales-catalog/shared";
@@ -583,6 +584,12 @@ export function mapSalesCatalogItem(row: SalesCatalogMemoryRow): ClientSalesCata
     platformProductCommissionPercentage: readNumber(metadata.platform_product_commission_percentage),
     platformProductCommissionReleaseDays: readNumber(metadata.platform_product_commission_release_days),
     platformProductAgentPrompt: readString(metadata.platform_product_agent_prompt),
+    salesDestination: normalizeSalesDestination(readString(metadata.sales_destination)),
+    productUrl: readString(metadata.source_product_url) ?? readString(metadata.product_url),
+    externalLinkButtonId: readString(metadata.link_button_id) ?? readString(metadata.external_link_button_id),
+    externalLinkButtonLabel: readString(metadata.link_button_label) ?? readString(metadata.external_link_button_label),
+    externalLinkButtonTag: readString(metadata.link_button_tag) ?? readString(metadata.external_link_button_tag),
+    externalLinkButtonTrackingUrl: readString(metadata.link_button_tracking_url) ?? readString(metadata.external_link_button_tracking_url),
     source: normalizeSource(readString(metadata.source)),
     whatsappCatalogId: readString(metadata.whatsapp_catalog_id),
     whatsappCatalogJid: readString(metadata.whatsapp_catalog_jid),
@@ -1070,6 +1077,11 @@ function normalizeBusinessType(value: string | null): SalesCatalogBusinessType {
 function normalizeSource(value: string | null): SalesCatalogSource {
   if (value === "whatsapp_catalog") return "whatsapp_catalog";
   return "manual";
+}
+
+function normalizeSalesDestination(value: string | null): SalesCatalogSalesDestination {
+  if (value === "external_site" || value === "manual_handoff" || value === "connectyhub_checkout") return value;
+  return "connectyhub_checkout";
 }
 
 function normalizeProductOriginType(value: string | null): SalesCatalogProductOriginType {

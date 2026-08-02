@@ -47,6 +47,7 @@ import {
   formatSalesCatalogOrderStatus,
   formatSalesCatalogPaymentStatus,
   formatSalesCatalogPaymentSessionStatus,
+  formatSalesCatalogSalesDestination,
   formatSalesCatalogStockStatus,
   formatSalesCatalogWeight,
   salesCatalogLeadDataFields,
@@ -73,6 +74,7 @@ import {
   type SalesCatalogPaymentSessionStatus,
   type SalesCatalogRevenueOwnerType,
   type SalesCatalogReservationPolicy,
+  type SalesCatalogSalesDestination,
   type SalesCatalogSku,
   type SalesCatalogSkuStatus,
   type SalesCatalogShippingQuote,
@@ -364,6 +366,9 @@ export function SalesCatalogConsole({
   const [category, setCategory] = useState("");
   const [highlightLabel, setHighlightLabel] = useState("");
   const [price, setPrice] = useState("");
+  const [salesDestination, setSalesDestination] = useState<SalesCatalogSalesDestination>("connectyhub_checkout");
+  const [productUrl, setProductUrl] = useState("");
+  const [externalButtonLabel, setExternalButtonLabel] = useState("");
   const [description, setDescription] = useState("");
   const [salePrice, setSalePrice] = useState("");
   const [saleStartsAt, setSaleStartsAt] = useState("");
@@ -491,7 +496,13 @@ export function SalesCatalogConsole({
   const inventoryEnabled = selectedSettings?.trackInventory ?? settingsDraft.trackInventory;
   const selectedShippingRule = shippingDraft.rules.find((rule) => rule.uf === selectedShippingUf) ?? shippingDraft.rules[0] ?? null;
   const selectedOrderItem = visibleItems.find((item) => item.id === orderItemId) ?? null;
-  const canCreate = Boolean(selectedCompanyId && title.trim() && description.trim() && !creating);
+  const canCreate = Boolean(
+    selectedCompanyId
+    && title.trim()
+    && description.trim()
+    && (salesDestination !== "external_site" || productUrl.trim())
+    && !creating,
+  );
   const canCalculateQuote = Boolean(selectedCompanyId && quoteItemId && cleanCep(quoteCep) && !calculatingQuote);
   const canCreateOrder = Boolean(selectedCompanyId && orderItemId && (orderCustomerName.trim() || orderCustomerPhone.trim()) && !creatingOrder);
 
@@ -1087,6 +1098,9 @@ export function SalesCatalogConsole({
       formData.set("highlightLabel", highlightLabel);
       formData.set("price", price);
       formData.set("currency", "BRL");
+      formData.set("salesDestination", salesDestination);
+      formData.set("productUrl", productUrl);
+      formData.set("externalButtonLabel", externalButtonLabel);
       formData.set("salePrice", salePrice);
       formData.set("saleStartsAt", saleStartsAt);
       formData.set("saleEndsAt", saleEndsAt);
@@ -1575,11 +1589,12 @@ export function SalesCatalogConsole({
   }
 
   async function copyTag(item: ClientSalesCatalogItem) {
+    const tag = item.salesDestination === "external_site" && item.externalLinkButtonTag ? item.externalLinkButtonTag : item.tag;
     try {
-      await navigator.clipboard.writeText(item.tag);
-      setNotice({ tone: "success", message: `Tag copiada: ${item.tag}` });
+      await navigator.clipboard.writeText(tag);
+      setNotice({ tone: "success", message: `Tag copiada: ${tag}` });
     } catch {
-      setNotice({ tone: "warning", message: item.tag });
+      setNotice({ tone: "warning", message: tag });
     }
   }
 
@@ -1594,6 +1609,9 @@ export function SalesCatalogConsole({
     setCategory(item.category ?? "");
     setHighlightLabel(item.highlightLabel ?? "");
     setPrice(item.price ?? "");
+    setSalesDestination(item.salesDestination);
+    setProductUrl(item.productUrl ?? "");
+    setExternalButtonLabel(item.externalLinkButtonLabel ?? item.title);
     setDescription(item.description);
     setSalePrice(item.offer.salePrice ?? "");
     setSaleStartsAt(item.offer.saleStartsAt ?? "");
@@ -1640,6 +1658,9 @@ export function SalesCatalogConsole({
     setCategory("");
     setHighlightLabel("");
     setPrice("");
+    setSalesDestination("connectyhub_checkout");
+    setProductUrl("");
+    setExternalButtonLabel("");
     setDescription("");
     setSalePrice("");
     setSaleStartsAt("");
@@ -2917,6 +2938,55 @@ export function SalesCatalogConsole({
                   style={{ borderColor: "var(--ch-border)" }}
                 />
               </label>
+            </div>
+
+            <div className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+              <FieldLabel>Destino da venda</FieldLabel>
+              <div className="grid gap-2 sm:grid-cols-3">
+                <DestinationButton
+                  active={salesDestination === "connectyhub_checkout"}
+                  icon={CreditCard}
+                  label="Checkout CH"
+                  onClick={() => setSalesDestination("connectyhub_checkout")}
+                />
+                <DestinationButton
+                  active={salesDestination === "external_site"}
+                  icon={ExternalLink}
+                  label="Site externo"
+                  onClick={() => setSalesDestination("external_site")}
+                />
+                <DestinationButton
+                  active={salesDestination === "manual_handoff"}
+                  icon={MessageSquareText}
+                  label="Atendimento"
+                  onClick={() => setSalesDestination("manual_handoff")}
+                />
+              </div>
+
+              {salesDestination === "external_site" ? (
+                <div className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_220px]">
+                  <label className="block">
+                    <FieldLabel>Link do produto</FieldLabel>
+                    <input
+                      value={productUrl}
+                      onChange={(event) => setProductUrl(event.target.value.slice(0, 1000))}
+                      className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                      placeholder="https://site.com/produto"
+                      style={{ borderColor: "var(--ch-border)" }}
+                    />
+                  </label>
+                  <label className="block">
+                    <FieldLabel>Texto do botao</FieldLabel>
+                    <input
+                      value={externalButtonLabel}
+                      onChange={(event) => setExternalButtonLabel(event.target.value.slice(0, 48))}
+                      className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                      placeholder={title.trim() || "Comprar agora"}
+                      style={{ borderColor: "var(--ch-border)" }}
+                    />
+                  </label>
+                </div>
+              ) : null}
             </div>
 
             <label className="block">
@@ -4340,6 +4410,7 @@ function CatalogItemCard({
           </div>
           <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
             {item.highlightLabel ? <NeonBadge tone="amber">{item.highlightLabel}</NeonBadge> : null}
+            <NeonBadge tone={salesDestinationTone(item.salesDestination)}>{formatSalesCatalogSalesDestination(item.salesDestination)}</NeonBadge>
             <NeonBadge tone={item.source === "whatsapp_catalog" ? "green" : "cyan"}>{sourceLabel}</NeonBadge>
             <NeonBadge tone={inventoryTone(item.inventory.status)}>{formatSalesCatalogStockStatus(item.inventory.status)}</NeonBadge>
             <NeonBadge tone={item.readiness === "ready" ? "green" : "amber"}>{formatReadiness(item.readiness)}</NeonBadge>
@@ -4462,6 +4533,22 @@ function CatalogItemCard({
           </div>
         ) : null}
 
+        {item.salesDestination === "external_site" && (item.productUrl || item.externalLinkButtonTag) ? (
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {item.externalLinkButtonTag ? (
+              <span className="inline-flex max-w-full items-center gap-1 rounded-md border px-2 py-1 font-mono text-[10px] text-violet-200" style={{ borderColor: "var(--ch-border)" }}>
+                <ExternalLink className="h-3 w-3 shrink-0" />
+                <span className="truncate">{item.externalLinkButtonTag}</span>
+              </span>
+            ) : null}
+            {item.productUrl ? (
+              <span className="inline-flex max-w-full items-center gap-1 rounded-md border px-2 py-1 text-[10px] text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
+                <span className="truncate">{item.productUrl}</span>
+              </span>
+            ) : null}
+          </div>
+        ) : null}
+
         <div className="mt-3 flex flex-wrap gap-1.5">
           {item.media.slice(0, 6).map((media) => (
             <span key={media.id} className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[10px] text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
@@ -4477,10 +4564,10 @@ function CatalogItemCard({
             onClick={onCopy}
             className="inline-flex min-h-9 min-w-0 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10"
             style={{ borderColor: "var(--ch-border)" }}
-            title={item.tag}
+            title={item.salesDestination === "external_site" && item.externalLinkButtonTag ? item.externalLinkButtonTag : item.tag}
           >
             <Copy className="h-3.5 w-3.5" />
-            <span className="max-w-[220px] truncate">{item.tag}</span>
+            <span className="max-w-[220px] truncate">{item.salesDestination === "external_site" && item.externalLinkButtonTag ? item.externalLinkButtonTag : item.tag}</span>
           </button>
           {item.whatsappCatalogId ? (
             <button
@@ -4896,6 +4983,33 @@ function TabButton({
   );
 }
 
+function DestinationButton({
+  active,
+  icon: Icon,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  icon: LucideIcon;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "inline-flex min-h-10 min-w-0 items-center justify-center gap-2 rounded-lg border px-3 text-[12px] font-semibold transition",
+        active ? "border-cyan-300/50 bg-cyan-300/15 text-cyan-100" : "text-slate-400 hover:bg-cyan-400/10 hover:text-cyan-100",
+      )}
+      style={{ borderColor: active ? undefined : "var(--ch-border)" }}
+    >
+      <Icon className="h-4 w-4 shrink-0" />
+      <span className="truncate">{label}</span>
+    </button>
+  );
+}
+
 function FieldLabel({ children, help }: { children: string; help?: string }) {
   const helpText = help ?? salesCatalogHelpText[children];
 
@@ -4995,6 +5109,12 @@ function importItemStatusTone(value: ClientSalesCatalogImportItem["status"]): Sa
 }
 
 function importDestinationTone(value: SalesCatalogImportDestination): SalesCatalogTone {
+  if (value === "external_site") return "violet";
+  if (value === "manual_handoff") return "amber";
+  return "cyan";
+}
+
+function salesDestinationTone(value: SalesCatalogSalesDestination): SalesCatalogTone {
   if (value === "external_site") return "violet";
   if (value === "manual_handoff") return "amber";
   return "cyan";

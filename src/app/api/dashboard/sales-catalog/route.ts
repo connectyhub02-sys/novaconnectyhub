@@ -51,6 +51,7 @@ import {
   type SalesCatalogProductShipping,
   type SalesCatalogOrderStatus,
   type SalesCatalogReservationPolicy,
+  type SalesCatalogSalesDestination,
   type SalesCatalogShippingProvider,
   type SalesCatalogShippingProfile,
   type SalesCatalogShippingRule,
@@ -73,6 +74,7 @@ import { importWhatsappCatalog, setWhatsappCatalogVisibility } from "@/lib/sales
 import { loadR2Config, putR2Object } from "@/lib/storage/r2";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
+import { buildTrackedLinkUrl, createTrackedLinkSlug, createTrackedLinkTag, normalizeHttpUrl } from "@/lib/tracking/tracked-links";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -92,6 +94,20 @@ type SalesCatalogMemoryRow = {
   metadata: JsonRecord | null;
   created_at: string | null;
   updated_at: string | null;
+};
+
+type ProductTrackedLinkResult = {
+  id: string;
+  label: string;
+  url: string;
+  tag: string;
+  trackingUrl: string;
+};
+
+type ProductTrackedLinkRow = {
+  id: string;
+  metadata: JsonRecord | null;
+  created_at: string | null;
 };
 
 type CurrentWorkspace = NonNullable<Awaited<ReturnType<typeof getCurrentWorkspace>>>;
@@ -154,6 +170,9 @@ export async function POST(request: NextRequest) {
   const price = normalizeOptionalText(readFormString(formData.get("price")), 60);
   const currency = normalizeOptionalText(readFormString(formData.get("currency")), 12) ?? "BRL";
   const status = normalizeStatus(readFormString(formData.get("status")));
+  const salesDestination = normalizeSalesDestination(readFormString(formData.get("salesDestination")));
+  const productUrlInput = normalizeOptionalText(readFormString(formData.get("productUrl")), 1000);
+  const externalButtonLabel = normalizeButtonLabel(readFormString(formData.get("externalButtonLabel"))) ?? title;
   const attributes = readItemAttributesPayload(formData.get("attributes"));
   const inventory = readProductInventoryPayload(formData);
   const offer = readProductOfferPayload(formData);
@@ -169,6 +188,21 @@ export async function POST(request: NextRequest) {
 
   if (!description) {
     return NextResponse.json({ error: "Informe uma descricao comercial curta." }, { status: 422 });
+  }
+
+  let productUrl: string | null = productUrlInput;
+  if (salesDestination === "external_site") {
+    if (!productUrlInput) {
+      return NextResponse.json({ error: "Informe o link do produto no site externo." }, { status: 422 });
+    }
+
+    try {
+      productUrl = normalizeHttpUrl(productUrlInput);
+    } catch (error) {
+      return NextResponse.json({ error: error instanceof Error ? error.message : "Informe uma URL valida para o produto externo." }, { status: 422 });
+    }
+  } else {
+    productUrl = null;
   }
 
   const filesError = validateFiles(files);
@@ -261,13 +295,56 @@ export async function POST(request: NextRequest) {
     }
 
     const tag = readFormString(existingMetadata.tag) ?? createSalesCatalogTag(title, itemId);
-    const content = buildSalesCatalogContent({ title, description, category, price, currency, media, attributes, inventory, offer, fulfillment, shipping });
+    const existingLinkButtonId = readFormString(existingMetadata.link_button_id) ?? readFormString(existingMetadata.external_link_button_id);
+    const trackedLink = salesDestination === "external_site" && productUrl
+      ? await upsertProductTrackedLinkButton({
+          client,
+          companyId: company.id,
+          userId: workspace.user.id,
+          itemId,
+          title,
+          description,
+          category,
+          price,
+          currency,
+          productUrl,
+          label: externalButtonLabel,
+          existingLinkButtonId,
+        })
+      : null;
+    if (salesDestination !== "external_site" && existingLinkButtonId) {
+      await deleteProductTrackedLinkButton({
+        client,
+        companyId: company.id,
+        userId: workspace.user.id,
+        linkButtonId: existingLinkButtonId,
+        productTitle: title,
+      });
+    }
+    const content = buildSalesCatalogContent({
+      title,
+      description,
+      category,
+      price,
+      currency,
+      media,
+      attributes,
+      inventory,
+      offer,
+      fulfillment,
+      shipping,
+      salesDestination,
+      productUrl,
+      externalLinkButtonTag: trackedLink?.tag ?? null,
+    });
     const metadataSource = readFormString(existingMetadata.source) ?? "manual";
     const highlightLabel = normalizeHighlightLabel(readFormString(formData.get("highlightLabel")));
     const memoryTags = [
       "sales_catalog_item",
       "sales_catalog",
       ...(metadataSource === "whatsapp_catalog" ? ["whatsapp_catalog"] : []),
+      ...(salesDestination === "external_site" ? ["external_site_product"] : []),
+      ...(salesDestination === "manual_handoff" ? ["manual_handoff"] : []),
       "whatsapp_agent",
       "lead_tracking",
     ];
@@ -289,6 +366,12 @@ export async function POST(request: NextRequest) {
       media: serializeSalesCatalogMedia(media),
       skus: serializeSalesCatalogSkus(skus),
       source: metadataSource,
+      sales_destination: salesDestination,
+      source_product_url: productUrl,
+      link_button_id: trackedLink?.id ?? null,
+      link_button_label: trackedLink?.label ?? null,
+      link_button_tag: trackedLink?.tag ?? null,
+      link_button_tracking_url: trackedLink?.trackingUrl ?? null,
       readiness: getSalesCatalogReadiness({ description, media }),
       created_by: readFormString(existingMetadata.created_by) ?? workspace.user.id,
       updated_by: workspace.user.id,
@@ -338,6 +421,10 @@ export async function POST(request: NextRequest) {
         sale_price: offer.salePrice,
         coupon_code: offer.couponCode,
         fulfillment_mode: fulfillment.mode,
+        sales_destination: salesDestination,
+        product_url: productUrl,
+        link_button_id: trackedLink?.id ?? null,
+        link_button_tag: trackedLink?.tag ?? null,
         actor_id: workspace.user.id,
       },
     });
@@ -2105,6 +2192,16 @@ function normalizeStatus(value: string | null): SalesCatalogItemStatus {
   return "active";
 }
 
+function normalizeSalesDestination(value: string | null): SalesCatalogSalesDestination {
+  if (value === "external_site" || value === "manual_handoff" || value === "connectyhub_checkout") return value;
+  return "connectyhub_checkout";
+}
+
+function normalizeButtonLabel(value: string | null) {
+  const normalized = value?.replace(/\s+/g, " ").trim() ?? "";
+  return normalized.length >= 2 ? normalized.slice(0, 48) : null;
+}
+
 function normalizeBusinessType(value: string | null): SalesCatalogBusinessType {
   if (value === "fashion" || value === "physical" || value === "services" || value === "digital" || value === "food") {
     return value;
@@ -2505,6 +2602,205 @@ function serializeProductFulfillment(fulfillment: SalesCatalogProductFulfillment
     delivery_instructions: fulfillment.deliveryInstructions,
     access_instructions: fulfillment.accessInstructions,
   };
+}
+
+async function upsertProductTrackedLinkButton(input: {
+  client: ReturnType<typeof createServiceClient>;
+  companyId: string;
+  userId: string;
+  itemId: string;
+  title: string;
+  description: string;
+  category: string | null;
+  price: string | null;
+  currency: string;
+  productUrl: string;
+  label: string;
+  existingLinkButtonId?: string | null;
+}): Promise<ProductTrackedLinkResult> {
+  const now = new Date().toISOString();
+  const slug = createTrackedLinkSlug(input.label);
+  const existingLinkButtonId = input.existingLinkButtonId?.trim() || null;
+  let linkId = existingLinkButtonId;
+  let existingMetadata: JsonRecord = {};
+
+  if (existingLinkButtonId) {
+    const { data, error } = await input.client
+      .from("intelligence_memory")
+      .select("id, metadata, created_at")
+      .eq("id", existingLinkButtonId)
+      .eq("scope", "organization")
+      .eq("organization_id", input.companyId)
+      .eq("memory_type", "tracked_link_button")
+      .maybeSingle<ProductTrackedLinkRow>();
+
+    if (error) {
+      throw new Error(`Nao foi possivel carregar o botao externo do produto: ${error.message}`);
+    }
+
+    if (data?.id) {
+      linkId = data.id;
+      existingMetadata = readRecord(data.metadata) ?? {};
+    } else {
+      linkId = null;
+    }
+  }
+
+  if (!linkId) {
+    const { data, error } = await input.client
+      .from("intelligence_memory")
+      .insert({
+        scope: "organization",
+        organization_id: input.companyId,
+        memory_type: "tracked_link_button",
+        title: input.label,
+        content: input.productUrl,
+        importance: 0.7,
+        tags: ["tracked_link_button", "sales_catalog_item", "whatsapp_agent", "lead_tracking", "external_site_product"],
+        metadata: {
+          label: input.label,
+          url: input.productUrl,
+          slug,
+          click_count: 0,
+          sales_destination: "external_site",
+          source: "sales_catalog_product",
+          catalog_item_id: input.itemId,
+          product_title: input.title,
+          product_description: input.description,
+          product_category: input.category,
+          product_price: input.price,
+          product_currency: input.currency,
+          created_by: input.userId,
+        },
+        created_at: now,
+        updated_at: now,
+      })
+      .select("id, metadata, created_at")
+      .single<ProductTrackedLinkRow>();
+
+    if (error || !data?.id) {
+      throw new Error(error?.message ?? "Nao foi possivel criar botao externo do produto.");
+    }
+
+    linkId = data.id;
+    existingMetadata = readRecord(data.metadata) ?? {};
+  }
+
+  const tag = createTrackedLinkTag(input.label, linkId);
+  const trackingUrl = buildTrackedLinkUrl(linkId);
+  const metadata = {
+    ...existingMetadata,
+    label: input.label,
+    url: input.productUrl,
+    slug,
+    tag,
+    tracking_url: trackingUrl,
+    sales_destination: "external_site",
+    source: "sales_catalog_product",
+    catalog_item_id: input.itemId,
+    product_title: input.title,
+    product_description: input.description,
+    product_category: input.category,
+    product_price: input.price,
+    product_currency: input.currency,
+    updated_by: input.userId,
+  };
+
+  const { error: updateError } = await input.client
+    .from("intelligence_memory")
+    .update({
+      title: input.label,
+      content: input.productUrl,
+      tags: ["tracked_link_button", "sales_catalog_item", "whatsapp_agent", "lead_tracking", "external_site_product"],
+      metadata,
+      updated_at: now,
+    })
+    .eq("id", linkId)
+    .eq("organization_id", input.companyId);
+
+  if (updateError) {
+    throw new Error(`Nao foi possivel salvar o botao externo do produto: ${updateError.message}`);
+  }
+
+  await input.client.from("intelligence_events").insert({
+    scope: "organization",
+    organization_id: input.companyId,
+    source_type: "tracked_link_button",
+    source_id: linkId,
+    event_type: existingLinkButtonId ? "tracked_link.updated_from_product" : "tracked_link.created_from_product",
+    title: `Botao externo do produto: ${input.label}`,
+    summary: `Tag ${tag} vinculada ao produto ${input.title}.`,
+    confidence: 1,
+    visibility: "organization",
+    tags: ["tracked_link_button", "sales_catalog_item", "whatsapp_agent", "lead_tracking"],
+    payload: {
+      catalog_item_id: input.itemId,
+      label: input.label,
+      url: input.productUrl,
+      tag,
+      tracking_url: trackingUrl,
+      sales_destination: "external_site",
+      actor_id: input.userId,
+    },
+  });
+
+  return {
+    id: linkId,
+    label: input.label,
+    url: input.productUrl,
+    tag,
+    trackingUrl,
+  };
+}
+
+async function deleteProductTrackedLinkButton(input: {
+  client: ReturnType<typeof createServiceClient>;
+  companyId: string;
+  userId: string;
+  linkButtonId: string;
+  productTitle: string;
+}) {
+  const { data, error } = await input.client
+    .from("intelligence_memory")
+    .delete()
+    .eq("id", input.linkButtonId)
+    .eq("scope", "organization")
+    .eq("organization_id", input.companyId)
+    .eq("memory_type", "tracked_link_button")
+    .select("id, title, content, metadata, created_at")
+    .maybeSingle<{
+      id: string;
+      title: string;
+      content: string;
+      metadata: JsonRecord | null;
+      created_at: string | null;
+    }>();
+
+  if (error) {
+    throw new Error(`Nao foi possivel remover o botao externo antigo: ${error.message}`);
+  }
+
+  if (!data) return;
+
+  const metadata = readRecord(data.metadata) ?? {};
+  await input.client.from("intelligence_events").insert({
+    scope: "organization",
+    organization_id: input.companyId,
+    source_type: "tracked_link_button",
+    source_id: data.id,
+    event_type: "tracked_link.deleted_from_product",
+    title: `Botao externo removido: ${data.title}`,
+    summary: `Produto ${input.productTitle} deixou de vender por site externo.`,
+    confidence: 1,
+    visibility: "organization",
+    tags: ["tracked_link_button", "sales_catalog_item", "whatsapp_agent", "lead_tracking"],
+    payload: {
+      label: readFormString(metadata.label) ?? data.title,
+      url: readFormString(metadata.url) ?? data.content,
+      tag: readFormString(metadata.tag),
+      deleted_by: input.userId,
+    },
+  });
 }
 
 async function persistSalesCatalogSkus(input: {
