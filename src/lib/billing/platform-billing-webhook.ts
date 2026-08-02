@@ -59,7 +59,10 @@ export type PlatformBillingOperationalTestResult = {
 export type PlatformTrialNotificationType =
   | "trial_started"
   | "trial_credit_milestone"
-  | "trial_no_credits";
+  | "trial_three_days_remaining"
+  | "trial_one_day_remaining"
+  | "trial_no_credits"
+  | "trial_expired";
 
 export type PlatformTrialNotificationInput = {
   organizationId: string;
@@ -225,6 +228,12 @@ const knownBillingMessageTemplateKeys: ReadonlySet<string> = new Set(
   PLATFORM_BILLING_MESSAGE_TEMPLATE_DEFINITIONS.map((definition) => definition.eventType),
 );
 const checkoutButtonEventTypes = new Set([
+  "trial_started",
+  "trial_credit_milestone",
+  "trial_three_days_remaining",
+  "trial_one_day_remaining",
+  "trial_no_credits",
+  "trial_expired",
   "subscription_pending",
   "subscription_replaced",
   "checkout_cart_updated",
@@ -1502,7 +1511,7 @@ function buildCheckoutActionButton(input: {
   }
 
   return {
-    label: "Finalizar pagamento",
+    label: input.eventType.startsWith("trial_") ? "Escolher plano" : "Finalizar pagamento",
     url,
   };
 }
@@ -1727,6 +1736,8 @@ function buildBillingMessage(input: {
     creditos_usados: formatCredits(input.usedCredits ?? 0),
     marco_creditos: formatCredits(input.milestoneCredits ?? input.usedCredits ?? 0),
     dias_restantes: input.trialDaysRemaining ?? "--",
+    trial_expira_em: formatMetadataDate(input.metadata.trial_ends_at) ?? "fim do teste",
+    data_expiracao_trial: formatMetadataDate(input.metadata.trial_ends_at) ?? "fim do teste",
     evento: input.eventType,
     status: input.providerStatus ?? "sem_status",
     data: formatDate(new Date()),
@@ -1886,7 +1897,24 @@ function formatDate(value: Date) {
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    timeZone: "America/Sao_Paulo",
   }).format(value);
+}
+
+function formatMetadataDate(value: unknown) {
+  const text = readString(value);
+
+  if (!text) {
+    return null;
+  }
+
+  const date = new Date(text);
+
+  if (!Number.isFinite(date.getTime())) {
+    return null;
+  }
+
+  return formatDate(date);
 }
 
 function preview(value: string, max: number) {

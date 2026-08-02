@@ -206,6 +206,22 @@ const PLATFORM_AUTOMATION_TIMING_POLICY: Record<string, PlatformAutomationTrigge
     },
     triggerConfig: { kind: "usage_milestone", step_credits: 100 },
   },
+  trial_three_days_remaining: {
+    delayMinutes: 0,
+    cooldownMinutes: 1440,
+    maxSendsPerContact: 1,
+    priority: 24,
+    conditions: { plan_codes: ["trial"], min_balance_credits: 1 },
+    triggerConfig: { kind: "trial_deadline", days_remaining: 3 },
+  },
+  trial_one_day_remaining: {
+    delayMinutes: 0,
+    cooldownMinutes: 1440,
+    maxSendsPerContact: 1,
+    priority: 26,
+    conditions: { plan_codes: ["trial"], min_balance_credits: 1 },
+    triggerConfig: { kind: "trial_deadline", days_remaining: 1 },
+  },
   trial_no_credits: {
     delayMinutes: 2,
     cooldownMinutes: 720,
@@ -213,6 +229,14 @@ const PLATFORM_AUTOMATION_TIMING_POLICY: Record<string, PlatformAutomationTrigge
     priority: 30,
     conditions: { plan_codes: ["trial"], max_balance_credits: 0 },
     triggerConfig: { kind: "wallet_empty" },
+  },
+  trial_expired: {
+    delayMinutes: 0,
+    cooldownMinutes: 1440,
+    maxSendsPerContact: 1,
+    priority: 35,
+    conditions: { plan_codes: ["trial"] },
+    triggerConfig: { kind: "trial_expired" },
   },
   subscription_pending: {
     delayMinutes: 8,
@@ -775,7 +799,10 @@ function getEventCategory(eventType: string): PlatformAutomationEventDefinition[
 function getEventRevenueGoal(eventType: string) {
   if (eventType === "trial_started") return "Mostrar bonus e acelerar a primeira assinatura.";
   if (eventType === "trial_credit_milestone") return "Criar urgencia conforme o saldo de teste diminui.";
+  if (eventType === "trial_three_days_remaining") return "Acelerar conversao destacando o bonus antes do fim do teste.";
+  if (eventType === "trial_one_day_remaining") return "Ultima chamada para converter com saldo restante acumulado.";
   if (eventType === "trial_no_credits") return "Recuperar usuarios sem saldo antes de perder o momento de compra.";
+  if (eventType === "trial_expired") return "Explicar expiracao do beneficio e reabrir caminho para assinatura.";
   if (eventType === "subscription_replaced") return "Manter a troca de plano no checkout e evitar perda da venda.";
   if (eventType === "checkout_cart_updated") return "Aumentar ticket medio com adicionais e pacotes de credito.";
   if (eventType === "checkout_payment_started") return "Recuperar pagamento iniciado antes de abandono do checkout.";

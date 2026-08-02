@@ -10,6 +10,8 @@ export const PLATFORM_BILLING_MESSAGE_VARIABLES = [
   "{creditos_usados}",
   "{marco_creditos}",
   "{dias_restantes}",
+  "{trial_expira_em}",
+  "{data_expiracao_trial}",
   "{evento}",
   "{status}",
   "{data}",
@@ -56,9 +58,24 @@ export const PLATFORM_BILLING_MESSAGE_TEMPLATE_DEFINITIONS = [
     description: "Cliente cruzou um novo bloco de consumo durante o teste gratis.",
   },
   {
+    eventType: "trial_three_days_remaining",
+    label: "Teste faltando 3 dias",
+    description: "Cliente ainda tem saldo de teste que pode virar bonus se assinar antes do fim dos 7 dias.",
+  },
+  {
+    eventType: "trial_one_day_remaining",
+    label: "Ultimo dia do teste",
+    description: "Ultima chamada para assinar antes do saldo restante do teste expirar.",
+  },
+  {
     eventType: "trial_no_credits",
     label: "Teste sem creditos",
     description: "Creditos do teste acabaram e os atendimentos automaticos precisam de plano ou creditos.",
+  },
+  {
+    eventType: "trial_expired",
+    label: "Teste expirado",
+    description: "Teste de 7 dias acabou e o saldo restante do beneficio expirou.",
   },
   {
     eventType: "payment_pending",
@@ -109,15 +126,21 @@ export const DEFAULT_PLATFORM_BILLING_MESSAGE_TEMPLATES: PlatformBillingMessageT
   checkout_payment_started:
     "{cliente}, recebemos sua tentativa de pagamento do plano {plano} por {metodo_pagamento}. Se ainda nao confirmou, conclua no painel: {checkout_url}.",
   trial_started:
-    "{cliente}, parabens. Seu teste gratis ConnectyHub foi liberado com {creditos} creditos. Assine um plano durante o teste e o saldo restante soma aos creditos do plano escolhido.",
+    "{cliente}, parabens. Seu teste gratis ConnectyHub foi liberado com {creditos} creditos. Assine um plano ate {trial_expira_em} e o saldo restante soma aos creditos do plano escolhido.",
   trial_credit_milestone:
-    "{cliente}, voce ja usou {marco_creditos} creditos do teste e ainda tem {creditos_restantes}. Assine um plano durante o teste para somar esse saldo aos creditos do plano escolhido.",
+    "{cliente}, voce ja usou {marco_creditos} creditos do teste e ainda tem {creditos_restantes}. Assine ate {trial_expira_em} para somar esse saldo aos creditos do plano escolhido.",
+  trial_three_days_remaining:
+    "{cliente}, faltam 3 dias para seu teste ConnectyHub acabar. Voce ainda tem {creditos_restantes} creditos de bonus. Assine ate {trial_expira_em} para somar esse saldo ao plano escolhido; depois disso o saldo expira.",
+  trial_one_day_remaining:
+    "{cliente}, ultimo dia do seu teste ConnectyHub. Ele expira em {trial_expira_em}. Voce ainda tem {creditos_restantes} creditos; se assinar agora, esse saldo soma ao plano escolhido. Depois do prazo, ele zera.",
   trial_no_credits:
     "{cliente}, seus creditos do teste acabaram. Para reativar atendimentos automaticos, IA e voz, escolha um plano no painel ConnectyHub.",
+  trial_expired:
+    "{cliente}, seu teste gratis ConnectyHub acabou em {trial_expira_em}. O saldo restante do beneficio expirou. Para reativar atendimentos automaticos, escolha um plano no painel.",
   payment_pending:
     "{cliente}, seu pagamento do plano {plano} ainda esta pendente. Assim que o Mercado Pago confirmar, seus creditos serao liberados automaticamente.",
   payment_approved:
-    "{cliente}, pagamento confirmado. Seu plano {plano} foi ativado na ConnectyHub com {creditos} creditos inclusos. Se havia saldo anterior, ele continua somado na sua carteira. Valor: {valor}.",
+    "{cliente}, pagamento confirmado. Seu plano {plano} foi ativado na ConnectyHub com {creditos} creditos inclusos. Se havia saldo de teste ainda valido, ele foi somado na sua carteira. Valor: {valor}.",
   payment_rejected:
     "{cliente}, o pagamento do plano {plano} nao foi aprovado. Seus dados continuam salvos, mas para liberar os atendimentos voce precisa concluir o pagamento no painel.",
   subscription_paused:

@@ -35,6 +35,7 @@ import {
   whatsappFollowUpEventName,
 } from "@/lib/whatsapp/proactive-followup";
 import { processPendingPlatformBillingNotifications } from "@/lib/billing/platform-billing-webhook";
+import { processPendingTrialConversionMessages } from "@/lib/billing/trial-notifications";
 import { runConnectyHubGatewayHealthCheck } from "@/lib/connectyhub-api/gateway";
 import {
   processQueuedSalesCatalogImportJobs,
@@ -397,9 +398,13 @@ export const connectyhubPlatformAutomationSweep = inngest.createFunction(
     triggers: [{ cron: "*/5 * * * *" }],
   },
   async ({ step }) => {
-    const summary = await step.run("process-pending-platform-automations", () =>
-      processPendingPlatformBillingNotifications(createServiceClient(), { limit: 25 }),
-    );
+    const summary = await step.run("process-pending-platform-automations", async () => {
+      const client = createServiceClient();
+      const trial = await processPendingTrialConversionMessages(client, { limit: 25 });
+      const billing = await processPendingPlatformBillingNotifications(client, { limit: 25 });
+
+      return { trial, billing };
+    });
 
     return {
       status: "swept",
