@@ -2,7 +2,8 @@
 
 import Image from "next/image";
 import { Copy, CreditCard, Loader2, QrCode, Sparkles } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { MercadoPagoCardBrick } from "@/components/checkout/mercado-pago-card-brick";
 import {
@@ -41,6 +42,20 @@ type NoticeState = {
   message: string;
 } | null;
 
+type CheckoutStatusResponse = {
+  ok?: boolean;
+  error?: string;
+  subscriptionStatus?: string;
+  invoiceStatus?: string;
+  paymentStatus?: string;
+  providerStatus?: string | null;
+  providerPaymentId?: string | null;
+  confirmed?: boolean;
+  pixQrCode?: string | null;
+  pixQrCodeBase64?: string | null;
+  pixTicketUrl?: string | null;
+};
+
 export function BillingPlanCheckout({
   subscriptionId,
   planCode,
@@ -57,9 +72,10 @@ export function BillingPlanCheckout({
   initialPixQrCodeBase64,
   initialPixTicketUrl,
 }: BillingPlanCheckoutProps) {
-  const canPay = ["pending", "incomplete", "past_due"].includes(subscriptionStatus)
-    && ["pending", "rejected", "in_process"].includes(paymentStatus);
-  const paymentRejected = paymentStatus === "rejected";
+  const router = useRouter();
+  const approvalRefreshQueuedRef = useRef(false);
+  const [subscriptionStatusOverride, setSubscriptionStatusOverride] = useState<string | null>(null);
+  const [paymentStatusOverride, setPaymentStatusOverride] = useState<string | null>(null);
   const [selectedBumpCodes, setSelectedBumpCodes] = useState<BillingCheckoutBumpCode[]>(initialSelectedBumpCodes);
   const [method, setMethod] = useState<PaymentMethod>(cardPublicKey ? "card" : "pix");
   const [pix, setPix] = useState<PixState>({
@@ -68,14 +84,21 @@ export function BillingPlanCheckout({
     ticketUrl: initialPixTicketUrl,
   });
   const [pixLoading, setPixLoading] = useState(false);
+  const [statusChecking, setStatusChecking] = useState(false);
   const [cartSyncing, setCartSyncing] = useState(false);
   const [copied, setCopied] = useState(false);
   const [notice, setNotice] = useState<NoticeState>(null);
+  const currentSubscriptionStatus = subscriptionStatusOverride ?? subscriptionStatus;
+  const currentPaymentStatus = paymentStatusOverride ?? paymentStatus;
+  const canPay = ["pending", "incomplete", "past_due"].includes(currentSubscriptionStatus)
+    && ["pending", "rejected", "in_process"].includes(currentPaymentStatus);
+  const paymentRejected = currentPaymentStatus === "rejected";
+  const checkoutConfirmed = currentSubscriptionStatus === "active" || currentPaymentStatus === "approved";
   const selectedBumps = useMemo(
     () => availableBumps.filter((bump) => selectedBumpCodes.includes(bump.code)),
     [availableBumps, selectedBumpCodes],
   );
-  const paymentStatusNotice = useMemo(() => buildPaymentStatusNotice(paymentStatus), [paymentStatus]);
+  const paymentStatusNotice = useMemo(() => buildPaymentStatusNotice(currentPaymentStatus), [currentPaymentStatus]);
   const bumpsAmount = selectedBumps.reduce((total, bump) => total + bump.priceBrl, 0);
   const totalAmount = Math.round((planAmountBrl + bumpsAmount) * 100) / 100;
   const cardExtraPayload = useMemo(
@@ -83,6 +106,90 @@ export function BillingPlanCheckout({
     [selectedBumpCodes],
   );
   const activeNotice = notice ?? paymentStatusNotice;
+
+  const queueCheckoutRefresh = useCallback(() => {
+    if (approvalRefreshQueuedRef.current) return;
+
+    approvalRefreshQueuedRef.current = true;
+    window.setTimeout(() => router.refresh(), 800);
+  }, [router]);
+
+  const checkPaymentStatus = useCallback(async ({ manual = false }: { manual?: boolean } = {}) => {
+    if (manual) {
+      setStatusChecking(true);
+      setNotice(null);
+    }
+
+    try {
+      const response = await fetch(`/api/dashboard/billing/checkout/${subscriptionId}/status`, {
+        cache: "no-store",
+      });
+      const data = await response.json().catch(() => null) as CheckoutStatusResponse | null;
+
+      if (!response.ok) {
+        throw new Error(data?.error ?? "Nao foi possivel consultar o Pix.");
+      }
+
+      if (data?.subscriptionStatus) {
+        setSubscriptionStatusOverride(data.subscriptionStatus);
+      }
+
+      if (data?.paymentStatus) {
+        setPaymentStatusOverride(data.paymentStatus);
+      }
+
+      setPix((current) => ({
+        qrCode: data?.pixQrCode ?? current.qrCode,
+        qrCodeBase64: data?.pixQrCodeBase64 ?? current.qrCodeBase64,
+        ticketUrl: data?.pixTicketUrl ?? current.ticketUrl,
+      }));
+
+      if (data?.confirmed || data?.paymentStatus === "approved" || data?.subscriptionStatus === "active") {
+        setNotice({
+          tone: "success",
+          message: "Pagamento confirmado. Plano ativo e creditos liberados.",
+        });
+        queueCheckoutRefresh();
+        return;
+      }
+
+      if (manual) {
+        setNotice({
+          tone: "warning",
+          message: data?.providerStatus
+            ? `Mercado Pago retornou ${data.providerStatus}. Ainda estamos aguardando a confirmacao.`
+            : "Pix ainda aguardando confirmacao.",
+        });
+      }
+    } catch (error) {
+      if (manual) {
+        setNotice({
+          tone: "error",
+          message: error instanceof Error ? error.message : "Nao foi possivel consultar o Pix.",
+        });
+      }
+    } finally {
+      if (manual) {
+        setStatusChecking(false);
+      }
+    }
+  }, [queueCheckoutRefresh, subscriptionId]);
+
+  useEffect(() => {
+    if (!canPay || method !== "pix" || !pix.qrCode) return;
+
+    const firstCheck = window.setTimeout(() => {
+      void checkPaymentStatus();
+    }, 3000);
+    const interval = window.setInterval(() => {
+      void checkPaymentStatus();
+    }, 8000);
+
+    return () => {
+      window.clearTimeout(firstCheck);
+      window.clearInterval(interval);
+    };
+  }, [canPay, checkPaymentStatus, method, pix.qrCode]);
 
   function toggleBump(code: BillingCheckoutBumpCode) {
     const next = selectedBumpCodes.includes(code)
@@ -150,12 +257,18 @@ export function BillingPlanCheckout({
         qrCodeBase64: data?.pixQrCodeBase64 ?? null,
         ticketUrl: data?.pixTicketUrl ?? null,
       });
+      if (data?.status) {
+        setPaymentStatusOverride(data.status);
+      }
       setNotice({
         tone: data?.status === "approved" ? "success" : "warning",
         message: data?.status === "approved"
           ? "Pagamento aprovado. O plano esta sendo ativado."
           : "Pix gerado. Assim que o pagamento cair, os creditos serao liberados.",
       });
+      if (data?.status === "approved") {
+        queueCheckoutRefresh();
+      }
     } catch (error) {
       setNotice({
         tone: "error",
@@ -194,13 +307,15 @@ export function BillingPlanCheckout({
             </div>
             <span className={cn(
               "rounded-full border px-3 py-1 font-mono text-[10px] font-bold uppercase tracking-wide",
-              paymentRejected
+              checkoutConfirmed
+                ? "border-emerald-300/35 bg-emerald-400/10 text-emerald-100"
+                : paymentRejected
                 ? "border-rose-300/35 bg-rose-400/10 text-rose-100"
                 : canPay
                 ? "border-emerald-300/30 bg-emerald-400/10 text-emerald-200"
                 : "border-cyan-300/30 bg-cyan-400/10 text-cyan-100",
             )}>
-              {paymentRejected ? "Pagamento recusado" : canPay ? "Aguardando pagamento" : "Checkout fechado"}
+              {checkoutConfirmed ? "Pagamento aprovado" : paymentRejected ? "Pagamento recusado" : canPay ? "Aguardando pagamento" : "Checkout fechado"}
             </span>
           </div>
         </div>
@@ -343,17 +458,23 @@ export function BillingPlanCheckout({
               <PixPanel
                 pix={pix}
                 copied={copied}
+                checking={statusChecking}
                 loading={pixLoading}
                 onCopy={copyPixCode}
                 onGenerate={generatePix}
+                onRefresh={() => void checkPaymentStatus({ manual: true })}
               />
             )}
           </>
         ) : (
           <div className="mt-5 rounded-[8px] border border-emerald-300/30 bg-emerald-400/10 p-4">
-            <p className="font-semibold text-white">Plano em processamento</p>
+            <p className="font-semibold text-white">
+              {checkoutConfirmed ? "Pagamento confirmado" : "Plano em processamento"}
+            </p>
             <p className="mt-2 text-sm leading-6 text-emerald-50/80">
-              Se o pagamento ja foi aprovado, os creditos entram automaticamente no painel.
+              {checkoutConfirmed
+                ? "Seu plano esta ativo e os creditos ja foram liberados no painel."
+                : "Se o pagamento ja foi aprovado, os creditos entram automaticamente no painel."}
             </p>
           </div>
         )}
@@ -446,6 +567,13 @@ function CartRow({ label, value }: { label: string; value: string }) {
 }
 
 function buildPaymentStatusNotice(paymentStatus: string): NoticeState {
+  if (paymentStatus === "approved") {
+    return {
+      tone: "success",
+      message: "Pagamento confirmado. Plano ativo e creditos liberados.",
+    };
+  }
+
   if (paymentStatus === "rejected") {
     return {
       tone: "error",
@@ -464,28 +592,34 @@ function buildPaymentStatusNotice(paymentStatus: string): NoticeState {
 }
 
 function PixPanel({
+  checking,
   copied,
   loading,
   onCopy,
   onGenerate,
+  onRefresh,
   pix,
 }: {
+  checking: boolean;
   copied: boolean;
   loading: boolean;
   onCopy: () => void;
   onGenerate: () => void;
+  onRefresh: () => void;
   pix: PixState;
 }) {
+  const busy = loading || checking;
+
   return (
     <div className="mt-5">
       <button
         type="button"
-        onClick={onGenerate}
-        disabled={loading}
+        onClick={pix.qrCode ? onRefresh : onGenerate}
+        disabled={busy}
         className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-[8px] bg-cyan-300 px-4 text-sm font-black text-slate-950 transition hover:bg-cyan-200 disabled:cursor-wait disabled:opacity-70"
       >
-        {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <QrCode className="h-4 w-4" />}
-        {pix.qrCode ? "Atualizar Pix" : "Gerar Pix"}
+        {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <QrCode className="h-4 w-4" />}
+        {loading ? "Gerando Pix" : checking ? "Consultando Pix" : pix.qrCode ? "Atualizar Pix" : "Gerar Pix"}
       </button>
 
       {pix.qrCodeBase64 ? (
