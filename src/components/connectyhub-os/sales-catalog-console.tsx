@@ -608,9 +608,6 @@ export function SalesCatalogConsole({
     setCatalogImportSourceUrl("");
     setCatalogImportFiles([]);
     setCatalogImportPatches({});
-    if (!nextSettings?.configured) {
-      setActiveTab("setup");
-    }
   }
 
   function applyBusinessTemplate(value: SalesCatalogBusinessType) {
@@ -1759,7 +1756,7 @@ export function SalesCatalogConsole({
       <div id="sales-catalog-tour-tabs" className="mb-4 grid grid-cols-3 gap-1.5 sm:flex sm:flex-wrap sm:gap-2">
         <TabButton active={activeTab === "setup"} icon={Settings2} label="Configuracao" mobileLabel="Config." onClick={() => setActiveTab("setup")} />
         <TabButton active={activeTab === "shipping"} icon={Truck} label="Entrega e Frete" mobileLabel="Frete" onClick={() => setActiveTab("shipping")} />
-        <TabButton active={activeTab === "products"} disabled={!hasConfiguredSettings} icon={PackagePlus} label="Produtos" onClick={() => setActiveTab("products")} />
+        <TabButton active={activeTab === "products"} icon={PackagePlus} label="Produtos" onClick={() => setActiveTab("products")} />
         <TabButton active={activeTab === "orders"} icon={ClipboardList} label="Pedidos WhatsApp" mobileLabel="Pedidos" onClick={() => setActiveTab("orders")} />
         <TabButton active={activeTab === "payments"} icon={CreditCard} label="Pagamentos" mobileLabel="Pagto." onClick={() => setActiveTab("payments")} />
         <TabButton active={activeTab === "whatsapp"} icon={CloudDownload} label="WhatsApp" onClick={() => setActiveTab("whatsapp")} />
@@ -2788,6 +2785,28 @@ export function SalesCatalogConsole({
         <div className="space-y-4">
           {activeTab === "products" ? (
           <>
+          {!hasConfiguredSettings ? (
+            <div className="rounded-xl border border-amber-300/35 bg-amber-300/10 px-4 py-3 text-[12px] text-amber-50">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex min-w-0 items-start gap-3">
+                  <Settings2 className="mt-0.5 h-4 w-4 shrink-0 text-amber-200" />
+                  <div className="min-w-0">
+                    <p className="font-semibold text-amber-100">Configuracao do catalogo pendente</p>
+                    <p className="mt-1 text-slate-300">Voce ja pode importar ou cadastrar produtos. Complete a configuracao depois para regras de pagamento, pedidos e WhatsApp.</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("setup")}
+                  className="inline-flex min-h-9 shrink-0 items-center justify-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-amber-100 transition hover:bg-amber-300/10"
+                  style={{ borderColor: "rgba(252, 211, 77, 0.35)" }}
+                >
+                  <Settings2 className="h-3.5 w-3.5" />
+                  Configurar
+                </button>
+              </div>
+            </div>
+          ) : null}
           <SalesCatalogImportPanel
             companyName={selectedCompany?.name ?? "empresa"}
             creating={creatingCatalogImport}
