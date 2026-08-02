@@ -4095,8 +4095,8 @@ function PromptToolsPanel({
         <div className="mt-4 rounded-lg border p-3" style={{ background: "var(--ch-surface)", borderColor: "var(--ch-border)" }}>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
-              Catalogo de Vendas
-              <InfoHint text="Tags criadas em Catalogo de Vendas. Insira no prompt para orientar o agente a enviar o produto certo." />
+              Tags de produtos
+              <InfoHint text="Tags geradas a partir dos produtos cadastrados em Produtos. Insira a tag no prompt para orientar o agente a enviar o item certo." />
             </p>
             <div className="flex flex-wrap items-center gap-2">
               <span className="rounded-full border px-2 py-1 font-mono text-[9px] uppercase tracking-widest text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
@@ -4113,59 +4113,43 @@ function PromptToolsPanel({
             </div>
           </div>
           {salesCatalog.length > 0 ? (
-            <div className="mt-3 grid max-h-[320px] gap-2 overflow-y-auto pr-1">
-              {salesCatalog.slice(0, 24).map((item) => {
+            <div className="mt-3 flex max-h-[300px] flex-wrap gap-2 overflow-y-auto pr-1">
+              {salesCatalog.slice(0, 80).map((item) => {
                 const promptTag = getSalesCatalogPromptTag(item);
 
                 return (
-                  <div
+                  <span
                     key={item.id}
-                    className="grid gap-2 rounded-lg border p-2 text-left transition hover:bg-cyan-400/10"
+                    className="inline-flex max-w-full overflow-hidden rounded-lg border"
                     style={{ borderColor: "var(--ch-border)" }}
                     title={promptTag}
                   >
-                    <span className="flex min-w-0 items-center justify-between gap-2">
-                      <span className="flex min-w-0 items-center gap-1.5 text-[12px] font-semibold text-slate-100">
-                        <Package className="h-3.5 w-3.5 shrink-0 text-cyan-300" />
-                        <span className="truncate">{item.title}</span>
-                      </span>
-                      <span className="shrink-0 rounded-full bg-cyan-400/10 px-2 py-1 font-mono text-[8px] uppercase tracking-widest text-cyan-200">
-                        {item.media.length} midia
-                      </span>
-                    </span>
-                    <span className="truncate font-mono text-[10px] text-cyan-300">{promptTag}</span>
-                    <span className="truncate text-[10px] text-slate-500">
-                      {formatSalesCatalogPromptItemMeta(item)}
-                    </span>
-                    <div className="mt-1 flex flex-wrap gap-1.5">
-                      <button
-                        type="button"
-                        className="inline-flex min-h-8 items-center gap-1.5 rounded-md border px-2 font-mono text-[9px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10"
-                        style={{ borderColor: "var(--ch-border)" }}
-                        title="Inserir tag do item"
-                        onClick={() => onInsertTag(promptTag)}
-                      >
-                        <Plus className="h-3.5 w-3.5" />
-                        Inserir
-                      </button>
-                      <button
-                        type="button"
-                        className="inline-flex min-h-8 items-center gap-1.5 rounded-md border px-2 font-mono text-[9px] font-semibold uppercase tracking-wide text-emerald-100 transition hover:bg-emerald-400/10"
-                        style={{ borderColor: "var(--ch-border)" }}
-                        title="Copiar tag do produto"
-                        onClick={() => onCopyCatalogItemTag(item)}
-                      >
-                        <Copy className="h-3.5 w-3.5" />
-                        Copiar
-                      </button>
-                    </div>
-                  </div>
+                    <button
+                      type="button"
+                      className="inline-flex min-h-10 max-w-[min(74vw,420px)] items-center gap-2 px-3 text-left transition hover:bg-cyan-400/10"
+                      title={`Inserir ${promptTag}`}
+                      onClick={() => onInsertTag(promptTag)}
+                    >
+                      <span className="min-w-0 truncate font-mono text-[10px] font-semibold text-cyan-300">{promptTag}</span>
+                      <span className="min-w-0 truncate text-[10px] font-semibold text-slate-400">{item.title}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="grid min-h-10 w-9 shrink-0 place-items-center border-l text-emerald-200 transition hover:bg-emerald-400/10"
+                      style={{ borderColor: "var(--ch-border)" }}
+                      title="Copiar tag do produto"
+                      aria-label={`Copiar tag ${promptTag}`}
+                      onClick={() => onCopyCatalogItemTag(item)}
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                    </button>
+                  </span>
                 );
               })}
             </div>
           ) : (
             <div className="mt-3 rounded-lg border border-dashed px-3 py-5 text-center text-[12px] leading-5 text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
-              <p>Nenhum item cadastrado em Catalogo de Vendas.</p>
+              <p>Nenhuma tag de produto cadastrada.</p>
               <Link
                 href="/dashboard/links"
                 className="mt-3 inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10"
