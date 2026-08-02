@@ -239,7 +239,7 @@ export function BillingPlanCheckout({
       setCardStatusPolling(false);
       setNotice({
         tone: "error",
-        message: "Pagamento recusado. Nenhuma cobranca foi concluida. Confira os dados do cartao, tente outro cartao ou use Pix.",
+        message: "Pagamento recusado. Nenhuma cobranca foi concluida. Veja a orientacao na tela ou escolha Pix para liberar o plano.",
       });
       return;
     }
@@ -369,6 +369,20 @@ export function BillingPlanCheckout({
       window.setTimeout(() => setCopied(false), 1800);
     } catch {
       setCopied(false);
+    }
+  }
+
+  function switchToPixAndGenerate() {
+    setMethod("pix");
+    setNotice({
+      tone: "warning",
+      message: pix.qrCode
+        ? "Pix ja esta pronto. Use o QR Code ou copia e cola para concluir."
+        : "Vamos gerar o Pix para concluir sem nova tentativa de cartao.",
+    });
+
+    if (!pix.qrCode && !pixLoading) {
+      void generatePix();
     }
   }
 
@@ -535,6 +549,7 @@ export function BillingPlanCheckout({
                 pendingMessage="Pagamento enviado. Assim que confirmar, os creditos serao liberados."
                 rejectedMessage="Pagamento recusado. Nenhuma cobranca foi concluida. Confira os dados do cartao, tente outro cartao ou use Pix."
                 onPaymentStatusChange={handleCardPaymentStatusChange}
+                onAlternativePaymentRequest={switchToPixAndGenerate}
                 onThreeDSComplete={handleCardThreeDSComplete}
               />
             ) : (
@@ -660,7 +675,7 @@ function buildPaymentStatusNotice(paymentStatus: string): NoticeState {
   if (paymentStatus === "rejected") {
     return {
       tone: "error",
-      message: "Pagamento recusado. Nenhuma cobranca foi concluida. Confira os dados do cartao, tente outro cartao ou use Pix.",
+      message: "Pagamento recusado. Nenhuma cobranca foi concluida. Tente outro cartao ou use Pix.",
     };
   }
 

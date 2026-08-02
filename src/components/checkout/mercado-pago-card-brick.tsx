@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { AlertTriangle, CreditCard, Loader2, QrCode, RefreshCw, ShieldAlert, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type JsonRecord = Record<string, unknown>;
@@ -57,6 +57,7 @@ type CardBrickProps = {
   pendingMessage?: string;
   rejectedMessage?: string;
   onPaymentStatusChange?: (result: CardPaymentStatusChange) => void;
+  onAlternativePaymentRequest?: () => void;
   onThreeDSComplete?: () => void;
 };
 
@@ -64,6 +65,16 @@ type ThreeDSChallenge = {
   externalResourceUrl: string;
   creq: string;
   checkoutUrl: string | null;
+};
+
+type RejectedPaymentCopy = {
+  inlineMessage: string;
+  title: string;
+  description: string;
+  reason: string;
+  recommendation: string;
+  nextSteps: string[];
+  statusDetail: string | null;
 };
 
 export type CardPaymentStatusChange = {
@@ -115,6 +126,7 @@ export function MercadoPagoCardBrick({
   pendingMessage = "Pagamento enviado. A confirmacao pode levar alguns instantes.",
   rejectedMessage = "Pagamento recusado. Nenhuma cobranca foi concluida. Confira os dados do cartao ou tente outro meio de pagamento.",
   onPaymentStatusChange,
+  onAlternativePaymentRequest,
   onThreeDSComplete,
 }: CardBrickProps) {
   const containerId = useMemo(() => `mp-card-${sessionId.replace(/[^a-zA-Z0-9_-]/g, "")}`, [sessionId]);
@@ -124,6 +136,7 @@ export function MercadoPagoCardBrick({
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<{ tone: "success" | "warning" | "error"; message: string } | null>(null);
   const [threeDSChallenge, setThreeDSChallenge] = useState<ThreeDSChallenge | null>(null);
+  const [rejectionModal, setRejectionModal] = useState<RejectedPaymentCopy | null>(null);
 
   useEffect(() => {
     if (!threeDSChallenge) return;
@@ -162,6 +175,7 @@ export function MercadoPagoCardBrick({
     async function mountBrick() {
       setReady(false);
       setResult(null);
+      setRejectionModal(null);
       await loadMercadoPagoSdk();
 
       if (!mounted || !window.MercadoPago) return;
@@ -203,6 +217,7 @@ export function MercadoPagoCardBrick({
           onSubmit: async (formData, additionalData) => {
             setSubmitting(true);
             setResult(null);
+            setRejectionModal(null);
             setThreeDSChallenge(null);
 
             try {
@@ -259,14 +274,20 @@ export function MercadoPagoCardBrick({
                 return;
               }
 
+              const rejectionCopy = rejected ? buildRejectedPaymentCopy(data?.providerStatusDetail, rejectedMessage) : null;
+
               setResult({
                 tone: approved ? "success" : rejected ? "error" : "warning",
                 message: approved
                   ? successMessage
                   : rejected
-                    ? formatRejectedPaymentMessage(data?.providerStatusDetail, rejectedMessage)
+                    ? rejectionCopy?.inlineMessage ?? rejectedMessage
                   : pendingMessage,
               });
+
+              if (rejectionCopy) {
+                setRejectionModal(rejectionCopy);
+              }
 
               if (data?.checkoutUrl && !rejected) {
                 window.setTimeout(() => {
@@ -336,6 +357,14 @@ export function MercadoPagoCardBrick({
           {result.message}
         </div>
       ) : null}
+
+      {rejectionModal ? (
+        <CardPaymentRejectionModal
+          rejection={rejectionModal}
+          onClose={() => setRejectionModal(null)}
+          onUsePix={onAlternativePaymentRequest}
+        />
+      ) : null}
     </div>
   );
 }
@@ -401,54 +430,319 @@ function isRejectedPaymentStatus(status: string | null) {
   return status === "rejected" || status === "cancelled" || status === "canceled" || status === "expired" || status === "error";
 }
 
-function formatRejectedPaymentMessage(statusDetail: string | null | undefined, fallback: string) {
+function buildRejectedPaymentCopy(statusDetail: string | null | undefined, fallback: string): RejectedPaymentCopy {
   const detail = normalizePaymentStatus(statusDetail);
+  const commonSteps = [
+    "Confira numero, validade, codigo de seguranca, CPF e nome do titular.",
+    "Tente outro cartao ou use Pix para liberar o plano imediatamente.",
+  ];
 
   if (detail === "cc_rejected_insufficient_amount") {
-    return "Pagamento recusado: o cartao nao tem saldo ou limite suficiente. Nenhuma cobranca foi concluida. Tente outro cartao ou Pix.";
+    return {
+      inlineMessage: "Pagamento recusado por limite insuficiente. Nenhuma cobranca foi concluida.",
+      title: "O cartao nao autorizou este valor",
+      description: "O banco emissor informou que o cartao nao tem saldo ou limite suficiente para concluir a compra.",
+      reason: "Limite ou saldo insuficiente.",
+      recommendation: "Use outro cartao com limite disponivel ou pague por Pix.",
+      nextSteps: commonSteps,
+      statusDetail: detail,
+    };
   }
 
   if (detail === "cc_rejected_bad_filled_card_number") {
-    return "Pagamento recusado: revise o numero do cartao e tente novamente. Nenhuma cobranca foi concluida.";
+    return {
+      inlineMessage: "Pagamento recusado. Revise o numero do cartao e tente novamente.",
+      title: "Revise o numero do cartao",
+      description: "O Mercado Pago recebeu a tentativa, mas o numero do cartao parece estar incorreto ou incompleto.",
+      reason: "Numero do cartao invalido.",
+      recommendation: "Digite novamente os dados do cartao com calma ou tente outro meio de pagamento.",
+      nextSteps: commonSteps,
+      statusDetail: detail,
+    };
   }
 
   if (detail === "cc_rejected_bad_filled_date") {
-    return "Pagamento recusado: revise a data de vencimento e tente novamente. Nenhuma cobranca foi concluida.";
+    return {
+      inlineMessage: "Pagamento recusado. Revise a validade do cartao e tente novamente.",
+      title: "Revise a data de vencimento",
+      description: "A validade informada nao foi aceita pelo Mercado Pago ou pelo banco emissor.",
+      reason: "Data de vencimento invalida.",
+      recommendation: "Confira mes e ano do cartao antes de tentar de novo.",
+      nextSteps: commonSteps,
+      statusDetail: detail,
+    };
   }
 
   if (detail === "cc_rejected_bad_filled_security_code") {
-    return "Pagamento recusado: revise o codigo de seguranca e tente novamente. Nenhuma cobranca foi concluida.";
+    return {
+      inlineMessage: "Pagamento recusado. Revise o codigo de seguranca e tente novamente.",
+      title: "Revise o codigo de seguranca",
+      description: "O codigo de seguranca informado nao foi aceito pelo banco emissor.",
+      reason: "Codigo de seguranca invalido.",
+      recommendation: "Confira o CVV no cartao e tente novamente.",
+      nextSteps: commonSteps,
+      statusDetail: detail,
+    };
   }
 
   if (detail === "cc_rejected_bad_filled_other") {
-    return "Pagamento recusado: revise os dados do cartao e tente novamente. Nenhuma cobranca foi concluida.";
+    return {
+      inlineMessage: "Pagamento recusado. Revise os dados do cartao e tente novamente.",
+      title: "Revise os dados do cartao",
+      description: "Alguma informacao do cartao nao foi aceita pelo Mercado Pago ou pelo banco emissor.",
+      reason: "Dados do cartao nao validados.",
+      recommendation: "Confira todos os campos antes de reenviar a tentativa.",
+      nextSteps: commonSteps,
+      statusDetail: detail,
+    };
   }
 
   if (detail === "cc_rejected_card_disabled") {
-    return "Pagamento recusado: o cartao esta bloqueado ou desabilitado para compras online. Nenhuma cobranca foi concluida.";
+    return {
+      inlineMessage: "Pagamento recusado. O cartao pode estar bloqueado para compras online.",
+      title: "Cartao nao habilitado para esta compra",
+      description: "O banco emissor recusou a compra porque o cartao pode estar bloqueado, desabilitado ou sem permissao para compra online.",
+      reason: "Cartao bloqueado ou desabilitado.",
+      recommendation: "Libere compras online no aplicativo do banco ou use outro cartao.",
+      nextSteps: commonSteps,
+      statusDetail: detail,
+    };
   }
 
   if (detail === "cc_rejected_call_for_authorize") {
-    return "Pagamento recusado: o banco pediu autorizacao para esta compra. Fale com o banco ou tente outro cartao.";
+    return {
+      inlineMessage: "Pagamento recusado. O banco pediu autorizacao para esta compra.",
+      title: "O banco precisa autorizar a compra",
+      description: "O banco emissor bloqueou a tentativa e pode pedir confirmacao pelo aplicativo, SMS ou atendimento.",
+      reason: "Autorizacao exigida pelo banco.",
+      recommendation: "Autorize a compra no banco e tente novamente, ou use Pix.",
+      nextSteps: [
+        "Confira se o aplicativo do banco pediu confirmacao da compra.",
+        "Depois da autorizacao, tente pagar novamente ou use Pix.",
+      ],
+      statusDetail: detail,
+    };
   }
 
   if (detail === "cc_rejected_duplicated_payment") {
-    return "Pagamento recusado por tentativa duplicada. Aguarde alguns instantes antes de tentar novamente.";
+    return {
+      inlineMessage: "Pagamento recusado por tentativa duplicada. Aguarde alguns instantes.",
+      title: "Tentativa duplicada detectada",
+      description: "O Mercado Pago identificou uma tentativa muito parecida feita em pouco tempo e bloqueou para evitar cobranca repetida.",
+      reason: "Tentativa duplicada.",
+      recommendation: "Aguarde alguns minutos antes de tentar novamente ou use Pix.",
+      nextSteps: [
+        "Espere alguns minutos para evitar novo bloqueio automatico.",
+        "Se precisa liberar agora, escolha Pix.",
+      ],
+      statusDetail: detail,
+    };
   }
 
   if (detail === "cc_rejected_invalid_installments") {
-    return "Pagamento recusado: o numero de parcelas nao foi aceito. Tente outra opcao de pagamento.";
+    return {
+      inlineMessage: "Pagamento recusado. A quantidade de parcelas nao foi aceita.",
+      title: "Parcelamento nao autorizado",
+      description: "O banco emissor ou o Mercado Pago nao aceitou a condicao de parcelamento escolhida.",
+      reason: "Parcela nao autorizada.",
+      recommendation: "Tente pagar em uma parcela, use outro cartao ou escolha Pix.",
+      nextSteps: commonSteps,
+      statusDetail: detail,
+    };
   }
 
   if (detail === "cc_rejected_max_attempts") {
-    return "Pagamento recusado: muitas tentativas foram feitas com este cartao. Tente outro cartao ou Pix.";
+    return {
+      inlineMessage: "Pagamento recusado por muitas tentativas. Use outro cartao ou Pix.",
+      title: "Muitas tentativas com este cartao",
+      description: "Por seguranca, o Mercado Pago bloqueou novas tentativas parecidas com este cartao por enquanto.",
+      reason: "Limite de tentativas atingido.",
+      recommendation: "Tente outro cartao ou use Pix para liberar o plano agora.",
+      nextSteps: [
+        "Evite insistir varias vezes com os mesmos dados.",
+        "Use outro cartao ou Pix para concluir sem esperar.",
+      ],
+      statusDetail: detail,
+    };
   }
 
   if (detail === "cc_rejected_blacklist" || detail === "cc_rejected_high_risk" || detail === "cc_rejected_other_reason") {
-    return "Pagamento recusado por seguranca do Mercado Pago ou do banco emissor. Nenhuma cobranca foi concluida. Tente outro cartao ou Pix.";
+    return {
+      inlineMessage: "Pagamento recusado por seguranca. Nenhuma cobranca foi concluida.",
+      title: "A compra nao passou na validacao de seguranca",
+      description: "O Mercado Pago ou o banco emissor recusou esta tentativa automaticamente. Isso pode acontecer por regra antifraude, muitas tentativas recentes, cartao vinculado a outra conta ou divergencia nos dados.",
+      reason: "Validacao de seguranca do Mercado Pago ou do banco emissor.",
+      recommendation: "Para liberar o plano agora, use Pix ou tente outro cartao com dados do titular corretos.",
+      nextSteps: [
+        "Use um cartao diferente, com CPF e nome do titular corretos.",
+        "Evite varias tentativas seguidas com o mesmo cartao.",
+        "Escolha Pix se quiser liberar o plano imediatamente.",
+      ],
+      statusDetail: detail,
+    };
   }
 
-  return fallback;
+  return {
+    inlineMessage: fallback,
+    title: "Nao conseguimos aprovar este pagamento",
+    description: "A tentativa foi enviada ao Mercado Pago, mas nao foi autorizada pelo provedor de pagamento ou pelo banco emissor.",
+    reason: "Pagamento nao autorizado.",
+    recommendation: "Confira os dados, tente outro cartao ou escolha Pix.",
+    nextSteps: commonSteps,
+    statusDetail: detail,
+  };
+}
+
+function CardPaymentRejectionModal({
+  rejection,
+  onClose,
+  onUsePix,
+}: {
+  rejection: RejectedPaymentCopy;
+  onClose: () => void;
+  onUsePix?: () => void;
+}) {
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-[10000] grid place-items-center bg-black/75 px-4 py-6 backdrop-blur-md"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="card-rejection-title"
+    >
+      <div className="w-full max-w-[620px] overflow-hidden rounded-[8px] border border-rose-200/25 bg-slate-950 shadow-2xl shadow-black/50">
+        <div className="flex items-start justify-between gap-4 border-b border-slate-700/80 p-5">
+          <div className="flex items-start gap-3">
+            <div className="grid h-11 w-11 shrink-0 place-items-center rounded-[8px] border border-rose-300/35 bg-rose-400/12 text-rose-100">
+              <ShieldAlert className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-rose-200">
+                Cartao recusado
+              </p>
+              <h2 id="card-rejection-title" className="mt-1 text-[22px] font-black leading-tight text-white">
+                {rejection.title}
+              </h2>
+              <p className="mt-2 text-sm leading-6 text-slate-300">
+                {rejection.description}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-[8px] border border-slate-600 text-slate-300 transition hover:border-slate-400 hover:text-white"
+            aria-label="Fechar aviso"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="space-y-4 p-5">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <PaymentRejectionFact
+              icon={<CreditCard className="h-4 w-4" />}
+              label="Cobranca"
+              value="Nenhuma cobranca foi concluida"
+              tone="emerald"
+            />
+            <PaymentRejectionFact
+              icon={<AlertTriangle className="h-4 w-4" />}
+              label="Motivo provavel"
+              value={rejection.reason}
+              tone="rose"
+            />
+          </div>
+
+          <div className="rounded-[8px] border border-amber-300/35 bg-amber-300/10 p-4">
+            <p className="text-sm font-bold text-amber-100">O que fazer agora</p>
+            <p className="mt-2 text-sm leading-6 text-amber-50/85">
+              {rejection.recommendation}
+            </p>
+          </div>
+
+          <div className="rounded-[8px] border border-slate-700 bg-slate-900/70 p-4">
+            <p className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-cyan-200">
+              Proximos passos
+            </p>
+            <div className="mt-3 space-y-2">
+              {rejection.nextSteps.map((step) => (
+                <div key={step} className="flex gap-2 text-sm leading-5 text-slate-300">
+                  <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-cyan-300" />
+                  <span>{step}</span>
+                </div>
+              ))}
+            </div>
+            {rejection.statusDetail ? (
+              <p className="mt-3 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                Codigo do provedor: {rejection.statusDetail}
+              </p>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="grid gap-2 border-t border-slate-700/80 p-5 sm:grid-cols-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-[7px] border border-slate-600 px-4 text-sm font-bold text-slate-100 transition hover:border-cyan-300/60 hover:bg-cyan-300/10"
+          >
+            <RefreshCw className="h-4 w-4" />
+            Tentar outro cartao
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              onUsePix?.();
+              onClose();
+            }}
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-[7px] bg-cyan-300 px-4 text-sm font-black text-slate-950 transition hover:bg-cyan-200"
+          >
+            <QrCode className="h-4 w-4" />
+            Usar Pix agora
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PaymentRejectionFact({
+  icon,
+  label,
+  tone,
+  value,
+}: {
+  icon: ReactNode;
+  label: string;
+  tone: "emerald" | "rose";
+  value: string;
+}) {
+  return (
+    <div className={cn(
+      "rounded-[8px] border p-3",
+      tone === "emerald"
+        ? "border-emerald-300/30 bg-emerald-400/10"
+        : "border-rose-300/30 bg-rose-400/10",
+    )}>
+      <div className={cn(
+        "flex items-center gap-2 font-mono text-[10px] font-bold uppercase tracking-[0.18em]",
+        tone === "emerald" ? "text-emerald-200" : "text-rose-200",
+      )}>
+        {icon}
+        {label}
+      </div>
+      <p className="mt-2 text-sm font-semibold leading-5 text-white">{value}</p>
+    </div>
+  );
 }
 
 function readThreeDSChallenge(value: unknown, checkoutUrl: string | null): ThreeDSChallenge | null {
