@@ -29,6 +29,7 @@ export default async function DashboardPlanosPage() {
     organization ? loadPendingPlan(client, organization.id) : null,
     loadPublicPricingPlans(client),
   ]);
+  const currentPlanCode = getCurrentPurchasablePlanCode(organization?.planCode, organization?.status);
 
   return (
     <ConnectyShell
@@ -53,12 +54,12 @@ export default async function DashboardPlanosPage() {
             </p>
           </div>
           <div className="rounded-xl border border-white/10 bg-white/[0.045] px-4 py-3 font-mono text-[11px] uppercase tracking-wide text-slate-400">
-            Plano atual: <span className="font-bold text-emerald-300">{organization?.planCode ?? "sem plano"}</span>
+            Plano atual: <span className="font-bold text-emerald-300">{currentPlanCode ?? "sem plano"}</span>
           </div>
         </div>
 
         <PricingPlansGrid
-          currentPlanCode={organization?.planCode ?? null}
+          currentPlanCode={currentPlanCode}
           initialPlans={pricingPlans}
           pendingPlan={pendingPlan}
           surface="dashboard"
@@ -91,4 +92,16 @@ async function loadPendingPlan(client: ReturnType<typeof createServiceClient>, o
     planCode: data.plan_code,
     checkoutUrl: buildDashboardBillingCheckoutPath(data.id),
   };
+}
+
+function getCurrentPurchasablePlanCode(planCode: string | null | undefined, status: string | null | undefined) {
+  const normalizedStatus = status?.trim().toLowerCase();
+
+  if (!planCode || !normalizedStatus) {
+    return null;
+  }
+
+  return ["active", "trial", "trial_pending", "internal"].includes(normalizedStatus)
+    ? planCode
+    : null;
 }
