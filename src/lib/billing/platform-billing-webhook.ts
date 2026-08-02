@@ -112,6 +112,35 @@ export type PlatformPlanInteractionNotificationInput = {
   metadata?: JsonRecord;
 };
 
+export type PlatformBillingLifecycleNotificationType =
+  | "manual_plan_activated"
+  | "manual_plan_renewed"
+  | "paid_plan_three_days_remaining"
+  | "paid_plan_one_day_remaining"
+  | "paid_plan_expired"
+  | "paid_low_credits_20"
+  | "paid_low_credits_10"
+  | "paid_no_credits";
+
+export type PlatformBillingLifecycleNotificationInput = {
+  organizationId: string;
+  subscriptionId: string | null;
+  invoiceId?: string | null;
+  paymentId?: string | null;
+  planCode: string;
+  planName: string;
+  amountBrl: number;
+  includedCredits: number;
+  eventType: PlatformBillingLifecycleNotificationType;
+  dedupeKey: string;
+  balanceCredits?: number | null;
+  usedCredits?: number | null;
+  daysRemaining?: number | null;
+  providerStatus?: string | null;
+  providerReference?: string | null;
+  metadata?: JsonRecord;
+};
+
 type ParsedExternalReference = {
   organizationId: string;
   subscriptionId: string;
@@ -238,6 +267,14 @@ const checkoutButtonEventTypes = new Set([
   "subscription_replaced",
   "checkout_cart_updated",
   "checkout_payment_started",
+  "manual_plan_activated",
+  "manual_plan_renewed",
+  "paid_plan_three_days_remaining",
+  "paid_plan_one_day_remaining",
+  "paid_plan_expired",
+  "paid_low_credits_20",
+  "paid_low_credits_10",
+  "paid_no_credits",
 ]);
 
 export async function processPlatformBillingMercadoPagoWebhook(
@@ -399,6 +436,43 @@ export async function sendPlatformPlanInteractionNotification(
     providerReference: input.providerReference ?? null,
     metadata: {
       source: "dashboard_plan_interaction",
+      ...(input.metadata ?? {}),
+    },
+  });
+  const event = notification?.id ? await loadBillingNotificationEvent(client, notification.id) : null;
+
+  return {
+    notificationId: notification?.id ?? null,
+    status: event?.status ?? notification?.status ?? "skipped",
+    selectedAgentId: event?.selected_agent_id ?? null,
+    recipientPhone: event?.recipient_phone ?? null,
+    messagePreview: event?.message_preview ?? null,
+    errorMessage: event?.error_message ?? null,
+  };
+}
+
+export async function sendPlatformBillingLifecycleNotification(
+  client: SupabaseClient,
+  input: PlatformBillingLifecycleNotificationInput,
+): Promise<PlatformBillingOperationalTestResult> {
+  const notification = await enqueuePlatformBillingNotification(client, {
+    organizationId: input.organizationId,
+    subscriptionId: input.subscriptionId,
+    invoiceId: input.invoiceId ?? null,
+    paymentId: input.paymentId ?? null,
+    planCode: input.planCode,
+    planName: input.planName,
+    amountBrl: input.amountBrl,
+    includedCredits: input.includedCredits,
+    balanceCredits: input.balanceCredits ?? undefined,
+    usedCredits: input.usedCredits ?? undefined,
+    trialDaysRemaining: input.daysRemaining ?? null,
+    eventType: input.eventType,
+    dedupeKey: input.dedupeKey,
+    providerStatus: input.providerStatus ?? input.eventType,
+    providerReference: input.providerReference ?? null,
+    metadata: {
+      source: "platform_billing_lifecycle",
       ...(input.metadata ?? {}),
     },
   });
@@ -1511,9 +1585,16 @@ function buildCheckoutActionButton(input: {
   }
 
   return {
-    label: input.eventType.startsWith("trial_") ? "Escolher plano" : "Finalizar pagamento",
+    label: resolveCheckoutActionLabel(input.eventType),
     url,
   };
+}
+
+function resolveCheckoutActionLabel(eventType: string) {
+  if (eventType.startsWith("trial_")) return "Escolher plano";
+  if (eventType.includes("low_credits") || eventType.includes("no_credits")) return "Comprar creditos";
+  if (eventType.includes("expired") || eventType.includes("remaining")) return "Renovar plano";
+  return "Finalizar pagamento";
 }
 
 function resolveCheckoutActionUrl(metadata: JsonRecord | null | undefined) {
@@ -1745,8 +1826,13 @@ function buildBillingMessage(input: {
     creditos_usados: formatCredits(input.usedCredits ?? 0),
     marco_creditos: formatCredits(input.milestoneCredits ?? input.usedCredits ?? 0),
     dias_restantes: input.trialDaysRemaining ?? "--",
+    data_vencimento: formatMetadataDate(input.metadata.period_ends_at)
+      ?? formatMetadataDate(input.metadata.current_period_end)
+      ?? formatMetadataDate(input.metadata.next_billing_at)
+      ?? "data de vencimento",
     trial_expira_em: formatMetadataDate(input.metadata.trial_ends_at) ?? "fim do teste",
     data_expiracao_trial: formatMetadataDate(input.metadata.trial_ends_at) ?? "fim do teste",
+    percentual_creditos: formatPercent(input.metadata.credit_balance_percent),
     evento: input.eventType,
     status: input.providerStatus ?? "sem_status",
     data: formatDate(new Date()),
@@ -1897,6 +1983,18 @@ function formatCredits(value: number) {
   return new Intl.NumberFormat("pt-BR", {
     maximumFractionDigits: value < 10 ? 2 : 0,
   }).format(Math.max(value, 0));
+}
+
+function formatPercent(value: unknown) {
+  const number = typeof value === "number" ? value : Number(value ?? 0);
+
+  if (!Number.isFinite(number)) {
+    return "0";
+  }
+
+  return new Intl.NumberFormat("pt-BR", {
+    maximumFractionDigits: number < 10 ? 1 : 0,
+  }).format(Math.max(number, 0));
 }
 
 function formatDate(value: Date) {

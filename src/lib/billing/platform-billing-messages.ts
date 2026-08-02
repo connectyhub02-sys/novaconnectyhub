@@ -10,8 +10,10 @@ export const PLATFORM_BILLING_MESSAGE_VARIABLES = [
   "{creditos_usados}",
   "{marco_creditos}",
   "{dias_restantes}",
+  "{data_vencimento}",
   "{trial_expira_em}",
   "{data_expiracao_trial}",
+  "{percentual_creditos}",
   "{evento}",
   "{status}",
   "{data}",
@@ -93,6 +95,46 @@ export const PLATFORM_BILLING_MESSAGE_TEMPLATE_DEFINITIONS = [
     description: "Pagamento negado, expirado ou com falha.",
   },
   {
+    eventType: "manual_plan_activated",
+    label: "Plano ativado manualmente",
+    description: "Admin liberou um plano manualmente para o cliente.",
+  },
+  {
+    eventType: "manual_plan_renewed",
+    label: "Plano renovado manualmente",
+    description: "Admin renovou o ciclo mensal de um plano manualmente.",
+  },
+  {
+    eventType: "paid_plan_three_days_remaining",
+    label: "Plano faltando 3 dias",
+    description: "Cliente pago esta perto do vencimento do ciclo atual.",
+  },
+  {
+    eventType: "paid_plan_one_day_remaining",
+    label: "Plano faltando 1 dia",
+    description: "Ultimo aviso antes do vencimento do ciclo pago.",
+  },
+  {
+    eventType: "paid_plan_expired",
+    label: "Plano vencido",
+    description: "Plano pago/manual venceu e precisa ser renovado.",
+  },
+  {
+    eventType: "paid_low_credits_20",
+    label: "Creditos abaixo de 20%",
+    description: "Cliente pago chegou em 20% ou menos dos creditos do ciclo.",
+  },
+  {
+    eventType: "paid_low_credits_10",
+    label: "Creditos abaixo de 10%",
+    description: "Cliente pago chegou em 10% ou menos dos creditos do ciclo.",
+  },
+  {
+    eventType: "paid_no_credits",
+    label: "Plano sem creditos",
+    description: "Cliente pago ficou sem saldo para IA, voz e atendimentos automaticos.",
+  },
+  {
     eventType: "subscription_paused",
     label: "Assinatura pausada",
     description: "Recorrencia pausada pelo provedor.",
@@ -143,6 +185,22 @@ export const DEFAULT_PLATFORM_BILLING_MESSAGE_TEMPLATES: PlatformBillingMessageT
     "{cliente}, pagamento confirmado. Seu plano {plano} foi ativado na ConnectyHub com {creditos} creditos inclusos. Se havia saldo de teste ainda valido, ele foi somado na sua carteira. Valor: {valor}.",
   payment_rejected:
     "{cliente}, o pagamento do plano {plano} nao foi aprovado. Seus dados continuam salvos, mas para liberar os atendimentos voce precisa concluir o pagamento no painel.",
+  manual_plan_activated:
+    "{cliente}, seu plano {plano} foi ativado manualmente pela equipe ConnectyHub com {creditos} creditos. Ele fica valido ate {data_vencimento}. Boas vendas.",
+  manual_plan_renewed:
+    "{cliente}, seu plano {plano} foi renovado manualmente pela equipe ConnectyHub. O novo ciclo vence em {data_vencimento} e seus creditos disponiveis sao {creditos_restantes}.",
+  paid_plan_three_days_remaining:
+    "{cliente}, seu plano {plano} vence em 3 dias, em {data_vencimento}. Voce ainda tem {creditos_restantes} creditos. Renove antes do vencimento para manter seus agentes atendendo sem pausa.",
+  paid_plan_one_day_remaining:
+    "{cliente}, seu plano {plano} vence em 1 dia, em {data_vencimento}. Para evitar pausa nos atendimentos automaticos, renove pelo painel.",
+  paid_plan_expired:
+    "{cliente}, seu plano {plano} venceu em {data_vencimento}. Seus dados continuam salvos, mas recursos pagos ficam pausados ate a renovacao.",
+  paid_low_credits_20:
+    "{cliente}, seus creditos ConnectyHub chegaram a {percentual_creditos}% do ciclo. Restam {creditos_restantes}. Recarregue agora para seus agentes nao pararem no meio dos atendimentos.",
+  paid_low_credits_10:
+    "{cliente}, alerta importante: restam apenas {creditos_restantes} creditos ({percentual_creditos}% do ciclo). Recarregue pelo painel para manter IA, voz e WhatsApp ativos.",
+  paid_no_credits:
+    "{cliente}, seus creditos acabaram. Seus agentes e recursos com custo ficam pausados ate uma recarga ou renovacao do plano.",
   subscription_paused:
     "{cliente}, sua assinatura ConnectyHub esta pausada. Acesse o painel para regularizar e manter os atendimentos ativos.",
   subscription_canceled:

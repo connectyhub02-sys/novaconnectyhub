@@ -35,6 +35,7 @@ import {
   whatsappFollowUpEventName,
 } from "@/lib/whatsapp/proactive-followup";
 import { processPendingPlatformBillingNotifications } from "@/lib/billing/platform-billing-webhook";
+import { processPaidBillingLifecycleNotifications } from "@/lib/billing/paid-lifecycle-notifications";
 import { processPendingTrialConversionMessages } from "@/lib/billing/trial-notifications";
 import { runConnectyHubGatewayHealthCheck } from "@/lib/connectyhub-api/gateway";
 import {
@@ -401,9 +402,10 @@ export const connectyhubPlatformAutomationSweep = inngest.createFunction(
     const summary = await step.run("process-pending-platform-automations", async () => {
       const client = createServiceClient();
       const trial = await processPendingTrialConversionMessages(client, { limit: 25 });
+      const paidLifecycle = await processPaidBillingLifecycleNotifications(client, { limit: 100 });
       const billing = await processPendingPlatformBillingNotifications(client, { limit: 25 });
 
-      return { trial, billing };
+      return { trial, paidLifecycle, billing };
     });
 
     return {

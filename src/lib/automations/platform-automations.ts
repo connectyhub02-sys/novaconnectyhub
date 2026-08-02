@@ -294,6 +294,70 @@ const PLATFORM_AUTOMATION_TIMING_POLICY: Record<string, PlatformAutomationTrigge
     conditions: { plan_codes: PAID_PLAN_CODES },
     triggerConfig: { kind: "billing_status", status: "rejected" },
   },
+  manual_plan_activated: {
+    delayMinutes: 0,
+    cooldownMinutes: 60,
+    maxSendsPerContact: 0,
+    priority: 62,
+    conditions: { plan_codes: PAID_PLAN_CODES },
+    triggerConfig: { kind: "admin_manual_plan", action: "activated" },
+  },
+  manual_plan_renewed: {
+    delayMinutes: 0,
+    cooldownMinutes: 60,
+    maxSendsPerContact: 0,
+    priority: 63,
+    conditions: { plan_codes: PAID_PLAN_CODES },
+    triggerConfig: { kind: "admin_manual_plan", action: "renewed" },
+  },
+  paid_plan_three_days_remaining: {
+    delayMinutes: 0,
+    cooldownMinutes: 1440,
+    maxSendsPerContact: 1,
+    priority: 64,
+    conditions: { plan_codes: PAID_PLAN_CODES },
+    triggerConfig: { kind: "paid_plan_deadline", days_remaining: 3 },
+  },
+  paid_plan_one_day_remaining: {
+    delayMinutes: 0,
+    cooldownMinutes: 1440,
+    maxSendsPerContact: 1,
+    priority: 66,
+    conditions: { plan_codes: PAID_PLAN_CODES },
+    triggerConfig: { kind: "paid_plan_deadline", days_remaining: 1 },
+  },
+  paid_plan_expired: {
+    delayMinutes: 0,
+    cooldownMinutes: 1440,
+    maxSendsPerContact: 2,
+    priority: 68,
+    conditions: { plan_codes: PAID_PLAN_CODES },
+    triggerConfig: { kind: "paid_plan_expired" },
+  },
+  paid_low_credits_20: {
+    delayMinutes: 0,
+    cooldownMinutes: 1440,
+    maxSendsPerContact: 1,
+    priority: 72,
+    conditions: { plan_codes: PAID_PLAN_CODES, max_credit_percent: 20 },
+    triggerConfig: { kind: "paid_credit_threshold", threshold_percent: 20 },
+  },
+  paid_low_credits_10: {
+    delayMinutes: 0,
+    cooldownMinutes: 1440,
+    maxSendsPerContact: 1,
+    priority: 74,
+    conditions: { plan_codes: PAID_PLAN_CODES, max_credit_percent: 10 },
+    triggerConfig: { kind: "paid_credit_threshold", threshold_percent: 10 },
+  },
+  paid_no_credits: {
+    delayMinutes: 0,
+    cooldownMinutes: 720,
+    maxSendsPerContact: 2,
+    priority: 76,
+    conditions: { plan_codes: PAID_PLAN_CODES, max_balance_credits: 0 },
+    triggerConfig: { kind: "paid_wallet_empty" },
+  },
   subscription_paused: {
     delayMinutes: 60,
     cooldownMinutes: 1440,
@@ -702,6 +766,10 @@ function automationConditionsMatch(
     return false;
   }
 
+  if (!numberConditionMatches(readNumber(input.metadata?.credit_balance_percent), conditions.min_credit_percent, conditions.max_credit_percent)) {
+    return false;
+  }
+
   const milestoneStep = readNumber(conditions.milestone_step_credits);
 
   if (milestoneStep !== null && milestoneStep > 0) {
@@ -803,6 +871,14 @@ function getEventRevenueGoal(eventType: string) {
   if (eventType === "trial_one_day_remaining") return "Ultima chamada para converter com saldo restante acumulado.";
   if (eventType === "trial_no_credits") return "Recuperar usuarios sem saldo antes de perder o momento de compra.";
   if (eventType === "trial_expired") return "Explicar expiracao do beneficio e reabrir caminho para assinatura.";
+  if (eventType === "manual_plan_activated") return "Confirmar liberacao manual e reduzir suporte apos ajuste do admin.";
+  if (eventType === "manual_plan_renewed") return "Confirmar renovacao manual e reforcar a continuidade do plano.";
+  if (eventType === "paid_plan_three_days_remaining") return "Antecipar renovacao antes de pausa operacional.";
+  if (eventType === "paid_plan_one_day_remaining") return "Ultima chamada para renovar sem interromper atendimentos.";
+  if (eventType === "paid_plan_expired") return "Avisar bloqueio por vencimento e levar o cliente para renovar.";
+  if (eventType === "paid_low_credits_20") return "Estimular recarga antes do risco de parada dos agentes.";
+  if (eventType === "paid_low_credits_10") return "Criar urgencia para recarga com saldo critico.";
+  if (eventType === "paid_no_credits") return "Recuperar operacao parada por falta de creditos.";
   if (eventType === "subscription_replaced") return "Manter a troca de plano no checkout e evitar perda da venda.";
   if (eventType === "checkout_cart_updated") return "Aumentar ticket medio com adicionais e pacotes de credito.";
   if (eventType === "checkout_payment_started") return "Recuperar pagamento iniciado antes de abandono do checkout.";

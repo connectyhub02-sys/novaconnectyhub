@@ -3,6 +3,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { debitCredits, grantCredits } from "@/lib/billing/cost-center";
 import type { BillingPlanRow } from "@/lib/billing/plans";
+import { sendPlatformBillingLifecycleNotification } from "@/lib/billing/platform-billing-webhook";
+import { getAppBaseUrl } from "@/lib/sales-catalog/mercado-pago";
 import { requirePlatformAdmin } from "@/lib/supabase/admin-auth";
 import { createServiceClient } from "@/lib/supabase/service";
 
@@ -61,6 +63,11 @@ type BillingCycleRow = {
 
 type BillingLimitsRow = {
   metadata: JsonRecord | null;
+};
+
+type WalletSnapshotRow = {
+  balance_credits: number | string | null;
+  lifetime_used_credits: number | string | null;
 };
 
 const PLAN_SELECT = [
@@ -262,6 +269,41 @@ async function activateOrRenewPlan(
     cycleEnd,
   });
 
+  let wallet: WalletSnapshotRow | null = null;
+  let notification: Awaited<ReturnType<typeof sendPlatformBillingLifecycleNotification>> | null = null;
+  let notificationError: string | null = null;
+
+  try {
+    wallet = await loadWalletSnapshot(client, input.organization.id);
+    notification = await sendPlatformBillingLifecycleNotification(client, {
+      organizationId: input.organization.id,
+      subscriptionId,
+      planCode: plan.plan_code,
+      planName: plan.name,
+      amountBrl: toNumber(plan.monthly_price_brl),
+      includedCredits: toNumber(plan.included_credits),
+      balanceCredits: toNumber(wallet?.balance_credits),
+      usedCredits: toNumber(wallet?.lifetime_used_credits),
+      daysRemaining: 30,
+      eventType: input.payload.action === "renew_plan" ? "manual_plan_renewed" : "manual_plan_activated",
+      dedupeKey: `billing:${subscriptionId}:${input.payload.action}:${cycleStart}`,
+      providerStatus: "admin_manual",
+      providerReference: null,
+      metadata: {
+        source: input.payload.action,
+        actor_id: input.actorId,
+        manual_reason: input.payload.reason,
+        current_period_start: cycleStart,
+        current_period_end: cycleEnd,
+        period_ends_at: cycleEnd,
+        checkout_url: "/dashboard/planos",
+        checkout_public_url: `${getAppBaseUrl()}/dashboard/planos`,
+      },
+    });
+  } catch (error) {
+    notificationError = error instanceof Error ? error.message : "Nao foi possivel enviar aviso de plano manual.";
+  }
+
   return {
     message: input.payload.action === "renew_plan"
       ? `Plano ${plan.name} renovado manualmente.`
@@ -271,6 +313,9 @@ async function activateOrRenewPlan(
       subscriptionId,
       creditTransactionId,
       grantedIncludedCredits: input.payload.grantIncludedCredits,
+      notificationId: notification?.notificationId ?? null,
+      notificationStatus: notification?.status ?? null,
+      notificationError: notificationError ?? notification?.errorMessage ?? null,
     },
     auditMetadata: {
       planCode: plan.plan_code,
@@ -280,6 +325,9 @@ async function activateOrRenewPlan(
       cycleEnd,
       grantedIncludedCredits: input.payload.grantIncludedCredits,
       includedCredits: toNumber(plan.included_credits),
+      notificationId: notification?.notificationId ?? null,
+      notificationStatus: notification?.status ?? null,
+      notificationError: notificationError ?? notification?.errorMessage ?? null,
     },
   };
 }
@@ -598,6 +646,20 @@ async function loadPlan(client: SupabaseClient, planCode: string) {
   }
 
   return data;
+}
+
+async function loadWalletSnapshot(client: SupabaseClient, organizationId: string) {
+  const { data, error } = await client
+    .from("credit_wallets")
+    .select("balance_credits, lifetime_used_credits")
+    .eq("organization_id", organizationId)
+    .maybeSingle<WalletSnapshotRow>();
+
+  if (error) {
+    throw new Error(`Nao foi possivel carregar saldo do cliente: ${error.message}`);
+  }
+
+  return data ?? null;
 }
 
 async function upsertManualSubscription(
