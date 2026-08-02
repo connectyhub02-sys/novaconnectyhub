@@ -84,7 +84,6 @@ import {
 } from "@/lib/leads/qualification";
 import type { CloneHumanizationMetric } from "@/lib/whatsapp/clone-humanization";
 import {
-  formatSalesCatalogFulfillmentMode,
   formatSalesCatalogSalesDestination,
   formatSalesCatalogStockStatus,
   type ClientSalesCatalogItem,
@@ -539,7 +538,6 @@ type WhatsappConsoleVariant = {
     knowledge: string;
     links: string;
     channels: string;
-    promptAssistant: string;
     voices: string;
   };
   connectionEnabled: boolean;
@@ -593,7 +591,6 @@ const clientWhatsappConsoleVariant = {
     knowledge: "/api/dashboard/knowledge",
     links: "/api/dashboard/whatsapp/links",
     channels: "/api/dashboard/whatsapp/channels",
-    promptAssistant: "/api/dashboard/whatsapp/prompt-assistant",
     voices: "/api/dashboard/voices",
   },
   connectionEnabled: true,
@@ -632,7 +629,6 @@ export const adminWhatsappConsoleVariant = {
     knowledge: "/api/admin/whatsapp/internal/knowledge",
     links: "/api/admin/whatsapp/internal/links",
     channels: "/api/admin/whatsapp/internal/channels",
-    promptAssistant: "/api/admin/whatsapp/internal/prompt-assistant",
     voices: "/api/admin/whatsapp/internal/voices",
   },
   connectionEnabled: true,
@@ -675,11 +671,8 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
   const [internalEditRoleTitle, setInternalEditRoleTitle] = useState("");
   const [internalEditDescription, setInternalEditDescription] = useState("");
   const [internalEditAutomationRoles, setInternalEditAutomationRoles] = useState<AgentAutomationRoles>(createEmptyAgentAutomationRoles());
-  const [promptProductUrl, setPromptProductUrl] = useState("");
-  const [promptNotes, setPromptNotes] = useState("");
   const [linkButtonLabel, setLinkButtonLabel] = useState("");
   const [linkButtonUrl, setLinkButtonUrl] = useState("");
-  const [generatingPrompt, setGeneratingPrompt] = useState(false);
   const [knowledgeUploading, setKnowledgeUploading] = useState(false);
   const [creatingLinkButton, setCreatingLinkButton] = useState(false);
   const [deletingLinkButtonId, setDeletingLinkButtonId] = useState<string | null>(null);
@@ -1314,40 +1307,6 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
     }
   }
 
-  async function generatePromptWithAI() {
-    if (!selectedCompanyId) {
-      setNotice({ tone: "warning", message: `Escolha um ${variant.entitySingular} antes de gerar o prompt.` });
-      return;
-    }
-
-    setGeneratingPrompt(true);
-    setNotice(null);
-
-    try {
-      const response = await fetch(variant.endpoints.promptAssistant, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          [variant.entityIdKey]: selectedCompanyId,
-          productUrl: promptProductUrl,
-          notes: promptNotes,
-        }),
-      });
-      const data = (await response.json().catch(() => null)) as { prompt?: string; error?: string } | null;
-
-      if (!response.ok || !data?.prompt) {
-        throw new Error(data?.error ?? "Nao foi possivel gerar o prompt com IA.");
-      }
-
-      updatePromptDraft(data.prompt);
-      setNotice({ tone: "success", message: "Prompt gerado com IA. Revise e salve as alteracoes." });
-    } catch (error) {
-      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao gerar prompt." });
-    } finally {
-      setGeneratingPrompt(false);
-    }
-  }
-
   async function uploadKnowledgeFile(file: File | null) {
     if (!file || !selectedCompanyId) {
       return;
@@ -1421,6 +1380,15 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
     try {
       await navigator.clipboard.writeText(link.tag);
       setNotice({ tone: "success", message: `Tag copiada: ${link.tag}` });
+    } catch {
+      setNotice({ tone: "error", message: "Nao foi possivel copiar a tag. Selecione a tag e copie manualmente." });
+    }
+  }
+
+  async function copySalesCatalogItemTag(item: ClientSalesCatalogItem) {
+    try {
+      await navigator.clipboard.writeText(item.tag);
+      setNotice({ tone: "success", message: `Tag copiada: ${item.tag}` });
     } catch {
       setNotice({ tone: "error", message: "Nao foi possivel copiar a tag. Selecione a tag e copie manualmente." });
     }
@@ -2078,7 +2046,6 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
                 <CloneRealTestPanel summary={state.cloneTest} enabled={behaviorDraft.cloneRealTestMode} />
 
                 <PromptToolsPanel
-                  generatingPrompt={generatingPrompt}
                   linkButtons={state.linkButtons}
                   salesCatalog={state.salesCatalog}
                   linkButtonLabel={linkButtonLabel}
@@ -2086,18 +2053,14 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
                   linkButtonsEnabled={behaviorDraft.interactiveMessages}
                   creatingLinkButton={creatingLinkButton}
                   deletingLinkButtonId={deletingLinkButtonId}
-                  notes={promptNotes}
-                  productUrl={promptProductUrl}
                   onCopyLinkButtonTag={copyTrackedLinkButtonTag}
+                  onCopyCatalogItemTag={copySalesCatalogItemTag}
                   onCreateLinkButton={createTrackedLinkButton}
                   onDeleteLinkButton={deleteTrackedLinkButton}
-                  onGenerate={generatePromptWithAI}
                   onInsertTag={insertPromptTag}
                   onLinkButtonLabelChange={setLinkButtonLabel}
                   onLinkButtonUrlChange={setLinkButtonUrl}
                   onLinkButtonsEnabledChange={(value) => updateBehavior("interactiveMessages", value)}
-                  onNotesChange={setPromptNotes}
-                  onProductUrlChange={setPromptProductUrl}
                   promptTags={promptTags}
                   entitySingular={variant.entitySingular}
                 />
@@ -4173,7 +4136,6 @@ function CloneMemoryPanel({
 }
 
 function PromptToolsPanel({
-  generatingPrompt,
   linkButtons,
   salesCatalog,
   linkButtonLabel,
@@ -4181,22 +4143,17 @@ function PromptToolsPanel({
   linkButtonsEnabled,
   creatingLinkButton,
   deletingLinkButtonId,
-  notes,
-  productUrl,
+  onCopyCatalogItemTag,
   onCopyLinkButtonTag,
   onCreateLinkButton,
   onDeleteLinkButton,
-  onGenerate,
   onInsertTag,
   onLinkButtonLabelChange,
   onLinkButtonUrlChange,
   onLinkButtonsEnabledChange,
-  onNotesChange,
-  onProductUrlChange,
   promptTags,
   entitySingular,
 }: {
-  generatingPrompt: boolean;
   linkButtons: TrackedLinkButton[];
   salesCatalog: ClientSalesCatalogItem[];
   linkButtonLabel: string;
@@ -4204,18 +4161,14 @@ function PromptToolsPanel({
   linkButtonsEnabled: boolean;
   creatingLinkButton: boolean;
   deletingLinkButtonId: string | null;
-  notes: string;
-  productUrl: string;
+  onCopyCatalogItemTag: (item: ClientSalesCatalogItem) => void;
   onCopyLinkButtonTag: (link: TrackedLinkButton) => void;
   onCreateLinkButton: () => void;
   onDeleteLinkButton: (link: TrackedLinkButton) => void;
-  onGenerate: () => void;
   onInsertTag: (token: string) => void;
   onLinkButtonLabelChange: (value: string) => void;
   onLinkButtonUrlChange: (value: string) => void;
   onLinkButtonsEnabledChange: (value: boolean) => void;
-  onNotesChange: (value: string) => void;
-  onProductUrlChange: (value: string) => void;
   promptTags: Array<{ token: string; label: string; description: string }>;
   entitySingular: string;
 }) {
@@ -4244,21 +4197,31 @@ function PromptToolsPanel({
           ))}
         </div>
         <div className="mt-4 rounded-lg border p-3" style={{ background: "var(--ch-surface)", borderColor: "var(--ch-border)" }}>
-          <div className="flex items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
               Catalogo de Vendas
               <InfoHint text="Tags criadas em Catalogo de Vendas. Insira no prompt para orientar o agente a enviar o produto certo." />
             </p>
-            <span className="rounded-full border px-2 py-1 font-mono text-[9px] uppercase tracking-widest text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
-              {salesCatalog.length.toLocaleString("pt-BR")}
-            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-full border px-2 py-1 font-mono text-[9px] uppercase tracking-widest text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
+                {salesCatalog.length.toLocaleString("pt-BR")}
+              </span>
+              <Link
+                href="/dashboard/links"
+                className="inline-flex min-h-8 items-center gap-1.5 rounded-md border px-2 font-mono text-[9px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10"
+                style={{ borderColor: "var(--ch-border)" }}
+              >
+                <Package className="h-3.5 w-3.5" />
+                Produtos
+              </Link>
+            </div>
           </div>
           {salesCatalog.length > 0 ? (
-            <div className="mt-3 grid max-h-[220px] gap-2 overflow-y-auto pr-1">
-              {salesCatalog.slice(0, 12).map((item) => (
+            <div className="mt-3 grid max-h-[320px] gap-2 overflow-y-auto pr-1">
+              {salesCatalog.slice(0, 24).map((item) => (
                 <div
                   key={item.id}
-                  className="grid gap-1 rounded-lg border p-2 text-left transition hover:bg-cyan-400/10"
+                  className="grid gap-2 rounded-lg border p-2 text-left transition hover:bg-cyan-400/10"
                   style={{ borderColor: "var(--ch-border)" }}
                   title={item.tag}
                 >
@@ -4284,68 +4247,43 @@ function PromptToolsPanel({
                       onClick={() => onInsertTag(item.tag)}
                     >
                       <Plus className="h-3.5 w-3.5" />
-                      Tag
+                      Inserir
                     </button>
                     <button
                       type="button"
                       className="inline-flex min-h-8 items-center gap-1.5 rounded-md border px-2 font-mono text-[9px] font-semibold uppercase tracking-wide text-emerald-100 transition hover:bg-emerald-400/10"
                       style={{ borderColor: "var(--ch-border)" }}
-                      title="Inserir regra de venda do item"
-                      onClick={() => onInsertTag(buildSalesCatalogPromptRule(item))}
+                      title="Copiar tag do produto"
+                      onClick={() => onCopyCatalogItemTag(item)}
                     >
-                      <Wand2 className="h-3.5 w-3.5" />
-                      Regra
+                      <Copy className="h-3.5 w-3.5" />
+                      Copiar
                     </button>
                   </div>
                 </div>
               ))}
             </div>
           ) : (
-            <div className="mt-3 rounded-lg border border-dashed px-3 py-4 text-center text-[12px] leading-5 text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
-              Nenhum item cadastrado em Catalogo de Vendas.
+            <div className="mt-3 rounded-lg border border-dashed px-3 py-5 text-center text-[12px] leading-5 text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
+              <p>Nenhum item cadastrado em Catalogo de Vendas.</p>
+              <Link
+                href="/dashboard/links"
+                className="mt-3 inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10"
+                style={{ borderColor: "var(--ch-border)" }}
+              >
+                <Package className="h-3.5 w-3.5" />
+                Cadastrar ou importar produtos
+              </Link>
             </div>
           )}
         </div>
-        <div className="mt-4 grid gap-2 md:grid-cols-[minmax(0,1fr)_auto]">
-          <label className="block">
-            <span className="mb-2 flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
-              Link do produto
-              <InfoHint text="A IA le a pagina publica informada e usa os detalhes para montar um prompt inicial." />
-            </span>
-            <div className="relative">
-              <Link2 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-cyan-300" />
-              <input
-                value={productUrl}
-                onChange={(event) => onProductUrlChange(event.target.value)}
-                className="h-11 w-full rounded-lg border bg-transparent pl-10 pr-3 text-[12px] outline-none"
-                placeholder="https://site.com/produto"
-                style={{ borderColor: "var(--ch-border)" }}
-              />
-            </div>
-          </label>
-          <ActionButton
-            icon={Wand2}
-            label="Criar prompt com IA"
-            description="Gera um prompt inicial usando o link e as notas informadas."
-            disabled={!productUrl.trim() && !notes.trim()}
-            loading={generatingPrompt}
-            onClick={onGenerate}
-          />
-        </div>
-        <textarea
-          value={notes}
-          onChange={(event) => onNotesChange(event.target.value.slice(0, 1200))}
-          className="mt-3 min-h-20 w-full resize-y rounded-lg border bg-transparent px-3 py-2 text-[12px] leading-5 outline-none"
-          placeholder="Notas do produto, regras de atendimento, publico ou detalhes importantes."
-          style={{ borderColor: "var(--ch-border)" }}
-        />
       </div>
 
       <div className="rounded-xl border p-3" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
-            Links e botoes
-            <InfoHint text="Cadastre links rastreados e controle se eles podem ser enviados como botoes no WhatsApp." />
+            Links e botoes gerais
+            <InfoHint text="Use para links que nao sao produtos, como agenda, suporte, site institucional ou orcamento. Produto com preco/link externo deve ser cadastrado em Catalogo de Vendas." />
           </p>
         </div>
 
@@ -4353,7 +4291,7 @@ function PromptToolsPanel({
           <ToggleTile
             icon={MessageSquare}
             label="Enviar como botao"
-            description="Ligado: links do catalogo podem virar botoes no WhatsApp. Desligado: os links continuam salvos, mas nao viram botao."
+            description="Ligado: links gerais podem virar botoes no WhatsApp. Desligado: os links continuam salvos, mas nao viram botao."
             checked={linkButtonsEnabled}
             onChange={() => onLinkButtonsEnabledChange(!linkButtonsEnabled)}
           />
@@ -4373,7 +4311,7 @@ function PromptToolsPanel({
           <label className="block">
             <span className="mb-2 flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
               URL de destino
-              <InfoHint text="O lead recebe um link rastreado. O destino real recebe UTM para separar cliques do agente WhatsApp." />
+              <InfoHint text="Destino geral rastreado. Para produto, cadastre em Catalogo de Vendas e use a tag do produto." />
             </span>
             <div className="relative">
               <Link2 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-cyan-300" />
@@ -4381,7 +4319,7 @@ function PromptToolsPanel({
                 value={linkButtonUrl}
                 onChange={(event) => onLinkButtonUrlChange(event.target.value.slice(0, 500))}
                 className="h-11 w-full rounded-lg border bg-transparent pl-10 pr-3 text-[12px] outline-none"
-                placeholder="https://site.com/produto"
+                placeholder="https://site.com/pagina"
                 style={{ borderColor: "var(--ch-border)" }}
               />
             </div>
@@ -4389,7 +4327,7 @@ function PromptToolsPanel({
           <ActionButton
             icon={Plus}
             label="Criar botao"
-            description="Salva o link rastreado no catalogo de botoes."
+            description="Salva o link rastreado na biblioteca de botoes gerais."
             disabled={!linkButtonLabel.trim() || !linkButtonUrl.trim()}
             loading={creatingLinkButton}
             onClick={onCreateLinkButton}
@@ -4398,7 +4336,7 @@ function PromptToolsPanel({
           <div className="rounded-lg border p-2.5" style={{ background: "var(--ch-surface)", borderColor: "var(--ch-border)" }}>
             <div className="flex items-center justify-between gap-2">
               <p className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
-                Catalogo de botoes
+                Biblioteca de botoes
                 <InfoHint text="Use a tag quando quiser orientar o agente a enviar um botao especifico no prompt." />
               </p>
               <span className="rounded-full border px-2 py-1 font-mono text-[9px] uppercase tracking-widest text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
@@ -4472,54 +4410,6 @@ function PromptToolsPanel({
   );
 }
 
-function buildSalesCatalogPromptRule(item: ClientSalesCatalogItem) {
-  const requiredTag = item.salesDestination === "external_site" && item.externalLinkButtonTag ? item.externalLinkButtonTag : item.tag;
-  const lines = [
-    "",
-    `REGRA DE VENDA DO CATALOGO: ${item.title}`,
-    `- Tag obrigatoria para enviar este item no WhatsApp: ${requiredTag}`,
-    `- Destino da venda: ${formatSalesCatalogSalesDestination(item.salesDestination)}.`,
-    "- Quando o lead pedir este produto, demonstrar interesse claro ou aceitar a oferta, responda naturalmente e inclua a tag acima na mesma resposta.",
-    "- Nao prometa que vai enviar foto, video, PDF, catalogo, preco ou proposta sem incluir a tag correspondente na mesma resposta.",
-    "- Se o lead pedir algo generico, ofereca este item somente quando ele combinar com a necessidade declarada.",
-  ];
-
-  if (item.salesDestination === "external_site") {
-    lines.push("- Este produto vende no site externo; envie o botao cadastrado e nao tente gerar checkout ConnectyHub.");
-  }
-
-  appendSalesCatalogPromptRuleLine(lines, "Categoria", item.category);
-  appendSalesCatalogPromptRuleLine(lines, "Preco base", item.price ? `${item.price} ${item.currency}` : null);
-  appendSalesCatalogPromptRuleLine(lines, "Oferta", formatSalesCatalogPromptOffer(item));
-  appendSalesCatalogPromptRuleLine(lines, "Variacoes", formatSalesCatalogPromptAttributes(item));
-  appendSalesCatalogPromptRuleLine(lines, "Estoque", formatSalesCatalogStockStatus(item.inventory.status));
-  appendSalesCatalogPromptRuleLine(lines, "Quantidade", item.inventory.quantity !== null ? `${item.inventory.quantity} unidade(s)` : null);
-  appendSalesCatalogPromptRuleLine(lines, "Entrega", formatSalesCatalogFulfillmentMode(item.fulfillment.mode));
-  appendSalesCatalogPromptRuleLine(lines, "Prazo/duracao", item.fulfillment.serviceDuration);
-  appendSalesCatalogPromptRuleLine(lines, "Frete", formatSalesCatalogPromptShipping(item));
-  appendSalesCatalogPromptRuleLine(lines, "Midias", item.media.length > 0 ? `${item.media.length} arquivo(s) cadastrado(s)` : null);
-
-  if (item.description) {
-    lines.push(`- Descricao comercial: ${buildCompactPromptText(item.description, 360)}`);
-  }
-
-  if (item.offer.callToAction) {
-    lines.push(`- Chamada sugerida: ${item.offer.callToAction}`);
-  }
-
-  if (item.inventory.status === "out_of_stock" && !item.inventory.allowBackorder) {
-    lines.push("- Se estiver esgotado, nao tente fechar pedido. Ofereca alternativa ou encaminhe para humano.");
-  }
-
-  return lines.join("\n");
-}
-
-function appendSalesCatalogPromptRuleLine(lines: string[], label: string, value: string | null) {
-  if (value) {
-    lines.push(`- ${label}: ${value}`);
-  }
-}
-
 function formatSalesCatalogPromptItemMeta(item: ClientSalesCatalogItem) {
   return [
     item.category,
@@ -4532,51 +4422,6 @@ function formatSalesCatalogPromptItemMeta(item: ClientSalesCatalogItem) {
 function formatSalesCatalogPromptPrice(item: ClientSalesCatalogItem) {
   if (item.offer.salePrice) return `Oferta ${item.offer.salePrice}`;
   return item.price;
-}
-
-function formatSalesCatalogPromptOffer(item: ClientSalesCatalogItem) {
-  const parts = [
-    item.offer.salePrice ? `${item.offer.salePrice} ${item.currency}` : null,
-    item.offer.couponCode ? `cupom ${item.offer.couponCode}` : null,
-    item.offer.couponDescription,
-    item.offer.notes,
-  ].filter(Boolean);
-
-  return parts.length > 0 ? parts.join(" / ") : null;
-}
-
-function formatSalesCatalogPromptAttributes(item: ClientSalesCatalogItem) {
-  if (item.attributes.length === 0) return null;
-
-  return item.attributes
-    .map((attribute) => `${attribute.name}: ${attribute.values.join(", ")}`)
-    .join("; ");
-}
-
-function formatSalesCatalogPromptShipping(item: ClientSalesCatalogItem) {
-  const parts = [
-    item.shipping.profile === "free" ? "frete gratis" : item.shipping.profile === "custom" ? "combinar no atendimento" : null,
-    item.shipping.weightGrams ? `${item.shipping.weightGrams} g` : null,
-    formatSalesCatalogPromptDimensions(item),
-    item.shipping.notes,
-  ].filter(Boolean);
-
-  return parts.length > 0 ? parts.join(" / ") : null;
-}
-
-function formatSalesCatalogPromptDimensions(item: ClientSalesCatalogItem) {
-  const dimensions = [
-    item.shipping.dimensions.lengthCm ? `${item.shipping.dimensions.lengthCm}C` : null,
-    item.shipping.dimensions.widthCm ? `${item.shipping.dimensions.widthCm}L` : null,
-    item.shipping.dimensions.heightCm ? `${item.shipping.dimensions.heightCm}A` : null,
-  ].filter(Boolean);
-
-  return dimensions.length > 0 ? `${dimensions.join(" x ")} cm` : null;
-}
-
-function buildCompactPromptText(value: string, maxLength: number) {
-  const cleaned = value.replace(/\s+/g, " ").trim();
-  return cleaned.length > maxLength ? `${cleaned.slice(0, maxLength - 3)}...` : cleaned;
 }
 
 function KnowledgeFilesPanel({
