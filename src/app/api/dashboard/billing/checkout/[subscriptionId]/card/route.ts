@@ -194,6 +194,7 @@ export async function POST(
       status: paymentData.status,
       providerStatus: paymentData.providerStatus,
       providerStatusDetail: paymentData.providerStatusDetail,
+      providerPaymentId: paymentData.providerPaymentId,
       threeDSChallenge: paymentData.threeDSChallenge,
       deviceSessionSent: Boolean(deviceSessionId),
       checkoutUrl: cart.checkoutPath,

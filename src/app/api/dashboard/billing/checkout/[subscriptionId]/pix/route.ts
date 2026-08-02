@@ -172,6 +172,7 @@ export async function POST(
       status: paymentData.status,
       providerStatus: paymentData.providerStatus,
       providerStatusDetail: paymentData.providerStatusDetail,
+      providerPaymentId: paymentData.providerPaymentId,
       pixQrCode: paymentData.pixQrCode,
       pixQrCodeBase64: paymentData.pixQrCodeBase64,
       pixTicketUrl: paymentData.pixTicketUrl,

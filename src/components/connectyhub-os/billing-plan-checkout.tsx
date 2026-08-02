@@ -5,7 +5,10 @@ import { Copy, CreditCard, Loader2, QrCode, Sparkles } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { MercadoPagoCardBrick } from "@/components/checkout/mercado-pago-card-brick";
+import {
+  MercadoPagoCardBrick,
+  type CardPaymentStatusChange,
+} from "@/components/checkout/mercado-pago-card-brick";
 import {
   type BillingCheckoutBump,
   type BillingCheckoutBumpCode,
@@ -21,6 +24,7 @@ type BillingPlanCheckoutProps = {
   payerEmail: string | null;
   subscriptionStatus: string;
   paymentStatus: string;
+  initialProviderPaymentId: string | null;
   cardPublicKey: string | null;
   availableBumps: BillingCheckoutBump[];
   initialSelectedBumpCodes: BillingCheckoutBumpCode[];
@@ -65,6 +69,7 @@ export function BillingPlanCheckout({
   payerEmail,
   subscriptionStatus,
   paymentStatus,
+  initialProviderPaymentId,
   cardPublicKey,
   availableBumps,
   initialSelectedBumpCodes,
@@ -76,8 +81,12 @@ export function BillingPlanCheckout({
   const approvalRefreshQueuedRef = useRef(false);
   const [subscriptionStatusOverride, setSubscriptionStatusOverride] = useState<string | null>(null);
   const [paymentStatusOverride, setPaymentStatusOverride] = useState<string | null>(null);
+  const [providerPaymentId, setProviderPaymentId] = useState<string | null>(initialProviderPaymentId);
+  const [cardStatusPolling, setCardStatusPolling] = useState(
+    Boolean(initialProviderPaymentId) && ["pending", "in_process"].includes(paymentStatus) && !initialPixQrCode,
+  );
   const [selectedBumpCodes, setSelectedBumpCodes] = useState<BillingCheckoutBumpCode[]>(initialSelectedBumpCodes);
-  const [method, setMethod] = useState<PaymentMethod>(cardPublicKey ? "card" : "pix");
+  const [method, setMethod] = useState<PaymentMethod>(initialPixQrCode ? "pix" : cardPublicKey ? "card" : "pix");
   const [pix, setPix] = useState<PixState>({
     qrCode: initialPixQrCode,
     qrCodeBase64: initialPixQrCodeBase64,
@@ -94,6 +103,10 @@ export function BillingPlanCheckout({
     && ["pending", "rejected", "in_process"].includes(currentPaymentStatus);
   const paymentRejected = currentPaymentStatus === "rejected";
   const checkoutConfirmed = currentSubscriptionStatus === "active" || currentPaymentStatus === "approved";
+  const shouldPollExistingProviderPayment = Boolean(providerPaymentId)
+    && ["pending", "in_process"].includes(currentPaymentStatus)
+    && !checkoutConfirmed
+    && !paymentRejected;
   const selectedBumps = useMemo(
     () => availableBumps.filter((bump) => selectedBumpCodes.includes(bump.code)),
     [availableBumps, selectedBumpCodes],
@@ -127,7 +140,7 @@ export function BillingPlanCheckout({
       const data = await response.json().catch(() => null) as CheckoutStatusResponse | null;
 
       if (!response.ok) {
-        throw new Error(data?.error ?? "Nao foi possivel consultar o Pix.");
+        throw new Error(data?.error ?? "Nao foi possivel consultar o pagamento.");
       }
 
       if (data?.subscriptionStatus) {
@@ -136,6 +149,10 @@ export function BillingPlanCheckout({
 
       if (data?.paymentStatus) {
         setPaymentStatusOverride(data.paymentStatus);
+      }
+
+      if (data?.providerPaymentId) {
+        setProviderPaymentId(data.providerPaymentId);
       }
 
       setPix((current) => ({
@@ -149,8 +166,13 @@ export function BillingPlanCheckout({
           tone: "success",
           message: "Pagamento confirmado. Plano ativo e creditos liberados.",
         });
+        setCardStatusPolling(false);
         queueCheckoutRefresh();
         return;
+      }
+
+      if (data?.paymentStatus === "rejected") {
+        setCardStatusPolling(false);
       }
 
       if (manual) {
@@ -158,14 +180,14 @@ export function BillingPlanCheckout({
           tone: "warning",
           message: data?.providerStatus
             ? `Mercado Pago retornou ${data.providerStatus}. Ainda estamos aguardando a confirmacao.`
-            : "Pix ainda aguardando confirmacao.",
+            : "Pagamento ainda aguardando confirmacao.",
         });
       }
     } catch (error) {
       if (manual) {
         setNotice({
           tone: "error",
-          message: error instanceof Error ? error.message : "Nao foi possivel consultar o Pix.",
+          message: error instanceof Error ? error.message : "Nao foi possivel consultar o pagamento.",
         });
       }
     } finally {
@@ -176,20 +198,73 @@ export function BillingPlanCheckout({
   }, [queueCheckoutRefresh, subscriptionId]);
 
   useEffect(() => {
-    if (!canPay || method !== "pix" || !pix.qrCode) return;
+    const shouldPollPixStatus = method === "pix" && Boolean(pix.qrCode);
+    const shouldPollCardStatus = cardStatusPolling || shouldPollExistingProviderPayment;
+
+    if (!canPay || (!shouldPollPixStatus && !shouldPollCardStatus)) return;
 
     const firstCheck = window.setTimeout(() => {
       void checkPaymentStatus();
-    }, 3000);
+    }, shouldPollCardStatus ? 2500 : 3000);
     const interval = window.setInterval(() => {
       void checkPaymentStatus();
-    }, 8000);
+    }, shouldPollCardStatus ? 6000 : 8000);
 
     return () => {
       window.clearTimeout(firstCheck);
       window.clearInterval(interval);
     };
-  }, [canPay, checkPaymentStatus, method, pix.qrCode]);
+  }, [canPay, cardStatusPolling, checkPaymentStatus, method, pix.qrCode, shouldPollExistingProviderPayment]);
+
+  const handleCardPaymentStatusChange = useCallback((result: CardPaymentStatusChange) => {
+    if (result.providerPaymentId) {
+      setProviderPaymentId(result.providerPaymentId);
+    }
+
+    if (result.status) {
+      setPaymentStatusOverride(result.status);
+    }
+
+    if (result.approved) {
+      setCardStatusPolling(false);
+      setNotice({
+        tone: "success",
+        message: "Pagamento confirmado. Plano ativo e creditos liberados.",
+      });
+      queueCheckoutRefresh();
+      return;
+    }
+
+    if (result.rejected) {
+      setCardStatusPolling(false);
+      setNotice({
+        tone: "error",
+        message: "Pagamento recusado. Nenhuma cobranca foi concluida. Confira os dados do cartao, tente outro cartao ou use Pix.",
+      });
+      return;
+    }
+
+    setCardStatusPolling(true);
+    setNotice({
+      tone: "warning",
+      message: result.hasThreeDSChallenge
+        ? "Confirme sua identidade no banco. Depois disso, vamos atualizar o checkout automaticamente."
+        : "Pagamento enviado. Estamos consultando a confirmacao do Mercado Pago automaticamente.",
+    });
+
+    window.setTimeout(() => {
+      void checkPaymentStatus();
+    }, 2500);
+  }, [checkPaymentStatus, queueCheckoutRefresh]);
+
+  const handleCardThreeDSComplete = useCallback(() => {
+    setCardStatusPolling(true);
+    setNotice({
+      tone: "warning",
+      message: "Autenticacao concluida. Estamos verificando o status do pagamento.",
+    });
+    void checkPaymentStatus();
+  }, [checkPaymentStatus]);
 
   function toggleBump(code: BillingCheckoutBumpCode) {
     const next = selectedBumpCodes.includes(code)
@@ -198,6 +273,8 @@ export function BillingPlanCheckout({
 
     setSelectedBumpCodes(next);
     setPix({ qrCode: null, qrCodeBase64: null, ticketUrl: null });
+    setProviderPaymentId(null);
+    setCardStatusPolling(false);
     setNotice(null);
     void syncCartSelection(next);
   }
@@ -246,6 +323,7 @@ export function BillingPlanCheckout({
         pixQrCodeBase64?: string | null;
         pixTicketUrl?: string | null;
         status?: string;
+        providerPaymentId?: string | null;
       } | null;
 
       if (!response.ok) {
@@ -259,6 +337,9 @@ export function BillingPlanCheckout({
       });
       if (data?.status) {
         setPaymentStatusOverride(data.status);
+      }
+      if (data?.providerPaymentId) {
+        setProviderPaymentId(data.providerPaymentId);
       }
       setNotice({
         tone: data?.status === "approved" ? "success" : "warning",
@@ -453,6 +534,8 @@ export function BillingPlanCheckout({
                 successMessage="Pagamento aprovado. Seu plano sera ativado agora."
                 pendingMessage="Pagamento enviado. Assim que confirmar, os creditos serao liberados."
                 rejectedMessage="Pagamento recusado. Nenhuma cobranca foi concluida. Confira os dados do cartao, tente outro cartao ou use Pix."
+                onPaymentStatusChange={handleCardPaymentStatusChange}
+                onThreeDSComplete={handleCardThreeDSComplete}
               />
             ) : (
               <PixPanel

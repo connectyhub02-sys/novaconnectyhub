@@ -56,12 +56,26 @@ type CardBrickProps = {
   successMessage?: string;
   pendingMessage?: string;
   rejectedMessage?: string;
+  onPaymentStatusChange?: (result: CardPaymentStatusChange) => void;
+  onThreeDSComplete?: () => void;
 };
 
 type ThreeDSChallenge = {
   externalResourceUrl: string;
   creq: string;
   checkoutUrl: string | null;
+};
+
+export type CardPaymentStatusChange = {
+  status: string | null;
+  providerStatus: string | null;
+  providerStatusDetail: string | null;
+  providerPaymentId: string | null;
+  checkoutUrl: string | null;
+  approved: boolean;
+  rejected: boolean;
+  pending: boolean;
+  hasThreeDSChallenge: boolean;
 };
 
 let mercadoPagoSdkPromise: Promise<void> | null = null;
@@ -100,6 +114,8 @@ export function MercadoPagoCardBrick({
   successMessage = "Pagamento aprovado. Vamos atualizar seu pedido.",
   pendingMessage = "Pagamento enviado. A confirmacao pode levar alguns instantes.",
   rejectedMessage = "Pagamento recusado. Nenhuma cobranca foi concluida. Confira os dados do cartao ou tente outro meio de pagamento.",
+  onPaymentStatusChange,
+  onThreeDSComplete,
 }: CardBrickProps) {
   const containerId = useMemo(() => `mp-card-${sessionId.replace(/[^a-zA-Z0-9_-]/g, "")}`, [sessionId]);
   const controllerRef = useRef<MercadoPagoBrickController | null>(null);
@@ -124,6 +140,7 @@ export function MercadoPagoCardBrick({
         tone: "warning",
         message: "Autenticacao concluida. Estamos verificando o status do pagamento.",
       });
+      onThreeDSComplete?.();
 
       window.setTimeout(() => {
         if (activeChallenge.checkoutUrl) {
@@ -137,7 +154,7 @@ export function MercadoPagoCardBrick({
     window.addEventListener("message", handleThreeDSMessage);
 
     return () => window.removeEventListener("message", handleThreeDSMessage);
-  }, [threeDSChallenge]);
+  }, [onThreeDSComplete, threeDSChallenge]);
 
   useEffect(() => {
     let mounted = true;
@@ -204,6 +221,7 @@ export function MercadoPagoCardBrick({
                 status?: string;
                 providerStatus?: string;
                 providerStatusDetail?: string | null;
+                providerPaymentId?: string | null;
                 threeDSChallenge?: {
                   externalResourceUrl?: string;
                   creq?: string;
@@ -219,6 +237,18 @@ export function MercadoPagoCardBrick({
               const approved = paymentStatus === "approved" || providerStatus === "approved";
               const rejected = isRejectedPaymentStatus(paymentStatus) || isRejectedPaymentStatus(providerStatus);
               const challenge = readThreeDSChallenge(data?.threeDSChallenge, data?.checkoutUrl ?? null);
+
+              onPaymentStatusChange?.({
+                status: data?.status ?? null,
+                providerStatus: data?.providerStatus ?? null,
+                providerStatusDetail: data?.providerStatusDetail ?? null,
+                providerPaymentId: data?.providerPaymentId ?? null,
+                checkoutUrl: data?.checkoutUrl ?? null,
+                approved,
+                rejected,
+                pending: !approved && !rejected,
+                hasThreeDSChallenge: Boolean(challenge),
+              });
 
               if (challenge) {
                 setThreeDSChallenge(challenge);
@@ -272,7 +302,7 @@ export function MercadoPagoCardBrick({
       controllerRef.current?.unmount();
       controllerRef.current = null;
     };
-  }, [amount, containerId, extraPayload, payerEmail, pendingMessage, publicKey, rejectedMessage, sessionId, submitPath, successMessage]);
+  }, [amount, containerId, extraPayload, onPaymentStatusChange, payerEmail, pendingMessage, publicKey, rejectedMessage, sessionId, submitPath, successMessage]);
 
   return (
     <div className="mt-6 rounded-[8px] border border-slate-700 bg-slate-900/70 p-4">

@@ -116,6 +116,7 @@ export default async function DashboardBillingCheckoutPage({
             payerEmail={intent.subscription.payer_email}
             subscriptionStatus={intent.subscription.status}
             paymentStatus={intent.payment.status}
+            initialProviderPaymentId={intent.payment.provider_payment_id}
             cardPublicKey={publicKey}
             availableBumps={availableBumps}
             initialSelectedBumpCodes={readSelectedBillingCheckoutBumpCodesForCatalog(intent, availableBumps)}
