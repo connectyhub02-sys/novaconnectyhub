@@ -6,6 +6,7 @@ import { requireClientCompanyAccess, listClientCompanies } from "@/lib/client-os
 import { createServiceClient } from "@/lib/supabase/service";
 import {
   buildSalesCatalogContent,
+  createDefaultSalesCatalogOrderBumps,
   createDefaultSalesCatalogShippingServices,
   createDefaultSalesCatalogCommerceSettings,
   defaultSalesCatalogShippingRules,
@@ -57,6 +58,7 @@ import {
   type SalesCatalogShippingWeightTier,
   type SalesCatalogStockStatus,
   type SalesCatalogWhatsAppMessageTemplates,
+  type SalesCatalogOrderBumpSettings,
   type SalesCatalogSource,
   type SalesCatalogSalesDestination,
   type SalesCatalogSku,
@@ -1010,6 +1012,7 @@ export function mapSalesCatalogSettings(row: SalesCatalogMemoryRow): ClientSales
     orderPolicy: readOrderPolicy(metadata.order_policy, commerceDefaults.orderPolicy),
     leadDataPolicy: readLeadDataPolicy(metadata.lead_data_policy, commerceDefaults.leadDataPolicy),
     messageTemplates: readMessageTemplates(metadata.message_templates, commerceDefaults.messageTemplates),
+    orderBumps: readOrderBumps(metadata.order_bumps ?? metadata.orderBumps, createDefaultSalesCatalogOrderBumps()),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -1706,8 +1709,39 @@ function readMessageTemplates(value: unknown, fallback: SalesCatalogWhatsAppMess
     orderSummary: readString(record.order_summary) ?? readString(record.orderSummary) ?? fallback.orderSummary,
     paymentRequest: readString(record.payment_request) ?? readString(record.paymentRequest) ?? fallback.paymentRequest,
     paymentConfirmed: readString(record.payment_confirmed) ?? readString(record.paymentConfirmed) ?? fallback.paymentConfirmed,
+    paymentRejected: readString(record.payment_rejected) ?? readString(record.paymentRejected) ?? fallback.paymentRejected,
+    paymentRefunded: readString(record.payment_refunded) ?? readString(record.paymentRefunded) ?? fallback.paymentRefunded,
     unavailableItem: readString(record.unavailable_item) ?? readString(record.unavailableItem) ?? fallback.unavailableItem,
     humanHandoff: readString(record.human_handoff) ?? readString(record.humanHandoff) ?? fallback.humanHandoff,
+  };
+}
+
+function readOrderBumps(value: unknown, fallback: SalesCatalogOrderBumpSettings): SalesCatalogOrderBumpSettings {
+  const record = readRecord(value);
+  if (!record) return fallback;
+
+  const itemsSource = Array.isArray(record.items) ? record.items : [];
+  const items = itemsSource
+    .map((item): SalesCatalogOrderBumpSettings["items"][number] | null => {
+      const itemRecord = readRecord(item);
+      if (!itemRecord) return null;
+
+      const productId = readString(itemRecord.product_id) ?? readString(itemRecord.productId);
+      if (!productId) return null;
+
+      return {
+        productId,
+        active: readNullableBoolean(itemRecord.active) ?? true,
+        badge: readString(itemRecord.badge),
+        title: readString(itemRecord.title),
+        description: readString(itemRecord.description),
+      };
+    })
+    .filter((item): item is SalesCatalogOrderBumpSettings["items"][number] => Boolean(item));
+
+  return {
+    enabled: readNullableBoolean(record.enabled) ?? fallback.enabled,
+    items,
   };
 }
 

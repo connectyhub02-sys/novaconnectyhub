@@ -12,6 +12,7 @@ import {
   normalizeCurrencyAmount,
 } from "@/lib/sales-catalog/mercado-pago";
 import { resolveSalesCatalogOrderPaymentOwner } from "@/lib/platform-product-sales";
+import { applySalesCatalogCheckoutOrderBumps } from "@/lib/sales-catalog/checkout-order-bumps";
 import { handleSalesCatalogApprovedPayment } from "@/lib/sales-catalog/post-payment";
 import { createServiceClient } from "@/lib/supabase/service";
 
@@ -53,9 +54,9 @@ type OrderItemRow = {
   id: string;
   title: string;
   quantity: number | null;
-  unit_price: string | null;
-  sale_price: string | null;
-  total: string | null;
+  unit_price: string | number | null;
+  sale_price: string | number | null;
+  total: string | number | null;
   sku_code: string | null;
 };
 
@@ -87,16 +88,12 @@ export async function POST(
     ?? readString(body.device_id)
     ?? readString(body.MP_DEVICE_SESSION_ID)
     ?? readString(request.headers.get("x-meli-session-id"));
+  const selectedOrderBumpIds = readStringList(body.selectedOrderBumpIds, []);
   const frontendAmount = normalizeCurrencyAmount(readString(formData.transaction_amount) ?? readNumber(formData.transaction_amount));
   const sessionAmount = normalizeCurrencyAmount(sourceSession.amount);
-  const amount = sessionAmount ?? frontendAmount;
 
-  if (!token || !paymentMethodId || !amount || !payerEmail) {
+  if (!token || !paymentMethodId || !payerEmail) {
     return NextResponse.json({ error: "Dados de cartao incompletos." }, { status: 400 });
-  }
-
-  if (frontendAmount && Math.abs(frontendAmount - amount) > 0.009) {
-    return NextResponse.json({ error: "Valor recebido nao confere com a sessao." }, { status: 400 });
   }
 
   const { data: order, error: orderError } = await client
@@ -116,10 +113,39 @@ export async function POST(
     .eq("order_id", order.id)
     .eq("organization_id", sourceSession.organization_id)
     .order("created_at", { ascending: true });
-  const items = (itemRows ?? []) as OrderItemRow[];
+  let items = (itemRows ?? []) as OrderItemRow[];
   let cardSessionId: string | null = null;
 
   try {
+    const orderBumpApplication = await applySalesCatalogCheckoutOrderBumps({
+      client,
+      organizationId: sourceSession.organization_id,
+      orderId: order.id,
+      selectedProductIds: selectedOrderBumpIds,
+    });
+    items = orderBumpApplication.items.map((item) => ({
+      id: item.id,
+      title: item.title,
+      quantity: item.quantity,
+      unit_price: item.unit_price,
+      sale_price: item.sale_price,
+      total: item.total,
+      sku_code: item.sku_code,
+    }));
+    const amount = orderBumpApplication.totalAmount
+      ?? sessionAmount
+      ?? frontendAmount
+      ?? normalizeCurrencyAmount(order.total)
+      ?? normalizeCurrencyAmount(order.subtotal);
+
+    if (!amount) {
+      return NextResponse.json({ error: "Informe o total do pedido antes de pagar." }, { status: 400 });
+    }
+
+    if (frontendAmount && Math.abs(frontendAmount - amount) > 0.009) {
+      return NextResponse.json({ error: "Valor recebido nao confere com o pedido atualizado." }, { status: 400 });
+    }
+
     const sourceMetadata = readRecord(sourceSession.metadata) ?? {};
     const resolvedOwner = await resolveSalesCatalogOrderPaymentOwner({
       client,
@@ -200,6 +226,9 @@ export async function POST(
         metadata: {
           created_from: "checkout_card_brick",
           source_payment_session_id: sourceSession.id,
+          selected_order_bump_product_ids: selectedOrderBumpIds,
+          applied_order_bump_product_ids: orderBumpApplication.appliedBumps.map((item) => item.productId),
+          added_order_bump_product_ids: orderBumpApplication.addedBumps.map((item) => item.productId),
           payment_method_id: paymentMethodId,
           installments,
           mercado_pago_device_session_sent: Boolean(deviceSessionId),
@@ -283,7 +312,7 @@ export async function POST(
 
     await client
       .from("sales_catalog_orders")
-      .update(buildOrderPatch(paymentData.status, cardSessionId, paymentData.providerPaymentId, readRecord(order.metadata) ?? {}, {
+      .update(buildOrderPatch(paymentData.status, cardSessionId, paymentData.providerPaymentId, readRecord(orderBumpApplication.order.metadata) ?? readRecord(order.metadata) ?? {}, {
         commercialFlowType,
         revenueOwnerType,
         containsPlatformProducts: connectyHubOwned,
@@ -322,6 +351,9 @@ export async function POST(
         provider_payment_id: paymentData.providerPaymentId,
         provider_status: paymentData.providerStatus,
         status: paymentData.status,
+        selected_order_bump_product_ids: selectedOrderBumpIds,
+        applied_order_bump_product_ids: orderBumpApplication.appliedBumps.map((item) => item.productId),
+        added_order_bump_product_ids: orderBumpApplication.addedBumps.map((item) => item.productId),
         payment_owner: connectyHubOwned ? "connectyhub" : "seller",
         commercial_flow_type: commercialFlowType,
         revenue_owner_type: revenueOwnerType,

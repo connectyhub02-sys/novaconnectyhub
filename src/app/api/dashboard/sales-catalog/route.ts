@@ -23,6 +23,7 @@ import {
   brazilianStates,
   buildSalesCatalogContent,
   createDefaultSalesCatalogCommerceSettings,
+  createDefaultSalesCatalogOrderBumps,
   createSalesCatalogTag,
   defaultSalesCatalogShippingRules,
   createDefaultSalesCatalogShippingServices,
@@ -59,6 +60,7 @@ import {
   type SalesCatalogShippingWeightTier,
   type SalesCatalogStockStatus,
   type SalesCatalogWhatsAppMessageTemplates,
+  type SalesCatalogOrderBumpSettings,
   type SalesCatalogSku,
   type SalesCatalogSkuStatus,
 } from "@/lib/sales-catalog/shared";
@@ -669,6 +671,7 @@ async function saveCatalogSettings(input: {
   const orderPolicy = normalizeOrderPolicy(input.body?.orderPolicy, commerceDefaults.orderPolicy);
   const leadDataPolicy = normalizeLeadDataPolicy(input.body?.leadDataPolicy, commerceDefaults.leadDataPolicy);
   const messageTemplates = normalizeMessageTemplates(input.body?.messageTemplates, commerceDefaults.messageTemplates);
+  const orderBumps = normalizeOrderBumps(input.body?.orderBumps, createDefaultSalesCatalogOrderBumps());
   const enabledPayments = paymentMethods.filter((method) => method.enabled);
   const now = new Date().toISOString();
   const metadata = {
@@ -682,6 +685,7 @@ async function saveCatalogSettings(input: {
     order_policy: serializeOrderPolicy(orderPolicy),
     lead_data_policy: serializeLeadDataPolicy(leadDataPolicy),
     message_templates: serializeMessageTemplates(messageTemplates),
+    order_bumps: serializeOrderBumps(orderBumps),
     updated_by: input.userId,
     updated_from: "sales_catalog_setup",
   };
@@ -698,6 +702,7 @@ async function saveCatalogSettings(input: {
     `CEP antes do frete: ${orderPolicy.askCepBeforeQuote ? "sim" : "nao"}`,
     leadDataPolicy.requiredFields.length ? `Dados do lead: ${leadDataPolicy.requiredFields.join(", ")}` : "",
     `Mensagem de resumo: ${messageTemplates.orderSummary}`,
+    orderBumps.enabled && orderBumps.items.length ? `Order bumps: ${orderBumps.items.length} oferta(s)` : "Order bumps: inativo",
   ].filter(Boolean).join("\n");
   const { data: existing, error: existingError } = await input.client
     .from("intelligence_memory")
@@ -2367,8 +2372,41 @@ function normalizeMessageTemplates(
     orderSummary: normalizeOptionalText(readFormString(record.orderSummary ?? record.order_summary), 360) ?? fallback.orderSummary,
     paymentRequest: normalizeOptionalText(readFormString(record.paymentRequest ?? record.payment_request), 360) ?? fallback.paymentRequest,
     paymentConfirmed: normalizeOptionalText(readFormString(record.paymentConfirmed ?? record.payment_confirmed), 240) ?? fallback.paymentConfirmed,
+    paymentRejected: normalizeOptionalText(readFormString(record.paymentRejected ?? record.payment_rejected), 300) ?? fallback.paymentRejected,
+    paymentRefunded: normalizeOptionalText(readFormString(record.paymentRefunded ?? record.payment_refunded), 300) ?? fallback.paymentRefunded,
     unavailableItem: normalizeOptionalText(readFormString(record.unavailableItem ?? record.unavailable_item), 240) ?? fallback.unavailableItem,
     humanHandoff: normalizeOptionalText(readFormString(record.humanHandoff ?? record.human_handoff), 240) ?? fallback.humanHandoff,
+  };
+}
+
+function normalizeOrderBumps(value: unknown, fallback: SalesCatalogOrderBumpSettings): SalesCatalogOrderBumpSettings {
+  const record = readRecord(value);
+  if (!record) return fallback;
+
+  const seen = new Set<string>();
+  const items = (Array.isArray(record.items) ? record.items : [])
+    .map((item): SalesCatalogOrderBumpSettings["items"][number] | null => {
+      const itemRecord = readRecord(item);
+      if (!itemRecord) return null;
+
+      const productId = normalizeUuid(readFormString(itemRecord.productId ?? itemRecord.product_id));
+      if (!productId || seen.has(productId)) return null;
+      seen.add(productId);
+
+      return {
+        productId,
+        active: readBoolean(itemRecord.active) ?? true,
+        badge: normalizeOptionalText(readFormString(itemRecord.badge), 32),
+        title: normalizeOptionalText(readFormString(itemRecord.title), 80),
+        description: normalizeOptionalText(readFormString(itemRecord.description), 180),
+      };
+    })
+    .filter((item): item is SalesCatalogOrderBumpSettings["items"][number] => Boolean(item))
+    .slice(0, 12);
+
+  return {
+    enabled: readBoolean(record.enabled) ?? false,
+    items,
   };
 }
 
@@ -2421,8 +2459,23 @@ function serializeMessageTemplates(templates: SalesCatalogWhatsAppMessageTemplat
     order_summary: templates.orderSummary,
     payment_request: templates.paymentRequest,
     payment_confirmed: templates.paymentConfirmed,
+    payment_rejected: templates.paymentRejected,
+    payment_refunded: templates.paymentRefunded,
     unavailable_item: templates.unavailableItem,
     human_handoff: templates.humanHandoff,
+  };
+}
+
+function serializeOrderBumps(settings: SalesCatalogOrderBumpSettings) {
+  return {
+    enabled: settings.enabled,
+    items: settings.items.map((item) => ({
+      product_id: item.productId,
+      active: item.active,
+      badge: item.badge,
+      title: item.title,
+      description: item.description,
+    })),
   };
 }
 

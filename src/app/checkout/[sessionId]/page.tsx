@@ -2,8 +2,17 @@ import type { Metadata } from "next";
 import Script from "next/script";
 import type { ReactNode } from "react";
 import { CheckoutPaymentOptions } from "@/components/checkout/checkout-payment-options";
+import {
+  CheckoutPaymentFeedbackModal,
+  type CheckoutPaymentFeedbackPayload,
+  type CheckoutPaymentFeedbackStatus,
+} from "@/components/checkout/checkout-payment-feedback-modal";
 import { CheckoutStatusPoller } from "@/components/checkout/checkout-status-poller";
 import { createServiceClient } from "@/lib/supabase/service";
+import {
+  loadSalesCatalogCheckoutOrderBumps,
+  type SalesCatalogCheckoutOrderBump,
+} from "@/lib/sales-catalog/checkout-order-bumps";
 import { loadMercadoPagoPlatformBillingConfig } from "@/lib/sales-catalog/mercado-pago";
 import {
   formatSalesCatalogPaymentSessionStatus,
@@ -40,6 +49,7 @@ type CheckoutSessionRow = {
   pix_qr_code_base64: string | null;
   pix_ticket_url: string | null;
   provider_status: string | null;
+  provider_status_detail: string | null;
   failure_reason: string | null;
   paid_at: string | null;
   updated_at: string | null;
@@ -69,6 +79,7 @@ type CheckoutOrderRow = {
 
 type CheckoutOrderItemRow = {
   id: string;
+  catalog_item_id: string | null;
   title: string;
   sku_code: string | null;
   quantity: number | null;
@@ -115,7 +126,7 @@ export default async function CheckoutPage({
 }) {
   const { sessionId } = await params;
   const client = createServiceClient();
-  const { session, order, items, organization, integration, whatsapp } = await loadCheckoutData(client, sessionId);
+  const { session, order, items, organization, integration, whatsapp, orderBumps } = await loadCheckoutData(client, sessionId);
 
   if (!session || !order || !organization) {
     return (
@@ -156,6 +167,14 @@ export default async function CheckoutPage({
     organizationName: organization.name,
     orderId: order.id,
     status,
+  });
+  const paymentFeedback = buildCheckoutPaymentFeedback({
+    status,
+    session,
+    order,
+    items,
+    organizationName: organization.name,
+    amountLabel: amount,
   });
 
   return (
@@ -273,6 +292,15 @@ export default async function CheckoutPage({
               pixQrCode={session.pix_qr_code}
               pixQrCodeBase64={session.pix_qr_code_base64}
               pixTicketUrl={session.pix_ticket_url}
+              organizationName={organization.name}
+              orderCode={order.id.slice(0, 8).toUpperCase()}
+              items={items.map((item) => ({
+                title: item.title,
+                quantity: item.quantity ?? 1,
+                total: formatCurrency(item.total ?? item.sale_price ?? item.unit_price),
+              }))}
+              orderBumps={orderBumps}
+              whatsappHref={whatsappReturn?.href ?? null}
             />
           )}
 
@@ -281,6 +309,10 @@ export default async function CheckoutPage({
           </p>
 
           <CheckoutWhatsAppReturn link={whatsappReturn} />
+          <CheckoutPaymentFeedbackModal
+            feedback={paymentFeedback}
+            whatsappHref={whatsappReturn?.href ?? null}
+          />
         </aside>
       </main>
     </CheckoutShell>
@@ -398,7 +430,7 @@ function CheckoutWhatsAppReturn({ link }: { link: CheckoutWhatsappReturn | null 
 async function loadCheckoutData(client: ReturnType<typeof createServiceClient>, sessionId: string) {
   const { data: session } = await client
     .from("sales_catalog_payment_sessions")
-    .select("id, organization_id, order_id, integration_id, provider, method, status, amount, currency, payer_email, pix_qr_code, pix_qr_code_base64, pix_ticket_url, provider_status, failure_reason, paid_at, updated_at, payment_owner_type, commercial_flow_type, revenue_owner_type, commission_context, metadata")
+    .select("id, organization_id, order_id, integration_id, provider, method, status, amount, currency, payer_email, pix_qr_code, pix_qr_code_base64, pix_ticket_url, provider_status, provider_status_detail, failure_reason, paid_at, updated_at, payment_owner_type, commercial_flow_type, revenue_owner_type, commission_context, metadata")
     .eq("id", sessionId)
     .maybeSingle<CheckoutSessionRow>();
 
@@ -410,6 +442,7 @@ async function loadCheckoutData(client: ReturnType<typeof createServiceClient>, 
       organization: null,
       integration: null,
       whatsapp: null,
+      orderBumps: [] as SalesCatalogCheckoutOrderBump[],
     };
   }
 
@@ -422,7 +455,7 @@ async function loadCheckoutData(client: ReturnType<typeof createServiceClient>, 
       .maybeSingle<CheckoutOrderRow>(),
     client
       .from("sales_catalog_order_items")
-      .select("id, title, sku_code, quantity, unit_price, sale_price, total, attributes, fulfillment, product_origin_type, commercial_flow_type, commission_eligible, metadata")
+      .select("id, catalog_item_id, title, sku_code, quantity, unit_price, sale_price, total, attributes, fulfillment, product_origin_type, commercial_flow_type, commission_eligible, metadata")
       .eq("order_id", session.order_id)
       .eq("organization_id", session.organization_id)
       .order("created_at", { ascending: true }),
@@ -443,13 +476,25 @@ async function loadCheckoutData(client: ReturnType<typeof createServiceClient>, 
     loadCheckoutIntegration(client, session),
   ]);
 
+  const items = (itemsResult.data ?? []) as CheckoutOrderItemRow[];
+  const orderBumps = orderResult.data
+    ? await loadSalesCatalogCheckoutOrderBumps({
+        client,
+        organizationId: session.organization_id,
+        excludeCatalogItemIds: items
+          .map((item) => item.catalog_item_id)
+          .filter((item): item is string => typeof item === "string"),
+      }).catch(() => [])
+    : [];
+
   return {
     session,
     order: orderResult.data ?? null,
-    items: (itemsResult.data ?? []) as CheckoutOrderItemRow[],
+    items,
     organization: organizationResult.data ?? null,
     integration,
     whatsapp: whatsappResult.data ?? null,
+    orderBumps,
   };
 }
 
@@ -573,6 +618,46 @@ function formatWhatsappPhone(value: string) {
   }
 
   return `+${value}`;
+}
+
+function buildCheckoutPaymentFeedback(input: {
+  status: string;
+  session: CheckoutSessionRow;
+  order: CheckoutOrderRow;
+  items: CheckoutOrderItemRow[];
+  organizationName: string;
+  amountLabel: string | null;
+}): CheckoutPaymentFeedbackPayload | null {
+  const status = normalizeCheckoutFeedbackStatus(input.status);
+  if (!status) return null;
+
+  return {
+    status,
+    organizationName: input.organizationName,
+    orderCode: input.order.id.slice(0, 8).toUpperCase(),
+    amountLabel: input.amountLabel,
+    providerStatusDetail: input.session.provider_status_detail,
+    items: input.items.map((item) => ({
+      title: item.title,
+      quantity: item.quantity ?? 1,
+      total: formatCurrency(item.total ?? item.sale_price ?? item.unit_price),
+    })),
+  };
+}
+
+function normalizeCheckoutFeedbackStatus(status: string): CheckoutPaymentFeedbackStatus | null {
+  if (
+    status === "approved"
+    || status === "rejected"
+    || status === "cancelled"
+    || status === "expired"
+    || status === "refunded"
+    || status === "error"
+  ) {
+    return status;
+  }
+
+  return null;
 }
 
 function readRecord(value: unknown): JsonRecord {

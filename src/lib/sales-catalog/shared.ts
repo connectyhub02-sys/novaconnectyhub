@@ -66,8 +66,23 @@ export type SalesCatalogWhatsAppMessageTemplates = {
   orderSummary: string;
   paymentRequest: string;
   paymentConfirmed: string;
+  paymentRejected: string;
+  paymentRefunded: string;
   unavailableItem: string;
   humanHandoff: string;
+};
+
+export type SalesCatalogOrderBumpItem = {
+  productId: string;
+  active: boolean;
+  badge: string | null;
+  title: string | null;
+  description: string | null;
+};
+
+export type SalesCatalogOrderBumpSettings = {
+  enabled: boolean;
+  items: SalesCatalogOrderBumpItem[];
 };
 
 export type SalesCatalogProductInventory = {
@@ -403,6 +418,7 @@ export type ClientSalesCatalogSettings = {
   orderPolicy: SalesCatalogOrderPolicy;
   leadDataPolicy: SalesCatalogLeadDataPolicy;
   messageTemplates: SalesCatalogWhatsAppMessageTemplates;
+  orderBumps: SalesCatalogOrderBumpSettings;
   createdAt: string | null;
   updatedAt: string | null;
 };
@@ -484,8 +500,17 @@ export function createDefaultSalesCatalogMessageTemplates(): SalesCatalogWhatsAp
     orderSummary: "",
     paymentRequest: "",
     paymentConfirmed: "",
+    paymentRejected: "",
+    paymentRefunded: "",
     unavailableItem: "",
     humanHandoff: "",
+  };
+}
+
+export function createDefaultSalesCatalogOrderBumps(): SalesCatalogOrderBumpSettings {
+  return {
+    enabled: false,
+    items: [],
   };
 }
 
