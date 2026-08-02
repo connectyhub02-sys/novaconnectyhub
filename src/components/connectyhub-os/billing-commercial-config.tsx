@@ -656,7 +656,7 @@ export function BillingCommercialConfig({ catalog }: { catalog: BillingCommercia
       </Panel>
 
       <div className="grid gap-3 xl:grid-cols-2">
-        <Panel title="Coloque creditos no cliente" eyebrow="carteira de teste" compact>
+        <Panel title="Coloque creditos no cliente" eyebrow="carteira de teste" compact collapsible>
           <form className="space-y-3" onSubmit={grantOrganizationCredits}>
             <FieldLabel label="Empresa">
               <select
@@ -708,7 +708,7 @@ export function BillingCommercialConfig({ catalog }: { catalog: BillingCommercia
           </form>
         </Panel>
 
-        <Panel title="Lance um consumo teste" eyebrow="simulador rapido" compact>
+        <Panel title="Lance um consumo teste" eyebrow="simulador rapido" compact collapsible>
           <form className="space-y-3" onSubmit={createTestEvent}>
             <FieldLabel label="Tarifa base">
               <select

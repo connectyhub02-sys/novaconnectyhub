@@ -103,6 +103,52 @@ export type CostCenterCustomerEconomics = {
   marginPercent: number;
 };
 
+export type PlanCreditEconomicsSummary = {
+  planCode: string;
+  name: string;
+  status: string;
+  monthlyPriceBrl: number;
+  includedCredits: number;
+  overageCreditPriceBrl: number;
+  revenuePerIncludedCreditBrl: number;
+  estimatedCostPerCreditBrl: number;
+  estimatedProfitPerCreditBrl: number;
+  estimatedPlanCostBrl: number;
+  estimatedPlanProfitBrl: number;
+  marginPercent: number;
+};
+
+export type ProviderUsageUnitSummary = {
+  provider: string;
+  label: string;
+  events: number;
+  inputUnits: number;
+  outputUnits: number;
+  totalUnits: number;
+  unitLabel: string;
+  providerCostBrl: number;
+  creditRevenueBrl: number;
+  chargeCredits: number;
+  profitBrl: number;
+};
+
+export type CreditEconomicsSummary = {
+  averagePlanCreditPriceBrl: number;
+  averageActualRevenuePerCreditBrl: number;
+  realCostPerCreditBrl: number;
+  profitPerCreditBrl: number;
+  marginPercent: number;
+  consumedCredits: number;
+  purchasedCredits: number;
+  providerCostBrl: number;
+  revenueBrl: number;
+  profitBrl: number;
+  activePlanCredits: number;
+  activePlanMonthlyRevenueBrl: number;
+  plans: PlanCreditEconomicsSummary[];
+  providers: ProviderUsageUnitSummary[];
+};
+
 export type CurrentCostCenterSummary = {
   periodLabel: string;
   scopeLabel: string;
@@ -129,6 +175,7 @@ export type CurrentCostCenterSummary = {
   suggestedCreditPrice70MarginBrl: number;
   activeConnectedWhatsappInstances: number;
   activeWhatsappOrganizations: number;
+  creditEconomics: CreditEconomicsSummary;
   providers: CostCenterProviderEconomics[];
   fixedProviders: FixedProviderCostSummary[];
   customers: CostCenterCustomerEconomics[];
@@ -169,6 +216,8 @@ export type BillingAdminSummary = {
 type UsageRow = {
   organization_id: string | null;
   provider: BillingProvider | string | null;
+  input_units: number | string | null;
+  output_units: number | string | null;
   provider_cost: number | string | null;
   connecty_revenue_estimate: number | string | null;
   gross_margin_estimate: number | string | null;
@@ -213,6 +262,15 @@ type OrganizationRow = {
   slug: string | null;
   plan_code: string | null;
   status: string | null;
+};
+
+type BillingPlanRow = {
+  plan_code: string;
+  name: string | null;
+  status: string | null;
+  monthly_price_brl: number | string | null;
+  included_credits: number | string | null;
+  overage_credit_price_brl: number | string | null;
 };
 
 type WhatsappInstanceRow = {
@@ -295,12 +353,13 @@ export async function getBillingAdminSummary(
     paymentResult,
     creditTransactionResult,
     organizationResult,
+    planResult,
     whatsappInstanceResult,
     commerce,
   ] = await Promise.all([
     supabase
       .from("usage_events")
-      .select("organization_id, provider, provider_cost, connecty_revenue_estimate, gross_margin_estimate, connecty_charge_credits, occurred_at, billing_mode, agent_scope")
+      .select("organization_id, provider, input_units, output_units, provider_cost, connecty_revenue_estimate, gross_margin_estimate, connecty_charge_credits, occurred_at, billing_mode, agent_scope")
       .gte("occurred_at", sinceIso)
       .limit(5000),
     supabase
@@ -331,6 +390,11 @@ export async function getBillingAdminSummary(
       .select("id, name, slug, plan_code, status")
       .limit(1000),
     supabase
+      .from("billing_plans")
+      .select("plan_code, name, status, monthly_price_brl, included_credits, overage_credit_price_brl")
+      .order("sort_order", { ascending: true })
+      .limit(100),
+    supabase
       .from("whatsapp_instances")
       .select("id, organization_id, provider, status")
       .eq("provider", "uazapi")
@@ -343,6 +407,7 @@ export async function getBillingAdminSummary(
     paymentResult.error?.message,
     creditTransactionResult.error?.message,
     organizationResult.error?.message,
+    planResult.error?.message,
     whatsappInstanceResult.error?.message,
   ].filter((message): message is string => Boolean(message));
 
@@ -366,6 +431,7 @@ export async function getBillingAdminSummary(
   const paymentRows = paymentResult.error ? [] : (paymentResult.data ?? []) as BillingPaymentRow[];
   const creditTransactionRows = creditTransactionResult.error ? [] : (creditTransactionResult.data ?? []) as CreditTransactionRow[];
   const organizationRows = organizationResult.error ? [] : (organizationResult.data ?? []) as OrganizationRow[];
+  const planRows = planResult.error ? [] : (planResult.data ?? []) as BillingPlanRow[];
   const whatsappInstanceRows = whatsappInstanceResult.error ? [] : (whatsappInstanceResult.data ?? []) as WhatsappInstanceRow[];
   const providerLabels = new Map<string, string>();
 
@@ -517,6 +583,7 @@ export async function getBillingAdminSummary(
     paymentRows,
     creditTransactionRows,
     organizationRows,
+    planRows,
     whatsappInstanceRows,
     todayStart,
     providerLabels,
@@ -557,6 +624,7 @@ function buildCurrentCostCenterSummary({
   paymentRows,
   creditTransactionRows,
   organizationRows,
+  planRows,
   whatsappInstanceRows,
   todayStart,
   providerLabels,
@@ -565,6 +633,7 @@ function buildCurrentCostCenterSummary({
   paymentRows: BillingPaymentRow[];
   creditTransactionRows: CreditTransactionRow[];
   organizationRows: OrganizationRow[];
+  planRows: BillingPlanRow[];
   whatsappInstanceRows: WhatsappInstanceRow[];
   todayStart: Date;
   providerLabels: Map<string, string>;
@@ -586,6 +655,7 @@ function buildCurrentCostCenterSummary({
   const activeWhatsappOrganizations = connectedInstancesByOrganization.size;
   const fixedProvider = buildUazapiFixedCostSummary(activeWhatsappInstances.length, activeWhatsappOrganizations);
   const providerMap = new Map<string, CostCenterProviderEconomics>();
+  const unitProviderMap = new Map<string, ProviderUsageUnitSummary>();
   const customerMap = new Map<string, CostCenterCustomerEconomics>();
   let consumedCredits = 0;
   let todayConsumedCredits = 0;
@@ -596,6 +666,7 @@ function buildCurrentCostCenterSummary({
 
   for (const provider of CURRENT_COST_PROVIDERS) {
     providerMap.set(provider, createProviderEconomics(provider, providerLabels));
+    unitProviderMap.set(provider, createProviderUsageSummary(provider, providerLabels));
   }
 
   for (const row of usageRows) {
@@ -618,6 +689,17 @@ function buildCurrentCostCenterSummary({
     providerSummary.creditRevenueBrl += creditRevenue;
     providerSummary.marginBrl += creditRevenue - providerCost;
     providerMap.set(provider, providerSummary);
+
+    const unitSummary = unitProviderMap.get(provider) ?? createProviderUsageSummary(provider, providerLabels);
+    unitSummary.events += 1;
+    unitSummary.inputUnits += toNumber(row.input_units);
+    unitSummary.outputUnits += toNumber(row.output_units);
+    unitSummary.totalUnits += toNumber(row.input_units) + toNumber(row.output_units);
+    unitSummary.providerCostBrl += providerCost;
+    unitSummary.creditRevenueBrl += creditRevenue;
+    unitSummary.chargeCredits += chargeCredits;
+    unitSummary.profitBrl += creditRevenue - providerCost;
+    unitProviderMap.set(provider, unitSummary);
 
     consumedCredits += chargeCredits;
     variableCostBrl += providerCost;
@@ -693,6 +775,7 @@ function buildCurrentCostCenterSummary({
   const grossProfitBrl = approvedRevenueBrl - totalCostBrl;
   const todayGrossProfitBrl = todayApprovedRevenueBrl - todayTotalCostBrl;
   const realCostPerConsumedCreditBrl = consumedCredits > 0 ? totalCostBrl / consumedCredits : 0;
+  const averageActualRevenuePerCreditBrl = consumedCredits > 0 ? approvedRevenueBrl / consumedCredits : 0;
   const providers = Array.from(providerMap.values())
     .map(roundProviderEconomics)
     .concat([
@@ -714,6 +797,16 @@ function buildCurrentCostCenterSummary({
     .map(roundCustomerEconomics)
     .sort((a, b) => b.totalCostBrl - a.totalCostBrl)
     .slice(0, 8);
+  const creditEconomics = buildCreditEconomicsSummary({
+    planRows,
+    unitProviderRows: Array.from(unitProviderMap.values()),
+    approvedRevenueBrl,
+    consumedCredits,
+    purchasedCredits,
+    providerCostBrl: totalCostBrl,
+    realCostPerCreditBrl: realCostPerConsumedCreditBrl,
+    averageActualRevenuePerCreditBrl,
+  });
 
   return {
     periodLabel: "Ultimos 30 dias",
@@ -741,6 +834,7 @@ function buildCurrentCostCenterSummary({
     suggestedCreditPrice70MarginBrl: roundMoney(suggestCreditPrice(realCostPerConsumedCreditBrl, 70)),
     activeConnectedWhatsappInstances: activeWhatsappInstances.length,
     activeWhatsappOrganizations,
+    creditEconomics,
     providers,
     fixedProviders: [fixedProvider],
     customers,
@@ -933,6 +1027,7 @@ function emptyCurrentCostCenterSummary(): CurrentCostCenterSummary {
     suggestedCreditPrice70MarginBrl: 0,
     activeConnectedWhatsappInstances: 0,
     activeWhatsappOrganizations: 0,
+    creditEconomics: emptyCreditEconomicsSummary(),
     providers: [
       roundProviderEconomics(createProviderEconomics("gemini", new Map())),
       roundProviderEconomics(createProviderEconomics("elevenlabs", new Map())),
@@ -951,6 +1046,28 @@ function emptyCurrentCostCenterSummary(): CurrentCostCenterSummary {
     ],
     fixedProviders: [fixedProvider],
     customers: [],
+  };
+}
+
+function emptyCreditEconomicsSummary(): CreditEconomicsSummary {
+  return {
+    averagePlanCreditPriceBrl: 0,
+    averageActualRevenuePerCreditBrl: 0,
+    realCostPerCreditBrl: 0,
+    profitPerCreditBrl: 0,
+    marginPercent: 0,
+    consumedCredits: 0,
+    purchasedCredits: 0,
+    providerCostBrl: 0,
+    revenueBrl: 0,
+    profitBrl: 0,
+    activePlanCredits: 0,
+    activePlanMonthlyRevenueBrl: 0,
+    plans: [],
+    providers: [
+      roundProviderUsageSummary(createProviderUsageSummary("gemini", new Map())),
+      roundProviderUsageSummary(createProviderUsageSummary("elevenlabs", new Map())),
+    ],
   };
 }
 
@@ -1021,6 +1138,116 @@ function roundProviderEconomics(provider: CostCenterProviderEconomics): CostCent
     creditRevenueBrl: roundMoney(provider.creditRevenueBrl),
     marginBrl: roundMoney(provider.creditRevenueBrl - totalCostBrl),
     marginPercent: calculateMarginPercent(totalCostBrl, provider.creditRevenueBrl),
+  };
+}
+
+function createProviderUsageSummary(
+  provider: string,
+  providerLabels: Map<string, string>,
+): ProviderUsageUnitSummary {
+  return {
+    provider,
+    label: providerLabels.get(provider) ?? providerNames[provider] ?? provider,
+    events: 0,
+    inputUnits: 0,
+    outputUnits: 0,
+    totalUnits: 0,
+    unitLabel: provider === "elevenlabs" ? "caracteres/request" : provider === "gemini" ? "tokens" : "unidades",
+    providerCostBrl: 0,
+    creditRevenueBrl: 0,
+    chargeCredits: 0,
+    profitBrl: 0,
+  };
+}
+
+function roundProviderUsageSummary(provider: ProviderUsageUnitSummary): ProviderUsageUnitSummary {
+  return {
+    ...provider,
+    inputUnits: roundCredits(provider.inputUnits),
+    outputUnits: roundCredits(provider.outputUnits),
+    totalUnits: roundCredits(provider.totalUnits),
+    providerCostBrl: roundMoney(provider.providerCostBrl),
+    creditRevenueBrl: roundMoney(provider.creditRevenueBrl),
+    chargeCredits: roundCredits(provider.chargeCredits),
+    profitBrl: roundMoney(provider.creditRevenueBrl - provider.providerCostBrl),
+  };
+}
+
+function buildCreditEconomicsSummary({
+  planRows,
+  unitProviderRows,
+  approvedRevenueBrl,
+  consumedCredits,
+  purchasedCredits,
+  providerCostBrl,
+  realCostPerCreditBrl,
+  averageActualRevenuePerCreditBrl,
+}: {
+  planRows: BillingPlanRow[];
+  unitProviderRows: ProviderUsageUnitSummary[];
+  approvedRevenueBrl: number;
+  consumedCredits: number;
+  purchasedCredits: number;
+  providerCostBrl: number;
+  realCostPerCreditBrl: number;
+  averageActualRevenuePerCreditBrl: number;
+}): CreditEconomicsSummary {
+  const activePlans = planRows.filter((plan) => plan.status === "active");
+  const activePlanCredits = activePlans.reduce((total, plan) => total + toNumber(plan.included_credits), 0);
+  const activePlanMonthlyRevenueBrl = activePlans.reduce((total, plan) => total + toNumber(plan.monthly_price_brl), 0);
+  const averagePlanCreditPriceBrl = activePlanCredits > 0 ? activePlanMonthlyRevenueBrl / activePlanCredits : 0;
+  const benchmarkRevenuePerCreditBrl = averageActualRevenuePerCreditBrl > 0
+    ? averageActualRevenuePerCreditBrl
+    : averagePlanCreditPriceBrl;
+  const profitPerCreditBrl = benchmarkRevenuePerCreditBrl - realCostPerCreditBrl;
+  const plans = activePlans
+    .map((plan) => mapPlanCreditEconomics(plan, realCostPerCreditBrl))
+    .sort((a, b) => a.monthlyPriceBrl - b.monthlyPriceBrl);
+
+  return {
+    averagePlanCreditPriceBrl: roundMoney(averagePlanCreditPriceBrl),
+    averageActualRevenuePerCreditBrl: roundMoney(averageActualRevenuePerCreditBrl),
+    realCostPerCreditBrl: roundMoney(realCostPerCreditBrl),
+    profitPerCreditBrl: roundMoney(profitPerCreditBrl),
+    marginPercent: calculateMarginPercent(realCostPerCreditBrl, benchmarkRevenuePerCreditBrl),
+    consumedCredits: roundCredits(consumedCredits),
+    purchasedCredits: roundCredits(purchasedCredits),
+    providerCostBrl: roundMoney(providerCostBrl),
+    revenueBrl: roundMoney(approvedRevenueBrl),
+    profitBrl: roundMoney(approvedRevenueBrl - providerCostBrl),
+    activePlanCredits: roundCredits(activePlanCredits),
+    activePlanMonthlyRevenueBrl: roundMoney(activePlanMonthlyRevenueBrl),
+    plans,
+    providers: unitProviderRows.map(roundProviderUsageSummary).sort((a, b) => b.providerCostBrl - a.providerCostBrl),
+  };
+}
+
+function mapPlanCreditEconomics(
+  plan: BillingPlanRow,
+  realCostPerCreditBrl: number,
+): PlanCreditEconomicsSummary {
+  const monthlyPriceBrl = toNumber(plan.monthly_price_brl);
+  const includedCredits = toNumber(plan.included_credits);
+  const overageCreditPriceBrl = toNumber(plan.overage_credit_price_brl);
+  const revenuePerIncludedCreditBrl = includedCredits > 0
+    ? monthlyPriceBrl / includedCredits
+    : overageCreditPriceBrl;
+  const estimatedPlanCostBrl = includedCredits * realCostPerCreditBrl;
+  const estimatedPlanProfitBrl = monthlyPriceBrl - estimatedPlanCostBrl;
+
+  return {
+    planCode: plan.plan_code,
+    name: plan.name || plan.plan_code,
+    status: plan.status || "draft",
+    monthlyPriceBrl: roundMoney(monthlyPriceBrl),
+    includedCredits: roundCredits(includedCredits),
+    overageCreditPriceBrl: roundMoney(overageCreditPriceBrl),
+    revenuePerIncludedCreditBrl: roundMoney(revenuePerIncludedCreditBrl),
+    estimatedCostPerCreditBrl: roundMoney(realCostPerCreditBrl),
+    estimatedProfitPerCreditBrl: roundMoney(revenuePerIncludedCreditBrl - realCostPerCreditBrl),
+    estimatedPlanCostBrl: roundMoney(estimatedPlanCostBrl),
+    estimatedPlanProfitBrl: roundMoney(estimatedPlanProfitBrl),
+    marginPercent: calculateMarginPercent(estimatedPlanCostBrl, monthlyPriceBrl),
   };
 }
 

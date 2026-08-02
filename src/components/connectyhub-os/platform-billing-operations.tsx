@@ -368,6 +368,7 @@ export function PlatformBillingOperations({
         eyebrow="Mercado Pago / Pix Automatico / WhatsApp"
         tone="amber"
         compact
+        collapsible
         action={
           <div className="flex flex-wrap gap-2">
             <NeonBadge tone={catalog.credentialReadiness === 100 ? "green" : "amber"}>

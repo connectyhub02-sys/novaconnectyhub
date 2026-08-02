@@ -81,7 +81,9 @@ export function BillingCenter({
         </Panel>
       )}
 
-      <div className="mb-4 grid grid-cols-2 gap-2 xl:grid-cols-4">
+      <ExecutiveCostSummary summary={summary} />
+
+      <div className="mb-4 grid grid-cols-2 gap-2 md:grid-cols-4 2xl:grid-cols-8">
         <BillingMetric
           icon={DatabaseZap}
           label="Eventos de uso"
@@ -110,9 +112,6 @@ export function BillingCenter({
           detail="Saldo total dos clientes"
           tone="amber"
         />
-      </div>
-
-      <div className="mb-4 grid grid-cols-2 gap-2 xl:grid-cols-4">
         <BillingMetric
           icon={HandCoins}
           label="Debitado clientes"
@@ -363,6 +362,106 @@ function CommercialSalesPanel({ summary }: { summary: BillingAdminSummary }) {
   );
 }
 
+function ExecutiveCostSummary({ summary }: { summary: BillingAdminSummary }) {
+  const current = summary.currentCostCenter;
+  const economics = current.creditEconomics;
+  const benchmarkPrice = economics.averageActualRevenuePerCreditBrl > 0
+    ? economics.averageActualRevenuePerCreditBrl
+    : economics.averagePlanCreditPriceBrl;
+
+  return (
+    <Panel
+      className="mb-4"
+      title="Resumo economico dos creditos"
+      eyebrow="planos atuais / uso real"
+      compact
+      action={
+        <div className="flex flex-wrap gap-2">
+          <NeonBadge tone="cyan">auto 15s</NeonBadge>
+          <NeonBadge tone={economics.profitPerCreditBrl >= 0 ? "green" : "amber"}>
+            {formatUnitMoney(economics.profitPerCreditBrl)} lucro/credito
+          </NeonBadge>
+        </div>
+      }
+    >
+      <div className="grid gap-2 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
+        <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
+          <CompactValue
+            label="Preco medio nos planos"
+            value={formatUnitMoney(economics.averagePlanCreditPriceBrl)}
+            detail={`${formatCredits(economics.activePlanCredits)} creditos ativos`}
+          />
+          <CompactValue
+            label="Receita media real"
+            value={formatUnitMoney(benchmarkPrice)}
+            detail={economics.averageActualRevenuePerCreditBrl > 0 ? "pagamentos / consumo" : "usando media dos planos"}
+          />
+          <CompactValue
+            label="Custo real/credito"
+            value={formatUnitMoney(economics.realCostPerCreditBrl)}
+            detail={`${formatMoney(economics.providerCostBrl)} custo total`}
+          />
+          <CompactValue
+            label="Margem media"
+            value={formatPercent(economics.marginPercent)}
+            detail={`${formatMoney(economics.profitBrl)} lucro bruto`}
+          />
+        </div>
+
+        <div className="grid gap-2 sm:grid-cols-2">
+          {economics.providers.map((provider) => (
+            <div
+              key={provider.provider}
+              className="rounded-lg px-2.5 py-2"
+              style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="truncate text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>{provider.label}</p>
+                  <p className="mt-0.5 truncate font-mono text-[9px] uppercase tracking-wider text-slate-500">
+                    {formatProviderUnits(provider)} / {formatCredits(provider.chargeCredits)} cr
+                  </p>
+                </div>
+                <span className="shrink-0 font-mono text-[11px] text-emerald-300">{formatMoney(provider.profitBrl)}</span>
+              </div>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <MiniStat label="custo" value={formatMoney(provider.providerCostBrl)} />
+                <MiniStat label="receita" value={formatMoney(provider.creditRevenueBrl)} />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {economics.plans.length > 0 ? (
+        <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          {economics.plans.slice(0, 4).map((plan) => (
+            <div
+              key={plan.planCode}
+              className="rounded-lg px-2.5 py-2"
+              style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="truncate text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>{plan.name}</p>
+                  <p className="mt-0.5 truncate font-mono text-[9px] uppercase tracking-wider text-slate-500">
+                    {formatMoney(plan.monthlyPriceBrl)} / {formatCredits(plan.includedCredits)} cr
+                  </p>
+                </div>
+                <span className="shrink-0 font-mono text-[11px] text-cyan-300">{formatUnitMoney(plan.revenuePerIncludedCreditBrl)}</span>
+              </div>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <MiniStat label="lucro/credito" value={formatUnitMoney(plan.estimatedProfitPerCreditBrl)} />
+                <MiniStat label="margem plano" value={formatPercent(plan.marginPercent)} />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </Panel>
+  );
+}
+
 function CurrentCostCenterPanel({ summary }: { summary: BillingAdminSummary }) {
   const current = summary.currentCostCenter;
   const fixedProvider = current.fixedProviders[0];
@@ -376,6 +475,7 @@ function CurrentCostCenterPanel({ summary }: { summary: BillingAdminSummary }) {
       title="Centro de custos atual"
       eyebrow="Gemini / ElevenLabs / Uazapi"
       compact
+      collapsible
       action={
         <div className="flex flex-wrap gap-2">
           <NeonBadge tone="cyan">{current.periodLabel}</NeonBadge>
@@ -617,7 +717,7 @@ function SupplierTariffsPanel({
       </div>
 
       {rows.length > 0 ? (
-        <div className="overflow-x-auto">
+        <div className="max-h-[380px] overflow-auto rounded-xl" style={{ border: "1px solid var(--ch-border)" }}>
           <DataTable
             columns={["Fornecedor", "Modelo/Recurso", "Unidade", "Custo fornecedor", "Custo 1k", "Custo 1M", "Preco CH", "Min. cr", "Margem"]}
             rows={rows}
@@ -671,22 +771,22 @@ function BillingMetric({
 
   return (
     <div
-      className="min-w-0 rounded-xl p-3"
+      className="min-w-0 rounded-lg px-2.5 py-2"
       style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}
     >
       <div className="flex min-w-0 items-start justify-between gap-2">
-        <p className="min-w-0 truncate font-mono text-[9px] uppercase tracking-[0.12em] text-slate-500">{label}</p>
+        <p className="min-w-0 truncate font-mono text-[8px] uppercase tracking-[0.1em] text-slate-500">{label}</p>
         <div
-          className="hidden h-7 w-7 shrink-0 items-center justify-center rounded-lg sm:flex"
+          className="hidden h-6 w-6 shrink-0 items-center justify-center rounded-md xl:flex"
           style={{ background: `${color}18`, color }}
         >
-          <Icon className="h-4 w-4" />
+          <Icon className="h-3.5 w-3.5" />
         </div>
       </div>
-      <p className="mt-2 truncate font-mono text-[20px] font-bold leading-none" style={{ color: "var(--ch-text)" }}>
+      <p className="mt-1.5 truncate font-mono text-[16px] font-bold leading-none" style={{ color: "var(--ch-text)" }}>
         {value}
       </p>
-      <p className="mt-1 truncate text-[11px] text-slate-500">{detail}</p>
+      <p className="mt-1 truncate text-[10px] text-slate-500">{detail}</p>
     </div>
   );
 }
@@ -736,6 +836,30 @@ function ProviderValue({ label, value }: { label: string; value: string }) {
     >
       <p className="font-mono text-[9px] uppercase tracking-wider text-slate-500">{label}</p>
       <p className="mt-1 truncate font-mono text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>{value}</p>
+    </div>
+  );
+}
+
+function CompactValue({ label, value, detail }: { label: string; value: string; detail: string }) {
+  return (
+    <div
+      className="min-w-0 rounded-lg px-2.5 py-2"
+      style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
+    >
+      <p className="truncate font-mono text-[8px] uppercase tracking-[0.1em] text-slate-500">{label}</p>
+      <p className="mt-1 truncate font-mono text-[17px] font-bold leading-none" style={{ color: "var(--ch-text)" }}>
+        {value}
+      </p>
+      <p className="mt-1 truncate text-[10px] text-slate-500">{detail}</p>
+    </div>
+  );
+}
+
+function MiniStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0">
+      <p className="truncate font-mono text-[8px] uppercase tracking-wider text-slate-500">{label}</p>
+      <p className="mt-0.5 truncate font-mono text-[11px] font-semibold" style={{ color: "var(--ch-text)" }}>{value}</p>
     </div>
   );
 }
@@ -805,6 +929,16 @@ function formatUnit(unit: string) {
   return labels[unit] ?? unit;
 }
 
+function formatProviderUnits(
+  provider: BillingAdminSummary["currentCostCenter"]["creditEconomics"]["providers"][number],
+) {
+  if (provider.provider === "gemini" && (provider.inputUnits > 0 || provider.outputUnits > 0)) {
+    return `${formatCompactNumber(provider.inputUnits)} in / ${formatCompactNumber(provider.outputUnits)} out`;
+  }
+
+  return `${formatCompactNumber(provider.totalUnits)} ${provider.unitLabel}`;
+}
+
 function formatMoney(value: number) {
   return new Intl.NumberFormat("pt-BR", {
     style: "currency",
@@ -836,4 +970,11 @@ function formatCredits(value: number) {
 
 function formatNumber(value: number) {
   return new Intl.NumberFormat("pt-BR").format(value);
+}
+
+function formatCompactNumber(value: number) {
+  return new Intl.NumberFormat("pt-BR", {
+    notation: "compact",
+    maximumFractionDigits: 1,
+  }).format(value);
 }
