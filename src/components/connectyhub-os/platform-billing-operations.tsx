@@ -7,6 +7,7 @@ import {
   Activity,
   AlertTriangle,
   BellRing,
+  CheckCircle2,
   Clock3,
   Coins,
   CreditCard,
@@ -65,6 +66,8 @@ type SettingsDraft = {
 type RefundDialogState = {
   payment: PlatformBillingPaymentItem;
   reason: string;
+  notice: ActionState | null;
+  completed: boolean;
 };
 
 export function PlatformBillingOperations({
@@ -320,7 +323,7 @@ export function PlatformBillingOperations({
     }
 
     setState({ tone: "idle", message: "" });
-    setRefundDialog({ payment, reason: "" });
+    setRefundDialog({ payment, reason: "", notice: null, completed: false });
   }
 
   async function confirmRefundPayment() {
@@ -332,12 +335,16 @@ export function PlatformBillingOperations({
     const reason = refundDialog.reason.trim();
 
     if (!reason) {
-      setState({ tone: "warning", message: "Informe o motivo do estorno antes de confirmar." });
+      setRefundDialog((current) => current ? {
+        ...current,
+        notice: { tone: "warning", message: "Informe o motivo do estorno antes de confirmar." },
+      } : current);
       return;
     }
 
     setRefundingId(payment.id);
     setState({ tone: "idle", message: "" });
+    setRefundDialog((current) => current ? { ...current, notice: null } : current);
 
     try {
       const response = await fetch("/api/admin/billing/refunds", {
@@ -371,17 +378,26 @@ export function PlatformBillingOperations({
           ? " Recorrencia Mercado Pago cancelada."
           : "";
 
-      setState({
-        tone: uncoveredCredits > 0 || data?.result?.providerSubscriptionCancelError ? "warning" : "success",
-        message: `Estorno de ${formatMoney(data?.result?.amountBrl ?? payment.amountBrl)} realizado. ${formatCredits(reversedCredits)} creditos removidos.${uncoveredCredits > 0 ? ` ${formatCredits(uncoveredCredits)} creditos ja tinham sido usados e ficaram descobertos.` : ""}${recurrenceWarning}`,
-      });
-      setRefundDialog(null);
+      const tone = uncoveredCredits > 0 || data?.result?.providerSubscriptionCancelError ? "warning" : "success";
+      const message = `Estorno de ${formatMoney(data?.result?.amountBrl ?? payment.amountBrl)} realizado. ${formatCredits(reversedCredits)} creditos removidos.${uncoveredCredits > 0 ? ` ${formatCredits(uncoveredCredits)} creditos ja tinham sido usados e ficaram descobertos.` : ""}${recurrenceWarning}`;
+
+      setState({ tone, message });
+      setRefundDialog((current) => current?.payment.id === payment.id ? {
+        ...current,
+        completed: true,
+        notice: { tone, message },
+      } : current);
       router.refresh();
     } catch (error) {
+      const message = error instanceof Error ? error.message : "Falha ao realizar estorno.";
       setState({
         tone: "error",
-        message: error instanceof Error ? error.message : "Falha ao realizar estorno.",
+        message,
       });
+      setRefundDialog((current) => current?.payment.id === payment.id ? {
+        ...current,
+        notice: { tone: "error", message },
+      } : current);
     } finally {
       setRefundingId(null);
     }
@@ -751,6 +767,8 @@ export function PlatformBillingOperations({
           loading={refundingId === refundDialog.payment.id}
           payment={refundDialog.payment}
           reason={refundDialog.reason}
+          notice={refundDialog.notice}
+          completed={refundDialog.completed}
           onChangeReason={(reason) => setRefundDialog((current) => current ? { ...current, reason } : current)}
           onClose={() => {
             if (refundingId !== refundDialog.payment.id) {
@@ -1028,6 +1046,8 @@ function RefundConfirmationModal({
   payment,
   reason,
   loading,
+  notice,
+  completed,
   onChangeReason,
   onClose,
   onConfirm,
@@ -1035,11 +1055,13 @@ function RefundConfirmationModal({
   payment: PlatformBillingPaymentItem;
   reason: string;
   loading: boolean;
+  notice: ActionState | null;
+  completed: boolean;
   onChangeReason: (reason: string) => void;
   onClose: () => void;
   onConfirm: () => void;
 }) {
-  const canConfirm = reason.trim().length > 0 && !loading;
+  const canConfirm = reason.trim().length > 0 && !loading && !completed;
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1119,7 +1141,7 @@ function RefundConfirmationModal({
           <FieldLabel label="Motivo do estorno">
             <textarea
               autoFocus
-              disabled={loading}
+              disabled={loading || completed}
               value={reason}
               onChange={(event) => onChangeReason(event.target.value)}
               placeholder="Ex: teste interno, solicitacao do cliente, cobranca indevida..."
@@ -1127,10 +1149,26 @@ function RefundConfirmationModal({
               style={inputStyle}
             />
           </FieldLabel>
+
+          {notice?.message ? (
+            <div
+              className="rounded-xl px-3 py-3 text-[12px] font-medium leading-5"
+              style={getActionMessageStyle(notice.tone)}
+            >
+              <div className="flex items-start gap-2">
+                {completed ? (
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+                ) : (
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                )}
+                <span>{notice.message}</span>
+              </div>
+            </div>
+          ) : null}
         </div>
 
         <div
-          className="grid gap-2 border-t px-5 py-4 sm:grid-cols-[1fr_auto]"
+          className={`grid gap-2 border-t px-5 py-4 ${completed ? "" : "sm:grid-cols-[1fr_auto]"}`}
           style={{ borderColor: "var(--ch-border)" }}
         >
           <button
@@ -1140,17 +1178,19 @@ function RefundConfirmationModal({
             className="min-h-11 rounded-xl border px-4 text-[12px] font-bold text-slate-200 transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50"
             style={{ borderColor: "var(--ch-border)" }}
           >
-            Cancelar
+            {completed ? "Fechar" : "Cancelar"}
           </button>
-          <button
-            type="submit"
-            disabled={!canConfirm}
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-4 text-[12px] font-black transition disabled:cursor-not-allowed disabled:opacity-45"
-            style={{ background: "rgba(244,63,94,0.92)", color: "#fff" }}
-          >
-            <RotateCcw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-            {loading ? "Estornando" : `Estornar ${formatMoney(payment.amountBrl)}`}
-          </button>
+          {!completed ? (
+            <button
+              type="submit"
+              disabled={!canConfirm}
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-4 text-[12px] font-black transition disabled:cursor-not-allowed disabled:opacity-45"
+              style={{ background: "rgba(244,63,94,0.92)", color: "#fff" }}
+            >
+              <RotateCcw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+              {loading ? "Estornando" : `Estornar ${formatMoney(payment.amountBrl)}`}
+            </button>
+          ) : null}
         </div>
       </form>
     </div>
