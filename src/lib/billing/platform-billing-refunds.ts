@@ -61,13 +61,26 @@ type BillingRefundRow = {
   provider_refund_id: string | null;
 };
 
+type PendingRefundRecord = {
+  id: string;
+  tableReady: boolean;
+};
+
+type MercadoPagoRefundEntry = {
+  id?: string | number;
+  amount?: number;
+  status?: string;
+  date_created?: string;
+};
+
 type MercadoPagoPaymentLike = {
   id?: string | number;
   status?: string;
   status_detail?: string;
   external_reference?: string;
   transaction_amount?: number;
-  refunds?: unknown;
+  transaction_amount_refunded?: number;
+  refunds?: MercadoPagoRefundEntry[];
 };
 
 type MercadoPagoRefundLike = {
@@ -147,7 +160,7 @@ export async function refundPlatformBillingPayment(
     payment.invoice_id ? loadInvoice(client, payment.invoice_id) : Promise.resolve(null),
   ]);
   const plan = subscription ? await loadPlan(client, subscription.plan_code) : null;
-  const refundId = await createPendingRefund(client, {
+  const pendingRefund = await createPendingRefund(client, {
     payment,
     subscription,
     invoice,
@@ -155,19 +168,26 @@ export async function refundPlatformBillingPayment(
     actorId: input.actorId,
     reason: input.reason ?? null,
   });
+  const refundId = pendingRefund.id;
 
   try {
     const config = await loadMercadoPagoPlatformBillingConfig({ client });
-    const refund = await createMercadoPagoPaymentRefund({
-      accessToken: config.accessToken,
-      paymentId: payment.provider_payment_id,
-      idempotencyKey: refundId,
-    }) as MercadoPagoRefundLike;
-    const providerPayment = await getMercadoPagoPayment({
+    const providerPaymentBefore = await getMercadoPagoPayment({
       accessToken: config.accessToken,
       paymentId: payment.provider_payment_id,
     }).catch(() => null) as MercadoPagoPaymentLike | null;
-    const providerPaymentStatus = readString(providerPayment?.status) ?? "refunded";
+    const refund = isProviderPaymentFullyRefunded(providerPaymentBefore, amountBrl)
+      ? buildRefundFromProviderPayment(providerPaymentBefore, payment.provider_payment_id, amountBrl)
+      : await createMercadoPagoPaymentRefund({
+          accessToken: config.accessToken,
+          paymentId: payment.provider_payment_id,
+          idempotencyKey: payment.id,
+        }) as MercadoPagoRefundLike;
+    const providerPayment = await getMercadoPagoPayment({
+      accessToken: config.accessToken,
+      paymentId: payment.provider_payment_id,
+    }).catch(() => providerPaymentBefore) as MercadoPagoPaymentLike | null;
+    const providerPaymentStatus = readString(providerPayment?.status) ?? readString(providerPaymentBefore?.status) ?? "refunded";
     const creditsToReverse = calculateRefundedCredits({ subscription, invoice, payment, plan });
     const creditReversal = creditsToReverse > 0
       ? await reverseCreditsForRefund(client, {
@@ -210,6 +230,7 @@ export async function refundPlatformBillingPayment(
 
     await updateInternalBillingState(client, {
       refundId,
+      refundTableReady: pendingRefund.tableReady,
       payment,
       subscription,
       invoice,
@@ -233,7 +254,7 @@ export async function refundPlatformBillingPayment(
       providerPaymentStatus,
       amountBrl,
       metadata,
-    });
+    }).catch(() => null);
 
     return {
       refundId,
@@ -251,17 +272,19 @@ export async function refundPlatformBillingPayment(
       providerSubscriptionCancelError: subscriptionCancel.error,
     };
   } catch (error) {
-    await client
-      .from("billing_refunds")
-      .update({
-        status: "failed",
-        metadata: {
-          source: "platform_billing_refund",
-          failed_at: new Date().toISOString(),
-          error_message: error instanceof Error ? error.message : "Falha desconhecida no estorno.",
-        },
-      })
-      .eq("id", refundId);
+    if (pendingRefund.tableReady) {
+      await client
+        .from("billing_refunds")
+        .update({
+          status: "failed",
+          metadata: {
+            source: "platform_billing_refund",
+            failed_at: new Date().toISOString(),
+            error_message: error instanceof Error ? error.message : "Falha desconhecida no estorno.",
+          },
+        })
+        .eq("id", refundId);
+    }
 
     throw error;
   }
@@ -334,6 +357,10 @@ async function loadProcessedRefund(client: SupabaseClient, paymentId: string) {
     .maybeSingle<BillingRefundRow>();
 
   if (error) {
+    if (isMissingDatabaseObjectError(error, "billing_refunds")) {
+      return null;
+    }
+
     throw new Error(`Nao foi possivel checar estornos existentes: ${error.message}`);
   }
 
@@ -350,7 +377,7 @@ async function createPendingRefund(
     actorId: string;
     reason: string | null;
   },
-) {
+): Promise<PendingRefundRecord> {
   const { data, error } = await client
     .from("billing_refunds")
     .insert({
@@ -376,10 +403,14 @@ async function createPendingRefund(
     .maybeSingle<{ id: string }>();
 
   if (error || !data?.id) {
+    if (error && isMissingDatabaseObjectError(error, "billing_refunds")) {
+      return { id: randomUUID(), tableReady: false };
+    }
+
     throw new Error(`Nao foi possivel registrar estorno antes de chamar o Mercado Pago: ${error?.message ?? "sem ID retornado"}`);
   }
 
-  return data.id;
+  return { id: data.id, tableReady: true };
 }
 
 async function cancelProviderSubscription(client: SupabaseClient, providerSubscriptionId: string) {
@@ -473,6 +504,7 @@ async function updateInternalBillingState(
   client: SupabaseClient,
   input: {
     refundId: string;
+    refundTableReady: boolean;
     payment: PaymentRow;
     subscription: SubscriptionRow | null;
     invoice: InvoiceRow | null;
@@ -488,18 +520,20 @@ async function updateInternalBillingState(
 ) {
   const now = new Date().toISOString();
   const [refundUpdate, paymentUpdate, invoiceUpdate, subscriptionUpdate, cyclesUpdate, organizationUpdate] = await Promise.all([
-    client
-      .from("billing_refunds")
-      .update({
-        provider_refund_id: input.providerRefundId,
-        status: normalizeRefundStatus(input.refundStatus),
-        credit_reversal_transaction_id: input.creditTransactionId,
-        reversed_credits: input.reversedCredits,
-        uncovered_credits: input.uncoveredCredits,
-        provider_response: input.metadata.mercado_pago_refund ?? {},
-        metadata: input.metadata,
-      })
-      .eq("id", input.refundId),
+    input.refundTableReady
+      ? client
+          .from("billing_refunds")
+          .update({
+            provider_refund_id: input.providerRefundId,
+            status: normalizeRefundStatus(input.refundStatus),
+            credit_reversal_transaction_id: input.creditTransactionId,
+            reversed_credits: input.reversedCredits,
+            uncovered_credits: input.uncoveredCredits,
+            provider_response: input.metadata.mercado_pago_refund ?? {},
+            metadata: input.metadata,
+          })
+          .eq("id", input.refundId)
+      : Promise.resolve({ error: null }),
     client
       .from("billing_payments")
       .update({
@@ -607,6 +641,47 @@ function isApprovedPayment(status: string | null | undefined, providerStatus: st
   return status === "approved" || providerStatus === "approved" || providerStatus === "authorized";
 }
 
+function isProviderPaymentFullyRefunded(payment: MercadoPagoPaymentLike | null, amountBrl: number) {
+  if (!payment) {
+    return false;
+  }
+
+  if (readString(payment.status) === "refunded") {
+    return true;
+  }
+
+  const refundedAmount = toNumber(payment.transaction_amount_refunded)
+    || sumProviderRefunds(payment.refunds);
+
+  return refundedAmount > 0 && refundedAmount + 0.009 >= amountBrl;
+}
+
+function buildRefundFromProviderPayment(
+  payment: MercadoPagoPaymentLike | null,
+  providerPaymentId: string,
+  amountBrl: number,
+): MercadoPagoRefundLike {
+  const latestRefund = Array.isArray(payment?.refunds)
+    ? [...payment.refunds].reverse().find((item) => item && typeof item === "object")
+    : null;
+
+  return {
+    id: latestRefund?.id,
+    payment_id: providerPaymentId,
+    amount: toNumber(latestRefund?.amount) || amountBrl,
+    status: readString(latestRefund?.status) ?? "approved",
+    date_created: latestRefund?.date_created,
+  };
+}
+
+function sumProviderRefunds(refunds: MercadoPagoRefundEntry[] | undefined) {
+  if (!Array.isArray(refunds)) {
+    return 0;
+  }
+
+  return refunds.reduce((total, refund) => total + toNumber(refund?.amount), 0);
+}
+
 function normalizeRefundStatus(status: string | null | undefined) {
   const normalized = status?.trim().toLowerCase();
 
@@ -649,4 +724,23 @@ function toNumber(value: unknown) {
 
 function readString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function isMissingDatabaseObjectError(error: unknown, objectName: string) {
+  const message = error instanceof Error
+    ? error.message
+    : typeof error === "object" && error && "message" in error
+      ? String((error as { message?: unknown }).message ?? "")
+      : "";
+  const code = typeof error === "object" && error && "code" in error
+    ? String((error as { code?: unknown }).code ?? "")
+    : "";
+  const normalized = message.toLowerCase();
+  const normalizedObjectName = objectName.toLowerCase();
+
+  return (code === "PGRST202" || code === "PGRST204" || code === "PGRST205")
+    && normalized.includes(normalizedObjectName)
+    || normalized.includes("schema cache") && normalized.includes(normalizedObjectName)
+    || normalized.includes(`function public.${normalizedObjectName}`)
+    || normalized.includes(`table 'public.${normalizedObjectName}'`);
 }

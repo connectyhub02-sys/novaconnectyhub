@@ -138,6 +138,7 @@ export type WalletRow = {
   lifetime_purchased_credits: number;
   lifetime_used_credits: number;
   status: string;
+  metadata: Record<string, unknown> | null;
 };
 
 export const providerLabels: Record<BillingProvider, string> = {
@@ -231,6 +232,10 @@ export async function reverseCreditsForRefund(client: SupabaseClient, input: Cre
   });
 
   if (error) {
+    if (isMissingRefundRpcError(error)) {
+      return reverseCreditsForRefundWithTables(client, input);
+    }
+
     throw new Error(`Nao foi possivel reverter creditos do estorno: ${error.message}`);
   }
 
@@ -242,6 +247,120 @@ export async function reverseCreditsForRefund(client: SupabaseClient, input: Cre
     uncoveredCredits: toNumber(row?.uncovered_credits),
     balanceAfterCredits: toNumber(row?.balance_after_credits),
   };
+}
+
+async function reverseCreditsForRefundWithTables(
+  client: SupabaseClient,
+  input: CreditRefundReversalInput,
+): Promise<CreditRefundReversalResult> {
+  if (input.amountCredits <= 0) {
+    throw new Error("Valor de creditos do estorno deve ser maior que zero.");
+  }
+
+  await ensureCreditWalletForRefundFallback(client, input.organizationId);
+
+  const wallet = await loadCreditWalletForRefund(client, input.organizationId);
+  const currentBalance = Math.max(toNumber(wallet.balance_credits), 0);
+  const reversedCredits = roundCredits(Math.min(currentBalance, input.amountCredits));
+  const uncoveredCredits = roundCredits(Math.max(input.amountCredits - reversedCredits, 0));
+  const balanceAfterCredits = roundCredits(currentBalance - reversedCredits);
+  const now = new Date().toISOString();
+  const walletMetadata = isRecord(wallet.metadata) ? wallet.metadata : {};
+  const { error: walletError } = await client
+    .from("credit_wallets")
+    .update({
+      balance_credits: balanceAfterCredits,
+      metadata: {
+        ...walletMetadata,
+        last_refund_at: now,
+        last_refund_requested_credits: input.amountCredits,
+        last_refund_reversed_credits: reversedCredits,
+        last_refund_external_reference: input.externalReference ?? null,
+        ...(uncoveredCredits > 0 ? { last_refund_uncovered_credits: uncoveredCredits } : {}),
+      },
+      updated_at: now,
+    })
+    .eq("id", wallet.id)
+    .eq("organization_id", input.organizationId);
+
+  if (walletError) {
+    throw new Error(`Nao foi possivel atualizar carteira no estorno: ${walletError.message}`);
+  }
+
+  if (reversedCredits <= 0) {
+    return {
+      transactionId: null,
+      reversedCredits,
+      uncoveredCredits,
+      balanceAfterCredits,
+    };
+  }
+
+  const transactionMetadata = {
+    ...(input.metadata ?? {}),
+    requested_refund_credits: input.amountCredits,
+    reversed_credits: reversedCredits,
+    uncovered_credits: uncoveredCredits,
+    fallback_without_refund_rpc: true,
+  };
+  const { data, error: transactionError } = await client
+    .from("credit_transactions")
+    .insert({
+      organization_id: input.organizationId,
+      wallet_id: wallet.id,
+      transaction_type: "refund",
+      amount_credits: reversedCredits * -1,
+      balance_after_credits: balanceAfterCredits,
+      external_reference: input.externalReference ?? null,
+      description: input.description ?? null,
+      metadata: transactionMetadata,
+    })
+    .select("id")
+    .maybeSingle<{ id: string }>();
+
+  if (transactionError) {
+    throw new Error(`Nao foi possivel registrar transacao de estorno: ${transactionError.message}`);
+  }
+
+  return {
+    transactionId: data?.id ? String(data.id) : null,
+    reversedCredits,
+    uncoveredCredits,
+    balanceAfterCredits,
+  };
+}
+
+async function ensureCreditWalletForRefundFallback(client: SupabaseClient, organizationId: string) {
+  try {
+    await ensureCreditWallet(client, organizationId);
+    return;
+  } catch (error) {
+    if (!isMissingEnsureWalletRpcError(error)) {
+      throw error;
+    }
+  }
+
+  const { error } = await client
+    .from("credit_wallets")
+    .insert({ organization_id: organizationId });
+
+  if (error && error.code !== "23505") {
+    throw new Error(`Nao foi possivel criar carteira de creditos: ${error.message}`);
+  }
+}
+
+async function loadCreditWalletForRefund(client: SupabaseClient, organizationId: string) {
+  const { data, error } = await client
+    .from("credit_wallets")
+    .select("id, organization_id, balance_credits, reserved_credits, lifetime_purchased_credits, lifetime_used_credits, status, metadata")
+    .eq("organization_id", organizationId)
+    .maybeSingle<WalletRow>();
+
+  if (error || !data) {
+    throw new Error(`Nao foi possivel carregar carteira para estorno: ${error?.message ?? "carteira nao encontrada"}`);
+  }
+
+  return data;
 }
 
 export async function debitCredits(client: SupabaseClient, input: CreditDebitInput) {
@@ -458,6 +577,35 @@ function isTrialUsageNotificationCandidate(status: BillingAccessStatus) {
     || status.organizationStatus === "trial"
     || status.organizationStatus === "trial_pending"
     || status.state.startsWith("trial_");
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function isMissingRefundRpcError(error: unknown) {
+  return isMissingDatabaseObjectError(error, "reverse_credit_wallet_for_refund");
+}
+
+function isMissingEnsureWalletRpcError(error: unknown) {
+  return isMissingDatabaseObjectError(error, "ensure_credit_wallet");
+}
+
+function isMissingDatabaseObjectError(error: unknown, objectName: string) {
+  const message = error instanceof Error
+    ? error.message
+    : isRecord(error) && "message" in error
+      ? String(error.message ?? "")
+      : "";
+  const code = isRecord(error) && "code" in error ? String(error.code ?? "") : "";
+  const normalized = message.toLowerCase();
+  const normalizedObjectName = objectName.toLowerCase();
+
+  return (
+    ((code === "PGRST202" || code === "PGRST204" || code === "PGRST205") && normalized.includes(normalizedObjectName))
+    || (normalized.includes("schema cache") && normalized.includes(normalizedObjectName))
+    || normalized.includes(`function public.${normalizedObjectName}`)
+  );
 }
 
 function roundUsageUnits(value: number) {
