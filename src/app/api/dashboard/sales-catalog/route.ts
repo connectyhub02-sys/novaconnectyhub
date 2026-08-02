@@ -70,7 +70,7 @@ import {
 } from "@/lib/sales-catalog/mercado-pago";
 import { createSalesCatalogPixPaymentSession } from "@/lib/sales-catalog/payment-sessions";
 import { calculateSalesCatalogShippingQuotes, normalizeSalesCatalogCep } from "@/lib/sales-catalog/shipping-calculator";
-import { importWhatsappCatalog, setWhatsappCatalogVisibility } from "@/lib/sales-catalog/whatsapp-sync";
+import { exportWhatsappCatalogProducts, importWhatsappCatalog, setWhatsappCatalogVisibility } from "@/lib/sales-catalog/whatsapp-sync";
 import { loadR2Config, putR2Object } from "@/lib/storage/r2";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
@@ -477,7 +477,22 @@ async function handleJsonPost(request: NextRequest, workspace: CurrentWorkspace)
       const result = await importWhatsappCatalog({
         userId: workspace.user.id,
         companyId,
-        catalogJid: readFormString(body?.catalogJid),
+        whatsappInstanceId: readFormString(body?.whatsappInstanceId),
+        client,
+      });
+
+      revalidatePath("/dashboard/links");
+      revalidatePath("/dashboard/whatsapp");
+
+      return NextResponse.json(result);
+    }
+
+    if (action === "export_whatsapp_catalog") {
+      const result = await exportWhatsappCatalogProducts({
+        userId: workspace.user.id,
+        companyId,
+        whatsappInstanceId: readFormString(body?.whatsappInstanceId),
+        itemIds: readStringArray(body?.itemIds),
         client,
       });
 
@@ -3217,6 +3232,16 @@ function statusForRouteError(error: unknown, fallback: number) {
 
 function readFormString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function readStringArray(value: unknown) {
+  if (!Array.isArray(value)) return [];
+
+  return Array.from(new Set(
+    value
+      .map((item) => normalizeUuid(readFormString(item)))
+      .filter((item): item is string => Boolean(item)),
+  ));
 }
 
 function readRecord(value: unknown): JsonRecord | null {

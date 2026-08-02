@@ -58,6 +58,7 @@ import {
   type ClientSalesCatalogPaymentSession,
   type ClientSalesCatalogSettings,
   type ClientSalesCatalogShippingSettings,
+  type ClientSalesCatalogWhatsappInstance,
   type SalesCatalogAttribute,
   type SalesCatalogBusinessType,
   type SalesCatalogCommercialFlowType,
@@ -108,6 +109,7 @@ type SalesCatalogConsoleProps = {
   initialPaymentSessions: ClientSalesCatalogPaymentSession[];
   initialSettings: ClientSalesCatalogSettings[];
   initialShippingSettings: ClientSalesCatalogShippingSettings[];
+  initialWhatsappInstances: ClientSalesCatalogWhatsappInstance[];
   initialCompanyId: string | null;
 };
 
@@ -289,7 +291,8 @@ const salesCatalogHelpText: Record<string, string> = {
   "Calculo por CEP": "Teste um CEP real para conferir se as regras de frete retornam valor e prazo corretos.",
   "Produto do pedido": "Selecione o item que sera registrado como pedido vindo do WhatsApp.",
   "SKU / variacao": "Escolha a combinacao vendavel quando o produto tiver estoque ou preco por variacao.",
-  "Telefone ou JID opcional": "Informe um contato quando quiser vincular o pedido a um lead especifico do WhatsApp.",
+  "Importar da instancia": "Escolha uma instancia WhatsApp conectada na plataforma.",
+  "Exportar para agente": "Escolha a instancia/agente que recebera os produtos da base.",
   "Lead no WhatsApp": "Dados do lead usados para localizar a conversa e continuar o atendimento.",
   Pedido: "Dados principais do pedido registrado a partir do WhatsApp.",
   Total: "Valor total do pedido, incluindo produto, frete ou ajustes manuais.",
@@ -337,6 +340,7 @@ export function SalesCatalogConsole({
   initialPaymentSessions,
   initialSettings,
   initialShippingSettings,
+  initialWhatsappInstances,
   initialCompanyId,
 }: SalesCatalogConsoleProps) {
   const initialSelectedCompanyId = initialCompanyId ?? initialCompanies[0]?.id ?? "";
@@ -348,6 +352,7 @@ export function SalesCatalogConsole({
   const [paymentSessions, setPaymentSessions] = useState(initialPaymentSessions);
   const [settings, setSettings] = useState(initialSettings);
   const [shippingSettings, setShippingSettings] = useState(initialShippingSettings);
+  const [whatsappInstances] = useState(initialWhatsappInstances);
   const [selectedCompanyId, setSelectedCompanyId] = useState(initialSelectedCompanyId);
   const [activeTab, setActiveTab] = useState<CatalogTab>(initialSelectedSettings?.configured ? "products" : "setup");
   const [productFormTab, setProductFormTab] = useState<SalesCatalogProductFormTab>("essential");
@@ -399,7 +404,9 @@ export function SalesCatalogConsole({
   const [files, setFiles] = useState<File[]>([]);
   const [editingMedia, setEditingMedia] = useState<SalesCatalogMedia[]>([]);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
-  const [catalogJid, setCatalogJid] = useState("");
+  const [selectedCatalogImportInstanceId, setSelectedCatalogImportInstanceId] = useState("");
+  const [selectedCatalogExportInstanceId, setSelectedCatalogExportInstanceId] = useState("");
+  const [selectedCatalogExportItemIds, setSelectedCatalogExportItemIds] = useState<string[]>([]);
   const [orderItemId, setOrderItemId] = useState("");
   const [orderSkuId, setOrderSkuId] = useState("");
   const [orderQuantity, setOrderQuantity] = useState("1");
@@ -422,6 +429,7 @@ export function SalesCatalogConsole({
   const [creatingPaymentSessionId, setCreatingPaymentSessionId] = useState<string | null>(null);
   const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
+  const [exportingWhatsappCatalog, setExportingWhatsappCatalog] = useState(false);
   const [catalogImportJobs, setCatalogImportJobs] = useState<ClientSalesCatalogImportJob[]>([]);
   const [loadingCatalogImports, setLoadingCatalogImports] = useState(false);
   const [creatingCatalogImport, setCreatingCatalogImport] = useState(false);
@@ -451,6 +459,20 @@ export function SalesCatalogConsole({
   const visiblePaymentSessions = useMemo(
     () => paymentSessions.filter((session) => !selectedCompanyId || session.companyId === selectedCompanyId),
     [paymentSessions, selectedCompanyId],
+  );
+  const visibleWhatsappInstances = useMemo(
+    () => whatsappInstances.filter((instance) => !selectedCompanyId || instance.companyId === selectedCompanyId),
+    [selectedCompanyId, whatsappInstances],
+  );
+  const connectedWhatsappInstances = useMemo(
+    () => visibleWhatsappInstances.filter((instance) => instance.status === "connected" && instance.tokenReady),
+    [visibleWhatsappInstances],
+  );
+  const selectedCatalogImportInstance = connectedWhatsappInstances.find((instance) => instance.id === selectedCatalogImportInstanceId) ?? connectedWhatsappInstances[0] ?? null;
+  const selectedCatalogExportInstance = connectedWhatsappInstances.find((instance) => instance.id === selectedCatalogExportInstanceId) ?? connectedWhatsappInstances[0] ?? null;
+  const selectedCatalogExportItems = useMemo(
+    () => visibleItems.filter((item) => selectedCatalogExportItemIds.includes(item.id)),
+    [selectedCatalogExportItemIds, visibleItems],
   );
   const filteredOrders = useMemo(
     () => orderFlowFilter === "all" ? visibleOrders : visibleOrders.filter((order) => order.commercialFlowType === orderFlowFilter),
@@ -503,6 +525,8 @@ export function SalesCatalogConsole({
     && (salesDestination !== "external_site" || productUrl.trim())
     && !creating,
   );
+  const canImportWhatsappCatalog = Boolean(selectedCompanyId && selectedCatalogImportInstance && !importing);
+  const canExportWhatsappCatalog = Boolean(selectedCompanyId && selectedCatalogExportInstance && selectedCatalogExportItems.length > 0 && !exportingWhatsappCatalog);
   const canCalculateQuote = Boolean(selectedCompanyId && quoteItemId && cleanCep(quoteCep) && !calculatingQuote);
   const canCreateOrder = Boolean(selectedCompanyId && orderItemId && (orderCustomerName.trim() || orderCustomerPhone.trim()) && !creatingOrder);
 
@@ -619,6 +643,9 @@ export function SalesCatalogConsole({
     setCatalogImportSourceUrl("");
     setCatalogImportFiles([]);
     setCatalogImportPatches({});
+    setSelectedCatalogImportInstanceId("");
+    setSelectedCatalogExportInstanceId("");
+    setSelectedCatalogExportItemIds([]);
   }
 
   function applyBusinessTemplate(value: SalesCatalogBusinessType) {
@@ -1481,7 +1508,7 @@ export function SalesCatalogConsole({
   }
 
   async function importWhatsappCatalog() {
-    if (!selectedCompanyId || importing) return;
+    if (!selectedCompanyId || !selectedCatalogImportInstance || importing) return;
 
     setImporting(true);
     setNotice(null);
@@ -1493,7 +1520,7 @@ export function SalesCatalogConsole({
         body: JSON.stringify({
           action: "import_whatsapp_catalog",
           companyId: selectedCompanyId,
-          catalogJid: catalogJid.trim() || undefined,
+          whatsappInstanceId: selectedCatalogImportInstance.id,
         }),
       });
       const data = await response.json().catch(() => null) as {
@@ -1523,6 +1550,61 @@ export function SalesCatalogConsole({
     } finally {
       setImporting(false);
     }
+  }
+
+  async function exportWhatsappCatalog() {
+    if (!selectedCompanyId || !selectedCatalogExportInstance || selectedCatalogExportItems.length === 0 || exportingWhatsappCatalog) return;
+
+    setExportingWhatsappCatalog(true);
+    setNotice(null);
+
+    try {
+      const response = await fetch("/api/dashboard/sales-catalog", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "export_whatsapp_catalog",
+          companyId: selectedCompanyId,
+          whatsappInstanceId: selectedCatalogExportInstance.id,
+          itemIds: selectedCatalogExportItems.map((item) => item.id),
+        }),
+      });
+      const data = await response.json().catch(() => null) as {
+        items?: ClientSalesCatalogItem[];
+        exported?: number;
+        providerSupported?: boolean;
+        error?: string;
+      } | null;
+
+      if (!response.ok || !data?.items) {
+        throw new Error(data?.error ?? "Nao foi possivel exportar o catalogo para o WhatsApp.");
+      }
+
+      setItems((current) => {
+        const updatedIds = new Set(data.items!.map((item) => item.id));
+        return current.map((item) => updatedIds.has(item.id) ? data.items!.find((updated) => updated.id === item.id) ?? item : item);
+      });
+      setSelectedCatalogExportItemIds([]);
+
+      setNotice({
+        tone: data.providerSupported ? "success" : "warning",
+        message: data.providerSupported
+          ? `${data.exported ?? 0} produto(s) exportado(s) para o WhatsApp.`
+          : `${data.exported ?? 0} produto(s) vinculados a ${selectedCatalogExportInstance.label}. A criacao nativa no catalogo WhatsApp fica pendente do endpoint de cadastro do provedor.`,
+      });
+    } catch (error) {
+      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao exportar catalogo WhatsApp." });
+    } finally {
+      setExportingWhatsappCatalog(false);
+    }
+  }
+
+  function toggleWhatsappExportItem(itemId: string) {
+    setSelectedCatalogExportItemIds((current) => (
+      current.includes(itemId)
+        ? current.filter((id) => id !== itemId)
+        : [...current, itemId]
+    ));
   }
 
   async function setWhatsappVisibility(item: ClientSalesCatalogItem, visible: boolean) {
@@ -2854,15 +2936,25 @@ export function SalesCatalogConsole({
             onRefresh={refreshCatalogImports}
             onSaveReview={saveCatalogImportReview}
           />
-          <WhatsAppCatalogImportPanel
-            catalogJid={catalogJid}
+          <WhatsAppCatalogBridgePanel
             companies={companies}
             companyName={selectedCompany?.name ?? "empresa"}
+            canExport={canExportWhatsappCatalog}
+            canImport={canImportWhatsappCatalog}
+            connectedInstances={connectedWhatsappInstances}
+            exportItemIds={selectedCatalogExportItems.map((item) => item.id)}
+            exporting={exportingWhatsappCatalog}
             importing={importing}
+            items={visibleItems}
+            selectedExportInstanceId={selectedCatalogExportInstance?.id ?? ""}
+            selectedImportInstanceId={selectedCatalogImportInstance?.id ?? ""}
             selectedCompanyId={selectedCompanyId}
-            onChangeCatalogJid={setCatalogJid}
             onChangeCompany={changeCompany}
+            onChangeExportInstance={setSelectedCatalogExportInstanceId}
+            onChangeImportInstance={setSelectedCatalogImportInstanceId}
+            onExport={exportWhatsappCatalog}
             onImport={importWhatsappCatalog}
+            onToggleExportItem={toggleWhatsappExportItem}
           />
           <Panel id="sales-catalog-tour-products" title={editingItemId ? "Editar item" : "Novo item"} eyebrow={selectedCompany?.name ?? "empresa"} tone="cyan" compact>
             <div className="space-y-3">
@@ -3555,15 +3647,25 @@ export function SalesCatalogConsole({
           </Panel>
           </>
           ) : (
-          <WhatsAppCatalogImportPanel
-            catalogJid={catalogJid}
+          <WhatsAppCatalogBridgePanel
             companies={companies}
             companyName={selectedCompany?.name ?? "empresa"}
+            canExport={canExportWhatsappCatalog}
+            canImport={canImportWhatsappCatalog}
+            connectedInstances={connectedWhatsappInstances}
+            exportItemIds={selectedCatalogExportItems.map((item) => item.id)}
+            exporting={exportingWhatsappCatalog}
             importing={importing}
+            items={visibleItems}
+            selectedExportInstanceId={selectedCatalogExportInstance?.id ?? ""}
+            selectedImportInstanceId={selectedCatalogImportInstance?.id ?? ""}
             selectedCompanyId={selectedCompanyId}
-            onChangeCatalogJid={setCatalogJid}
             onChangeCompany={changeCompany}
+            onChangeExportInstance={setSelectedCatalogExportInstanceId}
+            onChangeImportInstance={setSelectedCatalogImportInstanceId}
+            onExport={exportWhatsappCatalog}
             onImport={importWhatsappCatalog}
+            onToggleExportItem={toggleWhatsappExportItem}
           />
           )}
         </div>
@@ -3597,27 +3699,51 @@ export function SalesCatalogConsole({
   );
 }
 
-function WhatsAppCatalogImportPanel({
-  catalogJid,
+function WhatsAppCatalogBridgePanel({
+  canExport,
+  canImport,
   companies,
   companyName,
+  connectedInstances,
+  exportItemIds,
+  exporting,
   importing,
+  items,
   selectedCompanyId,
-  onChangeCatalogJid,
+  selectedExportInstanceId,
+  selectedImportInstanceId,
   onChangeCompany,
+  onChangeExportInstance,
+  onChangeImportInstance,
+  onExport,
   onImport,
+  onToggleExportItem,
 }: {
-  catalogJid: string;
+  canExport: boolean;
+  canImport: boolean;
   companies: ClientCompany[];
   companyName: string;
+  connectedInstances: ClientSalesCatalogWhatsappInstance[];
+  exportItemIds: string[];
+  exporting: boolean;
   importing: boolean;
+  items: ClientSalesCatalogItem[];
   selectedCompanyId: string;
-  onChangeCatalogJid: (value: string) => void;
+  selectedExportInstanceId: string;
+  selectedImportInstanceId: string;
   onChangeCompany: (companyId: string) => void;
+  onChangeExportInstance: (instanceId: string) => void;
+  onChangeImportInstance: (instanceId: string) => void;
+  onExport: () => void;
   onImport: () => void;
+  onToggleExportItem: (itemId: string) => void;
 }) {
+  const exportIds = new Set(exportItemIds);
+  const exportableItems = items.filter((item) => item.status !== "archived");
+  const selectedExportInstance = connectedInstances.find((instance) => instance.id === selectedExportInstanceId) ?? null;
+
   return (
-    <Panel title="Importar do catalogo WhatsApp" eyebrow={companyName} tone="violet" compact>
+    <Panel title="Catalogo WhatsApp" eyebrow={companyName} tone="violet" compact>
       <div className="space-y-3">
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="block">
@@ -3634,19 +3760,27 @@ function WhatsAppCatalogImportPanel({
             </select>
           </label>
           <label className="block">
-            <FieldLabel>Telefone ou JID opcional</FieldLabel>
-            <input
-              value={catalogJid}
-              onChange={(event) => onChangeCatalogJid(event.target.value.slice(0, 80))}
+            <FieldLabel>Importar da instancia</FieldLabel>
+            <select
+              value={selectedImportInstanceId}
+              onChange={(event) => onChangeImportInstance(event.target.value)}
+              disabled={connectedInstances.length === 0}
               className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
-              placeholder="5511999999999 ou 5511999999999@s.whatsapp.net"
               style={{ borderColor: "var(--ch-border)" }}
-            />
+            >
+              {connectedInstances.length > 0 ? (
+                connectedInstances.map((instance) => (
+                  <option key={instance.id} value={instance.id}>{instance.label}</option>
+                ))
+              ) : (
+                <option value="">Nenhuma instancia conectada</option>
+              )}
+            </select>
           </label>
         </div>
         <button
           type="button"
-          disabled={!selectedCompanyId || importing}
+          disabled={!canImport}
           onClick={onImport}
           className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border px-4 text-[12px] font-bold text-cyan-100 transition hover:bg-cyan-400/10 disabled:cursor-not-allowed disabled:opacity-50"
           style={{ borderColor: "var(--ch-border)" }}
@@ -3654,6 +3788,74 @@ function WhatsAppCatalogImportPanel({
           {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
           Importar / sincronizar catalogo WhatsApp
         </button>
+
+        <div className="grid gap-3 rounded-xl border p-3 lg:grid-cols-[minmax(220px,0.48fr)_minmax(0,1fr)]" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+          <div className="space-y-3">
+            <label className="block">
+              <FieldLabel>Exportar para agente</FieldLabel>
+              <select
+                value={selectedExportInstanceId}
+                onChange={(event) => onChangeExportInstance(event.target.value)}
+                disabled={connectedInstances.length === 0}
+                className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                style={{ borderColor: "var(--ch-border)" }}
+              >
+                {connectedInstances.length > 0 ? (
+                  connectedInstances.map((instance) => (
+                    <option key={instance.id} value={instance.id}>{instance.label}</option>
+                  ))
+                ) : (
+                  <option value="">Nenhuma instancia conectada</option>
+                )}
+              </select>
+            </label>
+            <MiniStat label="selecionados" value={exportItemIds.length.toString()} />
+            <button
+              type="button"
+              disabled={!canExport}
+              onClick={onExport}
+              className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border px-4 text-[12px] font-bold text-violet-100 transition hover:bg-violet-400/10 disabled:cursor-not-allowed disabled:opacity-50"
+              style={{ borderColor: "var(--ch-border)" }}
+            >
+              {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <CloudDownload className="h-4 w-4" />}
+              Exportar / vincular produtos
+            </button>
+          </div>
+
+          <div className="max-h-64 overflow-y-auto rounded-lg border" style={{ borderColor: "var(--ch-border)" }}>
+            {exportableItems.length > 0 ? (
+              <div className="divide-y" style={{ borderColor: "var(--ch-border)" }}>
+                {exportableItems.map((item) => {
+                  const checked = exportIds.has(item.id);
+                  const assignedToSelected = Boolean(
+                    selectedExportInstance
+                    && (
+                      item.assignedWhatsappInstanceIds.includes(selectedExportInstance.id)
+                      || (selectedExportInstance.agentId ? item.assignedAgentIds.includes(selectedExportInstance.agentId) : false)
+                    ),
+                  );
+
+                  return (
+                    <label key={item.id} className="grid cursor-pointer grid-cols-[18px_minmax(0,1fr)_auto] items-center gap-3 px-3 py-2 text-[12px] transition hover:bg-cyan-400/5">
+                      <input
+                        checked={checked}
+                        type="checkbox"
+                        onChange={() => onToggleExportItem(item.id)}
+                      />
+                      <span className="min-w-0">
+                        <span className="block truncate font-semibold text-slate-200">{item.title}</span>
+                        <span className="block truncate text-[10px] text-slate-500">{item.price ? `${item.price} ${item.currency}` : item.category ?? item.tag}</span>
+                      </span>
+                      {assignedToSelected ? <NeonBadge tone="green">vinculado</NeonBadge> : null}
+                    </label>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="px-3 py-8 text-center text-[12px] text-slate-500">Nenhum produto disponivel.</div>
+            )}
+          </div>
+        </div>
       </div>
     </Panel>
   );
@@ -4456,6 +4658,9 @@ function CatalogItemCard({
             {item.highlightLabel ? <NeonBadge tone="amber">{item.highlightLabel}</NeonBadge> : null}
             <NeonBadge tone={salesDestinationTone(item.salesDestination)}>{formatSalesCatalogSalesDestination(item.salesDestination)}</NeonBadge>
             <NeonBadge tone={item.source === "whatsapp_catalog" ? "green" : "cyan"}>{sourceLabel}</NeonBadge>
+            {item.assignedAgentIds.length > 0 || item.assignedWhatsappInstanceIds.length > 0 ? (
+              <NeonBadge tone="violet">{item.assignedAgentIds.length || item.assignedWhatsappInstanceIds.length} agente(s)</NeonBadge>
+            ) : null}
             <NeonBadge tone={inventoryTone(item.inventory.status)}>{formatSalesCatalogStockStatus(item.inventory.status)}</NeonBadge>
             <NeonBadge tone={item.readiness === "ready" ? "green" : "amber"}>{formatReadiness(item.readiness)}</NeonBadge>
           </div>

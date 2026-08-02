@@ -10,6 +10,7 @@ import {
   listClientSalesCatalogPaymentSessions,
   listClientSalesCatalogSettings,
   listClientSalesCatalogShippingSettings,
+  listClientSalesCatalogWhatsappInstances,
 } from "@/lib/client-os/sales-catalog";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
@@ -29,7 +30,7 @@ export default async function DashboardLinksPage() {
   }
 
   const client = createServiceClient();
-  const [companies, items, settings, shippingSettings, orders, paymentIntegrations, paymentSessions] = await Promise.all([
+  const [companies, items, settings, shippingSettings, orders, paymentIntegrations, paymentSessions, whatsappInstances] = await Promise.all([
     listClientCompanies(workspace.user.id, client),
     listClientSalesCatalog({ userId: workspace.user.id, client }),
     listClientSalesCatalogSettings({ userId: workspace.user.id, client }),
@@ -37,6 +38,7 @@ export default async function DashboardLinksPage() {
     listClientSalesCatalogOrders({ userId: workspace.user.id, client }),
     listClientSalesCatalogPaymentIntegrations({ userId: workspace.user.id, client }),
     listClientSalesCatalogPaymentSessions({ userId: workspace.user.id, client }),
+    listClientSalesCatalogWhatsappInstances({ userId: workspace.user.id, client }),
   ]);
   const organization = workspace.organization;
 
@@ -58,6 +60,7 @@ export default async function DashboardLinksPage() {
         initialPaymentSessions={paymentSessions}
         initialSettings={settings}
         initialShippingSettings={shippingSettings}
+        initialWhatsappInstances={whatsappInstances}
       />
     </ConnectyShell>
   );

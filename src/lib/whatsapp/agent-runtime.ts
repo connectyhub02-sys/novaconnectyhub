@@ -736,7 +736,13 @@ async function loadRunContext(client: SupabaseClient, runId: string) {
     : await Promise.all([
         loadOrganizationKnowledge(client, run.organization_id),
         loadOrganizationLinkButtons(client, run.organization_id),
-        listOrganizationSalesCatalog(client, run.organization_id).then((items) => items.filter((item) => item.status === "active")),
+        listOrganizationSalesCatalog(client, run.organization_id).then((items) => items.filter((item) => (
+          item.status === "active"
+          && isSalesCatalogVisibleForRuntime(item, {
+            agentId: run.agent_id,
+            whatsappInstanceId,
+          })
+        ))),
         getOrganizationSalesCatalogSettings(client, run.organization_id),
         getOrganizationSalesCatalogShippingSettings(client, run.organization_id).catch(() => null),
         loadOrganizationSalesCatalogOrders(client, {
@@ -1063,6 +1069,23 @@ async function loadGlobalAgent(client: SupabaseClient, organizationId: string) {
     .maybeSingle<AgentRow>();
 
   return data ?? null;
+}
+
+function isSalesCatalogVisibleForRuntime(
+  item: RuntimeSalesCatalogItem,
+  input: {
+    agentId: string;
+    whatsappInstanceId: string;
+  },
+) {
+  const agentIds = item.assignedAgentIds ?? [];
+  const whatsappInstanceIds = item.assignedWhatsappInstanceIds ?? [];
+
+  if (agentIds.length === 0 && whatsappInstanceIds.length === 0) {
+    return true;
+  }
+
+  return agentIds.includes(input.agentId) || whatsappInstanceIds.includes(input.whatsappInstanceId);
 }
 
 async function loadLead(client: SupabaseClient, leadId: string) {

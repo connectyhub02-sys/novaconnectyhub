@@ -2,6 +2,7 @@ export type SalesCatalogItemStatus = "active" | "draft" | "archived";
 export type SalesCatalogMediaKind = "image" | "video" | "document";
 export type SalesCatalogSource = "manual" | "whatsapp_catalog";
 export type SalesCatalogSalesDestination = "connectyhub_checkout" | "external_site" | "manual_handoff";
+export type SalesCatalogWhatsappExportStatus = "linked" | "pending_provider_support" | "exported" | "failed";
 export type SalesCatalogBusinessType = "simple" | "fashion" | "physical" | "services" | "digital" | "food";
 export type SalesCatalogShippingProfile = "default" | "free" | "custom";
 export type SalesCatalogShippingProvider = "correios" | "carrier";
@@ -157,6 +158,26 @@ export type SalesCatalogShippingService = {
   tiers: SalesCatalogShippingWeightTier[];
 };
 
+export type SalesCatalogWhatsappExportTarget = {
+  whatsappInstanceId: string;
+  agentId: string | null;
+  status: SalesCatalogWhatsappExportStatus;
+  exportedAt: string | null;
+  providerProductId: string | null;
+};
+
+export type ClientSalesCatalogWhatsappInstance = {
+  id: string;
+  companyId: string;
+  agentId: string | null;
+  agentName: string | null;
+  displayName: string | null;
+  phoneNumber: string | null;
+  status: string;
+  tokenReady: boolean;
+  label: string;
+};
+
 export type ClientSalesCatalogItem = {
   id: string;
   companyId: string;
@@ -191,6 +212,11 @@ export type ClientSalesCatalogItem = {
   externalLinkButtonLabel: string | null;
   externalLinkButtonTag: string | null;
   externalLinkButtonTrackingUrl: string | null;
+  assignedAgentIds: string[];
+  assignedWhatsappInstanceIds: string[];
+  sourceAgentId: string | null;
+  sourceWhatsappInstanceId: string | null;
+  whatsappExportTargets: SalesCatalogWhatsappExportTarget[];
   source: SalesCatalogSource;
   whatsappCatalogId: string | null;
   whatsappCatalogJid: string | null;

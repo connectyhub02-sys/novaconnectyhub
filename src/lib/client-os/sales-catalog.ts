@@ -22,6 +22,7 @@ import {
   type ClientSalesCatalogItem,
   type ClientSalesCatalogOrder,
   type ClientSalesCatalogShippingSettings,
+  type ClientSalesCatalogWhatsappInstance,
   type SalesCatalogAttribute,
   type SalesCatalogBusinessType,
   type SalesCatalogFulfillmentStatus,
@@ -58,6 +59,8 @@ import {
   type SalesCatalogSalesDestination,
   type SalesCatalogSku,
   type SalesCatalogSkuStatus,
+  type SalesCatalogWhatsappExportStatus,
+  type SalesCatalogWhatsappExportTarget,
 } from "@/lib/sales-catalog/shared";
 
 type JsonRecord = Record<string, unknown>;
@@ -204,6 +207,28 @@ export type SalesCatalogPaymentSessionRow = {
   updated_at: string | null;
 };
 
+type WhatsappInstanceRow = {
+  id: string;
+  organization_id: string | null;
+  provider_instance_id: string | null;
+  phone_number: string | null;
+  display_name: string | null;
+  status: string | null;
+  instance_token_encrypted: string | null;
+  metadata: JsonRecord | null;
+  updated_at: string | null;
+};
+
+type AgentRegistryRow = {
+  id: string;
+  organization_id: string | null;
+  name: string | null;
+  persona_name: string | null;
+  agent_code: string | null;
+  status: string | null;
+  metadata: JsonRecord | null;
+};
+
 export async function listClientSalesCatalog(input: {
   userId: string;
   companyId?: string | null;
@@ -232,6 +257,79 @@ export async function listClientSalesCatalog(input: {
   }
 
   return attachSalesCatalogSkus(client, ((data ?? []) as SalesCatalogMemoryRow[]).map(mapSalesCatalogItem));
+}
+
+export async function listClientSalesCatalogWhatsappInstances(input: {
+  userId: string;
+  companyId?: string | null;
+  client?: SupabaseClient;
+}): Promise<ClientSalesCatalogWhatsappInstance[]> {
+  const client = input.client ?? createServiceClient();
+  const companies = input.companyId
+    ? [await requireClientCompanyAccess({ userId: input.userId, companyId: input.companyId, client })]
+    : await listClientCompanies(input.userId, client);
+  const companyIds = companies.map((company) => company.id);
+
+  if (companyIds.length === 0) {
+    return [];
+  }
+
+  const [{ data: instances, error: instanceError }, { data: agents, error: agentError }] = await Promise.all([
+    client
+      .from("whatsapp_instances")
+      .select("id, organization_id, provider_instance_id, phone_number, display_name, status, instance_token_encrypted, metadata, updated_at")
+      .in("organization_id", companyIds)
+      .eq("provider", "uazapi")
+      .neq("status", "archived")
+      .order("updated_at", { ascending: false })
+      .returns<WhatsappInstanceRow[]>(),
+    client
+      .from("agent_registry")
+      .select("id, organization_id, name, persona_name, agent_code, status, metadata")
+      .in("organization_id", companyIds)
+      .neq("status", "archived")
+      .returns<AgentRegistryRow[]>(),
+  ]);
+
+  if (instanceError) {
+    throw new Error(`Nao foi possivel carregar as instancias WhatsApp: ${instanceError.message}`);
+  }
+
+  if (agentError) {
+    throw new Error(`Nao foi possivel carregar os agentes WhatsApp: ${agentError.message}`);
+  }
+
+  const agentsById = new Map((agents ?? []).map((agent) => [agent.id, agent]));
+  const agentsByCompany = new Map<string, AgentRegistryRow[]>();
+
+  for (const agent of agents ?? []) {
+    const companyId = readString(agent.organization_id);
+    if (!companyId) continue;
+
+    const current = agentsByCompany.get(companyId) ?? [];
+    current.push(agent);
+    agentsByCompany.set(companyId, current);
+  }
+
+  return (instances ?? [])
+    .filter((instance) => Boolean(readString(instance.organization_id)))
+    .map((instance) => {
+      const companyId = readString(instance.organization_id) ?? "";
+      const agent = resolveWhatsappInstanceAgent(instance, agentsById, agentsByCompany.get(companyId) ?? []);
+      const agentName = agent ? readString(agent.persona_name) ?? readString(agent.name) : null;
+
+      return {
+        id: instance.id,
+        companyId,
+        agentId: agent?.id ?? null,
+        agentName,
+        displayName: readString(instance.display_name),
+        phoneNumber: readString(instance.phone_number),
+        status: readString(instance.status) ?? "unknown",
+        tokenReady: Boolean(instance.instance_token_encrypted),
+        label: formatWhatsappInstanceLabel(instance, agentName),
+      };
+    });
 }
 
 export async function listClientSalesCatalogSettings(input: {
@@ -590,6 +688,11 @@ export function mapSalesCatalogItem(row: SalesCatalogMemoryRow): ClientSalesCata
     externalLinkButtonLabel: readString(metadata.link_button_label) ?? readString(metadata.external_link_button_label),
     externalLinkButtonTag: readString(metadata.link_button_tag) ?? readString(metadata.external_link_button_tag),
     externalLinkButtonTrackingUrl: readString(metadata.link_button_tracking_url) ?? readString(metadata.external_link_button_tracking_url),
+    assignedAgentIds: readStringList(metadata.assigned_agent_ids ?? metadata.agent_ids, []),
+    assignedWhatsappInstanceIds: readStringList(metadata.assigned_whatsapp_instance_ids ?? metadata.whatsapp_instance_ids, []),
+    sourceAgentId: readString(metadata.source_agent_id) ?? readString(metadata.agent_id),
+    sourceWhatsappInstanceId: readString(metadata.source_whatsapp_instance_id) ?? readString(metadata.whatsapp_instance_id),
+    whatsappExportTargets: readWhatsappExportTargets(metadata.whatsapp_export_targets),
     source: normalizeSource(readString(metadata.source)),
     whatsappCatalogId: readString(metadata.whatsapp_catalog_id),
     whatsappCatalogJid: readString(metadata.whatsapp_catalog_jid),
@@ -1337,6 +1440,94 @@ function readMessageTemplates(value: unknown, fallback: SalesCatalogWhatsAppMess
   };
 }
 
+function readWhatsappExportTargets(value: unknown): SalesCatalogWhatsappExportTarget[] {
+  if (!Array.isArray(value)) return [];
+
+  const targets = new Map<string, SalesCatalogWhatsappExportTarget>();
+
+  for (const item of value) {
+    const record = readRecord(item);
+    const whatsappInstanceId = readString(record?.whatsapp_instance_id) ?? readString(record?.whatsappInstanceId);
+
+    if (!record || !whatsappInstanceId) {
+      continue;
+    }
+
+    targets.set(whatsappInstanceId, {
+      whatsappInstanceId,
+      agentId: readString(record.agent_id) ?? readString(record.agentId),
+      status: normalizeWhatsappExportStatus(readString(record.status)),
+      exportedAt: readString(record.exported_at) ?? readString(record.exportedAt),
+      providerProductId: readString(record.provider_product_id) ?? readString(record.providerProductId),
+    });
+  }
+
+  return Array.from(targets.values());
+}
+
+function normalizeWhatsappExportStatus(value: string | null): SalesCatalogWhatsappExportStatus {
+  if (value === "linked" || value === "exported" || value === "failed") return value;
+  return "pending_provider_support";
+}
+
+function resolveWhatsappInstanceAgent(
+  instance: WhatsappInstanceRow,
+  agentsById: Map<string, AgentRegistryRow>,
+  organizationAgents: AgentRegistryRow[],
+) {
+  const candidateIds = getWhatsappInstanceAgentCandidateIds(instance);
+
+  for (const id of candidateIds) {
+    const agent = agentsById.get(id);
+    if (agent) return agent;
+  }
+
+  const activeWhatsappAgents = organizationAgents.filter((agent) => isWhatsappAgent(agent));
+  if (activeWhatsappAgents.length === 1) {
+    return activeWhatsappAgents[0];
+  }
+
+  if (organizationAgents.length === 1) {
+    return organizationAgents[0];
+  }
+
+  return null;
+}
+
+function getWhatsappInstanceAgentCandidateIds(instance: WhatsappInstanceRow) {
+  const metadata = readRecord(instance.metadata) ?? {};
+
+  return uniqueStrings([
+    readString(metadata.agent_id),
+    readString(metadata.agentId),
+    readString(metadata.whatsapp_agent_id),
+    readString(metadata.producer_agent_id),
+    ...readStringList(metadata.agent_ids, []),
+  ]);
+}
+
+function isWhatsappAgent(agent: AgentRegistryRow) {
+  const metadata = readRecord(agent.metadata) ?? {};
+  const agentKind = readString(metadata.agent_kind);
+  const agentCode = readString(agent.agent_code);
+
+  return agentKind === "whatsapp" || Boolean(agentCode?.includes("whatsapp"));
+}
+
+function formatWhatsappInstanceLabel(instance: WhatsappInstanceRow, agentName: string | null) {
+  const base = readString(instance.display_name)
+    ?? readString(instance.phone_number)
+    ?? readString(instance.provider_instance_id)
+    ?? "Instancia WhatsApp";
+  const suffix = [
+    agentName ? `Agente: ${agentName}` : null,
+    readString(instance.status) === "connected" ? "conectada" : readString(instance.status),
+    instance.instance_token_encrypted ? null : "sem token",
+  ].filter(Boolean).join(" | ");
+
+  return suffix ? `${base} (${suffix})` : base;
+}
+
 function readStringList(value: unknown, fallback: string[]) {
   if (!Array.isArray(value)) return fallback;
 
@@ -1345,6 +1536,10 @@ function readStringList(value: unknown, fallback: string[]) {
     .filter((item): item is string => Boolean(item));
 
   return Array.from(new Set(values));
+}
+
+function uniqueStrings(values: Array<string | null | undefined>) {
+  return Array.from(new Set(values.filter((value): value is string => Boolean(readString(value)))));
 }
 
 function readArrayLength(value: unknown) {
