@@ -4,6 +4,7 @@ import {
   Coins,
   CreditCard,
   Eye,
+  HardDrive,
   Link2,
   MapPin,
   Megaphone,
@@ -82,6 +83,8 @@ export function ClientDashboard({
           Alguns indicadores nao puderam ser atualizados agora. Os dados exibidos continuam limitados a esta empresa.
         </div>
       ) : null}
+
+      {overview.storage ? <StorageUsageBanner storage={overview.storage} /> : null}
 
       <div className="mb-4 grid gap-4 lg:grid-cols-3">
         <HeroMetricCard
@@ -526,6 +529,57 @@ function EmptyState({ title, detail }: { title: string; detail: string }) {
   );
 }
 
+function StorageUsageBanner({ storage }: { storage: NonNullable<ClientDashboardOverview["storage"]> }) {
+  const tone = storageTone(storage.status);
+  const fileLimitLabel = storage.fileLimit > 0 ? formatInteger(storage.fileLimit) : "sem limite";
+  const fileUsageLabel = `${formatInteger(storage.fileCount)}/${fileLimitLabel}`;
+
+  return (
+    <div
+      className="mb-4 rounded-2xl p-4"
+      style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}
+    >
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-center">
+        <div className="flex min-w-0 flex-1 items-start gap-3">
+          <div
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
+            style={{ background: "rgba(6,182,212,0.10)", border: "1px solid rgba(6,182,212,0.25)" }}
+          >
+            <HardDrive className="h-4 w-4" style={{ color: "var(--ch-accent)" }} />
+          </div>
+          <div className="min-w-0">
+            <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">
+              armazenamento / {storage.planName}
+            </p>
+            <p className="mt-1 text-[14px] font-semibold" style={{ color: "var(--ch-text)" }}>
+              {storage.usedLabel} usados de {storage.limitLabel}
+            </p>
+            <p className="mt-1 text-[11px] leading-4 text-slate-500">
+              {storage.availableLabel} livres para imagens, videos, arquivos de IA e midias de produtos.
+            </p>
+          </div>
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <div className="mb-1.5 flex items-center justify-between gap-2">
+            <span className="font-mono text-[9px] uppercase tracking-widest text-slate-500">uso atual</span>
+            <span className="font-mono text-[10px] font-semibold" style={{ color: "var(--ch-accent)" }}>
+              {storage.usedPercent}%
+            </span>
+          </div>
+          <ProgressBar value={storage.usedPercent} tone={tone} />
+        </div>
+
+        <div className="grid min-w-0 grid-cols-3 gap-2 xl:w-[420px]">
+          <KpiStat label="Usado" value={storage.usedLabel} tone={tone} />
+          <KpiStat label="Livre" value={storage.availableLabel} tone="cyan" />
+          <KpiStat label="Arquivos" value={fileUsageLabel} tone={storage.status === "danger" ? "rose" : "zinc"} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function buildRecommendation(overview: ClientDashboardOverview) {
   const warningAgent = overview.activeAgents.find((agent) => agent.status === "warning" || agent.status === "critical");
 
@@ -668,6 +722,12 @@ function toStatusTone(value: string): StatusTone {
   }
 
   return "idle";
+}
+
+function storageTone(status: NonNullable<ClientDashboardOverview["storage"]>["status"]): Tone {
+  if (status === "danger") return "rose";
+  if (status === "warning") return "amber";
+  return "cyan";
 }
 
 function formatInteger(value: number) {

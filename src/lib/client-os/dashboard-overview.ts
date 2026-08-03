@@ -2,6 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServiceClient } from "@/lib/supabase/service";
+import { formatStorageBytes, getOrganizationStorageState } from "@/lib/storage/quotas";
 import { listClientCompanies, requireClientCompanyAccess, type ClientCompany } from "./companies";
 
 type JsonRecord = Record<string, unknown>;
@@ -213,6 +214,23 @@ export type ClientDashboardCampaign = {
   updatedAt: string | null;
 };
 
+export type ClientDashboardStorage = {
+  planCode: string | null;
+  planName: string;
+  usedBytes: number;
+  limitBytes: number;
+  availableBytes: number;
+  usedPercent: number;
+  usedLabel: string;
+  limitLabel: string;
+  availableLabel: string;
+  fileCount: number;
+  fileLimit: number;
+  availableFileCount: number;
+  status: "ok" | "warning" | "danger";
+  updatedAt: string | null;
+};
+
 export type ClientDashboardOverview = {
   generatedAt: string;
   company: ClientCompany | null;
@@ -283,6 +301,7 @@ export type ClientDashboardOverview = {
   recentConversations: ClientDashboardConversation[];
   activeAgents: ClientDashboardAgent[];
   campaigns: ClientDashboardCampaign[];
+  storage: ClientDashboardStorage | null;
 };
 
 export type ClientDashboardOverviewRows = {
@@ -389,13 +408,18 @@ export async function getClientDashboardOverview(input: {
     organizationId: company.id,
     now,
   });
+  const storage = await loadDashboardStorage({
+    client,
+    organizationId: company.id,
+  });
 
   return buildClientDashboardOverviewFromRows({
     company,
     companies,
     now,
     rows,
-    warnings,
+    warnings: storage.warning ? [...warnings, storage.warning] : warnings,
+    storage: storage.data,
   });
 }
 
@@ -405,6 +429,7 @@ export function buildClientDashboardOverviewFromRows(input: {
   rows?: ClientDashboardOverviewRows;
   now?: Date;
   warnings?: string[];
+  storage?: ClientDashboardStorage | null;
 }): ClientDashboardOverview {
   const now = input.now ?? new Date();
   const generatedAt = now.toISOString();
@@ -519,6 +544,7 @@ export function buildClientDashboardOverviewFromRows(input: {
     recentConversations: buildRecentConversations(rows.conversations, leadsById),
     activeAgents: buildActiveAgents(rows.agents),
     campaigns: buildCampaigns(rows.metricSnapshots, rows.integrationAssets),
+    storage: input.storage ?? null,
   };
 }
 
@@ -669,6 +695,51 @@ async function loadDashboardRows(input: {
     },
     warnings: buckets.map((bucket) => bucket.warning).filter((warning): warning is string => Boolean(warning)),
   };
+}
+
+async function loadDashboardStorage(input: {
+  client: SupabaseClient;
+  organizationId: string;
+}): Promise<{ data: ClientDashboardStorage | null; warning: string | null }> {
+  try {
+    const state = await getOrganizationStorageState({
+      client: input.client,
+      organizationId: input.organizationId,
+    });
+    const fileLimit = state.entitlement.totalStorageFileLimit;
+    const fileWarningThreshold = fileLimit > 0 ? Math.ceil(fileLimit * 0.9) : Number.POSITIVE_INFINITY;
+    const status: ClientDashboardStorage["status"] =
+      state.usedPercent >= 95 || state.availableBytes <= 0 || state.availableFileCount <= 0
+        ? "danger"
+        : state.usedPercent >= 80 || state.usage.billableFileCount >= fileWarningThreshold
+          ? "warning"
+          : "ok";
+
+    return {
+      data: {
+        planCode: state.entitlement.planCode,
+        planName: state.entitlement.planName ?? state.entitlement.planCode ?? "Plano atual",
+        usedBytes: state.usage.usedBytes,
+        limitBytes: state.entitlement.totalStorageLimitBytes,
+        availableBytes: state.availableBytes,
+        usedPercent: state.usedPercent,
+        usedLabel: formatStorageBytes(state.usage.usedBytes),
+        limitLabel: formatStorageBytes(state.entitlement.totalStorageLimitBytes),
+        availableLabel: formatStorageBytes(state.availableBytes),
+        fileCount: state.usage.billableFileCount,
+        fileLimit,
+        availableFileCount: state.availableFileCount,
+        status,
+        updatedAt: state.usage.updatedAt,
+      },
+      warning: null,
+    };
+  } catch (error) {
+    return {
+      data: null,
+      warning: toLoadWarning("armazenamento", error),
+    };
+  }
 }
 
 async function safeQuery<T>(scope: string, query: PromiseLike<QueryResponse<T>>): Promise<QueryBucket<T>> {
