@@ -437,113 +437,171 @@ exception
   when undefined_table then null;
 end $$;
 
-with product_media as (
+do $$
+begin
+  create temporary table if not exists storage_usage_rollup (
+    organization_id uuid primary key,
+    product_media_bytes bigint not null default 0,
+    knowledge_bytes bigint not null default 0,
+    import_source_bytes bigint not null default 0,
+    generated_media_bytes bigint not null default 0,
+    lead_file_bytes bigint not null default 0,
+    file_count integer not null default 0
+  ) on commit drop;
+
+  truncate table storage_usage_rollup;
+
+  if to_regclass('public.intelligence_memory') is not null then
+    execute $sql$
+      insert into storage_usage_rollup (organization_id, product_media_bytes, file_count)
+      select
+        im.organization_id,
+        coalesce(sum(case when (media_item.value ->> 'size') ~ '^[0-9]+$' then (media_item.value ->> 'size')::bigint else 0 end), 0)::bigint as bytes,
+        count(*)::integer as file_count
+      from public.intelligence_memory im
+      cross join lateral jsonb_array_elements(
+        case when jsonb_typeof(im.metadata -> 'media') = 'array' then im.metadata -> 'media' else '[]'::jsonb end
+      ) media_item
+      where im.organization_id is not null
+        and im.memory_type = 'sales_catalog_item'
+      group by im.organization_id
+      on conflict (organization_id) do update
+      set
+        product_media_bytes = storage_usage_rollup.product_media_bytes + excluded.product_media_bytes,
+        file_count = storage_usage_rollup.file_count + excluded.file_count;
+    $sql$;
+
+    execute $sql$
+      insert into storage_usage_rollup (organization_id, knowledge_bytes, file_count)
+      select
+        im.organization_id,
+        coalesce(sum(case when (im.metadata ->> 'size') ~ '^[0-9]+$' then (im.metadata ->> 'size')::bigint else 0 end), 0)::bigint as bytes,
+        (count(*) filter (where (im.metadata ->> 'size') ~ '^[0-9]+$'))::integer as file_count
+      from public.intelligence_memory im
+      where im.organization_id is not null
+        and im.memory_type = 'knowledge_file'
+      group by im.organization_id
+      on conflict (organization_id) do update
+      set
+        knowledge_bytes = storage_usage_rollup.knowledge_bytes + excluded.knowledge_bytes,
+        file_count = storage_usage_rollup.file_count + excluded.file_count;
+    $sql$;
+  end if;
+
+  if to_regclass('public.sales_catalog_import_sources') is not null
+    and exists (
+      select 1
+      from information_schema.columns
+      where table_schema = 'public'
+        and table_name = 'sales_catalog_import_sources'
+        and column_name = 'file_size'
+    )
+  then
+    execute $sql$
+      insert into storage_usage_rollup (organization_id, import_source_bytes, file_count)
+      select
+        sis.organization_id,
+        coalesce(sum(coalesce(sis.file_size, 0)), 0)::bigint as bytes,
+        (count(*) filter (where coalesce(sis.file_size, 0) > 0))::integer as file_count
+      from public.sales_catalog_import_sources sis
+      where sis.organization_id is not null
+      group by sis.organization_id
+      on conflict (organization_id) do update
+      set
+        import_source_bytes = storage_usage_rollup.import_source_bytes + excluded.import_source_bytes,
+        file_count = storage_usage_rollup.file_count + excluded.file_count;
+    $sql$;
+  end if;
+
+  if to_regclass('public.generated_media') is not null
+    and exists (
+      select 1
+      from information_schema.columns
+      where table_schema = 'public'
+        and table_name = 'generated_media'
+        and column_name = 'bytes_size'
+    )
+  then
+    execute $sql$
+      insert into storage_usage_rollup (organization_id, generated_media_bytes, file_count)
+      select
+        gm.organization_id,
+        coalesce(sum(coalesce(gm.bytes_size, 0)), 0)::bigint as bytes,
+        (count(*) filter (where coalesce(gm.bytes_size, 0) > 0))::integer as file_count
+      from public.generated_media gm
+      where gm.organization_id is not null
+      group by gm.organization_id
+      on conflict (organization_id) do update
+      set
+        generated_media_bytes = storage_usage_rollup.generated_media_bytes + excluded.generated_media_bytes,
+        file_count = storage_usage_rollup.file_count + excluded.file_count;
+    $sql$;
+  end if;
+
+  if to_regclass('public.lead_files') is not null
+    and exists (
+      select 1
+      from information_schema.columns
+      where table_schema = 'public'
+        and table_name = 'lead_files'
+        and column_name = 'byte_size'
+    )
+  then
+    execute $sql$
+      insert into storage_usage_rollup (organization_id, lead_file_bytes, file_count)
+      select
+        lf.organization_id,
+        coalesce(sum(coalesce(lf.byte_size, 0)), 0)::bigint as bytes,
+        (count(*) filter (where coalesce(lf.byte_size, 0) > 0))::integer as file_count
+      from public.lead_files lf
+      where lf.organization_id is not null
+      group by lf.organization_id
+      on conflict (organization_id) do update
+      set
+        lead_file_bytes = storage_usage_rollup.lead_file_bytes + excluded.lead_file_bytes,
+        file_count = storage_usage_rollup.file_count + excluded.file_count;
+    $sql$;
+  end if;
+
+  insert into public.organization_storage_usage (
+    organization_id,
+    used_bytes,
+    billable_file_count,
+    product_media_bytes,
+    knowledge_bytes,
+    import_source_bytes,
+    generated_media_bytes,
+    lead_file_bytes,
+    other_bytes,
+    last_recalculated_at,
+    metadata,
+    updated_at
+  )
   select
-    im.organization_id,
-    coalesce(sum(case when (media_item.value ->> 'size') ~ '^[0-9]+$' then (media_item.value ->> 'size')::bigint else 0 end), 0)::bigint as bytes,
-    count(*)::integer as file_count
-  from public.intelligence_memory im
-  cross join lateral jsonb_array_elements(
-    case when jsonb_typeof(im.metadata -> 'media') = 'array' then im.metadata -> 'media' else '[]'::jsonb end
-  ) media_item
-  where im.organization_id is not null
-    and im.memory_type = 'sales_catalog_item'
-  group by im.organization_id
-),
-knowledge as (
-  select
-    im.organization_id,
-    coalesce(sum(case when (im.metadata ->> 'size') ~ '^[0-9]+$' then (im.metadata ->> 'size')::bigint else 0 end), 0)::bigint as bytes,
-    (count(*) filter (where (im.metadata ->> 'size') ~ '^[0-9]+$'))::integer as file_count
-  from public.intelligence_memory im
-  where im.organization_id is not null
-    and im.memory_type = 'knowledge_file'
-  group by im.organization_id
-),
-import_sources as (
-  select
-    sis.organization_id,
-    coalesce(sum(coalesce(sis.file_size, 0)), 0)::bigint as bytes,
-    (count(*) filter (where coalesce(sis.file_size, 0) > 0))::integer as file_count
-  from public.sales_catalog_import_sources sis
-  group by sis.organization_id
-),
-generated_media as (
-  select
-    gm.organization_id,
-    coalesce(sum(coalesce(gm.bytes_size, 0)), 0)::bigint as bytes,
-    (count(*) filter (where coalesce(gm.bytes_size, 0) > 0))::integer as file_count
-  from public.generated_media gm
-  group by gm.organization_id
-),
-lead_files as (
-  select
-    lf.organization_id,
-    coalesce(sum(coalesce(lf.byte_size, 0)), 0)::bigint as bytes,
-    (count(*) filter (where coalesce(lf.byte_size, 0) > 0))::integer as file_count
-  from public.lead_files lf
-  group by lf.organization_id
-),
-rollup as (
-  select
-    o.id as organization_id,
-    coalesce(pm.bytes, 0)::bigint as product_media_bytes,
-    coalesce(k.bytes, 0)::bigint as knowledge_bytes,
-    coalesce(ims.bytes, 0)::bigint as import_source_bytes,
-    coalesce(gm.bytes, 0)::bigint as generated_media_bytes,
-    coalesce(lf.bytes, 0)::bigint as lead_file_bytes,
-    (
-      coalesce(pm.file_count, 0)
-      + coalesce(k.file_count, 0)
-      + coalesce(ims.file_count, 0)
-      + coalesce(gm.file_count, 0)
-      + coalesce(lf.file_count, 0)
-    )::integer as file_count
-  from public.organizations o
-  left join product_media pm on pm.organization_id = o.id
-  left join knowledge k on k.organization_id = o.id
-  left join import_sources ims on ims.organization_id = o.id
-  left join generated_media gm on gm.organization_id = o.id
-  left join lead_files lf on lf.organization_id = o.id
-)
-insert into public.organization_storage_usage (
-  organization_id,
-  used_bytes,
-  billable_file_count,
-  product_media_bytes,
-  knowledge_bytes,
-  import_source_bytes,
-  generated_media_bytes,
-  lead_file_bytes,
-  other_bytes,
-  last_recalculated_at,
-  metadata,
-  updated_at
-)
-select
-  organization_id,
-  product_media_bytes + knowledge_bytes + import_source_bytes + generated_media_bytes + lead_file_bytes,
-  file_count,
-  product_media_bytes,
-  knowledge_bytes,
-  import_source_bytes,
-  generated_media_bytes,
-  lead_file_bytes,
-  0,
-  now(),
-  jsonb_build_object('backfilled_by', '0055_storage_limits_and_addons'),
-  now()
-from rollup
-where product_media_bytes + knowledge_bytes + import_source_bytes + generated_media_bytes + lead_file_bytes > 0
-on conflict (organization_id) do update
-set
-  used_bytes = greatest(public.organization_storage_usage.used_bytes, excluded.used_bytes),
-  billable_file_count = greatest(public.organization_storage_usage.billable_file_count, excluded.billable_file_count),
-  product_media_bytes = greatest(public.organization_storage_usage.product_media_bytes, excluded.product_media_bytes),
-  knowledge_bytes = greatest(public.organization_storage_usage.knowledge_bytes, excluded.knowledge_bytes),
-  import_source_bytes = greatest(public.organization_storage_usage.import_source_bytes, excluded.import_source_bytes),
-  generated_media_bytes = greatest(public.organization_storage_usage.generated_media_bytes, excluded.generated_media_bytes),
-  lead_file_bytes = greatest(public.organization_storage_usage.lead_file_bytes, excluded.lead_file_bytes),
-  last_recalculated_at = now(),
-  metadata = public.organization_storage_usage.metadata || excluded.metadata,
-  updated_at = now();
+    organization_id,
+    product_media_bytes + knowledge_bytes + import_source_bytes + generated_media_bytes + lead_file_bytes,
+    file_count,
+    product_media_bytes,
+    knowledge_bytes,
+    import_source_bytes,
+    generated_media_bytes,
+    lead_file_bytes,
+    0,
+    now(),
+    jsonb_build_object('backfilled_by', '0055_storage_limits_and_addons'),
+    now()
+  from storage_usage_rollup
+  where product_media_bytes + knowledge_bytes + import_source_bytes + generated_media_bytes + lead_file_bytes > 0
+  on conflict (organization_id) do update
+  set
+    used_bytes = greatest(public.organization_storage_usage.used_bytes, excluded.used_bytes),
+    billable_file_count = greatest(public.organization_storage_usage.billable_file_count, excluded.billable_file_count),
+    product_media_bytes = greatest(public.organization_storage_usage.product_media_bytes, excluded.product_media_bytes),
+    knowledge_bytes = greatest(public.organization_storage_usage.knowledge_bytes, excluded.knowledge_bytes),
+    import_source_bytes = greatest(public.organization_storage_usage.import_source_bytes, excluded.import_source_bytes),
+    generated_media_bytes = greatest(public.organization_storage_usage.generated_media_bytes, excluded.generated_media_bytes),
+    lead_file_bytes = greatest(public.organization_storage_usage.lead_file_bytes, excluded.lead_file_bytes),
+    last_recalculated_at = now(),
+    metadata = public.organization_storage_usage.metadata || excluded.metadata,
+    updated_at = now();
+end $$;
