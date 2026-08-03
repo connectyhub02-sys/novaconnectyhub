@@ -61,8 +61,8 @@ const moduleLabels: Record<string, { included: string; locked: string }> = {
 
 const defaultPresentation: Record<string, { description: string; tagline: string; cta: string }> = {
   trial: {
-    description: "Para provar o atendimento antes de assinar.",
-    tagline: "Teste seu primeiro agente antes de ativar um plano pago",
+    description: "Teste completo de 7 dias com creditos para validar atendimento, produtos, IA e automacoes.",
+    tagline: "Todos os recursos liberados durante o teste; depois, o painel pausa ate assinar",
     cta: "Comecar teste gratis",
   },
   starter: {
@@ -93,7 +93,7 @@ export function buildPublicPricingPlan(plan: PublicPricingBillingPlan): PublicPr
   const code = normalizeCode(plan.planCode);
   const presentation = defaultPresentation[code];
   const isTrial = code === "trial" || (plan.monthlyPriceBrl <= 0 && plan.trialDays > 0);
-  const included = buildIncludedItems(plan);
+  const included = buildIncludedItems(plan, isTrial);
 
   return {
     code,
@@ -101,7 +101,9 @@ export function buildPublicPricingPlan(plan: PublicPricingBillingPlan): PublicPr
     price: formatBrl(plan.monthlyPriceBrl),
     priceValue: plan.monthlyPriceBrl,
     period: isTrial && plan.trialDays > 0 ? `/${plan.trialDays} dias` : "/mes",
-    description: plan.shortDescription || presentation?.description || "Plano ConnectyHub configurado no admin.",
+    description: isTrial
+      ? presentation?.description || "Teste completo da ConnectyHub por tempo limitado."
+      : plan.shortDescription || presentation?.description || "Plano ConnectyHub configurado no admin.",
     tagline: presentation?.tagline || buildGeneratedTagline(plan),
     storage: buildStorageSummary(plan),
     included,
@@ -113,7 +115,28 @@ export function buildPublicPricingPlan(plan: PublicPricingBillingPlan): PublicPr
   };
 }
 
-function buildIncludedItems(plan: PublicPricingBillingPlan) {
+function buildIncludedItems(plan: PublicPricingBillingPlan, isTrial: boolean) {
+  if (isTrial) {
+    const trialItems = [
+      plan.includedCredits > 0 ? `${formatCredits(plan.includedCredits)} creditos para testar todo o painel` : null,
+      plan.trialDays > 0 ? `${plan.trialDays} dias com todos os recursos liberados` : "Teste com todos os recursos liberados",
+      plan.whatsappInstanceLimit !== null ? pluralize(plan.whatsappInstanceLimit, "WhatsApp conectado", "WhatsApps conectados") : null,
+      plan.agentLimit !== null ? pluralize(plan.agentLimit, "agente IA", "agentes IA") : null,
+      plan.userLimit !== null ? pluralize(plan.userLimit, "usuario no painel", "usuarios no painel") : null,
+      "Agente IA no WhatsApp",
+      "Catalogo de vendas",
+      "Campanhas e automacoes",
+      "CRM basico, leads e conversas",
+      "Voz IA por creditos",
+      "Instagram Direct e Messenger Facebook no teste",
+      "Meta Ads, Google Ads e gestor IA no teste",
+      "API WhatsApp no teste",
+      "Apos o teste, recursos pausam ate assinar",
+    ];
+
+    return uniqueStrings(trialItems.filter((item): item is string => Boolean(item))).slice(0, 14);
+  }
+
   const items = [
     plan.includedCredits > 0 ? `${formatCredits(plan.includedCredits)} creditos inclusos` : null,
     plan.whatsappInstanceLimit !== null ? pluralize(plan.whatsappInstanceLimit, "WhatsApp conectado", "WhatsApps conectados") : null,
@@ -150,14 +173,14 @@ function buildStorageSummary(plan: PublicPricingBillingPlan): PublicPricingStora
 }
 
 function buildLockedItems(plan: PublicPricingBillingPlan, isTrial: boolean) {
+  if (isTrial) {
+    return [];
+  }
+
   const moduleSet = new Set(plan.moduleCodes);
   const locked = Object.entries(moduleLabels)
     .filter(([code]) => !moduleSet.has(code))
     .map(([, label]) => label.locked);
-
-  if (isTrial) {
-    locked.unshift("Atendimento pausa apos o teste sem plano pago");
-  }
 
   return uniqueStrings(locked).slice(0, 8);
 }
