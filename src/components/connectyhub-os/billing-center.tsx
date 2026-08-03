@@ -7,6 +7,7 @@ import {
   DatabaseZap,
   Gauge,
   HandCoins,
+  HardDrive,
   Mic2,
   PackageCheck,
   ReceiptText,
@@ -240,6 +241,11 @@ export function BillingCenter({
               text="Hoje entra como custo fixo: R$ 138 por mes para ate 100 dispositivos, rateado pelas instancias WhatsApp conectadas."
             />
             <RuleCard
+              icon={HardDrive}
+              title="Cloudflare R2"
+              text="Agora entra como custo variavel estimado por GB armazenado, com free tier global e rateio proporcional ao uso de cada cliente."
+            />
+            <RuleCard
               icon={Coins}
               title="Planos + creditos"
               text="A leitura compara pagamentos aprovados, creditos comprados, creditos consumidos, custo real e margem bruta."
@@ -247,7 +253,7 @@ export function BillingCenter({
             <RuleCard
               icon={ReceiptText}
               title="Custos futuros"
-              text="Vercel, Supabase, Cloudflare, storage, hospedagem e aquisicao ficam fora desta fase ate virarem custo real da operacao."
+              text="Vercel, Supabase pago, hospedagem avancada e aquisicao ficam fora desta fase ate virarem custo real da operacao."
             />
           </div>
         </Panel>
@@ -465,6 +471,7 @@ function ExecutiveCostSummary({ summary }: { summary: BillingAdminSummary }) {
 function CurrentCostCenterPanel({ summary }: { summary: BillingAdminSummary }) {
   const current = summary.currentCostCenter;
   const fixedProvider = current.fixedProviders[0];
+  const storage = current.storage;
   const creditCostDetail = current.consumedCredits > 0
     ? `venda atual ${formatUnitMoney(current.creditUnitPriceBrl)}`
     : "aguardando consumo medido";
@@ -473,7 +480,7 @@ function CurrentCostCenterPanel({ summary }: { summary: BillingAdminSummary }) {
     <Panel
       className="mb-4"
       title="Centro de custos atual"
-      eyebrow="Gemini / ElevenLabs / Uazapi"
+      eyebrow="Gemini / ElevenLabs / Uazapi / Cloudflare R2"
       compact
       collapsible
       action={
@@ -483,7 +490,7 @@ function CurrentCostCenterPanel({ summary }: { summary: BillingAdminSummary }) {
         </div>
       }
     >
-      <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 xl:grid-cols-5">
         <BillingMetric
           icon={Calculator}
           label="Custo operacional"
@@ -512,9 +519,16 @@ function CurrentCostCenterPanel({ summary }: { summary: BillingAdminSummary }) {
           detail={creditCostDetail}
           tone={current.realCostPerConsumedCreditBrl > current.creditUnitPriceBrl ? "amber" : "violet"}
         />
+        <BillingMetric
+          icon={HardDrive}
+          label="Storage R2"
+          value={formatMoney(storage.monthlyCostBrl)}
+          detail={`${formatStorageBytes(storage.totalUsedBytes)} usados / ${formatMoney(storage.todayCostBrl)} hoje`}
+          tone="cyan"
+        />
       </div>
 
-      <div className="mt-3 grid gap-3 xl:grid-cols-[330px_minmax(0,1fr)]">
+      <div className="mt-3 grid gap-3 xl:grid-cols-[300px_300px_minmax(0,1fr)]">
         <div
           className="rounded-xl p-3"
           style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
@@ -537,6 +551,28 @@ function CurrentCostCenterPanel({ summary }: { summary: BillingAdminSummary }) {
           <p className="mt-2 text-[11px] leading-4 text-slate-500">
             {fixedProvider?.allocationLabel ?? "Custo fixo de WhatsApp ainda sem instancia conectada."}
           </p>
+        </div>
+
+        <div
+          className="rounded-xl p-3"
+          style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
+        >
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <HardDrive className="h-4 w-4 text-cyan-500" />
+              <p className="text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>Cloudflare R2</p>
+            </div>
+            <StatusBadge status={storage.totalUsedBytes > 0 ? "online" : "idle"} />
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
+            <ProviderValue label="Uso total" value={formatStorageBytes(storage.totalUsedBytes)} />
+            <ProviderValue label="Uso faturavel" value={formatStorageBytes(storage.billableUsedBytes)} />
+            <ProviderValue label="Free tier global" value={formatStorageBytes(storage.freeTierBytes)} />
+            <ProviderValue label="Empresas usando" value={formatNumber(storage.activeOrganizations)} />
+            <ProviderValue label="Custo GB/mes" value={formatUnitMoney(storage.costPerGbMonthBrl)} />
+            <ProviderValue label="Custo mensal" value={formatMoney(storage.monthlyCostBrl)} />
+          </div>
+          <p className="mt-2 text-[11px] leading-4 text-slate-500">{storage.pricingSource}</p>
         </div>
 
         <div
@@ -598,13 +634,18 @@ function CurrentCostCenterPanel({ summary }: { summary: BillingAdminSummary }) {
           </div>
           {current.customers.length > 0 ? (
             <DataTable
-              columns={["Cliente", "Receita", "Custo", "Creditos", "Margem"]}
+              columns={["Cliente", "Receita", "Custo", "Storage", "Creditos", "Margem"]}
               rows={current.customers.map((customer) => [
                 <span key="customer" className="font-semibold" style={{ color: "var(--ch-text)" }}>
                   {customer.name}
                 </span>,
                 <span key="revenue" className="font-mono text-emerald-300">{formatMoney(customer.revenueBrl)}</span>,
                 <span key="cost" className="font-mono text-amber-300">{formatMoney(customer.totalCostBrl)}</span>,
+                <TariffName
+                  key="storage"
+                  title={formatMoney(customer.storageCostBrl)}
+                  detail={formatStorageBytes(customer.storageUsedBytes)}
+                />,
                 <span key="credits" className="font-mono text-slate-300">{formatCredits(customer.chargeCredits)}</span>,
                 <span key="margin" className="font-mono text-slate-300">{formatMoney(customer.marginBrl)}</span>,
               ])}
@@ -631,6 +672,7 @@ function SupplierTariffsPanel({
   summary: BillingAdminSummary;
 }) {
   const fixedProvider = summary.currentCostCenter.fixedProviders[0];
+  const storage = summary.currentCostCenter.storage;
   const creditUnitPrice = summary.currentCostCenter.creditUnitPriceBrl;
   const sortedRates = [...catalog.rates].sort((a, b) => {
     const providerCompare = a.providerLabel.localeCompare(b.providerLabel, "pt-BR");
@@ -654,6 +696,21 @@ function SupplierTariffsPanel({
       <span key="cost1k" className="font-mono text-slate-500">-</span>,
       <span key="cost1m" className="font-mono text-slate-500">-</span>,
       <TariffName key="price" title="custo fixo" detail="nao debita credito por unidade" />,
+      <span key="minimum" className="font-mono text-slate-500">-</span>,
+      <span key="margin" className="font-mono text-slate-500">rateio</span>,
+    ],
+    [
+      <TariffName key="provider" title="Cloudflare R2" detail="Fornecedor de storage" muted={storage.totalUsedBytes <= 0} />,
+      <TariffName key="model" title="Storage Standard" detail={storage.pricingSource} />,
+      <span key="unit" className="font-mono text-slate-300">GB/mes</span>,
+      <TariffName
+        key="cost"
+        title={formatUnitMoney(storage.costPerGbMonthBrl)}
+        detail={`${formatStorageBytes(storage.freeTierBytes)} free tier`}
+      />,
+      <span key="cost1k" className="font-mono text-slate-500">-</span>,
+      <span key="cost1m" className="font-mono text-slate-500">-</span>,
+      <TariffName key="price" title="custo operacional" detail="rateado por bytes usados" />,
       <span key="minimum" className="font-mono text-slate-500">-</span>,
       <span key="margin" className="font-mono text-slate-500">rateio</span>,
     ],
@@ -713,7 +770,7 @@ function SupplierTariffsPanel({
         style={{ background: "rgba(6,182,212,0.07)", border: "1px solid rgba(6,182,212,0.18)" }}
       >
         Esta tabela mostra a regua de custo e preco que transforma consumo de fornecedores em creditos para o cliente.
-        Gemini e ElevenLabs entram por unidade de uso. Uazapi entra como custo fixo mensal da operacao.
+        Gemini e ElevenLabs entram por unidade de uso. Uazapi entra como custo fixo mensal. Cloudflare R2 entra como custo de armazenamento.
       </div>
 
       {rows.length > 0 ? (
@@ -977,4 +1034,20 @@ function formatCompactNumber(value: number) {
     notation: "compact",
     maximumFractionDigits: 1,
   }).format(value);
+}
+
+function formatStorageBytes(value: number) {
+  const safeValue = Math.max(0, value);
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let unitIndex = 0;
+  let amount = safeValue;
+
+  while (amount >= 1024 && unitIndex < units.length - 1) {
+    amount /= 1024;
+    unitIndex += 1;
+  }
+
+  return `${new Intl.NumberFormat("pt-BR", {
+    maximumFractionDigits: amount >= 10 || unitIndex === 0 ? 0 : 1,
+  }).format(amount)} ${units[unitIndex]}`;
 }

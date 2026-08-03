@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   Coins,
   ExternalLink,
+  HardDrive,
   Loader2,
   Mail,
   MinusCircle,
@@ -63,6 +64,14 @@ type PlatformUser = {
   manualAgentLimit: number | null;
   manualWhatsappInstanceLimit: number | null;
   manualUserLimit: number | null;
+  storageUsedBytes: number;
+  storageLimitBytes: number;
+  storageAvailableBytes: number;
+  storageUsedPercent: number;
+  storageBillableFileCount: number;
+  storageFileLimit: number;
+  storageMonthlyCostBrl: number;
+  storageUpdatedAt: string | null;
   createdAt: string | null;
   lastSignInAt: string | null;
 };
@@ -425,13 +434,15 @@ export function AdminUsersConsole({ initialSnapshot }: { initialSnapshot?: Admin
         </div>
       )}
 
-      <div className="mb-5 grid gap-2 sm:grid-cols-2 xl:grid-cols-6">
+      <div className="mb-5 grid gap-2 sm:grid-cols-2 xl:grid-cols-8">
         <UsersStatCard label="Usuarios" value={summary.totalUsers} tone="cyan" />
         <UsersStatCard label="Admins" value={summary.platformAdmins} tone="amber" />
         <UsersStatCard label="Empresas" value={summary.linkedOrganizations} tone="green" />
         <UsersStatCard label="Ativas" value={summary.activeOrganizations} tone="green" />
         <UsersStatCard label="Trial" value={summary.trialOrganizations} tone="amber" />
         <UsersStatCard label="Bloqueadas" value={summary.blockedOrganizations} tone={summary.blockedOrganizations > 0 ? "rose" : "zinc"} />
+        <UsersStatCard label="Storage usado" value={formatStorageBytes(summary.storageUsedBytes)} tone="cyan" />
+        <UsersStatCard label="Alertas storage" value={summary.storageOrganizationsNearLimit} tone={summary.storageOrganizationsNearLimit > 0 ? "amber" : "zinc"} />
       </div>
 
       <Panel
@@ -516,7 +527,7 @@ function UsersStatCard({
   tone,
 }: {
   label: string;
-  value: number;
+  value: number | string;
   tone: "green" | "cyan" | "amber" | "rose" | "zinc";
 }) {
   return (
@@ -526,7 +537,7 @@ function UsersStatCard({
     >
       <p className="truncate font-mono text-[8px] uppercase tracking-[0.16em] text-slate-500">{label}</p>
       <p className={cn("mt-1 truncate font-mono text-[20px] font-bold leading-none", statToneClass(tone))}>
-        {formatNumber(value)}
+        {typeof value === "number" ? formatNumber(value) : value}
       </p>
     </div>
   );
@@ -534,6 +545,7 @@ function UsersStatCard({
 
 function buildUsersSummary(users: PlatformUser[]) {
   const linkedOrganizationIds = new Set(users.map((user) => user.organizationId).filter(Boolean));
+  const organizations = getUniqueOrganizationUsers(users);
 
   return {
     totalUsers: users.length,
@@ -542,7 +554,23 @@ function buildUsersSummary(users: PlatformUser[]) {
     activeOrganizations: countOrganizationsByStatus(users, ["active"]),
     trialOrganizations: countOrganizationsByStatus(users, ["trial", "trial_pending"]),
     blockedOrganizations: countOrganizationsByStatus(users, ["inactive", "suspended", "blocked", "archived"]),
+    storageUsedBytes: organizations.reduce((sum, user) => sum + user.storageUsedBytes, 0),
+    storageLimitBytes: organizations.reduce((sum, user) => sum + user.storageLimitBytes, 0),
+    storageMonthlyCostBrl: organizations.reduce((sum, user) => sum + user.storageMonthlyCostBrl, 0),
+    storageOrganizationsNearLimit: organizations.filter((user) => user.storageUsedPercent >= 80).length,
   };
+}
+
+function getUniqueOrganizationUsers(users: PlatformUser[]) {
+  const organizations = new Map<string, PlatformUser>();
+
+  for (const user of users) {
+    if (user.organizationId && !organizations.has(user.organizationId)) {
+      organizations.set(user.organizationId, user);
+    }
+  }
+
+  return Array.from(organizations.values());
 }
 
 function countOrganizationsByStatus(users: PlatformUser[], statuses: string[]) {
@@ -564,6 +592,18 @@ function statToneClass(tone: "green" | "cyan" | "amber" | "rose" | "zinc") {
   if (tone === "amber") return "text-amber-400";
   if (tone === "rose") return "text-rose-400";
   return "text-slate-400";
+}
+
+function storageToneClass(tone: "cyan" | "amber" | "rose") {
+  if (tone === "rose") return "text-rose-300";
+  if (tone === "amber") return "text-amber-300";
+  return "text-cyan-300";
+}
+
+function storageFillClass(tone: "cyan" | "amber" | "rose") {
+  if (tone === "rose") return "bg-rose-400";
+  if (tone === "amber") return "bg-amber-400";
+  return "bg-cyan-400";
 }
 
 function CustomerControlModal({
@@ -847,6 +887,22 @@ function formatMoney(value: number) {
   }).format(value);
 }
 
+function formatStorageBytes(value: number) {
+  const safeValue = Math.max(0, value);
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let unitIndex = 0;
+  let amount = safeValue;
+
+  while (amount >= 1024 && unitIndex < units.length - 1) {
+    amount /= 1024;
+    unitIndex += 1;
+  }
+
+  return `${new Intl.NumberFormat("pt-BR", {
+    maximumFractionDigits: amount >= 10 || unitIndex === 0 ? 0 : 1,
+  }).format(amount)} ${units[unitIndex]}`;
+}
+
 function formatLimit(value: number | null) {
   return value === null ? "plano" : String(value);
 }
@@ -925,6 +981,10 @@ function UserRow({
         </div>
       </div>
 
+      {user.organizationId && (
+        <StorageUsageInline user={user} />
+      )}
+
       {user.lastSignInAt && (
         <p className="hidden shrink-0 font-mono text-[9px] text-slate-600 lg:block">
           {formatShortDate(user.lastSignInAt)}
@@ -991,6 +1051,31 @@ function UserRow({
           Acessar painel
         </button>
       </div>
+    </div>
+  );
+}
+
+function StorageUsageInline({ user }: { user: PlatformUser }) {
+  const tone = user.storageUsedPercent >= 95 ? "rose" : user.storageUsedPercent >= 80 ? "amber" : "cyan";
+
+  return (
+    <div className="hidden w-[150px] shrink-0 xl:block" title={`${formatStorageBytes(user.storageUsedBytes)} usados de ${formatStorageBytes(user.storageLimitBytes)}`}>
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <span className="inline-flex min-w-0 items-center gap-1 font-mono text-[8px] uppercase tracking-[0.14em] text-slate-500">
+          <HardDrive className="h-3 w-3 shrink-0" />
+          Storage
+        </span>
+        <span className={cn("font-mono text-[9px] font-bold", storageToneClass(tone))}>{user.storageUsedPercent}%</span>
+      </div>
+      <div className="h-1.5 overflow-hidden rounded-full bg-slate-800">
+        <div
+          className={cn("h-full rounded-full", storageFillClass(tone))}
+          style={{ width: `${Math.min(100, Math.max(0, user.storageUsedPercent))}%` }}
+        />
+      </div>
+      <p className="mt-1 truncate font-mono text-[9px] text-slate-500">
+        {formatStorageBytes(user.storageUsedBytes)} / {formatStorageBytes(user.storageLimitBytes)}
+      </p>
     </div>
   );
 }

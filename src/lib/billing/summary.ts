@@ -99,8 +99,23 @@ export type CostCenterCustomerEconomics = {
   totalCostBrl: number;
   chargeCredits: number;
   connectedWhatsappInstances: number;
+  storageUsedBytes: number;
+  storageCostBrl: number;
   marginBrl: number;
   marginPercent: number;
+};
+
+export type StorageCostSummary = {
+  provider: string;
+  label: string;
+  totalUsedBytes: number;
+  billableUsedBytes: number;
+  freeTierBytes: number;
+  activeOrganizations: number;
+  monthlyCostBrl: number;
+  todayCostBrl: number;
+  costPerGbMonthBrl: number;
+  pricingSource: string;
 };
 
 export type PlanCreditEconomicsSummary = {
@@ -175,6 +190,7 @@ export type CurrentCostCenterSummary = {
   suggestedCreditPrice70MarginBrl: number;
   activeConnectedWhatsappInstances: number;
   activeWhatsappOrganizations: number;
+  storage: StorageCostSummary;
   creditEconomics: CreditEconomicsSummary;
   providers: CostCenterProviderEconomics[];
   fixedProviders: FixedProviderCostSummary[];
@@ -232,6 +248,7 @@ type WalletRow = {
 };
 
 type CostCenterRow = {
+  id: string;
   provider: BillingProvider | string | null;
   name: string | null;
   enabled: boolean | null;
@@ -239,6 +256,9 @@ type CostCenterRow = {
 
 type RateRow = {
   active: boolean | null;
+  cost_center_id?: string | null;
+  unit?: string | null;
+  provider_cost_per_unit?: number | string | null;
 };
 
 type BillingPaymentRow = {
@@ -280,6 +300,12 @@ type WhatsappInstanceRow = {
   status: string | null;
 };
 
+type StorageUsageRow = {
+  organization_id: string;
+  used_bytes: number | string | null;
+  billable_file_count: number | string | null;
+};
+
 type CommerceSessionRow = {
   id: string;
   amount: number | string | null;
@@ -302,6 +328,9 @@ const COST_PERIOD_DAYS = 30;
 const CURRENT_COST_PROVIDERS = new Set(["gemini", "elevenlabs"]);
 const UAZAPI_MONTHLY_COST_BRL = 138;
 const UAZAPI_CAPACITY_UNITS = 100;
+const R2_FREE_TIER_STORAGE_BYTES = 10 * 1024 ** 3;
+const R2_STANDARD_STORAGE_COST_USD_PER_GB_MONTH = 0.015;
+const R2_ESTIMATED_USD_TO_BRL = 5.5;
 
 const providerNames: Record<string, string> = {
   gemini: "Gemini / Google AI Core",
@@ -355,6 +384,7 @@ export async function getBillingAdminSummary(
     organizationResult,
     planResult,
     whatsappInstanceResult,
+    storageUsageResult,
     commerce,
   ] = await Promise.all([
     supabase
@@ -368,11 +398,11 @@ export async function getBillingAdminSummary(
       .limit(5000),
     supabase
       .from("provider_cost_centers")
-      .select("provider, name, enabled")
+      .select("id, provider, name, enabled")
       .limit(100),
     supabase
       .from("billing_rates")
-      .select("active")
+      .select("active, cost_center_id, unit, provider_cost_per_unit")
       .eq("active", true)
       .limit(5000),
     supabase
@@ -399,6 +429,10 @@ export async function getBillingAdminSummary(
       .select("id, organization_id, provider, status")
       .eq("provider", "uazapi")
       .limit(5000),
+    supabase
+      .from("organization_storage_usage")
+      .select("organization_id, used_bytes, billable_file_count")
+      .limit(5000),
     getCommerceRevenueSummary(supabase, sinceIso),
   ]);
 
@@ -409,6 +443,7 @@ export async function getBillingAdminSummary(
     organizationResult.error?.message,
     planResult.error?.message,
     whatsappInstanceResult.error?.message,
+    storageUsageResult.error?.message,
   ].filter((message): message is string => Boolean(message));
 
   if (errors.length > 0) {
@@ -433,6 +468,7 @@ export async function getBillingAdminSummary(
   const organizationRows = organizationResult.error ? [] : (organizationResult.data ?? []) as OrganizationRow[];
   const planRows = planResult.error ? [] : (planResult.data ?? []) as BillingPlanRow[];
   const whatsappInstanceRows = whatsappInstanceResult.error ? [] : (whatsappInstanceResult.data ?? []) as WhatsappInstanceRow[];
+  const storageUsageRows = storageUsageResult.error ? [] : (storageUsageResult.data ?? []) as StorageUsageRow[];
   const providerLabels = new Map<string, string>();
 
   for (const row of costCenterRows) {
@@ -585,6 +621,9 @@ export async function getBillingAdminSummary(
     organizationRows,
     planRows,
     whatsappInstanceRows,
+    storageUsageRows,
+    costCenterRows,
+    rateRows,
     todayStart,
     providerLabels,
   });
@@ -626,6 +665,9 @@ function buildCurrentCostCenterSummary({
   organizationRows,
   planRows,
   whatsappInstanceRows,
+  storageUsageRows,
+  costCenterRows,
+  rateRows,
   todayStart,
   providerLabels,
 }: {
@@ -635,10 +677,14 @@ function buildCurrentCostCenterSummary({
   organizationRows: OrganizationRow[];
   planRows: BillingPlanRow[];
   whatsappInstanceRows: WhatsappInstanceRow[];
+  storageUsageRows: StorageUsageRow[];
+  costCenterRows: CostCenterRow[];
+  rateRows: RateRow[];
   todayStart: Date;
   providerLabels: Map<string, string>;
 }): CurrentCostCenterSummary {
   const organizationById = new Map(organizationRows.map((organization) => [organization.id, organization]));
+  const costCenterById = new Map(costCenterRows.map((costCenter) => [costCenter.id, costCenter]));
   const activeWhatsappInstances = whatsappInstanceRows.filter(
     (instance) => instance.provider === "uazapi" && instance.status === "connected" && Boolean(instance.organization_id),
   );
@@ -654,6 +700,7 @@ function buildCurrentCostCenterSummary({
 
   const activeWhatsappOrganizations = connectedInstancesByOrganization.size;
   const fixedProvider = buildUazapiFixedCostSummary(activeWhatsappInstances.length, activeWhatsappOrganizations);
+  const storage = buildStorageCostSummary(storageUsageRows, costCenterById, rateRows);
   const providerMap = new Map<string, CostCenterProviderEconomics>();
   const unitProviderMap = new Map<string, ProviderUsageUnitSummary>();
   const customerMap = new Map<string, CostCenterCustomerEconomics>();
@@ -668,6 +715,8 @@ function buildCurrentCostCenterSummary({
     providerMap.set(provider, createProviderEconomics(provider, providerLabels));
     unitProviderMap.set(provider, createProviderUsageSummary(provider, providerLabels));
   }
+  providerMap.set(storage.provider, createProviderEconomics(storage.provider, providerLabels));
+  unitProviderMap.set(storage.provider, createProviderUsageSummary(storage.provider, providerLabels));
 
   for (const row of usageRows) {
     const provider = row.provider ?? "unknown";
@@ -768,6 +817,38 @@ function buildCurrentCostCenterSummary({
     customer.totalCostBrl += fixedShare;
   }
 
+  if (storage.totalUsedBytes > 0) {
+    const storageProvider = providerMap.get(storage.provider) ?? createProviderEconomics(storage.provider, providerLabels);
+    const storageUnits = unitProviderMap.get(storage.provider) ?? createProviderUsageSummary(storage.provider, providerLabels);
+
+    storageProvider.events = storage.activeOrganizations;
+    storageProvider.variableCostBrl += storage.monthlyCostBrl;
+    storageProvider.totalCostBrl += storage.monthlyCostBrl;
+    storageProvider.marginBrl -= storage.monthlyCostBrl;
+    providerMap.set(storage.provider, storageProvider);
+
+    storageUnits.events = storage.activeOrganizations;
+    storageUnits.totalUnits += bytesToGb(storage.totalUsedBytes);
+    storageUnits.providerCostBrl += storage.monthlyCostBrl;
+    storageUnits.profitBrl -= storage.monthlyCostBrl;
+    unitProviderMap.set(storage.provider, storageUnits);
+
+    for (const row of storageUsageRows) {
+      const usedBytes = toNumber(row.used_bytes);
+      if (usedBytes <= 0) continue;
+      const storageShare = storage.totalUsedBytes > 0 ? storage.monthlyCostBrl * (usedBytes / storage.totalUsedBytes) : 0;
+      const customer = getOrCreateCustomerEconomics(customerMap, row.organization_id, organizationById);
+
+      customer.storageUsedBytes += usedBytes;
+      customer.storageCostBrl += storageShare;
+      customer.variableCostBrl += storageShare;
+      customer.totalCostBrl += storageShare;
+    }
+  }
+
+  variableCostBrl += storage.monthlyCostBrl;
+  todayVariableCostBrl += storage.todayCostBrl;
+
   const fixedCostBrl = fixedProvider.periodCostBrl;
   const todayFixedCostBrl = fixedProvider.todayCostBrl;
   const totalCostBrl = variableCostBrl + fixedCostBrl;
@@ -810,7 +891,7 @@ function buildCurrentCostCenterSummary({
 
   return {
     periodLabel: "Ultimos 30 dias",
-    scopeLabel: "Custos atuais: Gemini, ElevenLabs e Uazapi",
+    scopeLabel: "Custos atuais: Gemini, ElevenLabs, Uazapi e Cloudflare R2",
     creditUnitPriceBrl: CONNECTY_CREDIT_UNIT_BRL,
     approvedRevenueBrl: roundMoney(approvedRevenueBrl),
     todayApprovedRevenueBrl: roundMoney(todayApprovedRevenueBrl),
@@ -834,6 +915,7 @@ function buildCurrentCostCenterSummary({
     suggestedCreditPrice70MarginBrl: roundMoney(suggestCreditPrice(realCostPerConsumedCreditBrl, 70)),
     activeConnectedWhatsappInstances: activeWhatsappInstances.length,
     activeWhatsappOrganizations,
+    storage,
     creditEconomics,
     providers,
     fixedProviders: [fixedProvider],
@@ -1000,10 +1082,11 @@ function emptySummary({
 
 function emptyCurrentCostCenterSummary(): CurrentCostCenterSummary {
   const fixedProvider = buildUazapiFixedCostSummary(0, 0);
+  const storage = emptyStorageCostSummary();
 
   return {
     periodLabel: "Ultimos 30 dias",
-    scopeLabel: "Custos atuais: Gemini, ElevenLabs e Uazapi",
+    scopeLabel: "Custos atuais: Gemini, ElevenLabs, Uazapi e Cloudflare R2",
     creditUnitPriceBrl: CONNECTY_CREDIT_UNIT_BRL,
     approvedRevenueBrl: 0,
     todayApprovedRevenueBrl: 0,
@@ -1027,10 +1110,12 @@ function emptyCurrentCostCenterSummary(): CurrentCostCenterSummary {
     suggestedCreditPrice70MarginBrl: 0,
     activeConnectedWhatsappInstances: 0,
     activeWhatsappOrganizations: 0,
+    storage,
     creditEconomics: emptyCreditEconomicsSummary(),
     providers: [
       roundProviderEconomics(createProviderEconomics("gemini", new Map())),
       roundProviderEconomics(createProviderEconomics("elevenlabs", new Map())),
+      roundProviderEconomics(createProviderEconomics(storage.provider, new Map())),
       roundProviderEconomics({
         provider: fixedProvider.provider,
         label: fixedProvider.label,
@@ -1067,8 +1152,72 @@ function emptyCreditEconomicsSummary(): CreditEconomicsSummary {
     providers: [
       roundProviderUsageSummary(createProviderUsageSummary("gemini", new Map())),
       roundProviderUsageSummary(createProviderUsageSummary("elevenlabs", new Map())),
+      roundProviderUsageSummary(createProviderUsageSummary("r2", new Map())),
     ],
   };
+}
+
+function emptyStorageCostSummary(): StorageCostSummary {
+  const costPerGbMonthBrl = readR2FallbackCostPerGbMonthBrl();
+
+  return {
+    provider: "r2",
+    label: providerNames.r2,
+    totalUsedBytes: 0,
+    billableUsedBytes: 0,
+    freeTierBytes: R2_FREE_TIER_STORAGE_BYTES,
+    activeOrganizations: 0,
+    monthlyCostBrl: 0,
+    todayCostBrl: 0,
+    costPerGbMonthBrl: roundMoney(costPerGbMonthBrl),
+    pricingSource: "Cloudflare R2 Standard estimado: US$ 0.015 por GB-mes com cambio configurado no codigo.",
+  };
+}
+
+function buildStorageCostSummary(
+  storageUsageRows: StorageUsageRow[],
+  costCenterById: Map<string, CostCenterRow>,
+  rateRows: RateRow[],
+): StorageCostSummary {
+  const totalUsedBytes = storageUsageRows.reduce((sum, row) => sum + toNumber(row.used_bytes), 0);
+  const billableUsedBytes = Math.max(0, totalUsedBytes - R2_FREE_TIER_STORAGE_BYTES);
+  const activeOrganizations = storageUsageRows.filter((row) => toNumber(row.used_bytes) > 0).length;
+  const costPerGbMonthBrl = readR2CostPerGbMonthBrl(costCenterById, rateRows);
+  const monthlyCostBrl = bytesToGb(billableUsedBytes) * costPerGbMonthBrl;
+
+  return {
+    provider: "r2",
+    label: providerNames.r2,
+    totalUsedBytes: roundStorageBytes(totalUsedBytes),
+    billableUsedBytes: roundStorageBytes(billableUsedBytes),
+    freeTierBytes: R2_FREE_TIER_STORAGE_BYTES,
+    activeOrganizations,
+    monthlyCostBrl: roundMoney(monthlyCostBrl),
+    todayCostBrl: roundMoney(monthlyCostBrl / COST_PERIOD_DAYS),
+    costPerGbMonthBrl: roundMoney(costPerGbMonthBrl),
+    pricingSource: "Cloudflare R2 Standard: storage estimado por GB-mes; free tier global aplicado no calculo.",
+  };
+}
+
+function readR2CostPerGbMonthBrl(costCenterById: Map<string, CostCenterRow>, rateRows: RateRow[]) {
+  const configuredRate = rateRows.find((rate) => {
+    if (rate.active === false || rate.unit !== "megabyte" || !rate.cost_center_id) {
+      return false;
+    }
+
+    const costCenter = costCenterById.get(rate.cost_center_id);
+    return costCenter?.provider === "r2" && toNumber(rate.provider_cost_per_unit) > 0;
+  });
+
+  if (configuredRate) {
+    return toNumber(configuredRate.provider_cost_per_unit) * 1024;
+  }
+
+  return readR2FallbackCostPerGbMonthBrl();
+}
+
+function readR2FallbackCostPerGbMonthBrl() {
+  return R2_STANDARD_STORAGE_COST_USD_PER_GB_MONTH * R2_ESTIMATED_USD_TO_BRL;
 }
 
 function emptyCommerceSummary(schemaReady: boolean, warnings: string[]): CommerceRevenueSummary {
@@ -1152,7 +1301,13 @@ function createProviderUsageSummary(
     inputUnits: 0,
     outputUnits: 0,
     totalUnits: 0,
-    unitLabel: provider === "elevenlabs" ? "caracteres/request" : provider === "gemini" ? "tokens" : "unidades",
+    unitLabel: provider === "elevenlabs"
+      ? "caracteres/request"
+      : provider === "gemini"
+        ? "tokens"
+        : provider === "r2"
+          ? "GB armazenados"
+          : "unidades",
     providerCostBrl: 0,
     creditRevenueBrl: 0,
     chargeCredits: 0,
@@ -1274,6 +1429,8 @@ function getOrCreateCustomerEconomics(
     totalCostBrl: 0,
     chargeCredits: 0,
     connectedWhatsappInstances: 0,
+    storageUsedBytes: 0,
+    storageCostBrl: 0,
     marginBrl: 0,
     marginPercent: 0,
   };
@@ -1292,6 +1449,8 @@ function roundCustomerEconomics(customer: CostCenterCustomerEconomics): CostCent
     fixedCostBrl: roundMoney(customer.fixedCostBrl),
     totalCostBrl: roundMoney(totalCostBrl),
     chargeCredits: roundCredits(customer.chargeCredits),
+    storageUsedBytes: roundStorageBytes(customer.storageUsedBytes),
+    storageCostBrl: roundMoney(customer.storageCostBrl),
     marginBrl: roundMoney(customer.revenueBrl - totalCostBrl),
     marginPercent: calculateMarginPercent(totalCostBrl, customer.revenueBrl),
   };
@@ -1402,4 +1561,12 @@ function roundMoney(value: number) {
 
 function roundCredits(value: number) {
   return Math.round(value * 1000000) / 1000000;
+}
+
+function bytesToGb(value: number) {
+  return value / 1024 ** 3;
+}
+
+function roundStorageBytes(value: number) {
+  return Math.round(Math.max(0, value));
 }

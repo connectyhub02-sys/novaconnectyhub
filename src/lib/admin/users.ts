@@ -49,6 +49,14 @@ export type AdminPlatformUser = {
   manualAgentLimit: number | null;
   manualWhatsappInstanceLimit: number | null;
   manualUserLimit: number | null;
+  storageUsedBytes: number;
+  storageLimitBytes: number;
+  storageAvailableBytes: number;
+  storageUsedPercent: number;
+  storageBillableFileCount: number;
+  storageFileLimit: number;
+  storageMonthlyCostBrl: number;
+  storageUpdatedAt: string | null;
   createdAt: string | null;
   lastSignInAt: string | null;
 };
@@ -77,6 +85,10 @@ export type AdminUsersSnapshot = {
     activeOrganizations: number;
     trialOrganizations: number;
     blockedOrganizations: number;
+    storageUsedBytes: number;
+    storageLimitBytes: number;
+    storageMonthlyCostBrl: number;
+    storageOrganizationsNearLimit: number;
   };
   warnings: string[];
 };
@@ -142,6 +154,46 @@ type CycleRow = {
   billing_plans: { plan_code: string | null } | Array<{ plan_code: string | null }> | null;
 };
 
+type StorageUsageRow = {
+  organization_id: string;
+  used_bytes: number | string | null;
+  billable_file_count: number | string | null;
+  updated_at: string | null;
+};
+
+type StoragePlanRow = {
+  plan_code: string;
+  storage_limit_bytes: number | string | null;
+  storage_file_limit: number | string | null;
+};
+
+type StorageAddonRow = {
+  organization_id: string;
+  package_code: string | null;
+  quantity: number | string | null;
+  status: string | null;
+  current_period_end: string | null;
+};
+
+type StorageAddonPackageRow = {
+  code: string;
+  storage_bytes: number | string | null;
+  file_limit: number | string | null;
+  monthly_price_brl: number | string | null;
+  status: string | null;
+};
+
+type OrganizationStorageInfo = {
+  usedBytes: number;
+  limitBytes: number;
+  availableBytes: number;
+  usedPercent: number;
+  billableFileCount: number;
+  fileLimit: number;
+  monthlyCostBrl: number;
+  updatedAt: string | null;
+};
+
 const PLAN_SELECT = [
   "id",
   "plan_code",
@@ -164,6 +216,9 @@ const PLAN_SELECT = [
   "created_at",
   "updated_at",
 ].join(", ");
+
+const R2_STANDARD_STORAGE_COST_USD_PER_GB_MONTH = 0.015;
+const R2_ESTIMATED_USD_TO_BRL = 5.5;
 
 export async function getAdminUsersSnapshot(): Promise<AdminUsersSnapshot> {
   const service = createServiceClient();
@@ -238,6 +293,10 @@ export async function getAdminPlatformUsers(
       const limits = membership?.organizationId ? organizationState.limits.get(membership.organizationId) : null;
       const trialCycle = membership?.organizationId ? organizationState.trialCycles.get(membership.organizationId) : null;
       const resourceOverrides = readResourceOverrides(limits?.metadata);
+      const planCode = subscription?.plan_code ?? membership?.planCode ?? null;
+      const storage = membership?.organizationId
+        ? buildOrganizationStorageInfo(membership.organizationId, planCode, organizationState)
+        : emptyOrganizationStorageInfo();
 
       return {
         id: user.id,
@@ -256,7 +315,7 @@ export async function getAdminPlatformUsers(
         orgName: membership?.orgName ?? null,
         orgRole: membership?.role ?? null,
         orgStatus: membership?.status ?? null,
-        planCode: membership?.planCode ?? null,
+        planCode,
         balanceCredits: toNumber(wallet?.balance_credits),
         lifetimePurchasedCredits: toNumber(wallet?.lifetime_purchased_credits),
         lifetimeUsedCredits: toNumber(wallet?.lifetime_used_credits),
@@ -277,6 +336,14 @@ export async function getAdminPlatformUsers(
         manualAgentLimit: resourceOverrides.agentLimit,
         manualWhatsappInstanceLimit: resourceOverrides.whatsappInstanceLimit,
         manualUserLimit: resourceOverrides.userLimit,
+        storageUsedBytes: storage.usedBytes,
+        storageLimitBytes: storage.limitBytes,
+        storageAvailableBytes: storage.availableBytes,
+        storageUsedPercent: storage.usedPercent,
+        storageBillableFileCount: storage.billableFileCount,
+        storageFileLimit: storage.fileLimit,
+        storageMonthlyCostBrl: storage.monthlyCostBrl,
+        storageUpdatedAt: storage.updatedAt,
         createdAt: user.created_at ?? null,
         lastSignInAt: user.last_sign_in_at ?? null,
       };
@@ -324,7 +391,16 @@ export async function getAdminBillingPlanOptions(
 }
 
 async function loadOrganizationState(service: ReturnType<typeof createServiceClient>, organizationIds: string[]) {
-  const [walletsResult, subscriptionsResult, limitsResult, cyclesResult] = await Promise.all([
+  const [
+    walletsResult,
+    subscriptionsResult,
+    limitsResult,
+    cyclesResult,
+    storageUsageResult,
+    storagePlansResult,
+    storageAddonsResult,
+    storagePackagesResult,
+  ] = await Promise.all([
     service
       .from("credit_wallets")
       .select("organization_id, balance_credits, lifetime_purchased_credits, lifetime_used_credits, status")
@@ -346,6 +422,23 @@ async function loadOrganizationState(service: ReturnType<typeof createServiceCli
       .eq("status", "open")
       .order("cycle_end", { ascending: false })
       .limit(1000),
+    service
+      .from("organization_storage_usage")
+      .select("organization_id, used_bytes, billable_file_count, updated_at")
+      .in("organization_id", organizationIds),
+    service
+      .from("billing_plans")
+      .select("plan_code, storage_limit_bytes, storage_file_limit")
+      .limit(100),
+    service
+      .from("organization_storage_addons")
+      .select("organization_id, package_code, quantity, status, current_period_end")
+      .in("organization_id", organizationIds)
+      .limit(1000),
+    service
+      .from("storage_addon_packages")
+      .select("code, storage_bytes, file_limit, monthly_price_brl, status")
+      .limit(100),
   ]);
 
   const state = emptyOrganizationState();
@@ -353,6 +446,10 @@ async function loadOrganizationState(service: ReturnType<typeof createServiceCli
   if (subscriptionsResult.error) state.warnings.push(`organization_subscriptions: ${subscriptionsResult.error.message}`);
   if (limitsResult.error) state.warnings.push(`organization_billing_limits: ${limitsResult.error.message}`);
   if (cyclesResult.error) state.warnings.push(`billing_cycles: ${cyclesResult.error.message}`);
+  if (storageUsageResult.error) state.warnings.push(`organization_storage_usage: ${storageUsageResult.error.message}`);
+  if (storagePlansResult.error) state.warnings.push(`billing_plans storage: ${storagePlansResult.error.message}`);
+  if (storageAddonsResult.error) state.warnings.push(`organization_storage_addons: ${storageAddonsResult.error.message}`);
+  if (storagePackagesResult.error) state.warnings.push(`storage_addon_packages: ${storagePackagesResult.error.message}`);
 
   for (const wallet of (walletsResult.data ?? []) as WalletRow[]) {
     state.wallets.set(wallet.organization_id, wallet);
@@ -375,6 +472,24 @@ async function loadOrganizationState(service: ReturnType<typeof createServiceCli
     }
   }
 
+  for (const usage of (storageUsageResult.data ?? []) as StorageUsageRow[]) {
+    state.storageUsage.set(usage.organization_id, usage);
+  }
+
+  for (const plan of (storagePlansResult.data ?? []) as StoragePlanRow[]) {
+    state.storagePlans.set(plan.plan_code, plan);
+  }
+
+  for (const addon of (storageAddonsResult.data ?? []) as StorageAddonRow[]) {
+    const current = state.storageAddons.get(addon.organization_id) ?? [];
+    current.push(addon);
+    state.storageAddons.set(addon.organization_id, current);
+  }
+
+  for (const addonPackage of (storagePackagesResult.data ?? []) as StorageAddonPackageRow[]) {
+    state.storagePackages.set(addonPackage.code, addonPackage);
+  }
+
   return state;
 }
 
@@ -384,12 +499,17 @@ function emptyOrganizationState() {
     subscriptions: new Map<string, SubscriptionRow>(),
     limits: new Map<string, LimitsRow>(),
     trialCycles: new Map<string, CycleRow>(),
+    storageUsage: new Map<string, StorageUsageRow>(),
+    storagePlans: new Map<string, StoragePlanRow>(),
+    storageAddons: new Map<string, StorageAddonRow[]>(),
+    storagePackages: new Map<string, StorageAddonPackageRow>(),
     warnings: [] as string[],
   };
 }
 
 function buildSummary(users: AdminPlatformUser[]): AdminUsersSnapshot["summary"] {
   const linkedOrganizationIds = new Set(users.map((user) => user.organizationId).filter(Boolean));
+  const organizations = getUniqueOrganizationUsers(users);
 
   return {
     totalUsers: users.length,
@@ -398,7 +518,90 @@ function buildSummary(users: AdminPlatformUser[]): AdminUsersSnapshot["summary"]
     activeOrganizations: countOrganizationsByStatus(users, ["active"]),
     trialOrganizations: countOrganizationsByStatus(users, ["trial", "trial_pending"]),
     blockedOrganizations: countOrganizationsByStatus(users, ["inactive", "suspended", "blocked", "archived"]),
+    storageUsedBytes: organizations.reduce((sum, user) => sum + user.storageUsedBytes, 0),
+    storageLimitBytes: organizations.reduce((sum, user) => sum + user.storageLimitBytes, 0),
+    storageMonthlyCostBrl: roundMoney(organizations.reduce((sum, user) => sum + user.storageMonthlyCostBrl, 0)),
+    storageOrganizationsNearLimit: organizations.filter((user) => user.storageUsedPercent >= 80).length,
   };
+}
+
+function buildOrganizationStorageInfo(
+  organizationId: string,
+  planCode: string | null,
+  state: ReturnType<typeof emptyOrganizationState>,
+): OrganizationStorageInfo {
+  const usage = state.storageUsage.get(organizationId);
+  const plan = planCode ? state.storagePlans.get(planCode) : null;
+  const activeAddons = (state.storageAddons.get(organizationId) ?? []).filter((addon) => isActiveStorageAddon(addon, state));
+  const addonTotals = activeAddons.reduce(
+    (totals, addon) => {
+      const addonPackage = addon.package_code ? state.storagePackages.get(addon.package_code) : null;
+      const quantity = Math.max(1, toNumber(addon.quantity, 1));
+
+      totals.bytes += toNumber(addonPackage?.storage_bytes) * quantity;
+      totals.files += toNumber(addonPackage?.file_limit) * quantity;
+      return totals;
+    },
+    { bytes: 0, files: 0 },
+  );
+  const usedBytes = toNumber(usage?.used_bytes);
+  const limitBytes = toNumber(plan?.storage_limit_bytes) + addonTotals.bytes;
+  const billableFileCount = toNumber(usage?.billable_file_count);
+  const fileLimit = toNumber(plan?.storage_file_limit) + addonTotals.files;
+
+  return {
+    usedBytes,
+    limitBytes,
+    availableBytes: Math.max(limitBytes - usedBytes, 0),
+    usedPercent: calculateStoragePercent(usedBytes, limitBytes),
+    billableFileCount,
+    fileLimit,
+    monthlyCostBrl: roundMoney(bytesToGb(usedBytes) * readR2FallbackCostPerGbMonthBrl()),
+    updatedAt: usage?.updated_at ?? null,
+  };
+}
+
+function emptyOrganizationStorageInfo(): OrganizationStorageInfo {
+  return {
+    usedBytes: 0,
+    limitBytes: 0,
+    availableBytes: 0,
+    usedPercent: 0,
+    billableFileCount: 0,
+    fileLimit: 0,
+    monthlyCostBrl: 0,
+    updatedAt: null,
+  };
+}
+
+function getUniqueOrganizationUsers(users: AdminPlatformUser[]) {
+  const organizations = new Map<string, AdminPlatformUser>();
+
+  for (const user of users) {
+    if (user.organizationId && !organizations.has(user.organizationId)) {
+      organizations.set(user.organizationId, user);
+    }
+  }
+
+  return Array.from(organizations.values());
+}
+
+function isActiveStorageAddon(addon: StorageAddonRow, state: ReturnType<typeof emptyOrganizationState>) {
+  if (addon.status !== "active" || !addon.package_code) {
+    return false;
+  }
+
+  const addonPackage = state.storagePackages.get(addon.package_code);
+  if (addonPackage?.status !== "active") {
+    return false;
+  }
+
+  if (!addon.current_period_end) {
+    return true;
+  }
+
+  const periodEnd = new Date(addon.current_period_end).getTime();
+  return Number.isFinite(periodEnd) && periodEnd > Date.now();
 }
 
 function countOrganizationsByStatus(users: AdminPlatformUser[], statuses: string[]) {
@@ -472,6 +675,26 @@ function toNullableNumber(value: unknown) {
 
   const parsed = toNumber(value);
   return parsed >= 0 ? parsed : null;
+}
+
+function calculateStoragePercent(usedBytes: number, limitBytes: number) {
+  if (limitBytes <= 0) {
+    return 0;
+  }
+
+  return Math.min(100, Math.round((usedBytes / limitBytes) * 100));
+}
+
+function bytesToGb(value: number) {
+  return value / 1024 ** 3;
+}
+
+function readR2FallbackCostPerGbMonthBrl() {
+  return R2_STANDARD_STORAGE_COST_USD_PER_GB_MONTH * R2_ESTIMATED_USD_TO_BRL;
+}
+
+function roundMoney(value: number) {
+  return Math.round(value * 100000000) / 100000000;
 }
 
 function readErrorMessage(error: unknown) {
