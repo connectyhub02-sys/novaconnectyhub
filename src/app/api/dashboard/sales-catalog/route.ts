@@ -46,6 +46,7 @@ import {
   type SalesCatalogPaymentMethod,
   type SalesCatalogPaymentMethodId,
   type SalesCatalogPaymentStatus,
+  type SalesCatalogAutomationSettings,
   type SalesCatalogProductFulfillment,
   type SalesCatalogProductInventory,
   type SalesCatalogProductOffer,
@@ -483,6 +484,7 @@ async function handleJsonPost(request: NextRequest, workspace: CurrentWorkspace)
         client,
       });
 
+      revalidatePath("/dashboard/automacoes");
       revalidatePath("/dashboard/links");
       revalidatePath("/dashboard/whatsapp");
 
@@ -498,6 +500,7 @@ async function handleJsonPost(request: NextRequest, workspace: CurrentWorkspace)
         client,
       });
 
+      revalidatePath("/dashboard/automacoes");
       revalidatePath("/dashboard/links");
       revalidatePath("/dashboard/whatsapp");
 
@@ -671,6 +674,7 @@ async function saveCatalogSettings(input: {
   const orderPolicy = normalizeOrderPolicy(input.body?.orderPolicy, commerceDefaults.orderPolicy);
   const leadDataPolicy = normalizeLeadDataPolicy(input.body?.leadDataPolicy, commerceDefaults.leadDataPolicy);
   const messageTemplates = normalizeMessageTemplates(input.body?.messageTemplates, commerceDefaults.messageTemplates);
+  const automationSettings = normalizeAutomationSettings(input.body?.automationSettings, commerceDefaults.automationSettings);
   const orderBumps = normalizeOrderBumps(input.body?.orderBumps, createDefaultSalesCatalogOrderBumps());
   const enabledPayments = paymentMethods.filter((method) => method.enabled);
   const now = new Date().toISOString();
@@ -685,6 +689,7 @@ async function saveCatalogSettings(input: {
     order_policy: serializeOrderPolicy(orderPolicy),
     lead_data_policy: serializeLeadDataPolicy(leadDataPolicy),
     message_templates: serializeMessageTemplates(messageTemplates),
+    automation_settings: serializeAutomationSettings(automationSettings),
     order_bumps: serializeOrderBumps(orderBumps),
     updated_by: input.userId,
     updated_from: "sales_catalog_setup",
@@ -2379,6 +2384,23 @@ function normalizeMessageTemplates(
   };
 }
 
+function normalizeAutomationSettings(
+  value: unknown,
+  fallback: SalesCatalogAutomationSettings,
+): SalesCatalogAutomationSettings {
+  const record = readRecord(value);
+  if (!record) return fallback;
+
+  return {
+    paymentStatusNotifications: readBoolean(record.paymentStatusNotifications ?? record.payment_status_notifications)
+      ?? fallback.paymentStatusNotifications,
+    useConversationWhatsappFirst: readBoolean(record.useConversationWhatsappFirst ?? record.use_conversation_whatsapp_first)
+      ?? fallback.useConversationWhatsappFirst,
+    defaultWhatsappInstanceId: normalizeUuid(readFormString(record.defaultWhatsappInstanceId ?? record.default_whatsapp_instance_id)),
+    defaultAgentId: normalizeUuid(readFormString(record.defaultAgentId ?? record.default_agent_id)),
+  };
+}
+
 function normalizeOrderBumps(value: unknown, fallback: SalesCatalogOrderBumpSettings): SalesCatalogOrderBumpSettings {
   const record = readRecord(value);
   if (!record) return fallback;
@@ -2463,6 +2485,15 @@ function serializeMessageTemplates(templates: SalesCatalogWhatsAppMessageTemplat
     payment_refunded: templates.paymentRefunded,
     unavailable_item: templates.unavailableItem,
     human_handoff: templates.humanHandoff,
+  };
+}
+
+function serializeAutomationSettings(settings: SalesCatalogAutomationSettings) {
+  return {
+    payment_status_notifications: settings.paymentStatusNotifications,
+    use_conversation_whatsapp_first: settings.useConversationWhatsappFirst,
+    default_whatsapp_instance_id: settings.defaultWhatsappInstanceId,
+    default_agent_id: settings.defaultAgentId,
   };
 }
 

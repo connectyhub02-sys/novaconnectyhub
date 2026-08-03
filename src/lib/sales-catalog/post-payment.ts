@@ -3,8 +3,13 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
 import { recordPlatformProductCommissionsForApprovedPayment } from "@/lib/platform-product-sales";
-import { buildSalesCatalogContent, type SalesCatalogProductInventory, type SalesCatalogStockStatus } from "@/lib/sales-catalog/shared";
-import { mapSalesCatalogItem } from "@/lib/client-os/sales-catalog";
+import {
+  buildSalesCatalogContent,
+  createDefaultSalesCatalogCommerceSettings,
+  type SalesCatalogProductInventory,
+  type SalesCatalogStockStatus,
+} from "@/lib/sales-catalog/shared";
+import { getOrganizationSalesCatalogSettings, mapSalesCatalogItem } from "@/lib/client-os/sales-catalog";
 import { loadUazapiCredentials, type UazapiCredentials } from "@/lib/whatsapp/uazapi-credentials";
 
 type JsonRecord = Record<string, unknown>;
@@ -309,22 +314,23 @@ async function maybeNotifyPaymentApproved(input: {
 }) {
   const orderMetadata = readRecord(input.order.metadata);
   if (readString(orderMetadata.payment_whatsapp_notified_at)) return false;
-  if (!input.order.conversation_id) return false;
+  const settings = await getOrganizationSalesCatalogSettings(input.client, input.order.organization_id).catch(() => null);
+  const automation = settings?.automationSettings ?? createDefaultSalesCatalogCommerceSettings().automationSettings;
 
-  const { data: conversation } = await input.client
-    .from("conversations")
-    .select("id, whatsapp_instance_id, provider_chat_id")
-    .eq("id", input.order.conversation_id)
-    .eq("organization_id", input.order.organization_id)
-    .maybeSingle<ConversationRow>();
+  if (!automation.paymentStatusNotifications) return false;
 
-  if (!conversation?.whatsapp_instance_id) return false;
+  const conversation = input.order.conversation_id && automation.useConversationWhatsappFirst
+    ? await loadOrderConversation(input.client, input.order)
+    : null;
+  const whatsappInstanceId = conversation?.whatsapp_instance_id ?? automation.defaultWhatsappInstanceId;
+
+  if (!whatsappInstanceId) return false;
 
   const [{ data: instance }, { data: lead }] = await Promise.all([
     input.client
       .from("whatsapp_instances")
       .select("id, organization_id, phone_number, display_name, instance_token_encrypted, metadata")
-      .eq("id", conversation.whatsapp_instance_id)
+      .eq("id", whatsappInstanceId)
       .eq("organization_id", input.order.organization_id)
       .maybeSingle<WhatsappInstanceRow>(),
     input.order.lead_id
@@ -341,7 +347,12 @@ async function maybeNotifyPaymentApproved(input: {
   const phone = lead?.phone_number ?? input.order.customer_phone;
   if (!instance || !token || !phone) return false;
 
-  const text = buildPaymentApprovedMessage(input.order, input.items, input.paymentMethodLabel);
+  const text = buildPaymentApprovedMessage({
+    order: input.order,
+    items: input.items,
+    paymentMethod: input.paymentMethodLabel,
+    template: settings?.messageTemplates.paymentConfirmed ?? null,
+  });
   const credentials = await loadUazapiCredentials(input.client);
   const providerResponse = await callUazapi(credentials, "/send/text", {
     method: "POST",
@@ -365,37 +376,41 @@ async function maybeNotifyPaymentApproved(input: {
     .maybeSingle<{ metadata: JsonRecord | null }>();
   const latestMetadata = readRecord(latestOrder?.metadata);
 
-  await input.client.from("conversation_messages").insert({
-    organization_id: input.order.organization_id,
-    conversation_id: input.order.conversation_id,
-    lead_id: input.order.lead_id,
-    whatsapp_instance_id: instance.id,
-    provider: "uazapi",
-    provider_message_id: findProviderMessageId(providerResponse),
-    provider_chat_id: conversation.provider_chat_id,
-    direction: "outbound",
-    message_type: "text",
-    text_content: text,
-    payload: {
-      delivery_source: "sales_catalog_payment_confirmation",
-      provider_response: sanitizeProviderData(providerResponse),
-      payment_session_id: input.paymentSessionId,
-      provider_payment_id: input.providerPaymentId,
-      payment_method: input.paymentMethodLabel,
-    },
-    occurred_at: now,
-  });
+  if (conversation && input.order.conversation_id) {
+    await input.client.from("conversation_messages").insert({
+      organization_id: input.order.organization_id,
+      conversation_id: input.order.conversation_id,
+      lead_id: input.order.lead_id,
+      whatsapp_instance_id: instance.id,
+      provider: "uazapi",
+      provider_message_id: findProviderMessageId(providerResponse),
+      provider_chat_id: conversation.provider_chat_id,
+      direction: "outbound",
+      message_type: "text",
+      text_content: text,
+      payload: {
+        delivery_source: "sales_catalog_payment_confirmation",
+        provider_response: sanitizeProviderData(providerResponse),
+        payment_session_id: input.paymentSessionId,
+        provider_payment_id: input.providerPaymentId,
+        payment_method: input.paymentMethodLabel,
+      },
+      occurred_at: now,
+    });
+  }
 
   await Promise.all([
-    input.client
-      .from("conversations")
-      .update({
-        status: "waiting_customer",
-        last_message_preview: preview(text, 240),
-        last_message_at: now,
-      })
-      .eq("id", input.order.conversation_id)
-      .eq("organization_id", input.order.organization_id),
+    conversation && input.order.conversation_id
+      ? input.client
+          .from("conversations")
+          .update({
+            status: "waiting_customer",
+            last_message_preview: preview(text, 240),
+            last_message_at: now,
+          })
+          .eq("id", input.order.conversation_id)
+          .eq("organization_id", input.order.organization_id)
+      : Promise.resolve(),
     input.order.lead_id
       ? input.client
           .from("leads")
@@ -414,6 +429,8 @@ async function maybeNotifyPaymentApproved(input: {
           payment_whatsapp_notified_at: now,
           payment_whatsapp_notified_session_id: input.paymentSessionId,
           payment_whatsapp_notified_provider_payment_id: input.providerPaymentId,
+          payment_whatsapp_notified_instance_id: instance.id,
+          payment_whatsapp_notified_source: conversation ? "conversation_whatsapp" : "automation_default_whatsapp",
         },
       })
       .eq("id", input.order.id)
@@ -435,6 +452,9 @@ async function maybeNotifyPaymentApproved(input: {
       order_id: input.order.id,
       payment_session_id: input.paymentSessionId,
       provider_payment_id: input.providerPaymentId,
+      whatsapp_instance_id: instance.id,
+      conversation_id: input.order.conversation_id,
+      delivery_source: conversation ? "conversation_whatsapp" : "automation_default_whatsapp",
       source: input.source,
     },
   });
@@ -442,7 +462,26 @@ async function maybeNotifyPaymentApproved(input: {
   return true;
 }
 
-function buildPaymentApprovedMessage(order: OrderRow, items: OrderItemRow[], paymentMethod: string) {
+async function loadOrderConversation(client: SupabaseClient, order: OrderRow) {
+  if (!order.conversation_id) return null;
+
+  const { data } = await client
+    .from("conversations")
+    .select("id, whatsapp_instance_id, provider_chat_id")
+    .eq("id", order.conversation_id)
+    .eq("organization_id", order.organization_id)
+    .maybeSingle<ConversationRow>();
+
+  return data ?? null;
+}
+
+function buildPaymentApprovedMessage(input: {
+  order: OrderRow;
+  items: OrderItemRow[];
+  paymentMethod: string;
+  template: string | null;
+}) {
+  const { order, items } = input;
   const itemSummary = items.length > 0
     ? items.slice(0, 3).map((item) => {
         const quantity = normalizeQuantity(item.quantity);
@@ -451,12 +490,27 @@ function buildPaymentApprovedMessage(order: OrderRow, items: OrderItemRow[], pay
       }).join(", ")
     : "seu pedido";
   const total = order.total ? ` Total: ${order.total}.` : "";
+  const template = input.template?.trim();
+
+  if (template) {
+    return renderMessageTemplate(template, {
+      cliente: order.customer_name ?? "cliente",
+      pedido: order.id.slice(0, 8),
+      itens: itemSummary,
+      valor: order.total ? `R$ ${order.total}` : "valor do pedido",
+      metodo_pagamento: input.paymentMethod,
+    });
+  }
 
   return [
     "Pagamento confirmado",
-    `Recebemos o pagamento via ${paymentMethod} para ${itemSummary}.${total}`,
+    `Recebemos o pagamento via ${input.paymentMethod} para ${itemSummary}.${total}`,
     "Vou acompanhar a separacao do pedido e te aviso por aqui no WhatsApp.",
   ].join("\n");
+}
+
+function renderMessageTemplate(template: string, variables: Record<string, string>) {
+  return template.replace(/\{([a-z0-9_]+)\}/gi, (match, key: string) => variables[key.toLowerCase()] ?? match);
 }
 
 async function loadOrder(client: SupabaseClient, organizationId: string, orderId: string) {

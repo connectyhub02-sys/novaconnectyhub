@@ -72,6 +72,13 @@ export type SalesCatalogWhatsAppMessageTemplates = {
   humanHandoff: string;
 };
 
+export type SalesCatalogAutomationSettings = {
+  paymentStatusNotifications: boolean;
+  useConversationWhatsappFirst: boolean;
+  defaultWhatsappInstanceId: string | null;
+  defaultAgentId: string | null;
+};
+
 export type SalesCatalogOrderBumpItem = {
   productId: string;
   active: boolean;
@@ -418,6 +425,7 @@ export type ClientSalesCatalogSettings = {
   orderPolicy: SalesCatalogOrderPolicy;
   leadDataPolicy: SalesCatalogLeadDataPolicy;
   messageTemplates: SalesCatalogWhatsAppMessageTemplates;
+  automationSettings: SalesCatalogAutomationSettings;
   orderBumps: SalesCatalogOrderBumpSettings;
   createdAt: string | null;
   updatedAt: string | null;
@@ -425,7 +433,7 @@ export type ClientSalesCatalogSettings = {
 
 export type SalesCatalogCommerceSettings = Pick<
   ClientSalesCatalogSettings,
-  "paymentMethods" | "orderPolicy" | "leadDataPolicy" | "messageTemplates"
+  "paymentMethods" | "orderPolicy" | "leadDataPolicy" | "messageTemplates" | "automationSettings"
 >;
 
 export const salesCatalogPaymentMethodTemplates: SalesCatalogPaymentMethod[] = [
@@ -497,13 +505,22 @@ export function createDefaultSalesCatalogLeadDataPolicy(): SalesCatalogLeadDataP
 
 export function createDefaultSalesCatalogMessageTemplates(): SalesCatalogWhatsAppMessageTemplates {
   return {
-    orderSummary: "",
-    paymentRequest: "",
-    paymentConfirmed: "",
-    paymentRejected: "",
-    paymentRefunded: "",
-    unavailableItem: "",
-    humanHandoff: "",
+    orderSummary: "{cliente}, segue o resumo do pedido {pedido}: {itens}. Total: {valor}.",
+    paymentRequest: "{cliente}, para concluir o pedido {pedido}, toque no botao de pagamento abaixo. Assim que confirmar, eu te aviso por aqui.",
+    paymentConfirmed: "{cliente}, pagamento confirmado para o pedido {pedido}. Vamos seguir com a separacao e te manter informado por aqui.",
+    paymentRejected: "{cliente}, o pagamento do pedido {pedido} nao foi aprovado. Nenhuma cobranca foi concluida. Tente outro cartao ou use Pix.",
+    paymentRefunded: "{cliente}, o pagamento do pedido {pedido} foi estornado. Se precisar de ajuda para refazer a compra, eu te acompanho por aqui.",
+    unavailableItem: "{cliente}, esse item ficou indisponivel agora. Posso te mostrar uma alternativa parecida ou chamar uma pessoa do time.",
+    humanHandoff: "{cliente}, vou chamar uma pessoa do nosso time para continuar seu atendimento por aqui.",
+  };
+}
+
+export function createDefaultSalesCatalogAutomationSettings(): SalesCatalogAutomationSettings {
+  return {
+    paymentStatusNotifications: true,
+    useConversationWhatsappFirst: true,
+    defaultWhatsappInstanceId: null,
+    defaultAgentId: null,
   };
 }
 
@@ -525,6 +542,7 @@ export function createDefaultSalesCatalogCommerceSettings(): SalesCatalogCommerc
     orderPolicy: createDefaultSalesCatalogOrderPolicy(),
     leadDataPolicy: createDefaultSalesCatalogLeadDataPolicy(),
     messageTemplates: createDefaultSalesCatalogMessageTemplates(),
+    automationSettings: createDefaultSalesCatalogAutomationSettings(),
   };
 }
 

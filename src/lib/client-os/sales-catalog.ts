@@ -58,6 +58,7 @@ import {
   type SalesCatalogShippingWeightTier,
   type SalesCatalogStockStatus,
   type SalesCatalogWhatsAppMessageTemplates,
+  type SalesCatalogAutomationSettings,
   type SalesCatalogOrderBumpSettings,
   type SalesCatalogSource,
   type SalesCatalogSalesDestination,
@@ -1012,6 +1013,7 @@ export function mapSalesCatalogSettings(row: SalesCatalogMemoryRow): ClientSales
     orderPolicy: readOrderPolicy(metadata.order_policy, commerceDefaults.orderPolicy),
     leadDataPolicy: readLeadDataPolicy(metadata.lead_data_policy, commerceDefaults.leadDataPolicy),
     messageTemplates: readMessageTemplates(metadata.message_templates, commerceDefaults.messageTemplates),
+    automationSettings: readAutomationSettings(metadata.automation_settings ?? metadata.automationSettings, commerceDefaults.automationSettings),
     orderBumps: readOrderBumps(metadata.order_bumps ?? metadata.orderBumps, createDefaultSalesCatalogOrderBumps()),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -1713,6 +1715,20 @@ function readMessageTemplates(value: unknown, fallback: SalesCatalogWhatsAppMess
     paymentRefunded: readString(record.payment_refunded) ?? readString(record.paymentRefunded) ?? fallback.paymentRefunded,
     unavailableItem: readString(record.unavailable_item) ?? readString(record.unavailableItem) ?? fallback.unavailableItem,
     humanHandoff: readString(record.human_handoff) ?? readString(record.humanHandoff) ?? fallback.humanHandoff,
+  };
+}
+
+function readAutomationSettings(value: unknown, fallback: SalesCatalogAutomationSettings): SalesCatalogAutomationSettings {
+  const record = readRecord(value);
+  if (!record) return fallback;
+
+  return {
+    paymentStatusNotifications: readNullableBoolean(record.payment_status_notifications ?? record.paymentStatusNotifications)
+      ?? fallback.paymentStatusNotifications,
+    useConversationWhatsappFirst: readNullableBoolean(record.use_conversation_whatsapp_first ?? record.useConversationWhatsappFirst)
+      ?? fallback.useConversationWhatsappFirst,
+    defaultWhatsappInstanceId: readString(record.default_whatsapp_instance_id ?? record.defaultWhatsappInstanceId),
+    defaultAgentId: readString(record.default_agent_id ?? record.defaultAgentId),
   };
 }
 

@@ -129,6 +129,7 @@ type SettingsDraft = {
   orderPolicy: SalesCatalogOrderPolicy;
   leadDataPolicy: ClientSalesCatalogSettings["leadDataPolicy"];
   messageTemplates: SalesCatalogWhatsAppMessageTemplates;
+  automationSettings: ClientSalesCatalogSettings["automationSettings"];
   orderBumps: SalesCatalogOrderBumpSettings;
 };
 
@@ -453,10 +454,6 @@ export function SalesCatalogConsole({
     () => items.filter((item) => !selectedCompanyId || item.companyId === selectedCompanyId),
     [items, selectedCompanyId],
   );
-  const orderBumpEligibleItems = useMemo(
-    () => visibleItems.filter((item) => item.status === "active" && item.salesDestination === "connectyhub_checkout" && Boolean(item.price)),
-    [visibleItems],
-  );
   const visibleOrders = useMemo(
     () => orders.filter((order) => !selectedCompanyId || order.companyId === selectedCompanyId),
     [orders, selectedCompanyId],
@@ -755,64 +752,6 @@ export function SalesCatalogConsole({
     }));
   }
 
-  function updateMessageTemplate(key: keyof SalesCatalogWhatsAppMessageTemplates, value: string) {
-    setSettingsDraft((current) => ({
-      ...current,
-      messageTemplates: {
-        ...current.messageTemplates,
-        [key]: value.slice(0, 360),
-      },
-    }));
-  }
-
-  function updateOrderBumps(patch: Partial<SalesCatalogOrderBumpSettings>) {
-    setSettingsDraft((current) => ({
-      ...current,
-      orderBumps: {
-        ...current.orderBumps,
-        ...patch,
-      },
-    }));
-  }
-
-  function toggleOrderBumpProduct(product: ClientSalesCatalogItem) {
-    setSettingsDraft((current) => {
-      const existing = current.orderBumps.items.find((item) => item.productId === product.id);
-      const nextItems = existing
-        ? current.orderBumps.items.filter((item) => item.productId !== product.id)
-        : [
-            ...current.orderBumps.items,
-            {
-              productId: product.id,
-              active: true,
-              badge: product.highlightLabel ?? "Oferta especial",
-              title: product.title,
-              description: product.description.slice(0, 160),
-            },
-          ].slice(0, 12);
-
-      return {
-        ...current,
-        orderBumps: {
-          ...current.orderBumps,
-          items: nextItems,
-        },
-      };
-    });
-  }
-
-  function updateOrderBumpProduct(productId: string, patch: Partial<SalesCatalogOrderBumpSettings["items"][number]>) {
-    setSettingsDraft((current) => ({
-      ...current,
-      orderBumps: {
-        ...current.orderBumps,
-        items: current.orderBumps.items.map((item) => (
-          item.productId === productId ? { ...item, ...patch } : item
-        )),
-      },
-    }));
-  }
-
   function toggleSelectedAttribute(attribute: SalesCatalogAttribute, value: string) {
     setSelectedAttributes((current) => {
       const values = current[attribute.id] ?? [];
@@ -944,6 +883,7 @@ export function SalesCatalogConsole({
             retentionDays: settingsDraft.leadDataPolicy.retentionDays,
           },
           messageTemplates: settingsDraft.messageTemplates,
+          automationSettings: settingsDraft.automationSettings,
           orderBumps: settingsDraft.orderBumps,
         }),
       });
@@ -2231,156 +2171,21 @@ export function SalesCatalogConsole({
                 </label>
               </AccordionSection>
 
-              <AccordionSection icon={MessageSquareText} title="Mensagens automaticas" tone="cyan">
-                <div className="grid gap-3 lg:grid-cols-2">
-                  <label className="block">
-                    <FieldLabel>Resumo do pedido</FieldLabel>
-                    <textarea
-                      value={settingsDraft.messageTemplates.orderSummary}
-                      onChange={(event) => updateMessageTemplate("orderSummary", event.target.value)}
-                      className="min-h-20 w-full resize-y rounded-lg border bg-transparent px-3 py-2 text-[12px] leading-5 outline-none"
-                      style={{ borderColor: "var(--ch-border)" }}
-                    />
-                  </label>
-                  <label className="block">
-                    <FieldLabel>Pedido de pagamento</FieldLabel>
-                    <textarea
-                      value={settingsDraft.messageTemplates.paymentRequest}
-                      onChange={(event) => updateMessageTemplate("paymentRequest", event.target.value)}
-                      className="min-h-20 w-full resize-y rounded-lg border bg-transparent px-3 py-2 text-[12px] leading-5 outline-none"
-                      style={{ borderColor: "var(--ch-border)" }}
-                    />
-                  </label>
-                  <label className="block">
-                    <FieldLabel>Pagamento confirmado</FieldLabel>
-                    <textarea
-                      value={settingsDraft.messageTemplates.paymentConfirmed}
-                      onChange={(event) => updateMessageTemplate("paymentConfirmed", event.target.value)}
-                      className="min-h-20 w-full resize-y rounded-lg border bg-transparent px-3 py-2 text-[12px] leading-5 outline-none"
-                      style={{ borderColor: "var(--ch-border)" }}
-                    />
-                  </label>
-                  <label className="block">
-                    <FieldLabel>Item indisponivel</FieldLabel>
-                    <textarea
-                      value={settingsDraft.messageTemplates.unavailableItem}
-                      onChange={(event) => updateMessageTemplate("unavailableItem", event.target.value)}
-                      className="min-h-20 w-full resize-y rounded-lg border bg-transparent px-3 py-2 text-[12px] leading-5 outline-none"
-                      style={{ borderColor: "var(--ch-border)" }}
-                    />
-                  </label>
-                  <label className="block lg:col-span-2">
-                    <FieldLabel>Transferencia humana</FieldLabel>
-                    <textarea
-                      value={settingsDraft.messageTemplates.humanHandoff}
-                      onChange={(event) => updateMessageTemplate("humanHandoff", event.target.value)}
-                      className="min-h-20 w-full resize-y rounded-lg border bg-transparent px-3 py-2 text-[12px] leading-5 outline-none"
-                      style={{ borderColor: "var(--ch-border)" }}
-                    />
-                  </label>
-                  <label className="block">
-                    <FieldLabel>Pagamento recusado</FieldLabel>
-                    <textarea
-                      value={settingsDraft.messageTemplates.paymentRejected}
-                      onChange={(event) => updateMessageTemplate("paymentRejected", event.target.value)}
-                      className="min-h-20 w-full resize-y rounded-lg border bg-transparent px-3 py-2 text-[12px] leading-5 outline-none"
-                      style={{ borderColor: "var(--ch-border)" }}
-                      placeholder="{cliente}, seu pagamento nao foi concluido. Tente outro cartao ou use Pix pelo botao abaixo."
-                    />
-                  </label>
-                  <label className="block">
-                    <FieldLabel>Pagamento estornado</FieldLabel>
-                    <textarea
-                      value={settingsDraft.messageTemplates.paymentRefunded}
-                      onChange={(event) => updateMessageTemplate("paymentRefunded", event.target.value)}
-                      className="min-h-20 w-full resize-y rounded-lg border bg-transparent px-3 py-2 text-[12px] leading-5 outline-none"
-                      style={{ borderColor: "var(--ch-border)" }}
-                      placeholder="{cliente}, seu pagamento do pedido {pedido} foi estornado."
-                    />
-                  </label>
-                </div>
-              </AccordionSection>
-
-              <AccordionSection icon={BadgePercent} title="Order Bump do checkout" tone="amber">
-                <div className="space-y-4">
-                  <label className="flex items-start gap-3 rounded-lg border p-3" style={{ borderColor: "var(--ch-border)" }}>
-                    <input
-                      type="checkbox"
-                      checked={settingsDraft.orderBumps.enabled}
-                      onChange={(event) => updateOrderBumps({ enabled: event.target.checked })}
-                      className="mt-1 h-4 w-4 accent-cyan-300"
-                    />
-                    <span>
-                      <span className="block text-[13px] font-semibold text-slate-100">Mostrar ofertas extras antes do pagamento</span>
-                      <span className="mt-1 block text-[12px] leading-5 text-slate-400">
-                        O lead pode adicionar produtos complementares com 1 clique no checkout. Use para aumentar ticket medio.
-                      </span>
-                    </span>
-                  </label>
-
-                  {orderBumpEligibleItems.length > 0 ? (
-                    <div className="grid gap-3 lg:grid-cols-2">
-                      {orderBumpEligibleItems.map((item) => {
-                        const selected = settingsDraft.orderBumps.items.find((entry) => entry.productId === item.id) ?? null;
-
-                        return (
-                          <div
-                            key={item.id}
-                            className={cn(
-                              "rounded-lg border p-3",
-                              selected ? "border-amber-300/50 bg-amber-300/10" : "border-slate-700 bg-slate-950/35",
-                            )}
-                          >
-                            <div className="flex items-start gap-3">
-                              <input
-                                type="checkbox"
-                                checked={Boolean(selected)}
-                                onChange={() => toggleOrderBumpProduct(item)}
-                                className="mt-1 h-4 w-4 accent-amber-300"
-                              />
-                              <div className="min-w-0 flex-1">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <p className="truncate text-[13px] font-bold text-white">{item.title}</p>
-                                  <NeonBadge tone="cyan">{item.price ?? "sem preco"}</NeonBadge>
-                                </div>
-                                <p className="mt-1 line-clamp-2 text-[11px] leading-5 text-slate-400">{item.description || "Produto do checkout ConnectyHub."}</p>
-                              </div>
-                            </div>
-
-                            {selected ? (
-                              <div className="mt-3 grid gap-2">
-                                <input
-                                  value={selected.badge ?? ""}
-                                  onChange={(event) => updateOrderBumpProduct(item.id, { badge: event.target.value.slice(0, 32) })}
-                                  className="h-10 rounded-lg border bg-transparent px-3 text-[12px] outline-none"
-                                  style={{ borderColor: "var(--ch-border)" }}
-                                  placeholder="Badge: Oferta especial"
-                                />
-                                <input
-                                  value={selected.title ?? ""}
-                                  onChange={(event) => updateOrderBumpProduct(item.id, { title: event.target.value.slice(0, 80) })}
-                                  className="h-10 rounded-lg border bg-transparent px-3 text-[12px] outline-none"
-                                  style={{ borderColor: "var(--ch-border)" }}
-                                  placeholder="Titulo no checkout"
-                                />
-                                <textarea
-                                  value={selected.description ?? ""}
-                                  onChange={(event) => updateOrderBumpProduct(item.id, { description: event.target.value.slice(0, 180) })}
-                                  className="min-h-16 resize-y rounded-lg border bg-transparent px-3 py-2 text-[12px] leading-5 outline-none"
-                                  style={{ borderColor: "var(--ch-border)" }}
-                                  placeholder="Descricao curta da oferta"
-                                />
-                              </div>
-                            ) : null}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div className="rounded-lg border border-dashed border-slate-600 p-4 text-center text-[12px] leading-5 text-slate-400">
-                      Cadastre produtos ativos com destino checkout ConnectyHub e preco definido para liberar Order Bump.
-                    </div>
-                  )}
+              <AccordionSection icon={MessageSquareText} title="Automacoes do checkout" tone="cyan">
+                <div className="rounded-xl border border-cyan-300/20 bg-cyan-300/8 p-3">
+                  <p className="text-[13px] font-semibold text-slate-100">
+                    Mensagens automaticas, WhatsApp de envio e Order Bump agora ficam em Automacoes.
+                  </p>
+                  <p className="mt-1 text-[12px] leading-5 text-slate-400">
+                    O catalogo fica responsavel por produtos, pagamento, frete e pedido. As mensagens que o agente envia ao lead ficam em um ambiente unico.
+                  </p>
+                  <Link
+                    href="/dashboard/automacoes"
+                    className="mt-3 inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-cyan-300/35 px-3 font-mono text-[11px] font-bold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-300/10"
+                  >
+                    <MessageSquareText className="h-4 w-4" />
+                    Gerenciar automacoes
+                  </Link>
                 </div>
               </AccordionSection>
 
@@ -5615,6 +5420,7 @@ function buildSettingsDraft(settings: ClientSalesCatalogSettings | null): Settin
       requiredFields: [...(settings?.leadDataPolicy.requiredFields ?? commerceDefaults.leadDataPolicy.requiredFields)],
     },
     messageTemplates: { ...(settings?.messageTemplates ?? commerceDefaults.messageTemplates) },
+    automationSettings: { ...(settings?.automationSettings ?? commerceDefaults.automationSettings) },
     orderBumps: {
       enabled: settings?.orderBumps?.enabled ?? false,
       items: (settings?.orderBumps?.items ?? []).map((item) => ({ ...item })),
