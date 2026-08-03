@@ -40,6 +40,11 @@ import {
   type WhatsappCloneProfile,
 } from "./agent-behavior";
 import {
+  normalizeAgentPromptBuilderConfig,
+  promptBuilderMetadataKey,
+  type AgentPromptBuilderConfig,
+} from "./agent-prompt-templates";
+import {
   describeWhatsappHandoffNotificationResult,
   processWhatsappHandoffNotification,
 } from "./handoff-notifications";
@@ -226,6 +231,7 @@ export type ClientWhatsappState = {
     status?: string | null;
     prompt: string;
     promptPreview: string;
+    promptTemplateConfig: AgentPromptBuilderConfig;
     cloneProfile: WhatsappCloneProfile;
     cloneMemory: WhatsappCloneMemory;
     cloneProfileImport: WhatsappCloneProfileImportStatus;
@@ -1088,6 +1094,7 @@ export async function updateClientWhatsappPrompt(input: {
   cloneProfile?: unknown;
   qualificationConfig?: unknown;
   channelConfig?: unknown;
+  promptTemplateConfig?: unknown;
   client?: SupabaseClient;
 }): Promise<ClientWhatsappState> {
   const agentPrompt = (input.agentPrompt ?? input.prompt)?.trim();
@@ -1138,6 +1145,10 @@ export async function updateClientWhatsappPrompt(input: {
   let nextChannelConfig = hasChannelConfig
     ? normalizeAgentChannelConfig(input.channelConfig)
     : getAgentChannelConfig(agent);
+  const hasPromptTemplateConfig = input.promptTemplateConfig !== undefined;
+  const nextPromptTemplateConfig = hasPromptTemplateConfig
+    ? normalizeAgentPromptBuilderConfig(input.promptTemplateConfig, { updatedAt: new Date().toISOString() })
+    : getPromptTemplateConfig(agent);
 
   if (hasChannelConfig) {
     const metaEntitlement = resolveMetaSocialChannelsEntitlement({
@@ -1152,7 +1163,7 @@ export async function updateClientWhatsappPrompt(input: {
 
   const now = new Date().toISOString();
 
-  if (hasAgentPrompt || hasQualificationConfig || input.behavior !== undefined || hasCloneProfile || hasChannelConfig) {
+  if (hasAgentPrompt || hasQualificationConfig || input.behavior !== undefined || hasCloneProfile || hasChannelConfig || hasPromptTemplateConfig) {
     const promptToSave = hasAgentPrompt ? agentPrompt : agent.prompt?.trim() || defaultWhatsappAgentPrompt;
     const nextVersion = hasAgentPrompt ? await getNextPromptVersion(client, agent.id) : null;
     const { error } = await client
@@ -1165,6 +1176,7 @@ export async function updateClientWhatsappPrompt(input: {
           whatsapp_behavior_config: nextBehavior,
           whatsapp_clone_profile: nextCloneProfile,
           multichannel_config: nextChannelConfig,
+          [promptBuilderMetadataKey]: nextPromptTemplateConfig,
           [leadQualificationConfigKey]: nextQualificationConfig,
           prompt_control: {
             last_updated_at: now,
@@ -2410,6 +2422,7 @@ function buildState(
           avatarAlt: agent.avatar_alt,
           prompt: agentPrompt,
           promptPreview: preview(agentPrompt),
+          promptTemplateConfig: getPromptTemplateConfig(agent),
           cloneProfile: getCloneProfileConfig(agent),
           cloneMemory: getCloneMemoryConfig(agent),
           cloneProfileImport: getCloneProfileImportStatus(agent),
@@ -2510,6 +2523,10 @@ function getCloneMemoryConfig(agent: AgentRow | null) {
 
 function getCloneProfileImportStatus(agent: AgentRow | null) {
   return normalizeWhatsappCloneProfileImportStatus(readRecord(agent?.metadata)?.whatsapp_clone_profile_import);
+}
+
+function getPromptTemplateConfig(agent: AgentRow | null) {
+  return normalizeAgentPromptBuilderConfig(readRecord(agent?.metadata)?.[promptBuilderMetadataKey]);
 }
 
 function emptyCloneRealTestSummary(): ClientCloneRealTestSummary {

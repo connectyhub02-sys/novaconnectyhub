@@ -58,11 +58,15 @@ export async function generateConnectyVoiceAudio(input: GenerateConnectyVoiceAud
       client,
     });
 
-  const metering = await meterVoiceUsage(client, input, generated, provider).catch(async (error: unknown) => {
+  let metering: Awaited<ReturnType<typeof meterVoiceUsage>>;
+
+  try {
+    metering = await meterVoiceUsage(client, input, generated, provider);
+  } catch (error) {
     const message = error instanceof Error ? error.message : "Falha desconhecida ao registrar metering de audio.";
     await appendGeneratedMediaMeteringError(client, generated.mediaId, message);
-    return null;
-  });
+    throw error;
+  }
 
   if (metering?.usageEventId && generated.mediaId) {
     await client
@@ -75,10 +79,10 @@ export async function generateConnectyVoiceAudio(input: GenerateConnectyVoiceAud
 
   return {
     ...generated,
-    usageEventId: metering?.usageEventId ?? null,
-    billingMode: metering?.billingMode ?? null,
-    chargeCredits: metering?.chargeCredits ?? null,
-    meteringError: metering ? null : "audio_metering_failed",
+    usageEventId: metering.usageEventId ?? null,
+    billingMode: metering.billingMode ?? null,
+    chargeCredits: metering.chargeCredits ?? null,
+    meteringError: null,
   };
 }
 

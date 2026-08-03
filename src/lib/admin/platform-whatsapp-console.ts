@@ -23,6 +23,10 @@ import {
   type WhatsappCloneProfile,
 } from "@/lib/whatsapp/agent-behavior";
 import {
+  normalizeAgentPromptBuilderConfig,
+  promptBuilderMetadataKey,
+} from "@/lib/whatsapp/agent-prompt-templates";
+import {
   describeWhatsappHandoffNotificationResult,
   processWhatsappHandoffNotification,
 } from "@/lib/whatsapp/handoff-notifications";
@@ -1300,6 +1304,7 @@ function buildState(
           status: agent.status,
           prompt: agentPrompt,
           promptPreview: preview(agentPrompt),
+          promptTemplateConfig: normalizeAgentPromptBuilderConfig(readRecord(agent.metadata)?.[promptBuilderMetadataKey]),
           cloneProfile: getCloneProfileConfig(agent),
           cloneMemory: getCloneMemoryConfig(agent),
           cloneProfileImport: getCloneProfileImportStatus(agent),

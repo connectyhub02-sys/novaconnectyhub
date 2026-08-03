@@ -1127,7 +1127,7 @@ async function extractDraftsWithGemini(input: {
       fileTypes: files.map((file) => file.contentType),
       extractedItems: drafts.length,
     },
-  }).catch(() => null);
+  });
 
   return { drafts };
 }

@@ -15,8 +15,10 @@ export const runtime = "nodejs";
 
 type PromptAssistantBody = {
   companyId?: unknown;
+  mode?: unknown;
   productUrl?: unknown;
   notes?: unknown;
+  templateId?: unknown;
 };
 
 const maxPageChars = 12000;
@@ -31,11 +33,12 @@ export async function POST(request: NextRequest) {
 
   const body = await request.json().catch(() => null) as PromptAssistantBody | null;
   const requestedCompanyId = asString(body?.companyId);
+  const mode = asString(body?.mode);
   const productUrl = asString(body?.productUrl);
   const notes = asString(body?.notes)?.slice(0, maxNotesChars) ?? "";
 
   if (!productUrl && !notes) {
-    return NextResponse.json({ error: "Informe um link ou notas do produto." }, { status: 400 });
+    return NextResponse.json({ error: "Informe notas para a IA analisar." }, { status: 400 });
   }
 
   try {
@@ -52,8 +55,15 @@ export async function POST(request: NextRequest) {
     });
     await assertBillableAccess({ organizationId: company.id, client });
     const credentials = await loadGeminiCredentials(client) as GeminiCredentials;
-    const pageContext = productUrl ? await fetchPageContext(productUrl) : "";
-    const generated = await generatePrompt({
+    const pageContext = productUrl && mode !== "company_context" ? await fetchPageContext(productUrl) : "";
+    const generated = mode === "company_context"
+      ? await generateCompanyContext({
+        credentials,
+        companyName: company.name,
+        notes,
+        templateId: asString(body?.templateId),
+      })
+      : await generatePrompt({
       credentials,
       companyName: company.name,
       pageContext,
@@ -73,6 +83,7 @@ export async function POST(request: NextRequest) {
       debitDescription: "Assistente de prompt ConnectyHub",
       metadata: {
         source: "dashboard_prompt_assistant",
+        mode: mode ?? "prompt",
         companyId,
         hasProductUrl: Boolean(productUrl),
         notesChars: notes.length,
@@ -80,7 +91,9 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    return NextResponse.json({ prompt: generated.text });
+    return mode === "company_context"
+      ? NextResponse.json({ text: generated.text })
+      : NextResponse.json({ prompt: generated.text });
   } catch (error) {
     return NextResponse.json(
       {
@@ -90,6 +103,44 @@ export async function POST(request: NextRequest) {
       { status: statusForDashboardCompanyScopeError(error, error instanceof BillingAccessError ? 402 : 500) },
     );
   }
+}
+
+async function generateCompanyContext(input: {
+  credentials: GeminiCredentials;
+  companyName: string;
+  notes: string;
+  templateId: string | null;
+}) {
+  const modelId = input.credentials.model;
+  const systemInstruction = [
+    "Voce melhora complementos de empresa para prompt de agente comercial no WhatsApp.",
+    "Reescreva as notas em portugues do Brasil, de forma clara, operacional e sem inventar informacao.",
+    "Organize em topicos curtos: diferenciais, publico, regras comerciais, atendimento, limites e observacoes.",
+    "Nao crie promessa, preco, prazo, garantia ou politica que nao esteja nas notas.",
+    "Entregue somente o complemento final, sem explicacao externa.",
+  ].join("\n");
+  const prompt = [
+    `Empresa: ${input.companyName}`,
+    input.templateId ? `Modelo/nicho selecionado: ${input.templateId}` : "",
+    `Notas originais:\n${input.notes}`,
+  ].filter(Boolean).join("\n\n");
+  const responseData = await callGemini(input.credentials, systemInstruction, prompt, {
+    temperature: 0.32,
+    maxOutputTokens: 900,
+  });
+  const text = extractGeminiText(responseData).trim();
+
+  if (!text) {
+    throw new Error("Gemini nao retornou o complemento.");
+  }
+
+  return {
+    text: text.slice(0, maxNotesChars),
+    systemInstruction,
+    prompt,
+    modelId,
+    responseData,
+  };
 }
 
 async function fetchPageContext(productUrl: string) {
@@ -188,6 +239,47 @@ async function generatePrompt(input: {
     modelId,
     responseData: data,
   };
+}
+
+async function callGemini(
+  credentials: GeminiCredentials,
+  systemInstruction: string,
+  prompt: string,
+  config: { temperature: number; maxOutputTokens: number },
+) {
+  const url = new URL(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(credentials.model)}:generateContent`);
+  url.searchParams.set("key", credentials.apiKey);
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      systemInstruction: {
+        parts: [{
+          text: systemInstruction,
+        }],
+      },
+      contents: [{
+        role: "user",
+        parts: [{
+          text: prompt,
+        }],
+      }],
+      generationConfig: {
+        temperature: config.temperature,
+        topP: 0.9,
+        maxOutputTokens: config.maxOutputTokens,
+      },
+    }),
+    cache: "no-store",
+  });
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(readGeminiError(data) ?? `Gemini respondeu status ${response.status}.`);
+  }
+
+  return data;
 }
 
 function extractVisibleText(html: string) {

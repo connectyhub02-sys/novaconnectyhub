@@ -6,6 +6,12 @@ import { defaultLeadQualificationConfig, leadQualificationConfigKey } from "@/li
 import { defaultAgentChannelConfig, normalizeAgentChannelConfig } from "@/lib/agents/multichannel";
 import { assertBillableAccess, getOrganizationPlanLimits } from "@/lib/billing/trial";
 import { defaultWhatsappAgentPrompt, defaultWhatsappBehaviorConfig, defaultWhatsappCloneMemory, defaultWhatsappCloneProfile } from "@/lib/whatsapp/agent-behavior";
+import {
+  buildAgentPromptFromTemplate,
+  normalizeAgentPromptBuilderConfig,
+  promptBuilderMetadataKey,
+  type AgentPromptBuilderConfig,
+} from "@/lib/whatsapp/agent-prompt-templates";
 import { deleteUazapiProviderInstance } from "@/lib/whatsapp/uazapi-instance-cleanup";
 import { loadUazapiCredentials } from "@/lib/whatsapp/uazapi-credentials";
 import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
@@ -26,6 +32,7 @@ export type ClientAgent = {
   roleTitle: string;
   description: string | null;
   prompt: string;
+  promptTemplateConfig: AgentPromptBuilderConfig;
   status: string;
   autonomyLevel: number;
   updatedAt: string | null;
@@ -47,6 +54,7 @@ type AgentRow = {
   autonomy_level: number;
   updated_at: string | null;
   created_at: string | null;
+  metadata: JsonRecord | null;
 };
 
 type AgentFullRow = AgentRow & {
@@ -82,8 +90,8 @@ type AgentWhatsappInstanceRow = {
 const maxAgentNameLength = 80;
 const maxSectorNameLength = 80;
 const maxPromptLength = 8000;
-const agentListSelectColumns = "id, organization_id, sector_code, sector_name, agent_code, name, persona_name, role_title, description, prompt, status, autonomy_level, updated_at, created_at";
-const agentFullSelectColumns = `${agentListSelectColumns}, avatar_url, avatar_alt, profile_bio, llm_provider, model_id, requires_human_approval, tools, triggers, schedule_rrule, inngest_event_name, memory_access_level, monthly_budget_credits, metadata`;
+const agentListSelectColumns = "id, organization_id, sector_code, sector_name, agent_code, name, persona_name, role_title, description, prompt, status, autonomy_level, updated_at, created_at, metadata";
+const agentFullSelectColumns = `${agentListSelectColumns}, avatar_url, avatar_alt, profile_bio, llm_provider, model_id, requires_human_approval, tools, triggers, schedule_rrule, inngest_event_name, memory_access_level, monthly_budget_credits`;
 
 export async function getClientAgentsWorkspace(
   input: string | {
@@ -156,6 +164,7 @@ export async function createClientAgent(input: {
   sectorName?: string;
   roleTitle?: string;
   prompt?: string;
+  promptTemplateConfig?: unknown;
   client?: SupabaseClient;
 }) {
   const client = input.client ?? createServiceClient();
@@ -171,7 +180,15 @@ export async function createClientAgent(input: {
   const sectorName = normalizeSectorName(input.sectorName);
   const sectorCode = createSectorCode(sectorName);
   const roleTitle = normalizeRoleTitle(input.roleTitle);
-  const prompt = normalizePrompt(input.prompt);
+  const promptTemplateConfig = normalizeAgentPromptBuilderConfig(input.promptTemplateConfig, {
+    updatedAt: new Date().toISOString(),
+  });
+  const generatedPrompt = buildAgentPromptFromTemplate({
+    config: promptTemplateConfig,
+    companyName: company.name,
+    agentName: name,
+  });
+  const prompt = normalizePrompt(typeof input.prompt === "string" ? input.prompt : generatedPrompt);
   const agentCode = createAgentCode(name);
 
   const { data, error } = await client
@@ -208,6 +225,7 @@ export async function createClientAgent(input: {
         whatsapp_behavior_config: defaultWhatsappBehaviorConfig,
         whatsapp_clone_profile: defaultWhatsappCloneProfile,
         whatsapp_clone_memory: defaultWhatsappCloneMemory,
+        [promptBuilderMetadataKey]: promptTemplateConfig,
         [leadQualificationConfigKey]: defaultLeadQualificationConfig,
       },
     })
@@ -230,6 +248,7 @@ export async function updateClientAgent(input: {
   sectorName?: string;
   roleTitle?: string;
   prompt?: string;
+  promptTemplateConfig?: unknown;
   client?: SupabaseClient;
 }) {
   const client = input.client ?? createServiceClient();
@@ -256,7 +275,12 @@ export async function updateClientAgent(input: {
   const sectorCode = createSectorCode(sectorName);
   const roleTitle = normalizeRoleTitle(input.roleTitle);
   const prompt = normalizePrompt(input.prompt);
-  const metadata = mergeAgentMetadata(agent.metadata, targetCompany, sectorCode, sectorName);
+  const promptTemplateConfig = input.promptTemplateConfig !== undefined
+    ? normalizeAgentPromptBuilderConfig(input.promptTemplateConfig, { updatedAt: new Date().toISOString() })
+    : normalizeAgentPromptBuilderConfig(agent.metadata?.[promptBuilderMetadataKey]);
+  const metadata = mergeAgentMetadata(agent.metadata, targetCompany, sectorCode, sectorName, {
+    [promptBuilderMetadataKey]: promptTemplateConfig,
+  });
 
   const { data, error } = await client
     .from("agent_registry")
@@ -295,6 +319,7 @@ export async function cloneClientAgent(input: {
   sectorName?: string;
   roleTitle?: string;
   prompt?: string;
+  promptTemplateConfig?: unknown;
   client?: SupabaseClient;
 }) {
   const client = input.client ?? createServiceClient();
@@ -321,10 +346,14 @@ export async function cloneClientAgent(input: {
   const sectorCode = createSectorCode(sectorName);
   const roleTitle = normalizeRoleTitle(input.roleTitle || sourceAgent.role_title);
   const prompt = normalizePrompt(input.prompt || sourceAgent.prompt);
+  const promptTemplateConfig = input.promptTemplateConfig !== undefined
+    ? normalizeAgentPromptBuilderConfig(input.promptTemplateConfig, { updatedAt: new Date().toISOString() })
+    : normalizeAgentPromptBuilderConfig(sourceAgent.metadata?.[promptBuilderMetadataKey]);
   const metadata = mergeAgentMetadata(sourceAgent.metadata, targetCompany, sectorCode, sectorName, {
     cloned_from_agent_id: sourceAgent.id,
     cloned_from_agent_name: sourceAgent.name,
     cloned_at: new Date().toISOString(),
+    [promptBuilderMetadataKey]: promptTemplateConfig,
   });
   if (targetCompany.id !== sourceAgent.organization_id) {
     delete metadata.whatsapp_clone_memory;
@@ -586,6 +615,7 @@ function mapAgent(agent: AgentRow, companyById: Map<string, ClientCompany>) {
     roleTitle: agent.role_title,
     description: agent.description,
     prompt: agent.prompt,
+    promptTemplateConfig: normalizeAgentPromptBuilderConfig(agent.metadata?.[promptBuilderMetadataKey]),
     status: agent.status,
     autonomyLevel: agent.autonomy_level,
     updatedAt: agent.updated_at,

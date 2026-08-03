@@ -213,6 +213,7 @@ export async function PATCH(request: NextRequest) {
     cloneProfile?: unknown;
     qualificationConfig?: unknown;
     channelConfig?: unknown;
+    promptTemplateConfig?: unknown;
   }>(request);
   const context = await requireWorkspaceContext({
     requestedCompanyId: asString(body?.companyId),
@@ -248,6 +249,7 @@ export async function PATCH(request: NextRequest) {
       cloneProfile: body?.cloneProfile,
       qualificationConfig: body?.qualificationConfig,
       channelConfig: body?.channelConfig,
+      promptTemplateConfig: body?.promptTemplateConfig,
     });
 
     return NextResponse.json(attachWorkspace(context, state));

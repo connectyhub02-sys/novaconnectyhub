@@ -76,6 +76,15 @@ import {
   type WhatsappResponseMode,
 } from "@/lib/whatsapp/agent-behavior";
 import {
+  agentPromptTemplates,
+  buildAgentPromptFromTemplate,
+  defaultAgentPromptTemplateId,
+  isAgentPromptBuilderConfigEqual,
+  normalizeAgentPromptBuilderConfig,
+  type AgentPromptBuilderConfig,
+  type AgentPromptTemplateId,
+} from "@/lib/whatsapp/agent-prompt-templates";
+import {
   defaultLeadQualificationConfig,
   isLeadQualificationConfigEqual,
   normalizeLeadQualificationConfig,
@@ -206,6 +215,7 @@ type ClientWhatsappAgent = {
   roleTitle: string;
   description: string | null;
   prompt: string;
+  promptTemplateConfig?: AgentPromptBuilderConfig;
   status: string;
   autonomyLevel: number;
   updatedAt: string | null;
@@ -245,6 +255,7 @@ type WhatsappState = {
     status?: string | null;
     prompt: string;
     promptPreview: string;
+    promptTemplateConfig?: AgentPromptBuilderConfig;
     cloneProfile?: WhatsappCloneProfile;
     cloneMemory?: WhatsappCloneMemory;
     cloneProfileImport?: CloneProfileImportStatus;
@@ -539,6 +550,7 @@ type WhatsappConsoleVariant = {
     links: string;
     channels: string;
     voices: string;
+    promptAssistant?: string;
   };
   connectionEnabled: boolean;
   connectionDisabledReason?: string;
@@ -592,6 +604,7 @@ const clientWhatsappConsoleVariant = {
     links: "/api/dashboard/whatsapp/links",
     channels: "/api/dashboard/whatsapp/channels",
     voices: "/api/dashboard/voices",
+    promptAssistant: "/api/dashboard/whatsapp/prompt-assistant",
   },
   connectionEnabled: true,
   voiceCloneEnabled: true,
@@ -630,6 +643,7 @@ export const adminWhatsappConsoleVariant = {
     links: "/api/admin/whatsapp/internal/links",
     channels: "/api/admin/whatsapp/internal/channels",
     voices: "/api/admin/whatsapp/internal/voices",
+    promptAssistant: "/api/admin/whatsapp/internal/prompt-assistant",
   },
   connectionEnabled: true,
   connectionDisabledReason: "Crie o agente do setor antes de conectar o WhatsApp interno.",
@@ -647,6 +661,8 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
   const [connectMode, setConnectMode] = useState<ConnectionMode>("qr");
   const [connectPhone, setConnectPhone] = useState("");
   const [promptDraft, setPromptDraft] = useState("");
+  const [promptTemplateDraft, setPromptTemplateDraft] = useState<AgentPromptBuilderConfig>(() => normalizeAgentPromptBuilderConfig(null));
+  const [promptAssistantRunning, setPromptAssistantRunning] = useState(false);
   const [behaviorDraft, setBehaviorDraft] = useState<WhatsappBehaviorConfig>(defaultWhatsappBehaviorConfig);
   const [cloneProfileDraft, setCloneProfileDraft] = useState<WhatsappCloneProfile>(defaultWhatsappCloneProfile);
   const [qualificationDraft, setQualificationDraft] = useState<LeadQualificationConfig>(defaultLeadQualificationConfig);
@@ -655,7 +671,8 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
   const [selectedAgentId, setSelectedAgentId] = useState("");
   const [showAgentForm, setShowAgentForm] = useState(false);
   const [agentName, setAgentName] = useState("");
-  const [agentSectorName, setAgentSectorName] = useState("Atendimento WhatsApp");
+  const [agentSectorName, setAgentSectorName] = useState(agentPromptTemplates[0].sectorName);
+  const [agentTemplateId, setAgentTemplateId] = useState<AgentPromptTemplateId>(defaultAgentPromptTemplateId);
   const [creatingAgent, setCreatingAgent] = useState(false);
   const [deletingAgentId, setDeletingAgentId] = useState<string | null>(null);
   const [showInternalAgentForm, setShowInternalAgentForm] = useState(false);
@@ -747,8 +764,11 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
 
     if (!options?.preserveDrafts) {
       const nextPrompt = nextState.agent?.prompt ?? "";
+      const nextPromptTemplateConfig = normalizeAgentPromptBuilderConfig(nextState.agent?.promptTemplateConfig);
 
       setPromptDraft(nextPrompt);
+      setPromptTemplateDraft(nextPromptTemplateConfig);
+      setAgentTemplateId(nextPromptTemplateConfig.templateId);
       promptSelectionRef.current = { start: nextPrompt.length, end: nextPrompt.length };
       const nextBehavior = normalizeWhatsappBehaviorConfig(nextState.behavior);
       setBehaviorDraft(nextBehavior);
@@ -967,6 +987,9 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
 
   const promptChanged = state?.agent ? promptDraft.trim() !== state.agent.prompt.trim() : false;
   const promptTooLong = promptDraft.length > agentPromptMaxLength;
+  const promptTemplateChanged = state?.agent
+    ? !isAgentPromptBuilderConfigEqual(promptTemplateDraft, normalizeAgentPromptBuilderConfig(state.agent.promptTemplateConfig))
+    : false;
   const behaviorChanged = state ? !isBehaviorEqual(behaviorDraft, state.behavior) : false;
   const cloneProfileChanged = state?.agent
     ? !isCloneProfileEqual(cloneProfileDraft, normalizeWhatsappCloneProfile(state.agent.cloneProfile))
@@ -977,7 +1000,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
   const channelConfigChanged = state?.agent
     ? !isAgentChannelConfigEqual(channelConfigDraft, normalizeAgentChannelConfig(state.agent.channelConfig))
     : false;
-  const settingsChanged = promptChanged || behaviorChanged || cloneProfileChanged || qualificationChanged || channelConfigChanged;
+  const settingsChanged = promptChanged || promptTemplateChanged || behaviorChanged || cloneProfileChanged || qualificationChanged || channelConfigChanged;
   const companies = state?.companies ?? [];
   const agents = state?.agents ?? [];
   const selectedCompany = companies.find((company) => company.id === selectedCompanyId) ?? companies[0] ?? null;
@@ -1048,6 +1071,105 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
 
   function updatePromptDraft(value: string) {
     setPromptDraft(value.slice(0, agentPromptMaxLength));
+  }
+
+  function updateNewAgentTemplate(templateId: string) {
+    const template = agentPromptTemplates.find((item) => item.id === templateId) ?? agentPromptTemplates[0];
+
+    setAgentTemplateId(template.id);
+    setAgentSectorName(template.sectorName);
+  }
+
+  function updatePromptTemplateDraft(patch: Partial<AgentPromptBuilderConfig>) {
+    setPromptTemplateDraft((current) => {
+      const nextTemplateId = patch.templateId ?? current.templateId;
+      const templateChanged = patch.templateId && patch.templateId !== current.templateId;
+      const template = agentPromptTemplates.find((item) => item.id === nextTemplateId);
+
+      return normalizeAgentPromptBuilderConfig({
+        ...current,
+        ...(templateChanged && template
+          ? {
+              tone: template.defaultTone,
+              objective: template.defaultObjective,
+              audience: template.defaultAudience,
+              salesRules: template.salesPlaybook.join("\n"),
+              neverRules: template.careRules.join("\n"),
+            }
+          : {}),
+        ...patch,
+        updatedAt: new Date().toISOString(),
+      });
+    });
+  }
+
+  function generatePromptFromTemplate() {
+    if (!state?.agent) {
+      setNotice({ tone: "warning", message: "Crie ou escolha um agente antes de gerar o prompt." });
+      return;
+    }
+
+    const nextPrompt = buildAgentPromptFromTemplate({
+      config: promptTemplateDraft,
+      companyName: selectedCompany?.name ?? state.agent.companyId ?? "Empresa",
+      agentName: state.agent.name,
+      productCount: state.salesCatalog.length,
+      knowledgeFileCount: state.knowledge.files.length,
+    }).slice(0, agentPromptMaxLength);
+
+    setPromptDraft(nextPrompt);
+    promptSelectionRef.current = { start: nextPrompt.length, end: nextPrompt.length };
+    setNotice({ tone: "success", message: "Prompt gerado pelo modelo. Revise e clique em Salvar alteracoes." });
+  }
+
+  async function improveCompanyComplementWithAi() {
+    const endpoint = variant.endpoints.promptAssistant;
+    const notes = promptTemplateDraft.companyComplement.trim();
+
+    if (!endpoint) {
+      setNotice({ tone: "warning", message: "Assistente de prompt indisponivel nesta tela." });
+      return;
+    }
+
+    if (!selectedCompanyId) {
+      setNotice({ tone: "warning", message: `Escolha uma ${variant.entitySingular} antes de melhorar com IA.` });
+      return;
+    }
+
+    if (notes.length < 12) {
+      setNotice({ tone: "warning", message: "Escreva um complemento sobre a empresa antes de pedir melhoria com IA." });
+      return;
+    }
+
+    setPromptAssistantRunning(true);
+    setNotice(null);
+
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode: "company_context",
+          [variant.entityIdKey]: selectedCompanyId,
+          companyId: selectedCompanyId,
+          notes,
+          templateId: promptTemplateDraft.templateId,
+        }),
+      });
+      const data = (await response.json().catch(() => null)) as { text?: string; prompt?: string; error?: string } | null;
+      const improved = data?.text ?? data?.prompt ?? "";
+
+      if (!response.ok || !improved) {
+        throw new Error(data?.error ?? "Nao foi possivel melhorar o complemento.");
+      }
+
+      updatePromptTemplateDraft({ companyComplement: improved });
+      setNotice({ tone: "success", message: "Complemento melhorado com IA e cobrado nos creditos da empresa. Gere o prompt para aplicar." });
+    } catch (error) {
+      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao melhorar complemento com IA." });
+    } finally {
+      setPromptAssistantRunning(false);
+    }
   }
 
   function updateCloneProfileDraft(value: Partial<WhatsappCloneProfile>) {
@@ -1280,6 +1402,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
         body: JSON.stringify({
           ...whatsappActionPayload,
           agentPrompt: promptDraft,
+          promptTemplateConfig: promptTemplateDraft,
           behavior: behaviorDraft,
           cloneProfile: cloneProfileDraft,
           qualificationConfig: qualificationDraft,
@@ -1365,6 +1488,17 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
     setNotice(null);
 
     try {
+      const template = agentPromptTemplates.find((item) => item.id === agentTemplateId) ?? agentPromptTemplates[0];
+      const promptTemplateConfig = normalizeAgentPromptBuilderConfig({
+        templateId: template.id,
+        tone: template.defaultTone,
+        objective: template.defaultObjective,
+        audience: template.defaultAudience,
+        salesRules: template.salesPlaybook.join("\n"),
+        neverRules: template.careRules.join("\n"),
+        updatedAt: new Date().toISOString(),
+      });
+
       const response = await fetch(variant.endpoints.createAgent, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1373,7 +1507,8 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
           [variant.entityIdKey]: selectedCompanyId,
           name: agentName.trim() || "Agente WhatsApp",
           sectorName: agentSectorName.trim() || "Atendimento WhatsApp",
-          roleTitle: variant.agentRoleTitle,
+          roleTitle: template.roleTitle || variant.agentRoleTitle,
+          promptTemplateConfig,
         }),
       });
       const data = (await response.json().catch(() => null)) as { agent?: ClientWhatsappAgent; error?: string } | null;
@@ -1385,7 +1520,8 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
       const nextState = await fetchWhatsappState(variant, data?.agent?.id ?? selectedWhatsappEntityId);
       applyWhatsappState(nextState);
       setAgentName("");
-      setAgentSectorName("Atendimento WhatsApp");
+      setAgentSectorName(agentPromptTemplates[0].sectorName);
+      setAgentTemplateId(defaultAgentPromptTemplateId);
       setShowAgentForm(false);
       setNotice({ tone: "success", message: "Agente criado. Agora configure o prompt, comportamento e conexao." });
     } catch (error) {
@@ -1748,6 +1884,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
       ) : !state?.agent && !canManageInternalAgents ? (
         <ClientAgentsManager
           agentName={agentName}
+          agentTemplateId={agentTemplateId}
           agents={agents}
           companies={companies}
           creating={creatingAgent}
@@ -1757,6 +1894,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
           selectedCompanyId={selectedCompanyId}
           showForm={showAgentForm}
           onAgentNameChange={setAgentName}
+          onAgentTemplateChange={updateNewAgentTemplate}
           onCancel={() => setShowAgentForm(false)}
           onClone={cloneWhatsappAgent}
           onCreate={createWhatsappAgent}
@@ -1770,12 +1908,14 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
       ) : !state?.agent ? (
         <AgentCreationGate
           agentName={agentName}
+          agentTemplateId={agentTemplateId}
           companies={companies}
           creating={creatingAgent}
           selectedCompany={selectedCompany}
           selectedCompanyId={selectedCompanyId}
           showForm={showAgentForm}
           onAgentNameChange={setAgentName}
+          onAgentTemplateChange={updateNewAgentTemplate}
           onCancel={() => setShowAgentForm(false)}
           onCreate={createWhatsappAgent}
           onSectorNameChange={setAgentSectorName}
@@ -1789,6 +1929,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
         {!canManageInternalAgents ? (
           <ClientAgentsManager
             agentName={agentName}
+            agentTemplateId={agentTemplateId}
             agents={agents}
             companies={companies}
             creating={creatingAgent}
@@ -1798,6 +1939,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
             selectedCompanyId={selectedCompanyId}
             showForm={showAgentForm}
             onAgentNameChange={setAgentName}
+            onAgentTemplateChange={updateNewAgentTemplate}
             onCancel={() => setShowAgentForm(false)}
             onClone={cloneWhatsappAgent}
             onCreate={createWhatsappAgent}
@@ -1857,6 +1999,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
           entityLabel={variant.entityPromptLabel}
           instance={state.instance}
           promptChanged={promptChanged}
+          promptTemplateChanged={promptTemplateChanged}
           cloneProfileChanged={cloneProfileChanged}
           qualificationChanged={qualificationChanged}
           channelConfigChanged={channelConfigChanged}
@@ -1939,9 +2082,19 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
               <div className="grid gap-4">
                 <AgentIdentityCard agent={state.agent} company={selectedCompany} entityLabel={variant.entityPromptLabel} />
 
+                <GuidedPromptBuilder
+                  config={promptTemplateDraft}
+                  improving={promptAssistantRunning}
+                  knowledgeFileCount={state.knowledge.files.length}
+                  productCount={state.salesCatalog.length}
+                  onChange={updatePromptTemplateDraft}
+                  onGeneratePrompt={generatePromptFromTemplate}
+                  onImproveComplement={improveCompanyComplementWithAi}
+                />
+
                 <PromptBox
                   label="Prompt do agente"
-                  description="Define o tom, limites, perguntas e forma de atendimento do agente neste WhatsApp. Nao e template fixo de mensagem."
+                  description="Modo avancado. O texto final pode ser gerado pelo modelo acima e ajustado manualmente antes de salvar."
                   value={promptDraft}
                   maxLength={agentPromptMaxLength}
                   onChange={updatePromptDraft}
@@ -2772,6 +2925,7 @@ function WhatsappConsoleCommandBar({
   entityLabel,
   instance,
   promptChanged,
+  promptTemplateChanged,
   cloneProfileChanged,
   qualificationChanged,
   channelConfigChanged,
@@ -2788,6 +2942,7 @@ function WhatsappConsoleCommandBar({
   entityLabel: string;
   instance: WhatsappState["instance"];
   promptChanged: boolean;
+  promptTemplateChanged: boolean;
   cloneProfileChanged: boolean;
   qualificationChanged: boolean;
   channelConfigChanged: boolean;
@@ -2801,6 +2956,7 @@ function WhatsappConsoleCommandBar({
   const statusMeta = getStatusMeta(instance?.status ?? "draft");
   const changedAreas = [
     promptChanged ? "Prompt" : null,
+    promptTemplateChanged ? "Modelo" : null,
     cloneProfileChanged ? "DNA manual" : null,
     qualificationChanged ? "CRM" : null,
     channelConfigChanged ? "Canais" : null,
@@ -2917,6 +3073,7 @@ function SummaryPill({
 
 function ClientAgentsManager({
   agentName,
+  agentTemplateId,
   agents,
   companies,
   creating,
@@ -2926,6 +3083,7 @@ function ClientAgentsManager({
   selectedCompanyId,
   showForm,
   onAgentNameChange,
+  onAgentTemplateChange,
   onCancel,
   onClone,
   onCreate,
@@ -2937,6 +3095,7 @@ function ClientAgentsManager({
   variant,
 }: {
   agentName: string;
+  agentTemplateId: AgentPromptTemplateId;
   agents: ClientWhatsappAgent[];
   companies: ClientCompany[];
   creating: boolean;
@@ -2946,6 +3105,7 @@ function ClientAgentsManager({
   selectedCompanyId: string;
   showForm: boolean;
   onAgentNameChange: (value: string) => void;
+  onAgentTemplateChange: (value: string) => void;
   onCancel: () => void;
   onClone: (sourceAgentId: string, input: { companyId: string; name: string; sectorName: string }) => Promise<void>;
   onCreate: () => void;
@@ -3055,7 +3215,7 @@ function ClientAgentsManager({
 
       {showForm ? (
         <div className="mt-4 rounded-xl p-4" style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}>
-          <div className="grid gap-3 md:grid-cols-3">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <label className="block">
               <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">{variant.agentGateSelectLabel}</span>
               <select
@@ -3066,6 +3226,20 @@ function ClientAgentsManager({
                 {companies.map((company) => (
                   <option key={company.id} value={company.id}>
                     {company.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Modelo de atendimento</span>
+              <select
+                className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
+                value={agentTemplateId}
+                onChange={(event) => onAgentTemplateChange(event.target.value)}
+              >
+                {agentPromptTemplates.map((template) => (
+                  <option key={template.id} value={template.id}>
+                    {template.label}
                   </option>
                 ))}
               </select>
@@ -3470,6 +3644,7 @@ function AutomationRoleToggle({
 
 function AgentCreationGate({
   agentName,
+  agentTemplateId,
   companies,
   creating,
   sectorName,
@@ -3477,6 +3652,7 @@ function AgentCreationGate({
   selectedCompanyId,
   showForm,
   onAgentNameChange,
+  onAgentTemplateChange,
   onCancel,
   onCreate,
   onSectorNameChange,
@@ -3485,6 +3661,7 @@ function AgentCreationGate({
   variant,
 }: {
   agentName: string;
+  agentTemplateId: AgentPromptTemplateId;
   companies: ClientCompany[];
   creating: boolean;
   sectorName: string;
@@ -3492,6 +3669,7 @@ function AgentCreationGate({
   selectedCompanyId: string;
   showForm: boolean;
   onAgentNameChange: (value: string) => void;
+  onAgentTemplateChange: (value: string) => void;
   onCancel: () => void;
   onCreate: () => void;
   onSectorNameChange: (value: string) => void;
@@ -3551,6 +3729,20 @@ function AgentCreationGate({
                   {companies.map((company) => (
                     <option key={company.id} value={company.id}>
                       {company.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Modelo de atendimento</span>
+                <select
+                  className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
+                  value={agentTemplateId}
+                  onChange={(event) => onAgentTemplateChange(event.target.value)}
+                >
+                  {agentPromptTemplates.map((template) => (
+                    <option key={template.id} value={template.id}>
+                      {template.label}
                     </option>
                   ))}
                 </select>
@@ -3672,6 +3864,147 @@ function InfoHint({ text }: { text: string }) {
         {text}
       </span>
     </span>
+  );
+}
+
+function GuidedPromptBuilder({
+  config,
+  improving,
+  knowledgeFileCount,
+  productCount,
+  onChange,
+  onGeneratePrompt,
+  onImproveComplement,
+}: {
+  config: AgentPromptBuilderConfig;
+  improving: boolean;
+  knowledgeFileCount: number;
+  productCount: number;
+  onChange: (patch: Partial<AgentPromptBuilderConfig>) => void;
+  onGeneratePrompt: () => void;
+  onImproveComplement: () => void;
+}) {
+  const template = agentPromptTemplates.find((item) => item.id === config.templateId) ?? agentPromptTemplates[0];
+
+  return (
+    <BehaviorSection
+      title="Construtor guiado do prompt"
+      description="Escolha o nicho e preencha campos simples. O sistema gera o prompt comercial completo mantendo as regras de botoes, checkout e catalogo."
+      defaultOpen
+    >
+      <div className="grid gap-3">
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1fr)]">
+          <label className="block">
+            <span className="mb-1.5 flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
+              Nicho / profissao do agente
+              <InfoHint text="Esse modelo cria a base do prompt. O usuario ainda pode ajustar campos e o comportamento do agente nas outras abas." />
+            </span>
+            <select
+              className="h-11 w-full rounded-lg border px-3 text-[13px] outline-none"
+              value={config.templateId}
+              onChange={(event) => onChange({ templateId: event.target.value as AgentPromptTemplateId })}
+            >
+              {agentPromptTemplates.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <div className="rounded-lg border px-3 py-2" style={{ background: "var(--ch-panel-2)", borderColor: "var(--ch-border)" }}>
+            <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">{template.niche}</p>
+            <p className="mt-1 text-[12px] leading-5 text-slate-300">{template.summary}</p>
+          </div>
+        </div>
+
+        <div className="grid gap-2 md:grid-cols-3">
+          <InfoTile label="Produtos como tags" value={productCount.toLocaleString("pt-BR")} />
+          <InfoTile label="Arquivos anexados" value={knowledgeFileCount.toLocaleString("pt-BR")} />
+          <InfoTile label="Checkout" value="Botao obrigatorio" />
+        </div>
+
+        <div className="grid gap-3 xl:grid-cols-2">
+          <TextAreaField
+            label="Tom de voz"
+            description="Como o agente deve soar no WhatsApp."
+            minHeight="84px"
+            value={config.tone}
+            onChange={(tone) => onChange({ tone })}
+          />
+          <TextAreaField
+            label="Objetivo do atendimento"
+            description="Resultado principal esperado em cada conversa."
+            minHeight="84px"
+            value={config.objective}
+            onChange={(objective) => onChange({ objective })}
+          />
+          <TextAreaField
+            label="Publico e qualificacao"
+            description="Quem compra e quais dados o agente precisa levantar."
+            minHeight="84px"
+            value={config.audience}
+            onChange={(audience) => onChange({ audience })}
+          />
+          <TextAreaField
+            label="Regras de venda"
+            description="Como recomendar, comparar, oferecer combos e fechar."
+            minHeight="84px"
+            value={config.salesRules}
+            onChange={(salesRules) => onChange({ salesRules })}
+          />
+          <TextAreaField
+            label="Entrega, pagamento e pos-venda"
+            description="Frete, retirada, agenda, reserva, garantias e proximos passos."
+            minHeight="84px"
+            placeholder="Ex: confirmar endereco antes do checkout; retirada na loja; prazo informado somente quando cadastrado."
+            value={config.fulfillmentRules}
+            onChange={(fulfillmentRules) => onChange({ fulfillmentRules })}
+          />
+          <TextAreaField
+            label="Quando chamar humano"
+            description="Situacoes que exigem atendimento manual."
+            minHeight="84px"
+            value={config.humanHandoffRules}
+            onChange={(humanHandoffRules) => onChange({ humanHandoffRules })}
+          />
+        </div>
+
+        <TextAreaField
+          label="Complemento da empresa"
+          description="Informacoes extras da empresa, missao, diferenciais, politica comercial ou texto extra que o cliente ja tem."
+          minHeight="112px"
+          placeholder="Cole aqui detalhes da empresa. Se quiser, use Melhorar com IA; essa acao consome os creditos da empresa."
+          value={config.companyComplement}
+          onChange={(companyComplement) => onChange({ companyComplement })}
+        />
+
+        <TextAreaField
+          label="O que nunca fazer"
+          description="Limites especificos deste cliente alem dos limites automaticos da ConnectyHub."
+          minHeight="84px"
+          value={config.neverRules}
+          onChange={(neverRules) => onChange({ neverRules })}
+        />
+
+        <div className="flex flex-wrap gap-2">
+          <SecondaryAction
+            icon={Wand2}
+            label={improving ? "Melhorando" : "Melhorar complemento IA"}
+            description="Usa IA para organizar o complemento da empresa. Essa acao consome creditos da conta."
+            disabled={improving || config.companyComplement.trim().length < 12}
+            loading={improving}
+            onClick={onImproveComplement}
+          />
+          <ActionButton
+            icon={PenLine}
+            label="Gerar prompt pelo modelo"
+            description="Atualiza o texto final do prompt abaixo usando estes campos. Esta acao local nao usa IA."
+            onClick={onGeneratePrompt}
+          />
+        </div>
+      </div>
+    </BehaviorSection>
   );
 }
 

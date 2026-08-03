@@ -50,6 +50,7 @@ export async function POST(request: NextRequest) {
     sectorName?: unknown;
     roleTitle?: unknown;
     prompt?: unknown;
+    promptTemplateConfig?: unknown;
     sourceAgentId?: unknown;
   }>(request);
 
@@ -71,6 +72,7 @@ export async function POST(request: NextRequest) {
         sectorName: typeof body?.sectorName === "string" ? body.sectorName : undefined,
         roleTitle: typeof body?.roleTitle === "string" ? body.roleTitle : undefined,
         prompt: typeof body?.prompt === "string" ? body.prompt : undefined,
+        promptTemplateConfig: body?.promptTemplateConfig,
       });
 
       return NextResponse.json({ agent }, { status: 201 });
@@ -83,6 +85,7 @@ export async function POST(request: NextRequest) {
       sectorName: typeof body?.sectorName === "string" ? body.sectorName : undefined,
       roleTitle: typeof body?.roleTitle === "string" ? body.roleTitle : undefined,
       prompt: typeof body?.prompt === "string" ? body.prompt : undefined,
+      promptTemplateConfig: body?.promptTemplateConfig,
     });
 
     return NextResponse.json({ agent }, { status: 201 });
@@ -105,6 +108,7 @@ export async function PATCH(request: NextRequest) {
     sectorName?: unknown;
     roleTitle?: unknown;
     prompt?: unknown;
+    promptTemplateConfig?: unknown;
   }>(request);
 
   try {
@@ -124,6 +128,7 @@ export async function PATCH(request: NextRequest) {
       sectorName: typeof body?.sectorName === "string" ? body.sectorName : undefined,
       roleTitle: typeof body?.roleTitle === "string" ? body.roleTitle : undefined,
       prompt: typeof body?.prompt === "string" ? body.prompt : undefined,
+      promptTemplateConfig: body?.promptTemplateConfig,
     });
 
     return NextResponse.json({ agent });

@@ -10,8 +10,10 @@ export const runtime = "nodejs";
 
 type PromptAssistantBody = {
   sectorId?: unknown;
+  mode?: unknown;
   productUrl?: unknown;
   notes?: unknown;
+  templateId?: unknown;
 };
 
 type GeminiCredentials = {
@@ -33,6 +35,7 @@ export async function POST(request: NextRequest) {
 
   const body = await request.json().catch(() => null) as PromptAssistantBody | null;
   const sectorId = asString(body?.sectorId);
+  const mode = asString(body?.mode);
   const productUrl = asString(body?.productUrl);
   const notes = asString(body?.notes)?.slice(0, maxNotesChars) ?? "";
 
@@ -48,8 +51,16 @@ export async function POST(request: NextRequest) {
     const client = createServiceClient();
     const sector = await requirePlatformWhatsappSector(client, sectorId);
     const credentials = await loadGeminiCredentials(client);
-    const pageContext = productUrl ? await fetchPageContext(productUrl) : "";
-    const generated = await generatePrompt({
+    const pageContext = productUrl && mode !== "company_context" ? await fetchPageContext(productUrl) : "";
+    const generated = mode === "company_context"
+      ? await generateCompanyContext({
+        credentials,
+        sectorName: sector.name,
+        sectorDescription: sector.description,
+        notes,
+        templateId: asString(body?.templateId),
+      })
+      : await generatePrompt({
       credentials,
       sectorName: sector.name,
       sectorDescription: sector.description,
@@ -69,6 +80,7 @@ export async function POST(request: NextRequest) {
       debitDescription: "Assistente de prompt interno ConnectyHub",
       metadata: {
         source: "admin_whatsapp_prompt_assistant",
+        mode: mode ?? "prompt",
         sectorId: sector.id,
         sectorCode: sector.sector_code,
         hasProductUrl: Boolean(productUrl),
@@ -77,10 +89,51 @@ export async function POST(request: NextRequest) {
       },
     }).catch(() => null);
 
-    return NextResponse.json({ prompt: generated.text });
+    return mode === "company_context"
+      ? NextResponse.json({ text: generated.text })
+      : NextResponse.json({ prompt: generated.text });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Erro ao gerar prompt." }, { status: 500 });
   }
+}
+
+async function generateCompanyContext(input: {
+  credentials: GeminiCredentials;
+  sectorName: string;
+  sectorDescription: string | null;
+  notes: string;
+  templateId: string | null;
+}) {
+  const modelId = input.credentials.model;
+  const systemInstruction = [
+    "Voce melhora complementos para prompt de agente interno no WhatsApp.",
+    "Reescreva as notas em portugues do Brasil, de forma operacional e sem inventar informacao.",
+    "Organize em topicos curtos: contexto, objetivo, regras, limites e observacoes.",
+    "Entregue somente o complemento final, sem explicacao externa.",
+  ].join("\n");
+  const prompt = [
+    `Setor: ${input.sectorName}`,
+    input.sectorDescription ? `Descricao do setor: ${input.sectorDescription}` : "",
+    input.templateId ? `Modelo selecionado: ${input.templateId}` : "",
+    `Notas originais:\n${input.notes}`,
+  ].filter(Boolean).join("\n\n");
+  const responseData = await callGemini(input.credentials, systemInstruction, prompt, {
+    temperature: 0.32,
+    maxOutputTokens: 900,
+  });
+  const text = extractGeminiText(responseData).trim();
+
+  if (!text) {
+    throw new Error("Gemini nao retornou o complemento.");
+  }
+
+  return {
+    text: text.slice(0, maxNotesChars),
+    systemInstruction,
+    prompt,
+    modelId,
+    responseData,
+  };
 }
 
 async function loadGeminiCredentials(client = createServiceClient()): Promise<GeminiCredentials> {
@@ -225,6 +278,47 @@ async function generatePrompt(input: {
     modelId,
     responseData: data,
   };
+}
+
+async function callGemini(
+  credentials: GeminiCredentials,
+  systemInstruction: string,
+  prompt: string,
+  config: { temperature: number; maxOutputTokens: number },
+) {
+  const url = new URL(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(credentials.model)}:generateContent`);
+  url.searchParams.set("key", credentials.apiKey);
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      systemInstruction: {
+        parts: [{
+          text: systemInstruction,
+        }],
+      },
+      contents: [{
+        role: "user",
+        parts: [{
+          text: prompt,
+        }],
+      }],
+      generationConfig: {
+        temperature: config.temperature,
+        topP: 0.9,
+        maxOutputTokens: config.maxOutputTokens,
+      },
+    }),
+    cache: "no-store",
+  });
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(readGeminiError(data) ?? `Gemini respondeu status ${response.status}.`);
+  }
+
+  return data;
 }
 
 function extractVisibleText(html: string) {
