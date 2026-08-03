@@ -57,13 +57,17 @@ import {
 } from "@/lib/sales-catalog/shared";
 import { calculateSalesCatalogShippingQuotes, normalizeSalesCatalogCep } from "@/lib/sales-catalog/shipping-calculator";
 import {
-  defaultWhatsappAgentPrompt,
   defaultWhatsappGlobalPrompt,
   normalizeWhatsappCloneMemory,
   normalizeWhatsappCloneProfile,
   normalizeWhatsappBehaviorConfig,
   type WhatsappBehaviorConfig,
 } from "./agent-behavior";
+import {
+  buildAgentPromptFromTemplate,
+  normalizeAgentPromptBuilderConfig,
+  promptBuilderMetadataKey,
+} from "./agent-prompt-templates";
 import {
   enqueueWhatsappHandoffNotification,
   processWhatsappHandoffNotification,
@@ -1698,7 +1702,7 @@ function buildSystemInstruction(input: {
   userText: string;
   conversationMetadata: Record<string, unknown> | null;
 }) {
-  const agentPrompt = renderPromptVariables(input.agent.prompt?.trim() || defaultWhatsappAgentPrompt, input);
+  const agentPrompt = renderPromptVariables(resolveRuntimeAgentPrompt(input), input);
   const customGlobalPrompt = input.globalAgent?.prompt?.trim();
   const shouldAppendCustomGlobalPrompt = Boolean(customGlobalPrompt && customGlobalPrompt !== defaultWhatsappGlobalPrompt);
   const leadNameContext = buildLeadNameContext(input.lead);
@@ -1798,6 +1802,29 @@ function buildSystemInstruction(input: {
     "- Midia com analise automatica: use a analise como contexto real antes de responder.",
     "- Midia sem analise: nao finja que viu. Peca descricao ou reenvio.",
   ].join("\n");
+}
+
+function resolveRuntimeAgentPrompt(input: {
+  organization: OrganizationRow;
+  agent: AgentRow;
+  knowledge: KnowledgeMemoryRow[];
+  salesCatalog: RuntimeSalesCatalogItem[];
+}) {
+  const storedPrompt = input.agent.prompt?.trim();
+
+  if (storedPrompt) {
+    return storedPrompt;
+  }
+
+  const promptConfig = normalizeAgentPromptBuilderConfig(readRecord(input.agent.metadata)?.[promptBuilderMetadataKey]);
+
+  return buildAgentPromptFromTemplate({
+    config: promptConfig,
+    companyName: input.organization.name,
+    agentName: input.agent.persona_name?.trim() || input.agent.name,
+    productCount: input.salesCatalog.length,
+    knowledgeFileCount: input.knowledge.length,
+  });
 }
 
 function buildCloneProfileLines(agent: AgentRow) {

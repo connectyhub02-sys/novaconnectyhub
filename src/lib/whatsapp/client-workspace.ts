@@ -40,6 +40,7 @@ import {
   type WhatsappCloneProfile,
 } from "./agent-behavior";
 import {
+  buildAgentPromptFromTemplate,
   normalizeAgentPromptBuilderConfig,
   promptBuilderMetadataKey,
   type AgentPromptBuilderConfig,
@@ -2385,7 +2386,11 @@ function buildState(
   cloneTest: ClientCloneRealTestSummary = emptyCloneRealTestSummary(),
   runtimeAlerts: ClientWhatsappRuntimeAlert[] = [],
 ): ClientWhatsappState {
-  const agentPrompt = agent?.prompt?.trim() || defaultWhatsappAgentPrompt;
+  const agentPrompt = resolveAgentPrompt(agent, {
+    companyName: organization.name,
+    productCount: salesCatalog.length,
+    knowledgeFileCount: knowledgeFiles.length,
+  });
   const globalPrompt = globalAgent.prompt?.trim() || defaultWhatsappGlobalPrompt;
   const profileImageUrl = readProfileImageUrl(instance);
   const metaSocialChannels = resolveMetaSocialChannelsEntitlement({
@@ -2527,6 +2532,29 @@ function getCloneProfileImportStatus(agent: AgentRow | null) {
 
 function getPromptTemplateConfig(agent: AgentRow | null) {
   return normalizeAgentPromptBuilderConfig(readRecord(agent?.metadata)?.[promptBuilderMetadataKey]);
+}
+
+function resolveAgentPrompt(
+  agent: AgentRow | null,
+  input: { companyName: string; productCount?: number; knowledgeFileCount?: number },
+) {
+  const storedPrompt = agent?.prompt?.trim();
+
+  if (storedPrompt) {
+    return storedPrompt;
+  }
+
+  if (agent) {
+    return buildAgentPromptFromTemplate({
+      config: getPromptTemplateConfig(agent),
+      companyName: input.companyName,
+      agentName: agent.persona_name?.trim() || agent.name,
+      productCount: input.productCount,
+      knowledgeFileCount: input.knowledgeFileCount,
+    });
+  }
+
+  return defaultWhatsappAgentPrompt;
 }
 
 function emptyCloneRealTestSummary(): ClientCloneRealTestSummary {

@@ -23,6 +23,7 @@ import {
   type WhatsappCloneProfile,
 } from "@/lib/whatsapp/agent-behavior";
 import {
+  buildAgentPromptFromTemplate,
   normalizeAgentPromptBuilderConfig,
   promptBuilderMetadataKey,
 } from "@/lib/whatsapp/agent-prompt-templates";
@@ -1272,7 +1273,11 @@ function buildState(
   cloneTest: ClientCloneRealTestSummary = emptyCloneRealTestSummary(),
   runtimeAlerts: ClientWhatsappState["runtimeAlerts"] = [],
 ): ClientWhatsappState {
-  const agentPrompt = agent?.prompt?.trim() || defaultWhatsappAgentPrompt;
+  const agentPrompt = resolveAgentPrompt(agent, {
+    companyName: "ConnectyHub",
+    productCount: 0,
+    knowledgeFileCount: knowledgeFiles.length,
+  });
   const profileImageUrl = readProfileImageUrl(instance);
 
   return {
@@ -1340,6 +1345,29 @@ function buildState(
       }),
     },
   };
+}
+
+function resolveAgentPrompt(
+  agent: AgentRow | null,
+  input: { companyName: string; productCount?: number; knowledgeFileCount?: number },
+) {
+  const storedPrompt = agent?.prompt?.trim();
+
+  if (storedPrompt) {
+    return storedPrompt;
+  }
+
+  if (agent) {
+    return buildAgentPromptFromTemplate({
+      config: normalizeAgentPromptBuilderConfig(readRecord(agent.metadata)?.[promptBuilderMetadataKey]),
+      companyName: input.companyName,
+      agentName: agent.persona_name?.trim() || agent.name,
+      productCount: input.productCount,
+      knowledgeFileCount: input.knowledgeFileCount,
+    });
+  }
+
+  return defaultWhatsappAgentPrompt;
 }
 
 async function listPlatformWhatsappSectors(client: SupabaseClient) {
