@@ -533,6 +533,7 @@ function StorageUsageBanner({ storage }: { storage: NonNullable<ClientDashboardO
   const tone = storageTone(storage.status);
   const fileLimitLabel = storage.fileLimit > 0 ? formatInteger(storage.fileLimit) : "sem limite";
   const fileUsageLabel = `${formatInteger(storage.fileCount)}/${fileLimitLabel}`;
+  const usagePercent = getStorageUsagePercent(storage);
 
   return (
     <div
@@ -564,10 +565,10 @@ function StorageUsageBanner({ storage }: { storage: NonNullable<ClientDashboardO
           <div className="mb-1.5 flex items-center justify-between gap-2">
             <span className="font-mono text-[9px] uppercase tracking-widest text-slate-500">uso atual</span>
             <span className="font-mono text-[10px] font-semibold" style={{ color: "var(--ch-accent)" }}>
-              {storage.usedPercent}%
+              {usagePercent.label}
             </span>
           </div>
-          <ProgressBar value={storage.usedPercent} tone={tone} />
+          <StorageProgressBar value={usagePercent.visualValue} tone={tone} />
         </div>
 
         <div className="grid min-w-0 grid-cols-3 gap-2 xl:w-[420px]">
@@ -578,6 +579,30 @@ function StorageUsageBanner({ storage }: { storage: NonNullable<ClientDashboardO
       </div>
     </div>
   );
+}
+
+function StorageProgressBar({ value, tone }: { value: number; tone: Tone }) {
+  const toneStyle = toneClass(tone);
+
+  return (
+    <div className="h-1.5 overflow-hidden rounded-full" style={{ background: "var(--ch-border)" }}>
+      <div
+        className="h-full rounded-full transition-all"
+        style={{ width: `${Math.max(0, Math.min(value, 100))}%`, backgroundColor: toneStyle.fill }}
+      />
+    </div>
+  );
+}
+
+function getStorageUsagePercent(storage: NonNullable<ClientDashboardOverview["storage"]>) {
+  const rawPercent = storage.limitBytes > 0 ? (storage.usedBytes / storage.limitBytes) * 100 : 0;
+  const hasUsage = storage.usedBytes > 0 && storage.limitBytes > 0;
+  const roundedPercent = Math.max(0, Math.min(storage.usedPercent, 100));
+
+  return {
+    label: hasUsage && rawPercent < 1 ? "<1%" : `${roundedPercent}%`,
+    visualValue: hasUsage ? Math.max(2, Math.min(rawPercent, 100)) : 0,
+  };
 }
 
 function buildRecommendation(overview: ClientDashboardOverview) {

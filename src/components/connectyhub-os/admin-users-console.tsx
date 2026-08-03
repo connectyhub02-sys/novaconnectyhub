@@ -1057,6 +1057,7 @@ function UserRow({
 
 function StorageUsageInline({ user }: { user: PlatformUser }) {
   const tone = user.storageUsedPercent >= 95 ? "rose" : user.storageUsedPercent >= 80 ? "amber" : "cyan";
+  const usagePercent = getStorageUsagePercent(user);
 
   return (
     <div className="hidden w-[150px] shrink-0 xl:block" title={`${formatStorageBytes(user.storageUsedBytes)} usados de ${formatStorageBytes(user.storageLimitBytes)}`}>
@@ -1065,12 +1066,12 @@ function StorageUsageInline({ user }: { user: PlatformUser }) {
           <HardDrive className="h-3 w-3 shrink-0" />
           Storage
         </span>
-        <span className={cn("font-mono text-[9px] font-bold", storageToneClass(tone))}>{user.storageUsedPercent}%</span>
+        <span className={cn("font-mono text-[9px] font-bold", storageToneClass(tone))}>{usagePercent.label}</span>
       </div>
       <div className="h-1.5 overflow-hidden rounded-full bg-slate-800">
         <div
           className={cn("h-full rounded-full", storageFillClass(tone))}
-          style={{ width: `${Math.min(100, Math.max(0, user.storageUsedPercent))}%` }}
+          style={{ width: `${usagePercent.visualValue}%` }}
         />
       </div>
       <p className="mt-1 truncate font-mono text-[9px] text-slate-500">
@@ -1078,6 +1079,17 @@ function StorageUsageInline({ user }: { user: PlatformUser }) {
       </p>
     </div>
   );
+}
+
+function getStorageUsagePercent(user: Pick<PlatformUser, "storageLimitBytes" | "storageUsedBytes" | "storageUsedPercent">) {
+  const rawPercent = user.storageLimitBytes > 0 ? (user.storageUsedBytes / user.storageLimitBytes) * 100 : 0;
+  const hasUsage = user.storageUsedBytes > 0 && user.storageLimitBytes > 0;
+  const roundedPercent = Math.max(0, Math.min(user.storageUsedPercent, 100));
+
+  return {
+    label: hasUsage && rawPercent < 1 ? "<1%" : `${roundedPercent}%`,
+    visualValue: hasUsage ? Math.max(2, Math.min(rawPercent, 100)) : 0,
+  };
 }
 
 function UserAvatar({ user, displayName, initials }: { user: PlatformUser; displayName: string; initials: string }) {
