@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import {
@@ -701,9 +701,6 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
   const [channelScheduledFor, setChannelScheduledFor] = useState("");
   const [activeTab, setActiveTab] = useState<WhatsappConsoleTab>("connection");
   const [migrationCopying, setMigrationCopying] = useState<MigrationCredentialKind | null>(null);
-  const promptTextareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const promptSelectionRef = useRef({ start: 0, end: 0 });
-  const pendingPromptCaretRef = useRef<number | null>(null);
   const cloneProfileImportBaselineRef = useRef<string | null>(null);
   const appliedCloneProfileImportRef = useRef<string | null>(null);
   const isAwaitingConnection = Boolean(qrCode || pairCode) || state?.instance?.status === "qr_pending";
@@ -715,26 +712,6 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
       ? { [variant.entityIdKey]: selectedCompanyId }
       : { companyId: selectedCompanyId, agentId: selectedAgentId },
     [canManageInternalAgents, selectedAgentId, selectedCompanyId, variant.entityIdKey],
-  );
-  const promptTags = useMemo(
-    () => [
-      {
-        token: "{{lead_name}}",
-        label: "Nome do lead",
-        description: "Usa o nome salvo do lead quando estiver disponivel.",
-      },
-      {
-        token: variant.entityPromptToken,
-        label: variant.entityPromptLabel,
-        description: variant.entityPromptDescription,
-      },
-      {
-        token: "{{agente}}",
-        label: "Agente",
-        description: "Usa o nome do agente configurado nesta tela.",
-      },
-    ],
-    [variant.entityPromptDescription, variant.entityPromptLabel, variant.entityPromptToken],
   );
   const runtimeAlertNotifications = useMemo(
     () => buildRuntimeAlertNotifications(state?.runtimeAlerts ?? []),
@@ -769,7 +746,6 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
       setPromptDraft(nextPrompt);
       setPromptTemplateDraft(nextPromptTemplateConfig);
       setAgentTemplateId(nextPromptTemplateConfig.templateId);
-      promptSelectionRef.current = { start: nextPrompt.length, end: nextPrompt.length };
       const nextBehavior = normalizeWhatsappBehaviorConfig(nextState.behavior);
       setBehaviorDraft(nextBehavior);
       setCloneProfileDraft(normalizeWhatsappCloneProfile(nextState.agent?.cloneProfile));
@@ -1014,30 +990,6 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
       : variant.headerDescriptions.ready;
   const promptHelper = `${promptDraft.length.toLocaleString("pt-BR")} / ${agentPromptMaxLength.toLocaleString("pt-BR")} caracteres`;
 
-  useEffect(() => {
-    const position = pendingPromptCaretRef.current;
-
-    if (position === null) {
-      return;
-    }
-
-    pendingPromptCaretRef.current = null;
-
-    const textarea = promptTextareaRef.current;
-
-    if (!textarea) {
-      return;
-    }
-
-    textarea.focus();
-    textarea.setSelectionRange(position, position);
-    promptSelectionRef.current = { start: position, end: position };
-  }, [promptDraft]);
-
-  const rememberPromptSelection = useCallback((start: number, end: number) => {
-    promptSelectionRef.current = { start, end };
-  }, []);
-
   function updateBehavior<K extends keyof WhatsappBehaviorConfig>(key: K, value: WhatsappBehaviorConfig[K]) {
     setBehaviorDraft((current) => normalizeWhatsappBehaviorConfig({ ...current, [key]: value }));
   }
@@ -1118,7 +1070,6 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
     }).slice(0, agentPromptMaxLength);
 
     setPromptDraft(nextPrompt);
-    promptSelectionRef.current = { start: nextPrompt.length, end: nextPrompt.length };
     setNotice({ tone: "success", message: "Prompt gerado pelo modelo. Revise e clique em Salvar alteracoes." });
   }
 
@@ -1227,28 +1178,6 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
         questions: current.questions.filter((question) => question.id !== id),
       }),
     );
-  }
-
-  function insertPromptTag(token: string) {
-    setPromptDraft((current) => {
-      const textarea = promptTextareaRef.current;
-      const fallbackSelection = promptSelectionRef.current;
-      const rawStart = textarea?.selectionStart ?? fallbackSelection.start;
-      const rawEnd = textarea?.selectionEnd ?? fallbackSelection.end;
-      const start = Math.max(0, Math.min(rawStart, current.length));
-      const end = Math.max(start, Math.min(rawEnd, current.length));
-      const before = current.slice(0, start);
-      const after = current.slice(end);
-      const leadingSpace = before.length > 0 && !/\s$/.test(before) ? " " : "";
-      const trailingSpace = after.length > 0 && !/^\s/.test(after) ? " " : "";
-      const insertion = `${leadingSpace}${token}${trailingSpace}`;
-      const next = `${before}${insertion}${after}`.slice(0, agentPromptMaxLength);
-      const nextCaret = Math.min(before.length + leadingSpace.length + token.length, next.length);
-
-      pendingPromptCaretRef.current = nextCaret;
-
-      return next;
-    });
   }
 
   function selectAudioVoice(voice: AudioVoiceOption) {
@@ -1455,26 +1384,6 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
       setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao anexar arquivo." });
     } finally {
       setKnowledgeUploading(false);
-    }
-  }
-
-  async function copyTrackedLinkButtonTag(link: TrackedLinkButton) {
-    try {
-      await navigator.clipboard.writeText(link.tag);
-      setNotice({ tone: "success", message: `Tag copiada: ${link.tag}` });
-    } catch {
-      setNotice({ tone: "error", message: "Nao foi possivel copiar a tag. Selecione a tag e copie manualmente." });
-    }
-  }
-
-  async function copySalesCatalogItemTag(item: ClientSalesCatalogItem) {
-    const tag = getSalesCatalogPromptTag(item);
-
-    try {
-      await navigator.clipboard.writeText(tag);
-      setNotice({ tone: "success", message: `Tag copiada: ${tag}` });
-    } catch {
-      setNotice({ tone: "error", message: "Nao foi possivel copiar a tag. Selecione a tag e copie manualmente." });
     }
   }
 
@@ -2092,16 +2001,19 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
                   onImproveComplement={improveCompanyComplementWithAi}
                 />
 
-                <PromptBox
-                  label="Prompt do agente"
-                  description="Modo avancado. O texto final pode ser gerado pelo modelo acima e ajustado manualmente antes de salvar."
-                  value={promptDraft}
-                  maxLength={agentPromptMaxLength}
-                  onChange={updatePromptDraft}
-                  onSelectionChange={rememberPromptSelection}
-                  textareaRef={promptTextareaRef}
-                  helper={promptHelper}
-                />
+                <BehaviorSection
+                  title="Prompt tecnico avancado"
+                  description="Opcional. O agente usa o modelo do nicho e o complemento da empresa; abra apenas se precisar ajustar o texto final manualmente."
+                >
+                  <PromptBox
+                    label="Prompt final usado pelo agente"
+                    description="Texto tecnico final que sera enviado ao agente. Produtos e links cadastrados entram automaticamente no contexto do atendimento."
+                    value={promptDraft}
+                    maxLength={agentPromptMaxLength}
+                    onChange={updatePromptDraft}
+                    helper={promptHelper}
+                  />
+                </BehaviorSection>
 
                 <CloneProfileEditor
                   profile={cloneProfileDraft}
@@ -2116,16 +2028,6 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
                 <CloneMemoryPanel memory={state.agent.cloneMemory} enabled={behaviorDraft.cloneMemory} />
 
                 <CloneRealTestPanel summary={state.cloneTest} enabled={behaviorDraft.cloneRealTestMode} />
-
-                <PromptToolsPanel
-                  linkButtons={state.linkButtons}
-                  salesCatalog={state.salesCatalog}
-                  onCopyLinkButtonTag={copyTrackedLinkButtonTag}
-                  onCopyCatalogItemTag={copySalesCatalogItemTag}
-                  onInsertTag={insertPromptTag}
-                  promptTags={promptTags}
-                  entitySingular={variant.entitySingular}
-                />
 
                 <div className="flex flex-wrap gap-2">
                   <SecondaryAction
@@ -3919,73 +3821,79 @@ function GuidedPromptBuilder({
         </div>
 
         <div className="grid gap-2 md:grid-cols-3">
-          <InfoTile label="Produtos como tags" value={productCount.toLocaleString("pt-BR")} />
+          <InfoTile label="Produtos no contexto" value={productCount.toLocaleString("pt-BR")} />
           <InfoTile label="Arquivos anexados" value={knowledgeFileCount.toLocaleString("pt-BR")} />
           <InfoTile label="Checkout" value="Botao obrigatorio" />
         </div>
 
-        <div className="grid gap-3 xl:grid-cols-2">
-          <TextAreaField
-            label="Tom de voz"
-            description="Como o agente deve soar no WhatsApp."
-            minHeight="84px"
-            value={config.tone}
-            onChange={(tone) => onChange({ tone })}
-          />
-          <TextAreaField
-            label="Objetivo do atendimento"
-            description="Resultado principal esperado em cada conversa."
-            minHeight="84px"
-            value={config.objective}
-            onChange={(objective) => onChange({ objective })}
-          />
-          <TextAreaField
-            label="Publico e qualificacao"
-            description="Quem compra e quais dados o agente precisa levantar."
-            minHeight="84px"
-            value={config.audience}
-            onChange={(audience) => onChange({ audience })}
-          />
-          <TextAreaField
-            label="Regras de venda"
-            description="Como recomendar, comparar, oferecer combos e fechar."
-            minHeight="84px"
-            value={config.salesRules}
-            onChange={(salesRules) => onChange({ salesRules })}
-          />
-          <TextAreaField
-            label="Entrega, pagamento e pos-venda"
-            description="Frete, retirada, agenda, reserva, garantias e proximos passos."
-            minHeight="84px"
-            placeholder="Ex: confirmar endereco antes do checkout; retirada na loja; prazo informado somente quando cadastrado."
-            value={config.fulfillmentRules}
-            onChange={(fulfillmentRules) => onChange({ fulfillmentRules })}
-          />
-          <TextAreaField
-            label="Quando chamar humano"
-            description="Situacoes que exigem atendimento manual."
-            minHeight="84px"
-            value={config.humanHandoffRules}
-            onChange={(humanHandoffRules) => onChange({ humanHandoffRules })}
-          />
-        </div>
-
         <TextAreaField
-          label="Complemento da empresa"
-          description="Informacoes extras da empresa, missao, diferenciais, politica comercial ou texto extra que o cliente ja tem."
-          minHeight="112px"
+          label="Informacoes extras da empresa"
+          description="Campo principal para personalizar o agente. Produtos, precos e links ja entram automaticamente pelo Catalogo/Produtos."
+          minHeight="140px"
           placeholder="Cole aqui detalhes da empresa. Se quiser, use Melhorar com IA; essa acao consome os creditos da empresa."
           value={config.companyComplement}
           onChange={(companyComplement) => onChange({ companyComplement })}
         />
 
-        <TextAreaField
-          label="O que nunca fazer"
-          description="Limites especificos deste cliente alem dos limites automaticos da ConnectyHub."
-          minHeight="84px"
-          value={config.neverRules}
-          onChange={(neverRules) => onChange({ neverRules })}
-        />
+        <BehaviorSection
+          title="Ajustes avancados do modelo"
+          description="Opcional. O modelo do nicho ja preenche estes campos; ajuste somente quando precisar de uma regra especifica."
+        >
+          <div className="grid gap-3 xl:grid-cols-2">
+            <TextAreaField
+              label="Tom de voz"
+              description="Como o agente deve soar no WhatsApp."
+              minHeight="84px"
+              value={config.tone}
+              onChange={(tone) => onChange({ tone })}
+            />
+            <TextAreaField
+              label="Objetivo do atendimento"
+              description="Resultado principal esperado em cada conversa."
+              minHeight="84px"
+              value={config.objective}
+              onChange={(objective) => onChange({ objective })}
+            />
+            <TextAreaField
+              label="Publico e qualificacao"
+              description="Quem compra e quais dados o agente precisa levantar."
+              minHeight="84px"
+              value={config.audience}
+              onChange={(audience) => onChange({ audience })}
+            />
+            <TextAreaField
+              label="Regras de venda"
+              description="Como recomendar, comparar, oferecer combos e fechar."
+              minHeight="84px"
+              value={config.salesRules}
+              onChange={(salesRules) => onChange({ salesRules })}
+            />
+            <TextAreaField
+              label="Entrega, pagamento e pos-venda"
+              description="Frete, retirada, agenda, reserva, garantias e proximos passos."
+              minHeight="84px"
+              placeholder="Ex: confirmar endereco antes do checkout; retirada na loja; prazo informado somente quando cadastrado."
+              value={config.fulfillmentRules}
+              onChange={(fulfillmentRules) => onChange({ fulfillmentRules })}
+            />
+            <TextAreaField
+              label="Quando chamar humano"
+              description="Situacoes que exigem atendimento manual."
+              minHeight="84px"
+              value={config.humanHandoffRules}
+              onChange={(humanHandoffRules) => onChange({ humanHandoffRules })}
+            />
+            <div className="xl:col-span-2">
+              <TextAreaField
+                label="O que nunca fazer"
+                description="Limites especificos deste cliente alem dos limites automaticos da ConnectyHub."
+                minHeight="84px"
+                value={config.neverRules}
+                onChange={(neverRules) => onChange({ neverRules })}
+              />
+            </div>
+          </div>
+        </BehaviorSection>
 
         <div className="flex flex-wrap gap-2">
           <SecondaryAction
@@ -3999,7 +3907,7 @@ function GuidedPromptBuilder({
           <ActionButton
             icon={PenLine}
             label="Gerar prompt pelo modelo"
-            description="Atualiza o texto final do prompt abaixo usando estes campos. Esta acao local nao usa IA."
+            description="Atualiza o prompt tecnico avancado usando nicho, complemento e regras. Esta acao local nao usa IA."
             onClick={onGeneratePrompt}
           />
         </div>
@@ -4015,8 +3923,6 @@ function PromptBox({
   helper,
   maxLength,
   onChange,
-  onSelectionChange,
-  textareaRef,
 }: {
   label: string;
   description?: string;
@@ -4024,13 +3930,7 @@ function PromptBox({
   helper: string;
   maxLength: number;
   onChange: (value: string) => void;
-  onSelectionChange: (start: number, end: number) => void;
-  textareaRef: RefObject<HTMLTextAreaElement | null>;
 }) {
-  function recordSelection(textarea: HTMLTextAreaElement) {
-    onSelectionChange(textarea.selectionStart, textarea.selectionEnd);
-  }
-
   return (
     <label className="block">
       <span className="mb-2 flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
@@ -4038,16 +3938,9 @@ function PromptBox({
         {description ? <InfoHint text={description} /> : null}
       </span>
       <textarea
-        ref={textareaRef}
         value={value}
         maxLength={maxLength}
-        onChange={(event) => {
-          onChange(event.target.value);
-          recordSelection(event.currentTarget);
-        }}
-        onKeyUp={(event) => recordSelection(event.currentTarget)}
-        onMouseUp={(event) => recordSelection(event.currentTarget)}
-        onSelect={(event) => recordSelection(event.currentTarget)}
+        onChange={(event) => onChange(event.target.value)}
         className="min-h-[240px] w-full resize-y rounded-xl border px-3 py-3 font-mono text-[12px] leading-5 outline-none sm:min-h-[320px] sm:px-4"
         placeholder="Defina o comportamento do agente."
       />
@@ -4375,205 +4268,6 @@ function CloneMemoryPanel({
       </div>
     </BehaviorSection>
   );
-}
-
-function PromptToolsPanel({
-  linkButtons,
-  salesCatalog,
-  onCopyCatalogItemTag,
-  onCopyLinkButtonTag,
-  onInsertTag,
-  promptTags,
-  entitySingular,
-}: {
-  linkButtons: TrackedLinkButton[];
-  salesCatalog: ClientSalesCatalogItem[];
-  onCopyCatalogItemTag: (item: ClientSalesCatalogItem) => void;
-  onCopyLinkButtonTag: (link: TrackedLinkButton) => void;
-  onInsertTag: (token: string) => void;
-  promptTags: Array<{ token: string; label: string; description: string }>;
-  entitySingular: string;
-}) {
-  const catalogExternalLinkIds = new Set(
-    salesCatalog
-      .map((item) => item.externalLinkButtonId)
-      .filter((id): id is string => Boolean(id)),
-  );
-  const generalLinkButtons = linkButtons.filter((link) => !catalogExternalLinkIds.has(link.id));
-
-  return (
-    <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(280px,0.62fr)]">
-      <div className="rounded-xl border p-3" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
-            Tags do prompt
-            <InfoHint text={`Clique para inserir variaveis do ${entitySingular} no ponto atual do cursor no prompt.`} />
-          </p>
-        </div>
-        <div className="mt-3 flex flex-wrap gap-2">
-          {promptTags.map((tag) => (
-            <button
-              key={tag.token}
-              type="button"
-              className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-left text-[11px] font-semibold text-cyan-100 transition hover:bg-cyan-400/10"
-              style={{ borderColor: "var(--ch-border)" }}
-              title={tag.description}
-              onClick={() => onInsertTag(tag.token)}
-            >
-              <span className="font-mono text-[10px] text-cyan-300">{tag.token}</span>
-              <span className="text-slate-400">{tag.label}</span>
-            </button>
-          ))}
-        </div>
-        <div className="mt-4 rounded-lg border p-3" style={{ background: "var(--ch-surface)", borderColor: "var(--ch-border)" }}>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
-              Tags de produtos
-              <InfoHint text="Tags geradas a partir dos produtos cadastrados em Produtos. Insira a tag no prompt para orientar o agente a enviar o item certo." />
-            </p>
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full border px-2 py-1 font-mono text-[9px] uppercase tracking-widest text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
-                {salesCatalog.length.toLocaleString("pt-BR")}
-              </span>
-              <Link
-                href="/dashboard/links"
-                className="inline-flex min-h-8 items-center gap-1.5 rounded-md border px-2 font-mono text-[9px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10"
-                style={{ borderColor: "var(--ch-border)" }}
-              >
-                <Package className="h-3.5 w-3.5" />
-                Produtos
-              </Link>
-            </div>
-          </div>
-          {salesCatalog.length > 0 ? (
-            <div className="mt-3 flex max-h-[300px] flex-wrap gap-2 overflow-y-auto pr-1">
-              {salesCatalog.slice(0, 80).map((item) => {
-                const promptTag = getSalesCatalogPromptTag(item);
-
-                return (
-                  <span
-                    key={item.id}
-                    className="inline-flex max-w-full overflow-hidden rounded-lg border"
-                    style={{ borderColor: "var(--ch-border)" }}
-                    title={promptTag}
-                  >
-                    <button
-                      type="button"
-                      className="inline-flex min-h-10 max-w-[min(74vw,420px)] items-center gap-2 px-3 text-left transition hover:bg-cyan-400/10"
-                      title={`Inserir ${promptTag}`}
-                      onClick={() => onInsertTag(promptTag)}
-                    >
-                      <span className="min-w-0 truncate font-mono text-[10px] font-semibold text-cyan-300">{promptTag}</span>
-                      <span className="min-w-0 truncate text-[10px] font-semibold text-slate-400">{item.title}</span>
-                    </button>
-                    <button
-                      type="button"
-                      className="grid min-h-10 w-9 shrink-0 place-items-center border-l text-emerald-200 transition hover:bg-emerald-400/10"
-                      style={{ borderColor: "var(--ch-border)" }}
-                      title="Copiar tag do produto"
-                      aria-label={`Copiar tag ${promptTag}`}
-                      onClick={() => onCopyCatalogItemTag(item)}
-                    >
-                      <Copy className="h-3.5 w-3.5" />
-                    </button>
-                  </span>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="mt-3 rounded-lg border border-dashed px-3 py-5 text-center text-[12px] leading-5 text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
-              <p>Nenhuma tag de produto cadastrada.</p>
-              <Link
-                href="/dashboard/links"
-                className="mt-3 inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10"
-                style={{ borderColor: "var(--ch-border)" }}
-              >
-                <Package className="h-3.5 w-3.5" />
-                Cadastrar ou importar produtos
-              </Link>
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="rounded-xl border p-3" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
-            Tags gerais cadastradas
-            <InfoHint text="Tags ja cadastradas fora do Catalogo de Vendas. Produtos, precos e links externos devem ser gerenciados em Produtos." />
-          </p>
-          <span className="rounded-full border px-2 py-1 font-mono text-[9px] uppercase tracking-widest text-slate-400" style={{ borderColor: "var(--ch-border)" }}>
-            {generalLinkButtons.length.toLocaleString("pt-BR")}
-          </span>
-        </div>
-
-        {generalLinkButtons.length > 0 ? (
-          <div className="mt-3 grid max-h-[420px] gap-2 overflow-y-auto pr-1">
-            {generalLinkButtons.map((link) => (
-              <div
-                key={link.id}
-                className="grid gap-2 rounded-lg border p-2"
-                style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface)" }}
-              >
-                <div className="min-w-0">
-                  <div className="flex min-w-0 items-center justify-between gap-2">
-                    <p className="truncate text-[12px] font-semibold text-slate-100" title={link.label}>{link.label}</p>
-                    <span className="shrink-0 rounded-full bg-cyan-400/10 px-2 py-1 font-mono text-[9px] uppercase tracking-widest text-cyan-200">
-                      {link.clicks.toLocaleString("pt-BR")} cliques
-                    </span>
-                  </div>
-                  <p className="mt-1 truncate font-mono text-[10px] text-cyan-300" title={link.tag}>{link.tag}</p>
-                  <p className="mt-1 truncate text-[10px] text-slate-500" title={link.url}>{link.url}</p>
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  <button
-                    type="button"
-                    className="inline-flex min-h-8 items-center gap-1.5 rounded-md border px-2 font-mono text-[9px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10"
-                    style={{ borderColor: "var(--ch-border)" }}
-                    title="Inserir tag no prompt"
-                    onClick={() => onInsertTag(link.tag)}
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    Inserir
-                  </button>
-                  <button
-                    type="button"
-                    className="grid h-8 w-8 place-items-center rounded-md border text-cyan-200 transition hover:bg-cyan-400/10"
-                    style={{ borderColor: "var(--ch-border)" }}
-                    title="Copiar tag"
-                    aria-label={`Copiar tag ${link.tag}`}
-                    onClick={() => onCopyLinkButtonTag(link)}
-                  >
-                    <Copy className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="mt-3 rounded-lg border border-dashed px-3 py-6 text-center text-[12px] leading-5 text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
-            Nenhuma tag geral cadastrada fora do Catalogo de Vendas.
-          </div>
-        )}
-        <Link
-          href="/dashboard/links"
-          className="mt-3 inline-flex min-h-9 w-full items-center justify-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10"
-          style={{ borderColor: "var(--ch-border)" }}
-        >
-          <Package className="h-3.5 w-3.5" />
-          Gerenciar produtos
-        </Link>
-      </div>
-    </div>
-  );
-}
-
-function getSalesCatalogPromptTag(item: ClientSalesCatalogItem) {
-  if (item.salesDestination === "external_site" && item.externalLinkButtonTag) {
-    return item.externalLinkButtonTag;
-  }
-
-  return item.tag;
 }
 
 function formatSalesCatalogPromptItemMeta(item: ClientSalesCatalogItem) {
