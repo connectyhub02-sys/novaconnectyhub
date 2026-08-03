@@ -6,6 +6,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { meterUsageEvent } from "@/lib/billing/metered-usage";
 import { createServiceClient } from "@/lib/supabase/service";
 import { loadR2Config, putR2Object } from "@/lib/storage/r2";
+import { assertStorageUploadAllowed, recordOrganizationStorageUsage } from "@/lib/storage/quotas";
 import { loadElevenLabsCredentials, type ElevenLabsCredentials } from "./credentials";
 
 type CloneVoiceFile = {
@@ -289,8 +290,33 @@ async function generateVoicePreview(
   if (!r2Config.ok) return;
 
   const objectKey = `voice-previews/${input.organizationId}/${input.voiceId}-${randomUUID()}.mp3`;
+  const storageAllowed = await assertStorageUploadAllowed({
+    client,
+    organizationId: input.organizationId,
+    category: "generated_media",
+    files: [{
+      fileName: `${input.voiceId}-preview.mp3`,
+      contentType: "audio/mpeg",
+      sizeBytes: bytes.byteLength,
+    }],
+  }).then(() => true).catch(() => false);
+  if (!storageAllowed) return;
+
   const upload = await putR2Object(r2Config.config, objectKey, bytes, "audio/mpeg");
   if (!upload.ok) return;
+
+  await recordOrganizationStorageUsage({
+    client,
+    organizationId: input.organizationId,
+    category: "generated_media",
+    bytes: upload.bytesSize,
+    fileCount: 1,
+    metadata: {
+      source: "voice_clone_preview",
+      object_key: upload.objectKey,
+      voice_id: input.voiceId,
+    },
+  }).catch(() => null);
 
   if (input.voiceRecordId) {
     const { data } = await client

@@ -5,6 +5,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
 import { createServiceClient } from "@/lib/supabase/service";
 import { loadR2Config, putR2Object } from "@/lib/storage/r2";
+import { assertStorageUploadAllowed, recordOrganizationStorageUsage } from "@/lib/storage/quotas";
 import { loadElevenLabsCredentials } from "./credentials";
 
 type JsonRecord = Record<string, unknown>;
@@ -74,11 +75,35 @@ export async function generateElevenLabsAudio(input: GenerateElevenLabsAudioInpu
   const audioBytes = await readableStreamToBytes(audioStream);
   const now = new Date();
   const objectKey = `generated-media/elevenlabs/audio/${input.organizationId}/${now.getTime()}-${randomUUID()}.mp3`;
+  await assertStorageUploadAllowed({
+    client,
+    organizationId: input.organizationId,
+    category: "generated_media",
+    files: [{
+      fileName: `${now.getTime()}-${voiceId}.mp3`,
+      contentType: "audio/mpeg",
+      sizeBytes: audioBytes.byteLength,
+    }],
+  });
   const upload = await putR2Object(r2Config.config, objectKey, audioBytes, "audio/mpeg");
 
   if (!upload.ok) {
     throw new Error(upload.error);
   }
+
+  await recordOrganizationStorageUsage({
+    client,
+    organizationId: input.organizationId,
+    category: "generated_media",
+    bytes: upload.bytesSize,
+    fileCount: 1,
+    metadata: {
+      source: input.source ?? "voice_tts",
+      provider: "elevenlabs",
+      object_key: upload.objectKey,
+      voice_id: voiceId,
+    },
+  });
 
   const mediaId = await registerGeneratedMedia(client, {
     organizationId: input.organizationId,

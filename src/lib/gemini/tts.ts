@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServiceClient } from "@/lib/supabase/service";
 import { loadR2Config, putR2Object } from "@/lib/storage/r2";
+import { assertStorageUploadAllowed, recordOrganizationStorageUsage } from "@/lib/storage/quotas";
 import { loadGeminiCredentials } from "./credentials";
 
 type JsonRecord = Record<string, unknown>;
@@ -85,11 +86,35 @@ export async function generateGeminiAudio(input: GenerateGeminiAudioInput): Prom
   const audioBytes = wrapPcmAsWav(pcmBytes);
   const now = new Date();
   const objectKey = `generated-media/gemini/audio/${input.organizationId}/${now.getTime()}-${randomUUID()}.wav`;
+  await assertStorageUploadAllowed({
+    client,
+    organizationId: input.organizationId,
+    category: "generated_media",
+    files: [{
+      fileName: `${now.getTime()}-${voice.voiceName}.wav`,
+      contentType: "audio/wav",
+      sizeBytes: audioBytes.byteLength,
+    }],
+  });
   const upload = await putR2Object(r2Config.config, objectKey, audioBytes, "audio/wav");
 
   if (!upload.ok) {
     throw new Error(upload.error);
   }
+
+  await recordOrganizationStorageUsage({
+    client,
+    organizationId: input.organizationId,
+    category: "generated_media",
+    bytes: upload.bytesSize,
+    fileCount: 1,
+    metadata: {
+      source: input.source ?? "voice_tts",
+      provider: "gemini",
+      object_key: upload.objectKey,
+      voice_id: voice.voiceId,
+    },
+  });
 
   const mediaId = await registerGeneratedMedia(client, {
     organizationId: input.organizationId,

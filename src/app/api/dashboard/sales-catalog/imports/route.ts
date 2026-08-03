@@ -15,6 +15,7 @@ import {
   type SalesCatalogImportTargetMode,
 } from "@/lib/sales-catalog/importer";
 import { inngest } from "@/lib/inngest/client";
+import { assertStorageUploadAllowed, isStorageQuotaError } from "@/lib/storage/quotas";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
 
@@ -103,6 +104,17 @@ export async function POST(request: NextRequest) {
     if (payload.files.length === 0) {
       return NextResponse.json({ error: "Anexe um arquivo legivel para importar produtos com IA." }, { status: 422 });
     }
+
+    await assertStorageUploadAllowed({
+      client,
+      organizationId: company.id,
+      category: "import_source",
+      files: payload.files.map((file) => ({
+        fileName: file.fileName,
+        contentType: file.contentType,
+        sizeBytes: file.size,
+      })),
+    });
 
     const importJob = await createSalesCatalogImportJob({
       client,
@@ -285,6 +297,8 @@ function formatRouteError(error: unknown, fallback: string) {
 function statusForRouteError(error: unknown, fallback: number) {
   const scopeStatus = statusForDashboardCompanyScopeError(error, 0);
   if (scopeStatus) return scopeStatus;
+
+  if (isStorageQuotaError(error)) return error.status;
 
   return error instanceof BillingAccessError ? 402 : fallback;
 }

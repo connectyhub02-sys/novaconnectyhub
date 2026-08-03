@@ -4,6 +4,7 @@ import {
   uploadClientMetaOrganicMedia,
 } from "@/lib/meta/organic-publishing";
 import { assertBillableAccess, BillingAccessError } from "@/lib/billing/trial";
+import { isStorageQuotaError } from "@/lib/storage/quotas";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 
 export const dynamic = "force-dynamic";
@@ -44,7 +45,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ media, overview });
   } catch (error) {
-    return NextResponse.json(formatError(error), { status: error instanceof BillingAccessError ? 402 : 400 });
+    return NextResponse.json(formatError(error), { status: error instanceof BillingAccessError ? 402 : isStorageQuotaError(error) ? error.status : 400 });
   }
 }
 

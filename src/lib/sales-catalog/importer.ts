@@ -31,6 +31,7 @@ import {
   normalizeHttpUrl,
 } from "@/lib/tracking/tracked-links";
 import { loadR2Config, putR2Object } from "@/lib/storage/r2";
+import { assertStorageUploadAllowed, recordOrganizationStorageUsage } from "@/lib/storage/quotas";
 
 export type SalesCatalogImportSourceKind = "text" | "csv" | "excel" | "site" | "pdf" | "image" | "mixed";
 export type SalesCatalogImportTargetMode = "connectyhub_checkout" | "external_site" | "review";
@@ -236,7 +237,7 @@ const maxImportTextChars = 60000;
 const maxPageChars = 45000;
 const maxDraftItems = 120;
 const maxGeminiOutputTokens = 7000;
-const maxImportedImageBytes = 8 * 1024 * 1024;
+const maxImportedImageBytes = 20 * 1024 * 1024;
 
 export const salesCatalogImportProcessRequestedEventName = "connectyhub/sales-catalog.import.process_requested";
 
@@ -304,6 +305,22 @@ export async function createSalesCatalogImportJob(input: {
       await markImportFailed(input.client, job.id, input.companyId, sourceError.message);
       throw new Error(`Importacao criada, mas nao foi possivel salvar as fontes: ${sourceError.message}`);
     }
+  }
+
+  const storedFileBytes = files.reduce((total, file) => total + file.size, 0);
+  if (storedFileBytes > 0) {
+    await recordOrganizationStorageUsage({
+      client: input.client,
+      organizationId: input.companyId,
+      category: "import_source",
+      bytes: storedFileBytes,
+      fileCount: files.length,
+      metadata: {
+        source: "sales_catalog_ai_import",
+        import_job_id: job.id,
+        source_kind: sourceKind,
+      },
+    });
   }
 
   await input.client.from("sales_catalog_import_events").insert({
@@ -1978,7 +1995,7 @@ async function importExternalImageToR2(input: {
 
   const declaredBytes = Number(response.headers.get("content-length"));
   if (Number.isFinite(declaredBytes) && declaredBytes > maxImportedImageBytes) {
-    throw new Error("Imagem maior que 8 MB.");
+    throw new Error("Imagem maior que 20 MB.");
   }
 
   const contentType = normalizeImportedImageContentType(response.headers.get("content-type"), imageUrl);
@@ -1988,8 +2005,19 @@ async function importExternalImageToR2(input: {
 
   const body = new Uint8Array(await response.arrayBuffer());
   if (body.byteLength > maxImportedImageBytes) {
-    throw new Error("Imagem maior que 8 MB.");
+    throw new Error("Imagem maior que 20 MB.");
   }
+
+  await assertStorageUploadAllowed({
+    client: input.client,
+    organizationId: input.companyId,
+    category: "product_media",
+    files: [{
+      fileName: fileNameFromUrl(imageUrl) ?? input.itemTitle,
+      contentType,
+      sizeBytes: body.byteLength,
+    }],
+  });
 
   const configResult = await loadR2Config(input.client);
   if (!configResult.ok) {
@@ -2011,6 +2039,20 @@ async function importExternalImageToR2(input: {
   if (!upload.ok) {
     throw new Error(upload.error);
   }
+
+  await recordOrganizationStorageUsage({
+    client: input.client,
+    organizationId: input.companyId,
+    category: "product_media",
+    bytes: upload.bytesSize,
+    fileCount: 1,
+    metadata: {
+      source: "sales_catalog_external_image_import",
+      product_id: input.itemId,
+      object_key: upload.objectKey,
+      content_type: contentType,
+    },
+  });
 
   return {
     id: randomUUID(),

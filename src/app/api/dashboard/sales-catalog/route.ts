@@ -75,6 +75,11 @@ import { createSalesCatalogPixPaymentSession } from "@/lib/sales-catalog/payment
 import { calculateSalesCatalogShippingQuotes, normalizeSalesCatalogCep } from "@/lib/sales-catalog/shipping-calculator";
 import { exportWhatsappCatalogProducts, importWhatsappCatalog, setWhatsappCatalogVisibility } from "@/lib/sales-catalog/whatsapp-sync";
 import { loadR2Config, putR2Object } from "@/lib/storage/r2";
+import {
+  assertStorageUploadAllowed,
+  isStorageQuotaError,
+  recordOrganizationStorageUsage,
+} from "@/lib/storage/quotas";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
 import { buildTrackedLinkUrl, createTrackedLinkSlug, createTrackedLinkTag, normalizeHttpUrl } from "@/lib/tracking/tracked-links";
@@ -83,8 +88,8 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const maxCatalogFiles = 8;
-const maxCatalogFileBytes = 25 * 1024 * 1024;
-const maxCatalogTotalBytes = 80 * 1024 * 1024;
+const maxCatalogFileBytes = 250 * 1024 * 1024;
+const maxCatalogTotalBytes = 500 * 1024 * 1024;
 const maxDescriptionLength = 1800;
 
 type JsonRecord = Record<string, unknown>;
@@ -264,7 +269,20 @@ export async function POST(request: NextRequest) {
     }
 
     if (existingMediaBytes + uploadedBytes > maxCatalogTotalBytes) {
-      return NextResponse.json({ error: "O total de arquivos do produto precisa ter ate 80 MB." }, { status: 422 });
+      return NextResponse.json({ error: "O total de arquivos do produto precisa ter ate 500 MB." }, { status: 422 });
+    }
+
+    if (files.length > 0) {
+      await assertStorageUploadAllowed({
+        client,
+        organizationId: company.id,
+        category: "product_media",
+        files: files.map((file) => ({
+          fileName: file.name,
+          contentType: normalizeContentType(file),
+          sizeBytes: file.size,
+        })),
+      });
     }
 
     const configResult = files.length > 0 ? await loadR2Config(client) : null;
@@ -284,6 +302,20 @@ export async function POST(request: NextRequest) {
         if (!upload.ok) {
           return NextResponse.json({ error: upload.error }, { status: 502 });
         }
+
+        await recordOrganizationStorageUsage({
+          client,
+          organizationId: company.id,
+          category: "product_media",
+          bytes: upload.bytesSize,
+          fileCount: 1,
+          metadata: {
+            source: "sales_catalog_product_upload",
+            product_id: itemId,
+            object_key: upload.objectKey,
+            content_type: contentType,
+          },
+        });
 
         media.push({
           id: randomUUID(),
@@ -2074,7 +2106,7 @@ function validateFiles(files: File[]) {
   for (const file of files) {
     total += file.size;
     if (file.size <= 0 || file.size > maxCatalogFileBytes) {
-      return "Cada arquivo precisa ter ate 25 MB.";
+      return "Cada arquivo precisa ter ate 250 MB.";
     }
 
     const contentType = normalizeContentType(file);
@@ -2084,7 +2116,7 @@ function validateFiles(files: File[]) {
   }
 
   if (total > maxCatalogTotalBytes) {
-    return "O total de arquivos precisa ter ate 80 MB.";
+    return "O total de arquivos precisa ter ate 500 MB.";
   }
 
   return null;
@@ -3310,6 +3342,8 @@ function formatRouteError(error: unknown, fallback: string) {
 function statusForRouteError(error: unknown, fallback: number) {
   const scopeStatus = statusForDashboardCompanyScopeError(error, 0);
   if (scopeStatus) return scopeStatus;
+
+  if (isStorageQuotaError(error)) return error.status;
 
   return error instanceof BillingAccessError ? 402 : fallback;
 }

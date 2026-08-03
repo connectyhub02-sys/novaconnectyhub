@@ -9,6 +9,7 @@ import {
 import { requireClientCompanyAccess, type ClientCompany } from "@/lib/client-os/companies";
 import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
 import { loadR2Config, putR2Object } from "@/lib/storage/r2";
+import { assertStorageUploadAllowed, recordOrganizationStorageUsage } from "@/lib/storage/quotas";
 import { createServiceClient } from "@/lib/supabase/service";
 import {
   getMetaOrganicSurfaceLabel,
@@ -271,6 +272,17 @@ export async function uploadClientMetaOrganicMedia(input: {
     throw new Error("A midia precisa ter ate 8 MB.");
   }
 
+  await assertStorageUploadAllowed({
+    client,
+    organizationId: company.id,
+    category: "other",
+    files: [{
+      fileName: input.fileName,
+      contentType,
+      sizeBytes: input.bytes.byteLength,
+    }],
+  });
+
   const configResult = await loadR2Config(client);
 
   if (!configResult.ok) {
@@ -284,6 +296,19 @@ export async function uploadClientMetaOrganicMedia(input: {
   if (!uploadResult.ok) {
     throw new Error(uploadResult.error);
   }
+
+  await recordOrganizationStorageUsage({
+    client,
+    organizationId: company.id,
+    category: "other",
+    bytes: uploadResult.bytesSize,
+    fileCount: 1,
+    metadata: {
+      source: "meta_organic_media_upload",
+      object_key: uploadResult.objectKey,
+      content_type: contentType,
+    },
+  });
 
   const uploadedAt = new Date().toISOString();
   const { data, error } = await client

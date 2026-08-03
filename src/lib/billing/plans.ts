@@ -22,6 +22,11 @@ export type BillingPlan = {
   agentLimit: number | null;
   whatsappInstanceLimit: number | null;
   userLimit: number | null;
+  storageLimitBytes: number;
+  storageFileLimit: number;
+  storageImageMaxBytes: number;
+  storageVideoMaxBytes: number;
+  storageFileMaxBytes: number;
   moduleCodes: string[];
   mercadoPagoPreapprovalPlanId: string | null;
   createdAt: string;
@@ -58,6 +63,11 @@ export type BillingPlanRow = {
   agent_limit: number | string | null;
   whatsapp_instance_limit: number | string | null;
   user_limit: number | string | null;
+  storage_limit_bytes: number | string | null;
+  storage_file_limit: number | string | null;
+  storage_image_max_bytes: number | string | null;
+  storage_video_max_bytes: number | string | null;
+  storage_file_max_bytes: number | string | null;
   module_codes: string[] | null;
   mercado_pago_preapproval_plan_id: string | null;
   created_at: string;
@@ -87,6 +97,11 @@ export async function getBillingPlanCatalog(
         "agent_limit",
         "whatsapp_instance_limit",
         "user_limit",
+        "storage_limit_bytes",
+        "storage_file_limit",
+        "storage_image_max_bytes",
+        "storage_video_max_bytes",
+        "storage_file_max_bytes",
         "module_codes",
         "mercado_pago_preapproval_plan_id",
         "created_at",
@@ -148,6 +163,11 @@ export function mapBillingPlanRow(row: BillingPlanRow): BillingPlan {
     agentLimit: toNullableNumber(row.agent_limit),
     whatsappInstanceLimit: toNullableNumber(row.whatsapp_instance_limit),
     userLimit: toNullableNumber(row.user_limit),
+    storageLimitBytes: toNumber(row.storage_limit_bytes),
+    storageFileLimit: toNumber(row.storage_file_limit),
+    storageImageMaxBytes: toNumber(row.storage_image_max_bytes),
+    storageVideoMaxBytes: toNumber(row.storage_video_max_bytes),
+    storageFileMaxBytes: toNumber(row.storage_file_max_bytes),
     moduleCodes: Array.isArray(row.module_codes) ? row.module_codes.filter(Boolean) : [],
     mercadoPagoPreapprovalPlanId: row.mercado_pago_preapproval_plan_id,
     createdAt: row.created_at,

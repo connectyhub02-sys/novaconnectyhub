@@ -30,6 +30,11 @@ export async function loadPublicPricingPlans(
     agentLimit: plan.agentLimit,
     whatsappInstanceLimit: plan.whatsappInstanceLimit,
     userLimit: plan.userLimit,
+    storageLimitBytes: plan.storageLimitBytes,
+    storageFileLimit: plan.storageFileLimit,
+    storageImageMaxBytes: plan.storageImageMaxBytes,
+    storageVideoMaxBytes: plan.storageVideoMaxBytes,
+    storageFileMaxBytes: plan.storageFileMaxBytes,
     moduleCodes: plan.moduleCodes,
   })));
 }

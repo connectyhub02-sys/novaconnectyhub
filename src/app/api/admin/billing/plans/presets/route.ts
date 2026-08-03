@@ -23,11 +23,19 @@ const PLAN_SELECT = [
   "agent_limit",
   "whatsapp_instance_limit",
   "user_limit",
+  "storage_limit_bytes",
+  "storage_file_limit",
+  "storage_image_max_bytes",
+  "storage_video_max_bytes",
+  "storage_file_max_bytes",
   "module_codes",
   "mercado_pago_preapproval_plan_id",
   "created_at",
   "updated_at",
 ].join(", ");
+
+const MB = 1024 * 1024;
+const GB = 1024 * MB;
 
 const COMMERCIAL_PLAN_PRESETS = [
   {
@@ -46,6 +54,11 @@ const COMMERCIAL_PLAN_PRESETS = [
     agent_limit: 1,
     whatsapp_instance_limit: 1,
     user_limit: 1,
+    storage_limit_bytes: 250 * MB,
+    storage_file_limit: 100,
+    storage_image_max_bytes: 5 * MB,
+    storage_video_max_bytes: 30 * MB,
+    storage_file_max_bytes: 25 * MB,
     module_codes: ["whatsapp_agent", "sales_catalog", "crm_basic", "voice_ai"],
     metadata: {
       seed: "trial_credit_catalog",
@@ -59,6 +72,8 @@ const COMMERCIAL_PLAN_PRESETS = [
       trial_credits_convert_to_paid_plan: true,
       trial_credit_conversion_grace_days: 7,
       credit_policy_version: "rollover_v1",
+      storage_policy_version: "storage_limits_v1",
+      storage_limit_label: "250 MB",
       editable: true,
     },
   },
@@ -78,6 +93,11 @@ const COMMERCIAL_PLAN_PRESETS = [
     agent_limit: 1,
     whatsapp_instance_limit: 1,
     user_limit: 2,
+    storage_limit_bytes: 1 * GB,
+    storage_file_limit: 500,
+    storage_image_max_bytes: 8 * MB,
+    storage_video_max_bytes: 50 * MB,
+    storage_file_max_bytes: 50 * MB,
     module_codes: ["whatsapp_agent", "sales_catalog", "crm_basic", "voice_ai"],
     metadata: {
       seed: "commercial_credit_catalog",
@@ -91,6 +111,8 @@ const COMMERCIAL_PLAN_PRESETS = [
       inactive_plan_freezes_credits: true,
       monthly_plan_credits_accumulate: true,
       credit_policy_version: "rollover_v1",
+      storage_policy_version: "storage_limits_v1",
+      storage_limit_label: "1 GB",
       editable: true,
     },
   },
@@ -110,6 +132,11 @@ const COMMERCIAL_PLAN_PRESETS = [
     agent_limit: 4,
     whatsapp_instance_limit: 4,
     user_limit: 5,
+    storage_limit_bytes: 5 * GB,
+    storage_file_limit: 2500,
+    storage_image_max_bytes: 12 * MB,
+    storage_video_max_bytes: 100 * MB,
+    storage_file_max_bytes: 100 * MB,
     module_codes: ["whatsapp_agent", "sales_catalog", "crm_basic", "automations", "voice_ai", "reports", "team_users"],
     metadata: {
       seed: "commercial_credit_catalog",
@@ -124,6 +151,8 @@ const COMMERCIAL_PLAN_PRESETS = [
       inactive_plan_freezes_credits: true,
       monthly_plan_credits_accumulate: true,
       credit_policy_version: "rollover_v1",
+      storage_policy_version: "storage_limits_v1",
+      storage_limit_label: "5 GB",
       editable: true,
     },
   },
@@ -143,6 +172,11 @@ const COMMERCIAL_PLAN_PRESETS = [
     agent_limit: 8,
     whatsapp_instance_limit: 8,
     user_limit: 15,
+    storage_limit_bytes: 20 * GB,
+    storage_file_limit: 10000,
+    storage_image_max_bytes: 20 * MB,
+    storage_video_max_bytes: 250 * MB,
+    storage_file_max_bytes: 250 * MB,
     module_codes: ["whatsapp_agent", "sales_catalog", "crm_basic", "automations", "voice_ai", "api_whatsapp", "reports", "team_users"],
     metadata: {
       seed: "commercial_credit_catalog",
@@ -157,6 +191,8 @@ const COMMERCIAL_PLAN_PRESETS = [
       inactive_plan_freezes_credits: true,
       monthly_plan_credits_accumulate: true,
       credit_policy_version: "rollover_v1",
+      storage_policy_version: "storage_limits_v1",
+      storage_limit_label: "20 GB",
       editable: true,
     },
   },

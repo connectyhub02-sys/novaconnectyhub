@@ -6,6 +6,7 @@ import {
   Calculator,
   Coins,
   CreditCard,
+  HardDrive,
   Layers3,
   PackagePlus,
   Plus,
@@ -40,6 +41,11 @@ type PlanDraft = {
   agentLimit: string;
   whatsappInstanceLimit: string;
   userLimit: string;
+  storageLimitMb: string;
+  storageFileLimit: string;
+  storageImageMaxMb: string;
+  storageVideoMaxMb: string;
+  storageFileMaxMb: string;
   moduleCodes: string[];
   customModuleCode: string;
   mercadoPagoPreapprovalPlanId: string;
@@ -210,9 +216,10 @@ export function BillingPlansConsole({
             </div>
           ) : null}
 
-          <div className="grid grid-cols-4 gap-1.5 sm:gap-2 xl:gap-4">
+          <div className="grid grid-cols-2 gap-1.5 sm:gap-2 lg:grid-cols-5 xl:gap-4">
             <PlanMetric icon={Layers3} label="Planos" value={String(metrics.total)} detail={`${metrics.active} ativos`} />
             <PlanMetric icon={WalletCards} label="Creditos inclusos" value={formatCredits(metrics.includedCredits)} detail="somando planos ativos" />
+            <PlanMetric icon={HardDrive} label="Storage incluso" value={formatStorageBytes(metrics.includedStorageBytes)} detail="somando planos ativos" />
             <PlanMetric icon={CreditCard} label="Excedente medio" value={formatMoney(metrics.averageOveragePrice)} detail="por credito extra" />
             <PlanMetric icon={TrendingUp} label="Custo IA alvo" value={formatMoney(metrics.targetProviderCost)} detail="creditos inclusos / 4" />
           </div>
@@ -261,9 +268,10 @@ export function BillingPlansConsole({
                         <StatusBadge status={plan.status === "active" ? "online" : plan.status === "draft" ? "warning" : "idle"} label={plan.status} />
                       </div>
 
-                      <div className="mt-4 grid grid-cols-3 gap-2">
+                      <div className="mt-4 grid grid-cols-4 gap-2">
                         <MiniValue label="Mensal" value={formatMoney(plan.monthlyPriceBrl)} />
                         <MiniValue label="Creditos" value={formatCredits(plan.includedCredits)} />
+                        <MiniValue label="Storage" value={formatStorageBytes(plan.storageLimitBytes)} />
                         <MiniValue label="Extra" value={formatMoney(plan.overageCreditPriceBrl)} />
                       </div>
                     </button>
@@ -360,6 +368,25 @@ export function BillingPlansConsole({
                   <NumberField label="Agentes" value={draft.agentLimit} onChange={(value) => updateDraft({ agentLimit: value })} step="1" allowBlank />
                   <NumberField label="WhatsApps" value={draft.whatsappInstanceLimit} onChange={(value) => updateDraft({ whatsappInstanceLimit: value })} step="1" allowBlank />
                   <NumberField label="Usuarios" value={draft.userLimit} onChange={(value) => updateDraft({ userLimit: value })} step="1" allowBlank />
+                </div>
+
+                <div className="rounded-xl p-4" style={{ background: "rgba(14,165,233,0.08)", border: "1px solid rgba(14,165,233,0.22)" }}>
+                  <div className="mb-3 flex items-start gap-3">
+                    <HardDrive className="mt-0.5 h-4 w-4 shrink-0 text-cyan-200" />
+                    <div>
+                      <p className="text-[13px] font-semibold text-cyan-100">Armazenamento incluso</p>
+                      <p className="mt-1 text-[12px] leading-5 text-cyan-100/70">
+                        Limites para fotos, videos, anexos de produtos, importacoes com IA e arquivos de conhecimento da empresa.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-5">
+                    <NumberField label="Storage total MB" value={draft.storageLimitMb} onChange={(value) => updateDraft({ storageLimitMb: value })} step="1" />
+                    <NumberField label="Arquivos" value={draft.storageFileLimit} onChange={(value) => updateDraft({ storageFileLimit: value })} step="1" />
+                    <NumberField label="Imagem MB" value={draft.storageImageMaxMb} onChange={(value) => updateDraft({ storageImageMaxMb: value })} step="1" />
+                    <NumberField label="Video MB" value={draft.storageVideoMaxMb} onChange={(value) => updateDraft({ storageVideoMaxMb: value })} step="1" />
+                    <NumberField label="Arquivo MB" value={draft.storageFileMaxMb} onChange={(value) => updateDraft({ storageFileMaxMb: value })} step="1" />
+                  </div>
                 </div>
 
                 <div className="grid gap-3 md:grid-cols-[160px_1fr]">
@@ -619,6 +646,11 @@ function createDraft(plan: BillingPlan | null): PlanDraft {
       agentLimit: "",
       whatsappInstanceLimit: "",
       userLimit: "",
+      storageLimitMb: "0",
+      storageFileLimit: "0",
+      storageImageMaxMb: "0",
+      storageVideoMaxMb: "0",
+      storageFileMaxMb: "0",
       moduleCodes: [],
       customModuleCode: "",
       mercadoPagoPreapprovalPlanId: "",
@@ -642,6 +674,11 @@ function createDraft(plan: BillingPlan | null): PlanDraft {
     agentLimit: plan.agentLimit === null ? "" : String(plan.agentLimit),
     whatsappInstanceLimit: plan.whatsappInstanceLimit === null ? "" : String(plan.whatsappInstanceLimit),
     userLimit: plan.userLimit === null ? "" : String(plan.userLimit),
+    storageLimitMb: bytesToMbInput(plan.storageLimitBytes),
+    storageFileLimit: String(plan.storageFileLimit),
+    storageImageMaxMb: bytesToMbInput(plan.storageImageMaxBytes),
+    storageVideoMaxMb: bytesToMbInput(plan.storageVideoMaxBytes),
+    storageFileMaxMb: bytesToMbInput(plan.storageFileMaxBytes),
     moduleCodes: plan.moduleCodes,
     customModuleCode: "",
     mercadoPagoPreapprovalPlanId: plan.mercadoPagoPreapprovalPlanId ?? "",
@@ -666,6 +703,11 @@ function buildPayload(draft: PlanDraft) {
     agentLimit: draft.agentLimit === "" ? null : Number(draft.agentLimit),
     whatsappInstanceLimit: draft.whatsappInstanceLimit === "" ? null : Number(draft.whatsappInstanceLimit),
     userLimit: draft.userLimit === "" ? null : Number(draft.userLimit),
+    storageLimitBytes: mbToBytes(draft.storageLimitMb),
+    storageFileLimit: Number(draft.storageFileLimit || 0),
+    storageImageMaxBytes: mbToBytes(draft.storageImageMaxMb),
+    storageVideoMaxBytes: mbToBytes(draft.storageVideoMaxMb),
+    storageFileMaxBytes: mbToBytes(draft.storageFileMaxMb),
     moduleCodes: draft.moduleCodes,
     mercadoPagoPreapprovalPlanId: draft.mercadoPagoPreapprovalPlanId.trim(),
   };
@@ -690,6 +732,7 @@ function buildMetrics(plans: BillingPlan[]) {
     active: activePlans.length,
     activeRevenue: activePlans.reduce((total, plan) => total + plan.monthlyPriceBrl, 0),
     includedCredits: activePlans.reduce((total, plan) => total + plan.includedCredits, 0),
+    includedStorageBytes: activePlans.reduce((total, plan) => total + plan.storageLimitBytes, 0),
     averageOveragePrice,
     maxTrialDays: plans.reduce((max, plan) => Math.max(max, plan.trialDays), 0),
     targetProviderCost,
@@ -748,6 +791,31 @@ function formatMoney(value: number) {
 
 function formatCredits(value: number) {
   return new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 2 }).format(value);
+}
+
+function formatStorageBytes(value: number) {
+  const bytes = Math.max(0, Number.isFinite(value) ? value : 0);
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let nextValue = bytes;
+  let unitIndex = 0;
+
+  while (nextValue >= 1024 && unitIndex < units.length - 1) {
+    nextValue /= 1024;
+    unitIndex += 1;
+  }
+
+  const maximumFractionDigits = nextValue >= 10 || unitIndex === 0 ? 0 : 1;
+  return `${new Intl.NumberFormat("pt-BR", { maximumFractionDigits }).format(nextValue)} ${units[unitIndex]}`;
+}
+
+function bytesToMbInput(value: number) {
+  const mb = Math.round((value / (1024 * 1024)) * 100) / 100;
+  return Number.isFinite(mb) && mb > 0 ? String(mb) : "0";
+}
+
+function mbToBytes(value: string) {
+  const parsed = Number(value || 0);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed * 1024 * 1024) : 0;
 }
 
 function formatPercent(value: number) {

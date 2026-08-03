@@ -8,6 +8,11 @@ import {
 } from "@/lib/client-os/dashboard-route-scope";
 import { assertBillableAccess, BillingAccessError } from "@/lib/billing/trial";
 import { loadR2Config, putR2Object } from "@/lib/storage/r2";
+import {
+  assertStorageUploadAllowed,
+  isStorageQuotaError,
+  recordOrganizationStorageUsage,
+} from "@/lib/storage/quotas";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
 
@@ -64,6 +69,16 @@ export async function POST(request: NextRequest) {
       client,
     });
     await assertBillableAccess({ organizationId: company.id, client });
+    await assertStorageUploadAllowed({
+      client,
+      organizationId: company.id,
+      category: "knowledge",
+      files: [{
+        fileName: file.name,
+        contentType,
+        sizeBytes: file.size,
+      }],
+    });
     const configResult = await loadR2Config(client);
 
     if (!configResult.ok) {
@@ -78,6 +93,19 @@ export async function POST(request: NextRequest) {
     if (!uploadResult.ok) {
       return NextResponse.json({ error: uploadResult.error }, { status: 502 });
     }
+
+    await recordOrganizationStorageUsage({
+      client,
+      organizationId: company.id,
+      category: "knowledge",
+      bytes: uploadResult.bytesSize,
+      fileCount: 1,
+      metadata: {
+        source: "company_knowledge_upload",
+        object_key: uploadResult.objectKey,
+        content_type: contentType,
+      },
+    });
 
     const extractedText = await extractTextForMemory(file, contentType);
     const content = extractedText
@@ -135,7 +163,7 @@ export async function POST(request: NextRequest) {
         error: error instanceof Error ? error.message : "Erro ao anexar arquivo.",
         ...(error instanceof BillingAccessError ? { billingAccess: error.status } : {}),
       },
-      { status: statusForDashboardCompanyScopeError(error, error instanceof BillingAccessError ? 402 : 500) },
+      { status: statusForDashboardCompanyScopeError(error, error instanceof BillingAccessError ? 402 : isStorageQuotaError(error) ? error.status : 500) },
     );
   }
 }

@@ -28,6 +28,7 @@ import {
 } from "@/lib/gemini/credentials";
 import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
 import { loadR2Config, putR2Object } from "@/lib/storage/r2";
+import { assertStorageUploadAllowed, recordOrganizationStorageUsage } from "@/lib/storage/quotas";
 import { createServiceClient } from "@/lib/supabase/service";
 import { buildTrackedLinkUrl } from "@/lib/tracking/tracked-links";
 import {
@@ -7963,9 +7964,35 @@ async function persistLeadMediaFile(input: {
   const buffer = new Uint8Array(await response.arrayBuffer());
   const ext = mimeToExtension(downloaded.mimeType);
   const objectKey = `leads/${input.context.lead.id}/${Date.now()}_${input.latestInbound.id.slice(0, 8)}.${ext}`;
+  const storageAllowed = await assertStorageUploadAllowed({
+    client: input.client,
+    organizationId: input.context.organization.id,
+    category: "lead_file",
+    files: [{
+      fileName: objectKey.split("/").pop() ?? `lead-file.${ext}`,
+      contentType: downloaded.mimeType,
+      sizeBytes: buffer.byteLength,
+    }],
+  }).then(() => true).catch(() => false);
+
+  if (!storageAllowed) return;
 
   const upload = await putR2Object(r2Result.config, objectKey, buffer, downloaded.mimeType);
   if (!upload.ok) return;
+
+  await recordOrganizationStorageUsage({
+    client: input.client,
+    organizationId: input.context.organization.id,
+    category: "lead_file",
+    bytes: upload.bytesSize,
+    fileCount: 1,
+    metadata: {
+      source: "whatsapp_inbound_media",
+      object_key: upload.objectKey,
+      lead_id: input.context.lead.id,
+      conversation_id: input.context.conversationId,
+    },
+  }).catch(() => null);
 
   await input.client.from("lead_files").insert({
     organization_id: input.context.organization.id,

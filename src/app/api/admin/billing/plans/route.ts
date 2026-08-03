@@ -125,6 +125,11 @@ const PLAN_SELECT = [
   "agent_limit",
   "whatsapp_instance_limit",
   "user_limit",
+  "storage_limit_bytes",
+  "storage_file_limit",
+  "storage_image_max_bytes",
+  "storage_video_max_bytes",
+  "storage_file_max_bytes",
   "module_codes",
   "mercado_pago_preapproval_plan_id",
   "created_at",
@@ -148,6 +153,11 @@ type ParsedPlanPayload = {
   agentLimit: number | null;
   whatsappInstanceLimit: number | null;
   userLimit: number | null;
+  storageLimitBytes: number;
+  storageFileLimit: number;
+  storageImageMaxBytes: number;
+  storageVideoMaxBytes: number;
+  storageFileMaxBytes: number;
   moduleCodes: string[];
   mercadoPagoPreapprovalPlanId: string | null;
 };
@@ -187,6 +197,11 @@ function parsePlanPayload(body: unknown, mode: "create" | "update"):
   const agentLimit = toNullableInteger(record.agentLimit);
   const whatsappInstanceLimit = toNullableInteger(record.whatsappInstanceLimit);
   const userLimit = toNullableInteger(record.userLimit);
+  const storageLimitBytes = toInteger(record.storageLimitBytes, 0);
+  const storageFileLimit = toInteger(record.storageFileLimit, 0);
+  const storageImageMaxBytes = toInteger(record.storageImageMaxBytes, 0);
+  const storageVideoMaxBytes = toInteger(record.storageVideoMaxBytes, 0);
+  const storageFileMaxBytes = toInteger(record.storageFileMaxBytes, 0);
 
   if (
     monthlyPriceBrl < 0 ||
@@ -198,7 +213,12 @@ function parsePlanPayload(body: unknown, mode: "create" | "update"):
     sortOrder < 0 ||
     (agentLimit !== null && agentLimit < 0) ||
     (whatsappInstanceLimit !== null && whatsappInstanceLimit < 0) ||
-    (userLimit !== null && userLimit < 0)
+    (userLimit !== null && userLimit < 0) ||
+    storageLimitBytes < 0 ||
+    storageFileLimit < 0 ||
+    storageImageMaxBytes < 0 ||
+    storageVideoMaxBytes < 0 ||
+    storageFileMaxBytes < 0
   ) {
     return { ok: false, error: "Valores do plano nao podem ser negativos." };
   }
@@ -222,6 +242,11 @@ function parsePlanPayload(body: unknown, mode: "create" | "update"):
       agentLimit,
       whatsappInstanceLimit,
       userLimit,
+      storageLimitBytes,
+      storageFileLimit,
+      storageImageMaxBytes,
+      storageVideoMaxBytes,
+      storageFileMaxBytes,
       moduleCodes: normalizeCodeList(record.moduleCodes),
       mercadoPagoPreapprovalPlanId: readOptionalText(record.mercadoPagoPreapprovalPlanId),
     },
@@ -245,6 +270,11 @@ function toPlanDatabasePayload(plan: ParsedPlanPayload) {
     agent_limit: plan.agentLimit,
     whatsapp_instance_limit: plan.whatsappInstanceLimit,
     user_limit: plan.userLimit,
+    storage_limit_bytes: plan.storageLimitBytes,
+    storage_file_limit: plan.storageFileLimit,
+    storage_image_max_bytes: plan.storageImageMaxBytes,
+    storage_video_max_bytes: plan.storageVideoMaxBytes,
+    storage_file_max_bytes: plan.storageFileMaxBytes,
     module_codes: plan.moduleCodes,
     mercado_pago_preapproval_plan_id: plan.mercadoPagoPreapprovalPlanId,
   };

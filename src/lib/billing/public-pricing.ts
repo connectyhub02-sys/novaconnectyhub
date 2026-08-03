@@ -15,6 +15,11 @@ export type PublicPricingBillingPlan = {
   agentLimit: number | null;
   whatsappInstanceLimit: number | null;
   userLimit: number | null;
+  storageLimitBytes: number;
+  storageFileLimit: number;
+  storageImageMaxBytes: number;
+  storageVideoMaxBytes: number;
+  storageFileMaxBytes: number;
   moduleCodes: string[];
 };
 
@@ -104,6 +109,8 @@ function buildIncludedItems(plan: PublicPricingBillingPlan) {
     plan.whatsappInstanceLimit !== null ? pluralize(plan.whatsappInstanceLimit, "WhatsApp conectado", "WhatsApps conectados") : null,
     plan.agentLimit !== null ? pluralize(plan.agentLimit, "agente IA", "agentes IA") : null,
     plan.userLimit !== null ? pluralize(plan.userLimit, "usuario no painel", "usuarios no painel") : null,
+    plan.storageLimitBytes > 0 ? `${formatStorageBytes(plan.storageLimitBytes)} de armazenamento` : null,
+    plan.storageFileLimit > 0 ? `${formatCredits(plan.storageFileLimit)} arquivos armazenados` : null,
     ...plan.moduleCodes.map((code) => moduleLabels[code]?.included ?? formatModuleCode(code)),
     plan.overageCreditPriceBrl > 0 ? `Credito extra a ${formatBrl(plan.overageCreditPriceBrl)}` : null,
     plan.autoRechargeMinCredits > 0 ? `Recarga minima de ${formatCredits(plan.autoRechargeMinCredits)} creditos` : null,
@@ -132,6 +139,7 @@ function buildGeneratedTagline(plan: PublicPricingBillingPlan) {
     plan.agentLimit !== null ? pluralize(plan.agentLimit, "agente", "agentes") : null,
     plan.whatsappInstanceLimit !== null ? pluralize(plan.whatsappInstanceLimit, "WhatsApp", "WhatsApps") : null,
     plan.includedCredits > 0 ? `${formatCredits(plan.includedCredits)} creditos` : null,
+    plan.storageLimitBytes > 0 ? `${formatStorageBytes(plan.storageLimitBytes)} storage` : null,
   ].filter(Boolean);
 
   return parts.length > 0 ? parts.join(" + ") : "Oferta comercial configurada no admin";
@@ -151,6 +159,21 @@ function formatBrl(value: number) {
 
 function formatCredits(value: number) {
   return new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 }).format(value);
+}
+
+function formatStorageBytes(value: number) {
+  const bytes = Math.max(0, Number.isFinite(value) ? value : 0);
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let nextValue = bytes;
+  let unitIndex = 0;
+
+  while (nextValue >= 1024 && unitIndex < units.length - 1) {
+    nextValue /= 1024;
+    unitIndex += 1;
+  }
+
+  const maximumFractionDigits = nextValue >= 10 || unitIndex === 0 ? 0 : 1;
+  return `${new Intl.NumberFormat("pt-BR", { maximumFractionDigits }).format(nextValue)} ${units[unitIndex]}`;
 }
 
 function formatModuleCode(value: string) {
