@@ -1,7 +1,8 @@
 "use client";
 
 import Image from "next/image";
-import { CheckCircle2, Copy, CreditCard, Loader2, QrCode, RefreshCw, Rocket, ShieldAlert, Sparkles, Trophy, X } from "lucide-react";
+import { CheckCircle2, Copy, CreditCard, FileImage, FileVideo, Files, HardDrive, Loader2, QrCode, RefreshCw, Rocket, ShieldAlert, Sparkles, Trophy, X } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
@@ -23,6 +24,11 @@ type BillingPlanCheckoutProps = {
   planName: string;
   planAmountBrl: number;
   includedCredits: number;
+  storageLimitBytes: number;
+  storageFileLimit: number;
+  storageImageMaxBytes: number;
+  storageVideoMaxBytes: number;
+  storageFileMaxBytes: number;
   payerEmail: string | null;
   subscriptionStatus: string;
   paymentStatus: string;
@@ -87,6 +93,11 @@ export function BillingPlanCheckout({
   planName,
   planAmountBrl,
   includedCredits,
+  storageLimitBytes,
+  storageFileLimit,
+  storageImageMaxBytes,
+  storageVideoMaxBytes,
+  storageFileMaxBytes,
   payerEmail,
   subscriptionStatus,
   paymentStatus,
@@ -469,6 +480,15 @@ export function BillingPlanCheckout({
               <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">
                 Plano {planCode} com {formatCredits(includedCredits)} creditos inclusos. Saldos anteriores continuam na carteira e somam ao plano ativo.
               </p>
+              {storageLimitBytes > 0 ? (
+                <CheckoutStorageSummary
+                  storageLimitBytes={storageLimitBytes}
+                  storageFileLimit={storageFileLimit}
+                  storageImageMaxBytes={storageImageMaxBytes}
+                  storageVideoMaxBytes={storageVideoMaxBytes}
+                  storageFileMaxBytes={storageFileMaxBytes}
+                />
+              ) : null}
             </div>
             <span className={cn(
               "rounded-full border px-3 py-1 font-mono text-[10px] font-bold uppercase tracking-wide",
@@ -675,6 +695,58 @@ export function BillingPlanCheckout({
       />
     ) : null}
     </>
+  );
+}
+
+function CheckoutStorageSummary({
+  storageLimitBytes,
+  storageFileLimit,
+  storageImageMaxBytes,
+  storageVideoMaxBytes,
+  storageFileMaxBytes,
+}: {
+  storageLimitBytes: number;
+  storageFileLimit: number;
+  storageImageMaxBytes: number;
+  storageVideoMaxBytes: number;
+  storageFileMaxBytes: number;
+}) {
+  const details = [
+    storageFileLimit > 0 ? { icon: Files, label: `${formatCredits(storageFileLimit)} arquivos armazenados` } : null,
+    storageImageMaxBytes > 0 ? { icon: FileImage, label: `Imagem ate ${formatStorageBytes(storageImageMaxBytes)}` } : null,
+    storageVideoMaxBytes > 0 ? { icon: FileVideo, label: `Video ate ${formatStorageBytes(storageVideoMaxBytes)}` } : null,
+    storageFileMaxBytes > 0 ? { icon: HardDrive, label: `Arquivo ate ${formatStorageBytes(storageFileMaxBytes)}` } : null,
+  ].filter((item): item is { icon: LucideIcon; label: string } => Boolean(item));
+
+  return (
+    <div className="mt-4 rounded-[8px] border border-cyan-300/20 bg-cyan-300/[0.055] p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="inline-flex items-center gap-2 font-mono text-[10px] font-black uppercase tracking-[0.2em] text-cyan-100">
+          <HardDrive className="h-4 w-4 text-cyan-200" />
+          Armazenamento incluso
+        </span>
+        <span className="rounded-full border border-emerald-300/30 bg-emerald-400/10 px-3 py-1 font-mono text-[11px] font-black uppercase tracking-wide text-emerald-100">
+          {formatStorageBytes(storageLimitBytes)}
+        </span>
+      </div>
+      {details.length > 0 ? (
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          {details.map((detail) => {
+            const Icon = detail.icon;
+
+            return (
+              <span
+                key={detail.label}
+                className="inline-flex min-h-8 items-center gap-2 rounded-[6px] border border-white/10 bg-slate-950/45 px-2.5 font-mono text-[10px] font-semibold leading-4 text-slate-300"
+              >
+                <Icon className="h-3.5 w-3.5 shrink-0 text-cyan-200/80" />
+                <span className="min-w-0 truncate">{detail.label}</span>
+              </span>
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -1151,4 +1223,19 @@ function formatCredits(value: number) {
   return new Intl.NumberFormat("pt-BR", {
     maximumFractionDigits: 0,
   }).format(value);
+}
+
+function formatStorageBytes(value: number) {
+  const bytes = Math.max(0, Number.isFinite(value) ? value : 0);
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let nextValue = bytes;
+  let unitIndex = 0;
+
+  while (nextValue >= 1024 && unitIndex < units.length - 1) {
+    nextValue /= 1024;
+    unitIndex += 1;
+  }
+
+  const maximumFractionDigits = nextValue >= 10 || unitIndex === 0 ? 0 : 1;
+  return `${new Intl.NumberFormat("pt-BR", { maximumFractionDigits }).format(nextValue)} ${units[unitIndex]}`;
 }

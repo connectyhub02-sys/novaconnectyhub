@@ -745,7 +745,7 @@ export default function Home() {
           <PricingPlansGrid />
         </div>
         <p className="mt-6 text-center font-mono text-xs text-zinc-400">
-          Cancele quando quiser. Sem fidelidade. Sem contrato.
+          Cada plano inclui armazenamento para imagens, videos e arquivos dos produtos. Cancele quando quiser.
         </p>
       </PageSection>
 

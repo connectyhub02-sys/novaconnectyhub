@@ -31,12 +31,21 @@ export type PublicPricingPlan = {
   period: string;
   description: string;
   tagline: string;
+  storage: PublicPricingStorageSummary | null;
   included: string[];
   locked: string[];
   cta: string;
   trial?: boolean;
   popular?: boolean;
   premium?: boolean;
+};
+
+export type PublicPricingStorageSummary = {
+  limitLabel: string;
+  fileLimitLabel: string | null;
+  imageMaxLabel: string | null;
+  videoMaxLabel: string | null;
+  fileMaxLabel: string | null;
 };
 
 const moduleLabels: Record<string, { included: string; locked: string }> = {
@@ -94,6 +103,7 @@ export function buildPublicPricingPlan(plan: PublicPricingBillingPlan): PublicPr
     period: isTrial && plan.trialDays > 0 ? `/${plan.trialDays} dias` : "/mes",
     description: plan.shortDescription || presentation?.description || "Plano ConnectyHub configurado no admin.",
     tagline: presentation?.tagline || buildGeneratedTagline(plan),
+    storage: buildStorageSummary(plan),
     included,
     locked: buildLockedItems(plan, isTrial),
     cta: presentation?.cta || (isTrial ? "Comecar teste gratis" : `Assinar ${plan.name}`),
@@ -109,8 +119,6 @@ function buildIncludedItems(plan: PublicPricingBillingPlan) {
     plan.whatsappInstanceLimit !== null ? pluralize(plan.whatsappInstanceLimit, "WhatsApp conectado", "WhatsApps conectados") : null,
     plan.agentLimit !== null ? pluralize(plan.agentLimit, "agente IA", "agentes IA") : null,
     plan.userLimit !== null ? pluralize(plan.userLimit, "usuario no painel", "usuarios no painel") : null,
-    plan.storageLimitBytes > 0 ? `${formatStorageBytes(plan.storageLimitBytes)} de armazenamento` : null,
-    plan.storageFileLimit > 0 ? `${formatCredits(plan.storageFileLimit)} arquivos armazenados` : null,
     ...plan.moduleCodes.map((code) => moduleLabels[code]?.included ?? formatModuleCode(code)),
     plan.overageCreditPriceBrl > 0 ? `Credito extra a ${formatBrl(plan.overageCreditPriceBrl)}` : null,
     plan.autoRechargeMinCredits > 0 ? `Recarga minima de ${formatCredits(plan.autoRechargeMinCredits)} creditos` : null,
@@ -119,6 +127,26 @@ function buildIncludedItems(plan: PublicPricingBillingPlan) {
   ];
 
   return uniqueStrings(items.filter((item): item is string => Boolean(item))).slice(0, 14);
+}
+
+function buildStorageSummary(plan: PublicPricingBillingPlan): PublicPricingStorageSummary | null {
+  if (
+    plan.storageLimitBytes <= 0
+    && plan.storageFileLimit <= 0
+    && plan.storageImageMaxBytes <= 0
+    && plan.storageVideoMaxBytes <= 0
+    && plan.storageFileMaxBytes <= 0
+  ) {
+    return null;
+  }
+
+  return {
+    limitLabel: plan.storageLimitBytes > 0 ? formatStorageBytes(plan.storageLimitBytes) : "Sem limite definido",
+    fileLimitLabel: plan.storageFileLimit > 0 ? `${formatCredits(plan.storageFileLimit)} arquivos` : null,
+    imageMaxLabel: plan.storageImageMaxBytes > 0 ? `Imagem ate ${formatStorageBytes(plan.storageImageMaxBytes)}` : null,
+    videoMaxLabel: plan.storageVideoMaxBytes > 0 ? `Video ate ${formatStorageBytes(plan.storageVideoMaxBytes)}` : null,
+    fileMaxLabel: plan.storageFileMaxBytes > 0 ? `Arquivo ate ${formatStorageBytes(plan.storageFileMaxBytes)}` : null,
+  };
 }
 
 function buildLockedItems(plan: PublicPricingBillingPlan, isTrial: boolean) {

@@ -44,6 +44,11 @@ export type BillingCheckoutIntent = {
     name: string;
     monthly_price_brl: number | string | null;
     included_credits: number | string | null;
+    storage_limit_bytes: number | string | null;
+    storage_file_limit: number | string | null;
+    storage_image_max_bytes: number | string | null;
+    storage_video_max_bytes: number | string | null;
+    storage_file_max_bytes: number | string | null;
   };
 };
 
@@ -122,7 +127,7 @@ export async function loadBillingCheckoutIntent(
       .maybeSingle<BillingCheckoutIntent["payment"]>(),
     client
       .from("billing_plans")
-      .select("id, plan_code, name, monthly_price_brl, included_credits")
+      .select("id, plan_code, name, monthly_price_brl, included_credits, storage_limit_bytes, storage_file_limit, storage_image_max_bytes, storage_video_max_bytes, storage_file_max_bytes")
       .eq("plan_code", subscription.plan_code)
       .maybeSingle<BillingCheckoutIntent["plan"]>(),
   ]);

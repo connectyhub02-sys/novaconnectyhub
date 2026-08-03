@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Planos | ConnectyHub",
-  description: "Planos, creditos inclusos e limites do painel ConnectyHub.",
+  description: "Planos, creditos inclusos, armazenamento e limites do painel ConnectyHub.",
 };
 
 export default async function DashboardPlanosPage() {
@@ -50,7 +50,7 @@ export default async function DashboardPlanosPage() {
               Escolha o plano ideal para sua operacao.
             </h1>
             <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">
-              Compare creditos, agentes, WhatsApps e recursos. Ative, finalize ou troque seu plano com seguranca quando sua operacao precisar crescer.
+              Compare creditos, armazenamento, agentes, WhatsApps e recursos. Ative, finalize ou troque seu plano com seguranca quando sua operacao precisar crescer.
             </p>
           </div>
           <div className="rounded-xl border border-white/10 bg-white/[0.045] px-4 py-3 font-mono text-[11px] uppercase tracking-wide text-slate-400">

@@ -113,6 +113,11 @@ export default async function DashboardBillingCheckoutPage({
             planName={intent.plan.name}
             planAmountBrl={normalizeCurrencyAmount(intent.plan.monthly_price_brl) ?? 0}
             includedCredits={normalizeCurrencyAmount(intent.plan.included_credits) ?? 0}
+            storageLimitBytes={normalizePlanNumber(intent.plan.storage_limit_bytes)}
+            storageFileLimit={normalizePlanNumber(intent.plan.storage_file_limit)}
+            storageImageMaxBytes={normalizePlanNumber(intent.plan.storage_image_max_bytes)}
+            storageVideoMaxBytes={normalizePlanNumber(intent.plan.storage_video_max_bytes)}
+            storageFileMaxBytes={normalizePlanNumber(intent.plan.storage_file_max_bytes)}
             payerEmail={intent.subscription.payer_email}
             subscriptionStatus={intent.subscription.status}
             paymentStatus={intent.payment.status}
@@ -128,4 +133,9 @@ export default async function DashboardBillingCheckoutPage({
       )}
     </ConnectyShell>
   );
+}
+
+function normalizePlanNumber(value: number | string | null | undefined) {
+  const normalized = typeof value === "number" ? value : Number(String(value ?? "").replace(",", "."));
+  return Number.isFinite(normalized) ? normalized : 0;
 }

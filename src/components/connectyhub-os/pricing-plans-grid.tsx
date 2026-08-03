@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
-import type { PublicPricingPlan } from "@/lib/billing/public-pricing";
+import { AlertTriangle, CheckCircle2, FileImage, FileVideo, Files, HardDrive, Loader2 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import type { PublicPricingPlan, PublicPricingStorageSummary } from "@/lib/billing/public-pricing";
 
 const G = "#00ff88";
 
@@ -17,6 +18,13 @@ const fallbackPlans: PricingPlan[] = [
     period: "/7 dias",
     description: "Para provar o atendimento antes de assinar.",
     tagline: "1.000 creditos de teste para ativar seu primeiro agente",
+    storage: {
+      limitLabel: "250 MB",
+      fileLimitLabel: "100 arquivos",
+      imageMaxLabel: "Imagem ate 5 MB",
+      videoMaxLabel: "Video ate 30 MB",
+      fileMaxLabel: "Arquivo ate 25 MB",
+    },
     trial: true,
     included: [
       "1.000 creditos inclusos",
@@ -24,7 +32,6 @@ const fallbackPlans: PricingPlan[] = [
       "7 dias de acesso",
       "1 WhatsApp conectado",
       "1 agente IA",
-      "250 MB de armazenamento",
       "Instagram Direct e Messenger Facebook no teste",
       "Meta Ads, Google Ads e gestor IA no teste",
       "Voz IA por creditos",
@@ -41,12 +48,18 @@ const fallbackPlans: PricingPlan[] = [
     period: "/mes",
     description: "Para comecar a vender com IA no WhatsApp.",
     tagline: "Entrada com 1 agente para validar atendimento e vendas",
+    storage: {
+      limitLabel: "1 GB",
+      fileLimitLabel: "500 arquivos",
+      imageMaxLabel: "Imagem ate 8 MB",
+      videoMaxLabel: "Video ate 50 MB",
+      fileMaxLabel: "Arquivo ate 50 MB",
+    },
     included: [
       "3.000 creditos inclusos",
       "1 WhatsApp conectado",
       "1 agente IA",
       "2 usuarios no painel",
-      "1 GB de armazenamento",
       "Catalogo de vendas",
       "Campanhas WhatsApp",
       "Grupos e canais WhatsApp",
@@ -66,12 +79,18 @@ const fallbackPlans: PricingPlan[] = [
     description: "Para operacao comercial com mais volume.",
     tagline: "4 agentes e 4 WhatsApps para times que atendem todos os dias",
     popular: true,
+    storage: {
+      limitLabel: "5 GB",
+      fileLimitLabel: "2.500 arquivos",
+      imageMaxLabel: "Imagem ate 12 MB",
+      videoMaxLabel: "Video ate 100 MB",
+      fileMaxLabel: "Arquivo ate 100 MB",
+    },
     included: [
       "10.000 creditos inclusos",
       "4 WhatsApps conectados",
       "4 agentes IA",
       "5 usuarios no painel",
-      "5 GB de armazenamento",
       "CRM e funil comercial",
       "Campanhas e automacoes",
       "Instagram Direct e Messenger Facebook",
@@ -93,12 +112,18 @@ const fallbackPlans: PricingPlan[] = [
     description: "Para escalar atendimento, agentes e API.",
     tagline: "1 agente para cada WhatsApp em operacoes com equipe",
     premium: true,
+    storage: {
+      limitLabel: "20 GB",
+      fileLimitLabel: "10.000 arquivos",
+      imageMaxLabel: "Imagem ate 20 MB",
+      videoMaxLabel: "Video ate 250 MB",
+      fileMaxLabel: "Arquivo ate 250 MB",
+    },
     included: [
       "25.000 creditos inclusos",
       "8 WhatsApps conectados",
       "8 agentes IA",
       "15 usuarios no painel",
-      "20 GB de armazenamento",
       "API WhatsApp",
       "Integracoes avancadas",
       "Instagram Direct e Messenger Facebook",
@@ -323,6 +348,7 @@ export function PricingPlansGrid({
                   Este plano esta aguardando pagamento. Finalize para liberar os creditos.
                 </p>
               ) : null}
+              {plan.storage ? <PlanStorageSummary storage={plan.storage} /> : null}
               <ul>
                 {plan.included.map((item) => <li key={item}>{item}</li>)}
                 {plan.locked.map((item) => <li key={item} className="plan-locked">{item}</li>)}
@@ -462,6 +488,46 @@ function PricingPlansEmptyState() {
   );
 }
 
+function PlanStorageSummary({ storage }: { storage: PublicPricingStorageSummary }) {
+  const details = [
+    storage.fileLimitLabel ? { icon: Files, label: storage.fileLimitLabel } : null,
+    storage.imageMaxLabel ? { icon: FileImage, label: storage.imageMaxLabel } : null,
+    storage.videoMaxLabel ? { icon: FileVideo, label: storage.videoMaxLabel } : null,
+    storage.fileMaxLabel ? { icon: HardDrive, label: storage.fileMaxLabel } : null,
+  ].filter((item): item is { icon: LucideIcon; label: string } => Boolean(item));
+
+  return (
+    <div className="mt-4 rounded-[8px] border border-cyan-300/18 bg-cyan-300/[0.045] p-3">
+      <div className="flex items-center justify-between gap-3">
+        <span className="font-mono text-[9px] font-black uppercase tracking-[0.2em] text-cyan-200/80">
+          Armazenamento
+        </span>
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-300/25 bg-emerald-400/10 px-2 py-1 font-mono text-[10px] font-black uppercase tracking-wide text-emerald-100">
+          <HardDrive className="h-3.5 w-3.5" />
+          {storage.limitLabel}
+        </span>
+      </div>
+      {details.length > 0 ? (
+        <div className="mt-3 grid gap-1.5">
+          {details.map((detail) => {
+            const Icon = detail.icon;
+
+            return (
+              <span
+                key={detail.label}
+                className="inline-flex min-h-7 items-center gap-2 rounded-[6px] border border-white/10 bg-slate-950/45 px-2 font-mono text-[10px] font-semibold leading-4 text-slate-300"
+              >
+                <Icon className="h-3.5 w-3.5 shrink-0 text-cyan-200/75" />
+                <span className="min-w-0 truncate">{detail.label}</span>
+              </span>
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function normalizePricingPlans(plans: PricingPlan[]) {
   return plans
     .filter((plan) => plan.code && plan.name)
@@ -470,5 +536,20 @@ function normalizePricingPlans(plans: PricingPlan[]) {
       code: plan.code.trim().toLowerCase(),
       included: Array.isArray(plan.included) ? plan.included : [],
       locked: Array.isArray(plan.locked) ? plan.locked : [],
+      storage: normalizeStorageSummary(plan.storage),
     }));
+}
+
+function normalizeStorageSummary(storage: PricingPlan["storage"]): PublicPricingStorageSummary | null {
+  if (!storage || typeof storage.limitLabel !== "string") {
+    return null;
+  }
+
+  return {
+    limitLabel: storage.limitLabel,
+    fileLimitLabel: typeof storage.fileLimitLabel === "string" ? storage.fileLimitLabel : null,
+    imageMaxLabel: typeof storage.imageMaxLabel === "string" ? storage.imageMaxLabel : null,
+    videoMaxLabel: typeof storage.videoMaxLabel === "string" ? storage.videoMaxLabel : null,
+    fileMaxLabel: typeof storage.fileMaxLabel === "string" ? storage.fileMaxLabel : null,
+  };
 }
