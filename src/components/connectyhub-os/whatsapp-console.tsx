@@ -570,6 +570,11 @@ type VoiceCloneResponse = {
 };
 
 const agentPromptMaxLength = 8000;
+const agentNameMaxLength = 80;
+
+function normalizeEditableAgentName(value: string) {
+  return value.trim().replace(/\s+/g, " ");
+}
 
 const clientWhatsappConsoleVariant = {
   entityIdKey: "companyId",
@@ -661,6 +666,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
   const [connectMode, setConnectMode] = useState<ConnectionMode>("qr");
   const [connectPhone, setConnectPhone] = useState("");
   const [promptDraft, setPromptDraft] = useState("");
+  const [selectedAgentNameDraft, setSelectedAgentNameDraft] = useState("");
   const [promptTemplateDraft, setPromptTemplateDraft] = useState<AgentPromptBuilderConfig>(() => normalizeAgentPromptBuilderConfig(null));
   const [promptAssistantRunning, setPromptAssistantRunning] = useState(false);
   const [behaviorDraft, setBehaviorDraft] = useState<WhatsappBehaviorConfig>(defaultWhatsappBehaviorConfig);
@@ -744,6 +750,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
       const nextPromptTemplateConfig = normalizeAgentPromptBuilderConfig(nextState.agent?.promptTemplateConfig);
 
       setPromptDraft(nextPrompt);
+      setSelectedAgentNameDraft(nextState.agent?.name ?? "");
       setPromptTemplateDraft(nextPromptTemplateConfig);
       setAgentTemplateId(nextPromptTemplateConfig.templateId);
       const nextBehavior = normalizeWhatsappBehaviorConfig(nextState.behavior);
@@ -961,6 +968,14 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
     return () => clearTimeout(timeoutId);
   }, [hasChannelContext, loadChannelOperations]);
 
+  const selectedAgentNameNormalized = normalizeEditableAgentName(selectedAgentNameDraft);
+  const canEditSelectedAgentName = !canManageInternalAgents && Boolean(state?.agent);
+  const agentNameChanged = canEditSelectedAgentName && state?.agent
+    ? selectedAgentNameNormalized !== normalizeEditableAgentName(state.agent.name)
+    : false;
+  const agentNameInvalid = canEditSelectedAgentName
+    ? selectedAgentNameNormalized.length < 2 || selectedAgentNameNormalized.length > agentNameMaxLength
+    : false;
   const promptChanged = state?.agent ? promptDraft.trim() !== state.agent.prompt.trim() : false;
   const promptTooLong = promptDraft.length > agentPromptMaxLength;
   const promptTemplateChanged = state?.agent
@@ -976,7 +991,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
   const channelConfigChanged = state?.agent
     ? !isAgentChannelConfigEqual(channelConfigDraft, normalizeAgentChannelConfig(state.agent.channelConfig))
     : false;
-  const settingsChanged = promptChanged || promptTemplateChanged || behaviorChanged || cloneProfileChanged || qualificationChanged || channelConfigChanged;
+  const settingsChanged = agentNameChanged || promptChanged || promptTemplateChanged || behaviorChanged || cloneProfileChanged || qualificationChanged || channelConfigChanged;
   const companies = state?.companies ?? [];
   const agents = state?.agents ?? [];
   const selectedCompany = companies.find((company) => company.id === selectedCompanyId) ?? companies[0] ?? null;
@@ -1321,6 +1336,11 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
   }
 
   async function saveAgentSettings() {
+    if (agentNameInvalid) {
+      setNotice({ tone: "warning", message: `Informe um nome de agente com 2 a ${agentNameMaxLength} caracteres.` });
+      return false;
+    }
+
     setRunning("save_settings");
     setNotice(null);
 
@@ -1330,6 +1350,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...whatsappActionPayload,
+          ...(agentNameChanged ? { agentName: selectedAgentNameNormalized } : {}),
           agentPrompt: promptDraft,
           promptTemplateConfig: promptTemplateDraft,
           behavior: behaviorDraft,
@@ -1907,6 +1928,8 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
           company={selectedCompany}
           entityLabel={variant.entityPromptLabel}
           instance={state.instance}
+          agentNameDraft={selectedAgentNameDraft}
+          agentNameChanged={agentNameChanged}
           promptChanged={promptChanged}
           promptTemplateChanged={promptTemplateChanged}
           cloneProfileChanged={cloneProfileChanged}
@@ -1916,7 +1939,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
           behaviorChanged={behaviorChanged}
           promptTooLong={promptTooLong}
           saving={running === "save_settings"}
-          disabled={!state.capability.schemaReady || !settingsChanged || promptTooLong}
+          disabled={!state.capability.schemaReady || !settingsChanged || promptTooLong || agentNameInvalid}
           onSave={saveAgentSettings}
         />
 
@@ -1930,7 +1953,15 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
           >
             <div className="grid gap-3 sm:gap-4 2xl:grid-cols-[minmax(0,1fr)_320px]">
               <div className="grid content-start gap-4">
-                <AgentIdentityCard agent={state.agent} company={selectedCompany} entityLabel={variant.entityPromptLabel} />
+                <AgentIdentityCard
+                  agent={state.agent}
+                  agentNameChanged={agentNameChanged}
+                  agentNameDraft={selectedAgentNameDraft}
+                  agentNameInvalid={agentNameInvalid}
+                  company={selectedCompany}
+                  entityLabel={variant.entityPromptLabel}
+                  onAgentNameChange={!canManageInternalAgents ? setSelectedAgentNameDraft : undefined}
+                />
                 <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                   <InfoTile label="Conversa" value={formatResponseMode(behaviorDraft.responseMode)} />
                   <InfoTile label="Rapport" value={formatRapportMode(behaviorDraft.adaptiveRapportMode)} />
@@ -1989,7 +2020,15 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
           {state?.agent ? (
             <div className="grid gap-4">
               <div className="grid gap-4">
-                <AgentIdentityCard agent={state.agent} company={selectedCompany} entityLabel={variant.entityPromptLabel} />
+                <AgentIdentityCard
+                  agent={state.agent}
+                  agentNameChanged={agentNameChanged}
+                  agentNameDraft={selectedAgentNameDraft}
+                  agentNameInvalid={agentNameInvalid}
+                  company={selectedCompany}
+                  entityLabel={variant.entityPromptLabel}
+                  onAgentNameChange={!canManageInternalAgents ? setSelectedAgentNameDraft : undefined}
+                />
 
                 <GuidedPromptBuilder
                   config={promptTemplateDraft}
@@ -2041,7 +2080,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
                     icon={Wand2}
                     label="Salvar alteracoes"
                     description={`Salva prompt e comportamento deste agente para o ${variant.entitySingular} selecionado.`}
-                    disabled={!state?.capability.schemaReady || !state.agent || !settingsChanged || promptTooLong}
+                    disabled={!state?.capability.schemaReady || !state.agent || !settingsChanged || promptTooLong || agentNameInvalid}
                     loading={running === "save_settings"}
                     onClick={saveAgentSettings}
                   />
@@ -2083,7 +2122,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
                 icon={Wand2}
                 label="Salvar qualificacao"
                 description="Grava as perguntas, pesos e limites que o agente usa para qualificar o lead no CRM."
-                disabled={!state?.capability.schemaReady || !settingsChanged}
+                disabled={!state?.capability.schemaReady || !settingsChanged || agentNameInvalid}
                 loading={running === "save_settings"}
                 onClick={saveAgentSettings}
               />
@@ -2363,7 +2402,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
                 icon={Wand2}
                 label="Salvar comportamento"
                 description="Grava os controles de atendimento, audio, midia, temporizadores e janela da IA."
-                disabled={!state?.capability.schemaReady || !settingsChanged}
+                disabled={!state?.capability.schemaReady || !settingsChanged || agentNameInvalid}
                 loading={running === "save_settings"}
                 onClick={saveAgentSettings}
               />
@@ -2405,7 +2444,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
                   icon={Wand2}
                   label="Salvar canais"
                   description="Grava quais redes o mesmo agente pode atender."
-                  disabled={!state?.capability.schemaReady || !channelConfigChanged}
+                  disabled={!state?.capability.schemaReady || !channelConfigChanged || agentNameInvalid}
                   loading={running === "save_settings"}
                   onClick={saveAgentSettings}
                 />
@@ -2435,7 +2474,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
                 icon={Wand2}
                 label={behaviorChanged ? "Salvar permissoes" : "Permissoes salvas"}
                 description="Grava os controles multicanal do agente."
-                disabled={!state?.capability.schemaReady || !behaviorChanged || promptTooLong}
+                disabled={!state?.capability.schemaReady || !behaviorChanged || promptTooLong || agentNameInvalid}
                 loading={running === "save_settings"}
                 onClick={saveAgentSettings}
               />
@@ -2826,6 +2865,8 @@ function WhatsappConsoleCommandBar({
   company,
   entityLabel,
   instance,
+  agentNameDraft,
+  agentNameChanged,
   promptChanged,
   promptTemplateChanged,
   cloneProfileChanged,
@@ -2843,6 +2884,8 @@ function WhatsappConsoleCommandBar({
   company: ClientCompany | null;
   entityLabel: string;
   instance: WhatsappState["instance"];
+  agentNameDraft: string;
+  agentNameChanged: boolean;
   promptChanged: boolean;
   promptTemplateChanged: boolean;
   cloneProfileChanged: boolean;
@@ -2856,7 +2899,9 @@ function WhatsappConsoleCommandBar({
   onSave: () => void;
 }) {
   const statusMeta = getStatusMeta(instance?.status ?? "draft");
+  const displayAgentName = normalizeEditableAgentName(agentNameDraft) || agent.name;
   const changedAreas = [
+    agentNameChanged ? "Nome" : null,
     promptChanged ? "Prompt" : null,
     promptTemplateChanged ? "Modelo" : null,
     cloneProfileChanged ? "DNA manual" : null,
@@ -2881,7 +2926,7 @@ function WhatsappConsoleCommandBar({
     >
       <div className="grid gap-2 sm:gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
         <div className="-mx-1 flex min-w-0 gap-2 overflow-x-auto px-1 pb-1 sm:mx-0 sm:grid sm:grid-cols-3 sm:overflow-visible sm:px-0 sm:pb-0 lg:grid-cols-5">
-          <SummaryPill label="Agente" value={agent.name} />
+          <SummaryPill label="Agente" value={displayAgentName} />
           <SummaryPill label={entityLabel} value={company?.name ?? `${entityLabel} nao informado`} />
           <SummaryPill label="WhatsApp" value={statusMeta.label} tone={instance?.status === "connected" ? "green" : "amber"} />
           <SummaryPill label="Conversa" value={formatResponseMode(behavior.responseMode)} />
@@ -3694,21 +3739,60 @@ function AgentCreationGate({
 
 function AgentIdentityCard({
   agent,
+  agentNameChanged = false,
+  agentNameDraft,
+  agentNameInvalid = false,
   company,
   entityLabel = "Empresa",
+  onAgentNameChange,
 }: {
   agent: NonNullable<WhatsappState["agent"]>;
+  agentNameChanged?: boolean;
+  agentNameDraft?: string;
+  agentNameInvalid?: boolean;
   company: ClientCompany | null;
   entityLabel?: string;
+  onAgentNameChange?: (value: string) => void;
 }) {
   const companyStatus = company ? `${company.planCode} / ${company.status}` : "Plano nao informado";
+  const canEditName = Boolean(onAgentNameChange);
 
   return (
     <div
       className="grid gap-2 rounded-xl border p-3 sm:grid-cols-2 xl:grid-cols-4"
       style={{ background: "var(--ch-panel-2)", borderColor: "var(--ch-border-strong)" }}
     >
-      <InfoTile label="Agente" value={agent.name} />
+      {canEditName ? (
+        <label
+          className={cn(
+            "min-w-0 rounded-lg px-3 py-2 transition",
+            agentNameInvalid
+              ? "ring-1 ring-rose-400/70"
+              : agentNameChanged
+                ? "ring-1 ring-amber-300/60"
+                : "focus-within:ring-1 focus-within:ring-cyan-300/50",
+          )}
+          style={{ background: "var(--ch-panel-2)", border: "1px solid var(--ch-border)" }}
+        >
+          <span className="font-mono text-[9px] uppercase tracking-wide text-slate-500">Agente</span>
+          <input
+            aria-invalid={agentNameInvalid}
+            className="mt-1 block h-5 w-full min-w-0 bg-transparent p-0 text-[12px] font-semibold leading-4 text-slate-100 outline-none placeholder:text-slate-500"
+            maxLength={agentNameMaxLength}
+            placeholder="Nome do agente"
+            title="Nome do agente"
+            value={agentNameDraft ?? agent.name}
+            onChange={(event) => onAgentNameChange?.(event.target.value)}
+          />
+          {agentNameInvalid || agentNameChanged ? (
+            <span className={cn("mt-1 block text-[10px] leading-4", agentNameInvalid ? "text-rose-300" : "text-amber-200")}>
+              {agentNameInvalid ? "Informe pelo menos 2 caracteres." : "Nome alterado, salve para aplicar."}
+            </span>
+          ) : null}
+        </label>
+      ) : (
+        <InfoTile label="Agente" value={agent.name} />
+      )}
       <InfoTile label={entityLabel} value={company?.name ?? `${entityLabel} nao informado`} />
       <InfoTile label="Plano" value={companyStatus} />
       <InfoTile label="Ultima edicao" value={formatDate(agent.updatedAt)} />

@@ -206,6 +206,7 @@ export async function PATCH(request: NextRequest) {
   const body = await readJson<{
     companyId?: unknown;
     agentId?: unknown;
+    agentName?: unknown;
     prompt?: unknown;
     agentPrompt?: unknown;
     globalPrompt?: unknown;
@@ -243,6 +244,7 @@ export async function PATCH(request: NextRequest) {
       organization: context.organization,
       userId: context.userId,
       agentId: context.selectedAgentId,
+      agentName: typeof body?.agentName === "string" ? body.agentName : undefined,
       agentPrompt,
       globalPrompt,
       behavior: body?.behavior,

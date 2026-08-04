@@ -288,7 +288,22 @@ export type ClientWhatsappMigrationCredentialResult = {
 const whatsappAgentCode = "agente-whatsapp-sistema";
 const whatsappGlobalAgentCode = "agente-whatsapp-global";
 const maxPromptLength = 8000;
+const maxAgentNameLength = 80;
 const agentSelectColumns = "id, organization_id, sector_code, sector_name, agent_code, prompt, persona_name, name, avatar_url, avatar_alt, updated_at, created_at, metadata";
+
+function normalizeWorkspaceAgentName(value: string) {
+  const name = value.trim().replace(/\s+/g, " ");
+
+  if (name.length < 2) {
+    throw new Error("Informe o nome do agente.");
+  }
+
+  if (name.length > maxAgentNameLength) {
+    throw new Error(`O nome do agente pode ter no maximo ${maxAgentNameLength} caracteres.`);
+  }
+
+  return name;
+}
 
 export async function getClientWhatsappState(input: {
   organization: CurrentOrganization;
@@ -1088,6 +1103,7 @@ export async function updateClientWhatsappPrompt(input: {
   organization: CurrentOrganization;
   userId: string;
   agentId?: string | null;
+  agentName?: string;
   prompt?: string;
   agentPrompt?: string;
   globalPrompt?: string;
@@ -1099,6 +1115,8 @@ export async function updateClientWhatsappPrompt(input: {
   client?: SupabaseClient;
 }): Promise<ClientWhatsappState> {
   const agentPrompt = (input.agentPrompt ?? input.prompt)?.trim();
+  const hasAgentName = typeof input.agentName === "string";
+  const nextAgentName = hasAgentName ? normalizeWorkspaceAgentName(input.agentName ?? "") : null;
   const globalPrompt = input.globalPrompt?.trim();
   const hasAgentPrompt = typeof agentPrompt === "string";
   const hasGlobalPrompt = typeof globalPrompt === "string";
@@ -1121,11 +1139,19 @@ export async function updateClientWhatsappPrompt(input: {
 
   const client = input.client ?? createServiceClient();
   const agent = await requireWorkspaceWhatsappAgent(client, input.organization.id, input.agentId);
+  const agentForMetadata = hasAgentName && nextAgentName
+    ? {
+        ...agent,
+        name: nextAgentName,
+        persona_name: nextAgentName,
+        avatar_alt: `Agente ${nextAgentName}`,
+      }
+    : agent;
   const [globalAgent, instance] = await Promise.all([
     getOrCreateWorkspaceGlobalAgent(client, input.organization, input.userId),
-    getWorkspaceInstance(client, input.organization.id, agent),
+    getWorkspaceInstance(client, input.organization.id, agentForMetadata),
   ]);
-  const resolvedInstance = instance && agent ? await ensureInstanceAgentMetadata(client, instance, input.organization, agent) : instance;
+  const resolvedInstance = instance && agentForMetadata ? await ensureInstanceAgentMetadata(client, instance, input.organization, agentForMetadata) : instance;
   const nextBehavior = normalizeWhatsappBehaviorConfig(input.behavior ?? getBehaviorConfig(globalAgent, resolvedInstance, agent));
   if (input.behavior !== undefined) {
     await assertWhatsappBehaviorVoiceAccess(client, {
@@ -1164,12 +1190,19 @@ export async function updateClientWhatsappPrompt(input: {
 
   const now = new Date().toISOString();
 
-  if (hasAgentPrompt || hasQualificationConfig || input.behavior !== undefined || hasCloneProfile || hasChannelConfig || hasPromptTemplateConfig) {
+  if (hasAgentName || hasAgentPrompt || hasQualificationConfig || input.behavior !== undefined || hasCloneProfile || hasChannelConfig || hasPromptTemplateConfig) {
     const promptToSave = hasAgentPrompt ? agentPrompt : agent.prompt?.trim() || defaultWhatsappAgentPrompt;
     const nextVersion = hasAgentPrompt ? await getNextPromptVersion(client, agent.id) : null;
     const { error } = await client
       .from("agent_registry")
       .update({
+        ...(hasAgentName && nextAgentName
+          ? {
+              name: nextAgentName,
+              persona_name: nextAgentName,
+              avatar_alt: `Agente ${nextAgentName}`,
+            }
+          : {}),
         prompt: promptToSave,
         status: "needs_review",
         metadata: {
@@ -1248,7 +1281,7 @@ export async function updateClientWhatsappPrompt(input: {
       .update({
         metadata: {
           ...(resolvedInstance.metadata ?? {}),
-          ...buildAgentInstanceMetadata(input.organization, agent),
+          ...buildAgentInstanceMetadata(input.organization, agentForMetadata),
           behavior_config: nextBehavior,
           behavior_updated_at: now,
           behavior_updated_by: input.userId,
