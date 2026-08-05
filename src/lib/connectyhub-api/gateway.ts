@@ -2,6 +2,11 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createHash, createHmac, randomBytes } from "node:crypto";
+import {
+  assertOrganizationFeatureAccess,
+  formatAccessControlError,
+  statusForAccessControlError,
+} from "@/lib/billing/access-control";
 import { decryptCredentialValue, encryptCredentialValue, previewCredentialValue } from "@/lib/security/credentials-crypto";
 import { createServiceClient } from "@/lib/supabase/service";
 import { resolveUazapiWhatsappStatus, type UazapiWhatsappStatus } from "@/lib/uazapi/status";
@@ -305,6 +310,12 @@ export class GatewayHttpError extends Error {
 }
 
 export function formatGatewayError(error: unknown) {
+  const accessError = formatGatewayAccessError(error);
+
+  if (accessError) {
+    return accessError;
+  }
+
   if (error instanceof GatewayHttpError) {
     return {
       body: {
@@ -328,6 +339,33 @@ export function formatGatewayError(error: unknown) {
       },
     },
     status: 500,
+  };
+}
+
+function formatGatewayAccessError(error: unknown) {
+  const status = statusForAccessControlError(error, 500);
+
+  if (status === 500) {
+    return null;
+  }
+
+  const formatted = formatAccessControlError(error, "Acesso bloqueado.");
+  const message = typeof formatted.error === "string" ? formatted.error : "Acesso bloqueado.";
+
+  return {
+    body: {
+      ok: false,
+      error: {
+        code: status === 428
+          ? "account_completion_required"
+          : status === 402
+            ? "billing_access_required"
+            : "plan_feature_required",
+        message,
+        details: formatted,
+      },
+    },
+    status,
   };
 }
 
@@ -374,6 +412,12 @@ export async function authenticateGatewayRequest(
   if (!apiClient || apiClient.status !== "active") {
     throw new GatewayHttpError(403, "api_client_inactive", "Cliente API pausado, arquivado ou inexistente.");
   }
+
+  await assertOrganizationFeatureAccess({
+    organizationId: apiClient.organization_id,
+    featureCode: "connectyhub_api",
+    client,
+  });
 
   assertScopes(apiKey.scopes ?? [], requiredScopes);
 
@@ -1439,6 +1483,21 @@ export async function dispatchGatewayWebhookDeliveries(input: {
 
   if (!instance?.connectyhub_api_client_id) {
     return { delivered: 0, skipped: "instance_not_owned_by_api_client" };
+  }
+
+  try {
+    await assertOrganizationFeatureAccess({
+      organizationId: instance.organization_id,
+      featureCode: "connectyhub_api",
+      client,
+    });
+  } catch (error) {
+    const formatted = formatAccessControlError(error, "API WhatsApp bloqueada.");
+    return {
+      delivered: 0,
+      skipped: "api_access_blocked",
+      reason: typeof formatted.error === "string" ? formatted.error : "API WhatsApp bloqueada.",
+    };
   }
 
   const { data: endpoints, error: endpointsError } = await client
@@ -2514,8 +2573,14 @@ export async function runConnectyHubGatewayHealthCheck(input: {
 
   const apiClients = (clientsResult.data ?? []) as ApiClientRow[];
   const apiClientById = new Map(apiClients.map((apiClient) => [apiClient.id, apiClient]));
-  const instanceRows = ((instancesResult.data ?? []) as GatewayInstanceRow[]).filter(isPublicApiGatewayInstance);
-  const endpointRows = (endpointsResult.data ?? []) as WebhookEndpointRow[];
+  const activeApiClientIds = new Set(apiClients
+    .filter((apiClient) => apiClient.status === "active")
+    .map((apiClient) => apiClient.id));
+  const instanceRows = ((instancesResult.data ?? []) as GatewayInstanceRow[])
+    .filter(isPublicApiGatewayInstance)
+    .filter((instance) => instance.connectyhub_api_client_id ? activeApiClientIds.has(instance.connectyhub_api_client_id) : false);
+  const endpointRows = ((endpointsResult.data ?? []) as WebhookEndpointRow[])
+    .filter((endpoint) => activeApiClientIds.has(endpoint.client_id));
 
   const providerResults = await mapWithConcurrency(instanceRows, 4, async (instance) => {
     const apiClient = instance.connectyhub_api_client_id ? apiClientById.get(instance.connectyhub_api_client_id) : null;
@@ -2611,6 +2676,11 @@ export async function ensureClientApiClient(input: {
 }) {
   const client = input.client ?? createServiceClient();
   await assertOrganizationCanReceiveApiClient(client, input.organizationId);
+  await assertOrganizationFeatureAccess({
+    organizationId: input.organizationId,
+    featureCode: "connectyhub_api",
+    client,
+  });
 
   const { data: existing, error: lookupError } = await client
     .from("connectyhub_api_clients")
@@ -2655,13 +2725,7 @@ export async function ensureClientApiClient(input: {
 }
 
 async function ensureApiClientsForRegisteredCustomers(client: SupabaseClient) {
-  const authResult = await client.auth.admin.listUsers({ perPage: 1000 });
-
-  if (authResult.error) {
-    throw new Error(authResult.error.message);
-  }
-
-  const [profilesResult, membershipsResult, existingClientsResult] = await Promise.all([
+  const [profilesResult, membershipsResult, activeClientsResult] = await Promise.all([
     client.from("profiles").select("id, email, full_name, company_name, is_platform_admin"),
     client
       .from("organization_members")
@@ -2669,74 +2733,34 @@ async function ensureApiClientsForRegisteredCustomers(client: SupabaseClient) {
       .order("created_at", { ascending: true }),
     client
       .from("connectyhub_api_clients")
-      .select("id, organization_id, status, created_at")
-      .neq("status", "archived"),
+      .select("id, organization_id, created_at")
+      .neq("status", "archived")
+      .order("created_at", { ascending: true }),
   ]);
 
   if (profilesResult.error) throw new Error(profilesResult.error.message);
   if (membershipsResult.error) throw new Error(membershipsResult.error.message);
-  if (existingClientsResult.error) throw new Error(existingClientsResult.error.message);
+  if (activeClientsResult.error) throw new Error(activeClientsResult.error.message);
 
   const profilesById = new Map(((profilesResult.data ?? []) as ApiProvisionProfileRow[]).map((profile) => [profile.id, profile]));
-  const existingClientRows = (existingClientsResult.data ?? []) as Array<{ id: string; organization_id: string | null; created_at?: string | null }>;
-  const existingClientOrgIds = new Set(existingClientRows.map((clientRow) => clientRow.organization_id).filter(isPresent));
-  const membershipsByUser = new Map<string, Array<OrganizationRow & { created_at?: string | null }>>();
-
-  for (const row of (membershipsResult.data ?? []) as unknown as ApiProvisionMembershipRow[]) {
-    const organization = readFirst(row.organizations);
-    if (!row.user_id || !organization) continue;
-    const current = membershipsByUser.get(row.user_id) ?? [];
-    current.push(organization);
-    membershipsByUser.set(row.user_id, current);
-  }
-
   const customerOrganizationIds = new Set<string>();
   const platformOrganizationIds = new Set<string>();
 
-  for (const memberships of membershipsByUser.values()) {
-    for (const organization of memberships) {
-      if (organization.owner_id && profilesById.get(organization.owner_id)?.is_platform_admin) {
-        platformOrganizationIds.add(organization.id);
-      }
-    }
-  }
+  for (const row of (membershipsResult.data ?? []) as unknown as ApiProvisionMembershipRow[]) {
+    const organization = readFirst(row.organizations);
 
-  for (const user of authResult.data.users) {
-    if (!user.email) continue;
-
-    const profile = profilesById.get(user.id);
-    const memberships = (membershipsByUser.get(user.id) ?? []).filter((organization) => {
-      return !platformOrganizationIds.has(organization.id);
-    });
-
-    if (profile?.is_platform_admin) {
+    if (!row.user_id || !organization) {
       continue;
     }
 
-    let organization = memberships.find((item) => existingClientOrgIds.has(item.id)) ?? memberships[0] ?? null;
+    const ownerProfile = organization.owner_id ? profilesById.get(organization.owner_id) : null;
 
-    if (!organization) {
-      organization = await createCustomerOrganizationForApiUser({
-        client,
-        userId: user.id,
-        email: user.email,
-        profile,
-      });
-      existingClientOrgIds.delete(organization.id);
+    if (ownerProfile?.is_platform_admin) {
+      platformOrganizationIds.add(organization.id);
+      continue;
     }
 
     customerOrganizationIds.add(organization.id);
-
-    const apiClient = await ensureClientApiClient({
-      organizationId: organization.id,
-      organizationName: organization.name,
-      organizationSlug: organization.slug,
-      contactEmail: profile?.email ?? user.email,
-      actorId: user.id,
-      client,
-    });
-
-    existingClientOrgIds.add(apiClient.organization_id);
   }
 
   if (platformOrganizationIds.size > 0) {
@@ -2745,16 +2769,6 @@ async function ensureApiClientsForRegisteredCustomers(client: SupabaseClient) {
       .update({ status: "archived" })
       .in("organization_id", Array.from(platformOrganizationIds))
       .neq("status", "archived");
-  }
-
-  const activeClientsResult = await client
-    .from("connectyhub_api_clients")
-    .select("id, organization_id, created_at")
-    .neq("status", "archived")
-    .order("created_at", { ascending: true });
-
-  if (activeClientsResult.error) {
-    throw new Error(activeClientsResult.error.message);
   }
 
   const keptCustomerOrganizations = new Set<string>();
@@ -2782,44 +2796,6 @@ async function ensureApiClientsForRegisteredCustomers(client: SupabaseClient) {
   }
 
   return { customerOrganizationIds, platformOrganizationIds };
-}
-
-async function createCustomerOrganizationForApiUser(input: {
-  client: SupabaseClient;
-  userId: string;
-  email: string;
-  profile: ApiProvisionProfileRow | undefined;
-}) {
-  const baseName = normalizeProvisionedOrganizationName(input.profile?.company_name ?? input.profile?.full_name ?? input.email.split("@")[0] ?? "Workspace");
-  const slug = `empresa-cliente-${slugify(baseName) || "workspace"}-${Date.now().toString(36)}-${randomBytes(2).toString("hex")}`.slice(0, 96);
-
-  const { data: organization, error: organizationError } = await input.client
-    .from("organizations")
-    .insert({
-      name: baseName,
-      slug,
-      owner_id: input.userId,
-      plan_code: "trial",
-      status: "trial",
-    })
-    .select("id, name, slug, plan_code, status, owner_id")
-    .single<OrganizationRow>();
-
-  if (organizationError || !organization) {
-    throw new Error(organizationError?.message ?? "Nao foi possivel criar a empresa do cliente API.");
-  }
-
-  const { error: memberError } = await input.client.from("organization_members").insert({
-    organization_id: organization.id,
-    user_id: input.userId,
-    role: "owner",
-  });
-
-  if (memberError) {
-    throw new Error(memberError.message);
-  }
-
-  return organization;
 }
 
 async function assertOrganizationCanReceiveApiClient(client: SupabaseClient, organizationId: string) {
@@ -2860,6 +2836,12 @@ export async function createClientApiKey(input: {
   client?: SupabaseClient;
 }) {
   const client = input.client ?? createServiceClient();
+  await assertOrganizationFeatureAccess({
+    organizationId: input.organizationId,
+    featureCode: "connectyhub_api",
+    client,
+  });
+
   const apiClient = await requireOrganizationApiClient(client, input.organizationId, input.clientId);
 
   if (apiClient.status !== "active") {
@@ -2974,6 +2956,12 @@ export async function createClientWebhookEndpoint(input: {
   client?: SupabaseClient;
 }) {
   const client = input.client ?? createServiceClient();
+  await assertOrganizationFeatureAccess({
+    organizationId: input.organizationId,
+    featureCode: "connectyhub_api",
+    client,
+  });
+
   const apiClient = await requireOrganizationApiClient(client, input.organizationId, input.clientId);
 
   if (apiClient.status !== "active") {
@@ -5069,6 +5057,10 @@ function readFirst<T>(value: T | T[] | null | undefined): T | null {
   return Array.isArray(value) ? value[0] ?? null : value ?? null;
 }
 
+function isPresent<T>(value: T | null | undefined): value is T {
+  return value !== null && value !== undefined;
+}
+
 function extractProviderInstances(value: unknown) {
   if (Array.isArray(value)) {
     return value.filter(isRecord);
@@ -5448,10 +5440,6 @@ function normalizeComparable(value: string) {
     .trim();
 }
 
-function isPresent<T>(value: T | null | undefined): value is T {
-  return value !== null && value !== undefined;
-}
-
 function slugify(value: string) {
   return value
     .normalize("NFD")
@@ -5459,9 +5447,4 @@ function slugify(value: string) {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
-}
-
-function normalizeProvisionedOrganizationName(value: string) {
-  const name = value.trim().replace(/\s+/g, " ");
-  return name.length >= 2 ? name.slice(0, 96) : "Minha empresa";
 }

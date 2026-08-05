@@ -2,6 +2,7 @@ import "server-only";
 
 import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { assertOrganizationOperationalAccess } from "@/lib/billing/access-control";
 import { meterGeminiGenerationUsage } from "@/lib/billing/gemini-metering";
 import { loadGeminiCredentials, type GeminiCredentials } from "@/lib/gemini/credentials";
 import {
@@ -416,6 +417,11 @@ export async function processQueuedSalesCatalogImportJobs(input: {
     }
 
     try {
+      await assertOrganizationOperationalAccess({
+        organizationId: claimed.organization_id,
+        client: input.client,
+      });
+
       await processSalesCatalogImportJobByRow({
         client: input.client,
         job: claimed,
@@ -459,6 +465,11 @@ export async function processSalesCatalogImportJobById(input: {
   if (!job) {
     throw new Error("Importacao nao encontrada para processamento.");
   }
+
+  await assertOrganizationOperationalAccess({
+    organizationId: job.organization_id,
+    client: input.client,
+  });
 
   await processSalesCatalogImportJobByRow({
     client: input.client,

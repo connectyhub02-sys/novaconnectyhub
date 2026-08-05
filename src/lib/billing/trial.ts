@@ -250,6 +250,29 @@ export async function getOrganizationBillingAccess(input: {
     ? ` ${formatCredits(usedCredits)} de ${formatCredits(includedCredits)} creditos do ciclo ja foram utilizados.`
     : "";
 
+  if (organizationStatus === "trial_pending") {
+    return {
+      organizationId: organization.id,
+      planCode,
+      organizationStatus,
+      state: "inactive",
+      canUseBillableFeatures: false,
+      balanceCredits,
+      trialStartsAt,
+      trialEndsAt,
+      trialDaysTotal: TRIAL_DAYS,
+      trialDaysRemaining,
+      includedCredits,
+      usedCredits,
+      lowCreditThreshold,
+      bannerTone: "amber",
+      bannerTitle: "Cadastro pendente",
+      bannerDescription: "Complete seus dados para ativar o teste gratis de 7 dias.",
+      ctaLabel: "Completar cadastro",
+      ctaHref: "/dashboard/minha-conta?complete=1",
+    };
+  }
+
   if (isTrial && expired) {
     return {
       organizationId: organization.id,
@@ -280,8 +303,8 @@ export async function getOrganizationBillingAccess(input: {
       organizationId: organization.id,
       planCode,
       organizationStatus,
-      state: "trial_no_credits",
-      canUseBillableFeatures: false,
+      state: "trial_low_credits",
+      canUseBillableFeatures: true,
       balanceCredits,
       trialStartsAt,
       trialEndsAt,
@@ -290,9 +313,9 @@ export async function getOrganizationBillingAccess(input: {
       includedCredits,
       usedCredits,
       lowCreditThreshold,
-      bannerTone: "rose",
-      bannerTitle: "Creditos de teste acabaram",
-      bannerDescription: "Voce ainda pode mexer no painel, mas atendimentos automaticos, IA e voz ficam pausados. Ao assinar, os creditos do plano entram na hora.",
+      bannerTone: "amber",
+      bannerTitle: "Teste gratis ativo",
+      bannerDescription: "Seu teste de 7 dias continua liberado. Ao final do periodo, os recursos ficam pausados ate voce escolher um plano.",
       ctaLabel: "Assinar agora",
       ctaHref: "/dashboard/planos",
     };

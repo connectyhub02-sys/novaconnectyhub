@@ -2,6 +2,7 @@ import "server-only";
 
 import { createHmac, randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { assertOrganizationFeatureAccess } from "@/lib/billing/access-control";
 import {
   fetchMetaPageAccessToken,
   loadMetaGuidedOAuthConfig,
@@ -591,6 +592,14 @@ async function processScheduledMetaOrganicItem(client: SupabaseClient, item: Con
   }
 
   try {
+    if (claimed.organization_id) {
+      await assertOrganizationFeatureAccess({
+        organizationId: claimed.organization_id,
+        featureCode: "meta_organic_insights",
+        client,
+      });
+    }
+
     await publishClaimedMetaOrganicPost(client, claimed, actorId);
     return { id: item.id, status: "published" };
   } catch (error) {

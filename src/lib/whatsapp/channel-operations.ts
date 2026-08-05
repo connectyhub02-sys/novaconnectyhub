@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { assertOrganizationFeatureAccess } from "@/lib/billing/access-control";
 import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
 import { mapSalesCatalogItem } from "@/lib/client-os/sales-catalog";
 import type { ClientSalesCatalogItem, SalesCatalogMedia, SalesCatalogMediaKind } from "@/lib/sales-catalog/shared";
@@ -714,6 +715,14 @@ async function processWhatsappOutboundItem(client: SupabaseClient, item: Content
   const metadata = readRecord(claimed.metadata) ?? readRecord(item.metadata) ?? {};
 
   try {
+    if (claimed.scope === "organization" && claimed.organization_id) {
+      await assertOrganizationFeatureAccess({
+        organizationId: claimed.organization_id,
+        featureCode: "whatsapp_groups_channels",
+        client,
+      });
+    }
+
     const operation = asString(metadata.operation) as WhatsappOutboundOperation | null;
     const context = await resolveContextByOutboundItem(client, claimed);
     const payload = readRecord(metadata.payload) ?? {};

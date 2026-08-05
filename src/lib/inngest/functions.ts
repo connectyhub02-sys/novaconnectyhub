@@ -37,6 +37,7 @@ import {
 import { processPendingPlatformBillingNotifications } from "@/lib/billing/platform-billing-webhook";
 import { processPaidBillingLifecycleNotifications } from "@/lib/billing/paid-lifecycle-notifications";
 import { processPendingTrialConversionMessages } from "@/lib/billing/trial-notifications";
+import { syncConnectyhubApiAccessGuards } from "@/lib/connectyhub-api/access-sync";
 import { runConnectyHubGatewayHealthCheck } from "@/lib/connectyhub-api/gateway";
 import {
   processQueuedSalesCatalogImportJobs,
@@ -346,6 +347,31 @@ export const connectyhubApiHealthMonitor = inngest.createFunction(
   },
 );
 
+export const connectyhubApiAccessGuardSync = inngest.createFunction(
+  {
+    id: "connectyhub-api-access-guard-sync",
+    name: "ConnectyHub API Access Guard Sync",
+    retries: 1,
+    triggers: [
+      { event: "connectyhub/api.access_guard.sync.requested" },
+      { cron: "*/15 * * * *" },
+    ],
+  },
+  async ({ step }) => {
+    const summary = await step.run("sync-connectyhub-api-access-guards", () =>
+      syncConnectyhubApiAccessGuards({
+        client: createServiceClient(),
+        limit: 250,
+      }),
+    );
+
+    return {
+      status: "synced",
+      summary,
+    };
+  },
+);
+
 export const connectyhubWhatsappHandoffNotifier = inngest.createFunction(
   {
     id: "connectyhub-whatsapp-handoff-notifier",
@@ -542,6 +568,7 @@ export const functions = [
   connectyhubMetaOrganicPublishSweep,
   connectyhubWhatsappOutboundDispatcher,
   connectyhubWhatsappOutboundSweep,
+  connectyhubApiAccessGuardSync,
   connectyhubApiHealthMonitor,
   connectyhubWhatsappHandoffNotifier,
   connectyhubWhatsappCloneProfileImport,

@@ -48,6 +48,13 @@ type OrganizationTrialRow = {
   owner_id: string | null;
 };
 
+type OrganizationOwnerRow = {
+  id: string;
+  owner_id: string | null;
+  plan_code: string | null;
+  status: string | null;
+};
+
 type BillingSettingsRow = {
   billing_whatsapp_agent_id: string | null;
   notification_whatsapp_enabled: boolean | null;
@@ -168,6 +175,36 @@ export async function assertAccountComplete(input: {
   }
 
   return status;
+}
+
+export async function assertOrganizationOwnerAccountComplete(input: {
+  organizationId: string;
+  client?: SupabaseClient;
+}) {
+  const client = input.client ?? createServiceClient();
+  const { data: organization, error } = await client
+    .from("organizations")
+    .select("id, owner_id, plan_code, status")
+    .eq("id", input.organizationId)
+    .maybeSingle<OrganizationOwnerRow>();
+
+  if (error) {
+    throw new Error(`Nao foi possivel carregar o dono do workspace: ${error.message}`);
+  }
+
+  if (!organization) {
+    throw new Error("Workspace nao encontrado.");
+  }
+
+  if (organization.plan_code === "internal" || organization.status === "internal") {
+    return null;
+  }
+
+  if (!organization.owner_id) {
+    throw new Error("Workspace sem dono definido. Atualize o cadastro para liberar os recursos.");
+  }
+
+  return assertAccountComplete({ userId: organization.owner_id, client });
 }
 
 export async function isAccountSignupComplete(input: {

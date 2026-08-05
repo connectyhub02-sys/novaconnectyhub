@@ -15,7 +15,7 @@ import {
   updateClientApiKeyStatus,
   updateClientWebhookEndpointStatus,
 } from "@/lib/connectyhub-api/gateway";
-import { assertBillableAccess, formatBillingAccessError, statusForBillingAccessError } from "@/lib/billing/trial";
+import { assertUserFeatureAccess } from "@/lib/billing/access-control";
 import { createServiceClient } from "@/lib/supabase/service";
 import { ensureStarterOrganization, getCurrentWorkspace, type CurrentOrganization } from "@/lib/supabase/profile";
 
@@ -53,6 +53,13 @@ export async function GET() {
 
   try {
     const client = createServiceClient();
+    await assertUserFeatureAccess({
+      userId: context.userId,
+      organizationId: context.organization.id,
+      featureCode: "connectyhub_api",
+      client,
+    });
+
     await ensureClientApiClient({
       organizationId: context.organization.id,
       organizationName: context.organization.name,
@@ -93,7 +100,12 @@ export async function POST(request: NextRequest) {
   const client = createServiceClient();
 
   try {
-    await assertBillableAccess({ organizationId: context.organization.id, client });
+    await assertUserFeatureAccess({
+      userId: context.userId,
+      organizationId: context.organization.id,
+      featureCode: "connectyhub_api",
+      client,
+    });
 
     if (action === "ensure_client") {
       const apiClient = await ensureClientApiClient({
@@ -239,10 +251,6 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ ok: false, error: { code: "invalid_action", message: "Acao invalida." } }, { status: 422 });
   } catch (error) {
-    if (statusForBillingAccessError(error, 500) === 402) {
-      return NextResponse.json(formatBillingAccessError(error, "Acesso bloqueado por plano ou creditos."), { status: 402 });
-    }
-
     const formatted = formatGatewayError(error);
     return NextResponse.json(formatted.body, { status: formatted.status });
   }

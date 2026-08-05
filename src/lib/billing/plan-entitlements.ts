@@ -21,7 +21,8 @@ export type PlanFeatureCode =
   | "meta_organic_insights"
   | "meta_ads_analytics"
   | "google_ads_analytics"
-  | "ai_traffic_manager";
+  | "ai_traffic_manager"
+  | "connectyhub_api";
 
 export type BillingAccessStateLike =
   | "trial_active"
@@ -148,6 +149,16 @@ export const planFeatureDefinitions: Record<PlanFeatureCode, PlanFeatureDefiniti
     blockedTitle: "Gestor de trafego IA exige plano Scale",
     blockedDescription: "Automacoes avancadas de trafego pago com IA ficam reservadas para operacoes no Scale.",
   },
+  connectyhub_api: {
+    code: "connectyhub_api",
+    name: "API WhatsApp",
+    minimumPlanCode: "scale",
+    minimumPlanLabel: "Scale",
+    allowedTitle: "API WhatsApp liberada",
+    allowedDescription: "Chaves, webhooks, instancias e chamadas da API WhatsApp ficam disponiveis neste plano.",
+    blockedTitle: "API WhatsApp exige plano Scale",
+    blockedDescription: "A API WhatsApp fica liberada no teste gratis e, depois dos 7 dias, somente no Scale.",
+  },
 };
 
 export function resolvePlanFeatureEntitlement(
@@ -200,6 +211,10 @@ export function getPlanFeatureDefinition(featureCode: PlanFeatureCode) {
 
 export function resolveMetaSocialChannelsEntitlement(input: PlanEntitlementInput): PlanFeatureEntitlement {
   return resolvePlanFeatureEntitlement("meta_social_inbox", input);
+}
+
+export function resolveConnectyhubApiEntitlement(input: PlanEntitlementInput): PlanFeatureEntitlement {
+  return resolvePlanFeatureEntitlement("connectyhub_api", input);
 }
 
 export function hasEnabledMetaSocialChannels(config: unknown) {

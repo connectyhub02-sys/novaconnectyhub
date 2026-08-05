@@ -45,6 +45,12 @@ describe("resolvePlanFeatureEntitlement", () => {
       organizationStatus: "active",
       billingState: "paid_active",
     }).allowed).toBe(false);
+
+    expect(resolvePlanFeatureEntitlement("connectyhub_api", {
+      planCode: "starter",
+      organizationStatus: "active",
+      billingState: "paid_active",
+    }).allowed).toBe(false);
   });
 
   it("allows Pro-tier Meta features on pro and blocks Scale traffic analytics", () => {
@@ -74,6 +80,15 @@ describe("resolvePlanFeatureEntitlement", () => {
 
     expect(trafficEntitlement.allowed).toBe(false);
     expect(trafficEntitlement.reason).toBe("plan_required");
+
+    const apiEntitlement = resolvePlanFeatureEntitlement("connectyhub_api", {
+      planCode: "pro",
+      organizationStatus: "active",
+      billingState: "paid_active",
+    });
+
+    expect(apiEntitlement.allowed).toBe(false);
+    expect(apiEntitlement.reason).toBe("plan_required");
   });
 
   it("allows Scale-tier traffic features on scale", () => {
@@ -90,6 +105,12 @@ describe("resolvePlanFeatureEntitlement", () => {
     }).allowed).toBe(true);
 
     expect(resolvePlanFeatureEntitlement("ai_traffic_manager", {
+      planCode: "scale",
+      organizationStatus: "active",
+      billingState: "paid_active",
+    }).allowed).toBe(true);
+
+    expect(resolvePlanFeatureEntitlement("connectyhub_api", {
       planCode: "scale",
       organizationStatus: "active",
       billingState: "paid_active",

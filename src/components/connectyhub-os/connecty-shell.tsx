@@ -282,7 +282,7 @@ export function ConnectyShell({
   const [notificationGroups, setNotificationGroups] = useState<Record<string, ConnectyShellNotification[]>>({});
   const [billingAccess, setBillingAccess] = useState<BillingAccessClientStatus | null>(null);
   const [accountCompletion, setAccountCompletion] = useState<AccountCompletionClientStatus | null>(null);
-  const [accountCompletionDismissed, setAccountCompletionDismissed] = useState(false);
+  const [, setAccountCompletionDismissed] = useState(false);
   const [trialReminderState, setTrialReminderState] = useState<{ key: string | null; dismissed: boolean | null }>({
     key: null,
     dismissed: null,
@@ -1081,9 +1081,7 @@ export function ConnectyShell({
                 accountCompletion.missingFields.join("|"),
               ].join(":")
             : "account-completion-empty"}
-          dismissed={accountCompletionDismissed}
           status={accountCompletion}
-          onClose={() => setAccountCompletionDismissed(true)}
           onAvatarSynced={setAvatarUrl}
           onCompleted={(nextStatus) => {
             setAccountCompletion(nextStatus);
@@ -1143,16 +1141,12 @@ function AccountCompletionPill() {
 }
 
 function AccountCompletionModal({
-  dismissed,
   status,
   onAvatarSynced,
-  onClose,
   onCompleted,
 }: {
-  dismissed: boolean;
   status: AccountCompletionClientStatus | null;
   onAvatarSynced: (avatarUrl: string) => void;
-  onClose: () => void;
   onCompleted: (status: AccountCompletionClientStatus) => void;
 }) {
   const [fullName, setFullName] = useState(status?.fullName ?? "");
@@ -1216,7 +1210,7 @@ function AccountCompletionModal({
   const whatsappValidated = whatsappCheck.state === "valid" && whatsappCheck.phoneNormalized === currentPhoneForVerification;
 
   useEffect(() => {
-    if (!status || status.isComplete || dismissed || step !== "profile" || !currentPhoneForVerification) {
+    if (!status || status.isComplete || step !== "profile" || !currentPhoneForVerification) {
       return;
     }
 
@@ -1282,7 +1276,6 @@ function AccountCompletionModal({
     };
   }, [
     currentPhoneForVerification,
-    dismissed,
     status,
     status?.isComplete,
     status?.phoneNormalized,
@@ -1291,7 +1284,7 @@ function AccountCompletionModal({
     step,
   ]);
 
-  if (!status || status.isComplete || dismissed) {
+  if (!status || status.isComplete) {
     return null;
   }
 
@@ -1418,7 +1411,7 @@ function AccountCompletionModal({
           boxShadow: "0 34px 110px rgba(0,0,0,0.70)",
         }}
       >
-        <div className="flex items-start justify-between gap-4">
+        <div className="flex items-start gap-4">
           <div className="flex min-w-0 gap-3">
             <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-rose-400/16 text-rose-300">
               <UserCheck className="h-5 w-5" />
@@ -1433,14 +1426,6 @@ function AccountCompletionModal({
               </p>
             </div>
           </div>
-          <button
-            type="button"
-            aria-label="Fechar"
-            className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-white/12 bg-white/6 text-slate-300 transition hover:bg-white/10"
-            onClick={onClose}
-          >
-            <X className="h-4 w-4" />
-          </button>
         </div>
 
         <div className="mt-4 grid grid-cols-3 gap-2">

@@ -8,7 +8,6 @@ import { createServiceClient } from "./service";
 import { isAccountSignupComplete } from "@/lib/account/signup-completion";
 import { grantTrialCredits, scheduleTrialConversionMessages, TRIAL_PLAN_CODE } from "@/lib/billing/trial";
 import { sendTrialStartedNotification } from "@/lib/billing/trial-notifications";
-import { ensureClientApiClient } from "@/lib/connectyhub-api/gateway";
 
 export type CurrentProfile = {
   id: string;
@@ -108,7 +107,7 @@ export async function ensureStarterOrganization() {
 
   const supabase = await createWorkspaceDataClient();
   const signupComplete = workspace.profile.isPlatformAdmin
-    || await isAccountSignupComplete({ userId: workspace.user.id, client: supabase }).catch(() => true);
+    || await isAccountSignupComplete({ userId: workspace.user.id, client: supabase }).catch(() => false);
 
   if (workspace.organization) {
     if (!workspace.profile.isPlatformAdmin && workspace.organization.planCode === TRIAL_PLAN_CODE && signupComplete) {
@@ -189,15 +188,6 @@ export async function ensureStarterOrganization() {
   });
 
   if (!workspace.profile.isPlatformAdmin) {
-    await ensureClientApiClient({
-      organizationId: organization.id,
-      organizationName: organization.name,
-      organizationSlug: organization.slug,
-      contactEmail: workspace.profile.email,
-      actorId: workspace.user.id,
-      client: supabase,
-    });
-
     if (signupComplete) {
       await ensureTrialSetup({
         organizationId: organization.id,

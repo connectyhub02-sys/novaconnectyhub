@@ -2,7 +2,6 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { assertBillableAccess, grantTrialCredits, scheduleTrialConversionMessages } from "@/lib/billing/trial";
-import { ensureClientApiClient } from "@/lib/connectyhub-api/gateway";
 import { createServiceClient } from "@/lib/supabase/service";
 
 export type ClientCompany = {
@@ -91,14 +90,6 @@ export async function createClientCompany(input: {
   if (memberError) {
     throw new Error(`Empresa criada, mas nao foi possivel vincular o usuario: ${memberError.message}`);
   }
-
-  await ensureClientApiClient({
-    organizationId: organization.id,
-    organizationName: organization.name,
-    organizationSlug: organization.slug,
-    actorId: input.userId,
-    client,
-  });
 
   const trialOptIn = await loadUserTrialWhatsappOptIn(client, input.userId);
   await prepareClientCompanyTrial({

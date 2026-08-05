@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { ClientApiConsole } from "@/components/connectyhub-os/client-api-console";
+import { assertUserFeatureAccess, statusForAccessControlError } from "@/lib/billing/access-control";
 import { ensureClientApiClient, getClientGatewayState } from "@/lib/connectyhub-api/gateway";
 import { ensureStarterOrganization, getCurrentWorkspace } from "@/lib/supabase/profile";
 
@@ -28,6 +29,26 @@ export default async function DashboardApiWhatsappPage() {
 
   if (!organization) {
     redirect("/dashboard/empresa");
+  }
+
+  try {
+    await assertUserFeatureAccess({
+      userId: workspace.user.id,
+      organizationId: organization.id,
+      featureCode: "connectyhub_api",
+    });
+  } catch (error) {
+    const status = statusForAccessControlError(error, 500);
+
+    if (status === 428) {
+      redirect("/dashboard/minha-conta?complete=1&next=%2Fdashboard%2Fapi-whatsapp");
+    }
+
+    if (status === 402 || status === 403) {
+      redirect("/dashboard/planos?feature=api_whatsapp");
+    }
+
+    throw error;
   }
 
   await ensureClientApiClient({
