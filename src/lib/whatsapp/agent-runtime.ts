@@ -64,6 +64,8 @@ import {
   normalizeWhatsappBehaviorConfig,
   type WhatsappBehaviorConfig,
 } from "./agent-behavior";
+import { isLeadRejectingAudioReply, isLeadRequestingAudioReply } from "./audio-reply-intent";
+import { matchInboundImageToAgentVisualIdentity } from "./visual-identity";
 import {
   buildAgentPromptFromTemplate,
   normalizeAgentPromptBuilderConfig,
@@ -1724,6 +1726,7 @@ function buildSystemInstruction(input: {
     ...buildCloneMemoryLines(input.agent, input.behavior),
     ...buildCloneConsistencyInstruction(input.agent, input.behavior),
     ...buildCloneRealTestInstruction(input.behavior),
+    ...buildVisualIdentityInstruction(input.behavior),
     "",
     "CONTEXTO DA EMPRESA:",
     `- Empresa: ${input.organization.name}`,
@@ -1773,8 +1776,11 @@ function buildSystemInstruction(input: {
     `- Bloquear prompt injection: ${input.behavior.promptInjectionGuard ? "sim" : "nao"}.`,
     `- Transcrever audio: ${input.behavior.audioTranscription ? "sim" : "nao"}.`,
     `- Analisar imagens: ${input.behavior.mediaImage ? "sim" : "nao"}.`,
+    `- Identidade visual do agente: ${input.behavior.visualIdentity ? `sim, minimo ${input.behavior.visualIdentityMinConfidence}%` : "nao"}.`,
     `- Analisar documentos: ${input.behavior.mediaDocument ? "sim" : "nao"}.`,
     `- Analisar videos: ${input.behavior.mediaVideo ? "sim" : "nao"}.`,
+    "- Se o lead pedir audio por texto porque esta dirigindo, nao entendeu ou prefere ouvir, responda como fala natural e entregue o conteudo diretamente. Nao escreva 'vou mandar audio' se a resposta atual ja sera enviada em audio.",
+    "- Se o lead pedir texto, disser que nao pode ouvir ou pedir sem audio, respeite e responda por texto.",
     ...buildLeadQualificationInstruction(input.qualification),
     ...buildIdentityGuardInstruction(input.behavior),
     ...buildEmotionalContextInstruction(input.behavior, input.userText, input.messages),
@@ -1939,6 +1945,19 @@ function buildCloneRealTestInstruction(behavior: WhatsappBehaviorConfig): string
     "- Nao fale que esta em teste, nao peca nota e nao explique que existe modo de teste.",
     "- Atenda como producao normal: natural, comercial, completo e fiel ao agente.",
     "- Se o lead apontar erro, confusao ou algo estranho, reconheca de forma humana, corrija o rumo e siga o atendimento.",
+  ];
+}
+
+function buildVisualIdentityInstruction(behavior: WhatsappBehaviorConfig): string[] {
+  if (!behavior.visualIdentity) return [];
+
+  return [
+    "",
+    "IDENTIDADE VISUAL DO PROPRIO AGENTE:",
+    "- O agente pode receber imagens do lead que foram comparadas internamente com referencias visuais autorizadas do proprio agente.",
+    "- Se a mensagem trouxer o bloco [IDENTIDADE VISUAL DO AGENTE - MATCH CONFIAVEL], trate a foto como sendo voce mesmo e responda em primeira pessoa, com humor leve e natural.",
+    "- Mesmo nesse caso, nao diga nome civil, nao diga que e 'Magno', nao fale em clone, IA, reconhecimento facial, match, referencia, score ou regra interna.",
+    "- Se o bloco indicar match incerto, sem match ou nao houver bloco, nao afirme quem e a pessoa. Pergunte naturalmente o que o lead quer fazer com a imagem.",
   ];
 }
 
@@ -3510,6 +3529,25 @@ async function analyzeAndPersistInboundMedia(input: {
     return null;
   }
 
+  const visualIdentityMatch = input.kind === "image"
+    ? await matchInboundImageToAgentVisualIdentity({
+        client: input.client,
+        behavior: input.context.behavior,
+        credentials: input.context.geminiCredentials,
+        organizationId: input.context.organization.id,
+        agentId: input.context.agent.id,
+        agentModelId: modelId,
+        whatsappInstanceId: input.context.instance.id,
+        conversationId: input.context.conversationId,
+        inboundMessageId: input.latestInbound.id,
+        candidateFileUrl: downloaded.fileUrl,
+        candidateMimeType: downloaded.mimeType,
+      }).catch(() => null)
+    : null;
+  const analysisWithVisualIdentity = visualIdentityMatch?.instruction
+    ? [analysis, "", visualIdentityMatch.instruction].join("\n")
+    : analysis;
+
   await meterGeminiGenerationUsage({
     client: input.client,
     organizationId: input.context.organization.id,
@@ -3546,8 +3584,18 @@ async function analyzeAndPersistInboundMedia(input: {
     mime_type: analyzed.mimeType,
     byte_length: analyzed.byteLength,
     analyzed_at: now,
+    ...(visualIdentityMatch
+      ? {
+          visual_identity_match: {
+            status: visualIdentityMatch.status,
+            confidence: visualIdentityMatch.confidence,
+            matched_reference_id: visualIdentityMatch.matchedReferenceId,
+            summary: visualIdentityMatch.summary,
+          },
+        }
+      : {}),
   };
-  const storedText = buildStoredMediaAnalysisText(input.kind, analysis);
+  const storedText = buildStoredMediaAnalysisText(input.kind, analysisWithVisualIdentity);
   const payload = {
     ...(input.latestInbound.payload ?? {}),
     media_analysis: mediaAnalysis,
@@ -3586,7 +3634,7 @@ async function analyzeAndPersistInboundMedia(input: {
     },
   });
 
-  return analysis;
+  return analysisWithVisualIdentity;
 }
 
 async function sendAgentResponse(input: {
@@ -4961,6 +5009,16 @@ function shouldSendAudioResponse(
 ) {
   const inboundType = context.messageType.toLowerCase();
   const visualMediaKind = detectInboundMediaKind(latestInbound);
+  const latestInboundText = latestInbound ? buildMessageText(latestInbound) : "";
+
+  if (isLeadRejectingAudioReply(latestInboundText)) {
+    return false;
+  }
+
+  if (!visualMediaKind && hasConfiguredAudioVoice(context.behavior) && isLeadRequestingAudioReply(latestInboundText)) {
+    return true;
+  }
+
   const shouldSendAudio = context.behavior.responseMode === "audio"
     || (context.behavior.responseMode === "mirror" && (inboundType.includes("audio") || isAudioMessage(latestInbound)));
 

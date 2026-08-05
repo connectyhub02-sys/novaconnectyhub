@@ -286,6 +286,7 @@ type WhatsappState = {
   linkButtons: TrackedLinkButton[];
   salesCatalog: ClientSalesCatalogItem[];
   cloneTest?: CloneRealTestSummary;
+  visualIdentity?: VisualIdentityState;
   runtimeAlerts: RuntimeAlert[];
   capability: {
     canConnect: boolean;
@@ -293,6 +294,32 @@ type WhatsappState = {
     message: string | null;
     metaSocialChannels: PlanFeatureEntitlement;
   };
+};
+
+type VisualIdentityReference = {
+  id: string;
+  source: string;
+  status: "queued" | "processing" | "ready" | "failed" | "archived";
+  fileName: string;
+  contentType: string;
+  sizeBytes: number;
+  storageUrl: string;
+  descriptorSummary: string | null;
+  processingError: string | null;
+  processedAt: string | null;
+  createdAt: string | null;
+};
+
+type VisualIdentityState = {
+  enabled: boolean;
+  selfPhotoReply: boolean;
+  conservativeMatch: boolean;
+  minConfidence: number;
+  readyCount: number;
+  queuedCount: number;
+  failedCount: number;
+  lastProcessedAt: string | null;
+  references: VisualIdentityReference[];
 };
 
 type KnowledgeFile = {
@@ -550,6 +577,7 @@ type WhatsappConsoleVariant = {
     links: string;
     channels: string;
     voices: string;
+    visualIdentity: string;
     promptAssistant?: string;
   };
   connectionEnabled: boolean;
@@ -609,6 +637,7 @@ const clientWhatsappConsoleVariant = {
     links: "/api/dashboard/whatsapp/links",
     channels: "/api/dashboard/whatsapp/channels",
     voices: "/api/dashboard/voices",
+    visualIdentity: "/api/dashboard/whatsapp/visual-identity",
     promptAssistant: "/api/dashboard/whatsapp/prompt-assistant",
   },
   connectionEnabled: true,
@@ -648,6 +677,7 @@ export const adminWhatsappConsoleVariant = {
     links: "/api/admin/whatsapp/internal/links",
     channels: "/api/admin/whatsapp/internal/channels",
     voices: "/api/admin/whatsapp/internal/voices",
+    visualIdentity: "/api/admin/whatsapp/internal/visual-identity",
     promptAssistant: "/api/admin/whatsapp/internal/prompt-assistant",
   },
   connectionEnabled: true,
@@ -695,6 +725,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
   const [internalEditDescription, setInternalEditDescription] = useState("");
   const [internalEditAutomationRoles, setInternalEditAutomationRoles] = useState<AgentAutomationRoles>(createEmptyAgentAutomationRoles());
   const [knowledgeUploading, setKnowledgeUploading] = useState(false);
+  const [visualIdentityUploading, setVisualIdentityUploading] = useState(false);
   const [channelOps, setChannelOps] = useState<WhatsappChannelOperationsState | null>(null);
   const [channelAction, setChannelAction] = useState<string | null>(null);
   const [statusText, setStatusText] = useState("");
@@ -1408,6 +1439,85 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
     }
   }
 
+  async function uploadVisualIdentityReference(file: File | null) {
+    if (!file || !selectedCompanyId || !state?.agent) {
+      return;
+    }
+
+    const formData = new FormData();
+    formData.set(variant.entityIdKey, selectedCompanyId);
+    if (!canManageInternalAgents && selectedAgentId) {
+      formData.set("agentId", selectedAgentId);
+    }
+    formData.set("file", file);
+    setVisualIdentityUploading(true);
+    setNotice(null);
+
+    try {
+      const response = await fetch(variant.endpoints.visualIdentity, {
+        method: "POST",
+        body: formData,
+      });
+      const data = (await response.json().catch(() => null)) as { error?: string; state?: WhatsappState; notice?: Notice } | null;
+
+      if (!response.ok || !data) {
+        throw new Error(data?.error ?? "Nao foi possivel enviar a referencia visual.");
+      }
+
+      if (data.state) {
+        applyWhatsappState(data.state, { preserveDrafts: true });
+      } else {
+        const nextState = await fetchWhatsappState(variant, selectedWhatsappEntityId);
+        applyWhatsappState(nextState, { preserveDrafts: true });
+      }
+      setNotice(data.notice ?? { tone: "success", message: "Referencia visual enviada para processamento." });
+    } catch (error) {
+      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao enviar referencia visual." });
+    } finally {
+      setVisualIdentityUploading(false);
+    }
+  }
+
+  async function archiveVisualIdentityReference(referenceId: string) {
+    if (!selectedCompanyId || !state?.agent) {
+      return;
+    }
+
+    const params = new URLSearchParams({
+      [variant.entityIdKey]: selectedCompanyId,
+      referenceId,
+    });
+    if (!canManageInternalAgents && selectedAgentId) {
+      params.set("agentId", selectedAgentId);
+    }
+
+    setRunning(`visual_identity:${referenceId}`);
+    setNotice(null);
+
+    try {
+      const response = await fetch(`${variant.endpoints.visualIdentity}?${params.toString()}`, {
+        method: "DELETE",
+      });
+      const data = (await response.json().catch(() => null)) as { error?: string; state?: WhatsappState; notice?: Notice } | null;
+
+      if (!response.ok || !data) {
+        throw new Error(data?.error ?? "Nao foi possivel arquivar a referencia visual.");
+      }
+
+      if (data.state) {
+        applyWhatsappState(data.state, { preserveDrafts: true });
+      } else {
+        const nextState = await fetchWhatsappState(variant, selectedWhatsappEntityId);
+        applyWhatsappState(nextState, { preserveDrafts: true });
+      }
+      setNotice(data.notice ?? { tone: "success", message: "Referencia visual arquivada." });
+    } catch (error) {
+      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao arquivar referencia visual." });
+    } finally {
+      setRunning(null);
+    }
+  }
+
   async function createWhatsappAgent() {
     if (!selectedCompanyId) {
       setNotice({ tone: "warning", message: `Escolha um ${variant.entitySingular} antes de criar o agente.` });
@@ -2000,12 +2110,19 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
           eyebrow="base de conhecimento"
           action={<NeonBadge tone={state.knowledge.files.length > 0 ? "green" : "amber"}>{state.knowledge.files.length.toLocaleString("pt-BR")} arquivos</NeonBadge>}
         >
-          <div className="max-w-xl">
+          <div className="grid gap-4 xl:grid-cols-2">
             <KnowledgeFilesPanel
               files={state.knowledge.files}
               knowledgeUploading={knowledgeUploading}
               onUploadFile={uploadKnowledgeFile}
               entitySingular={variant.entitySingular}
+            />
+            <VisualIdentityPanel
+              identity={state.visualIdentity}
+              uploading={visualIdentityUploading}
+              running={running}
+              onArchive={archiveVisualIdentityReference}
+              onUploadFile={uploadVisualIdentityReference}
             />
           </div>
         </Panel>
@@ -2234,6 +2351,9 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
                   <ToggleTile icon={Building2} label="Memoria da empresa" description="Permite usar historico do lead com outros agentes da mesma empresa, sem misturar empresas diferentes da conta." checked={behaviorDraft.sharedCompanyContext} onChange={() => updateBehavior("sharedCompanyContext", !behaviorDraft.sharedCompanyContext)} />
                   <ToggleTile icon={Brain} label="Memoria do clone" description="Guarda aprendizados de estilo deste agente sem salvar dados de leads, produtos ou outras empresas." checked={behaviorDraft.cloneMemory} onChange={() => updateBehavior("cloneMemory", !behaviorDraft.cloneMemory)} />
                   <ToggleTile icon={ShieldCheck} label="Coerencia do clone" description="Mantem o agente fiel ao DNA/prompt e evita prometer links, botoes ou arquivos sem enviar junto." checked={behaviorDraft.cloneConsistencyGuard} onChange={() => updateBehavior("cloneConsistencyGuard", !behaviorDraft.cloneConsistencyGuard)} />
+                  <ToggleTile icon={ImageIcon} label="Identidade visual" description="Compara imagens recebidas com referencias autorizadas do proprio agente para manter resposta em primeira pessoa." checked={behaviorDraft.visualIdentity} onChange={() => updateBehavior("visualIdentity", !behaviorDraft.visualIdentity)} />
+                  <ToggleTile icon={UserRound} label="Foto propria" description="Quando a foto tiver match confiavel, o agente responde como ele mesmo, sem citar nome civil ou bastidores." checked={behaviorDraft.visualIdentitySelfPhotoReply} disabled={!behaviorDraft.visualIdentity} onChange={() => updateBehavior("visualIdentitySelfPhotoReply", !behaviorDraft.visualIdentitySelfPhotoReply)} />
+                  <ToggleTile icon={ShieldCheck} label="Match conservador" description="Em caso de duvida visual, impede afirmar identidade e trata a imagem como incerta." checked={behaviorDraft.visualIdentityConservativeMatch} disabled={!behaviorDraft.visualIdentity} onChange={() => updateBehavior("visualIdentityConservativeMatch", !behaviorDraft.visualIdentityConservativeMatch)} />
                   <ToggleTile icon={Calendar} label="Consciencia temporal" description="Injeta hora, dia e periodo no prompt para saudacoes e ritmo contextual." checked={behaviorDraft.temporalAwareness} onChange={() => updateBehavior("temporalAwareness", !behaviorDraft.temporalAwareness)} />
                   <ToggleTile icon={Gauge} label="Ritmo WPM" description="Calcula delay de digitacao baseado em palavras por minuto em vez de formula linear." checked={behaviorDraft.wpmTypingModel} onChange={() => updateBehavior("wpmTypingModel", !behaviorDraft.wpmTypingModel)} />
                   <ToggleTile icon={Repeat} label="Correcoes mid-message" description="Injeta erros de digitacao reais e envia correcao com asterisco, como humano faz." checked={behaviorDraft.midMessageCorrections} onChange={() => updateBehavior("midMessageCorrections", !behaviorDraft.midMessageCorrections)} />
@@ -2248,6 +2368,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
                   <NumberField label="Chance figurinha %" description="Probabilidade de enviar sticker apos responder." value={behaviorDraft.stickerProbability} min={0} max={100} onChange={(value) => updateBehavior("stickerProbability", value)} />
                   <NumberField label="WPM" description="Velocidade de digitacao simulada em palavras por minuto." value={behaviorDraft.wpmSpeed} min={25} max={80} onChange={(value) => updateBehavior("wpmSpeed", value)} />
                   <NumberField label="Chance correcao %" description="Probabilidade de injetar um typo com correcao por asterisco." value={behaviorDraft.correctionFrequency} min={5} max={50} onChange={(value) => updateBehavior("correctionFrequency", value)} />
+                  <NumberField label="Conf. foto %" description="Confianca minima para tratar uma imagem enviada como foto do proprio agente." value={behaviorDraft.visualIdentityMinConfidence} min={60} max={98} onChange={(value) => updateBehavior("visualIdentityMinConfidence", value)} />
                 </div>
               </BehaviorSection>
 
@@ -4423,6 +4544,95 @@ function KnowledgeFilesPanel({
   );
 }
 
+function VisualIdentityPanel({
+  identity,
+  uploading,
+  running,
+  onUploadFile,
+  onArchive,
+}: {
+  identity?: VisualIdentityState;
+  uploading: boolean;
+  running: string | null;
+  onUploadFile: (file: File | null) => void;
+  onArchive: (referenceId: string) => void;
+}) {
+  const references = identity?.references ?? [];
+  const readyCount = identity?.readyCount ?? 0;
+  const queuedCount = identity?.queuedCount ?? 0;
+  const failedCount = identity?.failedCount ?? 0;
+
+  return (
+    <div className="rounded-xl border p-3" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
+          Identidade visual
+          <InfoHint text="Fotos autorizadas do proprio agente usadas para reconhecer imagem dele mesmo em conversas." />
+        </p>
+        <label className="inline-flex min-h-9 cursor-pointer items-center justify-center gap-2 rounded-lg border border-emerald-400/25 bg-emerald-400/10 px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-emerald-200 transition hover:bg-emerald-400/15">
+          {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ImageIcon className="h-3.5 w-3.5" />}
+          Treinar
+          <input
+            accept="image/png,image/jpeg,image/webp,image/avif,.png,.jpg,.jpeg,.webp,.avif"
+            className="hidden"
+            type="file"
+            onChange={(event) => {
+              const file = event.currentTarget.files?.[0] ?? null;
+              event.currentTarget.value = "";
+              onUploadFile(file);
+            }}
+          />
+        </label>
+      </div>
+      <div className="mt-3 grid gap-2 sm:grid-cols-3">
+        <InfoTile label="Prontas" value={readyCount.toLocaleString("pt-BR")} />
+        <InfoTile label="Processando" value={queuedCount.toLocaleString("pt-BR")} />
+        <InfoTile label="Falhas" value={failedCount.toLocaleString("pt-BR")} />
+      </div>
+      <div className="mt-3 grid max-h-64 gap-2 overflow-y-auto pr-1">
+        {references.length > 0 ? (
+          references.map((reference) => {
+            const isArchiving = running === `visual_identity:${reference.id}`;
+            return (
+              <div key={reference.id} className="rounded-lg border px-3 py-2" style={{ background: "var(--ch-surface)", borderColor: "var(--ch-border)" }}>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="truncate text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>
+                      {reference.fileName}
+                    </p>
+                    <p className="mt-1 font-mono text-[9px] uppercase tracking-wide text-slate-500">
+                      {formatVisualIdentityStatus(reference.status)} / {formatBytes(reference.sizeBytes)} / {formatDate(reference.createdAt)}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="grid h-7 w-7 shrink-0 place-items-center rounded-md border border-rose-400/25 text-rose-200 transition hover:bg-rose-400/10 disabled:opacity-50"
+                    disabled={isArchiving}
+                    onClick={() => onArchive(reference.id)}
+                    title="Arquivar referencia"
+                  >
+                    {isArchiving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                  </button>
+                </div>
+                {reference.descriptorSummary ? (
+                  <p className="mt-2 line-clamp-2 text-[11px] leading-4 text-slate-500">{reference.descriptorSummary}</p>
+                ) : null}
+                {reference.processingError ? (
+                  <p className="mt-2 line-clamp-2 text-[11px] leading-4 text-rose-300">{reference.processingError}</p>
+                ) : null}
+              </div>
+            );
+          })
+        ) : (
+          <div className="rounded-lg border px-3 py-6 text-center text-[12px] text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
+            Nenhuma referencia visual treinada.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function NoAgentState() {
   return (
     <div className="grid min-h-[260px] place-items-center rounded-xl border p-4 text-center sm:min-h-[430px] sm:p-6" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
@@ -5531,6 +5741,9 @@ function BehaviorSummary({
     behavior.sharedCompanyContext,
     behavior.cloneMemory,
     behavior.cloneConsistencyGuard,
+    behavior.visualIdentity,
+    behavior.visualIdentitySelfPhotoReply,
+    behavior.visualIdentityConservativeMatch,
     behavior.identityGuard,
     behavior.leadMemory,
     behavior.emotionSensing,
@@ -5545,10 +5758,11 @@ function BehaviorSummary({
         <PromptCheck label="Agente ativo" active={behavior.agentEnabled} />
         <PromptCheck label={`${activeScenarios}/16 cenarios ativos`} active={activeScenarios >= 8} />
         <PromptCheck label={`${activeMedia}/4 midias ativas`} active={activeMedia >= 2} />
-        <PromptCheck label={`${activeHuman}/20 simulacao humana`} active={activeHuman >= 10} />
+        <PromptCheck label={`${activeHuman}/23 simulacao humana`} active={activeHuman >= 12} />
         <PromptCheck label="Intervencao humana" active={behavior.humanIntervention} />
         <PromptCheck label="Aviso humano WhatsApp" active={behavior.humanHandoffNotifications && Boolean(behavior.humanHandoffNotificationNumbers.trim())} />
         <PromptCheck label="Memoria do clone" active={behavior.cloneMemory} />
+        <PromptCheck label="Identidade visual" active={behavior.visualIdentity && behavior.visualIdentitySelfPhotoReply} />
         <PromptCheck label="Teste real do clone" active={behavior.cloneRealTestMode} />
         <PromptCheck label="Grupos WhatsApp" active={behavior.allowGroupChats} />
         <PromptCheck label="Temporizacao inteligente" active={behavior.smartTiming} />
@@ -6401,6 +6615,14 @@ function formatBytes(bytes: number | null | undefined) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function formatVisualIdentityStatus(value: VisualIdentityReference["status"]) {
+  if (value === "ready") return "pronta";
+  if (value === "processing") return "processando";
+  if (value === "queued") return "na fila";
+  if (value === "failed") return "falhou";
+  return "arquivada";
 }
 
 function normalizeVoiceSearch(value: string) {

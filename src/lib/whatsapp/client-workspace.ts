@@ -59,6 +59,11 @@ import {
   type WhatsappCloneProfileImportStatus,
 } from "./clone-profile-history";
 import {
+  buildClientWhatsappVisualIdentityState,
+  listAgentVisualIdentityReferences,
+  type ClientWhatsappVisualIdentityState,
+} from "./visual-identity";
+import {
   appendConnectionDiagnosticEvent,
   isPasskeyDisconnectReason,
   readConnectionDiagnostics,
@@ -256,6 +261,7 @@ export type ClientWhatsappState = {
   linkButtons: ClientTrackedLinkButton[];
   salesCatalog: ClientSalesCatalogItem[];
   cloneTest: ClientCloneRealTestSummary;
+  visualIdentity: ClientWhatsappVisualIdentityState;
   runtimeAlerts: ClientWhatsappRuntimeAlert[];
   capability: {
     canConnect: boolean;
@@ -329,16 +335,23 @@ export async function getClientWhatsappState(input: {
     : rawInstance;
 
   const behavior = getBehaviorConfig(globalAgent, instance, agent);
-  const [audio, runtimeAlerts] = await Promise.all([
+  const [audio, runtimeAlerts, visualIdentityReferences] = await Promise.all([
     listWhatsappAudioVoices({ organizationId: input.organization.id, ownerUserId: input.userId, client }),
     listWhatsappRuntimeAlerts(client, {
       organizationId: input.organization.id,
       agentId: agent?.id ?? null,
       instanceId: instance?.id ?? null,
     }),
+    agent
+      ? listAgentVisualIdentityReferences({ client, agentId: agent.id }).catch(() => [])
+      : Promise.resolve([]),
   ]);
+  const visualIdentity = buildClientWhatsappVisualIdentityState({
+    behavior,
+    references: visualIdentityReferences,
+  });
 
-  return buildState(input.organization, instance, agent, globalAgent, behavior, audio, knowledgeFiles, linkButtons, salesCatalog, cloneTest, runtimeAlerts);
+  return buildState(input.organization, instance, agent, globalAgent, behavior, audio, knowledgeFiles, linkButtons, salesCatalog, cloneTest, runtimeAlerts, visualIdentity);
 }
 
 export async function listWhatsappRuntimeAlerts(
@@ -2418,6 +2431,10 @@ function buildState(
   salesCatalog: ClientSalesCatalogItem[],
   cloneTest: ClientCloneRealTestSummary = emptyCloneRealTestSummary(),
   runtimeAlerts: ClientWhatsappRuntimeAlert[] = [],
+  visualIdentity: ClientWhatsappVisualIdentityState = buildClientWhatsappVisualIdentityState({
+    behavior,
+    references: [],
+  }),
 ): ClientWhatsappState {
   const agentPrompt = resolveAgentPrompt(agent, {
     companyName: organization.name,
@@ -2484,6 +2501,7 @@ function buildState(
     linkButtons,
     salesCatalog,
     cloneTest,
+    visualIdentity,
     runtimeAlerts,
     capability: {
       canConnect: true,

@@ -395,6 +395,17 @@ function buildUnavailableState(): DashboardWhatsappState {
       lastEventAt: null,
       events: [],
     },
+    visualIdentity: {
+      enabled: defaultWhatsappBehaviorConfig.visualIdentity,
+      selfPhotoReply: defaultWhatsappBehaviorConfig.visualIdentitySelfPhotoReply,
+      conservativeMatch: defaultWhatsappBehaviorConfig.visualIdentityConservativeMatch,
+      minConfidence: defaultWhatsappBehaviorConfig.visualIdentityMinConfidence,
+      readyCount: 0,
+      queuedCount: 0,
+      failedCount: 0,
+      lastProcessedAt: null,
+      references: [],
+    },
     runtimeAlerts: [],
     capability: {
       canConnect: false,

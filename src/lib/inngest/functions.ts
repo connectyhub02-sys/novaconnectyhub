@@ -30,6 +30,11 @@ import {
   whatsappCloneProfileImportEventName,
 } from "@/lib/whatsapp/clone-profile-history";
 import {
+  processWhatsappVisualIdentityReference,
+  type WhatsappVisualIdentityReferenceProcessEventData,
+  whatsappVisualIdentityReferenceProcessEventName,
+} from "@/lib/whatsapp/visual-identity";
+import {
   processWhatsappProactiveFollowUp,
   type WhatsappFollowUpEventData,
   whatsappFollowUpEventName,
@@ -376,6 +381,26 @@ export const connectyhubWhatsappCloneProfileImport = inngest.createFunction(
     ),
 );
 
+export const connectyhubWhatsappVisualIdentityReference = inngest.createFunction(
+  {
+    id: "connectyhub-whatsapp-visual-identity-reference",
+    name: "ConnectyHub WhatsApp Visual Identity Reference",
+    retries: 2,
+    triggers: [{ event: whatsappVisualIdentityReferenceProcessEventName }],
+  },
+  async ({ event, step }) => {
+    const data = event.data as WhatsappVisualIdentityReferenceProcessEventData;
+
+    if (!data?.referenceId) {
+      return { status: "skipped", reason: "missing_reference_id" };
+    }
+
+    return step.run("process-visual-identity-reference", () =>
+      processWhatsappVisualIdentityReference({ data }),
+    );
+  },
+);
+
 export const connectyhubWhatsappFollowUp = inngest.createFunction(
   {
     id: "connectyhub-whatsapp-follow-up",
@@ -545,6 +570,7 @@ export const functions = [
   connectyhubApiHealthMonitor,
   connectyhubWhatsappHandoffNotifier,
   connectyhubWhatsappCloneProfileImport,
+  connectyhubWhatsappVisualIdentityReference,
   connectyhubWhatsappFollowUp,
   connectyhubPlatformAutomationSweep,
   connectyhubSalesCatalogImportSweep,

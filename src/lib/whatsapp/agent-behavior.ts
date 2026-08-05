@@ -101,6 +101,10 @@ export type WhatsappBehaviorConfig = {
   cloneMemory: boolean;
   cloneConsistencyGuard: boolean;
   cloneRealTestMode: boolean;
+  visualIdentity: boolean;
+  visualIdentitySelfPhotoReply: boolean;
+  visualIdentityConservativeMatch: boolean;
+  visualIdentityMinConfidence: number;
   identityGuard: boolean;
   leadMemory: boolean;
   emotionSensing: boolean;
@@ -320,6 +324,10 @@ export const defaultWhatsappBehaviorConfig: WhatsappBehaviorConfig = {
   cloneMemory: true,
   cloneConsistencyGuard: true,
   cloneRealTestMode: false,
+  visualIdentity: true,
+  visualIdentitySelfPhotoReply: true,
+  visualIdentityConservativeMatch: true,
+  visualIdentityMinConfidence: 86,
   identityGuard: true,
   leadMemory: true,
   emotionSensing: true,
@@ -463,6 +471,9 @@ export function normalizeWhatsappBehaviorConfig(value: unknown): WhatsappBehavio
     merged.cloneMemory = false;
     merged.cloneConsistencyGuard = false;
     merged.cloneRealTestMode = false;
+    merged.visualIdentity = false;
+    merged.visualIdentitySelfPhotoReply = false;
+    merged.visualIdentityConservativeMatch = false;
     merged.identityGuard = false;
     merged.leadMemory = false;
     merged.emotionSensing = false;
@@ -476,6 +487,11 @@ export function normalizeWhatsappBehaviorConfig(value: unknown): WhatsappBehavio
     merged.negotiationTracking = false;
     merged.smallTalk = false;
     merged.turingBenchmark = false;
+  }
+
+  if (!merged.visualIdentity) {
+    merged.visualIdentitySelfPhotoReply = false;
+    merged.visualIdentityConservativeMatch = false;
   }
 
   if (merged.whatsappCampaignDelayMaxSeconds < merged.whatsappCampaignDelayMinSeconds) {
@@ -568,6 +584,7 @@ function readNumber(value: unknown, fallback: number, key: keyof WhatsappBehavio
   if (key === "stickerProbability") return clamp(Math.round(safe), 0, 100);
   if (key === "wpmSpeed") return clamp(Math.round(safe), 25, 80);
   if (key === "correctionFrequency") return clamp(Math.round(safe), 5, 50);
+  if (key === "visualIdentityMinConfidence") return clamp(Math.round(safe), 60, 98);
   if (key === "followUpDelayMinutes") return clamp(Math.round(safe), 30, 1440);
   if (key === "followUpMaxPerConversation") return clamp(Math.round(safe), 1, 5);
 
