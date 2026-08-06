@@ -12,14 +12,20 @@ import { loadUazapiCredentials, type UazapiCredentials } from "@/lib/whatsapp/ua
 
 type JsonRecord = Record<string, unknown>;
 
+export type AccountType = "person" | "company";
+export type AccountDocumentType = "cpf" | "cnpj";
+
 type ProfileCompletionRow = {
   id: string;
   email: string | null;
   full_name: string | null;
+  company_name: string | null;
+  account_type: string | null;
   phone: string | null;
   phone_normalized: string | null;
   phone_verified_at: string | null;
   phone_whatsapp_exists: boolean | null;
+  document_type: string | null;
   cpf_hash: string | null;
   cpf_preview: string | null;
   signup_completed_at: string | null;
@@ -88,6 +94,9 @@ export type AccountCompletionStatus = {
   phoneVerified: boolean;
   phoneWhatsappExists: boolean | null;
   cpfPreview: string | null;
+  documentType: AccountDocumentType | null;
+  accountType: AccountType | null;
+  companyName: string | null;
   signupCompletedAt: string | null;
   isPlatformAdmin: boolean;
 };
@@ -132,6 +141,9 @@ export async function getAccountCompletionStatusForUser(input: {
       phoneVerified: false,
       phoneWhatsappExists: null,
       cpfPreview: null,
+      documentType: null,
+      accountType: null,
+      companyName: null,
       signupCompletedAt: null,
       isPlatformAdmin: false,
     };
@@ -139,15 +151,19 @@ export async function getAccountCompletionStatusForUser(input: {
 
   const missingFields: string[] = [];
   const hasName = Boolean(profile.full_name?.trim());
+  const companyName = profile.company_name?.trim() || null;
   const hasPhone = Boolean(profile.phone_normalized || normalizeBrazilPhone(profile.phone ?? ""));
   const phoneVerified = Boolean(profile.phone_verified_at);
-  const hasCpf = Boolean(profile.cpf_hash);
+  const hasDocument = Boolean(profile.cpf_hash);
+  const documentType = normalizeAccountDocumentType(profile.document_type) ?? (hasDocument ? "cpf" : null);
+  const accountType = normalizeAccountType(profile.account_type) ?? (documentType === "cnpj" ? "company" : "person");
   const isPlatformAdmin = Boolean(profile.is_platform_admin);
 
   if (!hasName) missingFields.push("full_name");
+  if (accountType === "company" && !companyName) missingFields.push("company_name");
   if (!hasPhone) missingFields.push("phone");
   if (!phoneVerified) missingFields.push("phone_verification");
-  if (!hasCpf) missingFields.push("cpf");
+  if (!hasDocument) missingFields.push("cpf");
 
   return {
     isComplete: isPlatformAdmin || missingFields.length === 0,
@@ -159,6 +175,9 @@ export async function getAccountCompletionStatusForUser(input: {
     phoneVerified,
     phoneWhatsappExists: profile.phone_whatsapp_exists,
     cpfPreview: profile.cpf_preview,
+    documentType,
+    accountType,
+    companyName,
     signupCompletedAt: profile.signup_completed_at,
     isPlatformAdmin,
   };
@@ -218,6 +237,10 @@ export async function isAccountSignupComplete(input: {
 export async function saveAccountCompletionProfile(input: {
   userId: string;
   fullName?: string | null;
+  companyName?: string | null;
+  accountType?: string | null;
+  document?: string | null;
+  documentType?: string | null;
   cpf?: string | null;
   passwordSet?: boolean;
   source?: string;
@@ -238,16 +261,51 @@ export async function saveAccountCompletionProfile(input: {
     updates.full_name = fullName;
   }
 
-  if (typeof input.cpf === "string") {
-    const normalizedCpf = normalizeCpf(input.cpf);
+  const accountType = normalizeAccountType(input.accountType);
+  const companyName = typeof input.companyName === "string" ? input.companyName.trim() : null;
+  const documentInput = typeof input.document === "string"
+    ? input.document
+    : typeof input.cpf === "string"
+      ? input.cpf
+      : null;
 
-    if (!isValidCpf(normalizedCpf)) {
-      throw new Error("CPF invalido.");
+  if (accountType) {
+    updates.account_type = accountType;
+  }
+
+  if (typeof input.companyName === "string") {
+    if (companyName && companyName.length < 2) {
+      throw new Error("Informe o nome da empresa com pelo menos 2 caracteres.");
     }
 
-    updates.cpf_encrypted = encryptCredentialValue(normalizedCpf);
-    updates.cpf_hash = hashCredentialValue(`cpf:${normalizedCpf}`);
-    updates.cpf_preview = formatCpfPreview(normalizedCpf);
+    if (companyName && companyName.length > 120) {
+      throw new Error("Nome da empresa muito longo.");
+    }
+
+    updates.company_name = companyName || null;
+  }
+
+  if (documentInput !== null) {
+    const document = normalizeAccountDocument(documentInput, normalizeAccountDocumentType(input.documentType));
+    const resolvedAccountType = accountType ?? (document.type === "cnpj" ? "company" : "person");
+
+    if (resolvedAccountType === "company" && document.type !== "cnpj") {
+      throw new Error("Para cadastrar empresa, informe um CNPJ valido.");
+    }
+
+    if (resolvedAccountType === "person" && document.type !== "cpf") {
+      throw new Error("Para pessoa fisica, informe um CPF valido.");
+    }
+
+    if (resolvedAccountType === "company" && !companyName) {
+      throw new Error("Informe o nome da empresa.");
+    }
+
+    updates.account_type = resolvedAccountType;
+    updates.document_type = document.type;
+    updates.cpf_encrypted = encryptCredentialValue(document.number);
+    updates.cpf_hash = hashCredentialValue(`${document.type}:${document.number}`);
+    updates.cpf_preview = formatDocumentPreview(document);
     updates.cpf_verified_at = new Date().toISOString();
   }
 
@@ -262,7 +320,7 @@ export async function saveAccountCompletionProfile(input: {
 
   if (error) {
     if (error.code === "23505") {
-      throw new Error("Este CPF ou WhatsApp ja esta vinculado a outro cadastro.");
+      throw new Error("Este CPF/CNPJ ou WhatsApp ja esta vinculado a outro cadastro.");
     }
 
     throw new Error(`Nao foi possivel atualizar o cadastro: ${error.message}`);
@@ -280,19 +338,31 @@ export async function loadAccountCpfNumber(input: {
   userId: string;
   client?: SupabaseClient;
 }) {
+  const document = await loadAccountDocument(input);
+
+  return document?.number ?? null;
+}
+
+export async function loadAccountDocument(input: {
+  userId: string;
+  client?: SupabaseClient;
+}): Promise<{ type: AccountDocumentType; number: string } | null> {
   const client = input.client ?? createServiceClient();
   const { data, error } = await client
     .from("profiles")
-    .select("cpf_encrypted")
+    .select("cpf_encrypted, document_type")
     .eq("id", input.userId)
-    .maybeSingle<{ cpf_encrypted: string | null }>();
+    .maybeSingle<{ cpf_encrypted: string | null; document_type: string | null }>();
 
   if (error || !data?.cpf_encrypted) {
     return null;
   }
 
   try {
-    return decryptCredentialValue(data.cpf_encrypted);
+    const number = decryptCredentialValue(data.cpf_encrypted);
+    const type = normalizeAccountDocumentType(data.document_type) ?? (number.length === 14 ? "cnpj" : "cpf");
+
+    return { type, number };
   } catch {
     return null;
   }
@@ -626,6 +696,10 @@ export function normalizeCpf(value: string) {
   return value.replace(/\D/g, "");
 }
 
+export function normalizeCnpj(value: string) {
+  return value.replace(/\D/g, "");
+}
+
 export function isValidCpf(value: string) {
   const cpf = normalizeCpf(value);
 
@@ -637,6 +711,19 @@ export function isValidCpf(value: string) {
   const second = calculateCpfDigit(`${cpf.slice(0, 9)}${first}`, 11);
 
   return cpf.endsWith(`${first}${second}`);
+}
+
+export function isValidCnpj(value: string) {
+  const cnpj = normalizeCnpj(value);
+
+  if (cnpj.length !== 14 || /^(\d)\1+$/.test(cnpj)) {
+    return false;
+  }
+
+  const first = calculateCnpjDigit(cnpj.slice(0, 12), [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]);
+  const second = calculateCnpjDigit(`${cnpj.slice(0, 12)}${first}`, [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]);
+
+  return cnpj.endsWith(`${first}${second}`);
 }
 
 export function normalizeBrazilPhone(value: string | null | undefined) {
@@ -661,8 +748,55 @@ function calculateCpfDigit(base: string, weight: number) {
   return rest === 10 ? 0 : rest;
 }
 
-function formatCpfPreview(cpf: string) {
-  return `***.***.***-${cpf.slice(-2)}`;
+function calculateCnpjDigit(base: string, weights: number[]) {
+  const sum = base
+    .split("")
+    .reduce((total, digit, index) => total + Number(digit) * weights[index], 0);
+  const rest = sum % 11;
+
+  return rest < 2 ? 0 : 11 - rest;
+}
+
+function normalizeAccountDocument(
+  value: string,
+  requestedType?: AccountDocumentType | null,
+): { type: AccountDocumentType; number: string } {
+  const digits = value.replace(/\D/g, "");
+  const type = requestedType ?? (digits.length === 14 ? "cnpj" : "cpf");
+
+  if (type === "cnpj") {
+    if (!isValidCnpj(digits)) {
+      throw new Error("CNPJ invalido.");
+    }
+
+    return { type, number: digits };
+  }
+
+  if (!isValidCpf(digits)) {
+    throw new Error("CPF invalido.");
+  }
+
+  return { type, number: digits };
+}
+
+function normalizeAccountType(value: string | null | undefined): AccountType | null {
+  const normalized = typeof value === "string" ? value.toLowerCase() : null;
+
+  return normalized === "company" || normalized === "person" ? normalized : null;
+}
+
+function normalizeAccountDocumentType(value: string | null | undefined): AccountDocumentType | null {
+  const normalized = typeof value === "string" ? value.toLowerCase() : null;
+
+  return normalized === "cnpj" || normalized === "cpf" ? normalized : null;
+}
+
+function formatDocumentPreview(document: { type: AccountDocumentType; number: string }) {
+  if (document.type === "cnpj") {
+    return `**.***.***/****-${document.number.slice(-2)}`;
+  }
+
+  return `***.***.***-${document.number.slice(-2)}`;
 }
 
 function formatBrazilPhone(phoneNormalized: string) {
@@ -686,7 +820,7 @@ function buildCodeHash(userId: string, phoneNormalized: string, code: string) {
 async function loadProfileCompletion(client: SupabaseClient, userId: string) {
   const { data, error } = await client
     .from("profiles")
-    .select("id, email, full_name, phone, phone_normalized, phone_verified_at, phone_whatsapp_exists, cpf_hash, cpf_preview, signup_completed_at, is_platform_admin, trial_whatsapp_opt_in")
+    .select("id, email, full_name, company_name, account_type, phone, phone_normalized, phone_verified_at, phone_whatsapp_exists, document_type, cpf_hash, cpf_preview, signup_completed_at, is_platform_admin, trial_whatsapp_opt_in")
     .eq("id", userId)
     .maybeSingle<ProfileCompletionRow>();
 

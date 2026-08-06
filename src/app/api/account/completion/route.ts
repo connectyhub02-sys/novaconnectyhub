@@ -48,6 +48,10 @@ export async function POST(request: NextRequest) {
     const accountCompletion = await saveAccountCompletionProfile({
       userId: workspace.user.id,
       fullName: readString(body.fullName),
+      companyName: readString(body.companyName),
+      accountType: readString(body.accountType),
+      document: readString(body.document) ?? readString(body.cpf),
+      documentType: readString(body.documentType),
       cpf: readString(body.cpf),
       passwordSet: body.passwordSet === true,
       source: "account_completion_modal",

@@ -23,6 +23,9 @@ type ProxyAccountCompletionStatus = {
   phoneVerified: boolean;
   phoneWhatsappExists: boolean | null;
   cpfPreview: string | null;
+  documentType: "cpf" | "cnpj" | null;
+  accountType: "person" | "company" | null;
+  companyName: string | null;
   signupCompletedAt: string | null;
   isPlatformAdmin: boolean;
 };
@@ -30,10 +33,13 @@ type ProxyAccountCompletionStatus = {
 type ProxyProfileRow = {
   email: string | null;
   full_name: string | null;
+  company_name: string | null;
+  account_type: string | null;
   phone: string | null;
   phone_normalized: string | null;
   phone_verified_at: string | null;
   phone_whatsapp_exists: boolean | null;
+  document_type: string | null;
   cpf_hash: string | null;
   cpf_preview: string | null;
   signup_completed_at: string | null;
@@ -123,7 +129,7 @@ async function loadProxyAccountCompletion(
 ): Promise<ProxyAccountCompletionStatus | null> {
   const { data, error } = await supabase
     .from("profiles")
-    .select("email, full_name, phone, phone_normalized, phone_verified_at, phone_whatsapp_exists, cpf_hash, cpf_preview, signup_completed_at, is_platform_admin")
+    .select("email, full_name, company_name, account_type, phone, phone_normalized, phone_verified_at, phone_whatsapp_exists, document_type, cpf_hash, cpf_preview, signup_completed_at, is_platform_admin")
     .eq("id", userId)
     .maybeSingle<ProxyProfileRow>();
 
@@ -146,6 +152,9 @@ function mapProxyAccountCompletion(profile: ProxyProfileRow | null): ProxyAccoun
       phoneVerified: false,
       phoneWhatsappExists: null,
       cpfPreview: null,
+      documentType: null,
+      accountType: null,
+      companyName: null,
       signupCompletedAt: null,
       isPlatformAdmin: false,
     };
@@ -153,15 +162,19 @@ function mapProxyAccountCompletion(profile: ProxyProfileRow | null): ProxyAccoun
 
   const missingFields: string[] = [];
   const hasName = Boolean(profile.full_name?.trim());
+  const companyName = profile.company_name?.trim() || null;
   const hasPhone = Boolean(profile.phone_normalized || normalizeBrazilPhone(profile.phone));
   const phoneVerified = Boolean(profile.phone_verified_at);
-  const hasCpf = Boolean(profile.cpf_hash);
+  const hasDocument = Boolean(profile.cpf_hash);
+  const documentType = normalizeAccountDocumentType(profile.document_type) ?? (hasDocument ? "cpf" : null);
+  const accountType = normalizeAccountType(profile.account_type) ?? (documentType === "cnpj" ? "company" : "person");
   const isPlatformAdmin = Boolean(profile.is_platform_admin);
 
   if (!hasName) missingFields.push("full_name");
+  if (accountType === "company" && !companyName) missingFields.push("company_name");
   if (!hasPhone) missingFields.push("phone");
   if (!phoneVerified) missingFields.push("phone_verification");
-  if (!hasCpf) missingFields.push("cpf");
+  if (!hasDocument) missingFields.push("cpf");
 
   return {
     isComplete: isPlatformAdmin || missingFields.length === 0,
@@ -173,6 +186,9 @@ function mapProxyAccountCompletion(profile: ProxyProfileRow | null): ProxyAccoun
     phoneVerified,
     phoneWhatsappExists: profile.phone_whatsapp_exists,
     cpfPreview: profile.cpf_preview,
+    documentType,
+    accountType,
+    companyName,
     signupCompletedAt: profile.signup_completed_at,
     isPlatformAdmin,
   };
@@ -190,4 +206,16 @@ function normalizeBrazilPhone(value: string | null | undefined) {
   }
 
   return digits.startsWith("55") && (digits.length === 12 || digits.length === 13) ? digits : null;
+}
+
+function normalizeAccountType(value: string | null | undefined) {
+  const normalized = typeof value === "string" ? value.toLowerCase() : null;
+
+  return normalized === "company" || normalized === "person" ? normalized : null;
+}
+
+function normalizeAccountDocumentType(value: string | null | undefined) {
+  const normalized = typeof value === "string" ? value.toLowerCase() : null;
+
+  return normalized === "cnpj" || normalized === "cpf" ? normalized : null;
 }

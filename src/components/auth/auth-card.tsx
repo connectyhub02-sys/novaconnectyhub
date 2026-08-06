@@ -4,13 +4,14 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
-import { AlertTriangle, ArrowRight, CheckCircle2, Loader2, LockKeyhole, Mail, Phone, UserRound } from "lucide-react";
+import { AlertTriangle, ArrowRight, Building2, CheckCircle2, Loader2, LockKeyhole, Mail, Phone, UserRound } from "lucide-react";
 import { ConnectyLogo } from "@/components/brand/connecty-logo";
-import { formatBrazilPhoneInput, formatCpfInput, normalizeBrazilPhoneForApi } from "@/lib/account/input-format";
+import { formatBrazilPhoneInput, formatCnpjInput, formatCpfInput, normalizeBrazilPhoneForApi } from "@/lib/account/input-format";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
 type AuthMode = "login" | "signup";
+type SignupAccountType = "person" | "company";
 
 type WhatsappCheckState = {
   state: "idle" | "incomplete" | "checking" | "valid" | "not_found" | "error";
@@ -33,17 +34,23 @@ export function AuthCard({
   const [email, setEmail] = useState(initialEmail);
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
+  const [accountType, setAccountType] = useState<SignupAccountType>("person");
+  const [companyName, setCompanyName] = useState("");
   const [phone, setPhone] = useState("");
-  const [cpf, setCpf] = useState("");
+  const [documentValue, setDocumentValue] = useState("");
   const [verificationCode, setVerificationCode] = useState("");
   const [awaitingPhoneVerification, setAwaitingPhoneVerification] = useState(false);
   const [trialWhatsappOptIn, setTrialWhatsappOptIn] = useState(true);
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
   const [remoteWhatsappCheck, setRemoteWhatsappCheck] = useState<WhatsappCheckState | null>(null);
+  const [manualSignupOpen, setManualSignupOpen] = useState(mode !== "signup");
 
   const isSignup = mode === "signup";
   const benefitItems = ["Sessao persistente", "Painel do cliente", "Credenciais seguras"];
+  const documentType = accountType === "company" ? "cnpj" : "cpf";
+  const documentLabel = accountType === "company" ? "CNPJ" : "CPF";
+  const showCredentialForm = !isSignup || manualSignupOpen || awaitingPhoneVerification;
   const currentPhoneForVerification = normalizeBrazilPhoneForApi(phone);
   const whatsappCheck = useMemo<WhatsappCheckState>(() => {
     if (!isSignup || awaitingPhoneVerification) {
@@ -196,6 +203,12 @@ export function AuthCard({
       if (isSignup) {
         const phoneForVerification = normalizeBrazilPhoneForApi(phone);
 
+        if (accountType === "company" && companyName.trim().length < 2) {
+          setStatus("error");
+          setMessage("Informe o nome da empresa.");
+          return;
+        }
+
         if (!phoneForVerification) {
           setStatus("error");
           setMessage("Informe um WhatsApp valido com DDD. Ex.: (47) 99999-9999.");
@@ -216,6 +229,8 @@ export function AuthCard({
             emailRedirectTo: redirectTo,
             data: {
               full_name: fullName,
+              account_type: accountType,
+              company_name: accountType === "company" ? companyName : null,
               password_set_at: new Date().toISOString(),
               trial_whatsapp_opt_in: trialWhatsappOptIn,
               trial_whatsapp_opt_in_at: trialWhatsappOptIn ? new Date().toISOString() : null,
@@ -243,7 +258,10 @@ export function AuthCard({
         if (data.session) {
           await saveSignupCompletion({
             fullName,
-            cpf,
+            companyName: accountType === "company" ? companyName : null,
+            accountType,
+            document: documentValue,
+            documentType,
             passwordSet: true,
           });
           await requestPhoneVerification(phoneForVerification);
@@ -390,7 +408,7 @@ export function AuthCard({
 
           {supabaseConfigured ? (
             <button
-              className="mb-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md border border-white/[0.12] bg-white/[0.04] px-4 text-sm font-semibold text-white transition hover:border-[#00f3ff]/45 hover:bg-[#00f3ff]/10 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md border border-white/[0.12] bg-white/[0.04] px-4 text-sm font-semibold text-white transition hover:border-[#00f3ff]/45 hover:bg-[#00f3ff]/10 disabled:cursor-not-allowed disabled:opacity-60"
               disabled={status === "loading"}
               onClick={handleGoogleSignIn}
               type="button"
@@ -400,145 +418,178 @@ export function AuthCard({
             </button>
           ) : null}
 
-          <form className="space-y-4" onSubmit={handleSubmit}>
-            {isSignup ? (
-              <>
-                {!awaitingPhoneVerification ? (
-                  <>
-                    <FormField
-                      icon={UserRound}
-                      label="Nome"
-                      name="full_name"
-                      onChange={setFullName}
-                      placeholder="Seu nome completo"
-                      value={fullName}
-                    />
-                    <FormField
-                      icon={Phone}
-                      label="WhatsApp"
-                      name="phone"
-                      inputMode="tel"
-                      maxLength={19}
-                      onChange={(value) => {
-                        setPhone(formatBrazilPhoneInput(value));
-                        setMessage("");
-                      }}
-                      placeholder="(47) 99999-9999"
-                      type="tel"
-                      value={phone}
-                    />
-                    <SignupWhatsappCheck check={whatsappCheck} />
-                    <FormField
-                      icon={CheckCircle2}
-                      label="CPF"
-                      name="cpf"
-                      inputMode="numeric"
-                      maxLength={14}
-                      onChange={(value) => setCpf(formatCpfInput(value))}
-                      placeholder="000.000.000-00"
-                      value={cpf}
-                    />
-                    <label className="flex gap-3 rounded-md border border-white/[0.08] bg-black/25 p-3 text-left">
-                      <input
-                        checked={trialWhatsappOptIn}
-                        className="mt-0.5 h-4 w-4 accent-[#0aff0a]"
-                        onChange={(event) => setTrialWhatsappOptIn(event.target.checked)}
-                        type="checkbox"
-                      />
-                      <span className="text-xs leading-5 text-zinc-400">
-                        Aceito receber avisos importantes sobre meu teste gratis, creditos e assinatura pelo WhatsApp.
-                      </span>
-                    </label>
-                  </>
-                ) : (
-                  <>
-                    <FormField
-                      icon={Phone}
-                      label="WhatsApp"
-                      name="phone"
-                      inputMode="tel"
-                      maxLength={19}
-                      onChange={(value) => setPhone(formatBrazilPhoneInput(value))}
-                      placeholder="(47) 99999-9999"
-                      type="tel"
-                      value={phone}
-                    />
-                    <FormField
-                      icon={CheckCircle2}
-                      label="Codigo"
-                      name="verification_code"
-                      inputMode="numeric"
-                      maxLength={6}
-                      onChange={(value) => setVerificationCode(value.replace(/\D/g, "").slice(0, 6))}
-                      placeholder="000000"
-                      value={verificationCode}
-                    />
-                    <button
-                      className="h-10 rounded-md border border-[#00f3ff]/30 px-4 font-mono text-[10px] font-bold uppercase text-[#00f3ff] transition hover:bg-[#00f3ff]/10 disabled:cursor-not-allowed disabled:opacity-60"
-                      disabled={status === "loading"}
-                      onClick={resendPhoneVerification}
-                      type="button"
-                    >
-                      Reenviar codigo
-                    </button>
-                  </>
-                )}
-              </>
-            ) : null}
-
-            {!awaitingPhoneVerification ? (
-              <>
-                <FormField
-                  icon={Mail}
-                  label="Email"
-                  name="email"
-                  onChange={setEmail}
-                  placeholder="voce@email.com"
-                  type="email"
-                  value={email}
-                />
-                <FormField
-                  icon={LockKeyhole}
-                  label="Senha"
-                  name="password"
-                  onChange={setPassword}
-                  placeholder="Minimo 6 caracteres"
-                  type="password"
-                  value={password}
-                />
-              </>
-            ) : null}
-
-            {message ? (
-              <div
-                className={cn(
-                  "rounded-md border p-3 text-sm leading-6",
-                  status === "success"
-                    ? "border-[#0aff0a]/25 bg-[#0aff0a]/8 text-[#b7ffb7]"
-                    : "border-rose-300/25 bg-rose-300/8 text-rose-100",
-                )}
+          {isSignup && !awaitingPhoneVerification ? (
+            <div className="my-4">
+              <button
+                className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md border border-white/[0.1] bg-black/25 px-4 text-sm font-semibold text-zinc-300 transition hover:border-white/20 hover:bg-white/[0.05] hover:text-white"
+                onClick={() => {
+                  setManualSignupOpen((current) => !current);
+                  setMessage("");
+                }}
+                type="button"
               >
-                {message}
-              </div>
-            ) : null}
+                <Mail size={16} />
+                {manualSignupOpen ? "Ocultar cadastro com email" : "Cadastrar com email e senha"}
+              </button>
+            </div>
+          ) : null}
 
-            <button
-              className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-md bg-[#0aff0a] px-4 font-mono text-xs font-bold uppercase text-black transition hover:bg-[#5cff5c] disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={status === "loading" || (isSignup && !awaitingPhoneVerification && !whatsappValidated)}
-              type="submit"
+          <AuthStatusMessage message={message} status={status} />
+
+          {showCredentialForm ? (
+            <form
+              className={cn(
+                "space-y-4",
+                (!isSignup || awaitingPhoneVerification) && "mt-4",
+                isSignup && !awaitingPhoneVerification && "mt-4 border-t border-white/[0.08] pt-4",
+              )}
+              onSubmit={handleSubmit}
             >
-              {status === "loading" ? <Loader2 size={16} className="animate-spin" /> : <ArrowRight size={16} />}
-              {awaitingPhoneVerification
-                ? "Confirmar WhatsApp"
-                : isSignup
-                  ? whatsappCheck.state === "checking"
-                    ? "Verificando WhatsApp"
-                    : whatsappValidated
-                      ? "Criar conta e validar"
-                      : "Aguardando WhatsApp valido"
-                  : "Entrar no painel"}
-            </button>
-          </form>
+              {isSignup ? (
+                <>
+                  {!awaitingPhoneVerification ? (
+                    <>
+                      <SignupAccountTypeControl
+                        value={accountType}
+                        onChange={(nextType) => {
+                          setAccountType(nextType);
+                          setDocumentValue("");
+                          setMessage("");
+                        }}
+                      />
+                      <FormField
+                        icon={UserRound}
+                        label={accountType === "company" ? "Responsavel" : "Nome"}
+                        name="full_name"
+                        onChange={setFullName}
+                        placeholder="Seu nome completo"
+                        value={fullName}
+                      />
+                      {accountType === "company" ? (
+                        <FormField
+                          icon={Building2}
+                          label="Empresa"
+                          name="company_name"
+                          onChange={setCompanyName}
+                          placeholder="Nome da empresa"
+                          required
+                          value={companyName}
+                        />
+                      ) : null}
+                      <FormField
+                        icon={Phone}
+                        label="WhatsApp"
+                        name="phone"
+                        inputMode="tel"
+                        maxLength={19}
+                        onChange={(value) => {
+                          setPhone(formatBrazilPhoneInput(value));
+                          setMessage("");
+                        }}
+                        placeholder="(47) 99999-9999"
+                        type="tel"
+                        value={phone}
+                      />
+                      <SignupWhatsappCheck check={whatsappCheck} />
+                      <FormField
+                        icon={CheckCircle2}
+                        label={documentLabel}
+                        name="document"
+                        inputMode="numeric"
+                        maxLength={accountType === "company" ? 18 : 14}
+                        onChange={(value) => setDocumentValue(accountType === "company" ? formatCnpjInput(value) : formatCpfInput(value))}
+                        placeholder={accountType === "company" ? "00.000.000/0000-00" : "000.000.000-00"}
+                        value={documentValue}
+                      />
+                      <label className="flex gap-3 rounded-md border border-white/[0.08] bg-black/25 p-3 text-left">
+                        <input
+                          checked={trialWhatsappOptIn}
+                          className="mt-0.5 h-4 w-4 accent-[#0aff0a]"
+                          onChange={(event) => setTrialWhatsappOptIn(event.target.checked)}
+                          type="checkbox"
+                        />
+                        <span className="text-xs leading-5 text-zinc-400">
+                          Aceito receber avisos importantes sobre meu teste gratis, creditos e assinatura pelo WhatsApp.
+                        </span>
+                      </label>
+                    </>
+                  ) : (
+                    <>
+                      <FormField
+                        icon={Phone}
+                        label="WhatsApp"
+                        name="phone"
+                        inputMode="tel"
+                        maxLength={19}
+                        onChange={(value) => setPhone(formatBrazilPhoneInput(value))}
+                        placeholder="(47) 99999-9999"
+                        type="tel"
+                        value={phone}
+                      />
+                      <FormField
+                        icon={CheckCircle2}
+                        label="Codigo"
+                        name="verification_code"
+                        inputMode="numeric"
+                        maxLength={6}
+                        onChange={(value) => setVerificationCode(value.replace(/\D/g, "").slice(0, 6))}
+                        placeholder="000000"
+                        value={verificationCode}
+                      />
+                      <button
+                        className="h-10 rounded-md border border-[#00f3ff]/30 px-4 font-mono text-[10px] font-bold uppercase text-[#00f3ff] transition hover:bg-[#00f3ff]/10 disabled:cursor-not-allowed disabled:opacity-60"
+                        disabled={status === "loading"}
+                        onClick={resendPhoneVerification}
+                        type="button"
+                      >
+                        Reenviar codigo
+                      </button>
+                    </>
+                  )}
+                </>
+              ) : null}
+
+              {!awaitingPhoneVerification ? (
+                <>
+                  <FormField
+                    icon={Mail}
+                    label="Email"
+                    name="email"
+                    onChange={setEmail}
+                    placeholder="voce@email.com"
+                    type="email"
+                    value={email}
+                  />
+                  <FormField
+                    icon={LockKeyhole}
+                    label="Senha"
+                    name="password"
+                    onChange={setPassword}
+                    placeholder="Minimo 6 caracteres"
+                    type="password"
+                    value={password}
+                  />
+                </>
+              ) : null}
+
+              <button
+                className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-md bg-[#0aff0a] px-4 font-mono text-xs font-bold uppercase text-black transition hover:bg-[#5cff5c] disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={status === "loading" || (isSignup && !awaitingPhoneVerification && !whatsappValidated)}
+                type="submit"
+              >
+                {status === "loading" ? <Loader2 size={16} className="animate-spin" /> : <ArrowRight size={16} />}
+                {awaitingPhoneVerification
+                  ? "Confirmar WhatsApp"
+                  : isSignup
+                    ? whatsappCheck.state === "checking"
+                      ? "Verificando WhatsApp"
+                      : whatsappValidated
+                        ? "Criar conta e validar"
+                        : "Aguardando WhatsApp valido"
+                    : "Entrar no painel"}
+              </button>
+            </form>
+          ) : null}
 
           <p className="mt-5 text-center text-sm text-zinc-500">
             {isSignup ? "Ja tem conta?" : "Ainda nao tem conta?"}{" "}
@@ -560,6 +611,31 @@ export function AuthCard({
           ))}
         </section>
       </main>
+    </div>
+  );
+}
+
+function AuthStatusMessage({
+  message,
+  status,
+}: {
+  message: string;
+  status: "idle" | "loading" | "success" | "error";
+}) {
+  if (!message) {
+    return null;
+  }
+
+  return (
+    <div
+      className={cn(
+        "mt-4 rounded-md border p-3 text-sm leading-6",
+        status === "success"
+          ? "border-[#0aff0a]/25 bg-[#0aff0a]/8 text-[#b7ffb7]"
+          : "border-rose-300/25 bg-rose-300/8 text-rose-100",
+      )}
+    >
+      {message}
     </div>
   );
 }
@@ -589,6 +665,48 @@ function SignupWhatsappCheck({ check }: { check: WhatsappCheckState }) {
   );
 }
 
+function SignupAccountTypeControl({
+  onChange,
+  value,
+}: {
+  onChange: (value: SignupAccountType) => void;
+  value: SignupAccountType;
+}) {
+  const options: Array<{ icon: LucideIcon; label: string; value: SignupAccountType }> = [
+    { icon: UserRound, label: "Pessoa fisica", value: "person" },
+    { icon: Building2, label: "Empresa", value: "company" },
+  ];
+
+  return (
+    <div>
+      <span className="mb-2 block font-mono text-[10px] uppercase text-zinc-500">Tipo de cadastro</span>
+      <div className="grid grid-cols-2 gap-2 rounded-md border border-white/[0.08] bg-black/25 p-1">
+        {options.map((option) => {
+          const Icon = option.icon;
+          const selected = option.value === value;
+
+          return (
+            <button
+              key={option.value}
+              className={cn(
+                "inline-flex min-h-10 items-center justify-center gap-2 rounded-[5px] px-3 text-xs font-semibold transition",
+                selected
+                  ? "bg-[#0aff0a] text-black"
+                  : "text-zinc-400 hover:bg-white/[0.06] hover:text-white",
+              )}
+              onClick={() => onChange(option.value)}
+              type="button"
+            >
+              <Icon size={15} />
+              {option.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 async function bootstrapAccount() {
   const response = await fetch("/api/account/bootstrap", {
     method: "POST",
@@ -603,7 +721,10 @@ async function bootstrapAccount() {
 
 async function saveSignupCompletion(input: {
   fullName: string;
-  cpf: string;
+  companyName: string | null;
+  accountType: SignupAccountType;
+  document: string;
+  documentType: "cpf" | "cnpj";
   passwordSet: boolean;
 }) {
   const response = await fetch("/api/account/completion", {
@@ -690,6 +811,7 @@ function FormField({
   placeholder,
   inputMode,
   maxLength,
+  required = true,
   type = "text",
   value,
 }: {
@@ -700,6 +822,7 @@ function FormField({
   maxLength?: number;
   onChange: (value: string) => void;
   placeholder: string;
+  required?: boolean;
   type?: string;
   value: string;
 }) {
@@ -716,7 +839,7 @@ function FormField({
           name={name}
           onChange={(event) => onChange(event.target.value)}
           placeholder={placeholder}
-          required={name !== "company_name"}
+          required={required}
           type={type}
           value={value}
         />

@@ -57,7 +57,7 @@ import {
   readAdminImpersonationReturn,
   type AdminImpersonationReturn,
 } from "@/lib/admin-impersonation";
-import { formatBrazilPhoneInput, formatCpfInput, normalizeBrazilPhoneForApi } from "@/lib/account/input-format";
+import { formatBrazilPhoneInput, formatCnpjInput, formatCpfInput, normalizeBrazilPhoneForApi } from "@/lib/account/input-format";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
@@ -104,6 +104,8 @@ type BillingAccessClientStatus = {
   ctaHref: string;
 };
 
+type AccountCompletionAccountType = "person" | "company";
+
 type AccountCompletionClientStatus = {
   isComplete: boolean;
   missingFields: string[];
@@ -114,6 +116,9 @@ type AccountCompletionClientStatus = {
   phoneVerified: boolean;
   phoneWhatsappExists: boolean | null;
   cpfPreview: string | null;
+  documentType: "cpf" | "cnpj" | null;
+  accountType: AccountCompletionAccountType | null;
+  companyName: string | null;
   signupCompletedAt: string | null;
   isPlatformAdmin: boolean;
 };
@@ -1078,6 +1083,8 @@ export function ConnectyShell({
                 accountCompletion.email,
                 accountCompletion.phone,
                 accountCompletion.cpfPreview,
+                accountCompletion.accountType,
+                accountCompletion.companyName,
                 accountCompletion.missingFields.join("|"),
               ].join(":")
             : "account-completion-empty"}
@@ -1150,8 +1157,10 @@ function AccountCompletionModal({
   onCompleted: (status: AccountCompletionClientStatus) => void;
 }) {
   const [fullName, setFullName] = useState(status?.fullName ?? "");
+  const [accountType, setAccountType] = useState<AccountCompletionAccountType>(status?.accountType === "company" ? "company" : "person");
+  const [companyName, setCompanyName] = useState(status?.companyName ?? "");
   const [phone, setPhone] = useState(formatBrazilPhoneInput(status?.phone ?? ""));
-  const [cpf, setCpf] = useState("");
+  const [documentValue, setDocumentValue] = useState("");
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
   const [step, setStep] = useState<"profile" | "code">("profile");
@@ -1161,6 +1170,8 @@ function AccountCompletionModal({
   const [remoteWhatsappCheck, setRemoteWhatsappCheck] = useState<WhatsappCheckState | null>(null);
 
   const currentPhoneForVerification = normalizeBrazilPhoneForApi(phone);
+  const documentType = accountType === "company" ? "cnpj" : "cpf";
+  const documentLabel = accountType === "company" ? "CNPJ" : "CPF";
   const whatsappCheck = useMemo<WhatsappCheckState>(() => {
     if (!phone.trim()) {
       return {
@@ -1301,6 +1312,10 @@ function AccountCompletionModal({
         throw new Error("Informe um WhatsApp valido com DDD. Ex.: (47) 99999-9999.");
       }
 
+      if (accountType === "company" && companyName.trim().length < 2) {
+        throw new Error("Informe o nome da empresa.");
+      }
+
       if (whatsappCheck.state !== "valid" || whatsappCheck.phoneNormalized !== phoneForVerification) {
         throw new Error("Valide um WhatsApp ativo antes de enviar o codigo.");
       }
@@ -1323,7 +1338,10 @@ function AccountCompletionModal({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           fullName,
-          cpf,
+          companyName: accountType === "company" ? companyName : null,
+          accountType,
+          document: documentValue,
+          documentType,
           passwordSet: Boolean(password.trim()),
         }),
       });
@@ -1422,21 +1440,45 @@ function AccountCompletionModal({
               </p>
               <h2 className="mt-1 text-2xl font-bold leading-7 text-white">Complete seu cadastro</h2>
               <p className="mt-2 text-sm leading-6 text-slate-300">
-                Confirme CPF e WhatsApp para liberar agentes, WhatsApp, creditos, checkout e recursos de atendimento.
+                Confirme CPF/CNPJ e WhatsApp para liberar agentes, WhatsApp, creditos, checkout e recursos de atendimento.
               </p>
             </div>
           </div>
         </div>
 
-        <div className="mt-4 grid grid-cols-3 gap-2">
+        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
           <AccountCompletionBadge label="Nome" ok={!status.missingFields.includes("full_name")} />
-          <AccountCompletionBadge label="CPF" ok={!status.missingFields.includes("cpf")} />
+          <AccountCompletionBadge label="Documento" ok={!status.missingFields.includes("cpf")} />
+          <AccountCompletionBadge label={accountType === "company" ? "Empresa" : "Tipo"} ok={accountType !== "company" || !status.missingFields.includes("company_name")} />
           <AccountCompletionBadge label="WhatsApp" ok={!status.missingFields.includes("phone_verification")} />
         </div>
 
         {step === "profile" ? (
           <form className="mt-5 grid gap-3" onSubmit={handleProfileSubmit}>
-            <AccountCompletionInput label="Nome completo" onChange={setFullName} placeholder="Seu nome completo" value={fullName} />
+            <AccountCompletionTypeControl
+              value={accountType}
+              onChange={(nextType) => {
+                setAccountType(nextType);
+                setDocumentValue("");
+                setError(null);
+                setMessage(null);
+              }}
+            />
+            <AccountCompletionInput
+              label={accountType === "company" ? "Nome do responsavel" : "Nome completo"}
+              onChange={setFullName}
+              placeholder="Seu nome completo"
+              value={fullName}
+            />
+            {accountType === "company" ? (
+              <AccountCompletionInput
+                label="Nome da empresa"
+                onChange={setCompanyName}
+                placeholder="Razao social ou nome fantasia"
+                required
+                value={companyName}
+              />
+            ) : null}
             <AccountCompletionInput
               inputMode="tel"
               label="WhatsApp"
@@ -1452,11 +1494,12 @@ function AccountCompletionModal({
             <AccountCompletionWhatsappCheck check={whatsappCheck} />
             <AccountCompletionInput
               inputMode="numeric"
-              label="CPF"
-              maxLength={14}
-              onChange={(value) => setCpf(formatCpfInput(value))}
-              placeholder={status.cpfPreview ?? "000.000.000-00"}
-              value={cpf}
+              label={documentLabel}
+              maxLength={accountType === "company" ? 18 : 14}
+              onChange={(value) => setDocumentValue(accountType === "company" ? formatCnpjInput(value) : formatCpfInput(value))}
+              placeholder={status.cpfPreview ?? (accountType === "company" ? "00.000.000/0000-00" : "000.000.000-00")}
+              required={status.missingFields.includes("cpf")}
+              value={documentValue}
             />
             <AccountCompletionInput
               label="Criar senha"
@@ -1672,12 +1715,57 @@ function AccountCompletionBadge({ label, ok }: { label: string; ok: boolean }) {
   );
 }
 
+function AccountCompletionTypeControl({
+  onChange,
+  value,
+}: {
+  onChange: (value: AccountCompletionAccountType) => void;
+  value: AccountCompletionAccountType;
+}) {
+  const options: Array<{ icon: LucideIcon; label: string; value: AccountCompletionAccountType }> = [
+    { icon: UserCheck, label: "Pessoa fisica", value: "person" },
+    { icon: Building2, label: "Empresa", value: "company" },
+  ];
+
+  return (
+    <div>
+      <span className="mb-1.5 block font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
+        Tipo de cadastro
+      </span>
+      <div className="grid grid-cols-2 gap-2 rounded-xl border border-slate-500/32 bg-slate-950/45 p-1">
+        {options.map((option) => {
+          const Icon = option.icon;
+          const selected = option.value === value;
+
+          return (
+            <button
+              key={option.value}
+              className={cn(
+                "inline-flex min-h-10 items-center justify-center gap-2 rounded-lg px-3 text-xs font-bold transition",
+                selected
+                  ? "bg-cyan-300 text-slate-950"
+                  : "text-slate-400 hover:bg-white/[0.06] hover:text-white",
+              )}
+              onClick={() => onChange(option.value)}
+              type="button"
+            >
+              <Icon className="h-4 w-4" />
+              {option.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function AccountCompletionInput({
   inputMode,
   label,
   maxLength,
   onChange,
   placeholder,
+  required = true,
   type = "text",
   value,
 }: {
@@ -1686,6 +1774,7 @@ function AccountCompletionInput({
   maxLength?: number;
   onChange: (value: string) => void;
   placeholder: string;
+  required?: boolean;
   type?: string;
   value: string;
 }) {
@@ -1700,7 +1789,7 @@ function AccountCompletionInput({
         maxLength={maxLength}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
-        required={label !== "Criar senha"}
+        required={required && label !== "Criar senha"}
         type={type}
         value={value}
       />

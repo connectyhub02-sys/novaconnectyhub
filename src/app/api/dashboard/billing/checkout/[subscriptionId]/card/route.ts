@@ -3,7 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import {
   assertAccountComplete,
   formatAccountCompletionError,
-  loadAccountCpfNumber,
+  loadAccountDocument,
   statusForAccountCompletionError,
 } from "@/lib/account/signup-completion";
 import {
@@ -78,7 +78,7 @@ export async function POST(
   const payer = readRecord(formData.payer);
   const payerIdentification = readRecord(payer?.identification);
   const payerEmail = normalizeEmail(readString(payer?.email) ?? intent.subscription.payer_email ?? workspace.profile.email);
-  const fallbackCpfNumber = await loadAccountCpfNumber({ userId: workspace.user.id, client });
+  const fallbackDocument = await loadAccountDocument({ userId: workspace.user.id, client });
   const deviceSessionId = readString(body.deviceSessionId)
     ?? readString(request.headers.get("x-meli-session-id"));
   const frontendAmount = normalizeCurrencyAmount(readString(formData.transaction_amount) ?? readNumber(formData.transaction_amount));
@@ -96,8 +96,8 @@ export async function POST(
 
     const payerName = workspace.profile.fullName ?? workspace.organization.name;
     const payerPhone = workspace.profile.phone;
-    const payerIdentificationType = readString(payerIdentification?.type) ?? (fallbackCpfNumber ? "CPF" : null);
-    const payerIdentificationNumber = readString(payerIdentification?.number) ?? fallbackCpfNumber;
+    const payerIdentificationType = readString(payerIdentification?.type) ?? fallbackDocument?.type.toUpperCase() ?? null;
+    const payerIdentificationNumber = readString(payerIdentification?.number) ?? fallbackDocument?.number ?? null;
 
     await recordPaymentAttemptContextSafely(client, {
       paymentId: intent.payment.id,
