@@ -2,6 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { NextResponse, type NextRequest } from "next/server";
 import { getSupabasePublicEnv } from "./env";
+import { isMissingColumnError } from "./schema-errors";
 
 const protectedPrefixes = ["/admin", "/dashboard"];
 const protectedApiPrefixes = ["/api/dashboard"];
@@ -34,12 +35,12 @@ type ProxyProfileRow = {
   email: string | null;
   full_name: string | null;
   company_name: string | null;
-  account_type: string | null;
+  account_type?: string | null;
   phone: string | null;
   phone_normalized: string | null;
   phone_verified_at: string | null;
   phone_whatsapp_exists: boolean | null;
-  document_type: string | null;
+  document_type?: string | null;
   cpf_hash: string | null;
   cpf_preview: string | null;
   signup_completed_at: string | null;
@@ -134,6 +135,26 @@ async function loadProxyAccountCompletion(
     .maybeSingle<ProxyProfileRow>();
 
   if (error) {
+    if (isMissingColumnError(error, ["account_type", "document_type"])) {
+      const { data: legacyData, error: legacyError } = await supabase
+        .from("profiles")
+        .select("email, full_name, company_name, phone, phone_normalized, phone_verified_at, phone_whatsapp_exists, cpf_hash, cpf_preview, signup_completed_at, is_platform_admin")
+        .eq("id", userId)
+        .maybeSingle<Omit<ProxyProfileRow, "account_type" | "document_type">>();
+
+      if (legacyError) {
+        return null;
+      }
+
+      return mapProxyAccountCompletion(legacyData
+        ? {
+            ...legacyData,
+            account_type: null,
+            document_type: null,
+          }
+        : null);
+    }
+
     return null;
   }
 
@@ -166,7 +187,7 @@ function mapProxyAccountCompletion(profile: ProxyProfileRow | null): ProxyAccoun
   const hasPhone = Boolean(profile.phone_normalized || normalizeBrazilPhone(profile.phone));
   const phoneVerified = Boolean(profile.phone_verified_at);
   const hasDocument = Boolean(profile.cpf_hash);
-  const documentType = normalizeAccountDocumentType(profile.document_type) ?? (hasDocument ? "cpf" : null);
+  const documentType = inferAccountDocumentType(profile);
   const accountType = normalizeAccountType(profile.account_type) ?? (documentType === "cnpj" ? "company" : "person");
   const isPlatformAdmin = Boolean(profile.is_platform_admin);
 
@@ -218,4 +239,14 @@ function normalizeAccountDocumentType(value: string | null | undefined) {
   const normalized = typeof value === "string" ? value.toLowerCase() : null;
 
   return normalized === "cnpj" || normalized === "cpf" ? normalized : null;
+}
+
+function inferAccountDocumentType(profile: Pick<ProxyProfileRow, "cpf_hash" | "cpf_preview" | "document_type">) {
+  const documentType = normalizeAccountDocumentType(profile.document_type);
+
+  if (documentType || !profile.cpf_hash) {
+    return documentType;
+  }
+
+  return profile.cpf_preview?.includes("/") ? "cnpj" : "cpf";
 }

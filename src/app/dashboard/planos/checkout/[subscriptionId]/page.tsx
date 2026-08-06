@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { BillingPlanCheckout } from "@/components/connectyhub-os/billing-plan-checkout";
 import { ConnectyShell } from "@/components/connectyhub-os/connecty-shell";
+import { AccountCompletionRequiredError, assertAccountComplete } from "@/lib/account/signup-completion";
 import {
   loadBillingCheckoutBumps,
   loadBillingCheckoutIntent,
@@ -44,6 +45,17 @@ export default async function DashboardBillingCheckoutPage({
   }
 
   const client = createServiceClient();
+
+  try {
+    await assertAccountComplete({ userId: workspace.user.id, client });
+  } catch (error) {
+    if (error instanceof AccountCompletionRequiredError) {
+      redirect(`/dashboard/minha-conta?complete=1&next=${encodeURIComponent(`/dashboard/planos/checkout/${subscriptionId}`)}`);
+    }
+
+    throw error;
+  }
+
   const intent = await loadBillingCheckoutIntent(client, {
     organizationId: workspace.organization.id,
     subscriptionId,

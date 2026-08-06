@@ -287,6 +287,7 @@ export function ConnectyShell({
   const [notificationGroups, setNotificationGroups] = useState<Record<string, ConnectyShellNotification[]>>({});
   const [billingAccess, setBillingAccess] = useState<BillingAccessClientStatus | null>(null);
   const [accountCompletion, setAccountCompletion] = useState<AccountCompletionClientStatus | null>(null);
+  const [accountCompletionChecked, setAccountCompletionChecked] = useState(mode !== "client");
   const [, setAccountCompletionDismissed] = useState(false);
   const [trialReminderState, setTrialReminderState] = useState<{ key: string | null; dismissed: boolean | null }>({
     key: null,
@@ -308,6 +309,7 @@ export function ConnectyShell({
   }, []);
 
   const accountCompletionPending = mode === "client" && accountCompletion?.isComplete === false;
+  const accountCompletionGateActive = mode === "client" && (!accountCompletionChecked || accountCompletionPending);
   const trialReminderStatus = billingAccess
     && billingAccess.balanceCredits > 0
     && (billingAccess.state === "trial_active" || billingAccess.state === "trial_low_credits")
@@ -463,6 +465,10 @@ export function ConnectyShell({
         if (!cancelled) {
           setAccountCompletion(null);
         }
+      } finally {
+        if (!cancelled) {
+          setAccountCompletionChecked(true);
+        }
       }
     }
 
@@ -491,6 +497,7 @@ export function ConnectyShell({
 
         if (response.status === 428 && data?.accountCompletion) {
           setAccountCompletion(data.accountCompletion);
+          setAccountCompletionChecked(true);
           setAccountCompletionDismissed(false);
         }
 
@@ -1060,7 +1067,7 @@ export function ConnectyShell({
         {/* Content */}
         <main className="flex-1 overflow-auto">
           {mode === "client" ? <AdminImpersonationBanner /> : null}
-          {mode === "client" && !accountCompletionPending && !isAccountPage ? <BillingStatusBanner status={billingAccess} /> : null}
+          {mode === "client" && !accountCompletionGateActive && !isAccountPage ? <BillingStatusBanner status={billingAccess} /> : null}
           <div
             className={cn(
               "connecty-shell-content mx-auto w-full max-w-[1680px] px-3 sm:px-4 lg:px-8",
@@ -1073,7 +1080,7 @@ export function ConnectyShell({
           </div>
         </main>
       </div>
-      {mode === "client" && !accountCompletionPending && active !== "/dashboard/planos" ? (
+      {mode === "client" && !accountCompletionGateActive && active !== "/dashboard/planos" ? (
         <BillingAccessLockOverlay status={billingAccess} />
       ) : null}
       {mode === "client" ? (
@@ -1092,6 +1099,7 @@ export function ConnectyShell({
           onAvatarSynced={setAvatarUrl}
           onCompleted={(nextStatus) => {
             setAccountCompletion(nextStatus);
+            setAccountCompletionChecked(true);
             setAccountCompletionDismissed(nextStatus.isComplete);
           }}
         />

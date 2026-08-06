@@ -6,6 +6,7 @@ import { normalizeProfileAvatarUrl, syncAuthUserWhatsappAvatar } from "@/lib/acc
 import { grantTrialCredits, scheduleTrialConversionMessages, TRIAL_PLAN_CODE } from "@/lib/billing/trial";
 import { sendTrialStartedNotification } from "@/lib/billing/trial-notifications";
 import { decryptCredentialValue, encryptCredentialValue, hashCredentialValue } from "@/lib/security/credentials-crypto";
+import { isMissingColumnError } from "@/lib/supabase/schema-errors";
 import { createServiceClient } from "@/lib/supabase/service";
 import { readWhatsappInstanceProfileImageUrl } from "@/lib/whatsapp/instance-profile-image";
 import { loadUazapiCredentials, type UazapiCredentials } from "@/lib/whatsapp/uazapi-credentials";
@@ -20,12 +21,12 @@ type ProfileCompletionRow = {
   email: string | null;
   full_name: string | null;
   company_name: string | null;
-  account_type: string | null;
+  account_type?: string | null;
   phone: string | null;
   phone_normalized: string | null;
   phone_verified_at: string | null;
   phone_whatsapp_exists: boolean | null;
-  document_type: string | null;
+  document_type?: string | null;
   cpf_hash: string | null;
   cpf_preview: string | null;
   signup_completed_at: string | null;
@@ -155,7 +156,7 @@ export async function getAccountCompletionStatusForUser(input: {
   const hasPhone = Boolean(profile.phone_normalized || normalizeBrazilPhone(profile.phone ?? ""));
   const phoneVerified = Boolean(profile.phone_verified_at);
   const hasDocument = Boolean(profile.cpf_hash);
-  const documentType = normalizeAccountDocumentType(profile.document_type) ?? (hasDocument ? "cpf" : null);
+  const documentType = inferAccountDocumentType(profile);
   const accountType = normalizeAccountType(profile.account_type) ?? (documentType === "cnpj" ? "company" : "person");
   const isPlatformAdmin = Boolean(profile.is_platform_admin);
 
@@ -319,6 +320,31 @@ export async function saveAccountCompletionProfile(input: {
     .eq("id", input.userId);
 
   if (error) {
+    if (isMissingColumnError(error, ["account_type", "document_type"])) {
+      const legacyUpdates = { ...updates };
+      delete legacyUpdates.account_type;
+      delete legacyUpdates.document_type;
+      const { error: legacyError } = await client
+        .from("profiles")
+        .update(legacyUpdates)
+        .eq("id", input.userId);
+
+      if (!legacyError) {
+        await markSignupCompleteIfReady(client, {
+          userId: input.userId,
+          source: input.source ?? "account_completion_profile",
+        });
+
+        return getAccountCompletionStatusForUser({ userId: input.userId, client });
+      }
+
+      if (legacyError.code === "23505") {
+        throw new Error("Este CPF/CNPJ ou WhatsApp ja esta vinculado a outro cadastro.");
+      }
+
+      throw new Error(`Nao foi possivel atualizar o cadastro: ${legacyError.message}`);
+    }
+
     if (error.code === "23505") {
       throw new Error("Este CPF/CNPJ ou WhatsApp ja esta vinculado a outro cadastro.");
     }
@@ -354,18 +380,29 @@ export async function loadAccountDocument(input: {
     .eq("id", input.userId)
     .maybeSingle<{ cpf_encrypted: string | null; document_type: string | null }>();
 
-  if (error || !data?.cpf_encrypted) {
+  if (error) {
+    if (isMissingColumnError(error, ["document_type"])) {
+      const { data: legacyData, error: legacyError } = await client
+        .from("profiles")
+        .select("cpf_encrypted")
+        .eq("id", input.userId)
+        .maybeSingle<{ cpf_encrypted: string | null }>();
+
+      if (legacyError || !legacyData?.cpf_encrypted) {
+        return null;
+      }
+
+      return decryptAccountDocument(legacyData.cpf_encrypted, null);
+    }
+
     return null;
   }
 
-  try {
-    const number = decryptCredentialValue(data.cpf_encrypted);
-    const type = normalizeAccountDocumentType(data.document_type) ?? (number.length === 14 ? "cnpj" : "cpf");
-
-    return { type, number };
-  } catch {
+  if (!data?.cpf_encrypted) {
     return null;
   }
+
+  return decryptAccountDocument(data.cpf_encrypted, data.document_type);
 }
 
 export async function sendPhoneVerificationCode(input: {
@@ -791,6 +828,27 @@ function normalizeAccountDocumentType(value: string | null | undefined): Account
   return normalized === "cnpj" || normalized === "cpf" ? normalized : null;
 }
 
+function inferAccountDocumentType(profile: Pick<ProfileCompletionRow, "cpf_hash" | "cpf_preview" | "document_type">) {
+  const documentType = normalizeAccountDocumentType(profile.document_type);
+
+  if (documentType || !profile.cpf_hash) {
+    return documentType;
+  }
+
+  return profile.cpf_preview?.includes("/") ? "cnpj" : "cpf";
+}
+
+function decryptAccountDocument(encrypted: string, documentType: string | null | undefined) {
+  try {
+    const number = decryptCredentialValue(encrypted);
+    const type = normalizeAccountDocumentType(documentType) ?? (number.length === 14 ? "cnpj" : "cpf");
+
+    return { type, number };
+  } catch {
+    return null;
+  }
+}
+
 function formatDocumentPreview(document: { type: AccountDocumentType; number: string }) {
   if (document.type === "cnpj") {
     return `**.***.***/****-${document.number.slice(-2)}`;
@@ -825,6 +883,26 @@ async function loadProfileCompletion(client: SupabaseClient, userId: string) {
     .maybeSingle<ProfileCompletionRow>();
 
   if (error) {
+    if (isMissingColumnError(error, ["account_type", "document_type"])) {
+      const { data: legacyData, error: legacyError } = await client
+        .from("profiles")
+        .select("id, email, full_name, company_name, phone, phone_normalized, phone_verified_at, phone_whatsapp_exists, cpf_hash, cpf_preview, signup_completed_at, is_platform_admin, trial_whatsapp_opt_in")
+        .eq("id", userId)
+        .maybeSingle<Omit<ProfileCompletionRow, "account_type" | "document_type">>();
+
+      if (legacyError) {
+        throw new Error(`Nao foi possivel carregar o cadastro: ${legacyError.message}`);
+      }
+
+      return legacyData
+        ? {
+            ...legacyData,
+            account_type: null,
+            document_type: null,
+          }
+        : null;
+    }
+
     throw new Error(`Nao foi possivel carregar o cadastro: ${error.message}`);
   }
 

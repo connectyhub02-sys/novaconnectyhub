@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { PricingPlansGrid } from "@/components/connectyhub-os/pricing-plans-grid";
 import { ConnectyShell } from "@/components/connectyhub-os/connecty-shell";
+import { AccountCompletionRequiredError, assertAccountComplete } from "@/lib/account/signup-completion";
 import { buildDashboardBillingCheckoutPath } from "@/lib/billing/plan-checkout";
 import { loadPublicPricingPlans } from "@/lib/billing/public-pricing-server";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
@@ -25,6 +26,17 @@ export default async function DashboardPlanosPage() {
 
   const organization = workspace.organization;
   const client = createServiceClient();
+
+  try {
+    await assertAccountComplete({ userId: workspace.user.id, client });
+  } catch (error) {
+    if (error instanceof AccountCompletionRequiredError) {
+      redirect("/dashboard/minha-conta?complete=1&next=%2Fdashboard%2Fplanos");
+    }
+
+    throw error;
+  }
+
   const [pendingPlan, pricingPlans] = await Promise.all([
     organization ? loadPendingPlan(client, organization.id) : null,
     loadPublicPricingPlans(client),
