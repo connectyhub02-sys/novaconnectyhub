@@ -44,13 +44,13 @@ export function AuthCard({
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
   const [remoteWhatsappCheck, setRemoteWhatsappCheck] = useState<WhatsappCheckState | null>(null);
-  const [manualSignupOpen, setManualSignupOpen] = useState(mode !== "signup");
+  const [manualCredentialsOpen, setManualCredentialsOpen] = useState(false);
 
   const isSignup = mode === "signup";
   const benefitItems = ["Sessao persistente", "Painel do cliente", "Credenciais seguras"];
   const documentType = accountType === "company" ? "cnpj" : "cpf";
   const documentLabel = accountType === "company" ? "CNPJ" : "CPF";
-  const showCredentialForm = !isSignup || manualSignupOpen || awaitingPhoneVerification;
+  const showCredentialForm = manualCredentialsOpen || awaitingPhoneVerification;
   const currentPhoneForVerification = normalizeBrazilPhoneForApi(phone);
   const whatsappCheck = useMemo<WhatsappCheckState>(() => {
     if (!isSignup || awaitingPhoneVerification) {
@@ -418,18 +418,24 @@ export function AuthCard({
             </button>
           ) : null}
 
-          {isSignup && !awaitingPhoneVerification ? (
+          {!awaitingPhoneVerification ? (
             <div className="my-4">
               <button
                 className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md border border-white/[0.1] bg-black/25 px-4 text-sm font-semibold text-zinc-300 transition hover:border-white/20 hover:bg-white/[0.05] hover:text-white"
                 onClick={() => {
-                  setManualSignupOpen((current) => !current);
+                  setManualCredentialsOpen((current) => !current);
                   setMessage("");
                 }}
                 type="button"
               >
                 <Mail size={16} />
-                {manualSignupOpen ? "Ocultar cadastro com email" : "Cadastrar com email e senha"}
+                {manualCredentialsOpen
+                  ? isSignup
+                    ? "Ocultar cadastro com email"
+                    : "Ocultar entrada com email"
+                  : isSignup
+                    ? "Cadastrar com email e senha"
+                    : "Entrar com email e senha"}
               </button>
             </div>
           ) : null}
