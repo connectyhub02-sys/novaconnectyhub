@@ -35,6 +35,7 @@ const GATEWAY_STATUS_REVALIDATE_LIMIT = 8;
 const GATEWAY_HEALTH_EVENT_TYPE = "connectyhub.health_check";
 const ADMIN_GATEWAY_PROVIDER_EVENT_LIMIT = 100;
 const ADMIN_GATEWAY_PROVIDER_EVENT_LOOKBACK_DAYS = 14;
+const CONNECTYHUB_API_ACCESS_GUARD_KEY = "connectyhub_api_access_guard";
 
 export type GatewayScope =
   | "instances:read"
@@ -1863,7 +1864,7 @@ export async function createAdminApiClient(input: {
   }
 
   if (existing) {
-    return existing;
+    return restoreGuardedApiClientAccess(client, existing);
   }
 
   const { data, error } = await client
@@ -1887,6 +1888,87 @@ export async function createAdminApiClient(input: {
   }
 
   return data;
+}
+
+async function restoreGuardedApiClientAccess(client: SupabaseClient, apiClient: ApiClientRow) {
+  if (apiClient.status !== "paused" || !wasPausedByConnectyhubApiAccessGuard(apiClient.metadata)) {
+    return apiClient;
+  }
+
+  const restoredAt = new Date().toISOString();
+  const metadata = buildAllowedAccessGuardMetadata(apiClient.metadata, restoredAt);
+  const { data, error } = await client
+    .from("connectyhub_api_clients")
+    .update({
+      status: "active",
+      metadata,
+    })
+    .eq("id", apiClient.id)
+    .eq("status", "paused")
+    .select(apiClientColumns)
+    .maybeSingle<ApiClientRow>();
+
+  if (error) {
+    throw new GatewayHttpError(500, "api_client_restore_failed", `Nao foi possivel reativar a API WhatsApp: ${error.message}`);
+  }
+
+  await Promise.all([
+    restoreGuardedApiClientChildren(client, {
+      table: "connectyhub_api_keys",
+      clientId: apiClient.id,
+      restoredAt,
+    }),
+    restoreGuardedApiClientChildren(client, {
+      table: "connectyhub_webhook_endpoints",
+      clientId: apiClient.id,
+      restoredAt,
+    }),
+  ]);
+
+  return data ?? {
+    ...apiClient,
+    status: "active" as const,
+    metadata,
+    updated_at: restoredAt,
+  };
+}
+
+async function restoreGuardedApiClientChildren(
+  client: SupabaseClient,
+  input: {
+    table: "connectyhub_api_keys" | "connectyhub_webhook_endpoints";
+    clientId: string;
+    restoredAt: string;
+  },
+) {
+  const { data, error } = await client
+    .from(input.table)
+    .select("id, metadata")
+    .eq("client_id", input.clientId)
+    .eq("status", "paused");
+
+  if (error) {
+    throw new GatewayHttpError(500, "api_client_dependency_restore_failed", `Nao foi possivel carregar dependencias da API WhatsApp: ${error.message}`);
+  }
+
+  const rows = (data ?? []) as Array<{ id: string; metadata: JsonRecord | null }>;
+
+  await Promise.all(rows
+    .filter((row) => wasPausedByConnectyhubApiAccessGuard(row.metadata))
+    .map(async (row) => {
+      const update = await client
+        .from(input.table)
+        .update({
+          status: "active",
+          metadata: buildAllowedAccessGuardMetadata(row.metadata, input.restoredAt),
+        })
+        .eq("id", row.id)
+        .eq("status", "paused");
+
+      if (update.error) {
+        throw new GatewayHttpError(500, "api_client_dependency_restore_failed", `Nao foi possivel reativar dependencia da API WhatsApp: ${update.error.message}`);
+      }
+    }));
 }
 
 export async function createAdminApiKey(input: {
@@ -2696,7 +2778,7 @@ export async function ensureClientApiClient(input: {
   }
 
   if (existing) {
-    return existing;
+    return restoreGuardedApiClientAccess(client, existing);
   }
 
   const baseName = input.organizationName.trim() || "Minha empresa";
@@ -5394,6 +5476,35 @@ function findValue(value: unknown, predicate: (key: string, value: unknown) => b
 
 function isRecord(value: unknown): value is JsonRecord {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function wasPausedByConnectyhubApiAccessGuard(metadata: JsonRecord | null | undefined) {
+  const guard = isRecord(metadata) ? metadata[CONNECTYHUB_API_ACCESS_GUARD_KEY] : null;
+
+  return isRecord(guard)
+    && guard.paused_by === CONNECTYHUB_API_ACCESS_GUARD_KEY
+    && guard.allowed === false;
+}
+
+function buildAllowedAccessGuardMetadata(metadata: JsonRecord | null | undefined, checkedAt: string) {
+  const current = isRecord(metadata) ? metadata : {};
+  const previousGuard = isRecord(current[CONNECTYHUB_API_ACCESS_GUARD_KEY])
+    ? current[CONNECTYHUB_API_ACCESS_GUARD_KEY]
+    : {};
+
+  return {
+    ...current,
+    [CONNECTYHUB_API_ACCESS_GUARD_KEY]: {
+      allowed: true,
+      reason: "allowed",
+      status: null,
+      checked_at: checkedAt,
+      paused_at: typeof previousGuard.paused_at === "string" ? previousGuard.paused_at : null,
+      restored_at: checkedAt,
+      paused_by: typeof previousGuard.paused_by === "string" ? previousGuard.paused_by : CONNECTYHUB_API_ACCESS_GUARD_KEY,
+      previous_status: typeof previousGuard.previous_status === "string" ? previousGuard.previous_status : "active",
+    },
+  };
 }
 
 function readMetadataString(record: JsonRecord, key: string) {
