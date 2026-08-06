@@ -408,7 +408,7 @@ export function AuthCard({
 
           {supabaseConfigured ? (
             <button
-              className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md border border-white/[0.12] bg-white/[0.04] px-4 text-sm font-semibold text-white transition hover:border-[#00f3ff]/45 hover:bg-[#00f3ff]/10 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md border border-white bg-white px-4 text-sm font-bold text-slate-950 shadow-[0_0_28px_rgba(255,255,255,0.10)] transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60"
               disabled={status === "loading"}
               onClick={handleGoogleSignIn}
               type="button"
@@ -421,7 +421,12 @@ export function AuthCard({
           {!awaitingPhoneVerification ? (
             <div className="my-4">
               <button
-                className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md border border-white/[0.1] bg-black/25 px-4 text-sm font-semibold text-zinc-300 transition hover:border-white/20 hover:bg-white/[0.05] hover:text-white"
+                className={cn(
+                  "inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md border px-4 text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-60",
+                  manualCredentialsOpen
+                    ? "border-[#00f3ff]/50 bg-[#00f3ff]/14 text-cyan-50 hover:border-[#00f3ff]/70 hover:bg-[#00f3ff]/20"
+                    : "border-[#0aff0a] bg-[#0aff0a] text-slate-950 shadow-[0_0_26px_rgba(10,255,10,0.18)] hover:bg-[#5cff5c]",
+                )}
                 onClick={() => {
                   setManualCredentialsOpen((current) => !current);
                   setMessage("");
