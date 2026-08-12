@@ -272,6 +272,8 @@ export async function getWhatsappOperationsDashboard(
 }
 
 export async function fetchWhatsappGroups(context: WhatsappOperationalContext) {
+  assertWhatsappConnected(context);
+
   const result = await callUazapi(context, "/group/list", {
     method: "GET",
     query: { noparticipants: true },
@@ -287,6 +289,8 @@ export async function fetchWhatsappGroups(context: WhatsappOperationalContext) {
 }
 
 export async function fetchWhatsappNewsletters(context: WhatsappOperationalContext) {
+  assertWhatsappConnected(context);
+
   const result = await callUazapi(context, "/newsletter/list", {
     method: "GET",
   });
@@ -301,6 +305,8 @@ export async function fetchWhatsappNewsletters(context: WhatsappOperationalConte
 }
 
 export async function fetchWhatsappMessageLimits(context: WhatsappOperationalContext) {
+  assertWhatsappConnected(context);
+
   const result = await callUazapi(context, "/instance/wa_messages_limits", {
     method: "GET",
   });
@@ -312,6 +318,8 @@ export async function fetchWhatsappMessageLimits(context: WhatsappOperationalCon
 }
 
 export async function fetchWhatsappCampaignFolders(context: WhatsappOperationalContext) {
+  assertWhatsappConnected(context);
+
   const result = await callUazapi(context, "/sender/listfolders", {
     method: "GET",
   });
@@ -334,6 +342,8 @@ export async function queueWhatsappStatusBroadcast(
     scheduledFor?: string | null;
   },
 ) {
+  assertWhatsappConnected(context);
+
   if (!context.behavior.statusBroadcasts) {
     throw new Error("Ative Status no comportamento do agente antes de publicar stories.");
   }
@@ -373,6 +383,8 @@ export async function queueWhatsappSimpleCampaign(
     scheduledFor?: string | null;
   },
 ) {
+  assertWhatsappConnected(context);
+
   if (!context.behavior.campaignBroadcasts) {
     throw new Error("Ative Campanhas no comportamento do agente antes de criar disparos.");
   }
@@ -411,6 +423,8 @@ export async function queueWhatsappNewsletterText(
     scheduledFor?: string | null;
   },
 ) {
+  assertWhatsappConnected(context);
+
   if (!context.behavior.newsletterBroadcasts) {
     throw new Error("Ative Canais no comportamento do agente antes de postar em newsletters.");
   }
@@ -451,6 +465,8 @@ export async function queueWhatsappTargetTextCampaign(
     catalogItemIds?: string[];
   },
 ) {
+  assertWhatsappConnected(context);
+
   if (!context.behavior.campaignBroadcasts && !context.behavior.newsletterBroadcasts) {
     throw new Error("Ative Campanhas ou Canais no comportamento do agente antes de agendar posts para grupos/canais.");
   }
@@ -725,6 +741,7 @@ async function processWhatsappOutboundItem(client: SupabaseClient, item: Content
 
     const operation = asString(metadata.operation) as WhatsappOutboundOperation | null;
     const context = await resolveContextByOutboundItem(client, claimed);
+    assertWhatsappConnected(context);
     const payload = readRecord(metadata.payload) ?? {};
     let providerResponse: unknown;
 
@@ -969,6 +986,12 @@ async function buildOperationalContext(
     credentials,
     behavior,
   };
+}
+
+function assertWhatsappConnected(context: WhatsappOperationalContext) {
+  if (context.instance.status !== "connected") {
+    throw new Error("Conecte o WhatsApp antes de usar grupos, status, canais ou campanhas.");
+  }
 }
 
 async function resolveOperationalBehaviorConfig(

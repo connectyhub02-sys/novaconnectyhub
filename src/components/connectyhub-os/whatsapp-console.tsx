@@ -2484,14 +2484,14 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
       {state?.agent && activeTab === "multichannel" ? (
       <div className="mt-5">
         <Panel
-          title="Operacao multicanal"
+          title="Grupos e campanhas WhatsApp"
           eyebrow="grupos / status / canais / campanhas"
-          action={<NeonBadge tone={behaviorChanged || !channelOps ? "amber" : "green"}>{behaviorChanged ? "salve primeiro" : channelOps ? "sincronizado" : "pendente"}</NeonBadge>}
+          action={<NeonBadge tone={!isConnected || behaviorChanged || !channelOps ? "amber" : "green"}>{!isConnected ? "whatsapp offline" : behaviorChanged ? "salve primeiro" : channelOps ? "sincronizado" : "pendente"}</NeonBadge>}
         >
           <div className="mb-3 grid gap-3 rounded-xl border p-3 sm:p-4" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div className="min-w-0">
-                <p className="font-mono text-[9px] font-bold uppercase tracking-widest text-slate-500">Permissoes multicanal</p>
+                <p className="font-mono text-[9px] font-bold uppercase tracking-widest text-slate-500">Permissoes de grupos</p>
                 <p className="mt-1 text-[11px] leading-5 text-slate-300">
                   Grupos, Status, canais/newsletters e campanhas deste WhatsApp.
                 </p>
@@ -2499,7 +2499,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
               <ActionButton
                 icon={Wand2}
                 label={behaviorChanged ? "Salvar permissoes" : "Permissoes salvas"}
-                description="Grava os controles multicanal do agente."
+                description="Grava os controles de grupos e campanhas do agente."
                 disabled={!state?.capability.schemaReady || !behaviorChanged || promptTooLong || agentNameInvalid}
                 loading={running === "save_settings"}
                 onClick={saveAgentSettings}
@@ -2532,6 +2532,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
             behavior={normalizeWhatsappBehaviorConfig(state.behavior)}
             channelAction={channelAction}
             channelOps={channelOps}
+            connected={isConnected}
             campaignNumbers={campaignNumbers}
             campaignText={campaignText}
             campaignTitle={campaignTitle}
@@ -2962,7 +2963,7 @@ const whatsappConsoleTabs: Array<{
   { id: "qualification", label: "Qualificacao", description: "CRM e score", icon: CheckCircle2 },
   { id: "behavior", label: "Comportamento", description: "Modos e timers", icon: Shuffle },
   { id: "channels", label: "Redes sociais", description: "Instagram / Facebook", icon: Globe2, comingSoon: true },
-  { id: "multichannel", label: "Multicanal", description: "Grupos e campanhas", icon: Forward },
+  { id: "multichannel", label: "Grupos e campanhas", description: "WhatsApp", icon: Forward },
   { id: "files", label: "Arquivos", description: "Conhecimento", icon: FileText },
 ];
 
@@ -5684,6 +5685,7 @@ function WhatsappChannelOperationsPanel({
   behavior,
   channelAction,
   channelOps,
+  connected,
   campaignNumbers,
   campaignText,
   campaignTitle,
@@ -5707,6 +5709,7 @@ function WhatsappChannelOperationsPanel({
   behavior: WhatsappBehaviorConfig;
   channelAction: string | null;
   channelOps: WhatsappChannelOperationsState | null;
+  connected: boolean;
   campaignNumbers: string;
   campaignText: string;
   campaignTitle: string;
@@ -5728,12 +5731,13 @@ function WhatsappChannelOperationsPanel({
   onStatusTextChange: (value: string) => void;
 }) {
   const scheduledFor = localDatetimeToIso(channelScheduledFor);
+  const operationsLocked = !connected;
   const statusEnabled = behavior.statusBroadcasts;
   const campaignEnabled = behavior.campaignBroadcasts;
   const newsletterEnabled = behavior.newsletterBroadcasts;
-  const statusReady = statusEnabled && statusText.trim().length > 0;
-  const campaignReady = campaignEnabled && campaignText.trim().length > 0 && campaignNumbers.trim().length > 0;
-  const newsletterReady = newsletterEnabled && newsletterText.trim().length > 0 && newsletterJid.trim().length > 0;
+  const statusReady = !operationsLocked && statusEnabled && statusText.trim().length > 0;
+  const campaignReady = !operationsLocked && campaignEnabled && campaignText.trim().length > 0 && campaignNumbers.trim().length > 0;
+  const newsletterReady = !operationsLocked && newsletterEnabled && newsletterText.trim().length > 0 && newsletterJid.trim().length > 0;
   const targets = channelOps?.targets ?? [];
   const [selectedTargetIds, setSelectedTargetIds] = useState<string[]>([]);
   const [targetCampaignTitle, setTargetCampaignTitle] = useState("");
@@ -5755,11 +5759,13 @@ function WhatsappChannelOperationsPanel({
   const selectedValidCatalogItemIds = selectedCatalogItems.map((item) => item.id);
   const targetAttachmentCount = (targetMediaUrl.trim() ? 1 : 0) + selectedCatalogItems.filter((item) => item.media.length > 0).length;
   const targetRecurring = targetRecurrenceFrequency !== "none";
-  const targetAiReady = selectedTargets.length > 0
+  const targetAiReady = !operationsLocked
+    && selectedTargets.length > 0
     && (targetAiBrief.trim().length > 0 || targetCampaignTitle.trim().length > 0 || targetCampaignText.trim().length > 0)
     && (campaignEnabled || newsletterEnabled)
     && (!targetMentionAll || !selectedHasNewsletter);
-  const targetCampaignReady = selectedTargets.length > 0
+  const targetCampaignReady = !operationsLocked
+    && selectedTargets.length > 0
     && targetCampaignText.trim().length > 0
     && (campaignEnabled || newsletterEnabled)
     && (!targetMentionAll || !selectedHasNewsletter);
@@ -5799,6 +5805,20 @@ function WhatsappChannelOperationsPanel({
   return (
     <div className="grid gap-3 sm:gap-4 2xl:grid-cols-[minmax(0,1fr)_320px]">
       <div className="grid gap-3 sm:gap-4">
+        {operationsLocked ? (
+          <div className="rounded-xl border border-amber-300/25 bg-amber-300/10 px-3 py-3 text-amber-100">
+            <div className="flex gap-2">
+              <PlugZap className="mt-0.5 h-4 w-4 shrink-0" />
+              <div className="min-w-0">
+                <p className="text-[12px] font-semibold leading-5">Conecte o WhatsApp para operar grupos e campanhas.</p>
+                <p className="mt-1 text-[11px] leading-5 text-amber-100/80">
+                  Buscar grupos, postar status, consultar canais e enviar campanhas ficam bloqueados ate a instancia deste agente estar conectada.
+                </p>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
         <div className="grid gap-3 rounded-xl border p-3 md:grid-cols-2 xl:grid-cols-4" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
           <InfoTile label="Grupos" value={behavior.allowGroupChats ? formatGroupReplyMode(behavior.groupReplyMode) : "Pausado"} />
           <InfoTile label="Status" value={statusEnabled ? "Liberado" : "Bloqueado"} />
@@ -5818,6 +5838,7 @@ function WhatsappChannelOperationsPanel({
             icon={MessageCircle}
             label="Buscar grupos"
             description="Consulta os grupos visiveis para esta instancia na Uazapi."
+            disabled={operationsLocked}
             loading={channelAction === "refresh_groups"}
             onClick={() => onRunAction("refresh_groups")}
           />
@@ -5825,6 +5846,7 @@ function WhatsappChannelOperationsPanel({
             icon={FileText}
             label="Buscar canais"
             description="Consulta canais/newsletters ligados ao numero."
+            disabled={operationsLocked}
             loading={channelAction === "refresh_newsletters"}
             onClick={() => onRunAction("refresh_newsletters")}
           />
@@ -5832,6 +5854,7 @@ function WhatsappChannelOperationsPanel({
             icon={ShieldCheck}
             label="Limites"
             description="Consulta limites de mensagens do WhatsApp pela Uazapi."
+            disabled={operationsLocked}
             loading={channelAction === "message_limits"}
             onClick={() => onRunAction("message_limits")}
           />
@@ -5839,6 +5862,7 @@ function WhatsappChannelOperationsPanel({
             icon={Forward}
             label="Pastas"
             description="Consulta pastas do sender/campanhas da Uazapi."
+            disabled={operationsLocked}
             loading={channelAction === "campaign_folders"}
             onClick={() => onRunAction("campaign_folders")}
           />
@@ -5887,6 +5911,7 @@ function WhatsappChannelOperationsPanel({
                           type="checkbox"
                           className="mt-1 h-4 w-4 shrink-0 accent-cyan-300"
                           checked={selected}
+                          disabled={operationsLocked}
                           onChange={() => toggleTargetSelection(target.id)}
                         />
                         <div className="min-w-0 flex-1">
@@ -5912,7 +5937,7 @@ function WhatsappChannelOperationsPanel({
                               type="button"
                               className="rounded-md border px-2 py-1 font-mono text-[9px] uppercase tracking-widest text-slate-200"
                               style={{ borderColor: "var(--ch-border)" }}
-                              disabled={channelAction === "update_target_settings"}
+                              disabled={operationsLocked || channelAction === "update_target_settings"}
                               onClick={() => onRunAction("update_target_settings", { targetId: target.id, enabled: !target.enabled })}
                             >
                               {target.enabled ? "Pausar IA" : "Ativar IA"}
@@ -5922,7 +5947,7 @@ function WhatsappChannelOperationsPanel({
                             type="button"
                             className="rounded-md border px-2 py-1 font-mono text-[9px] uppercase tracking-widest text-slate-200"
                             style={{ borderColor: "var(--ch-border)" }}
-                            disabled={channelAction === "update_target_settings"}
+                            disabled={operationsLocked || channelAction === "update_target_settings"}
                             onClick={() => onRunAction("update_target_settings", { targetId: target.id, campaignEnabled: !target.campaignEnabled })}
                           >
                             {target.campaignEnabled ? "Bloquear campanha" : "Liberar campanha"}
@@ -5932,7 +5957,7 @@ function WhatsappChannelOperationsPanel({
                               type="button"
                               className="rounded-md border px-2 py-1 font-mono text-[9px] uppercase tracking-widest text-slate-200"
                               style={{ borderColor: "var(--ch-border)" }}
-                              disabled={channelAction === "update_target_settings"}
+                              disabled={operationsLocked || channelAction === "update_target_settings"}
                               onClick={() => onRunAction("update_target_settings", {
                                 targetId: target.id,
                                 muteUntil: target.muteUntil ? null : addHoursIso(24),
@@ -5947,7 +5972,7 @@ function WhatsappChannelOperationsPanel({
                             <select
                               className="h-8 rounded-md border bg-transparent px-2 text-[11px] outline-none"
                               value={target.replyMode}
-                              disabled={channelAction === "update_target_settings"}
+                              disabled={operationsLocked || channelAction === "update_target_settings"}
                               onChange={(event) => onRunAction("update_target_settings", { targetId: target.id, replyMode: event.target.value })}
                             >
                               <option value="mentions">So mencoes</option>
@@ -5959,7 +5984,7 @@ function WhatsappChannelOperationsPanel({
                             <select
                               className="h-8 rounded-md border bg-transparent px-2 text-[11px] outline-none"
                               value={target.mentionMode}
-                              disabled={channelAction === "update_target_settings"}
+                              disabled={operationsLocked || channelAction === "update_target_settings"}
                               onChange={(event) => onRunAction("update_target_settings", { targetId: target.id, mentionMode: event.target.value })}
                             >
                               <option value="none">Sem @</option>
@@ -5969,7 +5994,7 @@ function WhatsappChannelOperationsPanel({
                             <select
                               className="h-8 rounded-md border bg-transparent px-2 text-[11px] outline-none"
                               value={target.maxRepliesPerHour}
-                              disabled={channelAction === "update_target_settings"}
+                              disabled={operationsLocked || channelAction === "update_target_settings"}
                               onChange={(event) => onRunAction("update_target_settings", { targetId: target.id, maxRepliesPerHour: Number(event.target.value) })}
                             >
                               <option value={0}>0/h</option>
@@ -6094,12 +6119,13 @@ function WhatsappChannelOperationsPanel({
                       <button
                         key={item.id}
                         type="button"
-                        className="flex min-h-10 items-center gap-2 rounded-md border px-2 text-left transition hover:bg-cyan-400/10"
+                        className="flex min-h-10 items-center gap-2 rounded-md border px-2 text-left transition hover:bg-cyan-400/10 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
                         style={{
                           borderColor: selected ? "rgba(34,211,238,0.45)" : "var(--ch-border)",
                           background: selected ? "rgba(34,211,238,0.10)" : "transparent",
                         }}
                         onClick={() => toggleCatalogItemSelection(item.id)}
+                        disabled={operationsLocked}
                       >
                         <input
                           type="checkbox"
@@ -6319,7 +6345,7 @@ function WhatsappChannelOperationsPanel({
         />
 
         <div className="rounded-xl border p-3 sm:p-4" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
-          <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Historico multicanal</p>
+          <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Historico de envios WhatsApp</p>
           <div className="mt-4 grid gap-2">
             {channelOps?.history.length ? (
               channelOps.history.map((item) => (
@@ -6345,7 +6371,7 @@ function WhatsappChannelOperationsPanel({
               ))
             ) : (
               <div className="rounded-lg border px-3 py-6 text-center text-[12px] text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
-                Nenhum envio multicanal registrado ainda.
+                Nenhum envio de grupos e campanhas registrado ainda.
               </div>
             )}
           </div>
