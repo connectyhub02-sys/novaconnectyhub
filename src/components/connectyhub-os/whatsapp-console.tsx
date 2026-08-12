@@ -2021,8 +2021,8 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
 
         {activeTab === "files" ? (
         <Panel
-          title="Arquivos"
-          eyebrow="base de conhecimento"
+          title="Conhecimento"
+          eyebrow="base do agente"
           action={<NeonBadge tone={state.knowledge.files.length > 0 ? "green" : "amber"}>{state.knowledge.files.length.toLocaleString("pt-BR")} arquivos</NeonBadge>}
         >
           <div className="max-w-xl">
@@ -2030,7 +2030,6 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
               files={state.knowledge.files}
               knowledgeUploading={knowledgeUploading}
               onUploadFile={uploadKnowledgeFile}
-              entitySingular={variant.entitySingular}
             />
           </div>
         </Panel>
@@ -2960,11 +2959,11 @@ const whatsappConsoleTabs: Array<{
 }> = [
   { id: "connection", label: "Conexao", description: "Numero e status", icon: Smartphone },
   { id: "prompt", label: "Prompt", description: "Texto do agente", icon: PenLine },
+  { id: "files", label: "Conhecimento", description: "Arquivos e contexto", icon: FileText },
   { id: "qualification", label: "Qualificacao", description: "CRM e score", icon: CheckCircle2 },
   { id: "behavior", label: "Comportamento", description: "Modos e timers", icon: Shuffle },
   { id: "channels", label: "Redes sociais", description: "Instagram / Facebook", icon: Globe2, comingSoon: true },
   { id: "multichannel", label: "Grupos e campanhas", description: "WhatsApp", icon: Forward },
-  { id: "files", label: "Arquivos", description: "Conhecimento", icon: FileText },
 ];
 
 function WhatsappConsoleCommandBar({
@@ -3067,7 +3066,7 @@ function WhatsappConsoleTabs({
       aria-label="Secoes do painel WhatsApp"
       style={{ background: "var(--ch-panel)", borderColor: "var(--ch-border-strong)" }}
     >
-      <div className="flex min-w-max gap-1 overflow-x-auto pb-1 sm:grid sm:min-w-0 sm:grid-cols-6 sm:overflow-visible sm:pb-0">
+      <div className="flex min-w-max gap-1 overflow-x-auto pb-1 sm:grid sm:min-w-0 sm:grid-cols-3 sm:overflow-visible sm:pb-0 md:grid-cols-4 xl:grid-cols-7">
         {whatsappConsoleTabs.map((tab) => {
           const active = tab.id === activeTab;
           const comingSoon = tab.comingSoon && metaFeatureLaunchPaused;
@@ -4024,7 +4023,7 @@ function GuidedPromptBuilder({
 
         <div className="grid gap-2 md:grid-cols-3">
           <InfoTile label="Produtos no contexto" value={productCount.toLocaleString("pt-BR")} />
-          <InfoTile label="Arquivos anexados" value={knowledgeFileCount.toLocaleString("pt-BR")} />
+          <InfoTile label="Conhecimento" value={`${knowledgeFileCount.toLocaleString("pt-BR")} arquivos`} />
           <InfoTile label="Checkout" value="Botao obrigatorio" />
         </div>
 
@@ -4490,18 +4489,16 @@ function KnowledgeFilesPanel({
   files,
   knowledgeUploading,
   onUploadFile,
-  entitySingular,
 }: {
   files: KnowledgeFile[];
   knowledgeUploading: boolean;
   onUploadFile: (file: File | null) => void;
-  entitySingular: string;
 }) {
   return (
     <div className="rounded-xl border p-3" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
-          Arquivos do {entitySingular}
+          Materiais de conhecimento
           <InfoHint text="Arquivos adicionam contexto ao agente sem deixar o prompt grande demais." />
         </p>
         <label className="inline-flex min-h-9 cursor-pointer items-center justify-center gap-2 rounded-lg border border-cyan-400/25 bg-cyan-400/10 px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-200 transition hover:bg-cyan-400/15">
