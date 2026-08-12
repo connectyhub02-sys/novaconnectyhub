@@ -176,6 +176,10 @@ const PASSKEY_CONNECTION_REASON_TEXT =
   "Conta pediu verificacao por chave de acesso durante a leitura do QR.";
 const PASSKEY_MIGRATION_EXTENSION_URL =
   "https://chromewebstore.google.com/detail/cdjfbjfolpeenlmanmkoglhhcjfgcbpp";
+const META_AGENT_CHANNELS_COMING_SOON = true;
+const META_AGENT_CHANNELS_COMING_SOON_TITLE = "Atendimento Meta em breve";
+const META_AGENT_CHANNELS_COMING_SOON_MESSAGE =
+  "Em breve os agentes vao conseguir atender tambem pelo Instagram e pelo Facebook. Por enquanto, o lancamento segue com WhatsApp ativo; assim que a Meta liberar o app, esses canais serao habilitados aqui.";
 
 type RuntimeAlert = {
   id: string;
@@ -661,6 +665,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
+  const [metaComingSoonChannel, setMetaComingSoonChannel] = useState<string | null>(null);
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [pairCode, setPairCode] = useState<string | null>(null);
   const [connectMode, setConnectMode] = useState<ConnectionMode>("qr");
@@ -1026,6 +1031,11 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
         },
       });
     });
+  }
+
+  function openMetaChannelsComingSoon(channelLabel: string) {
+    setMetaComingSoonChannel(channelLabel);
+    setNotice({ tone: "warning", message: META_AGENT_CHANNELS_COMING_SOON_MESSAGE });
   }
 
   function updatePresenceMode(value: WhatsappPresenceMode) {
@@ -1768,6 +1778,12 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
       />
 
       {notice && <NoticeBar notice={notice} />}
+      {metaComingSoonChannel ? (
+        <MetaChannelsComingSoonModal
+          channelLabel={metaComingSoonChannel}
+          onClose={() => setMetaComingSoonChannel(null)}
+        />
+      ) : null}
 
       {loading ? (
         <LoadingState />
@@ -2425,13 +2441,14 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
               changed={channelConfigChanged}
               entitlement={state.capability.metaSocialChannels}
               onChange={(channelId, patch) => updateAgentChannelConfig(channelId, patch)}
+              onMetaComingSoonClick={openMetaChannelsComingSoon}
             />
             <div className="grid content-start gap-2">
               <InfoTile label="Canal principal" value="WhatsApp" />
-              <InfoTile label="Meta Social" value={state.capability.metaSocialChannels.allowed ? state.capability.metaSocialChannels.title : "Bloqueado"} />
+              <InfoTile label="Meta Social" value={META_AGENT_CHANNELS_COMING_SOON ? "Em breve" : state.capability.metaSocialChannels.allowed ? state.capability.metaSocialChannels.title : "Bloqueado"} />
               <InfoTile label="Meta ativos" value={state.capability.metaSocialChannels.allowed ? `${countEnabledMetaChannels(channelConfigDraft)} / 4` : "0 / 4"} />
-              <InfoTile label="Comentarios" value={state.capability.metaSocialChannels.allowed && countEnabledPublicChannels(channelConfigDraft) ? "Preparado" : "Pausado"} />
-              <InfoTile label="Directs" value={state.capability.metaSocialChannels.allowed && countEnabledPrivateMetaChannels(channelConfigDraft) ? "Preparado" : "Pausado"} />
+              <InfoTile label="Comentarios" value={META_AGENT_CHANNELS_COMING_SOON ? "Em breve" : state.capability.metaSocialChannels.allowed && countEnabledPublicChannels(channelConfigDraft) ? "Preparado" : "Pausado"} />
+              <InfoTile label="Directs" value={META_AGENT_CHANNELS_COMING_SOON ? "Em breve" : state.capability.metaSocialChannels.allowed && countEnabledPrivateMetaChannels(channelConfigDraft) ? "Preparado" : "Pausado"} />
               <div className="flex flex-wrap gap-2 pt-1">
                 <SecondaryAction
                   icon={RefreshCcw}
@@ -2592,6 +2609,10 @@ function isCloneProfileEqual(left: WhatsappCloneProfile, right: WhatsappClonePro
 }
 
 function countEnabledMetaChannels(config: AgentChannelConfig) {
+  if (META_AGENT_CHANNELS_COMING_SOON) {
+    return 0;
+  }
+
   const normalized = normalizeAgentChannelConfig(config);
   return agentChannelDefinitions.filter((definition) =>
     definition.provider === "meta" && normalized.channels[definition.id].enabled
@@ -2599,6 +2620,10 @@ function countEnabledMetaChannels(config: AgentChannelConfig) {
 }
 
 function countEnabledPublicChannels(config: AgentChannelConfig) {
+  if (META_AGENT_CHANNELS_COMING_SOON) {
+    return 0;
+  }
+
   const normalized = normalizeAgentChannelConfig(config);
   return agentChannelDefinitions.filter((definition) =>
     definition.provider === "meta" && definition.mode === "public" && normalized.channels[definition.id].enabled
@@ -2606,6 +2631,10 @@ function countEnabledPublicChannels(config: AgentChannelConfig) {
 }
 
 function countEnabledPrivateMetaChannels(config: AgentChannelConfig) {
+  if (META_AGENT_CHANNELS_COMING_SOON) {
+    return 0;
+  }
+
   const normalized = normalizeAgentChannelConfig(config);
   return agentChannelDefinitions.filter((definition) =>
     definition.provider === "meta" && definition.mode === "private" && normalized.channels[definition.id].enabled
@@ -2617,11 +2646,13 @@ function AgentChannelSettingsPanel({
   changed,
   entitlement,
   onChange,
+  onMetaComingSoonClick,
 }: {
   config: AgentChannelConfig;
   changed: boolean;
   entitlement: PlanFeatureEntitlement;
   onChange: (channelId: AgentChannelId, patch: Partial<AgentChannelConfigItem>) => void;
+  onMetaComingSoonClick: (channelLabel: string) => void;
 }) {
   const normalized = normalizeAgentChannelConfig(config);
 
@@ -2634,24 +2665,31 @@ function AgentChannelSettingsPanel({
         <div className="grid gap-2 md:grid-cols-2">
           {agentChannelDefinitions.map((definition) => {
             const channel = normalized.channels[definition.id];
-            const lockedByPlan = definition.provider === "meta" && !entitlement.allowed;
-            const enabled = channel.enabled && !lockedByPlan;
+            const comingSoon = META_AGENT_CHANNELS_COMING_SOON && definition.provider === "meta";
+            const lockedByPlan = definition.provider === "meta" && !entitlement.allowed && !comingSoon;
+            const blocked = comingSoon || lockedByPlan;
+            const enabled = channel.enabled && !blocked;
+            const handleMetaControlClick = () => onMetaComingSoonClick(definition.label);
 
             return (
               <div
                 key={definition.id}
-                className="rounded-lg border p-3"
+                className={cn("rounded-lg border p-3", comingSoon && "ring-1 ring-cyan-300/10")}
                 style={{ borderColor: "var(--ch-border)", background: "var(--ch-panel-2)" }}
               >
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="text-[13px] font-semibold leading-5" style={{ color: "var(--ch-text)" }}>{definition.label}</p>
-                      <NeonBadge tone={lockedByPlan ? "zinc" : enabled ? "green" : "amber"}>{lockedByPlan ? "plano pro/scale" : enabled ? "ativo" : "pausado"}</NeonBadge>
+                      <NeonBadge tone={comingSoon ? "cyan" : lockedByPlan ? "zinc" : enabled ? "green" : "amber"}>{comingSoon ? "em breve" : lockedByPlan ? "plano pro/scale" : enabled ? "ativo" : "pausado"}</NeonBadge>
                       {definition.primary ? <NeonBadge tone="cyan">principal</NeonBadge> : null}
                     </div>
                     <p className="mt-1 text-[11px] leading-5 text-slate-500">{definition.description}</p>
-                    {lockedByPlan ? (
+                    {comingSoon ? (
+                      <p className="mt-2 rounded-md border border-cyan-300/20 bg-cyan-300/10 px-2 py-1 text-[11px] leading-4 text-cyan-100">
+                        {META_AGENT_CHANNELS_COMING_SOON_MESSAGE}
+                      </p>
+                    ) : lockedByPlan ? (
                       <p className="mt-2 rounded-md border border-amber-300/20 bg-amber-300/10 px-2 py-1 text-[11px] leading-4 text-amber-100">
                         {entitlement.description}
                       </p>
@@ -2669,10 +2707,10 @@ function AgentChannelSettingsPanel({
                     <ToggleTile
                       icon={Power}
                       label={`Ativar ${definition.shortLabel}`}
-                      description="Habilita este canal para o mesmo agente atender quando a integracao Meta permitir."
+                      description={comingSoon ? META_AGENT_CHANNELS_COMING_SOON_MESSAGE : "Habilita este canal para o mesmo agente atender quando a integracao Meta permitir."}
                       checked={enabled}
                       disabled={lockedByPlan}
-                      onChange={() => onChange(definition.id, { enabled: !enabled })}
+                      onChange={() => comingSoon ? handleMetaControlClick() : onChange(definition.id, { enabled: !enabled })}
                     />
                   )}
 
@@ -2682,25 +2720,25 @@ function AgentChannelSettingsPanel({
                         icon={MessageCircle}
                         label="Comentario publico"
                         description="Permite registrar e preparar resposta publica em comentarios."
-                        checked={channel.allowPublicReplies && !lockedByPlan}
+                        checked={channel.allowPublicReplies && !blocked}
                         disabled={lockedByPlan}
-                        onChange={() => onChange(definition.id, { allowPublicReplies: !channel.allowPublicReplies })}
+                        onChange={() => comingSoon ? handleMetaControlClick() : onChange(definition.id, { allowPublicReplies: !channel.allowPublicReplies })}
                       />
                       <ToggleTile
                         icon={Send}
                         label="Direct privado"
                         description="Permite continuar a conversa no privado quando a Meta liberar private reply/direct."
-                        checked={channel.allowPrivateReplies && !lockedByPlan}
+                        checked={channel.allowPrivateReplies && !blocked}
                         disabled={lockedByPlan}
-                        onChange={() => onChange(definition.id, { allowPrivateReplies: !channel.allowPrivateReplies })}
+                        onChange={() => comingSoon ? handleMetaControlClick() : onChange(definition.id, { allowPrivateReplies: !channel.allowPrivateReplies })}
                       />
                       <ToggleTile
                         icon={ShieldCheck}
                         label="Aprovacao humana"
                         description="Segura respostas sensiveis de comentario antes de publicar."
-                        checked={channel.requiresHumanApproval && !lockedByPlan}
+                        checked={channel.requiresHumanApproval && !blocked}
                         disabled={lockedByPlan}
-                        onChange={() => onChange(definition.id, { requiresHumanApproval: !channel.requiresHumanApproval })}
+                        onChange={() => comingSoon ? handleMetaControlClick() : onChange(definition.id, { requiresHumanApproval: !channel.requiresHumanApproval })}
                       />
                     </div>
                   ) : definition.primary ? null : (
@@ -2709,17 +2747,17 @@ function AgentChannelSettingsPanel({
                         icon={Bot}
                         label="Resposta automatica"
                         description="Permite que o agente responda no canal privado sem criar outro prompt."
-                        checked={channel.autoReply && !lockedByPlan}
+                        checked={channel.autoReply && !blocked}
                         disabled={lockedByPlan}
-                        onChange={() => onChange(definition.id, { autoReply: !channel.autoReply })}
+                        onChange={() => comingSoon ? handleMetaControlClick() : onChange(definition.id, { autoReply: !channel.autoReply })}
                       />
                       <ToggleTile
                         icon={ShieldCheck}
                         label="Aprovacao humana"
                         description="Segura conversas privadas quando houver risco ou regra comercial sensivel."
-                        checked={channel.requiresHumanApproval && !lockedByPlan}
+                        checked={channel.requiresHumanApproval && !blocked}
                         disabled={lockedByPlan}
-                        onChange={() => onChange(definition.id, { requiresHumanApproval: !channel.requiresHumanApproval })}
+                        onChange={() => comingSoon ? handleMetaControlClick() : onChange(definition.id, { requiresHumanApproval: !channel.requiresHumanApproval })}
                       />
                     </div>
                   )}
@@ -2737,8 +2775,8 @@ function AgentChannelSettingsPanel({
         <div className="grid gap-2 md:grid-cols-4">
           <InfoTile label="Prompt" value="Unico por agente" />
           <InfoTile label="Memoria" value="Unificada por lead" />
-          <InfoTile label="Plano" value={entitlement.allowed ? entitlement.title : "Pro ou Scale"} />
-          <InfoTile label="Status" value={changed ? "Alteracoes pendentes" : "Configuracao salva"} />
+          <InfoTile label="Plano" value={META_AGENT_CHANNELS_COMING_SOON ? "WhatsApp ativo" : entitlement.allowed ? entitlement.title : "Pro ou Scale"} />
+          <InfoTile label="Status" value={META_AGENT_CHANNELS_COMING_SOON ? "Meta em breve" : changed ? "Alteracoes pendentes" : "Configuracao salva"} />
         </div>
       </BehaviorSection>
     </div>
@@ -2792,6 +2830,65 @@ function NoticeBar({ notice }: { notice: Notice }) {
   return (
     <div className={cn("mb-5 rounded-xl border px-4 py-3 text-[13px] leading-5", colors[notice.tone])}>
       {notice.message}
+    </div>
+  );
+}
+
+function MetaChannelsComingSoonModal({
+  channelLabel,
+  onClose,
+}: {
+  channelLabel: string;
+  onClose: () => void;
+}) {
+  return (
+    <div
+      aria-labelledby="meta-coming-soon-title"
+      aria-modal="true"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm"
+      onClick={onClose}
+      onKeyDown={(event) => event.key === "Escape" && onClose()}
+      role="dialog"
+      tabIndex={0}
+    >
+      <div
+        className="relative w-full max-w-md rounded-2xl border border-cyan-300/25 bg-[#121827] p-5 text-left shadow-2xl"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <button
+          aria-label="Fechar aviso"
+          className="absolute right-3 top-3 grid h-8 w-8 place-items-center rounded-full bg-white/5 text-slate-400 transition hover:bg-white/10 hover:text-white"
+          onClick={onClose}
+          type="button"
+        >
+          <X className="h-4 w-4" />
+        </button>
+
+        <div className="grid h-12 w-12 place-items-center rounded-2xl bg-cyan-300/10 text-cyan-200">
+          <MessageCircle className="h-6 w-6" />
+        </div>
+
+        <p className="mt-4 font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-cyan-200">
+          Em breve
+        </p>
+        <h3 id="meta-coming-soon-title" className="mt-2 pr-8 text-lg font-semibold text-white">
+          {META_AGENT_CHANNELS_COMING_SOON_TITLE}
+        </h3>
+        <p className="mt-3 text-sm leading-6 text-slate-300">
+          {META_AGENT_CHANNELS_COMING_SOON_MESSAGE}
+        </p>
+        <p className="mt-3 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-xs leading-5 text-slate-400">
+          Canal selecionado: {channelLabel}. O atendimento principal continua liberado pelo WhatsApp.
+        </p>
+
+        <button
+          className="mt-5 inline-flex min-h-10 w-full items-center justify-center rounded-lg bg-white px-4 font-mono text-[11px] font-semibold uppercase text-slate-950 transition hover:bg-slate-100"
+          onClick={onClose}
+          type="button"
+        >
+          Entendi
+        </button>
+      </div>
     </div>
   );
 }
