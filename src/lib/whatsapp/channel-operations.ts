@@ -19,6 +19,8 @@ type WhatsappTargetReplyMode = "off" | "all" | "mentions" | "admins" | "observer
 type WhatsappTargetMentionMode = "none" | "author" | "all";
 type WhatsappCampaignRecurrenceFrequency = "daily" | "weekly";
 type WhatsappCampaignDeliveryMode = "text" | "audio" | "text_audio";
+type WhatsappGroupIntelligenceStatus = "fresh" | "stale" | "missing" | "error";
+type WhatsappGroupRiskLevel = "low" | "medium" | "high";
 type SalesCatalogItemMapperInput = Parameters<typeof mapSalesCatalogItem>[0];
 
 type WhatsappInstanceRow = {
@@ -106,6 +108,22 @@ export type WhatsappChannelTarget = {
   maxRepliesPerHour: number;
   muteUntil: string | null;
   lastSyncedAt: string | null;
+  groupIntelligence: WhatsappGroupIntelligence | null;
+};
+
+export type WhatsappGroupIntelligence = {
+  status: WhatsappGroupIntelligenceStatus;
+  riskLevel: WhatsappGroupRiskLevel;
+  lastSyncedAt: string | null;
+  participantCount: number | null;
+  adminCount: number | null;
+  memberCount: number | null;
+  isAdmin: boolean | null;
+  isAnnouncement: boolean | null;
+  isLocked: boolean | null;
+  pendingRequests: number | null;
+  recommendations: string[];
+  error: string | null;
 };
 
 export type WhatsappOperationalContext = {
@@ -436,6 +454,87 @@ export async function syncWhatsappCampaignTracking(
   };
 }
 
+export async function syncWhatsappGroupIntelligence(
+  client: SupabaseClient,
+  context: WhatsappOperationalContext,
+  input: { limit?: number; force?: boolean } = {},
+) {
+  assertWhatsappConnected(context);
+
+  const limit = clamp(Math.round(input.limit ?? 20), 1, 30);
+  const rows = await listWhatsappGroupTargetRows(client, context, limit);
+  const syncedAt = new Date().toISOString();
+  const results: Array<{
+    targetId: string;
+    jid: string;
+    name: string;
+    intelligence: WhatsappGroupIntelligence;
+  }> = [];
+
+  for (const row of rows) {
+    const metadata = readRecord(row.metadata) ?? {};
+    let intelligence: WhatsappGroupIntelligence;
+
+    try {
+      const response = await callUazapi(context, "/group/info", {
+        method: "POST",
+        body: {
+          groupjid: row.provider_jid,
+          getInviteLink: false,
+          getRequestsParticipants: false,
+          force: input.force === true,
+        },
+      });
+
+      intelligence = normalizeGroupInfoResponse(response.data, row, syncedAt);
+    } catch (error) {
+      intelligence = buildGroupIntelligenceError(
+        row,
+        syncedAt,
+        error instanceof Error ? error.message : "Nao foi possivel consultar detalhes do grupo.",
+      );
+    }
+
+    const update = {
+      participant_count: intelligence.participantCount ?? row.participant_count,
+      is_admin: intelligence.isAdmin ?? row.is_admin,
+      is_announcement: intelligence.isAnnouncement ?? row.is_announcement,
+      last_synced_at: syncedAt,
+      metadata: {
+        ...metadata,
+        group_intelligence: intelligence,
+        group_info_synced_at: syncedAt,
+      },
+    };
+
+    const { error } = await client
+      .from("whatsapp_channel_targets")
+      .update(update)
+      .eq("id", row.id)
+      .eq("whatsapp_instance_id", context.instance.id);
+
+    if (error) {
+      throw new Error(`Nao foi possivel salvar inteligencia do grupo ${row.display_name ?? row.provider_jid}: ${error.message}`);
+    }
+
+    results.push({
+      targetId: row.id,
+      jid: row.provider_jid,
+      name: row.display_name?.trim() || row.provider_jid,
+      intelligence,
+    });
+  }
+
+  return {
+    fetchedAt: syncedAt,
+    groups: results.length,
+    highRisk: results.filter((item) => item.intelligence.riskLevel === "high").length,
+    mediumRisk: results.filter((item) => item.intelligence.riskLevel === "medium").length,
+    lowRisk: results.filter((item) => item.intelligence.riskLevel === "low").length,
+    results,
+  };
+}
+
 export async function queueWhatsappStatusBroadcast(
   client: SupabaseClient,
   context: WhatsappOperationalContext,
@@ -587,6 +686,11 @@ export async function queueWhatsappTargetTextCampaign(
   const blocked = targets.filter((target) => !target.campaignEnabled);
   if (blocked.length > 0) {
     throw new Error(`Destino sem campanhas liberadas: ${blocked[0]?.name ?? blocked[0]?.jid}.`);
+  }
+
+  const lockedAnnouncementGroup = targets.find((target) => target.type === "group" && target.isAnnouncement && target.isAdmin === false);
+  if (lockedAnnouncementGroup) {
+    throw new Error(`O grupo ${lockedAnnouncementGroup.name} esta como somente avisos e este WhatsApp nao aparece como admin. Atualize Detalhes ou ajuste o grupo antes de agendar.`);
   }
 
   const mentionAll = Boolean(input.mentionAll);
@@ -1354,6 +1458,29 @@ async function listWhatsappChannelTargetsByIds(
   return ((data ?? []) as WhatsappChannelTargetRow[]).map(mapWhatsappChannelTarget);
 }
 
+async function listWhatsappGroupTargetRows(
+  client: SupabaseClient,
+  context: WhatsappOperationalContext,
+  limit: number,
+): Promise<WhatsappChannelTargetRow[]> {
+  const { data, error } = await client
+    .from("whatsapp_channel_targets")
+    .select("id, scope, organization_id, whatsapp_instance_id, agent_id, provider, target_type, provider_jid, display_name, description, participant_count, is_admin, is_announcement, enabled, campaign_enabled, reply_mode, mention_mode, require_approval, max_replies_per_hour, mute_until, last_synced_at, metadata, created_at, updated_at")
+    .eq("whatsapp_instance_id", context.instance.id)
+    .eq("target_type", "group")
+    .order("updated_at", { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    if (isMissingWhatsappChannelTargetsTable(error)) {
+      throw new Error("Aplique a migration whatsapp_channel_targets antes de sincronizar detalhes dos grupos.");
+    }
+    throw new Error(`Nao foi possivel carregar grupos para analise: ${error.message}`);
+  }
+
+  return (data ?? []) as WhatsappChannelTargetRow[];
+}
+
 async function loadWhatsappChannelTargetById(
   client: SupabaseClient,
   context: WhatsappOperationalContext,
@@ -1407,6 +1534,7 @@ async function syncWhatsappChannelTargets(
   const now = new Date().toISOString();
   const items = extractProviderTargetItems(providerData, type);
   if (items.length === 0) return [];
+  const existingMetadata = await listExistingChannelTargetMetadata(client, context, type, items.map((item) => item.jid));
 
   const rows = items.map((item) => ({
     scope: context.scope,
@@ -1423,6 +1551,7 @@ async function syncWhatsappChannelTargets(
     is_announcement: item.isAnnouncement,
     last_synced_at: now,
     metadata: {
+      ...(existingMetadata.get(item.jid) ?? {}),
       provider_payload: sanitizeProviderData(item.raw),
       synced_from: type === "group" ? "group_list" : "newsletter_list",
     },
@@ -1444,6 +1573,37 @@ async function syncWhatsappChannelTargets(
   }
 
   return ((data ?? []) as WhatsappChannelTargetRow[]).map(mapWhatsappChannelTarget);
+}
+
+async function listExistingChannelTargetMetadata(
+  client: SupabaseClient,
+  context: WhatsappOperationalContext,
+  type: WhatsappTargetType,
+  jids: string[],
+) {
+  const uniqueJids = Array.from(new Set(jids)).slice(0, 250);
+  const metadata = new Map<string, JsonRecord>();
+  if (uniqueJids.length === 0) return metadata;
+
+  const { data, error } = await client
+    .from("whatsapp_channel_targets")
+    .select("provider_jid, metadata")
+    .eq("whatsapp_instance_id", context.instance.id)
+    .eq("target_type", type)
+    .in("provider_jid", uniqueJids);
+
+  if (error) {
+    if (isMissingWhatsappChannelTargetsTable(error)) {
+      return metadata;
+    }
+    throw new Error(`Nao foi possivel preservar metadados dos destinos WhatsApp: ${error.message}`);
+  }
+
+  for (const row of (data ?? []) as Array<{ provider_jid: string; metadata: JsonRecord | null }>) {
+    metadata.set(row.provider_jid, readRecord(row.metadata) ?? {});
+  }
+
+  return metadata;
 }
 
 async function listWhatsappOutboundRows(
@@ -1921,6 +2081,7 @@ function isMissingWhatsappChannelTargetsTable(error: unknown) {
 
 function mapWhatsappChannelTarget(row: WhatsappChannelTargetRow): WhatsappChannelTarget {
   const type = row.target_type === "newsletter" ? "newsletter" : "group";
+  const metadata = readRecord(row.metadata) ?? {};
   return {
     id: row.id,
     type,
@@ -1938,7 +2099,227 @@ function mapWhatsappChannelTarget(row: WhatsappChannelTargetRow): WhatsappChanne
     maxRepliesPerHour: clamp(Math.round(row.max_replies_per_hour ?? 6), 0, 120),
     muteUntil: row.mute_until,
     lastSyncedAt: row.last_synced_at,
+    groupIntelligence: type === "group" ? readGroupIntelligence(metadata.group_intelligence) : null,
   };
+}
+
+function normalizeGroupInfoResponse(
+  value: unknown,
+  row: WhatsappChannelTargetRow,
+  syncedAt: string,
+): WhatsappGroupIntelligence {
+  const record = readGroupInfoRecord(value);
+  const participants = readGroupParticipants(record);
+  const participantCount = readGroupParticipantCount(record, participants.length || null) ?? row.participant_count;
+  const adminCount = readGroupAdminCount(record, participants);
+  const memberCount = participantCount ?? (participants.length > 0 ? participants.length : null);
+  const isAdmin = findBooleanShallow(record, ["isAdmin", "is_admin", "IsAdmin", "isSenderAdmin", "senderIsAdmin", "meIsAdmin", "amIAdmin"])
+    ?? row.is_admin;
+  const isAnnouncement = findBooleanShallow(record, ["announce", "Announce", "isAnnounce", "IsAnnounce", "is_announcement", "isReadOnly", "readOnly"])
+    ?? row.is_announcement;
+  const isLocked = findBooleanShallow(record, ["isLocked", "IsLocked", "locked", "restrict", "isRestricted", "memberAddMode"]);
+  const pendingRequests = readCount(findValue(record, (key, item) => {
+    const normalized = key.toLowerCase().replace(/[_-]/g, "");
+    return ["requestparticipants", "requestsparticipants", "pendingparticipants", "pendingrequests"].includes(normalized)
+      && (Array.isArray(item) || typeof item === "number" || typeof item === "string");
+  }));
+
+  return buildGroupIntelligence({
+    status: "fresh",
+    syncedAt,
+    participantCount,
+    adminCount,
+    memberCount,
+    isAdmin,
+    isAnnouncement,
+    isLocked,
+    pendingRequests,
+    error: null,
+  });
+}
+
+function buildGroupIntelligence(input: {
+  status: WhatsappGroupIntelligenceStatus;
+  syncedAt: string;
+  participantCount: number | null;
+  adminCount: number | null;
+  memberCount: number | null;
+  isAdmin: boolean | null;
+  isAnnouncement: boolean | null;
+  isLocked: boolean | null;
+  pendingRequests: number | null;
+  error: string | null;
+}): WhatsappGroupIntelligence {
+  const recommendations: string[] = [];
+  let riskLevel: WhatsappGroupRiskLevel = "low";
+
+  if (input.error) {
+    riskLevel = "high";
+    recommendations.push("Nao foi possivel ler os detalhes deste grupo. Revise a conexao ou sincronize novamente.");
+  }
+
+  if (input.isAnnouncement && input.isAdmin === false) {
+    riskLevel = "high";
+    recommendations.push("Grupo esta como somente avisos e este WhatsApp nao aparece como admin.");
+  } else if (input.isAdmin === false) {
+    riskLevel = riskLevel === "high" ? "high" : "medium";
+    recommendations.push("Numero nao aparece como admin; evite automacoes sensiveis neste grupo.");
+  } else if (input.isAdmin === null) {
+    riskLevel = riskLevel === "high" ? "high" : "medium";
+    recommendations.push("Permissao de admin ainda nao foi confirmada pela Uazapi.");
+  }
+
+  if (input.isLocked) {
+    riskLevel = riskLevel === "high" ? "high" : "medium";
+    recommendations.push("Grupo tem configuracao restrita; alteracoes podem depender de admin.");
+  }
+
+  if (input.participantCount === null) {
+    riskLevel = riskLevel === "high" ? "high" : "medium";
+    recommendations.push("Contagem de membros nao veio no retorno; confira antes de campanhas grandes.");
+  } else if (input.participantCount >= 200) {
+    recommendations.push("Grupo grande; mantenha delays e mensagens curtas para reduzir risco de bloqueio.");
+  }
+
+  if ((input.pendingRequests ?? 0) > 0) {
+    recommendations.push("Existem solicitacoes pendentes de entrada no grupo.");
+  }
+
+  if (recommendations.length === 0) {
+    recommendations.push("Grupo pronto para campanhas com os delays atuais.");
+  }
+
+  return {
+    status: input.status,
+    riskLevel,
+    lastSyncedAt: input.syncedAt,
+    participantCount: input.participantCount,
+    adminCount: input.adminCount,
+    memberCount: input.memberCount,
+    isAdmin: input.isAdmin,
+    isAnnouncement: input.isAnnouncement,
+    isLocked: input.isLocked,
+    pendingRequests: input.pendingRequests,
+    recommendations: recommendations.slice(0, 4),
+    error: input.error,
+  };
+}
+
+function buildGroupIntelligenceError(
+  row: WhatsappChannelTargetRow,
+  syncedAt: string,
+  message: string,
+): WhatsappGroupIntelligence {
+  return buildGroupIntelligence({
+    status: "error",
+    syncedAt,
+    participantCount: row.participant_count,
+    adminCount: null,
+    memberCount: row.participant_count,
+    isAdmin: row.is_admin,
+    isAnnouncement: row.is_announcement,
+    isLocked: null,
+    pendingRequests: null,
+    error: message,
+  });
+}
+
+function readGroupIntelligence(value: unknown): WhatsappGroupIntelligence | null {
+  const record = readRecord(value);
+  if (!record) return null;
+
+  const lastSyncedAt = asString(record.lastSyncedAt);
+  const storedStatus = normalizeGroupIntelligenceStatus(record.status);
+  const status = storedStatus === "fresh" && isOlderThanHours(lastSyncedAt, 72) ? "stale" : storedStatus;
+
+  return {
+    status,
+    riskLevel: normalizeGroupRiskLevel(record.riskLevel),
+    lastSyncedAt,
+    participantCount: readNullableInteger(record.participantCount),
+    adminCount: readNullableInteger(record.adminCount),
+    memberCount: readNullableInteger(record.memberCount),
+    isAdmin: asNullableBoolean(record.isAdmin),
+    isAnnouncement: asNullableBoolean(record.isAnnouncement),
+    isLocked: asNullableBoolean(record.isLocked),
+    pendingRequests: readNullableInteger(record.pendingRequests),
+    recommendations: readStringArray(record.recommendations).slice(0, 4),
+    error: asString(record.error),
+  };
+}
+
+function readGroupInfoRecord(value: unknown): JsonRecord {
+  let record = readRecord(value) ?? {};
+
+  for (let depth = 0; depth < 4; depth += 1) {
+    let next: JsonRecord | null = null;
+
+    for (const key of ["group", "Group", "info", "Info", "data", "Data", "response", "Response"]) {
+      const nested = readRecord(record[key]);
+      if (nested) {
+        next = nested;
+        break;
+      }
+    }
+
+    if (!next) break;
+    record = next;
+  }
+
+  return record;
+}
+
+function readGroupParticipants(record: JsonRecord): JsonRecord[] {
+  const participants = findValue(record, (key, item) => {
+    const normalized = key.toLowerCase().replace(/[_-]/g, "");
+    return ["participants", "members", "groupmembers"].includes(normalized) && Array.isArray(item);
+  });
+
+  if (!Array.isArray(participants)) return [];
+
+  return participants
+    .map((item) => readRecord(item))
+    .filter((item): item is JsonRecord => Boolean(item));
+}
+
+function readGroupParticipantCount(record: JsonRecord, fallback: number | null) {
+  const count = readCount(findValue(record, (key, item) => {
+    const normalized = key.toLowerCase().replace(/[_-]/g, "");
+    return ["participantcount", "membercount", "memberscount", "size"].includes(normalized)
+      && (Array.isArray(item) || typeof item === "number" || typeof item === "string");
+  }));
+
+  return count ?? fallback;
+}
+
+function readGroupAdminCount(record: JsonRecord, participants: JsonRecord[]) {
+  const count = readCount(findValue(record, (key, item) => {
+    const normalized = key.toLowerCase().replace(/[_-]/g, "");
+    return ["admincount", "adminscount", "admins"].includes(normalized)
+      && (Array.isArray(item) || typeof item === "number" || typeof item === "string");
+  }));
+
+  if (count !== null) return count;
+  if (participants.length === 0) return null;
+
+  return participants.filter((participant) => isGroupParticipantAdmin(participant)).length;
+}
+
+function isGroupParticipantAdmin(participant: JsonRecord) {
+  const admin = findBooleanShallow(participant, ["isAdmin", "IsAdmin", "admin", "isSuperAdmin", "IsSuperAdmin", "isOwner", "owner"]);
+  if (admin !== null) return admin;
+
+  const role = findString(participant, ["role", "type", "participantType"]);
+  const normalized = role?.toLowerCase().replace(/[\s_-]+/g, "");
+  return normalized === "admin" || normalized === "superadmin" || normalized === "owner";
+}
+
+function normalizeGroupIntelligenceStatus(value: unknown): WhatsappGroupIntelligenceStatus {
+  return value === "fresh" || value === "stale" || value === "missing" || value === "error" ? value : "missing";
+}
+
+function normalizeGroupRiskLevel(value: unknown): WhatsappGroupRiskLevel {
+  return value === "low" || value === "medium" || value === "high" ? value : "medium";
 }
 
 function extractProviderTargetItems(value: unknown, type: WhatsappTargetType) {
@@ -2460,10 +2841,27 @@ function findDateString(value: unknown, keys: string[]): string | null {
   return Number.isNaN(date.getTime()) ? raw : date.toISOString();
 }
 
+function findBooleanShallow(value: unknown, keys: string[]): boolean | null {
+  const record = readRecord(value);
+  if (!record) return null;
+
+  const normalizedKeys = new Set(keys.map((key) => key.toLowerCase().replace(/[_-]/g, "")));
+
+  for (const [key, item] of Object.entries(record)) {
+    if (!normalizedKeys.has(key.toLowerCase().replace(/[_-]/g, ""))) continue;
+    const parsed = asNullableBoolean(item);
+    if (parsed !== null) return parsed;
+  }
+
+  return null;
+}
+
 function findBoolean(value: unknown, keys: string[]): boolean | null {
   const normalizedKeys = new Set(keys.map((key) => key.toLowerCase().replace(/[_-]/g, "")));
   const found = findValue(value, (key, item) => normalizedKeys.has(key.toLowerCase().replace(/[_-]/g, ""))
     && (typeof item === "boolean" || typeof item === "string" || typeof item === "number"));
+  const parsed = asNullableBoolean(found);
+  if (parsed !== null) return parsed;
 
   if (typeof found === "boolean") return found;
   if (typeof found === "number") return found === 1;
@@ -2503,6 +2901,31 @@ function readCount(value: unknown): number | null {
     return Number.isFinite(parsed) ? parsed : null;
   }
   return null;
+}
+
+function readNullableInteger(value: unknown) {
+  if (value === null || value === undefined || value === "") return null;
+  const number = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+  return Number.isFinite(number) ? Math.max(0, Math.round(number)) : null;
+}
+
+function asNullableBoolean(value: unknown): boolean | null {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value === 1;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (["true", "1", "yes", "sim", "admin", "owner", "superadmin"].includes(normalized)) return true;
+    if (["false", "0", "no", "nao", "member", "membro"].includes(normalized)) return false;
+  }
+
+  return null;
+}
+
+function isOlderThanHours(value: string | null, hours: number) {
+  if (!value) return false;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return false;
+  return Date.now() - date.getTime() > hours * 60 * 60 * 1000;
 }
 
 function sanitizeProviderData(value: unknown): unknown {

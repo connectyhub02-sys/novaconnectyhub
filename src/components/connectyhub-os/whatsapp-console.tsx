@@ -440,6 +440,21 @@ type WhatsappTargetCampaignDraft = {
   modelId: string;
 };
 
+type WhatsappGroupIntelligenceItem = {
+  status: "fresh" | "stale" | "missing" | "error";
+  riskLevel: "low" | "medium" | "high";
+  lastSyncedAt: string | null;
+  participantCount: number | null;
+  adminCount: number | null;
+  memberCount: number | null;
+  isAdmin: boolean | null;
+  isAnnouncement: boolean | null;
+  isLocked: boolean | null;
+  pendingRequests: number | null;
+  recommendations: string[];
+  error: string | null;
+};
+
 type WhatsappChannelTargetItem = {
   id: string;
   type: "group" | "newsletter";
@@ -457,6 +472,7 @@ type WhatsappChannelTargetItem = {
   maxRepliesPerHour: number;
   muteUntil: string | null;
   lastSyncedAt: string | null;
+  groupIntelligence: WhatsappGroupIntelligenceItem | null;
 };
 
 type WhatsappChannelOperationsState = {
@@ -5777,6 +5793,7 @@ function WhatsappChannelOperationsPanel({
   const selectedTargets = targets.filter((target) => selectedTargetIds.includes(target.id));
   const selectedValidTargetIds = selectedTargets.map((target) => target.id);
   const selectedHasNewsletter = selectedTargets.some((target) => target.type === "newsletter");
+  const selectedLockedAnnouncementGroup = selectedTargets.find((target) => target.type === "group" && target.isAnnouncement && target.isAdmin === false);
   const selectedCatalogItems = salesCatalog.filter((item) => selectedCatalogItemIds.includes(item.id));
   const selectedValidCatalogItemIds = selectedCatalogItems.map((item) => item.id);
   const targetAttachmentCount = (targetMediaUrl.trim() ? 1 : 0) + selectedCatalogItems.filter((item) => item.media.length > 0).length;
@@ -5790,6 +5807,7 @@ function WhatsappChannelOperationsPanel({
     && selectedTargets.length > 0
     && targetCampaignText.trim().length > 0
     && (campaignEnabled || newsletterEnabled)
+    && !selectedLockedAnnouncementGroup
     && (!targetMentionAll || !selectedHasNewsletter);
   const [targetSearch, setTargetSearch] = useState("");
   const [targetTypeFilter, setTargetTypeFilter] = useState<"all" | "group" | "newsletter">("all");
@@ -5797,6 +5815,9 @@ function WhatsappChannelOperationsPanel({
   const newsletterTargets = targets.filter((target) => target.type === "newsletter");
   const activeGroupTargets = groupTargets.filter((target) => target.enabled);
   const campaignReadyTargets = targets.filter((target) => target.campaignEnabled);
+  const analyzedGroupTargets = groupTargets.filter((target) => target.groupIntelligence);
+  const highRiskGroups = groupTargets.filter((target) => target.groupIntelligence?.riskLevel === "high");
+  const mediumRiskGroups = groupTargets.filter((target) => target.groupIntelligence?.riskLevel === "medium");
   const normalizedTargetSearch = targetSearch.trim().toLowerCase();
   const visibleTargets = targets.filter((target) => {
     const matchesType = targetTypeFilter === "all" || target.type === targetTypeFilter;
@@ -5809,6 +5830,13 @@ function WhatsappChannelOperationsPanel({
   const selectedTargetSummary = selectedTargets.length
     ? `${selectedTargets.length} destino(s) selecionado(s)`
     : "Nenhum destino selecionado";
+  const groupRiskSummary = highRiskGroups.length > 0
+    ? `${highRiskGroups.length} alto`
+    : mediumRiskGroups.length > 0
+      ? `${mediumRiskGroups.length} medio`
+      : analyzedGroupTargets.length > 0
+        ? "baixo"
+        : "pendente";
   const nextStepLabel = operationsLocked
     ? "Conectar WhatsApp"
     : targets.length === 0
@@ -5881,10 +5909,11 @@ function WhatsappChannelOperationsPanel({
               <NeonBadge tone={connected ? "green" : "amber"}>{connected ? "online" : "offline"}</NeonBadge>
             </div>
 
-            <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
               <InfoTile label="Destinos" value={`${groupTargets.length} grupos / ${newsletterTargets.length} canais`} />
               <InfoTile label="IA em grupos" value={behavior.allowGroupChats ? `${activeGroupTargets.length} ativos` : "Pausado"} />
               <InfoTile label="Campanhas" value={campaignEnabled ? `${campaignReadyTargets.length} liberados` : "Bloqueado"} />
+              <InfoTile label="Risco grupos" value={groupRiskSummary} />
               <InfoTile label="Agenda" value={`${scheduledCount} futuro(s)`} />
             </div>
           </div>
@@ -5909,6 +5938,14 @@ function WhatsappChannelOperationsPanel({
                 disabled={operationsLocked}
                 loading={channelAction === "refresh_groups"}
                 onClick={() => onRunAction("refresh_groups")}
+              />
+              <SecondaryAction
+                icon={Brain}
+                label="Detalhes"
+                description="Atualiza membros, permissoes e risco dos grupos pela Uazapi."
+                disabled={operationsLocked || groupTargets.length === 0}
+                loading={channelAction === "sync_group_intelligence"}
+                onClick={() => onRunAction("sync_group_intelligence")}
               />
               <SecondaryAction
                 icon={FileText}
@@ -6019,6 +6056,8 @@ function WhatsappChannelOperationsPanel({
               {visibleTargets.length ? (
                 visibleTargets.map((target) => {
                   const selected = selectedTargetIds.includes(target.id);
+                  const intelligence = target.groupIntelligence;
+                  const primaryRecommendation = intelligence?.recommendations[0] ?? null;
                   return (
                     <div
                       key={target.id}
@@ -6046,9 +6085,31 @@ function WhatsappChannelOperationsPanel({
                             {target.participantCount !== null ? <NeonBadge tone="zinc">{target.participantCount} membros</NeonBadge> : null}
                             {target.isAdmin ? <NeonBadge tone="green">admin</NeonBadge> : null}
                             {target.isAnnouncement ? <NeonBadge tone="amber">avisos</NeonBadge> : null}
+                            {target.type === "group" ? (
+                              <NeonBadge tone={intelligence ? groupRiskTone(intelligence.riskLevel) : "zinc"}>
+                                {intelligence ? `risco ${formatGroupRiskLevel(intelligence.riskLevel)}` : "sem detalhes"}
+                              </NeonBadge>
+                            ) : null}
+                            {target.type === "group" && typeof intelligence?.adminCount === "number" ? <NeonBadge tone="violet">{intelligence.adminCount} admins</NeonBadge> : null}
+                            {target.type === "group" && intelligence?.isLocked ? <NeonBadge tone="amber">restrito</NeonBadge> : null}
+                            {target.type === "group" && intelligence?.status === "stale" ? <NeonBadge tone="amber">detalhe antigo</NeonBadge> : null}
                             {target.type === "group" ? <NeonBadge tone={target.enabled ? "green" : "zinc"}>{target.enabled ? "ia ativa" : "ia off"}</NeonBadge> : null}
                             <NeonBadge tone={target.campaignEnabled ? "cyan" : "zinc"}>{target.campaignEnabled ? "campanha ok" : "campanha off"}</NeonBadge>
                           </span>
+                          {target.type === "group" ? (
+                            <span className={cn(
+                              "mt-2 block text-[11px] leading-4",
+                              intelligence?.riskLevel === "high"
+                                ? "text-rose-100"
+                                : intelligence?.riskLevel === "medium"
+                                  ? "text-amber-100"
+                                  : "text-slate-400",
+                            )}>
+                              {intelligence
+                                ? `${formatGroupIntelligenceStatus(intelligence)}: ${primaryRecommendation ?? "Sem recomendacao operacional."}`
+                                : "Detalhes de risco ainda pendentes."}
+                            </span>
+                          ) : null}
                         </div>
                       </div>
 
@@ -6319,6 +6380,11 @@ function WhatsappChannelOperationsPanel({
             {targetMentionAll && selectedHasNewsletter ? (
               <p className="mt-2 rounded-md border border-amber-300/25 bg-amber-300/10 px-2 py-1 text-[11px] leading-4 text-amber-100">
                 Remova canais da selecao para usar mencao geral.
+              </p>
+            ) : null}
+            {selectedLockedAnnouncementGroup ? (
+              <p className="mt-2 rounded-md border border-rose-400/25 bg-rose-400/10 px-2 py-1 text-[11px] leading-4 text-rose-100">
+                {selectedLockedAnnouncementGroup.name} esta como somente avisos e este WhatsApp nao aparece como admin.
               </p>
             ) : null}
             <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_112px]">
@@ -6914,6 +6980,25 @@ function readUnknownStringArray(value: unknown) {
 function readUnknownNumber(value: unknown) {
   const number = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
   return Number.isFinite(number) ? number : 0;
+}
+
+function formatGroupRiskLevel(value: WhatsappGroupIntelligenceItem["riskLevel"]) {
+  if (value === "high") return "alto";
+  if (value === "medium") return "medio";
+  return "baixo";
+}
+
+function groupRiskTone(value: WhatsappGroupIntelligenceItem["riskLevel"]): "green" | "amber" | "rose" {
+  if (value === "high") return "rose";
+  if (value === "medium") return "amber";
+  return "green";
+}
+
+function formatGroupIntelligenceStatus(value: WhatsappGroupIntelligenceItem) {
+  if (value.status === "error") return "Erro na leitura";
+  if (value.status === "stale") return `Analise antiga ${formatDate(value.lastSyncedAt)}`;
+  if (value.lastSyncedAt) return `Analisado ${formatDate(value.lastSyncedAt)}`;
+  return "Analise pendente";
 }
 
 function formatChannelTargetType(value: WhatsappChannelTargetItem["type"]) {

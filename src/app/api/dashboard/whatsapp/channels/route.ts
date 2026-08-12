@@ -20,6 +20,7 @@ import {
   queueWhatsappTargetTextCampaign,
   resolveClientWhatsappOperationalContext,
   syncWhatsappCampaignTracking,
+  syncWhatsappGroupIntelligence,
   type WhatsappOutboundItem,
   updateWhatsappChannelTargetSettings,
 } from "@/lib/whatsapp/channel-operations";
@@ -136,6 +137,9 @@ export async function POST(request: NextRequest) {
     } else if (action === "sync_campaign_tracking") {
       result = await syncWhatsappCampaignTracking(client, whatsapp);
       notice = "Rastreamento de campanhas atualizado pela Uazapi.";
+    } else if (action === "sync_group_intelligence") {
+      result = await syncWhatsappGroupIntelligence(client, whatsapp);
+      notice = "Detalhes e riscos dos grupos atualizados pela Uazapi.";
     } else if (action === "send_status") {
       const item = await queueWhatsappStatusBroadcast(client, whatsapp, {
         text: asString(body?.text) ?? "",
