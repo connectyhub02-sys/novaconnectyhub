@@ -129,6 +129,7 @@ export type WhatsappOutboundItem = {
   createdAt: string;
   providerStatus: string | null;
   error: string | null;
+  campaignTracking: WhatsappCampaignDeliveryTracking | null;
   recurrence: {
     frequency: WhatsappCampaignRecurrenceFrequency;
     occurrenceIndex: number;
@@ -136,6 +137,30 @@ export type WhatsappOutboundItem = {
     nextScheduledFor: string | null;
     seriesId: string | null;
   } | null;
+};
+
+export type WhatsappCampaignDeliverySample = {
+  id: string | null;
+  number: string | null;
+  status: "scheduled" | "sent" | "failed" | "unknown";
+  providerStatus: string | null;
+  error: string | null;
+  scheduledFor: string | null;
+  sentAt: string | null;
+};
+
+export type WhatsappCampaignDeliveryTracking = {
+  folderId: string;
+  status: "pending" | "sent" | "failed" | "partial" | "unknown";
+  total: number;
+  sent: number;
+  failed: number;
+  scheduled: number;
+  pending: number;
+  lastSyncedAt: string;
+  source: "uazapi_sender";
+  error: string | null;
+  samples: WhatsappCampaignDeliverySample[];
 };
 
 export type WhatsappOperationsAnalytics = {
@@ -148,6 +173,10 @@ export type WhatsappOperationsAnalytics = {
     withMedia: number;
     withAudio: number;
     totalRecipients: number;
+    trackedMessages: number;
+    sentMessages: number;
+    failedMessages: number;
+    pendingMessages: number;
   };
   calendar: Array<{
     id: string;
@@ -328,6 +357,82 @@ export async function fetchWhatsappCampaignFolders(context: WhatsappOperationalC
     fetchedAt: new Date().toISOString(),
     count: countProviderItems(result.data),
     data: sanitizeProviderData(result.data),
+  };
+}
+
+export async function syncWhatsappCampaignTracking(
+  client: SupabaseClient,
+  context: WhatsappOperationalContext,
+  input: { limit?: number } = {},
+) {
+  assertWhatsappConnected(context);
+
+  const rows = await listWhatsappOutboundRows(client, context, 80);
+  const limit = clamp(Math.round(input.limit ?? 12), 1, 30);
+  const candidates = rows
+    .filter((row) => {
+      const metadata = readRecord(row.metadata) ?? {};
+      return asString(metadata.operation) === "campaign_simple" && Boolean(readSenderCampaignFolderId(metadata));
+    })
+    .slice(0, limit);
+  const syncedAt = new Date().toISOString();
+  const results: Array<{
+    itemId: string;
+    title: string;
+    folderId: string;
+    tracking: WhatsappCampaignDeliveryTracking;
+  }> = [];
+
+  for (const row of candidates) {
+    const metadata = readRecord(row.metadata) ?? {};
+    const folderId = readSenderCampaignFolderId(metadata);
+    if (!folderId) continue;
+
+    let tracking: WhatsappCampaignDeliveryTracking;
+
+    try {
+      const response = await callUazapi(context, "/sender/listmessages", {
+        method: "POST",
+        body: {
+          folder_id: folderId,
+          limit: 1000,
+          offset: 0,
+        },
+      });
+
+      tracking = normalizeCampaignTrackingResponse(response.data, folderId, syncedAt);
+    } catch (error) {
+      tracking = buildCampaignTrackingError(folderId, syncedAt, error instanceof Error ? error.message : "Nao foi possivel consultar mensagens da campanha.");
+    }
+
+    await client
+      .from("content_pipeline_items")
+      .update({
+        metadata: {
+          ...metadata,
+          campaign_tracking: tracking,
+          campaign_tracking_synced_at: syncedAt,
+          provider_status: tracking.error
+            ? asString(metadata.provider_status) ?? "sent"
+            : normalizeProviderStatusFromTracking(tracking, asString(metadata.provider_status)),
+        },
+      })
+      .eq("id", row.id);
+
+    results.push({
+      itemId: row.id,
+      title: row.title,
+      folderId,
+      tracking,
+    });
+  }
+
+  return {
+    fetchedAt: syncedAt,
+    campaigns: results.length,
+    skipped: rows.length - candidates.length,
+    totals: summarizeCampaignTrackingResults(results.map((item) => item.tracking)),
+    results,
   };
 }
 
@@ -798,6 +903,8 @@ async function processWhatsappOutboundItem(client: SupabaseClient, item: Content
     }
 
     const publishedAt = new Date().toISOString();
+    const sanitizedProviderResponse = sanitizeProviderData(providerResponse);
+    const senderFolderId = operation === "campaign_simple" ? readSenderFolderIdFromProviderResponse(sanitizedProviderResponse) : null;
     let nextOccurrence: WhatsappOutboundItem | null = null;
     let recurrenceError: string | null = null;
 
@@ -815,7 +922,8 @@ async function processWhatsappOutboundItem(client: SupabaseClient, item: Content
         metadata: {
           ...(metadata ?? {}),
           provider_status: "sent",
-          provider_response: sanitizeProviderData(providerResponse),
+          provider_response: sanitizedProviderResponse,
+          sender_folder_id: senderFolderId,
           processed_at: publishedAt,
           recurrence: buildPublishedRecurrenceMetadata(metadata.recurrence, item.id, nextOccurrence, publishedAt, recurrenceError),
         },
@@ -1369,6 +1477,10 @@ function buildWhatsappOperationsAnalytics(rows: ContentPipelineRow[]): WhatsappO
     withMedia: 0,
     withAudio: 0,
     totalRecipients: 0,
+    trackedMessages: 0,
+    sentMessages: 0,
+    failedMessages: 0,
+    pendingMessages: 0,
   };
   const publishedHours = new Map<number, number>();
 
@@ -1379,6 +1491,7 @@ function buildWhatsappOperationsAnalytics(rows: ContentPipelineRow[]): WhatsappO
     const deliveryMode = normalizeCampaignDeliveryMode(payload.delivery_mode);
     const attachmentCount = readCampaignMediaAttachments(payload.media_attachments).length;
     const targetCount = readCampaignTargetCount(payload);
+    const campaignTracking = readCampaignTracking(metadata.campaign_tracking);
 
     if (row.status === "scheduled") summary.scheduled += 1;
     if (row.status === "published") summary.published += 1;
@@ -1387,6 +1500,12 @@ function buildWhatsappOperationsAnalytics(rows: ContentPipelineRow[]): WhatsappO
     if (attachmentCount > 0) summary.withMedia += 1;
     if (deliveryMode === "audio" || deliveryMode === "text_audio") summary.withAudio += 1;
     summary.totalRecipients += targetCount;
+    if (campaignTracking) {
+      summary.trackedMessages += campaignTracking.total;
+      summary.sentMessages += campaignTracking.sent;
+      summary.failedMessages += campaignTracking.failed;
+      summary.pendingMessages += campaignTracking.pending;
+    }
 
     if (row.status === "published" && row.published_at) {
       const hour = getSaoPauloHour(row.published_at);
@@ -1571,6 +1690,7 @@ function mapOutboundItem(row: ContentPipelineRow): WhatsappOutboundItem {
   const metadata = readRecord(row.metadata) ?? {};
   const recurrence = readStoredRecurrence(metadata.recurrence);
   const recurrenceRecord = readRecord(metadata.recurrence);
+
   return {
     id: row.id,
     operation: asString(metadata.operation) ?? row.content_type,
@@ -1582,6 +1702,7 @@ function mapOutboundItem(row: ContentPipelineRow): WhatsappOutboundItem {
     createdAt: row.created_at,
     providerStatus: asString(metadata.provider_status),
     error: asString(metadata.provider_error),
+    campaignTracking: readCampaignTracking(metadata.campaign_tracking),
     recurrence: recurrence
       ? {
         frequency: recurrence.frequency,
@@ -1592,6 +1713,203 @@ function mapOutboundItem(row: ContentPipelineRow): WhatsappOutboundItem {
       }
       : null,
   };
+}
+
+function normalizeCampaignTrackingResponse(
+  value: unknown,
+  folderId: string,
+  syncedAt: string,
+): WhatsappCampaignDeliveryTracking {
+  const messages = extractProviderItems(value, ["messages", "data", "items", "response"]);
+  const pagination = readRecord(findValue(value, (key) => key.toLowerCase() === "pagination"));
+  const totalRecords = readInteger(pagination?.totalRecords ?? pagination?.total_records ?? pagination?.total, messages.length);
+  const samples = messages.map(normalizeCampaignMessageSample);
+  const sent = samples.filter((item) => item.status === "sent").length;
+  const failed = samples.filter((item) => item.status === "failed").length;
+  const scheduled = samples.filter((item) => item.status === "scheduled").length;
+  const visibleTotal = Math.max(totalRecords, samples.length);
+  const unknown = Math.max(0, visibleTotal - sent - failed - scheduled);
+  const pending = Math.max(0, visibleTotal - sent - failed);
+  const status = resolveCampaignTrackingStatus({ total: visibleTotal, sent, failed, scheduled, pending, unknown });
+
+  return {
+    folderId,
+    status,
+    total: visibleTotal,
+    sent,
+    failed,
+    scheduled,
+    pending,
+    lastSyncedAt: syncedAt,
+    source: "uazapi_sender",
+    error: null,
+    samples: samples
+      .filter((item) => item.status === "failed" || item.error)
+      .concat(samples.filter((item) => item.status !== "failed" && !item.error))
+      .slice(0, 8),
+  };
+}
+
+function normalizeCampaignMessageSample(value: unknown): WhatsappCampaignDeliverySample {
+  const record = readRecord(value) ?? {};
+  const providerStatus = findString(record, ["messageStatus", "message_status", "status", "Status", "state", "sendStatus"]);
+
+  return {
+    id: findString(record, ["id", "messageId", "message_id", "keyId", "key_id", "wa_id"]),
+    number: findString(record, ["number", "phone", "recipient", "to", "chatId", "chatid", "jid", "remoteJid", "remote_jid"]),
+    status: normalizeCampaignMessageStatus(providerStatus, record),
+    providerStatus,
+    error: findString(record, ["error", "errorMessage", "error_message", "failReason", "fail_reason", "reason", "lastError"]),
+    scheduledFor: findDateString(record, ["scheduled_for", "scheduledFor", "scheduledAt", "scheduled_at", "created", "createdAt", "created_at"]),
+    sentAt: findDateString(record, ["sentAt", "sent_at", "deliveredAt", "delivered_at", "updated", "updatedAt", "updated_at"]),
+  };
+}
+
+function normalizeCampaignMessageStatus(
+  value: string | null,
+  record: JsonRecord,
+): WhatsappCampaignDeliverySample["status"] {
+  const normalized = value?.trim().toLowerCase().replace(/[\s_-]+/g, "");
+
+  if (normalized) {
+    if (["sent", "delivered", "read", "success", "succeeded", "completed", "done", "processed"].includes(normalized)) return "sent";
+    if (["failed", "error", "erro", "undelivered", "notdelivered", "notsent", "canceled", "cancelled"].includes(normalized)) return "failed";
+    if (["scheduled", "pending", "queued", "queue", "processing", "running", "waiting", "active", "created"].includes(normalized)) return "scheduled";
+  }
+
+  if (findString(record, ["error", "errorMessage", "error_message", "failReason", "fail_reason", "lastError"])) {
+    return "failed";
+  }
+
+  return "unknown";
+}
+
+function resolveCampaignTrackingStatus(input: {
+  total: number;
+  sent: number;
+  failed: number;
+  scheduled: number;
+  pending: number;
+  unknown: number;
+}): WhatsappCampaignDeliveryTracking["status"] {
+  if (input.total <= 0 || input.unknown >= input.total) return "unknown";
+  if (input.failed >= input.total) return "failed";
+  if (input.sent >= input.total) return "sent";
+  if (input.sent > 0 || input.failed > 0) return "partial";
+  if (input.pending > 0 || input.scheduled > 0) return "pending";
+  return "unknown";
+}
+
+function buildCampaignTrackingError(
+  folderId: string,
+  syncedAt: string,
+  message: string,
+): WhatsappCampaignDeliveryTracking {
+  return {
+    folderId,
+    status: "unknown",
+    total: 0,
+    sent: 0,
+    failed: 0,
+    scheduled: 0,
+    pending: 0,
+    lastSyncedAt: syncedAt,
+    source: "uazapi_sender",
+    error: message,
+    samples: [],
+  };
+}
+
+function readCampaignTracking(value: unknown): WhatsappCampaignDeliveryTracking | null {
+  const record = readRecord(value);
+  const folderId = asString(record?.folderId);
+  const lastSyncedAt = asString(record?.lastSyncedAt);
+
+  if (!record || !folderId || !lastSyncedAt) return null;
+
+  const status = normalizeCampaignTrackingStatus(record.status);
+  const total = Math.max(0, readInteger(record.total, 0));
+  const sent = Math.max(0, readInteger(record.sent, 0));
+  const failed = Math.max(0, readInteger(record.failed, 0));
+  const scheduled = Math.max(0, readInteger(record.scheduled, 0));
+  const pending = Math.max(0, readInteger(record.pending, Math.max(0, total - sent - failed)));
+
+  return {
+    folderId,
+    status,
+    total,
+    sent,
+    failed,
+    scheduled,
+    pending,
+    lastSyncedAt,
+    source: "uazapi_sender",
+    error: asString(record.error),
+    samples: readCampaignTrackingSamples(record.samples),
+  };
+}
+
+function readCampaignTrackingSamples(value: unknown): WhatsappCampaignDeliverySample[] {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item) => {
+      const record = readRecord(item);
+      if (!record) return null;
+
+      return {
+        id: asString(record.id),
+        number: asString(record.number),
+        status: normalizeCampaignMessageStatus(asString(record.status), record),
+        providerStatus: asString(record.providerStatus),
+        error: asString(record.error),
+        scheduledFor: asString(record.scheduledFor),
+        sentAt: asString(record.sentAt),
+      };
+    })
+    .filter((item): item is WhatsappCampaignDeliverySample => Boolean(item))
+    .slice(0, 8);
+}
+
+function normalizeCampaignTrackingStatus(value: unknown): WhatsappCampaignDeliveryTracking["status"] {
+  if (value === "pending" || value === "sent" || value === "failed" || value === "partial" || value === "unknown") return value;
+  return "unknown";
+}
+
+function normalizeProviderStatusFromTracking(
+  tracking: WhatsappCampaignDeliveryTracking,
+  fallback: string | null,
+) {
+  if (tracking.status === "sent") return "sent";
+  if (tracking.status === "failed") return "failed";
+  if (tracking.status === "partial") return "partial";
+  if (tracking.status === "pending") return "pending";
+  return fallback ?? "sent";
+}
+
+function summarizeCampaignTrackingResults(items: WhatsappCampaignDeliveryTracking[]) {
+  return items.reduce(
+    (total, item) => ({
+      messages: total.messages + item.total,
+      sent: total.sent + item.sent,
+      failed: total.failed + item.failed,
+      pending: total.pending + item.pending,
+      errors: total.errors + (item.error ? 1 : 0),
+    }),
+    { messages: 0, sent: 0, failed: 0, pending: 0, errors: 0 },
+  );
+}
+
+function readSenderCampaignFolderId(metadata: JsonRecord) {
+  const providerResponse = readRecord(metadata.provider_response);
+  return asString(metadata.sender_folder_id)
+    ?? asString(metadata.campaign_folder_id)
+    ?? readSenderFolderIdFromProviderResponse(providerResponse);
+}
+
+function readSenderFolderIdFromProviderResponse(value: unknown) {
+  const record = readRecord(value);
+  return asString(record?.folder_id) ?? asString(record?.folderId);
 }
 
 function isMissingWhatsappChannelTargetsTable(error: unknown) {
@@ -1950,6 +2268,10 @@ function buildCampaignOptimizationReasons(
     reasons.push(`${summary.failed} envio(s) precisam revisao antes de aumentar volume.`);
   }
 
+  if (summary.failedMessages > 0) {
+    reasons.push(`${summary.failedMessages} mensagem(ns) falharam na fila Uazapi; revise numeros e limites antes do proximo lote.`);
+  }
+
   if (summary.recurring === 0 && summary.published > 0) {
     reasons.push("Use recorrencia em campanhas que funcionam para manter presenca sem retrabalho.");
   }
@@ -2128,6 +2450,14 @@ function findString(value: unknown, keys: string[]): string | null {
   const lower = new Set(keys.map((key) => key.toLowerCase()));
   const found = findValue(value, (key, item) => lower.has(key.toLowerCase()) && typeof item === "string" && item.trim().length > 0);
   return typeof found === "string" ? found.trim() : null;
+}
+
+function findDateString(value: unknown, keys: string[]): string | null {
+  const raw = findString(value, keys);
+  if (!raw) return null;
+
+  const date = new Date(raw);
+  return Number.isNaN(date.getTime()) ? raw : date.toISOString();
 }
 
 function findBoolean(value: unknown, keys: string[]): boolean | null {

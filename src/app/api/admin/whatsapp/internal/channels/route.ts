@@ -16,6 +16,7 @@ import {
   queueWhatsappStatusBroadcast,
   queueWhatsappTargetTextCampaign,
   resolvePlatformWhatsappOperationalContext,
+  syncWhatsappCampaignTracking,
   type WhatsappOutboundItem,
   updateWhatsappChannelTargetSettings,
 } from "@/lib/whatsapp/channel-operations";
@@ -117,6 +118,9 @@ export async function POST(request: NextRequest) {
     } else if (action === "campaign_folders") {
       result = await fetchWhatsappCampaignFolders(whatsapp);
       notice = "Pastas de campanha consultadas.";
+    } else if (action === "sync_campaign_tracking") {
+      result = await syncWhatsappCampaignTracking(client, whatsapp);
+      notice = "Rastreamento interno de campanhas atualizado pela Uazapi.";
     } else if (action === "send_status") {
       const item = await queueWhatsappStatusBroadcast(client, whatsapp, {
         text: asString(body?.text) ?? "",

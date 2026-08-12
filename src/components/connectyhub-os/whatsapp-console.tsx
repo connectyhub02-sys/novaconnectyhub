@@ -401,6 +401,27 @@ type WhatsappChannelOutboundItem = {
   createdAt: string;
   providerStatus: string | null;
   error: string | null;
+  campaignTracking: {
+    folderId: string;
+    status: "pending" | "sent" | "failed" | "partial" | "unknown";
+    total: number;
+    sent: number;
+    failed: number;
+    scheduled: number;
+    pending: number;
+    lastSyncedAt: string;
+    source: "uazapi_sender";
+    error: string | null;
+    samples: Array<{
+      id: string | null;
+      number: string | null;
+      status: "scheduled" | "sent" | "failed" | "unknown";
+      providerStatus: string | null;
+      error: string | null;
+      scheduledFor: string | null;
+      sentAt: string | null;
+    }>;
+  } | null;
   recurrence: {
     frequency: "daily" | "weekly";
     occurrenceIndex: number;
@@ -469,6 +490,10 @@ type WhatsappChannelOperationsState = {
       withMedia: number;
       withAudio: number;
       totalRecipients: number;
+      trackedMessages: number;
+      sentMessages: number;
+      failedMessages: number;
+      pendingMessages: number;
     };
     calendar: Array<{
       id: string;
@@ -5909,6 +5934,14 @@ function WhatsappChannelOperationsPanel({
                 loading={channelAction === "campaign_folders"}
                 onClick={() => onRunAction("campaign_folders")}
               />
+              <SecondaryAction
+                icon={Gauge}
+                label="Rastrear"
+                description="Consulta entregas reais das campanhas pelo endpoint sender/listmessages."
+                disabled={operationsLocked}
+                loading={channelAction === "sync_campaign_tracking"}
+                onClick={() => onRunAction("sync_campaign_tracking")}
+              />
             </div>
           </div>
         </div>
@@ -6497,6 +6530,9 @@ function WhatsappChannelOperationsPanel({
                       <span>{formatOutboundRecurrence(item)}</span>
                     </p>
                   ) : null}
+                  {item.campaignTracking ? (
+                    <CampaignTrackingSummary tracking={item.campaignTracking} />
+                  ) : null}
                   {item.error ? (
                     <p className="mt-2 rounded-md border border-rose-400/20 bg-rose-400/10 px-2 py-1 text-[11px] leading-4 text-rose-100">{item.error}</p>
                   ) : null}
@@ -6515,6 +6551,83 @@ function WhatsappChannelOperationsPanel({
           onUseSuggestedTime={(value) => onChannelScheduledForChange(isoToLocalDatetimeInput(value))}
         />
       </div>
+    </div>
+  );
+}
+
+function CampaignTrackingSummary({
+  tracking,
+}: {
+  tracking: NonNullable<WhatsappChannelOutboundItem["campaignTracking"]>;
+}) {
+  const deliveredPercent = tracking.total > 0 ? Math.min(100, Math.round((tracking.sent / tracking.total) * 100)) : 0;
+  const failedSamples = tracking.samples.filter((item) => item.status === "failed" || item.error).slice(0, 2);
+
+  return (
+    <div className="mt-2 rounded-lg border border-cyan-300/20 bg-cyan-300/10 px-3 py-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-cyan-100">
+          <Gauge className="h-3.5 w-3.5" />
+          Rastreamento Uazapi
+        </p>
+        <NeonBadge tone={tracking.error ? "rose" : tracking.status === "sent" ? "green" : tracking.status === "failed" ? "rose" : tracking.status === "partial" ? "amber" : "cyan"}>
+          {formatCampaignTrackingStatus(tracking.status)}
+        </NeonBadge>
+      </div>
+
+      {tracking.error ? (
+        <p className="mt-2 rounded-md border border-rose-300/25 bg-rose-400/10 px-2 py-1 text-[11px] leading-4 text-rose-100">{tracking.error}</p>
+      ) : (
+        <>
+          <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-950/60">
+            <div className="h-full rounded-full bg-cyan-300" style={{ width: `${deliveredPercent}%` }} />
+          </div>
+          <div className="mt-2 grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+            <TrackingMiniStat label="Total" value={tracking.total} />
+            <TrackingMiniStat label="Enviadas" value={tracking.sent} tone="green" />
+            <TrackingMiniStat label="Pendentes" value={tracking.pending} tone="cyan" />
+            <TrackingMiniStat label="Falhas" value={tracking.failed} tone={tracking.failed > 0 ? "rose" : "zinc"} />
+          </div>
+          <p className="mt-2 font-mono text-[8px] uppercase tracking-widest text-slate-500">
+            Pasta {tracking.folderId} / sync {formatDate(tracking.lastSyncedAt)}
+          </p>
+        </>
+      )}
+
+      {failedSamples.length ? (
+        <div className="mt-2 grid gap-1">
+          {failedSamples.map((sample, index) => (
+            <p key={`${sample.id ?? sample.number ?? "falha"}-${index}`} className="rounded-md border border-rose-300/20 bg-rose-400/10 px-2 py-1 text-[11px] leading-4 text-rose-100">
+              {sample.number ?? sample.id ?? "Mensagem"}: {sample.error ?? formatCampaignMessageStatus(sample.status)}
+            </p>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function TrackingMiniStat({
+  label,
+  value,
+  tone = "zinc",
+}: {
+  label: string;
+  value: number;
+  tone?: "cyan" | "green" | "rose" | "zinc";
+}) {
+  const toneClass = tone === "green"
+    ? "text-emerald-200"
+    : tone === "rose"
+      ? "text-rose-200"
+      : tone === "cyan"
+        ? "text-cyan-100"
+        : "text-slate-300";
+
+  return (
+    <div className="rounded-md border border-white/10 bg-slate-950/25 px-2 py-1">
+      <p className="font-mono text-[8px] uppercase tracking-widest text-slate-500">{label}</p>
+      <p className={cn("mt-0.5 text-[12px] font-semibold", toneClass)}>{value.toLocaleString("pt-BR")}</p>
     </div>
   );
 }
@@ -6546,6 +6659,8 @@ function CampaignAnalyticsPanel({
           <MetricMiniCard icon={Repeat} label="Recorr." value={summary.recurring} />
           <MetricMiniCard icon={ImageIcon} label="Midia" value={summary.withMedia} />
           <MetricMiniCard icon={Mic} label="Audio" value={summary.withAudio} />
+          <MetricMiniCard icon={Gauge} label="Rastreadas" value={summary.trackedMessages} />
+          <MetricMiniCard icon={Power} label="Falhas API" value={summary.failedMessages} />
         </div>
       ) : (
         <div className="mt-3 rounded-lg border px-3 py-5 text-center text-[12px] text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
@@ -6730,6 +6845,21 @@ function formatDeliveryMode(value: "text" | "audio" | "text_audio") {
   if (value === "audio") return "audio";
   if (value === "text_audio") return "texto+audio";
   return "texto";
+}
+
+function formatCampaignTrackingStatus(value: NonNullable<WhatsappChannelOutboundItem["campaignTracking"]>["status"]) {
+  if (value === "sent") return "enviada";
+  if (value === "failed") return "falhou";
+  if (value === "partial") return "parcial";
+  if (value === "pending") return "pendente";
+  return "sem leitura";
+}
+
+function formatCampaignMessageStatus(value: NonNullable<WhatsappChannelOutboundItem["campaignTracking"]>["samples"][number]["status"]) {
+  if (value === "sent") return "enviada";
+  if (value === "failed") return "falhou";
+  if (value === "scheduled") return "pendente";
+  return "sem status";
 }
 
 function formatOptimizationConfidence(value: "low" | "medium" | "high") {
