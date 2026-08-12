@@ -106,6 +106,11 @@ import {
   type AgentChannelId,
 } from "@/lib/agents/multichannel";
 import type { PlanFeatureEntitlement } from "@/lib/billing/plan-entitlements";
+import {
+  metaFeatureComingSoonMessage,
+  metaFeatureComingSoonTitle,
+  metaFeatureLaunchPaused,
+} from "@/lib/meta/launch-status";
 import { cn } from "@/lib/utils";
 
 type WhatsappStatus = "draft" | "qr_pending" | "connected" | "disconnected" | "blocked" | "error" | "archived";
@@ -176,11 +181,6 @@ const PASSKEY_CONNECTION_REASON_TEXT =
   "Conta pediu verificacao por chave de acesso durante a leitura do QR.";
 const PASSKEY_MIGRATION_EXTENSION_URL =
   "https://chromewebstore.google.com/detail/cdjfbjfolpeenlmanmkoglhhcjfgcbpp";
-const META_AGENT_CHANNELS_COMING_SOON = true;
-const META_AGENT_CHANNELS_COMING_SOON_TITLE = "Atendimento Meta em breve";
-const META_AGENT_CHANNELS_COMING_SOON_MESSAGE =
-  "Em breve os agentes vao conseguir atender tambem pelo Instagram e pelo Facebook. Por enquanto, o lancamento segue com WhatsApp ativo; assim que a Meta liberar o app, esses canais serao habilitados aqui.";
-
 type RuntimeAlert = {
   id: string;
   kind: "internal_instance_block";
@@ -1035,7 +1035,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
 
   function openMetaChannelsComingSoon(channelLabel: string) {
     setMetaComingSoonChannel(channelLabel);
-    setNotice({ tone: "warning", message: META_AGENT_CHANNELS_COMING_SOON_MESSAGE });
+    setNotice({ tone: "warning", message: metaFeatureComingSoonMessage });
   }
 
   function updatePresenceMode(value: WhatsappPresenceMode) {
@@ -2445,10 +2445,10 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
             />
             <div className="grid content-start gap-2">
               <InfoTile label="Canal principal" value="WhatsApp" />
-              <InfoTile label="Meta Social" value={META_AGENT_CHANNELS_COMING_SOON ? "Em breve" : state.capability.metaSocialChannels.allowed ? state.capability.metaSocialChannels.title : "Bloqueado"} />
+              <InfoTile label="Meta Social" value={metaFeatureLaunchPaused ? "Em breve" : state.capability.metaSocialChannels.allowed ? state.capability.metaSocialChannels.title : "Bloqueado"} />
               <InfoTile label="Meta ativos" value={state.capability.metaSocialChannels.allowed ? `${countEnabledMetaChannels(channelConfigDraft)} / 4` : "0 / 4"} />
-              <InfoTile label="Comentarios" value={META_AGENT_CHANNELS_COMING_SOON ? "Em breve" : state.capability.metaSocialChannels.allowed && countEnabledPublicChannels(channelConfigDraft) ? "Preparado" : "Pausado"} />
-              <InfoTile label="Directs" value={META_AGENT_CHANNELS_COMING_SOON ? "Em breve" : state.capability.metaSocialChannels.allowed && countEnabledPrivateMetaChannels(channelConfigDraft) ? "Preparado" : "Pausado"} />
+              <InfoTile label="Comentarios" value={metaFeatureLaunchPaused ? "Em breve" : state.capability.metaSocialChannels.allowed && countEnabledPublicChannels(channelConfigDraft) ? "Preparado" : "Pausado"} />
+              <InfoTile label="Directs" value={metaFeatureLaunchPaused ? "Em breve" : state.capability.metaSocialChannels.allowed && countEnabledPrivateMetaChannels(channelConfigDraft) ? "Preparado" : "Pausado"} />
               <div className="flex flex-wrap gap-2 pt-1">
                 <SecondaryAction
                   icon={RefreshCcw}
@@ -2609,7 +2609,7 @@ function isCloneProfileEqual(left: WhatsappCloneProfile, right: WhatsappClonePro
 }
 
 function countEnabledMetaChannels(config: AgentChannelConfig) {
-  if (META_AGENT_CHANNELS_COMING_SOON) {
+  if (metaFeatureLaunchPaused) {
     return 0;
   }
 
@@ -2620,7 +2620,7 @@ function countEnabledMetaChannels(config: AgentChannelConfig) {
 }
 
 function countEnabledPublicChannels(config: AgentChannelConfig) {
-  if (META_AGENT_CHANNELS_COMING_SOON) {
+  if (metaFeatureLaunchPaused) {
     return 0;
   }
 
@@ -2631,7 +2631,7 @@ function countEnabledPublicChannels(config: AgentChannelConfig) {
 }
 
 function countEnabledPrivateMetaChannels(config: AgentChannelConfig) {
-  if (META_AGENT_CHANNELS_COMING_SOON) {
+  if (metaFeatureLaunchPaused) {
     return 0;
   }
 
@@ -2665,7 +2665,7 @@ function AgentChannelSettingsPanel({
         <div className="grid gap-2 md:grid-cols-2">
           {agentChannelDefinitions.map((definition) => {
             const channel = normalized.channels[definition.id];
-            const comingSoon = META_AGENT_CHANNELS_COMING_SOON && definition.provider === "meta";
+            const comingSoon = metaFeatureLaunchPaused && definition.provider === "meta";
             const lockedByPlan = definition.provider === "meta" && !entitlement.allowed && !comingSoon;
             const blocked = comingSoon || lockedByPlan;
             const enabled = channel.enabled && !blocked;
@@ -2687,7 +2687,7 @@ function AgentChannelSettingsPanel({
                     <p className="mt-1 text-[11px] leading-5 text-slate-500">{definition.description}</p>
                     {comingSoon ? (
                       <p className="mt-2 rounded-md border border-cyan-300/20 bg-cyan-300/10 px-2 py-1 text-[11px] leading-4 text-cyan-100">
-                        {META_AGENT_CHANNELS_COMING_SOON_MESSAGE}
+                        {metaFeatureComingSoonMessage}
                       </p>
                     ) : lockedByPlan ? (
                       <p className="mt-2 rounded-md border border-amber-300/20 bg-amber-300/10 px-2 py-1 text-[11px] leading-4 text-amber-100">
@@ -2707,7 +2707,7 @@ function AgentChannelSettingsPanel({
                     <ToggleTile
                       icon={Power}
                       label={`Ativar ${definition.shortLabel}`}
-                      description={comingSoon ? META_AGENT_CHANNELS_COMING_SOON_MESSAGE : "Habilita este canal para o mesmo agente atender quando a integracao Meta permitir."}
+                      description={comingSoon ? metaFeatureComingSoonMessage : "Habilita este canal para o mesmo agente atender quando a integracao Meta permitir."}
                       checked={enabled}
                       disabled={lockedByPlan}
                       onChange={() => comingSoon ? handleMetaControlClick() : onChange(definition.id, { enabled: !enabled })}
@@ -2775,8 +2775,8 @@ function AgentChannelSettingsPanel({
         <div className="grid gap-2 md:grid-cols-4">
           <InfoTile label="Prompt" value="Unico por agente" />
           <InfoTile label="Memoria" value="Unificada por lead" />
-          <InfoTile label="Plano" value={META_AGENT_CHANNELS_COMING_SOON ? "WhatsApp ativo" : entitlement.allowed ? entitlement.title : "Pro ou Scale"} />
-          <InfoTile label="Status" value={META_AGENT_CHANNELS_COMING_SOON ? "Meta em breve" : changed ? "Alteracoes pendentes" : "Configuracao salva"} />
+          <InfoTile label="Plano" value={metaFeatureLaunchPaused ? "WhatsApp ativo" : entitlement.allowed ? entitlement.title : "Pro ou Scale"} />
+          <InfoTile label="Status" value={metaFeatureLaunchPaused ? "Meta em breve" : changed ? "Alteracoes pendentes" : "Configuracao salva"} />
         </div>
       </BehaviorSection>
     </div>
@@ -2872,10 +2872,10 @@ function MetaChannelsComingSoonModal({
           Em breve
         </p>
         <h3 id="meta-coming-soon-title" className="mt-2 pr-8 text-lg font-semibold text-white">
-          {META_AGENT_CHANNELS_COMING_SOON_TITLE}
+          {metaFeatureComingSoonTitle}
         </h3>
         <p className="mt-3 text-sm leading-6 text-slate-300">
-          {META_AGENT_CHANNELS_COMING_SOON_MESSAGE}
+          {metaFeatureComingSoonMessage}
         </p>
         <p className="mt-3 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-xs leading-5 text-slate-400">
           Canal selecionado: {channelLabel}. O atendimento principal continua liberado pelo WhatsApp.

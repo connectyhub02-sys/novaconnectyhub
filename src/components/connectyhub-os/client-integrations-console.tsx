@@ -34,6 +34,12 @@ import type {
   IntegrationCategory,
   IntegrationConnectionStatus,
 } from "@/lib/client-os/integrations";
+import {
+  metaFeatureComingSoonDetail,
+  metaFeatureComingSoonMessage,
+  metaFeatureComingSoonTitle,
+  metaFeatureLaunchPaused,
+} from "@/lib/meta/launch-status";
 import { cn } from "@/lib/utils";
 import { MetaReviewTestButton, type ReviewTestResponse, type ReviewTestResult } from "./meta-review-test-button";
 import { NeonBadge, PageHeader, StatusBadge } from "./panel-primitives";
@@ -519,7 +525,7 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
   }, []);
 
   useEffect(() => {
-    if (!selectedCompanyId || metaConnection?.status !== "connected") {
+    if (metaFeatureLaunchPaused || !selectedCompanyId || metaConnection?.status !== "connected") {
       return;
     }
 
@@ -690,6 +696,12 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
   }
 
   function handleGuidedOAuthConnectClick(providerId: "meta-ads" | "google-growth", event: MouseEvent<HTMLAnchorElement>) {
+    if (metaFeatureLaunchPaused && providerId === "meta-ads") {
+      event.preventDefault();
+      setNotice({ tone: "warning", message: metaFeatureComingSoonMessage });
+      return;
+    }
+
     if (!selectedCompanyId || connectingGuidedProvider) {
       event.preventDefault();
       if (!selectedCompanyId) {
@@ -1353,7 +1365,7 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
           className="rounded-xl px-4 py-3 text-[12px] leading-5 text-slate-400"
           style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
         >
-          A Central organiza as conexoes por empresa. Mercado Pago, Meta e Google usam autorizacao guiada oficial; segredos tecnicos ficam somente na ConnectyHub.
+          A Central organiza as conexoes por empresa. Mercado Pago e Google usam autorizacao guiada oficial; Meta, Instagram e Facebook entram em breve apos a liberacao do app.
         </div>
       </div>
 
@@ -1371,46 +1383,50 @@ export function ClientIntegrationsConsole({ state }: { state: ClientIntegrationH
             onDisconnect={disconnectMercadoPago}
           />
 
-          <GuidedOAuthCard
-            accountLabel={metaConnection?.accountLabel ?? null}
-            connected={metaConnection?.status === "connected"}
-            connection={metaConnection}
-            connecting={connectingGuidedProvider === "meta-ads"}
-            disconnecting={disconnectingGuidedProvider === "meta-ads"}
-            kind="meta"
-            assets={selectedGrowthAssets.filter((asset) => asset.providerId === "meta-ads")}
-            actionLogs={metaActionLogs}
-            loadingMetaOperationalChecklist={loadingMetaOperationalChecklist}
-            loadingMetaWebhookMonitor={loadingMetaWebhookMonitor}
-            metaOperationalChecklist={metaConnection?.status === "connected" ? metaOperationalChecklist : null}
-            metaWebhookAction={metaWebhookAction}
-            metaWebhookMonitor={metaConnection?.status === "connected" ? metaWebhookMonitor : null}
-            runningMetaCanary={runningMetaCanary}
-            savingMetaLiveActivation={savingMetaLiveActivation}
-            savingSelection={savingSelectionProvider === "meta-ads"}
-            syncingAssets={syncingGrowthProvider === "meta-ads"}
-            selectionDraft={guidedSelectionDrafts[guidedSelectionKey(selectedCompanyId, "meta-ads")] ?? {}}
-            selectedCompanyId={selectedCompanyId}
-            selectedCompanyName={selectedCompany?.name ?? null}
-            onActivateMetaWebhooks={() => runMetaWebhookAction("subscribe_page")}
-            onConnect={(event) => handleGuidedOAuthConnectClick("meta-ads", event)}
-            onDisconnect={() => disconnectGuidedOAuth("meta-ads")}
-            onMetaReviewTestResult={handleMetaReviewTestResult}
-            onRefreshMetaOperationalChecklist={() => loadMetaOperationalChecklist()}
-            onRefreshMetaWebhookMonitor={() => loadMetaWebhookMonitor()}
-            onReplayMetaWebhookEvent={replayMetaWebhookEvent}
-            onRunMetaCanary={runMetaSocialCanary}
-            onSaveMetaLiveActivation={saveMetaLiveDispatchActivation}
-            onSaveSelection={(selection) => saveGuidedSelection("meta-ads", selection)}
-            onQueueAssetSync={() => queueGrowthSync("meta-ads")}
-            onSelectionChange={(selection) => {
-              setGuidedSelectionDrafts((current) => ({
-                ...current,
-                [guidedSelectionKey(selectedCompanyId, "meta-ads")]: selection,
-              }));
-            }}
-            onSimulateMetaWebhook={(scenario) => runMetaWebhookAction("simulate", scenario)}
-          />
+          {metaFeatureLaunchPaused ? (
+            <MetaIntegrationComingSoonCard />
+          ) : (
+            <GuidedOAuthCard
+              accountLabel={metaConnection?.accountLabel ?? null}
+              connected={metaConnection?.status === "connected"}
+              connection={metaConnection}
+              connecting={connectingGuidedProvider === "meta-ads"}
+              disconnecting={disconnectingGuidedProvider === "meta-ads"}
+              kind="meta"
+              assets={selectedGrowthAssets.filter((asset) => asset.providerId === "meta-ads")}
+              actionLogs={metaActionLogs}
+              loadingMetaOperationalChecklist={loadingMetaOperationalChecklist}
+              loadingMetaWebhookMonitor={loadingMetaWebhookMonitor}
+              metaOperationalChecklist={metaConnection?.status === "connected" ? metaOperationalChecklist : null}
+              metaWebhookAction={metaWebhookAction}
+              metaWebhookMonitor={metaConnection?.status === "connected" ? metaWebhookMonitor : null}
+              runningMetaCanary={runningMetaCanary}
+              savingMetaLiveActivation={savingMetaLiveActivation}
+              savingSelection={savingSelectionProvider === "meta-ads"}
+              syncingAssets={syncingGrowthProvider === "meta-ads"}
+              selectionDraft={guidedSelectionDrafts[guidedSelectionKey(selectedCompanyId, "meta-ads")] ?? {}}
+              selectedCompanyId={selectedCompanyId}
+              selectedCompanyName={selectedCompany?.name ?? null}
+              onActivateMetaWebhooks={() => runMetaWebhookAction("subscribe_page")}
+              onConnect={(event) => handleGuidedOAuthConnectClick("meta-ads", event)}
+              onDisconnect={() => disconnectGuidedOAuth("meta-ads")}
+              onMetaReviewTestResult={handleMetaReviewTestResult}
+              onRefreshMetaOperationalChecklist={() => loadMetaOperationalChecklist()}
+              onRefreshMetaWebhookMonitor={() => loadMetaWebhookMonitor()}
+              onReplayMetaWebhookEvent={replayMetaWebhookEvent}
+              onRunMetaCanary={runMetaSocialCanary}
+              onSaveMetaLiveActivation={saveMetaLiveDispatchActivation}
+              onSaveSelection={(selection) => saveGuidedSelection("meta-ads", selection)}
+              onQueueAssetSync={() => queueGrowthSync("meta-ads")}
+              onSelectionChange={(selection) => {
+                setGuidedSelectionDrafts((current) => ({
+                  ...current,
+                  [guidedSelectionKey(selectedCompanyId, "meta-ads")]: selection,
+                }));
+              }}
+              onSimulateMetaWebhook={(scenario) => runMetaWebhookAction("simulate", scenario)}
+            />
+          )}
 
           <GuidedOAuthCard
             accountLabel={googleConnection?.accountLabel ?? null}
@@ -1827,6 +1843,52 @@ function NoticeBar({ notice }: { notice: Notice }) {
       : { background: "rgba(244,63,94,0.08)", border: "1px solid rgba(244,63,94,0.22)", color: "#fda4af" };
 
   return <div className="mb-4 rounded-2xl px-4 py-3 text-[13px] font-medium" style={style}>{notice.message}</div>;
+}
+
+function MetaIntegrationComingSoonCard() {
+  return (
+    <section id="meta-ads-guiado" className="rounded-2xl p-4" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">integracao guiada</p>
+          <h2 className="mt-1 text-[16px] font-semibold text-slate-100">Meta Ads / Instagram</h2>
+          <p className="mt-2 text-[12px] leading-5 text-slate-400">{metaFeatureComingSoonMessage}</p>
+        </div>
+        <BarChart3 className="h-5 w-5 shrink-0 text-sky-300" />
+      </div>
+
+      <div className="mt-4 grid gap-2 sm:grid-cols-4">
+        <PaymentGuideStep done index="1" title="Lancamento" body="WhatsApp ativo" />
+        <PaymentGuideStep done={false} index="2" title="Meta" body="Em breve" />
+        <PaymentGuideStep done={false} index="3" title="Facebook" body="Em breve" />
+        <PaymentGuideStep done={false} index="4" title="Instagram" body="Em breve" />
+      </div>
+
+      <div className="mt-4 rounded-xl border p-3" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[13px] font-semibold text-slate-100">{metaFeatureComingSoonTitle}</p>
+            <p className="mt-1 text-[11px] leading-5 text-slate-500">{metaFeatureComingSoonDetail}</p>
+          </div>
+          <NeonBadge tone="amber">em breve</NeonBadge>
+        </div>
+
+        <div className="mt-3 rounded-lg border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-[11px] leading-5 text-cyan-100">
+          Meta Ads, Facebook, Instagram, Messenger, Direct e comentarios ficam visiveis como proximos recursos ate a aprovacao do app.
+        </div>
+
+        <button
+          type="button"
+          disabled
+          className="mt-3 inline-flex min-h-11 w-full cursor-not-allowed items-center justify-center gap-2 rounded-xl border px-4 text-[12px] font-bold text-slate-400 opacity-70"
+          style={{ borderColor: "var(--ch-border)" }}
+        >
+          <PlugZap className="h-4 w-4" />
+          Conectar Meta em breve
+        </button>
+      </div>
+    </section>
+  );
 }
 
 function MercadoPagoGuidedCard({

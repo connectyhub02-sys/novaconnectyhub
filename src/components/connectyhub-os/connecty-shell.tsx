@@ -58,6 +58,11 @@ import {
   type AdminImpersonationReturn,
 } from "@/lib/admin-impersonation";
 import { formatBrazilPhoneInput, formatCnpjInput, formatCpfInput, normalizeBrazilPhoneForApi } from "@/lib/account/input-format";
+import {
+  isMetaComingSoonClientHref,
+  metaFeatureComingSoonMessage,
+  metaFeatureComingSoonTitle,
+} from "@/lib/meta/launch-status";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
@@ -70,6 +75,7 @@ type NavItem = {
   tone?: AccentTone;
   badge?: string;
   badgeTone?: "green" | "amber" | "rose";
+  comingSoon?: boolean;
 };
 
 type NavSection = {
@@ -224,9 +230,9 @@ const clientSections: NavSection[] = [
     items: [
       { label: "Catálogo de Vendas", href: "/dashboard/links",         icon: ShoppingBag, tone: "sky" },
       { label: "Campanhas",       href: "/dashboard/campanhas",        icon: Megaphone, tone: "fuchsia" },
-      { label: "Meta Ads",        href: "/dashboard/trafego/meta-ads", icon: Megaphone, tone: "fuchsia" },
+      { label: "Meta Ads",        href: "/dashboard/trafego/meta-ads", icon: Megaphone, tone: "fuchsia", badge: "Em breve", badgeTone: "amber", comingSoon: true },
       { label: "Google Ads",      href: "/dashboard/trafego/google-ads", icon: Search, tone: "blue" },
-      { label: "Orgânico",        href: "/dashboard/trafego-organico", icon: Globe2, tone: "emerald" },
+      { label: "Orgânico",        href: "/dashboard/trafego-organico", icon: Globe2, tone: "emerald", badge: "Em breve", badgeTone: "amber", comingSoon: true },
       { label: "Automações",      href: "/dashboard/automacoes",       icon: Zap, tone: "violet" },
       { label: "Produtos",        href: "/dashboard/produtos",         icon: ShoppingBag, tone: "amber" },
       { label: "Relatórios",      href: "/dashboard/relatorios",       icon: BarChart3, tone: "blue" },
@@ -284,6 +290,7 @@ export function ConnectyShell({
   const [avatarError, setAvatarError] = useState<string | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [comingSoonItem, setComingSoonItem] = useState<NavItem | null>(null);
   const [notificationGroups, setNotificationGroups] = useState<Record<string, ConnectyShellNotification[]>>({});
   const [billingAccess, setBillingAccess] = useState<BillingAccessClientStatus | null>(null);
   const [accountCompletion, setAccountCompletion] = useState<AccountCompletionClientStatus | null>(null);
@@ -546,6 +553,11 @@ export function ConnectyShell({
     setTrialReminderState({ key: trialReminderStorageKey, dismissed: true });
   }, [trialReminderStorageKey]);
 
+  const handleComingSoonClick = useCallback((item: NavItem) => {
+    setComingSoonItem(item);
+    setMobileMenuOpen(false);
+  }, []);
+
   async function handleAvatarUpload(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0] ?? null;
     event.currentTarget.value = "";
@@ -665,7 +677,12 @@ export function ConnectyShell({
               </div>
               <div className="space-y-0.5">
                 {section.items.map((item) => (
-                  <SidebarLink key={item.href} item={item} isActive={item.href === activeItem?.href} />
+                  <SidebarLink
+                    key={item.href}
+                    item={item}
+                    isActive={item.href === activeItem?.href}
+                    onComingSoonClick={handleComingSoonClick}
+                  />
                 ))}
               </div>
             </div>
@@ -1051,6 +1068,7 @@ export function ConnectyShell({
             pageLabel={pageLabel}
             role={role}
             sections={sections}
+            onComingSoonClick={handleComingSoonClick}
             onClose={() => setMobileMenuOpen(false)}
           />
         ) : null}
@@ -1060,6 +1078,7 @@ export function ConnectyShell({
             active={active}
             items={mobileDockItems}
             mode={mode}
+            onComingSoonClick={handleComingSoonClick}
             onMenuClick={() => setMobileMenuOpen(true)}
           />
         ) : null}
@@ -1111,8 +1130,75 @@ export function ConnectyShell({
           onClose={handleTrialReminderClose}
         />
       ) : null}
+      {comingSoonItem ? (
+        <ShellComingSoonModal
+          item={comingSoonItem}
+          onClose={() => setComingSoonItem(null)}
+        />
+      ) : null}
       </div>
     </ConnectyShellNotificationsContext.Provider>
+  );
+}
+
+function ShellComingSoonModal({
+  item,
+  onClose,
+}: {
+  item: NavItem;
+  onClose: () => void;
+}) {
+  const Icon = item.icon;
+
+  return (
+    <div
+      aria-labelledby="shell-coming-soon-title"
+      aria-modal="true"
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm"
+      onClick={onClose}
+      onKeyDown={(event) => event.key === "Escape" && onClose()}
+      role="dialog"
+      tabIndex={0}
+    >
+      <div
+        className="relative w-full max-w-md rounded-2xl border border-cyan-300/25 bg-[#121827] p-5 text-left shadow-2xl"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <button
+          aria-label="Fechar aviso"
+          className="absolute right-3 top-3 grid h-8 w-8 place-items-center rounded-full bg-white/5 text-slate-400 transition hover:bg-white/10 hover:text-white"
+          onClick={onClose}
+          type="button"
+        >
+          <X className="h-4 w-4" />
+        </button>
+
+        <div className="grid h-12 w-12 place-items-center rounded-2xl bg-cyan-300/10 text-cyan-200">
+          <Icon className="h-6 w-6" />
+        </div>
+
+        <p className="mt-4 font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-cyan-200">
+          Em breve
+        </p>
+        <h3 id="shell-coming-soon-title" className="mt-2 pr-8 text-lg font-semibold text-white">
+          {metaFeatureComingSoonTitle}
+        </h3>
+        <p className="mt-3 text-sm leading-6 text-slate-300">
+          {metaFeatureComingSoonMessage}
+        </p>
+        <p className="mt-3 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-xs leading-5 text-slate-400">
+          Area selecionada: {item.label}. O atendimento principal continua liberado pelo WhatsApp.
+        </p>
+
+        <button
+          className="mt-5 inline-flex min-h-10 w-full items-center justify-center rounded-lg bg-white px-4 font-mono text-[11px] font-semibold uppercase text-slate-950 transition hover:bg-slate-100"
+          onClick={onClose}
+          type="button"
+        >
+          Entendi
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -2205,16 +2291,29 @@ function AccountAvatar({
 function SidebarLink({
   item,
   isActive: active,
+  onComingSoonClick,
 }: {
   item: NavItem;
   isActive: boolean;
+  onComingSoonClick: (item: NavItem) => void;
 }) {
   const Icon = item.icon;
   const itemPalette = accentPalettes[item.tone ?? "slate"];
+  const comingSoon = item.comingSoon || isMetaComingSoonClientHref(item.href);
+  const badge = comingSoon ? item.badge ?? "Em breve" : item.badge;
+
   return (
     <Link
       href={item.href}
       aria-current={active ? "page" : undefined}
+      onClick={(event) => {
+        if (!comingSoon) {
+          return;
+        }
+
+        event.preventDefault();
+        onComingSoonClick(item);
+      }}
       className="group relative flex h-9 items-center gap-2.5 rounded-xl px-3 text-[12.5px] transition-all"
       style={active ? {
         background: "linear-gradient(90deg, rgba(var(--ch-accent-rgb),0.22), rgba(var(--ch-accent-2-rgb),0.10))",
@@ -2239,7 +2338,7 @@ function SidebarLink({
         style={active ? undefined : { color: itemPalette.accent }}
       />
       <span className="flex-1 truncate font-medium">{item.label}</span>
-      {item.badge && (
+      {badge && (
         <span
           className="rounded-md px-1.5 py-0.5 font-mono text-[9px] leading-none"
           style={
@@ -2249,7 +2348,7 @@ function SidebarLink({
                      { background: "var(--ch-hover)", color: "var(--ch-muted)" }
           }
         >
-          {item.badge}
+          {badge}
         </span>
       )}
     </Link>
@@ -2267,6 +2366,7 @@ function MobileAppMenu({
   pageLabel,
   role,
   sections,
+  onComingSoonClick,
   onClose,
 }: {
   active: string;
@@ -2277,6 +2377,7 @@ function MobileAppMenu({
   pageLabel: string;
   role: string;
   sections: NavSection[];
+  onComingSoonClick: (item: NavItem) => void;
   onClose: () => void;
 }) {
   const [query, setQuery] = useState("");
@@ -2347,10 +2448,18 @@ function MobileAppMenu({
               <Link
                 href={activeItem.href}
                 className="mt-2 inline-flex h-8 items-center gap-2 rounded-xl px-3 font-mono text-[9px] font-bold uppercase tracking-wide"
-                onClick={onClose}
+                onClick={(event) => {
+                  if (activeItem.comingSoon || isMetaComingSoonClientHref(activeItem.href)) {
+                    event.preventDefault();
+                    onComingSoonClick(activeItem);
+                    return;
+                  }
+
+                  onClose();
+                }}
                 style={{ background: "rgba(var(--ch-accent-rgb),0.16)", color: "var(--ch-accent)", border: "1px solid rgba(var(--ch-accent-rgb),0.28)" }}
               >
-                Abrir novamente
+                {activeItem.comingSoon || isMetaComingSoonClientHref(activeItem.href) ? "Em breve" : "Abrir novamente"}
               </Link>
             ) : null}
           </div>
@@ -2376,6 +2485,7 @@ function MobileAppMenu({
                 active={isActive(item.href, active)}
                 item={item}
                 label={dockLabel(item, mode)}
+                onComingSoonClick={onComingSoonClick}
                 onClick={onClose}
               />
             ))}
@@ -2395,6 +2505,7 @@ function MobileAppMenu({
                     key={item.href}
                     item={item}
                     isActive={item.href === activeItem?.href}
+                    onComingSoonClick={onComingSoonClick}
                     onClick={onClose}
                   />
                 ))}
@@ -2415,22 +2526,33 @@ function MobileMenuQuickLink({
   active,
   item,
   label,
+  onComingSoonClick,
   onClick,
 }: {
   active: boolean;
   item: NavItem;
   label: string;
+  onComingSoonClick: (item: NavItem) => void;
   onClick: () => void;
 }) {
   const Icon = item.icon;
   const itemPalette = accentPalettes[item.tone ?? "slate"];
+  const comingSoon = item.comingSoon || isMetaComingSoonClientHref(item.href);
 
   return (
     <Link
       href={item.href}
       aria-current={active ? "page" : undefined}
       className="grid min-h-[92px] gap-2 rounded-3xl p-3 transition"
-      onClick={onClick}
+      onClick={(event) => {
+        if (comingSoon) {
+          event.preventDefault();
+          onComingSoonClick(item);
+          return;
+        }
+
+        onClick();
+      }}
       style={active ? {
         background: "linear-gradient(135deg, rgba(var(--ch-accent-rgb),0.26), rgba(var(--ch-accent-2-rgb),0.12))",
         border: "1px solid rgba(var(--ch-accent-rgb),0.48)",
@@ -2447,7 +2569,7 @@ function MobileMenuQuickLink({
       >
         <Icon className="h-4 w-4" />
       </span>
-      <span className="self-end truncate text-[13px] font-semibold">{label}</span>
+      <span className="self-end truncate text-[13px] font-semibold">{comingSoon ? "Em breve" : label}</span>
     </Link>
   );
 }
@@ -2455,20 +2577,32 @@ function MobileMenuQuickLink({
 function MobileMenuLink({
   item,
   isActive: active,
+  onComingSoonClick,
   onClick,
 }: {
   item: NavItem;
   isActive: boolean;
+  onComingSoonClick: (item: NavItem) => void;
   onClick: () => void;
 }) {
   const Icon = item.icon;
   const itemPalette = accentPalettes[item.tone ?? "slate"];
+  const comingSoon = item.comingSoon || isMetaComingSoonClientHref(item.href);
+  const badge = comingSoon ? item.badge ?? "Em breve" : item.badge;
 
   return (
     <Link
       href={item.href}
       aria-current={active ? "page" : undefined}
-      onClick={onClick}
+      onClick={(event) => {
+        if (comingSoon) {
+          event.preventDefault();
+          onComingSoonClick(item);
+          return;
+        }
+
+        onClick();
+      }}
       className="grid min-h-10 grid-cols-[24px_minmax(0,1fr)_auto] items-center gap-2 rounded-2xl px-3 py-2 text-[12.5px] transition-all"
       style={active ? {
         background: "linear-gradient(135deg, rgba(var(--ch-accent-rgb),0.26), rgba(var(--ch-accent-2-rgb),0.12))",
@@ -2491,7 +2625,7 @@ function MobileMenuLink({
         <Icon className="h-3.5 w-3.5" />
       </span>
       <span className="min-w-0 truncate font-semibold">{item.label}</span>
-      {item.badge ? (
+      {badge ? (
         <span
           className="rounded-md px-1.5 py-0.5 font-mono text-[9px] leading-none"
           style={
@@ -2501,7 +2635,7 @@ function MobileMenuLink({
                      { background: `rgba(${itemPalette.accentRgb},0.13)`, color: itemPalette.accent }
           }
         >
-          {item.badge}
+          {badge}
         </span>
       ) : (
         <span className="h-1.5 w-1.5 rounded-full" style={{ background: active ? "var(--ch-accent)" : `rgba(${itemPalette.accentRgb},0.55)` }} />
@@ -2514,11 +2648,13 @@ function MobileDock({
   active,
   items,
   mode,
+  onComingSoonClick,
   onMenuClick,
 }: {
   active: string;
   items: NavItem[];
   mode: "admin" | "client";
+  onComingSoonClick: (item: NavItem) => void;
   onMenuClick: () => void;
 }) {
   return (
@@ -2532,7 +2668,13 @@ function MobileDock({
         }}
       >
         {items.map((item) => (
-          <MobileDockLink key={item.href} active={isActive(item.href, active)} item={item} label={dockLabel(item, mode)} />
+          <MobileDockLink
+            key={item.href}
+            active={isActive(item.href, active)}
+            item={item}
+            label={dockLabel(item, mode)}
+            onComingSoonClick={onComingSoonClick}
+          />
         ))}
         <button
           type="button"
@@ -2552,13 +2694,32 @@ function MobileDock({
   );
 }
 
-function MobileDockLink({ active, item, label }: { active: boolean; item: NavItem; label: string }) {
+function MobileDockLink({
+  active,
+  item,
+  label,
+  onComingSoonClick,
+}: {
+  active: boolean;
+  item: NavItem;
+  label: string;
+  onComingSoonClick: (item: NavItem) => void;
+}) {
   const Icon = item.icon;
+  const comingSoon = item.comingSoon || isMetaComingSoonClientHref(item.href);
 
   return (
     <Link
       href={item.href}
       aria-current={active ? "page" : undefined}
+      onClick={(event) => {
+        if (!comingSoon) {
+          return;
+        }
+
+        event.preventDefault();
+        onComingSoonClick(item);
+      }}
       className="grid min-h-[56px] min-w-0 place-items-center gap-0.5 rounded-xl px-1.5 text-center transition"
       style={active ? {
         background: "linear-gradient(135deg, rgba(var(--ch-accent-rgb),0.96), rgba(var(--ch-accent-2-rgb),0.86))",
@@ -2572,7 +2733,7 @@ function MobileDockLink({ active, item, label }: { active: boolean; item: NavIte
       }}
     >
       <Icon className="h-4 w-4" />
-      <span className="max-w-full truncate font-mono text-[9px] font-semibold uppercase tracking-wide">{label}</span>
+      <span className="max-w-full truncate font-mono text-[9px] font-semibold uppercase tracking-wide">{comingSoon ? "Breve" : label}</span>
     </Link>
   );
 }

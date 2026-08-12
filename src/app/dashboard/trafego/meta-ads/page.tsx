@@ -4,7 +4,9 @@ import { connection } from "next/server";
 import { AdminAdsPlatformDashboard } from "@/components/connectyhub-os/admin-ads-platform-dashboard";
 import { ConnectyShell } from "@/components/connectyhub-os/connecty-shell";
 import { FeatureUpgradePanel } from "@/components/connectyhub-os/feature-upgrade-panel";
+import { MetaComingSoonPanel } from "@/components/connectyhub-os/meta-coming-soon-panel";
 import { resolvePlanFeatureEntitlement } from "@/lib/billing/plan-entitlements";
+import { metaFeatureLaunchPaused } from "@/lib/meta/launch-status";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { getClientTrafficOverview } from "@/lib/traffic/admin-traffic";
 
@@ -33,6 +35,15 @@ export default async function ClientMetaAdsPage() {
     userLabel: workspace.profile.email ?? undefined,
     workspaceName: workspace.organization.name ?? workspace.profile.companyName ?? "Workspace",
   };
+
+  if (metaFeatureLaunchPaused) {
+    return (
+      <ConnectyShell {...shellProps}>
+        <MetaComingSoonPanel featureName="Meta Ads" />
+      </ConnectyShell>
+    );
+  }
+
   const entitlement = resolvePlanFeatureEntitlement("meta_ads_analytics", {
     isPlatformAdmin: workspace.profile.isPlatformAdmin,
     organizationStatus: workspace.organization.status,

@@ -3,8 +3,10 @@ import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { ConnectyShell } from "@/components/connectyhub-os/connecty-shell";
 import { FeatureUpgradePanel } from "@/components/connectyhub-os/feature-upgrade-panel";
+import { MetaComingSoonPanel } from "@/components/connectyhub-os/meta-coming-soon-panel";
 import { MetaOrganicConsole } from "@/components/connectyhub-os/meta-organic-console";
 import { resolvePlanFeatureEntitlement } from "@/lib/billing/plan-entitlements";
+import { metaFeatureLaunchPaused } from "@/lib/meta/launch-status";
 import { getClientMetaOrganicOverview } from "@/lib/meta/organic-publishing";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 
@@ -33,6 +35,15 @@ export default async function OrganicTrafficPage() {
     userLabel: workspace.profile.email ?? undefined,
     workspaceName: workspace.organization.name ?? workspace.profile.companyName ?? "Workspace",
   };
+
+  if (metaFeatureLaunchPaused) {
+    return (
+      <ConnectyShell {...shellProps}>
+        <MetaComingSoonPanel featureName="Organico Meta" />
+      </ConnectyShell>
+    );
+  }
+
   const entitlement = resolvePlanFeatureEntitlement("meta_organic_insights", {
     isPlatformAdmin: workspace.profile.isPlatformAdmin,
     organizationStatus: workspace.organization.status,
