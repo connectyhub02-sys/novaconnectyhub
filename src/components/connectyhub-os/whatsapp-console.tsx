@@ -1038,6 +1038,15 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
     setNotice({ tone: "warning", message: metaFeatureComingSoonMessage });
   }
 
+  function handleWhatsappTabChange(tab: WhatsappConsoleTab) {
+    if (metaFeatureLaunchPaused && tab === "channels") {
+      openMetaChannelsComingSoon("Redes sociais");
+      return;
+    }
+
+    setActiveTab(tab);
+  }
+
   function updatePresenceMode(value: WhatsappPresenceMode) {
     setBehaviorDraft((current) => normalizeWhatsappBehaviorConfig({ ...current, presenceMode: value, alwaysOnline: value === "always" }));
   }
@@ -1959,7 +1968,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
           onSave={saveAgentSettings}
         />
 
-        <WhatsappConsoleTabs activeTab={activeTab} onChange={setActiveTab} />
+        <WhatsappConsoleTabs activeTab={activeTab} onChange={handleWhatsappTabChange} />
 
         {activeTab === "connection" ? (
           <Panel
@@ -2946,12 +2955,13 @@ const whatsappConsoleTabs: Array<{
   label: string;
   description: string;
   icon: LucideIcon;
+  comingSoon?: boolean;
 }> = [
   { id: "connection", label: "Conexao", description: "Numero e status", icon: Smartphone },
   { id: "prompt", label: "Prompt", description: "Texto do agente", icon: PenLine },
   { id: "qualification", label: "Qualificacao", description: "CRM e score", icon: CheckCircle2 },
   { id: "behavior", label: "Comportamento", description: "Modos e timers", icon: Shuffle },
-  { id: "channels", label: "Redes sociais", description: "Canais do agente", icon: Globe2 },
+  { id: "channels", label: "Redes sociais", description: "Instagram / Facebook", icon: Globe2, comingSoon: true },
   { id: "multichannel", label: "Multicanal", description: "Grupos e campanhas", icon: Forward },
   { id: "files", label: "Arquivos", description: "Conhecimento", icon: FileText },
 ];
@@ -3059,6 +3069,7 @@ function WhatsappConsoleTabs({
       <div className="flex min-w-max gap-1 overflow-x-auto pb-1 sm:grid sm:min-w-0 sm:grid-cols-6 sm:overflow-visible sm:pb-0">
         {whatsappConsoleTabs.map((tab) => {
           const active = tab.id === activeTab;
+          const comingSoon = tab.comingSoon && metaFeatureLaunchPaused;
           const Icon = tab.icon;
 
           return (
@@ -3072,14 +3083,23 @@ function WhatsappConsoleTabs({
                 "grid min-h-[52px] min-w-[132px] grid-cols-[18px_minmax(0,1fr)] items-center gap-1.5 rounded-lg px-2 text-left transition sm:min-h-[58px] sm:min-w-0 sm:gap-2 sm:px-3",
                 active
                   ? "text-slate-950 shadow-[0_0_24px_rgba(var(--ch-accent-rgb),0.18)] ring-1 ring-white/20"
-                  : "text-slate-200 hover:bg-white/10 hover:text-white",
+                  : comingSoon
+                    ? "text-slate-300 hover:bg-cyan-300/10 hover:text-cyan-100"
+                    : "text-slate-200 hover:bg-white/10 hover:text-white",
               )}
-              style={active ? { background: "linear-gradient(135deg, var(--ch-accent), var(--ch-accent-2))" } : undefined}
+              style={active ? { background: "linear-gradient(135deg, var(--ch-accent), var(--ch-accent-2))" } : comingSoon ? { border: "1px solid rgba(34,211,238,0.26)" } : undefined}
               onClick={() => onChange(tab.id)}
             >
-              <Icon className={cn("h-4 w-4", active ? "text-slate-950" : "text-slate-200")} />
+              <Icon className={cn("h-4 w-4", active ? "text-slate-950" : comingSoon ? "text-cyan-200" : "text-slate-200")} />
               <span className="min-w-0">
-                <span className={cn("block truncate text-[12px] font-semibold leading-4", active ? "text-slate-950" : "text-slate-100")}>{tab.label}</span>
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <span className={cn("block truncate text-[12px] font-semibold leading-4", active ? "text-slate-950" : "text-slate-100")}>{tab.label}</span>
+                  {comingSoon ? (
+                    <span className="shrink-0 rounded-md bg-amber-300/15 px-1.5 py-0.5 font-mono text-[8px] font-bold uppercase leading-none text-amber-200">
+                      Em breve
+                    </span>
+                  ) : null}
+                </span>
                 <span className={cn("mt-0.5 hidden truncate font-mono text-[8px] uppercase tracking-widest sm:block", active ? "text-slate-800" : "text-slate-300")}>{tab.description}</span>
               </span>
             </button>
