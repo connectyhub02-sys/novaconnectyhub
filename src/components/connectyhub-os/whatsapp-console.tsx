@@ -5766,6 +5766,33 @@ function WhatsappChannelOperationsPanel({
     && targetCampaignText.trim().length > 0
     && (campaignEnabled || newsletterEnabled)
     && (!targetMentionAll || !selectedHasNewsletter);
+  const [targetSearch, setTargetSearch] = useState("");
+  const [targetTypeFilter, setTargetTypeFilter] = useState<"all" | "group" | "newsletter">("all");
+  const groupTargets = targets.filter((target) => target.type === "group");
+  const newsletterTargets = targets.filter((target) => target.type === "newsletter");
+  const activeGroupTargets = groupTargets.filter((target) => target.enabled);
+  const campaignReadyTargets = targets.filter((target) => target.campaignEnabled);
+  const normalizedTargetSearch = targetSearch.trim().toLowerCase();
+  const visibleTargets = targets.filter((target) => {
+    const matchesType = targetTypeFilter === "all" || target.type === targetTypeFilter;
+    const searchable = `${target.name} ${target.jid} ${target.description ?? ""}`.toLowerCase();
+
+    return matchesType && (!normalizedTargetSearch || searchable.includes(normalizedTargetSearch));
+  });
+  const scheduledCount = channelOps?.analytics?.summary.scheduled ?? 0;
+  const failedCount = channelOps?.analytics?.summary.failed ?? 0;
+  const selectedTargetSummary = selectedTargets.length
+    ? `${selectedTargets.length} destino(s) selecionado(s)`
+    : "Nenhum destino selecionado";
+  const nextStepLabel = operationsLocked
+    ? "Conectar WhatsApp"
+    : targets.length === 0
+      ? "Sincronizar destinos"
+      : selectedTargets.length === 0
+        ? "Selecionar destinos"
+        : targetCampaignText.trim().length === 0
+          ? "Criar mensagem"
+          : "Revisar e agendar";
 
   function toggleTargetSelection(targetId: string) {
     setSelectedTargetIds((current) => current.includes(targetId)
@@ -5800,7 +5827,7 @@ function WhatsappChannelOperationsPanel({
   }
 
   return (
-    <div className="grid gap-3 sm:gap-4 2xl:grid-cols-[minmax(0,1fr)_320px]">
+    <div className="grid gap-3 sm:gap-4">
       <div className="grid gap-3 sm:gap-4">
         {operationsLocked ? (
           <div className="rounded-xl border border-amber-300/25 bg-amber-300/10 px-3 py-3 text-amber-100">
@@ -5816,83 +5843,148 @@ function WhatsappChannelOperationsPanel({
           </div>
         ) : null}
 
-        <div className="grid gap-3 rounded-xl border p-3 md:grid-cols-2 xl:grid-cols-4" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
-          <InfoTile label="Grupos" value={behavior.allowGroupChats ? formatGroupReplyMode(behavior.groupReplyMode) : "Pausado"} />
-          <InfoTile label="Status" value={statusEnabled ? "Liberado" : "Bloqueado"} />
-          <InfoTile label="Canais" value={newsletterEnabled ? "Liberado" : "Bloqueado"} />
-          <InfoTile label="Campanhas" value={campaignEnabled ? `${behavior.whatsappCampaignBatchSize} por lote` : "Bloqueado"} />
-        </div>
+        <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(300px,0.38fr)]">
+          <div className="rounded-xl border p-3 sm:p-4" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0">
+                <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Prontidao da operacao</p>
+                <p className="mt-1 text-[13px] font-semibold text-slate-100">{nextStepLabel}</p>
+                <p className="mt-1 text-[11px] leading-5 text-slate-500">
+                  {channelOps?.instance.displayName ?? "Instancia WhatsApp"} {channelOps?.instance.phoneNumber ? `/ ${channelOps.instance.phoneNumber}` : ""}
+                </p>
+              </div>
+              <NeonBadge tone={connected ? "green" : "amber"}>{connected ? "online" : "offline"}</NeonBadge>
+            </div>
 
-        <div className="flex flex-wrap gap-2">
-          <SecondaryAction
-            icon={RefreshCcw}
-            label="Atualizar painel"
-            description="Recarrega historico local e configuracao operacional."
-            loading={channelAction === "load_channels"}
-            onClick={onRefresh}
-          />
-          <SecondaryAction
-            icon={MessageCircle}
-            label="Buscar grupos"
-            description="Consulta os grupos visiveis para esta instancia na Uazapi."
-            disabled={operationsLocked}
-            loading={channelAction === "refresh_groups"}
-            onClick={() => onRunAction("refresh_groups")}
-          />
-          <SecondaryAction
-            icon={FileText}
-            label="Buscar canais"
-            description="Consulta canais/newsletters ligados ao numero."
-            disabled={operationsLocked}
-            loading={channelAction === "refresh_newsletters"}
-            onClick={() => onRunAction("refresh_newsletters")}
-          />
-          <SecondaryAction
-            icon={ShieldCheck}
-            label="Limites"
-            description="Consulta limites de mensagens do WhatsApp pela Uazapi."
-            disabled={operationsLocked}
-            loading={channelAction === "message_limits"}
-            onClick={() => onRunAction("message_limits")}
-          />
-          <SecondaryAction
-            icon={Forward}
-            label="Pastas"
-            description="Consulta pastas do sender/campanhas da Uazapi."
-            disabled={operationsLocked}
-            loading={channelAction === "campaign_folders"}
-            onClick={() => onRunAction("campaign_folders")}
-          />
-        </div>
+            <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+              <InfoTile label="Destinos" value={`${groupTargets.length} grupos / ${newsletterTargets.length} canais`} />
+              <InfoTile label="IA em grupos" value={behavior.allowGroupChats ? `${activeGroupTargets.length} ativos` : "Pausado"} />
+              <InfoTile label="Campanhas" value={campaignEnabled ? `${campaignReadyTargets.length} liberados` : "Bloqueado"} />
+              <InfoTile label="Agenda" value={`${scheduledCount} futuro(s)`} />
+            </div>
+          </div>
 
-        <label className="block rounded-xl border p-3" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
-          <span className="mb-1.5 flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
-            Agendar para
-            <InfoHint text="Opcional. Em branco, o envio entra na fila agora. Com data e hora, o Inngest processa quando chegar o horario." />
-          </span>
-          <input
-            className="h-10 w-full rounded-lg border px-3 font-mono text-[12px] outline-none"
-            type="datetime-local"
-            value={channelScheduledFor}
-            onChange={(event) => onChannelScheduledForChange(event.target.value)}
-          />
-        </label>
-
-        <div className="grid gap-3 rounded-xl border p-3 sm:p-4 xl:grid-cols-[minmax(0,1fr)_360px]" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
-          <div>
+          <div className="rounded-xl border p-3 sm:p-4" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
-                Grupos e canais sincronizados
-                <InfoHint text="Use Buscar grupos e Buscar canais para carregar os destinos desta instancia. Selecione destinos para campanhas agendadas." />
-              </p>
+              <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Sincronizacao</p>
+              {failedCount > 0 ? <NeonBadge tone="rose">{failedCount} falha(s)</NeonBadge> : <NeonBadge tone="cyan">painel local</NeonBadge>}
+            </div>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+              <SecondaryAction
+                icon={RefreshCcw}
+                label="Atualizar"
+                description="Recarrega historico local e configuracao operacional."
+                loading={channelAction === "load_channels"}
+                onClick={onRefresh}
+              />
+              <SecondaryAction
+                icon={MessageCircle}
+                label="Grupos"
+                description="Consulta os grupos visiveis para esta instancia na Uazapi."
+                disabled={operationsLocked}
+                loading={channelAction === "refresh_groups"}
+                onClick={() => onRunAction("refresh_groups")}
+              />
+              <SecondaryAction
+                icon={FileText}
+                label="Canais"
+                description="Consulta canais/newsletters ligados ao numero."
+                disabled={operationsLocked}
+                loading={channelAction === "refresh_newsletters"}
+                onClick={() => onRunAction("refresh_newsletters")}
+              />
+              <SecondaryAction
+                icon={ShieldCheck}
+                label="Limites"
+                description="Consulta limites de mensagens do WhatsApp pela Uazapi."
+                disabled={operationsLocked}
+                loading={channelAction === "message_limits"}
+                onClick={() => onRunAction("message_limits")}
+              />
+              <SecondaryAction
+                icon={Forward}
+                label="Pastas"
+                description="Consulta pastas do sender/campanhas da Uazapi."
+                disabled={operationsLocked}
+                loading={channelAction === "campaign_folders"}
+                onClick={() => onRunAction("campaign_folders")}
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="grid gap-2 rounded-xl border p-3 md:grid-cols-4" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
+          {[
+            { label: "1. Sincronizar", value: targets.length ? `${targets.length} destino(s)` : "Pendente", active: targets.length > 0 },
+            { label: "2. Selecionar", value: selectedTargetSummary, active: selectedTargets.length > 0 },
+            { label: "3. Criar mensagem", value: targetCampaignText.trim() ? "Rascunho pronto" : "Aguardando texto", active: targetCampaignText.trim().length > 0 },
+            { label: "4. Agendar", value: channelScheduledFor ? "Com horario" : "Fila imediata", active: targetCampaignReady },
+          ].map((step) => (
+            <div
+              key={step.label}
+              className={cn(
+                "rounded-lg border px-3 py-2",
+                step.active ? "border-cyan-300/30 bg-cyan-400/10" : "border-white/10 bg-white/[0.025]",
+              )}
+            >
+              <p className={cn("font-mono text-[8px] uppercase tracking-widest", step.active ? "text-cyan-200" : "text-slate-500")}>{step.label}</p>
+              <p className="mt-1 truncate text-[11px] font-semibold text-slate-200">{step.value}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="grid gap-3 xl:grid-cols-[minmax(0,0.58fr)_minmax(360px,0.42fr)]">
+          <div className="rounded-xl border p-3 sm:p-4" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
+                  Destinos sincronizados
+                  <InfoHint text="Use Buscar grupos e Buscar canais para carregar os destinos desta instancia. Selecione destinos para campanhas agendadas." />
+                </p>
+                <p className="mt-1 text-[11px] text-slate-500">{selectedTargetSummary}</p>
+              </div>
               <div className="flex gap-1.5">
-                <NeonBadge tone="cyan">{targets.filter((target) => target.type === "group").length} grupos</NeonBadge>
-                <NeonBadge tone="violet">{targets.filter((target) => target.type === "newsletter").length} canais</NeonBadge>
+                <NeonBadge tone="cyan">{groupTargets.length} grupos</NeonBadge>
+                <NeonBadge tone="violet">{newsletterTargets.length} canais</NeonBadge>
               </div>
             </div>
-            <div className="mt-3 grid max-h-[320px] gap-2 overflow-y-auto pr-1 md:grid-cols-2">
-              {targets.length ? (
-                targets.map((target) => {
+
+            <div className="mt-3 grid gap-2 lg:grid-cols-[minmax(0,1fr)_auto]">
+              <input
+                className="h-10 w-full rounded-lg border px-3 text-[12px] outline-none"
+                value={targetSearch}
+                onChange={(event) => setTargetSearch(event.target.value)}
+                placeholder="Buscar grupo, canal ou ID"
+              />
+              <div className="grid grid-cols-3 gap-1 rounded-lg border p-1" style={{ borderColor: "var(--ch-border)" }}>
+                {[
+                  { value: "all", label: "Todos" },
+                  { value: "group", label: "Grupos" },
+                  { value: "newsletter", label: "Canais" },
+                ].map((option) => {
+                  const active = targetTypeFilter === option.value;
+
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      className={cn(
+                        "h-8 rounded-md px-2 font-mono text-[9px] font-semibold uppercase tracking-widest transition",
+                        active ? "bg-cyan-400/15 text-cyan-100" : "text-slate-500 hover:bg-white/[0.04] hover:text-slate-200",
+                      )}
+                      aria-pressed={active}
+                      onClick={() => setTargetTypeFilter(option.value as "all" | "group" | "newsletter")}
+                    >
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="mt-3 grid max-h-[460px] gap-2 overflow-y-auto pr-1">
+              {visibleTargets.length ? (
+                visibleTargets.map((target) => {
                   const selected = selectedTargetIds.includes(target.id);
                   return (
                     <div
@@ -6007,18 +6099,37 @@ function WhatsappChannelOperationsPanel({
                   );
                 })
               ) : (
-                <div className="rounded-lg border px-3 py-8 text-center text-[12px] text-slate-500 md:col-span-2" style={{ borderColor: "var(--ch-border)" }}>
-                  Nenhum grupo ou canal sincronizado ainda. Use Buscar grupos e Buscar canais.
+                <div className="rounded-lg border px-3 py-8 text-center text-[12px] text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
+                  {targets.length ? "Nenhum destino encontrado com esses filtros." : "Nenhum grupo ou canal sincronizado ainda. Use Grupos e Canais."}
                 </div>
               )}
             </div>
           </div>
 
-          <div className="rounded-lg border p-3" style={{ background: "var(--ch-surface)", borderColor: "var(--ch-border)" }}>
-            <p className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
-              Post para grupos/canais
-              <InfoHint text="Gere um rascunho com IA, revise o texto, adicione voz/midia/produtos e aprove manualmente ao agendar para os destinos selecionados." />
-            </p>
+          <div className="rounded-xl border p-3 sm:p-4" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
+                  Criar campanha
+                  <InfoHint text="Gere um rascunho com IA, revise o texto, adicione voz/midia/produtos e aprove manualmente ao agendar para os destinos selecionados." />
+                </p>
+                <p className="mt-1 text-[13px] font-semibold text-slate-100">{selectedTargetSummary}</p>
+              </div>
+              <NeonBadge tone={targetCampaignReady ? "green" : "amber"}>{targetCampaignReady ? "pronto" : "rascunho"}</NeonBadge>
+            </div>
+
+            <label className="mt-3 block rounded-lg border p-3" style={{ background: "var(--ch-surface)", borderColor: "var(--ch-border)" }}>
+              <span className="mb-1.5 flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
+                Agendar para
+                <InfoHint text="Opcional. Em branco, o envio entra na fila agora. Com data e hora, o Inngest processa quando chegar o horario." />
+              </span>
+              <input
+                className="h-10 w-full rounded-lg border px-3 font-mono text-[12px] outline-none"
+                type="datetime-local"
+                value={channelScheduledFor}
+                onChange={(event) => onChannelScheduledForChange(event.target.value)}
+              />
+            </label>
             <textarea
               className="mt-3 min-h-24 w-full resize-y rounded-lg border px-3 py-2 text-[12px] leading-5 outline-none"
               value={targetAiBrief}
@@ -6060,6 +6171,19 @@ function WhatsappChannelOperationsPanel({
               onChange={(event) => setTargetCampaignText(event.target.value.slice(0, 1400))}
               placeholder="Mensagem para grupos e canais selecionados."
             />
+            {targetCampaignTitle.trim() || targetCampaignText.trim() ? (
+              <div className="mt-3 rounded-lg border p-3" style={{ background: "var(--ch-surface)", borderColor: "var(--ch-border)" }}>
+                <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Preview WhatsApp</p>
+                <div className="mt-2 rounded-lg border border-cyan-300/20 bg-cyan-300/10 px-3 py-2">
+                  {targetCampaignTitle.trim() ? (
+                    <p className="text-[12px] font-semibold text-cyan-50">{targetCampaignTitle.trim()}</p>
+                  ) : null}
+                  {targetCampaignText.trim() ? (
+                    <p className="mt-1 whitespace-pre-wrap text-[11px] leading-5 text-cyan-50/90">{targetCampaignText.trim()}</p>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
             <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_112px]">
               <label className="block">
                 <span className="mb-1 flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
@@ -6222,8 +6346,18 @@ function WhatsappChannelOperationsPanel({
           </div>
         </div>
 
-        <div className="grid gap-3 sm:gap-4 xl:grid-cols-3">
-          <div className="rounded-xl border p-3 sm:p-4" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
+        <div className="rounded-xl border p-3 sm:p-4" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Envios rapidos</p>
+              <p className="mt-1 text-[11px] text-slate-500">Status, lista manual de numeros e postagem direta em canal.</p>
+            </div>
+            <NeonBadge tone={statusEnabled || campaignEnabled || newsletterEnabled ? "cyan" : "amber"}>
+              {[statusEnabled, campaignEnabled, newsletterEnabled].filter(Boolean).length}/3 liberados
+            </NeonBadge>
+          </div>
+          <div className="mt-3 grid gap-3 sm:gap-4 xl:grid-cols-3">
+          <div className="rounded-xl border p-3 sm:p-4" style={{ background: "var(--ch-surface)", borderColor: "var(--ch-border)" }}>
             <p className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
               Status WhatsApp
               <InfoHint text="Publica texto no Status/Stories da instancia quando o controle Status WhatsApp estiver ligado." />
@@ -6260,7 +6394,7 @@ function WhatsappChannelOperationsPanel({
             </div>
           </div>
 
-          <div className="rounded-xl border p-3 sm:p-4" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
+          <div className="rounded-xl border p-3 sm:p-4" style={{ background: "var(--ch-surface)", borderColor: "var(--ch-border)" }}>
             <p className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
               Campanha simples
               <InfoHint text="Cria um disparo simples via Uazapi Sender. Use uma linha, virgula ou ponto e virgula por numero." />
@@ -6300,7 +6434,7 @@ function WhatsappChannelOperationsPanel({
             </div>
           </div>
 
-          <div className="rounded-xl border p-3 sm:p-4" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
+          <div className="rounded-xl border p-3 sm:p-4" style={{ background: "var(--ch-surface)", borderColor: "var(--ch-border)" }}>
             <p className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
               Canal / newsletter
               <InfoHint text="Posta texto em um canal/newsletter quando a instancia e a Uazapi permitirem esse recurso." />
@@ -6332,17 +6466,19 @@ function WhatsappChannelOperationsPanel({
               />
             </div>
           </div>
+          </div>
         </div>
       </div>
 
-      <div className="grid gap-3 sm:gap-4">
-        <CampaignAnalyticsPanel
-          analytics={channelOps?.analytics}
-          onUseSuggestedTime={(value) => onChannelScheduledForChange(isoToLocalDatetimeInput(value))}
-        />
-
+      <div className="grid gap-3 sm:gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
         <div className="rounded-xl border p-3 sm:p-4" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
-          <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Historico de envios WhatsApp</p>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Historico de envios WhatsApp</p>
+              <p className="mt-1 text-[11px] text-slate-500">Ultimos posts, campanhas agendadas e erros retornados pela fila.</p>
+            </div>
+            <NeonBadge tone={channelOps?.history.length ? "cyan" : "zinc"}>{channelOps?.history.length ?? 0} registros</NeonBadge>
+          </div>
           <div className="mt-4 grid gap-2">
             {channelOps?.history.length ? (
               channelOps.history.map((item) => (
@@ -6373,6 +6509,11 @@ function WhatsappChannelOperationsPanel({
             )}
           </div>
         </div>
+
+        <CampaignAnalyticsPanel
+          analytics={channelOps?.analytics}
+          onUseSuggestedTime={(value) => onChannelScheduledForChange(isoToLocalDatetimeInput(value))}
+        />
       </div>
     </div>
   );
