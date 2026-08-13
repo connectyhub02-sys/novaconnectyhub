@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Bot, Building2, Copy, Loader2, Pencil, Plus, Save, Sparkles, Trash2, X } from "lucide-react";
 import { NeonBadge, Panel, SectionHeader } from "./panel-primitives";
+import { InfinityLoadingPanel } from "./infinity-loader";
 import { cn } from "@/lib/utils";
 
 type ClientCompany = {
@@ -501,9 +502,10 @@ export function ClientAgentsConsole() {
       ) : null}
 
       {loading ? (
-        <div className="grid min-h-64 place-items-center rounded-2xl border border-cyan-400/15 bg-cyan-400/5">
-          <Loader2 className="h-5 w-5 animate-spin text-cyan-300" />
-        </div>
+        <InfinityLoadingPanel
+          label="Carregando agentes..."
+          description="Preparando lista de agentes, empresas e setores."
+        />
       ) : null}
     </>
   );

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { ArrowRight, Building2, Loader2, Plus, Save, Trash2 } from "lucide-react";
 import { KpiStat, NeonBadge, PageHeader, Panel, StatusBadge } from "./panel-primitives";
+import { InfinityLoader } from "./infinity-loader";
 import { cn } from "@/lib/utils";
 
 type PlatformWhatsappSector = {
@@ -189,8 +190,12 @@ export function AdminSectorsConsole() {
 
       {loading ? (
         <Panel title="Setores" eyebrow="carregando">
-          <div className="grid min-h-[220px] place-items-center text-cyan-300">
-            <Loader2 className="h-5 w-5 animate-spin" />
+          <div className="grid min-h-[260px] place-items-center px-4 py-8">
+            <InfinityLoader
+              label="Carregando setores..."
+              description="Preparando setores internos e agentes vinculados."
+              size="md"
+            />
           </div>
         </Panel>
       ) : null}

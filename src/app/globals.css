@@ -164,6 +164,79 @@ textarea {
   --text-secondary-color: #64748b !important;
 }
 
+.connecty-infinity-mark {
+  display: inline-flex;
+  color: #67e8f9;
+  filter: drop-shadow(0 0 12px rgba(34, 211, 238, 0.22));
+}
+
+.connecty-infinity-track,
+.connecty-infinity-trace {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.connecty-infinity-track {
+  stroke: rgba(148, 163, 184, 0.22);
+  stroke-width: 6.5;
+}
+
+.connecty-infinity-trace {
+  stroke: #22d3ee;
+  stroke-width: 7;
+  stroke-dasharray: 18 82;
+  stroke-dashoffset: 0;
+  animation: connecty-infinity-orbit 1.7s linear infinite;
+  filter: drop-shadow(0 0 8px rgba(34, 211, 238, 0.7));
+}
+
+.connecty-infinity-trace-alt {
+  stroke: #a78bfa;
+  stroke-dasharray: 8 92;
+  animation-delay: -0.7s;
+  animation-duration: 2.35s;
+  opacity: 0.9;
+}
+
+.connecty-infinity-core {
+  animation: connecty-infinity-core-pulse 1.5s ease-in-out infinite;
+  fill: #f8fafc;
+  filter: drop-shadow(0 0 10px rgba(248, 250, 252, 0.8));
+}
+
+@keyframes connecty-infinity-orbit {
+  to {
+    stroke-dashoffset: -100;
+  }
+}
+
+@keyframes connecty-infinity-core-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(0.85);
+    transform-origin: 80px 40px;
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.25);
+    transform-origin: 80px 40px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .connecty-infinity-trace,
+  .connecty-infinity-core {
+    animation: none;
+  }
+
+  .connecty-infinity-trace {
+    stroke-dasharray: 28 72;
+  }
+}
+
 @media (max-width: 640px) {
   .connecty-shell-content {
     overflow-x: clip;

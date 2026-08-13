@@ -21,6 +21,7 @@ import {
   X,
 } from "lucide-react";
 import { NeonBadge, PageHeader, Panel } from "./panel-primitives";
+import { InfinityLoader } from "./infinity-loader";
 import { clearAdminImpersonationReturn, saveAdminImpersonationReturn } from "@/lib/admin-impersonation";
 import type { AdminUsersSnapshot } from "@/lib/admin/users";
 import { createClient } from "@/lib/supabase/client";
@@ -463,8 +464,12 @@ export function AdminUsersConsole({ initialSnapshot }: { initialSnapshot?: Admin
         }
       >
         {loading ? (
-          <div className="grid min-h-[280px] place-items-center text-cyan-300">
-            <Loader2 className="h-5 w-5 animate-spin" />
+          <div className="grid min-h-[280px] place-items-center px-4 py-8">
+            <InfinityLoader
+              label="Carregando usuarios..."
+              description="Preparando clientes, planos, creditos e alertas."
+              size="md"
+            />
           </div>
         ) : filtered.length === 0 ? (
           <p className="py-8 text-center font-mono text-[12px] text-slate-500">

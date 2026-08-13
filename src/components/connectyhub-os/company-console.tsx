@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Building2, GitBranch, Loader2, Pencil, Plus, Save, Trash2, UserPlus, X } from "lucide-react";
 import { NeonBadge, Panel, SectionHeader } from "./panel-primitives";
+import { InfinityLoader } from "./infinity-loader";
 import { cn } from "@/lib/utils";
 
 type ClientCompany = {
@@ -265,8 +266,12 @@ export function CompanyConsole() {
 
       {loading ? (
         <Panel title="Empresas" eyebrow="carregando">
-          <div className="grid min-h-[220px] place-items-center text-cyan-300">
-            <Loader2 className="h-5 w-5 animate-spin" />
+          <div className="grid min-h-[260px] place-items-center px-4 py-8">
+            <InfinityLoader
+              label="Carregando empresas..."
+              description="Preparando workspace, setores e agentes vinculados."
+              size="md"
+            />
           </div>
         </Panel>
       ) : null}

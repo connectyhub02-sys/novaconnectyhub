@@ -6,10 +6,10 @@ import {
   ChevronDown,
   CircleAlert,
   CircleDot,
-  Loader2,
   TrendingDown,
   TrendingUp,
 } from "lucide-react";
+import { InfinityMark } from "./infinity-loader";
 import { cn } from "@/lib/utils";
 import type { StatusTone, Tone } from "@/lib/connectyhub-os-data";
 
@@ -516,7 +516,7 @@ export function DataTable({ columns, rows }: { columns: string[]; rows: ReactNod
 export function LoadingLine({ label }: { label: string }) {
   return (
     <span className="inline-flex items-center gap-2 font-mono text-[10px] uppercase tracking-widest text-slate-600">
-      <Loader2 className="h-3 w-3 animate-spin text-cyan-500" />
+      <InfinityMark size="sm" className="text-cyan-500" />
       {label}
     </span>
   );

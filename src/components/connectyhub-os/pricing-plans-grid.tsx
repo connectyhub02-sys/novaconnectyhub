@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, CheckCircle2, FileImage, FileVideo, Files, HardDrive, Loader2 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { InfinityLoader } from "./infinity-loader";
 import type { PublicPricingPlan, PublicPricingStorageSummary } from "@/lib/billing/public-pricing";
 
 const G = "#00ff88";
@@ -462,23 +463,13 @@ function dashboardButtonLabel({
 
 function PricingPlanSkeleton() {
   return (
-    <>
-      {Array.from({ length: 4 }).map((_, index) => (
-        <div key={index} className="pricing-card animate-pulse">
-          <div className="h-5 w-24 rounded bg-white/10" />
-          <div className="mt-6 h-11 w-32 rounded bg-white/10" />
-          <div className="mt-4 h-3 w-full rounded bg-white/10" />
-          <div className="mt-2 h-3 w-4/5 rounded bg-white/10" />
-          <div className="mt-8 grid gap-3">
-            <div className="h-3 w-full rounded bg-white/10" />
-            <div className="h-3 w-11/12 rounded bg-white/10" />
-            <div className="h-3 w-10/12 rounded bg-white/10" />
-            <div className="h-3 w-8/12 rounded bg-white/10" />
-          </div>
-          <div className="mt-auto h-11 rounded border border-white/10 bg-white/5" />
-        </div>
-      ))}
-    </>
+    <div className="pricing-card flex min-h-[320px] items-center justify-center md:col-span-2 xl:col-span-4">
+      <InfinityLoader
+        label="Carregando planos..."
+        description="Preparando catalogo, limites e valores disponiveis."
+        size="md"
+      />
+    </div>
   );
 }
 

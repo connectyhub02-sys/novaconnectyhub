@@ -16,6 +16,7 @@ import {
   type BillingCheckoutBump,
   type BillingCheckoutBumpCode,
 } from "@/lib/billing/plan-checkout-catalog";
+import { InfinityMark } from "./infinity-loader";
 import { cn } from "@/lib/utils";
 
 type BillingPlanCheckoutProps = {
@@ -961,7 +962,7 @@ function CheckoutPaymentFeedbackModal({
     >
       <div className="w-full max-w-[520px] rounded-[8px] border border-amber-200/25 bg-slate-950 p-5 shadow-2xl shadow-black/50">
         <div className="flex items-start gap-3">
-          <Loader2 className="mt-1 h-5 w-5 animate-spin text-amber-200" />
+          <InfinityMark size="sm" className="mt-1 text-amber-200" />
           <div>
             <h2 id="billing-processing-title" className="text-lg font-black text-white">{feedback.title}</h2>
             <p className="mt-2 text-sm leading-6 text-slate-300">{feedback.description}</p>

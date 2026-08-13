@@ -58,6 +58,7 @@ import {
   X,
 } from "lucide-react";
 import { NeonBadge, Panel, SectionHeader } from "./panel-primitives";
+import { InfinityLoader } from "./infinity-loader";
 import { useConnectyShellNotifications, type ConnectyShellNotification } from "./connecty-shell";
 import {
   defaultWhatsappBehaviorConfig,
@@ -2959,8 +2960,12 @@ function buildRuntimeAlertNotifications(alerts: RuntimeAlert[]): ConnectyShellNo
 function LoadingState() {
   return (
     <Panel title="WhatsApp" eyebrow="carregando">
-      <div className="grid min-h-[240px] place-items-center text-cyan-300">
-        <Loader2 className="h-6 w-6 animate-spin" />
+      <div className="grid min-h-[280px] place-items-center px-4 py-8">
+        <InfinityLoader
+          label="Carregando agente WhatsApp..."
+          description="Preparando conexao, prompt e comportamento."
+          size="md"
+        />
       </div>
     </Panel>
   );

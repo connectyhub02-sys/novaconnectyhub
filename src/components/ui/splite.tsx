@@ -8,6 +8,7 @@ import {
   useState,
 } from "react";
 import { Bot } from "lucide-react";
+import { InfinityMark } from "@/components/connectyhub-os/infinity-loader";
 import { cn } from "@/lib/utils";
 
 const Spline = dynamic(() => import("@splinetool/react-spline"), {
@@ -330,9 +331,13 @@ function SplineFallback({
         <div className="font-mono text-[10px] uppercase text-[#00f3ff] sm:text-xs">
           {loading ? "Carregando agente 3D" : "Agente IA online"}
         </div>
-        <div className="mt-3 h-1 w-24 overflow-hidden rounded-full bg-white/10 sm:w-32">
-          <div className="h-full w-1/2 animate-pulse rounded-full bg-[#0aff0a]" />
-        </div>
+        {loading ? (
+          <InfinityMark size="sm" className="mt-3 text-[#00f3ff]" />
+        ) : (
+          <div className="mt-3 h-1 w-24 overflow-hidden rounded-full bg-white/10 sm:w-32">
+            <div className="h-full w-full rounded-full bg-[#0aff0a]" />
+          </div>
+        )}
       </div>
     </div>
   );

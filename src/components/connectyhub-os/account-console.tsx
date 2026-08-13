@@ -33,6 +33,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { InfinityLoadingPanel } from "./infinity-loader";
 import { formatBrazilPhoneInput, normalizeBrazilPhoneForApi } from "@/lib/account/input-format";
 import { cn } from "@/lib/utils";
 
@@ -1845,18 +1846,11 @@ function ErrorState({
 
 function AccountLoadingState() {
   return (
-    <section className="mx-auto max-w-[1380px] space-y-5">
-      <div className="rounded-lg border border-white/10 bg-[#0a111d]/95 p-5">
-        <div className="h-6 w-48 animate-pulse rounded-md bg-white/10" />
-        <div className="mt-3 h-4 w-80 max-w-full animate-pulse rounded-md bg-white/10" />
-      </div>
-      <div className="grid gap-4 xl:grid-cols-12">
-        <div className="h-64 animate-pulse rounded-lg border border-white/10 bg-white/[0.05] xl:col-span-8" />
-        <div className="h-64 animate-pulse rounded-lg border border-white/10 bg-white/[0.05] xl:col-span-4" />
-      </div>
-      <div className="h-28 animate-pulse rounded-lg border border-white/10 bg-white/[0.05]" />
-      <div className="h-72 animate-pulse rounded-lg border border-white/10 bg-white/[0.05]" />
-    </section>
+    <InfinityLoadingPanel
+      className="mx-auto max-w-[1380px]"
+      label="Carregando minha conta..."
+      description="Preparando perfil, seguranca, creditos e faturas."
+    />
   );
 }
 
