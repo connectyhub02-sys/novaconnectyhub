@@ -23,6 +23,8 @@ type WhatsappGroupIntelligenceStatus = "fresh" | "stale" | "missing" | "error";
 type WhatsappGroupRiskLevel = "low" | "medium" | "high";
 type SalesCatalogItemMapperInput = Parameters<typeof mapSalesCatalogItem>[0];
 
+const outboundAudioDeliveryTimeoutMs = 30000;
+
 type WhatsappInstanceRow = {
   id: string;
   organization_id: string;
@@ -1147,6 +1149,7 @@ async function sendCampaignAudioToRecipient(
   });
   const providerResponse = await callUazapi(context, "/send/media", {
     method: "POST",
+    timeoutMs: outboundAudioDeliveryTimeoutMs,
     body: cleanPayload({
       number: recipient,
       type: "ptt",
@@ -1766,6 +1769,7 @@ async function callUazapi(
     method: "GET" | "POST" | "PUT" | "DELETE";
     body?: unknown;
     query?: Record<string, string | number | boolean | null | undefined>;
+    timeoutMs?: number;
   },
 ) {
   const url = new URL(`${context.credentials.baseUrl}${path}`);
@@ -1775,7 +1779,7 @@ async function callUazapi(
     }
   }
 
-  const response = await fetch(url, {
+  const fetchInit = {
     method: options.method,
     headers: {
       Accept: "application/json",
@@ -1784,14 +1788,58 @@ async function callUazapi(
     },
     body: options.body ? JSON.stringify(options.body) : undefined,
     cache: "no-store",
-  });
-  const data = await readResponse(response);
+  } satisfies RequestInit;
+  const response = options.timeoutMs
+    ? await fetchWithTimeout(url, fetchInit, options.timeoutMs, `Uazapi ${path}`)
+    : await fetch(url, fetchInit);
+  const data = options.timeoutMs
+    ? await withTimeout(readResponse(response), options.timeoutMs, `Uazapi ${path} leitura da resposta`)
+    : await readResponse(response);
 
   if (!response.ok) {
     throw new Error(readProviderError(data) ?? `Uazapi respondeu status ${response.status}.`);
   }
 
   return { status: response.status, data };
+}
+
+async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit, timeoutMs: number, label: string) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(input, {
+      ...init,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (isAbortError(error)) {
+      throw new Error(`${label} excedeu ${Math.round(timeoutMs / 1000)}s.`);
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string) {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timeout = setTimeout(() => {
+          reject(new Error(`${label} excedeu ${Math.round(timeoutMs / 1000)}s.`));
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+  }
 }
 
 async function callGeminiGenerateContent(
@@ -2753,6 +2801,12 @@ function countProviderItems(value: unknown): number | null {
 function readProviderError(value: unknown) {
   if (typeof value === "string") return value.trim() || null;
   return findString(value, ["error", "message", "detail"]);
+}
+
+function isAbortError(error: unknown) {
+  return error instanceof DOMException
+    ? error.name === "AbortError"
+    : readRecord(error)?.name === "AbortError";
 }
 
 function parseGeminiCampaignDraft(value: string) {

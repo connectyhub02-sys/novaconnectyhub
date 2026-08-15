@@ -7577,6 +7577,25 @@ async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit, tim
   }
 }
 
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string) {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timeout = setTimeout(() => {
+          reject(new Error(`${label} excedeu ${Math.round(timeoutMs / 1000)}s.`));
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+  }
+}
+
 async function callUazapi(
   credentials: UazapiCredentials,
   path: string,
@@ -7603,7 +7622,9 @@ async function callUazapi(
   const response = options.timeoutMs
     ? await fetchWithTimeout(`${credentials.baseUrl}${path}`, fetchInit, options.timeoutMs, `Uazapi ${path}`)
     : await fetch(`${credentials.baseUrl}${path}`, fetchInit);
-  const data = await readProviderResponse(response);
+  const data = options.timeoutMs
+    ? await withTimeout(readProviderResponse(response), options.timeoutMs, `Uazapi ${path} leitura da resposta`)
+    : await readProviderResponse(response);
 
   if (!response.ok && !options.tolerateError) {
     throw new Error(readProviderError(data) ?? `Uazapi respondeu status ${response.status}.`);
