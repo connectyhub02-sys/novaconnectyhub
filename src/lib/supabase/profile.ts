@@ -168,50 +168,7 @@ export async function ensureStarterOrganization() {
     return mapOwnedOrganization(existingOrganization);
   }
 
-  const name = workspace.profile.companyName || workspace.profile.fullName || workspace.profile.email || "Minha empresa";
-  const slug = slugify(name);
-
-  const { data: organization, error: orgError } = await supabase
-    .from("organizations")
-    .insert({
-      name,
-      slug,
-      owner_id: workspace.user.id,
-      plan_code: "trial",
-      status: signupComplete ? "trial" : "trial_pending",
-    })
-    .select("id, name, slug, plan_code, status")
-    .single();
-
-  if (orgError || !organization) {
-    return null;
-  }
-
-  await ensureOwnerMembership({
-    client: supabase,
-    organizationId: organization.id,
-    userId: workspace.user.id,
-  });
-
-  if (!workspace.profile.isPlatformAdmin) {
-    if (signupComplete) {
-      await ensureTrialSetup({
-        organizationId: organization.id,
-        userId: workspace.user.id,
-        optIn: workspace.profile.trialWhatsappOptIn,
-        client: supabase,
-      });
-    }
-  }
-
-  return {
-    id: organization.id,
-    name: organization.name,
-    slug: organization.slug,
-    planCode: organization.plan_code,
-    status: organization.status,
-    role: "owner",
-  };
+  return null;
 }
 
 async function findExistingOwnedOrganization(
@@ -448,16 +405,4 @@ async function createWorkspaceDataClient() {
   } catch {
     return createClient();
   }
-}
-
-function slugify(value: string) {
-  const slug = value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 42);
-
-  return slug ? `${slug}-${Date.now().toString(36)}` : `workspace-${Date.now().toString(36)}`;
 }

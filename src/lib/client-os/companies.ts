@@ -1,7 +1,7 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { assertBillableAccess, grantTrialCredits, scheduleTrialConversionMessages } from "@/lib/billing/trial";
+import { grantTrialCredits, scheduleTrialConversionMessages } from "@/lib/billing/trial";
 import { createServiceClient } from "@/lib/supabase/service";
 
 export type ClientCompany = {
@@ -132,6 +132,13 @@ export async function deleteClientCompany(input: {
     companyId: input.companyId,
     client,
   });
+  const linkedAgentsCount = await countLinkedCompanyAgents(client, company.id);
+
+  if (linkedAgentsCount > 0) {
+    throw new Error(linkedAgentsCount === 1
+      ? "Esta empresa possui 1 agente vinculado. Exclua ou mova o agente para outra empresa antes de excluir."
+      : `Esta empresa possui ${linkedAgentsCount} agentes vinculados. Exclua ou mova os agentes para outra empresa antes de excluir.`);
+  }
 
   const { data, error } = await client
     .from("organizations")
@@ -165,13 +172,11 @@ export async function updateClientCompany(input: {
     client,
   });
 
-  await assertBillableAccess({ organizationId: company.id, client });
-
   const name = normalizeCompanyName(input.name);
 
   const { data, error } = await client
     .from("organizations")
-    .update({ name })
+    .update({ name, updated_at: new Date().toISOString() })
     .eq("id", company.id)
     .eq("owner_id", input.userId)
     .select("id, name, slug, plan_code, status, created_at")
@@ -220,6 +225,21 @@ export async function requireClientCompanyAccess(input: {
   }
 
   return company;
+}
+
+async function countLinkedCompanyAgents(client: SupabaseClient, companyId: string) {
+  const { count, error } = await client
+    .from("agent_registry")
+    .select("id", { count: "exact", head: true })
+    .eq("scope", "organization")
+    .eq("organization_id", companyId)
+    .neq("status", "archived");
+
+  if (error) {
+    throw new Error(`Nao foi possivel validar agentes vinculados: ${error.message}`);
+  }
+
+  return count ?? 0;
 }
 
 function mapCompany(row: MembershipRow) {

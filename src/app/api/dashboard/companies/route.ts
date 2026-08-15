@@ -5,7 +5,6 @@ import {
   statusForAccountCompletionError,
 } from "@/lib/account/signup-completion";
 import { createClientCompany, deleteClientCompany, listClientCompanies, updateClientCompany } from "@/lib/client-os/companies";
-import { assertBillableAccess, BillingAccessError } from "@/lib/billing/trial";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
 
@@ -39,12 +38,6 @@ export async function POST(request: NextRequest) {
   const body = await readJson<{ name?: unknown }>(request);
 
   try {
-    const companies = await listClientCompanies(workspace.user.id);
-
-    if (companies.length > 0) {
-      await assertBillableAccess({ organizationId: companies[0].id });
-    }
-
     const company = await createClientCompany({
       userId: workspace.user.id,
       name: typeof body?.name === "string" ? body.name : "",
@@ -110,18 +103,9 @@ async function readJson<T>(request: NextRequest): Promise<T | null> {
 }
 
 function formatError(error: unknown) {
-  return {
-    ...formatAccountCompletionError(error),
-    ...(error instanceof BillingAccessError ? { billingAccess: error.status } : {}),
-  };
+  return formatAccountCompletionError(error);
 }
 
 function statusForError(error: unknown, fallback: number) {
-  const accountStatus = statusForAccountCompletionError(error, fallback);
-
-  if (accountStatus !== fallback) {
-    return accountStatus;
-  }
-
-  return error instanceof BillingAccessError ? 402 : fallback;
+  return statusForAccountCompletionError(error, fallback);
 }

@@ -195,6 +195,19 @@ export function CompanyConsole() {
   }
 
   async function deleteCompany(company: ClientCompany) {
+    const linkedAgents = agentsByCompanyId.get(company.id) ?? [];
+
+    if (linkedAgents.length > 0) {
+      setConfirmDeleteId(null);
+      setNotice({
+        tone: "warning",
+        message: linkedAgents.length === 1
+          ? "Esta empresa possui 1 agente vinculado. Exclua ou mova o agente para outra empresa antes de excluir."
+          : `Esta empresa possui ${linkedAgents.length} agentes vinculados. Exclua ou mova os agentes para outra empresa antes de excluir.`,
+      });
+      return;
+    }
+
     if (confirmDeleteId !== company.id) {
       setConfirmDeleteId(company.id);
       return;
@@ -542,7 +555,7 @@ function CompanyBlock({
                       className="rounded-md border border-cyan-400/20 bg-cyan-400/10 px-2 py-1 font-mono text-[9px] font-semibold uppercase tracking-wide text-cyan-200 transition hover:bg-cyan-400/15"
                       href="/dashboard/whatsapp"
                     >
-                      Editar / clonar
+                      Editar / mover
                     </Link>
                   </div>
                 </div>

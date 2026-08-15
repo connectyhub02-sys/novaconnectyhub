@@ -3,13 +3,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/supabase/service", () => ({ createServiceClient: vi.fn() }));
 vi.mock("@/lib/billing/trial", () => ({
-  assertBillableAccess: vi.fn(),
   grantTrialCredits: vi.fn(),
   scheduleTrialConversionMessages: vi.fn(),
 }));
 
-import { assertBillableAccess } from "@/lib/billing/trial";
-import { deleteClientCompany, listClientCompanies, requireClientCompanyAccess } from "./companies";
+import { deleteClientCompany, listClientCompanies, requireClientCompanyAccess, updateClientCompany } from "./companies";
 
 type MembershipRow = {
   role: string;
@@ -25,14 +23,16 @@ type MembershipRow = {
 
 type QueryResponse = {
   data?: unknown;
+  count?: number | null;
   error: { message: string } | null;
 };
 
 type QueryBuilder = PromiseLike<QueryResponse> & {
   eq(column: string, value: unknown): QueryBuilder;
   maybeSingle(): Promise<QueryResponse>;
+  neq(column: string, value: unknown): QueryBuilder;
   order(column: string, options?: unknown): QueryBuilder;
-  select(columns: string): QueryBuilder;
+  select(columns: string, options?: unknown): QueryBuilder;
   update(payload: Record<string, unknown>): QueryBuilder;
 };
 
@@ -154,26 +154,73 @@ describe("client companies", () => {
       client: client as never,
     })).resolves.toMatchObject({ id: "org-auto" });
 
-    expect(assertBillableAccess).not.toHaveBeenCalled();
     expect(client.organizationUpdates).toEqual([
       {
         filters: { id: "org-auto", owner_id: "user-a" },
-        status: "archived",
+        payload: expect.objectContaining({
+          status: "archived",
+          updated_at: expect.any(String),
+        }),
+      },
+    ]);
+  });
+
+  it("blocks deleting a client company while agents are linked", async () => {
+    const client = createMembershipClient([autoGoogleCompany], {
+      linkedAgentCountByCompanyId: { "org-auto": 1 },
+    });
+
+    await expect(deleteClientCompany({
+      userId: "user-a",
+      companyId: "org-auto",
+      client: client as never,
+    })).rejects.toThrow("Esta empresa possui 1 agente vinculado.");
+
+    expect(client.organizationUpdates).toEqual([]);
+  });
+
+  it("updates automatic Google-created client companies", async () => {
+    const client = createMembershipClient([autoGoogleCompany]);
+
+    await expect(updateClientCompany({
+      userId: "user-a",
+      companyId: "org-auto",
+      name: "Vision Business Group",
+      client: client as never,
+    })).resolves.toMatchObject({
+      id: "org-auto",
+      name: "Vision Business Group",
+    });
+
+    expect(client.organizationUpdates).toEqual([
+      {
+        filters: { id: "org-auto", owner_id: "user-a" },
+        payload: expect.objectContaining({
+          name: "Vision Business Group",
+          updated_at: expect.any(String),
+        }),
       },
     ]);
   });
 });
 
-function createMembershipClient(rows: MembershipRow[]) {
+function createMembershipClient(
+  rows: MembershipRow[],
+  options: { linkedAgentCountByCompanyId?: Record<string, number> } = {},
+) {
+  const mutableRows = rows.map((row) => ({
+    ...row,
+    organizations: row.organizations ? { ...row.organizations } : null,
+  }));
   const organizationUpdates: Array<{
     filters: Record<string, unknown>;
-    status: unknown;
+    payload: Record<string, unknown>;
   }> = [];
 
   return {
     organizationUpdates,
     from(table: string) {
-      if (table !== "organization_members" && table !== "organizations") {
+      if (table !== "organization_members" && table !== "organizations" && table !== "agent_registry") {
         throw new Error(`Unexpected table ${table}`);
       }
 
@@ -192,9 +239,10 @@ function createMembershipClient(rows: MembershipRow[]) {
         filters.set(column, value);
         return chain();
       };
+      builder.neq = () => chain();
       builder.maybeSingle = () => {
         if (table === "organizations") {
-          const row = rows.find((item) => item.organizations?.id === filters.get("id")) ?? null;
+          const row = mutableRows.find((item) => item.organizations?.id === filters.get("id")) ?? null;
 
           if (!row?.organizations || filters.get("owner_id") !== "user-a") {
             return Promise.resolve({ data: null, error: null });
@@ -202,9 +250,10 @@ function createMembershipClient(rows: MembershipRow[]) {
 
           if (updatePayload) {
             row.organizations.status = String(updatePayload.status ?? row.organizations.status);
+            row.organizations.name = String(updatePayload.name ?? row.organizations.name);
             organizationUpdates.push({
               filters: Object.fromEntries(filters),
-              status: updatePayload.status,
+              payload: updatePayload,
             });
           }
 
@@ -212,12 +261,20 @@ function createMembershipClient(rows: MembershipRow[]) {
         }
 
         return Promise.resolve({
-          data: rows.find((row) => row.organizations?.id === filters.get("organization_id")) ?? null,
+          data: mutableRows.find((row) => row.organizations?.id === filters.get("organization_id")) ?? null,
           error: null,
         });
       };
-      builder.then = (onfulfilled, onrejected) =>
-        Promise.resolve({ data: rows, error: null }).then(onfulfilled, onrejected);
+      builder.then = (onfulfilled, onrejected) => {
+        if (table === "agent_registry") {
+          const organizationId = String(filters.get("organization_id") ?? "");
+          const count = options.linkedAgentCountByCompanyId?.[organizationId] ?? 0;
+
+          return Promise.resolve({ data: [], count, error: null }).then(onfulfilled, onrejected);
+        }
+
+        return Promise.resolve({ data: mutableRows, error: null }).then(onfulfilled, onrejected);
+      };
 
       return builder;
     },

@@ -6,12 +6,11 @@ import {
 } from "@/lib/account/signup-completion";
 import { cloneClientAgent, createClientAgent, deleteClientAgent, getClientAgentsWorkspace, updateClientAgent } from "@/lib/client-os/agents";
 import { BillingAccessError } from "@/lib/billing/trial";
-import { currentOrganizationToClientCompany } from "@/lib/client-os/current-company";
 import {
-  resolveDashboardCompanyId,
+  DashboardCompanyScopeError,
   statusForDashboardCompanyScopeError,
 } from "@/lib/client-os/dashboard-route-scope";
-import { getCurrentWorkspace } from "@/lib/supabase/profile";
+import { getCurrentWorkspace, type CurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
 
 export const dynamic = "force-dynamic";
@@ -27,8 +26,6 @@ export async function GET() {
   try {
     const data = await getClientAgentsWorkspace({
       userId: workspace.user.id,
-      organizationId: workspace.organization?.id,
-      company: currentOrganizationToClientCompany(workspace.organization),
     });
     return NextResponse.json(data);
   } catch (error) {
@@ -56,9 +53,9 @@ export async function POST(request: NextRequest) {
 
   try {
     await assertAccountComplete({ userId: workspace.user.id, client: createServiceClient() });
-    const companyId = resolveDashboardCompanyId({
+    const companyId = resolveClientAgentCompanyId({
       workspace,
-      requestedCompanyId: typeof body?.companyId === "string" ? body.companyId : null,
+      requestedCompanyId: body?.companyId,
       missingMessage: "Cadastre uma empresa antes de criar agentes.",
     });
 
@@ -67,7 +64,6 @@ export async function POST(request: NextRequest) {
         userId: workspace.user.id,
         sourceAgentId: typeof body?.sourceAgentId === "string" ? body.sourceAgentId : "",
         companyId,
-        organizationId: companyId,
         name: typeof body?.name === "string" ? body.name : undefined,
         sectorName: typeof body?.sectorName === "string" ? body.sectorName : undefined,
         roleTitle: typeof body?.roleTitle === "string" ? body.roleTitle : undefined,
@@ -113,9 +109,9 @@ export async function PATCH(request: NextRequest) {
 
   try {
     await assertAccountComplete({ userId: workspace.user.id, client: createServiceClient() });
-    const companyId = resolveDashboardCompanyId({
+    const companyId = resolveClientAgentCompanyId({
       workspace,
-      requestedCompanyId: typeof body?.companyId === "string" ? body.companyId : null,
+      requestedCompanyId: body?.companyId,
       missingMessage: "Cadastre uma empresa antes de editar agentes.",
     });
 
@@ -123,7 +119,6 @@ export async function PATCH(request: NextRequest) {
       userId: workspace.user.id,
       agentId: typeof body?.agentId === "string" ? body.agentId : "",
       companyId,
-      organizationId: companyId,
       name: typeof body?.name === "string" ? body.name : "",
       sectorName: typeof body?.sectorName === "string" ? body.sectorName : undefined,
       roleTitle: typeof body?.roleTitle === "string" ? body.roleTitle : undefined,
@@ -147,14 +142,9 @@ export async function DELETE(request: NextRequest) {
   const body = await readJson<{ agentId?: unknown }>(request);
 
   try {
-    const companyId = resolveDashboardCompanyId({
-      workspace,
-      missingMessage: "Cadastre uma empresa antes de excluir agentes.",
-    });
     const agent = await deleteClientAgent({
       userId: workspace.user.id,
       agentId: typeof body?.agentId === "string" ? body.agentId : "",
-      organizationId: companyId,
     });
 
     return NextResponse.json({ deletedAgentId: agent.id });
@@ -169,6 +159,28 @@ async function readJson<T>(request: NextRequest): Promise<T | null> {
   } catch {
     return null;
   }
+}
+
+function resolveClientAgentCompanyId(input: {
+  workspace: CurrentWorkspace;
+  requestedCompanyId: unknown;
+  missingMessage: string;
+}) {
+  const requestedCompanyId = typeof input.requestedCompanyId === "string"
+    ? input.requestedCompanyId.trim()
+    : "";
+
+  if (requestedCompanyId) {
+    return requestedCompanyId;
+  }
+
+  const activeCompanyId = input.workspace.organization?.id ?? "";
+
+  if (activeCompanyId) {
+    return activeCompanyId;
+  }
+
+  throw new DashboardCompanyScopeError(input.missingMessage, 422);
 }
 
 function formatError(error: unknown) {
