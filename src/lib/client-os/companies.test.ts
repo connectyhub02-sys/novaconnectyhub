@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/supabase/service", () => ({ createServiceClient: vi.fn() }));
@@ -8,7 +8,8 @@ vi.mock("@/lib/billing/trial", () => ({
   scheduleTrialConversionMessages: vi.fn(),
 }));
 
-import { listClientCompanies, requireClientCompanyAccess } from "./companies";
+import { assertBillableAccess } from "@/lib/billing/trial";
+import { deleteClientCompany, listClientCompanies, requireClientCompanyAccess } from "./companies";
 
 type MembershipRow = {
   role: string;
@@ -32,6 +33,7 @@ type QueryBuilder = PromiseLike<QueryResponse> & {
   maybeSingle(): Promise<QueryResponse>;
   order(column: string, options?: unknown): QueryBuilder;
   select(columns: string): QueryBuilder;
+  update(payload: Record<string, unknown>): QueryBuilder;
 };
 
 const autoGoogleCompany: MembershipRow = {
@@ -71,6 +73,10 @@ const internalCompany: MembershipRow = {
 };
 
 describe("client companies", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it("lists automatic Google-created client workspaces without the legacy client slug prefix", async () => {
     const client = createMembershipClient([autoGoogleCompany, internalCompany]);
 
@@ -120,29 +126,96 @@ describe("client companies", () => {
       client: client as never,
     })).rejects.toThrow("Escolha uma empresa vinculada a sua conta.");
   });
+
+  it("does not expose archived workspaces as client companies", async () => {
+    const archivedCompany: MembershipRow = {
+      ...autoGoogleCompany,
+      organizations: {
+        ...autoGoogleCompany.organizations!,
+        status: "archived",
+      },
+    };
+    const client = createMembershipClient([archivedCompany]);
+
+    await expect(listClientCompanies("user-a", client as never)).resolves.toEqual([]);
+    await expect(requireClientCompanyAccess({
+      userId: "user-a",
+      companyId: "org-auto",
+      client: client as never,
+    })).rejects.toThrow("Escolha uma empresa vinculada a sua conta.");
+  });
+
+  it("archives a client company instead of deleting the organization row", async () => {
+    const client = createMembershipClient([autoGoogleCompany]);
+
+    await expect(deleteClientCompany({
+      userId: "user-a",
+      companyId: "org-auto",
+      client: client as never,
+    })).resolves.toMatchObject({ id: "org-auto" });
+
+    expect(assertBillableAccess).not.toHaveBeenCalled();
+    expect(client.organizationUpdates).toEqual([
+      {
+        filters: { id: "org-auto", owner_id: "user-a" },
+        status: "archived",
+      },
+    ]);
+  });
 });
 
 function createMembershipClient(rows: MembershipRow[]) {
+  const organizationUpdates: Array<{
+    filters: Record<string, unknown>;
+    status: unknown;
+  }> = [];
+
   return {
+    organizationUpdates,
     from(table: string) {
-      if (table !== "organization_members") {
+      if (table !== "organization_members" && table !== "organizations") {
         throw new Error(`Unexpected table ${table}`);
       }
 
       const filters = new Map<string, unknown>();
+      let updatePayload: Record<string, unknown> | null = null;
       const builder = {} as QueryBuilder;
       const chain = () => builder;
 
       builder.select = () => chain();
       builder.order = () => chain();
+      builder.update = (payload) => {
+        updatePayload = payload;
+        return chain();
+      };
       builder.eq = (column, value) => {
         filters.set(column, value);
         return chain();
       };
-      builder.maybeSingle = () => Promise.resolve({
-        data: rows.find((row) => row.organizations?.id === filters.get("organization_id")) ?? null,
-        error: null,
-      });
+      builder.maybeSingle = () => {
+        if (table === "organizations") {
+          const row = rows.find((item) => item.organizations?.id === filters.get("id")) ?? null;
+
+          if (!row?.organizations || filters.get("owner_id") !== "user-a") {
+            return Promise.resolve({ data: null, error: null });
+          }
+
+          if (updatePayload) {
+            row.organizations.status = String(updatePayload.status ?? row.organizations.status);
+            organizationUpdates.push({
+              filters: Object.fromEntries(filters),
+              status: updatePayload.status,
+            });
+          }
+
+          return Promise.resolve({ data: row.organizations, error: null });
+        }
+
+        return Promise.resolve({
+          data: rows.find((row) => row.organizations?.id === filters.get("organization_id")) ?? null,
+          error: null,
+        });
+      };
       builder.then = (onfulfilled, onrejected) =>
         Promise.resolve({ data: rows, error: null }).then(onfulfilled, onrejected);
 

@@ -57,7 +57,13 @@ type OrganizationMembershipRow = {
     slug: string | null;
     plan_code: string;
     status: string;
-  } | null;
+  } | Array<{
+    id: string;
+    name: string;
+    slug: string | null;
+    plan_code: string;
+    status: string;
+  }> | null;
 };
 
 type OwnedOrganizationRow = {
@@ -223,7 +229,6 @@ async function findExistingOwnedOrganization(
     .filter((organization) => organization.plan_code !== "internal");
 
   return organizations.find((organization) => !isInactiveOrganizationStatus(organization.status))
-    ?? organizations[0]
     ?? null;
 }
 
@@ -341,21 +346,31 @@ async function getPrimaryOrganization(userId: string): Promise<CurrentOrganizati
     .select("role, organizations(id, name, slug, plan_code, status)")
     .eq("user_id", userId)
     .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle<OrganizationMembershipRow>();
+    .limit(50)
+    .returns<OrganizationMembershipRow[]>();
 
-  if (!data?.organizations) {
+  const membership = (data ?? []).find((row) => {
+    const organization = readMembershipOrganization(row.organizations);
+    return organization && !isInactiveOrganizationStatus(organization.status);
+  });
+  const organization = membership ? readMembershipOrganization(membership.organizations) : null;
+
+  if (!membership || !organization) {
     return null;
   }
 
   return {
-    id: data.organizations.id,
-    name: data.organizations.name,
-    slug: data.organizations.slug,
-    planCode: data.organizations.plan_code,
-    status: data.organizations.status,
-    role: data.role,
+    id: organization.id,
+    name: organization.name,
+    slug: organization.slug,
+    planCode: organization.plan_code,
+    status: organization.status,
+    role: membership.role,
   };
+}
+
+function readMembershipOrganization(organization: OrganizationMembershipRow["organizations"]) {
+  return Array.isArray(organization) ? organization[0] ?? null : organization;
 }
 
 function mapProfile(row: ProfileRow, user: User): CurrentProfile {

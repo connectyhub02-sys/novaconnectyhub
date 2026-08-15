@@ -133,15 +133,13 @@ export async function deleteClientCompany(input: {
     client,
   });
 
-  await assertBillableAccess({ organizationId: company.id, client });
-
   const { data, error } = await client
     .from("organizations")
-    .delete()
+    .update({ status: "archived", updated_at: new Date().toISOString() })
     .eq("id", company.id)
     .eq("owner_id", input.userId)
-    .select("id")
-    .maybeSingle<{ id: string }>();
+    .select("id, name, slug, plan_code, status, created_at")
+    .maybeSingle<OrganizationRow>();
 
   if (error) {
     throw new Error(`Nao foi possivel excluir a empresa: ${error.message}`);
@@ -305,7 +303,11 @@ function createCompanySlug(value: string) {
 }
 
 function isClientWorkspaceCompany(company: ClientCompany) {
-  return company.planCode !== "internal";
+  return company.planCode !== "internal" && !isInactiveCompanyStatus(company.status);
+}
+
+function isInactiveCompanyStatus(status: string | null | undefined) {
+  return ["archived", "blocked", "cancelled", "canceled"].includes(status ?? "");
 }
 
 function normalizeCompanyNameForComparison(value: string) {
