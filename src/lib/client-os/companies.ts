@@ -45,7 +45,7 @@ export async function listClientCompanies(userId: string, client: SupabaseClient
   return ((data ?? []) as MembershipRow[])
     .map((row) => mapCompany(row))
     .filter((company): company is ClientCompany => Boolean(company))
-    .filter((company) => isClientCreatedCompany(company));
+    .filter((company) => isClientWorkspaceCompany(company));
 }
 
 export async function createClientCompany(input: {
@@ -217,7 +217,7 @@ export async function requireClientCompanyAccess(input: {
 
   const company = data ? mapCompany(data) : null;
 
-  if (!company || !isClientCreatedCompany(company)) {
+  if (!company || !isClientWorkspaceCompany(company)) {
     throw new Error("Escolha uma empresa vinculada a sua conta.");
   }
 
@@ -304,8 +304,8 @@ function createCompanySlug(value: string) {
   return `${clientCompanySlugPrefix}${slug || "empresa"}-${Date.now().toString(36)}`;
 }
 
-function isClientCreatedCompany(company: ClientCompany) {
-  return Boolean(company.slug?.startsWith(clientCompanySlugPrefix));
+function isClientWorkspaceCompany(company: ClientCompany) {
+  return company.planCode !== "internal";
 }
 
 function normalizeCompanyNameForComparison(value: string) {
