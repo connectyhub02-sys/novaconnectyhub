@@ -146,7 +146,13 @@ export async function generateElevenLabsAudio(input: GenerateElevenLabsAudioInpu
 }
 
 function normalizeAudioText(value: string) {
-  return value.replace(/\s+/g, " ").trim().slice(0, maxAudioTextLength);
+  const text = value.replace(/\s+/g, " ").trim();
+
+  if (text.length > maxAudioTextLength) {
+    throw new Error(`Texto para audio excede ${maxAudioTextLength} caracteres. Divida a mensagem antes de gerar voz.`);
+  }
+
+  return text;
 }
 
 function isRealtimeWhatsappAudioSource(value: string | null | undefined) {

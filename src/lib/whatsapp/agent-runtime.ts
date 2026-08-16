@@ -5380,12 +5380,20 @@ function resolveOutboundDelivery(
 ) {
   const baseChunks = context.behavior.splitMessages ? splitMessage(text) : [text];
   const audioFromBase = !forceText && shouldSendAudioForChunks(context, latestInbound, baseChunks);
-  const chunks = audioFromBase && !context.behavior.splitMessages && text.length > outboundChunkMaxLength
-    ? splitMessage(text)
+  const chunks = audioFromBase
+    ? resolveAudioOutboundChunks(text, context.behavior)
     : baseChunks;
   const shouldSendAudio = !forceText && shouldSendAudioForChunks(context, latestInbound, chunks);
 
   return { chunks, shouldSendAudio };
+}
+
+function resolveAudioOutboundChunks(text: string, behavior: WhatsappBehaviorConfig) {
+  if (behavior.splitMessages || text.length > outboundChunkMaxLength) {
+    return splitMessage(text, { mergeOverflow: false });
+  }
+
+  return [text];
 }
 
 function applyJitter(ms: number, behavior: WhatsappBehaviorConfig): number {
@@ -9058,7 +9066,7 @@ function readHumanPauseUntil(metadata: JsonRecord | null) {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-function splitMessage(text: string) {
+function splitMessage(text: string, options: { mergeOverflow?: boolean } = {}) {
   const paragraphs = text.split(/\n{2,}/).map((part) => part.trim()).filter(Boolean);
   const chunks: string[] = [];
 
@@ -9092,7 +9100,7 @@ function splitMessage(text: string) {
     if (current) chunks.push(current);
   }
 
-  return compactOutboundChunks(chunks);
+  return compactOutboundChunks(chunks, options);
 }
 
 function splitLongText(text: string, maxLength: number) {
@@ -9101,6 +9109,18 @@ function splitLongText(text: string, maxLength: number) {
   let current = "";
 
   for (const word of words) {
+    if (word.length > maxLength) {
+      if (current) {
+        chunks.push(current);
+        current = "";
+      }
+
+      for (let index = 0; index < word.length; index += maxLength) {
+        chunks.push(word.slice(index, index + maxLength));
+      }
+      continue;
+    }
+
     if ((current + " " + word).trim().length > maxLength && current) {
       chunks.push(current);
       current = word;
@@ -9116,10 +9136,10 @@ function splitLongText(text: string, maxLength: number) {
   return chunks;
 }
 
-function compactOutboundChunks(chunks: string[]) {
+function compactOutboundChunks(chunks: string[], options: { mergeOverflow?: boolean } = {}) {
   const cleanChunks = chunks.map((chunk) => chunk.trim()).filter(Boolean);
 
-  if (cleanChunks.length <= outboundChunkLimit) {
+  if (options.mergeOverflow === false || cleanChunks.length <= outboundChunkLimit) {
     return cleanChunks;
   }
 
