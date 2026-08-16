@@ -654,7 +654,6 @@ function ConversationsView({
                   <ChatMessages messages={selectedLead.conversation.messages} />
                 </div>
                 <div className="mt-3 grid gap-2 sm:hidden">
-                  <OpenWhatsAppButton phone={selectedLead.phone} />
                   <button
                     className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-cyan-400/25 bg-cyan-400/10 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-cyan-200 transition hover:bg-cyan-400/15"
                     onClick={() => setDetailsLeadId(selectedLead.id)}
@@ -731,7 +730,6 @@ function AttendanceCenterView({
       )
     : [];
   const handoffCountdown = formatHumanInterventionCountdown(activeHumanIntervention, handoffTick);
-  const normalizedPhone = activeLead?.phone?.replace(/\D/g, "") ?? "";
 
   useEffect(() => {
     const interval = window.setInterval(() => setHandoffTick(Date.now()), 1000);
@@ -1042,18 +1040,6 @@ function AttendanceCenterView({
                       <FileText className="h-4 w-4" />
                       Arquivo
                     </button>
-                    <a
-                      className={cn(
-                        "inline-flex h-9 items-center gap-2 rounded-full px-3 text-[12px] font-semibold transition",
-                        normalizedPhone ? "bg-emerald-600 text-white hover:bg-emerald-700" : "pointer-events-none bg-slate-200 text-slate-500",
-                      )}
-                      href={normalizedPhone ? `https://wa.me/${normalizedPhone}` : "#"}
-                      rel="noreferrer"
-                      target="_blank"
-                    >
-                      <Phone className="h-4 w-4" />
-                      WhatsApp
-                    </a>
                   </div>
                 </div>
 
@@ -1224,7 +1210,6 @@ function AttendanceLeadPanel({ lead, onDetails }: { lead: ClientLeadRecord; onDe
           <InfoMini label="Empresa" value={lead.companyName} />
         </div>
       </div>
-      <OpenWhatsAppButton phone={lead.phone} />
       <button
         className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-red-600 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-white transition hover:bg-red-700"
         onClick={onDetails}
@@ -1959,7 +1944,6 @@ function LeadDetailsModal({ lead, onClose }: { lead: ClientLeadRecord; onClose: 
               <TrackingArchive events={lead.leadFile.trackingEvents} />
               <LeadFileSnapshot lead={lead} />
               <ActivityTimeline activities={lead.activities} />
-              <OpenWhatsAppButton phone={lead.phone} />
             </div>
           </aside>
           <main className="min-h-0 bg-white p-3 sm:p-4 lg:overflow-hidden">
@@ -2225,27 +2209,6 @@ function TrackingArchive({ events }: { events: ClientLeadActivity[] }) {
         {!events.length ? <p className="text-[12px] text-slate-500">Sem eventos de cookies, push, GPS, cliques ou navegacao ainda.</p> : null}
       </div>
     </div>
-  );
-}
-
-function OpenWhatsAppButton({ phone }: { phone: string | null }) {
-  const normalizedPhone = phone?.replace(/\D/g, "") ?? "";
-
-  return (
-    <a
-      className={cn(
-        "inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl px-3 font-mono text-[10px] font-bold uppercase tracking-wide transition",
-        normalizedPhone
-          ? "bg-emerald-300 text-slate-950 hover:bg-emerald-200"
-          : "pointer-events-none border border-white/10 bg-white/[0.03] text-slate-500",
-      )}
-      href={normalizedPhone ? `https://wa.me/${normalizedPhone}` : "#"}
-      rel="noreferrer"
-      target="_blank"
-    >
-      <MessageCircle className="h-3.5 w-3.5" />
-      Abrir no WhatsApp
-    </a>
   );
 }
 
