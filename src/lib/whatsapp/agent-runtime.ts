@@ -79,6 +79,7 @@ import {
   type WhatsappHandoffNotificationEventData,
   type WhatsappHandoffNotificationResult,
 } from "./handoff-notifications";
+import { isHumanHandoffRequest } from "./human-handoff";
 import {
   getCloneHumanizationMetricLabel,
   type CloneHumanizationMetric,
@@ -5779,7 +5780,7 @@ function evaluateCloneHumanization(
   const cloneMemory = normalizeWhatsappCloneMemory(readRecord(context.agent.metadata)?.whatsapp_clone_memory);
   const hasCloneMemory = hasCloneMemoryContent(cloneMemory);
   const linkRequested = /\b(link|botao|comprar|compra|preco|valor|manda|mandar|envia|enviar|ver produto|produto)\b/.test(normalizedInput);
-  const humanRequested = isHumanRequest(input.userText);
+  const humanRequested = isHumanHandoffRequest(input.userText);
   const repeatedPattern = hasRepeatedRecentAgentOutput(context.messages, input.aiText);
   const incompleteOutput = isProbablyIncompleteOutput(input.aiText);
   const hasLiteralNewlineBug = /(?:\\n|\/n|n\/n)/i.test(input.aiText);
@@ -8551,20 +8552,6 @@ function isLowSignalLeadPing(value: string) {
   return /^(oi+|ola+|opa+|bom dia|boa tarde|boa noite|ei|hey|hello|alo|teste|ok|sim|nao|blz|beleza|hum|hmm)$/.test(value);
 }
 
-function isHumanRequest(value: string) {
-  const normalized = normalizeSearch(value);
-
-  if (!normalized) {
-    return false;
-  }
-
-  return [
-    /\b(falar|fala|conversar|conversa|chama|chamar|aciona|acionar|quero|preciso|pode|passa|passar|coloca|colocar|transfere|transferir|transfira|encaminha|encaminhar|manda|mandar)\b.{0,80}\b(humano|atendente|vendedor|consultor|suporte|alguem|pessoa real|pessoa de verdade|pessoal|equipe|time)\b/,
-    /\b(humano|atendente|vendedor|consultor|suporte|pessoa real|pessoa de verdade|pessoal|equipe|time)\b.{0,80}\b(falar|conversar|chamar|acionar|atender|retornar|ligar|assumir|resolver|continuar)\b/,
-    /\b(falar com alguem|me liga|me ligue|liga pra mim|ligacao|telefone de alguem|atendimento humano|passar para alguem|passa para alguem|transferir atendimento|transfere o atendimento|transfira o atendimento)\b/,
-  ].some((pattern) => pattern.test(normalized));
-}
-
 async function detectHumanHandoffIntent(input: {
   client: SupabaseClient;
   context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
@@ -8577,7 +8564,7 @@ async function detectHumanHandoffIntent(input: {
     return { handoff: false, source: "keyword", confidence: 0, reason: "empty_text" };
   }
 
-  if (isHumanRequest(text)) {
+  if (isHumanHandoffRequest(text)) {
     return { handoff: true, source: "keyword", confidence: 0.98, reason: "explicit_handoff_phrase" };
   }
 
@@ -8684,7 +8671,7 @@ function buildHumanHandoffClassifierInstruction() {
     "Responda somente JSON valido no formato {\"handoff\":boolean,\"confidence\":number,\"reason\":\"curto\"}.",
     "Marque handoff=true quando o lead pede transferencia, fala com vendedor/atendente/suporte/pessoa/equipe, reclama que quer alguem melhor, pede para ligar, ou indica que nao quer continuar com o agente.",
     "Entenda variacoes informais, erros de digitacao, ironia leve e contexto das ultimas mensagens.",
-    "Marque handoff=false se o lead so menciona humano/IA como assunto, faz teste de Turing, pede explicacao, manda ok/sim/nao, ou esta apenas negociando normalmente.",
+    "Marque handoff=false se o lead so menciona humano/IA como assunto, faz teste de Turing, pede explicacao, pergunta sobre criar/clonar pessoa, alguem virtual, persona, clone, avatar, manda ok/sim/nao, ou esta apenas negociando normalmente.",
     "Se estiver em duvida, retorne handoff=false.",
   ].join("\n");
 }
