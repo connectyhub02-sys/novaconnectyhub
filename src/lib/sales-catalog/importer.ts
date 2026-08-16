@@ -1,5 +1,6 @@
 import "server-only";
 
+import { Buffer } from "node:buffer";
 import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { assertOrganizationOperationalAccess } from "@/lib/billing/access-control";
@@ -235,6 +236,7 @@ export type SalesCatalogImportFileInput = {
 };
 
 const maxImportTextChars = 60000;
+const maxLocalImportTextChars = 2_000_000;
 const maxPageChars = 45000;
 const maxDraftItems = 120;
 const maxGeminiOutputTokens = 7000;
@@ -995,6 +997,11 @@ async function extractDrafts(input: {
   ].filter(Boolean).join("\n\n").slice(0, maxImportTextChars);
 
   const files = input.files ?? [];
+  const localSourceText = buildLocalImportSourceText({
+    text: input.text,
+    fetchedText: fetched.text,
+    files,
+  });
 
   if (!sourceText.trim() && !input.sourceUrl && files.length === 0) {
     return {
@@ -1002,6 +1009,24 @@ async function extractDrafts(input: {
       sourceText: "",
       summary: "Nenhuma fonte textual foi enviada.",
       warnings: ["Envie texto, CSV ou URL para importar."],
+      aiUsed: false,
+    };
+  }
+
+  const tableDrafts = parseDelimitedDrafts({
+    sourceText: localSourceText || sourceText,
+    sourceUrl: input.sourceUrl,
+    sourceKind: input.job.source_kind,
+    targetMode: input.job.target_mode,
+    defaultSalesDestination: input.job.default_sales_destination,
+  });
+
+  if (tableDrafts.length > 0) {
+    return {
+      drafts: tableDrafts,
+      sourceText: (localSourceText || sourceText).slice(0, maxImportTextChars),
+      summary: fetched.summary || `CSV estruturado encontrou ${tableDrafts.length} item(ns).`,
+      warnings: [],
       aiUsed: false,
     };
   }
@@ -1032,7 +1057,7 @@ async function extractDrafts(input: {
   }
 
   const fallbackDrafts = parseFallbackDrafts({
-    sourceText,
+    sourceText: localSourceText || sourceText,
     sourceUrl: input.sourceUrl,
     sourceKind: input.job.source_kind,
     targetMode: input.job.target_mode,
@@ -1041,7 +1066,7 @@ async function extractDrafts(input: {
 
   return {
     drafts: fallbackDrafts,
-    sourceText,
+    sourceText: (localSourceText || sourceText).slice(0, maxImportTextChars),
     summary: fetched.summary || `Extracao local encontrou ${fallbackDrafts.length} item(ns).`,
     warnings: "warning" in ai ? [ai.warning] : ["IA nao retornou itens; usamos extracao local."],
     aiUsed: false,
@@ -1160,6 +1185,43 @@ async function extractDraftsWithGemini(input: {
   return { drafts };
 }
 
+function buildLocalImportSourceText(input: {
+  text?: string | null;
+  fetchedText?: string | null;
+  files?: SalesCatalogImportFileInput[] | null;
+}) {
+  const chunks = [
+    normalizeOptionalText(input.text, maxLocalImportTextChars),
+    ...(input.files ?? []).map((file) => decodeTextImportFile(file) ?? normalizeOptionalText(file.text, maxLocalImportTextChars)),
+    normalizeOptionalText(input.fetchedText, maxLocalImportTextChars),
+  ].filter((chunk): chunk is string => Boolean(chunk));
+
+  return chunks.join("\n\n").slice(0, maxLocalImportTextChars);
+}
+
+function decodeTextImportFile(file: SalesCatalogImportFileInput) {
+  if (!isTextLikeImportFile(file)) return null;
+
+  try {
+    return Buffer.from(file.base64, "base64")
+      .toString("utf8")
+      .replace(/^\uFEFF/, "")
+      .trim()
+      .slice(0, maxLocalImportTextChars) || null;
+  } catch {
+    return null;
+  }
+}
+
+function isTextLikeImportFile(file: SalesCatalogImportFileInput) {
+  const contentType = file.contentType.toLowerCase();
+  const fileName = file.fileName.toLowerCase();
+
+  return contentType.startsWith("text/")
+    || contentType === "application/json"
+    || /\.(csv|tsv|txt|md|json)$/i.test(fileName);
+}
+
 function parseFallbackDrafts(input: {
   sourceText: string;
   sourceUrl?: string | null;
@@ -1189,21 +1251,34 @@ function parseDelimitedDrafts(input: {
   const headers = rows[0].map((value) => normalizeHeader(value));
   const dataRows = rows.slice(1).filter((row) => row.some((value) => value.trim()));
   const titleIndex = findHeaderIndex(headers, ["produto", "nome", "name", "title", "item", "servico", "servico_servico"]);
-  const priceIndex = findHeaderIndex(headers, ["preco", "price", "valor", "amount"]);
 
   if (titleIndex < 0) return [];
 
-  const descriptionIndex = findHeaderIndex(headers, ["descricao", "description", "detalhes", "observacoes"]);
-  const categoryIndex = findHeaderIndex(headers, ["categoria", "category", "grupo", "secao"]);
-  const urlIndex = findHeaderIndex(headers, ["url", "link", "product_url", "site"]);
-  const imageIndex = findHeaderIndex(headers, ["imagem", "image", "foto", "photo"]);
-  const skuIndex = findHeaderIndex(headers, ["sku", "codigo", "code"]);
-  const stockIndex = findHeaderIndex(headers, ["estoque", "stock", "quantidade"]);
+  const priceIndex = findHeaderIndexExactFirst(headers, ["preco", "price", "valor", "amount", "regular_price"], ["preco_regular", "valor_unitario", "unit_price"]);
+  const salePriceIndex = findHeaderIndexExactFirst(headers, ["preco_promocional", "sale_price", "preco_oferta", "preco_de_oferta", "promotional_price"], ["promocional"]);
+  const shortDescriptionIndex = findHeaderIndexExactFirst(headers, ["descricao_curta", "short_description", "resumo"], ["short_desc"]);
+  const descriptionIndex = findHeaderIndexExactFirst(headers, ["descricao", "description", "detalhes", "observacoes"], ["descricao_comercial", "long_description"]);
+  const categoryIndex = findHeaderIndex(headers, ["categorias", "categoria", "category", "grupo", "secao"]);
+  const urlIndex = findHeaderIndexExactFirst(headers, ["url", "link", "product_url", "site", "url_externa"], ["produto_url", "external_url"]);
+  const imageIndex = findHeaderIndex(headers, ["imagens", "imagem", "image", "foto", "photo"]);
+  const skuIndex = findHeaderIndexExactFirst(headers, ["sku", "codigo", "code"], ["codigo_sku"]);
+  const publishedIndex = findHeaderIndexExactFirst(headers, ["publicado", "published", "ativo", "active"], []);
+  const stockStatusIndex = findHeaderIndexExactFirst(headers, ["em_estoque", "stock_status", "in_stock"], ["status_estoque"]);
+  const stockQuantityIndex = findHeaderIndexExactFirst(headers, ["estoque", "stock", "quantidade", "stock_quantity"], ["quantidade_estoque"]);
+  const lowStockIndex = findHeaderIndexExactFirst(headers, ["quantidade_baixa_de_estoque", "low_stock_amount", "low_stock_threshold"], []);
+  const backorderIndex = findHeaderIndexExactFirst(headers, ["sao_permitidas_encomendas", "backorders_allowed", "allow_backorder"], ["encomendas"]);
+  const weightIndex = findHeaderIndexExactFirst(headers, ["peso_kg", "weight_kg", "peso", "weight"], []);
+  const lengthIndex = findHeaderIndexExactFirst(headers, ["comprimento_cm", "length_cm", "comprimento", "length"], []);
+  const widthIndex = findHeaderIndexExactFirst(headers, ["largura_cm", "width_cm", "largura", "width"], []);
+  const heightIndex = findHeaderIndexExactFirst(headers, ["altura_cm", "height_cm", "altura", "height"], []);
+  const saleStartsIndex = findHeaderIndexExactFirst(headers, ["data_de_preco_promocional_comeca_em", "sale_price_dates_from", "sale_starts_at"], []);
+  const saleEndsIndex = findHeaderIndexExactFirst(headers, ["data_de_preco_promocional_termina_em", "sale_price_dates_to", "sale_ends_at"], []);
 
   return dataRows
     .map((row, index) => {
       const title = normalizeTitle(row[titleIndex]);
       if (!title) return null;
+      if (publishedIndex >= 0 && isFalseLike(row[publishedIndex])) return null;
 
       const links = classifyImportLinks({
         productValues: urlIndex >= 0 ? [row[urlIndex]] : [],
@@ -1212,7 +1287,9 @@ function parseDelimitedDrafts(input: {
         fallbackProductUrl: input.targetMode === "external_site" ? input.sourceUrl ?? null : null,
       });
       const productUrl = links.productUrl;
-      const price = normalizePrice(row[priceIndex]);
+      const regularPrice = normalizePrice(row[priceIndex]);
+      const salePrice = normalizePrice(row[salePriceIndex]);
+      const price = regularPrice ?? salePrice;
       const destination = resolveDraftDestination({
         explicit: null,
         targetMode: input.targetMode,
@@ -1224,12 +1301,26 @@ function parseDelimitedDrafts(input: {
         price,
         productUrl,
       });
-      const stockQuantity = normalizeNumber(row[stockIndex]);
+      const description = combineImportedDescription([
+        row[shortDescriptionIndex],
+        row[descriptionIndex],
+      ], 1400);
+      const stockStatus = resolveDelimitedStockStatus(row[stockStatusIndex], row[backorderIndex]);
+      const stockQuantity = normalizeNumber(row[stockQuantityIndex]);
+      const lowStockThreshold = normalizeNumber(row[lowStockIndex]);
+      const allowBackorder = isTruthyLike(row[backorderIndex]);
+      const weightGrams = normalizeWeightGrams(row[weightIndex], headers[weightIndex]);
+      const dimensions = {
+        lengthCm: normalizeNumber(row[lengthIndex]),
+        widthCm: normalizeNumber(row[widthIndex]),
+        heightCm: normalizeNumber(row[heightIndex]),
+      };
+      const attributes = readDelimitedAttributes(row, headers);
       const skuCode = normalizeSkuCode(row[skuIndex]) ?? createSkuCode(title, String(index + 1));
 
       return buildDraft({
         title,
-        description: normalizeOptionalText(row[descriptionIndex], 1200),
+        description,
         category: normalizeOptionalText(row[categoryIndex], 80),
         price,
         productUrl,
@@ -1243,11 +1334,30 @@ function parseDelimitedDrafts(input: {
           ...(links.productUrl ? { product_url_detected: true } : {}),
         },
         skus: [{
-          ...createDraftSku({ title, skuCode, price, stockQuantity }),
+          ...createDraftSku({ title, skuCode, price, salePrice, stockQuantity }),
+          attributes,
+          stockStatus,
+          lowStockThreshold,
+          weightGrams,
+          dimensions,
         }],
         inventory: {
           ...emptySalesCatalogProductInventory(),
+          status: stockStatus,
           quantity: stockQuantity,
+          lowStockThreshold,
+          allowBackorder,
+        },
+        shipping: {
+          ...emptySalesCatalogProductShipping(),
+          weightGrams,
+          dimensions,
+        },
+        offer: {
+          ...emptySalesCatalogProductOffer(),
+          salePrice,
+          saleStartsAt: normalizeOptionalText(row[saleStartsIndex], 40),
+          saleEndsAt: normalizeOptionalText(row[saleEndsIndex], 40),
         },
       });
     })
@@ -2725,8 +2835,27 @@ function normalizePrice(value: unknown) {
   const text = readString(value);
   if (!text) return null;
 
-  const match = text.match(/(?:R\$\s*)?\d{1,6}(?:[.,]\d{2})?/);
-  return match ? match[0].replace(/^R\$\s*/i, "").trim() : null;
+  const match = text.match(/(?:R\$\s*)?\d[\d.,]*(?:[.,]\d{2})?/);
+  if (!match) return null;
+
+  return normalizeMoneyText(match[0]);
+}
+
+function normalizeMoneyText(value: string) {
+  const text = value.replace(/^R\$\s*/i, "").replace(/[^\d.,-]/g, "").trim();
+  if (!text) return null;
+
+  const lastComma = text.lastIndexOf(",");
+  const lastDot = text.lastIndexOf(".");
+  const decimalIndex = Math.max(lastComma, lastDot);
+  const decimalPart = decimalIndex >= 0 ? text.slice(decimalIndex + 1).replace(/\D/g, "") : "";
+
+  if (decimalIndex >= 0 && decimalPart.length === 2) {
+    const integerPart = text.slice(0, decimalIndex).replace(/[^\d-]/g, "") || "0";
+    return `${integerPart},${decimalPart}`;
+  }
+
+  return text.replace(/[^\d-]/g, "") || null;
 }
 
 function normalizeDraftUrl(value: unknown) {
@@ -2881,20 +3010,14 @@ function guessDelimiter(text: string) {
 }
 
 function parseDelimitedRows(text: string, delimiter: string) {
-  return text
-    .split(/\r?\n/)
-    .filter((line) => line.trim())
-    .map((line) => parseDelimitedLine(line, delimiter));
-}
-
-function parseDelimitedLine(line: string, delimiter: string) {
-  const values: string[] = [];
+  const rows: string[][] = [];
+  let row: string[] = [];
   let current = "";
   let quoted = false;
 
-  for (let index = 0; index < line.length; index++) {
-    const char = line[index];
-    const next = line[index + 1];
+  for (let index = 0; index < text.length; index++) {
+    const char = text[index];
+    const next = text[index + 1];
 
     if (char === "\"" && next === "\"") {
       current += "\"";
@@ -2908,21 +3031,32 @@ function parseDelimitedLine(line: string, delimiter: string) {
     }
 
     if (char === delimiter && !quoted) {
-      values.push(current.trim());
+      row.push(current.trim());
       current = "";
+      continue;
+    }
+
+    if ((char === "\n" || char === "\r") && !quoted) {
+      if (char === "\r" && next === "\n") index += 1;
+      row.push(current.trim());
+      current = "";
+      if (row.some((value) => value.trim())) rows.push(row);
+      row = [];
       continue;
     }
 
     current += char;
   }
 
-  values.push(current.trim());
-  return values;
+  row.push(current.trim());
+  if (row.some((value) => value.trim())) rows.push(row);
+  return rows;
 }
 
 function normalizeHeader(value: string) {
   return value
     .trim()
+    .replace(/^\uFEFF/, "")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
@@ -2934,6 +3068,113 @@ function findHeaderIndex(headers: string[], candidates: string[]) {
   return headers.findIndex((header) => candidates.includes(header) || candidates.some((candidate) => header.includes(candidate)));
 }
 
+function findHeaderIndexExactFirst(headers: string[], exactCandidates: string[], containsCandidates: string[]) {
+  const exact = headers.findIndex((header) => exactCandidates.includes(header));
+  if (exact >= 0) return exact;
+
+  return headers.findIndex((header) => containsCandidates.some((candidate) => header.includes(candidate)));
+}
+
+function combineImportedDescription(values: unknown[], maxLength: number) {
+  const parts = values
+    .map((value) => cleanImportedText(value))
+    .filter((value): value is string => Boolean(value));
+  const unique = Array.from(new Set(parts));
+  const text = unique.join("\n\n").replace(/\s+\n/g, "\n").replace(/\n\s+/g, "\n").trim();
+
+  return text ? text.slice(0, maxLength) : null;
+}
+
+function cleanImportedText(value: unknown) {
+  const text = readString(value);
+  if (!text) return null;
+
+  const cleaned = decodeHtml(text)
+    .replace(/\\n/g, "\n")
+    .replace(/<\s*br\s*\/?>/gi, "\n")
+    .replace(/<\/(?:p|li|div|h[1-6])>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+  return cleaned || null;
+}
+
+function readDelimitedAttributes(row: string[], headers: string[]) {
+  const attributes: SalesCatalogItemAttribute[] = [];
+
+  for (let index = 1; index <= 12; index++) {
+    const nameIndex = findHeaderIndexExactFirst(headers, [
+      `nome_do_atributo_${index}`,
+      `attribute_${index}_name`,
+      `attribute_name_${index}`,
+      `atributo_${index}_nome`,
+    ], []);
+    const valuesIndex = findHeaderIndexExactFirst(headers, [
+      `valor_es_do_atributo_${index}`,
+      `valores_do_atributo_${index}`,
+      `attribute_${index}_value_s`,
+      `attribute_${index}_values`,
+      `attribute_values_${index}`,
+      `atributo_${index}_valores`,
+    ], []);
+    const defaultIndex = findHeaderIndexExactFirst(headers, [
+      `valor_padrao_do_atributo_${index}`,
+      `attribute_${index}_default`,
+      `attribute_default_${index}`,
+    ], []);
+    const name = normalizeOptionalText(row[nameIndex], 80);
+    const values = parseAttributeValues(row[valuesIndex] || row[defaultIndex]);
+
+    if (!name || values.length === 0) continue;
+
+    attributes.push({
+      id: createAttributeId(name),
+      name,
+      values,
+    });
+  }
+
+  return attributes;
+}
+
+function parseAttributeValues(value: unknown) {
+  const text = cleanImportedText(value);
+  if (!text) return [];
+
+  return Array.from(new Set(text
+    .split(/[|,]/g)
+    .map((item) => item.replace(/\s+/g, " ").trim())
+    .filter(Boolean)
+    .slice(0, 30)));
+}
+
+function resolveDelimitedStockStatus(stockValue: unknown, backorderValue: unknown): SalesCatalogStockStatus {
+  if (isTruthyLike(backorderValue)) return "on_backorder";
+  if (isFalseLike(stockValue)) return "out_of_stock";
+  return "in_stock";
+}
+
+function normalizeWeightGrams(value: unknown, header: string | undefined) {
+  const number = readNumber(value);
+  if (number === null) return null;
+
+  return header?.includes("kg") || header === "peso"
+    ? Math.round(number * 1000)
+    : Math.round(number);
+}
+
+function isTruthyLike(value: unknown) {
+  const text = normalizeHeader(readString(value) ?? "");
+  return ["1", "true", "sim", "s", "yes", "y", "ativo", "active", "instock", "in_stock", "em_estoque"].includes(text);
+}
+
+function isFalseLike(value: unknown) {
+  const text = normalizeHeader(readString(value) ?? "");
+  return ["0", "false", "nao", "n", "no", "inativo", "inactive", "outofstock", "out_of_stock", "fora_de_estoque"].includes(text);
+}
+
 function isCategoryLine(line: string) {
   return line.length <= 80 && /[:：]$/.test(line) && !findPriceInText(line);
 }
@@ -2943,9 +3184,9 @@ function cleanCategoryLine(line: string) {
 }
 
 function findPriceInText(text: string) {
-  const match = text.match(/(?:R\$\s*)?\d{1,5}(?:[.,]\d{2})/);
+  const match = text.match(/(?:R\$\s*)?\d[\d.,]*(?:[.,]\d{2})/);
   return match && typeof match.index === "number"
-    ? { value: match[0].replace(/^R\$\s*/i, "").trim(), index: match.index }
+    ? { value: normalizeMoneyText(match[0]) ?? match[0].replace(/^R\$\s*/i, "").trim(), index: match.index }
     : null;
 }
 
