@@ -90,6 +90,7 @@ export const runtime = "nodejs";
 const maxCatalogFiles = 8;
 const maxCatalogFileBytes = 250 * 1024 * 1024;
 const maxCatalogTotalBytes = 500 * 1024 * 1024;
+const maxCartCheckoutItemUnitPriceCents = 10_000_000_000;
 const maxDescriptionLength = 1800;
 
 type JsonRecord = Record<string, unknown>;
@@ -3688,7 +3689,7 @@ function readSalesCatalogCartCheckoutItems(value: unknown): SalesCatalogCartChec
       ?? `Item ${index + 1}`;
     const note = normalizeOptionalText(readFormString(record.note), 140);
     const quantity = normalizeNullableInteger(record.quantity, 1, 1000) ?? 1;
-    const unitPriceCents = normalizeNullableInteger(record.unitPriceCents, 1, 100000000)
+    const unitPriceCents = normalizeNullableInteger(record.unitPriceCents, 1, maxCartCheckoutItemUnitPriceCents)
       ?? parseSalesCatalogMoneyToCents(readFormString(record.unitPrice))
       ?? parseSalesCatalogMoneyToCents(readFormString(record.price))
       ?? 0;
