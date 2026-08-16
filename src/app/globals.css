@@ -3900,6 +3900,72 @@ html {
   --sidebar-ring: oklch(0.556 0 0);
 }
 
+[data-connecty-mode] [data-connecty-contrast="dark"] {
+  color-scheme: dark;
+  color: #e5e7eb;
+}
+
+[data-connecty-mode] [data-connecty-contrast="dark"] .text-white,
+[data-connecty-mode] [data-connecty-contrast="dark"] .text-white\/70,
+[data-connecty-mode] [data-connecty-contrast="dark"] .text-slate-50,
+[data-connecty-mode] [data-connecty-contrast="dark"] .text-slate-100,
+[data-connecty-mode] [data-connecty-contrast="dark"] .text-slate-200 {
+  color: #f8fafc !important;
+}
+
+[data-connecty-mode] [data-connecty-contrast="dark"] .text-slate-300 {
+  color: #cbd5e1 !important;
+}
+
+[data-connecty-mode] [data-connecty-contrast="dark"] .text-slate-400,
+[data-connecty-mode] [data-connecty-contrast="dark"] .text-muted-foreground {
+  color: #94a3b8 !important;
+}
+
+[data-connecty-mode] [data-connecty-contrast="dark"] .text-slate-500 {
+  color: #64748b !important;
+}
+
+[data-connecty-mode] [data-connecty-contrast="dark"] .text-cyan-100,
+[data-connecty-mode] [data-connecty-contrast="dark"] .text-cyan-200,
+[data-connecty-mode] [data-connecty-contrast="dark"] .text-cyan-300,
+[data-connecty-mode] [data-connecty-contrast="dark"] .text-sky-100,
+[data-connecty-mode] [data-connecty-contrast="dark"] .text-sky-200,
+[data-connecty-mode] [data-connecty-contrast="dark"] .text-sky-300,
+[data-connecty-mode] [data-connecty-contrast="dark"] [class*="text-cyan-"],
+[data-connecty-mode] [data-connecty-contrast="dark"] [class*="text-sky-"] {
+  color: #67e8f9 !important;
+}
+
+[data-connecty-mode] [data-connecty-contrast="dark"] .bg-slate-950,
+[data-connecty-mode] [data-connecty-contrast="dark"] .bg-slate-950\/20,
+[data-connecty-mode] [data-connecty-contrast="dark"] .bg-slate-950\/25,
+[data-connecty-mode] [data-connecty-contrast="dark"] .bg-slate-950\/30,
+[data-connecty-mode] [data-connecty-contrast="dark"] .bg-slate-950\/35,
+[data-connecty-mode] [data-connecty-contrast="dark"] .bg-slate-950\/40,
+[data-connecty-mode] [data-connecty-contrast="dark"] .bg-slate-950\/45,
+[data-connecty-mode] [data-connecty-contrast="dark"] .bg-slate-950\/60,
+[data-connecty-mode] [data-connecty-contrast="dark"] .bg-slate-950\/70,
+[data-connecty-mode] [data-connecty-contrast="dark"] .bg-slate-950\/72,
+[data-connecty-mode] [data-connecty-contrast="dark"] .bg-slate-950\/80,
+[data-connecty-mode] [data-connecty-contrast="dark"] .bg-slate-950\/82,
+[data-connecty-mode] [data-connecty-contrast="dark"] .bg-slate-950\/90,
+[data-connecty-mode] [data-connecty-contrast="dark"] .bg-slate-950\/95 {
+  background-color: rgba(2, 6, 23, 0.78) !important;
+}
+
+[data-connecty-mode] [data-connecty-contrast="dark"] .bg-slate-900,
+[data-connecty-mode] [data-connecty-contrast="dark"] .bg-slate-900\/80 {
+  background-color: rgba(15, 23, 42, 0.9) !important;
+}
+
+[data-connecty-mode] [data-connecty-contrast="dark"] .bg-white\/\[0\.03\],
+[data-connecty-mode] [data-connecty-contrast="dark"] .bg-white\/\[0\.04\],
+[data-connecty-mode] [data-connecty-contrast="dark"] .bg-white\/5,
+[data-connecty-mode] [data-connecty-contrast="dark"] .bg-white\/10 {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

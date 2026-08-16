@@ -340,7 +340,7 @@ function LeadsView({
               <div className="grid grid-cols-2 gap-2">
                 <InfoMini label="Score" value={`${lead.score}/100`} />
                 <InfoMini label="Perfil" value={temperature.label} />
-                <InfoMini label="Origem" value={lead.source} />
+                <InfoMini label="Origem" value={formatPublicSource(lead.source)} />
                 <InfoMini label="Ultimo sinal" value={formatTime(lead.lastMessageAt ?? lead.updatedAt)} />
               </div>
 
@@ -394,7 +394,7 @@ function LeadsView({
                   </div>
                   <StatusPill status={lead.status} />
                   <div className="min-w-0 text-[12px] text-slate-300">
-                    <p className="truncate">{lead.source}</p>
+                    <p className="truncate">{formatPublicSource(lead.source)}</p>
                     <p className="mt-1 truncate text-slate-500">{lead.technical.location ?? "Local desconhecido"}</p>
                   </div>
                   <div className="min-w-0 text-[12px] text-slate-300">
@@ -1159,7 +1159,7 @@ function AttendanceLeadPanel({ lead, onDetails }: { lead: ClientLeadRecord; onDe
         <div className="mt-3 space-y-2">
           <InfoMini label="Telefone" value={lead.phone ?? "Nao informado"} />
           <InfoMini label="Email" value={lead.email ?? "Nao informado"} />
-          <InfoMini label="Origem" value={lead.source} />
+          <InfoMini label="Origem" value={formatPublicSource(lead.source)} />
           <InfoMini label="Empresa" value={lead.companyName} />
         </div>
       </div>
@@ -1767,7 +1767,10 @@ function LeadDetailsModal({ lead, onClose }: { lead: ClientLeadRecord; onClose: 
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 p-0 backdrop-blur-sm sm:p-4">
-      <div className="flex h-[100svh] max-h-[100svh] w-full max-w-[1280px] flex-col overflow-hidden border border-white/15 bg-[#11151d] shadow-2xl sm:h-auto sm:max-h-[92svh] sm:rounded-2xl">
+      <div
+        className="flex h-[100svh] max-h-[100svh] w-full max-w-[1280px] flex-col overflow-hidden border border-white/15 bg-[#11151d] shadow-2xl sm:h-auto sm:max-h-[92svh] sm:rounded-2xl"
+        data-connecty-contrast="dark"
+      >
         <div className="flex items-center justify-between gap-3 border-b border-white/10 px-3 py-3 sm:gap-4 sm:px-5 sm:py-4">
           <div className="flex min-w-0 items-center gap-3">
             <LeadAvatar lead={lead} size="lg" />
@@ -1819,11 +1822,12 @@ function LeadDetailsModal({ lead, onClose }: { lead: ClientLeadRecord; onClose: 
               <div
                 className="min-h-0 flex-1 overflow-y-auto border-t border-white/10 p-3 sm:p-5"
                 style={{
-                  backgroundColor: "#0b1117",
+                  backgroundColor: "#efeae2",
                   backgroundImage:
-                    "radial-gradient(circle at 12px 12px, rgba(148,163,184,0.1) 1px, transparent 1.5px), radial-gradient(circle at 2px 2px, rgba(34,211,238,0.06) 1px, transparent 1.5px)",
-                  backgroundPosition: "0 0, 14px 14px",
-                  backgroundSize: "28px 28px",
+                    `linear-gradient(rgba(239,234,226,0.28), rgba(239,234,226,0.28)), url("${whatsappConversationBackgroundUrl}")`,
+                  backgroundPosition: "center",
+                  backgroundRepeat: "repeat",
+                  backgroundSize: "420px auto",
                 }}
               >
                 <ChatMessages messages={selectedConversation?.messages ?? []} />
@@ -1956,7 +1960,7 @@ function InfoPanel({ title, text }: { title: string; text: string }) {
   return (
     <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
       <p className="font-mono text-[9px] uppercase tracking-widest text-cyan-300">{title}</p>
-      <p className="mt-3 text-[12px] leading-5 text-slate-200">{text}</p>
+      <p className="mt-3 text-[12px] leading-5 text-slate-200">{redactInternalProviderNames(text)}</p>
     </div>
   );
 }
@@ -2025,12 +2029,34 @@ function ConversationSelector({
 
 function formatConversationLabel(conversation: ClientLeadConversationFile) {
   return [
-    conversation.provider || conversation.channel || "Historico geral",
+    formatPublicSource(conversation.provider || conversation.channel || "Historico geral"),
     conversation.status ? `status ${conversation.status}` : null,
     conversation.lastMessageAt ? formatDateTime(conversation.lastMessageAt) : null,
   ]
     .filter(Boolean)
     .join(" · ");
+}
+
+function formatPublicSource(value: string | null | undefined) {
+  const text = redactInternalProviderNames(value ?? "").trim();
+  const normalized = text.toLowerCase().replace(/[\s_-]+/g, " ");
+
+  if (!text) return "ConnectyHub";
+  if (normalized.includes("whatsapp")) return "WhatsApp";
+  if (normalized.includes("webhook")) return "WhatsApp";
+  if (normalized.includes("api")) return "API WhatsApp";
+  if (normalized.includes("meta") || normalized.includes("instagram") || normalized.includes("facebook")) return "Meta";
+  if (normalized.includes("site") || normalized.includes("track") || normalized.includes("link")) return "Site / link";
+
+  return text;
+}
+
+function redactInternalProviderNames(value: string) {
+  return value
+    .replace(/uazapi[_\-\s]*webhook/gi, "WhatsApp")
+    .replace(/\buazapi\b/gi, "WhatsApp")
+    .replace(/\bprovider\b/gi, "canal")
+    .replace(/\bwebhook\b/gi, "WhatsApp");
 }
 
 function TrackingArchive({ events }: { events: ClientLeadActivity[] }) {
@@ -2044,10 +2070,10 @@ function TrackingArchive({ events }: { events: ClientLeadActivity[] }) {
         {events.slice(0, 10).map((event) => (
           <div key={event.id} className="rounded-xl border border-white/10 bg-slate-950/30 p-3">
             <div className="flex items-center justify-between gap-2">
-              <p className="truncate text-[12px] font-semibold text-white">{event.title}</p>
+              <p className="truncate text-[12px] font-semibold text-white">{redactInternalProviderNames(event.title)}</p>
               <span className="shrink-0 font-mono text-[9px] text-slate-500">{formatDateTime(event.occurredAt)}</span>
             </div>
-            <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-slate-400">{event.summary}</p>
+            <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-slate-400">{redactInternalProviderNames(event.summary)}</p>
           </div>
         ))}
         {!events.length ? <p className="text-[12px] text-slate-500">Sem eventos de cookies, push, GPS, cliques ou navegacao ainda.</p> : null}
@@ -2175,7 +2201,7 @@ function InfoMini({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl border border-white/10 bg-slate-950/30 px-3 py-2">
       <p className="font-mono text-[9px] uppercase tracking-wide text-slate-500">{label}</p>
-      <p className="mt-1 truncate text-[12px] font-semibold text-white">{value}</p>
+      <p className="mt-1 truncate text-[12px] font-semibold text-white">{redactInternalProviderNames(value)}</p>
     </div>
   );
 }
@@ -2202,7 +2228,7 @@ function getTemperatureMeta(value: ClientLeadRecord["qualification"]["temperatur
 
 function LeadTechnicalFile({ lead }: { lead: ClientLeadRecord }) {
   const rows = [
-    { label: "Origem", value: lead.technical.origin, icon: Globe2 },
+    { label: "Origem", value: formatPublicSource(lead.technical.origin), icon: Globe2 },
     { label: "Dispositivo", value: lead.technical.device ?? "Nao identificado", icon: Laptop },
     { label: "Sistema / nav.", value: [lead.technical.os, lead.technical.browser].filter(Boolean).join(" / ") || "Nao identificado", icon: Laptop },
     { label: "Localizacao", value: lead.technical.location ?? "Nao identificada", icon: MapPin },
@@ -2223,7 +2249,7 @@ function LeadTechnicalFile({ lead }: { lead: ClientLeadRecord }) {
                 <Icon className="h-3.5 w-3.5 text-cyan-300" />
                 {row.label}
               </span>
-              <span className="max-w-[170px] truncate text-right text-[11px] font-semibold text-white">{row.value}</span>
+              <span className="max-w-[170px] truncate text-right text-[11px] font-semibold text-white">{redactInternalProviderNames(row.value)}</span>
             </div>
           );
         })}
@@ -2242,10 +2268,10 @@ function ActivityTimeline({ activities }: { activities: ClientLeadActivity[] }) 
             <span className={cn("mt-1.5 h-2 w-2 rounded-full", activity.tone === "green" && "bg-emerald-400", activity.tone === "cyan" && "bg-cyan-400", activity.tone === "amber" && "bg-amber-400", activity.tone === "rose" && "bg-rose-400", activity.tone === "zinc" && "bg-slate-500")} />
             <div className="min-w-0">
               <div className="flex items-center justify-between gap-2">
-                <p className="truncate text-[12px] font-semibold text-white">{activity.title}</p>
+                <p className="truncate text-[12px] font-semibold text-white">{redactInternalProviderNames(activity.title)}</p>
                 <span className="shrink-0 font-mono text-[9px] text-slate-500">{formatDate(activity.occurredAt)}</span>
               </div>
-              <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-slate-400">{activity.summary}</p>
+              <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-slate-400">{redactInternalProviderNames(activity.summary)}</p>
             </div>
           </div>
         ))}
@@ -2325,7 +2351,7 @@ function ChatMessages({ messages }: { messages: ClientLeadMessage[] }) {
                   {formatTime(message.occurredAt)}
                 </span>
               </div>
-              <p className="whitespace-pre-wrap">{message.text}</p>
+              <p className="whitespace-pre-wrap">{redactInternalProviderNames(message.text)}</p>
               {message.mediaUrl ? (
                 <a
                   className="mt-3 inline-flex rounded-lg border border-slate-300 bg-white/70 px-2.5 py-1 font-mono text-[9px] font-bold uppercase tracking-wide text-slate-700 transition hover:bg-white"
