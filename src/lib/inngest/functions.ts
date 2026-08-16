@@ -45,6 +45,10 @@ import {
 } from "@/lib/sales-catalog/importer";
 import { createServiceClient } from "@/lib/supabase/service";
 import { syncUazapiInstances } from "@/lib/whatsapp/uazapi-sync";
+import {
+  elianeEcosystemSyncEventName,
+  syncElianeEcosystemKnowledge,
+} from "@/lib/whatsapp/eliane-ecosystem-sync";
 import { runGrowthAgentMission, type GrowthAgentCode } from "@/lib/growth/growth-agent-runner";
 
 export const connectyhubDailyAdminReport = inngest.createFunction(
@@ -468,6 +472,24 @@ export const connectyhubSalesCatalogImportSweep = inngest.createFunction(
   },
 );
 
+export const connectyhubElianeEcosystemSync = inngest.createFunction(
+  {
+    id: "connectyhub-eliane-ecosystem-sync",
+    name: "ConnectyHub Eliane Ecosystem Sync",
+    retries: 1,
+    triggers: [
+      { event: elianeEcosystemSyncEventName },
+      { cron: "0 9 * * *" },
+    ],
+  },
+  async ({ event, step }) =>
+    step.run("sync-eliane-ecosystem-knowledge", () =>
+      syncElianeEcosystemKnowledge({
+        triggerSource: event.name,
+      }),
+    ),
+);
+
 const growthAgentSchedules: Array<{
   id: string;
   name: string;
@@ -575,5 +597,6 @@ export const functions = [
   connectyhubWhatsappFollowUp,
   connectyhubPlatformAutomationSweep,
   connectyhubSalesCatalogImportSweep,
+  connectyhubElianeEcosystemSync,
   ...connectyhubGrowthAgentFunctions,
 ];
