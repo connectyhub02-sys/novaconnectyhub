@@ -188,24 +188,26 @@ export async function getPlatformWhatsappConsoleState(input: {
     return buildUnavailableState();
   }
 
-  const [agent, rawInstance, knowledgeFiles, linkButtons, audio] = await Promise.all([
+  const [agent, rawInstance, knowledgeFiles, linkButtons] = await Promise.all([
     getSectorWhatsappAgent(client, selectedSector.id),
     getSectorWhatsappInstance(client, selectedSector.id),
     listSectorKnowledge(client, selectedSector.id),
     listSectorLinkButtons(client, selectedSector.id),
-    listWhatsappAudioVoices({ organizationId: input.voiceOrganizationId || fallbackVoiceOrganizationId, client }),
   ]);
 
   const instance = rawInstance?.instance_token_encrypted && rawInstance.status !== "connected"
     ? await syncInstanceStatusFromProvider(client, rawInstance).catch(() => rawInstance)
     : rawInstance;
-  const [cloneTest, runtimeAlerts] = await Promise.all([
+  const voiceOrganizationId = input.voiceOrganizationId
+    || await resolvePlatformWhatsappVoiceOrganizationId(client, selectedSector.id, instance);
+  const [cloneTest, runtimeAlerts, audio] = await Promise.all([
     agent
       ? listPlatformCloneRealTests(client, agent.id)
       : Promise.resolve(emptyCloneRealTestSummary()),
     agent
       ? listWhatsappRuntimeAlerts(client, { agentId: agent.id, instanceId: instance?.id ?? null })
       : Promise.resolve([]),
+    listWhatsappAudioVoices({ organizationId: voiceOrganizationId, client }),
   ]);
 
   return {
@@ -213,6 +215,38 @@ export async function getPlatformWhatsappConsoleState(input: {
     companies: sectors.map(mapSectorEntity),
     selectedCompanyId: selectedSector.id,
   };
+}
+
+async function resolvePlatformWhatsappVoiceOrganizationId(
+  client: SupabaseClient,
+  sectorId: string,
+  instance: WhatsappInstanceRow | null,
+) {
+  if (instance?.organization_id) {
+    return instance.organization_id;
+  }
+
+  const { data: sectorInstance } = await client
+    .from("whatsapp_instances")
+    .select("organization_id")
+    .eq("provider", "uazapi")
+    .contains("metadata", { admin_whatsapp: true, sector_id: sectorId })
+    .neq("status", "archived")
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<{ organization_id: string | null }>();
+
+  if (sectorInstance?.organization_id) {
+    return sectorInstance.organization_id;
+  }
+
+  const { data: platformOrganization } = await client
+    .from("organizations")
+    .select("id")
+    .eq("slug", platformWhatsappOrganizationSlug)
+    .maybeSingle<{ id: string | null }>();
+
+  return platformOrganization?.id ?? fallbackVoiceOrganizationId;
 }
 
 export async function createPlatformWhatsappConsoleAgent(input: {
