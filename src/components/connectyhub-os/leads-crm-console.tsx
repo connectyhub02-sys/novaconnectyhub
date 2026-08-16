@@ -1915,21 +1915,18 @@ function LeadDetailsModal({ lead, onClose }: { lead: ClientLeadRecord; onClose: 
     ?? null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 p-0 backdrop-blur-sm sm:p-4">
-      <div
-        className="flex h-[100svh] max-h-[100svh] w-full max-w-[1280px] flex-col overflow-hidden border border-white/15 bg-[#11151d] shadow-2xl sm:h-auto sm:max-h-[92svh] sm:rounded-2xl"
-        data-connecty-contrast="dark"
-      >
-        <div className="flex items-center justify-between gap-3 border-b border-white/10 px-3 py-3 sm:gap-4 sm:px-5 sm:py-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 p-0 backdrop-blur-sm sm:p-4">
+      <div className="connecty-lead-file-modal flex h-[100svh] max-h-[100svh] w-full max-w-[1280px] flex-col overflow-hidden border border-red-100 bg-white text-slate-950 shadow-2xl sm:h-auto sm:max-h-[92svh] sm:rounded-2xl">
+        <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-white px-3 py-3 sm:gap-4 sm:px-5 sm:py-4">
           <div className="flex min-w-0 items-center gap-3">
             <LeadAvatar lead={lead} size="lg" />
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <h2 className="truncate text-[16px] font-bold text-white sm:text-[18px]">Arquivo inteligente do lead</h2>
+                <h2 className="truncate text-[16px] font-bold text-slate-950 sm:text-[18px]">Arquivo inteligente do lead</h2>
                 <StatusPill status={lead.status} />
               </div>
-              <div className="mt-1 flex flex-wrap gap-3 text-[12px] text-slate-400">
-                <span className="font-semibold text-white">{lead.name}</span>
+              <div className="mt-1 flex flex-wrap gap-3 text-[12px] text-slate-500">
+                <span className="font-semibold text-slate-950">{lead.name}</span>
                 <span className="inline-flex items-center gap-1.5">
                   <Phone className="h-3.5 w-3.5" />
                   {lead.phone ?? "Sem telefone"}
@@ -1945,7 +1942,7 @@ function LeadDetailsModal({ lead, onClose }: { lead: ClientLeadRecord; onClose: 
           </div>
           <button
             aria-label="Fechar detalhes do lead"
-            className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 text-slate-300 transition hover:bg-white/10"
+            className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 text-slate-500 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600"
             onClick={onClose}
             type="button"
           >
@@ -1954,7 +1951,7 @@ function LeadDetailsModal({ lead, onClose }: { lead: ClientLeadRecord; onClose: 
         </div>
 
         <div className="grid min-h-0 flex-1 overflow-y-auto lg:grid-cols-[370px_minmax(0,1fr)] lg:overflow-hidden">
-          <aside className="min-h-0 border-b border-white/10 bg-slate-950/25 p-3 sm:p-4 lg:overflow-y-auto lg:border-b-0 lg:border-r">
+          <aside className="min-h-0 border-b border-slate-200 bg-slate-50 p-3 sm:p-4 lg:overflow-y-auto lg:border-b-0 lg:border-r">
             <div className="space-y-3">
               <InfoPanel title="Resumo inteligente" text={lead.summary} />
               <QualificationGrid lead={lead} />
@@ -1965,11 +1962,11 @@ function LeadDetailsModal({ lead, onClose }: { lead: ClientLeadRecord; onClose: 
               <OpenWhatsAppButton phone={lead.phone} />
             </div>
           </aside>
-          <main className="min-h-0 p-3 sm:p-4 lg:overflow-hidden">
-            <div className="flex min-h-[560px] flex-col overflow-hidden rounded-2xl border border-white/10 bg-slate-950/70 lg:h-full lg:min-h-[640px]">
+          <main className="min-h-0 bg-white p-3 sm:p-4 lg:overflow-hidden">
+            <div className="flex min-h-[560px] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white lg:h-full lg:min-h-[640px]">
               <ConversationHeader lead={lead} conversation={selectedConversation} />
               <div
-                className="min-h-0 flex-1 overflow-y-auto border-t border-white/10 p-3 sm:p-5"
+                className="min-h-0 flex-1 overflow-y-auto border-t border-slate-200 p-3 sm:p-5"
                 style={{
                   backgroundColor: "#efeae2",
                   backgroundImage:

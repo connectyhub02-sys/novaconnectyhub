@@ -3966,6 +3966,68 @@ html {
   background-color: rgba(255, 255, 255, 0.05) !important;
 }
 
+.connecty-lead-file-modal {
+  color-scheme: light;
+  --lead-file-accent: #e50914;
+  --lead-file-accent-soft: #fff1f2;
+  --lead-file-border: #e5e7eb;
+  --lead-file-text: #0f172a;
+  --lead-file-muted: #64748b;
+}
+
+.connecty-lead-file-modal [class*="bg-slate-950"],
+.connecty-lead-file-modal [class*="bg-slate-900"],
+.connecty-lead-file-modal [class*="bg-white/[0.02]"],
+.connecty-lead-file-modal [class*="bg-white/[0.03]"],
+.connecty-lead-file-modal [class*="bg-white/[0.04]"] {
+  background-color: #ffffff !important;
+}
+
+.connecty-lead-file-modal [class*="bg-cyan"],
+.connecty-lead-file-modal [class*="bg-sky"],
+.connecty-lead-file-modal [class*="bg-violet"] {
+  background-color: var(--lead-file-accent-soft) !important;
+}
+
+.connecty-lead-file-modal .border-white\/10,
+.connecty-lead-file-modal .border-white\/15,
+.connecty-lead-file-modal [class*="border-slate"] {
+  border-color: var(--lead-file-border) !important;
+}
+
+.connecty-lead-file-modal [class*="border-cyan"],
+.connecty-lead-file-modal [class*="border-sky"],
+.connecty-lead-file-modal [class*="border-violet"] {
+  border-color: rgba(229, 9, 20, 0.22) !important;
+}
+
+.connecty-lead-file-modal .text-white,
+.connecty-lead-file-modal .text-slate-50,
+.connecty-lead-file-modal .text-slate-100,
+.connecty-lead-file-modal .text-slate-200 {
+  color: var(--lead-file-text) !important;
+}
+
+.connecty-lead-file-modal .text-slate-300,
+.connecty-lead-file-modal .text-slate-400,
+.connecty-lead-file-modal .text-muted-foreground {
+  color: #475569 !important;
+}
+
+.connecty-lead-file-modal .text-slate-500 {
+  color: var(--lead-file-muted) !important;
+}
+
+.connecty-lead-file-modal [class*="text-cyan"],
+.connecty-lead-file-modal [class*="text-sky"],
+.connecty-lead-file-modal [class*="text-violet"] {
+  color: var(--lead-file-accent) !important;
+}
+
+.connecty-lead-file-modal .shadow-sm {
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.08) !important;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
