@@ -1261,6 +1261,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
       normalizeWhatsappBehaviorConfig({
         ...current,
         responseMode: "audio",
+        splitMessages: true,
         audioVoiceId: voice.isDefault ? "" : voice.voiceId,
         audioVoiceName: voice.name,
         audioVoiceSource: voice.source,
