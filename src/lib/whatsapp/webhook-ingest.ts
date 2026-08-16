@@ -3,6 +3,7 @@ import "server-only";
 import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { inngest } from "@/lib/inngest/client";
+import { sendLeadReplyPushNotifications } from "@/lib/push/web-push";
 import { createServiceClient } from "@/lib/supabase/service";
 import { resolveUazapiWhatsappStatus } from "@/lib/uazapi/status";
 import {
@@ -204,6 +205,12 @@ export async function ingestUazapiWebhook(input: {
     });
     if (isHumanAuthoredWhatsappMessage(message, payload)) {
       await markConversationHandledByHuman(client, conversation.id, message);
+    }
+    if (message.direction === "inbound" && lead && !message.isGroupChat && !isHandoffNotificationReply) {
+      await sendLeadReplyPushNotifications({
+        client,
+        organizationId: instance.organization_id,
+      }).catch(() => undefined);
     }
     const agentRun = message.direction === "inbound"
       ? await enqueueWhatsappAgentRun(client, {

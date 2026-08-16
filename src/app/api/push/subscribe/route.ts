@@ -55,7 +55,6 @@ export async function POST(request: NextRequest) {
 
   const visitorId = readString(body.visitor_cookie_id) ?? randomUUID();
   const sessionId = readString(body.session_cookie_id);
-  const requestedOrganizationId = readUuid(readString(body.organization_id));
   const trackingToken = readString(body.tracking_token)
     ?? readString(request.headers.get("x-connectyhub-tracking-token"));
   const permission = normalizePermission(readString(body.permission));
@@ -66,6 +65,8 @@ export async function POST(request: NextRequest) {
 
   try {
     const client = createServiceClient();
+    const requestedOrganizationId = readUuid(readString(body.organization_id))
+      ?? await findPrimaryOrganizationIdForUser(client, authUser?.id ?? null);
     const authenticatedCanAccessOrganization = await canAttributeOrganization(
       client,
       authUser?.id ?? null,
@@ -162,6 +163,25 @@ export async function POST(request: NextRequest) {
       { status: 500 },
     );
   }
+}
+
+async function findPrimaryOrganizationIdForUser(
+  client: ReturnType<typeof createServiceClient>,
+  userId: string | null,
+) {
+  if (!userId) {
+    return null;
+  }
+
+  const { data } = await client
+    .from("organization_members")
+    .select("organization_id")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle<{ organization_id: string | null }>();
+
+  return readUuid(data?.organization_id ?? null);
 }
 
 async function canAttributeOrganization(

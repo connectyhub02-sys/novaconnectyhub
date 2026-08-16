@@ -1,12 +1,12 @@
 self.addEventListener("push", (event) => {
   const payload = readPayload(event);
-  const title = payload.title || "ConnectyHub";
+  const title = payload.title || "Nova mensagem no ConnectyHub";
   const options = {
-    body: payload.body || "Temos uma atualizacao para voce.",
+    body: payload.body || "Um lead respondeu no atendimento. Abra o painel para continuar.",
     icon: payload.icon || "/brand/connectyhub-mark-blue.png",
     badge: payload.badge || "/brand/connectyhub-mark-white.png",
     data: {
-      url: payload.url || "/",
+      url: payload.url || "/dashboard/atendimento",
       trackingId: payload.trackingId || null,
     },
   };

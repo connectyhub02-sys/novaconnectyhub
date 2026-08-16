@@ -686,7 +686,7 @@ async function requestGpsPermission(): Promise<PermissionRequestResult> {
 
 function getPushResultMessage(result: PermissionRequestResult) {
   if (result === "granted") {
-    return "Pronto. Voce vai receber novidades e alertas importantes da ConnectyHub.";
+    return "Pronto. Voce vai receber alertas importantes quando leads responderem e quando houver novidades da ConnectyHub.";
   }
 
   if (result === "denied") {
@@ -755,13 +755,13 @@ function getActivePromptContent(step: PermissionStep, permission: PermissionSign
     return {
       Icon: Bell,
       stepLabel: "Passo 1 de 2",
-      title: wasBlocked ? "Libere as novidades da ConnectyHub" : "Receba novidades em primeira mao",
-      description: "Primeiro vamos ativar avisos importantes. Depois seguimos para a experiencia por regiao.",
-      eyebrow: "Novidades em primeira mao",
+      title: wasBlocked ? "Libere alertas de atendimento" : "Receba respostas dos leads",
+      description: "Primeiro vamos ativar notificacoes para avisar quando um lead responder. Depois seguimos para a experiencia por regiao.",
+      eyebrow: "Alertas de atendimento",
       body: wasBlocked
-        ? "Seu navegador bloqueou notificacoes. Clique para ver a orientacao e liberar quando quiser receber conteudos e alertas."
-        : "Seja avisado antes sobre tecnologia, automacao, IA e recursos novos da plataforma.",
-      cta: wasBlocked ? "Liberar notificacoes" : "Receber novidades",
+        ? "Seu navegador bloqueou notificacoes. Clique para ver a orientacao e liberar quando quiser receber alertas de conversa."
+        : "Receba um aviso no navegador quando um lead responder no WhatsApp, mesmo que voce esteja em outra aba.",
+      cta: wasBlocked ? "Liberar notificacoes" : "Ativar alertas",
       tip: wasBlocked
         ? "Dica: se o navegador nao abrir o aviso, clique no cadeado ao lado do endereco e libere notificacoes."
         : "Dica: depois de clicar, confirme em Permitir no aviso que aparece no topo do navegador.",

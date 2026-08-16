@@ -709,6 +709,8 @@ function AttendanceCenterView({
   const [handoffOverrides, setHandoffOverrides] = useState<Record<string, ClientLeadHumanIntervention>>({});
   const [manualMessages, setManualMessages] = useState<Record<string, ClientLeadMessage[]>>({});
   const [handoffTick, setHandoffTick] = useState(() => Date.now());
+  const notifiedLeadMessages = useRef(new Set<string>());
+  const notificationSeeded = useRef(false);
 
   const tabItems = useMemo(() => buildAttendanceTabs(filteredLeads, handoffOverrides), [filteredLeads, handoffOverrides]);
   const visibleLeads = useMemo(
@@ -747,6 +749,32 @@ function AttendanceCenterView({
 
     return () => window.clearInterval(interval);
   }, [activeConversationId, router]);
+
+  useEffect(() => {
+    const inboundMessages = filteredLeads.flatMap((lead) =>
+      lead.conversation.messages
+        .filter((message) => message.author === "lead" || message.direction === "inbound")
+        .map((message) => ({ lead, message })),
+    );
+
+    if (!notificationSeeded.current) {
+      for (const item of inboundMessages) {
+        notifiedLeadMessages.current.add(item.message.id);
+      }
+
+      notificationSeeded.current = true;
+      return;
+    }
+
+    for (const item of inboundMessages) {
+      if (notifiedLeadMessages.current.has(item.message.id)) {
+        continue;
+      }
+
+      notifiedLeadMessages.current.add(item.message.id);
+      showLeadBrowserNotification(item.lead, item.message);
+    }
+  }, [filteredLeads]);
 
   async function updateHumanHandoff(action: "pause" | "resume") {
     if (!activeConversationId) {
@@ -1427,6 +1455,33 @@ function toTimestamp(value: string | null | undefined) {
   if (!value) return 0;
   const timestamp = new Date(value).getTime();
   return Number.isNaN(timestamp) ? 0 : timestamp;
+}
+
+function showLeadBrowserNotification(lead: ClientLeadRecord, message: ClientLeadMessage) {
+  if (typeof window === "undefined" || typeof Notification === "undefined") {
+    return;
+  }
+
+  if (Notification.permission !== "granted" || document.visibilityState === "visible") {
+    return;
+  }
+
+  const notification = new Notification(`Nova resposta de ${lead.name}`, {
+    body: message.text ? previewNotificationText(message.text, 120) : "O lead enviou uma nova mensagem.",
+    icon: lead.avatarUrl ?? "/brand/connectyhub-app-icon-192.png",
+    tag: `connectyhub-lead-${lead.id}`,
+  });
+
+  notification.onclick = () => {
+    window.focus();
+    window.location.href = "/dashboard/atendimento";
+    notification.close();
+  };
+}
+
+function previewNotificationText(value: string, maxLength: number) {
+  const clean = redactInternalProviderNames(value).replace(/\s+/g, " ").trim();
+  return clean.length > maxLength ? `${clean.slice(0, maxLength - 3)}...` : clean;
 }
 
 function SocialApprovalQueue({
