@@ -1098,7 +1098,7 @@ function AttendanceCenterView({
           <main className={cn("min-h-0 bg-[#efeae2]", conversationPane === "inbox" && "hidden xl:block")}>
             {activeLead ? (
               <div className="flex h-full min-h-0 flex-col">
-                <div className="flex min-h-[70px] items-center justify-between gap-3 border-b bg-white px-4 py-3" style={{ borderColor: "var(--ch-border)" }}>
+                <div className="flex min-h-[70px] flex-col gap-3 border-b bg-white px-4 py-3 lg:flex-row lg:items-center lg:justify-between" style={{ borderColor: "var(--ch-border)" }}>
                   <div className="flex min-w-0 items-center gap-3">
                     <button
                       className="grid h-9 w-9 shrink-0 place-items-center rounded-full border text-slate-700 xl:hidden"
@@ -1114,7 +1114,12 @@ function AttendanceCenterView({
                       <p className="truncate text-[12px] text-slate-500">{activeLead.phone ?? activeLead.companyName}</p>
                     </div>
                   </div>
-                  <div className="flex shrink-0 items-center gap-2">
+                  <div className="flex min-w-0 flex-wrap items-center gap-2 lg:justify-end">
+                    <AttendanceHeaderNotices
+                      countdown={handoffCountdown}
+                      handoffNotice={handoffNotice}
+                      humanIntervention={activeHumanIntervention}
+                    />
                     <button
                       className="hidden h-9 items-center gap-2 rounded-full border px-3 text-[12px] font-semibold text-slate-700 transition hover:bg-slate-100 sm:inline-flex"
                       onClick={() => setDetailsLeadId(activeLead.id)}
@@ -1150,27 +1155,6 @@ function AttendanceCenterView({
                       onEnable={() => void enableAttendancePushNotifications()}
                       permission={pushPrompt.permission}
                     />
-                  ) : null}
-                  {handoffNotice ? (
-                    <div
-                      className={cn(
-                        "mb-2 rounded-xl border px-3 py-2 text-[12px]",
-                        handoffNotice.tone === "success"
-                          ? "border-emerald-500/25 bg-emerald-50 text-emerald-700"
-                          : "border-red-500/25 bg-red-50 text-red-700",
-                      )}
-                    >
-                      {handoffNotice.message}
-                    </div>
-                  ) : null}
-                  {activeHumanIntervention.active ? (
-                    <div className="mb-2 rounded-xl border border-emerald-500/25 bg-emerald-50 px-3 py-2 text-[12px] text-emerald-800">
-                      IA pausada por atendimento humano.
-                      {" "}
-                      {handoffCountdown ? `Retorno automatico em ${handoffCountdown}.` : "Retorno automatico sem prazo definido."}
-                      {" "}
-                      Se o lead ficar sem resposta humana, a IA pode assumir antes da pausa longa.
-                    </div>
                   ) : null}
                   <form className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]" onSubmit={handleManualReplySubmit}>
                     <label className="relative block">
@@ -1286,6 +1270,51 @@ function AttendanceCenterView({
           </aside>
         </div>
       </div>
+    </div>
+  );
+}
+
+function AttendanceHeaderNotices({
+  countdown,
+  handoffNotice,
+  humanIntervention,
+}: {
+  countdown: string | null;
+  handoffNotice: { tone: "success" | "error"; message: string } | null;
+  humanIntervention: ClientLeadHumanIntervention;
+}) {
+  if (!handoffNotice && !humanIntervention.active) {
+    return null;
+  }
+
+  return (
+    <div className="flex min-w-0 flex-wrap items-center gap-2">
+      {handoffNotice ? (
+        <span
+          className={cn(
+            "inline-flex max-w-[260px] items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-semibold",
+            handoffNotice.tone === "success"
+              ? "border-emerald-500/25 bg-emerald-50 text-emerald-700"
+              : "border-red-500/25 bg-red-50 text-red-700",
+          )}
+          title={handoffNotice.message}
+        >
+          <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", handoffNotice.tone === "success" ? "bg-emerald-500" : "bg-red-500")} />
+          <span className="truncate">{handoffNotice.message}</span>
+        </span>
+      ) : null}
+      {humanIntervention.active ? (
+        <span
+          className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/25 bg-emerald-50 px-3 py-1.5 text-[11px] font-semibold text-emerald-800"
+          title="IA pausada por atendimento humano. A IA pode assumir antes se o lead ficar sem resposta."
+        >
+          <PauseCircle className="h-3.5 w-3.5" />
+          IA pausada
+          <span className="font-mono text-[10px] text-emerald-700">
+            {countdown ?? "sem prazo"}
+          </span>
+        </span>
+      ) : null}
     </div>
   );
 }
