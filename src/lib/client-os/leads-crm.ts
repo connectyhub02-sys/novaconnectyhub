@@ -137,9 +137,18 @@ export type ClientLeadConversationFile = {
   preview: string | null;
   messageCount: number;
   messages: ClientLeadMessage[];
+  humanIntervention: ClientLeadHumanIntervention;
   createdAt: string | null;
   updatedAt: string | null;
   lastMessageAt: string | null;
+};
+
+export type ClientLeadHumanIntervention = {
+  active: boolean;
+  pausedUntil: string | null;
+  reason: string | null;
+  source: string | null;
+  updatedAt: string | null;
 };
 
 export type ClientLeadRecord = {
@@ -194,6 +203,7 @@ export type ClientLeadRecord = {
     preview: string | null;
     messageCount: number;
     messages: ClientLeadMessage[];
+    humanIntervention: ClientLeadHumanIntervention;
   };
   leadFile: {
     conversationCount: number;
@@ -664,6 +674,7 @@ function mapLeadRecord(input: {
     ? conversationFiles.find((conversation) => conversation.id === activeConversation.id) ?? null
     : conversationFiles[0] ?? null;
   const messages = activeConversationFile?.messages ?? [];
+  const humanIntervention = activeConversationFile?.humanIntervention ?? emptyHumanIntervention();
   const activities = buildActivities(input.lead, input.conversations, input.events);
   const trackingEvents = activities.filter(isTrackingActivity);
   const intelligenceEvents = activities.filter((activity) => !isTrackingActivity(activity));
@@ -710,6 +721,7 @@ function mapLeadRecord(input: {
       preview: activeConversationFile?.preview ?? null,
       messageCount: messages.length,
       messages,
+      humanIntervention,
     },
     leadFile: {
       conversationCount: conversationFiles.length,
@@ -820,6 +832,7 @@ function buildConversationFiles(
   return conversations
     .map((conversation) => {
       const messages = (messagesByConversation.get(conversation.id) ?? []).map(mapMessage);
+      const humanIntervention = readConversationHumanIntervention(conversation.metadata);
 
       return {
         id: conversation.id,
@@ -830,12 +843,39 @@ function buildConversationFiles(
         preview: conversation.last_message_preview,
         messageCount: messages.length,
         messages,
+        humanIntervention,
         createdAt: conversation.created_at,
         updatedAt: conversation.updated_at,
         lastMessageAt: conversation.last_message_at ?? conversation.updated_at,
       };
     })
     .sort((a, b) => compareDateDesc(a.lastMessageAt ?? a.updatedAt, b.lastMessageAt ?? b.updatedAt));
+}
+
+function emptyHumanIntervention(): ClientLeadHumanIntervention {
+  return {
+    active: false,
+    pausedUntil: null,
+    reason: null,
+    source: null,
+    updatedAt: null,
+  };
+}
+
+function readConversationHumanIntervention(metadata: JsonRecord | null): ClientLeadHumanIntervention {
+  const human = readRecord(metadata?.human_intervention);
+  const pausedUntil = readString(human?.paused_until);
+  const pausedDate = pausedUntil ? new Date(pausedUntil) : null;
+  const pauseIsFuture = pausedDate !== null && !Number.isNaN(pausedDate.getTime()) && pausedDate.getTime() > Date.now();
+  const active = human?.active === true && (!pausedUntil || pauseIsFuture);
+
+  return {
+    active,
+    pausedUntil,
+    reason: readString(human?.reason),
+    source: readString(human?.source),
+    updatedAt: readString(human?.updated_at),
+  };
 }
 
 function buildActivities(

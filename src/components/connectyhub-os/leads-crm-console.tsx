@@ -12,20 +12,25 @@ import {
   ChevronDown,
   ChevronUp,
   Clock,
+  Bot,
   ExternalLink,
   Filter,
+  FileText,
   Globe2,
   Laptop,
   Loader2,
   Mail,
   MapPin,
   MessageCircle,
+  PauseCircle,
   Phone,
+  PlayCircle,
   RotateCcw,
   Search,
   Send,
   ShieldCheck,
   Target,
+  UserRound,
   X,
   XCircle,
 } from "lucide-react";
@@ -41,12 +46,16 @@ import type {
   ClientLeadActivity,
   ClientLeadConversationFile,
   ClientLeadCrmWorkspace,
+  ClientLeadHumanIntervention,
   ClientLeadMessage,
   ClientLeadRecord,
   ClientLeadStatus,
 } from "@/lib/client-os/leads-crm";
 
-type ConsoleMode = "leads" | "crm" | "conversas";
+type ConsoleMode = "leads" | "crm" | "conversas" | "atendimento";
+
+type AttendanceInboxTab = "all" | "unread" | "active" | "paused" | "qualified" | "won" | "archived";
+type AttendanceSideTab = "lead" | "crm" | "agent" | "history";
 
 type LeadCrmConsoleProps = {
   mode: ConsoleMode;
@@ -175,7 +184,7 @@ export function LeadCrmConsole({
       <PageHeader eyebrow={header.eyebrow} title={header.title} description={header.description} />
       {warnings.length ? <LeadWorkspaceWarning warnings={warnings} /> : null}
 
-      {mode !== "conversas" ? <LeadStats workspace={workspace} /> : null}
+      {mode !== "conversas" && mode !== "atendimento" ? <LeadStats workspace={workspace} /> : null}
 
       {mode === "leads" ? (
         <LeadsView
@@ -219,6 +228,21 @@ export function LeadCrmConsole({
           socialDispatchMonitor={socialDispatchMonitor}
           status={status}
           totalLeads={workspace.leads.length}
+        />
+      ) : null}
+
+      {mode === "atendimento" ? (
+        <AttendanceCenterView
+          conversationPane={conversationPane}
+          filteredLeads={filteredLeads}
+          search={search}
+          selectedLead={selectedLead}
+          selectedLeadId={selectedLead?.id ?? null}
+          setConversationPane={setConversationPane}
+          setDetailsLeadId={setDetailsLeadId}
+          setSearch={setSearch}
+          setSelectedLeadId={setSelectedLeadId}
+          workspace={workspace}
         />
       ) : null}
 
@@ -647,6 +671,583 @@ function ConversationsView({
       </div>
     </div>
   );
+}
+
+function AttendanceCenterView({
+  conversationPane,
+  filteredLeads,
+  search,
+  selectedLead,
+  selectedLeadId,
+  setConversationPane,
+  setDetailsLeadId,
+  setSearch,
+  setSelectedLeadId,
+  workspace,
+}: {
+  conversationPane: "inbox" | "chat";
+  filteredLeads: ClientLeadRecord[];
+  search: string;
+  selectedLead: ClientLeadRecord | null;
+  selectedLeadId: string | null;
+  setConversationPane: (pane: "inbox" | "chat") => void;
+  setDetailsLeadId: (id: string) => void;
+  setSearch: (value: string) => void;
+  setSelectedLeadId: (id: string) => void;
+  workspace: ClientLeadCrmWorkspace;
+}) {
+  const [inboxTab, setInboxTab] = useState<AttendanceInboxTab>("all");
+  const [sideTab, setSideTab] = useState<AttendanceSideTab>("lead");
+  const [manualReply, setManualReply] = useState("");
+  const [handoffBusy, setHandoffBusy] = useState(false);
+  const [handoffNotice, setHandoffNotice] = useState<{ tone: "success" | "error"; message: string } | null>(null);
+  const [handoffOverrides, setHandoffOverrides] = useState<Record<string, ClientLeadHumanIntervention>>({});
+
+  const tabItems = useMemo(() => buildAttendanceTabs(filteredLeads, handoffOverrides), [filteredLeads, handoffOverrides]);
+  const visibleLeads = useMemo(
+    () => filteredLeads.filter((lead) => matchesAttendanceTab(lead, inboxTab, handoffOverrides)),
+    [filteredLeads, handoffOverrides, inboxTab],
+  );
+  const activeLead = visibleLeads.find((lead) => lead.id === selectedLeadId)
+    ?? selectedLead
+    ?? visibleLeads[0]
+    ?? filteredLeads[0]
+    ?? null;
+  const activeHumanIntervention = activeLead ? getLeadHumanIntervention(activeLead, handoffOverrides) : emptyClientHumanIntervention();
+  const activeConversationId = activeLead?.conversation.id ?? null;
+  const normalizedPhone = activeLead?.phone?.replace(/\D/g, "") ?? "";
+  const manualReplyUrl = normalizedPhone
+    ? `https://wa.me/${normalizedPhone}${manualReply.trim() ? `?text=${encodeURIComponent(manualReply.trim())}` : ""}`
+    : "#";
+
+  async function updateHumanHandoff(action: "pause" | "resume") {
+    if (!activeConversationId) {
+      setHandoffNotice({ tone: "error", message: "Esta conversa ainda nao tem ID vinculado para pausar a IA." });
+      return;
+    }
+
+    setHandoffBusy(true);
+    setHandoffNotice(null);
+
+    try {
+      const response = await fetch("/api/dashboard/conversations/handoff", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action,
+          conversationId: activeConversationId,
+          minutes: 60,
+        }),
+      });
+      const payload = await response.json().catch(() => ({})) as {
+        error?: string;
+        humanIntervention?: ClientLeadHumanIntervention;
+      };
+
+      if (!response.ok || !payload.humanIntervention) {
+        throw new Error(payload.error ?? "Nao foi possivel atualizar a intervencao humana.");
+      }
+
+      setHandoffOverrides((current) => ({
+        ...current,
+        [activeConversationId]: payload.humanIntervention!,
+      }));
+      setHandoffNotice({
+        tone: "success",
+        message: action === "pause" ? "IA pausada para atendimento humano." : "IA retomada para esta conversa.",
+      });
+    } catch (error) {
+      setHandoffNotice({
+        tone: "error",
+        message: error instanceof Error ? error.message : "Erro inesperado ao atualizar atendimento.",
+      });
+    } finally {
+      setHandoffBusy(false);
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        <KpiStat label="Conversas" value={String(workspace.stats.total)} tone="cyan" />
+        <KpiStat label="Em atendimento" value={String(workspace.stats.active)} tone="amber" />
+        <KpiStat label="Qualificados" value={String(workspace.stats.qualified)} tone="green" />
+        <KpiStat label="Ganhos" value={String(workspace.stats.converted)} tone="green" />
+      </div>
+
+      <div
+        className="overflow-hidden rounded-[22px] border shadow-[0_24px_70px_rgba(17,17,17,0.08)]"
+        style={{ borderColor: "var(--ch-border-strong)", background: "rgba(255,255,255,0.94)" }}
+      >
+        <div className="grid min-h-[760px] xl:grid-cols-[380px_minmax(0,1fr)_360px]">
+          <aside
+            className={cn(
+              "min-h-0 border-b bg-white xl:border-b-0 xl:border-r",
+              conversationPane === "chat" && "hidden xl:block",
+            )}
+            style={{ borderColor: "var(--ch-border)" }}
+          >
+            <div className="border-b px-4 py-4" style={{ borderColor: "var(--ch-border)" }}>
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">Central WhatsApp</p>
+                  <h2 className="mt-1 text-[20px] font-bold text-slate-950">Atendimento</h2>
+                </div>
+                <Link
+                  className="grid h-10 w-10 place-items-center rounded-xl border text-slate-700 transition hover:bg-slate-100"
+                  href="/dashboard/whatsapp"
+                  style={{ borderColor: "var(--ch-border)" }}
+                  title="Configurar agentes"
+                >
+                  <Bot className="h-4 w-4" />
+                </Link>
+              </div>
+
+              <label className="relative mt-4 block">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                <input
+                  className="h-11 w-full rounded-full border bg-slate-100/80 pl-10 pr-3 text-[13px] text-slate-950 outline-none transition placeholder:text-slate-500 focus:border-red-500/45 focus:bg-white"
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Pesquisar ou comecar atendimento"
+                  style={{ borderColor: "var(--ch-border)" }}
+                  type="search"
+                  value={search}
+                />
+              </label>
+
+              <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+                {tabItems.map((item) => (
+                  <button
+                    key={item.value}
+                    className={cn(
+                      "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-3 text-[12px] font-semibold transition",
+                      inboxTab === item.value
+                        ? "border-red-500 bg-red-600 text-white shadow-[0_10px_22px_rgba(229,9,20,0.18)]"
+                        : "border-slate-200 bg-white text-slate-700 hover:border-red-300 hover:text-red-600",
+                    )}
+                    onClick={() => setInboxTab(item.value)}
+                    type="button"
+                  >
+                    {item.label}
+                    <span className={cn("font-mono text-[10px]", inboxTab === item.value ? "text-white/80" : "text-slate-400")}>{item.count}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="h-[640px] overflow-y-auto">
+              {visibleLeads.map((lead) => {
+                const latestMessage = getLatestLeadMessage(lead);
+                const humanIntervention = getLeadHumanIntervention(lead, handoffOverrides);
+                const selected = activeLead?.id === lead.id;
+
+                return (
+                  <button
+                    key={lead.id}
+                    className={cn(
+                      "grid w-full grid-cols-[48px_minmax(0,1fr)] gap-3 border-b px-4 py-3 text-left transition",
+                      selected ? "bg-red-50" : "bg-white hover:bg-slate-50",
+                    )}
+                    onClick={() => {
+                      setSelectedLeadId(lead.id);
+                      setConversationPane("chat");
+                    }}
+                    style={{ borderColor: "var(--ch-border)" }}
+                    type="button"
+                  >
+                    <LeadAvatar lead={lead} />
+                    <div className="min-w-0">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="truncate text-[14px] font-semibold text-slate-950">{lead.name}</p>
+                        <span className="shrink-0 text-[11px] text-slate-500">{formatTime(lead.lastMessageAt ?? lead.updatedAt)}</span>
+                      </div>
+                      <p className="mt-1 truncate text-[12px] text-slate-600">
+                        {latestMessage ? `${formatMessageAuthorShort(latestMessage)}: ${latestMessage.text}` : lead.conversation.preview ?? lead.summary}
+                      </p>
+                      <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5">
+                        <StatusPill status={lead.status} />
+                        {humanIntervention.active ? <NeonBadge tone="amber">IA pausada</NeonBadge> : null}
+                        {hasUnreadSignal(lead) ? <NeonBadge tone="cyan">lead respondeu</NeonBadge> : null}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+              {!visibleLeads.length ? (
+                <div className="p-4">
+                  <EmptyState title="Nada neste filtro" detail="Troque o filtro ou aguarde novas mensagens chegarem pelo WhatsApp." />
+                </div>
+              ) : null}
+            </div>
+          </aside>
+
+          <main className={cn("min-h-0 bg-[#efeae2]", conversationPane === "inbox" && "hidden xl:block")}>
+            {activeLead ? (
+              <div className="flex h-full min-h-[760px] flex-col">
+                <div className="flex min-h-[70px] items-center justify-between gap-3 border-b bg-white px-4 py-3" style={{ borderColor: "var(--ch-border)" }}>
+                  <div className="flex min-w-0 items-center gap-3">
+                    <button
+                      className="grid h-9 w-9 shrink-0 place-items-center rounded-full border text-slate-700 xl:hidden"
+                      onClick={() => setConversationPane("inbox")}
+                      style={{ borderColor: "var(--ch-border)" }}
+                      type="button"
+                    >
+                      <ChevronDown className="h-4 w-4 rotate-90" />
+                    </button>
+                    <LeadAvatar lead={activeLead} />
+                    <div className="min-w-0">
+                      <p className="truncate text-[15px] font-semibold text-slate-950">{activeLead.name}</p>
+                      <p className="truncate text-[12px] text-slate-500">{activeLead.phone ?? activeLead.companyName}</p>
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <button
+                      className="hidden h-9 items-center gap-2 rounded-full border px-3 text-[12px] font-semibold text-slate-700 transition hover:bg-slate-100 sm:inline-flex"
+                      onClick={() => setDetailsLeadId(activeLead.id)}
+                      style={{ borderColor: "var(--ch-border)" }}
+                      type="button"
+                    >
+                      <FileText className="h-4 w-4" />
+                      Arquivo
+                    </button>
+                    <a
+                      className={cn(
+                        "inline-flex h-9 items-center gap-2 rounded-full px-3 text-[12px] font-semibold transition",
+                        normalizedPhone ? "bg-emerald-600 text-white hover:bg-emerald-700" : "pointer-events-none bg-slate-200 text-slate-500",
+                      )}
+                      href={normalizedPhone ? `https://wa.me/${normalizedPhone}` : "#"}
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      <Phone className="h-4 w-4" />
+                      WhatsApp
+                    </a>
+                  </div>
+                </div>
+
+                <div
+                  className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-6"
+                  style={{
+                    backgroundColor: "#efeae2",
+                    backgroundImage:
+                      "radial-gradient(circle at 16px 16px, rgba(17,17,17,0.045) 1px, transparent 1.5px), radial-gradient(circle at 5px 6px, rgba(229,9,20,0.035) 1px, transparent 1.5px)",
+                    backgroundPosition: "0 0, 18px 18px",
+                    backgroundSize: "36px 36px",
+                  }}
+                >
+                  <ChatMessages messages={activeLead.conversation.messages} />
+                </div>
+
+                <div className="border-t bg-white p-3" style={{ borderColor: "var(--ch-border)" }}>
+                  {handoffNotice ? (
+                    <div
+                      className={cn(
+                        "mb-2 rounded-xl border px-3 py-2 text-[12px]",
+                        handoffNotice.tone === "success"
+                          ? "border-emerald-500/25 bg-emerald-50 text-emerald-700"
+                          : "border-red-500/25 bg-red-50 text-red-700",
+                      )}
+                    >
+                      {handoffNotice.message}
+                    </div>
+                  ) : null}
+                  <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                    <label className="relative block">
+                      <textarea
+                        className="min-h-11 w-full resize-none rounded-2xl border bg-slate-100/80 px-4 py-3 text-[13px] text-slate-950 outline-none transition placeholder:text-slate-500 focus:border-red-500/45 focus:bg-white"
+                        onChange={(event) => setManualReply(event.target.value)}
+                        placeholder="Digite uma resposta manual para abrir no WhatsApp..."
+                        style={{ borderColor: "var(--ch-border)" }}
+                        value={manualReply}
+                      />
+                    </label>
+                    <div className="grid gap-2 sm:w-[190px]">
+                      <button
+                        className={cn(
+                          "inline-flex h-11 items-center justify-center gap-2 rounded-2xl px-3 text-[12px] font-bold transition",
+                          activeHumanIntervention.active
+                            ? "border border-slate-200 bg-white text-slate-800 hover:bg-slate-100"
+                            : "bg-red-600 text-white hover:bg-red-700",
+                        )}
+                        disabled={handoffBusy}
+                        onClick={() => void updateHumanHandoff(activeHumanIntervention.active ? "resume" : "pause")}
+                        type="button"
+                      >
+                        {handoffBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : activeHumanIntervention.active ? <PlayCircle className="h-4 w-4" /> : <PauseCircle className="h-4 w-4" />}
+                        {activeHumanIntervention.active ? "Retomar IA" : "Assumir"}
+                      </button>
+                      <a
+                        className={cn(
+                          "inline-flex h-11 items-center justify-center gap-2 rounded-2xl px-3 text-[12px] font-bold transition",
+                          normalizedPhone ? "bg-slate-950 text-white hover:bg-slate-800" : "pointer-events-none bg-slate-200 text-slate-500",
+                        )}
+                        href={manualReplyUrl}
+                        rel="noreferrer"
+                        target="_blank"
+                      >
+                        <Send className="h-4 w-4" />
+                        Responder
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="grid h-full min-h-[760px] place-items-center p-6">
+                <EmptyState title="Sem conversa selecionada" detail="Escolha um lead na inbox para acompanhar o atendimento ao vivo." />
+              </div>
+            )}
+          </main>
+
+          <aside className="hidden min-h-0 border-l bg-white xl:block" style={{ borderColor: "var(--ch-border)" }}>
+            {activeLead ? (
+              <div className="flex h-full min-h-[760px] flex-col">
+                <div className="border-b px-4 py-4" style={{ borderColor: "var(--ch-border)" }}>
+                  <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">Controle do lead</p>
+                  <h3 className="mt-1 truncate text-[18px] font-bold text-slate-950">{activeLead.name}</h3>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <InfoMini label="Score" value={`${activeLead.score}/100`} />
+                    <InfoMini label="Status" value={statusMeta[activeLead.status].label} />
+                  </div>
+                </div>
+
+                <div className="border-b p-3" style={{ borderColor: "var(--ch-border)" }}>
+                  <div className="grid grid-cols-4 gap-1 rounded-2xl bg-slate-100 p-1">
+                    {[
+                      { value: "lead" as const, label: "Lead", icon: UserRound },
+                      { value: "crm" as const, label: "CRM", icon: Target },
+                      { value: "agent" as const, label: "Agente", icon: Bot },
+                      { value: "history" as const, label: "Hist.", icon: Clock },
+                    ].map((item) => {
+                      const Icon = item.icon;
+
+                      return (
+                        <button
+                          key={item.value}
+                          className={cn(
+                            "inline-flex h-9 items-center justify-center gap-1 rounded-xl text-[11px] font-semibold transition",
+                            sideTab === item.value ? "bg-white text-red-600 shadow-sm" : "text-slate-600 hover:text-slate-950",
+                          )}
+                          onClick={() => setSideTab(item.value)}
+                          type="button"
+                        >
+                          <Icon className="h-3.5 w-3.5" />
+                          {item.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="min-h-0 flex-1 overflow-y-auto p-4">
+                  {sideTab === "lead" ? <AttendanceLeadPanel lead={activeLead} onDetails={() => setDetailsLeadId(activeLead.id)} /> : null}
+                  {sideTab === "crm" ? <AttendanceCrmPanel lead={activeLead} /> : null}
+                  {sideTab === "agent" ? (
+                    <AttendanceAgentPanel
+                      busy={handoffBusy}
+                      humanIntervention={activeHumanIntervention}
+                      lead={activeLead}
+                      onToggle={() => void updateHumanHandoff(activeHumanIntervention.active ? "resume" : "pause")}
+                    />
+                  ) : null}
+                  {sideTab === "history" ? <AttendanceHistoryPanel lead={activeLead} /> : null}
+                </div>
+              </div>
+            ) : (
+              <div className="grid h-full min-h-[760px] place-items-center p-4">
+                <EmptyState title="Sem lead" detail="Selecione uma conversa para ver detalhes." />
+              </div>
+            )}
+          </aside>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AttendanceLeadPanel({ lead, onDetails }: { lead: ClientLeadRecord; onDetails: () => void }) {
+  return (
+    <div className="space-y-3">
+      <InfoPanel title="Resumo inteligente" text={lead.summary} />
+      <div className="rounded-2xl border bg-white p-4" style={{ borderColor: "var(--ch-border)" }}>
+        <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Contato</p>
+        <div className="mt-3 space-y-2">
+          <InfoMini label="Telefone" value={lead.phone ?? "Nao informado"} />
+          <InfoMini label="Email" value={lead.email ?? "Nao informado"} />
+          <InfoMini label="Origem" value={lead.source} />
+          <InfoMini label="Empresa" value={lead.companyName} />
+        </div>
+      </div>
+      <OpenWhatsAppButton phone={lead.phone} />
+      <button
+        className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-red-600 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-white transition hover:bg-red-700"
+        onClick={onDetails}
+        type="button"
+      >
+        Abrir arquivo completo
+        <ExternalLink className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  );
+}
+
+function AttendanceCrmPanel({ lead }: { lead: ClientLeadRecord }) {
+  return (
+    <div className="space-y-3">
+      <LeadQualificationSnapshot lead={lead} />
+      <div className="rounded-2xl border bg-white p-4" style={{ borderColor: "var(--ch-border)" }}>
+        <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Proxima acao</p>
+        <p className="mt-3 text-[13px] font-semibold leading-5 text-slate-950">
+          {lead.qualification.nextBestAction ?? "Continuar qualificando o lead."}
+        </p>
+        {lead.qualification.nextBestQuestion ? (
+          <p className="mt-3 rounded-xl border border-red-500/20 bg-red-50 p-3 text-[12px] leading-5 text-red-700">
+            {lead.qualification.nextBestQuestion}
+          </p>
+        ) : null}
+      </div>
+      <QualificationGrid lead={lead} />
+    </div>
+  );
+}
+
+function AttendanceAgentPanel({
+  busy,
+  humanIntervention,
+  lead,
+  onToggle,
+}: {
+  busy: boolean;
+  humanIntervention: ClientLeadHumanIntervention;
+  lead: ClientLeadRecord;
+  onToggle: () => void;
+}) {
+  return (
+    <div className="space-y-3">
+      <div className="rounded-2xl border bg-white p-4" style={{ borderColor: "var(--ch-border)" }}>
+        <div className="flex items-start gap-3">
+          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-slate-950 text-white">
+            <Bot className="h-5 w-5" />
+          </span>
+          <div className="min-w-0">
+            <p className="truncate text-[14px] font-bold text-slate-950">{lead.agentName ?? "Agente nao definido"}</p>
+            <p className="mt-1 text-[12px] leading-5 text-slate-600">
+              {humanIntervention.active ? "IA pausada para atendimento humano." : "IA apta a responder quando novas mensagens chegarem."}
+            </p>
+          </div>
+        </div>
+        <div className="mt-4 grid gap-2">
+          <InfoMini label="Estado" value={humanIntervention.active ? "Intervencao humana" : "Automacao ativa"} />
+          <InfoMini label="Pausada ate" value={formatDateTime(humanIntervention.pausedUntil)} />
+          <InfoMini label="Motivo" value={formatHumanInterventionReason(humanIntervention.reason)} />
+        </div>
+        <button
+          className={cn(
+            "mt-4 inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl px-3 font-mono text-[10px] font-bold uppercase tracking-wide transition",
+            humanIntervention.active ? "border border-slate-200 bg-white text-slate-900 hover:bg-slate-100" : "bg-red-600 text-white hover:bg-red-700",
+          )}
+          disabled={busy || !lead.conversation.id}
+          onClick={onToggle}
+          type="button"
+        >
+          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : humanIntervention.active ? <PlayCircle className="h-4 w-4" /> : <PauseCircle className="h-4 w-4" />}
+          {humanIntervention.active ? "Retomar agente" : "Pausar e assumir"}
+        </button>
+      </div>
+
+      <Link
+        className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-800 transition hover:bg-slate-100"
+        href="/dashboard/whatsapp"
+        style={{ borderColor: "var(--ch-border)" }}
+      >
+        Configurar agente
+        <ExternalLink className="h-3.5 w-3.5" />
+      </Link>
+    </div>
+  );
+}
+
+function AttendanceHistoryPanel({ lead }: { lead: ClientLeadRecord }) {
+  return (
+    <div className="space-y-3">
+      <LeadFileSnapshot lead={lead} />
+      <ActivityTimeline activities={lead.activities} />
+    </div>
+  );
+}
+
+function buildAttendanceTabs(
+  leads: ClientLeadRecord[],
+  overrides: Record<string, ClientLeadHumanIntervention>,
+): Array<{ value: AttendanceInboxTab; label: string; count: number }> {
+  return [
+    { value: "all", label: "Tudo", count: leads.length },
+    { value: "unread", label: "Nao lidas", count: leads.filter(hasUnreadSignal).length },
+    { value: "active", label: "Em atendimento", count: leads.filter((lead) => lead.status === "active").length },
+    { value: "paused", label: "IA pausada", count: leads.filter((lead) => getLeadHumanIntervention(lead, overrides).active).length },
+    { value: "qualified", label: "Qualificados", count: leads.filter((lead) => lead.status === "qualified" || lead.score >= 70).length },
+    { value: "won", label: "Ganhos", count: leads.filter((lead) => lead.status === "won").length },
+    { value: "archived", label: "Arquivados", count: leads.filter((lead) => lead.status === "archived").length },
+  ];
+}
+
+function matchesAttendanceTab(
+  lead: ClientLeadRecord,
+  tab: AttendanceInboxTab,
+  overrides: Record<string, ClientLeadHumanIntervention>,
+) {
+  if (tab === "all") return true;
+  if (tab === "unread") return hasUnreadSignal(lead);
+  if (tab === "active") return lead.status === "active";
+  if (tab === "paused") return getLeadHumanIntervention(lead, overrides).active;
+  if (tab === "qualified") return lead.status === "qualified" || lead.score >= 70;
+  if (tab === "won") return lead.status === "won";
+  if (tab === "archived") return lead.status === "archived";
+  return true;
+}
+
+function getLatestLeadMessage(lead: ClientLeadRecord) {
+  return lead.conversation.messages.at(-1) ?? null;
+}
+
+function hasUnreadSignal(lead: ClientLeadRecord) {
+  const latest = getLatestLeadMessage(lead);
+  return lead.status === "new" || latest?.author === "lead" || latest?.direction === "inbound";
+}
+
+function getLeadHumanIntervention(
+  lead: ClientLeadRecord,
+  overrides: Record<string, ClientLeadHumanIntervention>,
+) {
+  const conversationId = lead.conversation.id;
+  return conversationId && overrides[conversationId]
+    ? overrides[conversationId]
+    : lead.conversation.humanIntervention;
+}
+
+function emptyClientHumanIntervention(): ClientLeadHumanIntervention {
+  return {
+    active: false,
+    pausedUntil: null,
+    reason: null,
+    source: null,
+    updatedAt: null,
+  };
+}
+
+function formatMessageAuthorShort(message: ClientLeadMessage) {
+  if (message.author === "lead") return "Lead";
+  if (message.author === "ai") return "IA";
+  if (message.author === "human") return "Voce";
+  return "Sistema";
+}
+
+function formatHumanInterventionReason(value: string | null) {
+  if (value === "manual_dashboard_handoff") return "Assumido no painel";
+  if (value === "manual_dashboard_resume") return "Retomado no painel";
+  if (value === "human_outbound_from_connected_whatsapp") return "Humano respondeu no WhatsApp";
+  if (value === "human_handoff_requested") return "Lead pediu humano";
+  return value ?? "Sem motivo";
 }
 
 function SocialApprovalQueue({
@@ -1712,6 +2313,14 @@ function EmptyState({ title, detail }: { title: string; detail: string }) {
 }
 
 function getHeaderCopy(mode: ConsoleMode) {
+  if (mode === "atendimento") {
+    return {
+      eyebrow: "WhatsApp / Leads / CRM",
+      title: "Central de Atendimento",
+      description: "Acompanhe conversas ao vivo, assuma atendimentos e controle o CRM do lead em uma unica tela.",
+    };
+  }
+
   if (mode === "conversas") {
     return {
       eyebrow: "Atendimento / Multicanal",

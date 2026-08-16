@@ -28,7 +28,6 @@ import {
   Menu,
   Megaphone,
   MessageCircle,
-  MessageSquare,
   PlugZap,
   Search,
   ShieldCheck,
@@ -37,7 +36,6 @@ import {
   UserCheck,
   Users,
   Wand2,
-  Workflow,
   Wrench,
   X,
   Zap,
@@ -219,10 +217,7 @@ const clientSections: NavSection[] = [
     items: [
       { label: "Dashboard",    href: "/dashboard",                icon: BarChart3, tone: "blue" },
       { label: "Minha Empresa",href: "/dashboard/empresa",        icon: Building2, tone: "sky" },
-      { label: "Leads",        href: "/dashboard/leads",          icon: UserCheck, tone: "emerald" },
-      { label: "Conversas",    href: "/dashboard/conversas",      icon: MessageSquare, tone: "teal" },
-      { label: "Agentes",      href: "/dashboard/whatsapp",       icon: Bot, tone: "violet" },
-      { label: "CRM / Funil",  href: "/dashboard/crm",            icon: Workflow, tone: "amber" },
+      { label: "Atendimento",  href: "/dashboard/atendimento",    icon: MessageCircle, tone: "red" },
     ],
   },
   {
@@ -2746,7 +2741,7 @@ function MobileDockLink({
 function getMobileDockItems(sections: NavSection[], mode: "admin" | "client") {
   const dockHrefs = mode === "admin"
     ? ["/admin", "/admin/whatsapp/atendimento", "/admin/clientes", "/admin/leads"]
-    : ["/dashboard", "/dashboard/conversas", "/dashboard/whatsapp", "/dashboard/links"];
+    : ["/dashboard", "/dashboard/atendimento", "/dashboard/links", "/dashboard/minha-conta"];
   const items = sections.flatMap((section) => section.items);
 
   return dockHrefs
@@ -2765,9 +2760,10 @@ function dockLabel(item: NavItem, mode: "admin" | "client") {
     if (item.href === "/admin/leads") return "Leads";
   }
 
-  if (item.href === "/dashboard/conversas") return "Conversas";
+  if (item.href === "/dashboard/atendimento") return "Atender";
   if (item.href === "/dashboard/whatsapp") return "Agentes";
   if (item.href === "/dashboard/links") return "Vendas";
+  if (item.href === "/dashboard/minha-conta") return "Conta";
 
   return item.label;
 }
