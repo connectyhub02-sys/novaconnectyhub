@@ -745,7 +745,9 @@ function AttendanceCenterView({
   const [inboxTab, setInboxTab] = useState<AttendanceInboxTab>("all");
   const [manualReply, setManualReply] = useState("");
   const [leadCarts, setLeadCarts] = useState<Record<string, AttendanceCartItem[]>>({});
+  const [deletedCatalogItemIds, setDeletedCatalogItemIds] = useState<Set<string>>(() => new Set());
   const [cartCheckoutBusy, setCartCheckoutBusy] = useState(false);
+  const [catalogDeleteBusyId, setCatalogDeleteBusyId] = useState<string | null>(null);
   const [handoffBusy, setHandoffBusy] = useState(false);
   const [replyBusy, setReplyBusy] = useState(false);
   const [handoffNotice, setHandoffNotice] = useState<{ tone: "success" | "error"; message: string } | null>(null);
@@ -784,9 +786,13 @@ function AttendanceCenterView({
   const activeCartKey = activeConversationId ?? activeLead?.id ?? null;
   const activeCartItems = activeCartKey ? leadCarts[activeCartKey] ?? [] : [];
   const activeCartTotalCents = activeCartItems.reduce((total, item) => total + (item.unitPriceCents * item.quantity), 0);
+  const visibleCatalogItems = useMemo(
+    () => salesCatalogItems.filter((item) => !deletedCatalogItemIds.has(item.id)),
+    [deletedCatalogItemIds, salesCatalogItems],
+  );
   const activeCatalogProducts = useMemo(
-    () => buildAttendanceCatalogProducts(salesCatalogItems, activeLead?.companyId ?? null),
-    [activeLead?.companyId, salesCatalogItems],
+    () => buildAttendanceCatalogProducts(visibleCatalogItems, activeLead?.companyId ?? null),
+    [activeLead?.companyId, visibleCatalogItems],
   );
 
   function updateActiveCart(updater: (items: AttendanceCartItem[]) => AttendanceCartItem[]) {
@@ -855,6 +861,63 @@ function AttendanceCenterView({
 
   function clearActiveCart() {
     updateActiveCart(() => []);
+  }
+
+  async function deleteQuickCatalogProduct(product: AttendanceQuickProduct) {
+    if (catalogDeleteBusyId) {
+      return;
+    }
+
+    setCatalogDeleteBusyId(product.id);
+    setHandoffNotice(null);
+
+    try {
+      const response = await fetch("/api/dashboard/sales-catalog", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyId: product.companyId,
+          itemId: product.id,
+        }),
+      });
+      const payload = await response.json().catch(() => ({})) as { error?: string };
+
+      if (!response.ok) {
+        throw new Error(payload.error ?? "Nao foi possivel excluir o produto.");
+      }
+
+      setDeletedCatalogItemIds((current) => {
+        const next = new Set(current);
+        next.add(product.id);
+        return next;
+      });
+      setLeadCarts((current) => {
+        let changed = false;
+        const next: Record<string, AttendanceCartItem[]> = {};
+
+        for (const [key, items] of Object.entries(current)) {
+          const filteredItems = items.filter((item) => !(item.source === "catalog" && item.id === product.id));
+          if (filteredItems.length !== items.length) {
+            changed = true;
+          }
+          next[key] = filteredItems;
+        }
+
+        return changed ? next : current;
+      });
+      setHandoffNotice({
+        tone: "success",
+        message: "Produto removido do catalogo e das sacolas abertas.",
+      });
+      router.refresh();
+    } catch (error) {
+      setHandoffNotice({
+        tone: "error",
+        message: error instanceof Error ? error.message : "Erro inesperado ao excluir produto.",
+      });
+    } finally {
+      setCatalogDeleteBusyId(null);
+    }
   }
 
   function useCartSummaryInReply() {
@@ -1398,9 +1461,11 @@ function AttendanceCenterView({
                 onAddQuickItem={addQuickCartItem}
                 onClearCart={clearActiveCart}
                 onCreateCheckout={() => void createCartCheckoutAndSend()}
+                onDeleteQuickItem={(product) => void deleteQuickCatalogProduct(product)}
                 onRemoveItem={removeCartItem}
                 onUpdateQuantity={updateCartItemQuantity}
                 onUseSummary={useCartSummaryInReply}
+                productDeleteBusyId={catalogDeleteBusyId}
                 quickProducts={activeCatalogProducts}
                 totalCents={activeCartTotalCents}
               />
@@ -1540,9 +1605,11 @@ function AttendanceSalesBagPanel({
   onAddQuickItem,
   onClearCart,
   onCreateCheckout,
+  onDeleteQuickItem,
   onRemoveItem,
   onUpdateQuantity,
   onUseSummary,
+  productDeleteBusyId,
   quickProducts,
   totalCents,
 }: {
@@ -1554,18 +1621,34 @@ function AttendanceSalesBagPanel({
   onAddQuickItem: (product: AttendanceQuickProduct) => void;
   onClearCart: () => void;
   onCreateCheckout: () => void;
+  onDeleteQuickItem: (product: AttendanceQuickProduct) => void | Promise<void>;
   onRemoveItem: (itemId: string) => void;
   onUpdateQuantity: (itemId: string, quantity: number) => void;
   onUseSummary: () => void;
+  productDeleteBusyId: string | null;
   quickProducts: AttendanceQuickProduct[];
   totalCents: number;
 }) {
   const [manualName, setManualName] = useState("");
   const [manualPrice, setManualPrice] = useState("");
   const [manualQuantity, setManualQuantity] = useState("1");
+  const [productSearch, setProductSearch] = useState("");
+  const [confirmDeleteProductId, setConfirmDeleteProductId] = useState<string | null>(null);
   const manualPriceCents = parseCurrencyInputToCents(manualPrice);
   const manualQuantityNumber = Math.max(1, Math.min(99, Number.parseInt(manualQuantity, 10) || 1));
   const canAddManualItem = Boolean(manualName.trim()) && manualPriceCents > 0;
+  const normalizedProductSearch = productSearch.trim().toLowerCase();
+  const visibleQuickProducts = useMemo(() => {
+    if (!normalizedProductSearch) {
+      return quickProducts;
+    }
+
+    return quickProducts.filter((product) => (
+      product.name.toLowerCase().includes(normalizedProductSearch)
+      || product.description.toLowerCase().includes(normalizedProductSearch)
+      || product.category.toLowerCase().includes(normalizedProductSearch)
+    ));
+  }, [normalizedProductSearch, quickProducts]);
 
   function handleAddManualItem(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1582,6 +1665,20 @@ function AttendanceSalesBagPanel({
     setManualName("");
     setManualPrice("");
     setManualQuantity("1");
+  }
+
+  function handleDeleteQuickProduct(product: AttendanceQuickProduct) {
+    if (productDeleteBusyId) {
+      return;
+    }
+
+    if (confirmDeleteProductId !== product.id) {
+      setConfirmDeleteProductId(product.id);
+      return;
+    }
+
+    setConfirmDeleteProductId(null);
+    void onDeleteQuickItem(product);
   }
 
   return (
@@ -1641,41 +1738,96 @@ function AttendanceSalesBagPanel({
             </Link>
           </div>
 
+          <label className="relative mt-3 block">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+            <input
+              aria-label="Pesquisar produto na sacola"
+              className="h-10 w-full rounded-2xl border border-slate-200 bg-white pl-9 pr-3 text-[12px] text-slate-950 outline-none transition placeholder:text-slate-400 focus:border-red-400 focus:ring-2 focus:ring-red-100"
+              onChange={(event) => setProductSearch(event.target.value)}
+              placeholder="Pesquisar produto cadastrado..."
+              type="search"
+              value={productSearch}
+            />
+          </label>
+
           <div className="mt-3 space-y-2">
-            {quickProducts.length ? quickProducts.map((product) => {
+            {quickProducts.length && visibleQuickProducts.length ? visibleQuickProducts.map((product) => {
               const hasPrice = product.priceCents > 0;
+              const confirmingDelete = confirmDeleteProductId === product.id;
+              const deletingProduct = productDeleteBusyId === product.id;
 
               return (
-                <button
+                <div
                   key={product.id}
                   className={cn(
                     "grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-2xl border p-3 text-left transition",
                     hasPrice
                       ? "border-slate-200 bg-white hover:border-red-200 hover:bg-red-50"
-                      : "cursor-not-allowed border-amber-200 bg-amber-50/60 opacity-80",
+                      : "border-amber-200 bg-amber-50/60 opacity-80",
                   )}
-                  disabled={!hasPrice}
-                  onClick={() => onAddQuickItem(product)}
-                  type="button"
                 >
-                  <span className="min-w-0">
+                  <button
+                    className={cn("min-w-0 text-left", hasPrice ? "cursor-pointer" : "cursor-not-allowed")}
+                    disabled={!hasPrice}
+                    onClick={() => onAddQuickItem(product)}
+                    type="button"
+                  >
                     <span className="block truncate text-[13px] font-bold text-slate-950">{product.name}</span>
                     <span className="mt-1 block line-clamp-2 text-[11px] leading-4 text-slate-500">{product.description}</span>
                     <span className="mt-2 inline-flex rounded-full bg-slate-100 px-2 py-1 font-mono text-[9px] uppercase tracking-wide text-slate-500">
                       {product.category}
                     </span>
-                  </span>
-                  <span className="text-right">
+                  </button>
+                  <div className="text-right">
                     <span className={cn("block font-mono text-[12px] font-bold", hasPrice ? "text-red-600" : "text-amber-700")}>
                       {hasPrice ? formatCurrencyCents(product.priceCents) : "Sem valor"}
                     </span>
-                    <span className={cn("mt-2 inline-grid h-8 w-8 place-items-center rounded-xl text-white", hasPrice ? "bg-red-600" : "bg-amber-400")}>
-                      <Plus className="h-3.5 w-3.5" />
-                    </span>
-                  </span>
-                </button>
+                    <div className="mt-2 flex items-center justify-end gap-1.5">
+                      <button
+                        aria-label={`Adicionar ${product.name} a sacola`}
+                        className={cn(
+                          "inline-grid h-8 w-8 place-items-center rounded-xl text-white transition",
+                          hasPrice ? "bg-red-600 hover:bg-red-700" : "cursor-not-allowed bg-amber-400",
+                        )}
+                        disabled={!hasPrice}
+                        onClick={() => onAddQuickItem(product)}
+                        type="button"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        aria-label={confirmingDelete ? `Confirmar exclusao de ${product.name}` : `Excluir ${product.name}`}
+                        className={cn(
+                          "inline-grid h-8 w-8 place-items-center rounded-xl border text-slate-500 transition",
+                          confirmingDelete
+                            ? "border-red-200 bg-red-50 text-red-600 hover:bg-red-100"
+                            : "border-slate-200 bg-white hover:border-red-200 hover:bg-red-50 hover:text-red-600",
+                        )}
+                        disabled={deletingProduct}
+                        onClick={() => handleDeleteQuickProduct(product)}
+                        title={confirmingDelete ? "Clique novamente para excluir" : "Excluir produto"}
+                        type="button"
+                      >
+                        {deletingProduct ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                      </button>
+                    </div>
+                  </div>
+                  {confirmingDelete ? (
+                    <p className="col-span-2 rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-[10px] font-semibold text-red-600">
+                      Clique na lixeira novamente para excluir este produto do catalogo.
+                    </p>
+                  ) : null}
+                </div>
               );
-            }) : (
+            }) : quickProducts.length ? (
+              <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-center">
+                <Search className="mx-auto h-5 w-5 text-slate-400" />
+                <p className="mt-2 text-[13px] font-bold text-slate-950">Nenhum produto encontrado</p>
+                <p className="mt-1 text-[11px] leading-5 text-slate-500">
+                  Tente buscar pelo nome, categoria ou descricao do produto cadastrado.
+                </p>
+              </div>
+            ) : (
               <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-center">
                 <Package className="mx-auto h-5 w-5 text-slate-400" />
                 <p className="mt-2 text-[13px] font-bold text-slate-950">Nenhum produto cadastrado</p>

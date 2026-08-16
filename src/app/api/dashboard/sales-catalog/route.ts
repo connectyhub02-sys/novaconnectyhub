@@ -711,6 +711,16 @@ async function assertSalesCatalogJsonActionAccess(input: {
     return assertBillableAccess({ organizationId: input.organizationId, client: input.client });
   }
 
+  return assertSalesCatalogManualAccess({
+    organizationId: input.organizationId,
+    client: input.client,
+  });
+}
+
+async function assertSalesCatalogManualAccess(input: {
+  organizationId: string;
+  client: ReturnType<typeof createServiceClient>;
+}) {
   const status = await getOrganizationBillingAccess({
     organizationId: input.organizationId,
     client: input.client,
@@ -2425,7 +2435,7 @@ export async function DELETE(request: NextRequest) {
       missingMessage: "Informe a empresa e o produto para excluir.",
     });
     const company = await requireClientCompanyAccess({ userId: workspace.user.id, companyId, client });
-    await assertBillableAccess({ organizationId: company.id, client });
+    await assertSalesCatalogManualAccess({ organizationId: company.id, client });
 
     const { data, error } = await client
       .from("intelligence_memory")
@@ -2467,6 +2477,7 @@ export async function DELETE(request: NextRequest) {
 
     revalidatePath("/dashboard/links");
     revalidatePath("/dashboard/whatsapp");
+    revalidatePath("/dashboard/atendimento");
 
     return NextResponse.json({ deletedItemId: data.id });
   } catch (error) {
