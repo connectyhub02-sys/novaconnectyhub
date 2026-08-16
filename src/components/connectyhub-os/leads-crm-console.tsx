@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import {
   Activity,
   Archive,
+  Bell,
   Building2,
   CalendarClock,
   CheckCircle2,
@@ -37,6 +38,7 @@ import {
 } from "lucide-react";
 import { KpiStat, NeonBadge, PageHeader, Panel, ProgressBar } from "@/components/connectyhub-os/panel-primitives";
 import { cn } from "@/lib/utils";
+import { getTrackingSnapshot } from "@/lib/tracking/client";
 import type {
   ClientSocialApproval,
   ClientSocialDispatch,
@@ -63,6 +65,16 @@ type LeadCrmConsoleProps = {
   socialApprovals?: ClientSocialApproval[];
   socialDispatchMonitor?: ClientSocialDispatchMonitor;
   workspace: ClientLeadCrmWorkspace;
+};
+
+type BrowserPushPermissionState = NotificationPermission | "unsupported" | "unknown";
+
+type AttendancePushPromptState = {
+  busy: boolean;
+  dismissed: boolean;
+  message: string | null;
+  permission: BrowserPushPermissionState;
+  visible: boolean;
 };
 
 const statusOptions: Array<{ value: "all" | ClientLeadStatus; label: string }> = [
@@ -99,6 +111,8 @@ const emptySocialDispatchMonitor: ClientSocialDispatchMonitor = {
 };
 
 const whatsappConversationBackgroundUrl = "https://pub-eaf679ed02634f958b68991d910a997b.r2.dev/8c98994518b575bfd8c949e91d20548b.jpg";
+let attendanceVapidPublicKey: string | null = null;
+let attendanceVapidPublicKeyPromise: Promise<string> | null = null;
 
 export function LeadCrmConsole({
   mode,
@@ -708,6 +722,13 @@ function AttendanceCenterView({
   const [handoffOverrides, setHandoffOverrides] = useState<Record<string, ClientLeadHumanIntervention>>({});
   const [manualMessages, setManualMessages] = useState<Record<string, ClientLeadMessage[]>>({});
   const [handoffTick, setHandoffTick] = useState(() => Date.now());
+  const [pushPrompt, setPushPrompt] = useState<AttendancePushPromptState>(() => ({
+    busy: false,
+    dismissed: false,
+    message: null,
+    permission: readAttendancePushPermissionState(),
+    visible: false,
+  }));
   const notifiedLeadMessages = useRef(new Set<string>());
   const notificationSeeded = useRef(false);
 
@@ -730,6 +751,68 @@ function AttendanceCenterView({
       )
     : [];
   const handoffCountdown = formatHumanInterventionCountdown(activeHumanIntervention, handoffTick);
+
+  function promptAttendancePushPermission() {
+    const permission = readAttendancePushPermissionState();
+
+    if (permission === "granted") {
+      setPushPrompt((current) => ({
+        ...current,
+        busy: false,
+        message: null,
+        permission,
+        visible: false,
+      }));
+      return;
+    }
+
+    if (permission === "unsupported") {
+      setPushPrompt((current) => ({
+        ...current,
+        permission,
+        visible: false,
+      }));
+      return;
+    }
+
+    setPushPrompt((current) => ({
+      ...current,
+      message: permission === "denied"
+        ? "As notificacoes estao bloqueadas no navegador. Libere pelo cadeado ao lado do endereco."
+        : current.message,
+      permission,
+      visible: true,
+    }));
+  }
+
+  async function enableAttendancePushNotifications() {
+    setPushPrompt((current) => ({
+      ...current,
+      busy: true,
+      message: "Quando o navegador perguntar, clique em Permitir.",
+      visible: true,
+    }));
+
+    const result = await requestAttendancePushSubscription();
+    const permission = readAttendancePushPermissionState();
+
+    setPushPrompt((current) => ({
+      ...current,
+      busy: false,
+      dismissed: result === "granted" ? false : current.dismissed,
+      message: getAttendancePushPromptMessage(result),
+      permission,
+      visible: result !== "granted",
+    }));
+  }
+
+  function dismissAttendancePushPrompt() {
+    setPushPrompt((current) => ({
+      ...current,
+      dismissed: true,
+      visible: false,
+    }));
+  }
 
   useEffect(() => {
     const interval = window.setInterval(() => setHandoffTick(Date.now()), 1000);
@@ -770,6 +853,7 @@ function AttendanceCenterView({
       }
 
       notifiedLeadMessages.current.add(item.message.id);
+      promptAttendancePushPermission();
       showLeadBrowserNotification(item.lead, item.message);
     }
   }, [filteredLeads]);
@@ -1058,6 +1142,15 @@ function AttendanceCenterView({
                 </div>
 
                 <div className="border-t bg-white p-3" style={{ borderColor: "var(--ch-border)" }}>
+                  {pushPrompt.visible ? (
+                    <AttendancePushPermissionPrompt
+                      busy={pushPrompt.busy}
+                      message={pushPrompt.message}
+                      onDismiss={dismissAttendancePushPrompt}
+                      onEnable={() => void enableAttendancePushNotifications()}
+                      permission={pushPrompt.permission}
+                    />
+                  ) : null}
                   {handoffNotice ? (
                     <div
                       className={cn(
@@ -1192,6 +1285,76 @@ function AttendanceCenterView({
             )}
           </aside>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function AttendancePushPermissionPrompt({
+  busy,
+  message,
+  onDismiss,
+  onEnable,
+  permission,
+}: {
+  busy: boolean;
+  message: string | null;
+  onDismiss: () => void;
+  onEnable: () => void;
+  permission: BrowserPushPermissionState;
+}) {
+  const blocked = permission === "denied";
+
+  return (
+    <div className="mb-2 rounded-2xl border border-red-200 bg-red-50/80 px-3 py-3 text-[12px] text-slate-800 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 gap-3">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-red-600 text-white">
+            <Bell className="h-4 w-4" />
+          </span>
+          <div className="min-w-0">
+            <p className="font-semibold text-slate-950">
+              {blocked ? "Notificacoes bloqueadas neste navegador" : "Ative alertas de respostas dos leads"}
+            </p>
+            <p className="mt-1 leading-5 text-slate-600">
+              {blocked
+                ? "Para receber avisos, clique no cadeado ao lado do endereco do site e libere Notificacoes."
+                : "Quando um lead responder e voce estiver em outra aba, o ConnectyHub avisa pelo navegador."}
+            </p>
+            {message ? (
+              <p className="mt-2 rounded-xl border border-red-200 bg-white px-3 py-2 text-[11px] leading-4 text-red-700">
+                {message}
+              </p>
+            ) : null}
+          </div>
+        </div>
+        <button
+          aria-label="Fechar aviso de notificacoes"
+          className="grid h-8 w-8 shrink-0 place-items-center rounded-xl border border-red-100 bg-white text-slate-500 transition hover:border-red-200 hover:text-red-600"
+          onClick={onDismiss}
+          type="button"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <button
+          className={cn(
+            "inline-flex h-9 items-center justify-center gap-2 rounded-xl px-3 text-[12px] font-bold transition",
+            blocked
+              ? "border border-red-200 bg-white text-red-700 hover:bg-red-50"
+              : "bg-red-600 text-white hover:bg-red-700",
+          )}
+          disabled={busy}
+          onClick={onEnable}
+          type="button"
+        >
+          {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Bell className="h-3.5 w-3.5" />}
+          {busy ? "Aguardando" : blocked ? "Tentar liberar" : "Ativar notificacoes"}
+        </button>
+        <span className="text-[11px] text-slate-500">
+          O navegador sempre vai pedir uma confirmacao sua antes de ativar.
+        </span>
       </div>
     </div>
   );
@@ -1440,6 +1603,141 @@ function toTimestamp(value: string | null | undefined) {
   if (!value) return 0;
   const timestamp = new Date(value).getTime();
   return Number.isNaN(timestamp) ? 0 : timestamp;
+}
+
+function readAttendancePushPermissionState(): BrowserPushPermissionState {
+  if (
+    typeof window === "undefined"
+    || typeof Notification === "undefined"
+    || !("serviceWorker" in navigator)
+    || !("PushManager" in window)
+  ) {
+    return "unsupported";
+  }
+
+  return Notification.permission;
+}
+
+async function requestAttendancePushSubscription(): Promise<"granted" | "denied" | "dismissed" | "unsupported" | "failed"> {
+  if (
+    typeof window === "undefined"
+    || typeof Notification === "undefined"
+    || !("serviceWorker" in navigator)
+    || !("PushManager" in window)
+  ) {
+    return "unsupported";
+  }
+
+  const vapidPublicKey = await resolveAttendanceVapidPublicKey();
+
+  if (!vapidPublicKey) {
+    return "unsupported";
+  }
+
+  try {
+    const permission = await Notification.requestPermission();
+
+    if (permission !== "granted") {
+      return permission === "denied" ? "denied" : "dismissed";
+    }
+
+    const registration = await navigator.serviceWorker.register("/connecty-push-sw.js", { scope: "/" });
+    await registration.update().catch(() => undefined);
+    const readyRegistration = await navigator.serviceWorker.ready;
+    const existingSubscription = await readyRegistration.pushManager.getSubscription();
+    const subscription = existingSubscription ?? await readyRegistration.pushManager.subscribe({
+      applicationServerKey: urlBase64ToUint8Array(vapidPublicKey) as BufferSource,
+      userVisibleOnly: true,
+    });
+    const snapshot = getTrackingSnapshot();
+    const response = await fetch("/api/push/subscribe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        visitor_cookie_id: snapshot.visitorId,
+        session_cookie_id: snapshot.sessionId,
+        permission,
+        subscription: subscription.toJSON(),
+        metadata: {
+          page_path: window.location.pathname,
+          page_url: window.location.href,
+          page_title: document.title,
+          source: "attendance_center_prompt",
+          first_touch: snapshot.firstTouch,
+          last_touch: snapshot.lastTouch,
+          attribution: snapshot.attribution,
+          consent: snapshot.consent,
+          tracking_cookies: snapshot.cookies,
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      return "failed";
+    }
+
+    return "granted";
+  } catch {
+    return "failed";
+  }
+}
+
+function getAttendancePushPromptMessage(result: "granted" | "denied" | "dismissed" | "unsupported" | "failed") {
+  if (result === "granted") {
+    return "Pronto. Voce vai receber alertas quando leads responderem.";
+  }
+
+  if (result === "denied") {
+    return "O navegador bloqueou notificacoes. Libere pelo cadeado ao lado do endereco do site.";
+  }
+
+  if (result === "dismissed") {
+    return "Voce fechou o aviso do navegador. Clique em ativar quando quiser receber alertas.";
+  }
+
+  if (result === "unsupported") {
+    return "Nao encontramos a configuracao de push ou este navegador nao suporta alertas nesta sessao.";
+  }
+
+  return "Nao conseguimos ativar agora. Tente novamente em alguns instantes.";
+}
+
+async function resolveAttendanceVapidPublicKey() {
+  if (attendanceVapidPublicKey !== null) {
+    return attendanceVapidPublicKey;
+  }
+
+  if (!attendanceVapidPublicKeyPromise) {
+    attendanceVapidPublicKeyPromise = fetch("/api/push/config", {
+      cache: "no-store",
+      headers: { Accept: "application/json" },
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          return "";
+        }
+
+        const payload = await response.json().catch(() => null) as { public_key?: unknown } | null;
+        return typeof payload?.public_key === "string" ? payload.public_key.trim() : "";
+      })
+      .catch(() => "");
+  }
+
+  attendanceVapidPublicKey = await attendanceVapidPublicKeyPromise;
+  return attendanceVapidPublicKey;
+}
+
+function urlBase64ToUint8Array(value: string) {
+  const padding = "=".repeat((4 - (value.length % 4)) % 4);
+  const base64 = `${value}${padding}`.replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+
+  for (let index = 0; index < rawData.length; index += 1) {
+    outputArray[index] = rawData.charCodeAt(index);
+  }
+
+  return outputArray;
 }
 
 function showLeadBrowserNotification(lead: ClientLeadRecord, message: ClientLeadMessage) {
