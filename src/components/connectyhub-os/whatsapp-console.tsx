@@ -701,7 +701,13 @@ export const adminWhatsappConsoleVariant = {
   voiceCloneEnabled: true,
 } satisfies WhatsappConsoleVariant;
 
-export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { variant?: WhatsappConsoleVariant }) {
+export function WhatsAppConsole({
+  initialTab = "connection",
+  variant = clientWhatsappConsoleVariant,
+}: {
+  initialTab?: WhatsappConsoleTab;
+  variant?: WhatsappConsoleVariant;
+}) {
   const shellNotifications = useConnectyShellNotifications();
   const [state, setState] = useState<WhatsappState | null>(null);
   const [loading, setLoading] = useState(true);
@@ -752,7 +758,7 @@ export function WhatsAppConsole({ variant = clientWhatsappConsoleVariant }: { va
   const [newsletterJid, setNewsletterJid] = useState("");
   const [newsletterText, setNewsletterText] = useState("");
   const [channelScheduledFor, setChannelScheduledFor] = useState("");
-  const [activeTab, setActiveTab] = useState<WhatsappConsoleTab>("connection");
+  const [activeTab, setActiveTab] = useState<WhatsappConsoleTab>(initialTab);
   const [migrationCopying, setMigrationCopying] = useState<MigrationCredentialKind | null>(null);
   const cloneProfileImportBaselineRef = useRef<string | null>(null);
   const appliedCloneProfileImportRef = useRef<string | null>(null);
@@ -6504,6 +6510,9 @@ function WhatsappChannelOperationsPanel({
               Campanha simples
               <InfoHint text="Cria um disparo simples via Uazapi Sender. Use uma linha, virgula ou ponto e virgula por numero." />
             </p>
+            <div className="mt-3 rounded-lg border px-3 py-2 text-[11px] leading-5 text-amber-100" style={{ background: "rgba(251,191,36,0.10)", borderColor: "rgba(251,191,36,0.28)" }}>
+              Use apenas contatos que ja conversaram com a empresa ou autorizaram contato. Disparo frio pode gerar denuncia, bloqueio e banimento do WhatsApp.
+            </div>
             <input
               className="mt-3 h-10 w-full rounded-lg border px-3 text-[12px] outline-none"
               value={campaignTitle}

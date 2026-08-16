@@ -11,7 +11,14 @@ export const metadata: Metadata = {
   description: "Central para criar agentes, conectar WhatsApp, ajustar prompt e controlar o atendimento.",
 };
 
-export default async function AgentsPage() {
+type AgentsPageProps = {
+  searchParams?: Promise<{
+    tab?: string;
+  }>;
+};
+
+export default async function AgentsPage({ searchParams }: AgentsPageProps) {
+  const params = (await searchParams) ?? {};
   const workspace = await getCurrentWorkspace();
 
   if (!workspace) {
@@ -34,7 +41,15 @@ export default async function AgentsPage() {
       userLabel={profile.email ?? undefined}
       workspaceName={organization.name ?? profile.companyName ?? "Workspace"}
     >
-      <WhatsAppConsole />
+      <WhatsAppConsole initialTab={resolveInitialWhatsappTab(params.tab)} />
     </ConnectyShell>
   );
+}
+
+function resolveInitialWhatsappTab(value: string | undefined) {
+  if (value === "campanhas" || value === "grupos-campanhas" || value === "grupos") {
+    return "multichannel" as const;
+  }
+
+  return "connection" as const;
 }

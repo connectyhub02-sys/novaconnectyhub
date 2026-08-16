@@ -228,10 +228,6 @@ const clientSections: NavSection[] = [
     label: "Crescimento",
     items: [
       { label: "Catálogo de Vendas", href: "/dashboard/links",         icon: ShoppingBag, tone: "sky" },
-      { label: "Campanhas",       href: "/dashboard/campanhas",        icon: Megaphone, tone: "fuchsia" },
-      { label: "Meta Ads",        href: "/dashboard/trafego/meta-ads", icon: Megaphone, tone: "fuchsia", badge: "Em breve", badgeTone: "amber", comingSoon: true },
-      { label: "Google Ads",      href: "/dashboard/trafego/google-ads", icon: Search, tone: "blue" },
-      { label: "Orgânico",        href: "/dashboard/trafego-organico", icon: Globe2, tone: "emerald", badge: "Em breve", badgeTone: "amber", comingSoon: true },
       { label: "Automações",      href: "/dashboard/automacoes",       icon: Zap, tone: "violet" },
       { label: "Produtos",        href: "/dashboard/produtos",         icon: ShoppingBag, tone: "amber" },
       { label: "Relatórios",      href: "/dashboard/relatorios",       icon: BarChart3, tone: "blue" },
