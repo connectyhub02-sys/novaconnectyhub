@@ -86,16 +86,21 @@ export async function generateGeminiAudio(input: GenerateGeminiAudioInput): Prom
   const audioBytes = wrapPcmAsWav(pcmBytes);
   const now = new Date();
   const objectKey = `generated-media/gemini/audio/${input.organizationId}/${now.getTime()}-${randomUUID()}.wav`;
-  await assertStorageUploadAllowed({
-    client,
-    organizationId: input.organizationId,
-    category: "generated_media",
-    files: [{
-      fileName: `${now.getTime()}-${voice.voiceName}.wav`,
-      contentType: "audio/wav",
-      sizeBytes: audioBytes.byteLength,
-    }],
-  });
+  const bypassStorageQuota = isRealtimeWhatsappAudioSource(input.source);
+
+  if (!bypassStorageQuota) {
+    await assertStorageUploadAllowed({
+      client,
+      organizationId: input.organizationId,
+      category: "generated_media",
+      files: [{
+        fileName: `${now.getTime()}-${voice.voiceName}.wav`,
+        contentType: "audio/wav",
+        sizeBytes: audioBytes.byteLength,
+      }],
+    });
+  }
+
   const upload = await putR2Object(r2Config.config, objectKey, audioBytes, "audio/wav");
 
   if (!upload.ok) {
@@ -114,6 +119,11 @@ export async function generateGeminiAudio(input: GenerateGeminiAudioInput): Prom
       object_key: upload.objectKey,
       voice_id: voice.voiceId,
     },
+  }).catch((error: unknown) => {
+    if (!bypassStorageQuota) {
+      throw error;
+    }
+    return null;
   });
 
   const mediaId = await registerGeneratedMedia(client, {
@@ -289,6 +299,13 @@ function wrapPcmAsWav(pcmBytes: Uint8Array) {
 
 function normalizeAudioText(value: string) {
   return value.replace(/\s+/g, " ").trim().slice(0, maxAudioTextLength);
+}
+
+function isRealtimeWhatsappAudioSource(value: string | null | undefined) {
+  const source = value?.trim().toLowerCase();
+  return source === "whatsapp_agent"
+    || source === "whatsapp_test"
+    || source === "whatsapp_internal_test";
 }
 
 async function registerGeneratedMedia(
