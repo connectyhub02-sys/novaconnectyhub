@@ -1389,7 +1389,7 @@ function AttendanceCenterView({
                   <ChatMessages messages={activeMessages} />
                 </div>
 
-                <div className="border-t bg-white p-3" style={{ borderColor: "var(--ch-border)" }}>
+                <div className="border-t bg-white px-3 py-2" style={{ borderColor: "var(--ch-border)" }}>
                   {pushPrompt.visible ? (
                     <AttendancePushPermissionPrompt
                       busy={pushPrompt.busy}
@@ -1399,10 +1399,10 @@ function AttendanceCenterView({
                       permission={pushPrompt.permission}
                     />
                   ) : null}
-                  <form className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]" onSubmit={handleManualReplySubmit}>
-                    <label className="relative block">
+                  <form className="flex flex-col gap-2 lg:flex-row lg:items-end" onSubmit={handleManualReplySubmit}>
+                    <label className="relative block min-w-0 flex-1">
                       <textarea
-                        className="max-h-28 min-h-11 w-full resize-none rounded-2xl border bg-slate-100/80 px-4 py-3 text-[13px] text-slate-950 outline-none transition placeholder:text-slate-500 focus:border-red-500/45 focus:bg-white"
+                        className="max-h-24 min-h-10 w-full resize-none rounded-2xl border bg-slate-100/80 px-4 py-2 text-[13px] leading-6 text-slate-950 outline-none transition placeholder:text-slate-500 focus:border-red-500/45 focus:bg-white lg:h-10"
                         disabled={replyBusy}
                         onKeyDown={handleManualReplyKeyDown}
                         onChange={(event) => setManualReply(event.target.value)}
@@ -1411,10 +1411,10 @@ function AttendanceCenterView({
                         value={manualReply}
                       />
                     </label>
-                    <div className="grid gap-2 sm:w-[190px]">
+                    <div className="grid grid-cols-2 gap-2 lg:flex lg:w-auto lg:shrink-0">
                       <button
                         className={cn(
-                          "inline-flex h-11 items-center justify-center gap-2 rounded-2xl px-3 text-[12px] font-bold transition",
+                          "inline-flex h-10 items-center justify-center gap-2 rounded-xl px-3 text-[11px] font-bold transition lg:w-[112px]",
                           activeHumanIntervention.active
                             ? "border border-slate-200 bg-white text-slate-800 hover:bg-slate-100"
                             : "bg-red-600 text-white hover:bg-red-700",
@@ -1428,7 +1428,7 @@ function AttendanceCenterView({
                       </button>
                       <button
                         className={cn(
-                          "inline-flex h-11 items-center justify-center gap-2 rounded-2xl px-3 text-[12px] font-bold transition",
+                          "inline-flex h-10 items-center justify-center gap-2 rounded-xl px-3 text-[11px] font-bold transition lg:w-[122px]",
                           activeConversationId && manualReply.trim() && !replyBusy
                             ? "bg-slate-950 text-white hover:bg-slate-800"
                             : "bg-slate-200 text-slate-500",
