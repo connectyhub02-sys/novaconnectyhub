@@ -23,6 +23,14 @@ import {
   type WhatsappCloneProfile,
 } from "@/lib/whatsapp/agent-behavior";
 import {
+  applyElianeAgentDefaultsToMetadata,
+  buildElianeWhatsappPrompt,
+  elianeAgentRoleTitle,
+  ensureElianeOperationalKnowledge,
+  isElianeAgentName,
+  isElianeWhatsappAgentIdentity,
+} from "@/lib/whatsapp/eliane-agent";
+import {
   buildAgentPromptFromTemplate,
   normalizeAgentPromptBuilderConfig,
   promptBuilderMetadataKey,
@@ -394,11 +402,26 @@ export async function updatePlatformWhatsappConsoleAgentProfile(input: {
   const instance = await getSectorWhatsappInstance(client, sector.id);
   const name = normalizeAgentProfileName(input.name ?? agent.name);
   const personaName = normalizeAgentProfileName(input.personaName ?? agent.persona_name ?? name);
-  const roleTitle = normalizeAgentRoleTitle(input.roleTitle ?? agent.role_title ?? "Agente WhatsApp da ConnectyHub");
-  const description = normalizeAgentDescription(input.description ?? agent.description);
+  const wasElianeAgent = isElianeWhatsappAgentIdentity({
+    name: agent.name,
+    personaName: agent.persona_name,
+    metadata: agent.metadata,
+    prompt: agent.prompt,
+  });
+  const isElianeAgent = isElianeAgentName(name) || isElianeAgentName(personaName) || wasElianeAgent;
+  const shouldApplyElianeDefaults = isElianeAgent && !wasElianeAgent;
+  const roleTitle = normalizeAgentRoleTitle(
+    input.roleTitle ?? (shouldApplyElianeDefaults ? elianeAgentRoleTitle : agent.role_title) ?? "Agente WhatsApp da ConnectyHub",
+  );
+  const description = normalizeAgentDescription(
+    input.description
+      ?? (shouldApplyElianeDefaults
+        ? "Clone de atendimento da Eliane, fundadora da ConnectyHub, para vendas, qualificacao e suporte da plataforma."
+        : agent.description),
+  );
   const automationRoles = normalizeAgentAutomationRoles(input.automationRoles, readAutomationRoles(agent.metadata));
   const now = new Date().toISOString();
-  const metadata = {
+  const baseMetadata = {
     ...(readRecord(agent.metadata) ?? {}),
     automation_roles: automationRoles,
     can_send_signup_verification: automationRoles.signup_whatsapp_verification,
@@ -407,6 +430,20 @@ export async function updatePlatformWhatsappConsoleAgentProfile(input: {
     updated_by: input.userId,
     updated_at: now,
   };
+  const metadata = isElianeAgent
+    ? applyElianeAgentDefaultsToMetadata(baseMetadata, {
+        force: shouldApplyElianeDefaults,
+        behavior: getBehaviorConfig(agent, instance),
+      })
+    : baseMetadata;
+  const nextPrompt = shouldApplyElianeDefaults
+    ? buildElianeWhatsappPrompt({
+        id: sector.id,
+        sectorCode: sector.sector_code,
+        name: sector.name,
+        description: sector.description,
+      })
+    : undefined;
 
   const { error } = await client
     .from("agent_registry")
@@ -416,6 +453,12 @@ export async function updatePlatformWhatsappConsoleAgentProfile(input: {
       avatar_alt: `Agente ${personaName}`,
       role_title: roleTitle,
       description,
+      ...(nextPrompt
+        ? {
+            prompt: nextPrompt,
+            status: "needs_review",
+          }
+        : {}),
       metadata,
     })
     .eq("id", agent.id)
@@ -439,6 +482,20 @@ export async function updatePlatformWhatsappConsoleAgentProfile(input: {
         },
       })
       .eq("id", instance.id);
+  }
+
+  if (isElianeAgent) {
+    await ensureElianeOperationalKnowledge({
+      client,
+      sector: {
+        id: sector.id,
+        sectorCode: sector.sector_code,
+        name: sector.name,
+        description: sector.description,
+      },
+      agentId: agent.id,
+      userId: input.userId,
+    });
   }
 
   revalidateWhatsappAdmin();

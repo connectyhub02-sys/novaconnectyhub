@@ -4,6 +4,13 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { defaultAgentChannelConfig } from "@/lib/agents/multichannel";
 import { defaultLeadQualificationConfig, leadQualificationConfigKey } from "@/lib/leads/qualification";
 import { defaultWhatsappBehaviorConfig, defaultWhatsappCloneMemory, defaultWhatsappCloneProfile } from "@/lib/whatsapp/agent-behavior";
+import {
+  applyElianeAgentDefaultsToMetadata,
+  buildElianeWhatsappPrompt,
+  elianeAgentRoleTitle,
+  ensureElianeOperationalKnowledge,
+  isElianeAgentName,
+} from "@/lib/whatsapp/eliane-agent";
 import { createServiceClient } from "@/lib/supabase/service";
 
 type JsonRecord = Record<string, unknown>;
@@ -146,9 +153,30 @@ export async function createPlatformWhatsappAgent(input: {
   const client = input.client ?? createServiceClient();
   const sector = await requireActiveSector(client, input.sectorId);
   const name = normalizeAgentName(input.name);
-  const roleTitle = normalizeRoleTitle(input.roleTitle);
-  const prompt = normalizePrompt(input.prompt, sector);
+  const isElianeAgent = isElianeAgentName(name);
+  const roleTitle = normalizeRoleTitle(input.roleTitle, isElianeAgent);
+  const prompt = normalizePrompt(input.prompt, sector, isElianeAgent);
   const agentCode = createAgentCode(name, sector.sectorCode);
+  const baseMetadata = {
+    admin_created: true,
+    admin_whatsapp: true,
+    agent_kind: "whatsapp",
+    agent_type: "whatsapp_attendant",
+    lead_facing: true,
+    connectyhub_internal: true,
+    company_name: "ConnectyHub",
+    sector_id: sector.id,
+    sector_code: sector.sectorCode,
+    sector_name: sector.name,
+    multichannel_config: defaultAgentChannelConfig,
+    whatsapp_behavior_config: defaultWhatsappBehaviorConfig,
+    whatsapp_clone_profile: isElianeAgent ? undefined : defaultWhatsappCloneProfile,
+    whatsapp_clone_memory: defaultWhatsappCloneMemory,
+    [leadQualificationConfigKey]: isElianeAgent ? undefined : defaultLeadQualificationConfig,
+  };
+  const metadata = isElianeAgent
+    ? applyElianeAgentDefaultsToMetadata(baseMetadata, { force: true, behavior: defaultWhatsappBehaviorConfig })
+    : baseMetadata;
 
   const { data, error } = await client
     .from("agent_registry")
@@ -175,29 +203,22 @@ export async function createPlatformWhatsappAgent(input: {
       inngest_event_name: "connectyhub/whatsapp.message.received",
       memory_access_level: "sector",
       created_by: input.userId,
-      metadata: {
-        admin_created: true,
-        admin_whatsapp: true,
-        agent_kind: "whatsapp",
-        agent_type: "whatsapp_attendant",
-        lead_facing: true,
-        connectyhub_internal: true,
-        company_name: "ConnectyHub",
-        sector_id: sector.id,
-        sector_code: sector.sectorCode,
-        sector_name: sector.name,
-        multichannel_config: defaultAgentChannelConfig,
-        whatsapp_behavior_config: defaultWhatsappBehaviorConfig,
-        whatsapp_clone_profile: defaultWhatsappCloneProfile,
-        whatsapp_clone_memory: defaultWhatsappCloneMemory,
-        [leadQualificationConfigKey]: defaultLeadQualificationConfig,
-      },
+      metadata,
     })
     .select("id, sector_code, sector_name, agent_code, name, persona_name, role_title, description, prompt, status, autonomy_level, metadata, updated_at, created_at")
     .single<AgentRow>();
 
   if (error || !data) {
     throw new Error(error?.message ?? "Nao foi possivel criar o agente.");
+  }
+
+  if (isElianeAgent) {
+    await ensureElianeOperationalKnowledge({
+      client,
+      sector,
+      agentId: data.id,
+      userId: input.userId,
+    });
   }
 
   return mapAgent(data);
@@ -389,13 +410,13 @@ function normalizeAgentName(value: string) {
   return name;
 }
 
-function normalizeRoleTitle(value: string | undefined) {
+function normalizeRoleTitle(value: string | undefined, isElianeAgent = false) {
   const roleTitle = value?.trim().replace(/\s+/g, " ");
-  return roleTitle || "Agente WhatsApp da ConnectyHub";
+  return roleTitle || (isElianeAgent ? elianeAgentRoleTitle : "Agente WhatsApp da ConnectyHub");
 }
 
-function normalizePrompt(value: string | undefined, sector: PlatformWhatsappSector) {
-  const prompt = value?.trim() || defaultAdminWhatsappPrompt(sector);
+function normalizePrompt(value: string | undefined, sector: PlatformWhatsappSector, isElianeAgent = false) {
+  const prompt = value?.trim() || (isElianeAgent ? buildElianeWhatsappPrompt(sector) : defaultAdminWhatsappPrompt(sector));
 
   if (prompt.length > maxPromptLength) {
     throw new Error(`O prompt pode ter no maximo ${maxPromptLength} caracteres.`);
