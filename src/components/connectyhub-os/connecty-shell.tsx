@@ -31,7 +31,6 @@ import {
   MessageSquare,
   PlugZap,
   Search,
-  Settings,
   ShieldCheck,
   ShoppingBag,
   SlidersHorizontal,
@@ -240,7 +239,6 @@ const clientSections: NavSection[] = [
       { label: "API WhatsApp",     href: "/dashboard/api-whatsapp",     icon: PlugZap, tone: "emerald" },
       { label: "Planos",           href: "/dashboard/planos",           icon: Coins, tone: "amber" },
       { label: "Minha Conta",      href: "/dashboard/minha-conta",      icon: CreditCard, tone: "blue" },
-      { label: "Configurações",   href: "/dashboard/configuracoes",    icon: Settings, tone: "slate" },
     ],
   },
 ];
