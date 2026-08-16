@@ -275,6 +275,7 @@ export function ConnectyShell({
   const mobileDockItems = getMobileDockItems(sections, mode);
   const logoTone  = "blue";
   const isAccountPage = active === "/dashboard/minha-conta" || active.startsWith("/dashboard/minha-conta/");
+  const isAttendancePage = active === "/dashboard/atendimento";
   const [avatarUrl, setAvatarUrl] = useState(userAvatarUrl ?? null);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [avatarError, setAvatarError] = useState<string | null>(null);
@@ -338,6 +339,11 @@ export function ConnectyShell({
     && accountCompletion?.isComplete === true
     && trialReminderReady
     && trialReminderStatus !== null;
+  const showAttendanceBillingHeader = mode === "client"
+    && isAttendancePage
+    && !accountCompletionGateActive
+    && billingAccess !== null
+    && billingAccess.state !== "paid_active";
 
   const setNotificationGroup = useCallback((source: string, notifications: ConnectyShellNotification[]) => {
     setNotificationGroups((current) => {
@@ -816,9 +822,13 @@ export function ConnectyShell({
             </div>
           </div>
 
-          <div className="ml-auto flex items-center gap-2.5">
+          {showAttendanceBillingHeader ? (
+            <BillingHeaderSummary status={billingAccess} />
+          ) : null}
+
+          <div className={cn("flex items-center gap-2.5", showAttendanceBillingHeader ? "ml-0" : "ml-auto")}>
             {/* Search */}
-            <div className="relative hidden lg:block">
+            <div className={cn("relative hidden", showAttendanceBillingHeader ? "2xl:block" : "lg:block")}>
               <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2" style={{ color: "var(--ch-muted)" }} />
               <input
                 type="text"
@@ -936,7 +946,9 @@ export function ConnectyShell({
             </div>
 
             {mode === "client" ? (
-              accountCompletionPending ? <AccountCompletionPill /> : <CreditBalancePill status={billingAccess} />
+              accountCompletionPending
+                ? <AccountCompletionPill />
+                : showAttendanceBillingHeader ? null : <CreditBalancePill status={billingAccess} />
             ) : null}
 
             {/* Mode switch */}
@@ -1079,7 +1091,7 @@ export function ConnectyShell({
         {/* Content */}
         <main className="flex-1 overflow-auto">
           {mode === "client" ? <AdminImpersonationBanner /> : null}
-          {mode === "client" && !accountCompletionGateActive && !isAccountPage ? <BillingStatusBanner status={billingAccess} /> : null}
+          {mode === "client" && !accountCompletionGateActive && !isAccountPage && !isAttendancePage ? <BillingStatusBanner status={billingAccess} /> : null}
           <div
             className={cn(
               "connecty-shell-content mx-auto w-full max-w-[1680px] px-3 sm:px-4 lg:px-8",
@@ -1219,6 +1231,60 @@ function CreditBalancePill({ status }: { status: BillingAccessClientStatus | nul
       <Coins className="h-3.5 w-3.5" />
       <span className="hidden sm:inline">Creditos</span>
       <span>{label}</span>
+    </div>
+  );
+}
+
+function BillingHeaderSummary({ status }: { status: BillingAccessClientStatus | null }) {
+  if (!status || status.state === "paid_active") {
+    return null;
+  }
+
+  const tone = billingBannerTone(status.bannerTone);
+  const progressLabel = billingProgressLabel(status);
+  const progress = status.includedCredits > 0
+    ? Math.max(0, Math.min(100, ((status.includedCredits - status.usedCredits) / status.includedCredits) * 100))
+    : 0;
+
+  return (
+    <div className="hidden min-w-0 flex-1 justify-center px-2 lg:flex">
+      <div
+        className="flex h-10 min-w-0 max-w-[720px] flex-1 items-center gap-2.5 rounded-xl border px-3"
+        style={{
+          background: `linear-gradient(135deg, ${tone.background}, rgba(var(--ch-accent-2-rgb),0.06)), rgba(255,255,255,0.82)`,
+          borderColor: tone.border,
+          boxShadow: "0 10px 24px rgba(15,23,42,0.05)",
+        }}
+      >
+        <span
+          className="grid h-7 w-7 shrink-0 place-items-center rounded-lg"
+          style={{ background: tone.iconBackground, color: tone.color }}
+        >
+          <Coins className="h-3.5 w-3.5" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 items-center gap-2">
+            <p className="truncate text-[12px] font-bold" style={{ color: "var(--ch-text)" }} title={status.bannerTitle}>
+              {status.bannerTitle}
+            </p>
+            <span className="hidden shrink-0 font-mono text-[9px] uppercase tracking-wide text-slate-500 xl:inline">
+              {progressLabel}
+            </span>
+          </div>
+          {status.includedCredits > 0 ? (
+            <div className="mt-1 h-1 overflow-hidden rounded-full bg-slate-900/10">
+              <div className="h-full rounded-full" style={{ width: `${progress}%`, background: tone.color }} />
+            </div>
+          ) : null}
+        </div>
+        <Link
+          href={status.ctaHref}
+          className="inline-flex h-7 shrink-0 items-center justify-center rounded-lg px-3 font-mono text-[9px] font-black uppercase tracking-wide transition hover:opacity-90"
+          style={{ background: tone.color, color: "#061015" }}
+        >
+          {status.ctaLabel}
+        </Link>
+      </div>
     </div>
   );
 }
