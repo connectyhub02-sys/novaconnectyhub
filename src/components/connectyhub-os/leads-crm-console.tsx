@@ -60,6 +60,7 @@ import type {
   ClientLeadRecord,
   ClientLeadStatus,
 } from "@/lib/client-os/leads-crm";
+import type { ClientSalesCatalogItem } from "@/lib/sales-catalog/shared";
 
 type ConsoleMode = "leads" | "crm" | "conversas" | "atendimento";
 
@@ -67,6 +68,7 @@ type AttendanceInboxTab = "all" | "unread" | "active" | "paused" | "qualified" |
 
 type LeadCrmConsoleProps = {
   mode: ConsoleMode;
+  salesCatalogItems?: ClientSalesCatalogItem[];
   socialApprovals?: ClientSocialApproval[];
   socialDispatchMonitor?: ClientSocialDispatchMonitor;
   workspace: ClientLeadCrmWorkspace;
@@ -87,12 +89,13 @@ type AttendanceCartItem = {
   name: string;
   note?: string;
   quantity: number;
-  source: "quick" | "manual";
+  source: "catalog" | "manual";
   unitPriceCents: number;
 };
 
 type AttendanceQuickProduct = {
   category: string;
+  companyId: string;
   description: string;
   id: string;
   name: string;
@@ -136,39 +139,9 @@ const whatsappConversationBackgroundUrl = "https://pub-eaf679ed02634f958b68991d9
 let attendanceVapidPublicKey: string | null = null;
 let attendanceVapidPublicKeyPromise: Promise<string> | null = null;
 
-const attendanceQuickProducts: AttendanceQuickProduct[] = [
-  {
-    category: "Produto fisico",
-    description: "Item principal da conversa. Ajuste o valor se precisar.",
-    id: "quick-main-product",
-    name: "Produto principal",
-    priceCents: 9700,
-  },
-  {
-    category: "Complemento",
-    description: "Use para adicional, variacao, acompanhamento ou acessorio.",
-    id: "quick-addon",
-    name: "Complemento / adicional",
-    priceCents: 2900,
-  },
-  {
-    category: "Combo",
-    description: "Agrupa dois ou mais itens em uma oferta unica.",
-    id: "quick-combo",
-    name: "Combo personalizado",
-    priceCents: 19700,
-  },
-  {
-    category: "Servico",
-    description: "Para consultoria, reserva, sinal, entrada ou atendimento premium.",
-    id: "quick-service",
-    name: "Servico / sinal",
-    priceCents: 15000,
-  },
-];
-
 export function LeadCrmConsole({
   mode,
+  salesCatalogItems = [],
   socialApprovals: initialSocialApprovals = [],
   socialDispatchMonitor: initialSocialDispatchMonitor = emptySocialDispatchMonitor,
   workspace,
@@ -305,6 +278,7 @@ export function LeadCrmConsole({
         <AttendanceCenterView
           conversationPane={conversationPane}
           filteredLeads={filteredLeads}
+          salesCatalogItems={salesCatalogItems}
           search={search}
           selectedLead={selectedLead}
           selectedLeadId={selectedLead?.id ?? null}
@@ -745,6 +719,7 @@ function ConversationsView({
 function AttendanceCenterView({
   conversationPane,
   filteredLeads,
+  salesCatalogItems,
   search,
   selectedLead,
   selectedLeadId,
@@ -756,6 +731,7 @@ function AttendanceCenterView({
 }: {
   conversationPane: "inbox" | "chat";
   filteredLeads: ClientLeadRecord[];
+  salesCatalogItems: ClientSalesCatalogItem[];
   search: string;
   selectedLead: ClientLeadRecord | null;
   selectedLeadId: string | null;
@@ -807,6 +783,10 @@ function AttendanceCenterView({
   const activeCartKey = activeConversationId ?? activeLead?.id ?? null;
   const activeCartItems = activeCartKey ? leadCarts[activeCartKey] ?? [] : [];
   const activeCartTotalCents = activeCartItems.reduce((total, item) => total + (item.unitPriceCents * item.quantity), 0);
+  const activeCatalogProducts = useMemo(
+    () => buildAttendanceCatalogProducts(salesCatalogItems, activeLead?.companyId ?? null),
+    [activeLead?.companyId, salesCatalogItems],
+  );
 
   function updateActiveCart(updater: (items: AttendanceCartItem[]) => AttendanceCartItem[]) {
     if (!activeCartKey) {
@@ -836,7 +816,7 @@ function AttendanceCenterView({
           name: product.name,
           note: product.category,
           quantity: 1,
-          source: "quick",
+          source: "catalog",
           unitPriceCents: product.priceCents,
         },
       ];
@@ -1355,7 +1335,7 @@ function AttendanceCenterView({
                 onRemoveItem={removeCartItem}
                 onUpdateQuantity={updateCartItemQuantity}
                 onUseSummary={useCartSummaryInReply}
-                quickProducts={attendanceQuickProducts}
+                quickProducts={activeCatalogProducts}
                 totalCents={activeCartTotalCents}
               />
             ) : (
@@ -1579,8 +1559,8 @@ function AttendanceSalesBagPanel({
         <section>
           <div className="flex items-center justify-between gap-2">
             <div>
-              <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">Itens rapidos</p>
-              <h4 className="mt-1 text-[14px] font-bold text-slate-950">Adicionar produto</h4>
+              <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">Catalogo</p>
+              <h4 className="mt-1 text-[14px] font-bold text-slate-950">Produtos cadastrados</h4>
             </div>
             <Link
               className="inline-flex h-8 items-center gap-1.5 rounded-full border border-slate-200 px-3 text-[11px] font-semibold text-slate-700 transition hover:bg-slate-100"
@@ -1592,28 +1572,54 @@ function AttendanceSalesBagPanel({
           </div>
 
           <div className="mt-3 space-y-2">
-            {quickProducts.map((product) => (
-              <button
-                key={product.id}
-                className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3 text-left transition hover:border-red-200 hover:bg-red-50"
-                onClick={() => onAddQuickItem(product)}
-                type="button"
-              >
-                <span className="min-w-0">
-                  <span className="block truncate text-[13px] font-bold text-slate-950">{product.name}</span>
-                  <span className="mt-1 block line-clamp-2 text-[11px] leading-4 text-slate-500">{product.description}</span>
-                  <span className="mt-2 inline-flex rounded-full bg-slate-100 px-2 py-1 font-mono text-[9px] uppercase tracking-wide text-slate-500">
-                    {product.category}
+            {quickProducts.length ? quickProducts.map((product) => {
+              const hasPrice = product.priceCents > 0;
+
+              return (
+                <button
+                  key={product.id}
+                  className={cn(
+                    "grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-2xl border p-3 text-left transition",
+                    hasPrice
+                      ? "border-slate-200 bg-white hover:border-red-200 hover:bg-red-50"
+                      : "cursor-not-allowed border-amber-200 bg-amber-50/60 opacity-80",
+                  )}
+                  disabled={!hasPrice}
+                  onClick={() => onAddQuickItem(product)}
+                  type="button"
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate text-[13px] font-bold text-slate-950">{product.name}</span>
+                    <span className="mt-1 block line-clamp-2 text-[11px] leading-4 text-slate-500">{product.description}</span>
+                    <span className="mt-2 inline-flex rounded-full bg-slate-100 px-2 py-1 font-mono text-[9px] uppercase tracking-wide text-slate-500">
+                      {product.category}
+                    </span>
                   </span>
-                </span>
-                <span className="text-right">
-                  <span className="block font-mono text-[12px] font-bold text-red-600">{formatCurrencyCents(product.priceCents)}</span>
-                  <span className="mt-2 inline-grid h-8 w-8 place-items-center rounded-xl bg-red-600 text-white">
-                    <Plus className="h-3.5 w-3.5" />
+                  <span className="text-right">
+                    <span className={cn("block font-mono text-[12px] font-bold", hasPrice ? "text-red-600" : "text-amber-700")}>
+                      {hasPrice ? formatCurrencyCents(product.priceCents) : "Sem valor"}
+                    </span>
+                    <span className={cn("mt-2 inline-grid h-8 w-8 place-items-center rounded-xl text-white", hasPrice ? "bg-red-600" : "bg-amber-400")}>
+                      <Plus className="h-3.5 w-3.5" />
+                    </span>
                   </span>
-                </span>
-              </button>
-            ))}
+                </button>
+              );
+            }) : (
+              <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-center">
+                <Package className="mx-auto h-5 w-5 text-slate-400" />
+                <p className="mt-2 text-[13px] font-bold text-slate-950">Nenhum produto cadastrado</p>
+                <p className="mt-1 text-[11px] leading-5 text-slate-500">
+                  Cadastre produtos no Catalogo de Vendas para eles aparecerem aqui automaticamente.
+                </p>
+                <Link
+                  className="mt-3 inline-flex h-9 items-center justify-center rounded-xl bg-slate-950 px-3 text-[11px] font-bold text-white transition hover:bg-slate-800"
+                  href="/dashboard/links"
+                >
+                  Cadastrar produtos
+                </Link>
+              </div>
+            )}
           </div>
         </section>
 
@@ -1682,7 +1688,7 @@ function AttendanceSalesBagPanel({
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="truncate text-[13px] font-bold text-slate-950">{item.name}</p>
-                    <p className="mt-1 text-[11px] text-slate-500">{item.note ?? (item.source === "manual" ? "Item manual" : "Item rapido")}</p>
+                    <p className="mt-1 text-[11px] text-slate-500">{item.note ?? (item.source === "manual" ? "Item manual" : "Catalogo")}</p>
                   </div>
                   <button
                     aria-label={`Remover ${item.name}`}
@@ -3184,10 +3190,23 @@ function formatCurrencyCents(value: number) {
 }
 
 function parseCurrencyInputToCents(value: string) {
-  const normalized = value
-    .replace(/[^\d,.-]/g, "")
-    .replace(/\./g, "")
-    .replace(",", ".");
+  const cleaned = value.replace(/[^\d,.-]/g, "");
+  const lastComma = cleaned.lastIndexOf(",");
+  const lastDot = cleaned.lastIndexOf(".");
+  const decimalSeparator = lastComma > lastDot ? "," : lastDot > lastComma ? "." : null;
+  let normalized = cleaned;
+
+  if (decimalSeparator) {
+    const separatorIndex = decimalSeparator === "," ? lastComma : lastDot;
+    const integerPart = cleaned.slice(0, separatorIndex).replace(/[^\d-]/g, "");
+    const decimalPart = cleaned.slice(separatorIndex + 1).replace(/\D/g, "");
+    normalized = decimalPart.length <= 2 && decimalPart.length > 0
+      ? `${integerPart}.${decimalPart}`
+      : cleaned.replace(/[^\d-]/g, "");
+  } else {
+    normalized = cleaned.replace(/[^\d-]/g, "");
+  }
+
   const parsed = Number.parseFloat(normalized);
 
   if (!Number.isFinite(parsed) || parsed <= 0) {
@@ -3195,6 +3214,44 @@ function parseCurrencyInputToCents(value: string) {
   }
 
   return Math.round(parsed * 100);
+}
+
+function buildAttendanceCatalogProducts(items: ClientSalesCatalogItem[], companyId: string | null): AttendanceQuickProduct[] {
+  if (!companyId) {
+    return [];
+  }
+
+  return items
+    .filter((item) => item.companyId === companyId && item.status === "active")
+    .map((item) => ({
+      category: item.category ?? "Catalogo",
+      companyId: item.companyId,
+      description: item.description.trim() || item.highlightLabel || item.tag || "Produto cadastrado no catalogo.",
+      id: item.id,
+      name: item.title,
+      priceCents: getSalesCatalogItemPriceCents(item),
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+}
+
+function getSalesCatalogItemPriceCents(item: ClientSalesCatalogItem) {
+  const sku = item.skus.find((entry) => entry.status === "active") ?? item.skus[0] ?? null;
+  const candidates = [
+    item.offer.salePrice,
+    item.price,
+    sku?.salePrice,
+    sku?.price,
+  ];
+
+  for (const candidate of candidates) {
+    const cents = parseCurrencyInputToCents(candidate ?? "");
+
+    if (cents > 0) {
+      return cents;
+    }
+  }
+
+  return 0;
 }
 
 function buildLeadCartSummary(lead: ClientLeadRecord, items: AttendanceCartItem[]) {
