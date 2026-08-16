@@ -17,6 +17,7 @@ import {
   HUMAN_INTERVENTION_DEFAULT_MS,
   cancelQueuedWhatsappRunsForConversation,
   isConversationPausedForHuman,
+  scheduleHumanInterventionAutoResumeForLead,
 } from "./human-intervention";
 import {
   classifyWhatsappLeadDisplayName,
@@ -212,6 +213,14 @@ export async function ingestUazapiWebhook(input: {
         organizationId: instance.organization_id,
       }).catch(() => undefined);
     }
+    const autoResume = message.direction === "inbound" && lead && !message.isGroupChat && !isHandoffNotificationReply
+      ? await scheduleHumanInterventionAutoResumeForLead({
+          client,
+          conversationId: conversation.id,
+          messageOccurredAt: message.occurredAt,
+          providerMessageId: message.providerMessageId,
+        })
+      : null;
     const agentRun = message.direction === "inbound"
       ? await enqueueWhatsappAgentRun(client, {
           organizationId: instance.organization_id,
@@ -226,6 +235,8 @@ export async function ingestUazapiWebhook(input: {
           messageType: message.messageType,
           textContent: message.textContent,
           eventType,
+          allowPausedConversation: Boolean(autoResume),
+          humanFallbackResumeAt: autoResume?.resumeAt ?? null,
         })
       : null;
 
@@ -715,6 +726,11 @@ async function markConversationHandledByHuman(client: SupabaseClient, conversati
           reason: "human_outbound_from_connected_whatsapp",
           source: "connected_whatsapp",
           last_human_message_at: message.occurredAt,
+          lead_waiting_since: null,
+          last_unanswered_lead_message_at: null,
+          last_unanswered_lead_provider_message_id: null,
+          auto_resume_reason: null,
+          auto_resume_after: null,
           paused_until: pausedUntil,
           updated_at: new Date().toISOString(),
         },
@@ -744,6 +760,8 @@ async function enqueueWhatsappAgentRun(
     messageType: string | null;
     textContent: string | null;
     eventType: string;
+    allowPausedConversation?: boolean;
+    humanFallbackResumeAt?: string | null;
   },
 ) {
   const instanceMetadata = await loadWhatsappInstanceMetadata(client, input.whatsappInstanceId);
@@ -797,7 +815,7 @@ async function enqueueWhatsappAgentRun(
     return null;
   }
 
-  if (!isGroupChat && await isConversationPausedForHuman(client, input.conversationId)) {
+  if (!isGroupChat && !input.allowPausedConversation && await isConversationPausedForHuman(client, input.conversationId)) {
     return null;
   }
 
@@ -836,6 +854,13 @@ async function enqueueWhatsappAgentRun(
           debounced: true,
           debounced_at: new Date().toISOString(),
           messageGroupingSeconds,
+          ...(input.humanFallbackResumeAt
+            ? {
+                humanFallback: true,
+                humanFallbackReason: "lead_unanswered_after_handoff",
+                humanFallbackResumeAt: input.humanFallbackResumeAt,
+              }
+            : {}),
           ...(isPlatformWhatsapp
             ? {
                 platformWhatsapp: true,
@@ -886,6 +911,13 @@ async function enqueueWhatsappAgentRun(
         messageType: input.messageType,
         providerEventType: input.eventType,
         messageGroupingSeconds,
+        ...(input.humanFallbackResumeAt
+          ? {
+              humanFallback: true,
+              humanFallbackReason: "lead_unanswered_after_handoff",
+              humanFallbackResumeAt: input.humanFallbackResumeAt,
+            }
+          : {}),
         ...(isPlatformWhatsapp
           ? {
               platformWhatsapp: true,

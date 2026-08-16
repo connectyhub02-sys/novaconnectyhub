@@ -166,6 +166,11 @@ export async function POST(request: NextRequest) {
     reason: "manual_dashboard_reply",
     source: "connectyhub_dashboard",
     last_human_message_at: now,
+    lead_waiting_since: null,
+    last_unanswered_lead_message_at: null,
+    last_unanswered_lead_provider_message_id: null,
+    auto_resume_reason: null,
+    auto_resume_after: null,
     paused_until: pausedUntil,
     updated_at: now,
   };

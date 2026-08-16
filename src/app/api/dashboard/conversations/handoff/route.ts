@@ -63,6 +63,11 @@ export async function POST(request: NextRequest) {
         active: true,
         reason: "manual_dashboard_handoff",
         source: "connectyhub_dashboard",
+        lead_waiting_since: null,
+        last_unanswered_lead_message_at: null,
+        last_unanswered_lead_provider_message_id: null,
+        auto_resume_reason: null,
+        auto_resume_after: null,
         paused_until: pausedUntil,
         updated_at: now,
       }
@@ -71,6 +76,11 @@ export async function POST(request: NextRequest) {
         active: false,
         reason: "manual_dashboard_resume",
         source: "connectyhub_dashboard",
+        lead_waiting_since: null,
+        last_unanswered_lead_message_at: null,
+        last_unanswered_lead_provider_message_id: null,
+        auto_resume_reason: null,
+        auto_resume_after: null,
         paused_until: null,
         updated_at: now,
       };

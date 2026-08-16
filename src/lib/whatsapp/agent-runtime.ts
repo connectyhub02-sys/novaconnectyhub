@@ -318,24 +318,36 @@ export async function processQueuedWhatsappAgentRuns(input: {
 
   const { data, error } = await client
     .from("agent_runs")
-    .select("id")
+    .select("id, metadata")
     .eq("run_status", "queued")
     .eq("trigger_source", "connectyhub/whatsapp.message.received")
     .order("created_at", { ascending: true })
-    .limit(Math.min(Math.max(input.limit ?? 5, 1), 20));
+    .limit(50);
 
   if (error) {
     throw new Error(`Nao foi possivel carregar fila WhatsApp: ${error.message}`);
   }
 
   const results = [];
+  let deferred = 0;
+  const maxProcess = Math.min(Math.max(input.limit ?? 5, 1), 20);
 
-  for (const row of (data ?? []) as Array<{ id: string }>) {
+  for (const row of (data ?? []) as Array<{ id: string; metadata: JsonRecord | null }>) {
+    if (isRunDeferred(row.metadata)) {
+      deferred += 1;
+      continue;
+    }
+
     results.push(await processWhatsappAgentRun({ runId: row.id, client }));
+
+    if (results.length >= maxProcess) {
+      break;
+    }
   }
 
   return {
     processed: results.length,
+    deferred,
     expired,
     results,
   };
@@ -880,6 +892,7 @@ async function loadRunBehaviorContext(client: SupabaseClient, runId: string) {
     behavior,
     messageType: asString(metadata?.messageType) ?? "text",
     debounced: metadata?.debounced === true,
+    deferredUntil: asString(metadata?.humanFallbackResumeAt) ?? asString(metadata?.deferredUntil),
     latestInbound,
     recentInboundMessages,
   };
@@ -915,9 +928,16 @@ function resolveWhatsappAgentRunDelaySeconds(context: {
   behavior: WhatsappBehaviorConfig;
   messageType: string;
   debounced: boolean;
+  deferredUntil: string | null;
   latestInbound: ConversationMessageRow | null;
   recentInboundMessages: ConversationMessageRow[];
 }) {
+  const deferredDelay = getFutureDelaySeconds(context.deferredUntil);
+
+  if (deferredDelay > 0) {
+    return deferredDelay;
+  }
+
   const { behavior, latestInbound } = context;
 
   if (!behavior.smartTiming) {
@@ -978,6 +998,24 @@ function resolveWhatsappAgentRunDelaySeconds(context: {
   }
 
   return context.debounced ? behavior.timingTextBurstSeconds : behavior.timingTextSeconds;
+}
+
+function isRunDeferred(metadata: JsonRecord | null) {
+  return getFutureDelaySeconds(asString(readRecord(metadata)?.humanFallbackResumeAt) ?? asString(readRecord(metadata)?.deferredUntil)) > 0;
+}
+
+function getFutureDelaySeconds(value: string | null) {
+  if (!value) {
+    return 0;
+  }
+
+  const timestamp = new Date(value).getTime();
+
+  if (Number.isNaN(timestamp)) {
+    return 0;
+  }
+
+  return Math.max(0, Math.ceil((timestamp - Date.now()) / 1000));
 }
 
 function findPreviousInboundForDelay(messages: ConversationMessageRow[], current: ConversationMessageRow | null, windowSeconds: number) {

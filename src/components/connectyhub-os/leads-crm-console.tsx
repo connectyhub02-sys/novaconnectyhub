@@ -1090,7 +1090,7 @@ function AttendanceCenterView({
                       {" "}
                       {handoffCountdown ? `Retorno automatico em ${handoffCountdown}.` : "Retorno automatico sem prazo definido."}
                       {" "}
-                      Cada resposta humana reinicia esse tempo.
+                      Se o lead ficar sem resposta humana, a IA pode assumir antes da pausa longa.
                     </div>
                   ) : null}
                   <form className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]" onSubmit={handleManualReplySubmit}>
