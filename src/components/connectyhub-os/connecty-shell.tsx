@@ -230,7 +230,6 @@ const clientSections: NavSection[] = [
       { label: "Catálogo de Vendas", href: "/dashboard/links",         icon: ShoppingBag, tone: "sky" },
       { label: "Automações",      href: "/dashboard/automacoes",       icon: Zap, tone: "violet" },
       { label: "Produtos",        href: "/dashboard/produtos",         icon: ShoppingBag, tone: "amber" },
-      { label: "Relatórios",      href: "/dashboard/relatorios",       icon: BarChart3, tone: "blue" },
       { label: "Integrações",     href: "/dashboard/integracoes",      icon: PlugZap, tone: "teal" },
       { label: "API WhatsApp",     href: "/dashboard/api-whatsapp",     icon: PlugZap, tone: "emerald" },
       { label: "Planos",           href: "/dashboard/planos",           icon: Coins, tone: "amber" },

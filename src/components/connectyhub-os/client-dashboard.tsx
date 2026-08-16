@@ -1,15 +1,13 @@
 import type { LucideIcon } from "lucide-react";
 import {
-  Check,
-  Coins,
+  BarChart3,
+  Bot,
+  CheckCircle2,
   CreditCard,
-  Eye,
   HardDrive,
-  Link2,
   MapPin,
-  Megaphone,
   MessageCircle,
-  Send,
+  ShoppingBag,
   Smartphone,
   UserCheck,
   Zap,
@@ -20,22 +18,15 @@ import { AreaChartPanel } from "./charts";
 import {
   AgentCard,
   CommandButton,
-  HeroMetricCard,
   KpiStat,
-  MetricCard,
-  MiniSparkline,
   NeonBadge,
   PageHeader,
   Panel,
   ProgressBar,
-  StatusBadge,
   toneClass,
 } from "./panel-primitives";
 
-type StatusTone = "online" | "warning" | "critical" | "idle";
 type Tone = "green" | "cyan" | "amber" | "rose" | "violet" | "zinc";
-
-const metricIcons: LucideIcon[] = [UserCheck, MessageCircle, CreditCard, Coins];
 
 export function ClientDashboard({
   overview,
@@ -51,14 +42,21 @@ export function ClientDashboard({
   userLabel?: string;
 }) {
   const metrics = overview.metrics;
-  const leadCard = overview.summaryCards.find((card) => card.id === "leads") ?? overview.summaryCards[0];
-  const creditsCard = overview.summaryCards.find((card) => card.id === "credits") ?? overview.summaryCards[3];
   const agentsOnlineLabel = `${formatInteger(metrics.agents.online)} online`;
   const generatedAt = formatDateTime(overview.generatedAt);
   const insight = buildInsight(overview);
   const recommendation = buildRecommendation(overview);
-  const channelRows = buildChannelRows(overview);
-  const automationRows = buildAutomationRows(overview);
+  const conversionRate = percentage(metrics.sales.paidOrders30d, metrics.sales.orders30d);
+  const whatsappHealth = percentage(metrics.whatsapp.connected, metrics.whatsapp.total);
+  const automationSuccess = metrics.automation.successRate;
+  const leadStatusRows: Array<{ label: string; tone: Tone; value: number }> = [
+    { label: "Novos", value: metrics.leads.new, tone: "cyan" },
+    { label: "Ativos", value: metrics.leads.active, tone: "green" },
+    { label: "Qualificados", value: metrics.leads.qualified, tone: "violet" },
+    { label: "Ganhos", value: metrics.leads.won, tone: "green" },
+    { label: "Perdidos", value: metrics.leads.lost, tone: "rose" },
+  ];
+  const actionItems = buildActionItems(overview);
 
   return (
     <ConnectyShell
@@ -86,117 +84,106 @@ export function ClientDashboard({
 
       {overview.storage ? <StorageUsageBanner storage={overview.storage} /> : null}
 
-      <div className="mb-4 grid gap-4 lg:grid-cols-3">
-        <HeroMetricCard
+      <div className="mb-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <ReportCard
           icon={UserCheck}
-          label="Total de Leads"
-          value={leadCard?.value ?? "0"}
-          sub1Label="Ativos hoje"
-          sub1Value={formatInteger(metrics.leads.today)}
-          sub2Label="Ultimos 7 dias"
-          sub2Value={formatInteger(metrics.leads.last7d)}
-          series={leadCard?.series ?? overview.leadSeries.map((point) => point.value)}
-          accent="cyan"
+          label="Leads totais"
+          value={formatInteger(metrics.leads.total)}
+          detail={`${formatInteger(metrics.leads.last7d)} nos ultimos 7 dias`}
+          tone="cyan"
         />
-
-        <div
-          className="rounded-2xl p-5"
-          style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}
-        >
-          <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">agentes IA / status</p>
-          <p className="mt-1 text-[14px] font-semibold" style={{ color: "var(--ch-text)" }}>
-            Operacao atual
-          </p>
-          <div className="mt-4 space-y-2.5">
-            {overview.activeAgents.length ? (
-              overview.activeAgents.slice(0, 4).map((agent) => {
-                const isWarn = agent.status === "warning" || agent.status === "critical";
-                return (
-                  <div key={agent.id} className="flex items-center justify-between gap-3">
-                    <div className="flex min-w-0 items-center gap-2">
-                      <div
-                        className="h-1.5 w-1.5 shrink-0 rounded-full"
-                        style={{
-                          background: isWarn ? "#f59e0b" : "var(--ch-accent)",
-                          boxShadow: isWarn ? "0 0 5px #f59e0b" : "0 0 5px var(--ch-accent)",
-                        }}
-                      />
-                      <span className="truncate text-[12px] font-medium" style={{ color: "var(--ch-text)" }}>
-                        {agent.name}
-                      </span>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-2">
-                      <span className="font-mono text-[10px] text-slate-500">{agent.accuracy}%</span>
-                      <div className="w-16">
-                        <ProgressBar value={agent.accuracy} tone={isWarn ? "amber" : "cyan"} />
-                      </div>
-                    </div>
-                  </div>
-                );
-              })
-            ) : (
-              <EmptyState title="Nenhum agente ativo" detail="Crie ou ative um agente para acompanhar a operacao aqui." />
-            )}
-          </div>
-          <div
-            className="mt-4 rounded-xl px-3 py-2.5"
-            style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
-          >
-            <p className="font-mono text-[9px] uppercase tracking-wider text-slate-500">gerente IA recomenda</p>
-            <p className="mt-1 text-[11px] leading-4 text-slate-500">{recommendation}</p>
-          </div>
-        </div>
-
-        <div
-          className="rounded-2xl p-5"
-          style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}
-        >
-          <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">conversas / hoje</p>
-          <p className="mt-1 text-[14px] font-semibold" style={{ color: "var(--ch-text)" }}>
-            Atendimento IA
-          </p>
-          <div className="mt-4 divide-y" style={{ borderColor: "var(--ch-border)" }}>
-            {overview.recentConversations.length ? (
-              overview.recentConversations.slice(0, 4).map((conversation) => (
-                <div key={conversation.id} className="py-2.5 first:pt-0 last:pb-0">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-[12px] font-medium" style={{ color: "var(--ch-text)" }}>
-                      {conversation.leadName}
-                    </span>
-                    <span className="font-mono text-[10px]" style={{ color: "var(--ch-accent)" }}>
-                      {conversation.score}
-                    </span>
-                  </div>
-                  <div className="mt-0.5 flex items-center justify-between">
-                    <span className="font-mono text-[9px] uppercase tracking-wide text-slate-500">
-                      {conversation.channel}
-                    </span>
-                    <span className="max-w-[140px] truncate text-[10px] text-slate-500">{conversation.summary}</span>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <EmptyState title="Sem conversas recentes" detail="As novas conversas desta empresa aparecerao aqui." />
-            )}
-          </div>
-        </div>
+        <ReportCard
+          icon={MessageCircle}
+          label="Conversas abertas"
+          value={formatInteger(metrics.conversations.open)}
+          detail={`${formatInteger(metrics.conversations.today)} movimentadas hoje`}
+          tone="teal"
+        />
+        <ReportCard
+          icon={Smartphone}
+          label="WhatsApps conectados"
+          value={`${formatInteger(metrics.whatsapp.connected)}/${formatInteger(metrics.whatsapp.total)}`}
+          detail={`${whatsappHealth}% de saude operacional`}
+          tone={whatsappHealth >= 80 ? "green" : "amber"}
+        />
+        <ReportCard
+          icon={CreditCard}
+          label="Receita 30 dias"
+          value={formatMoney(metrics.sales.revenue30dBrl)}
+          detail={`${formatInteger(metrics.sales.paidOrders30d)} pedidos pagos`}
+          tone="green"
+        />
       </div>
 
-      <div className="mb-4">
+      <div className="mb-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
         <AreaChartPanel
           title="Evolucao de Leads"
           eyebrow="ultimos 7 dias / empresa atual"
-          value={`${formatInteger(metrics.leads.total)} leads`}
+          value={`${formatInteger(metrics.leads.last7d)} novos leads`}
           trend={metrics.leads.last7d > 0 ? `+${formatInteger(metrics.leads.last7d)} em 7d` : undefined}
           data={overview.leadSeries}
           color="#06b6d4"
+          compact
         />
+
+        <Panel id="crm" title="Funil de leads" eyebrow="status / CRM" compact>
+          <div className="grid gap-3">
+            {leadStatusRows.map((stage) => {
+              const tone = toneClass(stage.tone);
+              return (
+                <div key={stage.label}>
+                  <div className="mb-1.5 flex items-center justify-between gap-2">
+                    <span className="text-[12px] text-slate-500">{stage.label}</span>
+                    <span className={`font-mono text-[12px] font-semibold ${tone.text}`}>
+                      {formatInteger(stage.value)}
+                    </span>
+                  </div>
+                  <ProgressBar value={percentage(stage.value, Math.max(metrics.leads.total, 1))} tone={stage.tone} />
+                </div>
+              );
+            })}
+          </div>
+        </Panel>
       </div>
 
-      <div className="mb-4 grid grid-cols-4 gap-1.5 sm:gap-2 md:gap-4">
-        {overview.summaryCards.map((metric, index) => (
-          <MetricCard key={metric.id} icon={metricIcons[index] ?? Zap} {...metric} />
-        ))}
+      <div className="mb-4 grid gap-4 xl:grid-cols-3">
+        <Panel id="operacao-whatsapp" title="Operacao WhatsApp" eyebrow="agentes / mensagens / conexao" tone="violet" compact>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <KpiStat label="Agentes" value={formatInteger(metrics.agents.total)} tone="violet" />
+            <KpiStat label="Online" value={formatInteger(metrics.agents.online)} tone="green" />
+            <KpiStat label="Mensagens hoje" value={formatInteger(metrics.messages.today)} tone="cyan" />
+            <KpiStat label="Saidas hoje" value={formatInteger(metrics.messages.outboundToday)} tone="amber" />
+          </div>
+          <div
+            className="mt-3 rounded-xl px-3 py-2.5"
+            style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
+          >
+            <p className="font-mono text-[9px] uppercase tracking-wider text-slate-500">recomendacao</p>
+            <p className="mt-1 text-[11px] leading-4 text-slate-500">{recommendation}</p>
+          </div>
+        </Panel>
+
+        <Panel id="vendas-checkout" title="Vendas e checkout" eyebrow="catalogo / pedidos / pagamentos" tone="green" compact>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <KpiStat label="Pedidos 30d" value={formatInteger(metrics.sales.orders30d)} tone="cyan" />
+            <KpiStat label="Pagos 30d" value={formatInteger(metrics.sales.paidOrders30d)} tone="green" />
+            <KpiStat label="Conversao" value={`${conversionRate}%`} tone={conversionRate > 0 ? "green" : "zinc"} />
+            <KpiStat
+              label="Rejeitados"
+              value={formatInteger(metrics.sales.rejectedPayments30d)}
+              tone={metrics.sales.rejectedPayments30d ? "rose" : "zinc"}
+            />
+          </div>
+        </Panel>
+
+        <Panel id="creditos-automacoes" title="Creditos e automacoes" eyebrow="consumo / execucoes" tone="amber" compact>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <KpiStat label="Disponiveis" value={formatInteger(metrics.credits.available)} tone="amber" />
+            <KpiStat label="Usados 30d" value={formatInteger(metrics.credits.used30d)} tone="rose" />
+            <KpiStat label="Execucoes 30d" value={formatInteger(metrics.automation.runs30d)} tone="violet" />
+            <KpiStat label="Sucesso" value={`${automationSuccess}%`} tone={automationSuccess >= 80 ? "green" : "amber"} />
+          </div>
+        </Panel>
       </div>
 
       <div className="mb-4 grid gap-4 xl:grid-cols-[1fr_340px]">
@@ -271,26 +258,7 @@ export function ClientDashboard({
         </Panel>
       </div>
 
-      <div className="mb-4 grid gap-4 xl:grid-cols-[220px_1fr]">
-        <Panel id="crm" title="Funil de vendas" eyebrow="do clique a venda">
-          <div className="space-y-3">
-            {overview.funnel.map((stage) => {
-              const tone = toneClass(stage.tone);
-              return (
-                <div key={stage.label}>
-                  <div className="mb-1.5 flex items-center justify-between">
-                    <span className="text-[12px] text-slate-500">{stage.label}</span>
-                    <span className={`font-mono text-[12px] font-semibold ${tone.text}`}>
-                      {formatInteger(stage.count)}
-                    </span>
-                  </div>
-                  <ProgressBar value={stage.value} tone={stage.tone} />
-                </div>
-              );
-            })}
-          </div>
-        </Panel>
-
+      <div className="mb-4">
         <Panel id="conversas" title="Conversas ativas" eyebrow="canais / IA insight">
           <div className="grid gap-4 lg:grid-cols-[200px_1fr]">
             <div className="divide-y" style={{ borderColor: "var(--ch-border)" }}>
@@ -373,138 +341,51 @@ export function ClientDashboard({
         </Panel>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[280px_1fr_280px]">
-        <Panel id="links" title="Canais e creditos" eyebrow="whatsapp / carteira / consumo">
-          <div className="divide-y" style={{ borderColor: "var(--ch-border)" }}>
-            {channelRows.map((row) => (
-              <div key={row.label} className="py-2.5 first:pt-0 last:pb-0">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="flex items-center gap-1.5 text-[11px] text-slate-500">
-                    <row.icon className="h-3 w-3 text-slate-400" />
-                    {row.label}
-                  </span>
-                  <span className="font-mono text-[10px]" style={{ color: "var(--ch-accent)" }}>
-                    {row.value}
-                  </span>
-                </div>
-                <div className="mt-0.5 text-[11px] text-slate-500">{row.detail}</div>
-              </div>
-            ))}
-          </div>
-          <div className="mt-3">
-            <MiniSparkline color="#06b6d4" data={creditsCard?.series ?? [0, 0, 0, 0]} />
-            <div className="mt-3 space-y-2">
-              {[
-                [Eye, "Mensagens hoje", formatInteger(metrics.messages.today)],
-                [Link2, "Entradas", formatInteger(metrics.messages.inboundToday)],
-                [Send, "Saidas", formatInteger(metrics.messages.outboundToday)],
-              ].map(([Icon, label, value]) => {
-                const IconComponent = Icon as LucideIcon;
-                return (
-                  <div key={label as string} className="flex items-center justify-between">
-                    <span className="flex items-center gap-1.5 text-[11px] text-slate-500">
-                      <IconComponent className="h-3 w-3 text-slate-400" />
-                      {label as string}
-                    </span>
-                    <span className="font-mono text-[11px] font-medium" style={{ color: "var(--ch-text)" }}>
-                      {value as string}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </Panel>
-
-        <Panel id="campanhas" title="Campanhas ativas" eyebrow="pago / organico / ROAS">
-          {overview.campaigns.length ? (
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {overview.campaigns.map((campaign) => (
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,0.58fr)_minmax(0,0.42fr)]">
+        <Panel title="Resumo por empresa" eyebrow="workspaces vinculados" tone="cyan">
+          <div className="grid gap-2">
+            {overview.companies.length ? (
+              overview.companies.map((company) => (
                 <div
-                  key={campaign.id}
-                  className="rounded-xl p-3"
-                  style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
+                  key={company.id}
+                  className="flex items-center justify-between gap-3 rounded-xl border px-3 py-2"
+                  style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}
                 >
-                  <div className="mb-2 flex items-center justify-between">
-                    <StatusBadge status={toStatusTone(campaign.status)} label={campaign.status} />
-                    <Megaphone className="h-3.5 w-3.5 text-slate-400" />
+                  <div className="min-w-0">
+                    <p className="truncate text-[12px] font-semibold text-slate-100">{company.name}</p>
+                    <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">
+                      {company.planCode} / {company.status}
+                    </p>
                   </div>
-                  <div className="text-[12.5px] font-semibold" style={{ color: "var(--ch-text)" }}>
-                    {campaign.name}
-                  </div>
-                  <div className="mt-0.5 font-mono text-[9px] uppercase tracking-wide text-slate-400">
-                    {campaign.platform}
-                  </div>
-                  <div className="mt-3 grid grid-cols-2 gap-2">
-                    {[
-                      ["Gasto", formatMoney(campaign.spendBrl), ""],
-                      ["Leads", formatInteger(campaign.leads), "accent"],
-                      ["Cliques", formatInteger(campaign.clicks), ""],
-                      ["ROAS", formatRoas(campaign.roas), "green"],
-                    ].map(([label, value, color]) => (
-                      <div key={label}>
-                        <div className="font-mono text-[9px] text-slate-400">{label}</div>
-                        <div
-                          className="font-mono text-[11px] font-semibold"
-                          style={{
-                            color:
-                              color === "accent" ? "var(--ch-accent)" : color === "green" ? "#10b981" : "var(--ch-text)",
-                          }}
-                        >
-                          {value}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                  {overview.company?.id === company.id ? (
+                    <NeonBadge tone="green">atual</NeonBadge>
+                  ) : (
+                    <NeonBadge tone="zinc">{company.role}</NeonBadge>
+                  )}
                 </div>
-              ))}
-            </div>
-          ) : (
-            <EmptyState
-              title="Sem campanhas sincronizadas"
-              detail="As campanhas conectadas da empresa aparecerao aqui depois da integracao."
-            />
-          )}
+              ))
+            ) : (
+              <EmptyState title="Nenhuma empresa cadastrada" detail="Crie uma empresa para iniciar os indicadores do painel." />
+            )}
+          </div>
         </Panel>
 
-        <Panel id="automacoes" title="Automacoes" eyebrow="gatilhos / execucoes">
-          <div className="divide-y" style={{ borderColor: "var(--ch-border)" }}>
-            {automationRows.map((automation) => (
-              <div key={automation.trigger} className="py-3 first:pt-0 last:pb-0">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5">
-                      <StatusBadge status={automation.status} />
-                      <span className="truncate text-[12px] font-medium" style={{ color: "var(--ch-text)" }}>
-                        {automation.trigger}
-                      </span>
-                    </div>
-                    <p className="mt-1 text-[11px] leading-4 text-slate-500">{automation.action}</p>
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <div className="font-mono text-[9px] text-slate-400">exec.</div>
-                    <div className="font-mono text-[14px] font-bold text-emerald-500">{automation.runs}</div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+        <Panel title="Proximas acoes" eyebrow="para vender melhor no WhatsApp" tone="violet">
+          <div className="grid gap-2">
+            {actionItems.map((item) => {
+              const Icon = item.icon;
 
-          <div className="mt-4 grid grid-cols-2 gap-2">
-            {[
-              [Zap, "Execucoes 30d", formatInteger(metrics.automation.runs30d)],
-              [Check, "Taxa sucesso", `${formatInteger(metrics.automation.successRate)}%`],
-            ].map(([Icon, label, value]) => {
-              const IconComponent = Icon as LucideIcon;
               return (
                 <div
-                  key={label as string}
-                  className="rounded-xl p-3"
-                  style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
+                  key={item.label}
+                  className="flex gap-3 rounded-xl border px-3 py-3"
+                  style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}
                 >
-                  <IconComponent className="h-3.5 w-3.5 text-slate-400" />
-                  <div className="mt-2 font-mono text-[14px] font-bold text-emerald-500">{value as string}</div>
-                  <div className="font-mono text-[9px] text-slate-400">{label as string}</div>
+                  <Icon className="mt-0.5 h-4 w-4 shrink-0" style={{ color: "var(--ch-accent)" }} />
+                  <div className="min-w-0">
+                    <p className="text-[12px] font-semibold text-slate-100">{item.label}</p>
+                    <p className="mt-1 text-[11px] leading-5 text-slate-500">{item.detail}</p>
+                  </div>
                 </div>
               );
             })}
@@ -525,6 +406,37 @@ function EmptyState({ title, detail }: { title: string; detail: string }) {
         {title}
       </p>
       <p className="mt-1 text-[11px] leading-4 text-slate-500">{detail}</p>
+    </div>
+  );
+}
+
+function ReportCard({
+  detail,
+  icon: Icon,
+  label,
+  tone,
+  value,
+}: {
+  detail: string;
+  icon: LucideIcon;
+  label: string;
+  tone: "cyan" | "green" | "amber" | "rose" | "teal";
+  value: string;
+}) {
+  const color = tone === "green" ? "#34d399" : tone === "amber" ? "#fbbf24" : tone === "rose" ? "#fb7185" : tone === "teal" ? "#2dd4bf" : "#22d3ee";
+
+  return (
+    <div className="rounded-2xl p-4" style={{ background: "var(--ch-panel)", border: `1px solid ${color}55` }}>
+      <div className="flex items-start justify-between gap-3">
+        <p className="min-w-0 truncate font-mono text-[9px] uppercase tracking-widest text-slate-500">{label}</p>
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl" style={{ background: `${color}18`, color }}>
+          <Icon className="h-4 w-4" />
+        </span>
+      </div>
+      <p className="mt-3 truncate font-mono text-[26px] font-bold leading-none" style={{ color }}>
+        {value}
+      </p>
+      <p className="mt-2 text-[11px] leading-5 text-slate-500">{detail}</p>
     </div>
   );
 }
@@ -673,51 +585,28 @@ function buildInsight(overview: ClientDashboardOverview) {
   };
 }
 
-function buildChannelRows(overview: ClientDashboardOverview) {
-  return [
-    {
-      icon: Smartphone,
-      label: "WhatsApp conectados",
-      value: `${formatInteger(overview.metrics.whatsapp.connected)}/${formatInteger(overview.metrics.whatsapp.total)}`,
-      detail: `${formatInteger(overview.metrics.whatsapp.disconnected)} instancia(s) desconectada(s).`,
-    },
-    {
-      icon: MessageCircle,
-      label: "Conversas abertas",
-      value: formatInteger(overview.metrics.conversations.open),
-      detail: `${formatInteger(overview.metrics.conversations.today)} conversa(s) movimentadas hoje.`,
-    },
-    {
-      icon: Coins,
-      label: "Creditos disponiveis",
-      value: formatInteger(overview.metrics.credits.available),
-      detail: `${formatInteger(overview.metrics.credits.used30d)} credito(s) consumidos em 30 dias.`,
-    },
-  ];
-}
+function buildActionItems(overview: ClientDashboardOverview) {
+  const metrics = overview.metrics;
 
-function buildAutomationRows(overview: ClientDashboardOverview) {
-  const successStatus: StatusTone =
-    overview.metrics.automation.runs30d === 0
-      ? "idle"
-      : overview.metrics.automation.failed30d > 0
-        ? "warning"
-        : "online";
-  const trafficStatus: StatusTone = overview.metrics.traffic.openActions > 0 ? "warning" : "idle";
+  if (!overview.company) {
+    return [
+      { icon: CheckCircle2, label: "Criar empresa", detail: "O Dashboard ganha dados reais depois que o usuario cria a primeira empresa." },
+    ];
+  }
 
   return [
-    {
-      trigger: "Execucoes dos agentes",
-      action: `${formatInteger(overview.metrics.automation.completed30d)} concluidas e ${formatInteger(overview.metrics.automation.failed30d)} com falha em 30 dias.`,
-      runs: formatInteger(overview.metrics.automation.runs30d),
-      status: successStatus,
-    },
-    {
-      trigger: "Acoes do gestor IA",
-      action: `${formatInteger(overview.metrics.traffic.openActions)} acao(oes) abertas de trafego e crescimento.`,
-      runs: formatInteger(overview.metrics.traffic.openActions),
-      status: trafficStatus,
-    },
+    metrics.agents.total === 0
+      ? { icon: Bot, label: "Criar agente", detail: "Sem agente ativo, o WhatsApp ainda nao consegue atender leads automaticamente." }
+      : { icon: Bot, label: "Revisar agente", detail: `${formatInteger(metrics.agents.online)} agente(s) online e ${formatInteger(metrics.agents.warning)} com atencao.` },
+    metrics.whatsapp.connected === 0
+      ? { icon: Smartphone, label: "Conectar WhatsApp", detail: "Conecte o numero do agente para capturar conversas, leads e mensagens." }
+      : { icon: Smartphone, label: "WhatsApp conectado", detail: `${formatInteger(metrics.whatsapp.connected)} instancia(s) conectada(s) no workspace.` },
+    metrics.sales.orders30d === 0
+      ? { icon: ShoppingBag, label: "Ativar catalogo", detail: "Cadastre ou importe produtos para o agente vender sem site." }
+      : { icon: CreditCard, label: "Otimizar checkout", detail: `${formatInteger(metrics.sales.paidOrders30d)} pedido(s) pagos nos ultimos 30 dias.` },
+    metrics.automation.runs30d === 0
+      ? { icon: Zap, label: "Configurar automacoes", detail: "Use automacoes para pos-venda, pagamento e recuperacao de conversa parada." }
+      : { icon: BarChart3, label: "Acompanhar automacoes", detail: `${formatInteger(metrics.automation.completed30d)} execucoes concluidas em 30 dias.` },
   ];
 }
 
@@ -729,24 +618,6 @@ function channelTone(channel: string): Tone {
   if (normalized.includes("google")) return "amber";
 
   return "cyan";
-}
-
-function toStatusTone(value: string): StatusTone {
-  const normalized = value.toLowerCase();
-
-  if (["online", "connected", "active", "approved", "paid", "selected"].some((status) => normalized.includes(status))) {
-    return "online";
-  }
-
-  if (["attention", "atencao", "pending", "queued", "suggested", "progress"].some((status) => normalized.includes(status))) {
-    return "warning";
-  }
-
-  if (["critical", "critico", "failed", "rejected", "blocked", "error"].some((status) => normalized.includes(status))) {
-    return "critical";
-  }
-
-  return "idle";
 }
 
 function storageTone(status: NonNullable<ClientDashboardOverview["storage"]>["status"]): Tone {
@@ -767,8 +638,9 @@ function formatMoney(value: number) {
   }).format(value);
 }
 
-function formatRoas(value: number | null) {
-  return value === null ? "n/d" : `${new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 }).format(value)}x`;
+function percentage(value: number, total: number) {
+  if (!total) return 0;
+  return Math.round((value / total) * 100);
 }
 
 function formatDateTime(value: string) {

@@ -33,4 +33,9 @@ describe("Eliane self-service positioning", () => {
     expect(agentRuntimeSource).toContain("Nao exponha email, telefone completo, ID");
     expect(elianeAgentSource).toContain("IDENTIFICACAO DE CADASTRO");
   });
+
+  it("points report questions to Dashboard instead of a separate menu", () => {
+    expect(elianeAgentSource).toContain("Dashboard concentra os indicadores de relatorios do cliente");
+    expect(elianeAgentSource).toContain("Indicadores que antes ficavam em Relatorios agora ficam no Dashboard");
+  });
 });
