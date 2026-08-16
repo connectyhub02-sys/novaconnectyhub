@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { NextResponse, type NextRequest } from "next/server";
-import { assertBillableAccess, BillingAccessError } from "@/lib/billing/trial";
+import { assertBillableAccess, BillingAccessError, getOrganizationBillingAccess } from "@/lib/billing/trial";
 import {
   getOrganizationSalesCatalogSettings,
   mapSalesCatalogItem,
@@ -144,13 +144,17 @@ const salesCatalogOrderSelect = [
   "agent_notes",
   "internal_notes",
   "latest_payment_session_id",
+  "commercial_flow_type",
+  "revenue_owner_type",
+  "contains_platform_products",
+  "commission_eligible",
   "metadata",
   "created_by",
   "created_at",
   "updated_at",
 ].join(", ");
 
-const salesCatalogOrderItemSelect = "id, order_id, organization_id, catalog_item_id, sku_id, sku_code, title, tag, quantity, unit_price, sale_price, total, attributes, fulfillment, metadata, created_at";
+const salesCatalogOrderItemSelect = "id, order_id, organization_id, catalog_item_id, sku_id, sku_code, title, tag, quantity, unit_price, sale_price, total, attributes, fulfillment, product_origin_type, commercial_flow_type, revenue_owner_type, commission_eligible, platform_product_id, metadata, created_at";
 const salesCatalogPaymentIntegrationSelect = "id, organization_id, provider, mode, status, account_label, provider_account_id, public_key, access_token_encrypted, refresh_token_encrypted, token_expires_at, connected_at, last_error, webhook_secret_encrypted, webhook_url, metadata, created_at, updated_at";
 
 export async function POST(request: NextRequest) {
@@ -506,7 +510,7 @@ async function handleJsonPost(request: NextRequest, workspace: CurrentWorkspace)
       companyId,
       client,
     });
-    await assertBillableAccess({ organizationId: company.id, client });
+    await assertSalesCatalogJsonActionAccess({ action, organizationId: company.id, client });
 
     if (action === "import_whatsapp_catalog") {
       const result = await importWhatsappCatalog({
@@ -641,6 +645,21 @@ async function handleJsonPost(request: NextRequest, workspace: CurrentWorkspace)
       return NextResponse.json(result);
     }
 
+    if (action === "create_cart_checkout") {
+      const result = await createSalesCatalogCartCheckout({
+        client,
+        companyId,
+        userId: workspace.user.id,
+        body,
+      });
+
+      revalidatePath("/dashboard/atendimento");
+      revalidatePath("/dashboard/links");
+      revalidatePath("/dashboard/whatsapp");
+
+      return NextResponse.json(result);
+    }
+
     if (action === "update_order_status") {
       const result = await updateSalesCatalogOrderStatus({
         client,
@@ -681,6 +700,27 @@ async function handleJsonPost(request: NextRequest, workspace: CurrentWorkspace)
   } catch (error) {
     return NextResponse.json(formatRouteError(error, "Erro ao sincronizar catalogo."), { status: statusForRouteError(error, 500) });
   }
+}
+
+async function assertSalesCatalogJsonActionAccess(input: {
+  action: string | null;
+  organizationId: string;
+  client: ReturnType<typeof createServiceClient>;
+}) {
+  if (input.action !== "create_cart_checkout") {
+    return assertBillableAccess({ organizationId: input.organizationId, client: input.client });
+  }
+
+  const status = await getOrganizationBillingAccess({
+    organizationId: input.organizationId,
+    client: input.client,
+  });
+
+  if (status.canUseBillableFeatures || status.state === "paid_no_credits") {
+    return status;
+  }
+
+  throw new BillingAccessError(status);
 }
 
 async function saveCatalogSettings(input: {
@@ -1378,6 +1418,343 @@ async function createSalesCatalogOrder(input: {
   });
 
   return { order: mapSalesCatalogOrder(orderRow, [orderItemRow]), items: updatedItems };
+}
+
+type SalesCatalogCartCheckoutItem = {
+  catalogItemId: string | null;
+  name: string;
+  note: string | null;
+  quantity: number;
+  source: "catalog" | "manual";
+  unitPriceCents: number;
+};
+
+async function createSalesCatalogCartCheckout(input: {
+  client: ReturnType<typeof createServiceClient>;
+  companyId: string;
+  userId: string;
+  body: JsonRecord | null;
+}) {
+  const company = await requireClientCompanyAccess({
+    userId: input.userId,
+    companyId: input.companyId,
+    client: input.client,
+  });
+  const customerName = normalizeOptionalText(readFormString(input.body?.customerName), 140);
+  const customerPhone = normalizeOptionalText(readFormString(input.body?.customerPhone), 40);
+  const customerEmail = normalizeOptionalText(readFormString(input.body?.customerEmail), 160);
+  const customerDocument = normalizeOptionalText(readFormString(input.body?.customerDocument), 40);
+  const destinationCep = normalizeSalesCatalogCep(readFormString(input.body?.destinationCep));
+  const destinationAddress = normalizeOptionalText(readFormString(input.body?.destinationAddress), 300);
+  const agentNotes = normalizeOptionalText(readFormString(input.body?.agentNotes), 1200);
+  const internalNotes = normalizeOptionalText(readFormString(input.body?.internalNotes), 1200);
+  const cartItems = readSalesCatalogCartCheckoutItems(input.body?.items);
+
+  if (!customerName && !customerPhone) {
+    throw new Error("Informe ao menos o nome ou telefone do lead.");
+  }
+
+  if (cartItems.length === 0) {
+    throw new Error("Adicione ao menos um item na sacola para gerar checkout.");
+  }
+
+  const catalogItemIds = Array.from(new Set(
+    cartItems
+      .map((item) => item.catalogItemId)
+      .filter((item): item is string => Boolean(item)),
+  ));
+  const catalogRowsById = new Map<string, SalesCatalogMemoryRow>();
+
+  if (catalogItemIds.length > 0) {
+    const { data: catalogRows, error: catalogError } = await input.client
+      .from("intelligence_memory")
+      .select("id, organization_id, title, content, metadata, created_at, updated_at")
+      .eq("scope", "organization")
+      .eq("organization_id", company.id)
+      .eq("memory_type", "sales_catalog_item")
+      .in("id", catalogItemIds)
+      .returns<SalesCatalogMemoryRow[]>();
+
+    if (catalogError) {
+      throw new Error(`Nao foi possivel carregar os produtos da sacola: ${catalogError.message}`);
+    }
+
+    for (const row of catalogRows ?? []) {
+      catalogRowsById.set(row.id, row);
+    }
+
+    const missingCatalogItems = catalogItemIds.filter((itemId) => !catalogRowsById.has(itemId));
+    if (missingCatalogItems.length > 0) {
+      throw new Error("Um ou mais produtos da sacola nao existem mais no catalogo desta empresa.");
+    }
+  }
+
+  const resolvedItems = cartItems.map((cartItem) => {
+    const catalogRow = cartItem.catalogItemId ? catalogRowsById.get(cartItem.catalogItemId) ?? null : null;
+
+    if (!catalogRow) {
+      const unitPriceCents = cartItem.unitPriceCents;
+      const totalCents = unitPriceCents * cartItem.quantity;
+
+      return {
+        attributes: [] as SalesCatalogItemAttribute[],
+        catalogItemId: null as string | null,
+        category: null as string | null,
+        commercialFlowType: "client_direct",
+        commissionEligible: false,
+        commissionPolicyType: "none",
+        currency: "BRL",
+        fulfillment: emptySalesCatalogProductFulfillment(),
+        itemSource: "manual",
+        metadata: {
+          cart_item_source: "manual",
+          cart_item_note: cartItem.note,
+        } satisfies JsonRecord,
+        platformAgentPrompt: null as string | null,
+        platformCommissionPercentage: null as number | null,
+        platformCommissionReleaseDays: null as number | null,
+        platformProductCode: null as string | null,
+        platformProductId: null as string | null,
+        productOriginType: "client",
+        quantity: cartItem.quantity,
+        revenueOwnerType: "client",
+        salePriceCents: unitPriceCents,
+        skuCode: null as string | null,
+        skuId: null as string | null,
+        tag: null as string | null,
+        title: cartItem.name,
+        totalCents,
+        unitPriceCents,
+      };
+    }
+
+    const itemMetadata = readRecord(catalogRow.metadata) ?? {};
+    const item = mapSalesCatalogItem(catalogRow);
+
+    if (item.status === "archived") {
+      throw new Error(`O produto "${item.title}" esta arquivado e nao pode virar pedido.`);
+    }
+
+    if (item.inventory.status === "out_of_stock" && !item.inventory.allowBackorder) {
+      throw new Error(`O produto "${item.title}" esta esgotado. Ative encomenda ou escolha outro item.`);
+    }
+
+    const platformProductId = readFormString(itemMetadata.platform_product_id);
+    const platformProductCode = readFormString(itemMetadata.platform_product_code);
+    const platformCommissionPercentage = normalizeNumber(itemMetadata.platform_product_commission_percentage);
+    const platformCommissionReleaseDays = normalizeNumber(itemMetadata.platform_product_commission_release_days);
+    const platformAgentPrompt = readFormString(itemMetadata.platform_product_agent_prompt);
+    const commercialFlowType = normalizeCommercialFlowType(readFormString(itemMetadata.commercial_flow_type)
+      ?? (platformProductId ? "connectyhub_resale" : "client_direct"));
+    const revenueOwnerType = normalizeRevenueOwnerType(readFormString(itemMetadata.revenue_owner_type)
+      ?? (platformProductId ? "connectyhub" : "client"));
+    const commissionPolicyType = normalizeCommissionPolicyType(readFormString(itemMetadata.commission_policy_type)
+      ?? (platformProductId ? "percentage" : "none"));
+    const commissionEligible = readBoolean(itemMetadata.commission_eligible)
+      ?? Boolean(platformProductId && commissionPolicyType !== "none" && platformCommissionPercentage && platformCommissionPercentage > 0);
+    const unitPriceCents = getSalesCatalogCheckoutItemPriceCents(item) || cartItem.unitPriceCents;
+    const totalCents = unitPriceCents * cartItem.quantity;
+
+    return {
+      attributes: item.attributes,
+      catalogItemId: item.id,
+      category: item.category,
+      commercialFlowType,
+      commissionEligible,
+      commissionPolicyType,
+      currency: item.currency,
+      fulfillment: item.fulfillment,
+      itemSource: item.source,
+      metadata: {
+        cart_item_source: "catalog",
+        cart_item_note: cartItem.note,
+        category: item.category,
+        currency: item.currency,
+        source: item.source,
+        stock_status: item.inventory.status,
+        platform_product_id: platformProductId,
+        platform_product_code: platformProductCode,
+        commercial_flow_type: commercialFlowType,
+        revenue_owner_type: revenueOwnerType,
+        commission_policy_type: commissionPolicyType,
+        commission_eligible: commissionEligible,
+        platform_product_commission_percentage: platformCommissionPercentage,
+        platform_product_commission_release_days: platformCommissionReleaseDays,
+        platform_product_agent_prompt: platformAgentPrompt,
+      } satisfies JsonRecord,
+      platformAgentPrompt,
+      platformCommissionPercentage,
+      platformCommissionReleaseDays,
+      platformProductCode,
+      platformProductId,
+      productOriginType: platformProductId ? "connectyhub" : "client",
+      quantity: cartItem.quantity,
+      revenueOwnerType,
+      salePriceCents: unitPriceCents,
+      skuCode: null as string | null,
+      skuId: null as string | null,
+      tag: item.tag,
+      title: item.title,
+      totalCents,
+      unitPriceCents,
+    };
+  });
+  const hasPlatformItems = resolvedItems.some((item) => Boolean(item.platformProductId));
+  const hasClientItems = resolvedItems.some((item) => !item.platformProductId);
+
+  if (hasPlatformItems && hasClientItems) {
+    throw new Error("Nao misture produtos proprios e produtos ConnectyHub no mesmo checkout. Crie pedidos separados para garantir o recebimento correto.");
+  }
+
+  const subtotalCents = resolvedItems.reduce((total, item) => total + item.totalCents, 0);
+  const subtotal = formatSalesCatalogMoneyCents(subtotalCents);
+  const total = subtotal;
+  const now = new Date().toISOString();
+  const orderCommercialFlowType = hasPlatformItems ? resolvedItems[0]?.commercialFlowType ?? "connectyhub_resale" : "client_direct";
+  const orderRevenueOwnerType = hasPlatformItems ? resolvedItems[0]?.revenueOwnerType ?? "connectyhub" : "client";
+  const orderCommissionEligible = resolvedItems.some((item) => item.commissionEligible);
+
+  const { data: orderRow, error: orderError } = await input.client
+    .from("sales_catalog_orders")
+    .insert({
+      organization_id: company.id,
+      lead_id: normalizeUuid(readFormString(input.body?.leadId)),
+      conversation_id: normalizeUuid(readFormString(input.body?.conversationId)),
+      source: "attendance_panel",
+      status: "pending_payment",
+      payment_status: "pending",
+      fulfillment_status: "pending",
+      customer_name: customerName,
+      customer_phone: customerPhone,
+      customer_document: customerDocument,
+      customer_email: customerEmail,
+      destination_cep: destinationCep,
+      destination_address: destinationAddress,
+      subtotal,
+      discount_total: null,
+      shipping_total: null,
+      total,
+      payment_method: null,
+      shipping_method: null,
+      agent_notes: agentNotes,
+      internal_notes: internalNotes,
+      commercial_flow_type: orderCommercialFlowType,
+      revenue_owner_type: orderRevenueOwnerType,
+      contains_platform_products: hasPlatformItems,
+      commission_eligible: orderCommissionEligible,
+      metadata: {
+        created_from: "attendance_sales_bag",
+        source: "attendance_panel",
+        cart_item_count: resolvedItems.length,
+        cart_total_cents: subtotalCents,
+        currency: "BRL",
+        commercial_flow_type: orderCommercialFlowType,
+        revenue_owner_type: orderRevenueOwnerType,
+        commission_eligible: orderCommissionEligible,
+        platform_product_marketplace: hasPlatformItems,
+        lead_name: customerName,
+        lead_phone: customerPhone,
+      },
+      created_by: input.userId,
+      created_at: now,
+      updated_at: now,
+    })
+    .select(salesCatalogOrderSelect)
+    .single<SalesCatalogOrderRow>();
+
+  if (orderError || !orderRow) {
+    throw new Error(orderError?.message ?? "Nao foi possivel criar o pedido da sacola.");
+  }
+
+  const itemPayload = resolvedItems.map((item) => ({
+    order_id: orderRow.id,
+    organization_id: company.id,
+    catalog_item_id: item.catalogItemId,
+    sku_id: item.skuId,
+    sku_code: item.skuCode,
+    title: item.title,
+    tag: item.tag,
+    quantity: item.quantity,
+    unit_price: formatSalesCatalogMoneyCents(item.unitPriceCents),
+    sale_price: formatSalesCatalogMoneyCents(item.salePriceCents),
+    total: formatSalesCatalogMoneyCents(item.totalCents),
+    product_origin_type: item.productOriginType,
+    commercial_flow_type: item.commercialFlowType,
+    revenue_owner_type: item.revenueOwnerType,
+    commission_eligible: item.commissionEligible,
+    platform_product_id: item.platformProductId ?? null,
+    attributes: serializeItemAttributes(item.attributes),
+    fulfillment: serializeProductFulfillment(item.fulfillment),
+    metadata: item.metadata,
+  }));
+  const { data: orderItemRows, error: orderItemsError } = await input.client
+    .from("sales_catalog_order_items")
+    .insert(itemPayload)
+    .select(salesCatalogOrderItemSelect)
+    .returns<SalesCatalogOrderItemRow[]>();
+
+  if (orderItemsError || !orderItemRows?.length) {
+    throw new Error(orderItemsError?.message ?? "Pedido criado, mas nao foi possivel salvar os itens da sacola.");
+  }
+
+  const paymentResult = await createSalesCatalogPixPaymentSession({
+    client: input.client,
+    organizationId: company.id,
+    orderId: orderRow.id,
+    amount: total,
+    payerEmail: customerEmail,
+    source: "dashboard",
+    actorId: input.userId,
+  });
+  const { data: refreshedOrder, error: refreshedOrderError } = await input.client
+    .from("sales_catalog_orders")
+    .select(salesCatalogOrderSelect)
+    .eq("id", orderRow.id)
+    .eq("organization_id", company.id)
+    .maybeSingle<SalesCatalogOrderRow>();
+
+  if (refreshedOrderError) {
+    throw new Error(`Checkout criado, mas nao foi possivel recarregar o pedido: ${refreshedOrderError.message}`);
+  }
+
+  const { data: refreshedItems, error: refreshedItemsError } = await input.client
+    .from("sales_catalog_order_items")
+    .select(salesCatalogOrderItemSelect)
+    .eq("order_id", orderRow.id)
+    .order("created_at", { ascending: true })
+    .returns<SalesCatalogOrderItemRow[]>();
+
+  if (refreshedItemsError) {
+    throw new Error(`Checkout criado, mas nao foi possivel recarregar os itens: ${refreshedItemsError.message}`);
+  }
+
+  await input.client.from("intelligence_events").insert({
+    scope: "organization",
+    organization_id: company.id,
+    source_type: "sales_catalog_order",
+    source_id: orderRow.id,
+    event_type: "sales_catalog.checkout_created_from_attendance",
+    title: "Checkout criado pela sacola do atendimento",
+    summary: `${resolvedItems.length} item(ns) enviados para pagamento pelo painel de atendimento.`,
+    confidence: 1,
+    visibility: "organization",
+    tags: ["sales_catalog", "sales_catalog_order", "payment", "attendance_panel"],
+    payload: {
+      order_id: orderRow.id,
+      checkout_url: paymentResult.checkoutUrl,
+      total,
+      item_count: resolvedItems.length,
+      lead_id: normalizeUuid(readFormString(input.body?.leadId)),
+      conversation_id: normalizeUuid(readFormString(input.body?.conversationId)),
+      created_by: input.userId,
+    },
+  });
+
+  return {
+    order: mapSalesCatalogOrder(refreshedOrder ?? orderRow, refreshedItems ?? orderItemRows),
+    session: paymentResult.session,
+    checkoutUrl: paymentResult.checkoutUrl,
+  };
 }
 
 async function updateSalesCatalogOrderStatus(input: {
@@ -3278,6 +3655,106 @@ function normalizeRevenueOwnerType(value: string | null) {
 function normalizeCommissionPolicyType(value: string | null) {
   if (value === "percentage" || value === "fixed" || value === "custom") return value;
   return "none";
+}
+
+function readSalesCatalogCartCheckoutItems(value: unknown): SalesCatalogCartCheckoutItem[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.slice(0, 50).map((entry, index) => {
+    const record = readRecord(entry);
+
+    if (!record) {
+      throw new Error(`Item ${index + 1} da sacola esta invalido.`);
+    }
+
+    const source = readFormString(record.source) === "catalog" ? "catalog" : "manual";
+    const catalogItemId = source === "catalog"
+      ? readFormString(record.catalogItemId) ?? readFormString(record.id)
+      : null;
+    const name = normalizeOptionalText(readFormString(record.name) ?? readFormString(record.title), 140)
+      ?? `Item ${index + 1}`;
+    const note = normalizeOptionalText(readFormString(record.note), 140);
+    const quantity = normalizeNullableInteger(record.quantity, 1, 1000) ?? 1;
+    const unitPriceCents = normalizeNullableInteger(record.unitPriceCents, 1, 100000000)
+      ?? parseSalesCatalogMoneyToCents(readFormString(record.unitPrice))
+      ?? parseSalesCatalogMoneyToCents(readFormString(record.price))
+      ?? 0;
+
+    if (source === "catalog" && !catalogItemId) {
+      throw new Error(`O item ${index + 1} da sacola perdeu o vinculo com o catalogo.`);
+    }
+
+    if (unitPriceCents <= 0) {
+      throw new Error(`Informe um valor valido para "${name}".`);
+    }
+
+    return {
+      catalogItemId,
+      name,
+      note,
+      quantity,
+      source,
+      unitPriceCents,
+    };
+  });
+}
+
+function getSalesCatalogCheckoutItemPriceCents(item: ReturnType<typeof mapSalesCatalogItem>) {
+  const sku = item.skus.find((entry) => entry.status === "active") ?? item.skus[0] ?? null;
+  const candidates = [
+    item.offer.salePrice,
+    item.price,
+    sku?.salePrice,
+    sku?.price,
+  ];
+
+  for (const candidate of candidates) {
+    const cents = parseSalesCatalogMoneyToCents(candidate);
+
+    if (cents && cents > 0) {
+      return cents;
+    }
+  }
+
+  return 0;
+}
+
+function parseSalesCatalogMoneyToCents(value: string | null | undefined) {
+  const cleaned = value?.replace(/[^\d,.-]/g, "") ?? "";
+
+  if (!cleaned) {
+    return null;
+  }
+
+  const lastComma = cleaned.lastIndexOf(",");
+  const lastDot = cleaned.lastIndexOf(".");
+  const decimalSeparator = lastComma > lastDot ? "," : lastDot > lastComma ? "." : null;
+  let normalized = cleaned;
+
+  if (decimalSeparator) {
+    const separatorIndex = decimalSeparator === "," ? lastComma : lastDot;
+    const integerPart = cleaned.slice(0, separatorIndex).replace(/[^\d-]/g, "");
+    const decimalPart = cleaned.slice(separatorIndex + 1).replace(/\D/g, "");
+    normalized = decimalPart.length <= 2 && decimalPart.length > 0
+      ? `${integerPart}.${decimalPart}`
+      : cleaned.replace(/[^\d-]/g, "");
+  } else {
+    normalized = cleaned.replace(/[^\d-]/g, "");
+  }
+
+  const parsed = Number.parseFloat(normalized);
+
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return null;
+  }
+
+  return Math.round(parsed * 100);
+}
+
+function formatSalesCatalogMoneyCents(value: number) {
+  return (Math.max(0, Math.round(value)) / 100).toFixed(2);
 }
 
 function normalizeUf(value: string | null) {

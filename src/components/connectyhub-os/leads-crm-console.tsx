@@ -745,6 +745,7 @@ function AttendanceCenterView({
   const [inboxTab, setInboxTab] = useState<AttendanceInboxTab>("all");
   const [manualReply, setManualReply] = useState("");
   const [leadCarts, setLeadCarts] = useState<Record<string, AttendanceCartItem[]>>({});
+  const [cartCheckoutBusy, setCartCheckoutBusy] = useState(false);
   const [handoffBusy, setHandoffBusy] = useState(false);
   const [replyBusy, setReplyBusy] = useState(false);
   const [handoffNotice, setHandoffNotice] = useState<{ tone: "success" | "error"; message: string } | null>(null);
@@ -866,6 +867,67 @@ function AttendanceCenterView({
       tone: "success",
       message: "Resumo da sacola pronto no campo de resposta.",
     });
+  }
+
+  async function createCartCheckoutAndSend() {
+    if (!activeLead || !activeConversationId || !activeCartItems.length) {
+      setHandoffNotice({
+        tone: "error",
+        message: "Escolha uma conversa e adicione itens na sacola antes de gerar checkout.",
+      });
+      return;
+    }
+
+    setCartCheckoutBusy(true);
+    setHandoffNotice(null);
+
+    try {
+      const response = await fetch("/api/dashboard/sales-catalog", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "create_cart_checkout",
+          companyId: activeLead.companyId,
+          conversationId: activeConversationId,
+          customerEmail: activeLead.email,
+          customerName: activeLead.name,
+          customerPhone: activeLead.phone,
+          leadId: activeLead.id,
+          totalCents: activeCartTotalCents,
+          items: activeCartItems.map((item) => ({
+            catalogItemId: item.source === "catalog" ? item.id : null,
+            name: item.name,
+            note: item.note,
+            quantity: item.quantity,
+            source: item.source,
+            totalCents: item.unitPriceCents * item.quantity,
+            unitPriceCents: item.unitPriceCents,
+          })),
+        }),
+      });
+      const payload = await response.json().catch(() => ({})) as {
+        checkoutUrl?: string;
+        error?: string;
+      };
+
+      if (!response.ok || !payload.checkoutUrl) {
+        throw new Error(payload.error ?? "Nao foi possivel gerar o checkout da sacola.");
+      }
+
+      const message = buildLeadCheckoutMessage(activeLead, activeCartItems, payload.checkoutUrl);
+      const sent = await sendManualReply(message, "Checkout enviado pelo painel. IA pausada nesta conversa.");
+
+      if (sent) {
+        clearActiveCart();
+      }
+    } catch (error) {
+      setHandoffNotice({
+        tone: "error",
+        message: error instanceof Error ? error.message : "Erro inesperado ao gerar checkout.",
+      });
+    } finally {
+      setCartCheckoutBusy(false);
+    }
   }
 
   function promptAttendancePushPermission() {
@@ -1021,21 +1083,21 @@ function AttendanceCenterView({
     }
   }
 
-  async function sendManualReply() {
+  async function sendManualReply(textOverride?: string, successMessage = "Resposta enviada pelo painel. IA pausada nesta conversa.") {
     if (replyBusy) {
-      return;
+      return false;
     }
 
-    const text = manualReply.trim();
+    const text = (textOverride ?? manualReply).trim();
 
     if (!activeConversationId) {
       setHandoffNotice({ tone: "error", message: "Escolha uma conversa valida antes de responder." });
-      return;
+      return false;
     }
 
     if (!text) {
       setHandoffNotice({ tone: "error", message: "Digite uma mensagem para enviar." });
-      return;
+      return false;
     }
 
     setReplyBusy(true);
@@ -1076,13 +1138,15 @@ function AttendanceCenterView({
       }
 
       setManualReply("");
-      setHandoffNotice({ tone: "success", message: "Resposta enviada pelo painel. IA pausada nesta conversa." });
+      setHandoffNotice({ tone: "success", message: successMessage });
       router.refresh();
+      return true;
     } catch (error) {
       setHandoffNotice({
         tone: "error",
         message: error instanceof Error ? error.message : "Erro inesperado ao responder pelo painel.",
       });
+      return false;
     } finally {
       setReplyBusy(false);
     }
@@ -1327,11 +1391,13 @@ function AttendanceCenterView({
             {activeLead ? (
               <AttendanceSalesBagPanel
                 cartItems={activeCartItems}
+                checkoutBusy={cartCheckoutBusy}
                 humanIntervention={activeHumanIntervention}
                 lead={activeLead}
                 onAddManualItem={addManualCartItem}
                 onAddQuickItem={addQuickCartItem}
                 onClearCart={clearActiveCart}
+                onCreateCheckout={() => void createCartCheckoutAndSend()}
                 onRemoveItem={removeCartItem}
                 onUpdateQuantity={updateCartItemQuantity}
                 onUseSummary={useCartSummaryInReply}
@@ -1467,11 +1533,13 @@ function AttendancePushPermissionPrompt({
 
 function AttendanceSalesBagPanel({
   cartItems,
+  checkoutBusy,
   humanIntervention,
   lead,
   onAddManualItem,
   onAddQuickItem,
   onClearCart,
+  onCreateCheckout,
   onRemoveItem,
   onUpdateQuantity,
   onUseSummary,
@@ -1479,11 +1547,13 @@ function AttendanceSalesBagPanel({
   totalCents,
 }: {
   cartItems: AttendanceCartItem[];
+  checkoutBusy: boolean;
   humanIntervention: ClientLeadHumanIntervention;
   lead: ClientLeadRecord;
   onAddManualItem: (input: { name: string; priceCents: number; quantity: number }) => void;
   onAddQuickItem: (product: AttendanceQuickProduct) => void;
   onClearCart: () => void;
+  onCreateCheckout: () => void;
   onRemoveItem: (itemId: string) => void;
   onUpdateQuantity: (itemId: string, quantity: number) => void;
   onUseSummary: () => void;
@@ -1748,16 +1818,31 @@ function AttendanceSalesBagPanel({
             <CreditCard className="h-5 w-5 text-red-600" />
           </div>
           <p className="mt-2 text-[11px] leading-5 text-slate-600">
-            A proxima etapa e gerar checkout real com Mercado Pago. Por enquanto, use o resumo no chat para confirmar o pedido.
+            Gere um checkout seguro da ConnectyHub com os itens da sacola e envie o link de pagamento pelo chat.
           </p>
         </div>
 
         <button
           className={cn(
             "mt-3 inline-flex h-11 w-full items-center justify-center gap-2 rounded-2xl text-[12px] font-bold transition",
-            cartItems.length ? "bg-red-600 text-white hover:bg-red-700" : "bg-slate-200 text-slate-500",
+            cartItems.length && !checkoutBusy ? "bg-red-600 text-white hover:bg-red-700" : "bg-slate-200 text-slate-500",
           )}
-          disabled={!cartItems.length}
+          disabled={!cartItems.length || checkoutBusy}
+          onClick={onCreateCheckout}
+          type="button"
+        >
+          {checkoutBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CreditCard className="h-3.5 w-3.5" />}
+          {checkoutBusy ? "Gerando checkout" : "Gerar e enviar checkout"}
+        </button>
+
+        <button
+          className={cn(
+            "mt-2 inline-flex h-10 w-full items-center justify-center gap-2 rounded-2xl border text-[12px] font-bold transition",
+            cartItems.length && !checkoutBusy
+              ? "border-slate-200 bg-white text-slate-800 hover:bg-slate-100"
+              : "border-slate-200 bg-slate-100 text-slate-400",
+          )}
+          disabled={!cartItems.length || checkoutBusy}
           onClick={onUseSummary}
           type="button"
         >
@@ -3266,6 +3351,25 @@ function buildLeadCartSummary(lead: ClientLeadRecord, items: AttendanceCartItem[
     `Total: ${formatCurrencyCents(totalCents)}`,
     "",
     "Posso seguir com esse pedido e gerar o pagamento para voce?",
+  ];
+
+  return lines.join("\n");
+}
+
+function buildLeadCheckoutMessage(lead: ClientLeadRecord, items: AttendanceCartItem[], checkoutUrl: string) {
+  const totalCents = items.reduce((total, item) => total + (item.unitPriceCents * item.quantity), 0);
+  const lines = [
+    `${lead.name}, gerei o pagamento seguro do seu pedido:`,
+    "",
+    ...items.map((item, index) => (
+      `${index + 1}. ${item.quantity}x ${item.name} - ${formatCurrencyCents(item.unitPriceCents * item.quantity)}`
+    )),
+    "",
+    `Total: ${formatCurrencyCents(totalCents)}`,
+    "",
+    `Finalizar pagamento: ${checkoutUrl}`,
+    "",
+    "Assim que o pagamento for confirmado, seguimos com o pedido por aqui.",
   ];
 
   return lines.join("\n");
