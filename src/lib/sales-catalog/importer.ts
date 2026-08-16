@@ -36,6 +36,18 @@ import { loadR2Config, putR2Object } from "@/lib/storage/r2";
 import { assertStorageUploadAllowed, recordOrganizationStorageUsage } from "@/lib/storage/quotas";
 
 export type SalesCatalogImportSourceKind = "text" | "csv" | "excel" | "site" | "pdf" | "image" | "mixed";
+export type SalesCatalogImportPlatform =
+  | "auto"
+  | "woocommerce"
+  | "shopify"
+  | "wix"
+  | "nuvemshop"
+  | "loja_integrada"
+  | "tray"
+  | "anota_ai"
+  | "ifood"
+  | "generic_menu"
+  | "generic_sheet";
 export type SalesCatalogImportTargetMode = "connectyhub_checkout" | "external_site" | "review";
 export type SalesCatalogImportDestination = "connectyhub_checkout" | "external_site" | "manual_handoff";
 export type SalesCatalogImportJobStatus = "uploaded" | "extracting" | "review_required" | "ready_to_publish" | "publishing" | "published" | "failed";
@@ -177,6 +189,7 @@ export type ClientSalesCatalogImportJob = {
   companyId: string;
   createdBy: string | null;
   sourceKind: SalesCatalogImportSourceKind;
+  sourcePlatform: SalesCatalogImportPlatform;
   targetMode: SalesCatalogImportTargetMode;
   defaultSalesDestination: SalesCatalogImportDestination;
   status: SalesCatalogImportJobStatus;
@@ -249,6 +262,7 @@ export async function createSalesCatalogImportJob(input: {
   companyId: string;
   userId: string;
   sourceKind: SalesCatalogImportSourceKind;
+  sourcePlatform: SalesCatalogImportPlatform;
   targetMode: SalesCatalogImportTargetMode;
   defaultSalesDestination: SalesCatalogImportDestination;
   text?: string | null;
@@ -258,6 +272,7 @@ export async function createSalesCatalogImportJob(input: {
 }) {
   const now = new Date().toISOString();
   const sourceKind = normalizeSourceKind(input.sourceKind);
+  const sourcePlatform = normalizeImportPlatform(input.sourcePlatform);
   const targetMode = normalizeTargetMode(input.targetMode);
   const defaultSalesDestination = normalizeSalesDestination(input.defaultSalesDestination, targetMode);
   const title = normalizeOptionalText(input.title, 140) ?? createImportTitle(sourceKind);
@@ -279,6 +294,7 @@ export async function createSalesCatalogImportJob(input: {
       settings: {
         import_version: 1,
         queued_processing: true,
+        source_platform: sourcePlatform,
       },
       created_at: now,
       updated_at: now,
@@ -333,7 +349,7 @@ export async function createSalesCatalogImportJob(input: {
     event_type: "sales_catalog_import.created",
     title: "Importacao enfileirada",
     summary: sourceUrl ? `Fonte: ${sourceUrl}` : "Fonte enviada pelo usuario.",
-    payload: { sourceKind, targetMode, defaultSalesDestination, files: files.length },
+    payload: { sourceKind, sourcePlatform, targetMode, defaultSalesDestination, files: files.length },
   });
 
   return getSalesCatalogImportJob({
@@ -348,6 +364,7 @@ export async function createAndProcessSalesCatalogImport(input: {
   companyId: string;
   userId: string;
   sourceKind: SalesCatalogImportSourceKind;
+  sourcePlatform: SalesCatalogImportPlatform;
   targetMode: SalesCatalogImportTargetMode;
   defaultSalesDestination: SalesCatalogImportDestination;
   text?: string | null;
@@ -859,6 +876,7 @@ async function processSalesCatalogImportJob(input: {
     const readyCount = extraction.drafts.filter((draft) => draft.warnings.length === 0).length;
     const reviewRequired = warningCount > 0;
     const status: SalesCatalogImportJobStatus = reviewRequired ? "review_required" : "ready_to_publish";
+    const sourcePlatform = readImportJobSourcePlatform(input.job);
 
     await input.client
       .from("sales_catalog_import_jobs")
@@ -871,6 +889,7 @@ async function processSalesCatalogImportJob(input: {
           ready_items: readyCount,
           warning_count: warningCount,
           ai_used: extraction.aiUsed,
+          source_platform: sourcePlatform,
           destinations: countDraftDestinations(extraction.drafts),
         },
       })
@@ -888,6 +907,7 @@ async function processSalesCatalogImportJob(input: {
         warnings: extraction.warnings,
         warning_count: warningCount,
         ai_used: extraction.aiUsed,
+        source_platform: sourcePlatform,
       },
     });
   } catch (error) {
@@ -1017,6 +1037,7 @@ async function extractDrafts(input: {
     sourceText: localSourceText || sourceText,
     sourceUrl: input.sourceUrl,
     sourceKind: input.job.source_kind,
+    sourcePlatform: readImportJobSourcePlatform(input.job),
     targetMode: input.job.target_mode,
     defaultSalesDestination: input.job.default_sales_destination,
   });
@@ -1039,6 +1060,7 @@ async function extractDrafts(input: {
     sourceUrl: input.sourceUrl,
     files,
     sourceKind: input.job.source_kind,
+    sourcePlatform: readImportJobSourcePlatform(input.job),
     targetMode: input.job.target_mode,
     defaultSalesDestination: input.job.default_sales_destination,
   }).catch((error) => ({
@@ -1060,6 +1082,7 @@ async function extractDrafts(input: {
     sourceText: localSourceText || sourceText,
     sourceUrl: input.sourceUrl,
     sourceKind: input.job.source_kind,
+    sourcePlatform: readImportJobSourcePlatform(input.job),
     targetMode: input.job.target_mode,
     defaultSalesDestination: input.job.default_sales_destination,
   });
@@ -1081,6 +1104,7 @@ async function extractDraftsWithGemini(input: {
   sourceUrl?: string | null;
   files?: SalesCatalogImportFileInput[] | null;
   sourceKind: SalesCatalogImportSourceKind;
+  sourcePlatform: SalesCatalogImportPlatform;
   targetMode: SalesCatalogImportTargetMode;
   defaultSalesDestination: SalesCatalogImportDestination;
 }): Promise<{ drafts: SalesCatalogImportDraft[] }> {
@@ -1098,10 +1122,15 @@ async function extractDraftsWithGemini(input: {
     "Nao invente produtos, precos, links, frete, estoque ou condicoes que nao aparecam na fonte.",
     "Quando houver incerteza, use warnings e reduza confidence.",
     "Diferencie produto vendavel de regra comercial. Frete, retirada, taxa e prazo entram em shipping/fulfillment, nao como produto.",
+    isDeliveryImportPlatform(input.sourcePlatform)
+      ? "Para cardapios de delivery, preserve categorias, sabores, tamanhos, adicionais, complementos e combos. Nao transforme texto institucional em produto."
+      : "",
     "Use salesDestination conforme o objetivo do usuario: connectyhub_checkout, external_site ou manual_handoff.",
-  ].join("\n");
+  ].filter(Boolean).join("\n");
   const prompt = [
     `Fonte: ${input.sourceKind}`,
+    `Plataforma/origem declarada: ${formatImportPlatformForPrompt(input.sourcePlatform)}`,
+    getImportPlatformExtractionHint(input.sourcePlatform),
     input.sourceUrl ? `URL analisada: ${input.sourceUrl}` : "",
     `Modo escolhido: ${input.targetMode}`,
     `Destino padrao: ${input.defaultSalesDestination}`,
@@ -1174,6 +1203,7 @@ async function extractDraftsWithGemini(input: {
     debitDescription: "Importador inteligente de catalogo",
     metadata: {
       sourceKind: input.sourceKind,
+      sourcePlatform: input.sourcePlatform,
       targetMode: input.targetMode,
       defaultSalesDestination: input.defaultSalesDestination,
       fileCount: files.length,
@@ -1222,10 +1252,54 @@ function isTextLikeImportFile(file: SalesCatalogImportFileInput) {
     || /\.(csv|tsv|txt|md|json)$/i.test(fileName);
 }
 
+function readImportJobSourcePlatform(job: ImportJobRow) {
+  const settings = readRecord(job.settings);
+  return normalizeImportPlatform(settings?.source_platform);
+}
+
+function formatImportPlatformForPrompt(value: SalesCatalogImportPlatform) {
+  if (value === "woocommerce") return "WooCommerce";
+  if (value === "shopify") return "Shopify";
+  if (value === "wix") return "Wix Stores";
+  if (value === "nuvemshop") return "Nuvemshop";
+  if (value === "loja_integrada") return "Loja Integrada";
+  if (value === "tray") return "Tray";
+  if (value === "anota_ai") return "Anota Ai";
+  if (value === "ifood") return "iFood";
+  if (value === "generic_menu") return "Cardapio em PDF/foto";
+  if (value === "generic_sheet") return "Planilha generica";
+  return "Detectar automaticamente";
+}
+
+function isDeliveryImportPlatform(value: SalesCatalogImportPlatform) {
+  return value === "anota_ai" || value === "ifood" || value === "generic_menu";
+}
+
+function getImportPlatformExtractionHint(value: SalesCatalogImportPlatform) {
+  if (value === "anota_ai") {
+    return "Dica Anota Ai: priorize estrutura de cardapio, categorias, sabores, tamanhos, adicionais, complementos, combos e observacoes de retirada/entrega.";
+  }
+
+  if (value === "ifood" || value === "generic_menu") {
+    return "Dica cardapio: separe produtos reais de adicionais e opcoes. Fotos de cardapio servem como fonte visual; nao invente imagens comerciais.";
+  }
+
+  if (value === "woocommerce") {
+    return "Dica WooCommerce: reconheca regular_price, sale_price, short_description, categories, sku, stock e images quando existirem.";
+  }
+
+  if (value === "shopify") {
+    return "Dica Shopify: interprete produtos e variantes, mantendo opcoes, SKUs, precos e URLs de imagem publicas.";
+  }
+
+  return "";
+}
+
 function parseFallbackDrafts(input: {
   sourceText: string;
   sourceUrl?: string | null;
   sourceKind: SalesCatalogImportSourceKind;
+  sourcePlatform: SalesCatalogImportPlatform;
   targetMode: SalesCatalogImportTargetMode;
   defaultSalesDestination: SalesCatalogImportDestination;
 }) {
@@ -1239,6 +1313,7 @@ function parseDelimitedDrafts(input: {
   sourceText: string;
   sourceUrl?: string | null;
   sourceKind: SalesCatalogImportSourceKind;
+  sourcePlatform: SalesCatalogImportPlatform;
   targetMode: SalesCatalogImportTargetMode;
   defaultSalesDestination: SalesCatalogImportDestination;
 }) {
@@ -1250,17 +1325,32 @@ function parseDelimitedDrafts(input: {
 
   const headers = rows[0].map((value) => normalizeHeader(value));
   const dataRows = rows.slice(1).filter((row) => row.some((value) => value.trim()));
-  const titleIndex = findHeaderIndex(headers, ["produto", "nome", "name", "title", "item", "servico", "servico_servico"]);
+  const titleIndex = findHeaderIndex(headers, [
+    "produto",
+    "nome",
+    "name",
+    "title",
+    "item",
+    "servico",
+    "servico_servico",
+    "nome_do_produto",
+    "nome_produto",
+    "produto_nome",
+    "nome_item",
+    "item_nome",
+    "nome_do_item",
+    "cardapio_item",
+  ]);
 
   if (titleIndex < 0) return [];
 
-  const priceIndex = findHeaderIndexExactFirst(headers, ["preco", "price", "valor", "amount", "regular_price"], ["preco_regular", "valor_unitario", "unit_price"]);
-  const salePriceIndex = findHeaderIndexExactFirst(headers, ["preco_promocional", "sale_price", "preco_oferta", "preco_de_oferta", "promotional_price"], ["promocional"]);
-  const shortDescriptionIndex = findHeaderIndexExactFirst(headers, ["descricao_curta", "short_description", "resumo"], ["short_desc"]);
-  const descriptionIndex = findHeaderIndexExactFirst(headers, ["descricao", "description", "detalhes", "observacoes"], ["descricao_comercial", "long_description"]);
-  const categoryIndex = findHeaderIndex(headers, ["categorias", "categoria", "category", "grupo", "secao"]);
-  const urlIndex = findHeaderIndexExactFirst(headers, ["url", "link", "product_url", "site", "url_externa"], ["produto_url", "external_url"]);
-  const imageIndex = findHeaderIndex(headers, ["imagens", "imagem", "image", "foto", "photo"]);
+  const priceIndex = findHeaderIndexExactFirst(headers, ["preco", "price", "valor", "amount", "regular_price"], ["preco_regular", "valor_unitario", "unit_price", "valor_produto", "preco_produto", "price_br"]);
+  const salePriceIndex = findHeaderIndexExactFirst(headers, ["preco_promocional", "sale_price", "preco_oferta", "preco_de_oferta", "promotional_price"], ["promocional", "preco_desconto", "valor_promocional"]);
+  const shortDescriptionIndex = findHeaderIndexExactFirst(headers, ["descricao_curta", "short_description", "resumo"], ["short_desc", "descricao_resumida"]);
+  const descriptionIndex = findHeaderIndexExactFirst(headers, ["descricao", "description", "detalhes", "observacoes"], ["descricao_comercial", "long_description", "ingredientes", "composicao"]);
+  const categoryIndex = findHeaderIndex(headers, ["categorias", "categoria", "category", "grupo", "secao", "departamento", "cardapio_categoria"]);
+  const urlIndex = findHeaderIndexExactFirst(headers, ["url", "link", "product_url", "site", "url_externa"], ["produto_url", "external_url", "link_produto", "url_produto"]);
+  const imageIndex = findHeaderIndex(headers, ["imagens", "imagem", "image", "foto", "photo", "image_url", "url_imagem", "imagem_url", "foto_url"]);
   const skuIndex = findHeaderIndexExactFirst(headers, ["sku", "codigo", "code"], ["codigo_sku"]);
   const publishedIndex = findHeaderIndexExactFirst(headers, ["publicado", "published", "ativo", "active"], []);
   const stockStatusIndex = findHeaderIndexExactFirst(headers, ["em_estoque", "stock_status", "in_stock"], ["status_estoque"]);
@@ -2437,6 +2527,7 @@ function mapImportJob(job: ImportJobRow, items: ImportItemRow[], events: ImportE
     companyId: job.organization_id,
     createdBy: job.created_by,
     sourceKind: job.source_kind,
+    sourcePlatform: readImportJobSourcePlatform(job),
     targetMode: job.target_mode,
     defaultSalesDestination: job.default_sales_destination,
     status: job.status,
@@ -2797,6 +2888,25 @@ function normalizeSourceKind(value: unknown): SalesCatalogImportSourceKind {
   }
 
   return "text";
+}
+
+function normalizeImportPlatform(value: unknown): SalesCatalogImportPlatform {
+  if (
+    value === "woocommerce"
+    || value === "shopify"
+    || value === "wix"
+    || value === "nuvemshop"
+    || value === "loja_integrada"
+    || value === "tray"
+    || value === "anota_ai"
+    || value === "ifood"
+    || value === "generic_menu"
+    || value === "generic_sheet"
+  ) {
+    return value;
+  }
+
+  return "auto";
 }
 
 function normalizeTargetMode(value: unknown): SalesCatalogImportTargetMode {

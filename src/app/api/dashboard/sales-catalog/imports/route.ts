@@ -11,6 +11,7 @@ import {
   salesCatalogImportProcessRequestedEventName,
   type SalesCatalogImportDestination,
   type SalesCatalogImportFileInput,
+  type SalesCatalogImportPlatform,
   type SalesCatalogImportSourceKind,
   type SalesCatalogImportTargetMode,
 } from "@/lib/sales-catalog/importer";
@@ -121,6 +122,7 @@ export async function POST(request: NextRequest) {
       companyId: company.id,
       userId: workspace.user.id,
       sourceKind: payload.sourceKind,
+      sourcePlatform: payload.sourcePlatform,
       targetMode: payload.targetMode,
       defaultSalesDestination: payload.defaultSalesDestination,
       text: payload.text,
@@ -135,6 +137,7 @@ export async function POST(request: NextRequest) {
         jobId: importJob.id,
         companyId: company.id,
         sourceKind: payload.sourceKind,
+        sourcePlatform: payload.sourcePlatform,
       },
     }).catch(() => null);
 
@@ -157,6 +160,7 @@ async function readImportRequest(request: NextRequest) {
     return {
       companyId: readString(formData.get("companyId")),
       sourceKind: normalizeSourceKind(readString(formData.get("sourceKind")) ?? inferSourceKindFromFiles(files)),
+      sourcePlatform: normalizeImportPlatform(readString(formData.get("sourcePlatform"))),
       targetMode: normalizeTargetMode(readString(formData.get("targetMode"))),
       defaultSalesDestination: normalizeSalesDestination(readString(formData.get("defaultSalesDestination"))),
       text: readString(formData.get("text")),
@@ -171,6 +175,7 @@ async function readImportRequest(request: NextRequest) {
   return {
     companyId: readString(body.companyId),
     sourceKind: normalizeSourceKind(readString(body.sourceKind)),
+    sourcePlatform: normalizeImportPlatform(readString(body.sourcePlatform)),
     targetMode: normalizeTargetMode(readString(body.targetMode)),
     defaultSalesDestination: normalizeSalesDestination(readString(body.defaultSalesDestination)),
     text: readString(body.text),
@@ -262,6 +267,25 @@ function normalizeSourceKind(value: unknown): SalesCatalogImportSourceKind {
   }
 
   return "text";
+}
+
+function normalizeImportPlatform(value: unknown): SalesCatalogImportPlatform {
+  if (
+    value === "woocommerce"
+    || value === "shopify"
+    || value === "wix"
+    || value === "nuvemshop"
+    || value === "loja_integrada"
+    || value === "tray"
+    || value === "anota_ai"
+    || value === "ifood"
+    || value === "generic_menu"
+    || value === "generic_sheet"
+  ) {
+    return value;
+  }
+
+  return "auto";
 }
 
 function normalizeTargetMode(value: unknown): SalesCatalogImportTargetMode {

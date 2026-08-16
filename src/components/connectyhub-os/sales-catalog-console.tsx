@@ -92,6 +92,7 @@ import type {
   ClientSalesCatalogImportItem,
   SalesCatalogImportDestination,
   SalesCatalogImportItemPatch,
+  SalesCatalogImportPlatform,
   SalesCatalogImportSourceKind,
   SalesCatalogImportTargetMode,
 } from "@/lib/sales-catalog/importer";
@@ -118,6 +119,94 @@ type CatalogTab = "setup" | "shipping" | "products" | "orders" | "payments" | "w
 type SalesCatalogProductFormTab = "essential" | "pricing" | "media" | "stock" | "delivery";
 type CommercialFlowFilter = "all" | SalesCatalogCommercialFlowType;
 type CatalogImportPatchMap = Record<string, SalesCatalogImportItemPatch>;
+
+type CatalogImportPlatformOption = {
+  value: SalesCatalogImportPlatform;
+  label: string;
+  description: string;
+  sourceKind: SalesCatalogImportSourceKind;
+  defaultTitle?: string;
+};
+
+const catalogImportPlatformOptions: CatalogImportPlatformOption[] = [
+  {
+    value: "auto",
+    label: "Detectar automaticamente",
+    description: "Use quando nao souber a origem. A ConnectyHub tenta ler pelo tipo do arquivo e pelos campos encontrados.",
+    sourceKind: "text",
+  },
+  {
+    value: "anota_ai",
+    label: "Anota Ai",
+    description: "Prioridade para cardapios de delivery. Aceita exportacao, planilha, PDF ou foto do cardapio.",
+    sourceKind: "mixed",
+    defaultTitle: "Cardapio Anota Ai",
+  },
+  {
+    value: "woocommerce",
+    label: "WooCommerce",
+    description: "CSV exportado do WooCommerce, incluindo preco regular, preco promocional, categorias, estoque e URLs de imagem.",
+    sourceKind: "csv",
+    defaultTitle: "Catalogo WooCommerce",
+  },
+  {
+    value: "shopify",
+    label: "Shopify",
+    description: "Planilha/CSV de produtos e variantes do Shopify. Imagens dependem de URLs publicas no arquivo.",
+    sourceKind: "csv",
+    defaultTitle: "Catalogo Shopify",
+  },
+  {
+    value: "wix",
+    label: "Wix Stores",
+    description: "Exportacao do Wix Stores com produtos, precos e links. Fotos entram se houver URL acessivel.",
+    sourceKind: "csv",
+    defaultTitle: "Catalogo Wix",
+  },
+  {
+    value: "nuvemshop",
+    label: "Nuvemshop",
+    description: "Exportacao de produtos da Nuvemshop. A IA revisa nomes, variacoes e precos antes de publicar.",
+    sourceKind: "csv",
+    defaultTitle: "Catalogo Nuvemshop",
+  },
+  {
+    value: "loja_integrada",
+    label: "Loja Integrada",
+    description: "Planilha de produtos da Loja Integrada, com suporte a categorias, estoque e links externos.",
+    sourceKind: "csv",
+    defaultTitle: "Catalogo Loja Integrada",
+  },
+  {
+    value: "tray",
+    label: "Tray",
+    description: "CSV/planilha Tray. Produtos podem ser vendidos dentro da ConnectyHub ou manter link externo.",
+    sourceKind: "csv",
+    defaultTitle: "Catalogo Tray",
+  },
+  {
+    value: "ifood",
+    label: "iFood / cardapio delivery",
+    description: "Use para cardapio de restaurante, pizzaria, hamburgueria e adicionais. Imagens podem precisar de upload manual.",
+    sourceKind: "mixed",
+    defaultTitle: "Cardapio delivery",
+  },
+  {
+    value: "generic_menu",
+    label: "PDF ou foto de cardapio",
+    description: "A IA le produtos, categorias, tamanhos e adicionais. Fotos reais dos produtos normalmente ficam para upload depois.",
+    sourceKind: "mixed",
+    defaultTitle: "Cardapio por IA",
+  },
+  {
+    value: "generic_sheet",
+    label: "Planilha generica",
+    description: "CSV, XLSX ou TSV com nomes e precos. Ideal para catalogos simples enviados por fornecedores.",
+    sourceKind: "excel",
+    defaultTitle: "Planilha de produtos",
+  },
+];
+const defaultCatalogImportPlatformOption = catalogImportPlatformOptions[0]!;
 
 type SettingsDraft = {
   businessType: SalesCatalogBusinessType;
@@ -439,6 +528,7 @@ export function SalesCatalogConsole({
   const [savingCatalogImportId, setSavingCatalogImportId] = useState<string | null>(null);
   const [publishingCatalogImportId, setPublishingCatalogImportId] = useState<string | null>(null);
   const [catalogImportSourceKind, setCatalogImportSourceKind] = useState<SalesCatalogImportSourceKind>("text");
+  const [catalogImportSourcePlatform, setCatalogImportSourcePlatform] = useState<SalesCatalogImportPlatform>("auto");
   const [catalogImportTargetMode, setCatalogImportTargetMode] = useState<SalesCatalogImportTargetMode>("review");
   const [catalogImportDefaultDestination, setCatalogImportDefaultDestination] = useState<SalesCatalogImportDestination>("connectyhub_checkout");
   const [catalogImportTitle, setCatalogImportTitle] = useState("");
@@ -1339,8 +1429,42 @@ export function SalesCatalogConsole({
     const selectedFiles = Array.from(event.target.files ?? []).slice(0, 6);
     setCatalogImportFiles(selectedFiles);
 
-    if (selectedFiles.length > 0 && catalogImportSourceKind === "text") {
+    if (
+      selectedFiles.length > 0
+      && (
+        catalogImportSourceKind === "text"
+        || catalogImportSourceKind === "mixed"
+        || catalogImportSourcePlatform === "auto"
+        || catalogImportSourcePlatform === "anota_ai"
+        || catalogImportSourcePlatform === "ifood"
+        || catalogImportSourcePlatform === "generic_menu"
+        || catalogImportSourcePlatform === "generic_sheet"
+      )
+    ) {
       setCatalogImportSourceKind(inferImportSourceKindFromFile(selectedFiles[0]));
+    }
+  }
+
+  function handleCatalogImportSourcePlatform(value: SalesCatalogImportPlatform) {
+    setCatalogImportSourcePlatform(value);
+    const option = getCatalogImportPlatformOption(value);
+
+    if (value !== "auto") {
+      setCatalogImportSourceKind(option.sourceKind);
+    }
+
+    if (!catalogImportTitle.trim() && option.defaultTitle) {
+      setCatalogImportTitle(option.defaultTitle);
+    }
+  }
+
+  function handleCatalogImportTargetMode(value: SalesCatalogImportTargetMode) {
+    setCatalogImportTargetMode(value);
+
+    if (value === "connectyhub_checkout") {
+      setCatalogImportDefaultDestination("connectyhub_checkout");
+    } else if (value === "external_site") {
+      setCatalogImportDefaultDestination("external_site");
     }
   }
 
@@ -1364,6 +1488,7 @@ export function SalesCatalogConsole({
       const formData = new FormData();
       formData.set("companyId", selectedCompanyId);
       formData.set("sourceKind", catalogImportSourceKind);
+      formData.set("sourcePlatform", catalogImportSourcePlatform);
       formData.set("targetMode", catalogImportTargetMode);
       formData.set("defaultSalesDestination", catalogImportDefaultDestination);
       formData.set("title", catalogImportTitle);
@@ -2878,6 +3003,7 @@ export function SalesCatalogConsole({
             publishingJobId={publishingCatalogImportId}
             savingJobId={savingCatalogImportId}
             sourceKind={catalogImportSourceKind}
+            sourcePlatform={catalogImportSourcePlatform}
             sourceText={catalogImportText}
             targetMode={catalogImportTargetMode}
             title={catalogImportTitle}
@@ -2885,8 +3011,9 @@ export function SalesCatalogConsole({
             onChangeFiles={handleCatalogImportFiles}
             onChangeItem={updateCatalogImportItem}
             onChangeSourceKind={setCatalogImportSourceKind}
+            onChangeSourcePlatform={handleCatalogImportSourcePlatform}
             onChangeSourceText={setCatalogImportText}
-            onChangeTargetMode={setCatalogImportTargetMode}
+            onChangeTargetMode={handleCatalogImportTargetMode}
             onChangeTitle={setCatalogImportTitle}
             onCreate={createCatalogImport}
             onPublish={publishCatalogImport}
@@ -3828,6 +3955,7 @@ function SalesCatalogImportPanel({
   publishingJobId,
   savingJobId,
   sourceKind,
+  sourcePlatform,
   sourceText,
   targetMode,
   title,
@@ -3835,6 +3963,7 @@ function SalesCatalogImportPanel({
   onChangeFiles,
   onChangeItem,
   onChangeSourceKind,
+  onChangeSourcePlatform,
   onChangeSourceText,
   onChangeTargetMode,
   onChangeTitle,
@@ -3852,6 +3981,7 @@ function SalesCatalogImportPanel({
   publishingJobId: string | null;
   savingJobId: string | null;
   sourceKind: SalesCatalogImportSourceKind;
+  sourcePlatform: SalesCatalogImportPlatform;
   sourceText: string;
   targetMode: SalesCatalogImportTargetMode;
   title: string;
@@ -3859,6 +3989,7 @@ function SalesCatalogImportPanel({
   onChangeFiles: (event: ChangeEvent<HTMLInputElement>) => void;
   onChangeItem: (itemId: string, patch: Omit<SalesCatalogImportItemPatch, "id">) => void;
   onChangeSourceKind: (value: SalesCatalogImportSourceKind) => void;
+  onChangeSourcePlatform: (value: SalesCatalogImportPlatform) => void;
   onChangeSourceText: (value: string) => void;
   onChangeTargetMode: (value: SalesCatalogImportTargetMode) => void;
   onChangeTitle: (value: string) => void;
@@ -3869,13 +4000,30 @@ function SalesCatalogImportPanel({
 }) {
   const hasInput = files.length > 0;
   const canCreate = hasInput && !creating;
+  const selectedPlatform = getCatalogImportPlatformOption(sourcePlatform);
+  const platformNotice = getCatalogImportPlatformNotice(sourcePlatform, sourceKind);
+  const destinationNotice = getImportDestinationNotice(targetMode, defaultDestination);
 
   return (
     <Panel id="sales-catalog-ai-importer" title="Importador IA" eyebrow={companyName} tone="green" compact>
       <div className="space-y-3">
-        <div className="grid gap-2 sm:grid-cols-2">
+        <div className="grid gap-2 lg:grid-cols-[1.2fr_0.7fr_1fr]">
           <label className="block">
-            <FieldLabel>Origem</FieldLabel>
+            <FieldLabel>Plataforma</FieldLabel>
+            <select
+              value={sourcePlatform}
+              onChange={(event) => onChangeSourcePlatform(event.target.value as SalesCatalogImportPlatform)}
+              className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+              style={{ borderColor: "var(--ch-border)" }}
+            >
+              {catalogImportPlatformOptions.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+            <p className="mt-1 text-[11px] leading-4 text-slate-500">{selectedPlatform.description}</p>
+          </label>
+          <label className="block">
+            <FieldLabel>Tipo do arquivo</FieldLabel>
             <select
               value={sourceKind}
               onChange={(event) => onChangeSourceKind(event.target.value as SalesCatalogImportSourceKind)}
@@ -3886,7 +4034,7 @@ function SalesCatalogImportPanel({
               <option value="csv">CSV</option>
               <option value="excel">Excel</option>
               <option value="pdf">PDF</option>
-              <option value="image">Imagem</option>
+              <option value="image">Imagem / foto</option>
               <option value="mixed">Misto</option>
             </select>
           </label>
@@ -3902,32 +4050,41 @@ function SalesCatalogImportPanel({
           </label>
         </div>
 
+        <div className="rounded-xl border px-3 py-2 text-[11px] leading-5" style={{ borderColor: "var(--ch-border)", background: "var(--ch-panel)" }}>
+          <p className="font-semibold text-slate-200">{platformNotice.title}</p>
+          <p className="mt-1 text-slate-500">{platformNotice.description}</p>
+        </div>
+
         <div className="grid gap-2">
           <FieldLabel>Destino da venda</FieldLabel>
           <div className="grid gap-1.5 sm:grid-cols-3">
             <ImportChoiceButton
               active={targetMode === "review"}
               icon={SlidersHorizontal}
-              label="Revisar"
+              label="Revisar antes"
               onClick={() => onChangeTargetMode("review")}
             />
             <ImportChoiceButton
               active={targetMode === "connectyhub_checkout"}
               icon={CreditCard}
-              label="Checkout"
+              label="Vender na CH"
               onClick={() => onChangeTargetMode("connectyhub_checkout")}
             />
             <ImportChoiceButton
               active={targetMode === "external_site"}
               icon={ExternalLink}
-              label="Site externo"
+              label="Manter link"
               onClick={() => onChangeTargetMode("external_site")}
             />
+          </div>
+          <div className="rounded-lg border px-3 py-2 text-[11px] leading-5" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+            <p className="font-semibold text-slate-300">{destinationNotice.title}</p>
+            <p className="mt-1 text-slate-500">{destinationNotice.description}</p>
           </div>
         </div>
 
         <div className="grid gap-2">
-          <FieldLabel>Padrao dos itens</FieldLabel>
+          <FieldLabel>Se faltar destino no item</FieldLabel>
           <div className="grid gap-1.5 sm:grid-cols-3">
             <ImportChoiceButton
               active={defaultDestination === "connectyhub_checkout"}
@@ -3963,7 +4120,7 @@ function SalesCatalogImportPanel({
 
         <label className="flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-lg border px-3 text-[12px] font-bold text-cyan-100 transition hover:bg-cyan-400/10" style={{ borderColor: "var(--ch-border)" }}>
           <Upload className="h-4 w-4" />
-          {files.length > 0 ? `${files.length} arquivo(s)` : "Anexar arquivo"}
+          {files.length > 0 ? `${files.length} arquivo(s)` : "Anexar arquivo, cardapio ou foto"}
           <input
             type="file"
             multiple
@@ -4088,9 +4245,11 @@ function CatalogImportJobCard({
     <div className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="truncate text-[13px] font-semibold text-slate-100">{job.title ?? formatImportSourceKind(job.sourceKind)}</p>
+          <p className="truncate text-[13px] font-semibold text-slate-100">{job.title ?? formatImportPlatform(job.sourcePlatform)}</p>
           <p className="mt-1 flex flex-wrap gap-2 text-[11px] text-slate-500">
             {job.createdAt ? <span>{formatDateTime(job.createdAt)}</span> : null}
+            <span>{formatImportPlatform(job.sourcePlatform)}</span>
+            <span>{formatImportSourceKind(job.sourceKind)}</span>
             <span>{formatImportTargetMode(job.targetMode)}</span>
             {job.inputUrl ? <span className="max-w-[190px] truncate">{job.inputUrl}</span> : null}
           </p>
@@ -5308,6 +5467,87 @@ function formatImportSourceKind(value: SalesCatalogImportSourceKind) {
   if (value === "image") return "Imagem";
   if (value === "mixed") return "Misto";
   return "Texto";
+}
+
+function formatImportPlatform(value: SalesCatalogImportPlatform) {
+  if (value === "woocommerce") return "WooCommerce";
+  if (value === "shopify") return "Shopify";
+  if (value === "wix") return "Wix Stores";
+  if (value === "nuvemshop") return "Nuvemshop";
+  if (value === "loja_integrada") return "Loja Integrada";
+  if (value === "tray") return "Tray";
+  if (value === "anota_ai") return "Anota Ai";
+  if (value === "ifood") return "iFood / delivery";
+  if (value === "generic_menu") return "PDF ou foto";
+  if (value === "generic_sheet") return "Planilha";
+  return "Auto";
+}
+
+function getCatalogImportPlatformOption(value: SalesCatalogImportPlatform) {
+  return catalogImportPlatformOptions.find((option) => option.value === value) ?? defaultCatalogImportPlatformOption;
+}
+
+function getCatalogImportPlatformNotice(value: SalesCatalogImportPlatform, sourceKind: SalesCatalogImportSourceKind) {
+  if (value === "anota_ai") {
+    return {
+      title: "Anota Ai entra como origem prioritaria",
+      description: "Para clientes vindos do Anota Ai, envie exportacao, planilha, PDF ou foto do cardapio. A IA tenta separar categorias, sabores, tamanhos, adicionais e combos. Imagens so entram automaticamente quando o arquivo tiver URL publica acessivel; se vier foto/PDF, o lojista completa as fotos depois.",
+    };
+  }
+
+  if (value === "ifood" || value === "generic_menu" || sourceKind === "pdf" || sourceKind === "image") {
+    return {
+      title: "Cardapio por PDF ou foto",
+      description: "A IA pode extrair nome, descricao, preco, categorias e adicionais. Ela nao deve inventar fotos comerciais: depois da importacao, o cliente revisa e sobe imagens reais dos produtos quando necessario.",
+    };
+  }
+
+  if (value === "woocommerce" || value === "shopify" || value === "wix" || value === "nuvemshop" || value === "loja_integrada" || value === "tray") {
+    return {
+      title: "Exportacao de loja virtual",
+      description: "Se a planilha trouxer URLs de imagens, a ConnectyHub tenta importar essas imagens para nosso storage ao publicar produtos para checkout interno. URLs privadas, expiradas ou bloqueadas geram aviso para upload manual.",
+    };
+  }
+
+  return {
+    title: "Importacao assistida por IA",
+    description: "Selecione a plataforma quando souber a origem. Isso ajuda a IA a interpretar campos, variacoes, adicionais e imagens com menos revisao manual.",
+  };
+}
+
+function getImportDestinationNotice(targetMode: SalesCatalogImportTargetMode, defaultDestination: SalesCatalogImportDestination) {
+  if (targetMode === "connectyhub_checkout") {
+    return {
+      title: "Venda fica dentro da ConnectyHub",
+      description: "Os produtos sao cadastrados para o agente vender no WhatsApp e gerar checkout ConnectyHub. Links externos do arquivo viram apenas evidencia, nao levam o lead para fora.",
+    };
+  }
+
+  if (targetMode === "external_site") {
+    return {
+      title: "Manter link externo",
+      description: "Use quando o cliente ainda quer mandar o lead para a loja antiga. O produto entra como botao rastreavel, mas a venda final acontece fora da ConnectyHub.",
+    };
+  }
+
+  if (defaultDestination === "external_site") {
+    return {
+      title: "Revisao com preferencia para links externos",
+      description: "A IA vai deixar itens com URL prontos para sair pelo link externo, mas voce pode trocar cada item para checkout ConnectyHub antes de publicar.",
+    };
+  }
+
+  if (defaultDestination === "manual_handoff") {
+    return {
+      title: "Revisao com fechamento humano",
+      description: "Itens sem destino claro entram para atendimento humano. Use quando ainda nao quiser liberar checkout automatico.",
+    };
+  }
+
+  return {
+    title: "Revisar antes de publicar",
+    description: "O sistema mostra todos os itens antes de liberar. Em cada produto voce decide se vende pelo checkout ConnectyHub, mantem link externo ou deixa para atendimento humano.",
+  };
 }
 
 function formatImportTargetMode(value: SalesCatalogImportTargetMode) {
