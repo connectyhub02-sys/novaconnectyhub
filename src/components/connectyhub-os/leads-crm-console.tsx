@@ -97,6 +97,8 @@ const emptySocialDispatchMonitor: ClientSocialDispatchMonitor = {
   },
 };
 
+const whatsappConversationBackgroundUrl = "https://pub-eaf679ed02634f958b68991d910a997b.r2.dev/8c98994518b575bfd8c949e91d20548b.jpg";
+
 export function LeadCrmConsole({
   mode,
   socialApprovals: initialSocialApprovals = [],
@@ -1009,9 +1011,10 @@ function AttendanceCenterView({
                   style={{
                     backgroundColor: "#efeae2",
                     backgroundImage:
-                      "radial-gradient(circle at 16px 16px, rgba(17,17,17,0.045) 1px, transparent 1.5px), radial-gradient(circle at 5px 6px, rgba(229,9,20,0.035) 1px, transparent 1.5px)",
-                    backgroundPosition: "0 0, 18px 18px",
-                    backgroundSize: "36px 36px",
+                      `linear-gradient(rgba(239,234,226,0.28), rgba(239,234,226,0.28)), url("${whatsappConversationBackgroundUrl}")`,
+                    backgroundPosition: "center",
+                    backgroundRepeat: "repeat",
+                    backgroundSize: "420px auto",
                   }}
                 >
                   <ChatMessages messages={activeMessages} />
