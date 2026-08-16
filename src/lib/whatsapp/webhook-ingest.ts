@@ -1183,6 +1183,10 @@ function isHumanAuthoredWhatsappMessage(message: MessageSnapshot, payload: JsonR
 }
 
 function isApiAuthoredWhatsappMessage(message: MessageSnapshot, payload: JsonRecord) {
+  if (isDashboardHumanReply(payload)) {
+    return false;
+  }
+
   if (message.sentByApi === true) {
     return true;
   }
@@ -1206,6 +1210,25 @@ function isApiAuthoredWhatsappMessage(message: MessageSnapshot, payload: JsonRec
   }
 
   return false;
+}
+
+function isDashboardHumanReply(payload: JsonRecord) {
+  const trackSource = findNestedString(payload, ["track_source", "trackSource"]);
+
+  if (trackSource === "connectyhub_dashboard_human") {
+    return true;
+  }
+
+  const trackId = findNestedString(payload, ["track_id", "trackId"]);
+
+  if (trackId?.startsWith("dashboard_human_reply_")) {
+    return true;
+  }
+
+  const authorSource = findNestedString(payload, ["author_source", "authorSource", "source"]);
+  const authorType = findNestedString(payload, ["author_type", "authorType", "type"]);
+
+  return authorSource === "connectyhub_dashboard" && authorType === "human";
 }
 
 function buildLeadMetadata(

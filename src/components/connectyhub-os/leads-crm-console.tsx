@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import {
@@ -700,8 +700,10 @@ function AttendanceCenterView({
   const [sideTab, setSideTab] = useState<AttendanceSideTab>("lead");
   const [manualReply, setManualReply] = useState("");
   const [handoffBusy, setHandoffBusy] = useState(false);
+  const [replyBusy, setReplyBusy] = useState(false);
   const [handoffNotice, setHandoffNotice] = useState<{ tone: "success" | "error"; message: string } | null>(null);
   const [handoffOverrides, setHandoffOverrides] = useState<Record<string, ClientLeadHumanIntervention>>({});
+  const [manualMessages, setManualMessages] = useState<Record<string, ClientLeadMessage[]>>({});
 
   const tabItems = useMemo(() => buildAttendanceTabs(filteredLeads, handoffOverrides), [filteredLeads, handoffOverrides]);
   const visibleLeads = useMemo(
@@ -715,10 +717,13 @@ function AttendanceCenterView({
     ?? null;
   const activeHumanIntervention = activeLead ? getLeadHumanIntervention(activeLead, handoffOverrides) : emptyClientHumanIntervention();
   const activeConversationId = activeLead?.conversation.id ?? null;
+  const activeMessages = activeLead
+    ? [
+        ...activeLead.conversation.messages,
+        ...(activeConversationId ? manualMessages[activeConversationId] ?? [] : []),
+      ]
+    : [];
   const normalizedPhone = activeLead?.phone?.replace(/\D/g, "") ?? "";
-  const manualReplyUrl = normalizedPhone
-    ? `https://wa.me/${normalizedPhone}${manualReply.trim() ? `?text=${encodeURIComponent(manualReply.trim())}` : ""}`
-    : "#";
 
   async function updateHumanHandoff(action: "pause" | "resume") {
     if (!activeConversationId) {
@@ -766,23 +771,94 @@ function AttendanceCenterView({
     }
   }
 
-  return (
-    <div className="space-y-4">
-      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-        <KpiStat label="Conversas" value={String(workspace.stats.total)} tone="cyan" />
-        <KpiStat label="Em atendimento" value={String(workspace.stats.active)} tone="amber" />
-        <KpiStat label="Qualificados" value={String(workspace.stats.qualified)} tone="green" />
-        <KpiStat label="Ganhos" value={String(workspace.stats.converted)} tone="green" />
-      </div>
+  async function sendManualReply() {
+    if (replyBusy) {
+      return;
+    }
 
+    const text = manualReply.trim();
+
+    if (!activeConversationId) {
+      setHandoffNotice({ tone: "error", message: "Escolha uma conversa valida antes de responder." });
+      return;
+    }
+
+    if (!text) {
+      setHandoffNotice({ tone: "error", message: "Digite uma mensagem para enviar." });
+      return;
+    }
+
+    setReplyBusy(true);
+    setHandoffNotice(null);
+
+    try {
+      const response = await fetch("/api/dashboard/conversations/reply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          conversationId: activeConversationId,
+          text,
+        }),
+      });
+      const payload = await response.json().catch(() => ({})) as {
+        error?: string;
+        humanIntervention?: ClientLeadHumanIntervention;
+        message?: ClientLeadMessage;
+      };
+
+      if (!response.ok || !payload.message) {
+        throw new Error(payload.error ?? "Nao foi possivel enviar a resposta pelo painel.");
+      }
+
+      setManualMessages((current) => ({
+        ...current,
+        [activeConversationId]: [
+          ...(current[activeConversationId] ?? []),
+          payload.message!,
+        ],
+      }));
+
+      if (payload.humanIntervention) {
+        setHandoffOverrides((current) => ({
+          ...current,
+          [activeConversationId]: payload.humanIntervention!,
+        }));
+      }
+
+      setManualReply("");
+      setHandoffNotice({ tone: "success", message: "Resposta enviada pelo painel. IA pausada nesta conversa." });
+    } catch (error) {
+      setHandoffNotice({
+        tone: "error",
+        message: error instanceof Error ? error.message : "Erro inesperado ao responder pelo painel.",
+      });
+    } finally {
+      setReplyBusy(false);
+    }
+  }
+
+  function handleManualReplySubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    void sendManualReply();
+  }
+
+  function handleManualReplyKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      void sendManualReply();
+    }
+  }
+
+  return (
+    <div className="space-y-3">
       <div
         className="overflow-hidden rounded-[22px] border shadow-[0_24px_70px_rgba(17,17,17,0.08)]"
         style={{ borderColor: "var(--ch-border-strong)", background: "rgba(255,255,255,0.94)" }}
       >
-        <div className="grid min-h-[760px] xl:grid-cols-[380px_minmax(0,1fr)_360px]">
+        <div className="grid h-[calc(100svh-300px)] min-h-[620px] max-h-[900px] xl:grid-cols-[360px_minmax(0,1fr)_340px]">
           <aside
             className={cn(
-              "min-h-0 border-b bg-white xl:border-b-0 xl:border-r",
+              "flex h-full min-h-0 flex-col border-b bg-white xl:border-b-0 xl:border-r",
               conversationPane === "chat" && "hidden xl:block",
             )}
             style={{ borderColor: "var(--ch-border)" }}
@@ -792,6 +868,9 @@ function AttendanceCenterView({
                 <div>
                   <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">Central WhatsApp</p>
                   <h2 className="mt-1 text-[20px] font-bold text-slate-950">Atendimento</h2>
+                  <p className="mt-1 text-[11px] text-slate-500">
+                    {workspace.stats.total} conversas / {workspace.stats.active} em atendimento
+                  </p>
                 </div>
                 <Link
                   className="grid h-10 w-10 place-items-center rounded-xl border text-slate-700 transition hover:bg-slate-100"
@@ -835,7 +914,7 @@ function AttendanceCenterView({
               </div>
             </div>
 
-            <div className="h-[640px] overflow-y-auto">
+            <div className="min-h-0 flex-1 overflow-y-auto">
               {visibleLeads.map((lead) => {
                 const latestMessage = getLatestLeadMessage(lead);
                 const humanIntervention = getLeadHumanIntervention(lead, handoffOverrides);
@@ -883,7 +962,7 @@ function AttendanceCenterView({
 
           <main className={cn("min-h-0 bg-[#efeae2]", conversationPane === "inbox" && "hidden xl:block")}>
             {activeLead ? (
-              <div className="flex h-full min-h-[760px] flex-col">
+              <div className="flex h-full min-h-0 flex-col">
                 <div className="flex min-h-[70px] items-center justify-between gap-3 border-b bg-white px-4 py-3" style={{ borderColor: "var(--ch-border)" }}>
                   <div className="flex min-w-0 items-center gap-3">
                     <button
@@ -935,7 +1014,7 @@ function AttendanceCenterView({
                     backgroundSize: "36px 36px",
                   }}
                 >
-                  <ChatMessages messages={activeLead.conversation.messages} />
+                  <ChatMessages messages={activeMessages} />
                 </div>
 
                 <div className="border-t bg-white p-3" style={{ borderColor: "var(--ch-border)" }}>
@@ -951,12 +1030,14 @@ function AttendanceCenterView({
                       {handoffNotice.message}
                     </div>
                   ) : null}
-                  <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                  <form className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]" onSubmit={handleManualReplySubmit}>
                     <label className="relative block">
                       <textarea
-                        className="min-h-11 w-full resize-none rounded-2xl border bg-slate-100/80 px-4 py-3 text-[13px] text-slate-950 outline-none transition placeholder:text-slate-500 focus:border-red-500/45 focus:bg-white"
+                        className="max-h-28 min-h-11 w-full resize-none rounded-2xl border bg-slate-100/80 px-4 py-3 text-[13px] text-slate-950 outline-none transition placeholder:text-slate-500 focus:border-red-500/45 focus:bg-white"
+                        disabled={replyBusy}
+                        onKeyDown={handleManualReplyKeyDown}
                         onChange={(event) => setManualReply(event.target.value)}
-                        placeholder="Digite uma resposta manual para abrir no WhatsApp..."
+                        placeholder="Digite uma resposta aqui no painel..."
                         style={{ borderColor: "var(--ch-border)" }}
                         value={manualReply}
                       />
@@ -969,31 +1050,32 @@ function AttendanceCenterView({
                             ? "border border-slate-200 bg-white text-slate-800 hover:bg-slate-100"
                             : "bg-red-600 text-white hover:bg-red-700",
                         )}
-                        disabled={handoffBusy}
+                        disabled={handoffBusy || replyBusy}
                         onClick={() => void updateHumanHandoff(activeHumanIntervention.active ? "resume" : "pause")}
                         type="button"
                       >
                         {handoffBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : activeHumanIntervention.active ? <PlayCircle className="h-4 w-4" /> : <PauseCircle className="h-4 w-4" />}
                         {activeHumanIntervention.active ? "Retomar IA" : "Assumir"}
                       </button>
-                      <a
+                      <button
                         className={cn(
                           "inline-flex h-11 items-center justify-center gap-2 rounded-2xl px-3 text-[12px] font-bold transition",
-                          normalizedPhone ? "bg-slate-950 text-white hover:bg-slate-800" : "pointer-events-none bg-slate-200 text-slate-500",
+                          activeConversationId && manualReply.trim() && !replyBusy
+                            ? "bg-slate-950 text-white hover:bg-slate-800"
+                            : "bg-slate-200 text-slate-500",
                         )}
-                        href={manualReplyUrl}
-                        rel="noreferrer"
-                        target="_blank"
+                        disabled={!activeConversationId || !manualReply.trim() || replyBusy}
+                        type="submit"
                       >
-                        <Send className="h-4 w-4" />
-                        Responder
-                      </a>
+                        {replyBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                        {replyBusy ? "Enviando" : "Responder"}
+                      </button>
                     </div>
-                  </div>
+                  </form>
                 </div>
               </div>
             ) : (
-              <div className="grid h-full min-h-[760px] place-items-center p-6">
+              <div className="grid h-full min-h-0 place-items-center p-6">
                 <EmptyState title="Sem conversa selecionada" detail="Escolha um lead na inbox para acompanhar o atendimento ao vivo." />
               </div>
             )}
@@ -1001,7 +1083,7 @@ function AttendanceCenterView({
 
           <aside className="hidden min-h-0 border-l bg-white xl:block" style={{ borderColor: "var(--ch-border)" }}>
             {activeLead ? (
-              <div className="flex h-full min-h-[760px] flex-col">
+              <div className="flex h-full min-h-0 flex-col">
                 <div className="border-b px-4 py-4" style={{ borderColor: "var(--ch-border)" }}>
                   <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">Controle do lead</p>
                   <h3 className="mt-1 truncate text-[18px] font-bold text-slate-950">{activeLead.name}</h3>
@@ -1054,7 +1136,7 @@ function AttendanceCenterView({
                 </div>
               </div>
             ) : (
-              <div className="grid h-full min-h-[760px] place-items-center p-4">
+              <div className="grid h-full min-h-0 place-items-center p-4">
                 <EmptyState title="Sem lead" detail="Selecione uma conversa para ver detalhes." />
               </div>
             )}
@@ -2197,36 +2279,45 @@ function ConversationHeader({
 }
 
 function ChatMessages({ messages }: { messages: ClientLeadMessage[] }) {
+  const bottomRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ block: "end" });
+  }, [messages.length]);
+
   if (!messages.length) {
     return <EmptyState title="Sem mensagens salvas" detail="Quando o webhook receber ou enviar mensagens, o historico aparece aqui." />;
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       {messages.map((message) => {
         const isLead = message.author === "lead" || message.direction === "inbound";
         const isAi = message.author === "ai";
         const isHuman = message.author === "human";
         const isSystem = message.author === "system" || message.author === "unknown" || message.direction === "system" || message.direction === "unknown";
         const label = message.authorLabel || (isLead ? "Lead" : isHuman ? "Humano" : isAi ? "Agente IA" : "Sistema");
+        const isOutbound = !isSystem && !isLead;
+        const bubbleStyle = isSystem
+          ? { backgroundColor: "#fff7d6", borderColor: "#f6dc8c", color: "#3b3320" }
+          : isOutbound
+            ? { backgroundColor: "#d9fdd3", borderColor: "#b7e9ad", color: "#111b21" }
+            : { backgroundColor: "#ffffff", borderColor: "#e3ddd4", color: "#111b21" };
 
         return (
-          <div key={message.id} className={cn("flex", isLead ? "justify-end" : "justify-start")}>
+          <div key={message.id} className={cn("flex", isSystem ? "justify-center" : isOutbound ? "justify-end" : "justify-start")}>
             <div
               className={cn(
-                "max-w-[88%] rounded-xl border px-3 py-3 text-[13px] leading-5 shadow-lg shadow-black/15 sm:max-w-[72%] sm:px-4",
-                isLead && "border-emerald-300/25 bg-emerald-300/15 text-emerald-50",
-                isAi && !isLead && "border-cyan-300/20 bg-slate-900/95 text-slate-100",
-                isHuman && !isLead && "border-sky-300/25 bg-sky-300/10 text-sky-50",
-                !isLead && !isAi && !isHuman && !isSystem && "border-white/10 bg-slate-900/95 text-slate-100",
-                isSystem && "border-amber-400/20 bg-amber-400/10 text-amber-100",
+                "max-w-[88%] rounded-2xl border px-3 py-2.5 text-[13px] leading-5 shadow-sm sm:max-w-[72%] sm:px-3.5",
+                isSystem && "max-w-[82%] text-center",
               )}
+              style={bubbleStyle}
             >
-              <div className="mb-2 flex items-center justify-between gap-3">
-                <span className="font-mono text-[9px] uppercase tracking-wide opacity-75">
+              <div className="mb-1 flex items-center justify-between gap-3">
+                <span className="font-mono text-[9px] uppercase tracking-wide opacity-60">
                   {label}
                 </span>
-                <span className="font-mono text-[9px] opacity-60">
+                <span className="font-mono text-[9px] opacity-55">
                   {message.type !== "text" ? `${message.type} · ` : null}
                   {formatTime(message.occurredAt)}
                 </span>
@@ -2234,7 +2325,7 @@ function ChatMessages({ messages }: { messages: ClientLeadMessage[] }) {
               <p className="whitespace-pre-wrap">{message.text}</p>
               {message.mediaUrl ? (
                 <a
-                  className="mt-3 inline-flex rounded-lg border border-cyan-400/25 bg-cyan-400/10 px-2.5 py-1 font-mono text-[9px] font-bold uppercase tracking-wide text-cyan-200 transition hover:bg-cyan-400/15"
+                  className="mt-3 inline-flex rounded-lg border border-slate-300 bg-white/70 px-2.5 py-1 font-mono text-[9px] font-bold uppercase tracking-wide text-slate-700 transition hover:bg-white"
                   href={message.mediaUrl}
                   rel="noreferrer"
                   target="_blank"
@@ -2246,6 +2337,7 @@ function ChatMessages({ messages }: { messages: ClientLeadMessage[] }) {
           </div>
         );
       })}
+      <div ref={bottomRef} />
     </div>
   );
 }
