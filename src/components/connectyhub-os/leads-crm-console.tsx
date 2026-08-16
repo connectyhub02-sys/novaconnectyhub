@@ -1455,7 +1455,6 @@ function AttendanceCenterView({
               <AttendanceSalesBagPanel
                 cartItems={activeCartItems}
                 checkoutBusy={cartCheckoutBusy}
-                humanIntervention={activeHumanIntervention}
                 lead={activeLead}
                 onAddManualItem={addManualCartItem}
                 onAddQuickItem={addQuickCartItem}
@@ -1599,7 +1598,6 @@ function AttendancePushPermissionPrompt({
 function AttendanceSalesBagPanel({
   cartItems,
   checkoutBusy,
-  humanIntervention,
   lead,
   onAddManualItem,
   onAddQuickItem,
@@ -1615,7 +1613,6 @@ function AttendanceSalesBagPanel({
 }: {
   cartItems: AttendanceCartItem[];
   checkoutBusy: boolean;
-  humanIntervention: ClientLeadHumanIntervention;
   lead: ClientLeadRecord;
   onAddManualItem: (input: { name: string; priceCents: number; quantity: number }) => void;
   onAddQuickItem: (product: AttendanceQuickProduct) => void;
@@ -1708,18 +1705,6 @@ function AttendanceSalesBagPanel({
           </div>
         </div>
 
-        <div
-          className={cn(
-            "mt-3 rounded-2xl border px-3 py-2 text-[11px] leading-5",
-            humanIntervention.active
-              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-              : "border-amber-200 bg-amber-50 text-amber-800",
-          )}
-        >
-          {humanIntervention.active
-            ? "IA pausada. O atendimento manual pode fechar esta venda aqui."
-            : "IA ativa. Ao responder manualmente, ela pausa e o humano assume este lead."}
-        </div>
       </div>
 
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
