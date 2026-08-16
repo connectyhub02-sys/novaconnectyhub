@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { normalizeBrazilPhone } from "@/lib/account/signup-completion";
 import { buildAgentChannelRuntimeInstruction } from "@/lib/agents/multichannel";
 import {
   estimateTokensFromText,
@@ -236,6 +237,21 @@ type CrossAgentConversationContext = {
     agentName: string | null;
     occurredAt: string;
   }>;
+};
+
+type RegisteredClientProfileContext = {
+  matchType: "phone" | "name" | "none";
+  confidence: "confirmed" | "possible" | "none";
+  searchedPhone: string | null;
+  matchedByName: string | null;
+  fullName: string | null;
+  firstName: string | null;
+  emailPreview: string | null;
+  companyName: string | null;
+  signupCompletedAt: string | null;
+  organizationName: string | null;
+  organizationStatus: string | null;
+  planCode: string | null;
 };
 
 type InboundMediaKind = "image" | "video" | "document";
@@ -574,6 +590,13 @@ export async function processWhatsappAgentRun(input: {
 
     await maybeSetInstanceAvailable(context, token, "before");
 
+    const registeredClientContext = isElianeRuntimeAgent(agent)
+      ? await loadRegisteredClientProfileContext(client, {
+          phoneNumber: context.phoneNumber ?? lead?.phone_number ?? context.providerChatId,
+          userText,
+        }).catch(() => null)
+      : null;
+
     const cachedAiResponse = readCachedRunResponse(context.run.metadata);
     const salesCatalogShippingQuotes = buildRuntimeSalesCatalogShippingQuoteContext({
       items: context.salesCatalog,
@@ -597,6 +620,7 @@ export async function processWhatsappAgentRun(input: {
       salesCatalogOrders: context.salesCatalogOrders,
       learnings: context.learnings,
       crossAgentContext: context.crossAgentContext,
+      registeredClientContext,
       messages: context.messages,
       latestInbound,
       userText,
@@ -1636,6 +1660,7 @@ async function generateAgentResponse(input: {
   salesCatalogOrders: RuntimeSalesCatalogOrder[];
   learnings: KnowledgeMemoryRow[];
   crossAgentContext: CrossAgentConversationContext | null;
+  registeredClientContext: RegisteredClientProfileContext | null;
   messages: ConversationMessageRow[];
   latestInbound: ConversationMessageRow | null;
   userText: string;
@@ -1705,6 +1730,7 @@ function buildSystemInstruction(input: {
   salesCatalogOrders: RuntimeSalesCatalogOrder[];
   learnings: KnowledgeMemoryRow[];
   crossAgentContext: CrossAgentConversationContext | null;
+  registeredClientContext: RegisteredClientProfileContext | null;
   messages: ConversationMessageRow[];
   userText: string;
   conversationMetadata: Record<string, unknown> | null;
@@ -1749,6 +1775,7 @@ function buildSystemInstruction(input: {
     }),
     ...buildLeadMemoryLines(input.lead, input.behavior),
     ...buildCrossAgentConversationLines(input.crossAgentContext, input.agent),
+    ...buildRegisteredClientProfileLines(input.registeredClientContext, input.agent),
     ...buildKnowledgeLines(input.knowledge),
     ...buildLinkButtonLines(input.linkButtons, input),
     ...buildSalesCatalogLines(input.salesCatalog),
@@ -2074,6 +2101,208 @@ function buildCrossAgentConversationLines(context: CrossAgentConversationContext
           : "Agente";
       return `- ${author}: ${message.text}`;
     }),
+  ];
+}
+
+type RegisteredClientProfileRow = {
+  id: string;
+  email: string | null;
+  full_name: string | null;
+  phone: string | null;
+  phone_normalized: string | null;
+  company_name: string | null;
+  signup_completed_at: string | null;
+};
+
+type RegisteredClientMembershipRow = {
+  role: string | null;
+  organizations: {
+    name: string | null;
+    status: string | null;
+    plan_code: string | null;
+  } | Array<{
+    name: string | null;
+    status: string | null;
+    plan_code: string | null;
+  }> | null;
+};
+
+async function loadRegisteredClientProfileContext(
+  client: SupabaseClient,
+  input: {
+    phoneNumber: string | null | undefined;
+    userText: string;
+  },
+): Promise<RegisteredClientProfileContext> {
+  const phone = normalizeBrazilPhone(input.phoneNumber) ?? normalizeBrazilPhone(normalizePhone(input.phoneNumber));
+  const phoneMatch = phone ? await findProfileByPhone(client, phone) : null;
+
+  if (phoneMatch) {
+    return await buildRegisteredClientContext(client, phoneMatch, {
+      matchType: "phone",
+      confidence: "confirmed",
+      searchedPhone: phone,
+      matchedByName: null,
+    });
+  }
+
+  const nameCandidate = extractSelfDeclaredName(input.userText);
+  const nameMatch = nameCandidate ? await findUniqueProfileByName(client, nameCandidate) : null;
+
+  if (nameMatch) {
+    return await buildRegisteredClientContext(client, nameMatch, {
+      matchType: "name",
+      confidence: "possible",
+      searchedPhone: phone,
+      matchedByName: nameCandidate,
+    });
+  }
+
+  return {
+    matchType: "none",
+    confidence: "none",
+    searchedPhone: phone,
+    matchedByName: nameCandidate,
+    fullName: null,
+    firstName: null,
+    emailPreview: null,
+    companyName: null,
+    signupCompletedAt: null,
+    organizationName: null,
+    organizationStatus: null,
+    planCode: null,
+  };
+}
+
+async function findProfileByPhone(client: SupabaseClient, phoneNormalized: string) {
+  const select = "id, email, full_name, phone, phone_normalized, company_name, signup_completed_at";
+  const { data, error } = await client
+    .from("profiles")
+    .select(select)
+    .eq("phone_normalized", phoneNormalized)
+    .limit(2);
+
+  if (error) {
+    throw new Error(`Nao foi possivel consultar cadastro por telefone: ${error.message}`);
+  }
+
+  const rows = (data ?? []) as RegisteredClientProfileRow[];
+  if (rows.length === 1) return rows[0];
+  if (rows.length > 1) return null;
+
+  const { data: phoneRows, error: phoneError } = await client
+    .from("profiles")
+    .select(select)
+    .eq("phone", phoneNormalized)
+    .limit(2);
+
+  if (phoneError) {
+    throw new Error(`Nao foi possivel consultar telefone do cadastro: ${phoneError.message}`);
+  }
+
+  const fallbackRows = (phoneRows ?? []) as RegisteredClientProfileRow[];
+  return fallbackRows.length === 1 ? fallbackRows[0] : null;
+}
+
+async function findUniqueProfileByName(client: SupabaseClient, nameCandidate: string) {
+  const normalized = normalizeSearch(nameCandidate);
+  if (normalized.length < 3) return null;
+
+  const select = "id, email, full_name, phone, phone_normalized, company_name, signup_completed_at";
+  const escaped = escapeIlikePattern(nameCandidate);
+  const { data, error } = await client
+    .from("profiles")
+    .select(select)
+    .ilike("full_name", `%${escaped}%`)
+    .limit(3);
+
+  if (error) {
+    throw new Error(`Nao foi possivel consultar cadastro por nome: ${error.message}`);
+  }
+
+  const rows = ((data ?? []) as RegisteredClientProfileRow[])
+    .filter((row) => normalizeSearch(row.full_name ?? "").includes(normalized));
+
+  return rows.length === 1 ? rows[0] : null;
+}
+
+async function buildRegisteredClientContext(
+  client: SupabaseClient,
+  profile: RegisteredClientProfileRow,
+  match: Pick<RegisteredClientProfileContext, "matchType" | "confidence" | "searchedPhone" | "matchedByName">,
+): Promise<RegisteredClientProfileContext> {
+  const membership = await loadPrimaryMembershipForProfile(client, profile.id);
+  const organization = Array.isArray(membership?.organizations)
+    ? membership?.organizations[0] ?? null
+    : membership?.organizations ?? null;
+
+  return {
+    ...match,
+    fullName: profile.full_name,
+    firstName: extractFirstName(profile.full_name),
+    emailPreview: maskEmail(profile.email),
+    companyName: profile.company_name,
+    signupCompletedAt: profile.signup_completed_at,
+    organizationName: organization?.name ?? profile.company_name,
+    organizationStatus: organization?.status ?? null,
+    planCode: organization?.plan_code ?? null,
+  };
+}
+
+async function loadPrimaryMembershipForProfile(client: SupabaseClient, userId: string) {
+  const { data, error } = await client
+    .from("organization_members")
+    .select("role, organizations(name, status, plan_code)")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle<RegisteredClientMembershipRow>();
+
+  if (error) {
+    return null;
+  }
+
+  return data ?? null;
+}
+
+function buildRegisteredClientProfileLines(context: RegisteredClientProfileContext | null, agent: AgentRow): string[] {
+  if (!context || !isElianeRuntimeAgent(agent)) return [];
+
+  if (context.matchType === "phone" && context.confidence === "confirmed") {
+    return [
+      "",
+      "CADASTRO CONNECTYHUB DO CONTATO:",
+      "- O telefone do WhatsApp atual bate com um cadastro existente na ConnectyHub.",
+      context.firstName ? `- Primeiro nome cadastrado: ${context.firstName}.` : "",
+      context.companyName ? `- Empresa/perfil informado no cadastro: ${context.companyName}.` : "",
+      context.organizationName ? `- Workspace principal: ${context.organizationName}.` : "",
+      context.organizationStatus ? `- Status do workspace: ${context.organizationStatus}.` : "",
+      context.signupCompletedAt ? "- Cadastro do perfil ja foi concluido." : "- Cadastro existe, mas pode ainda faltar completar dados do perfil.",
+      "- Voce pode dizer naturalmente: 'vi aqui que esse numero ja tem cadastro'.",
+      "- Depois disso, oriente o proximo passo dentro do painel: entrar no painel, criar/revisar empresa, criar agente, conectar WhatsApp, importar/cadastrar produtos ou ajustar o recurso pedido.",
+      "- Nao exponha email, telefone completo, ID, dados internos ou status tecnico sensivel. Use apenas para orientar melhor.",
+    ].filter((line): line is string => Boolean(line));
+  }
+
+  if (context.matchType === "name" && context.confidence === "possible") {
+    return [
+      "",
+      "POSSIVEL CADASTRO CONNECTYHUB PELO NOME:",
+      `- O nome citado (${context.matchedByName}) parece bater com um unico cadastro, mas isso NAO confirma identidade.`,
+      "- Nome parecido nao prova identidade.",
+      context.firstName ? `- Primeiro nome encontrado: ${context.firstName}.` : "",
+      "- Nao afirme 'achei seu cadastro' ainda. Primeiro confirme de forma leve se ele ja fez cadastro e se esta falando pelo mesmo WhatsApp cadastrado.",
+      "- Se a pessoa confirmar que ainda nao cadastrou ou o numero nao bater, envie o caminho/botao de cadastro.",
+    ].filter((line): line is string => Boolean(line));
+  }
+
+  return [
+    "",
+    "CADASTRO CONNECTYHUB DO CONTATO:",
+    "- Nao foi encontrado cadastro pelo telefone atual do WhatsApp.",
+    "- Nao diga isso de forma acusatoria nem absoluta. Pergunte se ele ja fez o cadastro.",
+    "- Se ele disser que nao fez, envie o botao/link de cadastro disponivel e explique que depois ele entra no painel para criar empresa, agente e conectar WhatsApp.",
+    "- Se ele disser que ja fez, peca o e-mail ou telefone usado no cadastro e encaminhe com cuidado para suporte humano se precisar localizar manualmente.",
   ];
 }
 
@@ -9449,6 +9678,43 @@ function normalizeSearch(value: string) {
     .replace(/[^\p{L}\p{N}\s]/gu, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function extractSelfDeclaredName(value: string) {
+  const text = value.replace(/\s+/g, " ").trim();
+  const match = text.match(/\b(?:meu nome (?:e|é)|me chamo|sou (?:o|a)?|aqui (?:e|é))\s+([\p{L}][\p{L}'-]*(?:\s+[\p{L}][\p{L}'-]*){0,3})/iu);
+  const candidate = match?.[1]?.trim() ?? "";
+
+  if (!candidate) return null;
+
+  const cleaned = candidate
+    .replace(/\b(?:eu|tenho|quero|preciso|gostaria|estou|tava|falando|começando|comecando)\b.*$/i, "")
+    .replace(/[.,;:!?].*$/, "")
+    .trim();
+
+  if (cleaned.length < 3) return null;
+
+  const normalized = normalizeSearch(cleaned);
+  const forbidden = new Set(["eliane", "liana", "connectyhub", "connect hub", "marketing", "digital"]);
+
+  return forbidden.has(normalized) ? null : cleaned.slice(0, 80);
+}
+
+function extractFirstName(value: string | null | undefined) {
+  const first = value?.trim().split(/\s+/)[0] ?? "";
+  return first.length >= 2 ? first : null;
+}
+
+function escapeIlikePattern(value: string) {
+  return value.replace(/[\\%_]/g, (match) => `\\${match}`);
+}
+
+function maskEmail(value: string | null | undefined) {
+  const email = value?.trim();
+  if (!email || !email.includes("@")) return null;
+  const [name, domain] = email.split("@");
+  const visible = name.slice(0, Math.min(2, name.length));
+  return `${visible}${"*".repeat(Math.max(2, name.length - visible.length))}@${domain}`;
 }
 
 function normalizePhone(value: string | null | undefined) {

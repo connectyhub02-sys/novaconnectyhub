@@ -25,4 +25,12 @@ describe("Eliane self-service positioning", () => {
     expect(elianeAgentSource).toContain("Exemplo correto: 'vc entra no painel");
     expect(elianeAgentSource).toContain("Exemplo proibido: 'a gente cria seu clone");
   });
+
+  it("uses registered client context without exposing another user's data", () => {
+    expect(agentRuntimeSource).toContain("CADASTRO CONNECTYHUB DO CONTATO");
+    expect(agentRuntimeSource).toContain("O telefone do WhatsApp atual bate com um cadastro existente");
+    expect(agentRuntimeSource).toContain("Nome parecido nao prova identidade");
+    expect(agentRuntimeSource).toContain("Nao exponha email, telefone completo, ID");
+    expect(elianeAgentSource).toContain("IDENTIFICACAO DE CADASTRO");
+  });
 });

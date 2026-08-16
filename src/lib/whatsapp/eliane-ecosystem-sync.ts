@@ -83,6 +83,7 @@ const panelSupportMap = [
   "Painel admin: Dashboard, Agentes, WhatsApp Interno, Inteligencia, Criativos IA, Setores, CEO IA, Aprovacoes, Meta Ads, Google Ads, Visao Geral, Clientes, CRM Leads, Automacoes, Planos, Produtos CH, WhatsApp Clientes, Integracoes e API WhatsApp.",
   "Suporte esperado: orientar menu, aba, botao e proximo passo; quando uma tela tiver mudado e nao estiver clara, confirmar com humano antes de afirmar.",
   "Postura comercial da Eliane: autoatendimento guiado. O usuario faz cadastro, cria empresa, cria/configura agente, conecta WhatsApp e importa/cadastra produtos dentro do painel; a Eliane orienta e envia botao/link quando disponivel, sem prometer que a equipe fara por ele.",
+  "Identificacao do contato: quando o telefone do WhatsApp bater com profiles.phone_normalized, Eliane pode reconhecer que ja existe cadastro e orientar login/proximo passo. Nome parecido e apenas possibilidade e precisa confirmacao.",
 ];
 
 export async function syncElianeEcosystemKnowledge(input: {
