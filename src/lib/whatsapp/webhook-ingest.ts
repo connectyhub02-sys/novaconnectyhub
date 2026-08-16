@@ -13,6 +13,11 @@ import {
 import { normalizeWhatsappBehaviorConfig } from "./agent-behavior";
 import { isWhatsappHandoffNotificationRecipient } from "./handoff-notifications";
 import {
+  HUMAN_INTERVENTION_DEFAULT_MS,
+  cancelQueuedWhatsappRunsForConversation,
+  isConversationPausedForHuman,
+} from "./human-intervention";
+import {
   classifyWhatsappLeadDisplayName,
   isLikelyPersonalLeadName,
   normalizeLeadNameCandidate,
@@ -57,8 +62,6 @@ type AgentRow = {
 type WebhookEventRow = {
   id: string;
 };
-
-const HUMAN_OUTBOUND_PAUSE_MS = 60 * 60 * 1000;
 
 export type UazapiWebhookIngestResult = {
   eventId: string | null;
@@ -680,12 +683,12 @@ async function markConversationHandledByHuman(client: SupabaseClient, conversati
   const occurredAtMs = new Date(message.occurredAt).getTime();
   const nowMs = Date.now();
 
-  if (Number.isFinite(occurredAtMs) && nowMs - occurredAtMs > HUMAN_OUTBOUND_PAUSE_MS) {
+  if (Number.isFinite(occurredAtMs) && nowMs - occurredAtMs > HUMAN_INTERVENTION_DEFAULT_MS) {
     return;
   }
 
   const pauseBaseMs = Number.isFinite(occurredAtMs) && occurredAtMs <= nowMs ? occurredAtMs : nowMs;
-  const pausedUntil = new Date(pauseBaseMs + HUMAN_OUTBOUND_PAUSE_MS).toISOString();
+  const pausedUntil = new Date(pauseBaseMs + HUMAN_INTERVENTION_DEFAULT_MS).toISOString();
   const { data } = await client
     .from("conversations")
     .select("metadata")
@@ -711,6 +714,12 @@ async function markConversationHandledByHuman(client: SupabaseClient, conversati
       },
     })
     .eq("id", conversationId);
+
+  await cancelQueuedWhatsappRunsForConversation(
+    client,
+    conversationId,
+    "Cancelado: humano respondeu pelo WhatsApp conectado.",
+  );
 }
 
 async function enqueueWhatsappAgentRun(
@@ -778,6 +787,10 @@ async function enqueueWhatsappAgentRun(
     : {};
 
   if (!isGroupChat && isWhatsappHandoffNotificationRecipient(behavior, input.phoneNumber)) {
+    return null;
+  }
+
+  if (!isGroupChat && await isConversationPausedForHuman(client, input.conversationId)) {
     return null;
   }
 

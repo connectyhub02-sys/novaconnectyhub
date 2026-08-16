@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Activity,
   Archive,
@@ -698,6 +699,7 @@ function AttendanceCenterView({
   setSelectedLeadId: (id: string) => void;
   workspace: ClientLeadCrmWorkspace;
 }) {
+  const router = useRouter();
   const [inboxTab, setInboxTab] = useState<AttendanceInboxTab>("all");
   const [sideTab, setSideTab] = useState<AttendanceSideTab>("lead");
   const [manualReply, setManualReply] = useState("");
@@ -706,6 +708,7 @@ function AttendanceCenterView({
   const [handoffNotice, setHandoffNotice] = useState<{ tone: "success" | "error"; message: string } | null>(null);
   const [handoffOverrides, setHandoffOverrides] = useState<Record<string, ClientLeadHumanIntervention>>({});
   const [manualMessages, setManualMessages] = useState<Record<string, ClientLeadMessage[]>>({});
+  const [handoffTick, setHandoffTick] = useState(() => Date.now());
 
   const tabItems = useMemo(() => buildAttendanceTabs(filteredLeads, handoffOverrides), [filteredLeads, handoffOverrides]);
   const visibleLeads = useMemo(
@@ -720,12 +723,30 @@ function AttendanceCenterView({
   const activeHumanIntervention = activeLead ? getLeadHumanIntervention(activeLead, handoffOverrides) : emptyClientHumanIntervention();
   const activeConversationId = activeLead?.conversation.id ?? null;
   const activeMessages = activeLead
-    ? [
-        ...activeLead.conversation.messages,
-        ...(activeConversationId ? manualMessages[activeConversationId] ?? [] : []),
-      ]
+    ? mergeConversationMessages(
+        activeLead.conversation.messages,
+        activeConversationId ? manualMessages[activeConversationId] ?? [] : [],
+      )
     : [];
+  const handoffCountdown = formatHumanInterventionCountdown(activeHumanIntervention, handoffTick);
   const normalizedPhone = activeLead?.phone?.replace(/\D/g, "") ?? "";
+
+  useEffect(() => {
+    const interval = window.setInterval(() => setHandoffTick(Date.now()), 1000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    if (!activeConversationId) {
+      return;
+    }
+
+    const interval = window.setInterval(() => {
+      router.refresh();
+    }, 5000);
+
+    return () => window.clearInterval(interval);
+  }, [activeConversationId, router]);
 
   async function updateHumanHandoff(action: "pause" | "resume") {
     if (!activeConversationId) {
@@ -763,6 +784,7 @@ function AttendanceCenterView({
         tone: "success",
         message: action === "pause" ? "IA pausada para atendimento humano." : "IA retomada para esta conversa.",
       });
+      router.refresh();
     } catch (error) {
       setHandoffNotice({
         tone: "error",
@@ -829,6 +851,7 @@ function AttendanceCenterView({
 
       setManualReply("");
       setHandoffNotice({ tone: "success", message: "Resposta enviada pelo painel. IA pausada nesta conversa." });
+      router.refresh();
     } catch (error) {
       setHandoffNotice({
         tone: "error",
@@ -1033,6 +1056,15 @@ function AttendanceCenterView({
                       {handoffNotice.message}
                     </div>
                   ) : null}
+                  {activeHumanIntervention.active ? (
+                    <div className="mb-2 rounded-xl border border-emerald-500/25 bg-emerald-50 px-3 py-2 text-[12px] text-emerald-800">
+                      IA pausada por atendimento humano.
+                      {" "}
+                      {handoffCountdown ? `Retorno automatico em ${handoffCountdown}.` : "Retorno automatico sem prazo definido."}
+                      {" "}
+                      Cada resposta humana reinicia esse tempo.
+                    </div>
+                  ) : null}
                   <form className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]" onSubmit={handleManualReplySubmit}>
                     <label className="relative block">
                       <textarea
@@ -1130,6 +1162,7 @@ function AttendanceCenterView({
                   {sideTab === "agent" ? (
                     <AttendanceAgentPanel
                       busy={handoffBusy}
+                      countdown={handoffCountdown}
                       humanIntervention={activeHumanIntervention}
                       lead={activeLead}
                       onToggle={() => void updateHumanHandoff(activeHumanIntervention.active ? "resume" : "pause")}
@@ -1198,11 +1231,13 @@ function AttendanceCrmPanel({ lead }: { lead: ClientLeadRecord }) {
 
 function AttendanceAgentPanel({
   busy,
+  countdown,
   humanIntervention,
   lead,
   onToggle,
 }: {
   busy: boolean;
+  countdown: string | null;
   humanIntervention: ClientLeadHumanIntervention;
   lead: ClientLeadRecord;
   onToggle: () => void;
@@ -1223,6 +1258,7 @@ function AttendanceAgentPanel({
         </div>
         <div className="mt-4 grid gap-2">
           <InfoMini label="Estado" value={humanIntervention.active ? "Intervencao humana" : "Automacao ativa"} />
+          <InfoMini label="Volta em" value={humanIntervention.active ? countdown ?? "Sem prazo" : "Agora"} />
           <InfoMini label="Pausada ate" value={formatDateTime(humanIntervention.pausedUntil)} />
           <InfoMini label="Motivo" value={formatHumanInterventionReason(humanIntervention.reason)} />
         </div>
@@ -1305,9 +1341,16 @@ function getLeadHumanIntervention(
   overrides: Record<string, ClientLeadHumanIntervention>,
 ) {
   const conversationId = lead.conversation.id;
-  return conversationId && overrides[conversationId]
-    ? overrides[conversationId]
-    : lead.conversation.humanIntervention;
+  const override = conversationId ? overrides[conversationId] : null;
+
+  if (!override) {
+    return lead.conversation.humanIntervention;
+  }
+
+  const serverUpdatedAt = toTimestamp(lead.conversation.humanIntervention.updatedAt);
+  const overrideUpdatedAt = toTimestamp(override.updatedAt);
+
+  return serverUpdatedAt > overrideUpdatedAt ? lead.conversation.humanIntervention : override;
 }
 
 function emptyClientHumanIntervention(): ClientLeadHumanIntervention {
@@ -1330,9 +1373,60 @@ function formatMessageAuthorShort(message: ClientLeadMessage) {
 function formatHumanInterventionReason(value: string | null) {
   if (value === "manual_dashboard_handoff") return "Assumido no painel";
   if (value === "manual_dashboard_resume") return "Retomado no painel";
+  if (value === "manual_dashboard_reply") return "Humano respondeu no painel";
   if (value === "human_outbound_from_connected_whatsapp") return "Humano respondeu no WhatsApp";
   if (value === "human_handoff_requested") return "Lead pediu humano";
   return value ?? "Sem motivo";
+}
+
+function mergeConversationMessages(serverMessages: ClientLeadMessage[], localMessages: ClientLeadMessage[]) {
+  const seen = new Set<string>();
+  const merged: ClientLeadMessage[] = [];
+
+  for (const message of [...serverMessages, ...localMessages]) {
+    const key = message.providerMessageId
+      ? `provider:${message.providerMessageId}`
+      : `local:${message.id}`;
+
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    merged.push(message);
+  }
+
+  return merged.sort((a, b) => toTimestamp(a.occurredAt) - toTimestamp(b.occurredAt));
+}
+
+function formatHumanInterventionCountdown(humanIntervention: ClientLeadHumanIntervention, nowMs: number) {
+  if (!humanIntervention.active || !humanIntervention.pausedUntil) {
+    return null;
+  }
+
+  const pausedUntilMs = toTimestamp(humanIntervention.pausedUntil);
+  const remainingMs = pausedUntilMs - nowMs;
+
+  if (remainingMs <= 0) {
+    return "0s";
+  }
+
+  const totalSeconds = Math.ceil(remainingMs / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (hours > 0) {
+    return `${hours}h ${String(minutes).padStart(2, "0")}m`;
+  }
+
+  return `${minutes}m ${String(seconds).padStart(2, "0")}s`;
+}
+
+function toTimestamp(value: string | null | undefined) {
+  if (!value) return 0;
+  const timestamp = new Date(value).getTime();
+  return Number.isNaN(timestamp) ? 0 : timestamp;
 }
 
 function SocialApprovalQueue({

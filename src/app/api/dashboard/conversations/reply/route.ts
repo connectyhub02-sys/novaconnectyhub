@@ -3,6 +3,10 @@ import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
 import { loadUazapiCredentials, type UazapiCredentials } from "@/lib/whatsapp/uazapi-credentials";
+import {
+  HUMAN_INTERVENTION_DEFAULT_MS,
+  cancelQueuedWhatsappRunsForConversation,
+} from "@/lib/whatsapp/human-intervention";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -155,7 +159,7 @@ export async function POST(request: NextRequest) {
   ]);
   const metadata = readRecord(conversation.metadata) ?? {};
   const currentHuman = readRecord(metadata.human_intervention) ?? {};
-  const pausedUntil = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+  const pausedUntil = new Date(Date.now() + HUMAN_INTERVENTION_DEFAULT_MS).toISOString();
   const humanIntervention = {
     ...currentHuman,
     active: true,
@@ -255,6 +259,12 @@ export async function POST(request: NextRequest) {
       .eq("id", instance.id)
       .eq("organization_id", workspace.organization.id),
   ]);
+
+  await cancelQueuedWhatsappRunsForConversation(
+    client,
+    conversation.id,
+    "Cancelado: humano respondeu pelo painel.",
+  );
 
   await client.from("intelligence_events").insert({
     scope: "organization",

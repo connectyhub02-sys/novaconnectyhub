@@ -1,6 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
+import {
+  HUMAN_INTERVENTION_DEFAULT_MINUTES,
+  cancelQueuedWhatsappRunsForConversation,
+} from "@/lib/whatsapp/human-intervention";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -86,6 +90,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: updateError.message }, { status: 500 });
   }
 
+  if (action === "pause") {
+    await cancelQueuedWhatsappRunsForConversation(
+      client,
+      conversationId,
+      "Cancelado: conversa assumida pelo painel.",
+    );
+  }
+
   return NextResponse.json({
     ok: true,
     humanIntervention: {
@@ -114,8 +126,8 @@ function clampMinutes(value: unknown) {
   const numeric = typeof value === "number" ? value : Number(value);
 
   if (!Number.isFinite(numeric)) {
-    return 60;
+    return HUMAN_INTERVENTION_DEFAULT_MINUTES;
   }
 
-  return Math.max(5, Math.min(1440, Math.round(numeric)));
+  return Math.max(1, Math.min(1440, Math.round(numeric)));
 }
