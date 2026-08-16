@@ -15,6 +15,8 @@ import {
   ChevronUp,
   Clock,
   Bot,
+  Copy,
+  CreditCard,
   ExternalLink,
   Filter,
   FileText,
@@ -24,15 +26,19 @@ import {
   Mail,
   MapPin,
   MessageCircle,
+  Minus,
   PauseCircle,
   Phone,
   PlayCircle,
+  Plus,
+  Package,
   RotateCcw,
   Search,
   Send,
   ShieldCheck,
+  ShoppingBag,
   Target,
-  UserRound,
+  Trash2,
   X,
   XCircle,
 } from "lucide-react";
@@ -58,7 +64,6 @@ import type {
 type ConsoleMode = "leads" | "crm" | "conversas" | "atendimento";
 
 type AttendanceInboxTab = "all" | "unread" | "active" | "paused" | "qualified" | "won" | "archived";
-type AttendanceSideTab = "lead" | "crm" | "agent" | "history";
 
 type LeadCrmConsoleProps = {
   mode: ConsoleMode;
@@ -75,6 +80,23 @@ type AttendancePushPromptState = {
   message: string | null;
   permission: BrowserPushPermissionState;
   visible: boolean;
+};
+
+type AttendanceCartItem = {
+  id: string;
+  name: string;
+  note?: string;
+  quantity: number;
+  source: "quick" | "manual";
+  unitPriceCents: number;
+};
+
+type AttendanceQuickProduct = {
+  category: string;
+  description: string;
+  id: string;
+  name: string;
+  priceCents: number;
 };
 
 const statusOptions: Array<{ value: "all" | ClientLeadStatus; label: string }> = [
@@ -113,6 +135,37 @@ const emptySocialDispatchMonitor: ClientSocialDispatchMonitor = {
 const whatsappConversationBackgroundUrl = "https://pub-eaf679ed02634f958b68991d910a997b.r2.dev/8c98994518b575bfd8c949e91d20548b.jpg";
 let attendanceVapidPublicKey: string | null = null;
 let attendanceVapidPublicKeyPromise: Promise<string> | null = null;
+
+const attendanceQuickProducts: AttendanceQuickProduct[] = [
+  {
+    category: "Produto fisico",
+    description: "Item principal da conversa. Ajuste o valor se precisar.",
+    id: "quick-main-product",
+    name: "Produto principal",
+    priceCents: 9700,
+  },
+  {
+    category: "Complemento",
+    description: "Use para adicional, variacao, acompanhamento ou acessorio.",
+    id: "quick-addon",
+    name: "Complemento / adicional",
+    priceCents: 2900,
+  },
+  {
+    category: "Combo",
+    description: "Agrupa dois ou mais itens em uma oferta unica.",
+    id: "quick-combo",
+    name: "Combo personalizado",
+    priceCents: 19700,
+  },
+  {
+    category: "Servico",
+    description: "Para consultoria, reserva, sinal, entrada ou atendimento premium.",
+    id: "quick-service",
+    name: "Servico / sinal",
+    priceCents: 15000,
+  },
+];
 
 export function LeadCrmConsole({
   mode,
@@ -714,8 +767,8 @@ function AttendanceCenterView({
 }) {
   const router = useRouter();
   const [inboxTab, setInboxTab] = useState<AttendanceInboxTab>("all");
-  const [sideTab, setSideTab] = useState<AttendanceSideTab>("lead");
   const [manualReply, setManualReply] = useState("");
+  const [leadCarts, setLeadCarts] = useState<Record<string, AttendanceCartItem[]>>({});
   const [handoffBusy, setHandoffBusy] = useState(false);
   const [replyBusy, setReplyBusy] = useState(false);
   const [handoffNotice, setHandoffNotice] = useState<{ tone: "success" | "error"; message: string } | null>(null);
@@ -751,6 +804,89 @@ function AttendanceCenterView({
       )
     : [];
   const handoffCountdown = formatHumanInterventionCountdown(activeHumanIntervention, handoffTick);
+  const activeCartKey = activeConversationId ?? activeLead?.id ?? null;
+  const activeCartItems = activeCartKey ? leadCarts[activeCartKey] ?? [] : [];
+  const activeCartTotalCents = activeCartItems.reduce((total, item) => total + (item.unitPriceCents * item.quantity), 0);
+
+  function updateActiveCart(updater: (items: AttendanceCartItem[]) => AttendanceCartItem[]) {
+    if (!activeCartKey) {
+      return;
+    }
+
+    setLeadCarts((current) => ({
+      ...current,
+      [activeCartKey]: updater(current[activeCartKey] ?? []),
+    }));
+  }
+
+  function addQuickCartItem(product: AttendanceQuickProduct) {
+    updateActiveCart((items) => {
+      const existing = items.find((item) => item.id === product.id);
+
+      if (existing) {
+        return items.map((item) => (
+          item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
+        ));
+      }
+
+      return [
+        ...items,
+        {
+          id: product.id,
+          name: product.name,
+          note: product.category,
+          quantity: 1,
+          source: "quick",
+          unitPriceCents: product.priceCents,
+        },
+      ];
+    });
+  }
+
+  function addManualCartItem(input: { name: string; priceCents: number; quantity: number }) {
+    updateActiveCart((items) => [
+      ...items,
+      {
+        id: `manual-${Date.now()}-${items.length}`,
+        name: input.name,
+        quantity: input.quantity,
+        source: "manual",
+        unitPriceCents: input.priceCents,
+      },
+    ]);
+  }
+
+  function updateCartItemQuantity(itemId: string, quantity: number) {
+    updateActiveCart((items) => {
+      if (quantity <= 0) {
+        return items.filter((item) => item.id !== itemId);
+      }
+
+      return items.map((item) => (
+        item.id === itemId ? { ...item, quantity } : item
+      ));
+    });
+  }
+
+  function removeCartItem(itemId: string) {
+    updateActiveCart((items) => items.filter((item) => item.id !== itemId));
+  }
+
+  function clearActiveCart() {
+    updateActiveCart(() => []);
+  }
+
+  function useCartSummaryInReply() {
+    if (!activeLead || !activeCartItems.length) {
+      return;
+    }
+
+    setManualReply(buildLeadCartSummary(activeLead, activeCartItems));
+    setHandoffNotice({
+      tone: "success",
+      message: "Resumo da sacola pronto no campo de resposta.",
+    });
+  }
 
   function promptAttendancePushPermission() {
     const permission = readAttendancePushPermissionState();
@@ -1209,59 +1345,19 @@ function AttendanceCenterView({
 
           <aside className="hidden min-h-0 border-l bg-white xl:block" style={{ borderColor: "var(--ch-border)" }}>
             {activeLead ? (
-              <div className="flex h-full min-h-0 flex-col">
-                <div className="border-b px-4 py-4" style={{ borderColor: "var(--ch-border)" }}>
-                  <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">Controle do lead</p>
-                  <h3 className="mt-1 truncate text-[18px] font-bold text-slate-950">{activeLead.name}</h3>
-                  <div className="mt-3 grid grid-cols-2 gap-2">
-                    <InfoMini label="Score" value={`${activeLead.score}/100`} />
-                    <InfoMini label="Status" value={statusMeta[activeLead.status].label} />
-                  </div>
-                </div>
-
-                <div className="border-b p-3" style={{ borderColor: "var(--ch-border)" }}>
-                  <div className="grid grid-cols-4 gap-1 rounded-2xl bg-slate-100 p-1">
-                    {[
-                      { value: "lead" as const, label: "Lead", icon: UserRound },
-                      { value: "crm" as const, label: "CRM", icon: Target },
-                      { value: "agent" as const, label: "Agente", icon: Bot },
-                      { value: "history" as const, label: "Hist.", icon: Clock },
-                    ].map((item) => {
-                      const Icon = item.icon;
-
-                      return (
-                        <button
-                          key={item.value}
-                          className={cn(
-                            "inline-flex h-9 items-center justify-center gap-1 rounded-xl text-[11px] font-semibold transition",
-                            sideTab === item.value ? "bg-white text-red-600 shadow-sm" : "text-slate-600 hover:text-slate-950",
-                          )}
-                          onClick={() => setSideTab(item.value)}
-                          type="button"
-                        >
-                          <Icon className="h-3.5 w-3.5" />
-                          {item.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div className="min-h-0 flex-1 overflow-y-auto p-4">
-                  {sideTab === "lead" ? <AttendanceLeadPanel lead={activeLead} onDetails={() => setDetailsLeadId(activeLead.id)} /> : null}
-                  {sideTab === "crm" ? <AttendanceCrmPanel lead={activeLead} /> : null}
-                  {sideTab === "agent" ? (
-                    <AttendanceAgentPanel
-                      busy={handoffBusy}
-                      countdown={handoffCountdown}
-                      humanIntervention={activeHumanIntervention}
-                      lead={activeLead}
-                      onToggle={() => void updateHumanHandoff(activeHumanIntervention.active ? "resume" : "pause")}
-                    />
-                  ) : null}
-                  {sideTab === "history" ? <AttendanceHistoryPanel lead={activeLead} /> : null}
-                </div>
-              </div>
+              <AttendanceSalesBagPanel
+                cartItems={activeCartItems}
+                humanIntervention={activeHumanIntervention}
+                lead={activeLead}
+                onAddManualItem={addManualCartItem}
+                onAddQuickItem={addQuickCartItem}
+                onClearCart={clearActiveCart}
+                onRemoveItem={removeCartItem}
+                onUpdateQuantity={updateCartItemQuantity}
+                onUseSummary={useCartSummaryInReply}
+                quickProducts={attendanceQuickProducts}
+                totalCents={activeCartTotalCents}
+              />
             ) : (
               <div className="grid h-full min-h-0 place-items-center p-4">
                 <EmptyState title="Sem lead" detail="Selecione uma conversa para ver detalhes." />
@@ -1389,115 +1485,280 @@ function AttendancePushPermissionPrompt({
   );
 }
 
-function AttendanceLeadPanel({ lead, onDetails }: { lead: ClientLeadRecord; onDetails: () => void }) {
-  return (
-    <div className="space-y-3">
-      <InfoPanel title="Resumo inteligente" text={lead.summary} />
-      <div className="rounded-2xl border bg-white p-4" style={{ borderColor: "var(--ch-border)" }}>
-        <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Contato</p>
-        <div className="mt-3 space-y-2">
-          <InfoMini label="Telefone" value={lead.phone ?? "Nao informado"} />
-          <InfoMini label="Email" value={lead.email ?? "Nao informado"} />
-          <InfoMini label="Origem" value={formatPublicSource(lead.source)} />
-          <InfoMini label="Empresa" value={lead.companyName} />
-        </div>
-      </div>
-      <button
-        className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-red-600 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-white transition hover:bg-red-700"
-        onClick={onDetails}
-        type="button"
-      >
-        Abrir arquivo completo
-        <ExternalLink className="h-3.5 w-3.5" />
-      </button>
-    </div>
-  );
-}
-
-function AttendanceCrmPanel({ lead }: { lead: ClientLeadRecord }) {
-  return (
-    <div className="space-y-3">
-      <LeadQualificationSnapshot lead={lead} />
-      <div className="rounded-2xl border bg-white p-4" style={{ borderColor: "var(--ch-border)" }}>
-        <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Proxima acao</p>
-        <p className="mt-3 text-[13px] font-semibold leading-5 text-slate-950">
-          {lead.qualification.nextBestAction ?? "Continuar qualificando o lead."}
-        </p>
-        {lead.qualification.nextBestQuestion ? (
-          <p className="mt-3 rounded-xl border border-red-500/20 bg-red-50 p-3 text-[12px] leading-5 text-red-700">
-            {lead.qualification.nextBestQuestion}
-          </p>
-        ) : null}
-      </div>
-      <QualificationGrid lead={lead} />
-    </div>
-  );
-}
-
-function AttendanceAgentPanel({
-  busy,
-  countdown,
+function AttendanceSalesBagPanel({
+  cartItems,
   humanIntervention,
   lead,
-  onToggle,
+  onAddManualItem,
+  onAddQuickItem,
+  onClearCart,
+  onRemoveItem,
+  onUpdateQuantity,
+  onUseSummary,
+  quickProducts,
+  totalCents,
 }: {
-  busy: boolean;
-  countdown: string | null;
+  cartItems: AttendanceCartItem[];
   humanIntervention: ClientLeadHumanIntervention;
   lead: ClientLeadRecord;
-  onToggle: () => void;
+  onAddManualItem: (input: { name: string; priceCents: number; quantity: number }) => void;
+  onAddQuickItem: (product: AttendanceQuickProduct) => void;
+  onClearCart: () => void;
+  onRemoveItem: (itemId: string) => void;
+  onUpdateQuantity: (itemId: string, quantity: number) => void;
+  onUseSummary: () => void;
+  quickProducts: AttendanceQuickProduct[];
+  totalCents: number;
 }) {
+  const [manualName, setManualName] = useState("");
+  const [manualPrice, setManualPrice] = useState("");
+  const [manualQuantity, setManualQuantity] = useState("1");
+  const manualPriceCents = parseCurrencyInputToCents(manualPrice);
+  const manualQuantityNumber = Math.max(1, Math.min(99, Number.parseInt(manualQuantity, 10) || 1));
+  const canAddManualItem = Boolean(manualName.trim()) && manualPriceCents > 0;
+
+  function handleAddManualItem(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!canAddManualItem) {
+      return;
+    }
+
+    onAddManualItem({
+      name: manualName.trim(),
+      priceCents: manualPriceCents,
+      quantity: manualQuantityNumber,
+    });
+    setManualName("");
+    setManualPrice("");
+    setManualQuantity("1");
+  }
+
   return (
-    <div className="space-y-3">
-      <div className="rounded-2xl border bg-white p-4" style={{ borderColor: "var(--ch-border)" }}>
-        <div className="flex items-start gap-3">
-          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-slate-950 text-white">
-            <Bot className="h-5 w-5" />
-          </span>
+    <div className="flex h-full min-h-0 flex-col bg-white">
+      <div className="border-b px-4 py-4" style={{ borderColor: "var(--ch-border)" }}>
+        <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">Venda manual</p>
+        <div className="mt-1 flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="truncate text-[14px] font-bold text-slate-950">{lead.agentName ?? "Agente nao definido"}</p>
-            <p className="mt-1 text-[12px] leading-5 text-slate-600">
-              {humanIntervention.active ? "IA pausada para atendimento humano." : "IA apta a responder quando novas mensagens chegarem."}
+            <h3 className="truncate text-[18px] font-bold text-slate-950">Sacola do lead</h3>
+            <p className="mt-1 line-clamp-2 text-[12px] leading-5 text-slate-500">
+              Monte o pedido de {lead.name} sem gastar credito de IA.
             </p>
           </div>
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-red-600 text-white shadow-[0_14px_30px_rgba(229,9,20,0.18)]">
+            <ShoppingBag className="h-4 w-4" />
+          </span>
         </div>
-        <div className="mt-4 grid gap-2">
-          <InfoMini label="Estado" value={humanIntervention.active ? "Intervencao humana" : "Automacao ativa"} />
-          <InfoMini label="Volta em" value={humanIntervention.active ? countdown ?? "Sem prazo" : "Agora"} />
-          <InfoMini label="Pausada ate" value={formatDateTime(humanIntervention.pausedUntil)} />
-          <InfoMini label="Motivo" value={formatHumanInterventionReason(humanIntervention.reason)} />
+
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
+            <p className="font-mono text-[9px] uppercase tracking-wide text-slate-500">Total</p>
+            <p className="mt-1 truncate text-[16px] font-black text-slate-950">{formatCurrencyCents(totalCents)}</p>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
+            <p className="font-mono text-[9px] uppercase tracking-wide text-slate-500">Itens</p>
+            <p className="mt-1 truncate text-[16px] font-black text-slate-950">{cartItems.reduce((total, item) => total + item.quantity, 0)}</p>
+          </div>
         </div>
-        <button
+
+        <div
           className={cn(
-            "mt-4 inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl px-3 font-mono text-[10px] font-bold uppercase tracking-wide transition",
-            humanIntervention.active ? "border border-slate-200 bg-white text-slate-900 hover:bg-slate-100" : "bg-red-600 text-white hover:bg-red-700",
+            "mt-3 rounded-2xl border px-3 py-2 text-[11px] leading-5",
+            humanIntervention.active
+              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+              : "border-amber-200 bg-amber-50 text-amber-800",
           )}
-          disabled={busy || !lead.conversation.id}
-          onClick={onToggle}
-          type="button"
         >
-          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : humanIntervention.active ? <PlayCircle className="h-4 w-4" /> : <PauseCircle className="h-4 w-4" />}
-          {humanIntervention.active ? "Retomar agente" : "Pausar e assumir"}
-        </button>
+          {humanIntervention.active
+            ? "IA pausada. O atendimento manual pode fechar esta venda aqui."
+            : "IA ativa. Ao responder manualmente, ela pausa e o humano assume este lead."}
+        </div>
       </div>
 
-      <Link
-        className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-800 transition hover:bg-slate-100"
-        href="/dashboard/whatsapp"
-        style={{ borderColor: "var(--ch-border)" }}
-      >
-        Configurar agente
-        <ExternalLink className="h-3.5 w-3.5" />
-      </Link>
-    </div>
-  );
-}
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
+        <section>
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">Itens rapidos</p>
+              <h4 className="mt-1 text-[14px] font-bold text-slate-950">Adicionar produto</h4>
+            </div>
+            <Link
+              className="inline-flex h-8 items-center gap-1.5 rounded-full border border-slate-200 px-3 text-[11px] font-semibold text-slate-700 transition hover:bg-slate-100"
+              href="/dashboard/links"
+            >
+              <Package className="h-3.5 w-3.5" />
+              Catalogo
+            </Link>
+          </div>
 
-function AttendanceHistoryPanel({ lead }: { lead: ClientLeadRecord }) {
-  return (
-    <div className="space-y-3">
-      <LeadFileSnapshot lead={lead} />
-      <ActivityTimeline activities={lead.activities} />
+          <div className="mt-3 space-y-2">
+            {quickProducts.map((product) => (
+              <button
+                key={product.id}
+                className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3 text-left transition hover:border-red-200 hover:bg-red-50"
+                onClick={() => onAddQuickItem(product)}
+                type="button"
+              >
+                <span className="min-w-0">
+                  <span className="block truncate text-[13px] font-bold text-slate-950">{product.name}</span>
+                  <span className="mt-1 block line-clamp-2 text-[11px] leading-4 text-slate-500">{product.description}</span>
+                  <span className="mt-2 inline-flex rounded-full bg-slate-100 px-2 py-1 font-mono text-[9px] uppercase tracking-wide text-slate-500">
+                    {product.category}
+                  </span>
+                </span>
+                <span className="text-right">
+                  <span className="block font-mono text-[12px] font-bold text-red-600">{formatCurrencyCents(product.priceCents)}</span>
+                  <span className="mt-2 inline-grid h-8 w-8 place-items-center rounded-xl bg-red-600 text-white">
+                    <Plus className="h-3.5 w-3.5" />
+                  </span>
+                </span>
+              </button>
+            ))}
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+          <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">Item personalizado</p>
+          <form className="mt-3 space-y-2" onSubmit={handleAddManualItem}>
+            <input
+              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-[12px] text-slate-950 outline-none transition placeholder:text-slate-400 focus:border-red-400"
+              onChange={(event) => setManualName(event.target.value)}
+              placeholder="Ex: meia calabresa + meia catupiry"
+              value={manualName}
+            />
+            <div className="grid grid-cols-[minmax(0,1fr)_72px] gap-2">
+              <input
+                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-[12px] text-slate-950 outline-none transition placeholder:text-slate-400 focus:border-red-400"
+                inputMode="decimal"
+                onChange={(event) => setManualPrice(event.target.value)}
+                placeholder="Valor"
+                value={manualPrice}
+              />
+              <input
+                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-center text-[12px] text-slate-950 outline-none transition focus:border-red-400"
+                inputMode="numeric"
+                min={1}
+                onChange={(event) => setManualQuantity(event.target.value.replace(/\D/g, "").slice(0, 2))}
+                placeholder="Qtd"
+                type="text"
+                value={manualQuantity}
+              />
+            </div>
+            <button
+              className={cn(
+                "inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl text-[12px] font-bold transition",
+                canAddManualItem ? "bg-slate-950 text-white hover:bg-slate-800" : "bg-slate-200 text-slate-500",
+              )}
+              disabled={!canAddManualItem}
+              type="submit"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Adicionar a sacola
+            </button>
+          </form>
+        </section>
+
+        <section>
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">Pedido atual</p>
+              <h4 className="mt-1 text-[14px] font-bold text-slate-950">Carrinho manual</h4>
+            </div>
+            {cartItems.length ? (
+              <button
+                className="inline-flex h-8 items-center gap-1.5 rounded-full border border-slate-200 px-3 text-[11px] font-semibold text-slate-500 transition hover:border-red-200 hover:text-red-600"
+                onClick={onClearCart}
+                type="button"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Limpar
+              </button>
+            ) : null}
+          </div>
+
+          <div className="mt-3 space-y-2">
+            {cartItems.length ? cartItems.map((item) => (
+              <div key={item.id} className="rounded-2xl border border-slate-200 bg-white p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-[13px] font-bold text-slate-950">{item.name}</p>
+                    <p className="mt-1 text-[11px] text-slate-500">{item.note ?? (item.source === "manual" ? "Item manual" : "Item rapido")}</p>
+                  </div>
+                  <button
+                    aria-label={`Remover ${item.name}`}
+                    className="grid h-8 w-8 shrink-0 place-items-center rounded-xl text-slate-400 transition hover:bg-red-50 hover:text-red-600"
+                    onClick={() => onRemoveItem(item.id)}
+                    type="button"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                <div className="mt-3 flex items-center justify-between gap-2">
+                  <div className="inline-flex items-center rounded-xl border border-slate-200 bg-slate-50">
+                    <button
+                      aria-label={`Diminuir quantidade de ${item.name}`}
+                      className="grid h-8 w-8 place-items-center text-slate-600 transition hover:text-red-600"
+                      onClick={() => onUpdateQuantity(item.id, item.quantity - 1)}
+                      type="button"
+                    >
+                      <Minus className="h-3.5 w-3.5" />
+                    </button>
+                    <span className="w-8 text-center font-mono text-[12px] font-bold text-slate-950">{item.quantity}</span>
+                    <button
+                      aria-label={`Aumentar quantidade de ${item.name}`}
+                      className="grid h-8 w-8 place-items-center text-slate-600 transition hover:text-red-600"
+                      onClick={() => onUpdateQuantity(item.id, item.quantity + 1)}
+                      type="button"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-mono text-[10px] text-slate-500">{formatCurrencyCents(item.unitPriceCents)} un.</p>
+                    <p className="font-mono text-[13px] font-black text-slate-950">{formatCurrencyCents(item.unitPriceCents * item.quantity)}</p>
+                  </div>
+                </div>
+              </div>
+            )) : (
+              <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-center">
+                <ShoppingBag className="mx-auto h-5 w-5 text-slate-400" />
+                <p className="mt-2 text-[13px] font-bold text-slate-950">Sacola vazia</p>
+                <p className="mt-1 text-[11px] leading-5 text-slate-500">
+                  Adicione produtos para montar uma proposta e enviar pelo chat.
+                </p>
+              </div>
+            )}
+          </div>
+        </section>
+      </div>
+
+      <div className="border-t bg-white p-4" style={{ borderColor: "var(--ch-border)" }}>
+        <div className="rounded-2xl border border-red-100 bg-red-50 p-3">
+          <div className="flex items-center justify-between gap-3">
+            <span>
+              <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-red-500">Fechamento</p>
+              <p className="mt-1 text-[20px] font-black text-slate-950">{formatCurrencyCents(totalCents)}</p>
+            </span>
+            <CreditCard className="h-5 w-5 text-red-600" />
+          </div>
+          <p className="mt-2 text-[11px] leading-5 text-slate-600">
+            A proxima etapa e gerar checkout real com Mercado Pago. Por enquanto, use o resumo no chat para confirmar o pedido.
+          </p>
+        </div>
+
+        <button
+          className={cn(
+            "mt-3 inline-flex h-11 w-full items-center justify-center gap-2 rounded-2xl text-[12px] font-bold transition",
+            cartItems.length ? "bg-red-600 text-white hover:bg-red-700" : "bg-slate-200 text-slate-500",
+          )}
+          disabled={!cartItems.length}
+          onClick={onUseSummary}
+          type="button"
+        >
+          <Copy className="h-3.5 w-3.5" />
+          Usar resumo no chat
+        </button>
+      </div>
     </div>
   );
 }
@@ -1573,15 +1834,6 @@ function formatMessageAuthorShort(message: ClientLeadMessage) {
   if (message.author === "ai") return "IA";
   if (message.author === "human") return "Voce";
   return "Sistema";
-}
-
-function formatHumanInterventionReason(value: string | null) {
-  if (value === "manual_dashboard_handoff") return "Assumido no painel";
-  if (value === "manual_dashboard_resume") return "Retomado no painel";
-  if (value === "manual_dashboard_reply") return "Humano respondeu no painel";
-  if (value === "human_outbound_from_connected_whatsapp") return "Humano respondeu no WhatsApp";
-  if (value === "human_handoff_requested") return "Lead pediu humano";
-  return value ?? "Sem motivo";
 }
 
 function mergeConversationMessages(serverMessages: ClientLeadMessage[], localMessages: ClientLeadMessage[]) {
@@ -2922,6 +3174,44 @@ function formatTime(value: string | null | undefined) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(value));
+}
+
+function formatCurrencyCents(value: number) {
+  return new Intl.NumberFormat("pt-BR", {
+    currency: "BRL",
+    style: "currency",
+  }).format(value / 100);
+}
+
+function parseCurrencyInputToCents(value: string) {
+  const normalized = value
+    .replace(/[^\d,.-]/g, "")
+    .replace(/\./g, "")
+    .replace(",", ".");
+  const parsed = Number.parseFloat(normalized);
+
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return 0;
+  }
+
+  return Math.round(parsed * 100);
+}
+
+function buildLeadCartSummary(lead: ClientLeadRecord, items: AttendanceCartItem[]) {
+  const totalCents = items.reduce((total, item) => total + (item.unitPriceCents * item.quantity), 0);
+  const lines = [
+    `${lead.name}, deixei seu pedido montado aqui:`,
+    "",
+    ...items.map((item, index) => (
+      `${index + 1}. ${item.quantity}x ${item.name} - ${formatCurrencyCents(item.unitPriceCents * item.quantity)}`
+    )),
+    "",
+    `Total: ${formatCurrencyCents(totalCents)}`,
+    "",
+    "Posso seguir com esse pedido e gerar o pagamento para voce?",
+  ];
+
+  return lines.join("\n");
 }
 
 function formatDateTime(value: string | null | undefined) {
