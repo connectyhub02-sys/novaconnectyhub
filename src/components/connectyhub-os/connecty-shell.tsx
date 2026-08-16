@@ -82,7 +82,7 @@ type NavSection = {
   items: NavItem[];
 };
 
-type AccentTone = "teal" | "emerald" | "sky" | "blue" | "violet" | "amber" | "rose" | "fuchsia" | "slate";
+type AccentTone = "red" | "teal" | "emerald" | "sky" | "blue" | "violet" | "amber" | "rose" | "fuchsia" | "slate";
 
 type NotificationTone = "green" | "cyan" | "amber" | "rose" | "zinc";
 
@@ -153,6 +153,7 @@ type AccentPalette = {
 };
 
 const accentPalettes: Record<AccentTone, AccentPalette> = {
+  red: { accent: "#e50914", accentRgb: "229,9,20", accent2: "#111111", accent2Rgb: "17,17,17" },
   teal: { accent: "#38e8d6", accentRgb: "56,232,214", accent2: "#7dd3fc", accent2Rgb: "125,211,252" },
   emerald: { accent: "#34d399", accentRgb: "52,211,153", accent2: "#38e8d6", accent2Rgb: "56,232,214" },
   sky: { accent: "#38bdf8", accentRgb: "56,189,248", accent2: "#818cf8", accent2Rgb: "129,140,248" },
@@ -263,7 +264,7 @@ export function ConnectyShell({
   const active    = activeHref ?? pathname ?? "/";
   const sections  = mode === "admin" ? adminSections : clientSections;
   const activeItem = resolveActiveItem(sections, active);
-  const activeTone = activeItem?.tone ?? (mode === "admin" ? "teal" : "blue");
+  const activeTone: AccentTone = "red";
   const activePalette = accentPalettes[activeTone];
   const accent    = activePalette.accent;
   const accentRgb = activePalette.accentRgb;
@@ -584,44 +585,44 @@ export function ConnectyShell({
   }
 
   const shellTheme = {
-    background: "radial-gradient(circle at 10% -12%, rgba(var(--ch-accent-rgb),0.18) 0%, transparent 30rem), radial-gradient(circle at 100% 0%, rgba(var(--ch-accent-2-rgb),0.14) 0%, transparent 34rem), linear-gradient(180deg, #fbfdff 0%, var(--ch-bg) 46%, #eef5fb 100%)",
+    background: "radial-gradient(circle at 100% -10%, rgba(var(--ch-accent-rgb),0.13) 0%, transparent 26rem), radial-gradient(circle at 0% 15%, rgba(17,17,17,0.055) 0%, transparent 28rem), linear-gradient(180deg, #fbfbfc 0%, var(--ch-bg) 48%, #f1f1f3 100%)",
     colorScheme: "light",
-    "--ch-bg":         "#f3f7fb",
-    "--ch-surface":    "rgba(255,255,255,0.94)",
-    "--ch-surface-2":  "#eef5fb",
-    "--ch-surface-3":  "#e4edf7",
-    "--ch-border":     "rgba(15,23,42,0.12)",
-    "--ch-border-soft":"rgba(15,23,42,0.08)",
-    "--ch-border-strong":"rgba(15,23,42,0.18)",
+    "--ch-bg":         "#f5f5f6",
+    "--ch-surface":    "rgba(255,255,255,0.97)",
+    "--ch-surface-2":  "#f1f1f3",
+    "--ch-surface-3":  "#e9e9ec",
+    "--ch-border":     "rgba(17,17,17,0.10)",
+    "--ch-border-soft":"rgba(17,17,17,0.07)",
+    "--ch-border-strong":"rgba(17,17,17,0.15)",
     "--ch-brand-blue": "#01004c",
     "--ch-accent":     accent,
     "--ch-accent-rgb": accentRgb,
     "--ch-accent-2":   accent2,
     "--ch-accent-2-rgb": accent2Rgb,
-    "--ch-panel":      "linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,251,255,0.90)), rgba(255,255,255,0.92)",
-    "--ch-panel-2":    "linear-gradient(180deg, rgba(255,255,255,0.92), rgba(var(--ch-accent-rgb),0.040)), #f7fbff",
-    "--ch-text":       "#0b1220",
-    "--ch-text-rgb":   "11,18,32",
-    "--ch-muted":      "#475569",
-    "--ch-subtle":     "#718096",
-    "--ch-hover":      "rgba(var(--ch-accent-rgb),0.11)",
+    "--ch-panel":      "linear-gradient(180deg, rgba(255,255,255,0.99), rgba(247,247,248,0.94)), rgba(255,255,255,0.96)",
+    "--ch-panel-2":    "linear-gradient(180deg, rgba(255,255,255,0.96), rgba(var(--ch-accent-rgb),0.024)), #fafafa",
+    "--ch-text":       "#111111",
+    "--ch-text-rgb":   "17,17,17",
+    "--ch-muted":      "#5f6368",
+    "--ch-subtle":     "#8a8f98",
+    "--ch-hover":      "rgba(var(--ch-accent-rgb),0.075)",
     "--ch-dropdown-bg":"rgba(255,255,255,0.98)",
-    "--background":    "#f3f7fb",
-    "--foreground":    "#0b1220",
+    "--background":    "#f5f5f6",
+    "--foreground":    "#111111",
     "--card":          "#ffffff",
-    "--card-foreground":"#0b1220",
+    "--card-foreground":"#111111",
     "--popover":       "#ffffff",
-    "--popover-foreground":"#0b1220",
+    "--popover-foreground":"#111111",
     "--primary":       accent,
-    "--primary-foreground":"#061015",
-    "--secondary":     "#eef5fb",
-    "--secondary-foreground":"#0b1220",
-    "--muted":         "#eef5fb",
-    "--muted-foreground":"#475569",
-    "--accent":        "#e4edf7",
-    "--accent-foreground":"#0b1220",
-    "--border":        "rgba(15,23,42,0.12)",
-    "--input":         "rgba(15,23,42,0.16)",
+    "--primary-foreground":"#ffffff",
+    "--secondary":     "#f1f1f3",
+    "--secondary-foreground":"#111111",
+    "--muted":         "#f1f1f3",
+    "--muted-foreground":"#5f6368",
+    "--accent":        "#ededf0",
+    "--accent-foreground":"#111111",
+    "--border":        "rgba(17,17,17,0.10)",
+    "--input":         "rgba(17,17,17,0.14)",
     "--ring":          `rgba(${accentRgb},0.36)`,
   } as CSSProperties;
 
@@ -637,9 +638,9 @@ export function ConnectyShell({
       <aside
         className="sticky top-0 hidden h-svh w-[240px] shrink-0 flex-col lg:flex"
         style={{
-          background:  "linear-gradient(180deg, rgba(255,255,255,0.94), rgba(240,247,253,0.92))",
+          background:  "linear-gradient(180deg, rgba(255,255,255,0.98), rgba(246,246,247,0.96))",
           borderRight: "1px solid var(--ch-border-strong)",
-          boxShadow: "14px 0 42px rgba(15,23,42,0.05)",
+          boxShadow: "14px 0 42px rgba(17,17,17,0.045)",
           backdropFilter: "blur(18px)",
         }}
       >
@@ -793,7 +794,7 @@ export function ConnectyShell({
             background:    "rgba(255,255,255,0.76)",
             backdropFilter:"blur(18px)",
             borderBottom:  "1px solid var(--ch-border-strong)",
-            boxShadow: "0 12px 38px rgba(15,23,42,0.06)",
+            boxShadow: "0 12px 38px rgba(17,17,17,0.045)",
           }}
         >
           {/* Mobile brand */}
@@ -2303,7 +2304,6 @@ function SidebarLink({
   onComingSoonClick: (item: NavItem) => void;
 }) {
   const Icon = item.icon;
-  const itemPalette = accentPalettes[item.tone ?? "slate"];
   const comingSoon = item.comingSoon || isMetaComingSoonClientHref(item.href);
   const badge = comingSoon ? item.badge ?? "Em breve" : item.badge;
 
@@ -2321,10 +2321,10 @@ function SidebarLink({
       }}
       className="group relative flex h-9 items-center gap-2.5 rounded-xl px-3 text-[12.5px] transition-all"
       style={active ? {
-        background: "linear-gradient(90deg, rgba(var(--ch-accent-rgb),0.22), rgba(var(--ch-accent-2-rgb),0.10))",
-        border:     `1px solid rgba(var(--ch-accent-rgb),0.48)`,
-        color:      "var(--ch-text)",
-        boxShadow:  "0 10px 28px rgba(var(--ch-accent-rgb),0.14)",
+        background: "linear-gradient(135deg, #e50914 0%, #b70710 100%)",
+        border:     "1px solid rgba(229,9,20,0.68)",
+        color:      "#ffffff",
+        boxShadow:  "0 14px 28px rgba(229,9,20,0.22)",
       } : {
         background: "transparent",
         border:     "1px solid transparent",
@@ -2335,12 +2335,12 @@ function SidebarLink({
         <span
           aria-hidden="true"
           className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full"
-          style={{ background: "var(--ch-accent)", boxShadow: "0 0 10px rgba(var(--ch-accent-rgb),0.75)" }}
+          style={{ background: "#ffffff", boxShadow: "0 0 10px rgba(255,255,255,0.65)" }}
         />
       ) : null}
       <Icon
         className={cn("h-4 w-4 shrink-0", active ? "" : "opacity-70 group-hover:opacity-100")}
-        style={active ? undefined : { color: itemPalette.accent }}
+        style={active ? undefined : { color: "var(--ch-muted)" }}
       />
       <span className="flex-1 truncate font-medium">{item.label}</span>
       {badge && (
@@ -2349,7 +2349,7 @@ function SidebarLink({
           style={
             item.badgeTone === "amber" ? { background: "rgba(251,191,36,0.15)", color: "#fbbf24" } :
             item.badgeTone === "rose"  ? { background: "rgba(251,113,133,0.15)", color: "#fb7185" } :
-            active ? { background: `rgba(var(--ch-accent-rgb),0.15)`, color: "var(--ch-accent)" } :
+            active ? { background: "rgba(255,255,255,0.16)", color: "#ffffff" } :
                      { background: "var(--ch-hover)", color: "var(--ch-muted)" }
           }
         >
@@ -2541,7 +2541,6 @@ function MobileMenuQuickLink({
   onClick: () => void;
 }) {
   const Icon = item.icon;
-  const itemPalette = accentPalettes[item.tone ?? "slate"];
   const comingSoon = item.comingSoon || isMetaComingSoonClientHref(item.href);
 
   return (
@@ -2559,18 +2558,19 @@ function MobileMenuQuickLink({
         onClick();
       }}
       style={active ? {
-        background: "linear-gradient(135deg, rgba(var(--ch-accent-rgb),0.26), rgba(var(--ch-accent-2-rgb),0.12))",
-        border: "1px solid rgba(var(--ch-accent-rgb),0.48)",
-        color: "var(--ch-text)",
+        background: "linear-gradient(135deg, #e50914 0%, #b70710 100%)",
+        border: "1px solid rgba(229,9,20,0.62)",
+        color: "#ffffff",
+        boxShadow: "0 16px 32px rgba(229,9,20,0.20)",
       } : {
-        background: "linear-gradient(135deg, rgba(255,255,255,0.68), rgba(var(--ch-accent-rgb),0.030)), var(--ch-surface)",
-        border: `1px solid rgba(${itemPalette.accentRgb},0.26)`,
+        background: "linear-gradient(135deg, rgba(255,255,255,0.78), rgba(17,17,17,0.018)), var(--ch-surface)",
+        border: "1px solid var(--ch-border)",
         color: "var(--ch-text)",
       }}
     >
       <span
         className="grid h-9 w-9 place-items-center rounded-2xl"
-        style={{ background: active ? "rgba(var(--ch-accent-rgb),0.16)" : `rgba(${itemPalette.accentRgb},0.14)`, color: active ? "var(--ch-accent)" : itemPalette.accent }}
+        style={{ background: active ? "rgba(255,255,255,0.16)" : "rgba(17,17,17,0.05)", color: active ? "#ffffff" : "var(--ch-muted)" }}
       >
         <Icon className="h-4 w-4" />
       </span>
@@ -2591,7 +2591,6 @@ function MobileMenuLink({
   onClick: () => void;
 }) {
   const Icon = item.icon;
-  const itemPalette = accentPalettes[item.tone ?? "slate"];
   const comingSoon = item.comingSoon || isMetaComingSoonClientHref(item.href);
   const badge = comingSoon ? item.badge ?? "Em breve" : item.badge;
 
@@ -2610,21 +2609,21 @@ function MobileMenuLink({
       }}
       className="grid min-h-10 grid-cols-[24px_minmax(0,1fr)_auto] items-center gap-2 rounded-2xl px-3 py-2 text-[12.5px] transition-all"
       style={active ? {
-        background: "linear-gradient(135deg, rgba(var(--ch-accent-rgb),0.26), rgba(var(--ch-accent-2-rgb),0.12))",
-        border:     `1px solid rgba(var(--ch-accent-rgb),0.54)`,
-        color:      "var(--ch-text)",
-        boxShadow:  "0 12px 32px rgba(var(--ch-accent-rgb),0.15)",
+        background: "linear-gradient(135deg, #e50914 0%, #b70710 100%)",
+        border:     "1px solid rgba(229,9,20,0.62)",
+        color:      "#ffffff",
+        boxShadow:  "0 12px 32px rgba(229,9,20,0.20)",
       } : {
-        background: "linear-gradient(180deg, rgba(255,255,255,0.74), rgba(var(--ch-accent-rgb),0.025)), var(--ch-surface-2)",
-        border:     `1px solid rgba(${itemPalette.accentRgb},0.22)`,
+        background: "linear-gradient(180deg, rgba(255,255,255,0.80), rgba(17,17,17,0.018)), var(--ch-surface-2)",
+        border:     "1px solid var(--ch-border)",
         color:      "var(--ch-muted)",
       }}
     >
       <span
         className="flex h-6 w-6 items-center justify-center rounded-xl"
         style={{
-          background: active ? `rgba(var(--ch-accent-rgb),0.18)` : `rgba(${itemPalette.accentRgb},0.12)`,
-          color: active ? "var(--ch-accent)" : itemPalette.accent,
+          background: active ? "rgba(255,255,255,0.16)" : "rgba(17,17,17,0.05)",
+          color: active ? "#ffffff" : "var(--ch-muted)",
         }}
       >
         <Icon className="h-3.5 w-3.5" />
@@ -2636,14 +2635,14 @@ function MobileMenuLink({
           style={
             item.badgeTone === "amber" ? { background: "rgba(251,191,36,0.15)", color: "#fbbf24" } :
             item.badgeTone === "rose"  ? { background: "rgba(251,113,133,0.15)", color: "#fb7185" } :
-            active ? { background: `rgba(var(--ch-accent-rgb),0.15)`, color: "var(--ch-accent)" } :
-                     { background: `rgba(${itemPalette.accentRgb},0.13)`, color: itemPalette.accent }
+            active ? { background: "rgba(255,255,255,0.16)", color: "#ffffff" } :
+                     { background: "rgba(17,17,17,0.05)", color: "var(--ch-muted)" }
           }
         >
           {badge}
         </span>
       ) : (
-        <span className="h-1.5 w-1.5 rounded-full" style={{ background: active ? "var(--ch-accent)" : `rgba(${itemPalette.accentRgb},0.55)` }} />
+        <span className="h-1.5 w-1.5 rounded-full" style={{ background: active ? "#ffffff" : "rgba(17,17,17,0.22)" }} />
       )}
     </Link>
   );
