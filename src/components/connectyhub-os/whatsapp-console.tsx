@@ -2532,49 +2532,62 @@ export function WhatsAppConsole({
       {state?.agent && activeTab === "multichannel" ? (
       <div className="mt-5">
         <Panel
-          title="Grupos e campanhas WhatsApp"
-          eyebrow="grupos / status / canais / campanhas"
-          action={<NeonBadge tone={!isConnected || behaviorChanged || !channelOps ? "amber" : "green"}>{!isConnected ? "whatsapp offline" : behaviorChanged ? "salve primeiro" : channelOps ? "sincronizado" : "pendente"}</NeonBadge>}
+          title="Campanhas WhatsApp"
+          eyebrow="grupos / canais / status"
+          action={<NeonBadge tone={!isConnected || behaviorChanged || !channelOps ? "amber" : "green"}>{!isConnected ? "whatsapp offline" : behaviorChanged ? "permissoes pendentes" : channelOps ? "sincronizado" : "pendente"}</NeonBadge>}
         >
-          <div className="mb-3 grid gap-3 rounded-xl border p-3 sm:p-4" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
+          <div className="mb-3 rounded-xl border p-3 sm:p-4" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div className="min-w-0">
-                <p className="font-mono text-[9px] font-bold uppercase tracking-widest text-slate-500">Permissoes de grupos</p>
+                <p className="font-mono text-[9px] font-bold uppercase tracking-widest text-slate-500">Operacao de campanhas</p>
                 <p className="mt-1 text-[11px] leading-5 text-slate-300">
-                  Grupos, Status, canais/newsletters e campanhas deste WhatsApp.
+                  Configure o que este agente pode fazer em grupos, status e canais.
                 </p>
               </div>
               <ActionButton
                 icon={Wand2}
-                label={behaviorChanged ? "Salvar permissoes" : "Permissoes salvas"}
-                description="Grava os controles de grupos e campanhas do agente."
+                label={behaviorChanged ? "Salvar regras" : "Regras salvas"}
+                description="Grava as regras de grupos, status, canais e campanhas deste agente."
                 disabled={!state?.capability.schemaReady || !behaviorChanged || promptTooLong || agentNameInvalid}
                 loading={running === "save_settings"}
                 onClick={saveAgentSettings}
               />
             </div>
-            <ModeSelector<WhatsappGroupReplyMode>
-              value={behaviorDraft.groupReplyMode}
-              options={[
-                { value: "all", label: "Todos", description: "Responde toda mensagem", help: "Quando Atender grupos estiver ligado, qualquer mensagem do grupo pode acionar o agente." },
-                { value: "mentions", label: "Mencoes", description: "So quando citado", help: "O agente responde grupos apenas quando detectar mencao, nome do agente ou referencia direta." },
-                { value: "admins", label: "Admins", description: "Somente admins", help: "Responde so quando o webhook trouxer sinal de administrador no grupo." },
-              ]}
-              onChange={(value) => updateBehavior("groupReplyMode", value)}
-            />
-            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-5">
-              <ToggleTile icon={MessageCircle} label="Atender grupos" description="Permite que o agente responda mensagens em grupos do WhatsApp. Desligado, grupos sao ignorados." checked={behaviorDraft.allowGroupChats} onChange={() => updateBehavior("allowGroupChats", !behaviorDraft.allowGroupChats)} />
-              <ToggleTile icon={MessageCircle} label="Mencionar todos" description="Permite usar mencao geral em mensagens operacionais de grupo quando a Uazapi aceitar." checked={behaviorDraft.groupMentionAll} onChange={() => updateBehavior("groupMentionAll", !behaviorDraft.groupMentionAll)} />
-              <ToggleTile icon={Globe2} label="Status WhatsApp" description="Permite publicar stories/status pelo painel usando processamento Inngest." checked={behaviorDraft.statusBroadcasts} onChange={() => updateBehavior("statusBroadcasts", !behaviorDraft.statusBroadcasts)} />
-              <ToggleTile icon={FileText} label="Canais" description="Permite postar em canais/newsletters do WhatsApp pelo painel." checked={behaviorDraft.newsletterBroadcasts} onChange={() => updateBehavior("newsletterBroadcasts", !behaviorDraft.newsletterBroadcasts)} />
-              <ToggleTile icon={Forward} label="Campanhas" description="Permite criar disparos em lote via Uazapi Sender, sempre processados pelo Inngest." checked={behaviorDraft.campaignBroadcasts} onChange={() => updateBehavior("campaignBroadcasts", !behaviorDraft.campaignBroadcasts)} />
-            </div>
-            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-              <NumberField label="Max status" description="Limite maximo de contatos usados em cada publicacao de Status." value={behaviorDraft.whatsappMaxStatusRecipients} min={1} max={500} onChange={(value) => updateBehavior("whatsappMaxStatusRecipients", value)} />
-              <NumberField label="Lote campanha" description="Quantidade maxima de numeros aceitos por campanha simples." value={behaviorDraft.whatsappCampaignBatchSize} min={1} max={500} onChange={(value) => updateBehavior("whatsappCampaignBatchSize", value)} />
-              <NumberField label="Delay min" description="Intervalo minimo entre mensagens da campanha." value={behaviorDraft.whatsappCampaignDelayMinSeconds} min={5} max={600} onChange={(value) => updateBehavior("whatsappCampaignDelayMinSeconds", value)} />
-              <NumberField label="Delay max" description="Intervalo maximo entre mensagens da campanha." value={behaviorDraft.whatsappCampaignDelayMaxSeconds} min={5} max={900} onChange={(value) => updateBehavior("whatsappCampaignDelayMaxSeconds", value)} />
-            </div>
+            <details className="mt-3 rounded-xl border" style={{ background: "var(--ch-surface)", borderColor: "var(--ch-border)" }} open={behaviorChanged || undefined}>
+              <summary className="cursor-pointer list-none px-3 py-3">
+                <span className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                  <span>
+                    <span className="block font-mono text-[9px] font-bold uppercase tracking-widest text-slate-500">Configuracoes avancadas</span>
+                    <span className="mt-1 block text-[11px] leading-5 text-slate-400">Regras de resposta, recursos liberados e limites de envio.</span>
+                  </span>
+                  <span className="mt-1 inline-flex w-fit rounded-md border border-white/10 px-2 py-1 font-mono text-[9px] uppercase tracking-widest text-slate-300 sm:mt-0">abrir / fechar</span>
+                </span>
+              </summary>
+              <div className="grid gap-3 border-t p-3" style={{ borderColor: "var(--ch-border)" }}>
+                <ModeSelector<WhatsappGroupReplyMode>
+                  value={behaviorDraft.groupReplyMode}
+                  options={[
+                    { value: "all", label: "Todas", description: "Responde tudo", help: "Quando Responder em grupos estiver ligado, qualquer mensagem do grupo pode acionar o agente." },
+                    { value: "mentions", label: "Mencoes", description: "So quando chamado", help: "O agente responde grupos apenas quando detectar mencao, nome do agente ou referencia direta." },
+                    { value: "admins", label: "Admins", description: "So administradores", help: "Responde so quando o webhook trouxer sinal de administrador no grupo." },
+                  ]}
+                  onChange={(value) => updateBehavior("groupReplyMode", value)}
+                />
+                <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+                  <ToggleTile icon={MessageCircle} label="Responder em grupos" description="Permite que o agente responda mensagens em grupos do WhatsApp. Desligado, grupos sao ignorados." checked={behaviorDraft.allowGroupChats} onChange={() => updateBehavior("allowGroupChats", !behaviorDraft.allowGroupChats)} />
+                  <ToggleTile icon={MessageCircle} label="Mencionar todos" description="Permite usar mencao geral em mensagens operacionais de grupo quando a Uazapi aceitar." checked={behaviorDraft.groupMentionAll} onChange={() => updateBehavior("groupMentionAll", !behaviorDraft.groupMentionAll)} />
+                  <ToggleTile icon={Globe2} label="Posts no status" description="Permite publicar stories/status pelo painel usando processamento Inngest." checked={behaviorDraft.statusBroadcasts} onChange={() => updateBehavior("statusBroadcasts", !behaviorDraft.statusBroadcasts)} />
+                  <ToggleTile icon={FileText} label="Posts em canais" description="Permite postar em canais/newsletters do WhatsApp pelo painel." checked={behaviorDraft.newsletterBroadcasts} onChange={() => updateBehavior("newsletterBroadcasts", !behaviorDraft.newsletterBroadcasts)} />
+                  <ToggleTile icon={Forward} label="Campanhas em lote" description="Permite criar disparos em lote via Uazapi Sender, sempre processados pelo Inngest." checked={behaviorDraft.campaignBroadcasts} onChange={() => updateBehavior("campaignBroadcasts", !behaviorDraft.campaignBroadcasts)} />
+                </div>
+                <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                  <NumberField label="Max status" description="Limite maximo de contatos usados em cada publicacao de Status." value={behaviorDraft.whatsappMaxStatusRecipients} min={1} max={500} onChange={(value) => updateBehavior("whatsappMaxStatusRecipients", value)} />
+                  <NumberField label="Lote campanha" description="Quantidade maxima de numeros aceitos por campanha simples." value={behaviorDraft.whatsappCampaignBatchSize} min={1} max={500} onChange={(value) => updateBehavior("whatsappCampaignBatchSize", value)} />
+                  <NumberField label="Delay min" description="Intervalo minimo entre mensagens da campanha." value={behaviorDraft.whatsappCampaignDelayMinSeconds} min={5} max={600} onChange={(value) => updateBehavior("whatsappCampaignDelayMinSeconds", value)} />
+                  <NumberField label="Delay max" description="Intervalo maximo entre mensagens da campanha." value={behaviorDraft.whatsappCampaignDelayMaxSeconds} min={5} max={900} onChange={(value) => updateBehavior("whatsappCampaignDelayMaxSeconds", value)} />
+                </div>
+              </div>
+            </details>
           </div>
           <WhatsappChannelOperationsPanel
             behavior={normalizeWhatsappBehaviorConfig(state.behavior)}
@@ -5908,69 +5921,76 @@ function WhatsappChannelOperationsPanel({
           </div>
         ) : null}
 
-        <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(300px,0.38fr)]">
-          <div className="rounded-xl border p-3 sm:p-4" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-              <div className="min-w-0">
-                <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Prontidao da operacao</p>
-                <p className="mt-1 text-[13px] font-semibold text-slate-100">{nextStepLabel}</p>
-                <p className="mt-1 text-[11px] leading-5 text-slate-500">
-                  {channelOps?.instance.displayName ?? "Instancia WhatsApp"} {channelOps?.instance.phoneNumber ? `/ ${channelOps.instance.phoneNumber}` : ""}
-                </p>
-              </div>
-              <NeonBadge tone={connected ? "green" : "amber"}>{connected ? "online" : "offline"}</NeonBadge>
+        <div className="rounded-xl border p-3 sm:p-4" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0">
+              <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Proximo passo</p>
+              <p className="mt-1 text-[18px] font-semibold leading-6 text-slate-100">{nextStepLabel}</p>
+              <p className="mt-1 text-[11px] leading-5 text-slate-500">
+                {channelOps?.instance.displayName ?? "Instancia WhatsApp"} {channelOps?.instance.phoneNumber ? `/ ${channelOps.instance.phoneNumber}` : ""}
+              </p>
             </div>
-
-            <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
-              <InfoTile label="Destinos" value={`${groupTargets.length} grupos / ${newsletterTargets.length} canais`} />
-              <InfoTile label="IA em grupos" value={behavior.allowGroupChats ? `${activeGroupTargets.length} ativos` : "Pausado"} />
-              <InfoTile label="Campanhas" value={campaignEnabled ? `${campaignReadyTargets.length} liberados` : "Bloqueado"} />
-              <InfoTile label="Risco grupos" value={groupRiskSummary} />
-              <InfoTile label="Agenda" value={`${scheduledCount} futuro(s)`} />
-            </div>
-          </div>
-
-          <div className="rounded-xl border p-3 sm:p-4" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Sincronizacao</p>
-              {failedCount > 0 ? <NeonBadge tone="rose">{failedCount} falha(s)</NeonBadge> : <NeonBadge tone="cyan">painel local</NeonBadge>}
-            </div>
-            <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
-              <SecondaryAction
+            <div className="grid w-full gap-2 sm:w-auto sm:grid-cols-3 lg:min-w-[520px]">
+              <ActionButton
                 icon={RefreshCcw}
-                label="Atualizar"
-                description="Recarrega historico local e configuracao operacional."
+                label="Atualizar painel"
+                description="Recarrega os dados salvos de grupos, canais, campanhas e historico."
                 loading={channelAction === "load_channels"}
                 onClick={onRefresh}
               />
               <SecondaryAction
                 icon={MessageCircle}
-                label="Grupos"
-                description="Consulta os grupos visiveis para esta instancia na Uazapi."
+                label="Buscar grupos"
+                description="Consulta os grupos visiveis para esta instancia."
                 disabled={operationsLocked}
                 loading={channelAction === "refresh_groups"}
                 onClick={() => onRunAction("refresh_groups")}
               />
               <SecondaryAction
-                icon={Brain}
-                label="Detalhes"
-                description="Atualiza membros, permissoes e risco dos grupos pela Uazapi."
-                disabled={operationsLocked || groupTargets.length === 0}
-                loading={channelAction === "sync_group_intelligence"}
-                onClick={() => onRunAction("sync_group_intelligence")}
-              />
-              <SecondaryAction
                 icon={FileText}
-                label="Canais"
+                label="Buscar canais"
                 description="Consulta canais/newsletters ligados ao numero."
                 disabled={operationsLocked}
                 loading={channelAction === "refresh_newsletters"}
                 onClick={() => onRunAction("refresh_newsletters")}
               />
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+            <InfoTile label="Destinos" value={`${groupTargets.length} grupos / ${newsletterTargets.length} canais`} />
+            <InfoTile label="Resposta em grupos" value={behavior.allowGroupChats ? `${activeGroupTargets.length} ativos` : "Pausada"} />
+            <InfoTile label="Campanhas" value={campaignEnabled ? `${campaignReadyTargets.length} liberados` : "Bloqueadas"} />
+            <InfoTile label="Risco grupos" value={groupRiskSummary} />
+            <InfoTile label="Agenda" value={`${scheduledCount} futuro(s)`} />
+          </div>
+
+          <details className="mt-4 rounded-xl border" style={{ background: "var(--ch-surface)", borderColor: "var(--ch-border)" }}>
+            <summary className="cursor-pointer list-none px-3 py-3">
+              <span className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                <span>
+                  <span className="block font-mono text-[9px] uppercase tracking-widest text-slate-500">Ferramentas e diagnostico</span>
+                  <span className="mt-1 block text-[11px] leading-5 text-slate-400">Acoes de manutencao para detalhes, limites, pastas e rastreamento.</span>
+                </span>
+                <span className="mt-1 flex w-fit items-center gap-2 sm:mt-0">
+                  <NeonBadge tone={connected ? "green" : "amber"}>{connected ? "online" : "offline"}</NeonBadge>
+                  {failedCount > 0 ? <NeonBadge tone="rose">{failedCount} falha(s)</NeonBadge> : null}
+                </span>
+              </span>
+            </summary>
+            <div className="grid gap-2 border-t p-3 sm:grid-cols-2 xl:grid-cols-5" style={{ borderColor: "var(--ch-border)" }}>
+              <SecondaryAction
+                icon={Brain}
+                label="Detalhes"
+                description="Atualiza membros, permissoes e risco dos grupos."
+                disabled={operationsLocked || groupTargets.length === 0}
+                loading={channelAction === "sync_group_intelligence"}
+                onClick={() => onRunAction("sync_group_intelligence")}
+              />
               <SecondaryAction
                 icon={ShieldCheck}
                 label="Limites"
-                description="Consulta limites de mensagens do WhatsApp pela Uazapi."
+                description="Consulta limites de mensagens do WhatsApp."
                 disabled={operationsLocked}
                 loading={channelAction === "message_limits"}
                 onClick={() => onRunAction("message_limits")}
@@ -5978,7 +5998,7 @@ function WhatsappChannelOperationsPanel({
               <SecondaryAction
                 icon={Forward}
                 label="Pastas"
-                description="Consulta pastas do sender/campanhas da Uazapi."
+                description="Consulta pastas do sender/campanhas."
                 disabled={operationsLocked}
                 loading={channelAction === "campaign_folders"}
                 onClick={() => onRunAction("campaign_folders")}
@@ -5986,21 +6006,28 @@ function WhatsappChannelOperationsPanel({
               <SecondaryAction
                 icon={Gauge}
                 label="Rastrear"
-                description="Consulta entregas reais das campanhas pelo endpoint sender/listmessages."
+                description="Consulta entregas reais das campanhas."
                 disabled={operationsLocked}
                 loading={channelAction === "sync_campaign_tracking"}
                 onClick={() => onRunAction("sync_campaign_tracking")}
               />
+              <SecondaryAction
+                icon={RefreshCcw}
+                label="Recarregar"
+                description="Atualiza historico local e configuracao operacional."
+                loading={channelAction === "load_channels"}
+                onClick={onRefresh}
+              />
             </div>
-          </div>
+          </details>
         </div>
 
         <div className="grid gap-2 rounded-xl border p-3 md:grid-cols-4" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
           {[
             { label: "1. Sincronizar", value: targets.length ? `${targets.length} destino(s)` : "Pendente", active: targets.length > 0 },
             { label: "2. Selecionar", value: selectedTargetSummary, active: selectedTargets.length > 0 },
-            { label: "3. Criar mensagem", value: targetCampaignText.trim() ? "Rascunho pronto" : "Aguardando texto", active: targetCampaignText.trim().length > 0 },
-            { label: "4. Agendar", value: channelScheduledFor ? "Com horario" : "Fila imediata", active: targetCampaignReady },
+            { label: "3. Mensagem", value: targetCampaignText.trim() ? "Rascunho pronto" : "Aguardando texto", active: targetCampaignText.trim().length > 0 },
+            { label: "4. Enviar", value: channelScheduledFor ? "Com horario" : "Fila imediata", active: targetCampaignReady },
           ].map((step) => (
             <div
               key={step.label}
@@ -6015,12 +6042,12 @@ function WhatsappChannelOperationsPanel({
           ))}
         </div>
 
-        <div className="grid gap-3 xl:grid-cols-[minmax(0,0.58fr)_minmax(360px,0.42fr)]">
+        <div className="grid gap-3 xl:grid-cols-[minmax(0,0.56fr)_minmax(390px,0.44fr)]">
           <div className="rounded-xl border p-3 sm:p-4" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="min-w-0">
                 <p className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
-                  Destinos sincronizados
+                  Escolher destinos
                   <InfoHint text="Use Buscar grupos e Buscar canais para carregar os destinos desta instancia. Selecione destinos para campanhas agendadas." />
                 </p>
                 <p className="mt-1 text-[11px] text-slate-500">{selectedTargetSummary}</p>
@@ -6125,88 +6152,121 @@ function WhatsappChannelOperationsPanel({
                         </div>
                       </div>
 
-                      <div className="grid gap-2">
-                        <div className="flex flex-wrap gap-1.5">
-                          {target.type === "group" ? (
+                      <details className="rounded-lg border" style={{ borderColor: "var(--ch-border)" }}>
+                        <summary className="cursor-pointer list-none px-2 py-2">
+                          <span className="flex items-center justify-between gap-2">
+                            <span className="font-mono text-[9px] uppercase tracking-widest text-slate-400">Ajustes do destino</span>
+                            <span className="rounded-md bg-slate-800/80 px-1.5 py-0.5 font-mono text-[8px] uppercase tracking-widest text-slate-400">abrir</span>
+                          </span>
+                        </summary>
+                        <div className="grid gap-2 border-t p-2" style={{ borderColor: "var(--ch-border)" }}>
+                          <div className="flex flex-wrap gap-1.5">
+                            {target.type === "group" ? (
+                              <button
+                                type="button"
+                                className="rounded-md border px-2 py-1 font-mono text-[9px] uppercase tracking-widest text-slate-200"
+                                style={{ borderColor: "var(--ch-border)" }}
+                                disabled={operationsLocked || channelAction === "update_target_settings"}
+                                onClick={() => onRunAction("update_target_settings", { targetId: target.id, enabled: !target.enabled })}
+                              >
+                                {target.enabled ? "Pausar IA" : "Ativar IA"}
+                              </button>
+                            ) : null}
                             <button
                               type="button"
                               className="rounded-md border px-2 py-1 font-mono text-[9px] uppercase tracking-widest text-slate-200"
                               style={{ borderColor: "var(--ch-border)" }}
                               disabled={operationsLocked || channelAction === "update_target_settings"}
-                              onClick={() => onRunAction("update_target_settings", { targetId: target.id, enabled: !target.enabled })}
+                              onClick={() => onRunAction("update_target_settings", { targetId: target.id, campaignEnabled: !target.campaignEnabled })}
                             >
-                              {target.enabled ? "Pausar IA" : "Ativar IA"}
+                              {target.campaignEnabled ? "Bloquear campanha" : "Liberar campanha"}
                             </button>
-                          ) : null}
-                          <button
-                            type="button"
-                            className="rounded-md border px-2 py-1 font-mono text-[9px] uppercase tracking-widest text-slate-200"
-                            style={{ borderColor: "var(--ch-border)" }}
-                            disabled={operationsLocked || channelAction === "update_target_settings"}
-                            onClick={() => onRunAction("update_target_settings", { targetId: target.id, campaignEnabled: !target.campaignEnabled })}
-                          >
-                            {target.campaignEnabled ? "Bloquear campanha" : "Liberar campanha"}
-                          </button>
+                            {target.type === "group" ? (
+                              <button
+                                type="button"
+                                className="rounded-md border px-2 py-1 font-mono text-[9px] uppercase tracking-widest text-slate-200"
+                                style={{ borderColor: "var(--ch-border)" }}
+                                disabled={operationsLocked || channelAction === "update_target_settings"}
+                                onClick={() => onRunAction("update_target_settings", {
+                                  targetId: target.id,
+                                  muteUntil: target.muteUntil ? null : addHoursIso(24),
+                                })}
+                              >
+                                {target.muteUntil ? "Retomar grupo" : "Pausar 24h"}
+                              </button>
+                            ) : null}
+                          </div>
                           {target.type === "group" ? (
-                            <button
-                              type="button"
-                              className="rounded-md border px-2 py-1 font-mono text-[9px] uppercase tracking-widest text-slate-200"
-                              style={{ borderColor: "var(--ch-border)" }}
-                              disabled={operationsLocked || channelAction === "update_target_settings"}
-                              onClick={() => onRunAction("update_target_settings", {
-                                targetId: target.id,
-                                muteUntil: target.muteUntil ? null : addHoursIso(24),
-                              })}
-                            >
-                              {target.muteUntil ? "Retomar grupo" : "Pausar 24h"}
-                            </button>
+                            <div className="grid gap-2 sm:grid-cols-3">
+                              <select
+                                className="h-8 rounded-md border bg-transparent px-2 text-[11px] outline-none"
+                                value={target.replyMode}
+                                disabled={operationsLocked || channelAction === "update_target_settings"}
+                                onChange={(event) => onRunAction("update_target_settings", { targetId: target.id, replyMode: event.target.value })}
+                              >
+                                <option value="mentions">So mencoes</option>
+                                <option value="observer">Observador</option>
+                                <option value="admins">Admins</option>
+                                <option value="all">Todas</option>
+                                <option value="off">Desligado</option>
+                              </select>
+                              <select
+                                className="h-8 rounded-md border bg-transparent px-2 text-[11px] outline-none"
+                                value={target.mentionMode}
+                                disabled={operationsLocked || channelAction === "update_target_settings"}
+                                onChange={(event) => onRunAction("update_target_settings", { targetId: target.id, mentionMode: event.target.value })}
+                              >
+                                <option value="none">Sem @</option>
+                                <option value="author">@ autor</option>
+                                <option value="all">@ todos</option>
+                              </select>
+                              <select
+                                className="h-8 rounded-md border bg-transparent px-2 text-[11px] outline-none"
+                                value={target.maxRepliesPerHour}
+                                disabled={operationsLocked || channelAction === "update_target_settings"}
+                                onChange={(event) => onRunAction("update_target_settings", { targetId: target.id, maxRepliesPerHour: Number(event.target.value) })}
+                              >
+                                <option value={0}>0/h</option>
+                                <option value={3}>3/h</option>
+                                <option value={6}>6/h</option>
+                                <option value={12}>12/h</option>
+                                <option value={24}>24/h</option>
+                              </select>
+                            </div>
                           ) : null}
                         </div>
-                        {target.type === "group" ? (
-                          <div className="grid gap-2 sm:grid-cols-3">
-                            <select
-                              className="h-8 rounded-md border bg-transparent px-2 text-[11px] outline-none"
-                              value={target.replyMode}
-                              disabled={operationsLocked || channelAction === "update_target_settings"}
-                              onChange={(event) => onRunAction("update_target_settings", { targetId: target.id, replyMode: event.target.value })}
-                            >
-                              <option value="mentions">So mencoes</option>
-                              <option value="observer">Observador</option>
-                              <option value="admins">Admins</option>
-                              <option value="all">Todas</option>
-                              <option value="off">Desligado</option>
-                            </select>
-                            <select
-                              className="h-8 rounded-md border bg-transparent px-2 text-[11px] outline-none"
-                              value={target.mentionMode}
-                              disabled={operationsLocked || channelAction === "update_target_settings"}
-                              onChange={(event) => onRunAction("update_target_settings", { targetId: target.id, mentionMode: event.target.value })}
-                            >
-                              <option value="none">Sem @</option>
-                              <option value="author">@ autor</option>
-                              <option value="all">@ todos</option>
-                            </select>
-                            <select
-                              className="h-8 rounded-md border bg-transparent px-2 text-[11px] outline-none"
-                              value={target.maxRepliesPerHour}
-                              disabled={operationsLocked || channelAction === "update_target_settings"}
-                              onChange={(event) => onRunAction("update_target_settings", { targetId: target.id, maxRepliesPerHour: Number(event.target.value) })}
-                            >
-                              <option value={0}>0/h</option>
-                              <option value={3}>3/h</option>
-                              <option value={6}>6/h</option>
-                              <option value={12}>12/h</option>
-                              <option value={24}>24/h</option>
-                            </select>
-                          </div>
-                        ) : null}
-                      </div>
+                      </details>
                     </div>
                   );
                 })
               ) : (
                 <div className="rounded-lg border px-3 py-8 text-center text-[12px] text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
-                  {targets.length ? "Nenhum destino encontrado com esses filtros." : "Nenhum grupo ou canal sincronizado ainda. Use Grupos e Canais."}
+                  {targets.length ? (
+                    <span>Nenhum destino encontrado com esses filtros.</span>
+                  ) : (
+                    <div className="mx-auto grid max-w-md gap-3">
+                      <p className="text-[13px] font-semibold text-slate-200">Nenhum destino sincronizado ainda.</p>
+                      <p className="text-[11px] leading-5 text-slate-500">Busque grupos e canais para liberar a selecao de destinos.</p>
+                      <div className="mx-auto flex flex-wrap justify-center gap-2">
+                        <SecondaryAction
+                          icon={MessageCircle}
+                          label="Buscar grupos"
+                          description="Consulta os grupos visiveis para esta instancia."
+                          disabled={operationsLocked}
+                          loading={channelAction === "refresh_groups"}
+                          onClick={() => onRunAction("refresh_groups")}
+                        />
+                        <SecondaryAction
+                          icon={FileText}
+                          label="Buscar canais"
+                          description="Consulta canais/newsletters ligados ao numero."
+                          disabled={operationsLocked}
+                          loading={channelAction === "refresh_newsletters"}
+                          onClick={() => onRunAction("refresh_newsletters")}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -6431,10 +6491,13 @@ function WhatsappChannelOperationsPanel({
                 {formatTargetRecurrenceSummary(targetRecurrenceFrequency, targetRecurrenceOccurrences)}
               </p>
             ) : null}
+            <p className="mt-3 rounded-lg border border-amber-300/25 bg-amber-300/10 px-3 py-2 text-[11px] leading-5 text-amber-100">
+              Use campanhas apenas em grupos, canais ou contatos que ja autorizaram esse relacionamento. Envio frio pode gerar denuncia e bloqueio do WhatsApp.
+            </p>
             <div className="mt-3">
               <ActionButton
                 icon={Send}
-                label={`Agendar post (${selectedTargets.length})`}
+                label={`Agendar campanha (${selectedTargets.length})`}
                 description="Agenda a mensagem para grupos/canais selecionados."
                 disabled={!targetCampaignReady}
                 loading={channelAction === "send_target_campaign"}
@@ -6458,16 +6521,22 @@ function WhatsappChannelOperationsPanel({
         </div>
 
         <div className="rounded-xl border p-3 sm:p-4" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="min-w-0">
-              <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Envios rapidos</p>
-              <p className="mt-1 text-[11px] text-slate-500">Status, lista manual de numeros e postagem direta em canal.</p>
-            </div>
-            <NeonBadge tone={statusEnabled || campaignEnabled || newsletterEnabled ? "cyan" : "amber"}>
-              {[statusEnabled, campaignEnabled, newsletterEnabled].filter(Boolean).length}/3 liberados
-            </NeonBadge>
-          </div>
-          <div className="mt-3 grid gap-3 sm:gap-4 xl:grid-cols-3">
+          <details>
+            <summary className="cursor-pointer list-none">
+              <span className="flex flex-wrap items-center justify-between gap-2">
+                <span className="min-w-0">
+                  <span className="block font-mono text-[9px] uppercase tracking-widest text-slate-500">Envios rapidos e avancados</span>
+                  <span className="mt-1 block text-[11px] text-slate-500">Status, lista manual de numeros e postagem direta em canal.</span>
+                </span>
+                <span className="flex items-center gap-2">
+                  <NeonBadge tone={statusEnabled || campaignEnabled || newsletterEnabled ? "cyan" : "amber"}>
+                    {[statusEnabled, campaignEnabled, newsletterEnabled].filter(Boolean).length}/3 liberados
+                  </NeonBadge>
+                  <span className="rounded-md border border-white/10 px-2 py-1 font-mono text-[9px] uppercase tracking-widest text-slate-300">abrir</span>
+                </span>
+              </span>
+            </summary>
+          <div className="mt-3 grid gap-3 border-t pt-3 sm:gap-4 xl:grid-cols-3" style={{ borderColor: "var(--ch-border)" }}>
           <div className="rounded-xl border p-3 sm:p-4" style={{ background: "var(--ch-surface)", borderColor: "var(--ch-border)" }}>
             <p className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500">
               Status WhatsApp
@@ -6581,6 +6650,7 @@ function WhatsappChannelOperationsPanel({
             </div>
           </div>
           </div>
+          </details>
         </div>
       </div>
 
