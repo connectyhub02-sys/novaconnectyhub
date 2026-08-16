@@ -276,7 +276,7 @@ export function ConnectyShell({
   const canSwitch = mode === "admin" || isPlatformAdmin;
   const pageLabel = activeItem?.label ?? "Dashboard";
   const mobileDockItems = getMobileDockItems(sections, mode);
-  const logoTone  = "white";
+  const logoTone  = "blue";
   const isAccountPage = active === "/dashboard/minha-conta" || active.startsWith("/dashboard/minha-conta/");
   const [avatarUrl, setAvatarUrl] = useState(userAvatarUrl ?? null);
   const [avatarUploading, setAvatarUploading] = useState(false);
@@ -584,45 +584,45 @@ export function ConnectyShell({
   }
 
   const shellTheme = {
-    background: "linear-gradient(135deg, rgba(var(--ch-accent-rgb),0.10) 0%, transparent 30rem), linear-gradient(225deg, rgba(var(--ch-accent-2-rgb),0.08) 0%, transparent 34rem), linear-gradient(180deg, var(--ch-bg), #04060a 72%)",
-    colorScheme: "dark",
-    "--ch-bg":         "#05080d",
-    "--ch-surface":    "#0c1422",
-    "--ch-surface-2":  "#122035",
-    "--ch-surface-3":  "#1d304c",
-    "--ch-border":     "rgba(189,209,235,0.28)",
-    "--ch-border-soft":"rgba(189,209,235,0.16)",
-    "--ch-border-strong":"rgba(220,233,249,0.42)",
+    background: "radial-gradient(circle at 10% -12%, rgba(var(--ch-accent-rgb),0.18) 0%, transparent 30rem), radial-gradient(circle at 100% 0%, rgba(var(--ch-accent-2-rgb),0.14) 0%, transparent 34rem), linear-gradient(180deg, #fbfdff 0%, var(--ch-bg) 46%, #eef5fb 100%)",
+    colorScheme: "light",
+    "--ch-bg":         "#f3f7fb",
+    "--ch-surface":    "rgba(255,255,255,0.94)",
+    "--ch-surface-2":  "#eef5fb",
+    "--ch-surface-3":  "#e4edf7",
+    "--ch-border":     "rgba(15,23,42,0.12)",
+    "--ch-border-soft":"rgba(15,23,42,0.08)",
+    "--ch-border-strong":"rgba(15,23,42,0.18)",
     "--ch-brand-blue": "#01004c",
     "--ch-accent":     accent,
     "--ch-accent-rgb": accentRgb,
     "--ch-accent-2":   accent2,
     "--ch-accent-2-rgb": accent2Rgb,
-    "--ch-panel":      "linear-gradient(180deg, rgba(var(--ch-accent-rgb),0.075), rgba(var(--ch-accent-2-rgb),0.030)), var(--ch-surface)",
-    "--ch-panel-2":    "linear-gradient(180deg, rgba(255,255,255,0.060), rgba(var(--ch-accent-rgb),0.026)), var(--ch-surface-2)",
-    "--ch-text":       "#fbfdff",
-    "--ch-text-rgb":   "251,253,255",
-    "--ch-muted":      "#c5d0df",
-    "--ch-subtle":     "#94a6bb",
-    "--ch-hover":      "rgba(var(--ch-accent-rgb),0.15)",
-    "--ch-dropdown-bg":"#101a2a",
-    "--background":    "#05080d",
-    "--foreground":    "#fbfdff",
-    "--card":          "#0c1422",
-    "--card-foreground":"#fbfdff",
-    "--popover":       "#121a27",
-    "--popover-foreground":"#fbfdff",
+    "--ch-panel":      "linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,251,255,0.90)), rgba(255,255,255,0.92)",
+    "--ch-panel-2":    "linear-gradient(180deg, rgba(255,255,255,0.92), rgba(var(--ch-accent-rgb),0.040)), #f7fbff",
+    "--ch-text":       "#0b1220",
+    "--ch-text-rgb":   "11,18,32",
+    "--ch-muted":      "#475569",
+    "--ch-subtle":     "#718096",
+    "--ch-hover":      "rgba(var(--ch-accent-rgb),0.11)",
+    "--ch-dropdown-bg":"rgba(255,255,255,0.98)",
+    "--background":    "#f3f7fb",
+    "--foreground":    "#0b1220",
+    "--card":          "#ffffff",
+    "--card-foreground":"#0b1220",
+    "--popover":       "#ffffff",
+    "--popover-foreground":"#0b1220",
     "--primary":       accent,
     "--primary-foreground":"#061015",
-    "--secondary":     "#122035",
-    "--secondary-foreground":"#fbfdff",
-    "--muted":         "#122035",
-    "--muted-foreground":"#c5d0df",
-    "--accent":        "#1d304c",
-    "--accent-foreground":"#fbfdff",
-    "--border":        "rgba(196,211,232,0.24)",
-    "--input":         "rgba(224,233,246,0.30)",
-    "--ring":          `rgba(${accentRgb},0.48)`,
+    "--secondary":     "#eef5fb",
+    "--secondary-foreground":"#0b1220",
+    "--muted":         "#eef5fb",
+    "--muted-foreground":"#475569",
+    "--accent":        "#e4edf7",
+    "--accent-foreground":"#0b1220",
+    "--border":        "rgba(15,23,42,0.12)",
+    "--input":         "rgba(15,23,42,0.16)",
+    "--ring":          `rgba(${accentRgb},0.36)`,
   } as CSSProperties;
 
   return (
@@ -637,8 +637,10 @@ export function ConnectyShell({
       <aside
         className="sticky top-0 hidden h-svh w-[240px] shrink-0 flex-col lg:flex"
         style={{
-          background:  "linear-gradient(180deg, rgba(8,11,16,0.99), rgba(6,8,12,0.99))",
+          background:  "linear-gradient(180deg, rgba(255,255,255,0.94), rgba(240,247,253,0.92))",
           borderRight: "1px solid var(--ch-border-strong)",
+          boxShadow: "14px 0 42px rgba(15,23,42,0.05)",
+          backdropFilter: "blur(18px)",
         }}
       >
         {/* Brand */}
@@ -710,10 +712,10 @@ export function ConnectyShell({
               sideOffset={14}
               className="z-[9999] rounded-2xl p-2 shadow-2xl"
               style={{
-                background: "linear-gradient(180deg, #111b2a 0%, #07111d 100%)",
-                border: "1px solid rgba(224,233,246,0.46)",
-                boxShadow: "0 28px 90px rgba(0,0,0,0.72)",
-                color: "#fbfdff",
+                background: "linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(244,249,253,0.98) 100%)",
+                border: "1px solid var(--ch-border-strong)",
+                boxShadow: "0 28px 90px rgba(15,23,42,0.16)",
+                color: "var(--ch-text)",
                 maxWidth: "340px",
                 minWidth: "280px",
                 width: "calc(100vw - 40px)",
@@ -721,17 +723,17 @@ export function ConnectyShell({
             >
               <DropdownMenuLabel
                 className="rounded-xl px-3 py-3 text-xs"
-                style={{ background: "rgba(255,255,255,0.055)", color: "#e7eef8" }}
+                style={{ background: "rgba(var(--ch-accent-rgb),0.08)", color: "var(--ch-text)" }}
               >
                 Conta
               </DropdownMenuLabel>
-              <DropdownMenuSeparator className="my-2" style={{ background: "rgba(224,233,246,0.18)" }} />
+              <DropdownMenuSeparator className="my-2" style={{ background: "var(--ch-border)" }} />
               {mode === "client" && (
                 <DropdownMenuItem asChild className="cursor-pointer rounded-xl p-0 text-[13px]">
                   <Link
                     href="/dashboard/minha-conta"
                     className="mb-1 flex h-11 w-full items-center rounded-xl px-3 font-semibold"
-                    style={{ background: "rgba(255,255,255,0.075)", color: "#fbfdff", border: "1px solid rgba(224,233,246,0.12)" }}
+                    style={{ background: "rgba(255,255,255,0.72)", color: "var(--ch-text)", border: "1px solid var(--ch-border)" }}
                   >
                     <CreditCard className="mr-2 h-3.5 w-3.5" />
                     Minha conta
@@ -742,7 +744,7 @@ export function ConnectyShell({
                 <DropdownMenuItem asChild className="cursor-pointer rounded-xl p-0 text-[13px]">
                   <label
                     className="flex h-11 w-full items-center rounded-xl px-3 font-semibold"
-                    style={{ background: "rgba(255,255,255,0.075)", color: "#fbfdff", border: "1px solid rgba(224,233,246,0.12)" }}
+                    style={{ background: "rgba(255,255,255,0.72)", color: "var(--ch-text)", border: "1px solid var(--ch-border)" }}
                   >
                     {avatarUploading ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <Camera className="mr-2 h-3.5 w-3.5" />}
                     Trocar foto
@@ -758,7 +760,7 @@ export function ConnectyShell({
                   <Link
                     href={switchTo}
                     className="flex h-11 w-full items-center rounded-xl px-3 font-semibold"
-                    style={{ background: "rgba(255,255,255,0.075)", color: "#fbfdff", border: "1px solid rgba(224,233,246,0.12)" }}
+                    style={{ background: "rgba(255,255,255,0.72)", color: "var(--ch-text)", border: "1px solid var(--ch-border)" }}
                   >
                     {switchLbl}
                   </Link>
@@ -772,7 +774,7 @@ export function ConnectyShell({
                 <a
                   href="/auth/signout"
                   className="flex h-11 w-full items-center rounded-xl px-3"
-                  style={{ background: "rgba(251,113,133,0.18)", border: "1px solid rgba(251,113,133,0.34)", color: "#ffe4e6" }}
+                  style={{ background: "rgba(244,63,94,0.10)", border: "1px solid rgba(244,63,94,0.24)", color: "#be123c" }}
                 >
                   <LogOut className="mr-2 h-3.5 w-3.5" /> Sair
                 </a>
@@ -788,9 +790,10 @@ export function ConnectyShell({
         <header
           className="sticky top-0 z-40 flex h-[60px] items-center gap-3 px-3 sm:px-4 lg:px-6"
           style={{
-            background:    "color-mix(in srgb, var(--ch-bg) 76%, var(--ch-surface) 24%)",
-            backdropFilter:"blur(16px)",
+            background:    "rgba(255,255,255,0.76)",
+            backdropFilter:"blur(18px)",
             borderBottom:  "1px solid var(--ch-border-strong)",
+            boxShadow: "0 12px 38px rgba(15,23,42,0.06)",
           }}
         >
           {/* Mobile brand */}
@@ -862,10 +865,10 @@ export function ConnectyShell({
                   role="dialog"
                   aria-label="Notificacoes"
                   style={{
-                    background: "linear-gradient(180deg, #111b2a 0%, #07111d 100%)",
-                    border: "1px solid rgba(224,233,246,0.46)",
-                    boxShadow: "0 28px 90px rgba(0,0,0,0.72)",
-                    color: "#fbfdff",
+                    background: "linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(244,249,253,0.98) 100%)",
+                    border: "1px solid var(--ch-border-strong)",
+                    boxShadow: "0 28px 90px rgba(15,23,42,0.16)",
+                    color: "var(--ch-text)",
                   }}
                 >
                   <div className="mb-3 flex items-center justify-between gap-3">
@@ -882,7 +885,7 @@ export function ConnectyShell({
                       aria-label="Fechar notificacoes"
                       className="grid h-7 w-7 place-items-center rounded-lg transition"
                       onClick={() => setNotificationsOpen(false)}
-                      style={{ background: "rgba(255,255,255,0.075)", border: "1px solid rgba(224,233,246,0.14)" }}
+                      style={{ background: "rgba(var(--ch-accent-rgb),0.08)", border: "1px solid var(--ch-border)" }}
                     >
                       <X className="h-3.5 w-3.5" style={{ color: "var(--ch-muted)" }} />
                     </button>
@@ -895,7 +898,7 @@ export function ConnectyShell({
                           key={notification.id}
                           className="rounded-xl p-3"
                           style={{
-                            background: "rgba(255,255,255,0.055)",
+                            background: "rgba(255,255,255,0.72)",
                             border: `1px solid ${notificationToneBorder(notification.tone)}`,
                           }}
                         >
@@ -927,7 +930,7 @@ export function ConnectyShell({
                       ))}
                     </div>
                   ) : (
-                    <div className="rounded-xl px-3 py-4 text-[12px] leading-5 text-slate-500" style={{ background: "rgba(255,255,255,0.045)" }}>
+                    <div className="rounded-xl px-3 py-4 text-[12px] leading-5 text-slate-500" style={{ background: "rgba(var(--ch-accent-rgb),0.06)" }}>
                       Nenhuma notificacao ativa.
                     </div>
                   )}
@@ -978,10 +981,10 @@ export function ConnectyShell({
                 sideOffset={14}
                 className="z-[9999] rounded-2xl p-2 shadow-2xl"
                 style={{
-                  background: "linear-gradient(180deg, #111b2a 0%, #07111d 100%)",
-                  border: "1px solid rgba(224,233,246,0.46)",
-                  boxShadow: "0 28px 90px rgba(0,0,0,0.72)",
-                  color: "#fbfdff",
+                  background: "linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(244,249,253,0.98) 100%)",
+                  border: "1px solid var(--ch-border-strong)",
+                  boxShadow: "0 28px 90px rgba(15,23,42,0.16)",
+                  color: "var(--ch-text)",
                   maxWidth: "340px",
                   minWidth: "280px",
                   width: "calc(100vw - 40px)",
@@ -989,18 +992,18 @@ export function ConnectyShell({
               >
                 <DropdownMenuLabel
                   className="rounded-xl px-3 py-3 text-xs"
-                  style={{ background: "rgba(255,255,255,0.055)" }}
+                  style={{ background: "rgba(var(--ch-accent-rgb),0.08)" }}
                 >
-                  <div className="truncate text-[14px] font-bold leading-5" style={{ color: "#fbfdff" }}>{name}</div>
-                  <div className="truncate font-mono text-[10px] font-normal uppercase tracking-wide" style={{ color: "#cbd5e1" }}>{role}</div>
+                  <div className="truncate text-[14px] font-bold leading-5" style={{ color: "var(--ch-text)" }}>{name}</div>
+                  <div className="truncate font-mono text-[10px] font-normal uppercase tracking-wide" style={{ color: "var(--ch-muted)" }}>{role}</div>
                 </DropdownMenuLabel>
-                <DropdownMenuSeparator className="my-2" style={{ background: "rgba(224,233,246,0.18)" }} />
+                <DropdownMenuSeparator className="my-2" style={{ background: "var(--ch-border)" }} />
                 {mode === "client" && (
                   <DropdownMenuItem asChild className="cursor-pointer rounded-xl p-0 text-[13px]">
                     <Link
                       href="/dashboard/minha-conta"
                       className="mb-1 flex h-11 w-full items-center rounded-xl px-3 font-semibold"
-                      style={{ background: "rgba(255,255,255,0.075)", color: "#fbfdff", border: "1px solid rgba(224,233,246,0.12)" }}
+                      style={{ background: "rgba(255,255,255,0.72)", color: "var(--ch-text)", border: "1px solid var(--ch-border)" }}
                     >
                       <CreditCard className="mr-2 h-3.5 w-3.5" />
                       Minha conta
@@ -1011,7 +1014,7 @@ export function ConnectyShell({
                   <DropdownMenuItem asChild className="cursor-pointer rounded-xl p-0 text-[13px]">
                     <label
                       className="flex h-11 w-full items-center rounded-xl px-3 font-semibold"
-                      style={{ background: "rgba(255,255,255,0.075)", color: "#fbfdff", border: "1px solid rgba(224,233,246,0.12)" }}
+                      style={{ background: "rgba(255,255,255,0.72)", color: "var(--ch-text)", border: "1px solid var(--ch-border)" }}
                     >
                       {avatarUploading ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <Camera className="mr-2 h-3.5 w-3.5" />}
                       Trocar foto
@@ -1027,7 +1030,7 @@ export function ConnectyShell({
                     <Link
                       href={switchTo}
                       className="flex h-11 w-full items-center rounded-xl px-3 font-semibold"
-                      style={{ background: "rgba(255,255,255,0.075)", color: "#fbfdff", border: "1px solid rgba(224,233,246,0.12)" }}
+                      style={{ background: "rgba(255,255,255,0.72)", color: "var(--ch-text)", border: "1px solid var(--ch-border)" }}
                     >
                       {switchLbl}
                     </Link>
@@ -1041,7 +1044,7 @@ export function ConnectyShell({
                   <a
                     href="/auth/signout"
                     className="flex h-11 w-full items-center rounded-xl px-3"
-                    style={{ background: "rgba(251,113,133,0.18)", border: "1px solid rgba(251,113,133,0.34)", color: "#ffe4e6" }}
+                    style={{ background: "rgba(244,63,94,0.10)", border: "1px solid rgba(244,63,94,0.24)", color: "#be123c" }}
                   >
                     <LogOut className="mr-2 h-3.5 w-3.5" />Sair
                   </a>
@@ -1147,39 +1150,46 @@ function ShellComingSoonModal({
     <div
       aria-labelledby="shell-coming-soon-title"
       aria-modal="true"
-      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm"
+      className="fixed inset-0 z-[9999] flex items-center justify-center px-4 backdrop-blur-sm"
       onClick={onClose}
       onKeyDown={(event) => event.key === "Escape" && onClose()}
       role="dialog"
       tabIndex={0}
+      style={{ background: "rgba(15,23,42,0.30)" }}
     >
       <div
-        className="relative w-full max-w-md rounded-2xl border border-cyan-300/25 bg-[#121827] p-5 text-left shadow-2xl"
+        className="relative w-full max-w-md rounded-2xl border border-cyan-300/25 p-5 text-left shadow-2xl"
         onClick={(event) => event.stopPropagation()}
+        style={{
+          background: "linear-gradient(180deg, rgba(255,255,255,0.98), rgba(244,249,253,0.96))",
+          color: "var(--ch-text)",
+          boxShadow: "0 28px 90px rgba(15,23,42,0.16)",
+        }}
       >
         <button
           aria-label="Fechar aviso"
-          className="absolute right-3 top-3 grid h-8 w-8 place-items-center rounded-full bg-white/5 text-slate-400 transition hover:bg-white/10 hover:text-white"
+          className="absolute right-3 top-3 grid h-8 w-8 place-items-center rounded-full text-slate-400 transition hover:text-cyan-700"
           onClick={onClose}
           type="button"
+          style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
         >
           <X className="h-4 w-4" />
         </button>
 
-        <div className="grid h-12 w-12 place-items-center rounded-2xl bg-cyan-300/10 text-cyan-200">
+        <div className="grid h-12 w-12 place-items-center rounded-2xl bg-cyan-300/10 text-cyan-700">
           <Icon className="h-6 w-6" />
         </div>
 
-        <p className="mt-4 font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-cyan-200">
+        <p className="mt-4 font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-cyan-700">
           Em breve
         </p>
-        <h3 id="shell-coming-soon-title" className="mt-2 pr-8 text-lg font-semibold text-white">
+        <h3 id="shell-coming-soon-title" className="mt-2 pr-8 text-lg font-semibold" style={{ color: "var(--ch-text)" }}>
           {metaFeatureComingSoonTitle}
         </h3>
-        <p className="mt-3 text-sm leading-6 text-slate-300">
+        <p className="mt-3 text-sm leading-6 text-slate-500">
           {metaFeatureComingSoonMessage}
         </p>
-        <p className="mt-3 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-xs leading-5 text-slate-400">
+        <p className="mt-3 rounded-lg border px-3 py-2 text-xs leading-5 text-slate-500" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
           Area selecionada: {item.label}. O atendimento principal continua liberado pelo WhatsApp.
         </p>
 
@@ -1503,17 +1513,17 @@ function AccountCompletionModal({
   }
 
   return (
-    <div className="fixed inset-0 z-[10000] grid place-items-center bg-black/72 px-4 py-6 backdrop-blur-md">
+    <div className="fixed inset-0 z-[10000] grid place-items-center px-4 py-6 backdrop-blur-md" style={{ background: "rgba(15,23,42,0.34)" }}>
       <div
         className="w-full max-w-[560px] rounded-2xl p-5 shadow-2xl"
         role="dialog"
         aria-modal="true"
         aria-label="Complete seu cadastro"
         style={{
-          background: "linear-gradient(180deg, #111b2a 0%, #07111d 100%)",
-          border: "1px solid rgba(251,113,133,0.36)",
-          color: "#fbfdff",
-          boxShadow: "0 34px 110px rgba(0,0,0,0.70)",
+          background: "linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(244,249,253,0.98) 100%)",
+          border: "1px solid rgba(244,63,94,0.26)",
+          color: "var(--ch-text)",
+          boxShadow: "0 34px 110px rgba(15,23,42,0.18)",
         }}
       >
         <div className="flex items-start gap-4">
@@ -1525,8 +1535,8 @@ function AccountCompletionModal({
               <p className="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-rose-300">
                 Cadastro obrigatorio
               </p>
-              <h2 className="mt-1 text-2xl font-bold leading-7 text-white">Complete seu cadastro</h2>
-              <p className="mt-2 text-sm leading-6 text-slate-300">
+              <h2 className="mt-1 text-2xl font-bold leading-7" style={{ color: "var(--ch-text)" }}>Complete seu cadastro</h2>
+              <p className="mt-2 text-sm leading-6 text-slate-500">
                 Confirme CPF/CNPJ e WhatsApp para liberar agentes, WhatsApp, creditos, checkout e recursos de atendimento.
               </p>
             </div>
@@ -1626,7 +1636,7 @@ function AccountCompletionModal({
                 Validar WhatsApp
               </button>
               <button
-                className="h-12 rounded-xl border border-cyan-300/30 px-4 font-mono text-[10px] font-bold uppercase tracking-wide text-cyan-200 transition hover:bg-cyan-300/10"
+                className="h-12 rounded-xl border border-cyan-300/30 px-4 font-mono text-[10px] font-bold uppercase tracking-wide text-cyan-700 transition hover:bg-cyan-300/10"
                 onClick={() => setStep("profile")}
                 type="button"
               >
@@ -1666,18 +1676,19 @@ function TrialWelcomeModal({
 
   return (
     <div
-      className="fixed inset-0 z-[10000] grid place-items-center bg-black/70 px-4 py-6 backdrop-blur-md"
+      className="fixed inset-0 z-[10000] grid place-items-center px-4 py-6 backdrop-blur-md"
       role="dialog"
       aria-modal="true"
       aria-label={isUsageReminder ? "Lembrete de creditos do teste" : "Bem-vindo ao teste gratis"}
+      style={{ background: "rgba(15,23,42,0.34)" }}
     >
       <div
         className="w-full max-w-[620px] rounded-2xl p-5 shadow-2xl sm:p-6"
         style={{
-          background: "linear-gradient(180deg, #111b2a 0%, #07111d 100%)",
+          background: "linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(244,249,253,0.98) 100%)",
           border: "1px solid rgba(52,211,153,0.34)",
-          color: "#fbfdff",
-          boxShadow: "0 34px 120px rgba(0,0,0,0.70)",
+          color: "var(--ch-text)",
+          boxShadow: "0 34px 120px rgba(15,23,42,0.18)",
         }}
       >
         <div className="flex items-start justify-between gap-4">
@@ -1692,8 +1703,8 @@ function TrialWelcomeModal({
               <p className="font-mono text-[10px] font-bold uppercase tracking-[0.22em]" style={{ color: tone.color }}>
                 {isUsageReminder ? "Bonus em uso" : "Bonus ativado"}
               </p>
-              <h2 className="mt-1 text-2xl font-bold leading-8 text-white">{title}</h2>
-              <p className="mt-2 text-sm leading-6 text-slate-300">
+              <h2 className="mt-1 text-2xl font-bold leading-8" style={{ color: "var(--ch-text)" }}>{title}</h2>
+              <p className="mt-2 text-sm leading-6 text-slate-500">
                 {description}
               </p>
             </div>
@@ -1701,8 +1712,9 @@ function TrialWelcomeModal({
           <button
             type="button"
             aria-label="Fechar boas-vindas"
-            className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-white/12 bg-white/6 text-slate-300 transition hover:bg-white/10"
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border text-slate-500 transition hover:text-slate-900"
             onClick={onClose}
+            style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}
           >
             <X className="h-4 w-4" />
           </button>
@@ -1718,11 +1730,11 @@ function TrialWelcomeModal({
           <TrialWelcomeMetric label="dias restantes" value={String(daysRemaining)} />
         </div>
 
-        <div className="mt-5 rounded-2xl border border-emerald-300/24 bg-emerald-300/10 px-4 py-3 text-sm leading-6 text-emerald-50">
+        <div className="mt-5 rounded-2xl border border-emerald-300/24 bg-emerald-300/10 px-4 py-3 text-sm leading-6 text-emerald-700">
           Voce ainda tem {formatShellCredits(status.balanceCredits)} creditos. Contratando durante o teste, esse saldo e preservado e soma aos creditos do plano escolhido.
         </div>
 
-        <div className="mt-4 grid gap-2 text-[12px] leading-5 text-slate-300 sm:grid-cols-3">
+        <div className="mt-4 grid gap-2 text-[12px] leading-5 text-slate-600 sm:grid-cols-3">
           <TrialWelcomePoint>Teste atendimento, agentes e WhatsApp antes de assinar.</TrialWelcomePoint>
           <TrialWelcomePoint>Os creditos restantes do teste nao somem se voce assinar dentro dos 7 dias.</TrialWelcomePoint>
           <TrialWelcomePoint>Ao escolher Start, Pro ou Scale, os novos creditos entram junto com o saldo atual.</TrialWelcomePoint>
@@ -1739,7 +1751,7 @@ function TrialWelcomeModal({
           </Link>
           <button
             type="button"
-            className="inline-flex min-h-12 items-center justify-center rounded-xl border border-cyan-300/30 px-4 font-mono text-[10px] font-bold uppercase tracking-wide text-cyan-200 transition hover:bg-cyan-300/10"
+            className="inline-flex min-h-12 items-center justify-center rounded-xl border border-cyan-300/30 px-4 font-mono text-[10px] font-bold uppercase tracking-wide text-cyan-700 transition hover:bg-cyan-300/10"
             onClick={onClose}
           >
             Continuar testando
@@ -1752,17 +1764,17 @@ function TrialWelcomeModal({
 
 function TrialWelcomeMetric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-white/10 bg-white/[0.045] px-3 py-2">
+    <div className="rounded-xl border px-3 py-2" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
       <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-slate-500">{label}</p>
-      <p className="mt-1 font-mono text-[16px] font-bold text-emerald-300">{value}</p>
+      <p className="mt-1 font-mono text-[16px] font-bold text-emerald-700">{value}</p>
     </div>
   );
 }
 
 function TrialWelcomePoint({ children }: { children: ReactNode }) {
   return (
-    <div className="flex gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2.5">
-      <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-300" />
+    <div className="flex gap-2 rounded-xl border px-3 py-2.5" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
+      <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
       <span>{children}</span>
     </div>
   );
@@ -1792,9 +1804,9 @@ function AccountCompletionWhatsappCheck({ check }: { check: WhatsappCheckState }
 function AccountCompletionBadge({ label, ok }: { label: string; ok: boolean }) {
   return (
     <div className="rounded-xl border px-3 py-2" style={{
-      background: ok ? "rgba(52,211,153,0.10)" : "rgba(251,113,133,0.10)",
-      borderColor: ok ? "rgba(52,211,153,0.30)" : "rgba(251,113,133,0.30)",
-      color: ok ? "#86efac" : "#fda4af",
+      background: ok ? "rgba(5,150,105,0.10)" : "rgba(225,29,72,0.10)",
+      borderColor: ok ? "rgba(5,150,105,0.24)" : "rgba(225,29,72,0.24)",
+      color: ok ? "#047857" : "#be123c",
     }}>
       <p className="font-mono text-[9px] font-bold uppercase tracking-[0.16em]">{label}</p>
       <p className="mt-0.5 text-[11px] font-semibold">{ok ? "OK" : "Pendente"}</p>
@@ -1819,7 +1831,7 @@ function AccountCompletionTypeControl({
       <span className="mb-1.5 block font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
         Tipo de cadastro
       </span>
-      <div className="grid grid-cols-2 gap-2 rounded-xl border border-slate-500/32 bg-slate-950/45 p-1">
+      <div className="grid grid-cols-2 gap-2 rounded-xl border border-slate-300 bg-slate-100 p-1">
         {options.map((option) => {
           const Icon = option.icon;
           const selected = option.value === value;
@@ -1831,7 +1843,7 @@ function AccountCompletionTypeControl({
                 "inline-flex min-h-10 items-center justify-center gap-2 rounded-lg px-3 text-xs font-bold transition",
                 selected
                   ? "bg-cyan-300 text-slate-950"
-                  : "text-slate-400 hover:bg-white/[0.06] hover:text-white",
+                  : "text-slate-500 hover:bg-white hover:text-slate-900",
               )}
               onClick={() => onChange(option.value)}
               type="button"
@@ -1871,7 +1883,7 @@ function AccountCompletionInput({
         {label}
       </span>
       <input
-        className="h-11 w-full rounded-xl border border-slate-500/32 bg-slate-950/45 px-3 text-sm text-white outline-none placeholder:text-slate-600 focus:border-cyan-300/50"
+        className="h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-950 outline-none placeholder:text-slate-400 focus:border-cyan-300/50"
         inputMode={inputMode}
         maxLength={maxLength}
         onChange={(event) => onChange(event.target.value)}
@@ -1900,8 +1912,8 @@ function AccountCompletionFeedback({ error, message }: { error: string | null; m
     <div className={cn(
       "rounded-xl border px-3 py-2 text-sm leading-6",
       error
-        ? "border-rose-300/30 bg-rose-300/10 text-rose-100"
-        : "border-emerald-300/25 bg-emerald-300/10 text-emerald-100",
+        ? "border-rose-300/30 bg-rose-300/10 text-rose-700"
+        : "border-emerald-300/25 bg-emerald-300/10 text-emerald-700",
     )}>
       {error ?? message}
     </div>
@@ -1923,17 +1935,17 @@ function BillingAccessLockOverlay({ status }: { status: BillingAccessClientStatu
       aria-modal="true"
       aria-label={status.bannerTitle}
       style={{
-        background: "rgba(2,6,12,0.78)",
+        background: "rgba(15,23,42,0.34)",
         backdropFilter: "blur(14px)",
       }}
     >
       <div
         className="w-full max-w-[520px] rounded-2xl border p-5 shadow-2xl sm:p-6"
         style={{
-          background: "linear-gradient(180deg, #111b2a 0%, #07111d 100%)",
+          background: "linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(244,249,253,0.98) 100%)",
           borderColor: tone.border,
-          color: "#fbfdff",
-          boxShadow: "0 30px 120px rgba(0,0,0,0.68)",
+          color: "var(--ch-text)",
+          boxShadow: "0 30px 120px rgba(15,23,42,0.18)",
         }}
       >
         <div className="flex items-start gap-3">
@@ -1948,7 +1960,7 @@ function BillingAccessLockOverlay({ status }: { status: BillingAccessClientStatu
               {reason}
             </p>
             <h2 className="mt-1 text-[20px] font-bold leading-tight">{status.bannerTitle}</h2>
-            <p className="mt-2 text-[13px] leading-6 text-slate-300">{status.bannerDescription}</p>
+            <p className="mt-2 text-[13px] leading-6 text-slate-500">{status.bannerDescription}</p>
           </div>
         </div>
 
@@ -1958,7 +1970,7 @@ function BillingAccessLockOverlay({ status }: { status: BillingAccessClientStatu
           <LockMetric label="dias trial" value={status.trialDaysRemaining === null ? "--" : String(status.trialDaysRemaining)} tone={tone.color} />
         </div>
 
-        <div className="mt-5 rounded-xl border border-white/10 bg-white/[0.045] px-4 py-3 text-[12px] leading-5 text-slate-400">
+        <div className="mt-5 rounded-xl border px-4 py-3 text-[12px] leading-5 text-slate-500" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
           {lockSupportText(status)}
         </div>
 
@@ -1978,7 +1990,7 @@ function BillingAccessLockOverlay({ status }: { status: BillingAccessClientStatu
 
 function LockMetric({ label, tone, value }: { label: string; tone: string; value: string }) {
   return (
-    <div className="rounded-xl border border-white/10 bg-white/[0.045] px-3 py-2">
+    <div className="rounded-xl border px-3 py-2" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
       <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-slate-500">{label}</p>
       <p className="mt-1 font-mono text-[16px] font-bold" style={{ color: tone }}>{value}</p>
     </div>
@@ -2026,7 +2038,7 @@ function BillingStatusBanner({ status }: { status: BillingAccessClientStatus | n
         style={{
           background: `linear-gradient(135deg, ${tone.background}, rgba(var(--ch-accent-2-rgb),0.08)), var(--ch-surface)`,
           borderColor: tone.border,
-          boxShadow: "0 18px 44px rgba(0,0,0,0.24)",
+          boxShadow: "0 18px 44px rgba(15,23,42,0.08)",
         }}
       >
         <div className="min-w-0">
@@ -2048,7 +2060,7 @@ function BillingStatusBanner({ status }: { status: BillingAccessClientStatus | n
           </div>
           {status.includedCredits > 0 ? (
             <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-              <div className="h-2 overflow-hidden rounded-full bg-white/10">
+              <div className="h-2 overflow-hidden rounded-full bg-slate-900/10">
                 <div className="h-full rounded-full" style={{ width: `${progress}%`, background: tone.color }} />
               </div>
               <span className="font-mono text-[10px] uppercase tracking-wide text-slate-400">
@@ -2133,18 +2145,18 @@ function AdminImpersonationBanner() {
           background:
             "linear-gradient(135deg, rgba(var(--ch-accent-rgb),0.16), rgba(251,191,36,0.10)), var(--ch-surface)",
           borderColor: "rgba(251,191,36,0.42)",
-          boxShadow: "0 18px 44px rgba(0,0,0,0.26)",
+          boxShadow: "0 18px 44px rgba(15,23,42,0.08)",
         }}
       >
         <div className="min-w-0">
-          <div className="font-mono text-[9px] uppercase tracking-[0.22em] text-amber-200">
+          <div className="font-mono text-[9px] uppercase tracking-[0.22em] text-amber-700">
             Acesso administrativo ativo
           </div>
           <p className="mt-1 text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>
-            Voce esta acessando o painel de <span className="text-amber-200">{targetName}</span> como{" "}
-            <span className="text-cyan-200">{adminName}</span>.
+            Voce esta acessando o painel de <span className="text-amber-700">{targetName}</span> como{" "}
+            <span className="text-cyan-700">{adminName}</span>.
           </p>
-          {error ? <p className="mt-1 text-[11px] text-rose-200">{error}</p> : null}
+          {error ? <p className="mt-1 text-[11px] text-rose-700">{error}</p> : null}
         </div>
 
         <button
@@ -2155,7 +2167,7 @@ function AdminImpersonationBanner() {
           style={{
             background: "rgba(251,191,36,0.18)",
             borderColor: "rgba(251,191,36,0.42)",
-            color: "#fde68a",
+            color: "#92400e",
           }}
         >
           {returning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ArrowLeft className="h-3.5 w-3.5" />}
@@ -2262,7 +2274,7 @@ function AccountAvatar({
   name,
 }: {
   avatarUrl: string | null;
-  logoTone: "white";
+  logoTone: "blue" | "white";
   mode: "admin" | "client";
   name: string;
 }) {
@@ -2364,7 +2376,7 @@ function MobileAppMenu({
 }: {
   active: string;
   activeItem?: NavItem;
-  logoTone: "white";
+  logoTone: "blue" | "white";
   mode: "admin" | "client";
   name: string;
   pageLabel: string;
@@ -2551,7 +2563,7 @@ function MobileMenuQuickLink({
         border: "1px solid rgba(var(--ch-accent-rgb),0.48)",
         color: "var(--ch-text)",
       } : {
-        background: "linear-gradient(135deg, rgba(255,255,255,0.055), rgba(255,255,255,0.020)), var(--ch-surface)",
+        background: "linear-gradient(135deg, rgba(255,255,255,0.68), rgba(var(--ch-accent-rgb),0.030)), var(--ch-surface)",
         border: `1px solid rgba(${itemPalette.accentRgb},0.26)`,
         color: "var(--ch-text)",
       }}
@@ -2603,7 +2615,7 @@ function MobileMenuLink({
         color:      "var(--ch-text)",
         boxShadow:  "0 12px 32px rgba(var(--ch-accent-rgb),0.15)",
       } : {
-        background: "linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.015)), var(--ch-surface-2)",
+        background: "linear-gradient(180deg, rgba(255,255,255,0.74), rgba(var(--ch-accent-rgb),0.025)), var(--ch-surface-2)",
         border:     `1px solid rgba(${itemPalette.accentRgb},0.22)`,
         color:      "var(--ch-muted)",
       }}
@@ -2655,9 +2667,10 @@ function MobileDock({
       <div
         className="mx-3 mb-2 grid grid-cols-5 gap-1 rounded-2xl p-1.5 shadow-2xl"
         style={{
-          background: "color-mix(in srgb, var(--ch-bg) 82%, var(--ch-surface-2) 18%)",
+          background: "rgba(255,255,255,0.88)",
           border: "1px solid var(--ch-border-strong)",
-          boxShadow: "0 -18px 50px rgba(0,0,0,0.38)",
+          boxShadow: "0 -18px 50px rgba(15,23,42,0.12)",
+          backdropFilter: "blur(18px)",
         }}
       >
         {items.map((item) => (

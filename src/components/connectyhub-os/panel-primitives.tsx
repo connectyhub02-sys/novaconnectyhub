@@ -16,20 +16,20 @@ import type { StatusTone, Tone } from "@/lib/connectyhub-os-data";
 // ─── Tone map ─────────────────────────────────────────────────────────────────
 
 const toneMap: Record<Tone, { text: string; border: string; bg: string; fill: string; dot: string }> = {
-  green:  { text: "text-emerald-400", border: "border-emerald-500/25", bg: "bg-emerald-500/10", fill: "#34d399", dot: "bg-emerald-400" },
-  cyan:   { text: "text-cyan-400",    border: "border-cyan-500/25",    bg: "bg-cyan-500/10",    fill: "#22d3ee", dot: "bg-cyan-400"    },
-  amber:  { text: "text-amber-400",   border: "border-amber-500/25",   bg: "bg-amber-500/10",   fill: "#fbbf24", dot: "bg-amber-400"  },
-  rose:   { text: "text-rose-400",    border: "border-rose-500/25",    bg: "bg-rose-500/10",    fill: "#fb7185", dot: "bg-rose-400"   },
-  violet: { text: "text-violet-400",  border: "border-violet-500/25",  bg: "bg-violet-500/10",  fill: "#a78bfa", dot: "bg-violet-400" },
-  zinc:   { text: "text-slate-500",   border: "border-slate-300",      bg: "bg-slate-100",      fill: "#64748b", dot: "bg-slate-400"  },
+  green:  { text: "text-emerald-700", border: "border-emerald-500/25", bg: "bg-emerald-500/10", fill: "#059669", dot: "bg-emerald-500" },
+  cyan:   { text: "text-cyan-700",    border: "border-cyan-500/25",    bg: "bg-cyan-500/10",    fill: "#0891b2", dot: "bg-cyan-500"    },
+  amber:  { text: "text-amber-700",   border: "border-amber-500/25",   bg: "bg-amber-500/10",   fill: "#d97706", dot: "bg-amber-500"  },
+  rose:   { text: "text-rose-700",    border: "border-rose-500/25",    bg: "bg-rose-500/10",    fill: "#e11d48", dot: "bg-rose-500"   },
+  violet: { text: "text-violet-700",  border: "border-violet-500/25",  bg: "bg-violet-500/10",  fill: "#7c3aed", dot: "bg-violet-500" },
+  zinc:   { text: "text-slate-600",   border: "border-slate-300",      bg: "bg-slate-100",      fill: "#64748b", dot: "bg-slate-400"  },
 };
 
 const panelToneMap: Record<Tone, { rgb: string; fill: string }> = {
-  green:  { rgb: "52,211,153", fill: "#34d399" },
-  cyan:   { rgb: "34,211,238", fill: "#22d3ee" },
-  amber:  { rgb: "251,191,36", fill: "#fbbf24" },
-  rose:   { rgb: "251,113,133", fill: "#fb7185" },
-  violet: { rgb: "167,139,250", fill: "#a78bfa" },
+  green:  { rgb: "5,150,105", fill: "#059669" },
+  cyan:   { rgb: "8,145,178", fill: "#0891b2" },
+  amber:  { rgb: "217,119,6", fill: "#d97706" },
+  rose:   { rgb: "225,29,72", fill: "#e11d48" },
+  violet: { rgb: "124,58,237", fill: "#7c3aed" },
   zinc:   { rgb: "148,163,184", fill: "#94a3b8" },
 };
 
@@ -100,12 +100,12 @@ export function Panel({
 }) {
   const toneStyle = panelToneMap[tone];
   const chromeStyle = {
-    background: `linear-gradient(180deg, rgba(${toneStyle.rgb},0.075), rgba(var(--ch-accent-2-rgb),0.025)), var(--ch-panel)`,
-    border: `1px solid rgba(${toneStyle.rgb},0.36)`,
-    boxShadow: `inset 0 1px 0 rgba(255,255,255,0.06), 0 16px 44px rgba(${toneStyle.rgb},0.055)`,
+    background: `linear-gradient(180deg, rgba(255,255,255,0.96), rgba(${toneStyle.rgb},0.045)), var(--ch-panel)`,
+    border: `1px solid rgba(${toneStyle.rgb},0.22)`,
+    boxShadow: `inset 0 1px 0 rgba(255,255,255,0.80), 0 18px 50px rgba(15,23,42,0.055)`,
   };
   const headerStyle = {
-    background: `linear-gradient(90deg, rgba(${toneStyle.rgb},0.13), transparent 72%)`,
+    background: `linear-gradient(90deg, rgba(${toneStyle.rgb},0.10), rgba(255,255,255,0.48) 72%)`,
     borderBottom: "1px solid var(--ch-border-strong)",
   };
   const headerContent = (
@@ -133,7 +133,7 @@ export function Panel({
         {...(defaultOpen ? { open: true } : {})}
       >
         <summary
-          className="relative flex cursor-pointer list-none flex-col items-start justify-between gap-3 px-3 py-3 transition hover:bg-white/[0.025] marker:hidden sm:flex-row sm:items-center sm:px-4 sm:py-3 [&::-webkit-details-marker]:hidden"
+          className="relative flex cursor-pointer list-none flex-col items-start justify-between gap-3 px-3 py-3 transition hover:bg-slate-900/[0.025] marker:hidden sm:flex-row sm:items-center sm:px-4 sm:py-3 [&::-webkit-details-marker]:hidden"
           style={headerStyle}
         >
           <div className="flex min-w-0 flex-1 items-center gap-3">
@@ -182,6 +182,7 @@ export function MetricCard({
   detail: string; trend: string; tone: Tone; series: number[];
 }) {
   const t    = toneMap[tone];
+  const toneStyle = panelToneMap[tone];
   const isUp = trend.startsWith("+");
   const isDn = trend.startsWith("-");
 
@@ -189,9 +190,9 @@ export function MetricCard({
     <div
       className="min-w-0 rounded-xl p-2 sm:rounded-2xl sm:p-5"
       style={{
-        background: `linear-gradient(90deg, rgba(${t.fill === "#34d399" ? "52,211,153" : t.fill === "#22d3ee" ? "34,211,238" : t.fill === "#fbbf24" ? "251,191,36" : t.fill === "#fb7185" ? "251,113,133" : t.fill === "#a78bfa" ? "167,139,250" : "148,163,184"},0.10), rgba(255,255,255,0.018)), var(--ch-panel)`,
-        border: `1px solid rgba(${t.fill === "#34d399" ? "52,211,153" : t.fill === "#22d3ee" ? "34,211,238" : t.fill === "#fbbf24" ? "251,191,36" : t.fill === "#fb7185" ? "251,113,133" : t.fill === "#a78bfa" ? "167,139,250" : "148,163,184"},0.34)`,
-        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.045), 0 8px 20px rgba(0,0,0,0.08)",
+        background: `linear-gradient(90deg, rgba(${toneStyle.rgb},0.10), rgba(255,255,255,0.72)), var(--ch-panel)`,
+        border: `1px solid rgba(${toneStyle.rgb},0.24)`,
+        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.78), 0 10px 24px rgba(15,23,42,0.06)",
       }}
     >
       <div className="flex min-w-0 items-start justify-between gap-1.5 sm:gap-3">
@@ -226,15 +227,16 @@ export function HeroMetricCard({
   sub1Label: string; sub1Value: string; sub2Label: string; sub2Value: string;
   series: number[]; accent?: "cyan" | "emerald";
 }) {
-  const color  = accent === "cyan" ? "#22d3ee" : "#34d399";
-  const colorB = accent === "cyan" ? "#0e7490" : "#065f46";
+  const color  = accent === "cyan" ? "#0891b2" : "#059669";
+  const colorB = accent === "cyan" ? "#e0f7fb" : "#dcfce7";
 
   return (
     <div
       className="relative overflow-hidden rounded-xl p-3 sm:rounded-2xl sm:p-5"
       style={{
-        background: `linear-gradient(135deg, ${colorB} 0%, rgba(13,17,23,0.6) 100%)`,
+        background: `linear-gradient(135deg, ${colorB} 0%, rgba(255,255,255,0.92) 100%)`,
         border:     `1px solid rgba(${accent === "cyan" ? "34,211,238" : "52,211,153"},0.3)`,
+        boxShadow: "0 18px 50px rgba(15,23,42,0.06)",
       }}
     >
       {/* bg glow */}
@@ -244,21 +246,21 @@ export function HeroMetricCard({
       />
       <div className="relative">
         <div className="flex min-w-0 items-start justify-between gap-2 sm:gap-3">
-          <p className="min-w-0 truncate font-mono text-[9px] uppercase tracking-[0.14em] text-white/60 sm:text-[10px] sm:tracking-widest">{label}</p>
-          <div className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-white/10 sm:flex">
-            <Icon className="h-4 w-4 text-white" />
+          <p className="min-w-0 truncate font-mono text-[9px] uppercase tracking-[0.14em] text-slate-500 sm:text-[10px] sm:tracking-widest">{label}</p>
+          <div className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-white/70 sm:flex">
+            <Icon className="h-4 w-4" style={{ color }} />
           </div>
         </div>
-        <p className="mt-2 truncate font-mono text-[22px] font-bold leading-none text-white sm:mt-3 sm:text-[32px]">{value}</p>
-        <MiniSparkline className="mt-4 hidden sm:block" color="#ffffff" data={series} opacity={0.5} />
+        <p className="mt-2 truncate font-mono text-[22px] font-bold leading-none sm:mt-3 sm:text-[32px]" style={{ color }}>{value}</p>
+        <MiniSparkline className="mt-4 hidden sm:block" color={color} data={series} opacity={0.55} />
         <div className="mt-2 grid grid-cols-2 gap-2 sm:mt-3 sm:flex sm:gap-4">
           <div>
-            <p className="truncate font-mono text-[8px] uppercase tracking-wider text-white/50 sm:text-[9px]">{sub1Label}</p>
-            <p className="truncate font-mono text-[12px] font-semibold text-white sm:text-[14px]">{sub1Value}</p>
+            <p className="truncate font-mono text-[8px] uppercase tracking-wider text-slate-500 sm:text-[9px]">{sub1Label}</p>
+            <p className="truncate font-mono text-[12px] font-semibold sm:text-[14px]" style={{ color: "var(--ch-text)" }}>{sub1Value}</p>
           </div>
           <div>
-            <p className="truncate font-mono text-[8px] uppercase tracking-wider text-white/50 sm:text-[9px]">{sub2Label}</p>
-            <p className="truncate font-mono text-[12px] font-semibold text-white sm:text-[14px]">{sub2Value}</p>
+            <p className="truncate font-mono text-[8px] uppercase tracking-wider text-slate-500 sm:text-[9px]">{sub2Label}</p>
+            <p className="truncate font-mono text-[12px] font-semibold sm:text-[14px]" style={{ color: "var(--ch-text)" }}>{sub2Value}</p>
           </div>
         </div>
       </div>
@@ -296,7 +298,7 @@ export function MiniSparkline({ data, color, className, opacity = 1 }: {
       preserveAspectRatio="none"
       style={{ opacity }}
     >
-      <line x1="0" y1="27" x2="100" y2="27" stroke="rgba(255,255,255,0.06)" strokeWidth="1" />
+      <line x1="0" y1="27" x2="100" y2="27" stroke="rgba(15,23,42,0.08)" strokeWidth="1" />
       <polyline points={pts} fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
       <polyline points={`${pts} 100,28 0,28`} fill={color} fillOpacity="0.12" />
     </svg>
@@ -447,7 +449,7 @@ export function KpiStat({ label, value, tone = "zinc" }: { label: string; value:
   return (
     <div
       className="min-w-0 rounded-xl px-2 py-2 sm:px-3 sm:py-2.5"
-      style={{ background: `linear-gradient(90deg, ${t.fill}18, rgba(255,255,255,0.018)), var(--ch-panel-2)`, border: `1px solid ${t.fill}55` }}
+      style={{ background: `linear-gradient(90deg, ${t.fill}14, rgba(255,255,255,0.72)), var(--ch-panel-2)`, border: `1px solid ${t.fill}44` }}
     >
       <div className="truncate font-mono text-[8px] uppercase tracking-[0.11em] text-slate-600 sm:text-[9px] sm:tracking-widest">{label}</div>
       <div className={cn("mt-1 truncate font-mono text-[15px] font-bold leading-none sm:text-[16px]", t.text)}>{value}</div>
@@ -473,12 +475,12 @@ export function DataTable({ columns, rows }: { columns: string[]; rows: ReactNod
                 key={`${rowIndex}-${columns[cellIndex] ?? cellIndex}`}
                 data-mobile-data-cell
                 className="grid min-w-0 gap-1 rounded-xl px-2 py-2"
-                style={{ background: "rgba(255,255,255,0.030)" }}
+                style={{ background: "rgba(15,23,42,0.035)" }}
               >
                 <div className="font-mono text-[8px] uppercase tracking-widest text-slate-600">
                   {columns[cellIndex] ?? `Campo ${cellIndex + 1}`}
                 </div>
-                <div className="min-w-0 text-[12px] leading-5 text-slate-200">{cell}</div>
+                <div className="min-w-0 text-[12px] leading-5 text-slate-700">{cell}</div>
               </div>
             ))}
           </div>
