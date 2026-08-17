@@ -4770,7 +4770,6 @@ function CatalogImportJobCard({
 }) {
   const canceled = isCatalogImportJobCanceled(job);
   const pendingItems = canceled ? [] : job.items.filter((item) => item.status !== "published" && item.status !== "discarded");
-  const readyItems = pendingItems.filter((item) => item.status === "ready").length;
   const canPublish = pendingItems.length > 0 && !publishing;
   const canCancel = canCancelCatalogImportJob(job);
   const active = isCatalogImportJobActive(job);
@@ -4797,8 +4796,8 @@ function CatalogImportJobCard({
       </div>
 
       <div className="mt-3 grid gap-2 sm:grid-cols-5">
-        <MiniStat label="itens" value={String(job.items.length)} />
-        <MiniStat label="prontos" value={String(readyItems)} />
+        <MiniStat label="importados" value={String(job.items.length)} />
+        <MiniStat label="pendentes" value={String(pendingItems.length)} />
         <MiniStat label="externos" value={String(job.items.filter((item) => item.salesDestination === "external_site").length)} />
         <MiniStat label="duplicados" value={String(job.items.filter((item) => item.duplicateCandidates.length > 0).length)} />
         <MiniStat label="imagens" value={String(job.items.filter((item) => item.imageUrl).length)} />
@@ -4889,15 +4888,22 @@ function CatalogImportJobCard({
         <div className="mt-3 rounded-lg border border-slate-300/20 bg-slate-900/20 px-3 py-2 text-[11px] text-slate-400">
           Importacao cancelada. {job.items.length} item(ns) encontrados foram ocultos da revisao e nao serao publicados.
         </div>
-      ) : job.items.length > 0 ? (
+      ) : pendingItems.length > 0 ? (
         <div className="mt-3 grid gap-2">
-          {job.items.map((item) => (
+          <div className="rounded-lg border border-amber-300/40 bg-amber-300/10 px-3 py-2 text-[11px] text-amber-900">
+            Mostrando somente itens pendentes de revisao. Os produtos ja publicados aparecem apenas em Itens cadastrados.
+          </div>
+          {pendingItems.map((item) => (
             <CatalogImportItemEditor
               key={item.id}
               item={item}
               onChange={(patch) => onChangeItem(item.id, patch)}
             />
           ))}
+        </div>
+      ) : job.items.length > 0 ? (
+        <div className="mt-3 rounded-lg border border-emerald-300/40 bg-emerald-300/10 px-3 py-2 text-[11px] text-emerald-800">
+          Produtos publicados. Eles agora aparecem somente em Itens cadastrados.
         </div>
       ) : null}
     </div>
