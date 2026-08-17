@@ -4,8 +4,8 @@ import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
 import { loadUazapiCredentials, type UazapiCredentials } from "@/lib/whatsapp/uazapi-credentials";
 import {
-  HUMAN_INTERVENTION_DEFAULT_MS,
   cancelQueuedWhatsappRunsForConversation,
+  resolveHumanInterventionMinutesForInstance,
 } from "@/lib/whatsapp/human-intervention";
 
 type JsonRecord = Record<string, unknown>;
@@ -159,12 +159,18 @@ export async function POST(request: NextRequest) {
   ]);
   const metadata = readRecord(conversation.metadata) ?? {};
   const currentHuman = readRecord(metadata.human_intervention) ?? {};
-  const pausedUntil = new Date(Date.now() + HUMAN_INTERVENTION_DEFAULT_MS).toISOString();
+  const humanInterventionMinutes = await resolveHumanInterventionMinutesForInstance({
+    client,
+    organizationId: workspace.organization.id,
+    instanceMetadata: instance.metadata,
+  });
+  const pausedUntil = new Date(Date.now() + humanInterventionMinutes * 60 * 1000).toISOString();
   const humanIntervention = {
     ...currentHuman,
     active: true,
     reason: "manual_dashboard_reply",
     source: "connectyhub_dashboard",
+    configured_minutes: humanInterventionMinutes,
     last_human_message_at: now,
     lead_waiting_since: null,
     last_unanswered_lead_message_at: null,

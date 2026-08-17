@@ -4,9 +4,21 @@ import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import {
   HUMAN_INTERVENTION_DEFAULT_MINUTES,
   cancelQueuedWhatsappRunsForConversation,
+  resolveHumanInterventionMinutesForInstance,
 } from "@/lib/whatsapp/human-intervention";
 
 type JsonRecord = Record<string, unknown>;
+
+type ConversationRow = {
+  id: string;
+  organization_id: string;
+  whatsapp_instance_id: string | null;
+  metadata: JsonRecord | null;
+};
+
+type WhatsappInstanceRow = {
+  metadata: JsonRecord | null;
+};
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -37,10 +49,10 @@ export async function POST(request: NextRequest) {
   const client = createServiceClient();
   const { data: conversation, error: loadError } = await client
     .from("conversations")
-    .select("id, organization_id, metadata")
+    .select("id, organization_id, whatsapp_instance_id, metadata")
     .eq("id", conversationId)
     .eq("organization_id", workspace.organization.id)
-    .maybeSingle<{ id: string; organization_id: string; metadata: JsonRecord | null }>();
+    .maybeSingle<ConversationRow>();
 
   if (loadError) {
     return NextResponse.json({ error: loadError.message }, { status: 500 });
@@ -53,7 +65,13 @@ export async function POST(request: NextRequest) {
   const now = new Date().toISOString();
   const metadata = readRecord(conversation.metadata) ?? {};
   const currentHuman = readRecord(metadata.human_intervention) ?? {};
-  const minutes = clampMinutes(body?.minutes);
+  const minutes = action === "pause"
+    ? await resolveConversationHumanInterventionMinutes({
+        client,
+        organizationId: workspace.organization.id,
+        whatsappInstanceId: conversation.whatsapp_instance_id,
+      })
+    : HUMAN_INTERVENTION_DEFAULT_MINUTES;
   const pausedUntil = action === "pause"
     ? new Date(Date.now() + minutes * 60 * 1000).toISOString()
     : null;
@@ -63,6 +81,7 @@ export async function POST(request: NextRequest) {
         active: true,
         reason: "manual_dashboard_handoff",
         source: "connectyhub_dashboard",
+        configured_minutes: minutes,
         lead_waiting_since: null,
         last_unanswered_lead_message_at: null,
         last_unanswered_lead_provider_message_id: null,
@@ -128,16 +147,29 @@ async function readJson<T>(request: NextRequest): Promise<T | null> {
   }
 }
 
-function readRecord(value: unknown): JsonRecord | null {
-  return value && typeof value === "object" && !Array.isArray(value) ? (value as JsonRecord) : null;
-}
-
-function clampMinutes(value: unknown) {
-  const numeric = typeof value === "number" ? value : Number(value);
-
-  if (!Number.isFinite(numeric)) {
+async function resolveConversationHumanInterventionMinutes(input: {
+  client: ReturnType<typeof createServiceClient>;
+  organizationId: string;
+  whatsappInstanceId: string | null;
+}) {
+  if (!input.whatsappInstanceId) {
     return HUMAN_INTERVENTION_DEFAULT_MINUTES;
   }
 
-  return Math.max(1, Math.min(1440, Math.round(numeric)));
+  const { data } = await input.client
+    .from("whatsapp_instances")
+    .select("metadata")
+    .eq("id", input.whatsappInstanceId)
+    .eq("organization_id", input.organizationId)
+    .maybeSingle<WhatsappInstanceRow>();
+
+  return await resolveHumanInterventionMinutesForInstance({
+    client: input.client,
+    organizationId: input.organizationId,
+    instanceMetadata: readRecord(data?.metadata),
+  });
+}
+
+function readRecord(value: unknown): JsonRecord | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as JsonRecord) : null;
 }

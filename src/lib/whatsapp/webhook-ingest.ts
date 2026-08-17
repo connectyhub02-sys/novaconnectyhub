@@ -14,9 +14,9 @@ import {
 import { normalizeWhatsappBehaviorConfig } from "./agent-behavior";
 import { isWhatsappHandoffNotificationRecipient } from "./handoff-notifications";
 import {
-  HUMAN_INTERVENTION_DEFAULT_MS,
   cancelQueuedWhatsappRunsForConversation,
   isConversationPausedForHuman,
+  resolveHumanInterventionMinutesForInstance,
   scheduleHumanInterventionAutoResumeForLead,
 } from "./human-intervention";
 import {
@@ -205,7 +205,12 @@ export async function ingestUazapiWebhook(input: {
       payload,
     });
     if (isHumanAuthoredWhatsappMessage(message, payload)) {
-      await markConversationHandledByHuman(client, conversation.id, message);
+      const humanInterventionMinutes = await resolveHumanInterventionMinutesForInstance({
+        client,
+        organizationId: instance.organization_id,
+        instanceMetadata: readRecord(instance.metadata),
+      });
+      await markConversationHandledByHuman(client, conversation.id, message, humanInterventionMinutes);
     }
     if (message.direction === "inbound" && lead && !message.isGroupChat && !isHandoffNotificationReply) {
       await sendLeadReplyPushNotifications({
@@ -697,16 +702,22 @@ async function insertConversationMessage(
   throw new Error(`Nao foi possivel registrar mensagem: ${error.message}`);
 }
 
-async function markConversationHandledByHuman(client: SupabaseClient, conversationId: string, message: MessageSnapshot) {
+async function markConversationHandledByHuman(
+  client: SupabaseClient,
+  conversationId: string,
+  message: MessageSnapshot,
+  humanInterventionMinutes: number,
+) {
   const occurredAtMs = new Date(message.occurredAt).getTime();
   const nowMs = Date.now();
+  const humanInterventionMs = humanInterventionMinutes * 60 * 1000;
 
-  if (Number.isFinite(occurredAtMs) && nowMs - occurredAtMs > HUMAN_INTERVENTION_DEFAULT_MS) {
+  if (Number.isFinite(occurredAtMs) && nowMs - occurredAtMs > humanInterventionMs) {
     return;
   }
 
   const pauseBaseMs = Number.isFinite(occurredAtMs) && occurredAtMs <= nowMs ? occurredAtMs : nowMs;
-  const pausedUntil = new Date(pauseBaseMs + HUMAN_INTERVENTION_DEFAULT_MS).toISOString();
+  const pausedUntil = new Date(pauseBaseMs + humanInterventionMs).toISOString();
   const { data } = await client
     .from("conversations")
     .select("metadata")
@@ -725,6 +736,7 @@ async function markConversationHandledByHuman(client: SupabaseClient, conversati
           active: true,
           reason: "human_outbound_from_connected_whatsapp",
           source: "connected_whatsapp",
+          configured_minutes: humanInterventionMinutes,
           last_human_message_at: message.occurredAt,
           lead_waiting_since: null,
           last_unanswered_lead_message_at: null,

@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { normalizeWhatsappBehaviorConfig } from "./agent-behavior";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -109,6 +110,50 @@ export async function scheduleHumanInterventionAutoResumeForLead(input: {
     resumeAt,
     resumeAtMs: effectivePausedUntilMs,
   };
+}
+
+export async function resolveHumanInterventionMinutesForInstance(input: {
+  client: SupabaseClient;
+  organizationId: string;
+  instanceMetadata: JsonRecord | null;
+}) {
+  const instanceMetadata = readRecord(input.instanceMetadata);
+  const instanceConfig = readRecord(instanceMetadata?.behavior_config);
+
+  if (instanceConfig) {
+    return normalizeWhatsappBehaviorConfig(instanceConfig).humanInterventionMinutes;
+  }
+
+  const agentId = readString(instanceMetadata?.agent_id);
+  const agentConfig = agentId
+    ? await loadAgentBehaviorConfig(input.client, input.organizationId, agentId)
+    : null;
+  const globalConfig = await loadOrganizationGlobalBehaviorConfig(input.client, input.organizationId);
+
+  return normalizeWhatsappBehaviorConfig(agentConfig ?? globalConfig).humanInterventionMinutes;
+}
+
+async function loadAgentBehaviorConfig(client: SupabaseClient, organizationId: string, agentId: string) {
+  const { data } = await client
+    .from("agent_registry")
+    .select("metadata")
+    .eq("id", agentId)
+    .eq("organization_id", organizationId)
+    .maybeSingle<{ metadata: JsonRecord | null }>();
+
+  return readRecord(readRecord(data?.metadata)?.whatsapp_behavior_config);
+}
+
+async function loadOrganizationGlobalBehaviorConfig(client: SupabaseClient, organizationId: string) {
+  const { data } = await client
+    .from("agent_registry")
+    .select("metadata")
+    .eq("scope", "organization")
+    .eq("organization_id", organizationId)
+    .eq("agent_code", "agente-whatsapp-global")
+    .maybeSingle<{ metadata: JsonRecord | null }>();
+
+  return readRecord(readRecord(data?.metadata)?.whatsapp_behavior_config);
 }
 
 function parseIsoTimestamp(value: string | null) {
