@@ -695,26 +695,33 @@ export async function publishSalesCatalogImportJob(input: {
 
   let catalogItems = 0;
   let linkButtons = 0;
-  let manualItems = 0;
+  let legacyReviewItems = 0;
   let errors = 0;
 
   for (const item of candidates) {
     try {
-      if (item.salesDestination === "external_site") {
+      const publishItem = item.salesDestination === "manual_handoff"
+        ? {
+          ...item,
+          salesDestination: "connectyhub_checkout" as SalesCatalogImportDestination,
+          warnings: Array.from(new Set([...item.warnings, "Destino legado de atendimento convertido para checkout ConnectyHub."])),
+        }
+        : item;
+
+      if (publishItem.salesDestination === "external_site") {
         const linkButton = await publishImportItemAsTrackedLink({
           client: input.client,
           companyId: input.companyId,
           userId: input.userId,
           jobId: input.jobId,
-          item,
+          item: publishItem,
         });
         await publishImportItemAsCatalogItem({
           client: input.client,
           companyId: input.companyId,
           userId: input.userId,
           jobId: input.jobId,
-          item,
-          manualHandoff: false,
+          item: publishItem,
           linkButton,
         });
         linkButtons += 1;
@@ -725,15 +732,13 @@ export async function publishSalesCatalogImportJob(input: {
           companyId: input.companyId,
           userId: input.userId,
           jobId: input.jobId,
-          item,
-          manualHandoff: item.salesDestination === "manual_handoff",
+          item: publishItem,
           linkButton: null,
         });
         if (item.salesDestination === "manual_handoff") {
-          manualItems += 1;
-        } else {
-          catalogItems += 1;
+          legacyReviewItems += 1;
         }
+        catalogItems += 1;
       }
     } catch (error) {
       errors += 1;
@@ -770,7 +775,7 @@ export async function publishSalesCatalogImportJob(input: {
         ...job.stats,
         published_catalog_items: catalogItems,
         published_link_buttons: linkButtons,
-        published_manual_items: manualItems,
+        published_legacy_review_items: legacyReviewItems,
         publish_errors: errors,
       },
     })
@@ -783,8 +788,12 @@ export async function publishSalesCatalogImportJob(input: {
     level: errors > 0 ? "warning" : "info",
     event_type: "sales_catalog_import.published",
     title: "Importacao publicada",
-    summary: `${catalogItems} produto(s), ${linkButtons} botao(oes) externo(s), ${manualItems} item(ns) para humano.`,
-    payload: { catalogItems, linkButtons, manualItems, errors },
+    summary: [
+      `${catalogItems} produto(s)`,
+      `${linkButtons} botao(oes) externo(s)`,
+      legacyReviewItems > 0 ? `${legacyReviewItems} item(ns) legado(s) convertido(s) para checkout` : null,
+    ].filter(Boolean).join(", ") + ".",
+    payload: { catalogItems, linkButtons, legacyReviewItems, errors },
   });
 
   return getSalesCatalogImportJob({
@@ -1125,7 +1134,7 @@ async function extractDraftsWithGemini(input: {
     isDeliveryImportPlatform(input.sourcePlatform)
       ? "Para cardapios de delivery, preserve categorias, sabores, tamanhos, adicionais, complementos e combos. Nao transforme texto institucional em produto."
       : "",
-    "Use salesDestination conforme o objetivo do usuario: connectyhub_checkout, external_site ou manual_handoff.",
+    "Use salesDestination conforme o objetivo do usuario: connectyhub_checkout ou external_site.",
   ].filter(Boolean).join("\n");
   const prompt = [
     `Fonte: ${input.sourceKind}`,
@@ -1136,7 +1145,7 @@ async function extractDraftsWithGemini(input: {
     `Destino padrao: ${input.defaultSalesDestination}`,
     "",
     "Retorne neste formato:",
-    '{"items":[{"title":"string","description":"string|null","category":"string|null","price":"string|null","currency":"BRL","productUrl":"string|null","imageUrl":"string|null","salesDestination":"connectyhub_checkout|external_site|manual_handoff","attributes":[{"name":"Tamanho","values":["P","M"]}],"skus":[{"skuCode":"PIZZA-G","title":"Grande","price":"45,00","salePrice":null,"attributes":[{"name":"Tamanho","values":["Grande"]}],"stockStatus":"in_stock","stockQuantity":null,"weightGrams":null}],"inventory":{"status":"in_stock","quantity":null,"allowBackorder":false,"notes":null},"shipping":{"profile":"default","notes":null},"fulfillment":{"mode":"physical","schedulingRequired":false,"serviceDuration":null,"deliveryInstructions":null,"accessInstructions":null},"offer":{"salePrice":null,"couponCode":null,"notes":null},"confidence":0.86,"warnings":["string"],"sourceEvidence":{"line":"trecho que justifica"}}]}',
+    '{"items":[{"title":"string","description":"string|null","category":"string|null","price":"string|null","currency":"BRL","productUrl":"string|null","imageUrl":"string|null","salesDestination":"connectyhub_checkout|external_site","attributes":[{"name":"Tamanho","values":["P","M"]}],"skus":[{"skuCode":"PIZZA-G","title":"Grande","price":"45,00","salePrice":null,"attributes":[{"name":"Tamanho","values":["Grande"]}],"stockStatus":"in_stock","stockQuantity":null,"weightGrams":null}],"inventory":{"status":"in_stock","quantity":null,"allowBackorder":false,"notes":null},"shipping":{"profile":"default","notes":null},"fulfillment":{"mode":"physical","schedulingRequired":false,"serviceDuration":null,"deliveryInstructions":null,"accessInstructions":null},"offer":{"salePrice":null,"couponCode":null,"notes":null},"confidence":0.86,"warnings":["string"],"sourceEvidence":{"line":"trecho que justifica"}}]}',
     "",
     "Fonte textual:",
     input.sourceText.trim() ? input.sourceText.slice(0, maxImportTextChars) : "Sem texto extraido; use os arquivos anexados como fonte principal.",
@@ -1548,7 +1557,6 @@ async function publishImportItemAsCatalogItem(input: {
   userId: string;
   jobId: string;
   item: ClientSalesCatalogImportItem;
-  manualHandoff: boolean;
   linkButton: PublishedTrackedLinkButton | null;
 }) {
   const itemId = randomUUID();
@@ -1567,7 +1575,7 @@ async function publishImportItemAsCatalogItem(input: {
   const itemFulfillment = input.item.fulfillment;
   const fulfillment = {
     ...itemFulfillment,
-    mode: input.item.salesDestination === "manual_handoff" ? "service" as SalesCatalogFulfillmentMode : itemFulfillment.mode,
+    mode: itemFulfillment.mode,
   };
   const shipping = input.item.shipping;
   const content = buildSalesCatalogContent({
@@ -1592,9 +1600,9 @@ async function publishImportItemAsCatalogItem(input: {
     category: input.item.category,
     price: input.item.price,
     currency: input.item.currency,
-    status: input.manualHandoff ? "draft" : "active",
+    status: "active",
     tag,
-    highlight_label: input.manualHandoff ? "Atendimento humano" : "Importado por IA",
+    highlight_label: "Importado por IA",
     attributes: serializeItemAttributes(input.item.attributes),
     inventory: serializeProductInventory(inventory),
     offer: serializeProductOffer(offer),
@@ -1633,7 +1641,7 @@ async function publishImportItemAsCatalogItem(input: {
       memory_type: "sales_catalog_item",
       title: input.item.title,
       content,
-      importance: input.manualHandoff ? 0.72 : 0.82,
+      importance: 0.82,
       tags: [
         "sales_catalog_item",
         "sales_catalog",
@@ -1641,7 +1649,6 @@ async function publishImportItemAsCatalogItem(input: {
         "whatsapp_agent",
         "lead_tracking",
         ...(input.item.salesDestination === "external_site" ? ["external_site_product"] : []),
-        ...(input.manualHandoff ? ["manual_handoff"] : []),
       ],
       metadata,
       created_at: now,
@@ -1692,7 +1699,7 @@ async function publishImportItemAsCatalogItem(input: {
     source_id: input.jobId,
     event_type: "sales_catalog.import_item_published",
     title: `Produto importado: ${input.item.title}`,
-    summary: input.manualHandoff ? "Publicado como item de atendimento humano." : "Publicado no catalogo ConnectyHub.",
+    summary: "Publicado no catalogo ConnectyHub.",
     confidence: input.item.confidence,
     visibility: "organization",
     tags: ["sales_catalog", "sales_catalog_item", "ai_import", "whatsapp_agent", "lead_tracking"],
@@ -2353,7 +2360,7 @@ function buildFallbackDescription(item: ClientSalesCatalogImportItem) {
   const parts = [
     item.description,
     item.productUrl ? `Produto importado do site: ${item.productUrl}` : "",
-    item.salesDestination === "manual_handoff" ? "Fechamento precisa de atendimento humano." : "",
+    item.salesDestination === "manual_handoff" ? "Destino de venda precisa de revisao." : "",
   ].filter(Boolean);
 
   return parts.join("\n") || "Produto importado por IA para atendimento no WhatsApp.";
@@ -2915,13 +2922,13 @@ function normalizeTargetMode(value: unknown): SalesCatalogImportTargetMode {
 }
 
 function normalizeSalesDestination(value: unknown, targetMode: SalesCatalogImportTargetMode): SalesCatalogImportDestination {
-  if (value === "external_site" || value === "manual_handoff" || value === "connectyhub_checkout") return value;
+  if (value === "external_site" || value === "connectyhub_checkout") return value;
   if (targetMode === "external_site") return "external_site";
   return "connectyhub_checkout";
 }
 
 function readOptionalSalesDestination(value: unknown): SalesCatalogImportDestination | null {
-  if (value === "external_site" || value === "manual_handoff" || value === "connectyhub_checkout") return value;
+  if (value === "external_site" || value === "connectyhub_checkout") return value;
   return null;
 }
 

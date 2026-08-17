@@ -2992,7 +2992,7 @@ function buildSalesCatalogLines(items: RuntimeSalesCatalogItem[]) {
     "- Nunca invente produto, preco, arquivo ou condicao que nao esteja no catalogo.",
     "- Se o lead pedir algo generico, recomende no maximo 3 itens do catalogo e inclua a tag de cada um.",
     "- Para destino site externo, use a tag do botao externo do produto e nao gere pedido ou checkout ConnectyHub.",
-    "- Para destino atendimento humano, colete o minimo necessario e acione humano; nao gere checkout automatico.",
+    "- Se algum item legado aparecer como revisar destino da venda, confirme a intencao com o lead e acione o dono antes de prometer checkout.",
     "- Nunca invente desconto, cupom, prazo promocional ou condicao comercial; use somente oferta/cupom cadastrado no item.",
     "- Quando houver preco promocional ou CTA cadastrado, use isso para conduzir o fechamento sem parecer texto automatico.",
     "- Se o item estiver esgotado, nao venda como disponivel; ofereca alternativa ou pergunte se pode avisar quando voltar.",

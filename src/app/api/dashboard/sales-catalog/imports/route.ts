@@ -294,7 +294,7 @@ function normalizeTargetMode(value: unknown): SalesCatalogImportTargetMode {
 }
 
 function normalizeSalesDestination(value: unknown): SalesCatalogImportDestination {
-  if (value === "external_site" || value === "manual_handoff" || value === "connectyhub_checkout") return value;
+  if (value === "external_site" || value === "connectyhub_checkout") return value;
   return "connectyhub_checkout";
 }
 

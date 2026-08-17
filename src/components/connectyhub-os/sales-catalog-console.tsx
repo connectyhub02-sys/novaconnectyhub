@@ -3127,7 +3127,7 @@ export function SalesCatalogConsole({
 
             <div className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
               <FieldLabel>Destino da venda</FieldLabel>
-              <div className="grid gap-2 sm:grid-cols-3">
+              <div className="grid gap-2 sm:grid-cols-2">
                 <DestinationButton
                   active={salesDestination === "connectyhub_checkout"}
                   icon={CreditCard}
@@ -3139,12 +3139,6 @@ export function SalesCatalogConsole({
                   icon={ExternalLink}
                   label="Site externo"
                   onClick={() => setSalesDestination("external_site")}
-                />
-                <DestinationButton
-                  active={salesDestination === "manual_handoff"}
-                  icon={MessageSquareText}
-                  label="Atendimento"
-                  onClick={() => setSalesDestination("manual_handoff")}
                 />
               </div>
 
@@ -4083,29 +4077,25 @@ function SalesCatalogImportPanel({
           </div>
         </div>
 
-        <div className="grid gap-2">
-          <FieldLabel>Se faltar destino no item</FieldLabel>
-          <div className="grid gap-1.5 sm:grid-cols-3">
-            <ImportChoiceButton
-              active={defaultDestination === "connectyhub_checkout"}
-              icon={CreditCard}
-              label="Checkout"
-              onClick={() => onChangeDefaultDestination("connectyhub_checkout")}
-            />
-            <ImportChoiceButton
-              active={defaultDestination === "external_site"}
-              icon={ExternalLink}
-              label="Site"
-              onClick={() => onChangeDefaultDestination("external_site")}
-            />
-            <ImportChoiceButton
-              active={defaultDestination === "manual_handoff"}
-              icon={MessageSquareText}
-              label="Humano"
-              onClick={() => onChangeDefaultDestination("manual_handoff")}
-            />
+        {targetMode === "review" ? (
+          <div className="grid gap-2">
+            <FieldLabel>Se a IA nao identificar o destino</FieldLabel>
+            <div className="grid gap-1.5 sm:grid-cols-2">
+              <ImportChoiceButton
+                active={defaultDestination === "connectyhub_checkout"}
+                icon={CreditCard}
+                label="Checkout"
+                onClick={() => onChangeDefaultDestination("connectyhub_checkout")}
+              />
+              <ImportChoiceButton
+                active={defaultDestination === "external_site"}
+                icon={ExternalLink}
+                label="Site externo"
+                onClick={() => onChangeDefaultDestination("external_site")}
+              />
+            </div>
           </div>
-        </div>
+        ) : null}
 
         <label className="block">
           <FieldLabel>Observacoes opcionais</FieldLabel>
@@ -4361,7 +4351,6 @@ function CatalogImportItemEditor({
         >
           <option value="connectyhub_checkout">Checkout</option>
           <option value="external_site">Site externo</option>
-          <option value="manual_handoff">Humano</option>
         </select>
         <select
           value={item.status}
@@ -5537,16 +5526,9 @@ function getImportDestinationNotice(targetMode: SalesCatalogImportTargetMode, de
     };
   }
 
-  if (defaultDestination === "manual_handoff") {
-    return {
-      title: "Revisao com fechamento humano",
-      description: "Itens sem destino claro entram para atendimento humano. Use quando ainda nao quiser liberar checkout automatico.",
-    };
-  }
-
   return {
     title: "Revisar antes de publicar",
-    description: "O sistema mostra todos os itens antes de liberar. Em cada produto voce decide se vende pelo checkout ConnectyHub, mantem link externo ou deixa para atendimento humano.",
+    description: "O sistema mostra todos os itens antes de liberar. Em cada produto voce decide se vende pelo checkout ConnectyHub ou se mantem o link externo da loja antiga.",
   };
 }
 
@@ -5558,7 +5540,7 @@ function formatImportTargetMode(value: SalesCatalogImportTargetMode) {
 
 function formatImportDestination(value: SalesCatalogImportDestination) {
   if (value === "external_site") return "site";
-  if (value === "manual_handoff") return "humano";
+  if (value === "manual_handoff") return "revisar";
   return "checkout";
 }
 

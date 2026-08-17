@@ -860,7 +860,7 @@ export function formatSalesCatalogShippingProfile(profile: SalesCatalogShippingP
 
 export function formatSalesCatalogSalesDestination(destination: SalesCatalogSalesDestination) {
   if (destination === "external_site") return "site externo";
-  if (destination === "manual_handoff") return "atendimento humano";
+  if (destination === "manual_handoff") return "revisar destino da venda";
   return "checkout ConnectyHub";
 }
 

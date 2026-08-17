@@ -139,7 +139,7 @@ function normalizeItemStatus(value: unknown): SalesCatalogImportItemStatus | nul
 }
 
 function normalizeSalesDestination(value: unknown): SalesCatalogImportDestination | null {
-  if (value === "external_site" || value === "manual_handoff" || value === "connectyhub_checkout") return value;
+  if (value === "external_site" || value === "connectyhub_checkout") return value;
   return null;
 }
 

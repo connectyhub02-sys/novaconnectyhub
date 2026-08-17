@@ -384,7 +384,6 @@ export async function POST(request: NextRequest) {
       "sales_catalog",
       ...(metadataSource === "whatsapp_catalog" ? ["whatsapp_catalog"] : []),
       ...(salesDestination === "external_site" ? ["external_site_product"] : []),
-      ...(salesDestination === "manual_handoff" ? ["manual_handoff"] : []),
       "whatsapp_agent",
       "lead_tracking",
     ];
@@ -2663,7 +2662,7 @@ function normalizeStatus(value: string | null): SalesCatalogItemStatus {
 }
 
 function normalizeSalesDestination(value: string | null): SalesCatalogSalesDestination {
-  if (value === "external_site" || value === "manual_handoff" || value === "connectyhub_checkout") return value;
+  if (value === "external_site" || value === "connectyhub_checkout") return value;
   return "connectyhub_checkout";
 }
 
