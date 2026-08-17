@@ -877,6 +877,10 @@ export async function publishSalesCatalogImportJob(input: {
         }
         : item;
 
+      if (publishItem.salesDestination === "connectyhub_checkout" && !hasSalesCatalogImportCheckoutPrice(publishItem)) {
+        throw new Error(`Informe um preco antes de publicar "${publishItem.title}" no checkout ConnectyHub.`);
+      }
+
       if (publishItem.salesDestination === "external_site") {
         const linkButton = await publishImportItemAsTrackedLink({
           client: input.client,
@@ -1352,15 +1356,20 @@ async function listSalesCatalogImportSources(input: {
   return (data ?? []) as unknown as ImportSourceRow[];
 }
 
-function buildQueuedSourceInput(job: ImportJobRow, sources: ImportSourceRow[]) {
+export function buildQueuedSourceInput(job: ImportJobRow, sources: ImportSourceRow[]) {
   const sourceUrl = job.input_url ?? sources.map((source) => source.source_url).find(Boolean) ?? null;
-  const text = sources
-    .map((source) => source.text_excerpt)
+  const sourceEntries = sources.map((source) => ({
+    source,
+    file: readQueuedFileInput(source),
+  }));
+  const text = sourceEntries
+    .filter(({ file }) => !file)
+    .map(({ source }) => source.text_excerpt)
     .filter((text): text is string => Boolean(text?.trim()))
     .join("\n\n")
     .slice(0, maxImportTextChars);
-  const files = sources
-    .map(readQueuedFileInput)
+  const files = sourceEntries
+    .map(({ file }) => file)
     .filter((file): file is SalesCatalogImportFileInput => Boolean(file));
 
   return { sourceUrl, text, files };
@@ -2624,6 +2633,21 @@ function buildDraftWarnings(input: {
   return warnings;
 }
 
+export function hasSalesCatalogImportCheckoutPrice(input: Pick<ClientSalesCatalogImportItem, "price" | "offer" | "skus">) {
+  const candidates = [
+    input.offer.salePrice,
+    input.price,
+    ...input.skus
+      .filter((sku) => sku.status === "active")
+      .flatMap((sku) => [sku.salePrice, sku.price]),
+  ];
+
+  return candidates.some((value) => {
+    const amount = normalizeCurrencyAmount(value);
+    return typeof amount === "number" && amount > 0;
+  });
+}
+
 function createDraftSku(input: {
   title: string;
   skuCode: string;
@@ -3680,6 +3704,14 @@ function normalizeMoneyText(value: string) {
   }
 
   return text.replace(/[^\d-]/g, "") || null;
+}
+
+function normalizeCurrencyAmount(value: unknown) {
+  const normalized = normalizePrice(value);
+  if (!normalized) return null;
+
+  const amount = Number.parseFloat(normalized.replace(/\./g, "").replace(",", "."));
+  return Number.isFinite(amount) ? amount : null;
 }
 
 function normalizeDraftUrl(value: unknown) {
