@@ -21,7 +21,6 @@ import {
   Forward,
   Gauge,
   Globe2,
-  GraduationCap,
   ImageIcon,
   KeyRound,
   Link2,
@@ -47,7 +46,6 @@ import {
   SplitSquareVertical,
   Sticker,
   Sun,
-  Target,
   Timer,
   Trash2,
   type LucideIcon,
@@ -76,6 +74,10 @@ import {
   type WhatsappRapportMode,
   type WhatsappResponseMode,
 } from "@/lib/whatsapp/agent-behavior";
+import {
+  normalizeOrganizationLocations,
+  type OrganizationLocation,
+} from "@/lib/company-locations/shared";
 import {
   agentPromptTemplates,
   buildAgentPromptFromTemplate,
@@ -208,6 +210,20 @@ type ClientCompany = {
   createdAt: string | null;
 };
 
+type CompanyLocationDraft = {
+  id: string | null;
+  label: string;
+  address: string;
+  cep: string;
+  city: string;
+  region: string;
+  mapsUrl: string;
+  latitude: string;
+  longitude: string;
+  isPrimary: boolean;
+  notes: string;
+};
+
 type ClientWhatsappAgent = {
   id: string;
   companyId: string;
@@ -289,6 +305,7 @@ type WhatsappState = {
     files: KnowledgeFile[];
   };
   linkButtons: TrackedLinkButton[];
+  companyLocations?: OrganizationLocation[];
   salesCatalog: ClientSalesCatalogItem[];
   cloneTest?: CloneRealTestSummary;
   runtimeAlerts: RuntimeAlert[];
@@ -723,6 +740,7 @@ export function WhatsAppConsole({
   const [promptTemplateDraft, setPromptTemplateDraft] = useState<AgentPromptBuilderConfig>(() => normalizeAgentPromptBuilderConfig(null));
   const [promptAssistantRunning, setPromptAssistantRunning] = useState(false);
   const [behaviorDraft, setBehaviorDraft] = useState<WhatsappBehaviorConfig>(defaultWhatsappBehaviorConfig);
+  const [companyLocationDrafts, setCompanyLocationDrafts] = useState<CompanyLocationDraft[]>(() => [createEmptyCompanyLocationDraft()]);
   const [cloneProfileDraft, setCloneProfileDraft] = useState<WhatsappCloneProfile>(defaultWhatsappCloneProfile);
   const [qualificationDraft, setQualificationDraft] = useState<LeadQualificationConfig>(defaultLeadQualificationConfig);
   const [channelConfigDraft, setChannelConfigDraft] = useState<AgentChannelConfig>(defaultAgentChannelConfig);
@@ -808,6 +826,7 @@ export function WhatsAppConsole({
       setAgentTemplateId(nextPromptTemplateConfig.templateId);
       const nextBehavior = normalizeWhatsappBehaviorConfig(nextState.behavior);
       setBehaviorDraft(nextBehavior);
+      setCompanyLocationDrafts(toCompanyLocationDrafts(nextState.companyLocations ?? []));
       setCloneProfileDraft(normalizeWhatsappCloneProfile(nextState.agent?.cloneProfile));
       setChannelConfigDraft(normalizeAgentChannelConfig(nextState.agent?.channelConfig));
       setStatusMaxRecipients(nextBehavior.whatsappMaxStatusRecipients);
@@ -1035,6 +1054,7 @@ export function WhatsAppConsole({
     ? !isAgentPromptBuilderConfigEqual(promptTemplateDraft, normalizeAgentPromptBuilderConfig(state.agent.promptTemplateConfig))
     : false;
   const behaviorChanged = state ? !isBehaviorEqual(behaviorDraft, state.behavior) : false;
+  const companyLocationsChanged = state ? !isCompanyLocationDraftsEqual(companyLocationDrafts, state.companyLocations ?? []) : false;
   const cloneProfileChanged = state?.agent
     ? !isCloneProfileEqual(cloneProfileDraft, normalizeWhatsappCloneProfile(state.agent.cloneProfile))
     : false;
@@ -1044,7 +1064,7 @@ export function WhatsAppConsole({
   const channelConfigChanged = state?.agent
     ? !isAgentChannelConfigEqual(channelConfigDraft, normalizeAgentChannelConfig(state.agent.channelConfig))
     : false;
-  const settingsChanged = agentNameChanged || promptChanged || promptTemplateChanged || behaviorChanged || cloneProfileChanged || qualificationChanged || channelConfigChanged;
+  const settingsChanged = agentNameChanged || promptChanged || promptTemplateChanged || behaviorChanged || companyLocationsChanged || cloneProfileChanged || qualificationChanged || channelConfigChanged;
   const companies = state?.companies ?? [];
   const agents = state?.agents ?? [];
   const selectedCompany = companies.find((company) => company.id === selectedCompanyId) ?? companies[0] ?? null;
@@ -1060,6 +1080,41 @@ export function WhatsAppConsole({
 
   function updateBehavior<K extends keyof WhatsappBehaviorConfig>(key: K, value: WhatsappBehaviorConfig[K]) {
     setBehaviorDraft((current) => normalizeWhatsappBehaviorConfig({ ...current, [key]: value }));
+  }
+
+  function updateCompanyLocationDraft(index: number, patch: Partial<CompanyLocationDraft>) {
+    setCompanyLocationDrafts((current) => current.map((location, locationIndex) => (
+      locationIndex === index ? { ...location, ...patch } : location
+    )));
+  }
+
+  function addCompanyLocationDraft() {
+    setCompanyLocationDrafts((current) => [
+      ...current,
+      {
+        ...createEmptyCompanyLocationDraft(),
+        label: `Unidade ${current.length + 1}`,
+        isPrimary: current.length === 0,
+      },
+    ]);
+  }
+
+  function removeCompanyLocationDraft(index: number) {
+    setCompanyLocationDrafts((current) => {
+      const next = current.filter((_, locationIndex) => locationIndex !== index);
+      const fallback = next.length > 0 ? next : [createEmptyCompanyLocationDraft()];
+
+      return fallback.some((location) => location.isPrimary)
+        ? fallback
+        : fallback.map((location, locationIndex) => ({ ...location, isPrimary: locationIndex === 0 }));
+    });
+  }
+
+  function markCompanyLocationPrimary(index: number) {
+    setCompanyLocationDrafts((current) => current.map((location, locationIndex) => ({
+      ...location,
+      isPrimary: locationIndex === index,
+    })));
   }
 
   function updateAgentChannelConfig(channelId: AgentChannelId, patch: Partial<AgentChannelConfigItem>) {
@@ -1422,6 +1477,7 @@ export function WhatsAppConsole({
           agentPrompt: promptDraft,
           promptTemplateConfig: promptTemplateDraft,
           behavior: behaviorDraft,
+          companyLocations: normalizeCompanyLocationDraftsForSave(companyLocationDrafts),
           cloneProfile: cloneProfileDraft,
           qualificationConfig: qualificationDraft,
           channelConfig: channelConfigDraft,
@@ -2210,7 +2266,7 @@ export function WhatsAppConsole({
         <Panel
           title="Comportamento do agente"
           eyebrow="controles do atendimento"
-          action={<NeonBadge tone={behaviorChanged ? "amber" : "green"}>{behaviorChanged ? "alterado" : "salvo"}</NeonBadge>}
+          action={<NeonBadge tone={behaviorChanged || companyLocationsChanged ? "amber" : "green"}>{behaviorChanged || companyLocationsChanged ? "alterado" : "salvo"}</NeonBadge>}
         >
           <div className="grid gap-3 sm:gap-4 2xl:grid-cols-[minmax(0,1fr)_320px]">
             <div className="grid gap-3">
@@ -2290,6 +2346,16 @@ export function WhatsAppConsole({
                 </div>
               </BehaviorSection>
 
+              <BehaviorSection title="Localizacao da empresa" description="Enderecos que o agente pode enviar quando o lead pedir onde fica, Maps ou localizacao. O pin nativo sai quando latitude e longitude estiverem preenchidas." defaultOpen={companyLocationDrafts.length === 1 && !companyLocationDrafts[0]?.address}>
+                <CompanyLocationsEditor
+                  locations={companyLocationDrafts}
+                  onAdd={addCompanyLocationDraft}
+                  onChange={updateCompanyLocationDraft}
+                  onPrimary={markCompanyLocationPrimary}
+                  onRemove={removeCompanyLocationDraft}
+                />
+              </BehaviorSection>
+
               <BehaviorSection title="Simulacao humana" description="Comportamentos que fazem o agente parecer uma pessoa real no WhatsApp.">
                 <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
                   <ToggleTile icon={PenLine} label="Linguagem humanizada" description="Instrui a IA a usar abreviacoes, emoji e tom informal de brasileiro no WhatsApp." checked={behaviorDraft.humanizedLanguage} onChange={() => updateBehavior("humanizedLanguage", !behaviorDraft.humanizedLanguage)} />
@@ -2303,14 +2369,8 @@ export function WhatsAppConsole({
                   <ToggleTile icon={Mic} label="Preenchimento vocal" description="Adiciona hesitacoes naturais nos audios: 'hmm', 'entao', pausas de pensamento." checked={behaviorDraft.naturalAudioFillers} onChange={() => updateBehavior("naturalAudioFillers", !behaviorDraft.naturalAudioFillers)} />
                   <ToggleTile icon={Sticker} label="Figurinhas" description="Envia stickers contextuais ocasionalmente para simular comportamento natural do WhatsApp." checked={behaviorDraft.sendStickers} onChange={() => updateBehavior("sendStickers", !behaviorDraft.sendStickers)} />
                   <ToggleTile icon={Forward} label="Midia proativa" description="Permite que o agente envie imagens, catalogos ou midias relevantes de forma espontanea." checked={behaviorDraft.proactiveMedia} onChange={() => updateBehavior("proactiveMedia", !behaviorDraft.proactiveMedia)} />
-                  <ToggleTile icon={GraduationCap} label="Aprendizado continuo" description="O agente aprende com cada atendimento e cita experiencias reais anonimizadas de outros clientes." checked={behaviorDraft.agentLearning} onChange={() => updateBehavior("agentLearning", !behaviorDraft.agentLearning)} />
-                  <ToggleTile icon={Building2} label="Memoria da empresa" description="Permite usar historico do lead com outros agentes da mesma empresa, sem misturar empresas diferentes da conta." checked={behaviorDraft.sharedCompanyContext} onChange={() => updateBehavior("sharedCompanyContext", !behaviorDraft.sharedCompanyContext)} />
-                  <ToggleTile icon={Brain} label="Memoria do clone" description="Guarda aprendizados de estilo deste agente sem salvar dados de leads, produtos ou outras empresas." checked={behaviorDraft.cloneMemory} onChange={() => updateBehavior("cloneMemory", !behaviorDraft.cloneMemory)} />
-                  <ToggleTile icon={ShieldCheck} label="Coerencia do clone" description="Mantem o agente fiel ao DNA/prompt e evita prometer links, botoes ou arquivos sem enviar junto." checked={behaviorDraft.cloneConsistencyGuard} onChange={() => updateBehavior("cloneConsistencyGuard", !behaviorDraft.cloneConsistencyGuard)} />
-                  <ToggleTile icon={Calendar} label="Consciencia temporal" description="Injeta hora, dia e periodo no prompt para saudacoes e ritmo contextual." checked={behaviorDraft.temporalAwareness} onChange={() => updateBehavior("temporalAwareness", !behaviorDraft.temporalAwareness)} />
                   <ToggleTile icon={Gauge} label="Ritmo WPM" description="Calcula delay de digitacao baseado em palavras por minuto em vez de formula linear." checked={behaviorDraft.wpmTypingModel} onChange={() => updateBehavior("wpmTypingModel", !behaviorDraft.wpmTypingModel)} />
                   <ToggleTile icon={Repeat} label="Correcoes mid-message" description="Injeta erros de digitacao reais e envia correcao com asterisco, como humano faz." checked={behaviorDraft.midMessageCorrections} onChange={() => updateBehavior("midMessageCorrections", !behaviorDraft.midMessageCorrections)} />
-                  <ToggleTile icon={Brain} label="Arco da conversa" description="Gera resumo do arco conversacional via IA para continuidade entre sessoes." checked={behaviorDraft.conversationArcMemory} onChange={() => updateBehavior("conversationArcMemory", !behaviorDraft.conversationArcMemory)} />
                   <ToggleTile icon={Coffee} label="Small talk" description="Injeta contexto cultural e temporal brasileiro para papo leve quando o lead abrir espaco." checked={behaviorDraft.smallTalk} onChange={() => updateBehavior("smallTalk", !behaviorDraft.smallTalk)} />
                 </div>
                 <div className="mt-2 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
@@ -2357,7 +2417,7 @@ export function WhatsAppConsole({
                 </div>
               </BehaviorSection>
 
-              <BehaviorSection title="Cenarios especiais do lead" description="Eventos que a IA deve reconhecer para alimentar CRM, memoria e proximos passos.">
+              <BehaviorSection title="Citacoes do WhatsApp" description="Controla quando a resposta deve sair citando uma mensagem especifica do lead.">
                 <div className="grid gap-3">
                   <div className="grid gap-2">
                     <div>
@@ -2374,17 +2434,6 @@ export function WhatsAppConsole({
                       onChange={updateQuoteReplyMode}
                     />
                   </div>
-                  <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-                    <ToggleTile icon={UserRound} label="Pedido de humano" description="Identifica quando o lead pede vendedor, atendente ou suporte humano." checked={behaviorDraft.detectHumanRequest} onChange={() => updateBehavior("detectHumanRequest", !behaviorDraft.detectHumanRequest)} />
-                    <ToggleTile icon={Bot} label="IA pedido humano" description="Usa IA para entender pedidos indiretos ou contextuais de atendimento humano." checked={behaviorDraft.humanHandoffAiDetection} onChange={() => updateBehavior("humanHandoffAiDetection", !behaviorDraft.humanHandoffAiDetection)} />
-                    <ToggleTile icon={Clock3} label="Cancelar/remarcar" description="Reconhece pedidos de cancelamento, reagendamento ou mudanca de horario." checked={behaviorDraft.detectRescheduleCancel} onChange={() => updateBehavior("detectRescheduleCancel", !behaviorDraft.detectRescheduleCancel)} />
-                    <ToggleTile icon={MessageSquare} label="Captacao" description="Detecta quando o lead quer cadastrar, vender ou oferecer um imovel/produto." checked={behaviorDraft.detectPropertyCapture} onChange={() => updateBehavior("detectPropertyCapture", !behaviorDraft.detectPropertyCapture)} />
-                    <ToggleTile icon={Globe2} label="Localizacao" description="Registra localizacao enviada pelo lead para enriquecer atendimento e CRM." checked={behaviorDraft.detectLocation} onChange={() => updateBehavior("detectLocation", !behaviorDraft.detectLocation)} />
-                    <ToggleTile icon={ShieldCheck} label="Opt-out" description="Detecta quando o lead pede para parar contato ou sair da lista." checked={behaviorDraft.detectOptOut} onChange={() => updateBehavior("detectOptOut", !behaviorDraft.detectOptOut)} />
-                    <ToggleTile icon={Link2} label="Links do lead" description="Analisa links enviados pelo lead e guarda contexto util para atendimento." checked={behaviorDraft.analyzeLinks} onChange={() => updateBehavior("analyzeLinks", !behaviorDraft.analyzeLinks)} />
-                    <ToggleTile icon={FileText} label="Salvar midia" description={`Salva arquivos relevantes recebidos para historico, CRM e memoria do ${variant.entitySingular}.`} checked={behaviorDraft.leadFileStorage} onChange={() => updateBehavior("leadFileStorage", !behaviorDraft.leadFileStorage)} />
-                    <ToggleTile icon={Target} label="Rastreamento de negociacao" description="Classifica estagio do funil de vendas e injeta contexto progressivo no prompt da IA." checked={behaviorDraft.negotiationTracking} onChange={() => updateBehavior("negotiationTracking", !behaviorDraft.negotiationTracking)} />
-                  </div>
                 </div>
               </BehaviorSection>
 
@@ -2400,31 +2449,11 @@ export function WhatsAppConsole({
                 </div>
               </BehaviorSection>
 
-              <BehaviorSection title="Protecoes de contexto" description="Cenarios que podem confundir o agente se o lead mandar algo incompleto, fora de ordem ou tentando burlar o atendimento.">
-                <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-                  <ToggleTile icon={ImageIcon} label="Midias em lote" description="Reconhece varias fotos, audios, videos ou documentos seguidos antes de concluir uma resposta." checked={behaviorDraft.mediaBurstGuard} onChange={() => updateBehavior("mediaBurstGuard", !behaviorDraft.mediaBurstGuard)} />
-                  <ToggleTile icon={FileText} label="Midia sem legenda" description="Evita chutar conteudo quando foto, video ou documento chegam sem legenda ou analise confiavel." checked={behaviorDraft.missingMediaCaptionGuard} onChange={() => updateBehavior("missingMediaCaptionGuard", !behaviorDraft.missingMediaCaptionGuard)} />
-                  <ToggleTile icon={AudioLines} label="Audio dificil" description="Trata audio longo, ruidoso, sem transcricao ou em outro idioma sem inventar o que foi dito." checked={behaviorDraft.audioQualityGuard} onChange={() => updateBehavior("audioQualityGuard", !behaviorDraft.audioQualityGuard)} />
-                  <ToggleTile icon={PenLine} label="Msg editada/apagada" description="Reconhece mensagens editadas, apagadas ou revogadas e pede reenvio quando faltar contexto." checked={behaviorDraft.messageEditDeleteAwareness} onChange={() => updateBehavior("messageEditDeleteAwareness", !behaviorDraft.messageEditDeleteAwareness)} />
-                  <ToggleTile icon={MessageCircle} label="Contato/enquete/reacao" description="Controla respostas a contatos, enquetes, reacoes e eventos de WhatsApp sem texto claro." checked={behaviorDraft.contactPollReactionHandling} onChange={() => updateBehavior("contactPollReactionHandling", !behaviorDraft.contactPollReactionHandling)} />
-                  <ToggleTile icon={Shuffle} label="Troca de assunto" description="Detecta quando o lead muda bruscamente de tema para responder ao novo objetivo sem insistir no anterior." checked={behaviorDraft.topicShiftDetection} onChange={() => updateBehavior("topicShiftDetection", !behaviorDraft.topicShiftDetection)} />
-                  <ToggleTile icon={Bot} label="Anti prompt injection" description="Bloqueia pedidos para revelar regras, prompt, tokens, sistema ou para ignorar instrucoes internas." checked={behaviorDraft.promptInjectionGuard} onChange={() => updateBehavior("promptInjectionGuard", !behaviorDraft.promptInjectionGuard)} />
-                </div>
-              </BehaviorSection>
-
               <BehaviorSection title="Audio e midia com IA" description="Define quais tipos de midia a IA pode interpretar antes de responder o lead.">
-                <div className="grid gap-3 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-                  <div className="grid gap-2 md:grid-cols-2">
-                    <ToggleTile icon={Mic} label="Transcrever audio" description="Converte audios recebidos em texto para a IA entender antes de responder." checked={behaviorDraft.audioTranscription} onChange={() => updateBehavior("audioTranscription", !behaviorDraft.audioTranscription)} />
-                    <ToggleTile icon={ImageIcon} label="Analisar imagens" description="Permite que a IA leia imagens enviadas pelo lead e use esse contexto." checked={behaviorDraft.mediaImage} onChange={() => updateBehavior("mediaImage", !behaviorDraft.mediaImage)} />
-                    <ToggleTile icon={FileText} label="Analisar documentos" description="Permite interpretar documentos recebidos quando forem relevantes para o atendimento." checked={behaviorDraft.mediaDocument} onChange={() => updateBehavior("mediaDocument", !behaviorDraft.mediaDocument)} />
-                    <ToggleTile icon={Video} label="Analisar videos" description="Permite analisar videos enviados, respeitando os limites de lote configurados." checked={behaviorDraft.mediaVideo} onChange={() => updateBehavior("mediaVideo", !behaviorDraft.mediaVideo)} />
-                  </div>
-                  <div className="grid gap-2 md:grid-cols-3">
-                    <NumberField label="Imagens" description="Maximo de imagens analisadas quando o lead envia varias midias juntas." value={behaviorDraft.mediaBatchImageLimit} min={1} max={20} onChange={(value) => updateBehavior("mediaBatchImageLimit", value)} />
-                    <NumberField label="Videos" description="Maximo de videos analisados em um mesmo lote de mensagens." value={behaviorDraft.mediaBatchVideoLimit} min={1} max={5} onChange={(value) => updateBehavior("mediaBatchVideoLimit", value)} />
-                    <NumberField label="Documentos" description="Maximo de documentos analisados em um mesmo lote de mensagens." value={behaviorDraft.mediaBatchDocumentLimit} min={1} max={8} onChange={(value) => updateBehavior("mediaBatchDocumentLimit", value)} />
-                  </div>
+                <div className="grid gap-2 md:grid-cols-3">
+                  <NumberField label="Imagens" description="Maximo de imagens analisadas quando o lead envia varias midias juntas." value={behaviorDraft.mediaBatchImageLimit} min={1} max={20} onChange={(value) => updateBehavior("mediaBatchImageLimit", value)} />
+                  <NumberField label="Videos" description="Maximo de videos analisados em um mesmo lote de mensagens." value={behaviorDraft.mediaBatchVideoLimit} min={1} max={5} onChange={(value) => updateBehavior("mediaBatchVideoLimit", value)} />
+                  <NumberField label="Documentos" description="Maximo de documentos analisados em um mesmo lote de mensagens." value={behaviorDraft.mediaBatchDocumentLimit} min={1} max={8} onChange={(value) => updateBehavior("mediaBatchDocumentLimit", value)} />
                 </div>
               </BehaviorSection>
 
@@ -2461,7 +2490,7 @@ export function WhatsAppConsole({
               </BehaviorSection>
             </div>
 
-              <BehaviorSummary behavior={behaviorDraft} promptChanged={promptChanged} behaviorChanged={behaviorChanged} />
+              <BehaviorSummary behavior={behaviorDraft} promptChanged={promptChanged} behaviorChanged={behaviorChanged || companyLocationsChanged} />
 
             <div className="flex flex-wrap gap-2 2xl:col-start-2">
               <SecondaryAction
@@ -2669,6 +2698,62 @@ function normalizeAgentAutomationRoles(value: AgentAutomationRoles | null | unde
 
 function isBehaviorEqual(left: WhatsappBehaviorConfig, right: WhatsappBehaviorConfig) {
   return JSON.stringify(normalizeWhatsappBehaviorConfig(left)) === JSON.stringify(normalizeWhatsappBehaviorConfig(right));
+}
+
+function createEmptyCompanyLocationDraft(): CompanyLocationDraft {
+  return {
+    id: null,
+    label: "Unidade principal",
+    address: "",
+    cep: "",
+    city: "",
+    region: "",
+    mapsUrl: "",
+    latitude: "",
+    longitude: "",
+    isPrimary: true,
+    notes: "",
+  };
+}
+
+function toCompanyLocationDrafts(locations: OrganizationLocation[]): CompanyLocationDraft[] {
+  if (locations.length === 0) {
+    return [createEmptyCompanyLocationDraft()];
+  }
+
+  return locations.map((location, index) => ({
+    id: location.id,
+    label: location.label || (index === 0 ? "Unidade principal" : `Unidade ${index + 1}`),
+    address: location.address ?? "",
+    cep: location.cep ?? "",
+    city: location.city ?? "",
+    region: location.region ?? "",
+    mapsUrl: location.mapsUrl ?? "",
+    latitude: location.latitude === null ? "" : String(location.latitude),
+    longitude: location.longitude === null ? "" : String(location.longitude),
+    isPrimary: location.isPrimary || index === 0,
+    notes: location.notes ?? "",
+  }));
+}
+
+function normalizeCompanyLocationDraftsForSave(drafts: CompanyLocationDraft[]) {
+  return normalizeOrganizationLocations(drafts.map((draft) => ({
+    id: draft.id,
+    label: draft.label,
+    address: draft.address,
+    cep: draft.cep,
+    city: draft.city,
+    region: draft.region,
+    mapsUrl: draft.mapsUrl,
+    latitude: draft.latitude,
+    longitude: draft.longitude,
+    isPrimary: draft.isPrimary,
+    notes: draft.notes,
+  })));
+}
+
+function isCompanyLocationDraftsEqual(drafts: CompanyLocationDraft[], locations: OrganizationLocation[]) {
+  return JSON.stringify(normalizeCompanyLocationDraftsForSave(drafts)) === JSON.stringify(normalizeOrganizationLocations(locations));
 }
 
 function isAgentChannelConfigEqual(left: AgentChannelConfig, right: AgentChannelConfig) {
@@ -5412,6 +5497,118 @@ function TextAreaField({
   );
 }
 
+function CompanyLocationsEditor({
+  locations,
+  onAdd,
+  onChange,
+  onPrimary,
+  onRemove,
+}: {
+  locations: CompanyLocationDraft[];
+  onAdd: () => void;
+  onChange: (index: number, patch: Partial<CompanyLocationDraft>) => void;
+  onPrimary: (index: number) => void;
+  onRemove: (index: number) => void;
+}) {
+  return (
+    <div className="grid gap-3">
+      <div className="grid gap-3">
+        {locations.map((location, index) => (
+          <div
+            key={`${location.id ?? "new"}-${index}`}
+            className="rounded-lg border p-3"
+            style={{ background: "var(--ch-panel-2)", borderColor: "var(--ch-border)" }}
+          >
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-slate-400">
+                {location.isPrimary ? "unidade principal" : `unidade ${index + 1}`}
+              </span>
+              <div className="flex flex-wrap gap-2">
+                {!location.isPrimary ? (
+                  <SecondaryAction
+                    icon={ShieldCheck}
+                    label="Principal"
+                    description="Usar esta unidade quando o lead nao especificar qual local quer."
+                    onClick={() => onPrimary(index)}
+                  />
+                ) : null}
+                <SecondaryAction
+                  icon={Trash2}
+                  label="Remover"
+                  disabled={locations.length === 1 && !location.address && !location.mapsUrl && !location.latitude && !location.longitude}
+                  tone="danger"
+                  onClick={() => onRemove(index)}
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-3 xl:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
+              <TextField
+                label="Nome da unidade"
+                description="Ex.: Loja Centro, Matriz, Unidade Sao Paulo."
+                value={location.label}
+                onChange={(label) => onChange(index, { label })}
+              />
+              <TextAreaField
+                label="Endereco completo"
+                description="Endereco que o agente pode enviar por texto."
+                minHeight="72px"
+                value={location.address}
+                onChange={(address) => onChange(index, { address })}
+              />
+            </div>
+
+            <div className="mt-3 grid gap-3 md:grid-cols-3">
+              <TextField label="CEP" value={location.cep} onChange={(cep) => onChange(index, { cep })} />
+              <TextField label="Cidade" value={location.city} onChange={(city) => onChange(index, { city })} />
+              <TextField label="Estado" value={location.region} onChange={(region) => onChange(index, { region })} />
+            </div>
+
+            <div className="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1fr)_160px_160px]">
+              <TextField
+                label="Link Google Maps"
+                description="Usado quando o pin nativo nao puder ser enviado ou para complementar a resposta."
+                value={location.mapsUrl}
+                onChange={(mapsUrl) => onChange(index, { mapsUrl })}
+              />
+              <TextField
+                label="Latitude"
+                description="Obrigatoria para enviar pin nativo do WhatsApp."
+                value={location.latitude}
+                onChange={(latitude) => onChange(index, { latitude })}
+              />
+              <TextField
+                label="Longitude"
+                description="Obrigatoria para enviar pin nativo do WhatsApp."
+                value={location.longitude}
+                onChange={(longitude) => onChange(index, { longitude })}
+              />
+            </div>
+
+            <div className="mt-3">
+              <TextAreaField
+                label="Observacoes"
+                description="Ex.: estacionamento, horario de retirada, referencia de chegada."
+                minHeight="64px"
+                value={location.notes}
+                onChange={(notes) => onChange(index, { notes })}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <SecondaryAction
+        icon={Plus}
+        label="Adicionar unidade"
+        description="Use quando a empresa tiver mais de um endereco."
+        disabled={locations.length >= 8}
+        onClick={onAdd}
+      />
+    </div>
+  );
+}
+
 function LeadQualificationEditor({
   config,
   entityLabel,
@@ -5675,27 +5872,6 @@ function BehaviorSummary({
   promptChanged: boolean;
   behaviorChanged: boolean;
 }) {
-  const activeScenarios = [
-    behavior.detectHumanRequest,
-    behavior.humanHandoffAiDetection,
-    behavior.detectRescheduleCancel,
-    behavior.detectPropertyCapture,
-    behavior.detectLocation,
-    behavior.detectOptOut,
-    behavior.analyzeLinks,
-    behavior.quoteReplyMode !== "off",
-    behavior.leadFileStorage,
-    behavior.mediaBurstGuard,
-    behavior.missingMediaCaptionGuard,
-    behavior.audioQualityGuard,
-    behavior.messageEditDeleteAwareness,
-    behavior.contactPollReactionHandling,
-    behavior.topicShiftDetection,
-    behavior.promptInjectionGuard,
-  ].filter(Boolean).length;
-
-  const activeMedia = [behavior.audioTranscription, behavior.mediaImage, behavior.mediaDocument, behavior.mediaVideo].filter(Boolean).length;
-
   const activeHuman = [
     behavior.humanizedLanguage,
     behavior.emojiReactions,
@@ -5708,15 +5884,9 @@ function BehaviorSummary({
     behavior.naturalAudioFillers,
     behavior.sendStickers,
     behavior.proactiveMedia,
-    behavior.agentLearning,
-    behavior.sharedCompanyContext,
-    behavior.cloneMemory,
-    behavior.cloneConsistencyGuard,
-    behavior.identityGuard,
-    behavior.leadMemory,
-    behavior.emotionSensing,
-    behavior.conversationChoreography,
-    behavior.confidenceHumility,
+    behavior.wpmTypingModel,
+    behavior.midMessageCorrections,
+    behavior.smallTalk,
   ].filter(Boolean).length;
 
   return (
@@ -5724,12 +5894,10 @@ function BehaviorSummary({
       <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Resumo</p>
       <div className="mt-4 space-y-3">
         <PromptCheck label="Agente ativo" active={behavior.agentEnabled} />
-        <PromptCheck label={`${activeScenarios}/16 cenarios ativos`} active={activeScenarios >= 8} />
-        <PromptCheck label={`${activeMedia}/4 midias ativas`} active={activeMedia >= 2} />
-        <PromptCheck label={`${activeHuman}/20 simulacao humana`} active={activeHuman >= 10} />
+        <PromptCheck label={`${activeHuman}/14 simulacao humana`} active={activeHuman >= 7} />
+        <PromptCheck label="Citacao inteligente" active={behavior.quoteReplyMode !== "off"} />
         <PromptCheck label="Intervencao humana" active={behavior.humanIntervention} />
         <PromptCheck label="Aviso humano WhatsApp" active={behavior.humanHandoffNotifications && Boolean(behavior.humanHandoffNotificationNumbers.trim())} />
-        <PromptCheck label="Memoria do clone" active={behavior.cloneMemory} />
         <PromptCheck label="Teste real do clone" active={behavior.cloneRealTestMode} />
         <PromptCheck label="Grupos WhatsApp" active={behavior.allowGroupChats} />
         <PromptCheck label="Temporizacao inteligente" active={behavior.smartTiming} />

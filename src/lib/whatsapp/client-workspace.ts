@@ -23,6 +23,8 @@ import {
 import { decryptCredentialValue, encryptCredentialValue, previewCredentialValue } from "@/lib/security/credentials-crypto";
 import type { CurrentOrganization } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
+import type { OrganizationLocation } from "@/lib/company-locations/shared";
+import { listOrganizationLocations, replaceOrganizationLocations } from "@/lib/company-locations/server";
 import { buildTrackedLinkUrl } from "@/lib/tracking/tracked-links";
 import { resolveUazapiWhatsappStatus } from "@/lib/uazapi/status";
 import { listOrganizationSalesCatalog } from "@/lib/client-os/sales-catalog";
@@ -256,6 +258,7 @@ export type ClientWhatsappState = {
     files: ClientKnowledgeFile[];
   };
   linkButtons: ClientTrackedLinkButton[];
+  companyLocations: OrganizationLocation[];
   salesCatalog: ClientSalesCatalogItem[];
   cloneTest: ClientCloneRealTestSummary;
   runtimeAlerts: ClientWhatsappRuntimeAlert[];
@@ -315,16 +318,17 @@ export async function getClientWhatsappState(input: {
 }): Promise<ClientWhatsappState> {
   const client = input.client ?? createServiceClient();
   const agent = await getWorkspaceWhatsappAgent(client, input.organization.id, input.agentId);
-  const [rawInstance, globalAgent, knowledgeFiles, salesCatalog, cloneTest] = await Promise.all([
+  const [rawInstance, globalAgent, knowledgeFiles, linkButtons, companyLocations, salesCatalog, cloneTest] = await Promise.all([
     getWorkspaceInstance(client, input.organization.id, agent),
     getOrCreateWorkspaceGlobalAgent(client, input.organization, input.userId),
     listWorkspaceKnowledge(client, input.organization.id),
+    listWorkspaceLinkButtons(client, input.organization.id),
+    listOrganizationLocations(client, input.organization.id),
     listOrganizationSalesCatalog(client, input.organization.id, 80, { promoteLegacyLinkButtons: true }),
     agent
       ? listOrganizationCloneRealTests(client, input.organization.id, agent.id)
       : Promise.resolve(emptyCloneRealTestSummary()),
   ]);
-  const linkButtons = await listWorkspaceLinkButtons(client, input.organization.id);
 
   const instance = rawInstance?.instance_token_encrypted && rawInstance.status !== "connected"
     ? await syncClientInstanceStatus(client, rawInstance).catch(() => rawInstance)
@@ -340,7 +344,7 @@ export async function getClientWhatsappState(input: {
     }),
   ]);
 
-  return buildState(input.organization, instance, agent, globalAgent, behavior, audio, knowledgeFiles, linkButtons, salesCatalog, cloneTest, runtimeAlerts);
+  return buildState(input.organization, instance, agent, globalAgent, behavior, audio, knowledgeFiles, linkButtons, companyLocations, salesCatalog, cloneTest, runtimeAlerts);
 }
 
 export async function listWhatsappRuntimeAlerts(
@@ -1115,6 +1119,7 @@ export async function updateClientWhatsappPrompt(input: {
   qualificationConfig?: unknown;
   channelConfig?: unknown;
   promptTemplateConfig?: unknown;
+  companyLocations?: unknown;
   client?: SupabaseClient;
 }): Promise<ClientWhatsappState> {
   const agentPrompt = (input.agentPrompt ?? input.prompt)?.trim();
@@ -1179,6 +1184,7 @@ export async function updateClientWhatsappPrompt(input: {
   const nextPromptTemplateConfig = hasPromptTemplateConfig
     ? normalizeAgentPromptBuilderConfig(input.promptTemplateConfig, { updatedAt: new Date().toISOString() })
     : getPromptTemplateConfig(agent);
+  const hasCompanyLocations = input.companyLocations !== undefined;
 
   if (hasChannelConfig) {
     const metaEntitlement = resolveMetaSocialChannelsEntitlement({
@@ -1291,6 +1297,15 @@ export async function updateClientWhatsappPrompt(input: {
         },
       })
       .eq("id", resolvedInstance.id);
+  }
+
+  if (hasCompanyLocations) {
+    await replaceOrganizationLocations({
+      client,
+      organizationId: input.organization.id,
+      userId: input.userId,
+      locations: input.companyLocations,
+    });
   }
 
   revalidatePath("/dashboard/whatsapp");
@@ -2463,6 +2478,7 @@ function buildState(
   audio: WhatsappAudioVoiceState,
   knowledgeFiles: ClientKnowledgeFile[],
   linkButtons: ClientTrackedLinkButton[],
+  companyLocations: OrganizationLocation[],
   salesCatalog: ClientSalesCatalogItem[],
   cloneTest: ClientCloneRealTestSummary = emptyCloneRealTestSummary(),
   runtimeAlerts: ClientWhatsappRuntimeAlert[] = [],
@@ -2530,6 +2546,7 @@ function buildState(
       files: knowledgeFiles,
     },
     linkButtons,
+    companyLocations,
     salesCatalog,
     cloneTest,
     runtimeAlerts,

@@ -476,6 +476,8 @@ export function normalizeWhatsappBehaviorConfig(value: unknown): WhatsappBehavio
     merged.negotiationTracking = false;
     merged.smallTalk = false;
     merged.turingBenchmark = false;
+  } else {
+    forceStandardBehaviorForActiveAgents(merged);
   }
 
   if (merged.whatsappCampaignDelayMaxSeconds < merged.whatsappCampaignDelayMinSeconds) {
@@ -483,6 +485,39 @@ export function normalizeWhatsappBehaviorConfig(value: unknown): WhatsappBehavio
   }
 
   return merged;
+}
+
+function forceStandardBehaviorForActiveAgents(behavior: WhatsappBehaviorConfig) {
+  behavior.audioTranscription = true;
+  behavior.detectHumanRequest = true;
+  behavior.humanHandoffAiDetection = true;
+  behavior.detectRescheduleCancel = true;
+  behavior.detectPropertyCapture = true;
+  behavior.detectLocation = true;
+  behavior.detectOptOut = true;
+  behavior.analyzeLinks = true;
+  behavior.leadFileStorage = true;
+  behavior.mediaBurstGuard = true;
+  behavior.missingMediaCaptionGuard = true;
+  behavior.audioQualityGuard = true;
+  behavior.messageEditDeleteAwareness = true;
+  behavior.contactPollReactionHandling = true;
+  behavior.topicShiftDetection = true;
+  behavior.promptInjectionGuard = true;
+  behavior.sharedCompanyContext = true;
+  behavior.cloneMemory = true;
+  behavior.cloneConsistencyGuard = true;
+  behavior.identityGuard = true;
+  behavior.leadMemory = true;
+  behavior.emotionSensing = true;
+  behavior.conversationChoreography = true;
+  behavior.confidenceHumility = true;
+  behavior.mediaImage = true;
+  behavior.mediaDocument = true;
+  behavior.mediaVideo = true;
+  behavior.temporalAwareness = true;
+  behavior.conversationArcMemory = true;
+  behavior.negotiationTracking = true;
 }
 
 export function mergeWhatsappHandoffNotificationSettings(

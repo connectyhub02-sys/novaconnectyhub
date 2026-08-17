@@ -215,6 +215,7 @@ export async function PATCH(request: NextRequest) {
     qualificationConfig?: unknown;
     channelConfig?: unknown;
     promptTemplateConfig?: unknown;
+    companyLocations?: unknown;
   }>(request);
   const context = await requireWorkspaceContext({
     requestedCompanyId: asString(body?.companyId),
@@ -252,6 +253,7 @@ export async function PATCH(request: NextRequest) {
       qualificationConfig: body?.qualificationConfig,
       channelConfig: body?.channelConfig,
       promptTemplateConfig: body?.promptTemplateConfig,
+      companyLocations: body?.companyLocations,
     });
 
     return NextResponse.json(attachWorkspace(context, state));
@@ -386,6 +388,7 @@ function buildUnavailableState(): DashboardWhatsappState {
       files: [],
     },
     linkButtons: [],
+    companyLocations: [],
     salesCatalog: [],
     cloneTest: {
       total: 0,

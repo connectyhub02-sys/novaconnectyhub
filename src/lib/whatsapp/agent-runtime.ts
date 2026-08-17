@@ -31,6 +31,13 @@ import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
 import { loadR2Config, putR2Object } from "@/lib/storage/r2";
 import { assertStorageUploadAllowed, recordOrganizationStorageUsage } from "@/lib/storage/quotas";
 import { createServiceClient } from "@/lib/supabase/service";
+import {
+  formatOrganizationLocationAddress,
+  hasOrganizationLocationCoordinates,
+  hasUsableOrganizationLocation,
+  type OrganizationLocation,
+} from "@/lib/company-locations/shared";
+import { listOrganizationLocations } from "@/lib/company-locations/server";
 import { appendLeadTrackingParams, buildTrackedLinkUrl } from "@/lib/tracking/tracked-links";
 import {
   getOrganizationSalesCatalogSettings,
@@ -205,6 +212,7 @@ type RuntimeLinkButton = {
 
 type RuntimeSalesCatalogItem = ClientSalesCatalogItem;
 type RuntimeSalesCatalogOrder = ClientSalesCatalogOrder;
+type RuntimeOrganizationLocation = OrganizationLocation;
 
 type SalesCatalogPaymentLinkResult = {
   orderId: string;
@@ -268,6 +276,8 @@ type OutboundMessage = {
   fallbackReason?: string;
   interactiveButton?: boolean;
   buttonFallback?: boolean;
+  locationMessage?: boolean;
+  location?: JsonRecord;
   chunkIndex?: number;
   chunksTotal?: number;
   persisted?: boolean;
@@ -604,6 +614,38 @@ export async function processWhatsappAgentRun(input: {
 
     await maybeSetInstanceAvailable(context, token, "before");
 
+    const companyLocationReply = resolveCompanyLocationReply({
+      organization,
+      locations: context.companyLocations,
+      latestInbound,
+      userText,
+    });
+
+    if (companyLocationReply) {
+      const outbound = await sendCompanyLocationReply({
+        client,
+        context,
+        token,
+        phone,
+        latestInbound,
+        reply: companyLocationReply,
+      });
+
+      if (behavior.markAsRead) {
+        await markConversationRead(context.credentials, token, phone, context.providerChatId, context.providerMessageId);
+      }
+
+      await maybeSetInstanceAvailable(context, token, "after");
+
+      return await completeRun(client, run.id, preview(companyLocationReply.text, 500), {
+        sent: true,
+        reason: companyLocationReply.reason,
+        messages: outbound.length,
+        mode: outbound[0]?.mode ?? "text",
+        company_location_id: companyLocationReply.location?.id ?? null,
+      });
+    }
+
     const registeredClientContext = isElianeRuntimeAgent(agent)
       ? await loadRegisteredClientProfileContext(client, {
           phoneNumber: context.phoneNumber ?? lead?.phone_number ?? context.providerChatId,
@@ -628,6 +670,7 @@ export async function processWhatsappAgentRun(input: {
       lead,
       knowledge: context.knowledge,
       linkButtons: context.linkButtons,
+      companyLocations: context.companyLocations,
       salesCatalog: context.salesCatalog,
       salesCatalogSettings: context.salesCatalogSettings,
       salesCatalogShippingQuotes,
@@ -772,10 +815,11 @@ async function loadRunContext(client: SupabaseClient, runId: string) {
   const instanceMetadata = readRecord(instance.metadata);
   const sectorId = asString(instanceMetadata?.sector_id) ?? asString(readRecord(agent.metadata)?.sector_id);
   const isPlatformWhatsapp = instanceMetadata?.admin_whatsapp === true && Boolean(sectorId);
-  const [knowledge, linkButtons, salesCatalog, salesCatalogSettings, salesCatalogShippingSettings, salesCatalogOrders] = isPlatformWhatsapp && sectorId
+  const [knowledge, linkButtons, companyLocations, salesCatalog, salesCatalogSettings, salesCatalogShippingSettings, salesCatalogOrders] = isPlatformWhatsapp && sectorId
     ? await Promise.all([
         loadPlatformSectorKnowledge(client, sectorId),
         loadPlatformSectorLinkButtons(client, sectorId),
+        Promise.resolve([] as RuntimeOrganizationLocation[]),
         Promise.resolve([] as RuntimeSalesCatalogItem[]),
         Promise.resolve(null as ClientSalesCatalogSettings | null),
         Promise.resolve(null as ClientSalesCatalogShippingSettings | null),
@@ -784,6 +828,7 @@ async function loadRunContext(client: SupabaseClient, runId: string) {
     : await Promise.all([
         loadOrganizationKnowledge(client, run.organization_id),
         loadOrganizationLinkButtons(client, run.organization_id),
+        listOrganizationLocations(client, run.organization_id),
         listOrganizationSalesCatalog(client, run.organization_id).then((items) => items.filter((item) => (
           item.status === "active"
           && isSalesCatalogVisibleForRuntime(item, {
@@ -833,6 +878,7 @@ async function loadRunContext(client: SupabaseClient, runId: string) {
     geminiCredentials,
     knowledge,
     linkButtons,
+    companyLocations,
     salesCatalog,
     salesCatalogSettings,
     salesCatalogShippingSettings,
@@ -1725,6 +1771,7 @@ async function generateAgentResponse(input: {
   lead: LeadRow | null;
   knowledge: KnowledgeMemoryRow[];
   linkButtons: RuntimeLinkButton[];
+  companyLocations: RuntimeOrganizationLocation[];
   salesCatalog: RuntimeSalesCatalogItem[];
   salesCatalogSettings: ClientSalesCatalogSettings | null;
   salesCatalogShippingQuotes: RuntimeSalesCatalogShippingQuote[];
@@ -1795,6 +1842,7 @@ function buildSystemInstruction(input: {
   lead: LeadRow | null;
   knowledge: KnowledgeMemoryRow[];
   linkButtons: RuntimeLinkButton[];
+  companyLocations: RuntimeOrganizationLocation[];
   salesCatalog: RuntimeSalesCatalogItem[];
   salesCatalogSettings: ClientSalesCatalogSettings | null;
   salesCatalogShippingQuotes: RuntimeSalesCatalogShippingQuote[];
@@ -1849,6 +1897,7 @@ function buildSystemInstruction(input: {
     ...buildRegisteredClientProfileLines(input.registeredClientContext, input.agent),
     ...buildKnowledgeLines(input.knowledge),
     ...buildLinkButtonLines(input.linkButtons, input),
+    ...buildOrganizationLocationLines(input.companyLocations),
     ...buildSalesCatalogLines(input.salesCatalog),
     ...buildSalesCatalogCommerceLines(input.salesCatalogSettings),
     ...buildSalesCatalogShippingQuoteLines(input.salesCatalogShippingQuotes),
@@ -3012,8 +3061,40 @@ function buildLinkButtonLines(
   ];
 }
 
+function buildOrganizationLocationLines(locations: RuntimeOrganizationLocation[]) {
+  const usableLocations = locations.filter(hasUsableOrganizationLocation);
+
+  if (usableLocations.length === 0) {
+    return [
+      "",
+      "LOCALIZACAO DA EMPRESA:",
+      "- Nenhuma localizacao oficial foi cadastrada no painel. Se o lead pedir endereco/localizacao, nao invente; diga que vai confirmar ou peca para falar com um atendente.",
+    ];
+  }
+
+  return [
+    "",
+    "LOCALIZACOES CADASTRADAS DA EMPRESA:",
+    ...usableLocations.slice(0, 8).map((location) => {
+      const address = formatOrganizationLocationAddress(location);
+      const parts = [
+        location.isPrimary ? "principal" : null,
+        address || null,
+        location.mapsUrl ? `Maps: ${location.mapsUrl}` : null,
+        hasOrganizationLocationCoordinates(location) ? "pin nativo disponivel" : null,
+        location.notes ? `obs: ${location.notes}` : null,
+      ].filter(Boolean);
+
+      return `- ${location.label}: ${parts.join(" | ")}`;
+    }),
+    "Quando o lead pedir onde fica, endereco, Maps ou localizacao da empresa, use somente uma das localizacoes cadastradas. Se houver varias e o lead nao especificar, pergunte qual unidade ele quer.",
+  ];
+}
+
 function buildSalesCatalogLines(items: RuntimeSalesCatalogItem[]) {
-  if (items.length === 0) {
+  const sellableItems = items.filter(isSalesCatalogItemSellable);
+
+  if (sellableItems.length === 0) {
     return [];
   }
 
@@ -3034,7 +3115,7 @@ function buildSalesCatalogLines(items: RuntimeSalesCatalogItem[]) {
     "- Para servico ou assinatura, confirme escopo, agenda/duracao e proximo passo antes de pedir pagamento.",
     "- Se o item tiver arquivos, o sistema tentara enviar as midias no WhatsApp depois da resposta.",
     "- Se nao houver item adequado, faca uma pergunta curta para identificar melhor a necessidade.",
-    ...items.slice(0, 40).map((item) => {
+    ...sellableItems.slice(0, 40).map((item) => {
       const mediaSummary = item.media.length > 0
         ? `${item.media.length} arquivo(s): ${item.media.map((media) => media.kind).join(", ")}`
         : "sem arquivo";
@@ -4334,6 +4415,222 @@ async function sendAgentResponse(input: {
   return outbound;
 }
 
+type CompanyLocationReply = {
+  text: string;
+  reason: "company_location_single" | "company_location_multiple";
+  location: RuntimeOrganizationLocation | null;
+};
+
+function resolveCompanyLocationReply(input: {
+  organization: OrganizationRow;
+  locations: RuntimeOrganizationLocation[];
+  latestInbound: ConversationMessageRow | null;
+  userText: string;
+}): CompanyLocationReply | null {
+  if (!isBusinessLocationRequest(input.userText, input.latestInbound)) {
+    return null;
+  }
+
+  const usableLocations = input.locations.filter(hasUsableOrganizationLocation);
+
+  if (usableLocations.length === 0) {
+    return null;
+  }
+
+  if (usableLocations.length === 1) {
+    const location = usableLocations[0];
+    return {
+      text: buildSingleCompanyLocationText(input.organization, location),
+      reason: "company_location_single",
+      location,
+    };
+  }
+
+  return {
+    text: buildMultipleCompanyLocationsText(usableLocations),
+    reason: "company_location_multiple",
+    location: null,
+  };
+}
+
+async function sendCompanyLocationReply(input: {
+  client: SupabaseClient;
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
+  token: string;
+  phone: string;
+  latestInbound: ConversationMessageRow | null;
+  reply: CompanyLocationReply;
+}): Promise<OutboundMessage[]> {
+  const outbound: OutboundMessage[] = [];
+  const textProviderResponse = await sendWhatsappText({
+    credentials: input.context.credentials,
+    token: input.token,
+    phone: input.phone,
+    text: input.reply.text,
+    trackId: `company_location_text_${input.context.run.id}`,
+    replyId: input.latestInbound?.provider_message_id ?? undefined,
+    mentions: resolveGroupMentions(input.context, input.latestInbound),
+  });
+  const textMessage: OutboundMessage = {
+    text: input.reply.text,
+    mode: "text",
+    providerResponse: textProviderResponse,
+    chunkIndex: 1,
+    chunksTotal: input.reply.location && hasOrganizationLocationCoordinates(input.reply.location) ? 2 : 1,
+  };
+
+  await saveOutboundMessage(input.client, input.context, textMessage);
+  outbound.push({ ...textMessage, persisted: true });
+
+  if (input.reply.location && hasOrganizationLocationCoordinates(input.reply.location)) {
+    const locationText = buildLocationMessageText(input.reply.location);
+
+    try {
+      const locationProviderResponse = await sendWhatsappLocation({
+        credentials: input.context.credentials,
+        token: input.token,
+        phone: input.phone,
+        location: input.reply.location,
+        trackId: `company_location_pin_${input.context.run.id}`,
+        replyId: input.latestInbound?.provider_message_id ?? undefined,
+        mentions: resolveGroupMentions(input.context, input.latestInbound),
+      });
+      const locationMessage: OutboundMessage = {
+        text: locationText,
+        mode: "text",
+        providerResponse: locationProviderResponse,
+        locationMessage: true,
+        location: serializeOrganizationLocation(input.reply.location),
+        chunkIndex: 2,
+        chunksTotal: 2,
+      };
+
+      await saveOutboundMessage(input.client, input.context, locationMessage);
+      outbound.push({ ...locationMessage, persisted: true });
+    } catch (error) {
+      await persistCompanyLocationSendFallback(input.client, input.context, input.reply.location, error).catch(() => {});
+    }
+  }
+
+  return outbound;
+}
+
+function buildSingleCompanyLocationText(organization: OrganizationRow, location: RuntimeOrganizationLocation) {
+  const address = formatOrganizationLocationAddress(location);
+  const lines = [
+    `${location.label || organization.name}:`,
+    address || location.mapsUrl || "localizacao cadastrada",
+    location.mapsUrl ? `maps: ${location.mapsUrl}` : null,
+    hasOrganizationLocationCoordinates(location) ? "vou mandar o pin aqui tambem." : null,
+  ];
+
+  return lines.filter(Boolean).join("\n");
+}
+
+function buildMultipleCompanyLocationsText(locations: RuntimeOrganizationLocation[]) {
+  const lines = [
+    "tenho mais de uma unidade cadastrada:",
+    "",
+    ...locations.slice(0, 8).map((location, index) => {
+      const address = formatOrganizationLocationAddress(location) || location.mapsUrl || "endereco nao detalhado";
+      return `${index + 1}. ${location.label}: ${address}`;
+    }),
+    "",
+    "qual delas vc quer que eu te mande?",
+  ];
+
+  return lines.join("\n");
+}
+
+function buildLocationMessageText(location: RuntimeOrganizationLocation) {
+  return [
+    location.label,
+    formatOrganizationLocationAddress(location),
+    location.mapsUrl,
+  ].filter(Boolean).join("\n");
+}
+
+function isBusinessLocationRequest(userText: string, latestInbound: ConversationMessageRow | null) {
+  const normalized = normalizeSearch(userText);
+
+  if (!normalized || latestInbound?.message_type?.toLowerCase().includes("location")) {
+    return false;
+  }
+
+  if (isLeadOwnLocationMessage(normalized)) {
+    return false;
+  }
+
+  return [
+    /\bonde (?:fica|voces ficam|e a loja|e o local)\b/,
+    /\b(?:qual|manda|envia|me passa|pode mandar|tem) (?:o )?endereco\b/,
+    /\b(?:manda|envia|me manda|me passa|pode mandar|tem) (?:a )?localizacao\b/,
+    /\b(?:google maps|maps|como chegar)\b/,
+    /\bendereco (?:da|do|de voces|de vcs|da loja|do local|da empresa)\b/,
+    /\blocalizacao (?:da|do|de voces|de vcs|da loja|do local|da empresa)\b/,
+    /\b(?:retirada|retirar|buscar) (?:na loja|no local|ai|aonde)\b/,
+    /\bvcs ficam onde\b/,
+    /^(?:endereco|localizacao)$/,
+  ].some((pattern) => pattern.test(normalized));
+}
+
+function isLeadOwnLocationMessage(normalized: string) {
+  return [
+    /\bmeu endereco\b/,
+    /\bmeu cep\b/,
+    /\bminha rua\b/,
+    /\bmeu bairro\b/,
+    /\bminha localizacao\b/,
+    /\bestou em\b/,
+    /\bmoro em\b/,
+    /\bentregar em\b/,
+    /\bentrega em\b/,
+    /\bpara entregar\b/,
+  ].some((pattern) => pattern.test(normalized));
+}
+
+function serializeOrganizationLocation(location: RuntimeOrganizationLocation): JsonRecord {
+  return {
+    id: location.id,
+    label: location.label,
+    address: location.address,
+    cep: location.cep,
+    city: location.city,
+    region: location.region,
+    mapsUrl: location.mapsUrl,
+    latitude: location.latitude,
+    longitude: location.longitude,
+    isPrimary: location.isPrimary,
+  };
+}
+
+async function persistCompanyLocationSendFallback(
+  client: SupabaseClient,
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+  location: RuntimeOrganizationLocation,
+  error: unknown,
+) {
+  await client.from("intelligence_events").insert({
+    scope: "organization",
+    organization_id: context.organization.id,
+    source_type: "whatsapp",
+    source_id: context.conversationId,
+    producer_agent_id: context.agent.id,
+    event_type: "whatsapp.company_location.pin_failed",
+    title: "Falha ao enviar pin de localizacao",
+    summary: describeRuntimeError(error, "Falha desconhecida ao enviar localizacao."),
+    confidence: 0.86,
+    visibility: "organization",
+    tags: ["whatsapp", "location", "fallback"],
+    payload: {
+      agentRunId: context.run.id,
+      conversationId: context.conversationId,
+      leadId: context.lead?.id ?? null,
+      location: serializeOrganizationLocation(location),
+    },
+  });
+}
+
 function shouldUseMixedAudioDelivery(
   context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
   latestInbound: ConversationMessageRow | null,
@@ -4682,6 +4979,7 @@ function renderSalesCatalogTags(text: string, items: RuntimeSalesCatalogItem[]) 
   const selected = new Map<string, RuntimeSalesCatalogItem>();
 
   for (const item of items) {
+    if (!isSalesCatalogItemSellable(item)) continue;
     if (!item.tag || !rendered.includes(item.tag)) continue;
 
     selected.set(item.id, item);
@@ -4698,6 +4996,8 @@ function collectSalesCatalogAttachments(items: RuntimeSalesCatalogItem[]) {
   const attachments: Array<{ item: RuntimeSalesCatalogItem; media: SalesCatalogMedia }> = [];
 
   for (const item of items) {
+    if (!isSalesCatalogItemSellable(item)) continue;
+
     for (const media of item.media) {
       if (!media.storageUrl) continue;
 
@@ -5104,7 +5404,23 @@ async function scheduleSalesCatalogOrderAbandonedFollowUp(input: {
 }
 
 function isSalesCatalogItemSellable(item: RuntimeSalesCatalogItem) {
-  return item.inventory.status !== "out_of_stock" || item.inventory.allowBackorder;
+  const hasStock = item.inventory.status !== "out_of_stock" || item.inventory.allowBackorder;
+  return hasStock && hasRuntimeSalesCatalogPrice(item);
+}
+
+function hasRuntimeSalesCatalogPrice(item: RuntimeSalesCatalogItem) {
+  const candidates = [
+    item.offer.salePrice,
+    item.price,
+    ...item.skus
+      .filter((sku) => sku.status === "active" && (sku.stockStatus !== "out_of_stock" || item.inventory.allowBackorder))
+      .flatMap((sku) => [sku.salePrice, sku.price]),
+  ];
+
+  return candidates.some((value) => {
+    const amount = normalizeCurrencyAmount(value);
+    return typeof amount === "number" && amount > 0;
+  });
 }
 
 async function persistSalesCatalogUnavailableOrderAttempt(input: {
@@ -5922,6 +6238,38 @@ async function sendWhatsappText(input: {
   });
 }
 
+async function sendWhatsappLocation(input: {
+  credentials: UazapiCredentials;
+  token: string;
+  phone: string;
+  location: RuntimeOrganizationLocation;
+  trackId: string;
+  replyId?: string;
+  mentions?: string;
+}) {
+  if (!hasOrganizationLocationCoordinates(input.location)) {
+    throw new Error("Localizacao sem latitude/longitude para envio nativo.");
+  }
+
+  return callUazapi(input.credentials, "/send/location", {
+    method: "POST",
+    token: input.token,
+    body: {
+      number: input.phone,
+      name: input.location.label,
+      address: formatOrganizationLocationAddress(input.location) || input.location.address || input.location.label,
+      latitude: input.location.latitude,
+      longitude: input.location.longitude,
+      readchat: true,
+      readmessages: true,
+      ...(input.replyId ? { replyid: input.replyId } : {}),
+      ...(input.mentions ? { mentions: input.mentions } : {}),
+      track_source: "connectyhub",
+      track_id: input.trackId,
+    },
+  });
+}
+
 async function sendWhatsappInteractiveButtons(input: {
   credentials: UazapiCredentials;
   token: string;
@@ -5966,6 +6314,8 @@ async function saveOutboundMessage(
     fallback_reason: message.fallbackReason ?? null,
     interactive_button: message.interactiveButton === true,
     button_fallback: message.buttonFallback === true,
+    location_message: message.locationMessage === true,
+    location: message.location ?? null,
     generated_audio_media_id: message.generatedAudio?.mediaId ?? null,
     generated_audio_object_key: message.generatedAudio?.objectKey ?? null,
     agent_run_id: context.run.id,

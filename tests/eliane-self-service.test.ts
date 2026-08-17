@@ -21,7 +21,7 @@ describe("Eliane self-service positioning", () => {
 
   it("documents the correct wording for beginners in digital marketing", () => {
     expect(elianeAgentSource).toContain("Lead iniciante no marketing digital");
-    expect(elianeAgentSource).toContain("cadastro > entrar no painel > criar empresa > criar agente clone");
+    expect(elianeAgentSource).toContain("cadastro > entrar no painel > criar empresa > Atendimento > Configurar agente > criar agente clone");
     expect(elianeAgentSource).toContain("Exemplo correto: 'vc entra no painel");
     expect(elianeAgentSource).toContain("Exemplo proibido: 'a gente cria seu clone");
   });

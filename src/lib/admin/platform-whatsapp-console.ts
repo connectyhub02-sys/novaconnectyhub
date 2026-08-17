@@ -1426,6 +1426,7 @@ function buildState(
       files: knowledgeFiles,
     },
     linkButtons,
+    companyLocations: [],
     salesCatalog: [],
     cloneTest,
     runtimeAlerts,
