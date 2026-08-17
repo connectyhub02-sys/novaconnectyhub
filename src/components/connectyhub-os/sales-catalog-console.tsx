@@ -4766,7 +4766,7 @@ function CatalogImportItemEditor({
                 Encontramos produto parecido no catalogo. Por seguranca, a acao inicial e ignorar ate voce decidir.
               </p>
             </div>
-            <NeonBadge tone="warning">{Math.round((item.duplicateCandidates[0]?.score ?? 0) * 100)}%</NeonBadge>
+            <NeonBadge tone="amber">{Math.round((item.duplicateCandidates[0]?.score ?? 0) * 100)}%</NeonBadge>
           </div>
 
           <select
