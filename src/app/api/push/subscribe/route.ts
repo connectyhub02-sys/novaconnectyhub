@@ -10,6 +10,7 @@ import {
   decideOrganizationAttribution,
   verifyOrganizationTrackingToken,
 } from "@/lib/tracking/organization-attribution";
+import { resolveLeadTrackingContext } from "@/lib/tracking/lead-context";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -21,6 +22,13 @@ type PushSubscribeBody = {
   session_cookie_id?: unknown;
   organization_id?: unknown;
   tracking_token?: unknown;
+  lead_id?: unknown;
+  lead_phone?: unknown;
+  conversation_id?: unknown;
+  order_id?: unknown;
+  payment_session_id?: unknown;
+  tracking_link_id?: unknown;
+  tracking_source?: unknown;
   permission?: unknown;
   subscription?: unknown;
   metadata?: unknown;
@@ -59,6 +67,14 @@ export async function POST(request: NextRequest) {
     ?? readString(request.headers.get("x-connectyhub-tracking-token"));
   const permission = normalizePermission(readString(body.permission));
   const metadata = readRecord(body.metadata) ?? {};
+  const publicTracking = readRecord(metadata.public_tracking) ?? {};
+  const requestedLeadId = readString(body.lead_id) ?? readString(metadata.lead_id) ?? readString(publicTracking.lead_id);
+  const requestedConversationId = readString(body.conversation_id) ?? readString(metadata.conversation_id) ?? readString(publicTracking.conversation_id);
+  const requestedLeadPhone = readString(body.lead_phone) ?? readString(metadata.lead_phone) ?? readString(publicTracking.lead_phone);
+  const orderId = readString(body.order_id) ?? readString(metadata.order_id) ?? readString(publicTracking.order_id);
+  const paymentSessionId = readString(body.payment_session_id) ?? readString(metadata.payment_session_id) ?? readString(publicTracking.payment_session_id);
+  const trackingLinkId = readString(body.tracking_link_id) ?? readString(metadata.tracking_link_id) ?? readString(publicTracking.tracking_link_id);
+  const trackingSource = readString(body.tracking_source) ?? readString(metadata.tracking_source) ?? readString(publicTracking.tracking_source);
   const authUser = await getAuthUser();
   const now = new Date().toISOString();
   const endpointHash = fingerprint(endpoint);
@@ -81,6 +97,12 @@ export async function POST(request: NextRequest) {
     });
     const organizationId = organizationAttribution.organizationId;
     const scope = organizationAttribution.scope;
+    const leadContext = await resolveLeadTrackingContext(client, {
+      organizationId,
+      leadId: requestedLeadId,
+      conversationId: requestedConversationId,
+      leadPhone: requestedLeadPhone,
+    });
     const { data, error } = await client
       .from("push_subscriptions")
       .upsert(
@@ -89,6 +111,12 @@ export async function POST(request: NextRequest) {
           session_cookie_id: sessionId,
           user_id: authUser?.id ?? null,
           organization_id: organizationId,
+          lead_id: leadContext.leadId,
+          conversation_id: leadContext.conversationId,
+          lead_phone: leadContext.leadPhone,
+          subscription_scope: scope === "organization" ? "client" : "platform",
+          traffic_source: trackingSource ?? readString(metadata.source) ?? "web_push_prompt",
+          consent_status: permission,
           endpoint,
           p256dh,
           auth,
@@ -101,6 +129,15 @@ export async function POST(request: NextRequest) {
             organization_attribution: {
               requested_organization_id: requestedOrganizationId,
               result: organizationAttribution.reason,
+            },
+            lead_tracking: {
+              lead_id: leadContext.leadId,
+              lead_phone: leadContext.leadPhone,
+              conversation_id: leadContext.conversationId,
+              order_id: orderId,
+              payment_session_id: paymentSessionId,
+              tracking_link_id: trackingLinkId,
+              tracking_source: trackingSource,
             },
           },
           last_seen_at: now,
@@ -129,6 +166,7 @@ export async function POST(request: NextRequest) {
         "connecty_tracking",
         "push_tracking",
         "subscription_tracking",
+        leadContext.leadId || leadContext.leadPhone ? "lead_tracking" : "visitor_tracking",
         sessionId ? "session_tracking" : "no_session",
         authUser ? "authenticated_user" : "anonymous_visitor",
       ],
@@ -145,6 +183,13 @@ export async function POST(request: NextRequest) {
         subscription_id: data?.id ?? null,
         endpoint_hash: endpointHash,
         permission,
+        lead_id: leadContext.leadId,
+        lead_phone: leadContext.leadPhone,
+        conversation_id: leadContext.conversationId,
+        order_id: orderId,
+        payment_session_id: paymentSessionId,
+        tracking_link_id: trackingLinkId,
+        tracking_source: trackingSource,
         metadata,
         tracked_at: now,
       },
@@ -154,6 +199,7 @@ export async function POST(request: NextRequest) {
       ok: true,
       subscription_id: data?.id ?? null,
       endpoint_hash: endpointHash,
+      lead_id: leadContext.leadId,
     });
   } catch (error) {
     return NextResponse.json(

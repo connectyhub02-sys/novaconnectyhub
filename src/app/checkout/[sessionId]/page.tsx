@@ -19,6 +19,8 @@ import {
   type SalesCatalogCommercialFlowType,
   type SalesCatalogRevenueOwnerType,
 } from "@/lib/sales-catalog/shared";
+import { createOrganizationTrackingToken } from "@/lib/tracking/organization-attribution";
+import type { ConnectyPublicTrackingContext } from "@/lib/tracking/public-context";
 import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -62,6 +64,8 @@ type CheckoutSessionRow = {
 
 type CheckoutOrderRow = {
   id: string;
+  lead_id: string | null;
+  conversation_id: string | null;
   customer_name: string | null;
   customer_phone: string | null;
   subtotal: string | null;
@@ -176,9 +180,14 @@ export default async function CheckoutPage({
     organizationName: organization.name,
     amountLabel: amount,
   });
+  const publicTrackingContext = buildCheckoutPublicTrackingContext({
+    organizationId: organization.id,
+    order,
+    session,
+  });
 
   return (
-    <CheckoutShell>
+    <CheckoutShell publicTrackingContext={publicTrackingContext}>
       <main className="mx-auto grid min-h-screen w-full max-w-6xl gap-6 px-4 py-6 sm:px-6 lg:grid-cols-[minmax(0,1fr)_390px] lg:px-8 lg:py-10">
         <section className="flex flex-col justify-between rounded-[8px] border border-cyan-400/20 bg-slate-950/72 p-5 shadow-2xl shadow-black/30 sm:p-8">
           <div>
@@ -319,9 +328,23 @@ export default async function CheckoutPage({
   );
 }
 
-function CheckoutShell({ children }: { children: ReactNode }) {
+function CheckoutShell({
+  children,
+  publicTrackingContext,
+}: {
+  children: ReactNode;
+  publicTrackingContext?: ConnectyPublicTrackingContext | null;
+}) {
   return (
     <div className="min-h-screen bg-[#050912] text-white">
+      {publicTrackingContext ? (
+        <script
+          id="connecty-public-tracking-context"
+          dangerouslySetInnerHTML={{
+            __html: `window.__CONNECTYHUB_TRACKING_CONTEXT__=${safeJson(publicTrackingContext)};`,
+          }}
+        />
+      ) : null}
       <Script
         id="mercado-pago-security"
         src="https://www.mercadopago.com/v2/security.js"
@@ -332,6 +355,30 @@ function CheckoutShell({ children }: { children: ReactNode }) {
       <div className="relative">{children}</div>
     </div>
   );
+}
+
+function buildCheckoutPublicTrackingContext(input: {
+  organizationId: string;
+  order: CheckoutOrderRow;
+  session: CheckoutSessionRow;
+}): ConnectyPublicTrackingContext {
+  const secret = process.env.TRACKING_PUBLIC_TOKEN_SECRET;
+
+  return {
+    scope: "organization",
+    organization_id: input.organizationId,
+    tracking_token: secret ? createOrganizationTrackingToken(input.organizationId, secret) : null,
+    lead_id: input.order.lead_id,
+    lead_phone: input.order.customer_phone,
+    conversation_id: input.order.conversation_id,
+    order_id: input.order.id,
+    payment_session_id: input.session.id,
+    tracking_source: "sales_catalog_checkout",
+  };
+}
+
+function safeJson(value: unknown) {
+  return JSON.stringify(value).replace(/</g, "\\u003c");
 }
 
 function CheckoutMetric({ label, value }: { label: string; value: string | null }) {
@@ -449,7 +496,7 @@ async function loadCheckoutData(client: ReturnType<typeof createServiceClient>, 
   const [orderResult, itemsResult, organizationResult, whatsappResult, integration] = await Promise.all([
     client
       .from("sales_catalog_orders")
-      .select("id, customer_name, customer_phone, subtotal, shipping_total, total, shipping_method, status, payment_status, commercial_flow_type, revenue_owner_type, contains_platform_products, commission_eligible, metadata")
+      .select("id, lead_id, conversation_id, customer_name, customer_phone, subtotal, shipping_total, total, shipping_method, status, payment_status, commercial_flow_type, revenue_owner_type, contains_platform_products, commission_eligible, metadata")
       .eq("id", session.order_id)
       .eq("organization_id", session.organization_id)
       .maybeSingle<CheckoutOrderRow>(),

@@ -43,12 +43,28 @@ export function buildTrackedLinkUrl(linkId: string) {
 export function appendLeadTrackingParams(
   rawUrl: string,
   input: {
+    organizationId?: string | null;
     leadId?: string | null;
     leadPhone?: string | null;
+    conversationId?: string | null;
+    orderId?: string | null;
+    paymentSessionId?: string | null;
+    trackingLinkId?: string | null;
+    trackingSource?: string | null;
+    trackingToken?: string | null;
   },
 ) {
   try {
     const url = new URL(rawUrl);
+
+    if (input.organizationId) {
+      url.searchParams.set("organization_id", input.organizationId);
+      url.searchParams.set("scope", "organization");
+    }
+
+    if (input.trackingToken) {
+      url.searchParams.set("tracking_token", input.trackingToken);
+    }
 
     if (input.leadId) {
       url.searchParams.set("lead_id", input.leadId);
@@ -58,6 +74,26 @@ export function appendLeadTrackingParams(
 
     if (phone) {
       url.searchParams.set("lead_phone", phone);
+    }
+
+    if (input.conversationId) {
+      url.searchParams.set("conversation_id", input.conversationId);
+    }
+
+    if (input.orderId) {
+      url.searchParams.set("order_id", input.orderId);
+    }
+
+    if (input.paymentSessionId) {
+      url.searchParams.set("payment_session_id", input.paymentSessionId);
+    }
+
+    if (input.trackingLinkId) {
+      url.searchParams.set("tracking_link_id", input.trackingLinkId);
+    }
+
+    if (input.trackingSource) {
+      url.searchParams.set("tracking_source", input.trackingSource);
     }
 
     return url.toString();

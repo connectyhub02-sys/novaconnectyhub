@@ -79,6 +79,7 @@ async function loadOrganizationPushSubscriptions(client: SupabaseClient, organiz
       .select("id, endpoint, user_id, organization_id, last_seen_at")
       .eq("permission", "granted")
       .eq("organization_id", organizationId)
+      .is("unsubscribed_at", null)
       .gte("last_seen_at", cutoff)
       .order("last_seen_at", { ascending: false }),
     memberIds.length
@@ -87,6 +88,7 @@ async function loadOrganizationPushSubscriptions(client: SupabaseClient, organiz
           .select("id, endpoint, user_id, organization_id, last_seen_at")
           .eq("permission", "granted")
           .in("user_id", memberIds)
+          .is("unsubscribed_at", null)
           .gte("last_seen_at", cutoff)
           .order("last_seen_at", { ascending: false })
       : Promise.resolve({ data: [] as PushSubscriptionRow[], error: null }),

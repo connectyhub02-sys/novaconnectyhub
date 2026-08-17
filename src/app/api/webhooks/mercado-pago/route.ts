@@ -30,6 +30,26 @@ type PaymentSessionRow = {
   metadata: JsonRecord | null;
 };
 
+type OrderTrackingRow = {
+  id: string;
+  lead_id: string | null;
+  conversation_id: string | null;
+  customer_phone: string | null;
+  total: string | null;
+  metadata: JsonRecord | null;
+};
+
+type OrderItemTrackingRow = {
+  id: string;
+  catalog_item_id: string | null;
+  title: string;
+  quantity: number | null;
+  unit_price: string | number | null;
+  sale_price: string | number | null;
+  total: string | number | null;
+  sku_code: string | null;
+};
+
 export async function POST(request: NextRequest) {
   const client = createServiceClient();
   const payload = readRecord(await request.json().catch(() => null));
@@ -168,17 +188,24 @@ export async function POST(request: NextRequest) {
       paymentId: dataId,
     });
     const pixData = extractMercadoPagoPixData(payment);
-    const { data: orderMetadataRow } = await client
+    const { data: orderContextRow } = await client
       .from("sales_catalog_orders")
-      .select("metadata")
+      .select("id, lead_id, conversation_id, customer_phone, total, metadata")
       .eq("id", session.order_id)
       .eq("organization_id", session.organization_id)
-      .maybeSingle<{ metadata: JsonRecord | null }>();
+      .maybeSingle<OrderTrackingRow>();
+    const { data: orderItemRows } = await client
+      .from("sales_catalog_order_items")
+      .select("id, catalog_item_id, title, quantity, unit_price, sale_price, total, sku_code")
+      .eq("order_id", session.order_id)
+      .eq("organization_id", session.organization_id)
+      .order("created_at", { ascending: true });
+    const orderItems = (orderItemRows ?? []) as OrderItemTrackingRow[];
     const orderPatch = buildOrderPatchFromPaymentStatus(
       pixData.status,
       session.id,
       dataId,
-      readRecord(orderMetadataRow?.metadata),
+      readRecord(orderContextRow?.metadata),
       {
         paymentMethodLabel,
         commercialFlowType,
@@ -255,13 +282,20 @@ export async function POST(request: NextRequest) {
       summary: `Pagamento ${dataId} atualizado para ${pixData.providerStatus ?? pixData.status}.`,
       confidence: 1,
       visibility: "organization",
-      tags: ["sales_catalog", "payment", "mercado_pago", "webhook"],
+      tags: ["sales_catalog", "payment", "mercado_pago", "webhook", "lead_tracking"],
       payload: {
         payment_session_id: session.id,
         order_id: session.order_id,
         provider_payment_id: dataId,
         provider_status: pixData.providerStatus,
         status: pixData.status,
+        payment_method: session.method ?? null,
+        payment_method_label: paymentMethodLabel,
+        lead_id: orderContextRow?.lead_id ?? null,
+        conversation_id: orderContextRow?.conversation_id ?? null,
+        lead_phone: orderContextRow?.customer_phone ?? null,
+        order_total: orderContextRow?.total ?? null,
+        items: summarizeOrderItems(orderItems),
         payment_owner: connectyHubOwned ? "connectyhub" : "seller",
         commercial_flow_type: commercialFlowType,
         revenue_owner_type: revenueOwnerType,
@@ -427,6 +461,19 @@ function buildOrderPatchFromPaymentStatus(
       latest_commission_eligible: ownerContext.commissionEligible,
     },
   };
+}
+
+function summarizeOrderItems(items: OrderItemTrackingRow[]) {
+  return items.map((item) => ({
+    order_item_id: item.id,
+    catalog_item_id: item.catalog_item_id,
+    title: item.title,
+    quantity: item.quantity ?? 1,
+    sku_code: item.sku_code,
+    unit_price: item.unit_price,
+    sale_price: item.sale_price,
+    total: item.total,
+  }));
 }
 
 function readRecord(value: unknown): JsonRecord {

@@ -4,6 +4,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Bell, LocateFixed, X } from "lucide-react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { getTrackingSnapshot, isTrackingDisabled } from "@/lib/tracking/client";
+import {
+  buildPublicTrackingApiBody,
+  buildPublicTrackingMetadata,
+  readPublicTrackingContext,
+} from "@/lib/tracking/public-context";
 
 type TrackPayload = {
   event_type: string;
@@ -395,12 +400,14 @@ async function trackEvent(payload: TrackPayload) {
 
   try {
     const snapshot = getTrackingSnapshot();
+    const publicTracking = readPublicTrackingContext();
 
     await fetch("/api/track", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       keepalive: true,
       body: JSON.stringify({
+        ...buildPublicTrackingApiBody(publicTracking),
         visitor_cookie_id: snapshot.visitorId,
         session_cookie_id: snapshot.sessionId,
         first_touch: snapshot.firstTouch,
@@ -411,6 +418,7 @@ async function trackEvent(payload: TrackPayload) {
         referrer: document.referrer,
         search_params: window.location.search,
         metadata: {
+          ...buildPublicTrackingMetadata(publicTracking),
           ...(payload.metadata ?? getPageMetadata()),
           tracking_cookies: snapshot.cookies,
         },
@@ -561,15 +569,18 @@ async function requestPushPermission(): Promise<PermissionRequestResult> {
       applicationServerKey: urlBase64ToUint8Array(vapidPublicKey) as BufferSource,
     });
     const snapshot = getTrackingSnapshot();
+    const publicTracking = readPublicTrackingContext();
     const response = await fetch("/api/push/subscribe", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        ...buildPublicTrackingApiBody(publicTracking),
         visitor_cookie_id: snapshot.visitorId,
         session_cookie_id: snapshot.sessionId,
         permission,
         subscription: subscription.toJSON(),
         metadata: {
+          ...buildPublicTrackingMetadata(publicTracking),
           ...getPageMetadata(),
           first_touch: snapshot.firstTouch,
           last_touch: snapshot.lastTouch,

@@ -447,19 +447,33 @@ async function maybeNotifyPaymentApproved(input: {
     summary: preview(text, 500),
     confidence: 1,
     visibility: "organization",
-    tags: ["sales_catalog", "sales_catalog_order", "payment", "whatsapp"],
+    tags: ["sales_catalog", "sales_catalog_order", "payment", "whatsapp", "lead_tracking"],
     payload: {
       order_id: input.order.id,
+      lead_id: input.order.lead_id,
+      lead_phone: input.order.customer_phone,
       payment_session_id: input.paymentSessionId,
       provider_payment_id: input.providerPaymentId,
       whatsapp_instance_id: instance.id,
       conversation_id: input.order.conversation_id,
+      items: summarizePaymentConfirmationItems(input.items),
       delivery_source: conversation ? "conversation_whatsapp" : "automation_default_whatsapp",
       source: input.source,
     },
   });
 
   return true;
+}
+
+function summarizePaymentConfirmationItems(items: OrderItemRow[]) {
+  return items.map((item) => ({
+    order_item_id: item.id,
+    catalog_item_id: item.catalog_item_id,
+    sku_id: item.sku_id,
+    sku_code: item.sku_code,
+    title: item.title,
+    quantity: item.quantity ?? 1,
+  }));
 }
 
 async function loadOrderConversation(client: SupabaseClient, order: OrderRow) {

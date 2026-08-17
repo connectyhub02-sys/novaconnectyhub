@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
-import { applyTrackedLinkUtm, getPublicAppUrl } from "@/lib/tracking/tracked-links";
+import { createOrganizationTrackingToken } from "@/lib/tracking/organization-attribution";
+import { appendLeadTrackingParams, applyTrackedLinkUtm, getPublicAppUrl } from "@/lib/tracking/tracked-links";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -40,12 +41,29 @@ export async function GET(
 
   const metadata = readRecord(link.metadata) ?? {};
   const slug = readString(metadata.slug) ?? link.id.slice(0, 8);
-  const leadId = request.nextUrl.searchParams.get("lead_id");
-  const leadPhone = request.nextUrl.searchParams.get("lead_phone");
-  const finalUrl = applyTrackedLinkUtm(link.content, {
+  const leadId = request.nextUrl.searchParams.get("lead_id") ?? readString(metadata.lead_id);
+  const leadPhone = request.nextUrl.searchParams.get("lead_phone") ?? readString(metadata.lead_phone);
+  const conversationId = request.nextUrl.searchParams.get("conversation_id") ?? readString(metadata.conversation_id);
+  const orderId = request.nextUrl.searchParams.get("order_id") ?? readString(metadata.order_id);
+  const paymentSessionId = request.nextUrl.searchParams.get("payment_session_id") ?? readString(metadata.payment_session_id);
+  const trackingToken = createPublicTrackingToken(link.organization_id);
+  const utmUrl = applyTrackedLinkUtm(link.content, {
     campaign: link.organization_id ? `company_${link.organization_id.slice(0, 8)}` : "company",
     content: slug,
   });
+  const finalUrl = shouldAppendPublicTracking(utmUrl)
+    ? appendLeadTrackingParams(utmUrl, {
+        organizationId: link.organization_id,
+        trackingToken,
+        leadId,
+        leadPhone,
+        conversationId,
+        orderId,
+        paymentSessionId,
+        trackingLinkId: link.id,
+        trackingSource: "tracked_link_button",
+      })
+    : utmUrl;
   const tracking = extractTrackingData(request);
   const cookieTracking = extractCookieTracking(request);
   const currentClicks = readNumber(metadata.click_count) ?? 0;
@@ -68,6 +86,12 @@ export async function GET(
         final_url: finalUrl,
         lead_id: leadId,
         lead_phone: leadPhone,
+        conversation_id: conversationId,
+        order_id: orderId,
+        payment_session_id: paymentSessionId,
+        tracking_link_id: link.id,
+        tracking_source: "tracked_link_button",
+        items: Array.isArray(metadata.items) ? metadata.items : null,
         ...cookieTracking,
         query: Object.fromEntries(request.nextUrl.searchParams.entries()),
         ...tracking,
@@ -86,6 +110,24 @@ export async function GET(
   ]);
 
   return NextResponse.redirect(finalUrl);
+}
+
+function createPublicTrackingToken(organizationId: string | null) {
+  const secret = process.env.TRACKING_PUBLIC_TOKEN_SECRET;
+
+  if (!organizationId || !secret) {
+    return null;
+  }
+
+  return createOrganizationTrackingToken(organizationId, secret);
+}
+
+function shouldAppendPublicTracking(rawUrl: string) {
+  try {
+    return new URL(rawUrl).origin === new URL(getPublicAppUrl()).origin;
+  } catch {
+    return false;
+  }
 }
 
 function extractCookieTracking(request: NextRequest) {

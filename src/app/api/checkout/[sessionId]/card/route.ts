@@ -38,6 +38,8 @@ type PaymentSessionRow = {
 
 type OrderRow = {
   id: string;
+  lead_id: string | null;
+  conversation_id: string | null;
   customer_name: string | null;
   customer_document: string | null;
   customer_email: string | null;
@@ -98,7 +100,7 @@ export async function POST(
 
   const { data: order, error: orderError } = await client
     .from("sales_catalog_orders")
-    .select("id, customer_name, customer_document, customer_email, customer_phone, destination_cep, shipping_total, shipping_method, total, subtotal, metadata")
+    .select("id, lead_id, conversation_id, customer_name, customer_document, customer_email, customer_phone, destination_cep, shipping_total, shipping_method, total, subtotal, metadata")
     .eq("id", sourceSession.order_id)
     .eq("organization_id", sourceSession.organization_id)
     .maybeSingle<OrderRow>();
@@ -343,7 +345,7 @@ export async function POST(
       summary: `Pagamento ${paymentData.providerPaymentId ?? cardSessionId.slice(0, 8)} atualizado para ${paymentData.providerStatus ?? paymentData.status}.`,
       confidence: 1,
       visibility: "organization",
-      tags: ["sales_catalog", "payment", "mercado_pago", "card", "checkout"],
+      tags: ["sales_catalog", "payment", "mercado_pago", "card", "checkout", "lead_tracking"],
       payload: {
         order_id: order.id,
         payment_session_id: cardSessionId,
@@ -351,6 +353,12 @@ export async function POST(
         provider_payment_id: paymentData.providerPaymentId,
         provider_status: paymentData.providerStatus,
         status: paymentData.status,
+        payment_method: "card",
+        payment_method_label: "Cartao Mercado Pago",
+        lead_id: order.lead_id,
+        conversation_id: order.conversation_id,
+        lead_phone: order.customer_phone,
+        items: summarizePaymentItems(items),
         selected_order_bump_product_ids: selectedOrderBumpIds,
         applied_order_bump_product_ids: orderBumpApplication.appliedBumps.map((item) => item.productId),
         added_order_bump_product_ids: orderBumpApplication.addedBumps.map((item) => item.productId),
@@ -404,6 +412,18 @@ function buildCardPaymentDescription(items: OrderItemRow[], orderId: string) {
     : [`Pedido ${orderId.slice(0, 8)}`];
 
   return titles.join(", ").slice(0, 220);
+}
+
+function summarizePaymentItems(items: OrderItemRow[]) {
+  return items.map((item) => ({
+    order_item_id: item.id,
+    title: item.title,
+    quantity: item.quantity ?? 1,
+    sku_code: item.sku_code,
+    unit_price: item.unit_price,
+    sale_price: item.sale_price,
+    total: item.total,
+  }));
 }
 
 function buildOrderPatch(

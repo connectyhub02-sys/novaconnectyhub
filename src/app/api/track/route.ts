@@ -10,6 +10,7 @@ import {
   decideOrganizationAttribution,
   verifyOrganizationTrackingToken,
 } from "@/lib/tracking/organization-attribution";
+import { resolveLeadTrackingContext } from "@/lib/tracking/lead-context";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -22,6 +23,13 @@ type TrackingBody = {
   organization_id?: unknown;
   scope?: unknown;
   tracking_token?: unknown;
+  lead_id?: unknown;
+  lead_phone?: unknown;
+  conversation_id?: unknown;
+  order_id?: unknown;
+  payment_session_id?: unknown;
+  tracking_link_id?: unknown;
+  tracking_source?: unknown;
   event_type?: unknown;
   referrer?: unknown;
   search_params?: unknown;
@@ -57,12 +65,20 @@ export async function POST(request: NextRequest) {
   const trackingToken = readString(body.tracking_token)
     ?? readString(request.headers.get("x-connectyhub-tracking-token"));
   const metadata = readRecord(body.metadata) ?? {};
+  const publicTracking = readRecord(metadata.public_tracking) ?? {};
   const tracking = extractTrackingData(request);
   const authUser = await getAuthUser();
   const firstTouch = readRecord(body.first_touch) ?? readRecord(metadata.first_touch);
   const lastTouch = readRecord(body.last_touch) ?? readRecord(metadata.last_touch);
   const attribution = readRecord(body.attribution) ?? readRecord(metadata.attribution);
   const consent = readString(body.consent) ?? readString(metadata.consent);
+  const requestedLeadId = readString(body.lead_id) ?? readString(metadata.lead_id) ?? readString(publicTracking.lead_id);
+  const requestedConversationId = readString(body.conversation_id) ?? readString(metadata.conversation_id) ?? readString(publicTracking.conversation_id);
+  const requestedLeadPhone = readString(body.lead_phone) ?? readString(metadata.lead_phone) ?? readString(publicTracking.lead_phone);
+  const orderId = readString(body.order_id) ?? readString(metadata.order_id) ?? readString(publicTracking.order_id);
+  const paymentSessionId = readString(body.payment_session_id) ?? readString(metadata.payment_session_id) ?? readString(publicTracking.payment_session_id);
+  const trackingLinkId = readString(body.tracking_link_id) ?? readString(metadata.tracking_link_id) ?? readString(publicTracking.tracking_link_id);
+  const trackingSource = readString(body.tracking_source) ?? readString(metadata.tracking_source) ?? readString(publicTracking.tracking_source);
 
   try {
     const client = createServiceClient();
@@ -83,10 +99,22 @@ export async function POST(request: NextRequest) {
       : authUser
         ? "platform_user_activity"
         : "platform_marketing_tracking";
+    const leadContext = await resolveLeadTrackingContext(client, {
+      organizationId: organizationAttribution.organizationId,
+      leadId: requestedLeadId,
+      conversationId: requestedConversationId,
+      leadPhone: requestedLeadPhone,
+    });
     const pagePath = readString(metadata.page_path);
     const title = buildEventTitle(eventType, pagePath, sourceType);
     const summary = buildEventSummary(eventType, metadata, tracking);
-    const tags = buildTags({ eventType, scope, authUserId: authUser?.id ?? null, sessionId });
+    const tags = buildTags({
+      eventType,
+      scope,
+      authUserId: authUser?.id ?? null,
+      sessionId,
+      hasLeadContext: Boolean(leadContext.leadId || leadContext.leadPhone),
+    });
     const payload = {
       visitor_cookie_id: visitorId,
       session_cookie_id: sessionId,
@@ -102,6 +130,13 @@ export async function POST(request: NextRequest) {
       },
       ...tracking,
       ...metadata,
+      lead_id: leadContext.leadId,
+      lead_phone: leadContext.leadPhone,
+      conversation_id: leadContext.conversationId,
+      order_id: orderId,
+      payment_session_id: paymentSessionId,
+      tracking_link_id: trackingLinkId,
+      tracking_source: trackingSource,
       user_id: authUser?.id ?? null,
       user_email: authUser?.email ?? null,
       tracked_at: new Date().toISOString(),
@@ -295,7 +330,13 @@ function buildEventSummary(eventType: string, metadata: JsonRecord, tracking: Re
   return `${eventType}${location ? ` de ${location}` : ""}.`;
 }
 
-function buildTags(input: { eventType: string; scope: "platform" | "organization"; authUserId: string | null; sessionId: string | null }) {
+function buildTags(input: {
+  eventType: string;
+  scope: "platform" | "organization";
+  authUserId: string | null;
+  sessionId: string | null;
+  hasLeadContext: boolean;
+}) {
   const tags = ["connecty_tracking", input.scope === "organization" ? "client_marketing" : "platform_marketing"];
 
   if (input.authUserId) {
@@ -310,6 +351,7 @@ function buildTags(input: { eventType: string; scope: "platform" | "organization
   if (input.eventType.includes("click")) tags.push("click_tracking");
   if (input.eventType.includes("form") || input.eventType.includes("signup") || input.eventType.includes("cadastro")) tags.push("conversion_tracking");
   if (input.eventType.includes("dashboard")) tags.push("dashboard_usage");
+  if (input.hasLeadContext) tags.push("lead_tracking");
   if (input.sessionId) tags.push("session_tracking");
 
   return tags;

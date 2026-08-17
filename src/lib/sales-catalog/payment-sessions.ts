@@ -198,6 +198,7 @@ export async function createSalesCatalogPixPaymentSession(input: {
       client: input.client,
       organizationId: input.organizationId,
       order,
+      items,
       sessionId,
       checkoutUrl,
       amount,
@@ -286,6 +287,7 @@ export async function createSalesCatalogPixPaymentSession(input: {
         tracking_link_id: checkoutTracking.id,
         tracking_tag: checkoutTracking.tag,
         amount,
+        items: summarizePaymentItems(items),
         lead_id: order.lead_id,
         conversation_id: order.conversation_id,
         lead_phone: order.customer_phone,
@@ -327,6 +329,7 @@ async function createPaymentSessionTrackedLink(input: {
   client: SupabaseClient;
   organizationId: string;
   order: OrderRow;
+  items: OrderItemRow[];
   sessionId: string;
   checkoutUrl: string;
   amount: string | number;
@@ -356,6 +359,7 @@ async function createPaymentSessionTrackedLink(input: {
     lead_phone: input.order.customer_phone,
     amount: input.amount,
     currency: "BRL",
+    items: summarizePaymentItems(input.items),
     item_count: input.itemCount,
     created_from: input.source,
     actor_id: input.actorId,
@@ -405,6 +409,18 @@ async function createPaymentSessionTrackedLink(input: {
     tag,
     trackingUrl,
   };
+}
+
+function summarizePaymentItems(items: OrderItemRow[]) {
+  return items.map((item) => ({
+    order_item_id: item.id,
+    title: item.title,
+    quantity: item.quantity ?? 1,
+    sku_code: item.sku_code,
+    unit_price: item.unit_price,
+    sale_price: item.sale_price,
+    total: item.total,
+  }));
 }
 
 function buildPaymentDescription(items: OrderItemRow[], orderId: string) {
