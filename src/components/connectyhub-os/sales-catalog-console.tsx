@@ -609,6 +609,7 @@ export function SalesCatalogConsole({
   const [catalogImportText, setCatalogImportText] = useState("");
   const [catalogImportFiles, setCatalogImportFiles] = useState<File[]>([]);
   const [catalogImportPatches, setCatalogImportPatches] = useState<CatalogImportPatchMap>({});
+  const [catalogImportJobNotices, setCatalogImportJobNotices] = useState<Record<string, Notice>>({});
   const [catalogImportMonitor, setCatalogImportMonitor] = useState<CatalogImportMonitorState | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -835,6 +836,7 @@ export function SalesCatalogConsole({
     setCatalogImportText("");
     setCatalogImportFiles([]);
     setCatalogImportPatches({});
+    setCatalogImportJobNotices({});
     setCatalogImportMonitor(null);
     setSelectedCatalogImportInstanceId("");
     setSelectedCatalogExportInstanceId("");
@@ -1515,6 +1517,9 @@ export function SalesCatalogConsole({
   }
 
   function updateCatalogImportItem(itemId: string, patch: Omit<SalesCatalogImportItemPatch, "id">) {
+    const touchedJob = catalogImportJobs.find((job) => job.items.some((item) => item.id === itemId));
+    if (touchedJob) updateCatalogImportJobNotice(touchedJob.id, null);
+
     setCatalogImportPatches((current) => ({
       ...current,
       [itemId]: {
@@ -1724,12 +1729,17 @@ export function SalesCatalogConsole({
 
     const patches = getCatalogImportPatchesForJob(job);
     if (patches.length === 0) {
-      setNotice({ tone: "warning", message: "Nenhuma alteracao para salvar nesta importacao." });
+      updateCatalogImportJobNotice(job.id, {
+        tone: "warning",
+        message: "A revisao ja esta salva. Edite algum campo ou clique em Publicar para liberar os produtos prontos.",
+      });
+      setNotice(null);
       return;
     }
 
     setSavingCatalogImportId(job.id);
     setNotice(null);
+    updateCatalogImportJobNotice(job.id, null);
 
     try {
       const response = await fetch(`/api/dashboard/sales-catalog/imports/${encodeURIComponent(job.id)}`, {
@@ -1748,9 +1758,12 @@ export function SalesCatalogConsole({
 
       setCatalogImportJobs((current) => current.map((entry) => (entry.id === data.importJob!.id ? data.importJob! : entry)));
       clearCatalogImportPatches(patches);
+      updateCatalogImportJobNotice(job.id, { tone: "success", message: "Alteracoes da revisao salvas." });
       setNotice({ tone: "success", message: "Revisao salva." });
     } catch (error) {
-      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao salvar revisao." });
+      const message = error instanceof Error ? error.message : "Erro ao salvar revisao.";
+      updateCatalogImportJobNotice(job.id, { tone: "error", message });
+      setNotice({ tone: "error", message });
     } finally {
       setSavingCatalogImportId(null);
     }
@@ -1790,12 +1803,18 @@ export function SalesCatalogConsole({
         });
       }
       clearCatalogImportPatches(patches);
+      updateCatalogImportJobNotice(job.id, {
+        tone: data.importJob.errorMessage ? "warning" : "success",
+        message: data.importJob.errorMessage ?? "Importacao publicada no catalogo.",
+      });
       setNotice({
         tone: data.importJob.errorMessage ? "warning" : "success",
         message: data.importJob.errorMessage ?? `Importacao publicada: ${data.importJob.items.filter((item) => item.status === "published").length} item(ns).`,
       });
     } catch (error) {
-      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao publicar importacao." });
+      const message = error instanceof Error ? error.message : "Erro ao publicar importacao.";
+      updateCatalogImportJobNotice(job.id, { tone: "error", message });
+      setNotice({ tone: "error", message });
     } finally {
       setPublishingCatalogImportId(null);
     }
@@ -1829,9 +1848,12 @@ export function SalesCatalogConsole({
         errorMessage: data.importJob!.errorMessage,
         visiblePreviewCount: data.importJob!.items.length,
       } : current);
+      updateCatalogImportJobNotice(job.id, { tone: "success", message: "Importacao cancelada. Nenhum produto sera publicado." });
       setNotice({ tone: "success", message: "Importacao cancelada. Nenhum produto sera publicado." });
     } catch (error) {
-      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao cancelar importacao." });
+      const message = error instanceof Error ? error.message : "Erro ao cancelar importacao.";
+      updateCatalogImportJobNotice(job.id, { tone: "error", message });
+      setNotice({ tone: "error", message });
     } finally {
       setCancelingCatalogImportId(null);
     }
@@ -1850,6 +1872,19 @@ export function SalesCatalogConsole({
     setCatalogImportPatches((current) => Object.fromEntries(
       Object.entries(current).filter(([itemId]) => !ids.has(itemId)),
     ));
+  }
+
+  function updateCatalogImportJobNotice(jobId: string, nextNotice: Notice | null) {
+    setCatalogImportJobNotices((current) => {
+      if (nextNotice) {
+        return { ...current, [jobId]: nextNotice };
+      }
+
+      if (!(jobId in current)) return current;
+      const next = { ...current };
+      delete next[jobId];
+      return next;
+    });
   }
 
   async function importWhatsappCatalog() {
@@ -3230,6 +3265,8 @@ export function SalesCatalogConsole({
             defaultDestination={catalogImportDefaultDestination}
             files={catalogImportFiles}
             jobs={catalogImportJobs}
+            jobNotices={catalogImportJobNotices}
+            jobPatches={catalogImportPatches}
             loading={loadingCatalogImports}
             cancelingJobId={cancelingCatalogImportId}
             publishingJobId={publishingCatalogImportId}
@@ -4194,6 +4231,8 @@ function SalesCatalogImportPanel({
   defaultDestination,
   files,
   jobs,
+  jobNotices,
+  jobPatches,
   loading,
   cancelingJobId,
   publishingJobId,
@@ -4227,6 +4266,8 @@ function SalesCatalogImportPanel({
   defaultDestination: SalesCatalogImportDestination;
   files: File[];
   jobs: ClientSalesCatalogImportJob[];
+  jobNotices: Record<string, Notice>;
+  jobPatches: CatalogImportPatchMap;
   loading: boolean;
   cancelingJobId: string | null;
   publishingJobId: string | null;
@@ -4433,8 +4474,10 @@ function SalesCatalogImportPanel({
                 key={job.id}
                 job={job}
                 canceling={cancelingJobId === job.id}
+                hasChanges={job.items.some((item) => Boolean(jobPatches[item.id]))}
                 publishing={publishingJobId === job.id}
                 saving={savingJobId === job.id}
+                notice={jobNotices[job.id] ?? null}
                 onChangeItem={onChangeItem}
                 onCancel={() => onCancel(job)}
                 onOpenMonitor={() => onOpenMonitor(job)}
@@ -4689,6 +4732,8 @@ function ImportPreviewStatusDot({ status }: { status: CatalogImportPreviewItemSt
 function CatalogImportJobCard({
   job,
   canceling,
+  hasChanges,
+  notice,
   publishing,
   saving,
   onChangeItem,
@@ -4699,6 +4744,8 @@ function CatalogImportJobCard({
 }: {
   job: ClientSalesCatalogImportJob;
   canceling: boolean;
+  hasChanges: boolean;
+  notice: Notice | null;
   publishing: boolean;
   saving: boolean;
   onChangeItem: (itemId: string, patch: Omit<SalesCatalogImportItemPatch, "id">) => void;
@@ -4777,8 +4824,14 @@ function CatalogImportJobCard({
             className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-slate-300 transition hover:bg-cyan-400/10 hover:text-cyan-100 disabled:opacity-50"
             style={{ borderColor: "var(--ch-border)" }}
           >
-            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-            Salvar revisao
+            {saving ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : hasChanges ? (
+              <Save className="h-3.5 w-3.5" />
+            ) : (
+              <CheckCircle2 className="h-3.5 w-3.5" />
+            )}
+            {hasChanges ? "Salvar alteracoes" : "Sem alteracoes"}
           </button>
         ) : null}
         {!canceled && canCancel ? (
@@ -4804,6 +4857,19 @@ function CatalogImportJobCard({
           </button>
         ) : null}
       </div>
+
+      {notice ? (
+        <div
+          className={cn(
+            "mt-3 rounded-lg border px-3 py-2 text-[11px]",
+            notice.tone === "success" ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-200" : "",
+            notice.tone === "warning" ? "border-amber-400/30 bg-amber-400/10 text-amber-200" : "",
+            notice.tone === "error" ? "border-rose-400/30 bg-rose-400/10 text-rose-200" : "",
+          )}
+        >
+          {notice.message}
+        </div>
+      ) : null}
 
       {canceled ? (
         <div className="mt-3 rounded-lg border border-slate-300/20 bg-slate-900/20 px-3 py-2 text-[11px] text-slate-400">
