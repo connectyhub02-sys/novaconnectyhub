@@ -65,4 +65,15 @@ describe("WhatsApp media followed by text or audio", () => {
     expect(caption).toContain('normalized.startsWith("analise automatica de ")');
     expect(extractor).toContain("?? readMediaCaptionTextContent(message)");
   });
+
+  it("keeps image analysis detailed enough for commercial object identification", () => {
+    const analyzer = sourceBetween("async function analyzeDownloadedMediaWithGemini", "const inboundAudioTranscriptionPrompt");
+    const prompt = sourceBetween("function buildMediaAnalysisPrompt", "function extractProviderTranscript");
+
+    expect(analyzer).toContain("maxOutputTokens: input.kind === \"video\" ? 2200 : 1800");
+    expect(prompt).toContain("objeto/produto principal");
+    expect(prompt).toContain("veiculo");
+    expect(prompt).toContain("marca/modelo/versao provavel");
+    expect(prompt).toContain("nivel de confianca");
+  });
 });

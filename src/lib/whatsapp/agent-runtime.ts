@@ -8304,7 +8304,7 @@ async function analyzeDownloadedMediaWithGemini(input: {
       generationConfig: {
         temperature: 0.15,
         topP: 0.8,
-        maxOutputTokens: input.kind === "video" ? 1400 : 900,
+        maxOutputTokens: input.kind === "video" ? 2200 : 1800,
       },
       safetySettings: geminiSafetySettings,
     }),
@@ -8901,12 +8901,15 @@ function buildMediaAnalysisPrompt(kind: InboundMediaKind, caption: string | null
     `Analise esta ${formatMediaKind(kind).toLowerCase()} recebida em uma conversa comercial de WhatsApp da ConnectyHub.`,
     "Retorne apenas uma analise objetiva em portugues do Brasil, sem markdown pesado.",
     "Descreva elementos visuais relevantes, textos visiveis, contexto provavel e o que isso indica sobre a intencao do lead.",
+    "Quando houver um objeto/produto principal, tente identificar tipo, marca, modelo, cor, estado aparente e detalhes distintivos.",
+    "Se houver veiculo, tente identificar marca/modelo/versao provavel usando logo, grade, farois, traseira, lateral, rodas e textos visiveis; informe o nivel de confianca.",
     "Nao invente detalhes que nao aparecem no arquivo.",
+    "Se nao conseguir identificar com seguranca, diga quais pistas faltam e qual angulo/foto ajudaria.",
     caption ? `Legenda/mensagem do lead: ${caption}` : "",
   ].filter(Boolean);
 
   if (kind === "image") {
-    base.push("Se a imagem mostrar tela, site, produto, print ou ambiente, identifique isso claramente.");
+    base.push("Se a imagem mostrar tela, site, produto, veiculo, print ou ambiente, identifique isso claramente e priorize o assunto principal da foto.");
   } else if (kind === "video") {
     base.push("Se for video, descreva o que aparece ao longo dos quadros, telas, movimentos, textos e qualquer sinal util para responder o lead.");
   } else {
