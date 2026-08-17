@@ -600,6 +600,7 @@ export function SalesCatalogConsole({
   const [creatingCatalogImport, setCreatingCatalogImport] = useState(false);
   const [savingCatalogImportId, setSavingCatalogImportId] = useState<string | null>(null);
   const [publishingCatalogImportId, setPublishingCatalogImportId] = useState<string | null>(null);
+  const [cancelingCatalogImportId, setCancelingCatalogImportId] = useState<string | null>(null);
   const [catalogImportSourceKind, setCatalogImportSourceKind] = useState<SalesCatalogImportSourceKind>(defaultCatalogImportPlatformOption.sourceKind);
   const [catalogImportSourcePlatform, setCatalogImportSourcePlatform] = useState<SalesCatalogImportPlatform>("auto");
   const [catalogImportTargetMode, setCatalogImportTargetMode] = useState<SalesCatalogImportTargetMode>("connectyhub_checkout");
@@ -1797,6 +1798,42 @@ export function SalesCatalogConsole({
       setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao publicar importacao." });
     } finally {
       setPublishingCatalogImportId(null);
+    }
+  }
+
+  async function cancelCatalogImport(job: ClientSalesCatalogImportJob) {
+    if (!selectedCompanyId || cancelingCatalogImportId || !canCancelCatalogImportJob(job)) return;
+
+    const confirmed = window.confirm("Cancelar esta importacao? Os itens revisados serao ignorados e nada sera publicado.");
+    if (!confirmed) return;
+
+    setCancelingCatalogImportId(job.id);
+    setNotice(null);
+
+    try {
+      const response = await fetch(`/api/dashboard/sales-catalog/imports/${encodeURIComponent(job.id)}?companyId=${encodeURIComponent(selectedCompanyId)}`, {
+        method: "DELETE",
+      });
+      const data = await response.json().catch(() => null) as { importJob?: ClientSalesCatalogImportJob; error?: string } | null;
+
+      if (!response.ok || !data?.importJob) {
+        throw new Error(data?.error ?? "Nao foi possivel cancelar a importacao.");
+      }
+
+      setCatalogImportJobs((current) => current.map((entry) => (entry.id === data.importJob!.id ? data.importJob! : entry)));
+      clearCatalogImportPatches(data.importJob.items.map((item) => ({ id: item.id })));
+      setCatalogImportMonitor((current) => current?.jobId === data.importJob!.id ? {
+        ...current,
+        status: data.importJob!.status,
+        message: getCatalogImportMonitorMessage(data.importJob!),
+        errorMessage: data.importJob!.errorMessage,
+        visiblePreviewCount: data.importJob!.items.length,
+      } : current);
+      setNotice({ tone: "success", message: "Importacao cancelada. Nenhum produto sera publicado." });
+    } catch (error) {
+      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao cancelar importacao." });
+    } finally {
+      setCancelingCatalogImportId(null);
     }
   }
 
@@ -3194,6 +3231,7 @@ export function SalesCatalogConsole({
             files={catalogImportFiles}
             jobs={catalogImportJobs}
             loading={loadingCatalogImports}
+            cancelingJobId={cancelingCatalogImportId}
             publishingJobId={publishingCatalogImportId}
             savingJobId={savingCatalogImportId}
             sourceKind={catalogImportSourceKind}
@@ -3211,6 +3249,7 @@ export function SalesCatalogConsole({
             onChangeSourceText={setCatalogImportText}
             onChangeTargetMode={handleCatalogImportTargetMode}
             onChangeTitle={setCatalogImportTitle}
+            onCancel={cancelCatalogImport}
             onCreate={createCatalogImport}
             onOpenMonitor={openCatalogImportMonitor}
             onPublish={publishCatalogImport}
@@ -3220,8 +3259,10 @@ export function SalesCatalogConsole({
           {catalogImportMonitor?.open ? (
             <CatalogImportProgressModal
               job={monitoredCatalogImportJob}
+              canceling={monitoredCatalogImportJob ? cancelingCatalogImportId === monitoredCatalogImportJob.id : false}
               loading={loadingCatalogImports || creatingCatalogImport}
               monitor={catalogImportMonitor}
+              onCancel={cancelCatalogImport}
               onClose={closeCatalogImportMonitor}
               onRefresh={refreshCatalogImports}
             />
@@ -4154,6 +4195,7 @@ function SalesCatalogImportPanel({
   files,
   jobs,
   loading,
+  cancelingJobId,
   publishingJobId,
   savingJobId,
   selectedAgentScopeId,
@@ -4171,6 +4213,7 @@ function SalesCatalogImportPanel({
   onChangeSourceText,
   onChangeTargetMode,
   onChangeTitle,
+  onCancel,
   onCreate,
   onOpenMonitor,
   onPublish,
@@ -4185,6 +4228,7 @@ function SalesCatalogImportPanel({
   files: File[];
   jobs: ClientSalesCatalogImportJob[];
   loading: boolean;
+  cancelingJobId: string | null;
   publishingJobId: string | null;
   savingJobId: string | null;
   selectedAgentScopeId: string;
@@ -4202,6 +4246,7 @@ function SalesCatalogImportPanel({
   onChangeSourceText: (value: string) => void;
   onChangeTargetMode: (value: SalesCatalogImportTargetMode) => void;
   onChangeTitle: (value: string) => void;
+  onCancel: (job: ClientSalesCatalogImportJob) => void;
   onCreate: () => void;
   onOpenMonitor: (job: ClientSalesCatalogImportJob) => void;
   onPublish: (job: ClientSalesCatalogImportJob) => void;
@@ -4387,9 +4432,11 @@ function SalesCatalogImportPanel({
               <CatalogImportJobCard
                 key={job.id}
                 job={job}
+                canceling={cancelingJobId === job.id}
                 publishing={publishingJobId === job.id}
                 saving={savingJobId === job.id}
                 onChangeItem={onChangeItem}
+                onCancel={() => onCancel(job)}
                 onOpenMonitor={() => onOpenMonitor(job)}
                 onPublish={() => onPublish(job)}
                 onSaveReview={() => onSaveReview(job)}
@@ -4462,14 +4509,18 @@ function DuplicateActionButton({
 
 function CatalogImportProgressModal({
   job,
+  canceling,
   loading,
   monitor,
+  onCancel,
   onClose,
   onRefresh,
 }: {
   job: ClientSalesCatalogImportJob | null;
+  canceling: boolean;
   loading: boolean;
   monitor: CatalogImportMonitorState;
+  onCancel: (job: ClientSalesCatalogImportJob) => void;
   onClose: () => void;
   onRefresh: () => void;
 }) {
@@ -4478,7 +4529,7 @@ function CatalogImportProgressModal({
   const visibleItems = officialItems.length > 0 ? officialItems : visiblePreviewItems;
   const active = job ? isCatalogImportJobActive(job) : monitor.status === "preparing" || monitor.status === "uploading";
   const progress = job ? getCatalogImportJobProgress(job) : getCatalogImportMonitorProgress(monitor);
-  const statusLabel = job ? formatImportJobStatus(job.status) : formatCatalogImportMonitorStatus(monitor.status);
+  const statusLabel = job ? formatCatalogImportJobStatus(job) : formatCatalogImportMonitorStatus(monitor.status);
   const message = job ? getCatalogImportMonitorMessage(job) : monitor.message;
   const errorMessage = job?.errorMessage ?? monitor.errorMessage;
   const itemCount = job?.items.length ?? monitor.previewItems.length;
@@ -4494,9 +4545,20 @@ function CatalogImportProgressModal({
             <p className="mt-1 text-sm text-slate-500">{message}</p>
           </div>
           <div className="flex items-center gap-2">
-            <NeonBadge tone={job?.status === "failed" || monitor.status === "failed" ? "rose" : active ? "cyan" : "green"}>
+            <NeonBadge tone={job ? catalogImportJobStatusTone(job) : monitor.status === "failed" ? "rose" : active ? "cyan" : "green"}>
               {statusLabel}
             </NeonBadge>
+            {job && canCancelCatalogImportJob(job) ? (
+              <button
+                type="button"
+                disabled={canceling || loading}
+                onClick={() => onCancel(job)}
+                className="inline-flex min-h-9 items-center gap-2 rounded-full border border-rose-200 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-rose-600 transition hover:bg-rose-50 disabled:opacity-50"
+              >
+                {canceling ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <X className="h-3.5 w-3.5" />}
+                Cancelar
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={onClose}
@@ -4519,7 +4581,9 @@ function CatalogImportProgressModal({
                 <div
                   className={cn(
                     "h-full rounded-full transition-all duration-700",
-                    job?.status === "failed" || monitor.status === "failed" ? "bg-rose-500" : "bg-red-500",
+                    job
+                      ? job.status === "failed" && !isCatalogImportJobCanceled(job) ? "bg-rose-500" : "bg-red-500"
+                      : monitor.status === "failed" ? "bg-rose-500" : "bg-red-500",
                   )}
                   style={{ width: `${progress}%` }}
                 />
@@ -4614,24 +4678,29 @@ function ImportPreviewStatusDot({ status }: { status: CatalogImportPreviewItemSt
 
 function CatalogImportJobCard({
   job,
+  canceling,
   publishing,
   saving,
   onChangeItem,
+  onCancel,
   onOpenMonitor,
   onPublish,
   onSaveReview,
 }: {
   job: ClientSalesCatalogImportJob;
+  canceling: boolean;
   publishing: boolean;
   saving: boolean;
   onChangeItem: (itemId: string, patch: Omit<SalesCatalogImportItemPatch, "id">) => void;
+  onCancel: () => void;
   onOpenMonitor: () => void;
   onPublish: () => void;
   onSaveReview: () => void;
 }) {
   const pendingItems = job.items.filter((item) => item.status !== "published" && item.status !== "discarded");
   const readyItems = pendingItems.filter((item) => item.status === "ready").length;
-  const canPublish = pendingItems.length > 0 && !publishing;
+  const canPublish = pendingItems.length > 0 && !publishing && !isCatalogImportJobCanceled(job);
+  const canCancel = canCancelCatalogImportJob(job);
   const active = isCatalogImportJobActive(job);
   const progress = getCatalogImportJobProgress(job);
 
@@ -4651,7 +4720,7 @@ function CatalogImportJobCard({
         </div>
         <div className="flex items-center gap-2">
           {active ? <Loader2 className="h-3.5 w-3.5 animate-spin text-cyan-400" /> : null}
-          <NeonBadge tone={importJobStatusTone(job.status)}>{formatImportJobStatus(job.status)}</NeonBadge>
+          <NeonBadge tone={catalogImportJobStatusTone(job)}>{formatCatalogImportJobStatus(job)}</NeonBadge>
         </div>
       </div>
 
@@ -4667,7 +4736,7 @@ function CatalogImportJobCard({
         <div
           className={cn(
             "h-full rounded-full transition-all duration-700",
-            job.status === "failed" ? "bg-rose-500" : active ? "bg-cyan-500" : "bg-emerald-500",
+            job.status === "failed" && !isCatalogImportJobCanceled(job) ? "bg-rose-500" : active ? "bg-cyan-500" : "bg-emerald-500",
           )}
           style={{ width: `${progress}%` }}
         />
@@ -4699,6 +4768,17 @@ function CatalogImportJobCard({
           {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
           Salvar revisao
         </button>
+        {canCancel ? (
+          <button
+            type="button"
+            disabled={canceling || saving || publishing}
+            onClick={onCancel}
+            className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-rose-300/50 px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-rose-200 transition hover:bg-rose-400/10 disabled:opacity-50"
+          >
+            {canceling ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <X className="h-3.5 w-3.5" />}
+            Cancelar
+          </button>
+        ) : null}
         <button
           type="button"
           disabled={!canPublish}
@@ -4910,7 +4990,7 @@ function CatalogImportItemEditor({
                 onChange={(event) => onChange({ importExternalImage: event.target.checked })}
                 className="h-4 w-4 accent-cyan-300"
               />
-              Trazer para R2
+              Trazer imagens
             </label>
           </div>
           {item.imageImportError ? (
@@ -6129,6 +6209,19 @@ function isCatalogImportJobActive(job: ClientSalesCatalogImportJob) {
   return job.status === "uploaded" || job.status === "extracting" || job.status === "publishing";
 }
 
+function isCatalogImportJobCanceled(job: ClientSalesCatalogImportJob) {
+  return job.status === "failed"
+    && (
+      job.stats.cancelled === true
+      || /cancelad/i.test(job.errorMessage ?? "")
+    );
+}
+
+function canCancelCatalogImportJob(job: ClientSalesCatalogImportJob) {
+  return (job.status === "uploaded" || job.status === "extracting" || job.status === "review_required" || job.status === "ready_to_publish")
+    && !isCatalogImportJobCanceled(job);
+}
+
 function getCatalogImportJobProgress(job: ClientSalesCatalogImportJob) {
   if (job.status === "failed" || job.status === "published") return 100;
   if (job.status === "ready_to_publish" || job.status === "review_required") return 100;
@@ -6148,6 +6241,7 @@ function getCatalogImportMonitorProgress(monitor: CatalogImportMonitorState) {
 }
 
 function getCatalogImportMonitorMessage(job: ClientSalesCatalogImportJob) {
+  if (isCatalogImportJobCanceled(job)) return "Importacao cancelada. Nenhum produto sera publicado.";
   if (job.status === "uploaded") return "Importacao recebida. A fila vai iniciar a leitura em instantes.";
   if (job.status === "extracting") return "A IA esta lendo o arquivo e separando produtos, precos, imagens e duplicidades.";
   if (job.status === "review_required") return "Produtos encontrados. Alguns itens precisam da sua revisao antes de publicar.";
@@ -6161,6 +6255,16 @@ function formatCatalogImportMonitorStatus(value: CatalogImportMonitorStatus) {
   if (value === "preparing") return "preparando";
   if (value === "uploading") return "enviando";
   return formatImportJobStatus(value);
+}
+
+function formatCatalogImportJobStatus(job: ClientSalesCatalogImportJob) {
+  if (isCatalogImportJobCanceled(job)) return "cancelado";
+  return formatImportJobStatus(job.status);
+}
+
+function catalogImportJobStatusTone(job: ClientSalesCatalogImportJob): SalesCatalogTone {
+  if (isCatalogImportJobCanceled(job)) return "zinc";
+  return importJobStatusTone(job.status);
 }
 
 function formatImportSourceKind(value: SalesCatalogImportSourceKind) {
@@ -6209,7 +6313,7 @@ function getCatalogImportPlatformNotice(value: SalesCatalogImportPlatform, sourc
   if (value === "woocommerce" || value === "shopify" || value === "wix" || value === "nuvemshop" || value === "loja_integrada" || value === "tray") {
     return {
       title: "Exportacao de loja virtual",
-      description: "Se a planilha trouxer URLs de imagens, a ConnectyHub tenta importar essas imagens para nosso storage ao publicar produtos para checkout interno. URLs privadas, expiradas ou bloqueadas geram aviso para upload manual.",
+      description: "Se a planilha trouxer URLs de imagens, a ConnectyHub tenta trazer essas imagens para o armazenamento do usuario ao publicar produtos para checkout interno. URLs privadas, expiradas ou bloqueadas geram aviso para upload manual.",
     };
   }
 
@@ -6279,8 +6383,8 @@ function formatImportItemStatus(value: ClientSalesCatalogImportItem["status"]) {
 
 function formatImageImportStatus(value: NonNullable<ClientSalesCatalogImportItem["imageImportStatus"]>) {
   if (value === "pending") return "pendente";
-  if (value === "imported") return "r2";
-  if (value === "skipped") return "sem r2";
+  if (value === "imported") return "imagem salva";
+  if (value === "skipped") return "sem importacao";
   return "falhou";
 }
 

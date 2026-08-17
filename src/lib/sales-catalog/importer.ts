@@ -709,6 +709,92 @@ export async function updateSalesCatalogImportItems(input: {
   }
 }
 
+export async function cancelSalesCatalogImportJob(input: {
+  client: SupabaseClient;
+  companyId: string;
+  jobId: string;
+  userId?: string | null;
+}) {
+  const job = await getSalesCatalogImportJob({
+    client: input.client,
+    companyId: input.companyId,
+    jobId: input.jobId,
+  });
+
+  if (job.status === "published") {
+    throw new Error("Esta importacao ja foi publicada e nao pode ser cancelada.");
+  }
+
+  if (job.status === "publishing") {
+    throw new Error("A importacao esta publicando agora. Aguarde terminar antes de cancelar.");
+  }
+
+  if (isImportCancelledStatus(job.status, job.errorMessage)) {
+    return job;
+  }
+
+  const now = new Date().toISOString();
+  const cancelMessage = "Importacao cancelada pelo usuario.";
+
+  const cancelableItems = job.items.filter((item) => item.status !== "published" && item.status !== "discarded");
+  for (const item of cancelableItems) {
+    const { error: itemError } = await input.client
+      .from("sales_catalog_import_items")
+      .update({
+        status: "discarded",
+        warnings: Array.from(new Set([...item.warnings, cancelMessage])),
+        updated_at: now,
+      })
+      .eq("id", item.id)
+      .eq("import_job_id", input.jobId)
+      .eq("organization_id", input.companyId);
+
+    if (itemError) {
+      throw new Error(`Nao foi possivel cancelar item importado: ${itemError.message}`);
+    }
+  }
+
+  const { error: jobError } = await input.client
+    .from("sales_catalog_import_jobs")
+    .update({
+      status: "failed",
+      error_message: cancelMessage,
+      stats: {
+        ...job.stats,
+        cancelled: true,
+        cancelled_at: now,
+        cancelled_by: input.userId ?? null,
+      },
+      updated_at: now,
+    })
+    .eq("id", input.jobId)
+    .eq("organization_id", input.companyId)
+    .neq("status", "published");
+
+  if (jobError) {
+    throw new Error(`Nao foi possivel cancelar a importacao: ${jobError.message}`);
+  }
+
+  await input.client.from("sales_catalog_import_events").insert({
+    import_job_id: input.jobId,
+    organization_id: input.companyId,
+    level: "warning",
+    event_type: "sales_catalog_import.cancelled",
+    title: "Importacao cancelada",
+    summary: cancelMessage,
+    payload: {
+      cancelled_by: input.userId ?? null,
+      cancelled_items: cancelableItems.length,
+    },
+  });
+
+  return getSalesCatalogImportJob({
+    client: input.client,
+    companyId: input.companyId,
+    jobId: input.jobId,
+  });
+}
+
 export async function publishSalesCatalogImportJob(input: {
   client: SupabaseClient;
   companyId: string;
@@ -731,6 +817,11 @@ export async function publishSalesCatalogImportJob(input: {
     companyId: input.companyId,
     jobId: input.jobId,
   });
+
+  if (isImportCancelledStatus(job.status, job.errorMessage)) {
+    throw new Error("Esta importacao foi cancelada. Crie uma nova importacao para publicar produtos.");
+  }
+
   const assignmentScope = normalizeImportAssignmentScope(job);
   const selectedIds = new Set((input.itemIds ?? []).filter(Boolean));
   const candidates = job.items.filter((item) => (
@@ -900,17 +991,29 @@ async function processSalesCatalogImportJob(input: {
   sourceUrl?: string | null;
   files?: SalesCatalogImportFileInput[] | null;
 }) {
-  await input.client
+  const { data: claimedJob, error: claimError } = await input.client
     .from("sales_catalog_import_jobs")
     .update({ status: "extracting", updated_at: new Date().toISOString() })
-    .eq("id", input.job.id);
+    .eq("id", input.job.id)
+    .eq("organization_id", input.companyId)
+    .in("status", ["uploaded", "extracting"])
+    .select(importJobSelect)
+    .maybeSingle<ImportJobRow>();
+
+  if (claimError) {
+    throw new Error(`Nao foi possivel iniciar a leitura da importacao: ${claimError.message}`);
+  }
+
+  if (!claimedJob) {
+    return;
+  }
 
   try {
     const extraction = await extractDrafts({
       client: input.client,
       companyId: input.companyId,
       userId: input.userId,
-      job: input.job,
+      job: claimedJob,
       text: input.text,
       sourceUrl: input.sourceUrl,
       files: input.files,
@@ -918,6 +1021,10 @@ async function processSalesCatalogImportJob(input: {
 
     if (extraction.drafts.length === 0) {
       await markImportFailed(input.client, input.job.id, input.companyId, "Nao encontramos produtos nesta fonte.");
+      return;
+    }
+
+    if (await isImportCancelled(input.client, input.job.id, input.companyId)) {
       return;
     }
 
@@ -969,6 +1076,10 @@ async function processSalesCatalogImportJob(input: {
       },
     }));
 
+    if (await isImportCancelled(input.client, input.job.id, input.companyId)) {
+      return;
+    }
+
     const { error: itemError } = await input.client
       .from("sales_catalog_import_items")
       .insert(itemPayload);
@@ -983,9 +1094,9 @@ async function processSalesCatalogImportJob(input: {
     const duplicateCount = draftReviews.filter((review) => review.duplicateCandidates.length > 0).length;
     const reviewRequired = warningCount > 0;
     const status: SalesCatalogImportJobStatus = reviewRequired ? "review_required" : "ready_to_publish";
-    const sourcePlatform = readImportJobSourcePlatform(input.job);
+    const sourcePlatform = readImportJobSourcePlatform(claimedJob);
 
-    await input.client
+    const { data: finalizedJob, error: finalizeError } = await input.client
       .from("sales_catalog_import_jobs")
       .update({
         status,
@@ -1002,7 +1113,18 @@ async function processSalesCatalogImportJob(input: {
         },
       })
       .eq("id", input.job.id)
-      .eq("organization_id", input.companyId);
+      .eq("organization_id", input.companyId)
+      .eq("status", "extracting")
+      .select("id")
+      .maybeSingle<{ id: string }>();
+
+    if (finalizeError) {
+      throw new Error(`Nao foi possivel concluir a importacao: ${finalizeError.message}`);
+    }
+
+    if (!finalizedJob) {
+      return;
+    }
 
     await input.client.from("sales_catalog_import_events").insert({
       import_job_id: input.job.id,
@@ -1020,6 +1142,10 @@ async function processSalesCatalogImportJob(input: {
       },
     });
   } catch (error) {
+    if (await isImportCancelled(input.client, input.job.id, input.companyId)) {
+      return;
+    }
+
     await markImportFailed(
       input.client,
       input.job.id,
@@ -2567,7 +2693,7 @@ async function buildImportedMedia(input: {
     return {
       media: [],
       imageImportStatus: "failed",
-      imageImportError: error instanceof Error ? error.message : "Falha ao importar imagem externa.",
+      imageImportError: formatExternalImageImportError(error),
     };
   }
 }
@@ -2680,6 +2806,15 @@ async function importExternalImageToR2(input: {
     kind: resolveSalesCatalogMediaKind(contentType, fileName),
     createdAt: input.now,
   };
+}
+
+function formatExternalImageImportError(error: unknown) {
+  const message = error instanceof Error ? error.message : "";
+  if (/r2|cloudflare|bucket|endpoint|access key|secret access|public url/i.test(message)) {
+    return "Nao foi possivel trazer a imagem para o armazenamento da ConnectyHub. Verifique a configuracao de midias.";
+  }
+
+  return message || "Falha ao importar imagem externa.";
 }
 
 function buildImportItemPatchMetadata(patch: NormalizedItemPatch): JsonRecord | null {
@@ -2806,6 +2941,29 @@ async function markImportFailed(client: SupabaseClient, jobId: string, companyId
       payload: {},
     }),
   ]);
+}
+
+async function isImportCancelled(client: SupabaseClient, jobId: string, companyId: string) {
+  const { data } = await client
+    .from("sales_catalog_import_jobs")
+    .select("status, error_message, stats")
+    .eq("id", jobId)
+    .eq("organization_id", companyId)
+    .maybeSingle<{ status: SalesCatalogImportJobStatus; error_message: string | null; stats: JsonRecord | null }>();
+
+  return isImportCancelledStatus(data?.status ?? null, data?.error_message ?? null, data?.stats ?? null);
+}
+
+function isImportCancelledStatus(
+  status: SalesCatalogImportJobStatus | null,
+  errorMessage?: string | null,
+  stats?: JsonRecord | null,
+) {
+  return status === "failed"
+    && (
+      readBoolean(stats?.cancelled) === true
+      || /cancelad/i.test(errorMessage ?? "")
+    );
 }
 
 function buildQueuedImportSourceRows(input: {

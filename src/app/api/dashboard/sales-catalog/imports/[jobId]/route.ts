@@ -6,6 +6,7 @@ import {
   statusForDashboardCompanyScopeError,
 } from "@/lib/client-os/dashboard-route-scope";
 import {
+  cancelSalesCatalogImportJob,
   getSalesCatalogImportJob,
   updateSalesCatalogImportItems,
   type SalesCatalogImportDuplicateAction,
@@ -98,6 +99,41 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ j
     return NextResponse.json({ importJob });
   } catch (error) {
     return NextResponse.json(formatRouteError(error, "Erro ao editar itens importados."), { status: statusForRouteError(error, 500) });
+  }
+}
+
+export async function DELETE(request: NextRequest, context: { params: Promise<{ jobId: string }> }) {
+  const workspace = await getCurrentWorkspace();
+
+  if (!workspace) {
+    return NextResponse.json({ error: "Sessao obrigatoria." }, { status: 401 });
+  }
+
+  try {
+    const { jobId } = await context.params;
+    const client = createServiceClient();
+    const companyId = resolveDashboardCompanyId({
+      workspace,
+      requestedCompanyId: readString(request.nextUrl.searchParams.get("companyId")),
+      missingMessage: "Escolha uma empresa antes de cancelar a importacao.",
+    });
+    const company = await requireClientCompanyAccess({
+      userId: workspace.user.id,
+      companyId,
+      client,
+    });
+    await assertBillableAccess({ organizationId: company.id, client });
+
+    const importJob = await cancelSalesCatalogImportJob({
+      client,
+      companyId: company.id,
+      jobId,
+      userId: workspace.user.id,
+    });
+
+    return NextResponse.json({ importJob });
+  } catch (error) {
+    return NextResponse.json(formatRouteError(error, "Erro ao cancelar importacao."), { status: statusForRouteError(error, 500) });
   }
 }
 
