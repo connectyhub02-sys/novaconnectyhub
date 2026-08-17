@@ -90,6 +90,7 @@ import {
 import type {
   ClientSalesCatalogImportJob,
   ClientSalesCatalogImportItem,
+  SalesCatalogImportDuplicateAction,
   SalesCatalogImportDestination,
   SalesCatalogImportItemPatch,
   SalesCatalogImportPlatform,
@@ -119,6 +120,29 @@ type CatalogTab = "setup" | "shipping" | "products" | "orders" | "payments" | "w
 type SalesCatalogProductFormTab = "essential" | "pricing" | "media" | "stock" | "delivery";
 type CommercialFlowFilter = "all" | SalesCatalogCommercialFlowType;
 type CatalogImportPatchMap = Record<string, SalesCatalogImportItemPatch>;
+type CatalogImportMonitorStatus = ClientSalesCatalogImportJob["status"] | "preparing" | "uploading";
+type CatalogImportPreviewItemStatus = "queued" | "scanning" | "ready" | "warning" | "failed";
+type CatalogImportPreviewItem = {
+  id: string;
+  title: string;
+  detail: string;
+  price: string | null;
+  imageUrl: string | null;
+  status: CatalogImportPreviewItemStatus;
+};
+type CatalogImportMonitorState = {
+  open: boolean;
+  jobId: string | null;
+  title: string;
+  sourcePlatform: SalesCatalogImportPlatform;
+  sourceKind: SalesCatalogImportSourceKind;
+  status: CatalogImportMonitorStatus;
+  message: string;
+  previewItems: CatalogImportPreviewItem[];
+  visiblePreviewCount: number;
+  errorMessage: string | null;
+  startedAt: number;
+};
 
 type CatalogImportPlatformOption = {
   value: SalesCatalogImportPlatform;
@@ -584,6 +608,7 @@ export function SalesCatalogConsole({
   const [catalogImportText, setCatalogImportText] = useState("");
   const [catalogImportFiles, setCatalogImportFiles] = useState<File[]>([]);
   const [catalogImportPatches, setCatalogImportPatches] = useState<CatalogImportPatchMap>({});
+  const [catalogImportMonitor, setCatalogImportMonitor] = useState<CatalogImportMonitorState | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [visibilityId, setVisibilityId] = useState<string | null>(null);
@@ -615,6 +640,12 @@ export function SalesCatalogConsole({
   const selectedCatalogExportItems = useMemo(
     () => visibleItems.filter((item) => selectedCatalogExportItemIds.includes(item.id)),
     [selectedCatalogExportItemIds, visibleItems],
+  );
+  const monitoredCatalogImportJob = useMemo(
+    () => catalogImportMonitor?.jobId
+      ? catalogImportJobs.find((job) => job.id === catalogImportMonitor.jobId) ?? null
+      : null,
+    [catalogImportJobs, catalogImportMonitor?.jobId],
   );
   const filteredOrders = useMemo(
     () => orderFlowFilter === "all" ? visibleOrders : visibleOrders.filter((order) => order.commercialFlowType === orderFlowFilter),
@@ -711,7 +742,7 @@ export function SalesCatalogConsole({
       setLoadingCatalogImports(true);
 
       try {
-        const response = await fetch(`/api/dashboard/sales-catalog/imports?companyId=${encodeURIComponent(selectedCompanyId)}`);
+        const response = await fetch(`/api/dashboard/sales-catalog/imports?companyId=${encodeURIComponent(selectedCompanyId)}&processQueued=1`);
         const data = await response.json().catch(() => null) as { importJobs?: ClientSalesCatalogImportJob[]; error?: string } | null;
 
         if (cancelled) return;
@@ -748,7 +779,7 @@ export function SalesCatalogConsole({
     const intervalId = window.setInterval(() => {
       void (async () => {
         try {
-          const response = await fetch(`/api/dashboard/sales-catalog/imports?companyId=${encodeURIComponent(selectedCompanyId)}`);
+          const response = await fetch(`/api/dashboard/sales-catalog/imports?companyId=${encodeURIComponent(selectedCompanyId)}&processQueued=1`);
           const data = await response.json().catch(() => null) as { importJobs?: ClientSalesCatalogImportJob[] } | null;
 
           if (response.ok && data?.importJobs) {
@@ -758,10 +789,29 @@ export function SalesCatalogConsole({
           return;
         }
       })();
-    }, 12000);
+    }, 3500);
 
     return () => window.clearInterval(intervalId);
   }, [activeTab, catalogImportJobs, selectedCompanyId]);
+
+  useEffect(() => {
+    if (!catalogImportMonitor?.open || catalogImportMonitor.previewItems.length <= catalogImportMonitor.visiblePreviewCount) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      setCatalogImportMonitor((current) => {
+        if (!current?.open || current.previewItems.length <= current.visiblePreviewCount) return current;
+
+        return {
+          ...current,
+          visiblePreviewCount: Math.min(current.previewItems.length, current.visiblePreviewCount + 1),
+        };
+      });
+    }, 420);
+
+    return () => window.clearInterval(intervalId);
+  }, [catalogImportMonitor?.open, catalogImportMonitor?.previewItems.length, catalogImportMonitor?.visiblePreviewCount]);
 
   function changeCompany(companyId: string) {
     const nextSettings = settings.find((entry) => entry.companyId === companyId) ?? null;
@@ -784,6 +834,7 @@ export function SalesCatalogConsole({
     setCatalogImportText("");
     setCatalogImportFiles([]);
     setCatalogImportPatches({});
+    setCatalogImportMonitor(null);
     setSelectedCatalogImportInstanceId("");
     setSelectedCatalogExportInstanceId("");
     setCatalogImportAgentScopeId("");
@@ -1447,7 +1498,7 @@ export function SalesCatalogConsole({
     setNotice(null);
 
     try {
-      const response = await fetch(`/api/dashboard/sales-catalog/imports?companyId=${encodeURIComponent(selectedCompanyId)}`);
+      const response = await fetch(`/api/dashboard/sales-catalog/imports?companyId=${encodeURIComponent(selectedCompanyId)}&processQueued=1`);
       const data = await response.json().catch(() => null) as { importJobs?: ClientSalesCatalogImportJob[]; error?: string } | null;
 
       if (!response.ok || !data?.importJobs) {
@@ -1548,11 +1599,37 @@ export function SalesCatalogConsole({
       return;
     }
     const importSourceKind = resolveCatalogImportSourceKind(selectedPlatform, catalogImportFiles);
+    const monitorTitle = catalogImportTitle.trim() || selectedPlatform.defaultTitle || "Importacao de produtos";
 
     setCreatingCatalogImport(true);
     setNotice(null);
+    setCatalogImportMonitor({
+      open: true,
+      jobId: null,
+      title: monitorTitle,
+      sourcePlatform: catalogImportSourcePlatform,
+      sourceKind: importSourceKind,
+      status: "preparing",
+      message: "Lendo o arquivo e preparando a importacao.",
+      previewItems: [],
+      visiblePreviewCount: 0,
+      errorMessage: null,
+      startedAt: Date.now(),
+    });
 
     try {
+      const previewItems = await buildCatalogImportPreviewItems(catalogImportFiles, catalogImportSourcePlatform);
+
+      setCatalogImportMonitor((current) => current?.open ? {
+        ...current,
+        status: "uploading",
+        message: previewItems.length > 0
+          ? "Encontramos uma pre-visualizacao do arquivo. Agora a IA vai validar os produtos."
+          : "Arquivo enviado para leitura. A IA vai identificar produtos, precos e imagens.",
+        previewItems,
+        visiblePreviewCount: Math.min(previewItems.length, 1),
+      } : current);
+
       const formData = new FormData();
       formData.set("companyId", selectedCompanyId);
       formData.set("sourceKind", importSourceKind);
@@ -1585,6 +1662,14 @@ export function SalesCatalogConsole({
       }
 
       setCatalogImportJobs((current) => [data.importJob!, ...current.filter((job) => job.id !== data.importJob!.id)]);
+      setCatalogImportMonitor((current) => current?.open ? {
+        ...current,
+        jobId: data.importJob!.id,
+        status: data.importJob!.status,
+        message: getCatalogImportMonitorMessage(data.importJob!),
+        errorMessage: data.importJob!.errorMessage,
+        visiblePreviewCount: data.importJob!.items.length > 0 ? current.previewItems.length : current.visiblePreviewCount,
+      } : current);
       setCatalogImportText("");
       setCatalogImportFiles([]);
       setNotice({
@@ -1596,10 +1681,41 @@ export function SalesCatalogConsole({
             : "Importacao enfileirada. O cron vai extrair os produtos em instantes.",
       });
     } catch (error) {
-      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao importar produtos." });
+      const message = error instanceof Error ? error.message : "Erro ao importar produtos.";
+      setCatalogImportMonitor((current) => current?.open ? {
+        ...current,
+        status: "failed",
+        message,
+        errorMessage: message,
+      } : current);
+      setNotice({ tone: "error", message });
     } finally {
       setCreatingCatalogImport(false);
     }
+  }
+
+  function openCatalogImportMonitor(job: ClientSalesCatalogImportJob) {
+    setCatalogImportMonitor({
+      open: true,
+      jobId: job.id,
+      title: job.title ?? formatImportPlatform(job.sourcePlatform),
+      sourcePlatform: job.sourcePlatform,
+      sourceKind: job.sourceKind,
+      status: job.status,
+      message: getCatalogImportMonitorMessage(job),
+      previewItems: job.items.map(mapImportItemToPreviewItem),
+      visiblePreviewCount: job.items.length,
+      errorMessage: job.errorMessage,
+      startedAt: Date.now(),
+    });
+
+    if (job.status === "uploaded" || job.status === "extracting") {
+      void refreshCatalogImports();
+    }
+  }
+
+  function closeCatalogImportMonitor() {
+    setCatalogImportMonitor((current) => current ? { ...current, open: false } : current);
   }
 
   async function saveCatalogImportReview(job: ClientSalesCatalogImportJob) {
@@ -3096,10 +3212,20 @@ export function SalesCatalogConsole({
             onChangeTargetMode={handleCatalogImportTargetMode}
             onChangeTitle={setCatalogImportTitle}
             onCreate={createCatalogImport}
+            onOpenMonitor={openCatalogImportMonitor}
             onPublish={publishCatalogImport}
             onRefresh={refreshCatalogImports}
             onSaveReview={saveCatalogImportReview}
           />
+          {catalogImportMonitor?.open ? (
+            <CatalogImportProgressModal
+              job={monitoredCatalogImportJob}
+              loading={loadingCatalogImports || creatingCatalogImport}
+              monitor={catalogImportMonitor}
+              onClose={closeCatalogImportMonitor}
+              onRefresh={refreshCatalogImports}
+            />
+          ) : null}
           <WhatsAppCatalogBridgePanel
             companies={companies}
             companyName={selectedCompany?.name ?? "empresa"}
@@ -3120,7 +3246,7 @@ export function SalesCatalogConsole({
             onImport={importWhatsappCatalog}
             onToggleExportItem={toggleWhatsappExportItem}
           />
-          <Panel id="sales-catalog-tour-products" title={editingItemId ? "Editar item" : "Novo item"} eyebrow={selectedCompany?.name ?? "empresa"} tone="cyan" compact>
+          <Panel id="sales-catalog-tour-products" title={editingItemId ? "Editar item" : "Cadastrar produto manualmente"} eyebrow={selectedCompany?.name ?? "empresa"} tone="cyan" compact>
             <div className="space-y-3">
             <SalesProductFormTabs activeTab={productFormTab} onChange={setProductFormTab} tabs={salesCatalogProductFormTabs} />
 
@@ -4046,6 +4172,7 @@ function SalesCatalogImportPanel({
   onChangeTargetMode,
   onChangeTitle,
   onCreate,
+  onOpenMonitor,
   onPublish,
   onRefresh,
   onSaveReview,
@@ -4076,6 +4203,7 @@ function SalesCatalogImportPanel({
   onChangeTargetMode: (value: SalesCatalogImportTargetMode) => void;
   onChangeTitle: (value: string) => void;
   onCreate: () => void;
+  onOpenMonitor: (job: ClientSalesCatalogImportJob) => void;
   onPublish: (job: ClientSalesCatalogImportJob) => void;
   onRefresh: () => void;
   onSaveReview: (job: ClientSalesCatalogImportJob) => void;
@@ -4262,6 +4390,7 @@ function SalesCatalogImportPanel({
                 publishing={publishingJobId === job.id}
                 saving={savingJobId === job.id}
                 onChangeItem={onChangeItem}
+                onOpenMonitor={() => onOpenMonitor(job)}
                 onPublish={() => onPublish(job)}
                 onSaveReview={() => onSaveReview(job)}
               />
@@ -4304,11 +4433,191 @@ function ImportChoiceButton({
   );
 }
 
+function DuplicateActionButton({
+  active,
+  icon: Icon,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  icon: LucideIcon;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "inline-flex min-h-9 min-w-0 items-center justify-center gap-2 rounded-lg border px-2 font-mono text-[10px] font-bold uppercase tracking-wide transition",
+        active ? "border-amber-300/70 bg-amber-300/20 text-amber-900" : "text-slate-600 hover:bg-amber-400/10 hover:text-amber-900",
+      )}
+      style={{ borderColor: active ? undefined : "var(--ch-border)" }}
+    >
+      <Icon className="h-3.5 w-3.5 shrink-0" />
+      <span className="truncate">{label}</span>
+    </button>
+  );
+}
+
+function CatalogImportProgressModal({
+  job,
+  loading,
+  monitor,
+  onClose,
+  onRefresh,
+}: {
+  job: ClientSalesCatalogImportJob | null;
+  loading: boolean;
+  monitor: CatalogImportMonitorState;
+  onClose: () => void;
+  onRefresh: () => void;
+}) {
+  const officialItems = job?.items.map(mapImportItemToPreviewItem) ?? [];
+  const visiblePreviewItems = monitor.previewItems.slice(0, Math.max(0, monitor.visiblePreviewCount));
+  const visibleItems = officialItems.length > 0 ? officialItems : visiblePreviewItems;
+  const active = job ? isCatalogImportJobActive(job) : monitor.status === "preparing" || monitor.status === "uploading";
+  const progress = job ? getCatalogImportJobProgress(job) : getCatalogImportMonitorProgress(monitor);
+  const statusLabel = job ? formatImportJobStatus(job.status) : formatCatalogImportMonitorStatus(monitor.status);
+  const message = job ? getCatalogImportMonitorMessage(job) : monitor.message;
+  const errorMessage = job?.errorMessage ?? monitor.errorMessage;
+  const itemCount = job?.items.length ?? monitor.previewItems.length;
+  const imageCount = job?.items.filter((item) => item.imageUrl).length ?? monitor.previewItems.filter((item) => item.imageUrl).length;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-4xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
+          <div className="min-w-0">
+            <p className="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-red-500">importacao com ia</p>
+            <h3 className="mt-1 truncate text-xl font-bold text-slate-950">{monitor.title}</h3>
+            <p className="mt-1 text-sm text-slate-500">{message}</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <NeonBadge tone={job?.status === "failed" || monitor.status === "failed" ? "rose" : active ? "cyan" : "green"}>
+              {statusLabel}
+            </NeonBadge>
+            <button
+              type="button"
+              onClick={onClose}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition hover:bg-slate-100 hover:text-slate-950"
+              aria-label="Fechar acompanhamento da importacao"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+
+        <div className="grid gap-4 p-5 lg:grid-cols-[260px_minmax(0,1fr)]">
+          <div className="space-y-3">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <span className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">progresso</span>
+                {active || loading ? <Loader2 className="h-4 w-4 animate-spin text-red-500" /> : <CheckCircle2 className="h-4 w-4 text-emerald-500" />}
+              </div>
+              <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-200">
+                <div
+                  className={cn(
+                    "h-full rounded-full transition-all duration-700",
+                    job?.status === "failed" || monitor.status === "failed" ? "bg-rose-500" : "bg-red-500",
+                  )}
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+              <p className="mt-3 font-mono text-2xl font-bold text-slate-950">{progress}%</p>
+              <p className="text-xs text-slate-500">
+                {officialItems.length > 0
+                  ? "Produtos oficiais carregados do banco."
+                  : "Pre-visualizacao do arquivo enquanto a IA processa."}
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <MiniStat label="itens" value={String(itemCount)} />
+              <MiniStat label="imagens" value={String(imageCount)} />
+            </div>
+
+            {errorMessage ? (
+              <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+                {errorMessage}
+              </div>
+            ) : null}
+
+            <button
+              type="button"
+              disabled={loading}
+              onClick={onRefresh}
+              className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-700 transition hover:bg-slate-100 disabled:opacity-50"
+            >
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              Atualizar leitura
+            </button>
+          </div>
+
+          <div className="min-w-0 rounded-2xl border border-slate-200 bg-slate-50">
+            <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+              <div>
+                <p className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">produtos encontrados</p>
+                <p className="text-xs text-slate-500">{formatImportPlatform(monitor.sourcePlatform)} / {formatImportSourceKind(monitor.sourceKind)}</p>
+              </div>
+              {active ? <span className="h-2 w-2 rounded-full bg-red-500 shadow-[0_0_18px_rgba(239,68,68,0.8)]" /> : null}
+            </div>
+
+            <div className="max-h-[460px] overflow-y-auto p-3">
+              {visibleItems.length > 0 ? (
+                <div className="grid gap-2">
+                  {visibleItems.map((item, index) => (
+                    <div
+                      key={item.id}
+                      className="grid grid-cols-[32px_minmax(0,1fr)_auto] items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm"
+                    >
+                      <div className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-red-50 text-red-600">
+                        {item.imageUrl ? <ImageIcon className="h-4 w-4" /> : <PackagePlus className="h-4 w-4" />}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-slate-950">{index + 1}. {item.title}</p>
+                        <p className="truncate text-xs text-slate-500">{item.detail}</p>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        {item.price ? <span className="font-mono text-xs font-bold text-slate-900">{item.price}</span> : null}
+                        <ImportPreviewStatusDot status={item.status} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="grid gap-2">
+                  {Array.from({ length: 5 }).map((_, index) => (
+                    <div key={index} className="h-14 animate-pulse rounded-xl bg-white" />
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ImportPreviewStatusDot({ status }: { status: CatalogImportPreviewItemStatus }) {
+  const tone = status === "failed"
+    ? "bg-rose-500"
+    : status === "warning"
+      ? "bg-amber-400"
+      : status === "ready"
+        ? "bg-emerald-500"
+        : "bg-cyan-500";
+
+  return <span className={cn("h-2.5 w-2.5 rounded-full", tone)} />;
+}
+
 function CatalogImportJobCard({
   job,
   publishing,
   saving,
   onChangeItem,
+  onOpenMonitor,
   onPublish,
   onSaveReview,
 }: {
@@ -4316,12 +4625,15 @@ function CatalogImportJobCard({
   publishing: boolean;
   saving: boolean;
   onChangeItem: (itemId: string, patch: Omit<SalesCatalogImportItemPatch, "id">) => void;
+  onOpenMonitor: () => void;
   onPublish: () => void;
   onSaveReview: () => void;
 }) {
   const pendingItems = job.items.filter((item) => item.status !== "published" && item.status !== "discarded");
   const readyItems = pendingItems.filter((item) => item.status === "ready").length;
   const canPublish = pendingItems.length > 0 && !publishing;
+  const active = isCatalogImportJobActive(job);
+  const progress = getCatalogImportJobProgress(job);
 
   return (
     <div className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
@@ -4337,14 +4649,28 @@ function CatalogImportJobCard({
             {job.inputUrl ? <span className="max-w-[190px] truncate">{job.inputUrl}</span> : null}
           </p>
         </div>
-        <NeonBadge tone={importJobStatusTone(job.status)}>{formatImportJobStatus(job.status)}</NeonBadge>
+        <div className="flex items-center gap-2">
+          {active ? <Loader2 className="h-3.5 w-3.5 animate-spin text-cyan-400" /> : null}
+          <NeonBadge tone={importJobStatusTone(job.status)}>{formatImportJobStatus(job.status)}</NeonBadge>
+        </div>
       </div>
 
-      <div className="mt-3 grid gap-2 sm:grid-cols-4">
+      <div className="mt-3 grid gap-2 sm:grid-cols-5">
         <MiniStat label="itens" value={String(job.items.length)} />
         <MiniStat label="prontos" value={String(readyItems)} />
         <MiniStat label="externos" value={String(job.items.filter((item) => item.salesDestination === "external_site").length)} />
+        <MiniStat label="duplicados" value={String(job.items.filter((item) => item.duplicateCandidates.length > 0).length)} />
         <MiniStat label="imagens" value={String(job.items.filter((item) => item.imageUrl).length)} />
+      </div>
+
+      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-200">
+        <div
+          className={cn(
+            "h-full rounded-full transition-all duration-700",
+            job.status === "failed" ? "bg-rose-500" : active ? "bg-cyan-500" : "bg-emerald-500",
+          )}
+          style={{ width: `${progress}%` }}
+        />
       </div>
 
       {job.errorMessage ? (
@@ -4354,6 +4680,15 @@ function CatalogImportJobCard({
       ) : null}
 
       <div className="mt-3 flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={onOpenMonitor}
+          className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-slate-300 transition hover:bg-cyan-400/10 hover:text-cyan-100"
+          style={{ borderColor: "var(--ch-border)" }}
+        >
+          <Eye className="h-3.5 w-3.5" />
+          Acompanhar
+        </button>
         <button
           type="button"
           disabled={saving || publishing}
@@ -4398,6 +4733,16 @@ function CatalogImportItemEditor({
   onChange: (patch: Omit<SalesCatalogImportItemPatch, "id">) => void;
 }) {
   const canImportImage = Boolean(item.imageUrl) && item.salesDestination === "connectyhub_checkout";
+  const selectedDuplicateTargetId = item.duplicateTargetItemId ?? item.duplicateCandidates[0]?.itemId ?? "";
+
+  function changeDuplicateAction(action: SalesCatalogImportDuplicateAction) {
+    onChange({
+      duplicateAction: action,
+      duplicateTargetItemId: action === "update_existing" || action === "skip"
+        ? selectedDuplicateTargetId || item.duplicateCandidates[0]?.itemId || null
+        : null,
+    });
+  }
 
   return (
     <div className="rounded-lg border p-2.5" style={{ borderColor: "var(--ch-border)", background: "var(--ch-panel)" }}>
@@ -4411,6 +4756,59 @@ function CatalogImportItemEditor({
         </div>
         {item.price ? <span className="font-mono text-[12px] font-semibold text-emerald-200">R$ {item.price}</span> : null}
       </div>
+
+      {item.duplicateCandidates.length > 0 ? (
+        <div className="mb-2 rounded-lg border border-amber-400/30 bg-amber-400/10 p-2.5">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="font-mono text-[10px] font-bold uppercase tracking-wide text-amber-800">possivel duplicidade</p>
+              <p className="mt-1 text-[11px] text-slate-700">
+                Encontramos produto parecido no catalogo. Por seguranca, a acao inicial e ignorar ate voce decidir.
+              </p>
+            </div>
+            <NeonBadge tone="warning">{Math.round((item.duplicateCandidates[0]?.score ?? 0) * 100)}%</NeonBadge>
+          </div>
+
+          <select
+            value={selectedDuplicateTargetId}
+            onChange={(event) => onChange({
+              duplicateTargetItemId: event.target.value,
+              duplicateAction: item.duplicateAction === "create_new" ? "update_existing" : item.duplicateAction,
+            })}
+            className="mt-2 h-9 w-full rounded-lg border bg-transparent px-3 text-[11px] outline-none"
+            style={{ borderColor: "var(--ch-border)" }}
+          >
+            {item.duplicateCandidates.map((candidate) => (
+              <option key={candidate.itemId} value={candidate.itemId}>
+                {candidate.title}
+                {candidate.price ? ` - R$ ${candidate.price}` : ""}
+                {candidate.reasons.length ? ` (${candidate.reasons.join(", ")})` : ""}
+              </option>
+            ))}
+          </select>
+
+          <div className="mt-2 grid gap-2 sm:grid-cols-3">
+            <DuplicateActionButton
+              active={item.duplicateAction === "skip"}
+              icon={Trash2}
+              label="Ignorar"
+              onClick={() => changeDuplicateAction("skip")}
+            />
+            <DuplicateActionButton
+              active={item.duplicateAction === "update_existing"}
+              icon={RefreshCw}
+              label="Atualizar"
+              onClick={() => changeDuplicateAction("update_existing")}
+            />
+            <DuplicateActionButton
+              active={item.duplicateAction === "create_new"}
+              icon={PackagePlus}
+              label="Criar novo"
+              onClick={() => changeDuplicateAction("create_new")}
+            />
+          </div>
+        </div>
+      ) : null}
 
       <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_105px]">
         <input
@@ -5555,6 +5953,214 @@ function formatFileSize(size: number) {
   if (size >= 1024 * 1024) return `${(size / (1024 * 1024)).toFixed(1)} MB`;
   if (size >= 1024) return `${Math.ceil(size / 1024)} KB`;
   return `${size} B`;
+}
+
+async function buildCatalogImportPreviewItems(files: File[], platform: SalesCatalogImportPlatform): Promise<CatalogImportPreviewItem[]> {
+  const previews: CatalogImportPreviewItem[] = [];
+
+  for (const file of files) {
+    const sourceKind = inferImportSourceKindFromFile(file);
+
+    if (sourceKind === "csv" || sourceKind === "text") {
+      const text = (await file.text().catch(() => "")).slice(0, 260000);
+      previews.push(...extractCatalogImportPreviewItemsFromText(text, file.name, platform));
+    } else {
+      previews.push({
+        id: `${file.name}-${file.size}`,
+        title: file.name,
+        detail: sourceKind === "image" ? "Imagem enviada para leitura do cardapio." : "Arquivo enviado para leitura da IA.",
+        price: null,
+        imageUrl: null,
+        status: "scanning",
+      });
+    }
+  }
+
+  return previews.slice(0, 80);
+}
+
+function extractCatalogImportPreviewItemsFromText(text: string, fileName: string, platform: SalesCatalogImportPlatform) {
+  const rows = parseDelimitedPreviewRows(text);
+  if (rows.length < 2) return [];
+
+  const headers = rows[0]!.map(normalizeImportPreviewColumn);
+
+  return rows.slice(1)
+    .map((row, index): CatalogImportPreviewItem | null => {
+      const title = readImportPreviewCell(row, headers, ["nome", "name", "title", "titulo", "produto", "product", "post_title"]);
+      if (!title) return null;
+
+      const price = readImportPreviewCell(row, headers, [
+        "preco",
+        "price",
+        "regular_price",
+        "sale_price",
+        "preco_normal",
+        "preco_regular",
+        "valor",
+        "variant_price",
+      ]);
+      const category = readImportPreviewCell(row, headers, ["categorias", "categories", "categoria", "category", "tipo"]);
+      const description = readImportPreviewCell(row, headers, ["descricao_curta", "short_description", "descricao", "description"]);
+      const imageUrl = readImportPreviewCell(row, headers, ["imagens", "images", "image", "image_src", "url_imagem", "foto"]);
+      const detail = [category, description || formatImportPlatform(platform)]
+        .filter(Boolean)
+        .join(" / ")
+        .slice(0, 180);
+
+      return {
+        id: `${fileName}-${index}-${title}`,
+        title: title.slice(0, 140),
+        detail,
+        price: formatImportPreviewPrice(price),
+        imageUrl: imageUrl ? imageUrl.split(",")[0]?.trim() ?? null : null,
+        status: price ? "scanning" : "warning",
+      };
+    })
+    .filter((item): item is CatalogImportPreviewItem => Boolean(item))
+    .slice(0, 80);
+}
+
+function parseDelimitedPreviewRows(text: string) {
+  const delimiter = detectPreviewDelimiter(text);
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let cell = "";
+  let quoted = false;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    const next = text[index + 1];
+
+    if (char === "\"") {
+      if (quoted && next === "\"") {
+        cell += "\"";
+        index += 1;
+      } else {
+        quoted = !quoted;
+      }
+      continue;
+    }
+
+    if (!quoted && char === delimiter) {
+      row.push(cell.trim());
+      cell = "";
+      continue;
+    }
+
+    if (!quoted && (char === "\n" || char === "\r")) {
+      if (char === "\r" && next === "\n") index += 1;
+      row.push(cell.trim());
+      if (row.some(Boolean)) rows.push(row);
+      row = [];
+      cell = "";
+      if (rows.length >= 82) break;
+      continue;
+    }
+
+    cell += char ?? "";
+  }
+
+  if (cell.trim() || row.length > 0) {
+    row.push(cell.trim());
+    if (row.some(Boolean)) rows.push(row);
+  }
+
+  return rows;
+}
+
+function detectPreviewDelimiter(text: string) {
+  const firstLine = text.split(/\r?\n/, 1)[0] ?? "";
+  const candidates = [",", ";", "\t"];
+
+  return candidates
+    .map((delimiter) => ({ delimiter, count: firstLine.split(delimiter).length }))
+    .sort((left, right) => right.count - left.count)[0]?.delimiter ?? ",";
+}
+
+function readImportPreviewCell(row: string[], headers: string[], aliases: string[]) {
+  const normalizedAliases = aliases.map(normalizeImportPreviewColumn);
+
+  for (const alias of normalizedAliases) {
+    const index = headers.indexOf(alias);
+    const value = index >= 0 ? row[index]?.trim() : "";
+    if (value) return value;
+  }
+
+  return null;
+}
+
+function normalizeImportPreviewColumn(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function formatImportPreviewPrice(value: string | null) {
+  const cleaned = value?.trim();
+  if (!cleaned) return null;
+  if (/^r\$/i.test(cleaned)) return cleaned;
+  return `R$ ${cleaned}`;
+}
+
+function mapImportItemToPreviewItem(item: ClientSalesCatalogImportItem): CatalogImportPreviewItem {
+  return {
+    id: item.id,
+    title: item.title,
+    detail: [item.category, formatImportDestination(item.salesDestination), item.warnings[0]]
+      .filter(Boolean)
+      .join(" / "),
+    price: item.price ? `R$ ${item.price}` : null,
+    imageUrl: item.imageUrl,
+    status: item.status === "error"
+      ? "failed"
+      : item.warnings.length > 0 || item.status === "draft"
+        ? "warning"
+        : item.status === "ready" || item.status === "published"
+          ? "ready"
+          : "scanning",
+  };
+}
+
+function isCatalogImportJobActive(job: ClientSalesCatalogImportJob) {
+  return job.status === "uploaded" || job.status === "extracting" || job.status === "publishing";
+}
+
+function getCatalogImportJobProgress(job: ClientSalesCatalogImportJob) {
+  if (job.status === "failed" || job.status === "published") return 100;
+  if (job.status === "ready_to_publish" || job.status === "review_required") return 100;
+  if (job.status === "publishing") return 88;
+  if (job.status === "extracting") return Math.min(86, 42 + Math.max(1, job.items.length) * 4);
+  return job.items.length > 0 ? 38 : 18;
+}
+
+function getCatalogImportMonitorProgress(monitor: CatalogImportMonitorState) {
+  if (monitor.status === "failed") return 100;
+  if (monitor.status === "preparing") return 12;
+  if (monitor.status === "uploading") {
+    if (monitor.previewItems.length === 0) return 26;
+    return Math.min(72, 30 + Math.round((monitor.visiblePreviewCount / Math.max(1, monitor.previewItems.length)) * 42));
+  }
+  return 30;
+}
+
+function getCatalogImportMonitorMessage(job: ClientSalesCatalogImportJob) {
+  if (job.status === "uploaded") return "Importacao recebida. A fila vai iniciar a leitura em instantes.";
+  if (job.status === "extracting") return "A IA esta lendo o arquivo e separando produtos, precos, imagens e duplicidades.";
+  if (job.status === "review_required") return "Produtos encontrados. Alguns itens precisam da sua revisao antes de publicar.";
+  if (job.status === "ready_to_publish") return "Produtos encontrados e prontos para publicar no catalogo.";
+  if (job.status === "publishing") return "Publicando produtos no catalogo da empresa.";
+  if (job.status === "published") return "Produtos publicados. Eles ja podem aparecer para o agente e no atendimento manual.";
+  return job.errorMessage ?? "A importacao falhou. Revise o arquivo ou tente novamente.";
+}
+
+function formatCatalogImportMonitorStatus(value: CatalogImportMonitorStatus) {
+  if (value === "preparing") return "preparando";
+  if (value === "uploading") return "enviando";
+  return formatImportJobStatus(value);
 }
 
 function formatImportSourceKind(value: SalesCatalogImportSourceKind) {

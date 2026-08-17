@@ -8,6 +8,7 @@ import {
 import {
   getSalesCatalogImportJob,
   updateSalesCatalogImportItems,
+  type SalesCatalogImportDuplicateAction,
   type SalesCatalogImportDestination,
   type SalesCatalogImportItemPatch,
   type SalesCatalogImportItemStatus,
@@ -123,6 +124,11 @@ function readItemPatches(value: unknown): SalesCatalogImportItemPatch[] {
       if (record && "productUrl" in record) patch.productUrl = readNullableString(record.productUrl);
       if (record && "imageUrl" in record) patch.imageUrl = readNullableString(record.imageUrl);
       if (record && "importExternalImage" in record) patch.importExternalImage = readBoolean(record.importExternalImage) ?? false;
+      if (record && "duplicateAction" in record) {
+        const duplicateAction = normalizeDuplicateAction(readString(record.duplicateAction));
+        if (duplicateAction) patch.duplicateAction = duplicateAction;
+      }
+      if (record && "duplicateTargetItemId" in record) patch.duplicateTargetItemId = readNullableString(record.duplicateTargetItemId);
 
       return patch;
     })
@@ -137,6 +143,11 @@ function normalizeItemStatus(value: unknown): SalesCatalogImportItemStatus | nul
 
 function normalizeSalesDestination(value: unknown): SalesCatalogImportDestination | null {
   if (value === "external_site" || value === "connectyhub_checkout") return value;
+  return null;
+}
+
+function normalizeDuplicateAction(value: unknown): SalesCatalogImportDuplicateAction | null {
+  if (value === "create_new" || value === "update_existing" || value === "skip") return value;
   return null;
 }
 

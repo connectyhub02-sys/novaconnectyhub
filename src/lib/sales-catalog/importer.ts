@@ -53,9 +53,21 @@ export type SalesCatalogImportDestination = "connectyhub_checkout" | "external_s
 export type SalesCatalogImportJobStatus = "uploaded" | "extracting" | "review_required" | "ready_to_publish" | "publishing" | "published" | "failed";
 export type SalesCatalogImportItemStatus = "draft" | "ready" | "published" | "discarded" | "error";
 export type SalesCatalogImportImageImportStatus = "pending" | "imported" | "skipped" | "failed";
+export type SalesCatalogImportDuplicateAction = "create_new" | "update_existing" | "skip";
 export type SalesCatalogImportAssignmentScope = {
   assignedAgentIds: string[];
   assignedWhatsappInstanceIds: string[];
+};
+
+export type SalesCatalogImportDuplicateCandidate = {
+  itemId: string;
+  title: string;
+  category: string | null;
+  price: string | null;
+  productUrl: string | null;
+  source: string | null;
+  score: number;
+  reasons: string[];
 };
 
 type JsonRecord = Record<string, unknown>;
@@ -146,6 +158,16 @@ type ImportSourceRow = {
   created_at: string | null;
 };
 
+type ExistingSalesCatalogDuplicateRow = {
+  id: string;
+  title: string;
+  content: string | null;
+  tags: string[] | null;
+  metadata: JsonRecord | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
 export type ClientSalesCatalogImportItem = {
   id: string;
   jobId: string;
@@ -162,6 +184,9 @@ export type ClientSalesCatalogImportItem = {
   importExternalImage: boolean;
   imageImportStatus: SalesCatalogImportImageImportStatus | null;
   imageImportError: string | null;
+  duplicateCandidates: SalesCatalogImportDuplicateCandidate[];
+  duplicateAction: SalesCatalogImportDuplicateAction;
+  duplicateTargetItemId: string | null;
   attributes: SalesCatalogItemAttribute[];
   skus: SalesCatalogSku[];
   inventory: SalesCatalogProductInventory;
@@ -244,6 +269,8 @@ export type SalesCatalogImportItemPatch = {
   productUrl?: string | null;
   imageUrl?: string | null;
   importExternalImage?: boolean;
+  duplicateAction?: SalesCatalogImportDuplicateAction;
+  duplicateTargetItemId?: string | null;
 };
 
 export type SalesCatalogImportFileInput = {
@@ -415,6 +442,7 @@ export async function processQueuedSalesCatalogImportJobs(input: {
   client: SupabaseClient;
   limit?: number;
   jobId?: string | null;
+  companyId?: string | null;
 }) {
   let query = input.client
     .from("sales_catalog_import_jobs")
@@ -425,6 +453,10 @@ export async function processQueuedSalesCatalogImportJobs(input: {
 
   if (input.jobId) {
     query = query.eq("id", input.jobId);
+  }
+
+  if (input.companyId) {
+    query = query.eq("organization_id", input.companyId);
   }
 
   const { data, error } = await query;
@@ -721,10 +753,31 @@ export async function publishSalesCatalogImportJob(input: {
   let catalogItems = 0;
   let linkButtons = 0;
   let legacyReviewItems = 0;
+  let duplicateSkips = 0;
+  let duplicateUpdates = 0;
   let errors = 0;
 
   for (const item of candidates) {
     try {
+      const duplicateAction = resolveImportDuplicateAction(item);
+      const duplicateTargetItemId = duplicateAction === "update_existing"
+        ? resolveImportDuplicateTargetItemId(item)
+        : null;
+
+      if (duplicateAction === "update_existing" && !duplicateTargetItemId) {
+        throw new Error("Escolha qual produto existente deve ser atualizado.");
+      }
+
+      if (duplicateAction === "skip") {
+        await markImportItemDuplicateSkipped({
+          client: input.client,
+          companyId: input.companyId,
+          item,
+        });
+        duplicateSkips += 1;
+        continue;
+      }
+
       const publishItem = item.salesDestination === "manual_handoff"
         ? {
           ...item,
@@ -749,9 +802,11 @@ export async function publishSalesCatalogImportJob(input: {
           item: publishItem,
           linkButton,
           assignmentScope,
+          targetCatalogItemId: duplicateTargetItemId,
         });
         linkButtons += 1;
         catalogItems += 1;
+        if (duplicateAction === "update_existing") duplicateUpdates += 1;
       } else {
         await publishImportItemAsCatalogItem({
           client: input.client,
@@ -761,11 +816,13 @@ export async function publishSalesCatalogImportJob(input: {
           item: publishItem,
           linkButton: null,
           assignmentScope,
+          targetCatalogItemId: duplicateTargetItemId,
         });
         if (item.salesDestination === "manual_handoff") {
           legacyReviewItems += 1;
         }
         catalogItems += 1;
+        if (duplicateAction === "update_existing") duplicateUpdates += 1;
       }
     } catch (error) {
       errors += 1;
@@ -803,6 +860,8 @@ export async function publishSalesCatalogImportJob(input: {
         published_catalog_items: catalogItems,
         published_link_buttons: linkButtons,
         published_legacy_review_items: legacyReviewItems,
+        duplicate_skips: duplicateSkips,
+        duplicate_updates: duplicateUpdates,
         publish_errors: errors,
       },
     })
@@ -819,8 +878,10 @@ export async function publishSalesCatalogImportJob(input: {
       `${catalogItems} produto(s)`,
       `${linkButtons} botao(oes) externo(s)`,
       legacyReviewItems > 0 ? `${legacyReviewItems} item(ns) legado(s) convertido(s) para checkout` : null,
+      duplicateUpdates > 0 ? `${duplicateUpdates} duplicado(s) atualizado(s)` : null,
+      duplicateSkips > 0 ? `${duplicateSkips} duplicado(s) ignorado(s)` : null,
     ].filter(Boolean).join(", ") + ".",
-    payload: { catalogItems, linkButtons, legacyReviewItems, errors },
+    payload: { catalogItems, linkButtons, legacyReviewItems, duplicateUpdates, duplicateSkips, errors },
   });
 
   return getSalesCatalogImportJob({
@@ -867,35 +928,44 @@ async function processSalesCatalogImportJob(input: {
       .eq("organization_id", input.companyId)
       .in("status", ["draft", "ready", "error"]);
 
-    const itemPayload = extraction.drafts.slice(0, maxDraftItems).map((draft) => ({
+    const draftReviews = await buildImportDraftReviews({
+      client: input.client,
+      companyId: input.companyId,
+      drafts: extraction.drafts.slice(0, maxDraftItems),
+    });
+
+    const itemPayload = draftReviews.map((review) => ({
       import_job_id: input.job.id,
       organization_id: input.companyId,
-      status: draft.warnings.length > 0 ? "draft" : "ready",
-      sales_destination: draft.salesDestination,
-      title: draft.title,
-      description: draft.description,
-      category: draft.category,
-      price: draft.price,
-      currency: draft.currency,
-      product_url: draft.productUrl,
-      image_url: draft.imageUrl,
-      attributes: serializeItemAttributes(draft.attributes),
-      skus: serializeSalesCatalogSkus(draft.skus),
-      inventory: serializeProductInventory(draft.inventory),
-      shipping: serializeProductShipping(draft.shipping),
-      fulfillment: serializeProductFulfillment(draft.fulfillment),
-      offer: serializeProductOffer(draft.offer),
-      confidence: draft.confidence,
-      warnings: draft.warnings,
-      source_evidence: draft.sourceEvidence,
+      status: review.warnings.length > 0 ? "draft" : "ready",
+      sales_destination: review.draft.salesDestination,
+      title: review.draft.title,
+      description: review.draft.description,
+      category: review.draft.category,
+      price: review.draft.price,
+      currency: review.draft.currency,
+      product_url: review.draft.productUrl,
+      image_url: review.draft.imageUrl,
+      attributes: serializeItemAttributes(review.draft.attributes),
+      skus: serializeSalesCatalogSkus(review.draft.skus),
+      inventory: serializeProductInventory(review.draft.inventory),
+      shipping: serializeProductShipping(review.draft.shipping),
+      fulfillment: serializeProductFulfillment(review.draft.fulfillment),
+      offer: serializeProductOffer(review.draft.offer),
+      confidence: review.draft.confidence,
+      warnings: review.warnings,
+      source_evidence: review.draft.sourceEvidence,
       metadata: {
         created_from: "sales_catalog_ai_import",
         import_version: 1,
-        import_external_image: draft.importExternalImage,
-        image_import_status: draft.imageUrl
-          ? draft.importExternalImage ? "pending" : "skipped"
+        import_external_image: review.draft.importExternalImage,
+        image_import_status: review.draft.imageUrl
+          ? review.draft.importExternalImage ? "pending" : "skipped"
           : null,
         image_import_error: null,
+        duplicate_candidates: serializeDuplicateCandidates(review.duplicateCandidates),
+        duplicate_action: review.duplicateCandidates.length > 0 ? "skip" : "create_new",
+        duplicate_target_item_id: review.duplicateCandidates[0]?.itemId ?? null,
       },
     }));
 
@@ -908,8 +978,9 @@ async function processSalesCatalogImportJob(input: {
       return;
     }
 
-    const warningCount = extraction.drafts.reduce((total, draft) => total + draft.warnings.length, 0);
-    const readyCount = extraction.drafts.filter((draft) => draft.warnings.length === 0).length;
+    const warningCount = draftReviews.reduce((total, review) => total + review.warnings.length, 0);
+    const readyCount = draftReviews.filter((review) => review.warnings.length === 0).length;
+    const duplicateCount = draftReviews.filter((review) => review.duplicateCandidates.length > 0).length;
     const reviewRequired = warningCount > 0;
     const status: SalesCatalogImportJobStatus = reviewRequired ? "review_required" : "ready_to_publish";
     const sourcePlatform = readImportJobSourcePlatform(input.job);
@@ -924,6 +995,7 @@ async function processSalesCatalogImportJob(input: {
           total_items: extraction.drafts.length,
           ready_items: readyCount,
           warning_count: warningCount,
+          duplicate_count: duplicateCount,
           ai_used: extraction.aiUsed,
           source_platform: sourcePlatform,
           destinations: countDraftDestinations(extraction.drafts),
@@ -942,6 +1014,7 @@ async function processSalesCatalogImportJob(input: {
       payload: {
         warnings: extraction.warnings,
         warning_count: warningCount,
+        duplicate_count: duplicateCount,
         ai_used: extraction.aiUsed,
         source_platform: sourcePlatform,
       },
@@ -954,6 +1027,161 @@ async function processSalesCatalogImportJob(input: {
       error instanceof Error ? error.message : "Erro ao processar importacao.",
     );
   }
+}
+
+async function buildImportDraftReviews(input: {
+  client: SupabaseClient;
+  companyId: string;
+  drafts: SalesCatalogImportDraft[];
+}) {
+  const existingItems = await loadDuplicateCatalogItems(input);
+
+  return input.drafts.map((draft) => {
+    const duplicateCandidates = findDuplicateCandidatesForDraft(draft, existingItems);
+    const duplicateWarnings = duplicateCandidates.length > 0
+      ? [`Possivel duplicidade: ${duplicateCandidates[0]?.title ?? "produto ja cadastrado"}. Escolha criar novo, atualizar existente ou ignorar.`]
+      : [];
+
+    return {
+      draft,
+      duplicateCandidates,
+      warnings: Array.from(new Set([...draft.warnings, ...duplicateWarnings])),
+    };
+  });
+}
+
+async function loadDuplicateCatalogItems(input: {
+  client: SupabaseClient;
+  companyId: string;
+}) {
+  const { data, error } = await input.client
+    .from("intelligence_memory")
+    .select("id, title, content, tags, metadata, created_at, updated_at")
+    .eq("scope", "organization")
+    .eq("organization_id", input.companyId)
+    .eq("memory_type", "sales_catalog_item")
+    .order("updated_at", { ascending: false })
+    .limit(600);
+
+  if (error) {
+    throw new Error(`Nao foi possivel verificar duplicidades do catalogo: ${error.message}`);
+  }
+
+  return ((data ?? []) as unknown as ExistingSalesCatalogDuplicateRow[])
+    .map(mapDuplicateCatalogItem)
+    .filter((item): item is DuplicateCatalogItem => Boolean(item));
+}
+
+type DuplicateCatalogItem = SalesCatalogImportDuplicateCandidate & {
+  normalizedTitle: string;
+  normalizedUrl: string | null;
+  normalizedPrice: string | null;
+  normalizedCategory: string | null;
+  skuCodes: string[];
+};
+
+function mapDuplicateCatalogItem(row: ExistingSalesCatalogDuplicateRow): DuplicateCatalogItem | null {
+  const metadata = readRecord(row.metadata) ?? {};
+  if (readString(metadata.status) === "archived") return null;
+
+  const title = normalizeTitle(readString(metadata.title) ?? row.title);
+  if (!title) return null;
+
+  const category = normalizeOptionalText(readString(metadata.category), 80);
+  const price = normalizePrice(readString(metadata.price));
+  const productUrl = normalizeDraftUrl(
+    readString(metadata.source_product_url)
+      ?? readString(metadata.product_url)
+      ?? readString(metadata.url),
+  );
+  const source = normalizeOptionalText(readString(metadata.source), 80);
+  const skuCodes = readCatalogDuplicateSkuCodes(metadata);
+
+  return {
+    itemId: row.id,
+    title,
+    category,
+    price,
+    productUrl,
+    source,
+    score: 0,
+    reasons: [],
+    normalizedTitle: normalizeDuplicateText(title),
+    normalizedUrl: normalizeDuplicateUrl(productUrl),
+    normalizedPrice: price ? normalizeDuplicatePrice(price) : null,
+    normalizedCategory: category ? normalizeDuplicateText(category) : null,
+    skuCodes,
+  };
+}
+
+function findDuplicateCandidatesForDraft(
+  draft: SalesCatalogImportDraft,
+  existingItems: DuplicateCatalogItem[],
+): SalesCatalogImportDuplicateCandidate[] {
+  const normalizedTitle = normalizeDuplicateText(draft.title);
+  const normalizedUrl = normalizeDuplicateUrl(draft.productUrl);
+  const normalizedPrice = draft.price ? normalizeDuplicatePrice(draft.price) : null;
+  const normalizedCategory = draft.category ? normalizeDuplicateText(draft.category) : null;
+  const skuCodes = draft.skus
+    .map((sku) => normalizeSkuCode(sku.skuCode))
+    .filter((sku): sku is string => Boolean(sku));
+
+  return existingItems
+    .map((item) => {
+      const reasons: string[] = [];
+      let score = 0;
+
+      if (normalizedUrl && item.normalizedUrl && normalizedUrl === item.normalizedUrl) {
+        score += 0.9;
+        reasons.push("URL igual");
+      }
+
+      const hasSkuMatch = skuCodes.length > 0 && item.skuCodes.some((skuCode) => skuCodes.includes(skuCode));
+      if (hasSkuMatch) {
+        score += 0.9;
+        reasons.push("SKU igual");
+      }
+
+      if (normalizedTitle && item.normalizedTitle) {
+        if (normalizedTitle === item.normalizedTitle) {
+          score += 0.62;
+          reasons.push("Nome igual");
+        } else {
+          const similarity = duplicateTitleSimilarity(normalizedTitle, item.normalizedTitle);
+          if (similarity >= 0.85) {
+            score += 0.45;
+            reasons.push("Nome muito parecido");
+          } else if (similarity >= 0.72) {
+            score += 0.32;
+            reasons.push("Nome parecido");
+          }
+        }
+      }
+
+      if (normalizedPrice && item.normalizedPrice && normalizedPrice === item.normalizedPrice) {
+        score += 0.12;
+        reasons.push("Preco igual");
+      }
+
+      if (normalizedCategory && item.normalizedCategory && normalizedCategory === item.normalizedCategory) {
+        score += 0.08;
+        reasons.push("Categoria igual");
+      }
+
+      return {
+        itemId: item.itemId,
+        title: item.title,
+        category: item.category,
+        price: item.price,
+        productUrl: item.productUrl,
+        source: item.source,
+        score: Math.min(1, Number(score.toFixed(2))),
+        reasons: Array.from(new Set(reasons)),
+      };
+    })
+    .filter((candidate) => candidate.score >= 0.56 && candidate.reasons.length > 0)
+    .sort((left, right) => right.score - left.score)
+    .slice(0, 3);
 }
 
 async function processSalesCatalogImportJobByRow(input: {
@@ -1595,10 +1823,19 @@ async function publishImportItemAsCatalogItem(input: {
   item: ClientSalesCatalogImportItem;
   linkButton: PublishedTrackedLinkButton | null;
   assignmentScope: SalesCatalogImportAssignmentScope;
+  targetCatalogItemId?: string | null;
 }) {
-  const itemId = randomUUID();
   const now = new Date().toISOString();
-  const tag = createSalesCatalogTag(input.item.title, itemId);
+  const existingCatalogItem = input.targetCatalogItemId
+    ? await loadImportTargetCatalogItem({
+      client: input.client,
+      companyId: input.companyId,
+      itemId: input.targetCatalogItemId,
+    })
+    : null;
+  const existingMetadata = readRecord(existingCatalogItem?.metadata) ?? {};
+  const itemId = existingCatalogItem?.id ?? randomUUID();
+  const tag = readString(existingMetadata.tag) ?? createSalesCatalogTag(input.item.title, itemId);
   const mediaResult = await buildImportedMedia({
     client: input.client,
     companyId: input.companyId,
@@ -1606,7 +1843,8 @@ async function publishImportItemAsCatalogItem(input: {
     item: input.item,
     now,
   });
-  const media = mediaResult.media;
+  const existingMedia = readSalesCatalogMediaList(existingMetadata.media);
+  const media = mediaResult.media.length > 0 ? mediaResult.media : existingMedia;
   const inventory = input.item.inventory;
   const offer = input.item.offer;
   const itemFulfillment = input.item.fulfillment;
@@ -1632,6 +1870,7 @@ async function publishImportItemAsCatalogItem(input: {
     externalLinkButtonTag: input.linkButton?.tag ?? null,
   });
   const metadata = {
+    ...existingMetadata,
     title: input.item.title,
     description: input.item.description ?? buildFallbackDescription(input.item),
     category: input.item.category,
@@ -1666,38 +1905,64 @@ async function publishImportItemAsCatalogItem(input: {
       description: input.item.description ?? buildFallbackDescription(input.item),
       media,
     }),
-    created_by: input.userId,
+    duplicate_resolution: existingCatalogItem ? "updated_existing" : "created_new",
+    duplicate_source_import_item_id: input.item.id,
+    duplicate_target_item_id: input.targetCatalogItemId ?? null,
+    created_by: readString(existingMetadata.created_by) ?? input.userId,
     updated_by: input.userId,
-    updated_from: "sales_catalog_ai_import",
+    updated_from: existingCatalogItem ? "sales_catalog_ai_import_duplicate_update" : "sales_catalog_ai_import",
   };
 
-  const { data, error } = await input.client
-    .from("intelligence_memory")
-    .insert({
-      id: itemId,
-      scope: "organization",
-      organization_id: input.companyId,
-      memory_type: "sales_catalog_item",
-      title: input.item.title,
-      content,
-      importance: 0.82,
-      tags: [
-        "sales_catalog_item",
-        "sales_catalog",
-        "ai_import",
-        "whatsapp_agent",
-        "lead_tracking",
-        ...(input.item.salesDestination === "external_site" ? ["external_site_product"] : []),
-      ],
-      metadata,
-      created_at: now,
-      updated_at: now,
-    })
-    .select("id")
-    .single<{ id: string }>();
+  const tags = mergeSalesCatalogItemTags(
+    existingCatalogItem?.tags,
+    input.item.salesDestination === "external_site",
+  );
+
+  const mutation = existingCatalogItem
+    ? input.client
+      .from("intelligence_memory")
+      .update({
+        title: input.item.title,
+        content,
+        importance: 0.82,
+        tags,
+        metadata,
+        updated_at: now,
+      })
+      .eq("id", itemId)
+      .eq("organization_id", input.companyId)
+      .select("id")
+      .single<{ id: string }>()
+    : input.client
+      .from("intelligence_memory")
+      .insert({
+        id: itemId,
+        scope: "organization",
+        organization_id: input.companyId,
+        memory_type: "sales_catalog_item",
+        title: input.item.title,
+        content,
+        importance: 0.82,
+        tags,
+        metadata,
+        created_at: now,
+        updated_at: now,
+      })
+      .select("id")
+      .single<{ id: string }>();
+
+  const { data, error } = await mutation;
 
   if (error || !data) {
     throw new Error(error?.message ?? "Nao foi possivel publicar produto no catalogo.");
+  }
+
+  if (existingCatalogItem) {
+    await input.client
+      .from("sales_catalog_skus")
+      .delete()
+      .eq("organization_id", input.companyId)
+      .eq("catalog_item_id", data.id);
   }
 
   await persistImportedSkus({
@@ -1753,6 +2018,99 @@ async function publishImportItemAsCatalogItem(input: {
       assigned_whatsapp_instance_ids: input.assignmentScope.assignedWhatsappInstanceIds,
     },
   });
+}
+
+async function loadImportTargetCatalogItem(input: {
+  client: SupabaseClient;
+  companyId: string;
+  itemId: string;
+}) {
+  const { data, error } = await input.client
+    .from("intelligence_memory")
+    .select("id, title, content, tags, metadata, created_at, updated_at")
+    .eq("scope", "organization")
+    .eq("organization_id", input.companyId)
+    .eq("memory_type", "sales_catalog_item")
+    .eq("id", input.itemId)
+    .maybeSingle<ExistingSalesCatalogDuplicateRow>();
+
+  if (error) {
+    throw new Error(`Nao foi possivel carregar produto duplicado para atualizar: ${error.message}`);
+  }
+
+  if (!data) {
+    throw new Error("Produto duplicado escolhido para atualizacao nao foi encontrado.");
+  }
+
+  return data;
+}
+
+function resolveImportDuplicateAction(item: ClientSalesCatalogImportItem): SalesCatalogImportDuplicateAction {
+  if (item.duplicateCandidates.length === 0) return "create_new";
+  return item.duplicateAction;
+}
+
+function resolveImportDuplicateTargetItemId(item: ClientSalesCatalogImportItem) {
+  return item.duplicateTargetItemId ?? item.duplicateCandidates[0]?.itemId ?? null;
+}
+
+async function markImportItemDuplicateSkipped(input: {
+  client: SupabaseClient;
+  companyId: string;
+  item: ClientSalesCatalogImportItem;
+}) {
+  await input.client
+    .from("sales_catalog_import_items")
+    .update({
+      status: "discarded",
+      warnings: Array.from(new Set([...input.item.warnings, "Item ignorado por duplicidade."])),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", input.item.id)
+    .eq("organization_id", input.companyId);
+}
+
+function mergeSalesCatalogItemTags(existingTags: string[] | null | undefined, externalSite: boolean) {
+  return Array.from(new Set([
+    ...(Array.isArray(existingTags) ? existingTags.filter((tag): tag is string => typeof tag === "string" && Boolean(tag.trim())) : []),
+    "sales_catalog_item",
+    "sales_catalog",
+    "ai_import",
+    "whatsapp_agent",
+    "lead_tracking",
+    ...(externalSite ? ["external_site_product"] : []),
+  ]));
+}
+
+function readSalesCatalogMediaList(value: unknown): SalesCatalogMedia[] {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item): SalesCatalogMedia | null => {
+      const record = readRecord(item);
+      if (!record) return null;
+
+      const id = readString(record.id) ?? randomUUID();
+      const fileName = normalizeOptionalText(readString(record.fileName) ?? readString(record.file_name), 180);
+      const contentType = normalizeOptionalText(readString(record.contentType) ?? readString(record.content_type), 120);
+      const storageUrl = normalizeDraftUrl(readString(record.storageUrl) ?? readString(record.storage_url));
+      const size = normalizeNumber(record.size);
+      const createdAt = normalizeOptionalText(readString(record.createdAt) ?? readString(record.created_at), 40);
+
+      if (!fileName || !contentType || !storageUrl) return null;
+
+      return {
+        id,
+        fileName,
+        contentType,
+        size: size ?? 0,
+        storageUrl,
+        kind: resolveSalesCatalogMediaKind(contentType, fileName),
+        createdAt,
+      };
+    })
+    .filter((item): item is SalesCatalogMedia => Boolean(item))
+    .slice(0, 20);
 }
 
 async function publishImportItemAsTrackedLink(input: {
@@ -2352,6 +2710,16 @@ function buildImportItemPatchMetadata(patch: NormalizedItemPatch): JsonRecord | 
     metadata.image_import_error = null;
   }
 
+  if ("duplicateAction" in patch) {
+    changed = true;
+    metadata.duplicate_action = patch.duplicateAction;
+  }
+
+  if ("duplicateTargetItemId" in patch) {
+    changed = true;
+    metadata.duplicate_target_item_id = patch.duplicateTargetItemId;
+  }
+
   return changed ? metadata : null;
 }
 
@@ -2367,6 +2735,9 @@ function buildPublishedImportItemMetadata(
     image_import_error: mediaResult.imageImportError,
     source_image_url: item.imageUrl,
     imported_media_count: mediaResult.media.length,
+    duplicate_candidates: serializeDuplicateCandidates(item.duplicateCandidates),
+    duplicate_action: item.duplicateAction,
+    duplicate_target_item_id: item.duplicateTargetItemId,
   };
 }
 
@@ -2604,6 +2975,7 @@ function mapImportItem(row: ImportItemRow): ClientSalesCatalogImportItem {
     destination: row.sales_destination,
     imageUrl: row.image_url,
   });
+  const duplicateCandidates = readDuplicateCandidates(metadata.duplicate_candidates);
 
   return {
     id: row.id,
@@ -2621,6 +2993,9 @@ function mapImportItem(row: ImportItemRow): ClientSalesCatalogImportItem {
     importExternalImage,
     imageImportStatus: normalizeImageImportStatus(readString(metadata.image_import_status)),
     imageImportError: readString(metadata.image_import_error),
+    duplicateCandidates,
+    duplicateAction: normalizeDuplicateAction(readString(metadata.duplicate_action)) ?? defaultDuplicateAction(duplicateCandidates),
+    duplicateTargetItemId: normalizeUuid(readString(metadata.duplicate_target_item_id)) ?? duplicateCandidates[0]?.itemId ?? null,
     attributes: readAttributes(row.attributes),
     skus: readSkus(row.skus, { title: row.title, price: row.price, attributes: readAttributes(row.attributes) }),
     inventory: readInventory(row.inventory),
@@ -2661,6 +3036,8 @@ type NormalizedItemPatch = {
   productUrl?: string | null;
   imageUrl?: string | null;
   importExternalImage?: boolean;
+  duplicateAction?: SalesCatalogImportDuplicateAction;
+  duplicateTargetItemId?: string | null;
 };
 
 function normalizeItemPatch(patch: SalesCatalogImportItemPatch): NormalizedItemPatch | null {
@@ -2681,6 +3058,13 @@ function normalizeItemPatch(patch: SalesCatalogImportItemPatch): NormalizedItemP
   if ("productUrl" in patch) normalized.productUrl = normalizeDraftUrl(patch.productUrl);
   if ("imageUrl" in patch) normalized.imageUrl = normalizeDraftUrl(patch.imageUrl);
   if ("importExternalImage" in patch) normalized.importExternalImage = readBoolean(patch.importExternalImage) ?? false;
+  if ("duplicateAction" in patch) {
+    const duplicateAction = normalizeDuplicateAction(patch.duplicateAction);
+    if (duplicateAction) normalized.duplicateAction = duplicateAction;
+  }
+  if ("duplicateTargetItemId" in patch) {
+    normalized.duplicateTargetItemId = normalizeUuid(patch.duplicateTargetItemId) ?? null;
+  }
 
   return normalized;
 }
@@ -2919,6 +3303,126 @@ function serializeSalesCatalogMedia(media: SalesCatalogMedia[]) {
     kind: item.kind,
     created_at: item.createdAt,
   }));
+}
+
+function serializeDuplicateCandidates(candidates: SalesCatalogImportDuplicateCandidate[]) {
+  return candidates.map((candidate) => ({
+    item_id: candidate.itemId,
+    title: candidate.title,
+    category: candidate.category,
+    price: candidate.price,
+    product_url: candidate.productUrl,
+    source: candidate.source,
+    score: candidate.score,
+    reasons: candidate.reasons,
+  }));
+}
+
+function readDuplicateCandidates(value: unknown): SalesCatalogImportDuplicateCandidate[] {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item): SalesCatalogImportDuplicateCandidate | null => {
+      const record = readRecord(item);
+      if (!record) return null;
+
+      const itemId = normalizeUuid(readString(record.itemId) ?? readString(record.item_id));
+      const title = normalizeTitle(readString(record.title));
+      if (!itemId || !title) return null;
+
+      return {
+        itemId,
+        title,
+        category: normalizeOptionalText(readString(record.category), 80),
+        price: normalizePrice(readString(record.price)),
+        productUrl: normalizeDraftUrl(readString(record.productUrl) ?? readString(record.product_url)),
+        source: normalizeOptionalText(readString(record.source), 80),
+        score: clampConfidence(readNumber(record.score) ?? 0),
+        reasons: readStringList(record.reasons).slice(0, 8),
+      };
+    })
+    .filter((item): item is SalesCatalogImportDuplicateCandidate => Boolean(item))
+    .slice(0, 5);
+}
+
+function defaultDuplicateAction(candidates: SalesCatalogImportDuplicateCandidate[]): SalesCatalogImportDuplicateAction {
+  return candidates.length > 0 ? "skip" : "create_new";
+}
+
+function normalizeDuplicateAction(value: unknown): SalesCatalogImportDuplicateAction | null {
+  if (value === "create_new" || value === "update_existing" || value === "skip") return value;
+  return null;
+}
+
+function readCatalogDuplicateSkuCodes(metadata: JsonRecord) {
+  const codes = new Set<string>();
+  const skus = Array.isArray(metadata.skus) ? metadata.skus : [];
+
+  for (const sku of skus) {
+    const record = readRecord(sku);
+    const skuCode = normalizeSkuCode(readString(record?.skuCode) ?? readString(record?.sku_code));
+    if (skuCode) codes.add(skuCode);
+  }
+
+  for (const value of [
+    metadata.sku,
+    metadata.sku_code,
+    metadata.whatsapp_catalog_retailer_id,
+    metadata.external_sku,
+  ]) {
+    const skuCode = normalizeSkuCode(readString(value));
+    if (skuCode) codes.add(skuCode);
+  }
+
+  return Array.from(codes);
+}
+
+function normalizeDuplicateText(value: string | null | undefined) {
+  return (value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\b(?:produto|item|modelo|novo|usado|premium)\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizeDuplicateUrl(value: string | null | undefined) {
+  const normalized = normalizeDraftUrl(value);
+  if (!normalized) return null;
+
+  try {
+    const url = new URL(normalized);
+    url.hash = "";
+    Array.from(url.searchParams.keys()).forEach((key) => {
+      if (/^(utm_|fbclid|gclid|yclid|mc_)/i.test(key)) url.searchParams.delete(key);
+    });
+    url.pathname = url.pathname.replace(/\/+$/g, "") || "/";
+    return url.toString().replace(/\/$/g, "");
+  } catch {
+    return normalized.replace(/\/+$/g, "");
+  }
+}
+
+function normalizeDuplicatePrice(value: string) {
+  return value.replace(/[^\d]/g, "");
+}
+
+function duplicateTitleSimilarity(left: string, right: string) {
+  if (!left || !right) return 0;
+
+  const leftTokens = new Set(left.split(" ").filter((token) => token.length > 1));
+  const rightTokens = new Set(right.split(" ").filter((token) => token.length > 1));
+  if (leftTokens.size === 0 || rightTokens.size === 0) return 0;
+
+  const intersection = Array.from(leftTokens).filter((token) => rightTokens.has(token)).length;
+  const smaller = Math.min(leftTokens.size, rightTokens.size);
+  const larger = Math.max(leftTokens.size, rightTokens.size);
+  const containment = intersection / smaller;
+  const overlap = intersection / larger;
+
+  return (containment * 0.7) + (overlap * 0.3);
 }
 
 function resolveDraftDestination(input: {

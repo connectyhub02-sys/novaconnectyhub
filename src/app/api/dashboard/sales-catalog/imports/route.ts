@@ -6,8 +6,10 @@ import {
   statusForDashboardCompanyScopeError,
 } from "@/lib/client-os/dashboard-route-scope";
 import {
+  createAndProcessSalesCatalogImport,
   createSalesCatalogImportJob,
   listSalesCatalogImportJobs,
+  processQueuedSalesCatalogImportJobs,
   salesCatalogImportProcessRequestedEventName,
   type SalesCatalogImportAssignmentScope,
   type SalesCatalogImportDestination,
@@ -141,6 +143,15 @@ export async function GET(request: NextRequest) {
       companyId,
       client,
     });
+
+    if (request.nextUrl.searchParams.get("processQueued") === "1") {
+      await processQueuedSalesCatalogImportJobs({
+        client,
+        companyId: company.id,
+        limit: 1,
+      }).catch(() => null);
+    }
+
     const importJobs = await listSalesCatalogImportJobs({
       client,
       companyId: company.id,
@@ -200,7 +211,7 @@ export async function POST(request: NextRequest) {
       })),
     });
 
-    const importJob = await createSalesCatalogImportJob({
+    const importInput = {
       client,
       companyId: company.id,
       userId: workspace.user.id,
@@ -214,17 +225,23 @@ export async function POST(request: NextRequest) {
       title: payload.title,
       assignedAgentIds: assignmentScope.assignedAgentIds,
       assignedWhatsappInstanceIds: assignmentScope.assignedWhatsappInstanceIds,
-    });
+    };
+    const processImmediately = shouldProcessCatalogImportImmediately(payload);
+    const importJob = processImmediately
+      ? await createAndProcessSalesCatalogImport(importInput)
+      : await createSalesCatalogImportJob(importInput);
 
-    await inngest.send({
-      name: salesCatalogImportProcessRequestedEventName,
-      data: {
-        jobId: importJob.id,
-        companyId: company.id,
-        sourceKind: payload.sourceKind,
-        sourcePlatform: payload.sourcePlatform,
-      },
-    }).catch(() => null);
+    if (!processImmediately) {
+      await inngest.send({
+        name: salesCatalogImportProcessRequestedEventName,
+        data: {
+          jobId: importJob.id,
+          companyId: company.id,
+          sourceKind: payload.sourceKind,
+          sourcePlatform: payload.sourcePlatform,
+        },
+      }).catch(() => null);
+    }
 
     return NextResponse.json({ importJob });
   } catch (error) {
@@ -337,6 +354,24 @@ async function resolveImportAssignmentScope(input: {
     assignedAgentIds: requestedAgentIds,
     assignedWhatsappInstanceIds: requestedWhatsappInstanceIds,
   };
+}
+
+function shouldProcessCatalogImportImmediately(payload: Awaited<ReturnType<typeof readImportRequest>>) {
+  if (payload.sourceKind === "csv") return true;
+  if (payload.sourcePlatform === "woocommerce" || payload.sourcePlatform === "shopify") return true;
+  if (payload.sourcePlatform === "wix" || payload.sourcePlatform === "nuvemshop") return true;
+  if (payload.sourcePlatform === "loja_integrada" || payload.sourcePlatform === "tray") return true;
+
+  return payload.files.length > 0 && payload.files.every((file) => isTextLikeImportPayloadFile(file));
+}
+
+function isTextLikeImportPayloadFile(file: SalesCatalogImportFileInput) {
+  const contentType = file.contentType.toLowerCase();
+  const fileName = file.fileName.toLowerCase();
+
+  return contentType.startsWith("text/")
+    || contentType === "application/json"
+    || /\.(csv|tsv|txt|md|json)$/i.test(fileName);
 }
 
 async function readImportFiles(values: FormDataEntryValue[]) {
