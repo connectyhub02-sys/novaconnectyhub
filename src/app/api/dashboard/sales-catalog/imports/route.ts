@@ -9,6 +9,7 @@ import {
   createSalesCatalogImportJob,
   listSalesCatalogImportJobs,
   salesCatalogImportProcessRequestedEventName,
+  type SalesCatalogImportAssignmentScope,
   type SalesCatalogImportDestination,
   type SalesCatalogImportFileInput,
   type SalesCatalogImportPlatform,
@@ -173,6 +174,12 @@ export async function POST(request: NextRequest) {
       client,
     });
     await assertBillableAccess({ organizationId: company.id, client });
+    const assignmentScope = await resolveImportAssignmentScope({
+      client,
+      companyId: company.id,
+      assignedAgentIds: payload.assignedAgentIds,
+      assignedWhatsappInstanceIds: payload.assignedWhatsappInstanceIds,
+    });
 
     if (payload.sourceUrl || payload.sourceKind === "site") {
       return NextResponse.json({ error: "Importacao por link foi desativada. Anexe um arquivo do catalogo para importar." }, { status: 422 });
@@ -205,6 +212,8 @@ export async function POST(request: NextRequest) {
       sourceUrl: payload.sourceUrl,
       files: payload.files,
       title: payload.title,
+      assignedAgentIds: assignmentScope.assignedAgentIds,
+      assignedWhatsappInstanceIds: assignmentScope.assignedWhatsappInstanceIds,
     });
 
     await inngest.send({
@@ -245,6 +254,8 @@ async function readImportRequest(request: NextRequest) {
       text: readString(formData.get("text")),
       sourceUrl: readString(formData.get("sourceUrl")),
       title: readString(formData.get("title")),
+      assignedAgentIds: readUuidListPayload(formData.get("assignedAgentIds")),
+      assignedWhatsappInstanceIds: readUuidListPayload(formData.get("assignedWhatsappInstanceIds")),
       files,
     };
   }
@@ -263,7 +274,68 @@ async function readImportRequest(request: NextRequest) {
     text: readString(body.text),
     sourceUrl: readString(body.sourceUrl),
     title: readString(body.title),
+    assignedAgentIds: readUuidListPayload(body.assignedAgentIds),
+    assignedWhatsappInstanceIds: readUuidListPayload(body.assignedWhatsappInstanceIds),
     files: [] as SalesCatalogImportFileInput[],
+  };
+}
+
+async function resolveImportAssignmentScope(input: {
+  client: ReturnType<typeof createServiceClient>;
+  companyId: string;
+  assignedAgentIds: string[];
+  assignedWhatsappInstanceIds: string[];
+}): Promise<SalesCatalogImportAssignmentScope> {
+  const requestedAgentIds = uniqueStringList(input.assignedAgentIds);
+  const requestedWhatsappInstanceIds = uniqueStringList(input.assignedWhatsappInstanceIds);
+
+  if (requestedWhatsappInstanceIds.length > 0) {
+    const { data, error } = await input.client
+      .from("whatsapp_instances")
+      .select("id")
+      .eq("organization_id", input.companyId)
+      .neq("status", "archived")
+      .in("id", requestedWhatsappInstanceIds);
+
+    if (error) {
+      throw new Error(`Nao foi possivel validar o WhatsApp selecionado: ${error.message}`);
+    }
+
+    const validIds = new Set((data ?? [])
+      .map((row) => readString((row as { id?: unknown }).id))
+      .filter((id): id is string => Boolean(id)));
+    const invalidIds = requestedWhatsappInstanceIds.filter((id) => !validIds.has(id));
+
+    if (invalidIds.length > 0) {
+      throw new Error("Escolha um WhatsApp da empresa selecionada para importar produtos.");
+    }
+  }
+
+  if (requestedAgentIds.length > 0) {
+    const { data, error } = await input.client
+      .from("agent_registry")
+      .select("id")
+      .eq("organization_id", input.companyId)
+      .neq("status", "archived")
+      .in("id", requestedAgentIds);
+
+    if (error) {
+      throw new Error(`Nao foi possivel validar o agente selecionado: ${error.message}`);
+    }
+
+    const validIds = new Set((data ?? [])
+      .map((row) => readString((row as { id?: unknown }).id))
+      .filter((id): id is string => Boolean(id)));
+    const invalidIds = requestedAgentIds.filter((id) => !validIds.has(id));
+
+    if (invalidIds.length > 0) {
+      throw new Error("Escolha um agente da empresa selecionada para importar produtos.");
+    }
+  }
+
+  return {
+    assignedAgentIds: requestedAgentIds,
+    assignedWhatsappInstanceIds: requestedWhatsappInstanceIds,
   };
 }
 
@@ -455,6 +527,42 @@ function statusForRouteError(error: unknown, fallback: number) {
 
 function readString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function readUuidListPayload(value: unknown) {
+  const parsed = typeof value === "string"
+    ? parseJsonOrCsvList(value)
+    : value;
+
+  if (!Array.isArray(parsed)) {
+    const id = normalizeUuid(readString(parsed));
+    return id ? [id] : [];
+  }
+
+  return uniqueStringList(
+    parsed
+      .map((item) => normalizeUuid(readString(item)))
+      .filter((item): item is string => Boolean(item)),
+  );
+}
+
+function parseJsonOrCsvList(value: string) {
+  if (!value.trim()) return [];
+
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    return value.split(",").map((item) => item.trim()).filter(Boolean);
+  }
+}
+
+function uniqueStringList(values: string[]) {
+  return Array.from(new Set(values.filter(Boolean)));
+}
+
+function normalizeUuid(value: string | null) {
+  if (!value) return null;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value) ? value : null;
 }
 
 function readRecord(value: unknown): JsonRecord | null {

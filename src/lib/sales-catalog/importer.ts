@@ -53,6 +53,10 @@ export type SalesCatalogImportDestination = "connectyhub_checkout" | "external_s
 export type SalesCatalogImportJobStatus = "uploaded" | "extracting" | "review_required" | "ready_to_publish" | "publishing" | "published" | "failed";
 export type SalesCatalogImportItemStatus = "draft" | "ready" | "published" | "discarded" | "error";
 export type SalesCatalogImportImageImportStatus = "pending" | "imported" | "skipped" | "failed";
+export type SalesCatalogImportAssignmentScope = {
+  assignedAgentIds: string[];
+  assignedWhatsappInstanceIds: string[];
+};
 
 type JsonRecord = Record<string, unknown>;
 
@@ -192,6 +196,8 @@ export type ClientSalesCatalogImportJob = {
   sourcePlatform: SalesCatalogImportPlatform;
   targetMode: SalesCatalogImportTargetMode;
   defaultSalesDestination: SalesCatalogImportDestination;
+  assignedAgentIds: string[];
+  assignedWhatsappInstanceIds: string[];
   status: SalesCatalogImportJobStatus;
   title: string | null;
   inputUrl: string | null;
@@ -269,6 +275,8 @@ export async function createSalesCatalogImportJob(input: {
   sourceUrl?: string | null;
   files?: SalesCatalogImportFileInput[] | null;
   title?: string | null;
+  assignedAgentIds?: string[] | null;
+  assignedWhatsappInstanceIds?: string[] | null;
 }) {
   const now = new Date().toISOString();
   const sourceKind = normalizeSourceKind(input.sourceKind);
@@ -279,6 +287,10 @@ export async function createSalesCatalogImportJob(input: {
   const sourceUrl = normalizeOptionalText(input.sourceUrl, 1000);
   const sourceText = normalizeOptionalText(input.text, maxImportTextChars) ?? "";
   const files = input.files ?? [];
+  const assignmentScope = normalizeImportAssignmentScope({
+    assignedAgentIds: input.assignedAgentIds,
+    assignedWhatsappInstanceIds: input.assignedWhatsappInstanceIds,
+  });
 
   const { data: job, error: jobError } = await input.client
     .from("sales_catalog_import_jobs")
@@ -295,6 +307,8 @@ export async function createSalesCatalogImportJob(input: {
         import_version: 1,
         queued_processing: true,
         source_platform: sourcePlatform,
+        assigned_agent_ids: assignmentScope.assignedAgentIds,
+        assigned_whatsapp_instance_ids: assignmentScope.assignedWhatsappInstanceIds,
       },
       created_at: now,
       updated_at: now,
@@ -349,7 +363,15 @@ export async function createSalesCatalogImportJob(input: {
     event_type: "sales_catalog_import.created",
     title: "Importacao enfileirada",
     summary: sourceUrl ? `Fonte: ${sourceUrl}` : "Fonte enviada pelo usuario.",
-    payload: { sourceKind, sourcePlatform, targetMode, defaultSalesDestination, files: files.length },
+    payload: {
+      sourceKind,
+      sourcePlatform,
+      targetMode,
+      defaultSalesDestination,
+      files: files.length,
+      assignedAgentIds: assignmentScope.assignedAgentIds,
+      assignedWhatsappInstanceIds: assignmentScope.assignedWhatsappInstanceIds,
+    },
   });
 
   return getSalesCatalogImportJob({
@@ -371,6 +393,8 @@ export async function createAndProcessSalesCatalogImport(input: {
   sourceUrl?: string | null;
   files?: SalesCatalogImportFileInput[] | null;
   title?: string | null;
+  assignedAgentIds?: string[] | null;
+  assignedWhatsappInstanceIds?: string[] | null;
 }) {
   const job = await createSalesCatalogImportJob(input);
 
@@ -675,6 +699,7 @@ export async function publishSalesCatalogImportJob(input: {
     companyId: input.companyId,
     jobId: input.jobId,
   });
+  const assignmentScope = normalizeImportAssignmentScope(job);
   const selectedIds = new Set((input.itemIds ?? []).filter(Boolean));
   const candidates = job.items.filter((item) => (
     item.status !== "published"
@@ -723,6 +748,7 @@ export async function publishSalesCatalogImportJob(input: {
           jobId: input.jobId,
           item: publishItem,
           linkButton,
+          assignmentScope,
         });
         linkButtons += 1;
         catalogItems += 1;
@@ -734,6 +760,7 @@ export async function publishSalesCatalogImportJob(input: {
           jobId: input.jobId,
           item: publishItem,
           linkButton: null,
+          assignmentScope,
         });
         if (item.salesDestination === "manual_handoff") {
           legacyReviewItems += 1;
@@ -1266,6 +1293,15 @@ function readImportJobSourcePlatform(job: ImportJobRow) {
   return normalizeImportPlatform(settings?.source_platform);
 }
 
+function readImportJobAssignmentScope(job: Pick<ImportJobRow, "settings">): SalesCatalogImportAssignmentScope {
+  const settings = readRecord(job.settings);
+
+  return normalizeImportAssignmentScope({
+    assignedAgentIds: readStringList(settings?.assigned_agent_ids),
+    assignedWhatsappInstanceIds: readStringList(settings?.assigned_whatsapp_instance_ids),
+  });
+}
+
 function formatImportPlatformForPrompt(value: SalesCatalogImportPlatform) {
   if (value === "woocommerce") return "WooCommerce";
   if (value === "shopify") return "Shopify";
@@ -1558,6 +1594,7 @@ async function publishImportItemAsCatalogItem(input: {
   jobId: string;
   item: ClientSalesCatalogImportItem;
   linkButton: PublishedTrackedLinkButton | null;
+  assignmentScope: SalesCatalogImportAssignmentScope;
 }) {
   const itemId = randomUUID();
   const now = new Date().toISOString();
@@ -1621,6 +1658,8 @@ async function publishImportItemAsCatalogItem(input: {
     link_button_label: input.linkButton?.label ?? null,
     link_button_tag: input.linkButton?.tag ?? null,
     link_button_tracking_url: input.linkButton?.trackingUrl ?? null,
+    assigned_agent_ids: input.assignmentScope.assignedAgentIds,
+    assigned_whatsapp_instance_ids: input.assignmentScope.assignedWhatsappInstanceIds,
     import_job_id: input.jobId,
     import_item_id: input.item.id,
     readiness: getSalesCatalogReadiness({
@@ -1710,6 +1749,8 @@ async function publishImportItemAsCatalogItem(input: {
       link_button_id: input.linkButton?.id ?? null,
       link_button_tag: input.linkButton?.tag ?? null,
       sales_destination: input.item.salesDestination,
+      assigned_agent_ids: input.assignmentScope.assignedAgentIds,
+      assigned_whatsapp_instance_ids: input.assignmentScope.assignedWhatsappInstanceIds,
     },
   });
 }
@@ -2529,6 +2570,8 @@ const importEventSelect = [
 ].join(", ");
 
 function mapImportJob(job: ImportJobRow, items: ImportItemRow[], events: ImportEventRow[]): ClientSalesCatalogImportJob {
+  const assignmentScope = readImportJobAssignmentScope(job);
+
   return {
     id: job.id,
     companyId: job.organization_id,
@@ -2537,6 +2580,8 @@ function mapImportJob(job: ImportJobRow, items: ImportItemRow[], events: ImportE
     sourcePlatform: readImportJobSourcePlatform(job),
     targetMode: job.target_mode,
     defaultSalesDestination: job.default_sales_destination,
+    assignedAgentIds: assignmentScope.assignedAgentIds,
+    assignedWhatsappInstanceIds: assignmentScope.assignedWhatsappInstanceIds,
     status: job.status,
     title: job.title,
     inputUrl: job.input_url,
@@ -3370,6 +3415,16 @@ function readStringList(value: unknown) {
     .map((item) => readString(item))
     .filter((item): item is string => Boolean(item))
     .map((item) => item.slice(0, 120));
+}
+
+function normalizeImportAssignmentScope(input: {
+  assignedAgentIds?: string[] | null;
+  assignedWhatsappInstanceIds?: string[] | null;
+}): SalesCatalogImportAssignmentScope {
+  return {
+    assignedAgentIds: uniqueStrings((input.assignedAgentIds ?? []).map(normalizeUuid).filter((id): id is string => Boolean(id))),
+    assignedWhatsappInstanceIds: uniqueStrings((input.assignedWhatsappInstanceIds ?? []).map(normalizeUuid).filter((id): id is string => Boolean(id))),
+  };
 }
 
 function readNumber(value: unknown) {

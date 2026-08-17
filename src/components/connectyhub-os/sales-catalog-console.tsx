@@ -546,6 +546,7 @@ export function SalesCatalogConsole({
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [selectedCatalogImportInstanceId, setSelectedCatalogImportInstanceId] = useState("");
   const [selectedCatalogExportInstanceId, setSelectedCatalogExportInstanceId] = useState("");
+  const [catalogImportAgentScopeId, setCatalogImportAgentScopeId] = useState("");
   const [selectedCatalogExportItemIds, setSelectedCatalogExportItemIds] = useState<string[]>([]);
   const [orderItemId, setOrderItemId] = useState("");
   const [orderSkuId, setOrderSkuId] = useState("");
@@ -610,6 +611,7 @@ export function SalesCatalogConsole({
   );
   const selectedCatalogImportInstance = connectedWhatsappInstances.find((instance) => instance.id === selectedCatalogImportInstanceId) ?? connectedWhatsappInstances[0] ?? null;
   const selectedCatalogExportInstance = connectedWhatsappInstances.find((instance) => instance.id === selectedCatalogExportInstanceId) ?? connectedWhatsappInstances[0] ?? null;
+  const selectedCatalogImportAgentScope = connectedWhatsappInstances.find((instance) => instance.id === catalogImportAgentScopeId) ?? null;
   const selectedCatalogExportItems = useMemo(
     () => visibleItems.filter((item) => selectedCatalogExportItemIds.includes(item.id)),
     [selectedCatalogExportItemIds, visibleItems],
@@ -784,6 +786,7 @@ export function SalesCatalogConsole({
     setCatalogImportPatches({});
     setSelectedCatalogImportInstanceId("");
     setSelectedCatalogExportInstanceId("");
+    setCatalogImportAgentScopeId("");
     setSelectedCatalogExportItemIds([]);
   }
 
@@ -1558,6 +1561,14 @@ export function SalesCatalogConsole({
       formData.set("defaultSalesDestination", catalogImportDefaultDestination);
       formData.set("title", catalogImportTitle);
       formData.set("text", catalogImportText);
+      formData.set(
+        "assignedAgentIds",
+        JSON.stringify(selectedCatalogImportAgentScope?.agentId ? [selectedCatalogImportAgentScope.agentId] : []),
+      );
+      formData.set(
+        "assignedWhatsappInstanceIds",
+        JSON.stringify(selectedCatalogImportAgentScope ? [selectedCatalogImportAgentScope.id] : []),
+      );
 
       for (const file of catalogImportFiles) {
         formData.append("files", file);
@@ -3059,7 +3070,9 @@ export function SalesCatalogConsole({
             </div>
           ) : null}
           <SalesCatalogImportPanel
+            companies={companies}
             companyName={selectedCompany?.name ?? "empresa"}
+            connectedInstances={connectedWhatsappInstances}
             creating={creatingCatalogImport}
             defaultDestination={catalogImportDefaultDestination}
             files={catalogImportFiles}
@@ -3070,8 +3083,12 @@ export function SalesCatalogConsole({
             sourceKind={catalogImportSourceKind}
             sourcePlatform={catalogImportSourcePlatform}
             sourceText={catalogImportText}
+            selectedAgentScopeId={catalogImportAgentScopeId}
+            selectedCompanyId={selectedCompanyId}
             targetMode={catalogImportTargetMode}
             title={catalogImportTitle}
+            onChangeAgentScope={setCatalogImportAgentScopeId}
+            onChangeCompany={changeCompany}
             onChangeFiles={handleCatalogImportFiles}
             onChangeItem={updateCatalogImportItem}
             onChangeSourcePlatform={handleCatalogImportSourcePlatform}
@@ -4003,7 +4020,9 @@ function WhatsAppCatalogBridgePanel({
 }
 
 function SalesCatalogImportPanel({
+  companies,
   companyName,
+  connectedInstances,
   creating,
   defaultDestination,
   files,
@@ -4011,11 +4030,15 @@ function SalesCatalogImportPanel({
   loading,
   publishingJobId,
   savingJobId,
+  selectedAgentScopeId,
+  selectedCompanyId,
   sourceKind,
   sourcePlatform,
   sourceText,
   targetMode,
   title,
+  onChangeAgentScope,
+  onChangeCompany,
   onChangeFiles,
   onChangeItem,
   onChangeSourcePlatform,
@@ -4027,7 +4050,9 @@ function SalesCatalogImportPanel({
   onRefresh,
   onSaveReview,
 }: {
+  companies: ClientCompany[];
   companyName: string;
+  connectedInstances: ClientSalesCatalogWhatsappInstance[];
   creating: boolean;
   defaultDestination: SalesCatalogImportDestination;
   files: File[];
@@ -4035,11 +4060,15 @@ function SalesCatalogImportPanel({
   loading: boolean;
   publishingJobId: string | null;
   savingJobId: string | null;
+  selectedAgentScopeId: string;
+  selectedCompanyId: string;
   sourceKind: SalesCatalogImportSourceKind;
   sourcePlatform: SalesCatalogImportPlatform;
   sourceText: string;
   targetMode: SalesCatalogImportTargetMode;
   title: string;
+  onChangeAgentScope: (instanceId: string) => void;
+  onChangeCompany: (companyId: string) => void;
   onChangeFiles: (event: ChangeEvent<HTMLInputElement>) => void;
   onChangeItem: (itemId: string, patch: Omit<SalesCatalogImportItemPatch, "id">) => void;
   onChangeSourcePlatform: (value: SalesCatalogImportPlatform) => void;
@@ -4060,6 +4089,41 @@ function SalesCatalogImportPanel({
   return (
     <Panel id="sales-catalog-ai-importer" title="Importador IA" eyebrow={companyName} tone="green" compact>
       <div className="space-y-3">
+        <div className="grid gap-2 lg:grid-cols-2">
+          <label className="block">
+            <FieldLabel>Empresa de destino</FieldLabel>
+            <select
+              value={selectedCompanyId}
+              onChange={(event) => onChangeCompany(event.target.value)}
+              className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+              style={{ borderColor: "var(--ch-border)" }}
+            >
+              {companies.map((company) => (
+                <option key={company.id} value={company.id}>{company.name}</option>
+              ))}
+            </select>
+            <p className="mt-1 text-[11px] leading-4 text-slate-500">Os produtos entram no catalogo desta empresa.</p>
+          </label>
+
+          <label className="block">
+            <FieldLabel>Agentes que vendem</FieldLabel>
+            <select
+              value={selectedAgentScopeId}
+              onChange={(event) => onChangeAgentScope(event.target.value)}
+              className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+              style={{ borderColor: "var(--ch-border)" }}
+            >
+              <option value="">Todos os agentes da empresa</option>
+              {connectedInstances.map((instance) => (
+                <option key={instance.id} value={instance.id}>{instance.label}</option>
+              ))}
+            </select>
+            <p className="mt-1 text-[11px] leading-4 text-slate-500">
+              Deixe em todos para qualquer agente da empresa vender; escolha um agente para restringir.
+            </p>
+          </label>
+        </div>
+
         <div className="grid gap-2 lg:grid-cols-[1.2fr_0.7fr_1fr]">
           <label className="block">
             <FieldLabel>Plataforma</FieldLabel>
@@ -4269,6 +4333,7 @@ function CatalogImportJobCard({
             <span>{formatImportPlatform(job.sourcePlatform)}</span>
             <span>{formatImportSourceKind(job.sourceKind)}</span>
             <span>{formatImportTargetMode(job.targetMode)}</span>
+            <span>{job.assignedAgentIds.length || job.assignedWhatsappInstanceIds.length ? "agente especifico" : "todos os agentes"}</span>
             {job.inputUrl ? <span className="max-w-[190px] truncate">{job.inputUrl}</span> : null}
           </p>
         </div>
