@@ -102,6 +102,32 @@ type AttendanceQuickProduct = {
   priceCents: number;
 };
 
+const salesCatalogBrowserEventsChannel = "connectyhub:sales-catalog-events";
+
+type SalesCatalogBrowserEvent = {
+  companyId?: unknown;
+  itemId?: unknown;
+  type?: unknown;
+};
+
+function removeUnavailableCatalogCartItems(
+  carts: Record<string, AttendanceCartItem[]>,
+  availableCatalogItemIds: Set<string>,
+) {
+  let changed = false;
+  const next: Record<string, AttendanceCartItem[]> = {};
+
+  for (const [key, items] of Object.entries(carts)) {
+    const filteredItems = items.filter((item) => item.source !== "catalog" || availableCatalogItemIds.has(item.id));
+    if (filteredItems.length !== items.length) {
+      changed = true;
+    }
+    next[key] = filteredItems;
+  }
+
+  return changed ? next : carts;
+}
+
 const statusOptions: Array<{ value: "all" | ClientLeadStatus; label: string }> = [
   { value: "all", label: "Todos os status" },
   { value: "new", label: "Novos" },
@@ -790,10 +816,41 @@ function AttendanceCenterView({
     () => salesCatalogItems.filter((item) => !deletedCatalogItemIds.has(item.id)),
     [deletedCatalogItemIds, salesCatalogItems],
   );
+  const availableCatalogItemIds = useMemo(
+    () => new Set(visibleCatalogItems.filter((item) => item.status === "active").map((item) => item.id)),
+    [visibleCatalogItems],
+  );
   const activeCatalogProducts = useMemo(
     () => buildAttendanceCatalogProducts(visibleCatalogItems, activeLead?.companyId ?? null),
     [activeLead?.companyId, visibleCatalogItems],
   );
+
+  useEffect(() => {
+    setLeadCarts((current) => removeUnavailableCatalogCartItems(current, availableCatalogItemIds));
+  }, [availableCatalogItemIds]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !("BroadcastChannel" in window)) {
+      return;
+    }
+
+    const channel = new BroadcastChannel(salesCatalogBrowserEventsChannel);
+
+    channel.onmessage = (event: MessageEvent<SalesCatalogBrowserEvent>) => {
+      if (event.data?.type !== "sales-catalog-item-deleted" || typeof event.data.itemId !== "string") {
+        return;
+      }
+
+      setDeletedCatalogItemIds((current) => {
+        const next = new Set(current);
+        next.add(event.data.itemId as string);
+        return next;
+      });
+      router.refresh();
+    };
+
+    return () => channel.close();
+  }, [router]);
 
   function updateActiveCart(updater: (items: AttendanceCartItem[]) => AttendanceCartItem[]) {
     if (!activeCartKey) {
@@ -1802,6 +1859,11 @@ function AttendanceSalesBagPanel({
                   {confirmingDelete ? (
                     <p className="col-span-2 rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-[10px] font-semibold text-red-600">
                       Clique na lixeira novamente para excluir este produto do catalogo.
+                    </p>
+                  ) : null}
+                  {!hasPrice ? (
+                    <p className="col-span-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[10px] font-semibold leading-4 text-amber-700">
+                      Produto sem preco cadastrado. Edite no Catalogo de Vendas para liberar a adicao na sacola do lead.
                     </p>
                   ) : null}
                 </div>

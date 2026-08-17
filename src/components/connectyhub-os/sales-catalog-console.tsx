@@ -104,6 +104,22 @@ type Notice = {
   message: string;
 };
 
+const salesCatalogBrowserEventsChannel = "connectyhub:sales-catalog-events";
+
+function publishSalesCatalogItemDeleted(input: { companyId: string; itemId: string }) {
+  if (typeof window === "undefined" || !("BroadcastChannel" in window)) {
+    return;
+  }
+
+  const channel = new BroadcastChannel(salesCatalogBrowserEventsChannel);
+  channel.postMessage({
+    companyId: input.companyId,
+    itemId: input.itemId,
+    type: "sales-catalog-item-deleted",
+  });
+  channel.close();
+}
+
 type SalesCatalogConsoleProps = {
   initialCompanies: ClientCompany[];
   initialItems: ClientSalesCatalogItem[];
@@ -2045,6 +2061,7 @@ export function SalesCatalogConsole({
       }
 
       setItems((current) => current.filter((entry) => entry.id !== item.id));
+      publishSalesCatalogItemDeleted({ companyId: item.companyId, itemId: item.id });
       setConfirmDeleteId(null);
       setNotice({ tone: "success", message: "Item removido do catalogo." });
     } catch (error) {

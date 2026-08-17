@@ -2461,9 +2461,50 @@ export async function DELETE(request: NextRequest) {
     const company = await requireClientCompanyAccess({ userId: workspace.user.id, companyId, client });
     await assertSalesCatalogManualAccess({ organizationId: company.id, client });
 
+    const { data: existingItem, error: loadError } = await client
+      .from("intelligence_memory")
+      .select("id, title, metadata")
+      .eq("id", itemId)
+      .eq("scope", "organization")
+      .eq("organization_id", company.id)
+      .eq("memory_type", "sales_catalog_item")
+      .maybeSingle<{ id: string; title: string; metadata: JsonRecord | null }>();
+
+    if (loadError) {
+      return NextResponse.json({ error: `Nao foi possivel excluir: ${loadError.message}` }, { status: 500 });
+    }
+
+    if (!existingItem) {
+      return NextResponse.json({ error: "Produto nao encontrado para esta empresa." }, { status: 404 });
+    }
+
+    const now = new Date().toISOString();
+    const metadata = readRecord(existingItem.metadata) ?? {};
+    const linkedButtonId = readFormString(metadata.link_button_id) ?? readFormString(metadata.external_link_button_id);
+    const archivedMetadata: JsonRecord = {
+      ...metadata,
+      active: false,
+      archived_at: now,
+      deleted_at: now,
+      deleted_by: workspace.user.id,
+      external_link_button_id: null,
+      external_link_button_label: null,
+      external_link_button_tag: null,
+      external_link_button_tracking_url: null,
+      link_button_id: null,
+      link_button_label: null,
+      link_button_tag: null,
+      link_button_tracking_url: null,
+      removed_from_runtime_at: now,
+      status: "archived",
+    };
+
     const { data, error } = await client
       .from("intelligence_memory")
-      .delete()
+      .update({
+        metadata: archivedMetadata,
+        updated_at: now,
+      })
       .eq("id", itemId)
       .eq("scope", "organization")
       .eq("organization_id", company.id)
@@ -2479,7 +2520,26 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: "Produto nao encontrado para esta empresa." }, { status: 404 });
     }
 
-    const metadata = readRecord(data.metadata) ?? {};
+    const { error: skuArchiveError } = await client
+      .from("sales_catalog_skus")
+      .update({ status: "archived", updated_at: now })
+      .eq("organization_id", company.id)
+      .eq("catalog_item_id", data.id);
+
+    if (skuArchiveError) {
+      return NextResponse.json({ error: `Produto removido, mas nao foi possivel arquivar variacoes: ${skuArchiveError.message}` }, { status: 500 });
+    }
+
+    if (linkedButtonId) {
+      await deleteProductTrackedLinkButton({
+        client,
+        companyId: company.id,
+        userId: workspace.user.id,
+        linkButtonId: linkedButtonId,
+        productTitle: data.title,
+      });
+    }
+
     await client.from("intelligence_events").insert({
       scope: "organization",
       organization_id: company.id,
@@ -2496,9 +2556,12 @@ export async function DELETE(request: NextRequest) {
         label: data.title,
         tag: readFormString(metadata.tag),
         deleted_by: workspace.user.id,
+        linked_button_id: linkedButtonId,
       },
     });
 
+    revalidatePath("/dashboard/agentes");
+    revalidatePath("/dashboard/automacoes");
     revalidatePath("/dashboard/links");
     revalidatePath("/dashboard/whatsapp");
     revalidatePath("/dashboard/atendimento");
