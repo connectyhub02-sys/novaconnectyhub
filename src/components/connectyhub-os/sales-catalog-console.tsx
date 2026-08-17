@@ -4524,9 +4524,10 @@ function CatalogImportProgressModal({
   onClose: () => void;
   onRefresh: () => void;
 }) {
-  const officialItems = job?.items.map(mapImportItemToPreviewItem) ?? [];
+  const canceled = job ? isCatalogImportJobCanceled(job) : false;
+  const officialItems = canceled ? [] : job?.items.map(mapImportItemToPreviewItem) ?? [];
   const visiblePreviewItems = monitor.previewItems.slice(0, Math.max(0, monitor.visiblePreviewCount));
-  const visibleItems = officialItems.length > 0 ? officialItems : visiblePreviewItems;
+  const visibleItems = canceled ? [] : officialItems.length > 0 ? officialItems : visiblePreviewItems;
   const active = job ? isCatalogImportJobActive(job) : monitor.status === "preparing" || monitor.status === "uploading";
   const progress = job ? getCatalogImportJobProgress(job) : getCatalogImportMonitorProgress(monitor);
   const statusLabel = job ? formatCatalogImportJobStatus(job) : formatCatalogImportMonitorStatus(monitor.status);
@@ -4590,7 +4591,9 @@ function CatalogImportProgressModal({
               </div>
               <p className="mt-3 font-mono text-2xl font-bold text-slate-950">{progress}%</p>
               <p className="text-xs text-slate-500">
-                {officialItems.length > 0
+                {canceled
+                  ? "Importacao encerrada pelo usuario."
+                  : officialItems.length > 0
                   ? "Produtos oficiais carregados do banco."
                   : "Pre-visualizacao do arquivo enquanto a IA processa."}
               </p>
@@ -4628,7 +4631,14 @@ function CatalogImportProgressModal({
             </div>
 
             <div className="max-h-[460px] overflow-y-auto p-3">
-              {visibleItems.length > 0 ? (
+              {canceled ? (
+                <div className="rounded-xl border border-slate-200 bg-white px-4 py-8 text-center">
+                  <p className="text-sm font-semibold text-slate-900">Importacao cancelada</p>
+                  <p className="mt-2 text-xs leading-5 text-slate-500">
+                    Os produtos encontrados ficaram ocultos da revisao e nao serao publicados.
+                  </p>
+                </div>
+              ) : visibleItems.length > 0 ? (
                 <div className="grid gap-2">
                   {visibleItems.map((item, index) => (
                     <div
@@ -4697,9 +4707,10 @@ function CatalogImportJobCard({
   onPublish: () => void;
   onSaveReview: () => void;
 }) {
-  const pendingItems = job.items.filter((item) => item.status !== "published" && item.status !== "discarded");
+  const canceled = isCatalogImportJobCanceled(job);
+  const pendingItems = canceled ? [] : job.items.filter((item) => item.status !== "published" && item.status !== "discarded");
   const readyItems = pendingItems.filter((item) => item.status === "ready").length;
-  const canPublish = pendingItems.length > 0 && !publishing && !isCatalogImportJobCanceled(job);
+  const canPublish = pendingItems.length > 0 && !publishing;
   const canCancel = canCancelCatalogImportJob(job);
   const active = isCatalogImportJobActive(job);
   const progress = getCatalogImportJobProgress(job);
@@ -4758,17 +4769,19 @@ function CatalogImportJobCard({
           <Eye className="h-3.5 w-3.5" />
           Acompanhar
         </button>
-        <button
-          type="button"
-          disabled={saving || publishing}
-          onClick={onSaveReview}
-          className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-slate-300 transition hover:bg-cyan-400/10 hover:text-cyan-100 disabled:opacity-50"
-          style={{ borderColor: "var(--ch-border)" }}
-        >
-          {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-          Salvar revisao
-        </button>
-        {canCancel ? (
+        {!canceled ? (
+          <button
+            type="button"
+            disabled={saving || publishing}
+            onClick={onSaveReview}
+            className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-slate-300 transition hover:bg-cyan-400/10 hover:text-cyan-100 disabled:opacity-50"
+            style={{ borderColor: "var(--ch-border)" }}
+          >
+            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+            Salvar revisao
+          </button>
+        ) : null}
+        {!canceled && canCancel ? (
           <button
             type="button"
             disabled={canceling || saving || publishing}
@@ -4779,18 +4792,24 @@ function CatalogImportJobCard({
             Cancelar
           </button>
         ) : null}
-        <button
-          type="button"
-          disabled={!canPublish}
-          onClick={onPublish}
-          className="inline-flex min-h-9 items-center gap-2 rounded-lg bg-cyan-300 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {publishing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-          Publicar
-        </button>
+        {!canceled ? (
+          <button
+            type="button"
+            disabled={!canPublish}
+            onClick={onPublish}
+            className="inline-flex min-h-9 items-center gap-2 rounded-lg bg-cyan-300 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {publishing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+            Publicar
+          </button>
+        ) : null}
       </div>
 
-      {job.items.length > 0 ? (
+      {canceled ? (
+        <div className="mt-3 rounded-lg border border-slate-300/20 bg-slate-900/20 px-3 py-2 text-[11px] text-slate-400">
+          Importacao cancelada. {job.items.length} item(ns) encontrados foram ocultos da revisao e nao serao publicados.
+        </div>
+      ) : job.items.length > 0 ? (
         <div className="mt-3 grid gap-2">
           {job.items.map((item) => (
             <CatalogImportItemEditor
