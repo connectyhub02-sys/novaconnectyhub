@@ -2530,15 +2530,14 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: `Produto removido, mas nao foi possivel arquivar variacoes: ${skuArchiveError.message}` }, { status: 500 });
     }
 
-    if (linkedButtonId) {
-      await deleteProductTrackedLinkButton({
-        client,
-        companyId: company.id,
-        userId: workspace.user.id,
-        linkButtonId: linkedButtonId,
-        productTitle: data.title,
-      });
-    }
+    const deletedLinkButtonIds = await deleteProductTrackedLinkButtonsForCatalogItem({
+      client,
+      companyId: company.id,
+      userId: workspace.user.id,
+      itemId: data.id,
+      linkButtonIds: linkedButtonId ? [linkedButtonId] : [],
+      productTitle: data.title,
+    });
 
     await client.from("intelligence_events").insert({
       scope: "organization",
@@ -2557,6 +2556,7 @@ export async function DELETE(request: NextRequest) {
         tag: readFormString(metadata.tag),
         deleted_by: workspace.user.id,
         linked_button_id: linkedButtonId,
+        linked_button_ids: deletedLinkButtonIds,
       },
     });
 
@@ -3357,6 +3357,67 @@ async function upsertProductTrackedLinkButton(input: {
     tag,
     trackingUrl,
   };
+}
+
+async function deleteProductTrackedLinkButtonsForCatalogItem(input: {
+  client: ReturnType<typeof createServiceClient>;
+  companyId: string;
+  userId: string;
+  itemId: string;
+  linkButtonIds: string[];
+  productTitle: string;
+}) {
+  const directIds = new Set(input.linkButtonIds.map((id) => id.trim()).filter(Boolean));
+  const { data, error } = await input.client
+    .from("intelligence_memory")
+    .select("id, title, content, metadata, created_at")
+    .eq("scope", "organization")
+    .eq("organization_id", input.companyId)
+    .eq("memory_type", "tracked_link_button")
+    .contains("tags", ["tracked_link_button"])
+    .order("created_at", { ascending: false })
+    .limit(500);
+
+  if (error) {
+    throw new Error(`Nao foi possivel carregar botoes externos do produto: ${error.message}`);
+  }
+
+  const rows = ((data ?? []) as Array<{
+    id: string;
+    title: string;
+    content: string;
+    metadata: JsonRecord | null;
+    created_at: string | null;
+  }>)
+    .filter((row) => isTrackedLinkButtonFromCatalogItem(row, input.itemId, directIds));
+
+  for (const row of rows) {
+    await deleteProductTrackedLinkButton({
+      client: input.client,
+      companyId: input.companyId,
+      userId: input.userId,
+      linkButtonId: row.id,
+      productTitle: input.productTitle,
+    });
+  }
+
+  return rows.map((row) => row.id);
+}
+
+function isTrackedLinkButtonFromCatalogItem(
+  row: { id: string; metadata: JsonRecord | null },
+  itemId: string,
+  directIds: Set<string>,
+) {
+  if (directIds.has(row.id)) return true;
+
+  const metadata = readRecord(row.metadata) ?? {};
+  return (
+    readFormString(metadata.catalog_item_id) === itemId ||
+    readFormString(metadata.sales_catalog_item_id) === itemId ||
+    readFormString(metadata.link_button_catalog_item_id) === itemId ||
+    readFormString(metadata.product_id) === itemId
+  );
 }
 
 async function deleteProductTrackedLinkButton(input: {

@@ -188,6 +188,7 @@ type KnowledgeMemoryRow = {
   id: string;
   title: string;
   content: string;
+  tags?: string[] | null;
   metadata: JsonRecord | null;
   created_at: string | null;
 };
@@ -1598,7 +1599,7 @@ async function loadOrganizationKnowledge(client: SupabaseClient, organizationId:
 async function loadOrganizationLinkButtons(client: SupabaseClient, organizationId: string): Promise<RuntimeLinkButton[]> {
   const { data, error } = await client
     .from("intelligence_memory")
-    .select("id, title, content, metadata, created_at")
+    .select("id, title, content, tags, metadata, created_at")
     .eq("scope", "organization")
     .eq("organization_id", organizationId)
     .contains("tags", ["tracked_link_button"])
@@ -1609,7 +1610,10 @@ async function loadOrganizationLinkButtons(client: SupabaseClient, organizationI
     throw new Error(`Nao foi possivel carregar links rastreados: ${error.message}`);
   }
 
-  return ((data ?? []) as LinkButtonMemoryRow[]).map(mapRuntimeLinkButton);
+  return ((data ?? []) as LinkButtonMemoryRow[])
+    .filter((row) => !isArchivedRuntimeMemory(row))
+    .filter((row) => !isSalesCatalogRuntimeLinkButton(row))
+    .map(mapRuntimeLinkButton);
 }
 
 async function loadPlatformSectorKnowledge(client: SupabaseClient, sectorId: string) {
@@ -1647,6 +1651,34 @@ async function loadPlatformSectorLinkButtons(client: SupabaseClient, sectorId: s
   }
 
   return ((data ?? []) as LinkButtonMemoryRow[]).map(mapRuntimeLinkButton);
+}
+
+function isArchivedRuntimeMemory(row: KnowledgeMemoryRow) {
+  const metadata = readRecord(row.metadata) ?? {};
+  const status = asString(metadata.status)?.toLowerCase();
+
+  return (
+    status === "archived" ||
+    status === "deleted" ||
+    metadata.active === false ||
+    Boolean(metadata.archived_at) ||
+    Boolean(metadata.deleted_at)
+  );
+}
+
+function isSalesCatalogRuntimeLinkButton(row: LinkButtonMemoryRow) {
+  const metadata = readRecord(row.metadata) ?? {};
+  const tags = new Set(readStringList(row.tags, 20));
+
+  return (
+    tags.has("sales_catalog_item") ||
+    tags.has("external_site_product") ||
+    asString(metadata.catalog_item_id) !== null ||
+    asString(metadata.sales_catalog_item_id) !== null ||
+    asString(metadata.link_button_catalog_item_id) !== null ||
+    asString(metadata.product_id) !== null ||
+    asString(metadata.source) === "sales_catalog_product"
+  );
 }
 
 async function loadAgentLearnings(client: SupabaseClient, organizationId: string, isPlatform: boolean) {

@@ -106,6 +106,20 @@ type Notice = {
 
 const salesCatalogBrowserEventsChannel = "connectyhub:sales-catalog-events";
 
+function publishSalesCatalogUpdated(input: { companyId: string; itemIds?: string[] }) {
+  if (typeof window === "undefined" || !("BroadcastChannel" in window)) {
+    return;
+  }
+
+  const channel = new BroadcastChannel(salesCatalogBrowserEventsChannel);
+  channel.postMessage({
+    companyId: input.companyId,
+    itemIds: input.itemIds ?? [],
+    type: "sales-catalog-updated",
+  });
+  channel.close();
+}
+
 function publishSalesCatalogItemDeleted(input: { companyId: string; itemId: string }) {
   if (typeof window === "undefined" || !("BroadcastChannel" in window)) {
     return;
@@ -1389,6 +1403,7 @@ export function SalesCatalogConsole({
       }
 
       setItems((current) => [data.item!, ...current.filter((item) => item.id !== data.item!.id)]);
+      publishSalesCatalogUpdated({ companyId: data.item.companyId, itemIds: [data.item.id] });
       resetForm();
       setNotice({ tone: "success", message: isEditing ? "Item atualizado no catalogo." : "Item cadastrado no catalogo." });
     } catch (error) {
@@ -1821,6 +1836,10 @@ export function SalesCatalogConsole({
           const nextIds = new Set(data.items!.map((item) => item.id));
           return [...data.items!, ...current.filter((item) => !nextIds.has(item.id))];
         });
+        publishSalesCatalogUpdated({
+          companyId: selectedCompanyId,
+          itemIds: data.items.map((item) => item.id),
+        });
       }
       clearCatalogImportPatches(patches);
       updateCatalogImportJobNotice(job.id, {
@@ -1940,6 +1959,10 @@ export function SalesCatalogConsole({
         const updatedIds = new Set(data.items!.map((item) => item.id));
         return [...data.items!, ...current.filter((item) => !updatedIds.has(item.id))];
       });
+      publishSalesCatalogUpdated({
+        companyId: selectedCompanyId,
+        itemIds: data.items.map((item) => item.id),
+      });
 
       setNotice({
         tone: "success",
@@ -2031,6 +2054,7 @@ export function SalesCatalogConsole({
       }
 
       setItems((current) => current.map((entry) => (entry.id === data.item!.id ? data.item! : entry)));
+      publishSalesCatalogUpdated({ companyId: data.item.companyId, itemIds: [data.item.id] });
       setNotice({ tone: "success", message: visible ? "Produto exibido no catalogo WhatsApp." : "Produto ocultado no catalogo WhatsApp." });
     } catch (error) {
       setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao sincronizar produto." });

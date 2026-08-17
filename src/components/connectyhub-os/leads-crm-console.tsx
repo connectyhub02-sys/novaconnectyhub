@@ -107,6 +107,7 @@ const salesCatalogBrowserEventsChannel = "connectyhub:sales-catalog-events";
 type SalesCatalogBrowserEvent = {
   companyId?: unknown;
   itemId?: unknown;
+  itemIds?: unknown;
   type?: unknown;
 };
 
@@ -837,19 +838,54 @@ function AttendanceCenterView({
     const channel = new BroadcastChannel(salesCatalogBrowserEventsChannel);
 
     channel.onmessage = (event: MessageEvent<SalesCatalogBrowserEvent>) => {
-      if (event.data?.type !== "sales-catalog-item-deleted" || typeof event.data.itemId !== "string") {
+      if (event.data?.type === "sales-catalog-updated") {
+        router.refresh();
         return;
       }
 
-      setDeletedCatalogItemIds((current) => {
-        const next = new Set(current);
-        next.add(event.data.itemId as string);
-        return next;
-      });
-      router.refresh();
+      if (event.data?.type === "sales-catalog-item-deleted" && typeof event.data.itemId === "string") {
+        setDeletedCatalogItemIds((current) => {
+          const next = new Set(current);
+          next.add(event.data.itemId as string);
+          return next;
+        });
+        router.refresh();
+      }
     };
 
     return () => channel.close();
+  }, [router]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof document === "undefined") {
+      return;
+    }
+
+    let lastRefreshAt = 0;
+    const refreshCatalogSnapshot = () => {
+      const now = Date.now();
+      if (now - lastRefreshAt < 1500) {
+        return;
+      }
+
+      lastRefreshAt = now;
+      router.refresh();
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        refreshCatalogSnapshot();
+      }
+    };
+
+    window.addEventListener("focus", refreshCatalogSnapshot);
+    window.addEventListener("pageshow", refreshCatalogSnapshot);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("focus", refreshCatalogSnapshot);
+      window.removeEventListener("pageshow", refreshCatalogSnapshot);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, [router]);
 
   function updateActiveCart(updater: (items: AttendanceCartItem[]) => AttendanceCartItem[]) {
