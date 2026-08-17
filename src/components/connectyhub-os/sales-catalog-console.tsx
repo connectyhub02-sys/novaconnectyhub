@@ -125,6 +125,10 @@ type CatalogImportPlatformOption = {
   label: string;
   description: string;
   sourceKind: SalesCatalogImportSourceKind;
+  acceptedSourceKinds: SalesCatalogImportSourceKind[];
+  accept: string;
+  fileTypeLabel: string;
+  fileExample: string;
   defaultTitle?: string;
 };
 
@@ -133,13 +137,21 @@ const catalogImportPlatformOptions: CatalogImportPlatformOption[] = [
     value: "auto",
     label: "Detectar automaticamente",
     description: "Use quando nao souber a origem. A ConnectyHub tenta ler pelo tipo do arquivo e pelos campos encontrados.",
-    sourceKind: "text",
+    sourceKind: "mixed",
+    acceptedSourceKinds: ["text", "csv", "excel", "pdf", "image"],
+    accept: ".txt,.md,.csv,.tsv,.json,.pdf,.xls,.xlsx,.png,.jpg,.jpeg,.webp,image/*,application/pdf,text/plain,text/csv,application/json",
+    fileTypeLabel: "Detectar pelo arquivo",
+    fileExample: "Exemplo: CSV, Excel, PDF, foto do cardapio ou TXT com lista de produtos.",
   },
   {
     value: "anota_ai",
     label: "Anota Ai",
     description: "Prioridade para cardapios de delivery. Aceita exportacao, planilha, PDF ou foto do cardapio.",
     sourceKind: "mixed",
+    acceptedSourceKinds: ["csv", "excel", "pdf", "image"],
+    accept: ".csv,.tsv,.xls,.xlsx,.pdf,.png,.jpg,.jpeg,.webp,image/*,application/pdf,text/csv,text/tab-separated-values",
+    fileTypeLabel: "Exportacao, planilha, PDF ou foto",
+    fileExample: "Exemplo: exportacao do cardapio do Anota Ai, planilha de produtos, PDF do menu ou foto legivel do cardapio.",
     defaultTitle: "Cardapio Anota Ai",
   },
   {
@@ -147,13 +159,21 @@ const catalogImportPlatformOptions: CatalogImportPlatformOption[] = [
     label: "WooCommerce",
     description: "CSV exportado do WooCommerce, incluindo preco regular, preco promocional, categorias, estoque e URLs de imagem.",
     sourceKind: "csv",
+    acceptedSourceKinds: ["csv"],
+    accept: ".csv,text/csv",
+    fileTypeLabel: "CSV do WooCommerce",
+    fileExample: "Exemplo: Produtos > Exportar > Gerar CSV, com colunas Nome, Preco, Categorias, Estoque, SKU e Imagens.",
     defaultTitle: "Catalogo WooCommerce",
   },
   {
     value: "shopify",
     label: "Shopify",
-    description: "Planilha/CSV de produtos e variantes do Shopify. Imagens dependem de URLs publicas no arquivo.",
+    description: "CSV de produtos e variantes do Shopify. Imagens dependem de URLs publicas no arquivo.",
     sourceKind: "csv",
+    acceptedSourceKinds: ["csv"],
+    accept: ".csv,text/csv",
+    fileTypeLabel: "CSV do Shopify",
+    fileExample: "Exemplo: exportacao Products CSV do Shopify com Handle, Title, Variant Price, Image Src e variantes.",
     defaultTitle: "Catalogo Shopify",
   },
   {
@@ -161,6 +181,10 @@ const catalogImportPlatformOptions: CatalogImportPlatformOption[] = [
     label: "Wix Stores",
     description: "Exportacao do Wix Stores com produtos, precos e links. Fotos entram se houver URL acessivel.",
     sourceKind: "csv",
+    acceptedSourceKinds: ["csv"],
+    accept: ".csv,text/csv",
+    fileTypeLabel: "CSV do Wix Stores",
+    fileExample: "Exemplo: arquivo CSV exportado do Wix Stores com nome, descricao, preco, SKU e imagens publicas.",
     defaultTitle: "Catalogo Wix",
   },
   {
@@ -168,20 +192,32 @@ const catalogImportPlatformOptions: CatalogImportPlatformOption[] = [
     label: "Nuvemshop",
     description: "Exportacao de produtos da Nuvemshop. A IA revisa nomes, variacoes e precos antes de publicar.",
     sourceKind: "csv",
+    acceptedSourceKinds: ["csv"],
+    accept: ".csv,text/csv",
+    fileTypeLabel: "CSV da Nuvemshop",
+    fileExample: "Exemplo: exportacao de produtos da Nuvemshop em CSV com nome, preco, estoque, variantes e imagens.",
     defaultTitle: "Catalogo Nuvemshop",
   },
   {
     value: "loja_integrada",
     label: "Loja Integrada",
-    description: "Planilha de produtos da Loja Integrada, com suporte a categorias, estoque e links externos.",
+    description: "CSV de produtos da Loja Integrada, com suporte a categorias, estoque e links externos.",
     sourceKind: "csv",
+    acceptedSourceKinds: ["csv"],
+    accept: ".csv,text/csv",
+    fileTypeLabel: "CSV da Loja Integrada",
+    fileExample: "Exemplo: exportacao de produtos da Loja Integrada em CSV com nome, categoria, preco, estoque e URL.",
     defaultTitle: "Catalogo Loja Integrada",
   },
   {
     value: "tray",
     label: "Tray",
-    description: "CSV/planilha Tray. Produtos podem ser vendidos dentro da ConnectyHub ou manter link externo.",
+    description: "CSV Tray. Produtos podem ser vendidos dentro da ConnectyHub ou manter link externo.",
     sourceKind: "csv",
+    acceptedSourceKinds: ["csv"],
+    accept: ".csv,text/csv",
+    fileTypeLabel: "CSV da Tray",
+    fileExample: "Exemplo: exportacao de produtos Tray em CSV com descricao, preco, estoque, variantes e imagens.",
     defaultTitle: "Catalogo Tray",
   },
   {
@@ -189,6 +225,10 @@ const catalogImportPlatformOptions: CatalogImportPlatformOption[] = [
     label: "iFood / cardapio delivery",
     description: "Use para cardapio de restaurante, pizzaria, hamburgueria e adicionais. Imagens podem precisar de upload manual.",
     sourceKind: "mixed",
+    acceptedSourceKinds: ["csv", "excel", "pdf", "image"],
+    accept: ".csv,.tsv,.xls,.xlsx,.pdf,.png,.jpg,.jpeg,.webp,image/*,application/pdf,text/csv,text/tab-separated-values",
+    fileTypeLabel: "Cardapio, planilha, PDF ou foto",
+    fileExample: "Exemplo: planilha de cardapio, PDF do menu ou foto legivel com categorias, tamanhos e adicionais.",
     defaultTitle: "Cardapio delivery",
   },
   {
@@ -196,6 +236,10 @@ const catalogImportPlatformOptions: CatalogImportPlatformOption[] = [
     label: "PDF ou foto de cardapio",
     description: "A IA le produtos, categorias, tamanhos e adicionais. Fotos reais dos produtos normalmente ficam para upload depois.",
     sourceKind: "mixed",
+    acceptedSourceKinds: ["pdf", "image"],
+    accept: ".pdf,.png,.jpg,.jpeg,.webp,image/*,application/pdf",
+    fileTypeLabel: "PDF ou imagem",
+    fileExample: "Exemplo: PDF do cardapio ou foto clara do menu impresso, de preferencia uma pagina por imagem.",
     defaultTitle: "Cardapio por IA",
   },
   {
@@ -203,6 +247,10 @@ const catalogImportPlatformOptions: CatalogImportPlatformOption[] = [
     label: "Planilha generica",
     description: "CSV, XLSX ou TSV com nomes e precos. Ideal para catalogos simples enviados por fornecedores.",
     sourceKind: "excel",
+    acceptedSourceKinds: ["csv", "excel"],
+    accept: ".csv,.tsv,.xls,.xlsx,text/csv,text/tab-separated-values,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    fileTypeLabel: "CSV ou Excel",
+    fileExample: "Exemplo: planilha com colunas Produto, Descricao, Preco, Categoria, Estoque, SKU e URL da imagem.",
     defaultTitle: "Planilha de produtos",
   },
 ];
@@ -527,7 +575,7 @@ export function SalesCatalogConsole({
   const [creatingCatalogImport, setCreatingCatalogImport] = useState(false);
   const [savingCatalogImportId, setSavingCatalogImportId] = useState<string | null>(null);
   const [publishingCatalogImportId, setPublishingCatalogImportId] = useState<string | null>(null);
-  const [catalogImportSourceKind, setCatalogImportSourceKind] = useState<SalesCatalogImportSourceKind>("text");
+  const [catalogImportSourceKind, setCatalogImportSourceKind] = useState<SalesCatalogImportSourceKind>(defaultCatalogImportPlatformOption.sourceKind);
   const [catalogImportSourcePlatform, setCatalogImportSourcePlatform] = useState<SalesCatalogImportPlatform>("auto");
   const [catalogImportTargetMode, setCatalogImportTargetMode] = useState<SalesCatalogImportTargetMode>("review");
   const [catalogImportDefaultDestination, setCatalogImportDefaultDestination] = useState<SalesCatalogImportDestination>("connectyhub_checkout");
@@ -1427,31 +1475,37 @@ export function SalesCatalogConsole({
 
   function handleCatalogImportFiles(event: ChangeEvent<HTMLInputElement>) {
     const selectedFiles = Array.from(event.target.files ?? []).slice(0, 6);
-    setCatalogImportFiles(selectedFiles);
+    const option = getCatalogImportPlatformOption(catalogImportSourcePlatform);
+    const invalidFiles = getInvalidCatalogImportFiles(selectedFiles, option);
 
-    if (
-      selectedFiles.length > 0
-      && (
-        catalogImportSourceKind === "text"
-        || catalogImportSourceKind === "mixed"
-        || catalogImportSourcePlatform === "auto"
-        || catalogImportSourcePlatform === "anota_ai"
-        || catalogImportSourcePlatform === "ifood"
-        || catalogImportSourcePlatform === "generic_menu"
-        || catalogImportSourcePlatform === "generic_sheet"
-      )
-    ) {
-      setCatalogImportSourceKind(inferImportSourceKindFromFile(selectedFiles[0]));
+    if (invalidFiles.length > 0) {
+      setCatalogImportFiles([]);
+      setNotice({
+        tone: "warning",
+        message: `${option.label} aceita ${option.fileTypeLabel}. Revise: ${invalidFiles.slice(0, 3).map((file) => file.name).join(", ")}.`,
+      });
+      event.currentTarget.value = "";
+      return;
     }
+
+    setCatalogImportFiles(selectedFiles);
+    setCatalogImportSourceKind(resolveCatalogImportSourceKind(option, selectedFiles));
   }
 
   function handleCatalogImportSourcePlatform(value: SalesCatalogImportPlatform) {
     setCatalogImportSourcePlatform(value);
     const option = getCatalogImportPlatformOption(value);
+    const invalidFiles = getInvalidCatalogImportFiles(catalogImportFiles, option);
 
-    if (value !== "auto") {
-      setCatalogImportSourceKind(option.sourceKind);
+    if (invalidFiles.length > 0) {
+      setCatalogImportFiles([]);
+      setNotice({
+        tone: "warning",
+        message: `${option.label} usa ${option.fileTypeLabel}. Removi o anexo atual para evitar importacao errada.`,
+      });
     }
+
+    setCatalogImportSourceKind(resolveCatalogImportSourceKind(option, invalidFiles.length > 0 ? [] : catalogImportFiles));
 
     if (!catalogImportTitle.trim() && option.defaultTitle) {
       setCatalogImportTitle(option.defaultTitle);
@@ -1481,13 +1535,24 @@ export function SalesCatalogConsole({
       return;
     }
 
+    const selectedPlatform = getCatalogImportPlatformOption(catalogImportSourcePlatform);
+    const invalidFiles = getInvalidCatalogImportFiles(catalogImportFiles, selectedPlatform);
+    if (invalidFiles.length > 0) {
+      setNotice({
+        tone: "warning",
+        message: `${selectedPlatform.label} aceita ${selectedPlatform.fileTypeLabel}. Troque o arquivo antes de importar.`,
+      });
+      return;
+    }
+    const importSourceKind = resolveCatalogImportSourceKind(selectedPlatform, catalogImportFiles);
+
     setCreatingCatalogImport(true);
     setNotice(null);
 
     try {
       const formData = new FormData();
       formData.set("companyId", selectedCompanyId);
-      formData.set("sourceKind", catalogImportSourceKind);
+      formData.set("sourceKind", importSourceKind);
       formData.set("sourcePlatform", catalogImportSourcePlatform);
       formData.set("targetMode", catalogImportTargetMode);
       formData.set("defaultSalesDestination", catalogImportDefaultDestination);
@@ -3010,7 +3075,6 @@ export function SalesCatalogConsole({
             onChangeDefaultDestination={setCatalogImportDefaultDestination}
             onChangeFiles={handleCatalogImportFiles}
             onChangeItem={updateCatalogImportItem}
-            onChangeSourceKind={setCatalogImportSourceKind}
             onChangeSourcePlatform={handleCatalogImportSourcePlatform}
             onChangeSourceText={setCatalogImportText}
             onChangeTargetMode={handleCatalogImportTargetMode}
@@ -3956,7 +4020,6 @@ function SalesCatalogImportPanel({
   onChangeDefaultDestination,
   onChangeFiles,
   onChangeItem,
-  onChangeSourceKind,
   onChangeSourcePlatform,
   onChangeSourceText,
   onChangeTargetMode,
@@ -3982,7 +4045,6 @@ function SalesCatalogImportPanel({
   onChangeDefaultDestination: (value: SalesCatalogImportDestination) => void;
   onChangeFiles: (event: ChangeEvent<HTMLInputElement>) => void;
   onChangeItem: (itemId: string, patch: Omit<SalesCatalogImportItemPatch, "id">) => void;
-  onChangeSourceKind: (value: SalesCatalogImportSourceKind) => void;
   onChangeSourcePlatform: (value: SalesCatalogImportPlatform) => void;
   onChangeSourceText: (value: string) => void;
   onChangeTargetMode: (value: SalesCatalogImportTargetMode) => void;
@@ -4017,20 +4079,15 @@ function SalesCatalogImportPanel({
             <p className="mt-1 text-[11px] leading-4 text-slate-500">{selectedPlatform.description}</p>
           </label>
           <label className="block">
-            <FieldLabel>Tipo do arquivo</FieldLabel>
-            <select
-              value={sourceKind}
-              onChange={(event) => onChangeSourceKind(event.target.value as SalesCatalogImportSourceKind)}
-              className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
-              style={{ borderColor: "var(--ch-border)" }}
+            <FieldLabel>Arquivo esperado</FieldLabel>
+            <div
+              className="flex min-h-11 items-center justify-between gap-2 rounded-lg border px-3 text-[12px]"
+              style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}
             >
-              <option value="text">TXT / Texto</option>
-              <option value="csv">CSV</option>
-              <option value="excel">Excel</option>
-              <option value="pdf">PDF</option>
-              <option value="image">Imagem / foto</option>
-              <option value="mixed">Misto</option>
-            </select>
+              <span className="font-semibold text-slate-200">{selectedPlatform.fileTypeLabel}</span>
+              <NeonBadge tone="cyan">{formatImportSourceKind(sourceKind)}</NeonBadge>
+            </div>
+            <p className="mt-1 text-[11px] leading-4 text-slate-500">{selectedPlatform.fileExample}</p>
           </label>
           <label className="block">
             <FieldLabel>Titulo</FieldLabel>
@@ -4114,7 +4171,7 @@ function SalesCatalogImportPanel({
           <input
             type="file"
             multiple
-            accept=".txt,.md,.csv,.tsv,.json,.pdf,.xls,.xlsx,image/*,application/pdf,text/plain,text/csv,application/json"
+            accept={selectedPlatform.accept}
             className="sr-only"
             onChange={onChangeFiles}
           />
@@ -5440,6 +5497,22 @@ function inferImportSourceKindFromFile(file: File): SalesCatalogImportSourceKind
   if (type.includes("spreadsheet") || /\.(xlsx?|ods)$/i.test(name)) return "excel";
   if (type.includes("csv") || name.endsWith(".csv") || name.endsWith(".tsv")) return "csv";
   return "text";
+}
+
+function resolveCatalogImportSourceKind(option: CatalogImportPlatformOption, files: File[]) {
+  const inferred = files[0] ? inferImportSourceKindFromFile(files[0]) : option.sourceKind;
+
+  if (option.value === "auto" || option.sourceKind === "mixed" || option.value === "generic_sheet") {
+    return option.acceptedSourceKinds.includes(inferred) ? inferred : option.sourceKind;
+  }
+
+  return option.sourceKind;
+}
+
+function getInvalidCatalogImportFiles(files: File[], option: CatalogImportPlatformOption) {
+  if (option.value === "auto") return [];
+
+  return files.filter((file) => !option.acceptedSourceKinds.includes(inferImportSourceKindFromFile(file)));
 }
 
 function formatFileSize(size: number) {

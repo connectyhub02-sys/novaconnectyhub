@@ -43,6 +43,82 @@ const allowedImportMimeTypes = new Set([
   "text/tab-separated-values",
 ]);
 
+type ImportPlatformFileRule = {
+  defaultSourceKind: SalesCatalogImportSourceKind;
+  acceptedSourceKinds: SalesCatalogImportSourceKind[];
+  fileTypeLabel: string;
+  example: string;
+};
+
+const importPlatformFileRules: Record<SalesCatalogImportPlatform, ImportPlatformFileRule> = {
+  auto: {
+    defaultSourceKind: "mixed",
+    acceptedSourceKinds: ["text", "csv", "excel", "pdf", "image"],
+    fileTypeLabel: "TXT, CSV, Excel, PDF ou imagem",
+    example: "CSV, Excel, PDF, foto do cardapio ou TXT com lista de produtos.",
+  },
+  anota_ai: {
+    defaultSourceKind: "mixed",
+    acceptedSourceKinds: ["csv", "excel", "pdf", "image"],
+    fileTypeLabel: "exportacao, planilha, PDF ou foto",
+    example: "exportacao do cardapio do Anota Ai, planilha, PDF ou foto legivel.",
+  },
+  woocommerce: {
+    defaultSourceKind: "csv",
+    acceptedSourceKinds: ["csv"],
+    fileTypeLabel: "CSV do WooCommerce",
+    example: "Produtos > Exportar > Gerar CSV.",
+  },
+  shopify: {
+    defaultSourceKind: "csv",
+    acceptedSourceKinds: ["csv"],
+    fileTypeLabel: "CSV do Shopify",
+    example: "Products export CSV do Shopify.",
+  },
+  wix: {
+    defaultSourceKind: "csv",
+    acceptedSourceKinds: ["csv"],
+    fileTypeLabel: "CSV do Wix Stores",
+    example: "exportacao CSV de produtos do Wix Stores.",
+  },
+  nuvemshop: {
+    defaultSourceKind: "csv",
+    acceptedSourceKinds: ["csv"],
+    fileTypeLabel: "CSV da Nuvemshop",
+    example: "exportacao CSV de produtos da Nuvemshop.",
+  },
+  loja_integrada: {
+    defaultSourceKind: "csv",
+    acceptedSourceKinds: ["csv"],
+    fileTypeLabel: "CSV da Loja Integrada",
+    example: "exportacao CSV de produtos da Loja Integrada.",
+  },
+  tray: {
+    defaultSourceKind: "csv",
+    acceptedSourceKinds: ["csv"],
+    fileTypeLabel: "CSV da Tray",
+    example: "exportacao CSV de produtos da Tray.",
+  },
+  ifood: {
+    defaultSourceKind: "mixed",
+    acceptedSourceKinds: ["csv", "excel", "pdf", "image"],
+    fileTypeLabel: "cardapio, planilha, PDF ou foto",
+    example: "planilha do cardapio, PDF do menu ou foto legivel.",
+  },
+  generic_menu: {
+    defaultSourceKind: "mixed",
+    acceptedSourceKinds: ["pdf", "image"],
+    fileTypeLabel: "PDF ou imagem",
+    example: "PDF do cardapio ou foto clara do menu.",
+  },
+  generic_sheet: {
+    defaultSourceKind: "excel",
+    acceptedSourceKinds: ["csv", "excel"],
+    fileTypeLabel: "CSV ou Excel",
+    example: "planilha com Produto, Descricao, Preco, Categoria, Estoque, SKU e URL da imagem.",
+  },
+};
+
 type JsonRecord = Record<string, unknown>;
 
 export async function GET(request: NextRequest) {
@@ -156,11 +232,14 @@ async function readImportRequest(request: NextRequest) {
     }
 
     const files = await readImportFiles(formData.getAll("files"));
+    const sourcePlatform = normalizeImportPlatform(readString(formData.get("sourcePlatform")));
+    const requestedSourceKind = normalizeSourceKind(readString(formData.get("sourceKind")) ?? inferSourceKindFromFiles(files));
+    assertImportFilesMatchPlatform(sourcePlatform, files);
 
     return {
       companyId: readString(formData.get("companyId")),
-      sourceKind: normalizeSourceKind(readString(formData.get("sourceKind")) ?? inferSourceKindFromFiles(files)),
-      sourcePlatform: normalizeImportPlatform(readString(formData.get("sourcePlatform"))),
+      sourceKind: resolveSourceKindForPlatform(sourcePlatform, requestedSourceKind, files),
+      sourcePlatform,
       targetMode: normalizeTargetMode(readString(formData.get("targetMode"))),
       defaultSalesDestination: normalizeSalesDestination(readString(formData.get("defaultSalesDestination"))),
       text: readString(formData.get("text")),
@@ -172,10 +251,13 @@ async function readImportRequest(request: NextRequest) {
 
   const body = readRecord(await request.json().catch(() => null)) ?? {};
 
+  const sourcePlatform = normalizeImportPlatform(readString(body.sourcePlatform));
+  const requestedSourceKind = normalizeSourceKind(readString(body.sourceKind));
+
   return {
     companyId: readString(body.companyId),
-    sourceKind: normalizeSourceKind(readString(body.sourceKind)),
-    sourcePlatform: normalizeImportPlatform(readString(body.sourcePlatform)),
+    sourceKind: resolveSourceKindForPlatform(sourcePlatform, requestedSourceKind, []),
+    sourcePlatform,
     targetMode: normalizeTargetMode(readString(body.targetMode)),
     defaultSalesDestination: normalizeSalesDestination(readString(body.defaultSalesDestination)),
     text: readString(body.text),
@@ -234,11 +316,41 @@ async function extractTextFromImportFile(file: File, contentType: string) {
 function inferSourceKindFromFiles(files: SalesCatalogImportFileInput[]): SalesCatalogImportSourceKind {
   const first = files[0];
   if (!first) return "text";
-  if (first.contentType.includes("pdf")) return "pdf";
-  if (first.contentType.startsWith("image/")) return "image";
-  if (first.contentType.includes("spreadsheet") || /\.(xlsx?|ods)$/i.test(first.fileName)) return "excel";
-  if (first.contentType.includes("csv") || /\.csv$/i.test(first.fileName)) return "csv";
+  return inferSourceKindFromImportFile(first);
+}
+
+function inferSourceKindFromImportFile(file: SalesCatalogImportFileInput): SalesCatalogImportSourceKind {
+  if (file.contentType.includes("pdf")) return "pdf";
+  if (file.contentType.startsWith("image/")) return "image";
+  if (file.contentType.includes("csv") || /\.(csv|tsv)$/i.test(file.fileName)) return "csv";
+  if (file.contentType.includes("spreadsheet") || /\.(xlsx?|ods)$/i.test(file.fileName)) return "excel";
   return "text";
+}
+
+function resolveSourceKindForPlatform(
+  sourcePlatform: SalesCatalogImportPlatform,
+  requestedSourceKind: SalesCatalogImportSourceKind,
+  files: SalesCatalogImportFileInput[],
+): SalesCatalogImportSourceKind {
+  const rule = importPlatformFileRules[sourcePlatform];
+  const inferred = files[0] ? inferSourceKindFromImportFile(files[0]) : requestedSourceKind;
+
+  if (sourcePlatform === "auto" || rule.defaultSourceKind === "mixed" || sourcePlatform === "generic_sheet") {
+    return rule.acceptedSourceKinds.includes(inferred) ? inferred : rule.defaultSourceKind;
+  }
+
+  return rule.defaultSourceKind;
+}
+
+function assertImportFilesMatchPlatform(sourcePlatform: SalesCatalogImportPlatform, files: SalesCatalogImportFileInput[]) {
+  if (sourcePlatform === "auto") return;
+
+  const rule = importPlatformFileRules[sourcePlatform];
+  const invalidFiles = files.filter((file) => !rule.acceptedSourceKinds.includes(inferSourceKindFromImportFile(file)));
+
+  if (invalidFiles.length === 0) return;
+
+  throw new Error(`${formatImportPlatformForRoute(sourcePlatform)} aceita ${rule.fileTypeLabel}. Exemplo: ${rule.example}`);
 }
 
 function normalizeContentType(file: File) {
@@ -286,6 +398,20 @@ function normalizeImportPlatform(value: unknown): SalesCatalogImportPlatform {
   }
 
   return "auto";
+}
+
+function formatImportPlatformForRoute(value: SalesCatalogImportPlatform) {
+  if (value === "woocommerce") return "WooCommerce";
+  if (value === "shopify") return "Shopify";
+  if (value === "wix") return "Wix Stores";
+  if (value === "nuvemshop") return "Nuvemshop";
+  if (value === "loja_integrada") return "Loja Integrada";
+  if (value === "tray") return "Tray";
+  if (value === "anota_ai") return "Anota Ai";
+  if (value === "ifood") return "iFood / cardapio delivery";
+  if (value === "generic_menu") return "PDF ou foto de cardapio";
+  if (value === "generic_sheet") return "Planilha generica";
+  return "Importacao automatica";
 }
 
 function normalizeTargetMode(value: unknown): SalesCatalogImportTargetMode {
