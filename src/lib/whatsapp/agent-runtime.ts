@@ -4476,6 +4476,7 @@ async function sendCompanyLocationReply(input: {
         phone: input.phone,
         text: input.reply.text,
         choices: [`Abrir no Google Maps|${mapsUrl}`],
+        footerText: resolveInteractiveButtonFooterText(input.context.organization),
         trackId: `company_location_maps_${input.context.run.id}`,
         replyId: input.latestInbound?.provider_message_id ?? undefined,
         mentions: resolveGroupMentions(input.context, input.latestInbound),
@@ -4778,6 +4779,7 @@ async function sendTextOutboundChunk(input: {
         phone: input.phone,
         text: interactiveMenu.text,
         choices: interactiveMenu.choices,
+        footerText: resolveInteractiveButtonFooterText(input.context.organization),
         trackId: `agent_menu_${input.context.run.id}_${input.chunkIndex}`,
         replyId: input.replyId,
         mentions: resolveGroupMentions(input.context, input.mentionMessage),
@@ -5264,6 +5266,7 @@ async function sendSalesCatalogPaymentLink(input: {
       phone: input.phone,
       text,
       choices: [`Pagar agora|${paymentUrl}`],
+      footerText: resolveInteractiveButtonFooterText(input.context.organization),
       trackId: `agent_payment_button_${input.context.run.id}_${input.payment.orderId.slice(0, 8)}`,
       mentions: resolveGroupMentions(input.context),
     });
@@ -6228,6 +6231,7 @@ async function sendWhatsappInteractiveButtons(input: {
   phone: string;
   text: string;
   choices: string[];
+  footerText?: string;
   trackId: string;
   replyId?: string;
   mentions?: string;
@@ -6240,7 +6244,7 @@ async function sendWhatsappInteractiveButtons(input: {
       type: "button",
       text: input.text,
       choices: input.choices.slice(0, 3),
-      footerText: "ConnectyHub",
+      footerText: input.footerText ?? "ConnectyHub",
       readchat: true,
       readmessages: true,
       ...(input.replyId ? { replyid: input.replyId } : {}),
@@ -6249,6 +6253,28 @@ async function sendWhatsappInteractiveButtons(input: {
       track_id: input.trackId,
     },
   });
+}
+
+function resolveInteractiveButtonFooterText(organization: OrganizationRow | null | undefined) {
+  const planCode = normalizePlanCodeForFooter(organization?.plan_code);
+
+  if (planCode === "starter" || planCode === "pro" || planCode === "scale") {
+    return normalizeInteractiveFooterText(organization?.name) || "ConnectyHub";
+  }
+
+  return "ConnectyHub";
+}
+
+function normalizeInteractiveFooterText(value: string | null | undefined) {
+  return (value ?? "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 60);
+}
+
+function normalizePlanCodeForFooter(value: string | null | undefined) {
+  const normalized = (value ?? "").trim().toLowerCase();
+  return normalized === "start" ? "starter" : normalized;
 }
 
 async function saveOutboundMessage(

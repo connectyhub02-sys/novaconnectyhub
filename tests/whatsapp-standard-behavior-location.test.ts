@@ -148,4 +148,25 @@ describe("WhatsApp standard behavior and company location", () => {
     expect(sender).toContain("company_location_maps_");
     expect(sender).toContain("company_location_button_failed");
   });
+
+  it("uses customer branding in interactive button footers only for paid plans", () => {
+    const buttonSender = sourceBetween(
+      runtimeSource,
+      "async function sendWhatsappInteractiveButtons",
+      "async function saveOutboundMessage",
+    );
+    const footerResolver = sourceBetween(
+      runtimeSource,
+      "function resolveInteractiveButtonFooterText",
+      "async function saveOutboundMessage",
+    );
+
+    expect(buttonSender).toContain("footerText?: string");
+    expect(buttonSender).toContain('footerText: input.footerText ?? "ConnectyHub"');
+    expect(runtimeSource).toContain("footerText: resolveInteractiveButtonFooterText(input.context.organization)");
+    expect(footerResolver).toContain('planCode === "starter" || planCode === "pro" || planCode === "scale"');
+    expect(footerResolver).toContain("normalizeInteractiveFooterText(organization?.name)");
+    expect(footerResolver).toContain('return "ConnectyHub"');
+    expect(footerResolver).toContain(".slice(0, 60)");
+  });
 });
