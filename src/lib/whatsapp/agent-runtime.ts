@@ -3547,10 +3547,7 @@ async function resolveInboundUserText(input: {
   }
 
   const text = latestInbound.text_content?.trim();
-
-  if (text) {
-    return text;
-  }
+  const mediaKind = detectInboundMediaKind(latestInbound);
 
   if (input.context.behavior.audioTranscription && isAudioMessage(latestInbound)) {
     const transcript = await transcribeAndPersistInboundAudio(input).catch(async (error: unknown) => {
@@ -3562,8 +3559,6 @@ async function resolveInboundUserText(input: {
       return transcript;
     }
   }
-
-  const mediaKind = detectInboundMediaKind(latestInbound);
 
   if (mediaKind && input.context.behavior.mediaBurstGuard) {
     const batchText = await buildMediaBatchUserText({
@@ -3581,15 +3576,12 @@ async function resolveInboundUserText(input: {
 
   if (mediaKind) {
     if (isMediaAnalysisEnabled(input.context.behavior, mediaKind)) {
-      const analysis = await analyzeAndPersistInboundMedia({
+      const analysis = await resolveInboundMediaAnalysis({
         client: input.client,
         context: input.context,
         token: input.token,
-        latestInbound,
+        message: latestInbound,
         kind: mediaKind,
-      }).catch(async (error: unknown) => {
-        await persistMediaAnalysisFailure(input.client, input.context, latestInbound, mediaKind, error);
-        return null;
       });
 
       if (analysis) {
@@ -3614,9 +3606,79 @@ async function resolveInboundUserText(input: {
     return mediaUserText;
   }
 
+  if (text) {
+    const textWithMediaContext = await buildTextWithRecentVisualMediaContext({
+      client: input.client,
+      context: input.context,
+      token: input.token,
+      latestInbound,
+      text,
+    });
+
+    return textWithMediaContext ?? text;
+  }
+
   const fallbackText = buildMessageText(latestInbound);
   latestInbound.text_content = fallbackText;
   return fallbackText;
+}
+
+async function buildTextWithRecentVisualMediaContext(input: {
+  client: SupabaseClient;
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
+  token: string;
+  latestInbound: ConversationMessageRow;
+  text: string;
+}) {
+  const batch = selectRecentVisualMediaBeforeText(input.context, input.latestInbound);
+
+  if (batch.length === 0) {
+    return null;
+  }
+
+  const lines: string[] = [];
+
+  for (const message of batch) {
+    const kind = detectInboundMediaKind(message);
+    if (!kind) continue;
+
+    const caption = extractMessageCaption(message);
+    const enabled = isMediaAnalysisEnabled(input.context.behavior, kind);
+    const analysis = enabled
+      ? await resolveInboundMediaAnalysis({
+          client: input.client,
+          context: input.context,
+          token: input.token,
+          message,
+          kind,
+        })
+      : null;
+
+    const prefix = `${formatMediaKind(kind)} enviada antes do texto${caption ? ` com legenda "${preview(caption, 140)}"` : ""}`;
+    const summary = analysis
+      ? preview(analysis, 900)
+      : enabled
+        ? "Sem analise automatica confiavel nesta execucao."
+        : `Analise de ${formatMediaKind(kind).toLowerCase()} desativada no comportamento do agente.`;
+
+    lines.push(`- ${prefix}: ${summary}`);
+  }
+
+  if (lines.length === 0) {
+    return null;
+  }
+
+  return [
+    input.text,
+    "",
+    "[MIDIA RECENTE DO LEAD]",
+    ...lines,
+    "",
+    "[ORIENTACAO INTERNA]",
+    "Use a analise da midia junto com o texto mais recente do lead.",
+    "Nao diga que nao consegue ver a midia quando houver uma analise automatica disponivel.",
+    "Se a analise nao for confiavel ou estiver desativada, peca uma descricao curta sem inventar detalhes.",
+  ].join("\n");
 }
 
 async function buildMediaBatchUserText(input: {
@@ -3640,15 +3702,12 @@ async function buildMediaBatchUserText(input: {
     const caption = extractMessageCaption(message);
     const enabled = isMediaAnalysisEnabled(input.context.behavior, kind);
     const analysis = enabled
-      ? await analyzeAndPersistInboundMedia({
+      ? await resolveInboundMediaAnalysis({
           client: input.client,
           context: input.context,
           token: input.token,
-          latestInbound: message,
+          message,
           kind,
-        }).catch(async (error: unknown) => {
-          await persistMediaAnalysisFailure(input.client, input.context, message, kind, error);
-          return null;
         })
       : null;
 
@@ -3718,6 +3777,80 @@ function selectRecentVisualMediaBatch(
   }
 
   return selected.sort((left, right) => new Date(left.occurred_at).getTime() - new Date(right.occurred_at).getTime());
+}
+
+function selectRecentVisualMediaBeforeText(
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+  latestInbound: ConversationMessageRow,
+) {
+  const latestTime = new Date(latestInbound.occurred_at).getTime();
+  if (!Number.isFinite(latestTime)) return [];
+
+  const limits: Record<InboundMediaKind, number> = {
+    image: context.behavior.mediaBatchImageLimit,
+    video: context.behavior.mediaBatchVideoLimit,
+    document: context.behavior.mediaBatchDocumentLimit,
+  };
+  const used: Record<InboundMediaKind, number> = { image: 0, video: 0, document: 0 };
+  const windowMs = Math.max(
+    90,
+    context.behavior.timingMediaThenTextSeconds,
+    context.behavior.timingVideoCaptionSeconds,
+    context.behavior.timingDocumentCaptionSeconds,
+    context.behavior.timingMediaBurstSeconds,
+  ) * 1000;
+  const recentInboundCluster = getRecentInboundCluster(context.messages);
+  const candidates = recentInboundCluster
+    .filter((message) => message.id !== latestInbound.id)
+    .filter((message) => !latestInbound.provider_chat_id || !message.provider_chat_id || message.provider_chat_id === latestInbound.provider_chat_id)
+    .filter((message) => {
+      const kind = detectInboundMediaKind(message);
+      if (!kind) return false;
+
+      const messageTime = new Date(message.occurred_at).getTime();
+      return Number.isFinite(messageTime)
+        && messageTime <= latestTime
+        && latestTime - messageTime <= windowMs;
+    })
+    .sort((left, right) => new Date(right.occurred_at).getTime() - new Date(left.occurred_at).getTime());
+
+  const selected: ConversationMessageRow[] = [];
+
+  for (const message of candidates) {
+    const kind = detectInboundMediaKind(message);
+    if (!kind) continue;
+    if (used[kind] >= limits[kind]) continue;
+
+    selected.push(message);
+    used[kind] += 1;
+  }
+
+  return selected.sort((left, right) => new Date(left.occurred_at).getTime() - new Date(right.occurred_at).getTime());
+}
+
+async function resolveInboundMediaAnalysis(input: {
+  client: SupabaseClient;
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
+  token: string;
+  message: ConversationMessageRow;
+  kind: InboundMediaKind;
+}) {
+  const cached = readStoredMediaAnalysisText(input.message, input.kind);
+
+  if (cached) {
+    return cached;
+  }
+
+  return await analyzeAndPersistInboundMedia({
+    client: input.client,
+    context: input.context,
+    token: input.token,
+    latestInbound: input.message,
+    kind: input.kind,
+  }).catch(async (error: unknown) => {
+    await persistMediaAnalysisFailure(input.client, input.context, input.message, input.kind, error);
+    return null;
+  });
 }
 
 async function transcribeAndPersistInboundAudio(input: {
@@ -8581,6 +8714,21 @@ function buildMediaUserText(input: {
 
 function buildStoredMediaAnalysisText(kind: InboundMediaKind, analysis: string) {
   return `Analise automatica de ${formatMediaKind(kind).toLowerCase()}: ${analysis}`;
+}
+
+function readStoredMediaAnalysisText(message: ConversationMessageRow, kind: InboundMediaKind) {
+  const text = message.text_content?.trim();
+  if (!text) return null;
+
+  const prefix = `Analise automatica de ${formatMediaKind(kind).toLowerCase()}:`;
+  const normalizedText = normalizeSearch(text);
+  const normalizedPrefix = normalizeSearch(prefix);
+
+  if (!normalizedText.startsWith(normalizedPrefix)) {
+    return null;
+  }
+
+  return text.slice(prefix.length).trim() || null;
 }
 
 function isAudioMessage(message: ConversationMessageRow | null) {
