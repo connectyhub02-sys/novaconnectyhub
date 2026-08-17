@@ -3081,7 +3081,7 @@ function buildOrganizationLocationLines(locations: RuntimeOrganizationLocation[]
         location.isPrimary ? "principal" : null,
         address || null,
         location.mapsUrl ? `Maps: ${location.mapsUrl}` : null,
-        hasOrganizationLocationCoordinates(location) ? "pin nativo disponivel" : null,
+        resolveCompanyLocationMapUrl(location) ? "botao Google Maps disponivel" : null,
         location.notes ? `obs: ${location.notes}` : null,
       ].filter(Boolean);
 
@@ -4462,55 +4462,77 @@ async function sendCompanyLocationReply(input: {
   reply: CompanyLocationReply;
 }): Promise<OutboundMessage[]> {
   const outbound: OutboundMessage[] = [];
-  const textProviderResponse = await sendWhatsappText({
-    credentials: input.context.credentials,
-    token: input.token,
-    phone: input.phone,
-    text: input.reply.text,
-    trackId: `company_location_text_${input.context.run.id}`,
-    replyId: input.latestInbound?.provider_message_id ?? undefined,
-    mentions: resolveGroupMentions(input.context, input.latestInbound),
-  });
+  const mapsUrl = input.reply.location ? resolveCompanyLocationMapUrl(input.reply.location) : null;
+  let messageText = input.reply.text;
+  let providerResponse: unknown;
+  let interactiveButton = false;
+  let buttonFallback = false;
+
+  if (mapsUrl) {
+    try {
+      providerResponse = await sendWhatsappInteractiveButtons({
+        credentials: input.context.credentials,
+        token: input.token,
+        phone: input.phone,
+        text: input.reply.text,
+        choices: [`Abrir no Google Maps|${mapsUrl}`],
+        trackId: `company_location_maps_${input.context.run.id}`,
+        replyId: input.latestInbound?.provider_message_id ?? undefined,
+        mentions: resolveGroupMentions(input.context, input.latestInbound),
+      });
+      interactiveButton = true;
+    } catch (error) {
+      const errorMessage = describeRuntimeError(error, "Falha desconhecida ao enviar botao de localizacao.");
+      messageText = `${input.reply.text}\n\nAbrir no Google Maps: ${mapsUrl}`;
+      const textProviderResponse = await sendWhatsappText({
+        credentials: input.context.credentials,
+        token: input.token,
+        phone: input.phone,
+        text: messageText,
+        trackId: `company_location_maps_fallback_${input.context.run.id}`,
+        replyId: input.latestInbound?.provider_message_id ?? undefined,
+        mentions: resolveGroupMentions(input.context, input.latestInbound),
+      });
+
+      providerResponse = {
+        fallback: true,
+        reason: "company_location_button_failed",
+        error: errorMessage,
+        mapsUrl,
+        textProviderResponse,
+      };
+      buttonFallback = true;
+      await persistInteractiveButtonFallbackEvent(input.client, input.context, {
+        chunkIndex: 1,
+        chunksTotal: 1,
+        errorMessage,
+        providerResponse,
+      }).catch(() => {});
+    }
+  } else {
+    providerResponse = await sendWhatsappText({
+      credentials: input.context.credentials,
+      token: input.token,
+      phone: input.phone,
+      text: messageText,
+      trackId: `company_location_text_${input.context.run.id}`,
+      replyId: input.latestInbound?.provider_message_id ?? undefined,
+      mentions: resolveGroupMentions(input.context, input.latestInbound),
+    });
+  }
+
   const textMessage: OutboundMessage = {
-    text: input.reply.text,
+    text: messageText,
     mode: "text",
-    providerResponse: textProviderResponse,
+    providerResponse,
+    interactiveButton,
+    buttonFallback,
     chunkIndex: 1,
-    chunksTotal: input.reply.location && hasOrganizationLocationCoordinates(input.reply.location) ? 2 : 1,
+    chunksTotal: 1,
   };
 
   await saveOutboundMessage(input.client, input.context, textMessage);
   outbound.push({ ...textMessage, persisted: true });
-
-  if (input.reply.location && hasOrganizationLocationCoordinates(input.reply.location)) {
-    const locationText = buildLocationMessageText(input.reply.location);
-
-    try {
-      const locationProviderResponse = await sendWhatsappLocation({
-        credentials: input.context.credentials,
-        token: input.token,
-        phone: input.phone,
-        location: input.reply.location,
-        trackId: `company_location_pin_${input.context.run.id}`,
-        replyId: input.latestInbound?.provider_message_id ?? undefined,
-        mentions: resolveGroupMentions(input.context, input.latestInbound),
-      });
-      const locationMessage: OutboundMessage = {
-        text: locationText,
-        mode: "text",
-        providerResponse: locationProviderResponse,
-        locationMessage: true,
-        location: serializeOrganizationLocation(input.reply.location),
-        chunkIndex: 2,
-        chunksTotal: 2,
-      };
-
-      await saveOutboundMessage(input.client, input.context, locationMessage);
-      outbound.push({ ...locationMessage, persisted: true });
-    } catch (error) {
-      await persistCompanyLocationSendFallback(input.client, input.context, input.reply.location, error).catch(() => {});
-    }
-  }
 
   return outbound;
 }
@@ -4519,9 +4541,8 @@ function buildSingleCompanyLocationText(organization: OrganizationRow, location:
   const address = formatOrganizationLocationAddress(location);
   const lines = [
     `${location.label || organization.name}:`,
-    address || location.mapsUrl || "localizacao cadastrada",
-    location.mapsUrl ? `maps: ${location.mapsUrl}` : null,
-    hasOrganizationLocationCoordinates(location) ? "vou mandar o pin aqui tambem." : null,
+    address || "localizacao cadastrada",
+    resolveCompanyLocationMapUrl(location) ? "toque no botao abaixo para abrir no Google Maps." : null,
   ];
 
   return lines.filter(Boolean).join("\n");
@@ -4532,7 +4553,7 @@ function buildMultipleCompanyLocationsText(locations: RuntimeOrganizationLocatio
     "tenho mais de uma unidade cadastrada:",
     "",
     ...locations.slice(0, 8).map((location, index) => {
-      const address = formatOrganizationLocationAddress(location) || location.mapsUrl || "endereco nao detalhado";
+      const address = formatOrganizationLocationAddress(location) || (resolveCompanyLocationMapUrl(location) ? "localizacao no Maps cadastrada" : "endereco nao detalhado");
       return `${index + 1}. ${location.label}: ${address}`;
     }),
     "",
@@ -4542,12 +4563,17 @@ function buildMultipleCompanyLocationsText(locations: RuntimeOrganizationLocatio
   return lines.join("\n");
 }
 
-function buildLocationMessageText(location: RuntimeOrganizationLocation) {
-  return [
-    location.label,
-    formatOrganizationLocationAddress(location),
-    location.mapsUrl,
-  ].filter(Boolean).join("\n");
+function resolveCompanyLocationMapUrl(location: RuntimeOrganizationLocation) {
+  if (location.mapsUrl) {
+    return location.mapsUrl;
+  }
+
+  if (hasOrganizationLocationCoordinates(location)) {
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${location.latitude},${location.longitude}`)}`;
+  }
+
+  const address = formatOrganizationLocationAddress(location);
+  return address ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}` : null;
 }
 
 function isBusinessLocationRequest(userText: string, latestInbound: ConversationMessageRow | null) {
@@ -4587,48 +4613,6 @@ function isLeadOwnLocationMessage(normalized: string) {
     /\bentrega em\b/,
     /\bpara entregar\b/,
   ].some((pattern) => pattern.test(normalized));
-}
-
-function serializeOrganizationLocation(location: RuntimeOrganizationLocation): JsonRecord {
-  return {
-    id: location.id,
-    label: location.label,
-    address: location.address,
-    cep: location.cep,
-    city: location.city,
-    region: location.region,
-    mapsUrl: location.mapsUrl,
-    latitude: location.latitude,
-    longitude: location.longitude,
-    isPrimary: location.isPrimary,
-  };
-}
-
-async function persistCompanyLocationSendFallback(
-  client: SupabaseClient,
-  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
-  location: RuntimeOrganizationLocation,
-  error: unknown,
-) {
-  await client.from("intelligence_events").insert({
-    scope: "organization",
-    organization_id: context.organization.id,
-    source_type: "whatsapp",
-    source_id: context.conversationId,
-    producer_agent_id: context.agent.id,
-    event_type: "whatsapp.company_location.pin_failed",
-    title: "Falha ao enviar pin de localizacao",
-    summary: describeRuntimeError(error, "Falha desconhecida ao enviar localizacao."),
-    confidence: 0.86,
-    visibility: "organization",
-    tags: ["whatsapp", "location", "fallback"],
-    payload: {
-      agentRunId: context.run.id,
-      conversationId: context.conversationId,
-      leadId: context.lead?.id ?? null,
-      location: serializeOrganizationLocation(location),
-    },
-  });
 }
 
 function shouldUseMixedAudioDelivery(
@@ -6228,38 +6212,6 @@ async function sendWhatsappText(input: {
       number: input.phone,
       text: input.text,
       linkPreview: true,
-      readchat: true,
-      readmessages: true,
-      ...(input.replyId ? { replyid: input.replyId } : {}),
-      ...(input.mentions ? { mentions: input.mentions } : {}),
-      track_source: "connectyhub",
-      track_id: input.trackId,
-    },
-  });
-}
-
-async function sendWhatsappLocation(input: {
-  credentials: UazapiCredentials;
-  token: string;
-  phone: string;
-  location: RuntimeOrganizationLocation;
-  trackId: string;
-  replyId?: string;
-  mentions?: string;
-}) {
-  if (!hasOrganizationLocationCoordinates(input.location)) {
-    throw new Error("Localizacao sem latitude/longitude para envio nativo.");
-  }
-
-  return callUazapi(input.credentials, "/send/location", {
-    method: "POST",
-    token: input.token,
-    body: {
-      number: input.phone,
-      name: input.location.label,
-      address: formatOrganizationLocationAddress(input.location) || input.location.address || input.location.label,
-      latitude: input.location.latitude,
-      longitude: input.location.longitude,
       readchat: true,
       readmessages: true,
       ...(input.replyId ? { replyid: input.replyId } : {}),

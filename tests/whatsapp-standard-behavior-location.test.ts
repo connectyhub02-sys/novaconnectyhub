@@ -125,18 +125,27 @@ describe("WhatsApp standard behavior and company location", () => {
     expect(behaviorPanel).toContain("CompanyLocationsEditor");
   });
 
-  it("loads company locations into the agent and only sends a native pin for a single selected location", () => {
+  it("loads company locations into the agent and sends Maps as a button instead of a loose link or native pin", () => {
     const resolver = sourceBetween(
       runtimeSource,
       "function resolveCompanyLocationReply",
       "async function sendCompanyLocationReply",
     );
+    const sender = sourceBetween(
+      runtimeSource,
+      "async function sendCompanyLocationReply",
+      "function buildSingleCompanyLocationText",
+    );
 
     expect(runtimeSource).toContain("listOrganizationLocations(client, run.organization_id)");
     expect(runtimeSource).toContain("buildOrganizationLocationLines(input.companyLocations)");
-    expect(runtimeSource).toContain('"/send/location"');
+    expect(runtimeSource).toContain("resolveCompanyLocationMapUrl");
+    expect(runtimeSource).not.toContain('"/send/location"');
     expect(resolver).toContain('reason: "company_location_single"');
     expect(resolver).toContain('reason: "company_location_multiple"');
     expect(resolver).toContain("location: null");
+    expect(sender).toContain("Abrir no Google Maps|${mapsUrl}");
+    expect(sender).toContain("company_location_maps_");
+    expect(sender).toContain("company_location_button_failed");
   });
 });

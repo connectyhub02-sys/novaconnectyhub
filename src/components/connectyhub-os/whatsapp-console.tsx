@@ -2346,7 +2346,7 @@ export function WhatsAppConsole({
                 </div>
               </BehaviorSection>
 
-              <BehaviorSection title="Localizacao da empresa" description="Enderecos que o agente pode enviar quando o lead pedir onde fica, Maps ou localizacao. O pin nativo sai quando latitude e longitude estiverem preenchidas." defaultOpen={companyLocationDrafts.length === 1 && !companyLocationDrafts[0]?.address}>
+              <BehaviorSection title="Localizacao da empresa" description="Enderecos que o agente pode enviar quando o lead pedir onde fica, Maps ou localizacao. O botao abre o Google Maps quando houver link, coordenadas ou endereco completo." defaultOpen={companyLocationDrafts.length === 1 && !companyLocationDrafts[0]?.address}>
                 <CompanyLocationsEditor
                   locations={companyLocationDrafts}
                   onAdd={addCompanyLocationDraft}
@@ -5567,19 +5567,19 @@ function CompanyLocationsEditor({
             <div className="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1fr)_160px_160px]">
               <TextField
                 label="Link Google Maps"
-                description="Usado quando o pin nativo nao puder ser enviado ou para complementar a resposta."
+                description="Usado para montar o botao Abrir no Google Maps."
                 value={location.mapsUrl}
                 onChange={(mapsUrl) => onChange(index, { mapsUrl })}
               />
               <TextField
                 label="Latitude"
-                description="Obrigatoria para enviar pin nativo do WhatsApp."
+                description="Ajuda a montar o botao do Google Maps quando nao houver link."
                 value={location.latitude}
                 onChange={(latitude) => onChange(index, { latitude })}
               />
               <TextField
                 label="Longitude"
-                description="Obrigatoria para enviar pin nativo do WhatsApp."
+                description="Ajuda a montar o botao do Google Maps quando nao houver link."
                 value={location.longitude}
                 onChange={(longitude) => onChange(index, { longitude })}
               />
