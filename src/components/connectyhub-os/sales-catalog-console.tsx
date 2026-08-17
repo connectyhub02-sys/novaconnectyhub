@@ -620,6 +620,10 @@ export function SalesCatalogConsole({
     () => items.filter((item) => !selectedCompanyId || item.companyId === selectedCompanyId),
     [items, selectedCompanyId],
   );
+  const visibleWhatsappCatalogItems = useMemo(
+    () => visibleItems.filter((item) => item.source === "whatsapp_catalog"),
+    [visibleItems],
+  );
   const visibleOrders = useMemo(
     () => orders.filter((order) => !selectedCompanyId || order.companyId === selectedCompanyId),
     [orders, selectedCompanyId],
@@ -640,8 +644,8 @@ export function SalesCatalogConsole({
   const selectedCatalogExportInstance = connectedWhatsappInstances.find((instance) => instance.id === selectedCatalogExportInstanceId) ?? connectedWhatsappInstances[0] ?? null;
   const selectedCatalogImportAgentScope = connectedWhatsappInstances.find((instance) => instance.id === catalogImportAgentScopeId) ?? null;
   const selectedCatalogExportItems = useMemo(
-    () => visibleItems.filter((item) => selectedCatalogExportItemIds.includes(item.id)),
-    [selectedCatalogExportItemIds, visibleItems],
+    () => visibleWhatsappCatalogItems.filter((item) => selectedCatalogExportItemIds.includes(item.id)),
+    [selectedCatalogExportItemIds, visibleWhatsappCatalogItems],
   );
   const monitoredCatalogImportJob = useMemo(
     () => catalogImportMonitor?.jobId
@@ -3313,7 +3317,7 @@ export function SalesCatalogConsole({
             exportItemIds={selectedCatalogExportItems.map((item) => item.id)}
             exporting={exportingWhatsappCatalog}
             importing={importing}
-            items={visibleItems}
+            items={visibleWhatsappCatalogItems}
             selectedExportInstanceId={selectedCatalogExportInstance?.id ?? ""}
             selectedImportInstanceId={selectedCatalogImportInstance?.id ?? ""}
             selectedCompanyId={selectedCompanyId}
@@ -4018,7 +4022,7 @@ export function SalesCatalogConsole({
             exportItemIds={selectedCatalogExportItems.map((item) => item.id)}
             exporting={exportingWhatsappCatalog}
             importing={importing}
-            items={visibleItems}
+            items={visibleWhatsappCatalogItems}
             selectedExportInstanceId={selectedCatalogExportInstance?.id ?? ""}
             selectedImportInstanceId={selectedCatalogImportInstance?.id ?? ""}
             selectedCompanyId={selectedCompanyId}
@@ -4108,10 +4112,10 @@ function WhatsAppCatalogBridgePanel({
     <Panel title="Sincronizar com WhatsApp" eyebrow={`${companyName} / opcional`} tone="violet" compact>
       <div className="space-y-3">
         <div className="rounded-xl border border-violet-300/25 bg-violet-400/10 px-3 py-2 text-[11px] leading-5 text-slate-600">
-          <p className="font-semibold text-slate-900">Os produtos importados ja estao no catalogo principal.</p>
+          <p className="font-semibold text-slate-900">Esta area e somente para catalogo nativo do WhatsApp.</p>
           <p className="mt-1">
-            Use esta area somente se quiser trazer produtos que ja existem no WhatsApp ou vincular produtos a um agente especifico.
-            Para o agente vender e para aparecer na sacola do atendimento, nao precisa fazer mais nada aqui.
+            Produtos criados manualmente ou importados por IA ja entram no catalogo da empresa e seguem a regra de agentes escolhida na importacao.
+            Use aqui apenas para trazer produtos que ja existem no WhatsApp do agente.
           </p>
         </div>
 
@@ -4179,7 +4183,7 @@ function WhatsAppCatalogBridgePanel({
                 )}
               </select>
             </label>
-            <MiniStat label="selecionados" value={exportItemIds.length.toString()} />
+            <MiniStat label="produtos WhatsApp" value={exportableItems.length.toString()} />
             <button
               type="button"
               disabled={!canExport}
@@ -4188,7 +4192,7 @@ function WhatsAppCatalogBridgePanel({
               style={{ borderColor: "var(--ch-border)" }}
             >
               {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <CloudDownload className="h-4 w-4" />}
-              Vincular produtos selecionados
+              Vincular produtos do WhatsApp
             </button>
           </div>
 
@@ -4222,7 +4226,9 @@ function WhatsAppCatalogBridgePanel({
                 })}
               </div>
             ) : (
-              <div className="px-3 py-8 text-center text-[12px] text-slate-500">Nenhum produto disponivel.</div>
+              <div className="px-3 py-8 text-center text-[12px] text-slate-500">
+                Nenhum produto do WhatsApp sincronizado. Clique em "Trazer produtos do WhatsApp" apenas se esse numero ja tiver catalogo nativo no WhatsApp.
+              </div>
             )}
           </div>
         </div>
