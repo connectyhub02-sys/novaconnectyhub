@@ -455,8 +455,8 @@ const salesCatalogHelpText: Record<string, string> = {
   "Calculo por CEP": "Teste um CEP real para conferir se as regras de frete retornam valor e prazo corretos.",
   "Produto do pedido": "Selecione o item que sera registrado como pedido vindo do WhatsApp.",
   "SKU / variacao": "Escolha a combinacao vendavel quando o produto tiver estoque ou preco por variacao.",
-  "Importar da instancia": "Escolha uma instancia WhatsApp conectada na plataforma.",
-  "Exportar para agente": "Escolha a instancia/agente que recebera os produtos da base.",
+  "Importar do WhatsApp": "Use apenas quando a empresa ja tem produtos no catalogo nativo do WhatsApp e quer trazer esses itens para a ConnectyHub.",
+  "Vincular a agente": "Use apenas quando quiser restringir ou associar produtos a uma instancia/agente especifico.",
   "Lead no WhatsApp": "Dados do lead usados para localizar a conversa e continuar o atendimento.",
   Pedido: "Dados principais do pedido registrado a partir do WhatsApp.",
   Total: "Valor total do pedido, incluindo produto, frete ou ajustes manuais.",
@@ -4105,8 +4105,16 @@ function WhatsAppCatalogBridgePanel({
   const selectedExportInstance = connectedInstances.find((instance) => instance.id === selectedExportInstanceId) ?? null;
 
   return (
-    <Panel title="Catalogo WhatsApp" eyebrow={companyName} tone="violet" compact>
+    <Panel title="Sincronizar com WhatsApp" eyebrow={`${companyName} / opcional`} tone="violet" compact>
       <div className="space-y-3">
+        <div className="rounded-xl border border-violet-300/25 bg-violet-400/10 px-3 py-2 text-[11px] leading-5 text-slate-600">
+          <p className="font-semibold text-slate-900">Os produtos importados ja estao no catalogo principal.</p>
+          <p className="mt-1">
+            Use esta area somente se quiser trazer produtos que ja existem no WhatsApp ou vincular produtos a um agente especifico.
+            Para o agente vender e para aparecer na sacola do atendimento, nao precisa fazer mais nada aqui.
+          </p>
+        </div>
+
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="block">
             <FieldLabel>Empresa</FieldLabel>
@@ -4122,7 +4130,7 @@ function WhatsAppCatalogBridgePanel({
             </select>
           </label>
           <label className="block">
-            <FieldLabel>Importar da instancia</FieldLabel>
+            <FieldLabel>Importar do WhatsApp</FieldLabel>
             <select
               value={selectedImportInstanceId}
               onChange={(event) => onChangeImportInstance(event.target.value)}
@@ -4148,13 +4156,13 @@ function WhatsAppCatalogBridgePanel({
           style={{ borderColor: "var(--ch-border)" }}
         >
           {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-          Importar / sincronizar catalogo WhatsApp
+          Trazer produtos do WhatsApp
         </button>
 
         <div className="grid gap-3 rounded-xl border p-3 lg:grid-cols-[minmax(220px,0.48fr)_minmax(0,1fr)]" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
           <div className="space-y-3">
             <label className="block">
-              <FieldLabel>Exportar para agente</FieldLabel>
+              <FieldLabel>Vincular a agente</FieldLabel>
               <select
                 value={selectedExportInstanceId}
                 onChange={(event) => onChangeExportInstance(event.target.value)}
@@ -4180,7 +4188,7 @@ function WhatsAppCatalogBridgePanel({
               style={{ borderColor: "var(--ch-border)" }}
             >
               {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <CloudDownload className="h-4 w-4" />}
-              Exportar / vincular produtos
+              Vincular produtos selecionados
             </button>
           </div>
 
