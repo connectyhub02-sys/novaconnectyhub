@@ -970,6 +970,7 @@ function AttendanceCenterView({
       });
       const payload = await response.json().catch(() => ({})) as {
         checkoutUrl?: string;
+        trackingUrl?: string;
         error?: string;
       };
 
@@ -977,7 +978,8 @@ function AttendanceCenterView({
         throw new Error(payload.error ?? "Nao foi possivel gerar o checkout da sacola.");
       }
 
-      const message = buildLeadCheckoutMessage(activeLead, activeCartItems, payload.checkoutUrl);
+      const checkoutUrl = payload.trackingUrl ?? payload.checkoutUrl;
+      const message = buildLeadCheckoutMessage(activeLead, activeCartItems, checkoutUrl);
       const sent = await sendManualReply(message, "Checkout enviado pelo painel. IA pausada nesta conversa.");
 
       if (sent) {

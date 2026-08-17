@@ -31,7 +31,7 @@ import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
 import { loadR2Config, putR2Object } from "@/lib/storage/r2";
 import { assertStorageUploadAllowed, recordOrganizationStorageUsage } from "@/lib/storage/quotas";
 import { createServiceClient } from "@/lib/supabase/service";
-import { buildTrackedLinkUrl } from "@/lib/tracking/tracked-links";
+import { appendLeadTrackingParams, buildTrackedLinkUrl } from "@/lib/tracking/tracked-links";
 import {
   getOrganizationSalesCatalogSettings,
   getOrganizationSalesCatalogShippingSettings,
@@ -208,6 +208,7 @@ type RuntimeSalesCatalogOrder = ClientSalesCatalogOrder;
 type SalesCatalogPaymentLinkResult = {
   orderId: string;
   checkoutUrl: string;
+  trackingUrl: string | null;
   pixQrCode: string | null;
   pixTicketUrl: string | null;
 };
@@ -3317,19 +3318,10 @@ function buildLeadAwareTrackingUrl(
     lead: LeadRow | null;
   },
 ) {
-  const url = new URL(link.trackingUrl);
-
-  if (input.lead?.id) {
-    url.searchParams.set("lead_id", input.lead.id);
-  }
-
-  const phone = normalizePhone(input.lead?.phone_number);
-
-  if (phone) {
-    url.searchParams.set("lead_phone", phone);
-  }
-
-  return url.toString();
+  return appendLeadTrackingParams(link.trackingUrl, {
+    leadId: input.lead?.id,
+    leadPhone: normalizePhone(input.lead?.phone_number),
+  });
 }
 
 function findLinkButtonByReference(reference: string, linkButtons: RuntimeLinkButton[]) {
@@ -4743,6 +4735,7 @@ async function maybeCreateSalesCatalogPaymentLink(input: {
     return {
       orderId: input.orderId,
       checkoutUrl: result.checkoutUrl,
+      trackingUrl: result.trackingUrl ?? null,
       pixQrCode: result.pixQrCode,
       pixTicketUrl: result.pixTicketUrl,
     };
@@ -4781,6 +4774,10 @@ async function sendSalesCatalogPaymentLink(input: {
   let messageText = text;
   let interactiveButton = false;
   let buttonFallback = false;
+  const paymentUrl = appendLeadTrackingParams(input.payment.trackingUrl ?? input.payment.checkoutUrl, {
+    leadId: input.context.lead?.id,
+    leadPhone: normalizePhone(input.context.lead?.phone_number),
+  });
 
   try {
     providerResponse = await sendWhatsappInteractiveButtons({
@@ -4788,14 +4785,14 @@ async function sendSalesCatalogPaymentLink(input: {
       token: input.token,
       phone: input.phone,
       text,
-      choices: [`Pagar agora|${input.payment.checkoutUrl}`],
+      choices: [`Pagar agora|${paymentUrl}`],
       trackId: `agent_payment_button_${input.context.run.id}_${input.payment.orderId.slice(0, 8)}`,
       mentions: resolveGroupMentions(input.context),
     });
     interactiveButton = true;
   } catch (error) {
     const errorMessage = describeRuntimeError(error, "Falha desconhecida ao enviar botao de pagamento.");
-    messageText = "Gerei o checkout, mas o WhatsApp nao abriu o botao de pagamento agora. Vou continuar por aqui e te ajudo a finalizar.";
+    messageText = `Gerei o checkout seguro para concluir seu pedido. Finalizar pagamento: ${paymentUrl}`;
     const textProviderResponse = await sendWhatsappText({
       credentials: input.context.credentials,
       token: input.token,
@@ -4810,6 +4807,7 @@ async function sendSalesCatalogPaymentLink(input: {
       reason: "payment_interactive_button_failed",
       error: errorMessage,
       checkoutUrl: input.payment.checkoutUrl,
+      trackingUrl: paymentUrl,
       textProviderResponse,
     };
     buttonFallback = true;

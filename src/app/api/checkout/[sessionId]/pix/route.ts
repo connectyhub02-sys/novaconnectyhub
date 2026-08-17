@@ -95,6 +95,7 @@ export async function POST(
       ok: true,
       sessionId: result.session.id,
       checkoutUrl: result.checkoutUrl,
+      trackingUrl: result.trackingUrl,
       amount: orderBumpApplication.totalAmount,
     });
   } catch (error) {

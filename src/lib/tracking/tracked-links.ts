@@ -40,6 +40,32 @@ export function buildTrackedLinkUrl(linkId: string) {
   return `${getPublicAppUrl()}/r/${encodeURIComponent(linkId)}`;
 }
 
+export function appendLeadTrackingParams(
+  rawUrl: string,
+  input: {
+    leadId?: string | null;
+    leadPhone?: string | null;
+  },
+) {
+  try {
+    const url = new URL(rawUrl);
+
+    if (input.leadId) {
+      url.searchParams.set("lead_id", input.leadId);
+    }
+
+    const phone = input.leadPhone?.replace(/\D/g, "") ?? "";
+
+    if (phone) {
+      url.searchParams.set("lead_phone", phone);
+    }
+
+    return url.toString();
+  } catch {
+    return rawUrl;
+  }
+}
+
 export function normalizeHttpUrl(value: string) {
   const trimmed = value.trim();
 

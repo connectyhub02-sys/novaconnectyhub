@@ -17,12 +17,19 @@ import {
   loadMercadoPagoPlatformBillingConfig,
   normalizeCurrencyAmount,
 } from "./mercado-pago";
+import {
+  buildTrackedLinkUrl,
+  createTrackedLinkSlug,
+  createTrackedLinkTag,
+} from "@/lib/tracking/tracked-links";
 
 type JsonRecord = Record<string, unknown>;
 
 type OrderRow = {
   id: string;
   organization_id: string;
+  lead_id: string | null;
+  conversation_id: string | null;
   customer_name: string | null;
   customer_document: string | null;
   customer_email: string | null;
@@ -55,7 +62,7 @@ export async function createSalesCatalogPixPaymentSession(input: {
 }) {
   const { data: order, error: orderError } = await input.client
     .from("sales_catalog_orders")
-    .select("id, organization_id, customer_name, customer_document, customer_email, customer_phone, destination_cep, subtotal, shipping_total, total, metadata")
+    .select("id, organization_id, lead_id, conversation_id, customer_name, customer_document, customer_email, customer_phone, destination_cep, subtotal, shipping_total, total, metadata")
     .eq("id", input.orderId)
     .eq("organization_id", input.organizationId)
     .maybeSingle<OrderRow>();
@@ -187,6 +194,17 @@ export async function createSalesCatalogPixPaymentSession(input: {
       additionalInfo,
     });
     const pixData = extractMercadoPagoPixData(pix.payment);
+    const checkoutTracking = await createPaymentSessionTrackedLink({
+      client: input.client,
+      organizationId: input.organizationId,
+      order,
+      sessionId,
+      checkoutUrl,
+      amount,
+      source: input.source,
+      actorId: input.actorId ?? null,
+      itemCount: items.length,
+    });
     const { data: updated, error: updateError } = await input.client
       .from("sales_catalog_payment_sessions")
       .update({
@@ -200,6 +218,9 @@ export async function createSalesCatalogPixPaymentSession(input: {
         paid_at: pixData.paidAt,
         metadata: {
           ...readRecord(inserted.metadata),
+          checkout_tracking_url: checkoutTracking.trackingUrl,
+          checkout_tracking_link_id: checkoutTracking.id,
+          checkout_tracking_tag: checkoutTracking.tag,
           mercado_pago_payment_id: pixData.providerPaymentId,
           mercado_pago_status: pixData.providerStatus,
         },
@@ -223,6 +244,9 @@ export async function createSalesCatalogPixPaymentSession(input: {
         metadata: {
           ...readRecord(order.metadata),
           latest_checkout_url: checkoutUrl,
+          latest_checkout_tracking_url: checkoutTracking.trackingUrl,
+          latest_checkout_tracking_link_id: checkoutTracking.id,
+          latest_checkout_tracking_tag: checkoutTracking.tag,
           latest_payment_session_id: sessionId,
           latest_payment_provider: "mercado_pago",
           latest_payment_method: "pix",
@@ -252,13 +276,19 @@ export async function createSalesCatalogPixPaymentSession(input: {
       summary: `Sessao de pagamento criada para pedido ${order.id.slice(0, 8)}.`,
       confidence: 1,
       visibility: "organization",
-      tags: ["sales_catalog", "sales_catalog_order", "payment", "mercado_pago", "whatsapp_agent"],
+      tags: ["sales_catalog", "sales_catalog_order", "payment", "mercado_pago", "whatsapp_agent", "lead_tracking"],
       payload: {
         order_id: order.id,
         payment_session_id: sessionId,
         provider_payment_id: pixData.providerPaymentId,
         checkout_url: checkoutUrl,
+        tracking_url: checkoutTracking.trackingUrl,
+        tracking_link_id: checkoutTracking.id,
+        tracking_tag: checkoutTracking.tag,
         amount,
+        lead_id: order.lead_id,
+        conversation_id: order.conversation_id,
+        lead_phone: order.customer_phone,
         source: input.source,
         payment_owner: paymentOwner.owner,
         commercial_flow_type: paymentOwner.commercialFlowType,
@@ -271,6 +301,9 @@ export async function createSalesCatalogPixPaymentSession(input: {
     return {
       session: mapSalesCatalogPaymentSession(updated),
       checkoutUrl,
+      trackingUrl: checkoutTracking.trackingUrl,
+      trackingLinkId: checkoutTracking.id,
+      trackingTag: checkoutTracking.tag,
       pixQrCode: pixData.pixQrCode,
       pixTicketUrl: pixData.pixTicketUrl,
     };
@@ -288,6 +321,90 @@ export async function createSalesCatalogPixPaymentSession(input: {
 
     throw error;
   }
+}
+
+async function createPaymentSessionTrackedLink(input: {
+  client: SupabaseClient;
+  organizationId: string;
+  order: OrderRow;
+  sessionId: string;
+  checkoutUrl: string;
+  amount: string | number;
+  source: "dashboard" | "whatsapp_agent" | "checkout";
+  actorId: string | null;
+  itemCount: number;
+}) {
+  const id = randomUUID();
+  const label = `Pagamento pedido ${input.order.id.slice(0, 8)}`;
+  const slug = createTrackedLinkSlug(label);
+  const tag = createTrackedLinkTag(label, id);
+  const trackingUrl = buildTrackedLinkUrl(id);
+  const now = new Date().toISOString();
+  const metadata = {
+    label,
+    url: input.checkoutUrl,
+    slug,
+    tag,
+    tracking_url: trackingUrl,
+    click_count: 0,
+    sales_destination: "connectyhub_checkout",
+    source: "sales_catalog_checkout",
+    order_id: input.order.id,
+    payment_session_id: input.sessionId,
+    lead_id: input.order.lead_id,
+    conversation_id: input.order.conversation_id,
+    lead_phone: input.order.customer_phone,
+    amount: input.amount,
+    currency: "BRL",
+    item_count: input.itemCount,
+    created_from: input.source,
+    actor_id: input.actorId,
+  } satisfies JsonRecord;
+
+  const { error } = await input.client
+    .from("intelligence_memory")
+    .insert({
+      id,
+      scope: "organization",
+      organization_id: input.organizationId,
+      memory_type: "tracked_link_button",
+      title: label,
+      content: input.checkoutUrl,
+      importance: 0.75,
+      tags: ["tracked_link_button", "sales_catalog_checkout", "sales_catalog_order", "payment", "whatsapp_agent", "lead_tracking"],
+      metadata,
+      created_at: now,
+      updated_at: now,
+    });
+
+  if (error) {
+    throw new Error(`Checkout criado, mas nao foi possivel ativar rastreio do link: ${error.message}`);
+  }
+
+  await input.client.from("intelligence_events").insert({
+    scope: "organization",
+    organization_id: input.organizationId,
+    source_type: "tracked_link_button",
+    source_id: id,
+    event_type: "tracked_link.created_from_checkout",
+    title: `Botao de pagamento rastreado: ${label}`,
+    summary: `Tag ${tag} vinculada ao checkout do pedido ${input.order.id.slice(0, 8)}.`,
+    confidence: 1,
+    visibility: "organization",
+    tags: ["tracked_link_button", "sales_catalog_checkout", "sales_catalog_order", "payment", "whatsapp_agent", "lead_tracking"],
+    payload: {
+      ...metadata,
+      target_url: input.checkoutUrl,
+    },
+  });
+
+  return {
+    id,
+    label,
+    url: input.checkoutUrl,
+    tag,
+    trackingUrl,
+  };
 }
 
 function buildPaymentDescription(items: OrderItemRow[], orderId: string) {

@@ -82,7 +82,7 @@ import {
 } from "@/lib/storage/quotas";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
-import { buildTrackedLinkUrl, createTrackedLinkSlug, createTrackedLinkTag, normalizeHttpUrl } from "@/lib/tracking/tracked-links";
+import { appendLeadTrackingParams, buildTrackedLinkUrl, createTrackedLinkSlug, createTrackedLinkTag, normalizeHttpUrl } from "@/lib/tracking/tracked-links";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -1454,6 +1454,8 @@ async function createSalesCatalogCartCheckout(input: {
   const customerName = normalizeOptionalText(readFormString(input.body?.customerName), 140);
   const customerPhone = normalizeOptionalText(readFormString(input.body?.customerPhone), 40);
   const customerEmail = normalizeOptionalText(readFormString(input.body?.customerEmail), 160);
+  const leadId = normalizeUuid(readFormString(input.body?.leadId));
+  const conversationId = normalizeUuid(readFormString(input.body?.conversationId));
   const customerDocument = normalizeOptionalText(readFormString(input.body?.customerDocument), 40);
   const destinationCep = normalizeSalesCatalogCep(readFormString(input.body?.destinationCep));
   const destinationAddress = normalizeOptionalText(readFormString(input.body?.destinationAddress), 300);
@@ -1629,8 +1631,8 @@ async function createSalesCatalogCartCheckout(input: {
     .from("sales_catalog_orders")
     .insert({
       organization_id: company.id,
-      lead_id: normalizeUuid(readFormString(input.body?.leadId)),
-      conversation_id: normalizeUuid(readFormString(input.body?.conversationId)),
+      lead_id: leadId,
+      conversation_id: conversationId,
       source: "attendance_panel",
       status: "pending_payment",
       payment_status: "pending",
@@ -1717,6 +1719,10 @@ async function createSalesCatalogCartCheckout(input: {
     source: "dashboard",
     actorId: input.userId,
   });
+  const leadAwareCheckoutUrl = appendLeadTrackingParams(paymentResult.trackingUrl ?? paymentResult.checkoutUrl, {
+    leadId,
+    leadPhone: customerPhone,
+  });
   const { data: refreshedOrder, error: refreshedOrderError } = await input.client
     .from("sales_catalog_orders")
     .select(salesCatalogOrderSelect)
@@ -1749,14 +1755,18 @@ async function createSalesCatalogCartCheckout(input: {
     summary: `${resolvedItems.length} item(ns) enviados para pagamento pelo painel de atendimento.`,
     confidence: 1,
     visibility: "organization",
-    tags: ["sales_catalog", "sales_catalog_order", "payment", "attendance_panel"],
+    tags: ["sales_catalog", "sales_catalog_order", "payment", "attendance_panel", "lead_tracking"],
     payload: {
       order_id: orderRow.id,
       checkout_url: paymentResult.checkoutUrl,
+      tracking_url: leadAwareCheckoutUrl,
+      tracking_link_id: paymentResult.trackingLinkId ?? null,
+      tracking_tag: paymentResult.trackingTag ?? null,
       total,
       item_count: resolvedItems.length,
-      lead_id: normalizeUuid(readFormString(input.body?.leadId)),
-      conversation_id: normalizeUuid(readFormString(input.body?.conversationId)),
+      lead_id: leadId,
+      conversation_id: conversationId,
+      lead_phone: customerPhone,
       created_by: input.userId,
     },
   });
@@ -1765,6 +1775,7 @@ async function createSalesCatalogCartCheckout(input: {
     order: mapSalesCatalogOrder(refreshedOrder ?? orderRow, refreshedItems ?? orderItemRows),
     session: paymentResult.session,
     checkoutUrl: paymentResult.checkoutUrl,
+    trackingUrl: leadAwareCheckoutUrl,
   };
 }
 
