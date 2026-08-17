@@ -2918,7 +2918,7 @@ function normalizeImportPlatform(value: unknown): SalesCatalogImportPlatform {
 
 function normalizeTargetMode(value: unknown): SalesCatalogImportTargetMode {
   if (value === "connectyhub_checkout" || value === "external_site") return value;
-  return "review";
+  return "connectyhub_checkout";
 }
 
 function normalizeSalesDestination(value: unknown, targetMode: SalesCatalogImportTargetMode): SalesCatalogImportDestination {

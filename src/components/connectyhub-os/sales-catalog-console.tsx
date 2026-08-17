@@ -577,7 +577,7 @@ export function SalesCatalogConsole({
   const [publishingCatalogImportId, setPublishingCatalogImportId] = useState<string | null>(null);
   const [catalogImportSourceKind, setCatalogImportSourceKind] = useState<SalesCatalogImportSourceKind>(defaultCatalogImportPlatformOption.sourceKind);
   const [catalogImportSourcePlatform, setCatalogImportSourcePlatform] = useState<SalesCatalogImportPlatform>("auto");
-  const [catalogImportTargetMode, setCatalogImportTargetMode] = useState<SalesCatalogImportTargetMode>("review");
+  const [catalogImportTargetMode, setCatalogImportTargetMode] = useState<SalesCatalogImportTargetMode>("connectyhub_checkout");
   const [catalogImportDefaultDestination, setCatalogImportDefaultDestination] = useState<SalesCatalogImportDestination>("connectyhub_checkout");
   const [catalogImportTitle, setCatalogImportTitle] = useState("");
   const [catalogImportText, setCatalogImportText] = useState("");
@@ -3072,7 +3072,6 @@ export function SalesCatalogConsole({
             sourceText={catalogImportText}
             targetMode={catalogImportTargetMode}
             title={catalogImportTitle}
-            onChangeDefaultDestination={setCatalogImportDefaultDestination}
             onChangeFiles={handleCatalogImportFiles}
             onChangeItem={updateCatalogImportItem}
             onChangeSourcePlatform={handleCatalogImportSourcePlatform}
@@ -4017,7 +4016,6 @@ function SalesCatalogImportPanel({
   sourceText,
   targetMode,
   title,
-  onChangeDefaultDestination,
   onChangeFiles,
   onChangeItem,
   onChangeSourcePlatform,
@@ -4042,7 +4040,6 @@ function SalesCatalogImportPanel({
   sourceText: string;
   targetMode: SalesCatalogImportTargetMode;
   title: string;
-  onChangeDefaultDestination: (value: SalesCatalogImportDestination) => void;
   onChangeFiles: (event: ChangeEvent<HTMLInputElement>) => void;
   onChangeItem: (itemId: string, patch: Omit<SalesCatalogImportItemPatch, "id">) => void;
   onChangeSourcePlatform: (value: SalesCatalogImportPlatform) => void;
@@ -4108,13 +4105,7 @@ function SalesCatalogImportPanel({
 
         <div className="grid gap-2">
           <FieldLabel>Destino da venda</FieldLabel>
-          <div className="grid gap-1.5 sm:grid-cols-3">
-            <ImportChoiceButton
-              active={targetMode === "review"}
-              icon={SlidersHorizontal}
-              label="Revisar antes"
-              onClick={() => onChangeTargetMode("review")}
-            />
+          <div className="grid gap-1.5 sm:grid-cols-2">
             <ImportChoiceButton
               active={targetMode === "connectyhub_checkout"}
               icon={CreditCard}
@@ -4133,26 +4124,6 @@ function SalesCatalogImportPanel({
             <p className="mt-1 text-slate-500">{destinationNotice.description}</p>
           </div>
         </div>
-
-        {targetMode === "review" ? (
-          <div className="grid gap-2">
-            <FieldLabel>Se a IA nao identificar o destino</FieldLabel>
-            <div className="grid gap-1.5 sm:grid-cols-2">
-              <ImportChoiceButton
-                active={defaultDestination === "connectyhub_checkout"}
-                icon={CreditCard}
-                label="Checkout"
-                onClick={() => onChangeDefaultDestination("connectyhub_checkout")}
-              />
-              <ImportChoiceButton
-                active={defaultDestination === "external_site"}
-                icon={ExternalLink}
-                label="Site externo"
-                onClick={() => onChangeDefaultDestination("external_site")}
-              />
-            </div>
-          </div>
-        ) : null}
 
         <label className="block">
           <FieldLabel>Observacoes opcionais</FieldLabel>
