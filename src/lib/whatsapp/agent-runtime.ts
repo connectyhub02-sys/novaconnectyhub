@@ -3556,7 +3556,16 @@ async function resolveInboundUserText(input: {
     });
 
     if (transcript) {
-      return transcript;
+      const transcriptWithMediaContext = await buildTextWithRecentVisualMediaContext({
+        client: input.client,
+        context: input.context,
+        token: input.token,
+        latestInbound,
+        text: transcript,
+        followUpKind: "audio",
+      });
+
+      return transcriptWithMediaContext ?? transcript;
     }
   }
 
@@ -3613,9 +3622,26 @@ async function resolveInboundUserText(input: {
       token: input.token,
       latestInbound,
       text,
+      followUpKind: "texto",
     });
 
     return textWithMediaContext ?? text;
+  }
+
+  if (isAudioMessage(latestInbound)) {
+    const audioFallbackText = buildMessageText(latestInbound);
+    const audioWithMediaContext = await buildTextWithRecentVisualMediaContext({
+      client: input.client,
+      context: input.context,
+      token: input.token,
+      latestInbound,
+      text: audioFallbackText,
+      followUpKind: "audio",
+    });
+
+    if (audioWithMediaContext) {
+      return audioWithMediaContext;
+    }
   }
 
   const fallbackText = buildMessageText(latestInbound);
@@ -3629,6 +3655,7 @@ async function buildTextWithRecentVisualMediaContext(input: {
   token: string;
   latestInbound: ConversationMessageRow;
   text: string;
+  followUpKind: "texto" | "audio";
 }) {
   const batch = selectRecentVisualMediaBeforeText(input.context, input.latestInbound);
 
@@ -3637,6 +3664,8 @@ async function buildTextWithRecentVisualMediaContext(input: {
   }
 
   const lines: string[] = [];
+  const followUpLabel = input.followUpKind === "audio" ? "audio" : "texto";
+  const followUpReference = input.followUpKind === "audio" ? "a transcricao do audio mais recente" : "o texto mais recente";
 
   for (const message of batch) {
     const kind = detectInboundMediaKind(message);
@@ -3654,7 +3683,7 @@ async function buildTextWithRecentVisualMediaContext(input: {
         })
       : null;
 
-    const prefix = `${formatMediaKind(kind)} enviada antes do texto${caption ? ` com legenda "${preview(caption, 140)}"` : ""}`;
+    const prefix = `${formatMediaKind(kind)} enviada antes do ${followUpLabel}${caption ? ` com legenda "${preview(caption, 140)}"` : ""}`;
     const summary = analysis
       ? preview(analysis, 900)
       : enabled
@@ -3675,7 +3704,7 @@ async function buildTextWithRecentVisualMediaContext(input: {
     ...lines,
     "",
     "[ORIENTACAO INTERNA]",
-    "Use a analise da midia junto com o texto mais recente do lead.",
+    `Use a analise da midia junto com ${followUpReference} do lead.`,
     "Nao diga que nao consegue ver a midia quando houver uma analise automatica disponivel.",
     "Se a analise nao for confiavel ou estiver desativada, peca uma descricao curta sem inventar detalhes.",
   ].join("\n");
@@ -8731,6 +8760,26 @@ function readStoredMediaAnalysisText(message: ConversationMessageRow, kind: Inbo
   return text.slice(prefix.length).trim() || null;
 }
 
+function readMediaCaptionTextContent(message: ConversationMessageRow) {
+  const text = message.text_content?.trim();
+  if (!text) return null;
+
+  const kind = detectInboundMediaKind(message);
+  if (kind && readStoredMediaAnalysisText(message, kind)) return null;
+
+  const normalized = normalizeSearch(text);
+  if (
+    normalized.startsWith("nota interna")
+    || normalized.startsWith("analise automatica de ")
+    || normalized.includes("midia recebida")
+    || normalized.includes("orientacao interna")
+  ) {
+    return null;
+  }
+
+  return text;
+}
+
 function isAudioMessage(message: ConversationMessageRow | null) {
   if (!message) {
     return false;
@@ -8822,7 +8871,7 @@ function extractMessageCaption(message: ConversationMessageRow) {
     ?? asString(providerMessage?.text)
     ?? asString(providerMessage?.body)
     ?? asString(content?.caption)
-    ?? null;
+    ?? readMediaCaptionTextContent(message);
 }
 
 function formatMediaKind(kind: InboundMediaKind) {
