@@ -4786,7 +4786,7 @@ function CatalogImportJobCard({
   onSaveReview: () => void;
 }) {
   const canceled = isCatalogImportJobCanceled(job);
-  const pendingItems = canceled ? [] : job.items.filter((item) => item.status !== "published" && item.status !== "discarded");
+  const pendingItems = canceled ? [] : job.items.filter(isCatalogImportItemPendingReview);
   const canPublish = pendingItems.length > 0 && !publishing;
   const canCancel = canCancelCatalogImportJob(job);
   const active = isCatalogImportJobActive(job);
@@ -6329,6 +6329,14 @@ function mapImportItemToPreviewItem(item: ClientSalesCatalogImportItem): Catalog
 
 function isCatalogImportJobActive(job: ClientSalesCatalogImportJob) {
   return job.status === "uploaded" || job.status === "extracting" || job.status === "publishing";
+}
+
+function isCatalogImportItemPublishedToCatalog(item: ClientSalesCatalogImportItem) {
+  return item.status === "published" || Boolean(item.publishedCatalogItemId) || Boolean(item.publishedLinkButtonId);
+}
+
+function isCatalogImportItemPendingReview(item: ClientSalesCatalogImportItem) {
+  return !isCatalogImportItemPublishedToCatalog(item) && item.status !== "discarded";
 }
 
 function isCatalogImportJobCanceled(job: ClientSalesCatalogImportJob) {

@@ -261,6 +261,7 @@ export async function listClientSalesCatalog(input: {
     .eq("scope", "organization")
     .eq("memory_type", "sales_catalog_item")
     .in("organization_id", companyIds)
+    .neq("metadata->>status", "archived")
     .order("created_at", { ascending: false })
     .limit(120);
 
@@ -268,7 +269,12 @@ export async function listClientSalesCatalog(input: {
     throw new Error(`Nao foi possivel carregar o catalogo de vendas: ${error.message}`);
   }
 
-  return attachSalesCatalogSkus(client, ((data ?? []) as SalesCatalogMemoryRow[]).map(mapSalesCatalogItem));
+  return attachSalesCatalogSkus(
+    client,
+    ((data ?? []) as SalesCatalogMemoryRow[])
+      .map(mapSalesCatalogItem)
+      .filter((item) => item.status !== "archived"),
+  );
 }
 
 export async function listClientSalesCatalogWhatsappInstances(input: {
@@ -585,7 +591,12 @@ export async function listOrganizationSalesCatalog(
     throw new Error(`Nao foi possivel carregar o catalogo de vendas: ${error.message}`);
   }
 
-  return attachSalesCatalogSkus(client, ((data ?? []) as SalesCatalogMemoryRow[]).map(mapSalesCatalogItem));
+  return attachSalesCatalogSkus(
+    client,
+    ((data ?? []) as SalesCatalogMemoryRow[])
+      .map(mapSalesCatalogItem)
+      .filter((item) => item.status !== "archived"),
+  );
 }
 
 async function promoteLegacyTrackedLinkButtonsToSalesCatalog(client: SupabaseClient, companyIds: string[]) {
