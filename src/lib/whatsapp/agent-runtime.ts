@@ -556,7 +556,10 @@ export async function processWhatsappAgentRun(input: {
     }
 
     if (behavior.detectOptOut && behaviorSignals.some((signal) => signal.type === "whatsapp.lead.opt_out")) {
-      const optOutText = "Entendido. Vou respeitar seu pedido e nao seguir com novas mensagens por aqui.";
+      const optOutText = appendWhatsappTextFooter(
+        "Entendido. Vou respeitar seu pedido e nao seguir com novas mensagens por aqui.",
+        resolveWhatsappBrandFooterText(context.organization),
+      );
       const sent = await sendWhatsappText({
         credentials: context.credentials,
         token,
@@ -4484,7 +4487,10 @@ async function sendCompanyLocationReply(input: {
       interactiveButton = true;
     } catch (error) {
       const errorMessage = describeRuntimeError(error, "Falha desconhecida ao enviar botao de localizacao.");
-      messageText = `${input.reply.text}\n\nAbrir no Google Maps: ${mapsUrl}`;
+      messageText = appendWhatsappTextFooter(
+        `${input.reply.text}\n\nAbrir no Google Maps: ${mapsUrl}`,
+        resolveWhatsappBrandFooterText(input.context.organization),
+      );
       const textProviderResponse = await sendWhatsappText({
         credentials: input.context.credentials,
         token: input.token,
@@ -4511,6 +4517,7 @@ async function sendCompanyLocationReply(input: {
       }).catch(() => {});
     }
   } else {
+    messageText = appendWhatsappTextFooter(messageText, resolveWhatsappBrandFooterText(input.context.organization));
     providerResponse = await sendWhatsappText({
       credentials: input.context.credentials,
       token: input.token,
@@ -4767,6 +4774,7 @@ async function sendTextOutboundChunk(input: {
   trackIdPrefix: string;
 }) {
   const interactiveMenu = buildInteractiveLinkMenu(input.text, input.context);
+  let messageText = input.text;
   let providerResponse: unknown;
   let interactiveButton = false;
   let buttonFallback = false;
@@ -4787,11 +4795,12 @@ async function sendTextOutboundChunk(input: {
       interactiveButton = true;
     } catch (error) {
       const errorMessage = describeRuntimeError(error, "Falha desconhecida ao enviar botao WhatsApp.");
+      messageText = appendWhatsappTextFooter(input.text, resolveWhatsappBrandFooterText(input.context.organization));
       const textProviderResponse = await sendWhatsappText({
         credentials: input.context.credentials,
         token: input.token,
         phone: input.phone,
-        text: input.text,
+        text: messageText,
         trackId: `agent_button_fallback_${input.context.run.id}_${input.chunkIndex}`,
         replyId: input.replyId,
         mentions: resolveGroupMentions(input.context, input.mentionMessage),
@@ -4812,11 +4821,12 @@ async function sendTextOutboundChunk(input: {
       }).catch(() => {});
     }
   } else {
+    messageText = appendWhatsappTextFooter(input.text, resolveWhatsappBrandFooterText(input.context.organization));
     providerResponse = await sendWhatsappText({
       credentials: input.context.credentials,
       token: input.token,
       phone: input.phone,
-      text: input.text,
+      text: messageText,
       trackId: `${input.trackIdPrefix}_${input.context.run.id}_${input.chunkIndex}`,
       replyId: input.replyId,
       mentions: resolveGroupMentions(input.context, input.mentionMessage),
@@ -4824,7 +4834,7 @@ async function sendTextOutboundChunk(input: {
   }
 
   const message: OutboundMessage = {
-    text: input.text,
+    text: messageText,
     mode: "text",
     providerResponse,
     interactiveButton,
@@ -4850,6 +4860,7 @@ async function sendAudioReplyFallbackText(input: {
   error: unknown;
 }) {
   const errorMessage = describeRuntimeError(input.error, "Falha desconhecida ao enviar resposta em audio.");
+  const fallbackText = appendWhatsappTextFooter(input.text, resolveWhatsappBrandFooterText(input.context.organization));
 
   await setChatPresence(input.context.credentials, input.token, input.phone, "composing", 10000).catch(() => {});
 
@@ -4857,14 +4868,14 @@ async function sendAudioReplyFallbackText(input: {
     credentials: input.context.credentials,
     token: input.token,
     phone: input.phone,
-    text: input.text,
+    text: fallbackText,
     trackId: `agent_audio_fallback_${input.context.run.id}_${input.chunkIndex}`,
     replyId: input.replyId,
     mentions: resolveGroupMentions(input.context, input.mentionMessage),
   });
 
   const message: OutboundMessage = {
-    text: input.text,
+    text: fallbackText,
     mode: "text",
     intendedMode: "audio",
     providerResponse: {
@@ -5273,7 +5284,10 @@ async function sendSalesCatalogPaymentLink(input: {
     interactiveButton = true;
   } catch (error) {
     const errorMessage = describeRuntimeError(error, "Falha desconhecida ao enviar botao de pagamento.");
-    messageText = `Gerei o checkout seguro para concluir seu pedido. Finalizar pagamento: ${paymentUrl}`;
+    messageText = appendWhatsappTextFooter(
+      `Gerei o checkout seguro para concluir seu pedido. Finalizar pagamento: ${paymentUrl}`,
+      resolveWhatsappBrandFooterText(input.context.organization),
+    );
     const textProviderResponse = await sendWhatsappText({
       credentials: input.context.credentials,
       token: input.token,
@@ -6256,6 +6270,10 @@ async function sendWhatsappInteractiveButtons(input: {
 }
 
 function resolveInteractiveButtonFooterText(organization: OrganizationRow | null | undefined) {
+  return resolveWhatsappBrandFooterText(organization);
+}
+
+function resolveWhatsappBrandFooterText(organization: OrganizationRow | null | undefined) {
   const planCode = normalizePlanCodeForFooter(organization?.plan_code);
 
   if (planCode === "starter" || planCode === "pro" || planCode === "scale") {
@@ -6263,6 +6281,17 @@ function resolveInteractiveButtonFooterText(organization: OrganizationRow | null
   }
 
   return "ConnectyHub";
+}
+
+function appendWhatsappTextFooter(text: string, footerText: string | null | undefined) {
+  const normalizedText = text.trim();
+  const footer = normalizeInteractiveFooterText(footerText);
+
+  if (!normalizedText || !footer || normalizedText.endsWith(`\n\n${footer}`)) {
+    return normalizedText;
+  }
+
+  return `${normalizedText}\n\n${footer}`;
 }
 
 function normalizeInteractiveFooterText(value: string | null | undefined) {
@@ -7074,7 +7103,10 @@ async function handleLeadHumanHandoffRequest(input: {
 }) {
   const { client, context, latestInbound, requestText, detection } = input;
   const requestedAt = new Date().toISOString();
-  const handoffText = buildHumanHandoffText();
+  const handoffText = appendWhatsappTextFooter(
+    buildHumanHandoffText(),
+    resolveWhatsappBrandFooterText(context.organization),
+  );
   const sent = await sendWhatsappText({
     credentials: context.credentials,
     token: input.token,
