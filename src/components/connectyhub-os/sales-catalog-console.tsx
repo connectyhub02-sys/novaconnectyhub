@@ -631,6 +631,7 @@ export function SalesCatalogConsole({
   const [savingCatalogImportId, setSavingCatalogImportId] = useState<string | null>(null);
   const [publishingCatalogImportId, setPublishingCatalogImportId] = useState<string | null>(null);
   const [cancelingCatalogImportId, setCancelingCatalogImportId] = useState<string | null>(null);
+  const [deletingCatalogImportId, setDeletingCatalogImportId] = useState<string | null>(null);
   const [catalogImportSourceKind, setCatalogImportSourceKind] = useState<SalesCatalogImportSourceKind>(defaultCatalogImportPlatformOption.sourceKind);
   const [catalogImportSourcePlatform, setCatalogImportSourcePlatform] = useState<SalesCatalogImportPlatform>("auto");
   const [catalogImportTargetMode, setCatalogImportTargetMode] = useState<SalesCatalogImportTargetMode>("connectyhub_checkout");
@@ -1895,6 +1896,47 @@ export function SalesCatalogConsole({
       setNotice({ tone: "error", message });
     } finally {
       setCancelingCatalogImportId(null);
+    }
+  }
+
+  async function deleteCatalogImport(job: ClientSalesCatalogImportJob) {
+    if (!selectedCompanyId || deletingCatalogImportId || isCatalogImportJobActive(job)) return;
+
+    const confirmed = window.confirm("Excluir esta importacao da lista? Produtos ja publicados nao serao apagados.");
+    if (!confirmed) return;
+
+    setDeletingCatalogImportId(job.id);
+    setNotice(null);
+
+    try {
+      const response = await fetch(`/api/dashboard/sales-catalog/imports/${encodeURIComponent(job.id)}?companyId=${encodeURIComponent(selectedCompanyId)}&mode=remove`, {
+        method: "DELETE",
+      });
+      const data = await response.json().catch(() => null) as {
+        deletedJobId?: string;
+        error?: string;
+        storageReleaseError?: string | null;
+      } | null;
+
+      if (!response.ok || !data?.deletedJobId) {
+        throw new Error(data?.error ?? "Nao foi possivel excluir a importacao.");
+      }
+
+      setCatalogImportJobs((current) => current.filter((entry) => entry.id !== data.deletedJobId));
+      clearCatalogImportPatches(job.items.map((item) => ({ id: item.id })));
+      updateCatalogImportJobNotice(job.id, null);
+      setCatalogImportMonitor((current) => current?.jobId === data.deletedJobId ? null : current);
+
+      const message = data.storageReleaseError
+        ? "Importacao excluida, mas o contador de armazenamento precisa ser conferido."
+        : "Importacao excluida da lista.";
+      setNotice({ tone: data.storageReleaseError ? "warning" : "success", message });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Erro ao excluir importacao.";
+      updateCatalogImportJobNotice(job.id, { tone: "error", message });
+      setNotice({ tone: "error", message });
+    } finally {
+      setDeletingCatalogImportId(null);
     }
   }
 
@@ -3314,6 +3356,7 @@ export function SalesCatalogConsole({
             jobPatches={catalogImportPatches}
             loading={loadingCatalogImports}
             cancelingJobId={cancelingCatalogImportId}
+            deletingJobId={deletingCatalogImportId}
             publishingJobId={publishingCatalogImportId}
             savingJobId={savingCatalogImportId}
             sourceKind={catalogImportSourceKind}
@@ -3333,6 +3376,7 @@ export function SalesCatalogConsole({
             onChangeTitle={setCatalogImportTitle}
             onCancel={cancelCatalogImport}
             onCreate={createCatalogImport}
+            onDelete={deleteCatalogImport}
             onOpenMonitor={openCatalogImportMonitor}
             onPublish={publishCatalogImport}
             onRefresh={refreshCatalogImports}
@@ -4290,6 +4334,7 @@ function SalesCatalogImportPanel({
   jobPatches,
   loading,
   cancelingJobId,
+  deletingJobId,
   publishingJobId,
   savingJobId,
   selectedAgentScopeId,
@@ -4309,6 +4354,7 @@ function SalesCatalogImportPanel({
   onChangeTitle,
   onCancel,
   onCreate,
+  onDelete,
   onOpenMonitor,
   onPublish,
   onRefresh,
@@ -4325,6 +4371,7 @@ function SalesCatalogImportPanel({
   jobPatches: CatalogImportPatchMap;
   loading: boolean;
   cancelingJobId: string | null;
+  deletingJobId: string | null;
   publishingJobId: string | null;
   savingJobId: string | null;
   selectedAgentScopeId: string;
@@ -4344,6 +4391,7 @@ function SalesCatalogImportPanel({
   onChangeTitle: (value: string) => void;
   onCancel: (job: ClientSalesCatalogImportJob) => void;
   onCreate: () => void;
+  onDelete: (job: ClientSalesCatalogImportJob) => void;
   onOpenMonitor: (job: ClientSalesCatalogImportJob) => void;
   onPublish: (job: ClientSalesCatalogImportJob) => void;
   onRefresh: () => void;
@@ -4529,12 +4577,14 @@ function SalesCatalogImportPanel({
                 key={job.id}
                 job={job}
                 canceling={cancelingJobId === job.id}
+                deleting={deletingJobId === job.id}
                 hasChanges={job.items.some((item) => Boolean(jobPatches[item.id]))}
                 publishing={publishingJobId === job.id}
                 saving={savingJobId === job.id}
                 notice={jobNotices[job.id] ?? null}
                 onChangeItem={onChangeItem}
                 onCancel={() => onCancel(job)}
+                onDelete={() => onDelete(job)}
                 onOpenMonitor={() => onOpenMonitor(job)}
                 onPublish={() => onPublish(job)}
                 onSaveReview={() => onSaveReview(job)}
@@ -4787,24 +4837,28 @@ function ImportPreviewStatusDot({ status }: { status: CatalogImportPreviewItemSt
 function CatalogImportJobCard({
   job,
   canceling,
+  deleting,
   hasChanges,
   notice,
   publishing,
   saving,
   onChangeItem,
   onCancel,
+  onDelete,
   onOpenMonitor,
   onPublish,
   onSaveReview,
 }: {
   job: ClientSalesCatalogImportJob;
   canceling: boolean;
+  deleting: boolean;
   hasChanges: boolean;
   notice: Notice | null;
   publishing: boolean;
   saving: boolean;
   onChangeItem: (itemId: string, patch: Omit<SalesCatalogImportItemPatch, "id">) => void;
   onCancel: () => void;
+  onDelete: () => void;
   onOpenMonitor: () => void;
   onPublish: () => void;
   onSaveReview: () => void;
@@ -4814,6 +4868,7 @@ function CatalogImportJobCard({
   const canPublish = pendingItems.length > 0 && !publishing;
   const canCancel = canCancelCatalogImportJob(job);
   const active = isCatalogImportJobActive(job);
+  const canDelete = !active && !saving && !publishing && !canceling;
   const progress = getCatalogImportJobProgress(job);
 
   return (
@@ -4899,6 +4954,15 @@ function CatalogImportJobCard({
             Cancelar
           </button>
         ) : null}
+        <button
+          type="button"
+          disabled={!canDelete || deleting}
+          onClick={onDelete}
+          className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-rose-300/50 px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-rose-200 transition hover:bg-rose-400/10 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {deleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+          Excluir
+        </button>
         {!canceled ? (
           <button
             type="button"

@@ -33,7 +33,7 @@ import {
   normalizeHttpUrl,
 } from "@/lib/tracking/tracked-links";
 import { loadR2Config, putR2Object } from "@/lib/storage/r2";
-import { assertStorageUploadAllowed, recordOrganizationStorageUsage } from "@/lib/storage/quotas";
+import { assertStorageUploadAllowed, recordOrganizationStorageUsage, releaseOrganizationStorageUsage } from "@/lib/storage/quotas";
 
 export type SalesCatalogImportSourceKind = "text" | "csv" | "excel" | "site" | "pdf" | "image" | "mixed";
 export type SalesCatalogImportPlatform =
@@ -793,6 +793,97 @@ export async function cancelSalesCatalogImportJob(input: {
     companyId: input.companyId,
     jobId: input.jobId,
   });
+}
+
+export async function deleteSalesCatalogImportJob(input: {
+  client: SupabaseClient;
+  companyId: string;
+  jobId: string;
+  userId?: string | null;
+}) {
+  const job = await getSalesCatalogImportJob({
+    client: input.client,
+    companyId: input.companyId,
+    jobId: input.jobId,
+  });
+
+  if (job.status === "uploaded" || job.status === "extracting" || job.status === "publishing") {
+    throw new Error("A importacao ainda esta em andamento. Cancele ou aguarde terminar antes de excluir.");
+  }
+
+  const { data: sources, error: sourcesError } = await input.client
+    .from("sales_catalog_import_sources")
+    .select(importSourceSelect)
+    .eq("import_job_id", input.jobId)
+    .eq("organization_id", input.companyId);
+
+  if (sourcesError) {
+    throw new Error(`Nao foi possivel carregar fontes da importacao: ${sourcesError.message}`);
+  }
+
+  const sourceRows = (sources ?? []) as unknown as ImportSourceRow[];
+  const sourceFileSizes = sourceRows.map((source) => Math.max(0, Math.trunc(Number(source.file_size ?? 0))));
+  const releasedBytes = sourceFileSizes.reduce((total, size) => total + size, 0);
+  const releasedFileCount = sourceFileSizes.filter((size) => size > 0).length;
+
+  const { error: deleteError } = await input.client
+    .from("sales_catalog_import_jobs")
+    .delete()
+    .eq("id", input.jobId)
+    .eq("organization_id", input.companyId);
+
+  if (deleteError) {
+    throw new Error(`Nao foi possivel excluir importacao: ${deleteError.message}`);
+  }
+
+  let storageReleaseError: string | null = null;
+  if (releasedBytes > 0 || releasedFileCount > 0) {
+    await releaseOrganizationStorageUsage({
+      client: input.client,
+      organizationId: input.companyId,
+      category: "import_source",
+      bytes: releasedBytes,
+      fileCount: releasedFileCount,
+      metadata: {
+        source: "sales_catalog_import_deleted",
+        import_job_id: input.jobId,
+        deleted_by: input.userId ?? null,
+      },
+    }).catch((error: unknown) => {
+      storageReleaseError = error instanceof Error ? error.message : "Nao foi possivel liberar armazenamento da importacao.";
+    });
+  }
+
+  await input.client.from("intelligence_events").insert({
+    scope: "organization",
+    organization_id: input.companyId,
+    source_type: "sales_catalog_import",
+    source_id: input.jobId,
+    event_type: "sales_catalog_import.deleted",
+    title: "Importacao excluida",
+    summary: `Importacao ${job.title ?? job.sourcePlatform} removida da revisao do catalogo.`,
+    confidence: 1,
+    visibility: "organization",
+    tags: ["sales_catalog", "import", "cleanup"],
+    payload: {
+      import_job_id: input.jobId,
+      deleted_by: input.userId ?? null,
+      item_count: job.items.length,
+      source_count: sourceRows.length,
+      released_bytes: releasedBytes,
+      released_file_count: releasedFileCount,
+      storage_release_error: storageReleaseError,
+    },
+  });
+
+  return {
+    deletedJobId: input.jobId,
+    releasedBytes,
+    releasedFileCount,
+    sourceCount: sourceRows.length,
+    itemCount: job.items.length,
+    storageReleaseError,
+  };
 }
 
 export async function publishSalesCatalogImportJob(input: {

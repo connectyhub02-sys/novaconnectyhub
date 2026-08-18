@@ -7,6 +7,7 @@ import {
 } from "@/lib/client-os/dashboard-route-scope";
 import {
   cancelSalesCatalogImportJob,
+  deleteSalesCatalogImportJob,
   getSalesCatalogImportJob,
   updateSalesCatalogImportItems,
   type SalesCatalogImportDuplicateAction,
@@ -123,6 +124,17 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
       client,
     });
     await assertBillableAccess({ organizationId: company.id, client });
+
+    if (request.nextUrl.searchParams.get("mode") === "remove") {
+      const result = await deleteSalesCatalogImportJob({
+        client,
+        companyId: company.id,
+        jobId,
+        userId: workspace.user.id,
+      });
+
+      return NextResponse.json(result);
+    }
 
     const importJob = await cancelSalesCatalogImportJob({
       client,
