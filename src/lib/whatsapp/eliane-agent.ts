@@ -388,7 +388,7 @@ export function buildElianeOperationalManualContent() {
     "- Modo de conversa: Sempre texto, Sempre audio ou Espelho.",
     "- Rapport: Desligado, Suave ou Forte.",
     "- Localizacao da empresa: cadastrar unidades, endereco completo, CEP, cidade, estado, link do Google Maps, latitude, longitude e observacoes. O agente envia a localizacao com botao Abrir no Google Maps quando houver link, coordenadas ou endereco completo.",
-    "- Simulacao humana: linguagem humanizada, emoji, timing, pausa ao digitar, delay ao visualizar, audio espontaneo, typos, ritmo circadiano, preenchimento vocal, figurinhas, midia proativa, ritmo WPM, correcoes mid-message e small talk.",
+    "- Simulacao humana: linguagem humanizada, emoji, timing, pausa ao digitar, delay ao visualizar, audio espontaneo, erros intencionais, ritmo circadiano, preenchimento vocal, figurinhas, midia proativa, ritmo WPM, correcoes mid-message e small talk.",
     "- Seguranca e testes: Intervencao humana, Avisar humano, Cooldown aviso, Enviar teste, Numeros responsaveis, Protecao bots/loops, Teste real do clone, Turing benchmark e Janela da IA ativa.",
     "- Citacoes do WhatsApp: Desligado, Inteligente ou Sempre.",
     "- Midia: o agente interpreta audio, imagem, video e documento por padrao; o usuario ajusta apenas limites de lote para imagens, videos e documentos.",

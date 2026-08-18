@@ -172,7 +172,7 @@ describe("WhatsApp standard behavior and company location", () => {
     expect(behaviorPanel).toContain("Enviar teste");
     expect(behaviorPanel).toContain("Janela da IA ativa");
     expect(behaviorPanel).toContain("Reacoes emoji");
-    expect(behaviorPanel).toContain("Typos intencionais");
+    expect(behaviorPanel).toContain("Erros intencionais");
     expect(behaviorPanel).toContain("Figurinhas");
     expect(behaviorPanel).toContain("Midia proativa");
     expect(behaviorPanel).toContain("Small talk");
