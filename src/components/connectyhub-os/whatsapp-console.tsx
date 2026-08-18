@@ -2384,9 +2384,6 @@ export function WhatsAppConsole({
                     placeholder={"5599999999999\n5588888888888"}
                     onChange={(value) => updateBehavior("humanHandoffNotificationNumbers", value)}
                   />
-                  <div className="grid gap-2 md:grid-cols-2">
-                    <ToggleTile icon={Clock3} label="Janela da IA ativa" description="Faz o agente responder apenas dentro do horario configurado na Janela da IA." checked={behaviorDraft.aiScheduleEnabled} onChange={() => updateBehavior("aiScheduleEnabled", !behaviorDraft.aiScheduleEnabled)} />
-                  </div>
                 </div>
               </BehaviorSection>
 
@@ -2455,7 +2452,8 @@ export function WhatsAppConsole({
               </BehaviorSection>
 
               <BehaviorSection title="Janela da IA" description="Horario em que o agente pode responder quando a opcao Janela da IA ativa estiver ligada.">
-                <div className="grid gap-2 md:grid-cols-3">
+                <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                  <ToggleTile icon={Clock3} label="Janela da IA ativa" description="Faz o agente responder apenas dentro do horario configurado nesta janela." checked={behaviorDraft.aiScheduleEnabled} onChange={() => updateBehavior("aiScheduleEnabled", !behaviorDraft.aiScheduleEnabled)} />
                   <TextField label="Inicio" description="Horario em que a IA comeca a responder." value={behaviorDraft.aiScheduleStart} onChange={(value) => updateBehavior("aiScheduleStart", value)} />
                   <TextField label="Fim" description="Horario em que a IA para de responder." value={behaviorDraft.aiScheduleEnd} onChange={(value) => updateBehavior("aiScheduleEnd", value)} />
                   <TextField label="Fuso horario" description="Fuso usado para calcular a janela de atendimento." value={behaviorDraft.aiScheduleTimezone} onChange={(value) => updateBehavior("aiScheduleTimezone", value)} />

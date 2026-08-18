@@ -175,6 +175,20 @@ describe("WhatsApp standard behavior and company location", () => {
     expect(behaviorPanel).toContain("Figurinhas");
     expect(behaviorPanel).toContain("Midia proativa");
     expect(behaviorPanel).toContain("Small talk");
+
+    const securitySection = sourceBetween(
+      behaviorPanel,
+      '<BehaviorSection title="Seguranca e testes"',
+      '<BehaviorSection title="Citacoes do WhatsApp"',
+    );
+    const aiWindowSection = sourceBetween(
+      behaviorPanel,
+      '<BehaviorSection title="Janela da IA"',
+      "</BehaviorSection>",
+    );
+
+    expect(securitySection).not.toContain("Janela da IA ativa");
+    expect(aiWindowSection).toContain("Janela da IA ativa");
   });
 
   it("loads company locations into the agent and sends Maps as a button instead of a loose link or native pin", () => {
