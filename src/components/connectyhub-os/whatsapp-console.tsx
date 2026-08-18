@@ -54,6 +54,7 @@ import {
 import { NeonBadge, Panel, SectionHeader } from "./panel-primitives";
 import { InfinityLoader } from "./infinity-loader";
 import { useConnectyShellNotifications, type ConnectyShellNotification } from "./connecty-shell";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   defaultWhatsappBehaviorConfig,
   defaultWhatsappCloneMemory,
@@ -4080,19 +4081,28 @@ function WhatsappAvatar({
 
 function InfoHint({ text }: { text: string }) {
   return (
-    <span
-      aria-label={text}
-      className="group/help relative inline-flex shrink-0 items-center align-middle"
-      title={text}
-    >
-      <CircleHelp className="h-3.5 w-3.5 text-current opacity-70 transition group-hover/help:opacity-100" />
-      <span
-        className="pointer-events-none absolute right-0 top-5 z-50 hidden w-64 max-w-[calc(100vw-3rem)] rounded-lg border border-slate-200 bg-white px-3 py-2 text-left font-sans text-[11px] normal-case leading-5 tracking-normal text-slate-950 shadow-[0_16px_40px_rgba(15,23,42,0.16)] ring-1 ring-slate-950/5 group-hover/help:block"
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          aria-label={text}
+          className="inline-flex shrink-0 cursor-help items-center align-middle outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/45"
+          role="button"
+          tabIndex={0}
+        >
+          <CircleHelp className="h-3.5 w-3.5 text-current opacity-70 transition hover:opacity-100" />
+        </span>
+      </TooltipTrigger>
+      <TooltipContent
+        align="center"
+        className="z-[1000] max-w-[280px] border border-slate-200 bg-white px-3 py-2 text-left font-sans text-[11px] normal-case leading-5 tracking-normal text-slate-950 shadow-[0_16px_40px_rgba(15,23,42,0.16)] ring-1 ring-slate-950/5 [&>svg]:bg-white [&>svg]:fill-white"
+        collisionPadding={16}
         data-connecty-infohint="true"
+        side="top"
+        sideOffset={8}
       >
         {text}
-      </span>
-    </span>
+      </TooltipContent>
+    </Tooltip>
   );
 }
 

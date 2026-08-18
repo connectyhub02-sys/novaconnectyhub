@@ -202,6 +202,9 @@ describe("WhatsApp standard behavior and company location", () => {
     expect(globalsSource).toContain("color: #0f172a !important;");
     expect(consoleSource).toContain('data-connecty-contrast={active ? "dark" : undefined}');
     expect(consoleSource).toContain('data-connecty-contrast="dark"');
+    expect(consoleSource).toContain("TooltipContent");
+    expect(consoleSource).toContain('collisionPadding={16}');
+    expect(consoleSource).toContain("z-[1000]");
     expect(consoleSource).toContain('data-connecty-infohint="true"');
     expect(consoleSource).toContain("bg-white px-3 py-2 text-left font-sans text-[11px] normal-case leading-5 tracking-normal text-slate-950");
     expect(consoleSource).toContain("connecty-dark-action");
