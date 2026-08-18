@@ -98,6 +98,15 @@ type WhatsappInstanceAvatarRow = LeadAvatarSyncInstance & {
   metadata: JsonRecord | null;
 };
 
+type WhatsappInstanceQueueRow = {
+  id: string;
+  organization_id: string;
+  phone_number: string | null;
+  display_name: string | null;
+  status: string | null;
+  metadata: JsonRecord | null;
+};
+
 export type ClientLeadStatus = "new" | "active" | "qualified" | "won" | "lost" | "archived";
 
 export type ClientLeadMessageAuthor = "lead" | "ai" | "human" | "system" | "unknown";
@@ -130,6 +139,13 @@ export type ClientLeadActivity = {
 
 export type ClientLeadConversationFile = {
   id: string;
+  whatsappInstanceId: string | null;
+  whatsappInstanceName: string | null;
+  whatsappInstancePhone: string | null;
+  whatsappInstanceStatus: string | null;
+  agentId: string | null;
+  agentName: string | null;
+  agentAvatarUrl: string | null;
   channel: string;
   provider: string;
   providerChatId: string | null;
@@ -199,6 +215,13 @@ export type ClientLeadRecord = {
   };
   conversation: {
     id: string | null;
+    whatsappInstanceId: string | null;
+    whatsappInstanceName: string | null;
+    whatsappInstancePhone: string | null;
+    whatsappInstanceStatus: string | null;
+    agentId: string | null;
+    agentName: string | null;
+    agentAvatarUrl: string | null;
     status: string | null;
     preview: string | null;
     messageCount: number;
@@ -222,8 +245,21 @@ export type ClientLeadRecord = {
   lastMessageAt: string | null;
 };
 
+export type ClientLeadAttendanceQueue = {
+  key: string;
+  companyId: string;
+  agentId: string | null;
+  whatsappInstanceId: string | null;
+  label: string;
+  detail: string | null;
+  phone: string | null;
+  status: string | null;
+  avatarUrl: string | null;
+};
+
 export type ClientLeadCrmWorkspace = {
   companies: ClientCompany[];
+  attendanceQueues: ClientLeadAttendanceQueue[];
   leads: ClientLeadRecord[];
   stats: {
     total: number;
@@ -310,6 +346,7 @@ export async function getAdminLeadCrmWorkspace(input: {
 function buildEmptyWorkspace(companies: ClientCompany[], warnings: string[] = []): ClientLeadCrmWorkspace {
   return {
     companies,
+    attendanceQueues: [],
     leads: [],
     stats: {
       total: 0,
@@ -405,10 +442,11 @@ async function getLeadCrmWorkspaceForCompanies(input: {
   const leadIds = leadRows.map((lead) => lead.id);
   let conversationRows: ConversationRow[] = [];
   let agentRows: AgentRow[] = [];
+  let whatsappInstanceRows: WhatsappInstanceQueueRow[] = [];
   let eventRows: IntelligenceEventRow[] = [];
 
   try {
-    const [conversationsResult, agentsResult, eventsResult] = await Promise.all([
+    const [conversationsResult, agentsResult, whatsappInstancesResult, eventsResult] = await Promise.all([
       leadIds.length
         ? input.client
             .from("conversations")
@@ -424,6 +462,13 @@ async function getLeadCrmWorkspaceForCompanies(input: {
         .eq("scope", "organization")
         .in("organization_id", companyIds)
         .contains("metadata", { client_created: true, agent_kind: "whatsapp" })
+        .order("updated_at", { ascending: false })
+        .limit(240),
+      input.client
+        .from("whatsapp_instances")
+        .select("id, organization_id, phone_number, display_name, status, metadata")
+        .in("organization_id", companyIds)
+        .neq("status", "archived")
         .order("updated_at", { ascending: false })
         .limit(240),
       input.client
@@ -444,6 +489,12 @@ async function getLeadCrmWorkspaceForCompanies(input: {
       warnings.push(toLoadWarning("agentes", agentsResult.error));
     } else {
       agentRows = (agentsResult.data ?? []) as AgentRow[];
+    }
+
+    if (whatsappInstancesResult.error) {
+      warnings.push(toLoadWarning("instancias WhatsApp", whatsappInstancesResult.error));
+    } else {
+      whatsappInstanceRows = (whatsappInstancesResult.data ?? []) as WhatsappInstanceQueueRow[];
     }
 
     if (eventsResult.error) {
@@ -480,6 +531,8 @@ async function getLeadCrmWorkspaceForCompanies(input: {
 
   const companyById = new Map(input.companies.map((company) => [company.id, company]));
   const agentByOrgId = new Map<string, AgentRow>();
+  const agentById = new Map(agentRows.map((agent) => [agent.id, agent]));
+  const whatsappInstanceById = new Map(whatsappInstanceRows.map((instance) => [instance.id, instance]));
   let syncedAvatarMetadata = new Map<string, JsonRecord>();
 
   try {
@@ -517,6 +570,8 @@ async function getLeadCrmWorkspaceForCompanies(input: {
       company,
       agent,
       conversations,
+      agentById,
+      whatsappInstanceById,
       messagesByConversation,
       events,
     });
@@ -524,6 +579,11 @@ async function getLeadCrmWorkspaceForCompanies(input: {
 
   return {
     companies: input.companies,
+    attendanceQueues: buildAttendanceQueues({
+      agents: agentRows,
+      companies: input.companies,
+      instances: whatsappInstanceRows,
+    }),
     leads,
     stats: buildStats(leads),
     ...(warnings.length ? { warnings } : {}),
@@ -620,6 +680,8 @@ function mapLeadRecord(input: {
   company?: ClientCompany;
   agent: AgentRow | null;
   conversations: ConversationRow[];
+  agentById: Map<string, AgentRow>;
+  whatsappInstanceById: Map<string, WhatsappInstanceQueueRow>;
   messagesByConversation: Map<string, MessageRow[]>;
   events: IntelligenceEventRow[];
 }): ClientLeadRecord {
@@ -669,7 +731,12 @@ function mapLeadRecord(input: {
     ?? input.lead.last_event_summary
     ?? activeConversation?.last_message_preview
     ?? "Ainda sem resumo automatico.";
-  const conversationFiles = buildConversationFiles(input.conversations, input.messagesByConversation);
+  const conversationFiles = buildConversationFiles({
+    agentById: input.agentById,
+    conversations: input.conversations,
+    messagesByConversation: input.messagesByConversation,
+    whatsappInstanceById: input.whatsappInstanceById,
+  });
   const activeConversationFile = activeConversation
     ? conversationFiles.find((conversation) => conversation.id === activeConversation.id) ?? null
     : conversationFiles[0] ?? null;
@@ -717,6 +784,13 @@ function mapLeadRecord(input: {
     },
     conversation: {
       id: activeConversationFile?.id ?? null,
+      whatsappInstanceId: activeConversationFile?.whatsappInstanceId ?? null,
+      whatsappInstanceName: activeConversationFile?.whatsappInstanceName ?? null,
+      whatsappInstancePhone: activeConversationFile?.whatsappInstancePhone ?? null,
+      whatsappInstanceStatus: activeConversationFile?.whatsappInstanceStatus ?? null,
+      agentId: activeConversationFile?.agentId ?? null,
+      agentName: activeConversationFile?.agentName ?? null,
+      agentAvatarUrl: activeConversationFile?.agentAvatarUrl ?? null,
       status: activeConversationFile?.status ?? null,
       preview: activeConversationFile?.preview ?? null,
       messageCount: messages.length,
@@ -739,6 +813,83 @@ function mapLeadRecord(input: {
     updatedAt: input.lead.updated_at,
     lastMessageAt: input.lead.last_message_at ?? activeConversationFile?.lastMessageAt ?? null,
   };
+}
+
+function buildAttendanceQueues(input: {
+  agents: AgentRow[];
+  companies: ClientCompany[];
+  instances: WhatsappInstanceQueueRow[];
+}): ClientLeadAttendanceQueue[] {
+  const agentById = new Map(input.agents.map((agent) => [agent.id, agent]));
+  const companyById = new Map(input.companies.map((company) => [company.id, company]));
+  const agentIdsWithInstance = new Set<string>();
+  const seenKeys = new Set<string>();
+  const queues: ClientLeadAttendanceQueue[] = [];
+
+  const pushQueue = (queue: ClientLeadAttendanceQueue) => {
+    if (seenKeys.has(queue.key)) {
+      return;
+    }
+
+    seenKeys.add(queue.key);
+    queues.push(queue);
+  };
+
+  for (const instance of input.instances) {
+    const metadata = readRecord(instance.metadata) ?? {};
+    const agentId = readString(metadata.agent_id);
+    const agent = agentId ? agentById.get(agentId) ?? null : null;
+    const company = companyById.get(instance.organization_id);
+    const label = readString(metadata.agent_name)
+      ?? readString(agent?.persona_name)
+      ?? agent?.name
+      ?? instance.display_name
+      ?? instance.phone_number
+      ?? "WhatsApp";
+    const detail = formatLocation([
+      instance.display_name,
+      instance.phone_number,
+      company?.name ?? null,
+    ]);
+
+    if (agentId) {
+      agentIdsWithInstance.add(agentId);
+    }
+
+    pushQueue({
+      key: `instance:${instance.id}`,
+      companyId: instance.organization_id,
+      agentId,
+      whatsappInstanceId: instance.id,
+      label,
+      detail,
+      phone: instance.phone_number,
+      status: instance.status,
+      avatarUrl: agent?.avatar_url ?? null,
+    });
+  }
+
+  for (const agent of input.agents) {
+    if (!agent.organization_id || agentIdsWithInstance.has(agent.id)) {
+      continue;
+    }
+
+    const company = companyById.get(agent.organization_id);
+
+    pushQueue({
+      key: `agent:${agent.id}`,
+      companyId: agent.organization_id,
+      agentId: agent.id,
+      whatsappInstanceId: null,
+      label: readString(agent.persona_name) ?? agent.name,
+      detail: company ? `${company.name} / Sem WhatsApp conectado` : "Sem WhatsApp conectado",
+      phone: null,
+      status: null,
+      avatarUrl: agent.avatar_url,
+    });
+  }
+
+  return queues.sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
 }
 
 function mapMessage(row: MessageRow): ClientLeadMessage {
@@ -825,17 +976,48 @@ function defaultMessageAuthorLabel(type: ClientLeadMessageAuthor) {
   return "Desconhecido";
 }
 
-function buildConversationFiles(
-  conversations: ConversationRow[],
-  messagesByConversation: Map<string, MessageRow[]>,
-): ClientLeadConversationFile[] {
-  return conversations
+function buildConversationFiles(input: {
+  conversations: ConversationRow[];
+  messagesByConversation: Map<string, MessageRow[]>;
+  agentById: Map<string, AgentRow>;
+  whatsappInstanceById: Map<string, WhatsappInstanceQueueRow>;
+}): ClientLeadConversationFile[] {
+  const resolveInstanceAgent = (conversation: ConversationRow) => {
+    const instance = conversation.whatsapp_instance_id
+      ? input.whatsappInstanceById.get(conversation.whatsapp_instance_id) ?? null
+      : null;
+    const instanceMetadata = readRecord(instance?.metadata);
+    const agentId = readString(instanceMetadata?.agent_id);
+    const agent = agentId ? input.agentById.get(agentId) ?? null : null;
+    const agentName = readString(instanceMetadata?.agent_name)
+      ?? readString(agent?.persona_name)
+      ?? agent?.name
+      ?? instance?.display_name
+      ?? null;
+
+    return {
+      agent,
+      agentId,
+      agentName,
+      instance,
+    };
+  };
+
+  return input.conversations
     .map((conversation) => {
-      const messages = (messagesByConversation.get(conversation.id) ?? []).map(mapMessage);
+      const messages = (input.messagesByConversation.get(conversation.id) ?? []).map(mapMessage);
       const humanIntervention = readConversationHumanIntervention(conversation.metadata);
+      const { agent, agentId, agentName, instance } = resolveInstanceAgent(conversation);
 
       return {
         id: conversation.id,
+        whatsappInstanceId: conversation.whatsapp_instance_id,
+        whatsappInstanceName: instance?.display_name ?? null,
+        whatsappInstancePhone: instance?.phone_number ?? null,
+        whatsappInstanceStatus: instance?.status ?? null,
+        agentId,
+        agentName,
+        agentAvatarUrl: agent?.avatar_url ?? null,
         channel: conversation.channel,
         provider: conversation.provider,
         providerChatId: conversation.provider_chat_id,

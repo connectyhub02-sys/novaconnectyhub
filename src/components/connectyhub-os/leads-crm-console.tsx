@@ -52,6 +52,7 @@ import type {
   ClientSocialDispatchStatus,
 } from "@/lib/client-os/social-approvals";
 import type {
+  ClientLeadAttendanceQueue,
   ClientLeadActivity,
   ClientLeadConversationFile,
   ClientLeadCrmWorkspace,
@@ -65,6 +66,25 @@ import type { ClientSalesCatalogItem } from "@/lib/sales-catalog/shared";
 type ConsoleMode = "leads" | "crm" | "conversas" | "atendimento";
 
 type AttendanceInboxTab = "all" | "unread" | "active" | "paused" | "qualified" | "won" | "archived";
+
+type AttendanceThread = {
+  key: string;
+  lead: ClientLeadRecord;
+  conversation: ClientLeadConversationFile | null;
+  conversationId: string | null;
+  queueKey: string;
+  latestMessage: ClientLeadMessage | null;
+  lastMessageAt: string | null;
+};
+
+type AttendanceQueueFilter = {
+  key: string;
+  label: string;
+  detail: string | null;
+  count: number;
+  status: string | null;
+  avatarUrl: string | null;
+};
 
 type LeadCrmConsoleProps = {
   mode: ConsoleMode;
@@ -307,7 +327,6 @@ export function LeadCrmConsole({
           filteredLeads={filteredLeads}
           salesCatalogItems={salesCatalogItems}
           search={search}
-          selectedLead={selectedLead}
           selectedLeadId={selectedLead?.id ?? null}
           setConversationPane={setConversationPane}
           setDetailsLeadId={setDetailsLeadId}
@@ -748,7 +767,6 @@ function AttendanceCenterView({
   filteredLeads,
   salesCatalogItems,
   search,
-  selectedLead,
   selectedLeadId,
   setConversationPane,
   setDetailsLeadId,
@@ -760,7 +778,6 @@ function AttendanceCenterView({
   filteredLeads: ClientLeadRecord[];
   salesCatalogItems: ClientSalesCatalogItem[];
   search: string;
-  selectedLead: ClientLeadRecord | null;
   selectedLeadId: string | null;
   setConversationPane: (pane: "inbox" | "chat") => void;
   setDetailsLeadId: (id: string) => void;
@@ -781,6 +798,8 @@ function AttendanceCenterView({
   const [handoffOverrides, setHandoffOverrides] = useState<Record<string, ClientLeadHumanIntervention>>({});
   const [manualMessages, setManualMessages] = useState<Record<string, ClientLeadMessage[]>>({});
   const [handoffTick, setHandoffTick] = useState(() => Date.now());
+  const [selectedQueueKey, setSelectedQueueKey] = useState("all");
+  const [selectedThreadKey, setSelectedThreadKey] = useState<string | null>(null);
   const [pushPrompt, setPushPrompt] = useState<AttendancePushPromptState>(() => ({
     busy: false,
     dismissed: false,
@@ -791,26 +810,40 @@ function AttendanceCenterView({
   const notifiedLeadMessages = useRef(new Set<string>());
   const notificationSeeded = useRef(false);
 
-  const tabItems = useMemo(() => buildAttendanceTabs(filteredLeads, handoffOverrides), [filteredLeads, handoffOverrides]);
-  const visibleLeads = useMemo(
-    () => filteredLeads.filter((lead) => matchesAttendanceTab(lead, inboxTab, handoffOverrides)),
-    [filteredLeads, handoffOverrides, inboxTab],
+  const attendanceThreads = useMemo(() => buildAttendanceThreads(filteredLeads), [filteredLeads]);
+  const queueFilters = useMemo(
+    () => buildAttendanceQueueFilters(workspace.attendanceQueues, attendanceThreads),
+    [attendanceThreads, workspace.attendanceQueues],
   );
-  const activeLead = visibleLeads.find((lead) => lead.id === selectedLeadId)
-    ?? selectedLead
-    ?? visibleLeads[0]
-    ?? filteredLeads[0]
+  const selectedQueueExists = queueFilters.some((queue) => queue.key === selectedQueueKey);
+  const effectiveQueueKey = selectedQueueExists ? selectedQueueKey : "all";
+  const queueThreads = useMemo(
+    () => attendanceThreads.filter((thread) => matchesAttendanceQueue(thread, effectiveQueueKey)),
+    [attendanceThreads, effectiveQueueKey],
+  );
+  const tabItems = useMemo(() => buildAttendanceThreadTabs(queueThreads, handoffOverrides), [queueThreads, handoffOverrides]);
+  const visibleThreads = useMemo(
+    () => queueThreads.filter((thread) => matchesAttendanceThreadTab(thread, inboxTab, handoffOverrides)),
+    [handoffOverrides, inboxTab, queueThreads],
+  );
+  const activeThread = visibleThreads.find((thread) => thread.key === selectedThreadKey)
+    ?? visibleThreads.find((thread) => thread.lead.id === selectedLeadId)
+    ?? visibleThreads[0]
+    ?? queueThreads[0]
+    ?? (effectiveQueueKey === "all" ? attendanceThreads[0] : null)
     ?? null;
-  const activeHumanIntervention = activeLead ? getLeadHumanIntervention(activeLead, handoffOverrides) : emptyClientHumanIntervention();
-  const activeConversationId = activeLead?.conversation.id ?? null;
-  const activeMessages = activeLead
+  const activeLead = activeThread?.lead ?? null;
+  const activeConversation = activeThread?.conversation ?? null;
+  const activeHumanIntervention = activeThread ? getThreadHumanIntervention(activeThread, handoffOverrides) : emptyClientHumanIntervention();
+  const activeConversationId = activeThread?.conversationId ?? null;
+  const activeMessages = activeThread
     ? mergeConversationMessages(
-        activeLead.conversation.messages,
+        activeConversation?.messages ?? activeThread.lead.conversation.messages,
         activeConversationId ? manualMessages[activeConversationId] ?? [] : [],
       )
     : [];
   const handoffCountdown = formatHumanInterventionCountdown(activeHumanIntervention, handoffTick);
-  const activeCartKey = activeConversationId ?? activeLead?.id ?? null;
+  const activeCartKey = activeConversationId ?? activeThread?.key ?? activeLead?.id ?? null;
   const activeCartItems = activeCartKey ? leadCarts[activeCartKey] ?? [] : [];
   const activeCartTotalCents = activeCartItems.reduce((total, item) => total + (item.unitPriceCents * item.quantity), 0);
   const visibleCatalogItems = useMemo(
@@ -1178,10 +1211,10 @@ function AttendanceCenterView({
   }, [activeConversationId, router]);
 
   useEffect(() => {
-    const inboundMessages = filteredLeads.flatMap((lead) =>
-      lead.conversation.messages
+    const inboundMessages = attendanceThreads.flatMap((thread) =>
+      (thread.conversation?.messages ?? thread.lead.conversation.messages)
         .filter((message) => message.author === "lead" || message.direction === "inbound")
-        .map((message) => ({ lead, message })),
+        .map((message) => ({ lead: thread.lead, message })),
     );
 
     if (!notificationSeeded.current) {
@@ -1202,7 +1235,7 @@ function AttendanceCenterView({
       promptAttendancePushPermission();
       showLeadBrowserNotification(item.lead, item.message);
     }
-  }, [filteredLeads]);
+  }, [attendanceThreads]);
 
   async function updateHumanHandoff(action: "pause" | "resume") {
     if (!activeConversationId) {
@@ -1352,7 +1385,7 @@ function AttendanceCenterView({
                   <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">Central WhatsApp</p>
                   <h2 className="mt-1 text-[20px] font-bold text-slate-950">Atendimento</h2>
                   <p className="mt-1 text-[11px] text-slate-500">
-                    {workspace.stats.total} conversas / {workspace.stats.active} em atendimento
+                    {queueThreads.length} conversas / {queueThreads.filter((thread) => thread.lead.status === "active").length} em atendimento
                   </p>
                 </div>
                 <Link
@@ -1364,6 +1397,33 @@ function AttendanceCenterView({
                   <Bot className="h-4 w-4" />
                 </Link>
               </div>
+
+              {queueFilters.length > 1 ? (
+                <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+                  {queueFilters.map((queue) => (
+                    <button
+                      key={queue.key}
+                      className={cn(
+                        "inline-flex h-9 max-w-[210px] shrink-0 items-center gap-2 rounded-full border px-3 text-[12px] font-semibold transition",
+                        effectiveQueueKey === queue.key
+                          ? "border-slate-950 bg-slate-950 text-white shadow-[0_10px_22px_rgba(15,23,42,0.16)]"
+                          : "border-slate-200 bg-white text-slate-700 hover:border-slate-400 hover:text-slate-950",
+                      )}
+                      onClick={() => {
+                        setSelectedQueueKey(queue.key);
+                        setSelectedThreadKey(null);
+                      }}
+                      title={queue.detail ?? queue.label}
+                      type="button"
+                    >
+                      <span className="truncate">{queue.label}</span>
+                      <span className={cn("font-mono text-[10px]", effectiveQueueKey === queue.key ? "text-white/75" : "text-slate-400")}>
+                        {queue.count}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
 
               <label className="relative mt-4 block">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
@@ -1398,19 +1458,22 @@ function AttendanceCenterView({
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto">
-              {visibleLeads.map((lead) => {
-                const latestMessage = getLatestLeadMessage(lead);
-                const humanIntervention = getLeadHumanIntervention(lead, handoffOverrides);
-                const selected = activeLead?.id === lead.id;
+              {visibleThreads.map((thread) => {
+                const lead = thread.lead;
+                const latestMessage = thread.latestMessage;
+                const humanIntervention = getThreadHumanIntervention(thread, handoffOverrides);
+                const queueLabel = formatThreadQueueLabel(thread);
+                const selected = activeThread?.key === thread.key;
 
                 return (
                   <button
-                    key={lead.id}
+                    key={thread.key}
                     className={cn(
                       "grid w-full grid-cols-[48px_minmax(0,1fr)] gap-3 border-b px-4 py-3 text-left transition",
                       selected ? "bg-red-50" : "bg-white hover:bg-slate-50",
                     )}
                     onClick={() => {
+                      setSelectedThreadKey(thread.key);
                       setSelectedLeadId(lead.id);
                       setConversationPane("chat");
                     }}
@@ -1421,21 +1484,22 @@ function AttendanceCenterView({
                     <div className="min-w-0">
                       <div className="flex items-start justify-between gap-2">
                         <p className="truncate text-[14px] font-semibold text-slate-950">{lead.name}</p>
-                        <span className="shrink-0 text-[11px] text-slate-500">{formatTime(lead.lastMessageAt ?? lead.updatedAt)}</span>
+                        <span className="shrink-0 text-[11px] text-slate-500">{formatTime(thread.lastMessageAt ?? lead.updatedAt)}</span>
                       </div>
                       <p className="mt-1 truncate text-[12px] text-slate-600">
-                        {latestMessage ? `${formatMessageAuthorShort(latestMessage)}: ${latestMessage.text}` : lead.conversation.preview ?? lead.summary}
+                        {latestMessage ? `${formatMessageAuthorShort(latestMessage)}: ${latestMessage.text}` : thread.conversation?.preview ?? lead.conversation.preview ?? lead.summary}
                       </p>
                       <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5">
+                        <NeonBadge tone="zinc">{queueLabel}</NeonBadge>
                         <StatusPill status={lead.status} />
                         {humanIntervention.active ? <NeonBadge tone="amber">IA pausada</NeonBadge> : null}
-                        {hasUnreadSignal(lead) ? <NeonBadge tone="cyan">lead respondeu</NeonBadge> : null}
+                        {hasUnreadThreadSignal(thread) ? <NeonBadge tone="cyan">lead respondeu</NeonBadge> : null}
                       </div>
                     </div>
                   </button>
                 );
               })}
-              {!visibleLeads.length ? (
+              {!visibleThreads.length ? (
                 <div className="p-4">
                   <EmptyState title="Nada neste filtro" detail="Troque o filtro ou aguarde novas mensagens chegarem pelo WhatsApp." />
                 </div>
@@ -1459,7 +1523,9 @@ function AttendanceCenterView({
                     <LeadAvatar lead={activeLead} />
                     <div className="min-w-0">
                       <p className="truncate text-[15px] font-semibold text-slate-950">{activeLead.name}</p>
-                      <p className="truncate text-[12px] text-slate-500">{activeLead.phone ?? activeLead.companyName}</p>
+                      <p className="truncate text-[12px] text-slate-500">
+                        {[activeLead.phone, activeThread ? formatThreadQueueLabel(activeThread) : null].filter(Boolean).join(" / ") || activeLead.companyName}
+                      </p>
                     </div>
                   </div>
                   <div className="flex min-w-0 flex-wrap items-center gap-2 lg:justify-end">
@@ -2101,60 +2167,175 @@ function AttendanceSalesBagPanel({
   );
 }
 
-function buildAttendanceTabs(
-  leads: ClientLeadRecord[],
-  overrides: Record<string, ClientLeadHumanIntervention>,
-): Array<{ value: AttendanceInboxTab; label: string; count: number }> {
+function buildAttendanceThreads(leads: ClientLeadRecord[]): AttendanceThread[] {
+  const threads: AttendanceThread[] = [];
+
+  for (const lead of leads) {
+    if (!lead.leadFile.conversations.length) {
+      const latestMessage = lead.conversation.messages.at(-1) ?? null;
+      const fallbackConversationId = lead.conversation.id;
+
+      threads.push({
+        key: fallbackConversationId ? `conversation:${fallbackConversationId}` : `lead:${lead.id}`,
+        lead,
+        conversation: null,
+        conversationId: fallbackConversationId,
+        queueKey: queueKeyForConversation(lead.conversation),
+        latestMessage,
+        lastMessageAt: latestMessage?.occurredAt ?? lead.lastMessageAt ?? lead.updatedAt,
+      });
+      continue;
+    }
+
+    for (const conversation of lead.leadFile.conversations) {
+      const latestMessage = conversation.messages.at(-1) ?? null;
+
+      threads.push({
+        key: `conversation:${conversation.id}`,
+        lead,
+        conversation,
+        conversationId: conversation.id,
+        queueKey: queueKeyForConversation(conversation),
+        latestMessage,
+        lastMessageAt: latestMessage?.occurredAt ?? conversation.lastMessageAt ?? conversation.updatedAt ?? lead.lastMessageAt ?? lead.updatedAt,
+      });
+    }
+  }
+
+  return threads.sort((a, b) => toTimestamp(b.lastMessageAt) - toTimestamp(a.lastMessageAt));
+}
+
+function buildAttendanceQueueFilters(
+  queues: ClientLeadAttendanceQueue[],
+  threads: AttendanceThread[],
+): AttendanceQueueFilter[] {
+  const filters = new Map<string, AttendanceQueueFilter>();
+
+  filters.set("all", {
+    key: "all",
+    label: "Todos",
+    detail: "Todas as filas de atendimento",
+    count: threads.length,
+    status: null,
+    avatarUrl: null,
+  });
+
+  for (const queue of queues) {
+    const key = normalizeAttendanceQueueKey(queue);
+
+    filters.set(key, {
+      key,
+      label: queue.label,
+      detail: queue.detail,
+      count: threads.filter((thread) => matchesAttendanceQueue(thread, key)).length,
+      status: queue.status,
+      avatarUrl: queue.avatarUrl,
+    });
+  }
+
+  for (const thread of threads) {
+    if (filters.has(thread.queueKey)) {
+      continue;
+    }
+
+    filters.set(thread.queueKey, {
+      key: thread.queueKey,
+      label: formatThreadQueueLabel(thread),
+      detail: thread.conversation?.whatsappInstancePhone ?? thread.lead.companyName,
+      count: threads.filter((candidate) => matchesAttendanceQueue(candidate, thread.queueKey)).length,
+      status: thread.conversation?.whatsappInstanceStatus ?? thread.lead.conversation.whatsappInstanceStatus,
+      avatarUrl: thread.conversation?.agentAvatarUrl ?? thread.lead.conversation.agentAvatarUrl,
+    });
+  }
+
+  const [, ...specificFilters] = Array.from(filters.values());
+
   return [
-    { value: "all", label: "Tudo", count: leads.length },
-    { value: "unread", label: "Nao lidas", count: leads.filter(hasUnreadSignal).length },
-    { value: "active", label: "Em atendimento", count: leads.filter((lead) => lead.status === "active").length },
-    { value: "paused", label: "IA pausada", count: leads.filter((lead) => getLeadHumanIntervention(lead, overrides).active).length },
-    { value: "qualified", label: "Qualificados", count: leads.filter((lead) => lead.status === "qualified" || lead.score >= 70).length },
-    { value: "won", label: "Ganhos", count: leads.filter((lead) => lead.status === "won").length },
-    { value: "archived", label: "Arquivados", count: leads.filter((lead) => lead.status === "archived").length },
+    filters.get("all")!,
+    ...specificFilters.sort((a, b) => a.label.localeCompare(b.label, "pt-BR")),
   ];
 }
 
-function matchesAttendanceTab(
-  lead: ClientLeadRecord,
+function normalizeAttendanceQueueKey(queue: ClientLeadAttendanceQueue) {
+  if (queue.whatsappInstanceId) return `instance:${queue.whatsappInstanceId}`;
+  if (queue.agentId) return `agent:${queue.agentId}`;
+  return queue.key;
+}
+
+function matchesAttendanceQueue(thread: AttendanceThread, key: string) {
+  if (key === "all") return true;
+  return thread.queueKey === key;
+}
+
+function buildAttendanceThreadTabs(
+  threads: AttendanceThread[],
+  overrides: Record<string, ClientLeadHumanIntervention>,
+): Array<{ value: AttendanceInboxTab; label: string; count: number }> {
+  return [
+    { value: "all", label: "Tudo", count: threads.length },
+    { value: "unread", label: "Nao lidas", count: threads.filter(hasUnreadThreadSignal).length },
+    { value: "active", label: "Em atendimento", count: threads.filter((thread) => thread.lead.status === "active").length },
+    { value: "paused", label: "IA pausada", count: threads.filter((thread) => getThreadHumanIntervention(thread, overrides).active).length },
+    { value: "qualified", label: "Qualificados", count: threads.filter((thread) => thread.lead.status === "qualified" || thread.lead.score >= 70).length },
+    { value: "won", label: "Ganhos", count: threads.filter((thread) => thread.lead.status === "won").length },
+    { value: "archived", label: "Arquivados", count: threads.filter((thread) => thread.lead.status === "archived").length },
+  ];
+}
+
+function matchesAttendanceThreadTab(
+  thread: AttendanceThread,
   tab: AttendanceInboxTab,
   overrides: Record<string, ClientLeadHumanIntervention>,
 ) {
   if (tab === "all") return true;
-  if (tab === "unread") return hasUnreadSignal(lead);
-  if (tab === "active") return lead.status === "active";
-  if (tab === "paused") return getLeadHumanIntervention(lead, overrides).active;
-  if (tab === "qualified") return lead.status === "qualified" || lead.score >= 70;
-  if (tab === "won") return lead.status === "won";
-  if (tab === "archived") return lead.status === "archived";
+  if (tab === "unread") return hasUnreadThreadSignal(thread);
+  if (tab === "active") return thread.lead.status === "active";
+  if (tab === "paused") return getThreadHumanIntervention(thread, overrides).active;
+  if (tab === "qualified") return thread.lead.status === "qualified" || thread.lead.score >= 70;
+  if (tab === "won") return thread.lead.status === "won";
+  if (tab === "archived") return thread.lead.status === "archived";
   return true;
 }
 
-function getLatestLeadMessage(lead: ClientLeadRecord) {
-  return lead.conversation.messages.at(-1) ?? null;
+function queueKeyForConversation(conversation: {
+  agentId: string | null;
+  whatsappInstanceId: string | null;
+}) {
+  if (conversation.whatsappInstanceId) return `instance:${conversation.whatsappInstanceId}`;
+  if (conversation.agentId) return `agent:${conversation.agentId}`;
+  return "unassigned";
 }
 
-function hasUnreadSignal(lead: ClientLeadRecord) {
-  const latest = getLatestLeadMessage(lead);
-  return lead.status === "new" || latest?.author === "lead" || latest?.direction === "inbound";
+function formatThreadQueueLabel(thread: AttendanceThread) {
+  return thread.conversation?.agentName
+    ?? thread.conversation?.whatsappInstanceName
+    ?? thread.conversation?.whatsappInstancePhone
+    ?? thread.lead.conversation.agentName
+    ?? thread.lead.conversation.whatsappInstanceName
+    ?? thread.lead.conversation.whatsappInstancePhone
+    ?? "Sem agente";
 }
 
-function getLeadHumanIntervention(
-  lead: ClientLeadRecord,
+function hasUnreadThreadSignal(thread: AttendanceThread) {
+  const latest = thread.latestMessage;
+  return thread.lead.status === "new" || latest?.author === "lead" || latest?.direction === "inbound";
+}
+
+function getThreadHumanIntervention(
+  thread: AttendanceThread,
   overrides: Record<string, ClientLeadHumanIntervention>,
 ) {
-  const conversationId = lead.conversation.id;
-  const override = conversationId ? overrides[conversationId] : null;
+  const serverHumanIntervention = thread.conversation?.humanIntervention ?? thread.lead.conversation.humanIntervention;
+  const override = thread.conversationId ? overrides[thread.conversationId] : null;
 
   if (!override) {
-    return lead.conversation.humanIntervention;
+    return serverHumanIntervention;
   }
 
-  const serverUpdatedAt = toTimestamp(lead.conversation.humanIntervention.updatedAt);
+  const serverUpdatedAt = toTimestamp(serverHumanIntervention.updatedAt);
   const overrideUpdatedAt = toTimestamp(override.updatedAt);
 
-  return serverUpdatedAt > overrideUpdatedAt ? lead.conversation.humanIntervention : override;
+  return serverUpdatedAt > overrideUpdatedAt ? serverHumanIntervention : override;
 }
 
 function emptyClientHumanIntervention(): ClientLeadHumanIntervention {
