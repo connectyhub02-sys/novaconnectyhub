@@ -673,6 +673,16 @@ function ConnectyShellRoot({
     "--input":         "rgba(17,17,17,0.14)",
     "--ring":          `rgba(${accentRgb},0.36)`,
   } as CSSProperties;
+  const accountDropdownStyle = {
+    ...shellTheme,
+    background: "linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(244,249,253,0.98) 100%)",
+    border: "1px solid var(--ch-border-strong)",
+    boxShadow: "0 28px 90px rgba(15,23,42,0.16)",
+    color: "var(--ch-text)",
+    maxWidth: "340px",
+    minWidth: "280px",
+    width: "calc(100vw - 40px)",
+  } as CSSProperties;
 
   return (
     <ConnectyShellNotificationsContext.Provider value={shellNotificationContext}>
@@ -760,15 +770,7 @@ function ConnectyShellRoot({
               align="end"
               sideOffset={14}
               className="z-[9999] rounded-2xl p-2 shadow-2xl"
-              style={{
-                background: "linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(244,249,253,0.98) 100%)",
-                border: "1px solid var(--ch-border-strong)",
-                boxShadow: "0 28px 90px rgba(15,23,42,0.16)",
-                color: "var(--ch-text)",
-                maxWidth: "340px",
-                minWidth: "280px",
-                width: "calc(100vw - 40px)",
-              }}
+              style={accountDropdownStyle}
             >
               <DropdownMenuLabel
                 className="rounded-xl px-3 py-3 text-xs"
@@ -1035,15 +1037,7 @@ function ConnectyShellRoot({
                 align="end"
                 sideOffset={14}
                 className="z-[9999] rounded-2xl p-2 shadow-2xl"
-                style={{
-                  background: "linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(244,249,253,0.98) 100%)",
-                  border: "1px solid var(--ch-border-strong)",
-                  boxShadow: "0 28px 90px rgba(15,23,42,0.16)",
-                  color: "var(--ch-text)",
-                  maxWidth: "340px",
-                  minWidth: "280px",
-                  width: "calc(100vw - 40px)",
-                }}
+                style={accountDropdownStyle}
               >
                 <DropdownMenuLabel
                   className="rounded-xl px-3 py-3 text-xs"
