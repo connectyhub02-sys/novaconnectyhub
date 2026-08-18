@@ -3201,10 +3201,11 @@ function WhatsappConsoleTabs({
               role="tab"
               aria-selected={active}
               aria-current={active ? "page" : undefined}
+              data-connecty-contrast={active ? "dark" : undefined}
               className={cn(
                 "grid min-h-[52px] min-w-[132px] grid-cols-[18px_minmax(0,1fr)] items-center gap-1.5 rounded-lg px-2 text-left transition sm:min-h-[58px] sm:min-w-0 sm:gap-2 sm:px-3",
                 active
-                  ? "text-slate-950 shadow-[0_0_24px_rgba(var(--ch-accent-rgb),0.18)] ring-1 ring-white/20"
+                  ? "connecty-dark-action text-slate-100 shadow-[0_0_24px_rgba(var(--ch-accent-rgb),0.18)] ring-1 ring-white/20"
                   : comingSoon
                     ? "text-slate-300 hover:bg-cyan-300/10 hover:text-cyan-100"
                     : "text-slate-200 hover:bg-white/10 hover:text-white",
@@ -3212,17 +3213,17 @@ function WhatsappConsoleTabs({
               style={active ? { background: "linear-gradient(135deg, var(--ch-accent), var(--ch-accent-2))" } : comingSoon ? { border: "1px solid rgba(34,211,238,0.26)" } : undefined}
               onClick={() => onChange(tab.id)}
             >
-              <Icon className={cn("h-4 w-4", active ? "text-slate-950" : comingSoon ? "text-cyan-200" : "text-slate-200")} />
+              <Icon className={cn("h-4 w-4", active ? "text-slate-100" : comingSoon ? "text-cyan-200" : "text-slate-200")} />
               <span className="min-w-0">
                 <span className="flex min-w-0 items-center gap-1.5">
-                  <span className={cn("block truncate text-[12px] font-semibold leading-4", active ? "text-slate-950" : "text-slate-100")}>{tab.label}</span>
+                  <span className="block truncate text-[12px] font-semibold leading-4 text-slate-100">{tab.label}</span>
                   {comingSoon ? (
                     <span className="shrink-0 rounded-md bg-amber-300/15 px-1.5 py-0.5 font-mono text-[8px] font-bold uppercase leading-none text-amber-200">
                       Em breve
                     </span>
                   ) : null}
                 </span>
-                <span className={cn("mt-0.5 hidden truncate font-mono text-[8px] uppercase tracking-widest sm:block", active ? "text-slate-800" : "text-slate-300")}>{tab.description}</span>
+                <span className="mt-0.5 hidden truncate font-mono text-[8px] uppercase tracking-widest text-slate-300 sm:block">{tab.description}</span>
               </span>
             </button>
           );
@@ -4084,6 +4085,7 @@ function InfoHint({ text }: { text: string }) {
       <CircleHelp className="h-3.5 w-3.5 text-current opacity-70 transition group-hover/help:opacity-100" />
       <span
         className="pointer-events-none absolute right-0 top-5 z-50 hidden w-64 max-w-[calc(100vw-3rem)] rounded-lg border px-3 py-2 text-left font-sans text-[11px] normal-case leading-5 tracking-normal text-slate-200 shadow-2xl group-hover/help:block"
+        data-connecty-contrast="dark"
         style={{ background: "var(--ch-dropdown-bg)", borderColor: "var(--ch-border-strong)" }}
       >
         {text}
@@ -4863,19 +4865,20 @@ function ModeSelector<T extends string>({
             type="button"
             aria-pressed={active}
             onClick={() => onChange(option.value)}
+            data-connecty-contrast={active ? "dark" : undefined}
             className={cn(
               "min-h-14 rounded-lg border px-3 py-2 text-left transition sm:min-h-16",
               active
-                ? "border-white/25 text-slate-950 shadow-[0_0_22px_rgba(var(--ch-accent-rgb),0.18)] ring-1 ring-white/20"
+                ? "connecty-dark-action border-white/25 text-slate-100 shadow-[0_0_22px_rgba(var(--ch-accent-rgb),0.18)] ring-1 ring-white/20"
                 : "border-slate-700/70 bg-slate-950/20 text-slate-100 hover:border-cyan-300/35 hover:bg-white/10 hover:text-white",
             )}
             style={active ? { background: "linear-gradient(135deg, var(--ch-accent), var(--ch-accent-2))" } : undefined}
           >
-            <span className={cn("flex items-center gap-1.5 text-[12px] font-semibold", active ? "text-slate-950" : "text-slate-100")}>
+            <span className="flex items-center gap-1.5 text-[12px] font-semibold text-slate-100">
               {option.label}
               {option.help ? <InfoHint text={option.help} /> : null}
             </span>
-            <span className={cn("mt-1 block text-[11px]", active ? "text-slate-800" : "text-slate-300")}>{option.description}</span>
+            <span className="mt-1 block text-[11px] text-slate-300">{option.description}</span>
           </button>
         );
       })}
@@ -5245,7 +5248,7 @@ function VoiceSelector({
                         {voice.status === "verification_required" ? "pendente" : "pronta"}
                       </span>
                     ) : null}
-                    <span className={cn("rounded-md px-2 py-1 font-mono text-[8px] uppercase tracking-widest", active ? "bg-cyan-300/15 text-cyan-200" : "bg-slate-800/80 text-slate-400")}>
+                    <span className={cn("rounded-md border px-2 py-1 font-mono text-[8px] uppercase tracking-widest", active ? "border-cyan-300/20 bg-cyan-300/15 text-cyan-200" : "connecty-dark-chip")}>
                       {formatVoiceSource(voice)}
                     </span>
                     {(voice.source === "customer" || (voice.category === "cloned" && !voice.isDefault)) ? (
@@ -5261,7 +5264,7 @@ function VoiceSelector({
                           </button>
                           <button
                             type="button"
-                            className="rounded-md bg-slate-800/80 px-2 py-1 font-mono text-[8px] uppercase tracking-widest text-slate-400 hover:bg-slate-700/80"
+                            className="connecty-dark-chip rounded-md border px-2 py-1 font-mono text-[8px] uppercase tracking-widest hover:brightness-110"
                             onClick={(event) => { event.stopPropagation(); setConfirmDeleteId(null); }}
                           >
                             nao
@@ -5331,7 +5334,7 @@ function VoiceProviderButton({
     >
       <span className="flex items-center justify-between gap-2">
         <span className="text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>{label}</span>
-        <span className={cn("rounded-md px-2 py-1 font-mono text-[8px] uppercase tracking-widest", active ? "bg-cyan-300/15 text-cyan-200" : "bg-slate-800/80 text-slate-400")}>
+        <span className={cn("rounded-md border px-2 py-1 font-mono text-[8px] uppercase tracking-widest", active ? "border-cyan-300/20 bg-cyan-300/15 text-cyan-200" : "connecty-dark-chip")}>
           {active ? "ativo" : "selecionar"}
         </span>
       </span>
@@ -7878,7 +7881,8 @@ function ActionButton({
       type="button"
       disabled={disabled || loading}
       onClick={onClick}
-      className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg px-4 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-950 shadow-[0_12px_30px_rgba(var(--ch-accent-rgb),0.16)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+      data-connecty-contrast="dark"
+      className="connecty-dark-action inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg px-4 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-100 shadow-[0_12px_30px_rgba(var(--ch-accent-rgb),0.16)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto"
       style={{ background: "linear-gradient(135deg, var(--ch-accent), var(--ch-accent-2))" }}
     >
       {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Icon className="h-4 w-4" />}

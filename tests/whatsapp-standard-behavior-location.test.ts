@@ -9,6 +9,7 @@ import {
 const runtimeSource = readFileSync("src/lib/whatsapp/agent-runtime.ts", "utf8");
 const behaviorSource = readFileSync("src/lib/whatsapp/agent-behavior.ts", "utf8");
 const consoleSource = readFileSync("src/components/connectyhub-os/whatsapp-console.tsx", "utf8");
+const globalsSource = readFileSync("src/app/globals.css", "utf8");
 const migrationSource = readFileSync("supabase/migrations/0061_organization_locations.sql", "utf8");
 
 function sourceBetween(source: string, start: string, end: string) {
@@ -189,6 +190,17 @@ describe("WhatsApp standard behavior and company location", () => {
 
     expect(securitySection).not.toContain("Janela da IA ativa");
     expect(aiWindowSection).toContain("Janela da IA ativa");
+  });
+
+  it("keeps selected dashboard controls readable on dark accent backgrounds", () => {
+    expect(globalsSource).toContain('[data-connecty-mode] [data-connecty-contrast="dark"].text-slate-950');
+    expect(globalsSource).toContain("[data-connecty-mode] .connecty-dark-chip");
+    expect(globalsSource).toContain("[data-connecty-mode] .connecty-dark-action");
+    expect(consoleSource).toContain('data-connecty-contrast={active ? "dark" : undefined}');
+    expect(consoleSource).toContain('data-connecty-contrast="dark"');
+    expect(consoleSource).toContain("connecty-dark-action");
+    expect(consoleSource).toContain("connecty-dark-chip");
+    expect(consoleSource).toContain("disabled:opacity-70");
   });
 
   it("loads company locations into the agent and sends Maps as a button instead of a loose link or native pin", () => {

@@ -3905,6 +3905,24 @@ html {
   color: #e5e7eb;
 }
 
+[data-connecty-mode] [data-connecty-contrast="dark"].text-slate-950,
+[data-connecty-mode] [data-connecty-contrast="dark"].text-slate-900,
+[data-connecty-mode] [data-connecty-contrast="dark"].text-slate-800,
+[data-connecty-mode] [data-connecty-contrast="dark"].text-slate-700,
+[data-connecty-mode] [data-connecty-contrast="dark"].text-slate-600,
+[data-connecty-mode] [data-connecty-contrast="dark"] .text-slate-950,
+[data-connecty-mode] [data-connecty-contrast="dark"] .text-slate-900,
+[data-connecty-mode] [data-connecty-contrast="dark"] .text-slate-800,
+[data-connecty-mode] [data-connecty-contrast="dark"] .text-slate-700,
+[data-connecty-mode] [data-connecty-contrast="dark"] .text-slate-600 {
+  color: #f8fafc !important;
+}
+
+[data-connecty-mode] [data-connecty-contrast="dark"].text-white,
+[data-connecty-mode] [data-connecty-contrast="dark"].text-white\/70,
+[data-connecty-mode] [data-connecty-contrast="dark"].text-slate-50,
+[data-connecty-mode] [data-connecty-contrast="dark"].text-slate-100,
+[data-connecty-mode] [data-connecty-contrast="dark"].text-slate-200,
 [data-connecty-mode] [data-connecty-contrast="dark"] .text-white,
 [data-connecty-mode] [data-connecty-contrast="dark"] .text-white\/70,
 [data-connecty-mode] [data-connecty-contrast="dark"] .text-slate-50,
@@ -3964,6 +3982,28 @@ html {
 [data-connecty-mode] [data-connecty-contrast="dark"] .bg-white\/5,
 [data-connecty-mode] [data-connecty-contrast="dark"] .bg-white\/10 {
   background-color: rgba(255, 255, 255, 0.05) !important;
+}
+
+[data-connecty-mode] .connecty-dark-chip {
+  background-color: rgba(15, 23, 42, 0.88) !important;
+  border-color: rgba(15, 23, 42, 0.14) !important;
+  color: #f8fafc !important;
+}
+
+[data-connecty-mode] .connecty-dark-action,
+[data-connecty-mode] .connecty-dark-action * {
+  color: #f8fafc !important;
+}
+
+[data-connecty-mode] .connecty-dark-action svg {
+  color: #f8fafc !important;
+  stroke: currentColor;
+}
+
+[data-connecty-mode] .connecty-dark-action [class*="text-slate-300"],
+[data-connecty-mode] .connecty-dark-action [class*="text-slate-400"],
+[data-connecty-mode] .connecty-dark-action [class*="text-slate-500"] {
+  color: #e2e8f0 !important;
 }
 
 .connecty-lead-file-modal {
