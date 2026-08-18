@@ -77,7 +77,14 @@ export function InfinityLoadingPanel({
   className,
 }: InfinityLoaderProps) {
   return (
-    <section className={cn("grid min-h-[360px] place-items-center rounded-xl border border-white/10 bg-[#0a111d]/95 px-4 py-12", className)}>
+    <section
+      className={cn("grid min-h-[360px] place-items-center rounded-xl border px-4 py-12", className)}
+      style={{
+        background: "var(--ch-panel, rgba(10,17,29,0.95))",
+        borderColor: "var(--ch-border-strong, rgba(255,255,255,0.10))",
+        color: "var(--ch-text, #f8fafc)",
+      }}
+    >
       <InfinityLoader
         eyebrow={eyebrow}
         label={label}
