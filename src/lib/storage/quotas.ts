@@ -256,6 +256,48 @@ export async function recordOrganizationStorageUsage(input: {
   return data;
 }
 
+export async function releaseOrganizationStorageUsage(input: {
+  client?: SupabaseClient;
+  organizationId: string;
+  category: StorageUploadCategory;
+  bytes: number;
+  fileCount?: number;
+  metadata?: Record<string, unknown>;
+}) {
+  const bytes = Math.max(0, Math.trunc(input.bytes));
+  const fileCount = Math.max(0, Math.trunc(input.fileCount ?? 1));
+
+  if (bytes <= 0 && fileCount <= 0) {
+    return null;
+  }
+
+  const client = input.client ?? createServiceClient();
+  const { data, error } = await client.rpc("release_organization_storage_usage", {
+    p_organization_id: input.organizationId,
+    p_bytes: bytes,
+    p_file_count: fileCount,
+    p_category: input.category,
+    p_metadata: input.metadata ?? {},
+  });
+
+  if (!error) {
+    return data;
+  }
+
+  if (!isMissingStorageReleaseFunction(error)) {
+    throw new Error(`Nao foi possivel liberar uso de armazenamento: ${error.message}`);
+  }
+
+  return releaseOrganizationStorageUsageDirect({
+    bytes,
+    category: input.category,
+    client,
+    fileCount,
+    metadata: input.metadata,
+    organizationId: input.organizationId,
+  });
+}
+
 export function formatStorageBytes(value: number) {
   const bytes = Math.max(0, Number.isFinite(value) ? value : 0);
   const units = ["B", "KB", "MB", "GB", "TB"];
@@ -339,6 +381,83 @@ function uploadKindLabel(file: StorageUploadFile) {
 function toNumber(value: number | string | null | undefined) {
   const parsed = typeof value === "number" ? value : Number(value ?? 0);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+async function releaseOrganizationStorageUsageDirect(input: {
+  client: SupabaseClient;
+  organizationId: string;
+  category: StorageUploadCategory;
+  bytes: number;
+  fileCount: number;
+  metadata?: Record<string, unknown>;
+}) {
+  const { data: current, error: loadError } = await input.client
+    .from("organization_storage_usage")
+    .select(
+      [
+        "used_bytes",
+        "billable_file_count",
+        "product_media_bytes",
+        "knowledge_bytes",
+        "import_source_bytes",
+        "generated_media_bytes",
+        "lead_file_bytes",
+        "other_bytes",
+        "metadata",
+      ].join(", "),
+    )
+    .eq("organization_id", input.organizationId)
+    .maybeSingle<StorageUsageRow & { metadata: Record<string, unknown> | null }>();
+
+  if (loadError) {
+    throw new Error(`Nao foi possivel carregar uso de armazenamento: ${loadError.message}`);
+  }
+
+  const metadata = {
+    ...(current?.metadata ?? {}),
+    last_released_category: input.category,
+    ...(input.metadata ?? {}),
+  };
+  const payload = {
+    organization_id: input.organizationId,
+    used_bytes: Math.max(0, toNumber(current?.used_bytes) - input.bytes),
+    billable_file_count: Math.max(0, toNumber(current?.billable_file_count) - input.fileCount),
+    product_media_bytes: input.category === "product_media"
+      ? Math.max(0, toNumber(current?.product_media_bytes) - input.bytes)
+      : toNumber(current?.product_media_bytes),
+    knowledge_bytes: input.category === "knowledge"
+      ? Math.max(0, toNumber(current?.knowledge_bytes) - input.bytes)
+      : toNumber(current?.knowledge_bytes),
+    import_source_bytes: input.category === "import_source"
+      ? Math.max(0, toNumber(current?.import_source_bytes) - input.bytes)
+      : toNumber(current?.import_source_bytes),
+    generated_media_bytes: input.category === "generated_media"
+      ? Math.max(0, toNumber(current?.generated_media_bytes) - input.bytes)
+      : toNumber(current?.generated_media_bytes),
+    lead_file_bytes: input.category === "lead_file"
+      ? Math.max(0, toNumber(current?.lead_file_bytes) - input.bytes)
+      : toNumber(current?.lead_file_bytes),
+    other_bytes: input.category === "other"
+      ? Math.max(0, toNumber(current?.other_bytes) - input.bytes)
+      : toNumber(current?.other_bytes),
+    metadata,
+    updated_at: new Date().toISOString(),
+  };
+  const { data, error } = await input.client
+    .from("organization_storage_usage")
+    .upsert(payload, { onConflict: "organization_id" })
+    .select()
+    .single();
+
+  if (error) {
+    throw new Error(`Nao foi possivel liberar uso de armazenamento: ${error.message}`);
+  }
+
+  return data;
+}
+
+function isMissingStorageReleaseFunction(error: { code?: string; message?: string }) {
+  return error.code === "42883" || /release_organization_storage_usage/i.test(error.message ?? "");
 }
 
 function formatInteger(value: number) {

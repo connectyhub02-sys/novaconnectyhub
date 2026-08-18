@@ -2229,6 +2229,7 @@ function readSalesCatalogMediaList(value: unknown): SalesCatalogMedia[] {
       const fileName = normalizeOptionalText(readString(record.fileName) ?? readString(record.file_name), 180);
       const contentType = normalizeOptionalText(readString(record.contentType) ?? readString(record.content_type), 120);
       const storageUrl = normalizeDraftUrl(readString(record.storageUrl) ?? readString(record.storage_url));
+      const objectKey = normalizeOptionalText(readString(record.objectKey) ?? readString(record.object_key), 500);
       const size = normalizeNumber(record.size);
       const createdAt = normalizeOptionalText(readString(record.createdAt) ?? readString(record.created_at), 40);
 
@@ -2240,6 +2241,7 @@ function readSalesCatalogMediaList(value: unknown): SalesCatalogMedia[] {
         contentType,
         size: size ?? 0,
         storageUrl,
+        objectKey,
         kind: resolveSalesCatalogMediaKind(contentType, fileName),
         createdAt,
       };
@@ -2827,6 +2829,7 @@ async function importExternalImageToR2(input: {
     contentType,
     size: upload.bytesSize,
     storageUrl: upload.publicUrl,
+    objectKey: upload.objectKey,
     kind: resolveSalesCatalogMediaKind(contentType, fileName),
     createdAt: input.now,
   };
@@ -3482,6 +3485,7 @@ function serializeSalesCatalogMedia(media: SalesCatalogMedia[]) {
     content_type: item.contentType,
     size: item.size,
     storage_url: item.storageUrl,
+    object_key: item.objectKey ?? null,
     kind: item.kind,
     created_at: item.createdAt,
   }));

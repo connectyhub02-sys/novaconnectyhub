@@ -675,6 +675,7 @@ function serializeMedia(media: SalesCatalogMedia[]) {
     content_type: item.contentType,
     size: item.size,
     storage_url: item.storageUrl,
+    object_key: item.objectKey ?? null,
     kind: item.kind,
     created_at: item.createdAt,
   }));

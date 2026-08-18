@@ -74,6 +74,11 @@ import {
 import { createSalesCatalogPixPaymentSession } from "@/lib/sales-catalog/payment-sessions";
 import { calculateSalesCatalogShippingQuotes, normalizeSalesCatalogCep } from "@/lib/sales-catalog/shipping-calculator";
 import { exportWhatsappCatalogProducts, importWhatsappCatalog, setWhatsappCatalogVisibility } from "@/lib/sales-catalog/whatsapp-sync";
+import {
+  cleanupSalesCatalogMediaStorage,
+  filterCleanedSalesCatalogMedia,
+  type SalesCatalogMediaCleanupResult,
+} from "@/lib/sales-catalog/media-storage-cleanup";
 import { loadR2Config, putR2Object } from "@/lib/storage/r2";
 import {
   assertStorageUploadAllowed,
@@ -262,9 +267,13 @@ export async function POST(request: NextRequest) {
     }
 
     const existingMetadata = readRecord(existingRow?.metadata) ?? {};
-    let media: SalesCatalogMedia[] = readSalesCatalogMediaMetadata(existingMetadata.media);
+    const previousMedia = readSalesCatalogMediaMetadata(existingMetadata.media);
+    let media: SalesCatalogMedia[] = previousMedia;
+    let removedMedia: SalesCatalogMedia[] = [];
+    let removedMediaCleanup: SalesCatalogMediaCleanupResult | null = null;
     if (existingRow && keepMediaIds) {
-      media = media.filter((item) => keepMediaIds.has(item.id));
+      media = previousMedia.filter((item) => keepMediaIds.has(item.id));
+      removedMedia = previousMedia.filter((item) => !keepMediaIds.has(item.id));
     }
     const existingMediaBytes = media.reduce((total, item) => total + item.size, 0);
     const uploadedBytes = files.reduce((total, file) => total + file.size, 0);
@@ -328,6 +337,7 @@ export async function POST(request: NextRequest) {
           contentType,
           size: file.size,
           storageUrl: upload.publicUrl,
+          objectKey: upload.objectKey,
           kind: resolveSalesCatalogMediaKind(contentType, fileName),
           createdAt: now,
         });
@@ -430,12 +440,76 @@ export async function POST(request: NextRequest) {
     const query = existingRow
       ? client.from("intelligence_memory").update(payload).eq("id", existingRow.id)
       : client.from("intelligence_memory").insert({ id: itemId, ...payload, created_at: now });
-    const { data, error } = await query
+    const saveResult = await query
       .select("id, organization_id, title, content, metadata, created_at, updated_at")
       .single<SalesCatalogMemoryRow>();
+    let data = saveResult.data;
+    const error = saveResult.error;
 
     if (error || !data) {
       return NextResponse.json({ error: error?.message ?? "Nao foi possivel salvar o produto." }, { status: 500 });
+    }
+
+    if (removedMedia.length > 0) {
+      removedMediaCleanup = await cleanupSalesCatalogMediaStorage({
+        client,
+        organizationId: company.id,
+        productId: data.id,
+        userId: workspace.user.id,
+        media: removedMedia,
+        reason: "product_media_removed",
+      });
+
+      const uncleanedMedia = filterCleanedSalesCatalogMedia(removedMedia, removedMediaCleanup);
+      if (uncleanedMedia.length > 0) {
+        media = [...media, ...uncleanedMedia];
+
+        const restoredMetadata = {
+          ...(readRecord(data.metadata) ?? metadata),
+          media: serializeSalesCatalogMedia(media),
+          media_cleanup: {
+            deleted_count: removedMediaCleanup.deletedCount,
+            failed_count: removedMediaCleanup.failed.length,
+            released_bytes: removedMediaCleanup.releasedBytes,
+            released_file_count: removedMediaCleanup.releasedFileCount,
+            skipped_count: removedMediaCleanup.skipped.length,
+            updated_at: new Date().toISOString(),
+          },
+        };
+        const restoredContent = buildSalesCatalogContent({
+          title,
+          description,
+          category,
+          price,
+          currency,
+          media,
+          attributes,
+          inventory,
+          offer,
+          fulfillment,
+          shipping,
+          salesDestination,
+          productUrl,
+          externalLinkButtonTag: trackedLink?.tag ?? null,
+        });
+        const { data: restoredData } = await client
+          .from("intelligence_memory")
+          .update({
+            content: restoredContent,
+            metadata: restoredMetadata,
+            updated_at: now,
+          })
+          .eq("id", data.id)
+          .eq("scope", "organization")
+          .eq("organization_id", company.id)
+          .eq("memory_type", "sales_catalog_item")
+          .select("id, organization_id, title, content, metadata, created_at, updated_at")
+          .single<SalesCatalogMemoryRow>();
+
+        if (restoredData) {
+          data = restoredData;
+        }
+      }
     }
 
     await client.from("intelligence_events").insert({
@@ -465,6 +539,8 @@ export async function POST(request: NextRequest) {
         link_button_id: trackedLink?.id ?? null,
         link_button_tag: trackedLink?.tag ?? null,
         actor_id: workspace.user.id,
+        removed_media_count: removedMedia.length,
+        media_cleanup: removedMediaCleanup,
       },
     });
 
@@ -511,6 +587,21 @@ async function handleJsonPost(request: NextRequest, workspace: CurrentWorkspace)
       client,
     });
     await assertSalesCatalogJsonActionAccess({ action, organizationId: company.id, client });
+
+    if (action === "cleanup_archived_product_media") {
+      const result = await cleanupArchivedSalesCatalogProductMedia({
+        client,
+        companyId: company.id,
+        userId: workspace.user.id,
+        body,
+      });
+
+      revalidatePath("/dashboard");
+      revalidatePath("/dashboard/links");
+      revalidatePath("/dashboard/whatsapp");
+
+      return NextResponse.json(result);
+    }
 
     if (action === "import_whatsapp_catalog") {
       const result = await importWhatsappCatalog({
@@ -707,6 +798,10 @@ async function assertSalesCatalogJsonActionAccess(input: {
   organizationId: string;
   client: ReturnType<typeof createServiceClient>;
 }) {
+  if (input.action === "cleanup_archived_product_media") {
+    return null;
+  }
+
   if (input.action !== "create_cart_checkout") {
     return assertBillableAccess({ organizationId: input.organizationId, client: input.client });
   }
@@ -731,6 +826,120 @@ async function assertSalesCatalogManualAccess(input: {
   }
 
   throw new BillingAccessError(status);
+}
+
+async function cleanupArchivedSalesCatalogProductMedia(input: {
+  client: ReturnType<typeof createServiceClient>;
+  companyId: string;
+  userId: string;
+  body: JsonRecord | null;
+}) {
+  const limit = normalizeNullableInteger(input.body?.limit, 1, 500) ?? 100;
+  const { data: rows, error } = await input.client
+    .from("intelligence_memory")
+    .select("id, title, metadata")
+    .eq("scope", "organization")
+    .eq("organization_id", input.companyId)
+    .eq("memory_type", "sales_catalog_item")
+    .filter("metadata->>status", "eq", "archived")
+    .limit(limit)
+    .returns<Array<{ id: string; title: string; metadata: JsonRecord | null }>>();
+
+  if (error) {
+    throw new Error(`Nao foi possivel carregar produtos arquivados: ${error.message}`);
+  }
+
+  const summaries: Array<{
+    productId: string;
+    title: string;
+    cleanup: SalesCatalogMediaCleanupResult;
+  }> = [];
+  let productCount = 0;
+  let deletedCount = 0;
+  let releasedBytes = 0;
+  let releasedFileCount = 0;
+
+  for (const row of rows ?? []) {
+    const metadata = readRecord(row.metadata) ?? {};
+    const media = readSalesCatalogMediaMetadata(metadata.media);
+
+    if (media.length === 0) {
+      continue;
+    }
+
+    productCount += 1;
+
+    const cleanup = await cleanupSalesCatalogMediaStorage({
+      client: input.client,
+      organizationId: input.companyId,
+      productId: row.id,
+      userId: input.userId,
+      media,
+      reason: "product_deleted",
+    });
+    const remainingMedia = filterCleanedSalesCatalogMedia(media, cleanup);
+
+    if (cleanup.deletedCount > 0) {
+      const nextMetadata = {
+        ...metadata,
+        media: serializeSalesCatalogMedia(remainingMedia),
+        media_cleanup: {
+          deleted_count: cleanup.deletedCount,
+          failed_count: cleanup.failed.length,
+          released_bytes: cleanup.releasedBytes,
+          released_file_count: cleanup.releasedFileCount,
+          skipped_count: cleanup.skipped.length,
+          updated_at: new Date().toISOString(),
+        },
+      };
+
+      await input.client
+        .from("intelligence_memory")
+        .update({
+          metadata: nextMetadata,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", row.id)
+        .eq("scope", "organization")
+        .eq("organization_id", input.companyId)
+        .eq("memory_type", "sales_catalog_item");
+    }
+
+    deletedCount += cleanup.deletedCount;
+    releasedBytes += cleanup.releasedBytes;
+    releasedFileCount += cleanup.releasedFileCount;
+    summaries.push({ productId: row.id, title: row.title, cleanup });
+  }
+
+  await input.client.from("intelligence_events").insert({
+    scope: "organization",
+    organization_id: input.companyId,
+    source_type: "sales_catalog",
+    source_id: input.companyId,
+    event_type: "sales_catalog.archived_media_cleanup",
+    title: "Limpeza de midias de produtos arquivados",
+    summary: `${deletedCount} arquivo(s) removido(s) do storage em ${productCount} produto(s) arquivado(s).`,
+    confidence: 1,
+    visibility: "organization",
+    tags: ["sales_catalog", "sales_catalog_item", "storage", "cleanup"],
+    payload: {
+      products_with_media: productCount,
+      deleted_media_count: deletedCount,
+      released_bytes: releasedBytes,
+      released_file_count: releasedFileCount,
+      requested_by: input.userId,
+      limit,
+    },
+  });
+
+  return {
+    scanned: rows?.length ?? 0,
+    productsWithMedia: productCount,
+    deletedMediaCount: deletedCount,
+    releasedBytes,
+    releasedFileCount,
+    summaries,
+  };
 }
 
 async function saveCatalogSettings(input: {
@@ -2480,6 +2689,7 @@ export async function DELETE(request: NextRequest) {
 
     const now = new Date().toISOString();
     const metadata = readRecord(existingItem.metadata) ?? {};
+    const media = readSalesCatalogMediaMetadata(metadata.media);
     const linkedButtonId = readFormString(metadata.link_button_id) ?? readFormString(metadata.external_link_button_id);
     const archivedMetadata: JsonRecord = {
       ...metadata,
@@ -2499,7 +2709,7 @@ export async function DELETE(request: NextRequest) {
       status: "archived",
     };
 
-    const { data, error } = await client
+    const archiveResult = await client
       .from("intelligence_memory")
       .update({
         metadata: archivedMetadata,
@@ -2511,6 +2721,8 @@ export async function DELETE(request: NextRequest) {
       .eq("memory_type", "sales_catalog_item")
       .select("id, title, metadata")
       .maybeSingle<{ id: string; title: string; metadata: JsonRecord | null }>();
+    let data = archiveResult.data;
+    const error = archiveResult.error;
 
     if (error) {
       return NextResponse.json({ error: `Nao foi possivel excluir: ${error.message}` }, { status: 500 });
@@ -2528,6 +2740,47 @@ export async function DELETE(request: NextRequest) {
 
     if (skuArchiveError) {
       return NextResponse.json({ error: `Produto removido, mas nao foi possivel arquivar variacoes: ${skuArchiveError.message}` }, { status: 500 });
+    }
+
+    const mediaCleanup = await cleanupSalesCatalogMediaStorage({
+      client,
+      organizationId: company.id,
+      productId: data.id,
+      userId: workspace.user.id,
+      media,
+      reason: "product_deleted",
+    });
+    const remainingMedia = filterCleanedSalesCatalogMedia(media, mediaCleanup);
+
+    if (media.length > 0) {
+      const nextArchivedMetadata = {
+        ...archivedMetadata,
+        media: serializeSalesCatalogMedia(remainingMedia),
+        media_cleanup: {
+          deleted_count: mediaCleanup.deletedCount,
+          failed_count: mediaCleanup.failed.length,
+          released_bytes: mediaCleanup.releasedBytes,
+          released_file_count: mediaCleanup.releasedFileCount,
+          skipped_count: mediaCleanup.skipped.length,
+          updated_at: new Date().toISOString(),
+        },
+      };
+      const { data: refreshedData, error: mediaMetadataError } = await client
+        .from("intelligence_memory")
+        .update({
+          metadata: nextArchivedMetadata,
+          updated_at: now,
+        })
+        .eq("id", data.id)
+        .eq("scope", "organization")
+        .eq("organization_id", company.id)
+        .eq("memory_type", "sales_catalog_item")
+        .select("id, title, metadata")
+        .maybeSingle<{ id: string; title: string; metadata: JsonRecord | null }>();
+
+      if (!mediaMetadataError && refreshedData) {
+        data = refreshedData;
+      }
     }
 
     const deletedLinkButtonIds = await deleteProductTrackedLinkButtonsForCatalogItem({
@@ -2557,6 +2810,7 @@ export async function DELETE(request: NextRequest) {
         deleted_by: workspace.user.id,
         linked_button_id: linkedButtonId,
         linked_button_ids: deletedLinkButtonIds,
+        media_cleanup: mediaCleanup,
       },
     });
 
@@ -2566,7 +2820,7 @@ export async function DELETE(request: NextRequest) {
     revalidatePath("/dashboard/whatsapp");
     revalidatePath("/dashboard/atendimento");
 
-    return NextResponse.json({ deletedItemId: data.id });
+    return NextResponse.json({ deletedItemId: data.id, mediaCleanup });
   } catch (error) {
     return NextResponse.json(formatRouteError(error, "Erro ao excluir produto."), { status: statusForRouteError(error, 500) });
   }
@@ -2618,6 +2872,7 @@ function readSalesCatalogMediaMetadata(value: unknown): SalesCatalogMedia[] {
       contentType,
       size,
       storageUrl,
+      objectKey: readFormString(record.object_key) ?? readFormString(record.objectKey),
       kind: resolveSalesCatalogMediaKind(contentType, fileName),
       createdAt: readFormString(record.created_at) ?? readFormString(record.createdAt),
     });
@@ -2633,6 +2888,7 @@ function serializeSalesCatalogMedia(media: SalesCatalogMedia[]) {
     content_type: item.contentType,
     size: item.size,
     storage_url: item.storageUrl,
+    object_key: item.objectKey ?? null,
     kind: item.kind,
     created_at: item.createdAt,
   }));

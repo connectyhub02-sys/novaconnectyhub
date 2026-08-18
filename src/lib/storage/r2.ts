@@ -165,8 +165,107 @@ export async function putR2Object(config: R2Config, objectKey: string, body: Uin
   };
 }
 
+export async function deleteR2Object(config: R2Config, objectKey: string) {
+  const normalizedObjectKey = objectKey.trim().replace(/^\/+/, "");
+
+  if (!normalizedObjectKey) {
+    return {
+      ok: false as const,
+      error: "Informe a chave do objeto para remover do storage.",
+      status: 400,
+    };
+  }
+
+  const endpointUrl = new URL(config.endpoint);
+  const method = "DELETE";
+  const region = "auto";
+  const service = "s3";
+  const now = new Date();
+  const amzDate = toAmzDate(now);
+  const dateStamp = amzDate.slice(0, 8);
+  const canonicalUri = `/${encodePathSegment(config.bucket)}/${encodeObjectKey(normalizedObjectKey)}`;
+  const payloadHash = sha256Hex("");
+  const host = endpointUrl.host;
+  const canonicalHeaders = [
+    `host:${host}`,
+    `x-amz-content-sha256:${payloadHash}`,
+    `x-amz-date:${amzDate}`,
+    "",
+  ].join("\n");
+  const signedHeaders = "host;x-amz-content-sha256;x-amz-date";
+  const canonicalRequest = [
+    method,
+    canonicalUri,
+    "",
+    canonicalHeaders,
+    signedHeaders,
+    payloadHash,
+  ].join("\n");
+  const credentialScope = `${dateStamp}/${region}/${service}/aws4_request`;
+  const stringToSign = [
+    "AWS4-HMAC-SHA256",
+    amzDate,
+    credentialScope,
+    sha256Hex(canonicalRequest),
+  ].join("\n");
+  const signature = hmacHex(getSignatureKey(config.secretAccessKey, dateStamp, region, service), stringToSign);
+  const authorization = [
+    `AWS4-HMAC-SHA256 Credential=${config.accessKeyId}/${credentialScope}`,
+    `SignedHeaders=${signedHeaders}`,
+    `Signature=${signature}`,
+  ].join(", ");
+  const response = await fetch(`${endpointUrl.origin}${canonicalUri}`, {
+    method,
+    headers: {
+      Authorization: authorization,
+      "x-amz-content-sha256": payloadHash,
+      "x-amz-date": amzDate,
+    },
+    cache: "no-store",
+  });
+
+  if (!response.ok && response.status !== 404) {
+    await response.text().catch(() => "");
+    return {
+      ok: false as const,
+      error: `Falha ao remover arquivo do storage (status ${response.status}).`,
+      status: response.status,
+    };
+  }
+
+  return {
+    ok: true as const,
+    objectKey: normalizedObjectKey,
+    alreadyMissing: response.status === 404,
+    status: response.status,
+  };
+}
+
 export function buildPublicObjectUrl(publicUrl: string, objectKey: string) {
   return `${publicUrl.replace(/\/$/, "")}/${encodeObjectKey(objectKey)}`;
+}
+
+export function resolveR2ObjectKeyFromPublicUrl(publicUrl: string, storageUrl: string) {
+  try {
+    const publicBase = new URL(publicUrl);
+    const stored = new URL(storageUrl);
+
+    if (publicBase.origin !== stored.origin) {
+      return null;
+    }
+
+    const path = stored.pathname.replace(/^\/+/, "");
+    if (!path) {
+      return null;
+    }
+
+    return path
+      .split("/")
+      .map((segment) => decodeURIComponent(segment))
+      .join("/");
+  } catch {
+    return null;
+  }
 }
 
 function normalizeBaseUrl(value: string) {

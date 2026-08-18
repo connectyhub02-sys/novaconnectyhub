@@ -124,6 +124,7 @@ export type SalesCatalogMedia = {
   contentType: string;
   size: number;
   storageUrl: string;
+  objectKey?: string | null;
   kind: SalesCatalogMediaKind;
   createdAt: string | null;
 };

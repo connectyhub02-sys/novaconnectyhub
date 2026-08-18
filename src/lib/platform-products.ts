@@ -978,6 +978,7 @@ function readMediaList(value: unknown): SalesCatalogMedia[] {
         contentType,
         size: size ?? 0,
         storageUrl,
+        objectKey: readString(record?.object_key ?? record?.objectKey),
         kind: kind === "video" || kind === "document" ? kind : "image",
         createdAt: readString(record?.created_at ?? record?.createdAt),
       };
@@ -1099,6 +1100,7 @@ function serializeSalesCatalogMedia(media: SalesCatalogMedia[]) {
     content_type: item.contentType,
     size: item.size,
     storage_url: item.storageUrl,
+    object_key: item.objectKey ?? null,
     kind: item.kind,
     created_at: item.createdAt,
   }));

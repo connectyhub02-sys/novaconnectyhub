@@ -1216,6 +1216,7 @@ function readMediaList(value: unknown): SalesCatalogMedia[] {
         contentType,
         size,
         storageUrl,
+        objectKey: readString(record.object_key ?? record.objectKey),
         kind: normalizeKind(readString(record.kind), contentType, fileName),
         createdAt: readString(record.created_at),
       };

@@ -286,6 +286,7 @@ async function savePlatformProduct(request: NextRequest, mode: "create" | "updat
           contentType,
           size: file.size,
           storageUrl: upload.publicUrl,
+          objectKey: upload.objectKey,
           kind: resolveSalesCatalogMediaKind(contentType, fileName),
           createdAt: now,
         });
@@ -594,6 +595,7 @@ function serializeSalesCatalogMedia(media: SalesCatalogMedia[]) {
     content_type: item.contentType,
     size: item.size,
     storage_url: item.storageUrl,
+    object_key: item.objectKey ?? null,
     kind: item.kind,
     created_at: item.createdAt,
   }));
