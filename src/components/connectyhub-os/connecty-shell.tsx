@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
+import { createContext, useCallback, useContext, useEffect, useId, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import Image from "next/image";
 import Link from "next/link";
@@ -237,16 +237,7 @@ const clientSections: NavSection[] = [
 
 // ─── Shell ────────────────────────────────────────────────────────────────────
 
-export function ConnectyShell({
-  mode,
-  children,
-  isPlatformAdmin = false,
-  workspaceName,
-  userLabel,
-  activeHref,
-  userAvatarUrl,
-  initialNotifications = [],
-}: {
+type ConnectyShellProps = {
   mode: "admin" | "client";
   children: ReactNode;
   isPlatformAdmin?: boolean;
@@ -255,7 +246,62 @@ export function ConnectyShell({
   activeHref?: string;
   userAvatarUrl?: string | null;
   initialNotifications?: ConnectyShellNotification[];
+};
+
+export function ConnectyShell(props: ConnectyShellProps) {
+  const parentShell = useContext(ConnectyShellNotificationsContext);
+
+  if (parentShell) {
+    return (
+      <NestedConnectyShell
+        initialNotifications={props.initialNotifications}
+        parentShell={parentShell}
+      >
+        {props.children}
+      </NestedConnectyShell>
+    );
+  }
+
+  return <ConnectyShellRoot {...props} />;
+}
+
+function NestedConnectyShell({
+  children,
+  initialNotifications = [],
+  parentShell,
+}: {
+  children: ReactNode;
+  initialNotifications?: ConnectyShellNotification[];
+  parentShell: ConnectyShellNotificationsContextValue;
 }) {
+  const sourceId = useId();
+
+  useEffect(() => {
+    const source = `nested-shell:${sourceId}`;
+
+    if (initialNotifications.length === 0) {
+      parentShell.clearNotificationGroup(source);
+      return;
+    }
+
+    parentShell.setNotificationGroup(source, initialNotifications);
+
+    return () => parentShell.clearNotificationGroup(source);
+  }, [initialNotifications, parentShell, sourceId]);
+
+  return <>{children}</>;
+}
+
+function ConnectyShellRoot({
+  mode,
+  children,
+  isPlatformAdmin = false,
+  workspaceName,
+  userLabel,
+  activeHref,
+  userAvatarUrl,
+  initialNotifications = [],
+}: ConnectyShellProps) {
   const pathname  = usePathname();
   const active    = activeHref ?? pathname ?? "/";
   const sections  = mode === "admin" ? adminSections : clientSections;

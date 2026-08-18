@@ -4268,7 +4268,7 @@ function WhatsAppCatalogBridgePanel({
               </div>
             ) : (
               <div className="px-3 py-8 text-center text-[12px] text-slate-500">
-                Nenhum produto do WhatsApp sincronizado. Clique em "Trazer produtos do WhatsApp" apenas se esse numero ja tiver catalogo nativo no WhatsApp.
+                Nenhum produto do WhatsApp sincronizado. Clique em &quot;Trazer produtos do WhatsApp&quot; apenas se esse numero ja tiver catalogo nativo no WhatsApp.
               </div>
             )}
           </div>

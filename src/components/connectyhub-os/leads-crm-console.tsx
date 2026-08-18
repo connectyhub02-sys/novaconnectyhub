@@ -827,7 +827,17 @@ function AttendanceCenterView({
   );
 
   useEffect(() => {
-    setLeadCarts((current) => removeUnavailableCatalogCartItems(current, availableCatalogItemIds));
+    let cancelled = false;
+
+    queueMicrotask(() => {
+      if (!cancelled) {
+        setLeadCarts((current) => removeUnavailableCatalogCartItems(current, availableCatalogItemIds));
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, [availableCatalogItemIds]);
 
   useEffect(() => {
