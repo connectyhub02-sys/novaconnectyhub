@@ -149,6 +149,61 @@ describe("WhatsApp standard behavior and company location", () => {
     expect(sender).toContain("company_location_button_failed");
   });
 
+  it("keeps replies as text when the lead explicitly asks not to receive audio", () => {
+    const resolver = sourceBetween(
+      runtimeSource,
+      "function shouldSendAudioResponse",
+      "function hasConfiguredAudioVoice",
+    );
+
+    expect(resolver).toContain("leadExplicitlyRequestsTextReply(latestInbound)");
+    expect(resolver).toContain("return false");
+    expect(resolver).toContain("me manda");
+    expect(resolver).toContain("nao");
+    expect(resolver).toContain("escutar");
+    expect(resolver).toContain("sem");
+    expect(resolver).toContain("audio");
+    expect(resolver).toContain("digita");
+  });
+
+  it("keeps mirror mode strict even when spontaneous audio is enabled", () => {
+    const resolver = sourceBetween(
+      runtimeSource,
+      "function shouldSendAudioResponse",
+      "function hasConfiguredAudioVoice",
+    );
+
+    expect(resolver).toContain("const mirrorInboundIsAudio = latestInbound ? isAudioMessage(latestInbound)");
+    expect(resolver).toContain('context.behavior.responseMode === "mirror" && mirrorInboundIsAudio');
+    expect(resolver).toContain('context.behavior.responseMode !== "mirror"');
+    expect(resolver).not.toContain('context.behavior.responseMode === "mirror" && (inboundType.includes("audio")');
+  });
+
+  it("stops stale overlapping WhatsApp runs before sending more chunks", () => {
+    const processBody = sourceBetween(
+      runtimeSource,
+      "export async function processWhatsappAgentRun",
+      "async function loadRunContext",
+    );
+    const deliveryBody = sourceBetween(
+      runtimeSource,
+      "async function sendAgentResponse",
+      "type CompanyLocationReply",
+    );
+    const staleGuard = sourceBetween(
+      runtimeSource,
+      "async function loadLatestInboundMessage",
+      "function resolveWhatsappAgentRunDelaySeconds",
+    );
+
+    expect(runtimeSource).toContain("class StaleWhatsappRunError extends Error");
+    expect(processBody).toContain("error instanceof StaleWhatsappRunError");
+    expect(processBody).toContain('reason: "newer_inbound_message"');
+    expect(deliveryBody).toContain("await assertRunStillTargetsLatestInbound(input.client, context, latestInbound)");
+    expect(staleGuard).toContain(".eq(\"direction\", \"inbound\")");
+    expect(staleGuard).toContain("isNewerInboundMessage(activeInbound, latestInbound)");
+  });
+
   it("uses customer branding in text signatures and interactive button footers by plan", () => {
     const buttonSender = sourceBetween(
       runtimeSource,

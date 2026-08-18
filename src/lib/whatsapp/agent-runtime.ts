@@ -291,6 +291,18 @@ type BehaviorSignal = {
   payload?: JsonRecord;
 };
 
+class StaleWhatsappRunError extends Error {
+  latestMessageId: string | null;
+  latestProviderMessageId: string | null;
+
+  constructor(latestInbound: ConversationMessageRow | null) {
+    super("Execucao WhatsApp interrompida porque chegou uma mensagem mais recente do lead.");
+    this.name = "StaleWhatsappRunError";
+    this.latestMessageId = latestInbound?.id ?? null;
+    this.latestProviderMessageId = latestInbound?.provider_message_id ?? null;
+  }
+}
+
 type LeadMemorySnapshot = {
   personName: string | null;
   summary: string | null;
@@ -625,6 +637,8 @@ export async function processWhatsappAgentRun(input: {
     });
 
     if (companyLocationReply) {
+      await assertRunStillTargetsLatestInbound(client, context, latestInbound);
+
       const outbound = await sendCompanyLocationReply({
         client,
         context,
@@ -710,6 +724,9 @@ export async function processWhatsappAgentRun(input: {
       context,
       text: aiText,
     });
+
+    await assertRunStillTargetsLatestInbound(client, context, latestInbound);
+
     const outbound = await sendAgentResponse({
       client,
       context,
@@ -769,6 +786,15 @@ export async function processWhatsappAgentRun(input: {
       text_usage_charge_credits: textMetering?.chargeCredits ?? null,
     });
   } catch (error) {
+    if (error instanceof StaleWhatsappRunError) {
+      return await completeRun(client, run.id, error.message, {
+        skipped: true,
+        reason: "newer_inbound_message",
+        superseded_by_message_id: error.latestMessageId,
+        superseded_by_provider_message_id: error.latestProviderMessageId,
+      });
+    }
+
     const message = error instanceof Error ? error.message : "Erro desconhecido no agente WhatsApp.";
     await markRun(client, run.id, "failed", message);
     return { status: "failed", error: message };
@@ -973,6 +999,54 @@ async function loadRecentInboundMessagesForDelay(client: SupabaseClient, convers
   }
 
   return (data ?? []) as ConversationMessageRow[];
+}
+
+async function loadLatestInboundMessage(client: SupabaseClient, conversationId: string) {
+  const { data, error } = await client
+    .from("conversation_messages")
+    .select("id, provider_message_id, provider_chat_id, direction, message_type, text_content, payload, occurred_at")
+    .eq("conversation_id", conversationId)
+    .eq("direction", "inbound")
+    .order("occurred_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<ConversationMessageRow>();
+
+  if (error) {
+    throw new Error(`Nao foi possivel validar mensagem mais recente da conversa: ${error.message}`);
+  }
+
+  return data ?? null;
+}
+
+async function assertRunStillTargetsLatestInbound(
+  client: SupabaseClient,
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+  activeInbound: ConversationMessageRow | null,
+) {
+  const latestInbound = await loadLatestInboundMessage(client, context.conversationId);
+
+  if (isNewerInboundMessage(activeInbound, latestInbound)) {
+    throw new StaleWhatsappRunError(latestInbound);
+  }
+}
+
+function isNewerInboundMessage(activeInbound: ConversationMessageRow | null, candidate: ConversationMessageRow | null) {
+  if (!candidate || activeInbound?.id === candidate.id) {
+    return false;
+  }
+
+  if (!activeInbound) {
+    return true;
+  }
+
+  const activeTime = Date.parse(activeInbound.occurred_at);
+  const candidateTime = Date.parse(candidate.occurred_at);
+
+  if (Number.isFinite(activeTime) && Number.isFinite(candidateTime)) {
+    return candidateTime > activeTime;
+  }
+
+  return candidate.provider_message_id !== activeInbound.provider_message_id;
 }
 
 function resolveWhatsappAgentRunDelaySeconds(context: {
@@ -4239,6 +4313,8 @@ async function sendAgentResponse(input: {
         await setChatPresence(context.credentials, input.token, input.phone, sendAsAudio ? "recording" : "composing", sendAsAudio ? 60000 : 10000);
       }
 
+      await assertRunStillTargetsLatestInbound(input.client, context, latestInbound);
+
       const message = sendAsAudio
         ? await sendAudioOutboundChunk({
             client: input.client,
@@ -4301,6 +4377,8 @@ async function sendAgentResponse(input: {
         await setChatPresence(context.credentials, input.token, input.phone, "recording", 60000);
       }
 
+      await assertRunStillTargetsLatestInbound(input.client, context, latestInbound);
+
       const message = await sendAudioOutboundChunk({
         client: input.client,
         context,
@@ -4324,6 +4402,8 @@ async function sendAgentResponse(input: {
     });
 
     if (paymentLink) {
+      await assertRunStillTargetsLatestInbound(input.client, context, latestInbound);
+
       try {
         const paymentOutbound = await sendSalesCatalogPaymentLink({
           client: input.client,
@@ -4364,6 +4444,8 @@ async function sendAgentResponse(input: {
       await sleep(delayMs);
     }
 
+    await assertRunStillTargetsLatestInbound(input.client, context, latestInbound);
+
     const message = await sendTextOutboundChunk({
       client: input.client,
       context,
@@ -4381,6 +4463,8 @@ async function sendAgentResponse(input: {
   }
 
   if (catalogAttachments.length > 0) {
+    await assertRunStillTargetsLatestInbound(input.client, context, latestInbound);
+
     const mediaOutbound = await sendSalesCatalogMediaAttachments({
       client: input.client,
       context,
@@ -4401,6 +4485,8 @@ async function sendAgentResponse(input: {
   });
 
   if (paymentLink) {
+    await assertRunStillTargetsLatestInbound(input.client, context, latestInbound);
+
     try {
       const paymentOutbound = await sendSalesCatalogPaymentLink({
         client: input.client,
@@ -5795,18 +5881,41 @@ function shouldSendAudioResponse(
   context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
   latestInbound: ConversationMessageRow | null,
 ) {
-  const inboundType = context.messageType.toLowerCase();
-  const visualMediaKind = detectInboundMediaKind(latestInbound);
-  const shouldSendAudio = context.behavior.responseMode === "audio"
-    || (context.behavior.responseMode === "mirror" && (inboundType.includes("audio") || isAudioMessage(latestInbound)));
+  if (leadExplicitlyRequestsTextReply(latestInbound)) {
+    return false;
+  }
 
-  if (!shouldSendAudio && context.behavior.spontaneousAudio && hasConfiguredAudioVoice(context.behavior)) {
+  const visualMediaKind = detectInboundMediaKind(latestInbound);
+  const mirrorInboundIsAudio = latestInbound ? isAudioMessage(latestInbound) : context.messageType.toLowerCase().includes("audio");
+  const shouldSendAudio = context.behavior.responseMode === "audio"
+    || (context.behavior.responseMode === "mirror" && mirrorInboundIsAudio);
+
+  if (
+    !shouldSendAudio
+    && context.behavior.responseMode !== "mirror"
+    && context.behavior.spontaneousAudio
+    && hasConfiguredAudioVoice(context.behavior)
+  ) {
     if (Math.random() * 100 < context.behavior.spontaneousAudioProbability) {
       return !visualMediaKind;
     }
   }
 
   return shouldSendAudio && !visualMediaKind;
+}
+
+function leadExplicitlyRequestsTextReply(message: ConversationMessageRow | null) {
+  const normalized = normalizeSearch(stripInternalWhatsappContext(message?.text_content ?? ""));
+
+  if (!normalized) {
+    return false;
+  }
+
+  return /\b(?:manda|mande|envia|envie|responde|responda|fala|fale|pode mandar|pode responder|me manda|me mande|me envia|me envie|me responde|me responda)\b.{0,40}\b(?:em|por|no|na)?\s*(?:texto|mensagem|escrito|whatsapp|zap)\b/.test(normalized)
+    || /\b(?:prefiro|preciso|so consigo|consigo melhor)\b.{0,40}\b(?:texto|mensagem|escrito|digitado)\b/.test(normalized)
+    || /\b(?:nao|n)\b.{0,25}\b(?:posso|consigo|da pra|da para|vou conseguir)\b.{0,35}\b(?:escutar|ouvir|abrir audio|audio)\b/.test(normalized)
+    || /\b(?:sem|nada de|nao manda|nao mande|para de mandar|pare de mandar|evita|evite)\b.{0,25}\b(?:audio|voz|mensagem de voz|nota de voz)\b/.test(normalized)
+    || /\b(?:digita|digite|escreve|escreva|por escrito)\b/.test(normalized);
 }
 
 function hasConfiguredAudioVoice(behavior: WhatsappBehaviorConfig) {
