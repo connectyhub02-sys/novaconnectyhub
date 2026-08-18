@@ -2378,12 +2378,15 @@ export function WhatsAppConsole({
                   </div>
                   <TextAreaField
                     label="Numeros responsaveis"
-                    description="Um numero por linha ou separados por virgula. Quando o lead pedir humano, esses numeros recebem um aviso pelo WhatsApp conectado."
+                    description="Um numero por linha ou separados por virgula. Quando o lead pedir humano, esses numeros recebem um aviso pelo WhatsApp conectado. Esses numeros sao contatos internos: por seguranca, o agente nao responde esses numeros como lead."
                     value={behaviorDraft.humanHandoffNotificationNumbers}
                     minHeight="96px"
                     placeholder={"5599999999999\n5588888888888"}
                     onChange={(value) => updateBehavior("humanHandoffNotificationNumbers", value)}
                   />
+                  <div className="rounded-lg border border-amber-300/35 bg-amber-50 px-3 py-2 text-[11px] leading-5 text-amber-950">
+                    <span className="font-semibold">Seguranca:</span> numeros cadastrados aqui recebem avisos internos e ficam protegidos. O agente nao responde esses numeros como lead.
+                  </div>
                 </div>
               </BehaviorSection>
 
@@ -4084,9 +4087,8 @@ function InfoHint({ text }: { text: string }) {
     >
       <CircleHelp className="h-3.5 w-3.5 text-current opacity-70 transition group-hover/help:opacity-100" />
       <span
-        className="pointer-events-none absolute right-0 top-5 z-50 hidden w-64 max-w-[calc(100vw-3rem)] rounded-lg border px-3 py-2 text-left font-sans text-[11px] normal-case leading-5 tracking-normal text-slate-200 shadow-2xl group-hover/help:block"
-        data-connecty-contrast="dark"
-        style={{ background: "var(--ch-dropdown-bg)", borderColor: "var(--ch-border-strong)" }}
+        className="pointer-events-none absolute right-0 top-5 z-50 hidden w-64 max-w-[calc(100vw-3rem)] rounded-lg border border-slate-200 bg-white px-3 py-2 text-left font-sans text-[11px] normal-case leading-5 tracking-normal text-slate-950 shadow-[0_16px_40px_rgba(15,23,42,0.16)] ring-1 ring-slate-950/5 group-hover/help:block"
+        data-connecty-infohint="true"
       >
         {text}
       </span>

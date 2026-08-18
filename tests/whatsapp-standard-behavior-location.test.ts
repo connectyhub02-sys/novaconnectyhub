@@ -169,6 +169,7 @@ describe("WhatsApp standard behavior and company location", () => {
     expect(behaviorPanel).toContain("Avisar humano");
     expect(behaviorPanel).toContain("Cooldown aviso");
     expect(behaviorPanel).toContain("Numeros responsaveis");
+    expect(behaviorPanel).toContain("O agente nao responde esses numeros como lead.");
     expect(behaviorPanel).toContain("Enviar teste");
     expect(behaviorPanel).toContain("Janela da IA ativa");
     expect(behaviorPanel).toContain("Reacoes emoji");
@@ -196,8 +197,13 @@ describe("WhatsApp standard behavior and company location", () => {
     expect(globalsSource).toContain('[data-connecty-mode] [data-connecty-contrast="dark"].text-slate-950');
     expect(globalsSource).toContain("[data-connecty-mode] .connecty-dark-chip");
     expect(globalsSource).toContain("[data-connecty-mode] .connecty-dark-action");
+    expect(globalsSource).toContain('[data-connecty-mode] [data-connecty-infohint="true"]');
+    expect(globalsSource).toContain('[data-connecty-mode] [data-connecty-contrast="dark"] [data-connecty-infohint="true"]');
+    expect(globalsSource).toContain("color: #0f172a !important;");
     expect(consoleSource).toContain('data-connecty-contrast={active ? "dark" : undefined}');
     expect(consoleSource).toContain('data-connecty-contrast="dark"');
+    expect(consoleSource).toContain('data-connecty-infohint="true"');
+    expect(consoleSource).toContain("bg-white px-3 py-2 text-left font-sans text-[11px] normal-case leading-5 tracking-normal text-slate-950");
     expect(consoleSource).toContain("connecty-dark-action");
     expect(consoleSource).toContain("connecty-dark-chip");
     expect(consoleSource).toContain("disabled:opacity-70");

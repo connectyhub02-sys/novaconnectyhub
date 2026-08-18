@@ -4006,6 +4006,13 @@ html {
   color: #e2e8f0 !important;
 }
 
+[data-connecty-mode] [data-connecty-infohint="true"],
+[data-connecty-mode] [data-connecty-contrast="dark"] [data-connecty-infohint="true"] {
+  background: #ffffff !important;
+  border-color: rgba(203, 213, 225, 0.95) !important;
+  color: #0f172a !important;
+}
+
 .connecty-lead-file-modal {
   color-scheme: light;
   --lead-file-accent: #e50914;
