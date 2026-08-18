@@ -15,7 +15,6 @@ import {
   Coffee,
   Copy,
   Clock3,
-  Crosshair,
   Eye,
   FileText,
   Forward,
@@ -29,7 +28,6 @@ import {
   MessageSquare,
   Mic,
   Package,
-  Pause,
   PenLine,
   PenOff,
   PlugZap,
@@ -43,9 +41,7 @@ import {
   Shuffle,
   Smartphone,
   Smile,
-  SplitSquareVertical,
   Sticker,
-  Sun,
   Timer,
   Trash2,
   type LucideIcon,
@@ -2272,10 +2268,9 @@ export function WhatsAppConsole({
             <div className="grid gap-3">
               <BehaviorSection title="Base do agente" description="Controles principais que ligam ou pausam o atendimento automatico deste agente.">
                 <div className="grid gap-3">
-                  <div className="grid gap-2 md:grid-cols-3">
+                  <div className="grid gap-2 md:grid-cols-2">
                     <ToggleTile icon={Power} label="Agente ativo" description="Quando ligado, o agente pode responder leads automaticamente neste WhatsApp." checked={behaviorDraft.agentEnabled} onChange={() => updateBehavior("agentEnabled", !behaviorDraft.agentEnabled)} />
                     <ToggleTile icon={Eye} label="Marcar como lido" description="Marca mensagens como lidas depois que o sistema processa a conversa." checked={behaviorDraft.markAsRead} onChange={() => updateBehavior("markAsRead", !behaviorDraft.markAsRead)} />
-                    <ToggleTile icon={SplitSquareVertical} label="Dividir respostas" description="Quebra respostas longas em mensagens menores para parecer mais natural." checked={behaviorDraft.splitMessages} onChange={() => updateBehavior("splitMessages", !behaviorDraft.splitMessages)} />
                   </div>
                   <div className="grid gap-2">
                     <div>
@@ -2357,30 +2352,12 @@ export function WhatsAppConsole({
               </BehaviorSection>
 
               <BehaviorSection title="Simulacao humana" description="Comportamentos que fazem o agente parecer uma pessoa real no WhatsApp.">
-                <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-                  <ToggleTile icon={PenLine} label="Linguagem humanizada" description="Instrui a IA a usar abreviacoes, emoji e tom informal de brasileiro no WhatsApp." checked={behaviorDraft.humanizedLanguage} onChange={() => updateBehavior("humanizedLanguage", !behaviorDraft.humanizedLanguage)} />
+                <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
                   <ToggleTile icon={Smile} label="Reacoes emoji" description="Reage a mensagens do lead com emoji contextual antes de responder." checked={behaviorDraft.emojiReactions} onChange={() => updateBehavior("emojiReactions", !behaviorDraft.emojiReactions)} />
-                  <ToggleTile icon={Shuffle} label="Variacao de timing" description="Adiciona aleatoriedade de ±30% em todos os tempos de resposta." checked={behaviorDraft.timingJitter} onChange={() => updateBehavior("timingJitter", !behaviorDraft.timingJitter)} />
-                  <ToggleTile icon={Pause} label="Pausa ao digitar" description="Simula o padrao humano de digitar, parar e voltar a digitar." checked={behaviorDraft.composingPause} onChange={() => updateBehavior("composingPause", !behaviorDraft.composingPause)} />
-                  <ToggleTile icon={Eye} label="Delay ao visualizar" description="Atrasa a marcacao de lido para simular que o agente nao esta sempre olhando o celular." checked={behaviorDraft.readReceiptDelay} onChange={() => updateBehavior("readReceiptDelay", !behaviorDraft.readReceiptDelay)} />
-                  <ToggleTile icon={AudioLines} label="Audio espontaneo" description="Envia audio ocasionalmente mesmo quando o lead manda texto, como humano faria." checked={behaviorDraft.spontaneousAudio} onChange={() => updateBehavior("spontaneousAudio", !behaviorDraft.spontaneousAudio)} />
                   <ToggleTile icon={PenOff} label="Typos intencionais" description="A IA simula erros de digitacao e autocorrecoes naturais como um humano real." checked={behaviorDraft.intentionalTypos} onChange={() => updateBehavior("intentionalTypos", !behaviorDraft.intentionalTypos)} />
-                  <ToggleTile icon={Sun} label="Ritmo circadiano" description="Responde mais rapido de dia e mais devagar a noite, como padrao humano." checked={behaviorDraft.circadianTiming} onChange={() => updateBehavior("circadianTiming", !behaviorDraft.circadianTiming)} />
-                  <ToggleTile icon={Mic} label="Preenchimento vocal" description="Adiciona hesitacoes naturais nos audios: 'hmm', 'entao', pausas de pensamento." checked={behaviorDraft.naturalAudioFillers} onChange={() => updateBehavior("naturalAudioFillers", !behaviorDraft.naturalAudioFillers)} />
                   <ToggleTile icon={Sticker} label="Figurinhas" description="Envia stickers contextuais ocasionalmente para simular comportamento natural do WhatsApp." checked={behaviorDraft.sendStickers} onChange={() => updateBehavior("sendStickers", !behaviorDraft.sendStickers)} />
                   <ToggleTile icon={Forward} label="Midia proativa" description="Permite que o agente envie imagens, catalogos ou midias relevantes de forma espontanea." checked={behaviorDraft.proactiveMedia} onChange={() => updateBehavior("proactiveMedia", !behaviorDraft.proactiveMedia)} />
-                  <ToggleTile icon={Gauge} label="Ritmo WPM" description="Calcula delay de digitacao baseado em palavras por minuto em vez de formula linear." checked={behaviorDraft.wpmTypingModel} onChange={() => updateBehavior("wpmTypingModel", !behaviorDraft.wpmTypingModel)} />
-                  <ToggleTile icon={Repeat} label="Correcoes mid-message" description="Injeta erros de digitacao reais e envia correcao com asterisco, como humano faz." checked={behaviorDraft.midMessageCorrections} onChange={() => updateBehavior("midMessageCorrections", !behaviorDraft.midMessageCorrections)} />
                   <ToggleTile icon={Coffee} label="Small talk" description="Injeta contexto cultural e temporal brasileiro para papo leve quando o lead abrir espaco." checked={behaviorDraft.smallTalk} onChange={() => updateBehavior("smallTalk", !behaviorDraft.smallTalk)} />
-                </div>
-                <div className="mt-2 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-                  <NumberField label="Chance reacao %" description="Probabilidade de reagir a cada mensagem com emoji." value={behaviorDraft.reactionProbability} min={0} max={100} onChange={(value) => updateBehavior("reactionProbability", value)} />
-                  <NumberField label="Leitura min (s)" description="Segundos minimos antes de marcar como lido." value={behaviorDraft.readReceiptMinSeconds} min={1} max={30} onChange={(value) => updateBehavior("readReceiptMinSeconds", value)} />
-                  <NumberField label="Leitura max (s)" description="Segundos maximos antes de marcar como lido." value={behaviorDraft.readReceiptMaxSeconds} min={2} max={60} onChange={(value) => updateBehavior("readReceiptMaxSeconds", value)} />
-                  <NumberField label="Chance audio %" description="Probabilidade de responder com audio espontaneo em vez de texto." value={behaviorDraft.spontaneousAudioProbability} min={0} max={100} onChange={(value) => updateBehavior("spontaneousAudioProbability", value)} />
-                  <NumberField label="Chance figurinha %" description="Probabilidade de enviar sticker apos responder." value={behaviorDraft.stickerProbability} min={0} max={100} onChange={(value) => updateBehavior("stickerProbability", value)} />
-                  <NumberField label="WPM" description="Velocidade de digitacao simulada em palavras por minuto." value={behaviorDraft.wpmSpeed} min={25} max={80} onChange={(value) => updateBehavior("wpmSpeed", value)} />
-                  <NumberField label="Chance correcao %" description="Probabilidade de injetar um typo com correcao por asterisco." value={behaviorDraft.correctionFrequency} min={5} max={50} onChange={(value) => updateBehavior("correctionFrequency", value)} />
                 </div>
               </BehaviorSection>
 
@@ -2407,12 +2384,8 @@ export function WhatsAppConsole({
                     placeholder={"5599999999999\n5588888888888"}
                     onChange={(value) => updateBehavior("humanHandoffNotificationNumbers", value)}
                   />
-                  <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-                  <ToggleTile icon={Bot} label="Protecao bots/loops" description="Evita conversas infinitas quando outro bot ou automacao responder o agente." checked={behaviorDraft.botLoopProtection} onChange={() => updateBehavior("botLoopProtection", !behaviorDraft.botLoopProtection)} />
-                  <ToggleTile icon={UserRound} label="Teste entre instancias" description="Permite testar mensagens entre numeros internos sem bloquear a automacao." checked={behaviorDraft.allowInternalInstanceMessages} onChange={() => updateBehavior("allowInternalInstanceMessages", !behaviorDraft.allowInternalInstanceMessages)} />
-                  <ToggleTile icon={CheckCircle2} label="Teste real do clone" description="Registra respostas reais do WhatsApp como eventos de avaliacao para ajustar o clone depois." checked={behaviorDraft.cloneRealTestMode} onChange={() => updateBehavior("cloneRealTestMode", !behaviorDraft.cloneRealTestMode)} />
-                  <ToggleTile icon={Crosshair} label="Turing benchmark" description="Avalia cada resposta de teste com score 0-100 de humanidade via IA. Requer teste real do clone ativo." checked={behaviorDraft.turingBenchmark} onChange={() => updateBehavior("turingBenchmark", !behaviorDraft.turingBenchmark)} />
-                  <ToggleTile icon={Clock3} label="Janela da IA ativa" description="Faz o agente responder apenas dentro do horario configurado na Janela da IA." checked={behaviorDraft.aiScheduleEnabled} onChange={() => updateBehavior("aiScheduleEnabled", !behaviorDraft.aiScheduleEnabled)} />
+                  <div className="grid gap-2 md:grid-cols-2">
+                    <ToggleTile icon={Clock3} label="Janela da IA ativa" description="Faz o agente responder apenas dentro do horario configurado na Janela da IA." checked={behaviorDraft.aiScheduleEnabled} onChange={() => updateBehavior("aiScheduleEnabled", !behaviorDraft.aiScheduleEnabled)} />
                   </div>
                 </div>
               </BehaviorSection>
@@ -4555,7 +4528,7 @@ function CloneRealTestPanel({
           </div>
         ) : (
           <div className="rounded-lg border px-3 py-6 text-center text-[12px] leading-5 text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
-            Nenhuma metrica registrada ainda. Ligue Teste real do clone em Seguranca e testes e converse pelo WhatsApp para gerar os primeiros registros.
+            Nenhuma metrica registrada ainda. As metricas aparecem aqui automaticamente quando houver registros reais suficientes.
           </div>
         )}
       </div>
@@ -5898,7 +5871,6 @@ function BehaviorSummary({
         <PromptCheck label="Citacao inteligente" active={behavior.quoteReplyMode !== "off"} />
         <PromptCheck label="Intervencao humana" active={behavior.humanIntervention} />
         <PromptCheck label="Aviso humano WhatsApp" active={behavior.humanHandoffNotifications && Boolean(behavior.humanHandoffNotificationNumbers.trim())} />
-        <PromptCheck label="Teste real do clone" active={behavior.cloneRealTestMode} />
         <PromptCheck label="Grupos WhatsApp" active={behavior.allowGroupChats} />
         <PromptCheck label="Temporizacao inteligente" active={behavior.smartTiming} />
       </div>

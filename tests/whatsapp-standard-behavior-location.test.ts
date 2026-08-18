@@ -63,6 +63,27 @@ describe("WhatsApp standard behavior and company location", () => {
     );
 
     [
+      "behavior.splitMessages = true",
+      "behavior.humanizedLanguage = true",
+      "behavior.timingJitter = true",
+      "behavior.composingPause = true",
+      "behavior.readReceiptDelay = true",
+      "behavior.readReceiptMinSeconds = 3",
+      "behavior.readReceiptMaxSeconds = 12",
+      "behavior.spontaneousAudio = false",
+      "behavior.spontaneousAudioProbability = 0",
+      "behavior.circadianTiming = true",
+      "behavior.naturalAudioFillers = true",
+      "behavior.wpmTypingModel = true",
+      "behavior.wpmSpeed = 45",
+      "behavior.midMessageCorrections = true",
+      "behavior.correctionFrequency = 15",
+      "behavior.reactionProbability = 40",
+      "behavior.stickerProbability = 20",
+      "behavior.botLoopProtection = true",
+      "behavior.allowInternalInstanceMessages = false",
+      "behavior.cloneRealTestMode = false",
+      "behavior.turingBenchmark = false",
       "behavior.audioTranscription = true",
       "behavior.detectHumanRequest = true",
       "behavior.humanHandoffAiDetection = true",
@@ -119,10 +140,41 @@ describe("WhatsApp standard behavior and company location", () => {
       "Coerencia do clone",
       "Consciencia temporal",
       "Arco da conversa",
+      "Dividir respostas",
+      "Linguagem humanizada",
+      "Variacao de timing",
+      "Pausa ao digitar",
+      "Delay ao visualizar",
+      "Audio espontaneo",
+      "Ritmo circadiano",
+      "Preenchimento vocal",
+      "Ritmo WPM",
+      "Correcoes mid-message",
+      "Chance reacao %",
+      "Leitura min (s)",
+      "Leitura max (s)",
+      "Chance audio %",
+      "Chance figurinha %",
+      "Chance correcao %",
+      "Protecao bots/loops",
+      "Teste entre instancias",
+      "Teste real do clone",
+      "Turing benchmark",
     ].forEach((label) => expect(behaviorPanel).not.toContain(label));
 
     expect(behaviorPanel).toContain("Localizacao da empresa");
     expect(behaviorPanel).toContain("CompanyLocationsEditor");
+    expect(behaviorPanel).toContain("Intervencao humana");
+    expect(behaviorPanel).toContain("Avisar humano");
+    expect(behaviorPanel).toContain("Cooldown aviso");
+    expect(behaviorPanel).toContain("Numeros responsaveis");
+    expect(behaviorPanel).toContain("Enviar teste");
+    expect(behaviorPanel).toContain("Janela da IA ativa");
+    expect(behaviorPanel).toContain("Reacoes emoji");
+    expect(behaviorPanel).toContain("Typos intencionais");
+    expect(behaviorPanel).toContain("Figurinhas");
+    expect(behaviorPanel).toContain("Midia proativa");
+    expect(behaviorPanel).toContain("Small talk");
   });
 
   it("loads company locations into the agent and sends Maps as a button instead of a loose link or native pin", () => {

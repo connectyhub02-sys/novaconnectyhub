@@ -488,6 +488,27 @@ export function normalizeWhatsappBehaviorConfig(value: unknown): WhatsappBehavio
 }
 
 function forceStandardBehaviorForActiveAgents(behavior: WhatsappBehaviorConfig) {
+  behavior.splitMessages = true;
+  behavior.humanizedLanguage = true;
+  behavior.timingJitter = true;
+  behavior.composingPause = true;
+  behavior.readReceiptDelay = true;
+  behavior.readReceiptMinSeconds = 3;
+  behavior.readReceiptMaxSeconds = 12;
+  behavior.spontaneousAudio = false;
+  behavior.spontaneousAudioProbability = 0;
+  behavior.circadianTiming = true;
+  behavior.naturalAudioFillers = true;
+  behavior.wpmTypingModel = true;
+  behavior.wpmSpeed = 45;
+  behavior.midMessageCorrections = true;
+  behavior.correctionFrequency = 15;
+  behavior.reactionProbability = 40;
+  behavior.stickerProbability = 20;
+  behavior.botLoopProtection = true;
+  behavior.allowInternalInstanceMessages = false;
+  behavior.cloneRealTestMode = false;
+  behavior.turingBenchmark = false;
   behavior.audioTranscription = true;
   behavior.detectHumanRequest = true;
   behavior.humanHandoffAiDetection = true;
