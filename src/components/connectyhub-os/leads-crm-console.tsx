@@ -352,11 +352,11 @@ function LeadWorkspaceWarning({ warnings }: { warnings: string[] }) {
         title="Dados temporariamente indisponiveis"
         tone="amber"
       >
-        <div className="space-y-2 text-[12px] leading-5 text-amber-100/90">
-          <p>O CRM continua acessivel, mas uma parte dos dados nao atualizou nesta tentativa.</p>
+        <div className="space-y-2 text-[12px] leading-5 text-amber-900">
+          <p className="font-medium">O CRM continua acessivel, mas uma parte dos dados nao atualizou nesta tentativa.</p>
           <ul className="space-y-1">
             {visibleWarnings.map((warning) => (
-              <li key={warning}>{warning}</li>
+              <li className="rounded-xl border border-amber-200/80 bg-amber-50/80 px-3 py-2 text-amber-800" key={warning}>{warning}</li>
             ))}
           </ul>
         </div>

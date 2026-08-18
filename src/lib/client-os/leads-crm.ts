@@ -101,6 +101,8 @@ type WhatsappInstanceAvatarRow = LeadAvatarSyncInstance & {
 type WhatsappInstanceQueueRow = {
   id: string;
   organization_id: string;
+  connectyhub_api_client_id: string | null;
+  connectyhub_api_visibility: string | null;
   phone_number: string | null;
   display_name: string | null;
   status: string | null;
@@ -421,41 +423,13 @@ async function getLeadCrmWorkspaceForCompanies(input: {
 
   const warnings: string[] = [];
   let leadRows: LeadRow[] = [];
-
-  try {
-    const leadsResult = await input.client
-      .from("leads")
-      .select("id, organization_id, channel, phone_number, display_name, status, score, source, last_event_summary, last_message_at, metadata, created_at, updated_at")
-      .in("organization_id", companyIds)
-      .order("updated_at", { ascending: false })
-      .limit(input.leadLimit ?? 160);
-
-    if (leadsResult.error) {
-      return buildEmptyWorkspace(input.companies, [toLoadWarning("leads", leadsResult.error)]);
-    }
-
-    leadRows = (leadsResult.data ?? []) as LeadRow[];
-  } catch (error) {
-    return buildEmptyWorkspace(input.companies, [toLoadWarning("leads", error)]);
-  }
-
-  const leadIds = leadRows.map((lead) => lead.id);
   let conversationRows: ConversationRow[] = [];
   let agentRows: AgentRow[] = [];
   let whatsappInstanceRows: WhatsappInstanceQueueRow[] = [];
   let eventRows: IntelligenceEventRow[] = [];
 
   try {
-    const [conversationsResult, agentsResult, whatsappInstancesResult, eventsResult] = await Promise.all([
-      leadIds.length
-        ? input.client
-            .from("conversations")
-            .select("id, organization_id, lead_id, whatsapp_instance_id, channel, provider, provider_chat_id, status, last_message_preview, last_message_at, metadata, created_at, updated_at")
-            .in("organization_id", companyIds)
-            .in("lead_id", leadIds)
-            .order("updated_at", { ascending: false })
-            .limit(Math.max(240, (input.leadLimit ?? 160) * 2))
-        : Promise.resolve({ data: [], error: null }),
+    const [agentsResult, whatsappInstancesResult, eventsResult] = await Promise.all([
       input.client
         .from("agent_registry")
         .select("id, organization_id, name, persona_name, avatar_url, metadata")
@@ -466,7 +440,7 @@ async function getLeadCrmWorkspaceForCompanies(input: {
         .limit(240),
       input.client
         .from("whatsapp_instances")
-        .select("id, organization_id, phone_number, display_name, status, metadata")
+        .select("id, organization_id, connectyhub_api_client_id, connectyhub_api_visibility, phone_number, display_name, status, metadata")
         .in("organization_id", companyIds)
         .neq("status", "archived")
         .order("updated_at", { ascending: false })
@@ -478,12 +452,6 @@ async function getLeadCrmWorkspaceForCompanies(input: {
         .order("occurred_at", { ascending: false })
         .limit(1200),
     ]);
-
-    if (conversationsResult.error) {
-      warnings.push(toLoadWarning("conversas", conversationsResult.error));
-    } else {
-      conversationRows = (conversationsResult.data ?? []) as ConversationRow[];
-    }
 
     if (agentsResult.error) {
       warnings.push(toLoadWarning("agentes", agentsResult.error));
@@ -506,24 +474,70 @@ async function getLeadCrmWorkspaceForCompanies(input: {
     warnings.push(toLoadWarning("dados complementares dos leads", error));
   }
 
+  const leadCrmWhatsappInstanceRows = whatsappInstanceRows.filter(isLeadCrmWhatsappInstance);
+  const leadCrmWhatsappInstanceIds = leadCrmWhatsappInstanceRows.map((instance) => instance.id);
+
+  try {
+    if (leadCrmWhatsappInstanceIds.length) {
+      const conversationsResult = await input.client
+        .from("conversations")
+        .select("id, organization_id, lead_id, whatsapp_instance_id, channel, provider, provider_chat_id, status, last_message_preview, last_message_at, metadata, created_at, updated_at")
+        .in("organization_id", companyIds)
+        .in("whatsapp_instance_id", leadCrmWhatsappInstanceIds)
+        .not("lead_id", "is", null)
+        .order("updated_at", { ascending: false })
+        .limit(Math.max(240, (input.leadLimit ?? 160) * 2));
+
+      if (conversationsResult.error) {
+        warnings.push(toLoadWarning("conversas", conversationsResult.error));
+      } else {
+        conversationRows = (conversationsResult.data ?? []) as ConversationRow[];
+      }
+    }
+  } catch (error) {
+    warnings.push(toLoadWarning("conversas", error));
+  }
+
+  const leadIds = uniqueStrings(conversationRows.map((conversation) => conversation.lead_id));
+
+  try {
+    if (leadIds.length) {
+      const leadsResult = await input.client
+        .from("leads")
+        .select("id, organization_id, channel, phone_number, display_name, status, score, source, last_event_summary, last_message_at, metadata, created_at, updated_at")
+        .in("organization_id", companyIds)
+        .in("id", leadIds)
+        .order("updated_at", { ascending: false })
+        .limit(input.leadLimit ?? 160);
+
+      if (leadsResult.error) {
+        warnings.push(toLoadWarning("leads", leadsResult.error));
+      } else {
+        leadRows = (leadsResult.data ?? []) as LeadRow[];
+      }
+    }
+  } catch (error) {
+    warnings.push(toLoadWarning("leads", error));
+  }
+
+  const loadedLeadIds = new Set(leadRows.map((lead) => lead.id));
+  conversationRows = conversationRows.filter((conversation) => (
+    Boolean(conversation.lead_id) && loadedLeadIds.has(conversation.lead_id as string)
+  ));
+
   const conversationIds = conversationRows.map((conversation) => conversation.id);
   let messageRows: MessageRow[] = [];
 
   try {
     if (conversationIds.length) {
-      const messagesResult = await input.client
-        .from("conversation_messages")
-        .select("id, organization_id, conversation_id, lead_id, whatsapp_instance_id, provider, provider_message_id, provider_chat_id, direction, message_type, text_content, payload, occurred_at, created_at")
-        .in("organization_id", companyIds)
-        .in("conversation_id", conversationIds)
-        .order("occurred_at", { ascending: true })
-        .limit(Math.max(1200, conversationIds.length * 30));
+      const messagesResult = await loadConversationMessageRows({
+        client: input.client,
+        companyIds,
+        conversationIds,
+      });
 
-      if (messagesResult.error) {
-        warnings.push(toLoadWarning("mensagens", messagesResult.error));
-      } else {
-        messageRows = (messagesResult.data ?? []) as MessageRow[];
-      }
+      messageRows = messagesResult.rows;
+      warnings.push(...messagesResult.warnings);
     }
   } catch (error) {
     warnings.push(toLoadWarning("mensagens", error));
@@ -532,7 +546,7 @@ async function getLeadCrmWorkspaceForCompanies(input: {
   const companyById = new Map(input.companies.map((company) => [company.id, company]));
   const agentByOrgId = new Map<string, AgentRow>();
   const agentById = new Map(agentRows.map((agent) => [agent.id, agent]));
-  const whatsappInstanceById = new Map(whatsappInstanceRows.map((instance) => [instance.id, instance]));
+  const whatsappInstanceById = new Map(leadCrmWhatsappInstanceRows.map((instance) => [instance.id, instance]));
   let syncedAvatarMetadata = new Map<string, JsonRecord>();
 
   try {
@@ -582,7 +596,7 @@ async function getLeadCrmWorkspaceForCompanies(input: {
     attendanceQueues: buildAttendanceQueues({
       agents: agentRows,
       companies: input.companies,
-      instances: whatsappInstanceRows,
+      instances: leadCrmWhatsappInstanceRows,
     }),
     leads,
     stats: buildStats(leads),
@@ -597,6 +611,119 @@ function toLoadWarning(scope: string, error: unknown) {
 
 function logLeadCrmLoadError(scope: string, error: unknown) {
   console.error(`[LeadCRM] Falha ao carregar ${scope}`, error);
+}
+
+const conversationMessageColumns = "id, organization_id, conversation_id, lead_id, whatsapp_instance_id, provider, provider_message_id, provider_chat_id, direction, message_type, text_content, payload, occurred_at, created_at";
+const conversationMessageSlimColumns = "id, organization_id, conversation_id, lead_id, whatsapp_instance_id, provider, provider_message_id, provider_chat_id, direction, message_type, text_content, occurred_at, created_at";
+
+async function loadConversationMessageRows(input: {
+  client: SupabaseClient;
+  companyIds: string[];
+  conversationIds: string[];
+}): Promise<{ rows: MessageRow[]; warnings: string[] }> {
+  const rows: MessageRow[] = [];
+  const failedConversationIds: string[] = [];
+
+  for (const batch of chunkArray(input.conversationIds, 8)) {
+    const results = await Promise.all(
+      batch.map((conversationId) => loadMessagesForConversation({
+        client: input.client,
+        companyIds: input.companyIds,
+        conversationId,
+      })),
+    );
+
+    for (const result of results) {
+      rows.push(...result.rows);
+
+      if (result.error) {
+        failedConversationIds.push(result.conversationId);
+      }
+    }
+  }
+
+  const seen = new Set<string>();
+  const dedupedRows = rows.filter((row) => {
+    if (seen.has(row.id)) {
+      return false;
+    }
+
+    seen.add(row.id);
+    return true;
+  });
+
+  dedupedRows.sort((a, b) => compareDateAsc(a.occurred_at ?? a.created_at, b.occurred_at ?? b.created_at));
+
+  return {
+    rows: dedupedRows,
+    warnings: failedConversationIds.length
+      ? ["Algumas mensagens antigas nao carregaram nesta tentativa. As demais conversas continuam disponiveis."]
+      : [],
+  };
+}
+
+async function loadMessagesForConversation(input: {
+  client: SupabaseClient;
+  companyIds: string[];
+  conversationId: string;
+}): Promise<{ conversationId: string; rows: MessageRow[]; error: unknown | null }> {
+  const queryMessages = (columns: string) => input.client
+    .from("conversation_messages")
+    .select(columns)
+    .in("organization_id", input.companyIds)
+    .eq("conversation_id", input.conversationId)
+    .order("occurred_at", { ascending: false })
+    .limit(120);
+  const fullResult = await queryMessages(conversationMessageColumns);
+
+  if (!fullResult.error) {
+    return {
+      conversationId: input.conversationId,
+      rows: ((fullResult.data ?? []) as unknown as MessageRow[]).reverse(),
+      error: null,
+    };
+  }
+
+  logLeadCrmLoadError(`mensagens da conversa ${input.conversationId}`, fullResult.error);
+
+  const slimResult = await queryMessages(conversationMessageSlimColumns);
+
+  if (!slimResult.error) {
+    return {
+      conversationId: input.conversationId,
+      rows: ((slimResult.data ?? []) as unknown as Array<Omit<MessageRow, "payload">>).reverse().map((row) => ({
+        ...row,
+        payload: null,
+      })),
+      error: null,
+    };
+  }
+
+  logLeadCrmLoadError(`mensagens leves da conversa ${input.conversationId}`, slimResult.error);
+
+  return {
+    conversationId: input.conversationId,
+    rows: [],
+    error: slimResult.error,
+  };
+}
+
+function isLeadCrmWhatsappInstance(instance: WhatsappInstanceQueueRow) {
+  const metadata = readRecord(instance.metadata) ?? {};
+  const visibility = (instance.connectyhub_api_visibility ?? "").toLowerCase();
+  const createdFrom = readString(metadata.created_from)?.toLowerCase();
+
+  if (visibility === "api_customer") {
+    return false;
+  }
+
+  if (instance.connectyhub_api_client_id || metadata.api_gateway === true) {
+    return false;
+  }
+
+  return metadata.client_agent === true
+    || Boolean(readString(metadata.agent_id))
+    || createdFrom === "client_dashboard";
 }
 
 async function syncMissingLeadAvatarsForCrm(input: {
@@ -1249,6 +1376,24 @@ function groupBy<T>(items: T[], keyFn: (item: T) => string) {
   }
 
   return map;
+}
+
+function uniqueStrings(values: Array<string | null | undefined>) {
+  return Array.from(new Set(values.filter((value): value is string => Boolean(value))));
+}
+
+function chunkArray<T>(items: T[], size: number) {
+  const chunks: T[][] = [];
+
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size));
+  }
+
+  return chunks;
+}
+
+function compareDateAsc(a: string | null | undefined, b: string | null | undefined) {
+  return new Date(a ?? 0).getTime() - new Date(b ?? 0).getTime();
 }
 
 function compareDateDesc(a: string | null | undefined, b: string | null | undefined) {

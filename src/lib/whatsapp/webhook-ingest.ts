@@ -148,6 +148,14 @@ export async function ingestUazapiWebhook(input: {
     payload,
   });
 
+  if (!isConversationMessageWebhookEvent(eventType)) {
+    await markWebhookEvent(client, eventResult.eventId, "processed");
+    return {
+      ...baseResult,
+      status: "processed",
+    };
+  }
+
   if (!message.providerChatId && !message.phoneNumber && !message.providerMessageId) {
     await markWebhookEvent(client, eventResult.eventId, "processed");
     return {
@@ -395,6 +403,15 @@ function isConnectionWebhookEvent(eventType: string) {
   const normalized = eventType.toLowerCase().replace(/[_-]+/g, " ");
 
   return normalized.includes("connection") || normalized.includes("connect") || normalized.includes("status");
+}
+
+function isConversationMessageWebhookEvent(eventType: string) {
+  const normalized = eventType.toLowerCase().replace(/[_-]+/g, " ").trim();
+
+  return normalized === "message"
+    || normalized === "messages"
+    || normalized === "message received"
+    || normalized === "messages received";
 }
 
 async function insertWebhookEvent(
