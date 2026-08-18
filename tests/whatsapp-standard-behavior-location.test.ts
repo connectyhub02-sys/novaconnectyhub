@@ -204,7 +204,7 @@ describe("WhatsApp standard behavior and company location", () => {
     expect(staleGuard).toContain("isNewerInboundMessage(activeInbound, latestInbound)");
   });
 
-  it("uses customer branding in text signatures and interactive button footers by plan", () => {
+  it("uses customer branding only in native interactive button footers by plan", () => {
     const buttonSender = sourceBetween(
       runtimeSource,
       "async function sendWhatsappInteractiveButtons",
@@ -219,14 +219,11 @@ describe("WhatsApp standard behavior and company location", () => {
     expect(buttonSender).toContain("footerText?: string");
     expect(buttonSender).toContain('footerText: input.footerText ?? "ConnectyHub"');
     expect(runtimeSource).toContain("footerText: resolveInteractiveButtonFooterText(input.context.organization)");
-    expect(runtimeSource).toContain("appendWhatsappTextFooter(input.text, resolveWhatsappBrandFooterText(input.context.organization))");
-    expect(runtimeSource).toContain("const handoffText = appendWhatsappTextFooter(");
+    expect(runtimeSource).not.toContain("appendWhatsappTextFooter");
     expect(runtimeSource).toContain("buildHumanHandoffText()");
-    expect(runtimeSource).toContain("appendWhatsappTextFooter(");
     expect(footerResolver).toContain('planCode === "starter" || planCode === "pro" || planCode === "scale"');
     expect(footerResolver).toContain("normalizeInteractiveFooterText(organization?.name)");
     expect(footerResolver).toContain('return "ConnectyHub"');
-    expect(footerResolver).toContain("function appendWhatsappTextFooter");
     expect(footerResolver).toContain(".slice(0, 60)");
   });
 });

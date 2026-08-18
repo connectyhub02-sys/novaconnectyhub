@@ -568,10 +568,7 @@ export async function processWhatsappAgentRun(input: {
     }
 
     if (behavior.detectOptOut && behaviorSignals.some((signal) => signal.type === "whatsapp.lead.opt_out")) {
-      const optOutText = appendWhatsappTextFooter(
-        "Entendido. Vou respeitar seu pedido e nao seguir com novas mensagens por aqui.",
-        resolveWhatsappBrandFooterText(context.organization),
-      );
+      const optOutText = "Entendido. Vou respeitar seu pedido e nao seguir com novas mensagens por aqui.";
       const sent = await sendWhatsappText({
         credentials: context.credentials,
         token,
@@ -4573,10 +4570,7 @@ async function sendCompanyLocationReply(input: {
       interactiveButton = true;
     } catch (error) {
       const errorMessage = describeRuntimeError(error, "Falha desconhecida ao enviar botao de localizacao.");
-      messageText = appendWhatsappTextFooter(
-        `${input.reply.text}\n\nAbrir no Google Maps: ${mapsUrl}`,
-        resolveWhatsappBrandFooterText(input.context.organization),
-      );
+      messageText = `${input.reply.text}\n\nAbrir no Google Maps: ${mapsUrl}`;
       const textProviderResponse = await sendWhatsappText({
         credentials: input.context.credentials,
         token: input.token,
@@ -4603,7 +4597,6 @@ async function sendCompanyLocationReply(input: {
       }).catch(() => {});
     }
   } else {
-    messageText = appendWhatsappTextFooter(messageText, resolveWhatsappBrandFooterText(input.context.organization));
     providerResponse = await sendWhatsappText({
       credentials: input.context.credentials,
       token: input.token,
@@ -4860,7 +4853,7 @@ async function sendTextOutboundChunk(input: {
   trackIdPrefix: string;
 }) {
   const interactiveMenu = buildInteractiveLinkMenu(input.text, input.context);
-  let messageText = input.text;
+  const messageText = input.text;
   let providerResponse: unknown;
   let interactiveButton = false;
   let buttonFallback = false;
@@ -4881,7 +4874,6 @@ async function sendTextOutboundChunk(input: {
       interactiveButton = true;
     } catch (error) {
       const errorMessage = describeRuntimeError(error, "Falha desconhecida ao enviar botao WhatsApp.");
-      messageText = appendWhatsappTextFooter(input.text, resolveWhatsappBrandFooterText(input.context.organization));
       const textProviderResponse = await sendWhatsappText({
         credentials: input.context.credentials,
         token: input.token,
@@ -4907,7 +4899,6 @@ async function sendTextOutboundChunk(input: {
       }).catch(() => {});
     }
   } else {
-    messageText = appendWhatsappTextFooter(input.text, resolveWhatsappBrandFooterText(input.context.organization));
     providerResponse = await sendWhatsappText({
       credentials: input.context.credentials,
       token: input.token,
@@ -4946,7 +4937,7 @@ async function sendAudioReplyFallbackText(input: {
   error: unknown;
 }) {
   const errorMessage = describeRuntimeError(input.error, "Falha desconhecida ao enviar resposta em audio.");
-  const fallbackText = appendWhatsappTextFooter(input.text, resolveWhatsappBrandFooterText(input.context.organization));
+  const fallbackText = input.text;
 
   await setChatPresence(input.context.credentials, input.token, input.phone, "composing", 10000).catch(() => {});
 
@@ -5370,10 +5361,7 @@ async function sendSalesCatalogPaymentLink(input: {
     interactiveButton = true;
   } catch (error) {
     const errorMessage = describeRuntimeError(error, "Falha desconhecida ao enviar botao de pagamento.");
-    messageText = appendWhatsappTextFooter(
-      `Gerei o checkout seguro para concluir seu pedido. Finalizar pagamento: ${paymentUrl}`,
-      resolveWhatsappBrandFooterText(input.context.organization),
-    );
+    messageText = `Gerei o checkout seguro para concluir seu pedido. Finalizar pagamento: ${paymentUrl}`;
     const textProviderResponse = await sendWhatsappText({
       credentials: input.context.credentials,
       token: input.token,
@@ -6392,17 +6380,6 @@ function resolveWhatsappBrandFooterText(organization: OrganizationRow | null | u
   return "ConnectyHub";
 }
 
-function appendWhatsappTextFooter(text: string, footerText: string | null | undefined) {
-  const normalizedText = text.trim();
-  const footer = normalizeInteractiveFooterText(footerText);
-
-  if (!normalizedText || !footer || normalizedText.endsWith(`\n\n${footer}`)) {
-    return normalizedText;
-  }
-
-  return `${normalizedText}\n\n${footer}`;
-}
-
 function normalizeInteractiveFooterText(value: string | null | undefined) {
   return (value ?? "")
     .replace(/\s+/g, " ")
@@ -7212,10 +7189,7 @@ async function handleLeadHumanHandoffRequest(input: {
 }) {
   const { client, context, latestInbound, requestText, detection } = input;
   const requestedAt = new Date().toISOString();
-  const handoffText = appendWhatsappTextFooter(
-    buildHumanHandoffText(),
-    resolveWhatsappBrandFooterText(context.organization),
-  );
+  const handoffText = buildHumanHandoffText();
   const sent = await sendWhatsappText({
     credentials: context.credentials,
     token: input.token,
