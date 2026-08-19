@@ -18,6 +18,7 @@ import { AdminCustomerWhatsappActions } from "./admin-customer-whatsapp-actions"
 import { ConnectyShell, type ConnectyShellNotification } from "./connecty-shell";
 import { DataTable, KpiStat, NeonBadge, PageHeader, Panel, StatusBadge } from "./panel-primitives";
 import { SyncWhatsAppInstancesButton } from "./sync-whatsapp-instances-button";
+import { UazapiCostGuardPanel } from "./uazapi-cost-guard-panel";
 
 export function AdminCustomerWhatsappConsole({
   workspace,
@@ -63,6 +64,8 @@ export function AdminCustomerWhatsappConsole({
           </ul>
         </Panel>
       )}
+
+      <UazapiCostGuardPanel initialState={workspace.costGuard} />
 
       <div className="mb-5 grid grid-cols-3 gap-1.5 sm:gap-2 xl:grid-cols-6 xl:gap-4">
         <MetricTile

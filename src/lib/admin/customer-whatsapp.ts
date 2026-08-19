@@ -7,6 +7,10 @@ import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
 import { deleteUazapiProviderInstance } from "@/lib/whatsapp/uazapi-instance-cleanup";
 import { loadUazapiCredentials } from "@/lib/whatsapp/uazapi-credentials";
 import { readWhatsappInstanceProfileImageUrl } from "@/lib/whatsapp/instance-profile-image";
+import {
+  getUazapiCostGuardAdminState,
+  type UazapiCostGuardAdminState,
+} from "@/lib/whatsapp/uazapi-cost-guard";
 
 type JsonRecord = Record<string, unknown>;
 type ConnectyHubApiVisibility = "internal" | "api_customer" | "hybrid";
@@ -111,6 +115,7 @@ export type AdminCustomerWhatsappWorkspace = {
     averageAgentRunSeconds: number | null;
   };
   instances: AdminCustomerWhatsappInstance[];
+  costGuard: UazapiCostGuardAdminState;
   warnings: string[];
 };
 
@@ -272,6 +277,7 @@ export async function getAdminCustomerWhatsappWorkspace(
   client: SupabaseClient = createServiceClient(),
 ): Promise<AdminCustomerWhatsappWorkspace> {
   const warnings: string[] = [];
+  const costGuard = await getUazapiCostGuardAdminState(client);
   const { data: instanceData, error: instanceError } = await client
     .from("whatsapp_instances")
     .select(
@@ -284,6 +290,7 @@ export async function getAdminCustomerWhatsappWorkspace(
   if (instanceError) {
     return {
       ...emptyWorkspace,
+      costGuard,
       warnings: [`Nao foi possivel carregar instancias dos clientes: ${instanceError.message}`],
     };
   }
@@ -294,6 +301,7 @@ export async function getAdminCustomerWhatsappWorkspace(
   if (organizationIds.length === 0) {
     return {
       ...emptyWorkspace,
+      costGuard,
       warnings: ["Nenhuma instancia WhatsApp de cliente foi registrada ainda."],
     };
   }
@@ -445,6 +453,7 @@ export async function getAdminCustomerWhatsappWorkspace(
       averageAgentRunSeconds: readAverageRunSeconds(agentRunSummary),
     },
     instances,
+    costGuard,
     warnings,
   };
 }
@@ -655,6 +664,39 @@ const emptyWorkspace: AdminCustomerWhatsappWorkspace = {
     averageAgentRunSeconds: null,
   },
   instances: [],
+  costGuard: {
+    settings: {
+      enabled: false,
+      runTimeLocal: "23:30",
+      timezone: "America/Sao_Paulo",
+      trialGraceDays: 7,
+      maxDeletionsPerRun: 50,
+      lastScheduledRunAt: null,
+      lastScheduledRunStatus: null,
+      lastScheduledRunSummary: null,
+      lastManualDryRunAt: null,
+      lastManualDryRunSummary: null,
+      updatedAt: null,
+    },
+    scheduler: {
+      enabled: false,
+      timezone: "America/Sao_Paulo",
+      currentLocalDate: "",
+      currentLocalTime: "",
+      nextRunLabel: "desativada",
+      dueNow: false,
+    },
+    snapshot: {
+      total: 0,
+      connected: 0,
+      disconnected: 0,
+      apiCustomer: 0,
+      clientAgent: 0,
+      internalPlatform: 0,
+      unknown: 0,
+    },
+    recentRuns: [],
+  },
   warnings: [],
 };
 

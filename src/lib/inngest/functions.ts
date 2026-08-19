@@ -45,6 +45,7 @@ import {
 } from "@/lib/sales-catalog/importer";
 import { createServiceClient } from "@/lib/supabase/service";
 import { syncUazapiInstances } from "@/lib/whatsapp/uazapi-sync";
+import { runScheduledUazapiCostGuard } from "@/lib/whatsapp/uazapi-cost-guard";
 import {
   elianeEcosystemSyncEventName,
   syncElianeEcosystemKnowledge,
@@ -109,6 +110,29 @@ export const connectyhubWhatsappSync = inngest.createFunction(
 
     return {
       status: "synced",
+      summary,
+    };
+  },
+);
+
+export const connectyhubUazapiCostGuard = inngest.createFunction(
+  {
+    id: "connectyhub-uazapi-cost-guard",
+    name: "ConnectyHub Uazapi Cost Guard",
+    retries: 1,
+    triggers: [{ cron: "*/10 * * * *" }],
+  },
+  async ({ step }) => {
+    const summary = await step.run("run-uazapi-cost-guard-if-due", () =>
+      runScheduledUazapiCostGuard({
+        client: createServiceClient(),
+        triggerSource: "inngest_cron",
+      }),
+    );
+
+    return {
+      status: summary.status,
+      reason: summary.reason,
       summary,
     };
   },
@@ -580,6 +604,7 @@ export const functions = [
   connectyhubDailyAdminReport,
   connectyhubAdminPing,
   connectyhubWhatsappSync,
+  connectyhubUazapiCostGuard,
   connectyhubWhatsappAgentResponse,
   connectyhubWhatsappAgentSweep,
   connectyhubMetaSocialMessageQueue,
