@@ -30,7 +30,7 @@ export function UazapiCostGuardPanel({
   const [runTimeLocal, setRunTimeLocal] = useState(initialState.settings.runTimeLocal);
   const [trialGraceDays, setTrialGraceDays] = useState(String(initialState.settings.trialGraceDays));
   const [maxDeletionsPerRun, setMaxDeletionsPerRun] = useState(String(initialState.settings.maxDeletionsPerRun));
-  const [running, setRunning] = useState<"save" | "dry_run" | null>(null);
+  const [running, setRunning] = useState<"save" | "dry_run" | "delete_now" | null>(null);
   const [notice, setNotice] = useState<{ tone: "success" | "error" | "warning"; message: string } | null>(null);
   const [lastSummary, setLastSummary] = useState<UazapiCostGuardRunSummary | null>(null);
 
@@ -43,7 +43,7 @@ export function UazapiCostGuardPanel({
     [enabled, maxDeletionsPerRun, runTimeLocal, state.settings, trialGraceDays],
   );
 
-  async function postAction(payload: Record<string, unknown>, runningKey: "save" | "dry_run") {
+  async function postAction(payload: Record<string, unknown>, runningKey: "save" | "dry_run" | "delete_now") {
     setRunning(runningKey);
     setNotice(null);
 
@@ -65,11 +65,16 @@ export function UazapiCostGuardPanel({
       setTrialGraceDays(String(data.state.settings.trialGraceDays));
       setMaxDeletionsPerRun(String(data.state.settings.maxDeletionsPerRun));
       setLastSummary(data.summary ?? null);
+      const deleted = data.summary?.deleted ?? 0;
+      const archivedMissing = data.summary?.archivedMissing ?? 0;
+      const failed = data.summary?.failed ?? 0;
       setNotice({
-        tone: runningKey === "dry_run" ? "warning" : "success",
+        tone: runningKey === "dry_run" ? "warning" : failed > 0 ? "warning" : "success",
         message: runningKey === "dry_run"
           ? "Teste concluido sem excluir instancias."
-          : "Regra da Uazapi salva.",
+          : runningKey === "delete_now"
+            ? `Execucao concluida: ${deleted} excluida(s), ${archivedMissing} arquivada(s), ${failed} falha(s).`
+            : "Regra da Uazapi salva.",
       });
       router.refresh();
     } catch (error) {
@@ -94,6 +99,16 @@ export function UazapiCostGuardPanel({
 
   function runDryRun() {
     void postAction({ action: "run_dry_run" }, "dry_run");
+  }
+
+  function runDeleteNow() {
+    const confirmed = window.confirm(
+      "Executar a limpeza Uazapi agora?\n\nInstancias desconectadas elegiveis serao excluidas do provedor e arquivadas na ConnectyHub.",
+    );
+
+    if (!confirmed) return;
+
+    void postAction({ action: "run_delete_now" }, "delete_now");
   }
 
   const latestSummary = lastSummary ?? state.settings.lastManualDryRunSummary ?? state.settings.lastScheduledRunSummary;
@@ -195,6 +210,15 @@ export function UazapiCostGuardPanel({
               <PlayCircle className="h-3.5 w-3.5" />
               {running === "dry_run" ? "Testando" : "Testar sem excluir"}
             </button>
+            <button
+              className={buttonClass("danger")}
+              disabled={disabled}
+              onClick={runDeleteNow}
+              type="button"
+            >
+              <ShieldCheck className="h-3.5 w-3.5" />
+              {running === "delete_now" ? "Executando" : "Executar exclusao agora"}
+            </button>
           </div>
 
           {notice ? (
@@ -256,11 +280,13 @@ function InfoTile({ label, value }: { label: string; value: string }) {
   );
 }
 
-function buttonClass(tone: "primary" | "ghost") {
+function buttonClass(tone: "primary" | "ghost" | "danger") {
   return cn(
     "inline-flex h-10 items-center justify-center gap-2 rounded-xl px-4 font-mono text-[10px] font-bold uppercase tracking-wide transition disabled:cursor-not-allowed disabled:opacity-50",
     tone === "primary"
       ? "bg-red-600 text-white shadow-lg shadow-red-600/15 hover:bg-red-500"
-      : "border border-slate-200 bg-white text-slate-700 hover:border-red-200 hover:text-red-600",
+      : tone === "danger"
+        ? "border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100"
+        : "border border-slate-200 bg-white text-slate-700 hover:border-red-200 hover:text-red-600",
   );
 }

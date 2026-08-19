@@ -107,10 +107,17 @@ export const connectyhubWhatsappSync = inngest.createFunction(
         configureWebhooks: data?.configureWebhooks !== false,
       }),
     );
+    const costGuard = await step.run("run-uazapi-cost-guard-after-sync-if-due", () =>
+      runScheduledUazapiCostGuard({
+        client: createServiceClient(),
+        triggerSource: "whatsapp_sync_cron",
+      }),
+    );
 
     return {
       status: "synced",
       summary,
+      costGuard,
     };
   },
 );

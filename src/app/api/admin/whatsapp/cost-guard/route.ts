@@ -76,6 +76,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true, state, summary });
     }
 
+    if (action === "run_delete_now") {
+      const summary = await runUazapiInstanceCostGuard({
+        actorId: auth.userId,
+        client,
+        mode: "delete",
+        triggerSource: "admin_panel_manual_delete",
+        updateScheduledRun: true,
+      });
+      const state = await getUazapiCostGuardAdminState(client);
+
+      revalidatePath("/admin/clientes/whatsapp");
+      revalidatePath("/admin/api-whatsapp");
+
+      return NextResponse.json({ ok: true, state, summary });
+    }
+
     return NextResponse.json({ ok: false, error: { message: "Acao invalida." } }, { status: 422 });
   } catch (error) {
     return NextResponse.json(
