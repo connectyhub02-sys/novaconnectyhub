@@ -431,18 +431,9 @@ async function planInstanceDecision(input: {
   }
 
   if (!input.providerIds.has(input.row.provider_instance_id)) {
-    if (instanceType === "api_customer" || instanceType === "client_agent") {
-      return {
-        decision: "archive_provider_missing",
-        reason: "Instancia nao aparece mais no /instance/all da Uazapi.",
-        eligibleAt: null,
-        instanceType,
-      };
-    }
-
     return {
-      decision: instanceType === "internal_platform" ? "skip_internal" : "skip_unknown",
-      reason: "Instancia fora do provedor, mas a origem exige revisao manual.",
+      decision: "archive_provider_missing",
+      reason: "Instancia nao aparece mais no /instance/all da Uazapi.",
       eligibleAt: null,
       instanceType,
     };
@@ -466,24 +457,6 @@ async function planInstanceDecision(input: {
     };
   }
 
-  if (instanceType === "internal_platform") {
-    return {
-      decision: "skip_internal",
-      reason: "Instancia interna da ConnectyHub exige exclusao manual.",
-      eligibleAt: null,
-      instanceType,
-    };
-  }
-
-  if (instanceType === "unknown") {
-    return {
-      decision: "skip_unknown",
-      reason: "Origem da instancia nao esta classificada como API ou agente do cliente.",
-      eligibleAt: null,
-      instanceType,
-    };
-  }
-
   const billing = await getCachedBilling(input.client, input.row.organization_id, input.billingCache);
   const trialHold = resolveTrialHold(billing, input.settings.trialGraceDays);
 
@@ -500,7 +473,11 @@ async function planInstanceDecision(input: {
     decision: "delete_disconnected",
     reason: instanceType === "api_customer"
       ? "Instancia API desconectada confirmada no provedor."
-      : "Instancia de agente de cliente desconectada confirmada no provedor.",
+      : instanceType === "client_agent"
+        ? "Instancia de agente de cliente desconectada confirmada no provedor."
+        : instanceType === "internal_platform"
+          ? "Instancia interna desconectada confirmada no provedor."
+          : "Instancia desconectada confirmada no provedor.",
     eligibleAt: trialHold.eligibleAt,
     instanceType,
   };
