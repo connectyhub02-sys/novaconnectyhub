@@ -3327,12 +3327,17 @@ export function SalesCatalogConsole({
           </Panel>
         </div>
       ) : (
-        <div className="grid gap-4 xl:grid-cols-[minmax(320px,0.72fr)_minmax(0,1fr)]">
-        <div className="space-y-4">
+        <div className={cn(
+          "grid gap-4",
+          activeTab === "products"
+            ? "xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.72fr)]"
+            : "xl:grid-cols-[minmax(320px,0.72fr)_minmax(0,1fr)]",
+        )}>
+        <div className={activeTab === "products" ? "contents" : "space-y-4"}>
           {activeTab === "products" ? (
           <>
           {!hasConfiguredSettings ? (
-            <div className="rounded-xl border border-amber-300/35 bg-amber-300/10 px-4 py-3 text-[12px] text-amber-50">
+            <div className="order-0 rounded-xl border border-amber-300/35 bg-amber-300/10 px-4 py-3 text-[12px] text-amber-50 xl:col-span-2">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex min-w-0 items-start gap-3">
                   <Settings2 className="mt-0.5 h-4 w-4 shrink-0 text-amber-200" />
@@ -3405,6 +3410,7 @@ export function SalesCatalogConsole({
             />
           ) : null}
           <WhatsAppCatalogBridgePanel
+            className="order-2"
             companies={companies}
             companyName={selectedCompany?.name ?? "empresa"}
             canExport={canExportWhatsappCatalog}
@@ -3424,7 +3430,7 @@ export function SalesCatalogConsole({
             onImport={importWhatsappCatalog}
             onToggleExportItem={toggleWhatsappExportItem}
           />
-          <Panel id="sales-catalog-tour-products" title={editingItemId ? "Editar item" : "Cadastrar produto manualmente"} eyebrow={selectedCompany?.name ?? "empresa"} tone="cyan" compact>
+          <Panel className="order-1" id="sales-catalog-tour-products" title={editingItemId ? "Editar item" : "Cadastrar produto manualmente"} eyebrow={selectedCompany?.name ?? "empresa"} tone="cyan" compact>
             <div className="space-y-3">
             <SalesProductFormTabs activeTab={productFormTab} onChange={setProductFormTab} tabs={salesCatalogProductFormTabs} />
 
@@ -4132,7 +4138,7 @@ export function SalesCatalogConsole({
           )}
         </div>
 
-        <Panel title="Itens cadastrados" eyebrow={selectedCompany?.name ?? "catalogo"} tone="green" compact>
+        <Panel className={activeTab === "products" ? "order-3 xl:col-span-2" : undefined} title="Itens cadastrados" eyebrow={selectedCompany?.name ?? "catalogo"} tone="green" compact>
           {visibleItems.length > 0 ? (
             <div className="grid gap-3">
               {visibleItems.map((item) => (
@@ -4164,6 +4170,7 @@ export function SalesCatalogConsole({
 function WhatsAppCatalogBridgePanel({
   canExport,
   canImport,
+  className,
   companies,
   companyName,
   connectedInstances,
@@ -4183,6 +4190,7 @@ function WhatsAppCatalogBridgePanel({
 }: {
   canExport: boolean;
   canImport: boolean;
+  className?: string;
   companies: ClientCompany[];
   companyName: string;
   connectedInstances: ClientSalesCatalogWhatsappInstance[];
@@ -4205,12 +4213,12 @@ function WhatsAppCatalogBridgePanel({
   const selectedExportInstance = connectedInstances.find((instance) => instance.id === selectedExportInstanceId) ?? null;
 
   return (
-    <Panel title="Sincronizar com WhatsApp" eyebrow={`${companyName} / opcional`} tone="violet" compact>
+    <Panel className={className} title="Sincronizar com WhatsApp" eyebrow={`${companyName} / opcional`} tone="violet" compact>
       <div className="space-y-3">
         <div className="rounded-xl border border-violet-300/25 bg-violet-400/10 px-3 py-2 text-[11px] leading-5 text-slate-600">
           <p className="font-semibold text-slate-900">Esta area e somente para catalogo nativo do WhatsApp.</p>
           <p className="mt-1">
-            Produtos criados manualmente ou importados por IA ja entram no catalogo da empresa e seguem a regra de agentes escolhida na importacao.
+            Produtos cadastrados no catalogo da empresa ja seguem a regra de agentes escolhida em cada item.
             Use aqui apenas para trazer produtos que ja existem no WhatsApp do agente.
           </p>
         </div>
