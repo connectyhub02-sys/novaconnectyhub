@@ -8,7 +8,9 @@ import {
   statusForDashboardCompanyScopeError,
 } from "@/lib/client-os/dashboard-route-scope";
 import {
+  isSalesCatalogAiImportEnabled,
   publishSalesCatalogImportJob,
+  salesCatalogAiImportDisabledMessage,
   type SalesCatalogImportDuplicateAction,
   type SalesCatalogImportDestination,
   type SalesCatalogImportItemPatch,
@@ -41,6 +43,10 @@ export async function POST(request: NextRequest, context: { params: Promise<{ jo
   }
 
   try {
+    if (!isSalesCatalogAiImportEnabled()) {
+      return NextResponse.json({ error: salesCatalogAiImportDisabledMessage }, { status: 410 });
+    }
+
     const { jobId } = await context.params;
     const body = readRecord(await request.json().catch(() => null)) ?? {};
     const client = createServiceClient();

@@ -105,6 +105,7 @@ type Notice = {
 };
 
 const salesCatalogBrowserEventsChannel = "connectyhub:sales-catalog-events";
+const salesCatalogAiImportPanelEnabled = false;
 
 function publishSalesCatalogUpdated(input: { companyId: string; itemIds?: string[] }) {
   if (typeof window === "undefined" || !("BroadcastChannel" in window)) {
@@ -769,6 +770,10 @@ export function SalesCatalogConsole({
   }, []);
 
   useEffect(() => {
+    if (!salesCatalogAiImportPanelEnabled) {
+      return;
+    }
+
     if (!selectedCompanyId) {
       return;
     }
@@ -808,6 +813,10 @@ export function SalesCatalogConsole({
   }, [selectedCompanyId]);
 
   useEffect(() => {
+    if (!salesCatalogAiImportPanelEnabled) {
+      return;
+    }
+
     const hasQueuedImport = catalogImportJobs.some((job) => job.status === "uploaded" || job.status === "extracting");
     if (!selectedCompanyId || activeTab !== "products" || !hasQueuedImport) {
       return;
@@ -3329,7 +3338,7 @@ export function SalesCatalogConsole({
                   <Settings2 className="mt-0.5 h-4 w-4 shrink-0 text-amber-200" />
                   <div className="min-w-0">
                     <p className="font-semibold text-amber-100">Configuracao do catalogo pendente</p>
-                    <p className="mt-1 text-slate-300">Voce ja pode importar ou cadastrar produtos. Complete a configuracao depois para regras de pagamento, pedidos e WhatsApp.</p>
+                    <p className="mt-1 text-slate-300">Voce ja pode cadastrar produtos. Complete a configuracao depois para regras de pagamento, pedidos e WhatsApp.</p>
                   </div>
                 </div>
                 <button
@@ -3344,45 +3353,47 @@ export function SalesCatalogConsole({
               </div>
             </div>
           ) : null}
-          <SalesCatalogImportPanel
-            companies={companies}
-            companyName={selectedCompany?.name ?? "empresa"}
-            connectedInstances={connectedWhatsappInstances}
-            creating={creatingCatalogImport}
-            defaultDestination={catalogImportDefaultDestination}
-            files={catalogImportFiles}
-            jobs={catalogImportJobs}
-            jobNotices={catalogImportJobNotices}
-            jobPatches={catalogImportPatches}
-            loading={loadingCatalogImports}
-            cancelingJobId={cancelingCatalogImportId}
-            deletingJobId={deletingCatalogImportId}
-            publishingJobId={publishingCatalogImportId}
-            savingJobId={savingCatalogImportId}
-            sourceKind={catalogImportSourceKind}
-            sourcePlatform={catalogImportSourcePlatform}
-            sourceText={catalogImportText}
-            selectedAgentScopeId={catalogImportAgentScopeId}
-            selectedCompanyId={selectedCompanyId}
-            targetMode={catalogImportTargetMode}
-            title={catalogImportTitle}
-            onChangeAgentScope={setCatalogImportAgentScopeId}
-            onChangeCompany={changeCompany}
-            onChangeFiles={handleCatalogImportFiles}
-            onChangeItem={updateCatalogImportItem}
-            onChangeSourcePlatform={handleCatalogImportSourcePlatform}
-            onChangeSourceText={setCatalogImportText}
-            onChangeTargetMode={handleCatalogImportTargetMode}
-            onChangeTitle={setCatalogImportTitle}
-            onCancel={cancelCatalogImport}
-            onCreate={createCatalogImport}
-            onDelete={deleteCatalogImport}
-            onOpenMonitor={openCatalogImportMonitor}
-            onPublish={publishCatalogImport}
-            onRefresh={refreshCatalogImports}
-            onSaveReview={saveCatalogImportReview}
-          />
-          {catalogImportMonitor?.open ? (
+          {salesCatalogAiImportPanelEnabled ? (
+            <SalesCatalogImportPanel
+              companies={companies}
+              companyName={selectedCompany?.name ?? "empresa"}
+              connectedInstances={connectedWhatsappInstances}
+              creating={creatingCatalogImport}
+              defaultDestination={catalogImportDefaultDestination}
+              files={catalogImportFiles}
+              jobs={catalogImportJobs}
+              jobNotices={catalogImportJobNotices}
+              jobPatches={catalogImportPatches}
+              loading={loadingCatalogImports}
+              cancelingJobId={cancelingCatalogImportId}
+              deletingJobId={deletingCatalogImportId}
+              publishingJobId={publishingCatalogImportId}
+              savingJobId={savingCatalogImportId}
+              sourceKind={catalogImportSourceKind}
+              sourcePlatform={catalogImportSourcePlatform}
+              sourceText={catalogImportText}
+              selectedAgentScopeId={catalogImportAgentScopeId}
+              selectedCompanyId={selectedCompanyId}
+              targetMode={catalogImportTargetMode}
+              title={catalogImportTitle}
+              onChangeAgentScope={setCatalogImportAgentScopeId}
+              onChangeCompany={changeCompany}
+              onChangeFiles={handleCatalogImportFiles}
+              onChangeItem={updateCatalogImportItem}
+              onChangeSourcePlatform={handleCatalogImportSourcePlatform}
+              onChangeSourceText={setCatalogImportText}
+              onChangeTargetMode={handleCatalogImportTargetMode}
+              onChangeTitle={setCatalogImportTitle}
+              onCancel={cancelCatalogImport}
+              onCreate={createCatalogImport}
+              onDelete={deleteCatalogImport}
+              onOpenMonitor={openCatalogImportMonitor}
+              onPublish={publishCatalogImport}
+              onRefresh={refreshCatalogImports}
+              onSaveReview={saveCatalogImportReview}
+            />
+          ) : null}
+          {salesCatalogAiImportPanelEnabled && catalogImportMonitor?.open ? (
             <CatalogImportProgressModal
               job={monitoredCatalogImportJob}
               canceling={monitoredCatalogImportJob ? cancelingCatalogImportId === monitoredCatalogImportJob.id : false}

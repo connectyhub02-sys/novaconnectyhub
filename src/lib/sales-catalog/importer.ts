@@ -288,7 +288,19 @@ const maxDraftItems = 120;
 const maxGeminiOutputTokens = 7000;
 const maxImportedImageBytes = 20 * 1024 * 1024;
 
+export const salesCatalogAiImportDisabledMessage = "Importacao com IA esta pausada. Cadastre os produtos manualmente pelo catalogo.";
 export const salesCatalogImportProcessRequestedEventName = "connectyhub/sales-catalog.import.process_requested";
+
+export function isSalesCatalogAiImportEnabled() {
+  const value = process.env.CONNECTYHUB_SALES_CATALOG_AI_IMPORT?.trim().toLowerCase();
+  return value === "1" || value === "true" || value === "enabled";
+}
+
+function assertSalesCatalogAiImportEnabled() {
+  if (!isSalesCatalogAiImportEnabled()) {
+    throw new Error(salesCatalogAiImportDisabledMessage);
+  }
+}
 
 export async function createSalesCatalogImportJob(input: {
   client: SupabaseClient;
@@ -305,6 +317,8 @@ export async function createSalesCatalogImportJob(input: {
   assignedAgentIds?: string[] | null;
   assignedWhatsappInstanceIds?: string[] | null;
 }) {
+  assertSalesCatalogAiImportEnabled();
+
   const now = new Date().toISOString();
   const sourceKind = normalizeSourceKind(input.sourceKind);
   const sourcePlatform = normalizeImportPlatform(input.sourcePlatform);
@@ -444,6 +458,16 @@ export async function processQueuedSalesCatalogImportJobs(input: {
   jobId?: string | null;
   companyId?: string | null;
 }) {
+  if (!isSalesCatalogAiImportEnabled()) {
+    return {
+      processed: 0,
+      skipped: input.jobId ? 1 : 0,
+      results: input.jobId
+        ? [{ jobId: input.jobId, status: "skipped" as const, error: salesCatalogAiImportDisabledMessage }]
+        : [],
+    };
+  }
+
   let query = input.client
     .from("sales_catalog_import_jobs")
     .select(importJobSelect)
@@ -527,6 +551,8 @@ export async function processSalesCatalogImportJobById(input: {
   jobId: string;
   userId?: string | null;
 }) {
+  assertSalesCatalogAiImportEnabled();
+
   const { data: job, error } = await input.client
     .from("sales_catalog_import_jobs")
     .select(importJobSelect)
@@ -894,6 +920,8 @@ export async function publishSalesCatalogImportJob(input: {
   itemIds?: string[] | null;
   patches?: SalesCatalogImportItemPatch[] | null;
 }) {
+  assertSalesCatalogAiImportEnabled();
+
   if (input.patches?.length) {
     await updateSalesCatalogImportItems({
       client: input.client,

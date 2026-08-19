@@ -8,8 +8,10 @@ import {
 import {
   createAndProcessSalesCatalogImport,
   createSalesCatalogImportJob,
+  isSalesCatalogAiImportEnabled,
   listSalesCatalogImportJobs,
   processQueuedSalesCatalogImportJobs,
+  salesCatalogAiImportDisabledMessage,
   salesCatalogImportProcessRequestedEventName,
   type SalesCatalogImportAssignmentScope,
   type SalesCatalogImportDestination,
@@ -144,7 +146,7 @@ export async function GET(request: NextRequest) {
       client,
     });
 
-    if (request.nextUrl.searchParams.get("processQueued") === "1") {
+    if (request.nextUrl.searchParams.get("processQueued") === "1" && isSalesCatalogAiImportEnabled()) {
       await processQueuedSalesCatalogImportJobs({
         client,
         companyId: company.id,
@@ -172,6 +174,10 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    if (!isSalesCatalogAiImportEnabled()) {
+      return NextResponse.json({ error: salesCatalogAiImportDisabledMessage }, { status: 410 });
+    }
+
     const payload = await readImportRequest(request);
     const client = createServiceClient();
     const companyId = resolveDashboardCompanyId({
