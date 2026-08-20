@@ -3152,9 +3152,9 @@ function WhatsappConsoleCommandBar({
     <div
       className="sticky top-[68px] z-20 mb-3 rounded-xl border px-2.5 py-2.5 shadow-2xl shadow-slate-950/20 backdrop-blur sm:top-3 sm:mb-4 sm:px-3 sm:py-3"
       style={{
-        background: "linear-gradient(180deg, rgba(var(--ch-accent-rgb),0.07), rgba(16,23,34,0.94))",
-        borderColor: "var(--ch-border-strong)",
-        boxShadow: "0 18px 45px rgba(0,0,0,0.24)",
+        background: "linear-gradient(135deg, rgba(var(--ch-accent-rgb),0.98), rgba(var(--ch-accent-2-rgb),0.92))",
+        borderColor: "rgba(var(--ch-accent-rgb),0.44)",
+        boxShadow: "0 18px 45px rgba(var(--ch-accent-rgb),0.24)",
       }}
     >
       <div className="grid gap-2 sm:gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
