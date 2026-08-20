@@ -17,7 +17,7 @@ import type { StatusTone, Tone } from "@/lib/connectyhub-os-data";
 
 const toneMap: Record<Tone, { text: string; border: string; bg: string; fill: string; dot: string }> = {
   green:  { text: "text-emerald-700", border: "border-emerald-500/25", bg: "bg-emerald-500/10", fill: "#059669", dot: "bg-emerald-500" },
-  cyan:   { text: "text-cyan-700",    border: "border-cyan-500/25",    bg: "bg-cyan-500/10",    fill: "#e50914", dot: "bg-cyan-500"    },
+  cyan:   { text: "text-cyan-700",    border: "border-cyan-500/25",    bg: "bg-cyan-500/10",    fill: "#1877f2", dot: "bg-cyan-500"    },
   amber:  { text: "text-amber-700",   border: "border-amber-500/25",   bg: "bg-amber-500/10",   fill: "#d97706", dot: "bg-amber-500"  },
   rose:   { text: "text-rose-700",    border: "border-rose-500/25",    bg: "bg-rose-500/10",    fill: "#dc2626", dot: "bg-rose-500"   },
   violet: { text: "text-violet-700",  border: "border-violet-500/25",  bg: "bg-violet-500/10",  fill: "#111111", dot: "bg-violet-500" },
@@ -26,7 +26,7 @@ const toneMap: Record<Tone, { text: string; border: string; bg: string; fill: st
 
 const panelToneMap: Record<Tone, { rgb: string; fill: string }> = {
   green:  { rgb: "5,150,105", fill: "#059669" },
-  cyan:   { rgb: "229,9,20", fill: "#e50914" },
+  cyan:   { rgb: "24,119,242", fill: "#1877f2" },
   amber:  { rgb: "217,119,6", fill: "#d97706" },
   rose:   { rgb: "220,38,38", fill: "#dc2626" },
   violet: { rgb: "17,17,17", fill: "#111111" },
@@ -227,15 +227,15 @@ export function HeroMetricCard({
   sub1Label: string; sub1Value: string; sub2Label: string; sub2Value: string;
   series: number[]; accent?: "cyan" | "emerald";
 }) {
-  const color  = accent === "cyan" ? "#e50914" : "#059669";
-  const colorB = accent === "cyan" ? "#fff1f2" : "#dcfce7";
+  const color  = accent === "cyan" ? "#1877f2" : "#059669";
+  const colorB = accent === "cyan" ? "#eaf3ff" : "#dcfce7";
 
   return (
     <div
       className="relative overflow-hidden rounded-xl p-3 sm:rounded-2xl sm:p-5"
       style={{
         background: `linear-gradient(135deg, ${colorB} 0%, rgba(255,255,255,0.92) 100%)`,
-        border:     `1px solid rgba(${accent === "cyan" ? "229,9,20" : "52,211,153"},0.3)`,
+        border:     `1px solid rgba(${accent === "cyan" ? "24,119,242" : "52,211,153"},0.3)`,
         boxShadow: "0 18px 50px rgba(15,23,42,0.06)",
       }}
     >
@@ -518,7 +518,7 @@ export function DataTable({ columns, rows }: { columns: string[]; rows: ReactNod
 export function LoadingLine({ label }: { label: string }) {
   return (
     <span className="inline-flex items-center gap-2 font-mono text-[10px] uppercase tracking-widest text-slate-600">
-      <InfinityMark size="sm" className="text-red-600" />
+      <InfinityMark size="sm" className="text-blue-600" />
       {label}
     </span>
   );

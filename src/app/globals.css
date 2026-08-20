@@ -298,7 +298,7 @@ textarea {
 [data-connecty-mode] .text-sky-100,
 [data-connecty-mode] .text-sky-200,
 [data-connecty-mode] .text-sky-300 {
-  color: #dc2626 !important;
+  color: var(--ch-accent) !important;
 }
 
 [data-connecty-mode] .text-emerald-100,
@@ -349,7 +349,7 @@ textarea {
 
 [data-connecty-mode] .text-cyan-700,
 [data-connecty-mode] .text-sky-700 {
-  color: #dc2626 !important;
+  color: var(--ch-accent) !important;
 }
 
 [data-connecty-mode] .text-emerald-700 {
@@ -410,12 +410,12 @@ textarea {
 }
 
 [data-connecty-mode] .bg-sky-50 {
-  background-color: rgba(229, 9, 20, 0.08) !important;
+  background-color: rgba(var(--ch-accent-rgb), 0.08) !important;
 }
 
 [data-connecty-mode] [class*="text-cyan-"],
 [data-connecty-mode] [class*="text-sky-"] {
-  color: #dc2626 !important;
+  color: var(--ch-accent) !important;
 }
 
 [data-connecty-mode] [class*="text-violet-"] {
@@ -424,7 +424,7 @@ textarea {
 
 [data-connecty-mode] [class*="border-cyan-"],
 [data-connecty-mode] [class*="border-sky-"] {
-  border-color: rgba(229, 9, 20, 0.24) !important;
+  border-color: rgba(var(--ch-accent-rgb), 0.24) !important;
 }
 
 [data-connecty-mode] [class*="border-violet-"] {
@@ -437,7 +437,7 @@ textarea {
 [data-connecty-mode] .bg-sky-300,
 [data-connecty-mode] .bg-sky-400,
 [data-connecty-mode] .bg-sky-500 {
-  background-color: #e50914 !important;
+  background-color: var(--ch-accent) !important;
   color: #ffffff !important;
 }
 
@@ -456,7 +456,7 @@ textarea {
 [data-connecty-mode] .bg-sky-300\/10,
 [data-connecty-mode] .bg-sky-300\/12,
 [data-connecty-mode] .bg-sky-500\/10 {
-  background-color: rgba(229, 9, 20, 0.09) !important;
+  background-color: rgba(var(--ch-accent-rgb), 0.09) !important;
 }
 
 [data-connecty-mode] .bg-violet-300\/10,
@@ -470,18 +470,18 @@ textarea {
 [data-connecty-mode] .hover\:bg-cyan-300:hover,
 [data-connecty-mode] .hover\:bg-sky-200:hover,
 [data-connecty-mode] .hover\:bg-sky-300:hover {
-  background-color: #b70710 !important;
+  background-color: var(--ch-accent-2) !important;
   color: #ffffff !important;
 }
 
 [data-connecty-mode] [class*="hover:bg-cyan-"]:hover,
 [data-connecty-mode] [class*="hover:bg-sky-"]:hover {
-  border-color: rgba(229, 9, 20, 0.34) !important;
+  border-color: rgba(var(--ch-accent-rgb), 0.34) !important;
 }
 
 [data-connecty-mode] [data-active][class*="data-active:border-cyan-"],
 [data-connecty-mode] [data-active][class*="data-active:border-sky-"] {
-  border-color: rgba(229, 9, 20, 0.54) !important;
+  border-color: rgba(var(--ch-accent-rgb), 0.54) !important;
 }
 
 [data-connecty-mode] .border-slate-300 {
@@ -4015,8 +4015,8 @@ html {
 
 .connecty-lead-file-modal {
   color-scheme: light;
-  --lead-file-accent: #e50914;
-  --lead-file-accent-soft: #fff1f2;
+  --lead-file-accent: #1877f2;
+  --lead-file-accent-soft: #eaf3ff;
   --lead-file-border: #e5e7eb;
   --lead-file-text: #0f172a;
   --lead-file-muted: #64748b;
@@ -4045,7 +4045,7 @@ html {
 .connecty-lead-file-modal [class*="border-cyan"],
 .connecty-lead-file-modal [class*="border-sky"],
 .connecty-lead-file-modal [class*="border-violet"] {
-  border-color: rgba(229, 9, 20, 0.22) !important;
+  border-color: rgba(24, 119, 242, 0.22) !important;
 }
 
 .connecty-lead-file-modal .text-white,

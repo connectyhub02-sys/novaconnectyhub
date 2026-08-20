@@ -4708,7 +4708,7 @@ function CatalogImportProgressModal({
       <div className="w-full max-w-4xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
         <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
           <div className="min-w-0">
-            <p className="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-red-500">importacao com ia</p>
+            <p className="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-blue-500">importacao com ia</p>
             <h3 className="mt-1 truncate text-xl font-bold text-slate-950">{monitor.title}</h3>
             <p className="mt-1 text-sm text-slate-500">{message}</p>
           </div>
@@ -4743,15 +4743,15 @@ function CatalogImportProgressModal({
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <div className="flex items-center justify-between gap-3">
                 <span className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">progresso</span>
-                {active || loading ? <Loader2 className="h-4 w-4 animate-spin text-red-500" /> : <CheckCircle2 className="h-4 w-4 text-emerald-500" />}
+                {active || loading ? <Loader2 className="h-4 w-4 animate-spin text-blue-500" /> : <CheckCircle2 className="h-4 w-4 text-emerald-500" />}
               </div>
               <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-200">
                 <div
                   className={cn(
                     "h-full rounded-full transition-all duration-700",
                     job
-                      ? job.status === "failed" && !isCatalogImportJobCanceled(job) ? "bg-rose-500" : "bg-red-500"
-                      : monitor.status === "failed" ? "bg-rose-500" : "bg-red-500",
+                      ? job.status === "failed" && !isCatalogImportJobCanceled(job) ? "bg-rose-500" : "bg-blue-500"
+                      : monitor.status === "failed" ? "bg-rose-500" : "bg-blue-500",
                   )}
                   style={{ width: `${progress}%` }}
                 />
@@ -4794,7 +4794,7 @@ function CatalogImportProgressModal({
                 <p className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">produtos encontrados</p>
                 <p className="text-xs text-slate-500">{formatImportPlatform(monitor.sourcePlatform)} / {formatImportSourceKind(monitor.sourceKind)}</p>
               </div>
-              {active ? <span className="h-2 w-2 rounded-full bg-red-500 shadow-[0_0_18px_rgba(239,68,68,0.8)]" /> : null}
+              {active ? <span className="h-2 w-2 rounded-full bg-blue-500 shadow-[0_0_18px_rgba(24,119,242,0.8)]" /> : null}
             </div>
 
             <div className="max-h-[460px] overflow-y-auto p-3">
@@ -4812,7 +4812,7 @@ function CatalogImportProgressModal({
                       key={item.id}
                       className="grid grid-cols-[32px_minmax(0,1fr)_auto] items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm"
                     >
-                      <div className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-red-50 text-red-600">
+                      <div className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-blue-50 text-blue-600">
                         {item.imageUrl ? <ImageIcon className="h-4 w-4" /> : <PackagePlus className="h-4 w-4" />}
                       </div>
                       <div className="min-w-0">

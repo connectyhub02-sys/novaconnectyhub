@@ -1428,7 +1428,7 @@ function AttendanceCenterView({
               <label className="relative mt-4 block">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
                 <input
-                  className="h-11 w-full rounded-full border bg-slate-100/80 pl-10 pr-3 text-[13px] text-slate-950 outline-none transition placeholder:text-slate-500 focus:border-red-500/45 focus:bg-white"
+                  className="h-11 w-full rounded-full border bg-slate-100/80 pl-10 pr-3 text-[13px] text-slate-950 outline-none transition placeholder:text-slate-500 focus:border-blue-500/45 focus:bg-white"
                   onChange={(event) => setSearch(event.target.value)}
                   placeholder="Pesquisar ou comecar atendimento"
                   style={{ borderColor: "var(--ch-border)" }}
@@ -1444,8 +1444,8 @@ function AttendanceCenterView({
                     className={cn(
                       "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-3 text-[12px] font-semibold transition",
                       inboxTab === item.value
-                        ? "border-red-500 bg-red-600 text-white shadow-[0_10px_22px_rgba(229,9,20,0.18)]"
-                        : "border-slate-200 bg-white text-slate-700 hover:border-red-300 hover:text-red-600",
+                        ? "border-blue-500 bg-blue-600 text-white shadow-[0_10px_22px_rgba(24,119,242,0.18)]"
+                        : "border-slate-200 bg-white text-slate-700 hover:border-blue-300 hover:text-blue-600",
                     )}
                     onClick={() => setInboxTab(item.value)}
                     type="button"
@@ -1470,7 +1470,7 @@ function AttendanceCenterView({
                     key={thread.key}
                     className={cn(
                       "grid w-full grid-cols-[48px_minmax(0,1fr)] gap-3 border-b px-4 py-3 text-left transition",
-                      selected ? "bg-red-50" : "bg-white hover:bg-slate-50",
+                      selected ? "bg-blue-50" : "bg-white hover:bg-slate-50",
                     )}
                     onClick={() => {
                       setSelectedThreadKey(thread.key);
@@ -1573,7 +1573,7 @@ function AttendanceCenterView({
                   <form className="flex flex-col gap-2 lg:flex-row lg:items-end" onSubmit={handleManualReplySubmit}>
                     <label className="relative block min-w-0 flex-1">
                       <textarea
-                        className="max-h-24 min-h-10 w-full resize-none rounded-2xl border bg-slate-100/80 px-4 py-2 text-[13px] leading-6 text-slate-950 outline-none transition placeholder:text-slate-500 focus:border-red-500/45 focus:bg-white lg:h-10"
+                        className="max-h-24 min-h-10 w-full resize-none rounded-2xl border bg-slate-100/80 px-4 py-2 text-[13px] leading-6 text-slate-950 outline-none transition placeholder:text-slate-500 focus:border-blue-500/45 focus:bg-white lg:h-10"
                         disabled={replyBusy}
                         onKeyDown={handleManualReplyKeyDown}
                         onChange={(event) => setManualReply(event.target.value)}
@@ -1588,7 +1588,7 @@ function AttendanceCenterView({
                           "inline-flex h-10 items-center justify-center gap-2 rounded-xl px-3 text-[11px] font-bold transition lg:w-[112px]",
                           activeHumanIntervention.active
                             ? "border border-slate-200 bg-white text-slate-800 hover:bg-slate-100"
-                            : "bg-red-600 text-white hover:bg-red-700",
+                            : "bg-blue-600 text-white hover:bg-blue-700",
                         )}
                         disabled={handoffBusy || replyBusy}
                         onClick={() => void updateHumanHandoff(activeHumanIntervention.active ? "resume" : "pause")}
@@ -1712,10 +1712,10 @@ function AttendancePushPermissionPrompt({
   const blocked = permission === "denied";
 
   return (
-    <div className="mb-2 rounded-2xl border border-red-200 bg-red-50/80 px-3 py-3 text-[12px] text-slate-800 shadow-sm">
+    <div className="mb-2 rounded-2xl border border-blue-200 bg-blue-50/80 px-3 py-3 text-[12px] text-slate-800 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 gap-3">
-          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-red-600 text-white">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-blue-600 text-white">
             <Bell className="h-4 w-4" />
           </span>
           <div className="min-w-0">
@@ -1736,7 +1736,7 @@ function AttendancePushPermissionPrompt({
         </div>
         <button
           aria-label="Fechar aviso de notificacoes"
-          className="grid h-8 w-8 shrink-0 place-items-center rounded-xl border border-red-100 bg-white text-slate-500 transition hover:border-red-200 hover:text-red-600"
+          className="grid h-8 w-8 shrink-0 place-items-center rounded-xl border border-blue-100 bg-white text-slate-500 transition hover:border-blue-200 hover:text-blue-600"
           onClick={onDismiss}
           type="button"
         >
@@ -1749,7 +1749,7 @@ function AttendancePushPermissionPrompt({
             "inline-flex h-9 items-center justify-center gap-2 rounded-xl px-3 text-[12px] font-bold transition",
             blocked
               ? "border border-red-200 bg-white text-red-700 hover:bg-red-50"
-              : "bg-red-600 text-white hover:bg-red-700",
+              : "bg-blue-600 text-white hover:bg-blue-700",
           )}
           disabled={busy}
           onClick={onEnable}
@@ -1860,7 +1860,7 @@ function AttendanceSalesBagPanel({
               Monte o pedido de {lead.name} sem gastar credito de IA.
             </p>
           </div>
-          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-red-600 text-white shadow-[0_14px_30px_rgba(229,9,20,0.18)]">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-blue-600 text-white shadow-[0_14px_30px_rgba(24,119,242,0.18)]">
             <ShoppingBag className="h-4 w-4" />
           </span>
         </div>
@@ -1898,7 +1898,7 @@ function AttendanceSalesBagPanel({
             <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
             <input
               aria-label="Pesquisar produto na sacola"
-              className="h-10 w-full rounded-2xl border border-slate-200 bg-white pl-9 pr-3 text-[12px] text-slate-950 outline-none transition placeholder:text-slate-400 focus:border-red-400 focus:ring-2 focus:ring-red-100"
+              className="h-10 w-full rounded-2xl border border-slate-200 bg-white pl-9 pr-3 text-[12px] text-slate-950 outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
               onChange={(event) => setProductSearch(event.target.value)}
               placeholder="Pesquisar produto cadastrado..."
               type="search"
@@ -1918,7 +1918,7 @@ function AttendanceSalesBagPanel({
                   className={cn(
                     "grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-2xl border p-3 text-left transition",
                     hasPrice
-                      ? "border-slate-200 bg-white hover:border-red-200 hover:bg-red-50"
+                      ? "border-slate-200 bg-white hover:border-blue-200 hover:bg-blue-50"
                       : "border-amber-200 bg-amber-50/60 opacity-80",
                   )}
                 >
@@ -1935,7 +1935,7 @@ function AttendanceSalesBagPanel({
                     </span>
                   </button>
                   <div className="text-right">
-                    <span className={cn("block font-mono text-[12px] font-bold", hasPrice ? "text-red-600" : "text-amber-700")}>
+                    <span className={cn("block font-mono text-[12px] font-bold", hasPrice ? "text-blue-600" : "text-amber-700")}>
                       {hasPrice ? formatCurrencyCents(product.priceCents) : "Sem valor"}
                     </span>
                     <div className="mt-2 flex items-center justify-end gap-1.5">
@@ -1943,7 +1943,7 @@ function AttendanceSalesBagPanel({
                         aria-label={`Adicionar ${product.name} a sacola`}
                         className={cn(
                           "inline-grid h-8 w-8 place-items-center rounded-xl text-white transition",
-                          hasPrice ? "bg-red-600 hover:bg-red-700" : "cursor-not-allowed bg-amber-400",
+                          hasPrice ? "bg-blue-600 hover:bg-blue-700" : "cursor-not-allowed bg-amber-400",
                         )}
                         disabled={!hasPrice}
                         onClick={() => onAddQuickItem(product)}
@@ -2010,21 +2010,21 @@ function AttendanceSalesBagPanel({
           <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">Item personalizado</p>
           <form className="mt-3 space-y-2" onSubmit={handleAddManualItem}>
             <input
-              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-[12px] text-slate-950 outline-none transition placeholder:text-slate-400 focus:border-red-400"
+              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-[12px] text-slate-950 outline-none transition placeholder:text-slate-400 focus:border-blue-400"
               onChange={(event) => setManualName(event.target.value)}
               placeholder="Ex: meia calabresa + meia catupiry"
               value={manualName}
             />
             <div className="grid grid-cols-[minmax(0,1fr)_72px] gap-2">
               <input
-                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-[12px] text-slate-950 outline-none transition placeholder:text-slate-400 focus:border-red-400"
+                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-[12px] text-slate-950 outline-none transition placeholder:text-slate-400 focus:border-blue-400"
                 inputMode="decimal"
                 onChange={(event) => setManualPrice(event.target.value)}
                 placeholder="Valor"
                 value={manualPrice}
               />
               <input
-                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-center text-[12px] text-slate-950 outline-none transition focus:border-red-400"
+                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-center text-[12px] text-slate-950 outline-none transition focus:border-blue-400"
                 inputMode="numeric"
                 min={1}
                 onChange={(event) => setManualQuantity(event.target.value.replace(/\D/g, "").slice(0, 2))}
@@ -2086,7 +2086,7 @@ function AttendanceSalesBagPanel({
                   <div className="inline-flex items-center rounded-xl border border-slate-200 bg-slate-50">
                     <button
                       aria-label={`Diminuir quantidade de ${item.name}`}
-                      className="grid h-8 w-8 place-items-center text-slate-600 transition hover:text-red-600"
+                      className="grid h-8 w-8 place-items-center text-slate-600 transition hover:text-blue-600"
                       onClick={() => onUpdateQuantity(item.id, item.quantity - 1)}
                       type="button"
                     >
@@ -2095,7 +2095,7 @@ function AttendanceSalesBagPanel({
                     <span className="w-8 text-center font-mono text-[12px] font-bold text-slate-950">{item.quantity}</span>
                     <button
                       aria-label={`Aumentar quantidade de ${item.name}`}
-                      className="grid h-8 w-8 place-items-center text-slate-600 transition hover:text-red-600"
+                      className="grid h-8 w-8 place-items-center text-slate-600 transition hover:text-blue-600"
                       onClick={() => onUpdateQuantity(item.id, item.quantity + 1)}
                       type="button"
                     >
@@ -2122,13 +2122,13 @@ function AttendanceSalesBagPanel({
       </div>
 
       <div className="border-t bg-white p-4" style={{ borderColor: "var(--ch-border)" }}>
-        <div className="rounded-2xl border border-red-100 bg-red-50 p-3">
+        <div className="rounded-2xl border border-blue-100 bg-blue-50 p-3">
           <div className="flex items-center justify-between gap-3">
             <span>
-              <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-red-500">Fechamento</p>
+              <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-blue-500">Fechamento</p>
               <p className="mt-1 text-[20px] font-black text-slate-950">{formatCurrencyCents(totalCents)}</p>
             </span>
-            <CreditCard className="h-5 w-5 text-red-600" />
+            <CreditCard className="h-5 w-5 text-blue-600" />
           </div>
           <p className="mt-2 text-[11px] leading-5 text-slate-600">
             Gere um checkout seguro da ConnectyHub com os itens da sacola e envie o link de pagamento pelo chat.
@@ -2138,7 +2138,7 @@ function AttendanceSalesBagPanel({
         <button
           className={cn(
             "mt-3 inline-flex h-11 w-full items-center justify-center gap-2 rounded-2xl text-[12px] font-bold transition",
-            cartItems.length && !checkoutBusy ? "bg-red-600 text-white hover:bg-red-700" : "bg-slate-200 text-slate-500",
+            cartItems.length && !checkoutBusy ? "bg-blue-600 text-white hover:bg-blue-700" : "bg-slate-200 text-slate-500",
           )}
           disabled={!cartItems.length || checkoutBusy}
           onClick={onCreateCheckout}
@@ -2999,7 +2999,7 @@ function LeadDetailsModal({ lead, onClose }: { lead: ClientLeadRecord; onClose: 
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 p-0 backdrop-blur-sm sm:p-4">
-      <div className="connecty-lead-file-modal flex h-[100svh] max-h-[100svh] w-full max-w-[1280px] flex-col overflow-hidden border border-red-100 bg-white text-slate-950 shadow-2xl sm:h-auto sm:max-h-[92svh] sm:rounded-2xl">
+      <div className="connecty-lead-file-modal flex h-[100svh] max-h-[100svh] w-full max-w-[1280px] flex-col overflow-hidden border border-blue-100 bg-white text-slate-950 shadow-2xl sm:h-auto sm:max-h-[92svh] sm:rounded-2xl">
         <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-white px-3 py-3 sm:gap-4 sm:px-5 sm:py-4">
           <div className="flex min-w-0 items-center gap-3">
             <LeadAvatar lead={lead} size="lg" />
@@ -3025,7 +3025,7 @@ function LeadDetailsModal({ lead, onClose }: { lead: ClientLeadRecord; onClose: 
           </div>
           <button
             aria-label="Fechar detalhes do lead"
-            className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 text-slate-500 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600"
+            className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 text-slate-500 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
             onClick={onClose}
             type="button"
           >

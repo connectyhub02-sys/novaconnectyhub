@@ -151,11 +151,11 @@ type AccentPalette = {
 };
 
 const accentPalettes: Record<AccentTone, AccentPalette> = {
-  red: { accent: "#e50914", accentRgb: "229,9,20", accent2: "#111111", accent2Rgb: "17,17,17" },
+  red: { accent: "#1877f2", accentRgb: "24,119,242", accent2: "#0a58ca", accent2Rgb: "10,88,202" },
   teal: { accent: "#38e8d6", accentRgb: "56,232,214", accent2: "#7dd3fc", accent2Rgb: "125,211,252" },
   emerald: { accent: "#34d399", accentRgb: "52,211,153", accent2: "#38e8d6", accent2Rgb: "56,232,214" },
   sky: { accent: "#38bdf8", accentRgb: "56,189,248", accent2: "#818cf8", accent2Rgb: "129,140,248" },
-  blue: { accent: "#60a5fa", accentRgb: "96,165,250", accent2: "#38bdf8", accent2Rgb: "56,189,248" },
+  blue: { accent: "#1877f2", accentRgb: "24,119,242", accent2: "#0a58ca", accent2Rgb: "10,88,202" },
   violet: { accent: "#a78bfa", accentRgb: "167,139,250", accent2: "#f0abfc", accent2Rgb: "240,171,252" },
   amber: { accent: "#fbbf24", accentRgb: "251,191,36", accent2: "#fb923c", accent2Rgb: "251,146,60" },
   rose: { accent: "#fb7185", accentRgb: "251,113,133", accent2: "#f472b6", accent2Rgb: "244,114,182" },
@@ -218,7 +218,7 @@ const clientSections: NavSection[] = [
       { label: "Dashboard",    href: "/dashboard",                icon: BarChart3, tone: "blue" },
       { label: "Minha Empresa",href: "/dashboard/empresa",        icon: Building2, tone: "sky" },
       { label: "Agentes",      href: "/dashboard/whatsapp",       icon: Bot, tone: "violet" },
-      { label: "Atendimento",  href: "/dashboard/atendimento",    icon: MessageCircle, tone: "red" },
+      { label: "Atendimento",  href: "/dashboard/atendimento",    icon: MessageCircle, tone: "blue" },
     ],
   },
   {
@@ -306,7 +306,7 @@ function ConnectyShellRoot({
   const active    = activeHref ?? pathname ?? "/";
   const sections  = mode === "admin" ? adminSections : clientSections;
   const activeItem = resolveActiveItem(sections, active);
-  const activeTone: AccentTone = "red";
+  const activeTone: AccentTone = "blue";
   const activePalette = accentPalettes[activeTone];
   const accent    = activePalette.accent;
   const accentRgb = activePalette.accentRgb;
@@ -2423,10 +2423,10 @@ function SidebarLink({
       }}
       className="group relative flex h-9 items-center gap-2.5 rounded-xl px-3 text-[12.5px] transition-all"
       style={active ? {
-        background: "linear-gradient(135deg, #e50914 0%, #b70710 100%)",
-        border:     "1px solid rgba(229,9,20,0.68)",
+        background: "linear-gradient(135deg, var(--ch-accent) 0%, var(--ch-accent-2) 100%)",
+        border:     "1px solid rgba(var(--ch-accent-rgb),0.68)",
         color:      "#ffffff",
-        boxShadow:  "0 14px 28px rgba(229,9,20,0.22)",
+        boxShadow:  "0 14px 28px rgba(var(--ch-accent-rgb),0.22)",
       } : {
         background: "transparent",
         border:     "1px solid transparent",
@@ -2660,10 +2660,10 @@ function MobileMenuQuickLink({
         onClick();
       }}
       style={active ? {
-        background: "linear-gradient(135deg, #e50914 0%, #b70710 100%)",
-        border: "1px solid rgba(229,9,20,0.62)",
+        background: "linear-gradient(135deg, var(--ch-accent) 0%, var(--ch-accent-2) 100%)",
+        border: "1px solid rgba(var(--ch-accent-rgb),0.62)",
         color: "#ffffff",
-        boxShadow: "0 16px 32px rgba(229,9,20,0.20)",
+        boxShadow: "0 16px 32px rgba(var(--ch-accent-rgb),0.20)",
       } : {
         background: "linear-gradient(135deg, rgba(255,255,255,0.78), rgba(17,17,17,0.018)), var(--ch-surface)",
         border: "1px solid var(--ch-border)",
@@ -2711,10 +2711,10 @@ function MobileMenuLink({
       }}
       className="grid min-h-10 grid-cols-[24px_minmax(0,1fr)_auto] items-center gap-2 rounded-2xl px-3 py-2 text-[12.5px] transition-all"
       style={active ? {
-        background: "linear-gradient(135deg, #e50914 0%, #b70710 100%)",
-        border:     "1px solid rgba(229,9,20,0.62)",
+        background: "linear-gradient(135deg, var(--ch-accent) 0%, var(--ch-accent-2) 100%)",
+        border:     "1px solid rgba(var(--ch-accent-rgb),0.62)",
         color:      "#ffffff",
-        boxShadow:  "0 12px 32px rgba(229,9,20,0.20)",
+        boxShadow:  "0 12px 32px rgba(var(--ch-accent-rgb),0.20)",
       } : {
         background: "linear-gradient(180deg, rgba(255,255,255,0.80), rgba(17,17,17,0.018)), var(--ch-surface-2)",
         border:     "1px solid var(--ch-border)",

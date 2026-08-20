@@ -144,7 +144,7 @@ export function UazapiCostGuardPanel({
               <span className="inline-flex h-10 items-center gap-2">
                 <input
                   checked={enabled}
-                  className="h-4 w-4 accent-red-600"
+                  className="h-4 w-4 accent-blue-600"
                   disabled={disabled}
                   onChange={(event) => setEnabled(event.target.checked)}
                   type="checkbox"
@@ -156,7 +156,7 @@ export function UazapiCostGuardPanel({
             <label className="grid gap-1 rounded-xl border border-slate-200 bg-white/70 p-3">
               <span className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Horario diario</span>
               <input
-                className="h-10 rounded-lg border border-slate-200 bg-white px-3 font-mono text-[13px] font-semibold text-slate-800 outline-none focus:border-red-300"
+                className="h-10 rounded-lg border border-slate-200 bg-white px-3 font-mono text-[13px] font-semibold text-slate-800 outline-none focus:border-blue-300"
                 disabled={disabled}
                 onChange={(event) => setRunTimeLocal(event.target.value)}
                 type="time"
@@ -167,7 +167,7 @@ export function UazapiCostGuardPanel({
             <label className="grid gap-1 rounded-xl border border-slate-200 bg-white/70 p-3">
               <span className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Carencia trial</span>
               <input
-                className="h-10 rounded-lg border border-slate-200 bg-white px-3 font-mono text-[13px] font-semibold text-slate-800 outline-none focus:border-red-300"
+                className="h-10 rounded-lg border border-slate-200 bg-white px-3 font-mono text-[13px] font-semibold text-slate-800 outline-none focus:border-blue-300"
                 disabled={disabled}
                 max={30}
                 min={0}
@@ -180,7 +180,7 @@ export function UazapiCostGuardPanel({
             <label className="grid gap-1 rounded-xl border border-slate-200 bg-white/70 p-3">
               <span className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Limite por run</span>
               <input
-                className="h-10 rounded-lg border border-slate-200 bg-white px-3 font-mono text-[13px] font-semibold text-slate-800 outline-none focus:border-red-300"
+                className="h-10 rounded-lg border border-slate-200 bg-white px-3 font-mono text-[13px] font-semibold text-slate-800 outline-none focus:border-blue-300"
                 disabled={disabled}
                 max={250}
                 min={1}
@@ -238,7 +238,7 @@ export function UazapiCostGuardPanel({
         <div className="grid gap-3">
           <div className="rounded-xl border border-slate-200 bg-white/70 p-3">
             <div className="flex items-center gap-2">
-              <Clock3 className="h-4 w-4 text-red-600" />
+              <Clock3 className="h-4 w-4 text-blue-600" />
               <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Agenda</p>
             </div>
             <div className="mt-3 grid grid-cols-2 gap-2">
@@ -251,7 +251,7 @@ export function UazapiCostGuardPanel({
 
           <div className="rounded-xl border border-slate-200 bg-white/70 p-3">
             <div className="flex items-center gap-2">
-              <ShieldCheck className="h-4 w-4 text-red-600" />
+              <ShieldCheck className="h-4 w-4 text-blue-600" />
               <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Ultima leitura</p>
             </div>
             {latestSummary ? (
@@ -284,9 +284,9 @@ function buttonClass(tone: "primary" | "ghost" | "danger") {
   return cn(
     "inline-flex h-10 items-center justify-center gap-2 rounded-xl px-4 font-mono text-[10px] font-bold uppercase tracking-wide transition disabled:cursor-not-allowed disabled:opacity-50",
     tone === "primary"
-      ? "bg-red-600 text-white shadow-lg shadow-red-600/15 hover:bg-red-500"
+      ? "bg-blue-600 text-white shadow-lg shadow-blue-600/15 hover:bg-blue-500"
       : tone === "danger"
         ? "border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100"
-        : "border border-slate-200 bg-white text-slate-700 hover:border-red-200 hover:text-red-600",
+        : "border border-slate-200 bg-white text-slate-700 hover:border-blue-200 hover:text-blue-600",
   );
 }
