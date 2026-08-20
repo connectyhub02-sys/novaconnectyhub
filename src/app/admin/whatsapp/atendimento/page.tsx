@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import { connection } from "next/server";
 import { AccessDenied } from "@/components/connectyhub-os/access-denied";
-import { AdminWhatsappAgentsConsole } from "@/components/connectyhub-os/admin-whatsapp-agents-console";
+import { AdminWhatsappAtendimentoConsole } from "@/components/connectyhub-os/admin-whatsapp-atendimento-console";
 import { ConnectyShell } from "@/components/connectyhub-os/connecty-shell";
+import { getAdminLeadCrmWorkspace } from "@/lib/client-os/leads-crm";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 
 export const metadata: Metadata = {
@@ -18,6 +19,8 @@ export default async function AdminWhatsappAtendimentoPage() {
     return <AccessDenied />;
   }
 
+  const leadWorkspace = await getAdminLeadCrmWorkspace({ limit: 400 });
+
   return (
     <ConnectyShell
       activeHref="/admin/whatsapp/atendimento"
@@ -26,7 +29,7 @@ export default async function AdminWhatsappAtendimentoPage() {
       userAvatarUrl={workspace.profile.avatarUrl}
       userLabel={workspace.profile.email ?? "CEO_HUMAN_ADM"}
     >
-      <AdminWhatsappAgentsConsole />
+      <AdminWhatsappAtendimentoConsole leadWorkspace={leadWorkspace} />
     </ConnectyShell>
   );
 }

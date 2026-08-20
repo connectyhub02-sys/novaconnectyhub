@@ -30,7 +30,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Sessao obrigatoria." }, { status: 401 });
   }
 
-  if (!workspace.organization?.id) {
+  const isPlatformAdmin = workspace.profile.isPlatformAdmin;
+  const workspaceOrganizationId = workspace.organization?.id ?? null;
+
+  if (!isPlatformAdmin && !workspaceOrganizationId) {
     return NextResponse.json({ error: "Empresa obrigatoria." }, { status: 400 });
   }
 
@@ -47,30 +50,35 @@ export async function POST(request: NextRequest) {
   }
 
   const client = createServiceClient();
-  const { data: conversation, error: loadError } = await client
+  let conversationQuery = client
     .from("conversations")
     .select("id, organization_id, whatsapp_instance_id, metadata")
-    .eq("id", conversationId)
-    .eq("organization_id", workspace.organization.id)
-    .maybeSingle<ConversationRow>();
+    .eq("id", conversationId);
+
+  if (!isPlatformAdmin) {
+    conversationQuery = conversationQuery.eq("organization_id", workspaceOrganizationId!);
+  }
+
+  const { data: conversation, error: loadError } = await conversationQuery.maybeSingle<ConversationRow>();
 
   if (loadError) {
     return NextResponse.json({ error: loadError.message }, { status: 500 });
   }
 
   if (!conversation) {
-    return NextResponse.json({ error: "Conversa nao encontrada nesta empresa." }, { status: 404 });
+    return NextResponse.json({ error: "Conversa nao encontrada para este acesso." }, { status: 404 });
   }
 
+  const organizationId = conversation.organization_id;
   const now = new Date().toISOString();
   const metadata = readRecord(conversation.metadata) ?? {};
   const currentHuman = readRecord(metadata.human_intervention) ?? {};
   const minutes = action === "pause"
-    ? await resolveConversationHumanInterventionMinutes({
-        client,
-        organizationId: workspace.organization.id,
-        whatsappInstanceId: conversation.whatsapp_instance_id,
-      })
+      ? await resolveConversationHumanInterventionMinutes({
+          client,
+          organizationId,
+          whatsappInstanceId: conversation.whatsapp_instance_id,
+        })
     : HUMAN_INTERVENTION_DEFAULT_MINUTES;
   const pausedUntil = action === "pause"
     ? new Date(Date.now() + minutes * 60 * 1000).toISOString()
@@ -79,8 +87,8 @@ export async function POST(request: NextRequest) {
     ? {
         ...currentHuman,
         active: true,
-        reason: "manual_dashboard_handoff",
-        source: "connectyhub_dashboard",
+        reason: isPlatformAdmin ? "manual_admin_handoff" : "manual_dashboard_handoff",
+        source: isPlatformAdmin ? "connectyhub_admin" : "connectyhub_dashboard",
         configured_minutes: minutes,
         lead_waiting_since: null,
         last_unanswered_lead_message_at: null,
@@ -93,8 +101,8 @@ export async function POST(request: NextRequest) {
     : {
         ...currentHuman,
         active: false,
-        reason: "manual_dashboard_resume",
-        source: "connectyhub_dashboard",
+        reason: isPlatformAdmin ? "manual_admin_resume" : "manual_dashboard_resume",
+        source: isPlatformAdmin ? "connectyhub_admin" : "connectyhub_dashboard",
         lead_waiting_since: null,
         last_unanswered_lead_message_at: null,
         last_unanswered_lead_provider_message_id: null,
@@ -113,7 +121,7 @@ export async function POST(request: NextRequest) {
       },
     })
     .eq("id", conversationId)
-    .eq("organization_id", workspace.organization.id);
+    .eq("organization_id", organizationId);
 
   if (updateError) {
     return NextResponse.json({ error: updateError.message }, { status: 500 });

@@ -87,6 +87,8 @@ type AttendanceQueueFilter = {
 };
 
 type LeadCrmConsoleProps = {
+  attendanceNotificationHref?: string;
+  commerceEnabled?: boolean;
   mode: ConsoleMode;
   salesCatalogItems?: ClientSalesCatalogItem[];
   socialApprovals?: ClientSocialApproval[];
@@ -187,6 +189,8 @@ let attendanceVapidPublicKey: string | null = null;
 let attendanceVapidPublicKeyPromise: Promise<string> | null = null;
 
 export function LeadCrmConsole({
+  attendanceNotificationHref = "/dashboard/atendimento",
+  commerceEnabled = true,
   mode,
   salesCatalogItems = [],
   socialApprovals: initialSocialApprovals = [],
@@ -323,8 +327,10 @@ export function LeadCrmConsole({
 
       {mode === "atendimento" ? (
         <AttendanceCenterView
+          commerceEnabled={commerceEnabled}
           conversationPane={conversationPane}
           filteredLeads={filteredLeads}
+          notificationHref={attendanceNotificationHref}
           salesCatalogItems={salesCatalogItems}
           search={search}
           selectedLeadId={selectedLead?.id ?? null}
@@ -763,8 +769,10 @@ function ConversationsView({
 }
 
 function AttendanceCenterView({
+  commerceEnabled,
   conversationPane,
   filteredLeads,
+  notificationHref,
   salesCatalogItems,
   search,
   selectedLeadId,
@@ -774,8 +782,10 @@ function AttendanceCenterView({
   setSelectedLeadId,
   workspace,
 }: {
+  commerceEnabled: boolean;
   conversationPane: "inbox" | "chat";
   filteredLeads: ClientLeadRecord[];
+  notificationHref: string;
   salesCatalogItems: ClientSalesCatalogItem[];
   search: string;
   selectedLeadId: string | null;
@@ -847,8 +857,8 @@ function AttendanceCenterView({
   const activeCartItems = activeCartKey ? leadCarts[activeCartKey] ?? [] : [];
   const activeCartTotalCents = activeCartItems.reduce((total, item) => total + (item.unitPriceCents * item.quantity), 0);
   const visibleCatalogItems = useMemo(
-    () => salesCatalogItems.filter((item) => !deletedCatalogItemIds.has(item.id)),
-    [deletedCatalogItemIds, salesCatalogItems],
+    () => (commerceEnabled ? salesCatalogItems.filter((item) => !deletedCatalogItemIds.has(item.id)) : []),
+    [commerceEnabled, deletedCatalogItemIds, salesCatalogItems],
   );
   const availableCatalogItemIds = useMemo(
     () => new Set(visibleCatalogItems.filter((item) => item.status === "active").map((item) => item.id)),
@@ -1233,9 +1243,9 @@ function AttendanceCenterView({
 
       notifiedLeadMessages.current.add(item.message.id);
       promptAttendancePushPermission();
-      showLeadBrowserNotification(item.lead, item.message);
+      showLeadBrowserNotification(item.lead, item.message, notificationHref);
     }
-  }, [attendanceThreads]);
+  }, [attendanceThreads, notificationHref]);
 
   async function updateHumanHandoff(action: "pause" | "resume") {
     if (!activeConversationId) {
@@ -1623,22 +1633,30 @@ function AttendanceCenterView({
 
           <aside className="hidden min-h-0 border-l bg-white xl:block" style={{ borderColor: "var(--ch-border)" }}>
             {activeLead ? (
-              <AttendanceSalesBagPanel
-                cartItems={activeCartItems}
-                checkoutBusy={cartCheckoutBusy}
-                lead={activeLead}
-                onAddManualItem={addManualCartItem}
-                onAddQuickItem={addQuickCartItem}
-                onClearCart={clearActiveCart}
-                onCreateCheckout={() => void createCartCheckoutAndSend()}
-                onDeleteQuickItem={(product) => void deleteQuickCatalogProduct(product)}
-                onRemoveItem={removeCartItem}
-                onUpdateQuantity={updateCartItemQuantity}
-                onUseSummary={useCartSummaryInReply}
-                productDeleteBusyId={catalogDeleteBusyId}
-                quickProducts={activeCatalogProducts}
-                totalCents={activeCartTotalCents}
-              />
+              commerceEnabled ? (
+                <AttendanceSalesBagPanel
+                  cartItems={activeCartItems}
+                  checkoutBusy={cartCheckoutBusy}
+                  lead={activeLead}
+                  onAddManualItem={addManualCartItem}
+                  onAddQuickItem={addQuickCartItem}
+                  onClearCart={clearActiveCart}
+                  onCreateCheckout={() => void createCartCheckoutAndSend()}
+                  onDeleteQuickItem={(product) => void deleteQuickCatalogProduct(product)}
+                  onRemoveItem={removeCartItem}
+                  onUpdateQuantity={updateCartItemQuantity}
+                  onUseSummary={useCartSummaryInReply}
+                  productDeleteBusyId={catalogDeleteBusyId}
+                  quickProducts={activeCatalogProducts}
+                  totalCents={activeCartTotalCents}
+                />
+              ) : (
+                <AttendanceAdminContextPanel
+                  conversation={activeConversation}
+                  humanIntervention={activeHumanIntervention}
+                  lead={activeLead}
+                />
+              )
             ) : (
               <div className="grid h-full min-h-0 place-items-center p-4">
                 <EmptyState title="Sem lead" detail="Selecione uma conversa para ver detalhes." />
@@ -1762,6 +1780,103 @@ function AttendancePushPermissionPrompt({
           O navegador sempre vai pedir uma confirmacao sua antes de ativar.
         </span>
       </div>
+    </div>
+  );
+}
+
+function AttendanceAdminContextPanel({
+  conversation,
+  humanIntervention,
+  lead,
+}: {
+  conversation: ClientLeadConversationFile | null;
+  humanIntervention: ClientLeadHumanIntervention;
+  lead: ClientLeadRecord;
+}) {
+  return (
+    <div className="flex h-full min-h-0 flex-col bg-white">
+      <div className="border-b px-4 py-4" style={{ borderColor: "var(--ch-border)" }}>
+        <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">Atendimento admin</p>
+        <div className="mt-1 flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="truncate text-[18px] font-bold text-slate-950">Contexto da conversa</h3>
+            <p className="mt-1 line-clamp-2 text-[12px] leading-5 text-slate-500">
+              Empresa, agente e status operacional da conversa selecionada.
+            </p>
+          </div>
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-blue-600 text-white shadow-[0_14px_30px_rgba(24,119,242,0.18)]">
+            <ShieldCheck className="h-4 w-4" />
+          </span>
+        </div>
+      </div>
+
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
+        <section className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+          <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">Lead</p>
+          <h4 className="mt-2 truncate text-[15px] font-bold text-slate-950">{lead.name}</h4>
+          <div className="mt-3 space-y-2">
+            <AdminContextLine icon={Building2} label="Empresa" value={lead.companyName} />
+            <AdminContextLine icon={Phone} label="Telefone" value={lead.phone ?? "-"} />
+            <AdminContextLine icon={Bot} label="Agente" value={conversation?.agentName ?? lead.agentName ?? "Sem agente vinculado"} />
+            <AdminContextLine icon={MessageCircle} label="Canal" value={conversation?.whatsappInstanceName ?? conversation?.whatsappInstancePhone ?? lead.channel} />
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-blue-100 bg-blue-50 p-3">
+          <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-blue-500">Intervencao humana</p>
+          <div className="mt-3 flex items-center justify-between gap-3">
+            <div>
+              <p className="text-[14px] font-bold text-slate-950">
+                {humanIntervention.active ? "IA pausada" : "IA ativa"}
+              </p>
+              <p className="mt-1 text-[11px] leading-5 text-slate-600">
+                {humanIntervention.active
+                  ? "Atendimento manual em andamento."
+                  : "Atendimento automatico em andamento."}
+              </p>
+            </div>
+            <span
+              className={cn(
+                "h-2.5 w-2.5 shrink-0 rounded-full",
+                humanIntervention.active ? "bg-blue-600" : "bg-emerald-500",
+              )}
+            />
+          </div>
+          <div className="mt-3 space-y-2">
+            <AdminContextLine icon={Clock} label="Pausada ate" value={formatDateTime(humanIntervention.pausedUntil)} />
+            <AdminContextLine icon={Clock} label="Atualizacao" value={formatDateTime(humanIntervention.updatedAt)} />
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-slate-200 bg-white p-3">
+          <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">Historico</p>
+          <div className="mt-3 space-y-2">
+            <AdminContextLine icon={MessageCircle} label="Mensagens" value={String(conversation?.messageCount ?? lead.conversation.messageCount ?? 0)} />
+            <AdminContextLine icon={Clock} label="Ultima mensagem" value={formatDateTime(conversation?.lastMessageAt ?? lead.lastMessageAt)} />
+            <AdminContextLine icon={Archive} label="Status" value={conversation?.status ?? lead.status} />
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function AdminContextLine({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: typeof Building2;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
+      <Icon className="h-3.5 w-3.5 shrink-0 text-blue-600" />
+      <span className="min-w-0">
+        <span className="block font-mono text-[8px] uppercase tracking-wide text-slate-400">{label}</span>
+        <span className="block truncate text-[12px] font-semibold text-slate-950">{value}</span>
+      </span>
     </div>
   );
 }
@@ -2540,7 +2655,7 @@ function urlBase64ToUint8Array(value: string) {
   return outputArray;
 }
 
-function showLeadBrowserNotification(lead: ClientLeadRecord, message: ClientLeadMessage) {
+function showLeadBrowserNotification(lead: ClientLeadRecord, message: ClientLeadMessage, href: string) {
   if (typeof window === "undefined" || typeof Notification === "undefined") {
     return;
   }
@@ -2557,7 +2672,7 @@ function showLeadBrowserNotification(lead: ClientLeadRecord, message: ClientLead
 
   notification.onclick = () => {
     window.focus();
-    window.location.href = "/dashboard/atendimento";
+    window.location.href = href;
     notification.close();
   };
 }
