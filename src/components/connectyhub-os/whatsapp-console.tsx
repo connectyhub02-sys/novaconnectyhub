@@ -3150,11 +3150,11 @@ function WhatsappConsoleCommandBar({
 
   return (
     <div
-      className="sticky top-[68px] z-20 mb-3 rounded-xl border px-2.5 py-2.5 shadow-2xl shadow-slate-950/20 backdrop-blur sm:top-3 sm:mb-4 sm:px-3 sm:py-3"
+      className="sticky top-[68px] z-20 mb-3 rounded-xl border px-2.5 py-2.5 backdrop-blur sm:top-3 sm:mb-4 sm:px-3 sm:py-3"
       style={{
-        background: "linear-gradient(135deg, rgba(var(--ch-accent-rgb),0.98), rgba(var(--ch-accent-2-rgb),0.92))",
-        borderColor: "rgba(var(--ch-accent-rgb),0.44)",
-        boxShadow: "0 18px 45px rgba(var(--ch-accent-rgb),0.24)",
+        background: "linear-gradient(135deg, rgba(var(--ch-accent-rgb),0.12), rgba(var(--ch-accent-2-rgb),0.055) 42%, rgba(255,255,255,0.94) 100%), rgba(255,255,255,0.86)",
+        borderColor: "rgba(var(--ch-accent-rgb),0.22)",
+        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.82), 0 14px 34px rgba(var(--ch-accent-rgb),0.10)",
       }}
     >
       <div className="grid gap-2 sm:gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
@@ -3247,12 +3247,18 @@ function SummaryPill({
   tone?: "default" | "green" | "amber";
 }) {
   return (
-    <div className="min-w-[150px] rounded-lg border px-3 py-2 sm:min-w-0" style={{ background: "var(--ch-panel-2)", borderColor: "var(--ch-border)" }}>
+    <div
+      className="min-w-[150px] rounded-lg border px-3 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.74)] sm:min-w-0"
+      style={{
+        background: "linear-gradient(180deg, rgba(255,255,255,0.96), rgba(var(--ch-accent-rgb),0.024)), rgba(255,255,255,0.88)",
+        borderColor: "rgba(var(--ch-accent-rgb),0.13)",
+      }}
+    >
       <p className="truncate font-mono text-[8px] uppercase tracking-widest text-slate-500">{label}</p>
       <p
         className={cn(
           "mt-1 truncate text-[12px] font-semibold leading-4",
-          tone === "green" ? "text-emerald-300" : tone === "amber" ? "text-amber-200" : "text-slate-100",
+          tone === "green" ? "text-emerald-600" : tone === "amber" ? "text-amber-600" : "text-slate-950",
         )}
         title={value}
       >
