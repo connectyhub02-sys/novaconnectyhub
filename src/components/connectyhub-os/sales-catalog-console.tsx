@@ -97,6 +97,7 @@ import type {
   SalesCatalogImportSourceKind,
   SalesCatalogImportTargetMode,
 } from "@/lib/sales-catalog/importer";
+import { HighlightLabelInput } from "./highlight-label-input";
 import { cn } from "@/lib/utils";
 
 type Notice = {
@@ -3430,7 +3431,7 @@ export function SalesCatalogConsole({
             onImport={importWhatsappCatalog}
             onToggleExportItem={toggleWhatsappExportItem}
           />
-          <Panel className="order-1" id="sales-catalog-tour-products" title={editingItemId ? "Editar item" : "Cadastrar produto manualmente"} eyebrow={selectedCompany?.name ?? "empresa"} tone="cyan" compact>
+          <Panel className="order-1 overflow-visible" id="sales-catalog-tour-products" title={editingItemId ? "Editar item" : "Cadastrar produto manualmente"} eyebrow={selectedCompany?.name ?? "empresa"} tone="cyan" compact>
             <div className="space-y-3">
             <SalesProductFormTabs activeTab={productFormTab} onChange={setProductFormTab} tabs={salesCatalogProductFormTabs} />
 
@@ -3558,20 +3559,17 @@ export function SalesCatalogConsole({
               ) : null}
             </div>
 
-            <label className="block">
+            <div className="block">
               <FieldLabel>Selo de destaque</FieldLabel>
-              <input
+              <HighlightLabelInput
                 value={highlightLabel}
-                onChange={(event) => setHighlightLabel(event.target.value.slice(0, 32))}
-                className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
-                list="sales-catalog-highlight-labels"
+                onChange={setHighlightLabel}
+                inputClassName="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                inputStyle={{ borderColor: "var(--ch-border)" }}
                 placeholder="Ex.: Mais vendido, Mais procurado, Oferta especial"
-                style={{ borderColor: "var(--ch-border)" }}
+                suggestions={highlightLabelSuggestions}
               />
-              <datalist id="sales-catalog-highlight-labels">
-                {highlightLabelSuggestions.map((label) => <option key={label} value={label} />)}
-              </datalist>
-            </label>
+            </div>
 
             <label className="block">
               <FieldLabel>Descricao comercial</FieldLabel>

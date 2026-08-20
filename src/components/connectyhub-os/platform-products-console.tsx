@@ -55,6 +55,7 @@ import {
 import { cn } from "@/lib/utils";
 import { ConnectyShell } from "./connecty-shell";
 import { HelpHint } from "./guided-help";
+import { HighlightLabelInput } from "./highlight-label-input";
 import { NeonBadge, PageHeader, Panel, StatusBadge } from "./panel-primitives";
 
 type ProductDraft = {
@@ -750,6 +751,7 @@ export function PlatformProductsConsole({
           ) : (
             <div className="grid gap-5 xl:grid-cols-[minmax(380px,0.82fr)_minmax(0,1fr)]">
               <Panel
+                className={activeTab === "products" ? "overflow-visible" : undefined}
                 id={activeTab === "setup" ? "platform-products-tour-setup" : "platform-products-tour-product-form"}
                 title={activeTab === "setup" ? "Configuracao do Catalogo" : draft.productId ? "Editar item" : "Novo item"}
                 eyebrow={activeTab === "setup" ? "base do catalogo" : "catalogo de produtos"}
@@ -938,17 +940,14 @@ export function PlatformProductsConsole({
                       </Field>
 
                       <Field label="Selo de destaque">
-                        <input
+                        <HighlightLabelInput
                           value={draft.highlightLabel}
-                          onChange={(event) => patchDraft({ highlightLabel: event.target.value.slice(0, 32) })}
-                          className="h-10 w-full rounded-xl px-3 text-[13px] outline-none"
-                          list="platform-product-highlight-labels"
+                          onChange={(highlightLabel) => patchDraft({ highlightLabel })}
+                          inputClassName="h-10 w-full rounded-xl px-3 text-[13px] outline-none"
+                          inputStyle={inputStyle}
                           placeholder="Ex.: Mais vendido, Mais procurado, Oferta especial"
-                          style={inputStyle}
+                          suggestions={highlightLabelSuggestions}
                         />
-                        <datalist id="platform-product-highlight-labels">
-                          {highlightLabelSuggestions.map((label) => <option key={label} value={label} />)}
-                        </datalist>
                       </Field>
 
                       <Field label="Descricao curta para vitrine">
