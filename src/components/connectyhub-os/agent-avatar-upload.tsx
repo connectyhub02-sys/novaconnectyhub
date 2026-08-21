@@ -82,7 +82,7 @@ export function AgentAvatarUpload({
         size="xs"
         disabled={state.status === "uploading"}
         onClick={() => inputRef.current?.click()}
-        className="border-cyan-500/30 bg-cyan-500/5 font-mono text-[9px] uppercase tracking-widest text-cyan-700 hover:bg-cyan-500/10"
+        className="border-emerald-500/30 bg-emerald-500/5 font-mono text-[9px] uppercase tracking-widest text-emerald-700 hover:bg-emerald-500/10"
       >
         {state.status === "uploading" ? <Loader2 className="h-3 w-3 animate-spin" /> : <ImagePlus className="h-3 w-3" />}
         Trocar foto

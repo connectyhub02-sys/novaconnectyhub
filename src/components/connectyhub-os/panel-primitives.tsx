@@ -16,21 +16,21 @@ import type { StatusTone, Tone } from "@/lib/connectyhub-os-data";
 // ─── Tone map ─────────────────────────────────────────────────────────────────
 
 const toneMap: Record<Tone, { text: string; border: string; bg: string; fill: string; dot: string }> = {
-  green:  { text: "text-emerald-700", border: "border-emerald-500/25", bg: "bg-emerald-500/10", fill: "#059669", dot: "bg-emerald-500" },
-  cyan:   { text: "text-cyan-700",    border: "border-cyan-500/25",    bg: "bg-cyan-500/10",    fill: "#1877f2", dot: "bg-cyan-500"    },
-  amber:  { text: "text-amber-700",   border: "border-amber-500/25",   bg: "bg-amber-500/10",   fill: "#d97706", dot: "bg-amber-500"  },
+  green:  { text: "text-emerald-700", border: "border-emerald-500/25", bg: "bg-emerald-500/10", fill: "#128c7e", dot: "bg-emerald-500" },
+  cyan:   { text: "text-blue-700",    border: "border-blue-500/25",    bg: "bg-blue-500/10",    fill: "#1877f2", dot: "bg-blue-500"    },
+  amber:  { text: "text-amber-700",   border: "border-amber-500/25",   bg: "bg-amber-500/10",   fill: "#b45309", dot: "bg-amber-500"  },
   rose:   { text: "text-rose-700",    border: "border-rose-500/25",    bg: "bg-rose-500/10",    fill: "#dc2626", dot: "bg-rose-500"   },
-  violet: { text: "text-violet-700",  border: "border-violet-500/25",  bg: "bg-violet-500/10",  fill: "#111111", dot: "bg-violet-500" },
+  violet: { text: "text-indigo-700",  border: "border-indigo-500/25",  bg: "bg-indigo-500/10",  fill: "#4f46e5", dot: "bg-indigo-500" },
   zinc:   { text: "text-slate-600",   border: "border-slate-300",      bg: "bg-slate-100",      fill: "#64748b", dot: "bg-slate-400"  },
 };
 
 const panelToneMap: Record<Tone, { rgb: string; fill: string }> = {
-  green:  { rgb: "5,150,105", fill: "#059669" },
+  green:  { rgb: "18,140,126", fill: "#128c7e" },
   cyan:   { rgb: "24,119,242", fill: "#1877f2" },
-  amber:  { rgb: "217,119,6", fill: "#d97706" },
+  amber:  { rgb: "180,83,9", fill: "#b45309" },
   rose:   { rgb: "220,38,38", fill: "#dc2626" },
-  violet: { rgb: "17,17,17", fill: "#111111" },
-  zinc:   { rgb: "148,163,184", fill: "#94a3b8" },
+  violet: { rgb: "79,70,229", fill: "#4f46e5" },
+  zinc:   { rgb: "100,116,139", fill: "#64748b" },
 };
 
 const statusMap: Record<StatusTone, { label: string; tone: Tone; icon: LucideIcon }> = {
@@ -227,15 +227,15 @@ export function HeroMetricCard({
   sub1Label: string; sub1Value: string; sub2Label: string; sub2Value: string;
   series: number[]; accent?: "cyan" | "emerald";
 }) {
-  const color  = accent === "cyan" ? "#1877f2" : "#059669";
-  const colorB = accent === "cyan" ? "#eaf3ff" : "#dcfce7";
+  const color  = accent === "cyan" ? "#1877f2" : "#128c7e";
+  const colorB = accent === "cyan" ? "#eaf3ff" : "#e7f8ef";
 
   return (
     <div
       className="relative overflow-hidden rounded-xl p-3 sm:rounded-2xl sm:p-5"
       style={{
         background: `linear-gradient(135deg, ${colorB} 0%, rgba(255,255,255,0.92) 100%)`,
-        border:     `1px solid rgba(${accent === "cyan" ? "24,119,242" : "52,211,153"},0.3)`,
+        border:     `1px solid rgba(${accent === "cyan" ? "24,119,242" : "18,140,126"},0.3)`,
         boxShadow: "0 18px 50px rgba(15,23,42,0.06)",
       }}
     >

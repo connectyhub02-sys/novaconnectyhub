@@ -565,14 +565,14 @@ type ControlToneStyle = {
 };
 
 const controlToneStyles: Record<ControlTone, ControlToneStyle> = {
-  cyan: { color: "#38e8d6", rgb: "56,232,214" },
-  emerald: { color: "#34d399", rgb: "52,211,153" },
-  sky: { color: "#38bdf8", rgb: "56,189,248" },
-  violet: { color: "#a78bfa", rgb: "167,139,250" },
-  amber: { color: "#fbbf24", rgb: "251,191,36" },
-  rose: { color: "#fb7185", rgb: "251,113,133" },
-  fuchsia: { color: "#e879f9", rgb: "232,121,249" },
-  slate: { color: "#94a3b8", rgb: "148,163,184" },
+  cyan: { color: "#1877f2", rgb: "24,119,242" },
+  emerald: { color: "#128c7e", rgb: "18,140,126" },
+  sky: { color: "#0284c7", rgb: "2,132,199" },
+  violet: { color: "#4f46e5", rgb: "79,70,229" },
+  amber: { color: "#b45309", rgb: "180,83,9" },
+  rose: { color: "#dc2626", rgb: "220,38,38" },
+  fuchsia: { color: "#4f46e5", rgb: "79,70,229" },
+  slate: { color: "#64748b", rgb: "100,116,139" },
 };
 
 type WhatsappConsoleTab = "connection" | "prompt" | "qualification" | "behavior" | "channels" | "multichannel" | "files";
@@ -2208,6 +2208,7 @@ export function WhatsAppConsole({
                     description={`Salva prompt e comportamento deste agente para o ${variant.entitySingular} selecionado.`}
                     disabled={!state?.capability.schemaReady || !state.agent || !settingsChanged || promptTooLong || agentNameInvalid}
                     loading={running === "save_settings"}
+                    tone="ai"
                     onClick={saveAgentSettings}
                   />
                 </div>
@@ -2250,6 +2251,7 @@ export function WhatsAppConsole({
                 description="Grava as perguntas, pesos e limites que o agente usa para qualificar o lead no CRM."
                 disabled={!state?.capability.schemaReady || !settingsChanged || agentNameInvalid}
                 loading={running === "save_settings"}
+                tone="ai"
                 onClick={saveAgentSettings}
               />
             </div>
@@ -2275,7 +2277,7 @@ export function WhatsAppConsole({
                   </div>
                   <div className="grid gap-2">
                     <div>
-                      <h3 className="font-mono text-[9px] font-bold uppercase tracking-widest text-slate-100">Presenca WhatsApp</h3>
+                      <h3 className="font-mono text-[9px] font-bold uppercase tracking-widest" style={{ color: "var(--ch-text)" }}>Presenca WhatsApp</h3>
                       <p className="mt-1 text-[11px] leading-4 text-slate-400">Define como o agente aparece online antes, durante e depois do atendimento.</p>
                     </div>
                     <ModeSelector<WhatsappPresenceMode>
@@ -2310,7 +2312,7 @@ export function WhatsAppConsole({
                 <div className="grid gap-3 xl:grid-cols-2">
                   <div className="grid gap-2">
                     <div>
-                      <h3 className="font-mono text-[9px] font-bold uppercase tracking-widest text-slate-100">Modo de conversa</h3>
+                      <h3 className="font-mono text-[9px] font-bold uppercase tracking-widest" style={{ color: "var(--ch-text)" }}>Modo de conversa</h3>
                       <p className="mt-1 text-[11px] leading-4 text-slate-400">Define se o agente responde por texto, audio ou segue o formato usado pelo lead.</p>
                     </div>
                     <ModeSelector<WhatsappResponseMode>
@@ -2326,7 +2328,7 @@ export function WhatsAppConsole({
 
                   <div className="grid gap-2">
                     <div>
-                      <h3 className="font-mono text-[9px] font-bold uppercase tracking-widest text-slate-100">Rapport adaptativo</h3>
+                      <h3 className="font-mono text-[9px] font-bold uppercase tracking-widest" style={{ color: "var(--ch-text)" }}>Rapport adaptativo</h3>
                       <p className="mt-1 text-[11px] leading-4 text-slate-400">Controla quanto o agente adapta linguagem, formalidade e tom ao perfil do lead.</p>
                     </div>
                     <ModeSelector<WhatsappRapportMode>
@@ -2395,7 +2397,7 @@ export function WhatsAppConsole({
                 <div className="grid gap-3">
                   <div className="grid gap-2">
                     <div>
-                      <h3 className="font-mono text-[9px] font-bold uppercase tracking-widest text-slate-100">Citar mensagens</h3>
+                      <h3 className="font-mono text-[9px] font-bold uppercase tracking-widest" style={{ color: "var(--ch-text)" }}>Citar mensagens</h3>
                       <p className="mt-1 text-[11px] leading-4 text-slate-400">Controla quando a resposta deve sair citando uma mensagem especifica do lead.</p>
                     </div>
                     <ModeSelector<WhatsappQuoteReplyMode>
@@ -2817,11 +2819,11 @@ function AgentChannelSettingsPanel({
                     </div>
                     <p className="mt-1 text-[11px] leading-5 text-slate-500">{definition.description}</p>
                     {comingSoon ? (
-                      <p className="mt-2 rounded-md border border-cyan-300/20 bg-cyan-300/10 px-2 py-1 text-[11px] leading-4 text-cyan-100">
+                      <p className="mt-2 rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-[11px] leading-4 text-blue-700">
                         {metaFeatureComingSoonMessage}
                       </p>
                     ) : lockedByPlan ? (
-                      <p className="mt-2 rounded-md border border-amber-300/20 bg-amber-300/10 px-2 py-1 text-[11px] leading-4 text-amber-100">
+                      <p className="mt-2 rounded-md border border-amber-300/35 bg-amber-50 px-2 py-1 text-[11px] leading-4 text-amber-800">
                         {entitlement.description}
                       </p>
                     ) : null}
@@ -2953,9 +2955,9 @@ function formatCloneProfileImportStatus(status?: CloneProfileImportStatus | null
 
 function NoticeBar({ notice }: { notice: Notice }) {
   const colors = {
-    success: "border-emerald-400/25 bg-emerald-400/10 text-emerald-200",
-    warning: "border-amber-400/25 bg-amber-400/10 text-amber-200",
-    error: "border-rose-400/25 bg-rose-400/10 text-rose-200",
+    success: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    warning: "border-amber-300/40 bg-amber-50 text-amber-800",
+    error: "border-rose-200 bg-rose-50 text-rose-700",
   } satisfies Record<Notice["tone"], string>;
 
   return (
@@ -2983,32 +2985,36 @@ function MetaChannelsComingSoonModal({
       tabIndex={0}
     >
       <div
-        className="relative w-full max-w-md rounded-2xl border border-cyan-300/25 bg-[#121827] p-5 text-left shadow-2xl"
+        className="relative w-full max-w-md rounded-2xl border p-5 text-left shadow-2xl"
         onClick={(event) => event.stopPropagation()}
+        style={{ background: "var(--ch-surface)", borderColor: "rgba(var(--ch-brand-primary-rgb),0.22)" }}
       >
         <button
           aria-label="Fechar aviso"
-          className="absolute right-3 top-3 grid h-8 w-8 place-items-center rounded-full bg-white/5 text-slate-400 transition hover:bg-white/10 hover:text-white"
+          className="absolute right-3 top-3 grid h-8 w-8 place-items-center rounded-full bg-slate-100 text-slate-500 transition hover:bg-slate-200 hover:text-slate-700"
           onClick={onClose}
           type="button"
         >
           <X className="h-4 w-4" />
         </button>
 
-        <div className="grid h-12 w-12 place-items-center rounded-2xl bg-cyan-300/10 text-cyan-200">
+        <div
+          className="grid h-12 w-12 place-items-center rounded-2xl"
+          style={{ background: "rgba(var(--ch-brand-primary-rgb),0.10)", color: "var(--ch-brand-primary)" }}
+        >
           <MessageCircle className="h-6 w-6" />
         </div>
 
-        <p className="mt-4 font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-cyan-200">
+        <p className="mt-4 font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-blue-700">
           Em breve
         </p>
-        <h3 id="meta-coming-soon-title" className="mt-2 pr-8 text-lg font-semibold text-white">
+        <h3 id="meta-coming-soon-title" className="mt-2 pr-8 text-lg font-semibold" style={{ color: "var(--ch-text)" }}>
           {metaFeatureComingSoonTitle}
         </h3>
-        <p className="mt-3 text-sm leading-6 text-slate-300">
+        <p className="mt-3 text-sm leading-6 text-slate-600">
           {metaFeatureComingSoonMessage}
         </p>
-        <p className="mt-3 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-xs leading-5 text-slate-400">
+        <p className="mt-3 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs leading-5 text-blue-700">
           Canal selecionado: {channelLabel}. O atendimento principal continua liberado pelo WhatsApp.
         </p>
 
@@ -3056,7 +3062,10 @@ function CompanyRequiredState({ variant }: { variant: WhatsappConsoleVariant }) 
     <Panel title={`Nenhum ${variant.entitySingular} cadastrado`} eyebrow="primeiro passo">
       <div className="grid min-h-[280px] place-items-center text-center">
         <div className="max-w-sm">
-          <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-cyan-400/10 text-cyan-300">
+          <div
+            className="mx-auto grid h-14 w-14 place-items-center rounded-2xl"
+            style={{ background: "rgba(var(--ch-whatsapp-rgb),0.10)", color: "var(--ch-whatsapp-deep)" }}
+          >
             <Building2 className="h-7 w-7" />
           </div>
           <h2 className="mt-4 text-[16px] font-semibold" style={{ color: "var(--ch-text)" }}>{variant.missingEntityTitle}</h2>
@@ -3064,8 +3073,9 @@ function CompanyRequiredState({ variant }: { variant: WhatsappConsoleVariant }) 
             {variant.missingEntityDescription}
           </p>
           <Link
-            className="mt-5 inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-cyan-300 px-4 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-950 transition hover:bg-cyan-200"
+            className="mt-5 inline-flex min-h-10 items-center justify-center gap-2 rounded-lg px-4 font-mono text-[10px] font-bold uppercase tracking-wide text-white transition hover:brightness-110"
             href={variant.missingEntityHref}
+            style={{ background: "linear-gradient(135deg, var(--ch-whatsapp-deep), var(--ch-whatsapp))" }}
           >
             <Plus className="h-4 w-4" />
             {variant.missingEntityAction}
@@ -3197,6 +3207,7 @@ function WhatsappConsoleTabs({
           const active = tab.id === activeTab;
           const comingSoon = tab.comingSoon && metaFeatureLaunchPaused;
           const Icon = tab.icon;
+          const activeStyle = getWhatsappTabActiveStyle(tab.id);
 
           return (
             <button
@@ -3209,25 +3220,25 @@ function WhatsappConsoleTabs({
               className={cn(
                 "grid min-h-[52px] min-w-[132px] grid-cols-[18px_minmax(0,1fr)] items-center gap-1.5 rounded-lg px-2 text-left transition sm:min-h-[58px] sm:min-w-0 sm:gap-2 sm:px-3",
                 active
-                  ? "connecty-dark-action text-slate-100 shadow-[0_0_24px_rgba(var(--ch-accent-rgb),0.18)] ring-1 ring-white/20"
+                  ? "connecty-dark-action text-white ring-1 ring-white/25"
                   : comingSoon
-                    ? "text-slate-300 hover:bg-cyan-300/10 hover:text-cyan-100"
-                    : "text-slate-200 hover:bg-white/10 hover:text-white",
+                    ? "text-slate-600 hover:bg-blue-50 hover:text-blue-700"
+                    : "text-slate-600 hover:bg-blue-50 hover:text-blue-700",
               )}
-              style={active ? { background: "linear-gradient(135deg, var(--ch-accent), var(--ch-accent-2))" } : comingSoon ? { border: "1px solid rgba(34,211,238,0.26)" } : undefined}
+              style={active ? activeStyle : comingSoon ? { border: "1px solid rgba(var(--ch-brand-primary-rgb),0.24)" } : undefined}
               onClick={() => onChange(tab.id)}
             >
-              <Icon className={cn("h-4 w-4", active ? "text-slate-100" : comingSoon ? "text-cyan-200" : "text-slate-200")} />
+              <Icon className={cn("h-4 w-4", active ? "text-white" : comingSoon ? "text-blue-600" : "text-slate-500")} />
               <span className="min-w-0">
                 <span className="flex min-w-0 items-center gap-1.5">
-                  <span className="block truncate text-[12px] font-semibold leading-4 text-slate-100">{tab.label}</span>
+                  <span className={cn("block truncate text-[12px] font-semibold leading-4", active ? "text-white" : "text-slate-800")}>{tab.label}</span>
                   {comingSoon ? (
-                    <span className="shrink-0 rounded-md bg-amber-300/15 px-1.5 py-0.5 font-mono text-[8px] font-bold uppercase leading-none text-amber-200">
+                    <span className="shrink-0 rounded-md bg-amber-100 px-1.5 py-0.5 font-mono text-[8px] font-bold uppercase leading-none text-amber-700">
                       Em breve
                     </span>
                   ) : null}
                 </span>
-                <span className="mt-0.5 hidden truncate font-mono text-[8px] uppercase tracking-widest text-slate-300 sm:block">{tab.description}</span>
+                <span className={cn("mt-0.5 hidden truncate font-mono text-[8px] uppercase tracking-widest sm:block", active ? "text-white/75" : "text-slate-500")}>{tab.description}</span>
               </span>
             </button>
           );
@@ -3235,6 +3246,27 @@ function WhatsappConsoleTabs({
       </div>
     </div>
   );
+}
+
+function getWhatsappTabActiveStyle(tab: WhatsappConsoleTab) {
+  if (tab === "connection" || tab === "multichannel") {
+    return {
+      background: "linear-gradient(135deg, var(--ch-whatsapp-deep), var(--ch-whatsapp))",
+      boxShadow: "0 14px 28px rgba(var(--ch-whatsapp-deep-rgb),0.18)",
+    };
+  }
+
+  if (tab === "prompt" || tab === "behavior" || tab === "files") {
+    return {
+      background: "linear-gradient(135deg, var(--ch-ai), var(--ch-ai-cyan))",
+      boxShadow: "0 14px 28px rgba(var(--ch-ai-rgb),0.18)",
+    };
+  }
+
+  return {
+    background: "linear-gradient(135deg, var(--ch-brand-action), var(--ch-brand-primary))",
+    boxShadow: "0 14px 28px rgba(var(--ch-brand-primary-rgb),0.18)",
+  };
 }
 
 function SummaryPill({
@@ -3246,20 +3278,36 @@ function SummaryPill({
   value: string;
   tone?: "default" | "green" | "amber";
 }) {
+  const toneStyle = tone === "green"
+    ? {
+        background: "linear-gradient(180deg, rgba(255,255,255,0.98), rgba(var(--ch-whatsapp-rgb),0.045))",
+        borderColor: "rgba(var(--ch-whatsapp-rgb),0.18)",
+        color: "var(--ch-whatsapp-deep)",
+      }
+    : tone === "amber"
+      ? {
+          background: "linear-gradient(180deg, rgba(255,255,255,0.98), rgba(var(--ch-warning-rgb),0.055))",
+          borderColor: "rgba(var(--ch-warning-rgb),0.22)",
+          color: "var(--ch-warning)",
+        }
+      : {
+          background: "linear-gradient(180deg, rgba(255,255,255,0.96), rgba(var(--ch-accent-rgb),0.024)), rgba(255,255,255,0.88)",
+          borderColor: "rgba(var(--ch-accent-rgb),0.13)",
+          color: "var(--ch-text)",
+        };
+
   return (
     <div
       className="min-w-[150px] rounded-lg border px-3 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.74)] sm:min-w-0"
       style={{
-        background: "linear-gradient(180deg, rgba(255,255,255,0.96), rgba(var(--ch-accent-rgb),0.024)), rgba(255,255,255,0.88)",
-        borderColor: "rgba(var(--ch-accent-rgb),0.13)",
+        background: toneStyle.background,
+        borderColor: toneStyle.borderColor,
       }}
     >
       <p className="truncate font-mono text-[8px] uppercase tracking-widest text-slate-500">{label}</p>
       <p
-        className={cn(
-          "mt-1 truncate text-[12px] font-semibold leading-4",
-          tone === "green" ? "text-emerald-600" : tone === "amber" ? "text-amber-600" : "text-slate-950",
-        )}
+        className="mt-1 truncate text-[12px] font-semibold leading-4"
+        style={{ color: toneStyle.color }}
         title={value}
       >
         {value}
@@ -3406,6 +3454,7 @@ function ClientAgentsManager({
           icon={Plus}
           label={showForm ? "Formulario aberto" : "Novo agente"}
           disabled={showForm || creating}
+          tone="ai"
           onClick={onStart}
         />
       </div>
@@ -3462,7 +3511,7 @@ function ClientAgentsManager({
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
             <SecondaryAction icon={X} label="Fechar" disabled={creating} onClick={onCancel} />
-            <ActionButton icon={Wand2} label="Criar agente" disabled={creating || !selectedCompanyId} loading={creating} onClick={onCreate} />
+            <ActionButton icon={Wand2} label="Criar agente" disabled={creating || !selectedCompanyId} loading={creating} tone="ai" onClick={onCreate} />
           </div>
         </div>
       ) : null}
@@ -3472,7 +3521,7 @@ function ClientAgentsManager({
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Clonar configuracao</p>
-              <p className="mt-1 text-[13px] font-semibold text-slate-100">{cloneSource.name}</p>
+          <p className="mt-1 text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>{cloneSource.name}</p>
               <p className="mt-1 text-[11px] text-slate-400">O clone copia prompt e controles, mas nasce sem instancia WhatsApp.</p>
             </div>
             <SecondaryAction icon={X} label="Fechar" disabled={creating} onClick={() => setCloneSourceId(null)} />
@@ -3515,6 +3564,7 @@ function ClientAgentsManager({
               label="Clonar agente"
               disabled={creating || !cloneName.trim() || !cloneCompanyId}
               loading={creating}
+              tone="ai"
               onClick={submitClone}
             />
           </div>
@@ -3827,7 +3877,7 @@ function AutomationRoleToggle({
     >
       <input
         type="checkbox"
-        className="mt-1 h-4 w-4 shrink-0 rounded border-white/20 bg-black/20 accent-cyan-300"
+        className="mt-1 h-4 w-4 shrink-0 rounded border-blue-200 bg-white accent-emerald-600"
         checked={checked}
         onChange={(event) => onChange(event.target.checked)}
       />
@@ -3878,7 +3928,7 @@ function AgentCreationGate({
     <Panel
       title="Criar agente WhatsApp"
       eyebrow={variant.agentGateEyebrow}
-      action={<NeonBadge tone="cyan">novo fluxo</NeonBadge>}
+      action={<NeonBadge tone="violet">novo clone</NeonBadge>}
     >
       <div className="grid gap-3 sm:gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(320px,0.7fr)]">
         <div
@@ -3886,7 +3936,10 @@ function AgentCreationGate({
           style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
         >
           <div className="flex items-start gap-3">
-            <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-cyan-400/10 text-cyan-300">
+            <div
+              className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl"
+              style={{ background: "rgba(var(--ch-ai-rgb),0.10)", color: "var(--ch-ai)" }}
+            >
               <Bot className="h-6 w-6" />
             </div>
             <div>
@@ -3905,7 +3958,7 @@ function AgentCreationGate({
 
           {!showForm ? (
             <div className="mt-5">
-              <ActionButton icon={Plus} label="Criar agente" onClick={onStart} />
+              <ActionButton icon={Plus} label="Criar agente" tone="ai" onClick={onStart} />
             </div>
           ) : null}
         </div>
@@ -3966,7 +4019,7 @@ function AgentCreationGate({
 
             <div className="mt-5 flex flex-wrap gap-2">
               <SecondaryAction icon={RefreshCcw} label="Cancelar" disabled={creating} onClick={onCancel} />
-              <ActionButton icon={Wand2} label="Salvar agente" disabled={creating || !selectedCompanyId} loading={creating} onClick={onCreate} />
+              <ActionButton icon={Wand2} label="Salvar agente" disabled={creating || !selectedCompanyId} loading={creating} tone="ai" onClick={onCreate} />
             </div>
           </div>
         ) : (
@@ -3975,7 +4028,7 @@ function AgentCreationGate({
             style={{ background: "var(--ch-panel-2)", border: "1px solid var(--ch-border)" }}
           >
             <div className="max-w-xs">
-              <Building2 className="mx-auto h-7 w-7 text-cyan-300" />
+              <Building2 className="mx-auto h-7 w-7" style={{ color: "var(--ch-whatsapp-deep)" }} />
               <p className="mt-3 text-[13px] leading-6 text-slate-500">
                 {variant.agentGateSideDescription}
               </p>
@@ -4027,15 +4080,16 @@ function AgentIdentityCard({
           <span className="font-mono text-[9px] uppercase tracking-wide text-slate-500">Agente</span>
           <input
             aria-invalid={agentNameInvalid}
-            className="mt-1 block h-5 w-full min-w-0 bg-transparent p-0 text-[12px] font-semibold leading-4 text-slate-100 outline-none placeholder:text-slate-500"
+            className="mt-1 block h-5 w-full min-w-0 bg-transparent p-0 text-[12px] font-semibold leading-4 outline-none placeholder:text-slate-500"
             maxLength={agentNameMaxLength}
             placeholder="Nome do agente"
+            style={{ color: "var(--ch-text)" }}
             title="Nome do agente"
             value={agentNameDraft ?? agent.name}
             onChange={(event) => onAgentNameChange?.(event.target.value)}
           />
           {agentNameInvalid || agentNameChanged ? (
-            <span className={cn("mt-1 block text-[10px] leading-4", agentNameInvalid ? "text-rose-300" : "text-amber-200")}>
+            <span className={cn("mt-1 block text-[10px] leading-4", agentNameInvalid ? "text-rose-600" : "text-amber-600")}>
               {agentNameInvalid ? "Informe pelo menos 2 caracteres." : "Nome alterado, salve para aplicar."}
             </span>
           ) : null}
@@ -4065,8 +4119,8 @@ function WhatsappAvatar({
 
   return (
     <div
-      className={cn("relative grid shrink-0 place-items-center overflow-hidden rounded-2xl border bg-cyan-400/10 text-cyan-200", dimension)}
-      style={{ borderColor: "var(--ch-border)" }}
+      className={cn("relative grid shrink-0 place-items-center overflow-hidden rounded-2xl border", dimension)}
+      style={{ background: "rgba(var(--ch-whatsapp-rgb),0.10)", borderColor: "rgba(var(--ch-whatsapp-rgb),0.24)", color: "var(--ch-whatsapp-deep)" }}
       title={imageUrl ? "Foto do WhatsApp conectado" : "Foto aparece quando o WhatsApp estiver conectado"}
     >
       {imageUrl ? (
@@ -4354,15 +4408,15 @@ function CloneProfileEditor({
               />
             </div>
             {status?.status === "succeeded" ? (
-              <p className="mt-2 text-[10px] leading-4 text-emerald-200">
+              <p className="mt-2 text-[10px] leading-4 text-emerald-700">
                 {status.outboundSamples} saidas usadas em {status.sampledChats} chats.
               </p>
             ) : null}
             {status?.status === "failed" && status.error ? (
-              <p className="mt-2 text-[10px] leading-4 text-rose-200">{status.error}</p>
+              <p className="mt-2 text-[10px] leading-4 text-rose-700">{status.error}</p>
             ) : null}
             {!canImport ? (
-              <p className="mt-2 text-[10px] leading-4 text-amber-200">Conecte o WhatsApp para liberar a leitura do historico.</p>
+              <p className="mt-2 text-[10px] leading-4 text-amber-700">Conecte o WhatsApp para liberar a leitura do historico.</p>
             ) : null}
           </div>
         </div>
@@ -4489,12 +4543,12 @@ function CloneRealTestPanel({
               <div key={event.id} className="rounded-lg border px-3 py-2" style={{ background: "var(--ch-panel-2)", borderColor: "var(--ch-border)" }}>
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="truncate text-[12px] font-semibold text-slate-100">{event.title}</p>
+                    <p className="truncate text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>{event.title}</p>
                     <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-slate-400">{event.summary || "Resposta sem resumo salvo."}</p>
                   </div>
                   <span className={cn(
                     "shrink-0 rounded-md px-2 py-1 font-mono text-[9px] font-bold uppercase tracking-widest",
-                    event.reviewFlags.length ? "bg-amber-400/15 text-amber-200" : "bg-emerald-400/15 text-emerald-200",
+                    event.reviewFlags.length ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700",
                   )}>
                     {formatCloneScore(event.humanizationScore ?? event.score)}
                   </span>
@@ -4517,12 +4571,12 @@ function CloneRealTestPanel({
                         title={metric.reason}
                       >
                         <div className="flex items-center justify-between gap-2">
-                          <span className="truncate text-[10px] font-semibold text-slate-300">{metric.label}</span>
+                          <span className="truncate text-[10px] font-semibold text-slate-600">{metric.label}</span>
                           <span className={cn("font-mono text-[9px] font-bold", getHumanizationMetricTextColor(metric.status))}>
                             {formatCloneScore(metric.score)}
                           </span>
                         </div>
-                        <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-800">
+                        <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-blue-100">
                           <span
                             className={cn("block h-full rounded-full", getHumanizationMetricBarColor(metric.status))}
                             style={{ width: `${Math.max(4, Math.min(100, Math.round(metric.score * 100)))}%` }}
@@ -4535,7 +4589,7 @@ function CloneRealTestPanel({
                 {event.reviewFlags.length ? (
                   <div className="mt-2 flex flex-wrap gap-1">
                     {event.reviewFlags.map((flag) => (
-                      <span key={flag} className="rounded-md border border-amber-300/20 bg-amber-300/10 px-2 py-1 font-mono text-[9px] uppercase tracking-widest text-amber-100">
+                      <span key={flag} className="rounded-md border border-amber-300/35 bg-amber-50 px-2 py-1 font-mono text-[9px] uppercase tracking-widest text-amber-800">
                         {formatCloneReviewFlag(flag)}
                       </span>
                     ))}
@@ -4586,7 +4640,7 @@ function CloneMemoryPanel({
         {hasMemory ? (
           <div className="grid gap-2">
             {data.summary ? (
-              <div className="rounded-lg border px-3 py-2 text-[12px] leading-5 text-slate-300" style={{ borderColor: "var(--ch-border)", background: "var(--ch-panel-2)" }}>
+              <div className="rounded-lg border px-3 py-2 text-[12px] leading-5 text-slate-600" style={{ borderColor: "var(--ch-border)", background: "var(--ch-panel-2)" }}>
                 {data.summary}
               </div>
             ) : null}
@@ -4595,7 +4649,7 @@ function CloneMemoryPanel({
                 <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">{group.label}</p>
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {group.values.map((value) => (
-                    <span key={`${group.label}-${value}`} className="rounded-md border border-cyan-300/15 bg-cyan-300/10 px-2 py-1 text-[10px] leading-4 text-cyan-100">
+                    <span key={`${group.label}-${value}`} className="rounded-md border border-indigo-200 bg-indigo-50 px-2 py-1 text-[10px] leading-4 text-indigo-700">
                       {value}
                     </span>
                   ))}
@@ -4643,7 +4697,7 @@ function KnowledgeFilesPanel({
           Materiais de conhecimento
           <InfoHint text="Arquivos adicionam contexto ao agente sem deixar o prompt grande demais." />
         </p>
-        <label className="inline-flex min-h-9 cursor-pointer items-center justify-center gap-2 rounded-lg border border-cyan-400/25 bg-cyan-400/10 px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-200 transition hover:bg-cyan-400/15">
+        <label className="inline-flex min-h-9 cursor-pointer items-center justify-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-indigo-700 transition hover:bg-indigo-100">
           {knowledgeUploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
           Anexar
           <input
@@ -4684,7 +4738,10 @@ function NoAgentState() {
   return (
     <div className="grid min-h-[260px] place-items-center rounded-xl border p-4 text-center sm:min-h-[430px] sm:p-6" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
       <div className="max-w-sm">
-        <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-cyan-400/10 text-cyan-300">
+        <div
+          className="mx-auto grid h-14 w-14 place-items-center rounded-2xl"
+          style={{ background: "rgba(var(--ch-ai-rgb),0.10)", color: "var(--ch-ai)" }}
+        >
           <Bot className="h-7 w-7" />
         </div>
         <h2 className="mt-4 text-[16px] font-semibold" style={{ color: "var(--ch-text)" }}>Nenhum agente cadastrado</h2>
@@ -4692,8 +4749,9 @@ function NoAgentState() {
           Crie um agente e escolha o atendimento que ele vai assumir.
         </p>
         <Link
-          className="mt-5 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg bg-cyan-300 px-4 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-950 transition hover:bg-cyan-200 sm:w-auto"
+          className="mt-5 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg px-4 font-mono text-[10px] font-bold uppercase tracking-wide text-white transition hover:brightness-110 sm:w-auto"
           href="/dashboard/whatsapp"
+          style={{ background: "linear-gradient(135deg, var(--ch-ai), var(--ch-ai-cyan))" }}
         >
           <Wand2 className="h-4 w-4" />
           Criar agente
@@ -4726,7 +4784,7 @@ function BehaviorSection({
           {description ? <InfoHint text={description} /> : null}
         </span>
         <span className="font-mono text-[10px] uppercase tracking-widest text-slate-500 group-open:hidden">abrir</span>
-        <span className="hidden font-mono text-[10px] uppercase tracking-widest text-cyan-300 group-open:inline">fechar</span>
+        <span className="hidden font-mono text-[10px] uppercase tracking-widest text-blue-700 group-open:inline">fechar</span>
       </summary>
       <div className="border-t px-3 py-3 sm:px-4 sm:py-4" style={{ borderColor: "var(--ch-border)" }}>
         {children}
@@ -4828,7 +4886,7 @@ function ToggleTile({
       type="button"
       disabled={disabled}
       onClick={onChange}
-      className="flex min-h-12 items-center justify-between gap-2 rounded-lg border px-2.5 py-2 text-left transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-55 disabled:hover:bg-transparent sm:min-h-11 sm:gap-3 sm:px-3"
+      className="flex min-h-12 items-center justify-between gap-2 rounded-lg border px-2.5 py-2 text-left transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-55 disabled:hover:bg-transparent sm:min-h-11 sm:gap-3 sm:px-3"
       style={{
         background: checked ? `linear-gradient(135deg, rgba(${tone.rgb},0.17), rgba(${tone.rgb},0.07))` : "var(--ch-panel-2)",
         borderColor: checked ? `rgba(${tone.rgb},0.48)` : `rgba(${tone.rgb},0.22)`,
@@ -4853,7 +4911,7 @@ function ToggleTile({
       <span
         className="relative h-5 w-9 shrink-0 rounded-full transition"
         style={{
-          background: checked ? tone.color : "rgb(51,65,85)",
+          background: checked ? tone.color : "var(--ch-border)",
           boxShadow: checked ? `0 0 16px rgba(${tone.rgb},0.26)` : "none",
         }}
       >
@@ -4887,16 +4945,16 @@ function ModeSelector<T extends string>({
             className={cn(
               "min-h-14 rounded-lg border px-3 py-2 text-left transition sm:min-h-16",
               active
-                ? "connecty-dark-action border-white/25 text-slate-100 shadow-[0_0_22px_rgba(var(--ch-accent-rgb),0.18)] ring-1 ring-white/20"
-                : "border-slate-700/70 bg-slate-950/20 text-slate-100 hover:border-cyan-300/35 hover:bg-white/10 hover:text-white",
+                ? "connecty-dark-action border-white/25 text-white shadow-[0_12px_28px_rgba(var(--ch-ai-rgb),0.18)] ring-1 ring-white/20"
+                : "border-blue-100 bg-white text-slate-700 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700",
             )}
-            style={active ? { background: "linear-gradient(135deg, var(--ch-accent), var(--ch-accent-2))" } : undefined}
+            style={active ? { background: "linear-gradient(135deg, var(--ch-ai), var(--ch-ai-cyan))" } : undefined}
           >
-            <span className="flex items-center gap-1.5 text-[12px] font-semibold text-slate-100">
+            <span className={cn("flex items-center gap-1.5 text-[12px] font-semibold", active ? "text-white" : "text-slate-800")}>
               {option.label}
               {option.help ? <InfoHint text={option.help} /> : null}
             </span>
-            <span className="mt-1 block text-[11px] text-slate-300">{option.description}</span>
+            <span className={cn("mt-1 block text-[11px]", active ? "text-white/80" : "text-slate-500")}>{option.description}</span>
           </button>
         );
       })}
@@ -5068,8 +5126,8 @@ function VoiceSelector({
         <div className={cn(
           "mt-3 rounded-lg border px-3 py-2 text-[12px] leading-5",
           selectedVoice.status === "verification_required"
-            ? "border-amber-300/20 bg-amber-300/10 text-amber-100"
-            : "border-emerald-300/20 bg-emerald-300/10 text-emerald-100",
+            ? "border-amber-300/35 bg-amber-50 text-amber-800"
+            : "border-emerald-200 bg-emerald-50 text-emerald-700",
         )}>
           {selectedVoice.status === "verification_required"
             ? `Sua voz "${selectedVoice.name}" foi clonada mas esta pendente de verificacao. Enquanto isso, o agente usara a voz padrao.`
@@ -5078,7 +5136,7 @@ function VoiceSelector({
       ) : null}
 
       {errorMessage ? (
-        <div className="mt-3 rounded-lg border border-amber-300/20 bg-amber-300/10 px-3 py-2 text-[12px] leading-5 text-amber-100">
+        <div className="mt-3 rounded-lg border border-amber-300/35 bg-amber-50 px-3 py-2 text-[12px] leading-5 text-amber-800">
           {errorMessage}
         </div>
       ) : null}
@@ -5108,7 +5166,7 @@ function VoiceSelector({
           onClick={() => setCloneOpen((current) => !current)}
         >
           <span className="flex items-center gap-2">
-            <Mic className="h-4 w-4 text-cyan-300" />
+            <Mic className="h-4 w-4" style={{ color: "var(--ch-ai)" }} />
             <span>
               <span className="flex items-center gap-1.5 text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>
                 Clonar minha voz premium
@@ -5117,7 +5175,7 @@ function VoiceSelector({
               <span className="block text-[11px] text-slate-500">Clone de voz entra como Audio premium.</span>
             </span>
           </span>
-          <span className="font-mono text-[9px] uppercase tracking-widest text-cyan-200">{cloneOpen ? "fechar" : "abrir"}</span>
+          <span className="font-mono text-[9px] uppercase tracking-widest text-indigo-700">{cloneOpen ? "fechar" : "abrir"}</span>
         </button>
 
         {cloneOpen ? (
@@ -5137,7 +5195,7 @@ function VoiceSelector({
                 <span className="mb-1.5 block font-mono text-[9px] uppercase tracking-widest text-slate-500">Audios de amostra</span>
                 <input
                   accept="audio/*,.aac,.m4a,.mp3,.oga,.ogg,.opus,.wav,.webm"
-                  className="block w-full rounded-lg border px-3 py-2 text-[12px] file:mr-3 file:rounded-md file:border-0 file:bg-cyan-300/15 file:px-3 file:py-1.5 file:text-[11px] file:font-semibold file:text-cyan-100"
+                  className="block w-full rounded-lg border px-3 py-2 text-[12px] file:mr-3 file:rounded-md file:border-0 file:bg-indigo-50 file:px-3 file:py-1.5 file:text-[11px] file:font-semibold file:text-indigo-700"
                   multiple
                   onChange={(event) => setCloneFiles(Array.from(event.target.files ?? []))}
                   type="file"
@@ -5153,7 +5211,7 @@ function VoiceSelector({
                     className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-[11px]"
                     style={{ borderColor: "var(--ch-border)" }}
                   >
-                    <span className="min-w-0 truncate text-slate-300">{file.name}</span>
+                    <span className="min-w-0 truncate text-slate-600">{file.name}</span>
                     <span className="shrink-0 font-mono text-[10px] uppercase tracking-widest text-slate-500">{formatBytes(file.size)}</span>
                   </div>
                 ))}
@@ -5187,7 +5245,7 @@ function VoiceSelector({
             </div>
 
             {cloneError ? (
-              <div className="mt-3 rounded-lg border border-rose-300/20 bg-rose-300/10 px-3 py-2 text-[12px] leading-5 text-rose-100">
+              <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[12px] leading-5 text-rose-700">
                 {cloneError}
               </div>
             ) : null}
@@ -5195,16 +5253,17 @@ function VoiceSelector({
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <button
                 type="button"
-                className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-cyan-300 px-4 font-mono text-[10px] font-bold uppercase tracking-widest text-slate-950 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+                className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg px-4 font-mono text-[10px] font-bold uppercase tracking-widest text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
                 disabled={!canClone}
                 onClick={submitVoiceClone}
+                style={{ background: "linear-gradient(135deg, var(--ch-ai), var(--ch-ai-cyan))" }}
               >
                 {cloneSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
                 Criar voz
               </button>
               <button
                 type="button"
-                className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg border px-4 font-mono text-[10px] font-bold uppercase tracking-widest text-slate-400 sm:w-auto"
+                className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-blue-100 bg-white px-4 font-mono text-[10px] font-bold uppercase tracking-widest text-blue-700 transition hover:bg-blue-50 sm:w-auto"
                 onClick={() => {
                   setCloneOpen(false);
                   setCloneError(null);
@@ -5243,11 +5302,11 @@ function VoiceSelector({
                   onClick={() => onSelect(voice)}
                   className={cn(
                     "grid min-h-12 w-full grid-cols-[1fr_auto] items-center gap-3 px-3 py-2 text-left transition",
-                    active ? "bg-cyan-400/10" : "bg-slate-950/20 hover:bg-cyan-400/5",
+                    active ? "bg-blue-50" : "bg-white hover:bg-blue-50",
                   )}
                 >
                   <span className="flex min-w-0 items-center gap-2">
-                    <Volume2 className={cn("h-3.5 w-3.5 shrink-0", active ? "text-cyan-300" : "text-slate-500")} />
+                    <Volume2 className={cn("h-3.5 w-3.5 shrink-0", active ? "text-indigo-700" : "text-slate-500")} />
                     <span className="min-w-0">
                       <span className="block truncate text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>{voice.name}</span>
                       <span className="mt-0.5 block truncate font-mono text-[9px] uppercase tracking-widest text-slate-500">
@@ -5260,13 +5319,13 @@ function VoiceSelector({
                       <span className={cn(
                         "rounded-md px-2 py-1 font-mono text-[8px] uppercase tracking-widest",
                         voice.status === "verification_required"
-                          ? "bg-amber-300/15 text-amber-200"
-                          : "bg-emerald-300/15 text-emerald-200",
+                          ? "bg-amber-50 text-amber-700"
+                          : "bg-emerald-50 text-emerald-700",
                       )}>
                         {voice.status === "verification_required" ? "pendente" : "pronta"}
                       </span>
                     ) : null}
-                    <span className={cn("rounded-md border px-2 py-1 font-mono text-[8px] uppercase tracking-widest", active ? "border-cyan-300/20 bg-cyan-300/15 text-cyan-200" : "connecty-dark-chip")}>
+                    <span className={cn("rounded-md border px-2 py-1 font-mono text-[8px] uppercase tracking-widest", active ? "border-blue-200 bg-blue-50 text-blue-700" : "border-slate-200 bg-slate-50 text-slate-600")}>
                       {formatVoiceSource(voice)}
                     </span>
                     {(voice.source === "customer" || (voice.category === "cloned" && !voice.isDefault)) ? (
@@ -5274,7 +5333,7 @@ function VoiceSelector({
                         <span className="flex items-center gap-1" onClick={(event) => event.stopPropagation()}>
                           <button
                             type="button"
-                            className="rounded-md bg-rose-500/20 px-2 py-1 font-mono text-[8px] uppercase tracking-widest text-rose-300 hover:bg-rose-500/30 disabled:opacity-50"
+                            className="rounded-md bg-rose-50 px-2 py-1 font-mono text-[8px] uppercase tracking-widest text-rose-700 hover:bg-rose-100 disabled:opacity-50"
                             disabled={deletingVoiceId === voice.voiceId}
                             onClick={(event) => { event.stopPropagation(); deleteVoice(voice.voiceId); }}
                           >
@@ -5291,7 +5350,7 @@ function VoiceSelector({
                       ) : (
                         <button
                           type="button"
-                          className="rounded-md p-1 text-slate-500 hover:bg-rose-500/15 hover:text-rose-300"
+                          className="rounded-md p-1 text-slate-500 hover:bg-rose-50 hover:text-rose-700"
                           title="Excluir voz"
                           onClick={(event) => { event.stopPropagation(); setConfirmDeleteId(voice.voiceId); }}
                         >
@@ -5307,7 +5366,7 @@ function VoiceSelector({
           </div>
 
           {visibleVoices.length === 0 ? (
-            <div className="mt-3 rounded-lg border border-amber-300/20 bg-amber-300/10 px-3 py-2 text-[12px] leading-5 text-amber-100">
+            <div className="mt-3 rounded-lg border border-amber-300/35 bg-amber-50 px-3 py-2 text-[12px] leading-5 text-amber-800">
               Nenhuma voz encontrada neste grupo.
             </div>
           ) : null}
@@ -5319,7 +5378,7 @@ function VoiceSelector({
           ) : null}
         </>
       ) : (
-        <div className="mt-3 rounded-lg border border-amber-300/20 bg-amber-300/10 px-3 py-2 text-[12px] leading-5 text-amber-100">
+        <div className="mt-3 rounded-lg border border-amber-300/35 bg-amber-50 px-3 py-2 text-[12px] leading-5 text-amber-800">
           {errorMessage ?? "Nenhuma voz disponivel."}
         </div>
       )}
@@ -5345,14 +5404,14 @@ function VoiceProviderButton({
       type="button"
       className={cn(
         "min-h-14 rounded-lg border px-3 py-2 text-left transition disabled:cursor-not-allowed disabled:opacity-50",
-        active ? "border-cyan-300/40 bg-cyan-300/10" : "border-white/10 bg-slate-950/20 hover:bg-cyan-400/5",
+        active ? "border-blue-200 bg-blue-50" : "border-slate-200 bg-white hover:bg-blue-50",
       )}
       disabled={disabled}
       onClick={onClick}
     >
       <span className="flex items-center justify-between gap-2">
         <span className="text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>{label}</span>
-        <span className={cn("rounded-md border px-2 py-1 font-mono text-[8px] uppercase tracking-widest", active ? "border-cyan-300/20 bg-cyan-300/15 text-cyan-200" : "connecty-dark-chip")}>
+        <span className={cn("rounded-md border px-2 py-1 font-mono text-[8px] uppercase tracking-widest", active ? "border-blue-200 bg-blue-50 text-blue-700" : "border-slate-200 bg-slate-50 text-slate-600")}>
           {active ? "ativo" : "selecionar"}
         </span>
       </span>
@@ -5681,7 +5740,7 @@ function LeadQualificationEditor({
             >
               <div className="grid gap-2 xl:grid-cols-[170px_minmax(320px,1fr)_106px_118px_34px] xl:items-end">
                 <label className="block">
-                  <span className="mb-1 block font-mono text-[8px] uppercase tracking-widest text-cyan-300">Pergunta {index + 1} · Rotulo</span>
+                  <span className="mb-1 block font-mono text-[8px] uppercase tracking-widest text-blue-700">Pergunta {index + 1} · Rotulo</span>
                   <input
                     className="h-9 w-full rounded-md border px-2.5 text-[12px] font-semibold outline-none"
                     value={question.label}
@@ -5704,7 +5763,7 @@ function LeadQualificationEditor({
                   <div className="grid h-9 grid-cols-[26px_1fr_26px] overflow-hidden rounded-md border" style={{ borderColor: "var(--ch-border)" }}>
                     <button
                       type="button"
-                      className="grid place-items-center border-r text-slate-300 transition hover:bg-white/5"
+                      className="grid place-items-center border-r text-slate-600 transition hover:bg-blue-50"
                       style={{ borderColor: "var(--ch-border)" }}
                       onClick={() => onQuestionChange(question.id, { weight: Math.max(0, question.weight - 1) })}
                       aria-label={`Diminuir peso da pergunta ${index + 1}`}
@@ -5721,7 +5780,7 @@ function LeadQualificationEditor({
                     />
                     <button
                       type="button"
-                      className="grid place-items-center border-l text-slate-300 transition hover:bg-white/5"
+                      className="grid place-items-center border-l text-slate-600 transition hover:bg-blue-50"
                       style={{ borderColor: "var(--ch-border)" }}
                       onClick={() => onQuestionChange(question.id, { weight: Math.min(40, question.weight + 1) })}
                       aria-label={`Aumentar peso da pergunta ${index + 1}`}
@@ -5734,22 +5793,22 @@ function LeadQualificationEditor({
                   type="button"
                   className={cn(
                     "flex h-9 items-center justify-between gap-2 rounded-md border px-2.5 text-left transition",
-                    question.required ? "border-emerald-300/30 bg-emerald-400/10 text-emerald-100" : "border-slate-700/70 bg-slate-950/20 text-slate-400",
+                    question.required ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-white text-slate-500",
                   )}
                   onClick={() => onQuestionChange(question.id, { required: !question.required })}
                   title="Marca se esta pergunta e essencial para qualificar o lead."
                 >
                   <span className="flex min-w-0 items-center gap-1.5">
-                    <CheckCircle2 className={cn("h-3.5 w-3.5 shrink-0", question.required ? "text-cyan-300" : "text-slate-500")} />
+                    <CheckCircle2 className={cn("h-3.5 w-3.5 shrink-0", question.required ? "text-emerald-700" : "text-slate-500")} />
                     <span className="truncate text-[11px] font-semibold">Obrigatoria</span>
                   </span>
-                  <span className={cn("relative h-4 w-7 shrink-0 rounded-full transition", question.required ? "bg-emerald-400" : "bg-slate-700")}>
+                  <span className={cn("relative h-4 w-7 shrink-0 rounded-full transition", question.required ? "bg-emerald-500" : "bg-slate-300")}>
                     <span className={cn("absolute top-0.5 h-3 w-3 rounded-full bg-white transition", question.required ? "left-3.5" : "left-0.5")} />
                   </span>
                 </button>
                 <button
                   type="button"
-                  className="grid h-9 w-full place-items-center rounded-md border border-rose-400/25 bg-rose-400/10 text-rose-200 transition hover:bg-rose-400/15 xl:w-9"
+                  className="grid h-9 w-full place-items-center rounded-md border border-rose-200 bg-rose-50 text-rose-700 transition hover:bg-rose-100 xl:w-9"
                   onClick={() => onRemoveQuestion(question.id)}
                   title="Excluir pergunta"
                   aria-label={`Excluir pergunta ${index + 1}`}
@@ -5758,11 +5817,11 @@ function LeadQualificationEditor({
                 </button>
               </div>
               <details className="group mt-1.5">
-                <summary className="flex cursor-pointer list-none items-center gap-2 font-mono text-[8px] uppercase tracking-widest text-slate-500 transition hover:text-cyan-300">
+                <summary className="flex cursor-pointer list-none items-center gap-2 font-mono text-[8px] uppercase tracking-widest text-slate-500 transition hover:text-blue-700">
                   <span>Campo interno</span>
-                  <span className="rounded-full border border-slate-700/70 px-1.5 py-0.5 text-[8px] normal-case tracking-normal text-slate-400">{question.crmField || "sem campo"}</span>
+                  <span className="rounded-full border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[8px] normal-case tracking-normal text-slate-500">{question.crmField || "sem campo"}</span>
                   <span className="group-open:hidden">editar</span>
-                  <span className="hidden text-cyan-300 group-open:inline">fechar</span>
+                  <span className="hidden text-blue-700 group-open:inline">fechar</span>
                 </summary>
                 <label className="mt-2 block max-w-sm">
                   <span className="mb-1 block font-mono text-[8px] uppercase tracking-widest text-slate-500">Campo CRM interno</span>
@@ -5778,7 +5837,7 @@ function LeadQualificationEditor({
 
           <button
             type="button"
-            className="inline-flex min-h-10 w-fit items-center justify-center gap-2 rounded-lg border border-cyan-400/25 bg-cyan-400/10 px-4 font-mono text-[10px] font-bold uppercase tracking-wide text-cyan-200 transition hover:bg-cyan-400/15"
+            className="inline-flex min-h-10 w-fit items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 font-mono text-[10px] font-bold uppercase tracking-wide text-blue-700 transition hover:bg-blue-100"
             onClick={onAddQuestion}
           >
             <Plus className="h-4 w-4" />
@@ -6067,12 +6126,12 @@ function WhatsappChannelOperationsPanel({
     <div className="grid gap-3 sm:gap-4">
       <div className="grid gap-3 sm:gap-4">
         {operationsLocked ? (
-          <div className="rounded-xl border border-amber-300/25 bg-amber-300/10 px-3 py-3 text-amber-100">
+          <div className="rounded-xl border border-amber-300/35 bg-amber-50 px-3 py-3 text-amber-800">
             <div className="flex gap-2">
               <PlugZap className="mt-0.5 h-4 w-4 shrink-0" />
               <div className="min-w-0">
                 <p className="text-[12px] font-semibold leading-5">Conecte o WhatsApp para operar grupos e campanhas.</p>
-                <p className="mt-1 text-[11px] leading-5 text-amber-100/80">
+                <p className="mt-1 text-[11px] leading-5 text-amber-700">
                   Buscar grupos, postar status, consultar canais e enviar campanhas ficam bloqueados ate a instancia deste agente estar conectada.
                 </p>
               </div>
@@ -6084,7 +6143,7 @@ function WhatsappChannelOperationsPanel({
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div className="min-w-0">
               <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Proximo passo</p>
-              <p className="mt-1 text-[18px] font-semibold leading-6 text-slate-100">{nextStepLabel}</p>
+              <p className="mt-1 text-[18px] font-semibold leading-6" style={{ color: "var(--ch-text)" }}>{nextStepLabel}</p>
               <p className="mt-1 text-[11px] leading-5 text-slate-500">
                 {channelOps?.instance.displayName ?? "Instancia WhatsApp"} {channelOps?.instance.phoneNumber ? `/ ${channelOps.instance.phoneNumber}` : ""}
               </p>
@@ -6192,11 +6251,11 @@ function WhatsappChannelOperationsPanel({
               key={step.label}
               className={cn(
                 "rounded-lg border px-3 py-2",
-                step.active ? "border-cyan-300/30 bg-cyan-400/10" : "border-white/10 bg-white/[0.025]",
+                step.active ? "border-emerald-200 bg-emerald-50" : "border-blue-100 bg-white",
               )}
             >
-              <p className={cn("font-mono text-[8px] uppercase tracking-widest", step.active ? "text-cyan-200" : "text-slate-500")}>{step.label}</p>
-              <p className="mt-1 truncate text-[11px] font-semibold text-slate-200">{step.value}</p>
+              <p className={cn("font-mono text-[8px] uppercase tracking-widest", step.active ? "text-emerald-700" : "text-slate-500")}>{step.label}</p>
+              <p className="mt-1 truncate text-[11px] font-semibold" style={{ color: "var(--ch-text)" }}>{step.value}</p>
             </div>
           ))}
         </div>
@@ -6238,7 +6297,7 @@ function WhatsappChannelOperationsPanel({
                       type="button"
                       className={cn(
                         "h-8 rounded-md px-2 font-mono text-[9px] font-semibold uppercase tracking-widest transition",
-                        active ? "bg-cyan-400/15 text-cyan-100" : "text-slate-500 hover:bg-white/[0.04] hover:text-slate-200",
+                        active ? "bg-blue-50 text-blue-700" : "text-slate-500 hover:bg-blue-50 hover:text-blue-700",
                       )}
                       aria-pressed={active}
                       onClick={() => setTargetTypeFilter(option.value as "all" | "group" | "newsletter")}
@@ -6261,14 +6320,14 @@ function WhatsappChannelOperationsPanel({
                       key={target.id}
                       className="grid min-h-[82px] gap-3 rounded-lg border p-3 transition"
                       style={{
-                        background: selected ? "rgba(34,211,238,0.10)" : "var(--ch-surface)",
-                        borderColor: selected ? "rgba(34,211,238,0.45)" : "var(--ch-border)",
+                        background: selected ? "rgba(var(--ch-whatsapp-rgb),0.08)" : "var(--ch-surface)",
+                        borderColor: selected ? "rgba(var(--ch-whatsapp-rgb),0.36)" : "var(--ch-border)",
                       }}
                     >
                       <div className="flex gap-3">
                         <input
                           type="checkbox"
-                          className="mt-1 h-4 w-4 shrink-0 accent-cyan-300"
+                          className="mt-1 h-4 w-4 shrink-0 accent-emerald-600"
                           checked={selected}
                           disabled={operationsLocked}
                           onChange={() => toggleTargetSelection(target.id)}
@@ -6276,7 +6335,7 @@ function WhatsappChannelOperationsPanel({
                         <div className="min-w-0 flex-1">
                           <span className="flex min-w-0 items-center gap-2">
                             <span className="truncate text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>{target.name}</span>
-                            <span className="shrink-0 rounded-md bg-slate-800/80 px-1.5 py-0.5 font-mono text-[8px] uppercase tracking-widest text-slate-300">{formatChannelTargetType(target.type)}</span>
+                            <span className="shrink-0 rounded-md bg-slate-100 px-1.5 py-0.5 font-mono text-[8px] uppercase tracking-widest text-slate-600">{formatChannelTargetType(target.type)}</span>
                           </span>
                           <span className="mt-1 block truncate font-mono text-[9px] text-slate-500">{target.jid}</span>
                           <span className="mt-2 flex flex-wrap gap-1.5">
@@ -6298,9 +6357,9 @@ function WhatsappChannelOperationsPanel({
                             <span className={cn(
                               "mt-2 block text-[11px] leading-4",
                               intelligence?.riskLevel === "high"
-                                ? "text-rose-100"
+                                ? "text-rose-700"
                                 : intelligence?.riskLevel === "medium"
-                                  ? "text-amber-100"
+                                  ? "text-amber-700"
                                   : "text-slate-400",
                             )}>
                               {intelligence
@@ -6314,8 +6373,8 @@ function WhatsappChannelOperationsPanel({
                       <details className="rounded-lg border" style={{ borderColor: "var(--ch-border)" }}>
                         <summary className="cursor-pointer list-none px-2 py-2">
                           <span className="flex items-center justify-between gap-2">
-                            <span className="font-mono text-[9px] uppercase tracking-widest text-slate-400">Ajustes do destino</span>
-                            <span className="rounded-md bg-slate-800/80 px-1.5 py-0.5 font-mono text-[8px] uppercase tracking-widest text-slate-400">abrir</span>
+                            <span className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Ajustes do destino</span>
+                            <span className="rounded-md bg-slate-100 px-1.5 py-0.5 font-mono text-[8px] uppercase tracking-widest text-slate-600">abrir</span>
                           </span>
                         </summary>
                         <div className="grid gap-2 border-t p-2" style={{ borderColor: "var(--ch-border)" }}>
@@ -6323,7 +6382,7 @@ function WhatsappChannelOperationsPanel({
                             {target.type === "group" ? (
                               <button
                                 type="button"
-                                className="rounded-md border px-2 py-1 font-mono text-[9px] uppercase tracking-widest text-slate-200"
+                                className="rounded-md border px-2 py-1 font-mono text-[9px] uppercase tracking-widest text-blue-700 transition hover:bg-blue-50"
                                 style={{ borderColor: "var(--ch-border)" }}
                                 disabled={operationsLocked || channelAction === "update_target_settings"}
                                 onClick={() => onRunAction("update_target_settings", { targetId: target.id, enabled: !target.enabled })}
@@ -6333,7 +6392,7 @@ function WhatsappChannelOperationsPanel({
                             ) : null}
                             <button
                               type="button"
-                              className="rounded-md border px-2 py-1 font-mono text-[9px] uppercase tracking-widest text-slate-200"
+                              className="rounded-md border px-2 py-1 font-mono text-[9px] uppercase tracking-widest text-blue-700 transition hover:bg-blue-50"
                               style={{ borderColor: "var(--ch-border)" }}
                               disabled={operationsLocked || channelAction === "update_target_settings"}
                               onClick={() => onRunAction("update_target_settings", { targetId: target.id, campaignEnabled: !target.campaignEnabled })}
@@ -6343,7 +6402,7 @@ function WhatsappChannelOperationsPanel({
                             {target.type === "group" ? (
                               <button
                                 type="button"
-                                className="rounded-md border px-2 py-1 font-mono text-[9px] uppercase tracking-widest text-slate-200"
+                                className="rounded-md border px-2 py-1 font-mono text-[9px] uppercase tracking-widest text-blue-700 transition hover:bg-blue-50"
                                 style={{ borderColor: "var(--ch-border)" }}
                                 disabled={operationsLocked || channelAction === "update_target_settings"}
                                 onClick={() => onRunAction("update_target_settings", {
@@ -6404,7 +6463,7 @@ function WhatsappChannelOperationsPanel({
                     <span>Nenhum destino encontrado com esses filtros.</span>
                   ) : (
                     <div className="mx-auto grid max-w-md gap-3">
-                      <p className="text-[13px] font-semibold text-slate-200">Nenhum destino sincronizado ainda.</p>
+                      <p className="text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>Nenhum destino sincronizado ainda.</p>
                       <p className="text-[11px] leading-5 text-slate-500">Busque grupos e canais para liberar a selecao de destinos.</p>
                       <div className="mx-auto flex flex-wrap justify-center gap-2">
                         <SecondaryAction
@@ -6438,7 +6497,7 @@ function WhatsappChannelOperationsPanel({
                   Criar campanha
                   <InfoHint text="Gere um rascunho com IA, revise o texto, adicione voz/midia/produtos e aprove manualmente ao agendar para os destinos selecionados." />
                 </p>
-                <p className="mt-1 text-[13px] font-semibold text-slate-100">{selectedTargetSummary}</p>
+                <p className="mt-1 text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>{selectedTargetSummary}</p>
               </div>
               <NeonBadge tone={targetCampaignReady ? "green" : "amber"}>{targetCampaignReady ? "pronto" : "rascunho"}</NeonBadge>
             </div>
@@ -6472,12 +6531,12 @@ function WhatsappChannelOperationsPanel({
               />
             </div>
             {targetAiChecklist.length ? (
-              <div className="mt-3 rounded-lg border border-cyan-300/20 bg-cyan-300/10 px-3 py-2">
-                <p className="font-mono text-[9px] uppercase tracking-widest text-cyan-100">Checklist antes de aprovar</p>
+              <div className="mt-3 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2">
+                <p className="font-mono text-[9px] uppercase tracking-widest text-indigo-700">Checklist antes de aprovar</p>
                 <div className="mt-2 grid gap-1">
                   {targetAiChecklist.map((item, index) => (
-                    <p key={`${item}-${index}`} className="flex gap-2 text-[11px] leading-4 text-cyan-50">
-                      <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-cyan-200" />
+                    <p key={`${item}-${index}`} className="flex gap-2 text-[11px] leading-4 text-indigo-700">
+                      <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-indigo-600" />
                       <span>{item}</span>
                     </p>
                   ))}
@@ -6499,12 +6558,12 @@ function WhatsappChannelOperationsPanel({
             {targetCampaignTitle.trim() || targetCampaignText.trim() ? (
               <div className="mt-3 rounded-lg border p-3" style={{ background: "var(--ch-surface)", borderColor: "var(--ch-border)" }}>
                 <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Preview WhatsApp</p>
-                <div className="mt-2 rounded-lg border border-cyan-300/20 bg-cyan-300/10 px-3 py-2">
+                <div className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
                   {targetCampaignTitle.trim() ? (
-                    <p className="text-[12px] font-semibold text-cyan-50">{targetCampaignTitle.trim()}</p>
+                    <p className="text-[12px] font-semibold text-emerald-800">{targetCampaignTitle.trim()}</p>
                   ) : null}
                   {targetCampaignText.trim() ? (
-                    <p className="mt-1 whitespace-pre-wrap text-[11px] leading-5 text-cyan-50/90">{targetCampaignText.trim()}</p>
+                    <p className="mt-1 whitespace-pre-wrap text-[11px] leading-5 text-emerald-700">{targetCampaignText.trim()}</p>
                   ) : null}
                 </div>
               </div>
@@ -6565,26 +6624,26 @@ function WhatsappChannelOperationsPanel({
                       <button
                         key={item.id}
                         type="button"
-                        className="flex min-h-10 items-center gap-2 rounded-md border px-2 text-left transition hover:bg-cyan-400/10 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
+                        className="flex min-h-10 items-center gap-2 rounded-md border px-2 text-left transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
                         style={{
-                          borderColor: selected ? "rgba(34,211,238,0.45)" : "var(--ch-border)",
-                          background: selected ? "rgba(34,211,238,0.10)" : "transparent",
+                          borderColor: selected ? "rgba(var(--ch-whatsapp-rgb),0.36)" : "var(--ch-border)",
+                          background: selected ? "rgba(var(--ch-whatsapp-rgb),0.08)" : "transparent",
                         }}
                         onClick={() => toggleCatalogItemSelection(item.id)}
                         disabled={operationsLocked}
                       >
                         <input
                           type="checkbox"
-                          className="h-3.5 w-3.5 shrink-0 accent-cyan-300"
+                          className="h-3.5 w-3.5 shrink-0 accent-emerald-600"
                           checked={selected}
                           readOnly
                         />
-                        <Package className="h-3.5 w-3.5 shrink-0 text-cyan-300" />
+                        <Package className="h-3.5 w-3.5 shrink-0 text-emerald-700" />
                         <span className="min-w-0 flex-1">
-                          <span className="block truncate text-[11px] font-semibold text-slate-100">{item.title}</span>
+                          <span className="block truncate text-[11px] font-semibold" style={{ color: "var(--ch-text)" }}>{item.title}</span>
                           <span className="block truncate text-[9px] text-slate-500">{formatSalesCatalogPromptItemMeta(item)}</span>
                         </span>
-                        <span className="shrink-0 rounded-md bg-slate-800/80 px-1.5 py-0.5 font-mono text-[8px] uppercase tracking-widest text-slate-300">
+                        <span className="shrink-0 rounded-md bg-slate-100 px-1.5 py-0.5 font-mono text-[8px] uppercase tracking-widest text-slate-600">
                           {item.media.length}
                         </span>
                       </button>
@@ -6594,7 +6653,7 @@ function WhatsappChannelOperationsPanel({
               </div>
             ) : null}
             {targetDeliveryMode !== "text" || targetAttachmentCount > 0 ? (
-              <p className="mt-2 flex items-center gap-1.5 text-[11px] leading-4 text-cyan-100">
+              <p className="mt-2 flex items-center gap-1.5 text-[11px] leading-4 text-blue-700">
                 {targetDeliveryMode !== "text" ? <Mic className="h-3.5 w-3.5" /> : <ImageIcon className="h-3.5 w-3.5" />}
                 {formatTargetMediaSummary(targetDeliveryMode, targetAttachmentCount)}
               </p>
@@ -6602,19 +6661,19 @@ function WhatsappChannelOperationsPanel({
             <label className="mt-3 flex items-start gap-2 rounded-lg border px-3 py-2 text-[11px] leading-4 text-slate-300" style={{ borderColor: "var(--ch-border)" }}>
               <input
                 type="checkbox"
-                className="mt-0.5 h-4 w-4 accent-cyan-300"
+                className="mt-0.5 h-4 w-4 accent-emerald-600"
                 checked={targetMentionAll}
                 onChange={(event) => setTargetMentionAll(event.target.checked)}
               />
               <span>Mencionar todos nos grupos selecionados</span>
             </label>
             {targetMentionAll && selectedHasNewsletter ? (
-              <p className="mt-2 rounded-md border border-amber-300/25 bg-amber-300/10 px-2 py-1 text-[11px] leading-4 text-amber-100">
+              <p className="mt-2 rounded-md border border-amber-300/35 bg-amber-50 px-2 py-1 text-[11px] leading-4 text-amber-800">
                 Remova canais da selecao para usar mencao geral.
               </p>
             ) : null}
             {selectedLockedAnnouncementGroup ? (
-              <p className="mt-2 rounded-md border border-rose-400/25 bg-rose-400/10 px-2 py-1 text-[11px] leading-4 text-rose-100">
+              <p className="mt-2 rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-[11px] leading-4 text-rose-700">
                 {selectedLockedAnnouncementGroup.name} esta como somente avisos e este WhatsApp nao aparece como admin.
               </p>
             ) : null}
@@ -6645,12 +6704,12 @@ function WhatsappChannelOperationsPanel({
               </label>
             </div>
             {targetRecurring ? (
-              <p className="mt-2 flex items-center gap-1.5 text-[11px] leading-4 text-cyan-100">
+              <p className="mt-2 flex items-center gap-1.5 text-[11px] leading-4 text-emerald-700">
                 <Repeat className="h-3.5 w-3.5" />
                 {formatTargetRecurrenceSummary(targetRecurrenceFrequency, targetRecurrenceOccurrences)}
               </p>
             ) : null}
-            <p className="mt-3 rounded-lg border border-amber-300/25 bg-amber-300/10 px-3 py-2 text-[11px] leading-5 text-amber-100">
+            <p className="mt-3 rounded-lg border border-amber-300/35 bg-amber-50 px-3 py-2 text-[11px] leading-5 text-amber-800">
               Use campanhas apenas em grupos, canais ou contatos que ja autorizaram esse relacionamento. Envio frio pode gerar denuncia e bloqueio do WhatsApp.
             </p>
             <div className="mt-3">
@@ -6738,7 +6797,7 @@ function WhatsappChannelOperationsPanel({
               Campanha simples
               <InfoHint text="Cria um disparo simples via Uazapi Sender. Use uma linha, virgula ou ponto e virgula por numero." />
             </p>
-            <div className="mt-3 rounded-lg border px-3 py-2 text-[11px] leading-5 text-amber-100" style={{ background: "rgba(251,191,36,0.10)", borderColor: "rgba(251,191,36,0.28)" }}>
+            <div className="mt-3 rounded-lg border border-amber-300/35 bg-amber-50 px-3 py-2 text-[11px] leading-5 text-amber-800">
               Use apenas contatos que ja conversaram com a empresa ou autorizaram contato. Disparo frio pode gerar denuncia, bloqueio e banimento do WhatsApp.
             </div>
             <input
@@ -6828,14 +6887,14 @@ function WhatsappChannelOperationsPanel({
                 <div key={item.id} className="rounded-lg border px-3 py-2" style={{ background: "var(--ch-surface)", borderColor: "var(--ch-border)" }}>
                   <div className="flex items-start justify-between gap-2">
                     <p className="min-w-0 truncate text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>{item.title}</p>
-                    <span className="shrink-0 rounded-md bg-slate-800/80 px-2 py-1 font-mono text-[8px] uppercase tracking-widest text-slate-300">{item.status}</span>
+                    <span className="shrink-0 rounded-md bg-slate-100 px-2 py-1 font-mono text-[8px] uppercase tracking-widest text-slate-600">{item.status}</span>
                   </div>
                   <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-slate-500">{item.summary ?? formatChannelOperation(item.operation)}</p>
                   <p className="mt-2 font-mono text-[9px] uppercase tracking-widest text-slate-500">
                     {formatChannelOperation(item.operation)} / {formatDate(item.scheduledFor ?? item.createdAt)}
                   </p>
                   {item.recurrence ? (
-                    <p className="mt-2 flex items-center gap-1.5 rounded-md border border-cyan-300/20 bg-cyan-300/10 px-2 py-1 text-[11px] leading-4 text-cyan-100">
+                    <p className="mt-2 flex items-center gap-1.5 rounded-md border border-blue-100 bg-blue-50 px-2 py-1 text-[11px] leading-4 text-blue-700">
                       <Repeat className="h-3.5 w-3.5 shrink-0" />
                       <span>{formatOutboundRecurrence(item)}</span>
                     </p>
@@ -6844,7 +6903,7 @@ function WhatsappChannelOperationsPanel({
                     <CampaignTrackingSummary tracking={item.campaignTracking} />
                   ) : null}
                   {item.error ? (
-                    <p className="mt-2 rounded-md border border-rose-400/20 bg-rose-400/10 px-2 py-1 text-[11px] leading-4 text-rose-100">{item.error}</p>
+                    <p className="mt-2 rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-[11px] leading-4 text-rose-700">{item.error}</p>
                   ) : null}
                 </div>
               ))
@@ -6874,9 +6933,9 @@ function CampaignTrackingSummary({
   const failedSamples = tracking.samples.filter((item) => item.status === "failed" || item.error).slice(0, 2);
 
   return (
-    <div className="mt-2 rounded-lg border border-cyan-300/20 bg-cyan-300/10 px-3 py-2">
+    <div className="mt-2 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-cyan-100">
+        <p className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-blue-700">
           <Gauge className="h-3.5 w-3.5" />
           Rastreamento Uazapi
         </p>
@@ -6886,11 +6945,11 @@ function CampaignTrackingSummary({
       </div>
 
       {tracking.error ? (
-        <p className="mt-2 rounded-md border border-rose-300/25 bg-rose-400/10 px-2 py-1 text-[11px] leading-4 text-rose-100">{tracking.error}</p>
+        <p className="mt-2 rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-[11px] leading-4 text-rose-700">{tracking.error}</p>
       ) : (
         <>
-          <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-950/60">
-            <div className="h-full rounded-full bg-cyan-300" style={{ width: `${deliveredPercent}%` }} />
+          <div className="mt-2 h-2 overflow-hidden rounded-full bg-blue-100">
+            <div className="h-full rounded-full" style={{ width: `${deliveredPercent}%`, background: "var(--ch-whatsapp-deep)" }} />
           </div>
           <div className="mt-2 grid grid-cols-2 gap-1.5 sm:grid-cols-4">
             <TrackingMiniStat label="Total" value={tracking.total} />
@@ -6907,7 +6966,7 @@ function CampaignTrackingSummary({
       {failedSamples.length ? (
         <div className="mt-2 grid gap-1">
           {failedSamples.map((sample, index) => (
-            <p key={`${sample.id ?? sample.number ?? "falha"}-${index}`} className="rounded-md border border-rose-300/20 bg-rose-400/10 px-2 py-1 text-[11px] leading-4 text-rose-100">
+            <p key={`${sample.id ?? sample.number ?? "falha"}-${index}`} className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-[11px] leading-4 text-rose-700">
               {sample.number ?? sample.id ?? "Mensagem"}: {sample.error ?? formatCampaignMessageStatus(sample.status)}
             </p>
           ))}
@@ -6927,15 +6986,15 @@ function TrackingMiniStat({
   tone?: "cyan" | "green" | "rose" | "zinc";
 }) {
   const toneClass = tone === "green"
-    ? "text-emerald-200"
+    ? "text-emerald-700"
     : tone === "rose"
-      ? "text-rose-200"
+      ? "text-rose-700"
       : tone === "cyan"
-        ? "text-cyan-100"
-        : "text-slate-300";
+        ? "text-blue-700"
+        : "text-slate-700";
 
   return (
-    <div className="rounded-md border border-white/10 bg-slate-950/25 px-2 py-1">
+    <div className="rounded-md border border-blue-100 bg-white px-2 py-1">
       <p className="font-mono text-[8px] uppercase tracking-widest text-slate-500">{label}</p>
       <p className={cn("mt-0.5 text-[12px] font-semibold", toneClass)}>{value.toLocaleString("pt-BR")}</p>
     </div>
@@ -6984,12 +7043,11 @@ function CampaignAnalyticsPanel({
             <div className="flex items-center justify-between gap-3">
               <span className="min-w-0">
                 <span className="block font-mono text-[9px] uppercase tracking-widest text-slate-500">Proximo horario</span>
-                <span className="mt-1 block text-[13px] font-semibold text-cyan-100">{formatDate(analytics.optimization.nextSuggestedFor)}</span>
+                <span className="mt-1 block text-[13px] font-semibold text-blue-700">{formatDate(analytics.optimization.nextSuggestedFor)}</span>
               </span>
               <button
                 type="button"
-                className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border px-3 text-[11px] font-semibold text-cyan-100 transition hover:bg-cyan-400/10"
-                style={{ borderColor: "rgba(34,211,238,0.35)" }}
+                className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-blue-200 px-3 text-[11px] font-semibold text-blue-700 transition hover:bg-blue-50"
                 onClick={() => onUseSuggestedTime(analytics.optimization.nextSuggestedFor)}
               >
                 <Clock3 className="h-3.5 w-3.5" />
@@ -7010,8 +7068,8 @@ function CampaignAnalyticsPanel({
                 analytics.calendar.slice(0, 5).map((item) => (
                   <div key={item.id} className="rounded-lg border px-2.5 py-2" style={{ borderColor: "var(--ch-border)" }}>
                     <div className="flex items-start justify-between gap-2">
-                      <span className="min-w-0 truncate text-[11px] font-semibold text-slate-200">{item.title}</span>
-                      <span className="shrink-0 font-mono text-[9px] text-cyan-200">{formatDate(item.scheduledFor)}</span>
+                      <span className="min-w-0 truncate text-[11px] font-semibold" style={{ color: "var(--ch-text)" }}>{item.title}</span>
+                      <span className="shrink-0 font-mono text-[9px] text-blue-700">{formatDate(item.scheduledFor)}</span>
                     </div>
                     <p className="mt-1 font-mono text-[9px] uppercase tracking-widest text-slate-500">
                       {formatChannelOperation(item.operation)} / {formatDeliveryMode(item.deliveryMode)} / {item.targetCount || 1} destino(s)
@@ -7035,10 +7093,10 @@ function MetricMiniCard({ icon: Icon, label, value }: { icon: LucideIcon; label:
   return (
     <div className="rounded-lg border px-2.5 py-2" style={{ background: "var(--ch-surface)", borderColor: "var(--ch-border)" }}>
       <div className="flex items-center gap-1.5 text-slate-400">
-        <Icon className="h-3.5 w-3.5 text-cyan-300" />
+        <Icon className="h-3.5 w-3.5 text-blue-700" />
         <span className="font-mono text-[8px] uppercase tracking-widest">{label}</span>
       </div>
-      <p className="mt-1 text-[16px] font-semibold text-slate-100">{value.toLocaleString("pt-BR")}</p>
+      <p className="mt-1 text-[16px] font-semibold" style={{ color: "var(--ch-text)" }}>{value.toLocaleString("pt-BR")}</p>
     </div>
   );
 }
@@ -7046,8 +7104,8 @@ function MetricMiniCard({ icon: Icon, label, value }: { icon: LucideIcon; label:
 function PromptCheck({ label, active }: { label: string; active: boolean }) {
   return (
     <div className="flex items-center gap-2">
-      <CheckCircle2 className={cn("h-4 w-4", active ? "text-emerald-300" : "text-slate-500")} />
-      <span className={cn("text-[12px]", active ? "text-slate-200" : "text-slate-500")}>{label}</span>
+      <CheckCircle2 className={cn("h-4 w-4", active ? "text-emerald-700" : "text-slate-500")} />
+      <span className={cn("text-[12px]", active ? "text-slate-700" : "text-slate-500")}>{label}</span>
     </div>
   );
 }
@@ -7347,6 +7405,14 @@ function CompactConnectionCard({
         : visibleQrCode
           ? "Escaneie o QR Code pelo WhatsApp para concluir."
           : meta.description;
+  const qrModeActiveStyle = {
+    background: "rgba(var(--ch-whatsapp-rgb),0.12)",
+    color: "var(--ch-whatsapp-deep)",
+  };
+  const phoneModeActiveStyle = {
+    background: "rgba(var(--ch-brand-primary-rgb),0.10)",
+    color: "var(--ch-brand-primary)",
+  };
 
   useEffect(() => {
     if (visibleQrCode && !connectionAttemptFinished && visibleQrCode !== prevQrRef.current) {
@@ -7394,7 +7460,7 @@ function CompactConnectionCard({
       >
         {!enabled ? (
           <div>
-            <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-amber-500/10 text-amber-200">
+            <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-amber-500/10 text-amber-700">
               <PlugZap className="h-6 w-6" />
             </div>
             <p className="mt-2 text-[11px] leading-4 text-slate-500">
@@ -7403,22 +7469,22 @@ function CompactConnectionCard({
           </div>
         ) : visiblePairCode ? (
           <div className="grid place-items-center">
-            <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-sky-500/10 text-sky-300">
+            <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-sky-500/10 text-sky-700">
               <KeyRound className="h-6 w-6" />
             </div>
-            <p className="mt-2 text-[11px] leading-4 text-sky-300">
+            <p className="mt-2 text-[11px] leading-4 text-sky-700">
               Codigo de pareamento
             </p>
-            <p className="mt-2 rounded-lg border border-sky-300/20 bg-sky-300/10 px-3 py-2 font-mono text-[18px] font-bold text-sky-100">
+            <p className="mt-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 font-mono text-[18px] font-bold text-sky-800">
               {formatPairCode(visiblePairCode)}
             </p>
           </div>
         ) : visibleQrCode ? (
           <button className="group cursor-pointer border-0 bg-transparent p-0" onClick={() => setQrModalOpen(true)} title="Clique para abrir o QR Code" type="button">
-            <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-emerald-500/10 text-emerald-400">
+            <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-emerald-500/10 text-emerald-700">
               <QrCode className="h-6 w-6" />
             </div>
-            <p className="mt-2 text-[11px] leading-4 text-emerald-400">
+            <p className="mt-2 text-[11px] leading-4 text-emerald-700">
               QR Code gerado — clique para exibir
             </p>
           </button>
@@ -7428,7 +7494,10 @@ function CompactConnectionCard({
           </div>
         ) : (
           <div>
-            <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-cyan-500/10 text-cyan-300">
+            <div
+              className="mx-auto grid h-12 w-12 place-items-center rounded-2xl"
+              style={{ background: "rgba(var(--ch-whatsapp-rgb),0.10)", color: "var(--ch-whatsapp-deep)" }}
+            >
               <QrCode className="h-6 w-6" />
             </div>
             <p className="mt-2 text-[11px] leading-4 text-slate-500">
@@ -7457,10 +7526,11 @@ function CompactConnectionCard({
           <button
             className={cn(
               "inline-flex min-h-9 items-center justify-center gap-2 rounded-md px-3 font-mono text-[10px] font-semibold uppercase transition disabled:cursor-not-allowed disabled:opacity-50",
-              connectMode === "qr" ? "bg-white/10 text-cyan-100" : "text-slate-400 hover:text-slate-100",
+              connectMode === "qr" ? "shadow-sm" : "text-slate-500 hover:bg-blue-50 hover:text-slate-700",
             )}
             disabled={!enabled || running === "connect"}
             onClick={() => onConnectModeChange("qr")}
+            style={connectMode === "qr" ? qrModeActiveStyle : undefined}
             type="button"
           >
             <QrCode className="h-3.5 w-3.5" />
@@ -7469,10 +7539,11 @@ function CompactConnectionCard({
           <button
             className={cn(
               "inline-flex min-h-9 items-center justify-center gap-2 rounded-md px-3 font-mono text-[10px] font-semibold uppercase transition disabled:cursor-not-allowed disabled:opacity-50",
-              connectMode === "phone" ? "bg-white/10 text-sky-100" : "text-slate-400 hover:text-slate-100",
+              connectMode === "phone" ? "shadow-sm" : "text-slate-500 hover:bg-blue-50 hover:text-slate-700",
             )}
             disabled={!enabled || running === "connect"}
             onClick={() => onConnectModeChange("phone")}
+            style={connectMode === "phone" ? phoneModeActiveStyle : undefined}
             type="button"
           >
             <Smartphone className="h-3.5 w-3.5" />
@@ -7487,7 +7558,7 @@ function CompactConnectionCard({
               <InfoHint text="Use somente numeros, incluindo pais e DDD. Exemplo: 5511999999999." />
             </span>
             <input
-              className="min-h-10 rounded-lg border bg-white/[0.04] px-3 text-[13px] text-slate-100 outline-none transition placeholder:text-slate-600 focus:border-sky-300/60"
+              className="min-h-10 rounded-lg border bg-white px-3 text-[13px] text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-sky-400/70"
               inputMode="tel"
               onChange={(event) => onConnectPhoneChange(event.target.value)}
               placeholder="5511999999999"
@@ -7506,6 +7577,7 @@ function CompactConnectionCard({
           description={connectionActionDescription}
           disabled={connectionActionDisabled}
           loading={running === "connect"}
+          tone="whatsapp"
           onClick={onConnect}
         />
         <div className="flex flex-wrap gap-2">
@@ -7586,26 +7658,27 @@ function CompactConnectionCard({
           tabIndex={0}
         >
           <div
-            className="relative w-full max-w-md rounded-2xl border border-amber-300/25 bg-[#121827] p-5 text-left shadow-2xl"
+            className="relative w-full max-w-md rounded-2xl border p-5 text-left shadow-2xl"
             onClick={(event) => event.stopPropagation()}
+            style={{ background: "var(--ch-surface)", borderColor: "rgba(var(--ch-warning-rgb),0.26)" }}
           >
             <button
               aria-label="Fechar aviso"
-              className="absolute right-3 top-3 grid h-8 w-8 place-items-center rounded-full bg-white/5 text-slate-400 transition hover:bg-white/10 hover:text-white"
+              className="absolute right-3 top-3 grid h-8 w-8 place-items-center rounded-full bg-slate-100 text-slate-500 transition hover:bg-slate-200 hover:text-slate-700"
               onClick={() => setPasskeyModalOpen(false)}
               type="button"
             >
               <X className="h-4 w-4" />
             </button>
 
-            <div className="grid h-12 w-12 place-items-center rounded-2xl bg-amber-300/10 text-amber-200">
+            <div className="grid h-12 w-12 place-items-center rounded-2xl bg-amber-100 text-amber-700">
               <KeyRound className="h-6 w-6" />
             </div>
 
-            <h3 id="passkey-blocked-title" className="mt-4 pr-8 text-lg font-semibold text-white">
+            <h3 id="passkey-blocked-title" className="mt-4 pr-8 text-lg font-semibold" style={{ color: "var(--ch-text)" }}>
               Verificacao extra solicitada
             </h3>
-            <p className="mt-3 text-sm leading-6 text-slate-300">
+            <p className="mt-3 text-sm leading-6 text-slate-600">
               {PASSKEY_CONNECTION_HELP_TEXT}
             </p>
             <p className="mt-3 text-xs leading-5 text-slate-500">
@@ -7615,7 +7688,7 @@ function CompactConnectionCard({
             <div className="mt-5 flex flex-col gap-2 sm:flex-row">
               {!resetActionDisabled ? (
                 <button
-                  className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-lg border border-amber-300/30 bg-amber-300/10 px-4 font-mono text-[11px] font-semibold uppercase text-amber-100 transition hover:bg-amber-300/15"
+                  className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-lg border border-amber-300/40 bg-amber-50 px-4 font-mono text-[11px] font-semibold uppercase text-amber-700 transition hover:bg-amber-100"
                   onClick={() => {
                     setPasskeyModalOpen(false);
                     onReset();
@@ -7627,7 +7700,7 @@ function CompactConnectionCard({
                 </button>
               ) : null}
               <button
-                className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-lg border border-cyan-300/30 bg-cyan-300/10 px-4 font-mono text-[11px] font-semibold uppercase text-cyan-100 transition hover:bg-cyan-300/15"
+                className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 font-mono text-[11px] font-semibold uppercase text-blue-700 transition hover:bg-blue-100"
                 onClick={() => {
                   setPasskeyModalOpen(false);
                   setMigrationModalOpen(true);
@@ -7660,30 +7733,34 @@ function CompactConnectionCard({
           tabIndex={0}
         >
           <div
-            className="relative max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl border border-cyan-300/20 bg-[#101827] p-5 text-left shadow-2xl"
+            className="relative max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl border p-5 text-left shadow-2xl"
             onClick={(event) => event.stopPropagation()}
+            style={{ background: "var(--ch-surface)", borderColor: "rgba(var(--ch-brand-primary-rgb),0.22)" }}
           >
             <button
               aria-label="Fechar migracao assistida"
-              className="absolute right-3 top-3 grid h-8 w-8 place-items-center rounded-full bg-white/5 text-slate-400 transition hover:bg-white/10 hover:text-white"
+              className="absolute right-3 top-3 grid h-8 w-8 place-items-center rounded-full bg-slate-100 text-slate-500 transition hover:bg-slate-200 hover:text-slate-700"
               onClick={() => setMigrationModalOpen(false)}
               type="button"
             >
               <X className="h-4 w-4" />
             </button>
 
-            <div className="grid h-12 w-12 place-items-center rounded-2xl bg-cyan-300/10 text-cyan-200">
+            <div
+              className="grid h-12 w-12 place-items-center rounded-2xl"
+              style={{ background: "rgba(var(--ch-ai-rgb),0.10)", color: "var(--ch-ai)" }}
+            >
               <KeyRound className="h-6 w-6" />
             </div>
 
-            <h3 id="passkey-migration-title" className="mt-4 pr-8 text-lg font-semibold text-white">
+            <h3 id="passkey-migration-title" className="mt-4 pr-8 text-lg font-semibold" style={{ color: "var(--ch-text)" }}>
               Migracao assistida
             </h3>
-            <p className="mt-3 text-sm leading-6 text-slate-300">
+            <p className="mt-3 text-sm leading-6 text-slate-600">
               Conecte esta conta no WhatsApp Web oficial, conclua a verificacao por chave de acesso e use a extensao para migrar a sessao autenticada.
             </p>
 
-            <div className="mt-4 grid gap-2 text-[12px] leading-5 text-slate-400">
+            <div className="mt-4 grid gap-2 text-[12px] leading-5 text-slate-500">
               <p>1. Instale a extensao Session Migration Connector.</p>
               <p>2. Entre no WhatsApp Web oficial e conclua a verificacao pelo celular.</p>
               <p>3. Na extensao, use os botoes abaixo para copiar a Server URL e o Instance Token.</p>
@@ -7691,7 +7768,7 @@ function CompactConnectionCard({
             </div>
 
             <a
-              className="mt-4 inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-cyan-300/25 bg-cyan-300/10 px-4 font-mono text-[11px] font-semibold uppercase text-cyan-100 transition hover:bg-cyan-300/15"
+              className="mt-4 inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 font-mono text-[11px] font-semibold uppercase text-blue-700 transition hover:bg-blue-100"
               href={PASSKEY_MIGRATION_EXTENSION_URL}
               rel="noreferrer"
               target="_blank"
@@ -7717,13 +7794,13 @@ function CompactConnectionCard({
               />
             </div>
 
-            <div className="mt-4 rounded-lg border border-amber-300/20 bg-amber-300/10 px-3 py-2 text-[11px] leading-5 text-amber-100/90">
+            <div className="mt-4 rounded-lg border border-amber-300/35 bg-amber-50 px-3 py-2 text-[11px] leading-5 text-amber-800">
               O token permite migrar esta sessao do WhatsApp. Use apenas na extensao indicada e nao compartilhe com terceiros.
             </div>
 
             <div className="mt-5 flex flex-col gap-2 sm:flex-row">
               <button
-                className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/5 px-4 font-mono text-[11px] font-semibold uppercase text-slate-100 transition hover:bg-white/10"
+                className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 font-mono text-[11px] font-semibold uppercase text-blue-700 transition hover:bg-blue-100"
                 onClick={() => {
                   setMigrationModalOpen(false);
                   onRefresh();
@@ -7763,13 +7840,13 @@ function MigrationCopyButton({
 }) {
   return (
     <button
-      className="grid min-h-20 gap-1 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-3 text-left transition hover:bg-white/[0.07] disabled:cursor-not-allowed disabled:opacity-60"
+      className="grid min-h-20 gap-1 rounded-xl border border-blue-100 bg-white px-3 py-3 text-left transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
       disabled={disabled}
       onClick={onClick}
       type="button"
     >
-      <span className="inline-flex items-center gap-2 font-mono text-[11px] font-semibold uppercase text-white">
-        {loading ? <Loader2 className="h-4 w-4 animate-spin text-cyan-200" /> : <Copy className="h-4 w-4 text-cyan-200" />}
+      <span className="inline-flex items-center gap-2 font-mono text-[11px] font-semibold uppercase text-slate-800">
+        {loading ? <Loader2 className="h-4 w-4 animate-spin text-blue-600" /> : <Copy className="h-4 w-4 text-blue-600" />}
         {label}
       </span>
       <span className="text-[11px] leading-4 text-slate-500">{description}</span>
@@ -7784,7 +7861,7 @@ function ConnectionDiagnosticsPanel({ attempt }: { attempt: ConnectionAttemptDia
   const readableReason = attempt.finalStatus === "passkey_blocked" && reason ? PASSKEY_CONNECTION_REASON_TEXT : reason;
 
   return (
-    <div className="mt-3 rounded-lg border border-white/10 bg-white/[0.03] p-3">
+    <div className="mt-3 rounded-lg border p-3" style={{ background: "var(--ch-panel-2)", borderColor: "var(--ch-border)" }}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="font-mono text-[9px] uppercase tracking-wide text-slate-500">Diagnostico</p>
@@ -7804,15 +7881,15 @@ function ConnectionDiagnosticsPanel({ attempt }: { attempt: ConnectionAttemptDia
       </div>
 
       {readableReason ? (
-        <p className="mt-3 break-words rounded-md bg-black/20 px-2 py-2 text-[11px] leading-4 text-slate-400">
+        <p className="mt-3 break-words rounded-md bg-white px-2 py-2 text-[11px] leading-4 text-slate-500">
           {readableReason}
         </p>
       ) : null}
 
       {attempt.finalStatus === "passkey_blocked" ? (
         <div className="mt-3 rounded-md border border-amber-300/20 bg-amber-300/10 px-2 py-2">
-          <p className="font-mono text-[9px] uppercase text-amber-200">Conexao assistida recomendada</p>
-          <p className="mt-1 text-[11px] leading-4 text-amber-100/85">
+          <p className="font-mono text-[9px] uppercase text-amber-700">Conexao assistida recomendada</p>
+          <p className="mt-1 text-[11px] leading-4 text-amber-800">
             {PASSKEY_CONNECTION_ASSISTED_TEXT} A validacao deve ser concluida no WhatsApp Web oficial antes de migrar a sessao autenticada.
           </p>
         </div>
@@ -7840,9 +7917,9 @@ function ConnectionDiagnosticsPanel({ attempt }: { attempt: ConnectionAttemptDia
 
 function ConnectionDiagnosticCounter({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-md bg-black/20 px-2 py-1.5">
+    <div className="rounded-md bg-white px-2 py-1.5">
       <p className="font-mono text-[9px] uppercase text-slate-500">{label}</p>
-      <p className="mt-0.5 text-[12px] font-semibold text-slate-100">{value.toLocaleString("pt-BR")}</p>
+      <p className="mt-0.5 text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>{value.toLocaleString("pt-BR")}</p>
     </div>
   );
 }
@@ -7854,7 +7931,7 @@ function StatusInfoTile({ connected }: { connected: boolean }) {
       <p
         className={cn(
           "mt-1 inline-flex items-center gap-2 break-words text-[12px] font-semibold leading-4",
-          connected ? "text-emerald-300" : "text-rose-300",
+          connected ? "text-emerald-700" : "text-rose-700",
         )}
       >
         <span
@@ -7885,6 +7962,7 @@ function ActionButton({
   description,
   loading,
   disabled,
+  tone = "default",
   onClick,
 }: {
   icon: LucideIcon;
@@ -7892,16 +7970,32 @@ function ActionButton({
   description?: string;
   loading?: boolean;
   disabled?: boolean;
+  tone?: "default" | "whatsapp" | "ai";
   onClick: () => void;
 }) {
+  const actionTheme = tone === "whatsapp"
+    ? {
+        background: "linear-gradient(135deg, var(--ch-whatsapp-deep), var(--ch-whatsapp))",
+        boxShadow: "0 12px 30px rgba(var(--ch-whatsapp-deep-rgb),0.18)",
+      }
+    : tone === "ai"
+      ? {
+          background: "linear-gradient(135deg, var(--ch-ai), var(--ch-ai-cyan))",
+          boxShadow: "0 12px 30px rgba(var(--ch-ai-rgb),0.18)",
+        }
+      : {
+          background: "linear-gradient(135deg, var(--ch-brand-action), var(--ch-brand-primary))",
+          boxShadow: "0 12px 30px rgba(var(--ch-brand-primary-rgb),0.16)",
+        };
+
   return (
     <button
       type="button"
       disabled={disabled || loading}
       onClick={onClick}
       data-connecty-contrast="dark"
-      className="connecty-dark-action inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg px-4 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-100 shadow-[0_12px_30px_rgba(var(--ch-accent-rgb),0.16)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto"
-      style={{ background: "linear-gradient(135deg, var(--ch-accent), var(--ch-accent-2))" }}
+      className="connecty-dark-action inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg px-4 font-mono text-[10px] font-bold uppercase tracking-wide text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto"
+      style={actionTheme}
     >
       {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Icon className="h-4 w-4" />}
       <span className="inline-flex items-center gap-1.5">
@@ -7936,7 +8030,7 @@ function SecondaryAction({
       onClick={onClick}
       className={cn(
         "inline-flex min-h-9 w-full items-center justify-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide transition disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto",
-        tone === "danger" ? "border-rose-400/30 bg-rose-400/10 text-rose-200 hover:bg-rose-400/15" : "border-white/15 bg-white/[0.04] text-slate-100 hover:border-cyan-300/35 hover:bg-white/[0.08]",
+        tone === "danger" ? "border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100" : "border-blue-100 bg-white text-blue-700 hover:border-blue-200 hover:bg-blue-50",
       )}
     >
       {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Icon className="h-3.5 w-3.5" />}
@@ -7963,7 +8057,7 @@ function getStatusMeta(status: WhatsappStatus): {
       title: "WhatsApp conectado",
       description: "O numero esta pronto para enviar testes e receber conversas.",
       bg: "bg-emerald-400/10",
-      text: "text-emerald-300",
+      text: "text-emerald-700",
     };
   }
 
@@ -7974,7 +8068,7 @@ function getStatusMeta(status: WhatsappStatus): {
       title: "Aguardando leitura",
       description: "Finalize a conexao lendo o QR Code pelo WhatsApp.",
       bg: "bg-amber-400/10",
-      text: "text-amber-300",
+      text: "text-amber-700",
     };
   }
 
@@ -7985,7 +8079,7 @@ function getStatusMeta(status: WhatsappStatus): {
       title: "Conexao com erro",
       description: "Tente reconectar o numero ou acione o suporte da plataforma.",
       bg: "bg-rose-400/10",
-      text: "text-rose-300",
+      text: "text-rose-700",
     };
   }
 
@@ -7995,7 +8089,7 @@ function getStatusMeta(status: WhatsappStatus): {
     title: "Nenhum WhatsApp ativo",
     description: "Inicie a conexao para parear o numero.",
     bg: "bg-cyan-400/10",
-    text: "text-cyan-300",
+    text: "text-blue-700",
   };
 }
 
@@ -8097,28 +8191,28 @@ function formatConnectionEventTime(value: string) {
 function getConnectionDiagnosticTone(status: ConnectionFinalStatus) {
   if (status === "success") {
     return {
-      text: "text-emerald-300",
-      badge: "bg-emerald-400/10 text-emerald-200",
+      text: "text-emerald-700",
+      badge: "bg-emerald-50 text-emerald-700",
     };
   }
 
   if (status === "passkey_blocked" || status === "qr_timeout") {
     return {
-      text: "text-amber-300",
-      badge: "bg-amber-400/10 text-amber-200",
+      text: "text-amber-700",
+      badge: "bg-amber-50 text-amber-700",
     };
   }
 
   if (status === "provider_error" || status === "disconnected") {
     return {
-      text: "text-rose-300",
-      badge: "bg-rose-400/10 text-rose-200",
+      text: "text-rose-700",
+      badge: "bg-rose-50 text-rose-700",
     };
   }
 
   return {
-    text: "text-cyan-300",
-    badge: "bg-cyan-400/10 text-cyan-200",
+    text: "text-blue-700",
+    badge: "bg-blue-50 text-blue-700",
   };
 }
 
@@ -8182,9 +8276,9 @@ function formatCloneReviewFlag(value: string) {
 }
 
 function getHumanizationMetricTextColor(status: CloneHumanizationMetric["status"]) {
-  if (status === "good") return "text-emerald-300";
-  if (status === "warning") return "text-amber-300";
-  return "text-rose-300";
+  if (status === "good") return "text-emerald-700";
+  if (status === "warning") return "text-amber-700";
+  return "text-rose-700";
 }
 
 function getHumanizationMetricBarColor(status: CloneHumanizationMetric["status"]) {

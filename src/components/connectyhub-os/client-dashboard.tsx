@@ -70,7 +70,7 @@ export function ClientDashboard({
         eyebrow={`Workspace / ${workspaceName}`}
         title="Dashboard"
         description={`Dados isolados desta empresa. Atualizado em ${generatedAt}.`}
-        actions={<CommandButton tone="cyan">+ Criar agente</CommandButton>}
+        actions={<CommandButton tone="violet">+ Criar agente</CommandButton>}
       />
 
       {overview.warnings.length ? (
@@ -104,7 +104,7 @@ export function ClientDashboard({
           label="WhatsApps conectados"
           value={`${formatInteger(metrics.whatsapp.connected)}/${formatInteger(metrics.whatsapp.total)}`}
           detail={`${whatsappHealth}% de saude operacional`}
-          tone={whatsappHealth >= 80 ? "green" : "amber"}
+          tone={whatsappHealth >= 80 ? "teal" : "amber"}
         />
         <ReportCard
           icon={CreditCard}
@@ -122,7 +122,7 @@ export function ClientDashboard({
           value={`${formatInteger(metrics.leads.last7d)} novos leads`}
           trend={metrics.leads.last7d > 0 ? `+${formatInteger(metrics.leads.last7d)} em 7d` : undefined}
           data={overview.leadSeries}
-          color="#06b6d4"
+          color="var(--ch-chart-2)"
           compact
         />
 
@@ -147,7 +147,7 @@ export function ClientDashboard({
       </div>
 
       <div className="mb-4 grid gap-4 xl:grid-cols-3">
-        <Panel id="operacao-whatsapp" title="Operacao WhatsApp" eyebrow="agentes / mensagens / conexao" tone="violet" compact>
+        <Panel id="operacao-whatsapp" title="Operacao WhatsApp" eyebrow="agentes / mensagens / conexao" tone="green" compact>
           <div className="grid gap-2 sm:grid-cols-2">
             <KpiStat label="Agentes" value={formatInteger(metrics.agents.total)} tone="violet" />
             <KpiStat label="Online" value={formatInteger(metrics.agents.online)} tone="green" />
@@ -192,6 +192,7 @@ export function ClientDashboard({
           title="Agent Task Force"
           eyebrow="funcionarios IA / operacao agora"
           action={<NeonBadge tone="green">{agentsOnlineLabel}</NeonBadge>}
+          tone="violet"
         >
           {overview.activeAgents.length ? (
             <div className="grid gap-3 sm:grid-cols-2">
@@ -217,6 +218,7 @@ export function ClientDashboard({
           title="Lead Pulse"
           eyebrow="captura / origem / score"
           action={<NeonBadge tone="cyan">{formatInteger(metrics.leads.total)}</NeonBadge>}
+          tone="green"
         >
           <div className="divide-y" style={{ borderColor: "var(--ch-border)" }}>
             {overview.recentLeads.length ? (
@@ -259,7 +261,7 @@ export function ClientDashboard({
       </div>
 
       <div className="mb-4">
-        <Panel id="conversas" title="Conversas ativas" eyebrow="canais / IA insight">
+        <Panel id="conversas" title="Conversas ativas" eyebrow="canais / IA insight" tone="green">
           <div className="grid gap-4 lg:grid-cols-[200px_1fr]">
             <div className="divide-y" style={{ borderColor: "var(--ch-border)" }}>
               {overview.recentConversations.length ? (
@@ -352,7 +354,7 @@ export function ClientDashboard({
                   style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}
                 >
                   <div className="min-w-0">
-                    <p className="truncate text-[12px] font-semibold text-slate-100">{company.name}</p>
+                    <p className="truncate text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>{company.name}</p>
                     <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">
                       {company.planCode} / {company.status}
                     </p>
@@ -383,7 +385,7 @@ export function ClientDashboard({
                 >
                   <Icon className="mt-0.5 h-4 w-4 shrink-0" style={{ color: "var(--ch-accent)" }} />
                   <div className="min-w-0">
-                    <p className="text-[12px] font-semibold text-slate-100">{item.label}</p>
+                    <p className="text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>{item.label}</p>
                     <p className="mt-1 text-[11px] leading-5 text-slate-500">{item.detail}</p>
                   </div>
                 </div>
@@ -423,13 +425,27 @@ function ReportCard({
   tone: "cyan" | "green" | "amber" | "rose" | "teal";
   value: string;
 }) {
-  const color = tone === "green" ? "#34d399" : tone === "amber" ? "#fbbf24" : tone === "rose" ? "#fb7185" : tone === "teal" ? "#2dd4bf" : "#22d3ee";
+  const color = tone === "green"
+    ? "var(--ch-success)"
+    : tone === "amber"
+      ? "var(--ch-warning)"
+      : tone === "rose"
+        ? "var(--ch-danger)"
+        : tone === "teal"
+          ? "var(--ch-whatsapp-deep)"
+          : "var(--ch-brand-primary)";
 
   return (
-    <div className="rounded-2xl p-4" style={{ background: "var(--ch-panel)", border: `1px solid ${color}55` }}>
+    <div
+      className="rounded-2xl p-4"
+      style={{ background: "var(--ch-panel)", border: `1px solid color-mix(in srgb, ${color} 34%, transparent)` }}
+    >
       <div className="flex items-start justify-between gap-3">
         <p className="min-w-0 truncate font-mono text-[9px] uppercase tracking-widest text-slate-500">{label}</p>
-        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl" style={{ background: `${color}18`, color }}>
+        <span
+          className="grid h-9 w-9 shrink-0 place-items-center rounded-xl"
+          style={{ background: `color-mix(in srgb, ${color} 12%, transparent)`, color }}
+        >
           <Icon className="h-4 w-4" />
         </span>
       </div>

@@ -105,7 +105,7 @@ export function AgentPromptEditor({
           variant="outline"
           size="xs"
           onClick={() => setOpen((value) => !value)}
-          className="border-violet-500/30 bg-violet-500/5 font-mono text-[9px] uppercase tracking-widest text-violet-700 hover:bg-violet-500/10"
+          className="border-indigo-500/30 bg-indigo-500/5 font-mono text-[9px] uppercase tracking-widest text-indigo-700 hover:bg-indigo-500/10"
         >
           {open ? <X className="h-3 w-3" /> : <PencilLine className="h-3 w-3" />}
           {open ? "Fechar" : "Editar prompt"}
@@ -161,7 +161,8 @@ export function AgentPromptEditor({
                 size="xs"
                 disabled={!isDirty || state.status === "saving"}
                 onClick={savePrompt}
-                className="bg-[#01004c] text-white hover:bg-[#01004c]/90"
+                className="text-white hover:brightness-110"
+                style={{ background: "linear-gradient(135deg, var(--ch-ai), var(--ch-ai-cyan))" }}
               >
                 {state.status === "saving" ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
                 Salvar prompt

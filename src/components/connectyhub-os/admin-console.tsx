@@ -77,7 +77,7 @@ export function AdminConsole({
           <div className="flex gap-2">
             <button
               type="button"
-              className="flex h-8 items-center gap-2 rounded-xl px-3 text-[11px] font-medium text-slate-400 transition hover:text-white"
+              className="flex h-8 items-center gap-2 rounded-xl px-3 text-[11px] font-medium text-slate-500 transition hover:text-blue-700"
               style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}
             >
               Atualizado {formatShortDate(overview.generatedAt)}
@@ -85,15 +85,15 @@ export function AdminConsole({
             <button
               type="button"
               title={overview.warnings.join("\n")}
-              className="flex h-8 items-center gap-2 rounded-xl px-3 text-[11px] font-medium text-slate-400 transition hover:text-white"
+              className="flex h-8 items-center gap-2 rounded-xl px-3 text-[11px] font-medium text-slate-500 transition hover:text-blue-700"
               style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}
             >
               Base {overview.warnings.length ? `${overview.warnings.length} aviso` : "ok"}
             </button>
             <button
               type="button"
-              className="flex h-8 items-center gap-2 rounded-xl px-3 text-[11px] font-medium text-white"
-              style={{ background: "var(--ch-accent)", color: "#000" }}
+              className="flex h-8 items-center gap-2 rounded-xl px-3 text-[11px] font-medium"
+              style={{ background: "var(--ch-accent)", color: "#ffffff" }}
             >
               Exportar dados
             </button>
@@ -109,7 +109,7 @@ export function AdminConsole({
           <div className="mb-3 flex flex-col justify-between gap-2 md:flex-row md:items-end">
             <div>
               <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-slate-500">operacao / hoje</p>
-              <h2 className="mt-1 text-[20px] font-semibold leading-tight text-white">ConnectyHub OS</h2>
+              <h2 className="mt-1 text-[20px] font-semibold leading-tight" style={{ color: "var(--ch-text)" }}>ConnectyHub OS</h2>
               <p className="mt-0.5 max-w-2xl text-[11px] leading-4 text-slate-500">
                 Receita, clientes, creditos e riscos em uma leitura curta.
               </p>
@@ -145,7 +145,7 @@ export function AdminConsole({
           value={overview.revenue.value}
           trend={overview.revenue.trend}
           data={overview.revenue.series}
-          color="#34d399"
+          color="var(--ch-chart-5)"
           filters={["6M", "1A"]}
           compact
         />
@@ -167,7 +167,7 @@ export function AdminConsole({
           title="Novos clientes"
           eyebrow="cadastros / 7 dias"
           data={overview.activationSeries}
-          color="#34d399"
+          color="var(--ch-chart-1)"
           filters={["7D"]}
           compact
         />
@@ -175,7 +175,7 @@ export function AdminConsole({
           title="Leads captados"
           eyebrow="clientes / 7 dias"
           data={overview.leadSeries}
-          color="#22d3ee"
+          color="var(--ch-chart-2)"
           filters={["7D"]}
           compact
         />
@@ -301,7 +301,7 @@ function HealthDialCard({
       <div className="flex items-start justify-between gap-2">
         <div>
           <p className="font-mono text-[8px] uppercase tracking-[0.16em] text-slate-500">saude</p>
-          <p className="mt-0.5 text-[13px] font-semibold text-white">Plataforma</p>
+          <p className="mt-0.5 text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>Plataforma</p>
         </div>
         <NeonBadge tone={tone}>{score}%</NeonBadge>
       </div>
@@ -313,9 +313,12 @@ function HealthDialCard({
             background: `conic-gradient(${colors.fill} ${score * 3.6}deg, rgba(148,163,184,0.16) 0deg)`,
           }}
         >
-          <div className="grid h-[84px] w-[84px] place-items-center rounded-full bg-[#0b1322] text-center">
+          <div
+            className="grid h-[84px] w-[84px] place-items-center rounded-full text-center"
+            style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}
+          >
             <div>
-              <p className="font-mono text-[22px] font-bold leading-none text-white">{score}%</p>
+              <p className="font-mono text-[22px] font-bold leading-none" style={{ color: colors.fill }}>{score}%</p>
               <p className="mt-0.5 text-[9px] text-slate-500">operacional</p>
             </div>
           </div>
@@ -367,17 +370,17 @@ function ClientList({ clients }: { clients: AdminDashboardOverview["clients"] })
   }
 
   return (
-    <div className="divide-y divide-white/5">
+    <div className="divide-y divide-blue-100">
       {clients.map((client) => (
         <div key={`${client.id}-${client.company}`} className="grid grid-cols-[1fr_auto] gap-2 py-2 first:pt-0 last:pb-0">
           <div className="min-w-0">
-            <p className="truncate text-[12px] font-semibold text-white">{client.company}</p>
+            <p className="truncate text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>{client.company}</p>
             <p className="truncate font-mono text-[9px] text-slate-600">{client.owner}</p>
             <p className="truncate text-[9px] text-slate-600">{client.plan} / {client.tokens}</p>
           </div>
           <div className="flex flex-col items-end gap-1.5">
             <TinyStatusPill status={client.status} />
-            <span className="font-mono text-[10px] text-emerald-400">{client.mrr}</span>
+            <span className="font-mono text-[10px]" style={{ color: "var(--ch-success)" }}>{client.mrr}</span>
           </div>
         </div>
       ))}
@@ -400,14 +403,14 @@ function CompactAgentList({ agents }: { agents: AdminDashboardOverview["internal
         >
           <div className="mb-2 flex items-start justify-between gap-2">
             <div className="min-w-0">
-              <p className="truncate text-[12px] font-semibold text-white">{agent.name}</p>
+              <p className="truncate text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>{agent.name}</p>
               <p className="truncate font-mono text-[8px] uppercase tracking-wide text-slate-500">{agent.sector} / {agent.role}</p>
             </div>
             <TinyStatusPill status={agent.status} />
           </div>
           <p className="line-clamp-1 text-[10px] leading-4 text-slate-500">{agent.task}</p>
-          <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/10">
-            <div className="h-full rounded-full bg-cyan-400" style={{ width: `${Math.max(0, Math.min(agent.accuracy, 100))}%` }} />
+          <div className="mt-2 h-1 overflow-hidden rounded-full" style={{ background: "var(--ch-border)" }}>
+            <div className="h-full rounded-full" style={{ width: `${Math.max(0, Math.min(agent.accuracy, 100))}%`, background: "var(--ch-ai-cyan)" }} />
           </div>
         </div>
       ))}
@@ -430,7 +433,7 @@ function CeoBrief({
         <NeonBadge tone={tone}>{insight.autonomyLabel}</NeonBadge>
         <NeonBadge tone={approvals.length ? "amber" : "green"}>{approvals.length} pendente</NeonBadge>
       </div>
-      <p className="mt-2 text-[12px] font-semibold leading-snug text-white">{insight.headline}</p>
+      <p className="mt-2 text-[12px] font-semibold leading-snug" style={{ color: "var(--ch-text)" }}>{insight.headline}</p>
       <div className="mt-2 space-y-1.5">
         {insight.recommendations.slice(0, 2).map((item) => (
           <div key={item} className="flex gap-2">
@@ -446,14 +449,14 @@ function CeoBrief({
           <KpiStat key={kpi.label} label={kpi.label} value={kpi.value} tone={kpi.tone} />
         ))}
       </div>
-      <div id="aprovacoes" className="mt-2 divide-y divide-white/5">
+      <div id="aprovacoes" className="mt-2 divide-y divide-blue-100">
         {approvals.slice(0, 2).map((approval) => {
           const colors = toneClass(approval.risk);
 
           return (
             <div key={approval.id} className="py-2 first:pt-0 last:pb-0">
               <div className="flex items-center justify-between gap-2">
-                <p className="truncate text-[11px] font-medium text-white">{approval.client}</p>
+                <p className="truncate text-[11px] font-medium" style={{ color: "var(--ch-text)" }}>{approval.client}</p>
                 <span className={cn("font-mono text-[9px]", colors.text)}>{approval.submitted}</span>
               </div>
               <p className="mt-0.5 line-clamp-1 text-[10px] text-slate-500">{approval.request}</p>
@@ -468,10 +471,10 @@ function CeoBrief({
 function CeoActivityPanel({ items }: { items: AdminDashboardOverview["ceoActivity"] }) {
   return (
     <Panel title="Atividade CEO IA" eyebrow="decisoes / relatorios" compact>
-      <div className="divide-y divide-white/5">
+      <div className="divide-y divide-blue-100">
         {items.length ? items.slice(0, 4).map((item) => (
           <div key={`${item.time}-${item.label}`} className="flex items-start justify-between gap-2 py-2 first:pt-0 last:pb-0">
-            <span className="min-w-0 truncate text-[11px] text-slate-300">{item.label}</span>
+            <span className="min-w-0 truncate text-[11px] text-slate-500">{item.label}</span>
             <span className="shrink-0 font-mono text-[10px] text-slate-600">{item.time}</span>
           </div>
         )) : (
@@ -495,8 +498,8 @@ function MaintenanceGrid({ items }: { items: AdminDashboardOverview["maintenance
             <TinyStatusPill status={item.status} />
             <Wrench className="h-3.5 w-3.5 text-slate-700" />
           </div>
-          <p className="text-[11px] font-medium text-white">{item.area}</p>
-          <p className="mt-0.5 font-mono text-[9px] text-cyan-500">{item.target}</p>
+          <p className="text-[11px] font-medium" style={{ color: "var(--ch-text)" }}>{item.area}</p>
+          <p className="mt-0.5 font-mono text-[9px]" style={{ color: "var(--ch-info)" }}>{item.target}</p>
         </div>
       ))}
     </div>
@@ -519,7 +522,7 @@ function InfraList({ stats }: { stats: AdminDashboardOverview["infraStats"] }) {
               <Icon className="h-3.5 w-3.5 shrink-0 text-slate-600" />
               <span className="truncate text-[11px] text-slate-400">{stat.label}</span>
             </div>
-            <span className="shrink-0 font-mono text-[12px] text-white">{stat.value}</span>
+            <span className="shrink-0 font-mono text-[12px]" style={{ color: "var(--ch-text)" }}>{stat.value}</span>
           </div>
         );
       })}
@@ -592,14 +595,14 @@ function AdminMarketingPanel({ marketing }: { marketing: AdminMarketingOverview 
           style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
         >
           <p className="mb-1.5 font-mono text-[8px] uppercase tracking-[0.16em] text-slate-500">Sinais</p>
-          <div className="divide-y divide-white/5">
+          <div className="divide-y divide-blue-100">
             {marketing.recentEvents.length ? marketing.recentEvents.slice(0, 3).map((event) => {
               const tone = toneClass(event.tone);
 
               return (
                 <div key={event.id} className="flex items-center justify-between gap-2 py-1.5 first:pt-0 last:pb-0">
                   <span className={cn("h-2 w-2 shrink-0 rounded-full", tone.dot)} />
-                  <p className="min-w-0 flex-1 truncate text-[10px] text-slate-300">{event.title}</p>
+                  <p className="min-w-0 flex-1 truncate text-[10px] text-slate-500">{event.title}</p>
                   <span className="shrink-0 font-mono text-[8px] text-slate-600">
                     {formatShortDate(event.occurredAt)}
                   </span>
@@ -655,7 +658,7 @@ function MarketingBucketList({ title, items }: { title: string; items: AdminMark
         {items.length ? items.map((item) => (
           <div key={item.label} className="flex items-center justify-between gap-2">
             <span className="truncate text-[10px] text-slate-400">{item.label}</span>
-            <span className="shrink-0 font-mono text-[10px] text-white">{formatNumber(item.value)}</span>
+            <span className="shrink-0 font-mono text-[10px]" style={{ color: "var(--ch-text)" }}>{formatNumber(item.value)}</span>
           </div>
         )) : (
           <span className="text-[11px] text-slate-600">Sem dados.</span>
@@ -666,12 +669,12 @@ function MarketingBucketList({ title, items }: { title: string; items: AdminMark
 }
 
 function toneTextClass(tone: Tone) {
-  if (tone === "green") return "text-emerald-400";
-  if (tone === "amber") return "text-amber-400";
-  if (tone === "cyan") return "text-cyan-400";
-  if (tone === "rose") return "text-rose-400";
-  if (tone === "violet") return "text-violet-400";
-  return "text-slate-400";
+  if (tone === "green") return "text-emerald-700";
+  if (tone === "amber") return "text-amber-700";
+  if (tone === "cyan") return "text-blue-700";
+  if (tone === "rose") return "text-rose-700";
+  if (tone === "violet") return "text-indigo-700";
+  return "text-slate-600";
 }
 
 function formatNumber(value: number) {
