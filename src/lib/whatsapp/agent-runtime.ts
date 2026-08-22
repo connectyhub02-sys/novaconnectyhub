@@ -3187,6 +3187,8 @@ function buildSalesCatalogLines(items: RuntimeSalesCatalogItem[]) {
     "- Quando o lead pedir detalhe, aprofunde aos poucos e pergunte o que ele prefere. Nao despeje descricao, beneficios, estoque, arquivos ou dados tecnicos de uma vez.",
     "- Para produto de checkout ConnectyHub, deixe detalhes longos para a pagina de produto; o sistema pode enviar automaticamente o botao Ver produto.",
     "- Se o lead pedir dois ou mais produtos juntos, confirme os itens escolhidos de forma curta; o sistema deve criar um unico checkout com todos os itens somados.",
+    "- Se o lead vier escolhendo produtos em mensagens separadas e depois disser para fechar/pagar/comprar, trate os produtos recentes da conversa como um carrinho unico. Resuma o carrinho em uma frase curta, sem repetir ficha tecnica.",
+    "- Se o lead pedir quantidade, use a quantidade pedida. Se falar 'meia', 'meio' ou 'metade', reconheca naturalmente como fracionamento/combinacao e confirme antes de inventar regra de preco.",
     "- Quando o lead escolher uma opcao ou disser que quer comprar/fechar/pagar, use a tag do item escolhido e responda curto; o sistema registra pedido e gera checkout/botao quando possivel.",
     "- Nunca escreva 'toque no botao abaixo', 'vou te enviar o botao' ou equivalente se a resposta nao tiver a tag exata do produto ou link que gera a acao.",
     "- Nunca mencione ao lead campos internos como destino da venda, checkout ConnectyHub, status, quantidade em estoque, alerta de estoque, arquivos, execucao, SKU, tipo de produto ou midias, a menos que ele pergunte diretamente.",
@@ -4445,6 +4447,7 @@ async function sendAgentResponse(input: {
   const selectedCatalogItems = mergeRuntimeSalesCatalogItems(
     renderedCatalog.items,
     selectSalesCatalogItemsFromText(context.salesCatalog, orderIntentText),
+    selectSalesCatalogItemsFromText(context.salesCatalog, cleanText),
   );
   const { chunks, shouldSendAudio } = resolveOutboundDelivery(context, latestInbound, cleanText, selectedCatalogItems.length > 0);
   const mixedCandidateChunks = shouldSendAudioResponse(context, latestInbound) && selectedCatalogItems.length === 0
@@ -5377,6 +5380,223 @@ function mergeRuntimeSalesCatalogItems(...groups: RuntimeSalesCatalogItem[][]) {
   return Array.from(merged.values());
 }
 
+type RuntimeSalesCatalogOrderSelection = {
+  item: RuntimeSalesCatalogItem;
+  quantity: number;
+  source: "current_response" | "recent_lead_message";
+  mentionText: string | null;
+  quantitySignal: string | null;
+  fractionalQuantity: number | null;
+};
+
+const salesCatalogCartHistoryMessageLimit = 18;
+const salesCatalogCheckoutItemLimit = 8;
+
+function resolveSalesCatalogOrderSelections(input: {
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
+  currentItems: RuntimeSalesCatalogItem[];
+  responseText: string;
+  intentText: string;
+}) {
+  const selected = new Map<string, RuntimeSalesCatalogOrderSelection>();
+  const addSelection = (selection: RuntimeSalesCatalogOrderSelection) => {
+    const quantity = clampRuntimeOrderQuantity(selection.quantity);
+    const current = selected.get(selection.item.id);
+
+    if (!current) {
+      selected.set(selection.item.id, {
+        ...selection,
+        quantity,
+      });
+      return;
+    }
+
+    selected.set(selection.item.id, {
+      ...current,
+      quantity: Math.max(current.quantity, quantity),
+      mentionText: current.mentionText ?? selection.mentionText,
+      quantitySignal: current.quantitySignal ?? selection.quantitySignal,
+      fractionalQuantity: current.fractionalQuantity ?? selection.fractionalQuantity,
+    });
+  };
+
+  for (const item of input.currentItems) {
+    const quantity = resolveSalesCatalogMentionQuantity([input.intentText, input.responseText].join(" "), item);
+    addSelection({
+      item,
+      quantity: quantity.quantity,
+      source: "current_response",
+      mentionText: preview([input.intentText, input.responseText].filter(Boolean).join(" "), 280),
+      quantitySignal: quantity.signal,
+      fractionalQuantity: quantity.fractionalQuantity,
+    });
+  }
+
+  if (!hasSalesCatalogOrderIntent(input.intentText)) {
+    return Array.from(selected.values()).slice(0, salesCatalogCheckoutItemLimit);
+  }
+
+  const latestInbound = findLatestInbound(input.context.messages);
+  const currentIntentItems = selectSalesCatalogItemsFromText(input.context.salesCatalog, input.intentText);
+  const shouldIncludeCartHistory = shouldUseSalesCatalogConversationCartHistory(input.intentText, currentIntentItems.length);
+  const cartBoundaryMs = resolveSalesCatalogCartBoundaryMs(input.context.salesCatalogOrders);
+  const recentInboundMessages = input.context.messages
+    .filter((message) => {
+      if (message.direction !== "inbound") return false;
+      if (!message.text_content?.trim()) return false;
+      if (!shouldIncludeCartHistory && message.id !== latestInbound?.id) return false;
+      if (!cartBoundaryMs) return true;
+
+      const occurredAt = Date.parse(message.occurred_at);
+      return Number.isFinite(occurredAt) && occurredAt > cartBoundaryMs;
+    })
+    .slice(-salesCatalogCartHistoryMessageLimit);
+
+  for (const message of recentInboundMessages) {
+    const quotedContext = extractQuotedMessageContext(message, input.context.messages);
+    const mentionText = [message.text_content, quotedContext ? `[citado] ${quotedContext}` : ""]
+      .filter(Boolean)
+      .join(" ");
+
+    for (const selection of selectSalesCatalogOrderSelectionsFromText(
+      input.context.salesCatalog,
+      mentionText,
+      "recent_lead_message",
+    )) {
+      addSelection(selection);
+    }
+  }
+
+  return Array.from(selected.values()).slice(0, salesCatalogCheckoutItemLimit);
+}
+
+function shouldUseSalesCatalogConversationCartHistory(intentText: string, currentIntentItemCount: number) {
+  const normalized = normalizeSearch(intentText);
+
+  if (!normalized) return false;
+  if (currentIntentItemCount === 0) return true;
+
+  return /\b(tudo|todos|todas|esses|essas|eles|elas|ambos|ambas|carrinho|produtos|itens|junto|juntos|junta|somar)\b/.test(normalized)
+    || /\b(os dois|as duas|fechar tudo|fecha tudo)\b/.test(normalized);
+}
+
+function selectSalesCatalogOrderSelectionsFromText(
+  items: RuntimeSalesCatalogItem[],
+  text: string,
+  source: RuntimeSalesCatalogOrderSelection["source"],
+): RuntimeSalesCatalogOrderSelection[] {
+  return selectSalesCatalogItemsFromText(items, text).map((item) => {
+    const quantity = resolveSalesCatalogMentionQuantity(text, item);
+
+    return {
+      item,
+      quantity: quantity.quantity,
+      source,
+      mentionText: preview(text, 280),
+      quantitySignal: quantity.signal,
+      fractionalQuantity: quantity.fractionalQuantity,
+    };
+  });
+}
+
+function resolveSalesCatalogMentionQuantity(text: string, item: RuntimeSalesCatalogItem) {
+  const normalizedText = normalizeSearch(text);
+  const rawText = text.toLowerCase();
+  const candidates = buildSalesCatalogOrderMentionCandidates(item);
+  const match = candidates
+    .map((candidate) => ({ candidate, index: normalizedText.indexOf(candidate) }))
+    .filter((entry) => entry.index >= 0)
+    .sort((a, b) => a.index - b.index || b.candidate.length - a.candidate.length)[0];
+
+  if (!match) {
+    return { quantity: 1, signal: null as string | null, fractionalQuantity: null as number | null };
+  }
+
+  const before = normalizedText.slice(Math.max(0, match.index - 48), match.index);
+  const after = normalizedText.slice(match.index + match.candidate.length, match.index + match.candidate.length + 48);
+  const quantity = parseRuntimeOrderQuantityFromText(before, after);
+  const fractionalQuantity = hasRuntimeOrderFractionSignal(before, after, rawText) ? 0.5 : null;
+
+  return {
+    quantity: quantity ?? 1,
+    signal: fractionalQuantity ? "fractional_half_requested" : quantity ? "explicit_quantity_requested" : null,
+    fractionalQuantity,
+  };
+}
+
+function buildSalesCatalogOrderMentionCandidates(item: RuntimeSalesCatalogItem) {
+  const baseCandidates = [
+    item.title,
+    ...item.skus.map((sku) => sku.title ?? ""),
+    item.platformProductCode ?? "",
+  ]
+    .map((value) => normalizeSearch(value))
+    .filter((value) => value.length >= 5);
+
+  return Array.from(new Set([
+    ...baseCandidates,
+    ...buildSalesCatalogSearchTokens(item).filter((token) => token.length >= 5),
+  ])).sort((a, b) => b.length - a.length);
+}
+
+function parseRuntimeOrderQuantityFromText(before: string, after: string) {
+  const digitBefore = before.match(/(?:^|\s)(\d{1,3})\s*(?:x|un|unid|unidade|unidades|peca|pecas|peça|peças|item|itens|pizza|pizzas|caixa|caixas|ampola|ampolas)?\s*$/);
+  if (digitBefore) {
+    const parsed = Number.parseInt(digitBefore[1], 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  }
+
+  const wordBefore = before.match(/(?:^|\s)(um|uma|dois|duas|tres|três|quatro|cinco|seis|sete|oito|nove|dez)\s*(?:x|un|unid|unidade|unidades|peca|pecas|peça|peças|item|itens|pizza|pizzas|caixa|caixas|ampola|ampolas)?\s*$/);
+  const wordQuantity = wordBefore ? salesCatalogQuantityWords.get(wordBefore[1]) : null;
+  if (wordQuantity) return wordQuantity;
+
+  const digitAfter = after.match(/^\s*(?:x\s*)?(\d{1,3})\s*(?:un|unid|unidade|unidades|peca|pecas|peça|peças|item|itens|pizza|pizzas|caixa|caixas|ampola|ampolas)\b/);
+  if (digitAfter) {
+    const parsed = Number.parseInt(digitAfter[1], 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  }
+
+  return null;
+}
+
+function hasRuntimeOrderFractionSignal(before: string, after: string, rawText: string) {
+  const context = `${before} ${after}`;
+  return (
+    /\b(meia|meio|metade)\b/.test(context)
+    || /\b1\s*\/\s*2\b/.test(rawText)
+  );
+}
+
+function clampRuntimeOrderQuantity(value: number) {
+  if (!Number.isFinite(value) || value <= 0) return 1;
+  return Math.max(1, Math.min(100000, Math.floor(value)));
+}
+
+function resolveSalesCatalogCartBoundaryMs(orders: RuntimeSalesCatalogOrder[]) {
+  const timestamps = orders
+    .flatMap((order) => [order.createdAt, order.updatedAt])
+    .map((value) => Date.parse(value ?? ""))
+    .filter((value) => Number.isFinite(value));
+
+  return timestamps.length > 0 ? Math.max(...timestamps) : null;
+}
+
+const salesCatalogQuantityWords = new Map<string, number>([
+  ["um", 1],
+  ["uma", 1],
+  ["dois", 2],
+  ["duas", 2],
+  ["tres", 3],
+  ["três", 3],
+  ["quatro", 4],
+  ["cinco", 5],
+  ["seis", 6],
+  ["sete", 7],
+  ["oito", 8],
+  ["nove", 9],
+  ["dez", 10],
+]);
+
 function buildSalesCatalogTokenFrequency(items: RuntimeSalesCatalogItem[]) {
   const frequency = new Map<string, number>();
 
@@ -5501,10 +5721,21 @@ async function recordSalesCatalogOrderIntent(input: {
   text: string;
   intentText?: string;
 }): Promise<SalesCatalogPaymentLinkResult | null> {
-  const checkoutCatalogItems = input.items.filter((item) => item.salesDestination === "connectyhub_checkout");
-  const unavailableItems = checkoutCatalogItems.filter((item) => item.status === "active" && !isSalesCatalogItemSellable(item));
-  const items = checkoutCatalogItems.filter((item) => item.status === "active" && isSalesCatalogItemSellable(item)).slice(0, 8);
   const intentText = input.intentText ?? input.text;
+  const cartSelections = resolveSalesCatalogOrderSelections({
+    context: input.context,
+    currentItems: input.items,
+    responseText: input.text,
+    intentText,
+  });
+  const checkoutCatalogSelections = cartSelections.filter((selection) => selection.item.salesDestination === "connectyhub_checkout");
+  const unavailableItems = checkoutCatalogSelections
+    .map((selection) => selection.item)
+    .filter((item) => item.status === "active" && !isSalesCatalogItemSellable(item));
+  const orderCatalogSelections = checkoutCatalogSelections
+    .filter((selection) => selection.item.status === "active" && isSalesCatalogItemSellable(selection.item))
+    .slice(0, salesCatalogCheckoutItemLimit);
+  const items = orderCatalogSelections.map((selection) => selection.item);
 
   if (items.length === 0 || !hasSalesCatalogOrderIntent(intentText)) {
     if (unavailableItems.length > 0 && hasSalesCatalogOrderIntent(intentText)) {
@@ -5539,17 +5770,25 @@ async function recordSalesCatalogOrderIntent(input: {
         })
       : null;
     const customerPhone = input.context.lead?.phone_number ?? input.context.phoneNumber ?? null;
-    const orderSelections = items.map((item) => {
+    const orderSelections = orderCatalogSelections.map((selection) => {
+      const { item } = selection;
       const sku = resolveRuntimeOrderSku(item);
       const unitPrice = sku?.price ?? item.price;
       const salePrice = sku?.salePrice ?? item.offer.salePrice;
+      const unitTotal = salePrice ?? unitPrice;
+      const total = multiplyRuntimeOrderItemTotal(unitTotal, selection.quantity);
 
       return {
         item,
         sku,
+        quantity: selection.quantity,
         unitPrice,
         salePrice,
-        total: salePrice ?? unitPrice,
+        total,
+        source: selection.source,
+        mentionText: selection.mentionText,
+        quantitySignal: selection.quantitySignal,
+        fractionalQuantity: selection.fractionalQuantity,
       };
     });
     const primaryItem = orderSelections[0].item;
@@ -5586,6 +5825,16 @@ async function recordSalesCatalogOrderIntent(input: {
           agent_id: input.context.agent.id,
           selected_catalog_item_ids: items.map((item) => item.id),
           selected_catalog_item_tags: items.map((item) => item.tag),
+          conversation_cart_items: orderSelections.map((selection) => ({
+            catalog_item_id: selection.item.id,
+            title: selection.item.title,
+            tag: selection.item.tag,
+            quantity: selection.quantity,
+            source: selection.source,
+            quantity_signal: selection.quantitySignal,
+            fractional_quantity: selection.fractionalQuantity,
+            mention_preview: selection.mentionText,
+          })),
           commercial_flow_type: commercialFlowType,
           revenue_owner_type: revenueOwnerType,
           commission_eligible: commissionEligible,
@@ -5602,7 +5851,18 @@ async function recordSalesCatalogOrderIntent(input: {
       return null;
     }
 
-    const orderItems = orderSelections.map(({ item, sku, unitPrice, salePrice, total: itemTotal }) => {
+    const orderItems = orderSelections.map(({
+      item,
+      sku,
+      quantity,
+      unitPrice,
+      salePrice,
+      total: itemTotal,
+      source,
+      mentionText,
+      quantitySignal,
+      fractionalQuantity,
+    }) => {
       return {
         order_id: order.id,
         organization_id: input.context.organization.id,
@@ -5611,7 +5871,7 @@ async function recordSalesCatalogOrderIntent(input: {
         sku_code: sku?.skuCode ?? null,
         title: sku?.title || item.title,
         tag: item.tag,
-        quantity: 1,
+        quantity,
         unit_price: unitPrice,
         sale_price: salePrice,
         total: itemTotal,
@@ -5646,6 +5906,10 @@ async function recordSalesCatalogOrderIntent(input: {
           platform_product_commission_percentage: item.platformProductCommissionPercentage,
           platform_product_commission_release_days: item.platformProductCommissionReleaseDays,
           platform_product_agent_prompt: item.platformProductAgentPrompt,
+          conversation_cart_source: source,
+          conversation_cart_quantity_signal: quantitySignal,
+          conversation_cart_fractional_quantity: fractionalQuantity,
+          conversation_cart_mention_preview: mentionText,
         },
       };
     });
@@ -5670,6 +5934,15 @@ async function recordSalesCatalogOrderIntent(input: {
         agent_run_id: input.context.run.id,
         product_ids: items.map((item) => item.id),
         product_tags: items.map((item) => item.tag),
+        cart_items: orderSelections.map((selection) => ({
+          product_id: selection.item.id,
+          product_tag: selection.item.tag,
+          title: selection.item.title,
+          quantity: selection.quantity,
+          source: selection.source,
+          quantity_signal: selection.quantitySignal,
+          fractional_quantity: selection.fractionalQuantity,
+        })),
       },
     });
 
@@ -5959,6 +6232,19 @@ function resolveRuntimeOrderSku(item: RuntimeSalesCatalogItem): RuntimeSalesCata
   return activeSkus.length === 1 ? activeSkus[0] : null;
 }
 
+function multiplyRuntimeOrderItemTotal(total: string | null, quantity: number) {
+  const safeQuantity = clampRuntimeOrderQuantity(quantity);
+
+  if (safeQuantity <= 1) {
+    return total;
+  }
+
+  const amount = normalizeCurrencyAmount(total);
+  if (!amount) return total;
+
+  return formatRuntimeOrderMoney(amount * safeQuantity);
+}
+
 function sumRuntimeOrderTotal(items: Array<{ total: string | null }>) {
   let total = 0;
 
@@ -5968,9 +6254,11 @@ function sumRuntimeOrderTotal(items: Array<{ total: string | null }>) {
     total += amount;
   }
 
-  return total > 0
-    ? total.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-    : null;
+  return total > 0 ? formatRuntimeOrderMoney(total) : null;
+}
+
+function formatRuntimeOrderMoney(value: number) {
+  return value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 async function scheduleSalesCatalogOrderAbandonedFollowUp(input: {
