@@ -1562,7 +1562,7 @@ function AttendanceCenterView({
                       type="button"
                     >
                       <FileText className="h-4 w-4" />
-                      Arquivo
+                      CRM do lead
                     </button>
                   </div>
                 </div>
