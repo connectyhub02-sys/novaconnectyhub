@@ -1948,6 +1948,7 @@ function AttendanceSalesBagPanel({
   const [manualQuantity, setManualQuantity] = useState("1");
   const [productSearch, setProductSearch] = useState("");
   const [confirmDeleteProductId, setConfirmDeleteProductId] = useState<string | null>(null);
+  const [expandedProductId, setExpandedProductId] = useState<string | null>(null);
   const manualPriceCents = parseCurrencyInputToCents(manualPrice);
   const manualQuantityNumber = Math.max(1, Math.min(99, Number.parseInt(manualQuantity, 10) || 1));
   const canAddManualItem = Boolean(manualName.trim()) && manualPriceCents > 0;
@@ -1995,6 +1996,10 @@ function AttendanceSalesBagPanel({
     void onDeleteQuickItem(product);
   }
 
+  function toggleProductDescription(productId: string) {
+    setExpandedProductId((currentProductId) => (currentProductId === productId ? null : productId));
+  }
+
   return (
     <div className="flex h-full min-h-0 flex-col bg-white">
       <div className="border-b px-4 py-3" style={{ borderColor: "var(--ch-border)" }}>
@@ -2032,93 +2037,104 @@ function AttendanceSalesBagPanel({
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
         <section>
           <div className="flex items-center justify-between gap-2">
-            <div>
-              <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">Catalogo</p>
-              <h4 className="mt-1 text-[14px] font-bold text-slate-950">Produtos cadastrados</h4>
-            </div>
+            <h4 className="text-[14px] font-bold text-slate-950">Produtos cadastrados</h4>
             <Link
-              className="inline-flex h-8 items-center gap-1.5 rounded-full border border-slate-200 px-3 text-[11px] font-semibold text-slate-700 transition hover:bg-slate-100"
+              aria-label="Abrir catalogo de vendas"
+              className="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-slate-200 bg-white text-slate-700 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
               href="/dashboard/links"
+              title="Catalogo de vendas"
             >
               <Package className="h-3.5 w-3.5" />
-              Catalogo
             </Link>
           </div>
 
-          <label className="relative mt-3 block">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+          <label className="relative mt-2 block">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-blue-600" />
             <input
               aria-label="Pesquisar produto na sacola"
-              className="h-10 w-full rounded-2xl border border-slate-200 bg-white pl-9 pr-3 text-[12px] text-slate-950 outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+              className="h-11 w-full rounded-2xl border border-blue-200 bg-blue-50/50 pl-9 pr-3 text-[12px] font-semibold text-slate-950 outline-none transition placeholder:font-medium placeholder:text-slate-500 focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100"
               onChange={(event) => setProductSearch(event.target.value)}
-              placeholder="Pesquisar produto cadastrado..."
+              placeholder="Buscar produto..."
               type="search"
               value={productSearch}
             />
           </label>
 
-          <div className="mt-3 space-y-2">
+          <div className="mt-2 space-y-1.5">
             {quickProducts.length && visibleQuickProducts.length ? visibleQuickProducts.map((product) => {
               const hasPrice = product.priceCents > 0;
               const confirmingDelete = confirmDeleteProductId === product.id;
               const deletingProduct = productDeleteBusyId === product.id;
+              const productDescription = product.description.trim();
+              const productExpanded = expandedProductId === product.id;
 
               return (
                 <div
                   key={product.id}
                   className={cn(
-                    "grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-2xl border p-3 text-left transition",
+                    "grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-2 rounded-2xl border p-2.5 text-left transition",
                     hasPrice
                       ? "border-slate-200 bg-white hover:border-blue-200 hover:bg-blue-50"
                       : "border-amber-200 bg-amber-50/60 opacity-80",
                   )}
                 >
-                  <button
-                    className={cn("min-w-0 text-left", hasPrice ? "cursor-pointer" : "cursor-not-allowed")}
-                    disabled={!hasPrice}
-                    onClick={() => onAddQuickItem(product)}
-                    type="button"
-                  >
+                  <div className="min-w-0">
                     <span className="block truncate text-[13px] font-bold text-slate-950">{product.name}</span>
-                    <span className="mt-1 block line-clamp-2 text-[11px] leading-4 text-slate-500">{product.description}</span>
-                    <span className="mt-2 inline-flex rounded-full bg-slate-100 px-2 py-1 font-mono text-[9px] uppercase tracking-wide text-slate-500">
-                      {product.category}
-                    </span>
-                  </button>
-                  <div className="text-right">
-                    <span className={cn("block font-mono text-[12px] font-bold", hasPrice ? "text-blue-600" : "text-amber-700")}>
-                      {hasPrice ? formatCurrencyCents(product.priceCents) : "Sem valor"}
-                    </span>
-                    <div className="mt-2 flex items-center justify-end gap-1.5">
-                      <button
-                        aria-label={`Adicionar ${product.name} a sacola`}
-                        className={cn(
-                          "inline-grid h-8 w-8 place-items-center rounded-xl text-white transition",
-                          hasPrice ? "bg-blue-600 hover:bg-blue-700" : "cursor-not-allowed bg-amber-400",
-                        )}
-                        disabled={!hasPrice}
-                        onClick={() => onAddQuickItem(product)}
-                        type="button"
-                      >
-                        <Plus className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        aria-label={confirmingDelete ? `Confirmar exclusao de ${product.name}` : `Excluir ${product.name}`}
-                        className={cn(
-                          "inline-grid h-8 w-8 place-items-center rounded-xl border text-slate-500 transition",
-                          confirmingDelete
-                            ? "border-red-200 bg-red-50 text-red-600 hover:bg-red-100"
-                            : "border-slate-200 bg-white hover:border-red-200 hover:bg-red-50 hover:text-red-600",
-                        )}
-                        disabled={deletingProduct}
-                        onClick={() => handleDeleteQuickProduct(product)}
-                        title={confirmingDelete ? "Clique novamente para excluir" : "Excluir produto"}
-                        type="button"
-                      >
-                        {deletingProduct ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-                      </button>
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                      <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 font-mono text-[8px] uppercase tracking-wide text-slate-500">
+                        {product.category}
+                      </span>
+                      {productDescription ? (
+                        <button
+                          aria-expanded={productExpanded}
+                          aria-label={`${productExpanded ? "Ocultar" : "Ver"} detalhes de ${product.name}`}
+                          className="inline-flex h-6 items-center gap-1 rounded-full border border-slate-200 bg-white px-2 text-[10px] font-bold text-blue-600 transition hover:border-blue-200 hover:bg-blue-50"
+                          onClick={() => toggleProductDescription(product.id)}
+                          type="button"
+                        >
+                          {productExpanded ? "Ver menos" : "Ver mais"}
+                          {productExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                        </button>
+                      ) : null}
                     </div>
                   </div>
+                  <div className="flex shrink-0 items-center justify-end gap-1.5">
+                    <span className={cn("max-w-[76px] truncate font-mono text-[12px] font-bold", hasPrice ? "text-blue-600" : "text-amber-700")}>
+                      {hasPrice ? formatCurrencyCents(product.priceCents) : "Sem valor"}
+                    </span>
+                    <button
+                      aria-label={`Adicionar ${product.name} a sacola`}
+                      className={cn(
+                        "inline-grid h-8 w-8 place-items-center rounded-xl text-white transition",
+                        hasPrice ? "bg-blue-600 hover:bg-blue-700" : "cursor-not-allowed bg-amber-400",
+                      )}
+                      disabled={!hasPrice}
+                      onClick={() => onAddQuickItem(product)}
+                      type="button"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      aria-label={confirmingDelete ? `Confirmar exclusao de ${product.name}` : `Excluir ${product.name}`}
+                      className={cn(
+                        "inline-grid h-8 w-8 place-items-center rounded-xl border text-slate-500 transition",
+                        confirmingDelete
+                          ? "border-red-200 bg-red-50 text-red-600 hover:bg-red-100"
+                          : "border-slate-200 bg-white hover:border-red-200 hover:bg-red-50 hover:text-red-600",
+                      )}
+                      disabled={deletingProduct}
+                      onClick={() => handleDeleteQuickProduct(product)}
+                      title={confirmingDelete ? "Clique novamente para excluir" : "Excluir produto"}
+                      type="button"
+                    >
+                      {deletingProduct ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                    </button>
+                  </div>
+                  {productExpanded && productDescription ? (
+                    <p className="col-span-2 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-[11px] leading-4 text-slate-600">
+                      {productDescription}
+                    </p>
+                  ) : null}
                   {confirmingDelete ? (
                     <p className="col-span-2 rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-[10px] font-semibold text-red-600">
                       Clique na lixeira novamente para excluir este produto do catalogo.
