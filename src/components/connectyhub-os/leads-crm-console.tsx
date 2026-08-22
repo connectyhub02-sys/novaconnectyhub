@@ -1997,29 +1997,30 @@ function AttendanceSalesBagPanel({
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-white">
-      <div className="border-b px-4 py-4" style={{ borderColor: "var(--ch-border)" }}>
-        <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">Venda manual</p>
-        <div className="mt-1 flex items-start justify-between gap-3">
+      <div className="border-b px-4 py-3" style={{ borderColor: "var(--ch-border)" }}>
+        <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <h3 className="truncate text-[18px] font-bold text-slate-950">Sacola do lead</h3>
-            <p className="mt-1 line-clamp-2 text-[12px] leading-5 text-slate-500">
-              Monte o pedido de {lead.name} sem gastar credito de IA.
-            </p>
+            <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">Venda manual</p>
+            <h3 className="mt-1 truncate text-[18px] font-bold text-slate-950">Sacola do lead</h3>
           </div>
-          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-blue-600 text-white shadow-[0_14px_30px_rgba(24,119,242,0.18)]">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-2xl bg-blue-600 text-white shadow-[0_14px_30px_rgba(24,119,242,0.18)]">
             <ShoppingBag className="h-4 w-4" />
           </span>
         </div>
 
-        <div className="mt-3 grid grid-cols-2 gap-2">
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
-            <p className="font-mono text-[9px] uppercase tracking-wide text-slate-500">Total</p>
-            <p className="mt-1 truncate text-[16px] font-black text-slate-950">{formatCurrencyCents(totalCents)}</p>
-          </div>
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
-            <p className="font-mono text-[9px] uppercase tracking-wide text-slate-500">Itens</p>
-            <p className="mt-1 truncate text-[16px] font-black text-slate-950">{cartItems.reduce((total, item) => total + item.quantity, 0)}</p>
-          </div>
+        <p className="mt-1 line-clamp-1 text-[12px] leading-5 text-slate-500">
+          Monte o pedido de {lead.name} sem gastar credito de IA.
+        </p>
+
+        <div className="mt-2 flex items-center gap-1.5">
+          <span className="inline-flex min-w-0 items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">
+            <span className="font-mono text-[8px] uppercase tracking-wide text-slate-500">Total</span>
+            <span className="truncate text-[12px] font-black text-slate-950">{formatCurrencyCents(totalCents)}</span>
+          </span>
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">
+            <span className="font-mono text-[8px] uppercase tracking-wide text-slate-500">Itens</span>
+            <span className="text-[12px] font-black text-slate-950">{cartItems.reduce((total, item) => total + item.quantity, 0)}</span>
+          </span>
         </div>
 
       </div>
@@ -2267,23 +2268,18 @@ function AttendanceSalesBagPanel({
         </section>
       </div>
 
-      <div className="border-t bg-white p-4" style={{ borderColor: "var(--ch-border)" }}>
-        <div className="rounded-2xl border border-blue-100 bg-blue-50 p-3">
-          <div className="flex items-center justify-between gap-3">
-            <span>
-              <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-blue-500">Fechamento</p>
-              <p className="mt-1 text-[20px] font-black text-slate-950">{formatCurrencyCents(totalCents)}</p>
-            </span>
-            <CreditCard className="h-5 w-5 text-blue-600" />
-          </div>
-          <p className="mt-2 text-[11px] leading-5 text-slate-600">
-            Gere um checkout seguro da ConnectyHub com os itens da sacola e envie o link de pagamento pelo chat.
-          </p>
+      <div className="border-t bg-white p-3" style={{ borderColor: "var(--ch-border)" }}>
+        <div className="flex items-center justify-between gap-2 rounded-2xl border border-blue-100 bg-blue-50 px-3 py-2">
+          <span className="min-w-0">
+            <p className="font-mono text-[8px] uppercase tracking-[0.16em] text-blue-500">Fechamento</p>
+            <p className="truncate text-[16px] font-black text-slate-950">{formatCurrencyCents(totalCents)}</p>
+          </span>
+          <CreditCard className="h-4 w-4 shrink-0 text-blue-600" />
         </div>
 
         <button
           className={cn(
-            "mt-3 inline-flex h-11 w-full items-center justify-center gap-2 rounded-2xl text-[12px] font-bold transition",
+            "mt-2 inline-flex h-10 w-full items-center justify-center gap-2 rounded-2xl text-[12px] font-bold transition",
             cartItems.length && !checkoutBusy ? "bg-blue-600 text-white hover:bg-blue-700" : "bg-slate-200 text-slate-500",
           )}
           disabled={!cartItems.length || checkoutBusy}
@@ -2296,7 +2292,7 @@ function AttendanceSalesBagPanel({
 
         <button
           className={cn(
-            "mt-2 inline-flex h-10 w-full items-center justify-center gap-2 rounded-2xl border text-[12px] font-bold transition",
+            "mt-2 inline-flex h-9 w-full items-center justify-center gap-2 rounded-2xl border text-[12px] font-bold transition",
             cartItems.length && !checkoutBusy
               ? "border-slate-200 bg-white text-slate-800 hover:bg-slate-100"
               : "border-slate-200 bg-slate-100 text-slate-400",
