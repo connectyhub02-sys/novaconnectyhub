@@ -879,13 +879,14 @@ function buildCheckoutWhatsappReturn(input: {
   }
 
   const orderCode = input.orderId.slice(0, 8).toUpperCase();
+  const checkoutName = input.organizationName.trim() || "sua loja";
   const statusLine = input.status === "approved"
     ? "Meu pagamento foi aprovado."
     : input.status === "rejected" || input.status === "cancelled" || input.status === "expired" || input.status === "error"
       ? "Tive um problema no pagamento."
       : "Estou finalizando o pagamento.";
   const message = [
-    `Ola, vim do checkout ConnectyHub do pedido #${orderCode}.`,
+    `Ola, vim do checkout de ${checkoutName} do pedido #${orderCode}.`,
     statusLine,
     "Quero continuar o atendimento pelo WhatsApp.",
   ].join(" ");
