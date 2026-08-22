@@ -112,11 +112,21 @@ type WhatsappInstanceQueueRow = {
 
 export type ClientLeadStatus = "new" | "active" | "qualified" | "won" | "lost" | "archived";
 
+export type ClientLeadMessageDirection = "inbound" | "outbound" | "system" | "unknown";
+
 export type ClientLeadMessageAuthor = "lead" | "ai" | "human" | "system" | "unknown";
+
+export type ClientLeadQuotedMessage = {
+  providerMessageId: string | null;
+  direction: ClientLeadMessageDirection | null;
+  authorLabel: string | null;
+  type: string | null;
+  text: string;
+};
 
 export type ClientLeadMessage = {
   id: string;
-  direction: "inbound" | "outbound" | "system" | "unknown";
+  direction: ClientLeadMessageDirection;
   author: ClientLeadMessageAuthor;
   authorLabel: string;
   authorSource: string;
@@ -127,6 +137,7 @@ export type ClientLeadMessage = {
   providerChatId: string | null;
   type: string;
   text: string;
+  quotedMessage: ClientLeadQuotedMessage | null;
   mediaUrl: string | null;
   occurredAt: string | null;
 };
@@ -1024,13 +1035,11 @@ function readWhatsappInstanceAvatarUrl(instance: WhatsappInstanceQueueRow | null
   return readWhatsappInstanceProfileImageUrl(instance?.metadata);
 }
 
-function mapMessage(row: MessageRow): ClientLeadMessage {
+function mapMessage(row: MessageRow, conversationMessages: MessageRow[] = []): ClientLeadMessage {
   const payload = readRecord(row.payload) ?? {};
   const author = resolveMessageAuthor(row, payload);
-  const mediaUrl = readString(payload.media_url)
-    ?? readString(payload.mediaUrl)
-    ?? readString(payload.file_url)
-    ?? readString(payload.url);
+  const mediaUrl = readMessageMediaUrl(payload);
+  const quotedMessage = buildQuotedMessagePreview(row, conversationMessages);
 
   return {
     id: row.id,
@@ -1044,14 +1053,291 @@ function mapMessage(row: MessageRow): ClientLeadMessage {
     providerMessageId: row.provider_message_id,
     providerChatId: row.provider_chat_id,
     type: row.message_type ?? "text",
-    text: readString(row.text_content)
-      ?? readString(payload.text)
-      ?? readString(payload.body)
-      ?? readString(payload.caption)
-      ?? (mediaUrl ? `Midia registrada: ${row.message_type ?? "arquivo"}` : "Mensagem sem texto."),
+    text: readMessageText(row, payload, mediaUrl) ?? "Mensagem sem texto.",
+    quotedMessage,
     mediaUrl,
     occurredAt: row.occurred_at ?? row.created_at,
   };
+}
+
+function readMessageMediaUrl(payload: JsonRecord) {
+  return readString(payload.media_url)
+    ?? readString(payload.mediaUrl)
+    ?? readString(payload.file_url)
+    ?? readString(payload.url);
+}
+
+function readMessageText(row: MessageRow, payload = readRecord(row.payload) ?? {}, mediaUrl = readMessageMediaUrl(payload)) {
+  return readString(row.text_content)
+    ?? readString(payload.text)
+    ?? readString(payload.body)
+    ?? readString(payload.caption)
+    ?? (mediaUrl ? `Midia registrada: ${row.message_type ?? "arquivo"}` : null);
+}
+
+function buildQuotedMessagePreview(row: MessageRow, conversationMessages: MessageRow[]): ClientLeadQuotedMessage | null {
+  const payload = readRecord(row.payload);
+  if (!payload) return null;
+
+  const quotedProviderMessageId = findQuotedProviderMessageId(payload);
+  const directText =
+    findNestedQuotedMessageContext(payload, "quotedMsg") ??
+    findNestedQuotedMessageContext(payload, "quotedMessage") ??
+    findNestedQuotedMessageContext(payload, "contextInfo");
+  const referencedMessage = quotedProviderMessageId
+    ? findQuotedMessageByProviderId(conversationMessages, quotedProviderMessageId, row.id)
+    : null;
+  const referencedPayload = readRecord(referencedMessage?.payload) ?? {};
+  const referencedAuthor = referencedMessage ? resolveMessageAuthor(referencedMessage, referencedPayload) : null;
+  const referencedText = referencedMessage ? readMessageText(referencedMessage, referencedPayload) : null;
+  const text = directText ?? referencedText;
+
+  if (!text) {
+    return null;
+  }
+
+  return {
+    providerMessageId: referencedMessage?.provider_message_id ?? quotedProviderMessageId ?? null,
+    direction: referencedMessage?.direction ?? null,
+    authorLabel: referencedAuthor?.label ?? null,
+    type: referencedMessage?.message_type ?? findQuotedMessageType(payload),
+    text: text.trim().slice(0, 500),
+  };
+}
+
+function findNestedQuotedMessageContext(payload: JsonRecord, rootKey: string): string | null {
+  for (const [key, value] of Object.entries(payload)) {
+    if (key.toLowerCase() === rootKey.toLowerCase() && readRecord(value)) {
+      return describeQuotedMessageContext(value as JsonRecord);
+    }
+
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        const itemRecord = readRecord(item);
+        if (!itemRecord) continue;
+
+        const found = findNestedQuotedMessageContext(itemRecord, rootKey);
+        if (found) return found;
+      }
+    }
+
+    const record = readRecord(value);
+    if (record) {
+      const found = findNestedQuotedMessageContext(record, rootKey);
+      if (found) return found;
+    }
+  }
+
+  return null;
+}
+
+function describeQuotedMessageContext(value: JsonRecord): string | null {
+  const text = readQuotedMessageText(value);
+
+  if (text) {
+    return text;
+  }
+
+  const mediaKind = detectQuotedPayloadMediaKind(value);
+
+  if (mediaKind) {
+    const caption = findString(value, ["caption", "fileName", "filename", "title", "name"]);
+    return caption
+      ? `${formatQuotedMediaKind(mediaKind)} citado: ${caption}`
+      : `${formatQuotedMediaKind(mediaKind)} citado sem texto legivel.`;
+  }
+
+  return null;
+}
+
+function readQuotedMessageText(value: JsonRecord): string | null {
+  const text =
+    readString(value.text) ??
+    readString(value.body) ??
+    readString(value.caption) ??
+    readString(value.conversation) ??
+    readString(value.content);
+
+  if (text) return text;
+
+  for (const inner of Object.values(value)) {
+    const innerRecord = readRecord(inner);
+    if (!innerRecord) continue;
+
+    const innerText =
+      readString(innerRecord.text) ??
+      readString(innerRecord.body) ??
+      readString(innerRecord.caption) ??
+      readString(innerRecord.conversation);
+
+    if (innerText) return innerText;
+  }
+
+  return null;
+}
+
+function detectQuotedPayloadMediaKind(value: JsonRecord): "audio" | "image" | "video" | "document" | null {
+  const signature = normalizeSearch(collectQuotedPayloadSignature(value).join(" "));
+
+  if (signature.includes("audio") || signature.includes("voice") || signature.includes("ptt") || signature.includes("ogg") || signature.includes("opus")) {
+    return "audio";
+  }
+
+  if (signature.includes("image") || signature.includes("photo") || signature.includes("jpeg") || signature.includes("png") || signature.includes("webp") || signature.includes("imagem")) {
+    return "image";
+  }
+
+  if (signature.includes("video") || signature.includes("mp4") || signature.includes("quicktime")) {
+    return "video";
+  }
+
+  if (signature.includes("document") || signature.includes("file") || signature.includes("pdf") || signature.includes("application") || signature.includes("arquivo")) {
+    return "document";
+  }
+
+  return null;
+}
+
+function collectQuotedPayloadSignature(value: unknown, depth = 0): string[] {
+  if (!value || depth > 4) return [];
+
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => collectQuotedPayloadSignature(item, depth + 1));
+  }
+
+  const record = readRecord(value);
+  if (!record) {
+    return [];
+  }
+
+  const parts: string[] = [];
+
+  for (const [key, item] of Object.entries(record)) {
+    parts.push(key);
+
+    if (typeof item === "string") {
+      const normalizedKey = normalizeSearch(key);
+      if (/\b(type|kind|mimetype|mime type|media type|message type|caption|filename|file name|url)\b/.test(normalizedKey)) {
+        parts.push(item);
+      }
+    } else if (typeof item === "boolean" && item) {
+      parts.push(key);
+    } else if (readRecord(item) || Array.isArray(item)) {
+      parts.push(...collectQuotedPayloadSignature(item, depth + 1));
+    }
+  }
+
+  return parts;
+}
+
+function findQuotedProviderMessageId(payload: JsonRecord) {
+  return findString(payload, [
+    "quoted",
+    "quotedId",
+    "quoted_id",
+    "quotedMsgId",
+    "quoted_msg_id",
+    "quotedMessageId",
+    "quoted_message_id",
+    "quotedStanzaId",
+    "quoted_stanza_id",
+    "stanzaId",
+    "stanza_id",
+  ]);
+}
+
+function findQuotedMessageType(payload: JsonRecord) {
+  return findString(payload, [
+    "quotedMessageType",
+    "quoted_message_type",
+    "messageType",
+    "message_type",
+    "mediaType",
+    "media_type",
+  ]) ?? detectQuotedPayloadMediaKind(payload);
+}
+
+function findQuotedMessageByProviderId(messages: MessageRow[], quotedProviderMessageId: string, activeMessageId: string) {
+  for (const candidate of [...messages].reverse()) {
+    if (candidate.id === activeMessageId || !candidate.provider_message_id) {
+      continue;
+    }
+
+    if (providerMessageIdsMatch(candidate.provider_message_id, quotedProviderMessageId)) {
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
+function providerMessageIdsMatch(left: string, right: string) {
+  const normalizedLeft = normalizeProviderMessageId(left);
+  const normalizedRight = normalizeProviderMessageId(right);
+
+  if (!normalizedLeft || !normalizedRight) {
+    return false;
+  }
+
+  if (normalizedLeft === normalizedRight) {
+    return true;
+  }
+
+  return normalizedLeft.length >= 8
+    && normalizedRight.length >= 8
+    && (normalizedLeft.endsWith(normalizedRight) || normalizedRight.endsWith(normalizedLeft));
+}
+
+function normalizeProviderMessageId(value: string) {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function findString(value: unknown, keys: string[], depth = 0): string | null {
+  if (!value || depth > 5) return null;
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = findString(item, keys, depth + 1);
+      if (found) return found;
+    }
+
+    return null;
+  }
+
+  const record = readRecord(value);
+  if (!record) return null;
+
+  const keySet = new Set(keys.map((key) => key.toLowerCase()));
+
+  for (const [key, item] of Object.entries(record)) {
+    if (keySet.has(key.toLowerCase())) {
+      const found = readString(item);
+      if (found) return found;
+    }
+  }
+
+  for (const item of Object.values(record)) {
+    if (readRecord(item) || Array.isArray(item)) {
+      const found = findString(item, keys, depth + 1);
+      if (found) return found;
+    }
+  }
+
+  return null;
+}
+
+function normalizeSearch(value: string) {
+  return value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function formatQuotedMediaKind(value: "audio" | "image" | "video" | "document") {
+  if (value === "audio") return "Audio";
+  if (value === "image") return "Imagem";
+  if (value === "video") return "Video";
+  return "Documento";
 }
 
 function resolveMessageAuthor(row: MessageRow, payload: JsonRecord): {
@@ -1137,7 +1423,8 @@ function buildConversationFiles(input: {
 
   return input.conversations
     .map((conversation) => {
-      const messages = (input.messagesByConversation.get(conversation.id) ?? []).map(mapMessage);
+      const conversationMessages = input.messagesByConversation.get(conversation.id) ?? [];
+      const messages = conversationMessages.map((message) => mapMessage(message, conversationMessages));
       const humanIntervention = readConversationHumanIntervention(conversation.metadata);
       const { agent, agentId, agentName, instance } = resolveInstanceAgent(conversation);
 

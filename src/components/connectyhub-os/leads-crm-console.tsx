@@ -3781,6 +3781,14 @@ function ChatMessages({ messages }: { messages: ClientLeadMessage[] }) {
         const isSystem = message.author === "system" || message.author === "unknown" || message.direction === "system" || message.direction === "unknown";
         const label = message.authorLabel || (isLead ? "Lead" : isHuman ? "Humano" : isAi ? "Agente IA" : "Sistema");
         const isOutbound = !isSystem && !isLead;
+        const quotedLabel = message.quotedMessage
+          ? message.quotedMessage.authorLabel
+            ?? (message.quotedMessage.direction === "inbound"
+              ? "Lead"
+              : message.quotedMessage.direction === "outbound"
+                ? "Atendimento"
+                : "Mensagem citada")
+          : null;
         const bubbleStyle = isSystem
           ? { backgroundColor: "#fff7d6", borderColor: "#f6dc8c", color: "#3b3320" }
           : isOutbound
@@ -3805,6 +3813,30 @@ function ChatMessages({ messages }: { messages: ClientLeadMessage[] }) {
                   {formatTime(message.occurredAt)}
                 </span>
               </div>
+              {message.quotedMessage ? (
+                <div
+                  className={cn(
+                    "mb-2 overflow-hidden rounded-lg border-l-2 px-2.5 py-2 text-left",
+                    isOutbound
+                      ? "border-[#25D366] bg-white/45"
+                      : "border-[#25D366] bg-[#f0fdf4]",
+                  )}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="truncate font-mono text-[9px] font-bold uppercase tracking-wide text-[#128C7E]">
+                      {quotedLabel}
+                    </span>
+                    {message.quotedMessage.type && message.quotedMessage.type !== "text" ? (
+                      <span className="shrink-0 font-mono text-[8px] uppercase tracking-wide text-slate-500">
+                        {message.quotedMessage.type}
+                      </span>
+                    ) : null}
+                  </div>
+                  <p className="mt-1 line-clamp-2 whitespace-pre-wrap text-[12px] leading-4 text-slate-700">
+                    {redactInternalProviderNames(message.quotedMessage.text)}
+                  </p>
+                </div>
+              ) : null}
               <p className="whitespace-pre-wrap">{redactInternalProviderNames(message.text)}</p>
               {message.mediaUrl ? (
                 <a

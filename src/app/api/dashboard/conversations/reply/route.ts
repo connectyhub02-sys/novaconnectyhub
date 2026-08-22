@@ -326,6 +326,7 @@ export async function POST(request: NextRequest) {
       providerChatId: message.provider_chat_id,
       type: message.message_type ?? "text",
       text: message.text_content ?? text,
+      quotedMessage: null,
       mediaUrl: null,
       occurredAt: message.occurred_at ?? message.created_at ?? now,
     },
