@@ -573,7 +573,7 @@ function CompanyBlock({
             </button>
             <label
               className={cn(
-                "inline-flex min-h-9 cursor-pointer items-center justify-center gap-2 rounded-lg border border-blue-400/25 bg-blue-400/10 px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-blue-200 transition hover:bg-blue-400/15",
+                "inline-flex min-h-9 cursor-pointer items-center justify-center gap-2 rounded-lg border border-[#0f62fe] bg-[#0f62fe] px-3 font-mono text-[10px] font-black uppercase tracking-wide text-white shadow-lg shadow-blue-900/15 transition hover:border-[#0b55df] hover:bg-[#0b55df]",
                 logoUploading && "pointer-events-none opacity-60",
               )}
             >
