@@ -1434,7 +1434,7 @@ function AttendanceCenterView({
                       className={cn(
                         "inline-flex h-9 max-w-[210px] shrink-0 items-center gap-2 rounded-full border px-3 text-[12px] font-semibold transition",
                         effectiveQueueKey === queue.key
-                          ? "border-[#25D366] bg-gradient-to-r from-white via-[#ecfff1] to-[#25D366] text-[#075E54] shadow-[0_10px_22px_rgba(37,211,102,0.12)]"
+                          ? "border-[#25D366] bg-[#25D366] text-[#075E54] shadow-[0_10px_22px_rgba(37,211,102,0.16)]"
                           : "border-slate-200 bg-white text-slate-700 hover:border-[#25D366] hover:text-[#075E54]",
                       )}
                       onClick={() => {
@@ -1472,7 +1472,7 @@ function AttendanceCenterView({
                     className={cn(
                       "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-3 text-[12px] font-semibold transition",
                       inboxTab === item.value
-                        ? "border-[#25D366] bg-gradient-to-r from-white via-[#ecfff1] to-[#25D366] text-[#075E54] shadow-[0_10px_22px_rgba(37,211,102,0.12)]"
+                        ? "border-[#25D366] bg-[#25D366] text-[#075E54] shadow-[0_10px_22px_rgba(37,211,102,0.16)]"
                         : "border-slate-200 bg-white text-slate-700 hover:border-[#25D366] hover:text-[#075E54]",
                     )}
                     onClick={() => setInboxTab(item.value)}
@@ -1548,7 +1548,7 @@ function AttendanceCenterView({
                     >
                       <ChevronDown className="h-4 w-4 rotate-90" />
                     </button>
-                    <AgentAvatar avatarUrl={activeAgentIdentity.avatarUrl} name={activeAgentIdentity.name} size="md" />
+                    <LeadAvatar lead={activeLead} />
                     <div className="min-w-0">
                       <p className="truncate text-[15px] font-semibold text-slate-950">{activeLead.name}</p>
                       <p className="truncate text-[12px] text-slate-500">
@@ -1627,7 +1627,7 @@ function AttendanceCenterView({
                         className={cn(
                           "inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl px-3 text-[11px] font-bold transition lg:w-[122px]",
                           activeConversationId && manualReply.trim() && !replyBusy
-                            ? "border border-[#25D366] bg-gradient-to-r from-white via-[#ecfff1] to-[#25D366] text-[#075E54] shadow-[0_10px_20px_rgba(37,211,102,0.14)] hover:from-[#f7fff9] hover:via-[#ddffe6] hover:to-[#25D366]"
+                            ? "border border-[#25D366] bg-[#25D366] text-[#075E54] shadow-[0_10px_20px_rgba(37,211,102,0.16)] hover:bg-[#25D366] hover:opacity-90"
                             : "bg-slate-200 text-slate-500",
                         )}
                         disabled={!activeConversationId || !manualReply.trim() || replyBusy}
@@ -3352,7 +3352,7 @@ function AgentAvatar({
   return (
     <span
       className={cn(
-        "flex shrink-0 items-center justify-center rounded-full border border-[#25D366] bg-gradient-to-r from-white via-[#ecfff1] to-[#25D366] font-mono font-bold text-[#075E54]",
+        "flex shrink-0 items-center justify-center rounded-full border border-[#25D366] bg-[#25D366] font-mono font-bold text-[#075E54]",
         dimensions,
         fontSize,
       )}
