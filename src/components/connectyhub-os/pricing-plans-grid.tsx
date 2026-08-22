@@ -311,7 +311,7 @@ export function PricingPlansGrid({
 
   return (
     <>
-      <div className="pricing-plans-grid">
+      <div className={surface === "dashboard" ? "pricing-plans-grid pricing-plans-grid-dashboard" : "pricing-plans-grid"}>
         {visiblePlans.length === 0 && catalogLoading ? (
           <PricingPlanSkeleton />
         ) : visiblePlans.length === 0 ? (
@@ -399,18 +399,18 @@ export function PricingPlansGrid({
       ) : null}
 
       {switchPrompt ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-[8px] border border-amber-300/30 bg-slate-950 p-5 shadow-2xl shadow-black/40">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-[8px] border border-amber-200 bg-white p-5 shadow-2xl shadow-slate-950/20">
             <div className="flex items-start gap-3">
-              <span className="rounded-full border border-amber-300/30 bg-amber-400/10 p-2 text-amber-200">
+              <span className="rounded-full border border-amber-200 bg-amber-50 p-2 text-amber-700">
                 <AlertTriangle className="h-5 w-5" />
               </span>
               <div>
-                <div className="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-amber-200">
+                <div className="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-amber-700">
                   Pagamento pendente
                 </div>
-                <h2 className="mt-2 text-xl font-black text-white">Trocar plano escolhido?</h2>
-                <p className="mt-2 text-sm leading-6 text-slate-300">
+                <h2 className="mt-2 text-xl font-black text-slate-950">Trocar plano escolhido?</h2>
+                <p className="mt-2 text-sm leading-6 text-slate-600">
                   Voce ja tem o plano {switchPrompt.fromPlanName} aguardando pagamento. Se confirmar, vamos cancelar essa solicitacao e abrir o checkout do plano {switchPrompt.toPlan.name}.
                 </p>
               </div>
@@ -419,7 +419,7 @@ export function PricingPlansGrid({
               <button
                 type="button"
                 onClick={() => setSwitchPrompt(null)}
-                className="min-h-11 rounded-[8px] border border-slate-600 px-4 text-sm font-bold text-slate-200 transition hover:bg-white/5"
+                className="min-h-11 rounded-[8px] border border-slate-200 px-4 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
               >
                 Manter plano atual
               </button>

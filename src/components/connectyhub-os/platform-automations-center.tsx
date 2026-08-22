@@ -202,13 +202,13 @@ export function PlatformAutomationsCenter({
                 className={cn(
                   "rounded-xl border px-3 py-3 text-left transition",
                   selectedFlowId === flow.id && !creating
-                    ? "border-cyan-400/60 bg-cyan-500/10"
-                    : "border-slate-700/70 bg-slate-950/35 hover:border-cyan-400/35 hover:bg-cyan-500/5",
+                    ? "border-blue-300 bg-blue-50"
+                    : "border-slate-200 bg-white hover:border-blue-200 hover:bg-blue-50/60",
                 )}
               >
                 <div className="flex min-w-0 items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="truncate text-[13px] font-semibold text-slate-100">{flow.name}</p>
+                    <p className="truncate text-[13px] font-semibold text-slate-950">{flow.name}</p>
                     <p className="mt-1 truncate font-mono text-[9px] uppercase tracking-widest text-slate-500">
                       {flow.eventLabel} / {flow.audienceType}
                     </p>
@@ -248,9 +248,9 @@ export function PlatformAutomationsCenter({
                 <div
                   className={cn(
                     "rounded-xl border px-3 py-2 text-[12px] leading-5",
-                    state.tone === "success" && "border-emerald-400/35 bg-emerald-500/10 text-emerald-100",
-                    state.tone === "error" && "border-rose-400/35 bg-rose-500/10 text-rose-100",
-                    state.tone === "warning" && "border-amber-400/35 bg-amber-500/10 text-amber-100",
+                    state.tone === "success" && "border-emerald-200 bg-emerald-50 text-emerald-700",
+                    state.tone === "error" && "border-rose-200 bg-rose-50 text-rose-700",
+                    state.tone === "warning" && "border-amber-200 bg-amber-50 text-amber-800",
                   )}
                 >
                   {state.message}
@@ -354,9 +354,9 @@ export function PlatformAutomationsCenter({
                   />
                 </Field>
                 <div className="grid gap-3">
-                  <div className="rounded-xl border border-slate-700 bg-slate-950/35 p-3">
-                    <div className="flex items-center gap-2 text-[12px] font-semibold text-slate-100">
-                      <Sparkles className="h-4 w-4 text-cyan-300" />
+                  <div className="rounded-xl border border-blue-100 bg-blue-50 p-3">
+                    <div className="flex items-center gap-2 text-[12px] font-semibold text-slate-950">
+                      <Sparkles className="h-4 w-4 text-blue-600" />
                       Variaveis
                     </div>
                     <div className="mt-3 flex flex-wrap gap-1.5">
@@ -368,7 +368,7 @@ export function PlatformAutomationsCenter({
                             ...current,
                             messageTemplate: `${current.messageTemplate}${current.messageTemplate.endsWith(" ") ? "" : " "}${variable}`,
                           }))}
-                          className="rounded-full border border-cyan-400/25 bg-cyan-500/10 px-2 py-1 font-mono text-[9px] text-cyan-100 transition hover:bg-cyan-500/20"
+                          className="rounded-full border border-blue-200 bg-white px-2 py-1 font-mono text-[9px] text-blue-700 transition hover:bg-blue-100"
                         >
                           {variable}
                         </button>
@@ -377,9 +377,9 @@ export function PlatformAutomationsCenter({
                   </div>
 
                   {selectedEvent && (
-                    <div className="rounded-xl border border-emerald-400/25 bg-emerald-500/10 p-3 text-[12px] leading-5 text-emerald-50">
+                    <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-[12px] leading-5 text-emerald-700">
                       <p className="font-semibold">{selectedEvent.label}</p>
-                      <p className="mt-1 text-emerald-100/80">{selectedEvent.revenueGoal}</p>
+                      <p className="mt-1 text-emerald-700/80">{selectedEvent.revenueGoal}</p>
                     </div>
                   )}
                 </div>
@@ -402,7 +402,7 @@ export function PlatformAutomationsCenter({
                         ))}
                       </select>
                     </Field>
-                    <label className="flex items-start gap-3 rounded-xl border border-slate-700 bg-slate-950/40 p-3 text-[12px] leading-5 text-slate-300">
+                    <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-[12px] leading-5 text-slate-600">
                       <input
                         type="checkbox"
                         checked={draft.fallbackToBillingAgent}
@@ -510,11 +510,11 @@ export function PlatformAutomationsCenter({
             <DataTable
               columns={["Cliente", "Fluxo", "Evento", "Status", "Agente", "Criado"]}
               rows={catalog.notifications.map((item) => [
-                <span key="customer" className="font-semibold text-slate-100">{item.organizationName}</span>,
-                <span key="flow" className="text-slate-300">{item.automationFlowName ?? "Template legado"}</span>,
-                <span key="event" className="font-mono text-[10px] text-cyan-200">{item.eventLabel}</span>,
+                <span key="customer" className="font-semibold text-slate-950">{item.organizationName}</span>,
+                <span key="flow" className="text-slate-600">{item.automationFlowName ?? "Template legado"}</span>,
+                <span key="event" className="font-mono text-[10px] text-blue-700">{item.eventLabel}</span>,
                 <FlowStatusPill key="status" status={item.status} />,
-                <span key="agent" className="text-slate-300">{item.agentName ?? "Global"}</span>,
+                <span key="agent" className="text-slate-600">{item.agentName ?? "Global"}</span>,
                 <span key="date" className="font-mono text-[10px] text-slate-400">{formatDateTime(item.createdAt)}</span>,
               ])}
             />
@@ -532,11 +532,11 @@ export function PlatformAutomationsCenter({
             {catalog.eventDefinitions.map((event) => (
               <div
                 key={event.eventType}
-                className="rounded-xl border border-slate-700/70 bg-slate-950/35 p-3"
+                className="rounded-xl border border-slate-200 bg-white p-3"
               >
                 <div className="flex items-center justify-between gap-2">
-                  <p className="text-[12px] font-semibold text-slate-100">{event.label}</p>
-                  <span className="rounded-full border border-violet-400/25 bg-violet-500/10 px-2 py-1 font-mono text-[8px] uppercase tracking-widest text-violet-100">
+                  <p className="text-[12px] font-semibold text-slate-950">{event.label}</p>
+                  <span className="rounded-full border border-indigo-200 bg-indigo-50 px-2 py-1 font-mono text-[8px] uppercase tracking-widest text-indigo-700">
                     {event.category}
                   </span>
                 </div>
@@ -644,13 +644,13 @@ function FlowJourneyCanvas({
       className="rounded-2xl border p-3"
       style={{
         borderColor: "rgba(34,211,238,0.24)",
-        background: "linear-gradient(180deg, rgba(34,211,238,0.08), rgba(15,23,42,0.28))",
+        background: "linear-gradient(180deg, rgba(24,119,242,0.08), rgba(255,255,255,0.92))",
       }}
     >
       <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
-          <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-cyan-300">jornada visual</p>
-          <p className="mt-1 text-[13px] font-semibold text-slate-100">Como este fluxo se conecta</p>
+          <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-blue-700">jornada visual</p>
+          <p className="mt-1 text-[13px] font-semibold text-slate-950">Como este fluxo se conecta</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <NeonBadge tone={draft.status === "active" ? "green" : draft.status === "paused" ? "amber" : "zinc"}>
@@ -668,11 +668,11 @@ function FlowJourneyCanvas({
         ))}
       </div>
 
-      <div className="mt-3 rounded-xl border border-slate-700/70 bg-slate-950/35 p-3">
+      <div className="mt-3 rounded-xl border border-slate-200 bg-white p-3">
         <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0">
             <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">logica do fluxo</p>
-            <p className="mt-1 text-[12px] leading-5 text-slate-300">
+            <p className="mt-1 text-[12px] leading-5 text-slate-600">
               Se o evento acontecer e as regras baterem, o agente envia a mensagem. Se as regras nao baterem, o envio para antes de gastar atendimento.
             </p>
           </div>
@@ -720,7 +720,7 @@ function FlowStepCard({ step, index }: { step: FlowStep; index: number }) {
       className="min-h-[138px] rounded-xl border p-3"
       style={{
         borderColor: `${palette.fill}55`,
-        background: `linear-gradient(180deg, ${palette.fill}14, rgba(2,6,23,0.42))`,
+        background: `linear-gradient(180deg, ${palette.fill}16, rgba(255,255,255,0.96))`,
       }}
     >
       <div className="flex items-start justify-between gap-2">
@@ -735,7 +735,7 @@ function FlowStepCard({ step, index }: { step: FlowStep; index: number }) {
         </span>
       </div>
       <p className="mt-3 font-mono text-[8px] uppercase tracking-[0.18em] text-slate-500">{step.eyebrow}</p>
-      <p className="mt-1 line-clamp-2 text-[13px] font-semibold leading-4 text-slate-100">{step.title}</p>
+      <p className="mt-1 line-clamp-2 text-[13px] font-semibold leading-4 text-slate-950">{step.title}</p>
       <p className="mt-2 line-clamp-3 text-[11px] leading-4 text-slate-400">{step.detail}</p>
     </div>
   );
@@ -745,7 +745,7 @@ function FlowConnector() {
   return (
     <div className="relative flex h-7 items-center justify-center xl:h-auto">
       <div className="h-px w-full bg-cyan-400/35 xl:block" />
-      <div className="absolute grid h-6 w-6 place-items-center rounded-full border border-cyan-400/35 bg-slate-950 text-cyan-200 shadow-[0_0_18px_rgba(34,211,238,0.18)]">
+      <div className="absolute grid h-6 w-6 place-items-center rounded-full border border-blue-200 bg-white text-blue-700 shadow-[0_8px_18px_rgba(24,119,242,0.12)]">
         <ChevronDown className="h-3.5 w-3.5 xl:hidden" />
         <ChevronRight className="hidden h-3.5 w-3.5 xl:block" />
       </div>
@@ -765,7 +765,7 @@ function MiniFlowChain({ flow }: { flow: PlatformAutomationFlow }) {
     <div className="flex w-full min-w-0 items-center gap-1 overflow-hidden">
       {labels.map((label, index) => (
         <FragmentWithMiniConnector key={`${label}-${index}`} showConnector={index < labels.length - 1}>
-          <span className="max-w-[92px] truncate rounded-full border border-slate-700 bg-slate-950/45 px-2 py-1 font-mono text-[8px] uppercase tracking-widest text-slate-400">
+          <span className="max-w-[92px] truncate rounded-full border border-slate-200 bg-white px-2 py-1 font-mono text-[8px] uppercase tracking-widest text-slate-500">
             {label}
           </span>
         </FragmentWithMiniConnector>
@@ -834,10 +834,10 @@ function FlowStatusBadge({ status }: { status: PlatformAutomationStatus }) {
 }
 
 function FlowStatusPill({ status }: { status: string }) {
-  const tone = status === "sent" ? "text-emerald-200 border-emerald-400/30 bg-emerald-500/10"
-    : status === "failed" ? "text-rose-200 border-rose-400/30 bg-rose-500/10"
-      : status === "pending" ? "text-amber-200 border-amber-400/30 bg-amber-500/10"
-        : "text-slate-300 border-slate-700 bg-slate-900/60";
+  const tone = status === "sent" ? "text-emerald-700 border-emerald-200 bg-emerald-50"
+    : status === "failed" ? "text-rose-700 border-rose-200 bg-rose-50"
+      : status === "pending" ? "text-amber-800 border-amber-200 bg-amber-50"
+        : "text-slate-600 border-slate-200 bg-slate-50";
 
   return (
     <span className={cn("rounded-full border px-2 py-1 font-mono text-[9px] uppercase tracking-widest", tone)}>
@@ -867,20 +867,20 @@ function EmptyState({
   description: string;
 }) {
   return (
-    <div className="grid place-items-center rounded-xl border border-slate-700 bg-slate-950/35 p-8 text-center">
-      <Icon className="h-8 w-8 text-slate-500" />
-      <p className="mt-3 text-[13px] font-semibold text-slate-200">{title}</p>
+    <div className="grid place-items-center rounded-xl border border-slate-200 bg-slate-50 p-8 text-center">
+      <Icon className="h-8 w-8 text-slate-400" />
+      <p className="mt-3 text-[13px] font-semibold text-slate-950">{title}</p>
       <p className="mt-1 max-w-md text-[12px] leading-5 text-slate-500">{description}</p>
     </div>
   );
 }
 
 const metricPalette = {
-  cyan: { fill: "#22d3ee" },
-  green: { fill: "#34d399" },
-  amber: { fill: "#fbbf24" },
-  violet: { fill: "#a78bfa" },
-  rose: { fill: "#fb7185" },
+  cyan: { fill: "#1877f2" },
+  green: { fill: "#128c7e" },
+  amber: { fill: "#b45309" },
+  violet: { fill: "#4f46e5" },
+  rose: { fill: "#dc2626" },
 };
 
 const audienceLabels: Record<PlatformAutomationAudience, string> = {

@@ -306,6 +306,9 @@ export async function getAdminCustomerWhatsappWorkspace(
     };
   }
 
+  const customerInstanceIds = Array.from(new Set(instanceRows.map((row) => row.id).filter(Boolean)));
+  const telemetrySinceIso = new Date(Date.now() - 1000 * 60 * 60 * 24 * 90).toISOString();
+
   const [agentsResult, leadsResult, conversationsResult, webhooksResult, messagesResult, agentRunsResult] = await Promise.all([
     client
       .from("agent_registry")
@@ -331,9 +334,10 @@ export async function getAdminCustomerWhatsappWorkspace(
     client
       .from("conversation_messages")
       .select("id, organization_id, conversation_id, whatsapp_instance_id, direction, message_type, payload, occurred_at")
-      .in("organization_id", organizationIds)
+      .in("whatsapp_instance_id", customerInstanceIds)
+      .gte("occurred_at", telemetrySinceIso)
       .order("occurred_at", { ascending: false })
-      .limit(10000),
+      .limit(3000),
     client
       .from("agent_runs")
       .select("id, agent_id, organization_id, run_status, trigger_source, input_summary, output_summary, error_message, metadata, started_at, finished_at, created_at")

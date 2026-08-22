@@ -116,13 +116,20 @@ export function AutonomousCommandCenter({
       />
 
       {overview.warnings.length > 0 && (
-        <Panel className="mb-5" title="Aviso da fundacao autonoma" eyebrow="supabase / schema">
+        <Panel
+          className="mb-5"
+          title={overview.schemaReady ? "Aviso de dados parciais" : "Aviso da fundacao autonoma"}
+          eyebrow={overview.schemaReady ? "supabase / performance" : "supabase / schema"}
+          tone={overview.schemaReady ? "amber" : "cyan"}
+        >
           <div
             className="rounded-xl p-4 text-[13px] leading-6 text-slate-600"
             style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.22)" }}
           >
             <p className="font-semibold text-amber-700">
-              Rode a migration 0006 no Supabase para ativar agentes, central de inteligencia, instancias e plano de recursos.
+              {overview.schemaReady
+                ? "A central carregou com dados parciais. A operacao continua ativa enquanto o Supabase termina de responder."
+                : "Rode a migration 0006 no Supabase para ativar agentes, central de inteligencia, instancias e plano de recursos."}
             </p>
             <ul className="mt-2 list-disc space-y-1 pl-5">
               {overview.warnings.slice(0, 4).map((warning) => (

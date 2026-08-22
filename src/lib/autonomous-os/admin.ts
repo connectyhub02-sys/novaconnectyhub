@@ -356,13 +356,16 @@ export async function getAutonomousAdminOverview({
     entitlementsResult.error,
   ].filter(Boolean);
 
-  if (errors.length > 0) {
+  const schemaErrors = errors.filter(isSchemaMissingError);
+
+  if (schemaErrors.length > 0) {
     return {
       ...fallbackOverview,
-      warnings: errors.map((error) => error?.message ?? "Erro desconhecido ao carregar Admin OS autonomo."),
+      warnings: schemaErrors.map((error) => error?.message ?? "Erro desconhecido ao carregar Admin OS autonomo."),
     };
   }
 
+  const warnings = errors.map(formatAutonomousLoadWarning);
   const agents = ((agentsResult.data ?? []) as AgentRow[]).map(mapAgent);
   const runs = ((runsResult.data ?? []) as AgentRunRow[]).map(mapAgentRun);
   const intelligenceEvents = ((eventsResult.data ?? []) as IntelligenceEventRow[]).map(mapIntelligenceEvent);
@@ -374,7 +377,7 @@ export async function getAutonomousAdminOverview({
 
   return {
     schemaReady: true,
-    warnings: [],
+    warnings,
     summary: {
       totalAgents: agents.length,
       systemAgents: agents.filter((agent) => agent.agentType === "system_operator").length,
@@ -396,6 +399,24 @@ export async function getAutonomousAdminOverview({
     contentPipeline,
     planEntitlements,
   };
+}
+
+function isSchemaMissingError(error: { code?: string; message?: string } | null | undefined) {
+  const message = (error?.message ?? "").toLowerCase();
+  return error?.code === "42P01"
+    || message.includes("does not exist")
+    || message.includes("could not find")
+    || message.includes("schema cache");
+}
+
+function formatAutonomousLoadWarning(error: { code?: string; message?: string } | null | undefined) {
+  const message = error?.message ?? "Erro desconhecido ao carregar dados autonomos.";
+
+  if (message.toLowerCase().includes("statement timeout")) {
+    return "Dados parciais: uma consulta demorou demais no Supabase. A tela foi carregada sem bloquear a operacao.";
+  }
+
+  return `Dados parciais: ${message}`;
 }
 
 function mapAgent(row: AgentRow): AdminAgent {

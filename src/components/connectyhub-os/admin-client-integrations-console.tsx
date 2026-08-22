@@ -194,7 +194,7 @@ function OperationalAlertsPanel({ overview }: { overview: AdminClientIntegration
             style={{ background: "var(--ch-panel-2)", border: "1px dashed var(--ch-border)" }}
           >
             <CheckCircle2 className="mb-3 h-8 w-8 text-emerald-400" />
-            <p className="text-[13px] font-semibold text-slate-200">Nenhum alerta no filtro atual.</p>
+            <p className="text-[13px] font-semibold text-slate-950">Nenhum alerta no filtro atual.</p>
             <p className="mt-1 text-[12px] text-slate-500">Erros, OAuth pendente e conexoes sem atividade recente aparecerao aqui.</p>
           </div>
         )}
@@ -239,10 +239,10 @@ function OperationalAlertCard({
             <StatusBadge status={alertSeverityStatus(alert.severity)} label={alertSeverityLabel(alert.severity)} />
             <span className="font-mono text-[9px] uppercase tracking-wide text-slate-600">{alert.providerLabel}</span>
           </div>
-          <p className="truncate text-[13px] font-semibold text-slate-100">{alert.companyName}</p>
+          <p className="truncate text-[13px] font-semibold text-slate-950">{alert.companyName}</p>
           <p className={`mt-1 text-[12px] font-semibold ${toneText(tone)}`}>{alert.title}</p>
         </div>
-        <Link href={logsHref} className="rounded-lg p-1 transition hover:bg-white/5" aria-label="Abrir logs do alerta">
+        <Link href={logsHref} className="rounded-lg p-1 transition hover:bg-slate-100" aria-label="Abrir logs do alerta">
           <ArrowUpRight className={`h-4 w-4 shrink-0 ${toneText(tone)}`} />
         </Link>
       </div>
@@ -312,11 +312,11 @@ function FilterGroup<T extends string>({
               key={option.id}
               href={getHref(option.id)}
               className={`rounded-xl border px-3 py-2 font-mono text-[10px] uppercase tracking-wide transition ${
-                isActive ? "text-cyan-200" : "text-slate-400 hover:text-slate-100"
+                isActive ? "text-blue-700" : "text-slate-500 hover:text-blue-700"
               }`}
               style={{
                 borderColor: isActive ? "rgba(34,211,238,0.48)" : "var(--ch-border)",
-                background: isActive ? "rgba(34,211,238,0.1)" : "rgba(255,255,255,0.02)",
+                background: isActive ? "rgba(24,119,242,0.10)" : "rgba(255,255,255,0.72)",
               }}
             >
               {option.label}
@@ -332,7 +332,7 @@ function CompanyCell({ company, filters }: { company: AdminClientIntegrationComp
   return (
     <div className="min-w-0">
       <div className="flex min-w-0 items-center gap-2">
-        <p className="truncate text-[13px] font-semibold text-slate-100">{company.name}</p>
+        <p className="truncate text-[13px] font-semibold text-slate-950">{company.name}</p>
         <StatusBadge status={statusTone(company.health)} label={companyHealthLabel(company.health)} />
       </div>
       <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2 font-mono text-[9px] uppercase tracking-wide text-slate-600">
@@ -342,8 +342,7 @@ function CompanyCell({ company, filters }: { company: AdminClientIntegrationComp
       </div>
       <Link
         href={filterHref(filters, { companyId: company.id })}
-        className="mt-2 inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 font-mono text-[9px] uppercase tracking-wide text-cyan-300 transition hover:bg-cyan-400/10"
-        style={{ borderColor: "rgba(34,211,238,0.24)" }}
+        className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-2 py-1 font-mono text-[9px] uppercase tracking-wide text-blue-700 transition hover:bg-blue-100"
       >
         <Eye className="h-3 w-3" />
         Detalhar
@@ -362,7 +361,7 @@ function ProviderSummaryCard({ provider }: { provider: AdminClientProviderSummar
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="truncate text-[13px] font-semibold text-slate-100">{provider.label}</p>
+          <p className="truncate text-[13px] font-semibold text-slate-950">{provider.label}</p>
           <p className="mt-1 font-mono text-[10px] uppercase tracking-wide text-slate-600">{coverage}% de cobertura</p>
         </div>
         <NeonBadge tone={provider.error > 0 ? "rose" : provider.warning > 0 ? "amber" : "green"}>
@@ -384,7 +383,7 @@ function ProviderSummaryCard({ provider }: { provider: AdminClientProviderSummar
             <ListChecks className="h-3.5 w-3.5" />
             selecao pendente
           </span>
-          <span className="font-mono text-[12px] font-bold text-amber-200">{provider.selectionPending}</span>
+          <span className="font-mono text-[12px] font-bold text-amber-700">{provider.selectionPending}</span>
         </div>
       )}
     </div>
@@ -393,8 +392,8 @@ function ProviderSummaryCard({ provider }: { provider: AdminClientProviderSummar
 
 function TinyCount({ label, value, tone }: { label: string; value: number; tone: Tone }) {
   return (
-    <div className="min-w-0 rounded-xl px-2 py-2 text-center" style={{ background: "rgba(255,255,255,0.025)" }}>
-      <p className="font-mono text-[13px] font-bold text-slate-100">{value}</p>
+    <div className="min-w-0 rounded-xl px-2 py-2 text-center" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}>
+      <p className="font-mono text-[13px] font-bold text-slate-950">{value}</p>
       <p className={`truncate font-mono text-[8px] uppercase tracking-wide ${toneText(tone)}`}>{label}</p>
     </div>
   );
@@ -482,7 +481,7 @@ function SelectedCompanyPanel({
         <div className="mb-3 flex items-center justify-between gap-3">
           <div>
             <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-slate-500">historico</p>
-            <h3 className="text-[14px] font-semibold text-slate-100">Eventos do cliente</h3>
+            <h3 className="text-[14px] font-semibold text-slate-950">Eventos do cliente</h3>
           </div>
           <NeonBadge tone={company.events.length > 0 ? "cyan" : "zinc"}>{company.events.length}</NeonBadge>
         </div>
@@ -515,14 +514,14 @@ function ProviderDetailCard({
     <div className="min-w-0 rounded-2xl p-4" style={{ background: "var(--ch-panel-2)", border: "1px solid var(--ch-border)" }}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="truncate text-[13px] font-semibold text-slate-100">{provider.label}</p>
+          <p className="truncate text-[13px] font-semibold text-slate-950">{provider.label}</p>
           <p className="mt-1 font-mono text-[10px] uppercase tracking-wide text-slate-600">{formatDateShort(provider.lastActivityAt)}</p>
         </div>
         <StatusBadge status={statusTone(provider.status)} label={provider.statusLabel} />
       </div>
-      <p className="mt-3 min-h-10 text-[12px] leading-5 text-slate-300">{provider.detail}</p>
+      <p className="mt-3 min-h-10 text-[12px] leading-5 text-slate-600">{provider.detail}</p>
       {provider.accountLabel && (
-        <p className="mt-3 truncate rounded-xl px-3 py-2 font-mono text-[10px] text-slate-300" style={{ background: "rgba(255,255,255,0.035)" }}>
+        <p className="mt-3 truncate rounded-xl px-3 py-2 font-mono text-[10px] text-slate-600" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}>
           {provider.accountLabel}
         </p>
       )}
@@ -531,15 +530,14 @@ function ProviderDetailCard({
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <Link
           href={filterHref(filters, { provider: provider.providerId, companyId })}
-          className="inline-flex h-8 items-center gap-1.5 rounded-lg border px-2 font-mono text-[9px] uppercase tracking-wide text-cyan-300 transition hover:bg-cyan-400/10"
-          style={{ borderColor: "rgba(34,211,238,0.24)" }}
+          className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-2 font-mono text-[9px] uppercase tracking-wide text-blue-700 transition hover:bg-blue-100"
         >
           <Filter className="h-3 w-3" />
           Filtrar
         </Link>
         <Link
           href={logsHref}
-          className="inline-flex h-8 items-center gap-1.5 rounded-lg border px-2 font-mono text-[9px] uppercase tracking-wide text-slate-300 transition hover:bg-white/5"
+          className="inline-flex h-8 items-center gap-1.5 rounded-lg border px-2 font-mono text-[9px] uppercase tracking-wide text-slate-600 transition hover:bg-slate-50"
           style={{ borderColor: "var(--ch-border)" }}
         >
           <History className="h-3 w-3" />
@@ -568,7 +566,7 @@ function ProviderSelectionBlock({ provider }: { provider: AdminClientProviderSta
   }
 
   return (
-    <div className="mt-3 rounded-xl p-3" style={{ background: "rgba(255,255,255,0.025)", border: "1px solid var(--ch-border)" }}>
+    <div className="mt-3 rounded-xl p-3" style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-slate-500">selecao guiada</p>
@@ -583,11 +581,11 @@ function ProviderSelectionBlock({ provider }: { provider: AdminClientProviderSta
             <div
               key={`${provider.providerId}-${asset.label}`}
               className="flex min-w-0 items-center justify-between gap-2 rounded-lg px-2 py-2"
-              style={{ background: "rgba(15,23,42,0.46)" }}
+              style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}
             >
               <div className="min-w-0">
                 <p className="truncate font-mono text-[9px] uppercase tracking-wide text-slate-500">{asset.label}</p>
-                <p className="truncate font-mono text-[10px] text-slate-300">{asset.value ?? "Nao selecionado"}</p>
+                <p className="truncate font-mono text-[10px] text-slate-600">{asset.value ?? "Nao selecionado"}</p>
               </div>
               <NeonBadge tone={asset.ready ? "green" : asset.required ? "amber" : "zinc"}>
                 {asset.ready ? "ok" : asset.required ? "pendente" : "opcional"}
@@ -606,7 +604,7 @@ function SupportActionCard({ action, compact = false }: { action: AdminClientSup
   return (
     <div
       className="mt-3 rounded-xl p-3"
-      style={{ background: "rgba(15,23,42,0.42)", border: "1px solid var(--ch-border)" }}
+      style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
@@ -618,19 +616,18 @@ function SupportActionCard({ action, compact = false }: { action: AdminClientSup
 
       <p className={`${compact ? "line-clamp-2" : ""} mt-2 text-[11px] leading-5 text-slate-400`}>{action.detail}</p>
 
-      <div className="mt-3 rounded-lg px-3 py-2" style={{ background: "rgba(255,255,255,0.035)" }}>
+      <div className="mt-3 rounded-lg px-3 py-2" style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}>
         <div className="mb-1 flex items-center gap-2">
-          <MessageSquareText className="h-3.5 w-3.5 text-cyan-300" />
+          <MessageSquareText className="h-3.5 w-3.5 text-blue-600" />
           <p className="font-mono text-[9px] uppercase tracking-wide text-slate-500">mensagem ao cliente</p>
         </div>
-        <p className={`${compact ? "line-clamp-2" : ""} select-all text-[11px] leading-5 text-slate-300`}>{action.customerMessage}</p>
+        <p className={`${compact ? "line-clamp-2" : ""} select-all text-[11px] leading-5 text-slate-600`}>{action.customerMessage}</p>
       </div>
 
       {action.href && (
         <Link
           href={action.href}
-          className="mt-3 inline-flex h-8 items-center gap-1.5 rounded-lg border px-2 font-mono text-[9px] uppercase tracking-wide text-cyan-300 transition hover:bg-cyan-400/10"
-          style={{ borderColor: "rgba(34,211,238,0.24)" }}
+          className="mt-3 inline-flex h-8 items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-2 font-mono text-[9px] uppercase tracking-wide text-blue-700 transition hover:bg-blue-100"
         >
           <ArrowUpRight className="h-3 w-3" />
           {action.hrefLabel ?? "Abrir rota"}
@@ -711,7 +708,7 @@ function RecentEventsPanel({ events, filters }: { events: AdminClientIntegration
       ) : (
         <div className="grid place-items-center rounded-2xl px-4 py-10 text-center" style={{ background: "var(--ch-panel-2)", border: "1px dashed var(--ch-border)" }}>
           <History className="mb-3 h-8 w-8 text-slate-500" />
-          <p className="text-[13px] font-semibold text-slate-200">Nenhum evento de integracao encontrado.</p>
+          <p className="text-[13px] font-semibold text-slate-950">Nenhum evento de integracao encontrado.</p>
           <p className="mt-1 text-[12px] text-slate-500">Quando clientes conectarem ou testarem provedores, os eventos aparecerao aqui.</p>
         </div>
       )}
@@ -736,7 +733,7 @@ function EmptyState({ title, description }: { title: string; description: string
       style={{ background: "var(--ch-panel-2)", border: "1px dashed var(--ch-border)" }}
     >
       <PlugZap className="mb-3 h-8 w-8 text-slate-500" />
-      <p className="text-[13px] font-semibold text-slate-200">{title}</p>
+      <p className="text-[13px] font-semibold text-slate-950">{title}</p>
       <p className="mt-1 text-[12px] text-slate-500">{description}</p>
     </div>
   );
@@ -775,8 +772,8 @@ function selectionStatusLabel(status: AdminClientProviderStatus["selectionStatus
 }
 
 function selectionText(status: AdminClientProviderStatus["selectionStatus"]) {
-  if (status === "complete") return "text-emerald-300";
-  if (status === "partial") return "text-amber-300";
+  if (status === "complete") return "text-emerald-700";
+  if (status === "partial") return "text-amber-700";
   return "text-slate-500";
 }
 
@@ -818,10 +815,10 @@ function alertSeverityLabel(severity: AdminClientIntegrationAlertSeverity) {
 }
 
 function toneText(tone: Tone) {
-  if (tone === "green") return "text-emerald-400";
-  if (tone === "amber") return "text-amber-400";
-  if (tone === "rose") return "text-rose-400";
-  if (tone === "cyan") return "text-cyan-400";
+  if (tone === "green") return "text-emerald-700";
+  if (tone === "amber") return "text-amber-700";
+  if (tone === "rose") return "text-rose-700";
+  if (tone === "cyan") return "text-blue-700";
   return "text-slate-500";
 }
 

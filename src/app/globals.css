@@ -2634,6 +2634,91 @@ html {
   letter-spacing: 0.5px;
 }
 
+[data-connecty-mode] .pricing-plans-grid-dashboard .pricing-card {
+  border-color: rgba(var(--ch-accent-rgb), 0.24);
+  background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(var(--ch-accent-rgb),0.045));
+  box-shadow: 0 18px 44px rgba(15,23,42,0.07);
+  color: var(--ch-text);
+}
+
+[data-connecty-mode] .pricing-plans-grid-dashboard .pricing-card:hover {
+  border-color: rgba(var(--ch-accent-rgb), 0.42);
+  box-shadow: 0 20px 48px rgba(var(--ch-accent-rgb),0.12);
+}
+
+[data-connecty-mode] .pricing-plans-grid-dashboard .pricing-card-popular {
+  border-color: rgba(var(--ch-success-rgb),0.48);
+  background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(var(--ch-success-rgb),0.07));
+}
+
+[data-connecty-mode] .pricing-plans-grid-dashboard .pricing-card-premium {
+  border-color: rgba(var(--ch-ai-rgb),0.30);
+  background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(var(--ch-ai-rgb),0.055));
+}
+
+[data-connecty-mode] .pricing-plans-grid-dashboard .pricing-card-trial {
+  border-color: rgba(var(--ch-accent-rgb),0.34);
+}
+
+[data-connecty-mode] .pricing-plans-grid-dashboard .pricing-card h3 {
+  color: var(--ch-success);
+}
+
+[data-connecty-mode] .pricing-plans-grid-dashboard .pricing-card strong,
+[data-connecty-mode] .pricing-plans-grid-dashboard .pricing-card ul {
+  color: var(--ch-text);
+}
+
+[data-connecty-mode] .pricing-plans-grid-dashboard .pricing-card small,
+[data-connecty-mode] .pricing-plans-grid-dashboard .pricing-card p {
+  color: var(--ch-muted);
+}
+
+[data-connecty-mode] .pricing-plans-grid-dashboard .pricing-card li.plan-locked {
+  color: var(--ch-subtle);
+}
+
+[data-connecty-mode] .pricing-plans-grid-dashboard .pricing-card a,
+[data-connecty-mode] .pricing-plans-grid-dashboard .pricing-card button.pricing-card-action {
+  border-color: rgba(var(--ch-accent-rgb),0.42);
+  background: rgba(var(--ch-accent-rgb),0.09);
+  color: var(--ch-accent);
+}
+
+[data-connecty-mode] .pricing-plans-grid-dashboard .pricing-card button.pricing-card-action:disabled {
+  border-color: var(--ch-border);
+  background: rgba(148,163,184,0.10);
+  color: var(--ch-subtle);
+}
+
+[data-connecty-mode] .pricing-plans-grid-dashboard .trial-badge,
+[data-connecty-mode] .pricing-plans-grid-dashboard .popular-badge,
+[data-connecty-mode] .pricing-plans-grid-dashboard .premium-badge {
+  border: 1px solid rgba(var(--ch-accent-rgb),0.28);
+  background: rgba(255,255,255,0.82);
+  color: var(--ch-accent);
+}
+
+[data-connecty-mode] .pricing-plans-grid-dashboard .popular-badge {
+  border-color: rgba(var(--ch-success-rgb),0.32);
+  color: var(--ch-success);
+}
+
+[data-connecty-mode] .pricing-plans-grid-dashboard .premium-badge {
+  border-color: rgba(var(--ch-ai-rgb),0.28);
+  color: var(--ch-ai);
+}
+
+[data-connecty-mode] .pricing-plans-grid-dashboard .pricing-card [class*="bg-slate-950"] {
+  background-color: rgba(255,255,255,0.84) !important;
+  border-color: var(--ch-border) !important;
+  color: var(--ch-text) !important;
+}
+
+[data-connecty-mode] .pricing-plans-grid-dashboard .pricing-card [class*="text-slate-300"] {
+  color: var(--ch-text) !important;
+}
+
 /* ── METRIC CARD — mobile 3-in-a-row ───────────────── */
 /* Override the large desktop size for narrow viewports */
 @media (max-width: 640px) {

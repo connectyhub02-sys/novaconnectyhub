@@ -340,10 +340,10 @@ export function BillingPlansConsole({
                 <div className="rounded-xl p-4" style={{ background: "rgba(16,185,129,0.08)", border: "1px solid rgba(16,185,129,0.22)" }}>
                   <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
                     <div className="flex items-start gap-3">
-                      <Calculator className="mt-0.5 h-4 w-4 shrink-0 text-emerald-300" />
+                      <Calculator className="mt-0.5 h-4 w-4 shrink-0 text-emerald-700" />
                       <div>
-                        <p className="text-[13px] font-semibold text-emerald-100">Centro de custo do plano</p>
-                        <p className="mt-1 text-[12px] leading-5 text-emerald-100/75">
+                        <p className="text-[13px] font-semibold text-emerald-800">Centro de custo do plano</p>
+                        <p className="mt-1 text-[12px] leading-5 text-emerald-700/80">
                           {formatCredits(1)} credito = {formatMoney(CONNECTY_CREDIT_UNIT_BRL)}. Custo alvo dos creditos inclusos = valor percebido / {INCLUDED_CREDIT_TARGET_MARKUP}.
                         </p>
                       </div>
@@ -372,10 +372,10 @@ export function BillingPlansConsole({
 
                 <div className="rounded-xl p-4" style={{ background: "rgba(14,165,233,0.08)", border: "1px solid rgba(14,165,233,0.22)" }}>
                   <div className="mb-3 flex items-start gap-3">
-                    <HardDrive className="mt-0.5 h-4 w-4 shrink-0 text-cyan-200" />
+                    <HardDrive className="mt-0.5 h-4 w-4 shrink-0 text-blue-700" />
                     <div>
-                      <p className="text-[13px] font-semibold text-cyan-100">Armazenamento incluso</p>
-                      <p className="mt-1 text-[12px] leading-5 text-cyan-100/70">
+                      <p className="text-[13px] font-semibold text-blue-800">Armazenamento incluso</p>
+                      <p className="mt-1 text-[12px] leading-5 text-blue-700/80">
                         Limites para fotos, videos, anexos de produtos, importacoes com IA e arquivos de conhecimento da empresa.
                       </p>
                     </div>
@@ -583,9 +583,9 @@ function MiniValue({ label, value }: { label: string; value: string }) {
 
 function CostValue({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg px-3 py-2.5" style={{ background: "rgba(15,23,42,0.28)", border: "1px solid rgba(16,185,129,0.18)" }}>
-      <p className="text-[10px] font-semibold uppercase text-emerald-100/60">{label}</p>
-      <p className="mt-1 truncate font-mono text-[15px] font-bold text-emerald-50">{value}</p>
+    <div className="rounded-lg px-3 py-2.5" style={{ background: "rgba(255,255,255,0.82)", border: "1px solid rgba(16,185,129,0.22)" }}>
+      <p className="text-[10px] font-semibold uppercase text-emerald-700/70">{label}</p>
+      <p className="mt-1 truncate font-mono text-[15px] font-bold text-slate-950">{value}</p>
     </div>
   );
 }
