@@ -273,8 +273,11 @@ export async function POST(request: NextRequest) {
     let removedMedia: SalesCatalogMedia[] = [];
     let removedMediaCleanup: SalesCatalogMediaCleanupResult | null = null;
     if (existingRow && keepMediaIds) {
-      media = previousMedia.filter((item) => keepMediaIds.has(item.id));
-      removedMedia = previousMedia.filter((item) => !keepMediaIds.has(item.id));
+      const keepMediaIdSet = new Set(keepMediaIds);
+      media = keepMediaIds
+        .map((id) => previousMedia.find((item) => item.id === id))
+        .filter((item): item is SalesCatalogMedia => Boolean(item));
+      removedMedia = previousMedia.filter((item) => !keepMediaIdSet.has(item.id));
     }
     const existingMediaBytes = media.reduce((total, item) => total + item.size, 0);
     const uploadedBytes = files.reduce((total, file) => total + file.size, 0);
@@ -2905,10 +2908,14 @@ function readKeepMediaIds(value: unknown) {
   const parsed = parseJson(value);
   if (!Array.isArray(parsed)) return null;
 
-  const ids = new Set<string>();
+  const ids: string[] = [];
+  const seen = new Set<string>();
   for (const item of parsed) {
     const id = readFormString(item);
-    if (id) ids.add(id);
+    if (id && !seen.has(id)) {
+      seen.add(id);
+      ids.push(id);
+    }
   }
 
   return ids;

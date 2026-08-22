@@ -4,6 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 import { ArrowRight, CheckCircle2, FileText, MessageCircle, Package, ShieldCheck, Sparkles, Store } from "lucide-react";
+import { SalesCatalogMediaGallery } from "@/components/checkout/sales-catalog-media-gallery";
 import { ProductCheckoutButton } from "@/components/checkout/sales-catalog-product-actions";
 import { mapSalesCatalogItem } from "@/lib/client-os/sales-catalog";
 import { normalizeCurrencyAmount } from "@/lib/sales-catalog/mercado-pago";
@@ -91,8 +92,7 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
   const related = await loadRelatedProducts(client, item, row.organization_id);
   const price = normalizeCurrencyAmount(item.offer.salePrice) ?? normalizeCurrencyAmount(item.price);
   const priceLabel = price ? formatCurrency(price) : "Sob consulta";
-  const cover = item.media.find((media) => media.kind === "image") ?? null;
-  const videos = item.media.filter((media) => media.kind === "video");
+  const galleryMedia = item.media.filter((media) => media.kind === "image" || media.kind === "video");
   const documents = item.media.filter((media) => media.kind === "document");
   const leadId = readSearchString(query.lead_id);
   const leadPhone = readSearchString(query.lead_phone);
@@ -121,22 +121,8 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
       <section className="mx-auto grid min-h-screen w-full max-w-6xl gap-6 px-4 py-5 sm:px-6 lg:grid-cols-[minmax(0,1fr)_380px] lg:px-8 lg:py-8">
         <div className="overflow-hidden rounded-[8px] border border-blue-100 bg-white shadow-2xl shadow-blue-950/10">
           <div className="grid gap-0 lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1fr)]">
-            <div className="relative min-h-[320px] border-b border-blue-100 bg-gradient-to-br from-blue-50 via-white to-emerald-50 lg:border-b-0 lg:border-r">
-              {cover ? (
-                <Image
-                  alt={item.title}
-                  src={cover.storageUrl}
-                  fill
-                  unoptimized
-                  sizes="(max-width: 1023px) 100vw, 52vw"
-                  className="object-contain p-6"
-                  priority
-                />
-              ) : (
-                <div className="flex h-full min-h-[320px] items-center justify-center">
-                  <Package className="h-20 w-20 text-blue-200" aria-hidden="true" />
-                </div>
-              )}
+            <div className="border-b border-blue-100 lg:border-b-0 lg:border-r">
+              <SalesCatalogMediaGallery title={item.title} media={galleryMedia} />
             </div>
 
             <div className="flex min-h-[420px] flex-col p-5 sm:p-7">
@@ -268,9 +254,9 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
             </div>
           </details>
 
-          {videos.length > 0 || documents.length > 0 ? (
+          {documents.length > 0 ? (
             <div className="mt-6 grid gap-3 sm:grid-cols-2">
-              {[...videos, ...documents].map((media) => (
+              {documents.map((media) => (
                 <a
                   key={media.id}
                   href={media.storageUrl}

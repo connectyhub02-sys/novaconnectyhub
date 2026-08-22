@@ -3206,6 +3206,8 @@ function buildSalesCatalogLines(items: RuntimeSalesCatalogItem[]) {
     "- Para item digital, conduza pagamento e envie/prepare o acesso dentro do WhatsApp.",
     "- Para servico ou assinatura, confirme escopo, agenda/duracao e proximo passo antes de pedir pagamento.",
     "- Se o item tiver arquivos, fale sobre foto/video somente quando o lead pedir ver ou quando a midia for realmente necessaria para decidir.",
+    "- Quando houver varias fotos/videos, nao prometa enviar tudo no WhatsApp. Use uma midia principal e direcione o restante para a pagina do produto.",
+    "- Se o lead pedir mais fotos, video ou detalhes visuais, responda curto e use a pagina do produto para a galeria completa.",
     "- Se nao houver item adequado, faca uma pergunta curta para identificar melhor a necessidade.",
     ...sellableItems.slice(0, 40).map((item) => {
       const mediaSummary = item.media.length > 0
@@ -5717,17 +5719,23 @@ function collectSalesCatalogAttachments(items: RuntimeSalesCatalogItem[]) {
   for (const item of items) {
     if (!isSalesCatalogItemSellable(item)) continue;
 
-    for (const media of item.media) {
-      if (!media.storageUrl) continue;
+    const media = selectSalesCatalogPrimaryMedia(item);
+    if (!media) continue;
 
-      attachments.push({ item, media });
-      if (attachments.length >= 2) {
-        return attachments;
-      }
-    }
+    attachments.push({ item, media });
+    break;
   }
 
   return attachments;
+}
+
+function selectSalesCatalogPrimaryMedia(item: RuntimeSalesCatalogItem) {
+  return (
+    item.media.find((media) => media.kind === "image" && media.storageUrl) ??
+    item.media.find((media) => media.kind === "video" && media.storageUrl) ??
+    item.media.find((media) => media.kind === "document" && media.storageUrl) ??
+    null
+  );
 }
 
 function shouldSendSalesCatalogMediaAttachments(latestInbound: ConversationMessageRow | null, text: string) {

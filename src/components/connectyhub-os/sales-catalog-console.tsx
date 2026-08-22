@@ -2210,6 +2210,16 @@ export function SalesCatalogConsole({
     event.target.value = "";
   }
 
+  function moveEditingMediaToCover(mediaId: string) {
+    setEditingMedia((current) => {
+      const target = current.find((media) => media.id === mediaId);
+
+      if (!target || target.kind !== "image") return current;
+
+      return [target, ...current.filter((media) => media.id !== mediaId)];
+    });
+  }
+
   function resetForm() {
     setEditingItemId(null);
     setEditingMedia([]);
@@ -4042,23 +4052,42 @@ export function SalesCatalogConsole({
 
             {editingItemId && editingMedia.length > 0 ? (
               <div className="grid gap-2">
-                {editingMedia.map((media) => (
-                  <div key={media.id} className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-[11px]" style={{ borderColor: "var(--ch-border)" }}>
-                    <span className="flex min-w-0 items-center gap-2 text-slate-300">
-                      <MediaIcon media={media} />
-                      <span className="truncate">{media.fileName}</span>
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setEditingMedia((current) => current.filter((entry) => entry.id !== media.id))}
-                      className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border text-slate-400 transition hover:bg-rose-400/10 hover:text-rose-100"
-                      style={{ borderColor: "var(--ch-border)" }}
-                      title="Remover arquivo"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                ))}
+                {editingMedia.map((media) => {
+                  const coverMediaId = editingMedia.find((entry) => entry.kind === "image")?.id ?? null;
+                  const isCover = media.kind === "image" && media.id === coverMediaId;
+
+                  return (
+                    <div key={media.id} className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-[11px]" style={{ borderColor: "var(--ch-border)" }}>
+                      <span className="flex min-w-0 items-center gap-2 text-slate-300">
+                        <MediaIcon media={media} />
+                        <span className="truncate">{media.fileName}</span>
+                        {isCover ? <NeonBadge tone="green">Capa</NeonBadge> : null}
+                      </span>
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        {media.kind === "image" && !isCover ? (
+                          <button
+                            type="button"
+                            onClick={() => moveEditingMediaToCover(media.id)}
+                            className="inline-flex h-7 items-center justify-center rounded-md border px-2 font-mono text-[9px] font-semibold uppercase tracking-wide text-emerald-200 transition hover:bg-emerald-400/10"
+                            style={{ borderColor: "var(--ch-border)" }}
+                            title="Usar como capa"
+                          >
+                            Capa
+                          </button>
+                        ) : null}
+                        <button
+                          type="button"
+                          onClick={() => setEditingMedia((current) => current.filter((entry) => entry.id !== media.id))}
+                          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border text-slate-400 transition hover:bg-rose-400/10 hover:text-rose-100"
+                          style={{ borderColor: "var(--ch-border)" }}
+                          title="Remover arquivo"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             ) : null}
 
