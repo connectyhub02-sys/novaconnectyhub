@@ -3186,6 +3186,7 @@ function buildSalesCatalogLines(items: RuntimeSalesCatalogItem[]) {
     "- Quando o lead perguntar se tem um produto, responda em ate 2 mensagens curtas, confirme que tem e apresente no maximo 3 opcoes com nome, preco e uma frase simples de contexto.",
     "- Quando o lead pedir detalhe, aprofunde aos poucos e pergunte o que ele prefere. Nao despeje descricao, beneficios, estoque, arquivos ou dados tecnicos de uma vez.",
     "- Para produto de checkout ConnectyHub, deixe detalhes longos para a pagina de produto; o sistema pode enviar automaticamente o botao Ver produto.",
+    "- Se o lead pedir dois ou mais produtos juntos, confirme os itens escolhidos de forma curta; o sistema deve criar um unico checkout com todos os itens somados.",
     "- Quando o lead escolher uma opcao ou disser que quer comprar/fechar/pagar, use a tag do item escolhido e responda curto; o sistema registra pedido e gera checkout/botao quando possivel.",
     "- Nunca escreva 'toque no botao abaixo', 'vou te enviar o botao' ou equivalente se a resposta nao tiver a tag exata do produto ou link que gera a acao.",
     "- Nunca mencione ao lead campos internos como destino da venda, checkout ConnectyHub, status, quantidade em estoque, alerta de estoque, arquivos, execucao, SKU, tipo de produto ou midias, a menos que ele pergunte diretamente.",
@@ -4441,14 +4442,18 @@ async function sendAgentResponse(input: {
   const cleanText = normalizeAssistantText(ensureLinkPromiseIsActionable(customerCatalogText, context));
   const orderIntentText = latestInbound?.text_content?.trim() ?? "";
   const hasOrderIntent = hasSalesCatalogOrderIntent(orderIntentText);
-  const { chunks, shouldSendAudio } = resolveOutboundDelivery(context, latestInbound, cleanText, renderedCatalog.items.length > 0);
-  const mixedCandidateChunks = shouldSendAudioResponse(context, latestInbound) && renderedCatalog.items.length === 0
+  const selectedCatalogItems = mergeRuntimeSalesCatalogItems(
+    renderedCatalog.items,
+    selectSalesCatalogItemsFromText(context.salesCatalog, orderIntentText),
+  );
+  const { chunks, shouldSendAudio } = resolveOutboundDelivery(context, latestInbound, cleanText, selectedCatalogItems.length > 0);
+  const mixedCandidateChunks = shouldSendAudioResponse(context, latestInbound) && selectedCatalogItems.length === 0
     ? splitChunksAroundLinkLines(chunks, context)
     : chunks;
-  const shouldUseMixedAudio = shouldUseMixedAudioDelivery(context, latestInbound, mixedCandidateChunks, renderedCatalog.items.length > 0);
+  const shouldUseMixedAudio = shouldUseMixedAudioDelivery(context, latestInbound, mixedCandidateChunks, selectedCatalogItems.length > 0);
   const outbound: OutboundMessage[] = [];
   const catalogAttachments = shouldSendSalesCatalogMediaAttachments(latestInbound, cleanText)
-    ? collectSalesCatalogAttachments(renderedCatalog.items)
+    ? collectSalesCatalogAttachments(selectedCatalogItems)
     : [];
 
   if (shouldUseMixedAudio) {
@@ -4523,7 +4528,7 @@ async function sendAgentResponse(input: {
         token: input.token,
         phone: input.phone,
         latestInbound,
-        items: renderedCatalog.items,
+        items: selectedCatalogItems,
         chunkIndex: productChunkIndex,
         chunksTotal: productChunkIndex,
         persistedChunks: persistedTextChunks,
@@ -4587,7 +4592,7 @@ async function sendAgentResponse(input: {
     const paymentLink = await recordSalesCatalogOrderIntent({
       client: input.client,
       context,
-      items: renderedCatalog.items,
+      items: selectedCatalogItems,
       text: cleanText,
       intentText: orderIntentText,
     });
@@ -4618,7 +4623,7 @@ async function sendAgentResponse(input: {
         token: input.token,
         phone: input.phone,
         latestInbound,
-        items: renderedCatalog.items,
+        items: selectedCatalogItems,
         chunkIndex: productChunkIndex,
         chunksTotal: productChunkIndex,
         persistedChunks: textPersistedChunks,
@@ -4691,7 +4696,7 @@ async function sendAgentResponse(input: {
   const paymentLink = await recordSalesCatalogOrderIntent({
     client: input.client,
     context,
-    items: renderedCatalog.items,
+    items: selectedCatalogItems,
     text: cleanText,
     intentText: orderIntentText,
   });
@@ -4721,7 +4726,7 @@ async function sendAgentResponse(input: {
       token: input.token,
       phone: input.phone,
       latestInbound,
-      items: renderedCatalog.items,
+      items: selectedCatalogItems,
       chunkIndex: productChunkIndex,
       chunksTotal: productChunkIndex,
       persistedChunks,
@@ -5333,28 +5338,101 @@ function referencesSalesCatalogItem(normalizedText: string, item: RuntimeSalesCa
   });
 }
 
+function selectSalesCatalogItemsFromText(items: RuntimeSalesCatalogItem[], text: string) {
+  const normalizedText = normalizeSearch(text);
+
+  if (!normalizedText) {
+    return [];
+  }
+
+  const sellableItems = items.filter(isSalesCatalogItemSellable);
+  const tokenFrequency = buildSalesCatalogTokenFrequency(sellableItems);
+
+  return sellableItems.filter((item) => {
+    if (item.tag && text.includes(item.tag)) {
+      return true;
+    }
+
+    if (referencesSalesCatalogItem(normalizedText, item)) {
+      return true;
+    }
+
+    const uniqueTokens = buildSalesCatalogSearchTokens(item).filter((token) => tokenFrequency.get(token) === 1);
+
+    return uniqueTokens.some((token) => normalizedText.includes(token));
+  });
+}
+
+function mergeRuntimeSalesCatalogItems(...groups: RuntimeSalesCatalogItem[][]) {
+  const merged = new Map<string, RuntimeSalesCatalogItem>();
+
+  for (const group of groups) {
+    for (const item of group) {
+      if (!merged.has(item.id)) {
+        merged.set(item.id, item);
+      }
+    }
+  }
+
+  return Array.from(merged.values());
+}
+
+function buildSalesCatalogTokenFrequency(items: RuntimeSalesCatalogItem[]) {
+  const frequency = new Map<string, number>();
+
+  for (const item of items) {
+    const seen = new Set(buildSalesCatalogSearchTokens(item));
+
+    for (const token of seen) {
+      frequency.set(token, (frequency.get(token) ?? 0) + 1);
+    }
+  }
+
+  return frequency;
+}
+
+function buildSalesCatalogSearchTokens(item: RuntimeSalesCatalogItem) {
+  const values = [
+    item.title,
+    item.category ?? "",
+    item.platformProductCode ?? "",
+    ...item.skus.map((sku) => sku.title ?? ""),
+    ...item.skus.map((sku) => sku.skuCode ?? ""),
+  ];
+  const tokens = values
+    .flatMap((value) => normalizeSearch(value).split(" "))
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 5 && !salesCatalogIgnoredSearchTokens.has(token));
+
+  return Array.from(new Set(tokens));
+}
+
 function salesCatalogCandidateTokensMatch(normalizedText: string, candidate: string) {
-  const ignoredTokens = new Set([
-    "ampola",
-    "capsula",
-    "capsulas",
-    "comprimido",
-    "comprimidos",
-    "produto",
-    "produtos",
-    "servico",
-    "servicos",
-    "tirzepatida",
-  ]);
   const tokens = candidate
     .split(" ")
-    .filter((token) => token.length >= 3 && !ignoredTokens.has(token))
+    .filter((token) => token.length >= 3 && !salesCatalogIgnoredSearchTokens.has(token))
     .slice(0, 6);
 
   if (tokens.length < 2) return false;
 
   return tokens.every((token) => normalizedText.includes(token));
 }
+
+const salesCatalogIgnoredSearchTokens = new Set([
+  "ampola",
+  "capsula",
+  "capsulas",
+  "comprimido",
+  "comprimidos",
+  "produto",
+  "produtos",
+  "servico",
+  "servicos",
+  "injetavel",
+  "injetaveis",
+  "testosterona",
+  "tirzepatida",
+]);
 
 function sanitizeSalesCatalogCustomerText(text: string, hasCatalogContext: boolean) {
   if (!hasCatalogContext) return text;
