@@ -52,10 +52,8 @@ import { normalizeCurrencyAmount } from "@/lib/sales-catalog/mercado-pago";
 import {
   formatSalesCatalogFulfillmentMode,
   formatSalesCatalogFulfillmentStatus,
-  formatSalesCatalogInline,
   formatSalesCatalogOrderStatus,
   formatSalesCatalogPaymentStatus,
-  formatSalesCatalogSalesDestination,
   formatSalesCatalogStockStatus,
   type ClientSalesCatalogItem,
   type ClientSalesCatalogOrder,
@@ -3084,7 +3082,7 @@ function renderPromptVariables(prompt: string, input: {
   }
 
   for (const item of input.salesCatalog ?? []) {
-    rendered = rendered.replaceAll(item.tag, formatSalesCatalogInline(item));
+    rendered = rendered.replaceAll(item.tag, formatSalesCatalogCustomerMention(item));
   }
 
   return rendered;
@@ -3175,7 +3173,12 @@ function buildSalesCatalogLines(items: RuntimeSalesCatalogItem[]) {
   return [
     "",
     "CATALOGO DE VENDAS DISPONIVEL:",
-    "- Quando o lead pedir um produto, servico, catalogo, foto, video, PDF, preco ou proposta, escolha o item exato abaixo e use a tag correspondente.",
+    "- Use o catalogo como memoria interna para conversar como uma pessoa real. Nunca copie a ficha tecnica completa para o lead.",
+    "- Quando o lead perguntar se tem um produto, responda em ate 2 mensagens curtas, confirme que tem e apresente no maximo 3 opcoes com nome, preco e uma frase simples de contexto.",
+    "- Quando o lead pedir detalhe, aprofunde aos poucos e pergunte o que ele prefere. Nao despeje descricao, beneficios, estoque, arquivos ou dados tecnicos de uma vez.",
+    "- Quando o lead escolher uma opcao ou disser que quer comprar/fechar/pagar, use a tag do item escolhido e responda curto; o sistema registra pedido e gera checkout/botao quando possivel.",
+    "- Nunca escreva 'toque no botao abaixo', 'vou te enviar o botao' ou equivalente se a resposta nao tiver a tag exata do produto ou link que gera a acao.",
+    "- Nunca mencione ao lead campos internos como destino da venda, checkout ConnectyHub, status, quantidade em estoque, alerta de estoque, arquivos, execucao, SKU, tipo de produto ou midias, a menos que ele pergunte diretamente.",
     "- Nunca invente produto, preco, arquivo ou condicao que nao esteja no catalogo.",
     "- Se o lead pedir algo generico, recomende no maximo 3 itens do catalogo e inclua a tag de cada um.",
     "- Para destino site externo, use a tag do botao externo do produto e nao gere pedido ou checkout ConnectyHub.",
@@ -3187,7 +3190,7 @@ function buildSalesCatalogLines(items: RuntimeSalesCatalogItem[]) {
     "- Para produto fisico, peca CEP/endereco quando precisar calcular entrega.",
     "- Para item digital, conduza pagamento e envie/prepare o acesso dentro do WhatsApp.",
     "- Para servico ou assinatura, confirme escopo, agenda/duracao e proximo passo antes de pedir pagamento.",
-    "- Se o item tiver arquivos, o sistema tentara enviar as midias no WhatsApp depois da resposta.",
+    "- Se o item tiver arquivos, fale sobre foto/video somente quando o lead pedir ver ou quando a midia for realmente necessaria para decidir.",
     "- Se nao houver item adequado, faca uma pergunta curta para identificar melhor a necessidade.",
     ...sellableItems.slice(0, 40).map((item) => {
       const mediaSummary = item.media.length > 0
@@ -3209,7 +3212,7 @@ function buildSalesCatalogLines(items: RuntimeSalesCatalogItem[]) {
         item.fulfillment.schedulingRequired ? "precisa agendar" : "",
         item.fulfillment.serviceDuration ? `duracao/prazo ${item.fulfillment.serviceDuration}` : "",
       ].filter(Boolean).join(", ");
-      const destinationSummary = formatSalesCatalogSalesDestination(item.salesDestination);
+      const destinationSummary = formatRuntimeSalesCatalogDestinationForPrompt(item);
       const externalSummary = item.salesDestination === "external_site"
         ? item.externalLinkButtonTag
           ? ` | botao externo: ${item.externalLinkButtonTag}`
@@ -3217,9 +3220,15 @@ function buildSalesCatalogLines(items: RuntimeSalesCatalogItem[]) {
             ? ` | site externo: ${item.productUrl}`
             : " | botao externo pendente"
         : "";
-      return `- ${item.tag} (${item.title})${item.price ? ` | ${item.price} ${item.currency}` : ""}${item.category ? ` | ${item.category}` : ""} | destino: ${destinationSummary}${externalSummary}${offerSummary ? ` | ${offerSummary}` : ""} | execucao: ${fulfillmentSummary} | estoque: ${inventorySummary} | ${mediaSummary}: ${preview(item.description, 420)}`;
+      return `- ${item.tag} (${item.title})${item.price ? ` | ${item.price} ${item.currency}` : ""}${item.category ? ` | categoria: ${item.category}` : ""} | venda interna: ${destinationSummary}${externalSummary}${offerSummary ? ` | oferta interna: ${offerSummary}` : ""} | execucao interna: ${fulfillmentSummary || "nao informado"} | disponibilidade interna: ${inventorySummary || "nao informado"} | midias internas: ${mediaSummary} | resumo interno: ${preview(item.description, 180)}`;
     }),
   ];
+}
+
+function formatRuntimeSalesCatalogDestinationForPrompt(item: RuntimeSalesCatalogItem) {
+  if (item.salesDestination === "external_site") return "site externo";
+  if (item.salesDestination === "manual_handoff") return "revisar destino da venda";
+  return "pagamento interno automatico";
 }
 
 function buildSalesCatalogCommerceLines(settings: ClientSalesCatalogSettings | null) {
@@ -4344,14 +4353,18 @@ async function sendAgentResponse(input: {
   const latestInbound = findLatestInbound(context.messages);
   const renderedLinks = renderLinkButtonTags(input.text, context.linkButtons, { lead: context.lead });
   const renderedCatalog = renderSalesCatalogTags(renderedLinks, context.salesCatalog);
-  const cleanText = normalizeAssistantText(ensureLinkPromiseIsActionable(renderedCatalog.text, context));
+  const customerCatalogText = sanitizeSalesCatalogCustomerText(renderedCatalog.text, context.salesCatalog.length > 0);
+  const cleanText = normalizeAssistantText(ensureLinkPromiseIsActionable(customerCatalogText, context));
+  const orderIntentText = buildSalesCatalogOrderIntentText(latestInbound, cleanText);
   const { chunks, shouldSendAudio } = resolveOutboundDelivery(context, latestInbound, cleanText, renderedCatalog.items.length > 0);
   const mixedCandidateChunks = shouldSendAudioResponse(context, latestInbound) && renderedCatalog.items.length === 0
     ? splitChunksAroundLinkLines(chunks, context)
     : chunks;
   const shouldUseMixedAudio = shouldUseMixedAudioDelivery(context, latestInbound, mixedCandidateChunks, renderedCatalog.items.length > 0);
   const outbound: OutboundMessage[] = [];
-  const catalogAttachments = collectSalesCatalogAttachments(renderedCatalog.items);
+  const catalogAttachments = shouldSendSalesCatalogMediaAttachments(latestInbound, cleanText)
+    ? collectSalesCatalogAttachments(renderedCatalog.items)
+    : [];
 
   if (shouldUseMixedAudio) {
     const replyTargets = await resolveOutboundReplyTargets(input.client, context, mixedCandidateChunks).catch(() => []);
@@ -4472,6 +4485,7 @@ async function sendAgentResponse(input: {
       context,
       items: renderedCatalog.items,
       text: cleanText,
+      intentText: orderIntentText,
     });
 
     if (paymentLink) {
@@ -4555,6 +4569,7 @@ async function sendAgentResponse(input: {
     context,
     items: renderedCatalog.items,
     text: cleanText,
+    intentText: orderIntentText,
   });
 
   if (paymentLink) {
@@ -5127,19 +5142,109 @@ async function persistInteractiveButtonFallbackEvent(
 function renderSalesCatalogTags(text: string, items: RuntimeSalesCatalogItem[]) {
   let rendered = text;
   const selected = new Map<string, RuntimeSalesCatalogItem>();
+  const normalizedOriginalText = normalizeSearch(text);
 
   for (const item of items) {
     if (!isSalesCatalogItemSellable(item)) continue;
-    if (!item.tag || !rendered.includes(item.tag)) continue;
+
+    const hasTag = Boolean(item.tag && rendered.includes(item.tag));
+    const hasNaturalReference = referencesSalesCatalogItem(normalizedOriginalText, item);
+
+    if (!hasTag && !hasNaturalReference) continue;
 
     selected.set(item.id, item);
-    rendered = rendered.replaceAll(item.tag, formatSalesCatalogInline(item));
+
+    if (hasTag) {
+      rendered = rendered.replaceAll(item.tag, formatSalesCatalogCustomerMention(item));
+    }
   }
 
   return {
     text: rendered,
     items: Array.from(selected.values()),
   };
+}
+
+function formatSalesCatalogCustomerMention(item: RuntimeSalesCatalogItem) {
+  const price = item.offer.salePrice ?? item.price;
+  const priceText = price ? ` - ${price}${item.currency ? ` ${item.currency}` : ""}` : "";
+  const highlightText = item.highlightLabel ? ` (${item.highlightLabel})` : "";
+
+  return `${item.title}${highlightText}${priceText}`.replace(/\s+/g, " ").trim();
+}
+
+function referencesSalesCatalogItem(normalizedText: string, item: RuntimeSalesCatalogItem) {
+  if (!normalizedText) return false;
+
+  const candidates = [
+    item.title,
+    ...item.skus.map((sku) => sku.title ?? ""),
+    item.platformProductCode ?? "",
+  ]
+    .map((value) => normalizeSearch(value))
+    .filter((value) => value.length >= 5);
+
+  return candidates.some((candidate) => {
+    if (normalizedText.includes(candidate)) return true;
+    return salesCatalogCandidateTokensMatch(normalizedText, candidate);
+  });
+}
+
+function salesCatalogCandidateTokensMatch(normalizedText: string, candidate: string) {
+  const ignoredTokens = new Set([
+    "ampola",
+    "capsula",
+    "capsulas",
+    "comprimido",
+    "comprimidos",
+    "produto",
+    "produtos",
+    "servico",
+    "servicos",
+    "tirzepatida",
+  ]);
+  const tokens = candidate
+    .split(" ")
+    .filter((token) => token.length >= 3 && !ignoredTokens.has(token))
+    .slice(0, 6);
+
+  if (tokens.length < 2) return false;
+
+  return tokens.every((token) => normalizedText.includes(token));
+}
+
+function sanitizeSalesCatalogCustomerText(text: string, hasCatalogContext: boolean) {
+  if (!hasCatalogContext) return text;
+
+  const filtered: string[] = [];
+  let skippingInternalBullets = false;
+
+  for (const line of text.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    const normalized = normalizeSearch(trimmed);
+    const startsInternalSection = /^(destino da venda|botao para enviar ao lead|site do produto|arquivos que vou|estoque e disponibilidade|oferta comercial|entrega execucao|entrega e frete|variacoes disponiveis|venda interna|oferta interna|execucao interna|disponibilidade interna|midias internas|resumo interno)\b/.test(normalized);
+    const startsInternalField = /^(?:[-*]\s*)?(?:status|quantidade disponivel|alerta de baixo estoque|aceita encomenda|tipo|arquivo|sku|destino|execucao|midias internas|disponibilidade interna)\b/.test(normalized);
+
+    if (startsInternalSection || startsInternalField) {
+      skippingInternalBullets = true;
+      continue;
+    }
+
+    if (skippingInternalBullets && /^\s*[-*]\s+/.test(line)) {
+      continue;
+    }
+
+    if (!trimmed) {
+      skippingInternalBullets = false;
+      filtered.push(line);
+      continue;
+    }
+
+    skippingInternalBullets = false;
+    filtered.push(line);
+  }
+
+  return filtered.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
 function collectSalesCatalogAttachments(items: RuntimeSalesCatalogItem[]) {
@@ -5152,7 +5257,7 @@ function collectSalesCatalogAttachments(items: RuntimeSalesCatalogItem[]) {
       if (!media.storageUrl) continue;
 
       attachments.push({ item, media });
-      if (attachments.length >= 6) {
+      if (attachments.length >= 2) {
         return attachments;
       }
     }
@@ -5161,18 +5266,33 @@ function collectSalesCatalogAttachments(items: RuntimeSalesCatalogItem[]) {
   return attachments;
 }
 
+function shouldSendSalesCatalogMediaAttachments(latestInbound: ConversationMessageRow | null, text: string) {
+  const inboundText = latestInbound?.text_content?.trim() ?? "";
+  const normalized = normalizeSearch([inboundText, text].filter(Boolean).join(" "));
+
+  return /\b(foto|fotos|imagem|imagens|video|videos|arquivo|arquivos|pdf|midia|midias|catalogo|catalogos|embalagem|mostra|mostrar)\b/.test(normalized);
+}
+
+function buildSalesCatalogOrderIntentText(latestInbound: ConversationMessageRow | null, text: string) {
+  const inboundText = latestInbound?.text_content?.trim() ?? "";
+
+  return [inboundText, text].filter(Boolean).join("\n");
+}
+
 async function recordSalesCatalogOrderIntent(input: {
   client: SupabaseClient;
   context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
   items: RuntimeSalesCatalogItem[];
   text: string;
+  intentText?: string;
 }): Promise<SalesCatalogPaymentLinkResult | null> {
   const checkoutCatalogItems = input.items.filter((item) => item.salesDestination === "connectyhub_checkout");
   const unavailableItems = checkoutCatalogItems.filter((item) => item.status === "active" && !isSalesCatalogItemSellable(item));
   const items = checkoutCatalogItems.filter((item) => item.status === "active" && isSalesCatalogItemSellable(item)).slice(0, 8);
+  const intentText = input.intentText ?? input.text;
 
-  if (items.length === 0 || !hasSalesCatalogOrderIntent(input.text)) {
-    if (unavailableItems.length > 0 && hasSalesCatalogOrderIntent(input.text)) {
+  if (items.length === 0 || !hasSalesCatalogOrderIntent(intentText)) {
+    if (unavailableItems.length > 0 && hasSalesCatalogOrderIntent(intentText)) {
       await persistSalesCatalogUnavailableOrderAttempt({
         client: input.client,
         context: input.context,
