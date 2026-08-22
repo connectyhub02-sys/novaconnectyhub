@@ -130,6 +130,10 @@ const inboundAudioDownloadTimeoutMs = 20000;
 const inboundAudioFileFetchTimeoutMs = 25000;
 const inboundAudioTranscriptionTimeoutMs = 45000;
 const outboundAudioDeliveryTimeoutMs = 30000;
+const outboundTextDeliveryTimeoutMs = 30000;
+const whatsappPresenceTimeoutMs = 12000;
+const whatsappReactionTimeoutMs = 8000;
+const geminiAgentResponseTimeoutMs = 60000;
 const linkButtonTagRegex = /\{\{\s*link_[^{}]+?\s*\}\}/gi;
 
 type AgentRunRow = {
@@ -1860,7 +1864,7 @@ async function generateAgentResponse(input: {
   const url = new URL(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelId)}:generateContent`);
   url.searchParams.set("key", input.credentials.apiKey);
 
-  const response = await fetch(url, {
+  const response = await fetchWithTimeout(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -1876,8 +1880,8 @@ async function generateAgentResponse(input: {
       safetySettings: geminiSafetySettings,
     }),
     cache: "no-store",
-  });
-  const data = await readProviderResponse(response);
+  }, geminiAgentResponseTimeoutMs, "Gemini generateContent do agente WhatsApp");
+  const data = await withTimeout(readProviderResponse(response), geminiAgentResponseTimeoutMs, "Gemini leitura da resposta do agente WhatsApp");
 
   if (!response.ok) {
     throw new Error(readProviderError(data) ?? `Gemini respondeu status ${response.status}.`);
@@ -2031,6 +2035,9 @@ function buildSystemInstruction(input: {
     "- Responda sempre em portugues do Brasil.",
     "- Se usar um link rastreado, inclua a URL ou tag exatamente como aparece na lista de links.",
     "- 'Nota interna' e contexto operacional — nunca repita essa expressao para o lead.",
+    "- Quando a mensagem do lead vier com '[Respondendo a mensagem: ...]', trate esse trecho como a mensagem citada no WhatsApp e responda ao texto/audio/midia atual do lead considerando essa referencia.",
+    "- Nao responda a mensagem citada como se ela tivesse acabado de chegar; use a citacao para entender 'esse', 'isso', 'essa opcao', 'gostei', 'quero esse' e referencias parecidas.",
+    "- Se a citacao for audio, imagem, video ou documento sem texto legivel, seja transparente e peca um resumo curto apenas se o contexto atual nao for suficiente.",
     "- Audio sem transcricao: nao mencione 'midia' ou 'arquivo'. Diga naturalmente que nao conseguiu ouvir e peca pra resumir em texto.",
     "- Midia com analise automatica: use a analise como contexto real antes de responder.",
     "- Midia sem analise: nao finja que viu. Peca descricao ou reenvio.",
@@ -3606,13 +3613,13 @@ function extractQuotedMessageContext(message: ConversationMessageRow, messages: 
   const payload = readRecord(message.payload);
   if (!payload) return null;
 
-  const quotedText =
-    findNestedQuotedText(payload, "quotedMsg") ??
-    findNestedQuotedText(payload, "quotedMessage") ??
-    findNestedQuotedText(payload, "contextInfo");
+  const quotedContext =
+    findNestedQuotedMessageContext(payload, "quotedMsg") ??
+    findNestedQuotedMessageContext(payload, "quotedMessage") ??
+    findNestedQuotedMessageContext(payload, "contextInfo");
 
-  if (quotedText) {
-    const trimmed = quotedText.trim();
+  if (quotedContext) {
+    const trimmed = quotedContext.trim();
     if (trimmed.length > 0) {
       return trimmed.slice(0, 500);
     }
@@ -3624,36 +3631,110 @@ function extractQuotedMessageContext(message: ConversationMessageRow, messages: 
     : null;
 }
 
-function findNestedQuotedText(payload: Record<string, unknown>, rootKey: string): string | null {
+function findNestedQuotedMessageContext(payload: Record<string, unknown>, rootKey: string): string | null {
   for (const [key, value] of Object.entries(payload)) {
     if (key.toLowerCase() === rootKey.toLowerCase() && isRecord(value)) {
-      const text =
-        asString(value.text) ??
-        asString(value.body) ??
-        asString(value.caption) ??
-        asString(value.conversation) ??
-        asString(value.content);
-      if (text) return text;
-
-      for (const inner of Object.values(value)) {
-        if (isRecord(inner)) {
-          const innerText =
-            asString(inner.text) ??
-            asString(inner.body) ??
-            asString(inner.caption) ??
-            asString(inner.conversation);
-          if (innerText) return innerText;
-        }
-      }
-      return null;
+      return describeQuotedMessageContext(value);
     }
 
     if (isRecord(value)) {
-      const found = findNestedQuotedText(value as Record<string, unknown>, rootKey);
+      const found = findNestedQuotedMessageContext(value as Record<string, unknown>, rootKey);
       if (found) return found;
     }
   }
   return null;
+}
+
+function describeQuotedMessageContext(value: Record<string, unknown>): string | null {
+  const text = readQuotedMessageText(value);
+
+  if (text) {
+    return text;
+  }
+
+  const mediaKind = detectQuotedPayloadMediaKind(value);
+
+  if (mediaKind) {
+    const caption = findString(value, ["caption", "fileName", "filename", "title", "name"]);
+    return caption
+      ? `${formatQuotedMediaKind(mediaKind)} citado: ${caption}`
+      : `${formatQuotedMediaKind(mediaKind)} citado sem texto legivel.`;
+  }
+
+  return null;
+}
+
+function readQuotedMessageText(value: Record<string, unknown>): string | null {
+  const text =
+    asString(value.text) ??
+    asString(value.body) ??
+    asString(value.caption) ??
+    asString(value.conversation) ??
+    asString(value.content);
+
+  if (text) return text;
+
+  for (const inner of Object.values(value)) {
+    if (!isRecord(inner)) continue;
+
+    const innerText =
+      asString(inner.text) ??
+      asString(inner.body) ??
+      asString(inner.caption) ??
+      asString(inner.conversation);
+
+    if (innerText) return innerText;
+  }
+
+  return null;
+}
+
+function detectQuotedPayloadMediaKind(value: Record<string, unknown>): InboundMediaKind | "audio" | null {
+  const signature = normalizeSearch(collectQuotedPayloadSignature(value).join(" "));
+
+  if (isAudioSignature(signature)) return "audio";
+  if (signature.includes("image") || signature.includes("photo") || signature.includes("jpeg") || signature.includes("png") || signature.includes("webp") || signature.includes("imagem")) {
+    return "image";
+  }
+  if (signature.includes("video") || signature.includes("mp4") || signature.includes("quicktime")) {
+    return "video";
+  }
+  if (signature.includes("document") || signature.includes("file") || signature.includes("pdf") || signature.includes("application") || signature.includes("arquivo")) {
+    return "document";
+  }
+
+  return null;
+}
+
+function collectQuotedPayloadSignature(value: unknown, depth = 0): string[] {
+  if (!value || depth > 4) return [];
+
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => collectQuotedPayloadSignature(item, depth + 1));
+  }
+
+  if (!isRecord(value)) {
+    return [];
+  }
+
+  const parts: string[] = [];
+
+  for (const [key, item] of Object.entries(value)) {
+    parts.push(key);
+
+    if (typeof item === "string") {
+      const normalizedKey = normalizeSearch(key);
+      if (/\b(type|kind|mimetype|mime type|media type|message type|caption|filename|file name|url)\b/.test(normalizedKey)) {
+        parts.push(item);
+      }
+    } else if (typeof item === "boolean" && item) {
+      parts.push(key);
+    } else if (isRecord(item) || Array.isArray(item)) {
+      parts.push(...collectQuotedPayloadSignature(item, depth + 1));
+    }
+  }
+
+  return parts;
 }
 
 function findQuotedProviderMessageId(payload: JsonRecord) {
@@ -5769,6 +5850,7 @@ async function sendSalesCatalogMediaAttachments(input: {
     const providerResponse = await callUazapi(input.context.credentials, "/send/media", {
       method: "POST",
       token: input.token,
+      timeoutMs: outboundTextDeliveryTimeoutMs,
       body: {
         number: input.phone,
         type: media.kind,
@@ -6518,6 +6600,7 @@ async function sendWhatsappText(input: {
   return callUazapi(input.credentials, "/send/text", {
     method: "POST",
     token: input.token,
+    timeoutMs: outboundTextDeliveryTimeoutMs,
     body: {
       number: input.phone,
       text: input.text,
@@ -6546,6 +6629,7 @@ async function sendWhatsappInteractiveButtons(input: {
   return callUazapi(input.credentials, "/send/menu", {
     method: "POST",
     token: input.token,
+    timeoutMs: outboundTextDeliveryTimeoutMs,
     body: {
       number: input.phone,
       type: "button",
@@ -7204,7 +7288,6 @@ function buildMessageEventSignature(message: ConversationMessageRow | null) {
   const payload = readRecord(message.payload);
   const providerMessage = readProviderMessageRecord(message);
   const content = readRecord(providerMessage?.content);
-  const rawPayload = payload ? JSON.stringify(payload).slice(0, 4000) : "";
 
   return normalizeSearch([
     message.message_type,
@@ -7218,9 +7301,28 @@ function buildMessageEventSignature(message: ConversationMessageRow | null) {
     asString(providerMessage?.kind),
     asString(providerMessage?.event),
     asString(providerMessage?.action),
+    asString(providerMessage?.edited),
+    asString(providerMessage?.deleted),
+    asString(providerMessage?.revoked),
+    asString(providerMessage?.reaction),
+    formatTruthyEventFlag(providerMessage?.edited, "edited"),
+    formatTruthyEventFlag(providerMessage?.deleted, "deleted"),
+    formatTruthyEventFlag(providerMessage?.revoked, "revoked"),
+    formatTruthyEventFlag(providerMessage?.reaction, "reaction"),
     asString(content?.type),
-    rawPayload,
+    asString(content?.edited),
+    asString(content?.deleted),
+    asString(content?.revoked),
+    asString(content?.reaction),
+    formatTruthyEventFlag(content?.edited, "edited"),
+    formatTruthyEventFlag(content?.deleted, "deleted"),
+    formatTruthyEventFlag(content?.revoked, "revoked"),
+    formatTruthyEventFlag(content?.reaction, "reaction"),
   ].filter(Boolean).join(" "));
+}
+
+function formatTruthyEventFlag(value: unknown, label: string) {
+  return value === true ? label : null;
 }
 
 function detectSignalMediaKind(message: ConversationMessageRow | null): InboundMediaKind | "audio" | null {
@@ -8481,70 +8583,84 @@ async function shouldBlockInternalInstance(client: SupabaseClient, behavior: Wha
 async function markConversationRead(credentials: UazapiCredentials, token: string, phone: string, providerChatId: string | null, providerMessageId: string | null) {
   const normalizedPhone = normalizeChatAddress(phone);
   const chatAddress = providerChatId?.trim() || (isWhatsappGroupChatId(normalizedPhone) ? normalizedPhone : `${normalizedPhone}@s.whatsapp.net`);
-  const chatRead = await callUazapi(credentials, "/chat/read", {
-    method: "POST",
-    token,
-    body: {
-      number: chatAddress,
-      read: true,
-    },
-    tolerateError: true,
-  });
 
-  if (!chatRead.ok && providerChatId) {
-    await callUazapi(credentials, "/chat/read", {
+  try {
+    const chatRead = await callUazapi(credentials, "/chat/read", {
       method: "POST",
       token,
       body: {
-        number: normalizedPhone,
-        chatid: providerChatId,
+        number: chatAddress,
         read: true,
       },
       tolerateError: true,
-    });
-  }
-
-  if (providerMessageId) {
-    const messageRead = await callUazapi(credentials, "/message/markread", {
-      method: "POST",
-      token,
-      body: { id: [providerMessageId] },
-      tolerateError: true,
+      timeoutMs: whatsappPresenceTimeoutMs,
     });
 
-    if (!messageRead.ok) {
-      await callUazapi(credentials, "/message/markread", {
+    if (!chatRead.ok && providerChatId) {
+      await callUazapi(credentials, "/chat/read", {
         method: "POST",
         token,
         body: {
           number: normalizedPhone,
-          chatid: providerChatId ?? undefined,
-          messageId: providerMessageId,
-          messageid: providerMessageId,
-          id: providerMessageId,
+          chatid: providerChatId,
+          read: true,
         },
         tolerateError: true,
+        timeoutMs: whatsappPresenceTimeoutMs,
       });
     }
+
+    if (providerMessageId) {
+      const messageRead = await callUazapi(credentials, "/message/markread", {
+        method: "POST",
+        token,
+        body: { id: [providerMessageId] },
+        tolerateError: true,
+        timeoutMs: whatsappPresenceTimeoutMs,
+      });
+
+      if (!messageRead.ok) {
+        await callUazapi(credentials, "/message/markread", {
+          method: "POST",
+          token,
+          body: {
+            number: normalizedPhone,
+            chatid: providerChatId ?? undefined,
+            messageId: providerMessageId,
+            messageid: providerMessageId,
+            id: providerMessageId,
+          },
+          tolerateError: true,
+          timeoutMs: whatsappPresenceTimeoutMs,
+        });
+      }
+    }
+  } catch {
+    return;
   }
 }
 
 async function ensureWhatsappPresencePrivacy(credentials: UazapiCredentials, token: string, behavior: WhatsappBehaviorConfig) {
   const alwaysVisible = isAlwaysPresenceMode(behavior);
 
-  await callUazapi(credentials, "/instance/privacy", {
-    method: "POST",
-    token,
-    body: {
-      groupadd: "contacts",
-      last: alwaysVisible ? "all" : "contacts",
-      status: "contacts",
-      profile: "all",
-      readreceipts: behavior.markAsRead ? "all" : "none",
-      online: alwaysVisible ? "all" : "match_last_seen",
-    },
-    tolerateError: true,
-  });
+  try {
+    await callUazapi(credentials, "/instance/privacy", {
+      method: "POST",
+      token,
+      body: {
+        groupadd: "contacts",
+        last: alwaysVisible ? "all" : "contacts",
+        status: "contacts",
+        profile: "all",
+        readreceipts: behavior.markAsRead ? "all" : "none",
+        online: alwaysVisible ? "all" : "match_last_seen",
+      },
+      tolerateError: true,
+      timeoutMs: whatsappPresenceTimeoutMs,
+    });
+  } catch {
+    return;
+  }
 }
 
 async function setChatPresence(
@@ -8557,25 +8673,35 @@ async function setChatPresence(
   const number = normalizeChatAddress(phone);
   const delay = delayMs == null ? undefined : Math.min(Math.max(Math.round(delayMs), 1000), 300000);
 
-  await callUazapi(credentials, "/message/presence", {
-    method: "POST",
-    token,
-    body: {
-      number,
-      presence,
-      ...(delay ? { delay } : {}),
-    },
-    tolerateError: true,
-  });
+  try {
+    await callUazapi(credentials, "/message/presence", {
+      method: "POST",
+      token,
+      body: {
+        number,
+        presence,
+        ...(delay ? { delay } : {}),
+      },
+      tolerateError: true,
+      timeoutMs: whatsappPresenceTimeoutMs,
+    });
+  } catch {
+    return;
+  }
 }
 
 async function setPresenceAvailable(credentials: UazapiCredentials, token: string) {
-  await callUazapi(credentials, "/instance/presence", {
-    method: "POST",
-    token,
-    body: { presence: "available" },
-    tolerateError: true,
-  });
+  try {
+    await callUazapi(credentials, "/instance/presence", {
+      method: "POST",
+      token,
+      body: { presence: "available" },
+      tolerateError: true,
+      timeoutMs: whatsappPresenceTimeoutMs,
+    });
+  } catch {
+    return;
+  }
 }
 
 async function maybeSetInstanceAvailable(
@@ -8627,16 +8753,21 @@ async function sendEmojiReaction(input: {
 
   const emoji = pickContextualEmoji(input.userText);
 
-  await callUazapi(input.credentials, "/message/react", {
-    method: "POST",
-    token: input.token,
-    body: {
-      number: input.phone,
-      messageId: input.messageId,
-      reaction: emoji,
-    },
-    tolerateError: true,
-  });
+  try {
+    await callUazapi(input.credentials, "/message/react", {
+      method: "POST",
+      token: input.token,
+      timeoutMs: whatsappReactionTimeoutMs,
+      body: {
+        number: input.phone,
+        messageId: input.messageId,
+        reaction: emoji,
+      },
+      tolerateError: true,
+    });
+  } catch {
+    return;
+  }
 }
 
 function pickContextualEmoji(text: string): string {
@@ -9517,6 +9648,11 @@ function formatMediaKind(kind: InboundMediaKind) {
   if (kind === "image") return "Imagem";
   if (kind === "video") return "Video";
   return "Documento";
+}
+
+function formatQuotedMediaKind(kind: InboundMediaKind | "audio") {
+  if (kind === "audio") return "Audio";
+  return formatMediaKind(kind);
 }
 
 function defaultMimeTypeForKind(kind: InboundMediaKind) {

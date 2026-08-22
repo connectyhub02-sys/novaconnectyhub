@@ -28,16 +28,20 @@ describe("WhatsApp quoted reply context", () => {
   });
 
   it("extracts quoted text from common WhatsApp provider payload shapes", () => {
-    const extractor = sourceBetween("function extractQuotedMessageContext", "function findNestedQuotedText");
+    const extractor = sourceBetween("function extractQuotedMessageContext", "function findNestedQuotedMessageContext");
+    const nestedExtractor = sourceBetween("function findNestedQuotedMessageContext", "function findQuotedProviderMessageId");
 
-    expect(extractor).toContain('findNestedQuotedText(payload, "quotedMsg")');
-    expect(extractor).toContain('findNestedQuotedText(payload, "quotedMessage")');
-    expect(extractor).toContain('findNestedQuotedText(payload, "contextInfo")');
+    expect(extractor).toContain('findNestedQuotedMessageContext(payload, "quotedMsg")');
+    expect(extractor).toContain('findNestedQuotedMessageContext(payload, "quotedMessage")');
+    expect(extractor).toContain('findNestedQuotedMessageContext(payload, "contextInfo")');
     expect(extractor).toContain("trimmed.slice(0, 500)");
+    expect(nestedExtractor).toContain("describeQuotedMessageContext(value)");
+    expect(nestedExtractor).toContain("detectQuotedPayloadMediaKind(value)");
+    expect(nestedExtractor).toContain("formatQuotedMediaKind(mediaKind)");
   });
 
   it("resolves provider quoted ids against the loaded conversation history", () => {
-    const extractor = sourceBetween("function extractQuotedMessageContext", "function findNestedQuotedText");
+    const extractor = sourceBetween("function extractQuotedMessageContext", "function findNestedQuotedMessageContext");
     const idExtractor = sourceBetween("function findQuotedProviderMessageId", "function findQuotedMessageTextByProviderId");
     const historyResolver = sourceBetween("function findQuotedMessageTextByProviderId", "function providerMessageIdsMatch");
     const matcher = sourceBetween("function providerMessageIdsMatch", "function isRecord");
@@ -50,5 +54,13 @@ describe("WhatsApp quoted reply context", () => {
     expect(historyResolver).toContain("buildMessageText(candidate)");
     expect(matcher).toContain("normalizeProviderMessageId");
     expect(matcher).toContain("normalizedLeft.endsWith(normalizedRight)");
+  });
+
+  it("teaches all agents how to use quoted WhatsApp context without treating it as a new message", () => {
+    const systemInstruction = sourceBetween("function buildSystemInstruction", "function resolveRuntimeAgentPrompt");
+
+    expect(systemInstruction).toContain("Quando a mensagem do lead vier com '[Respondendo a mensagem: ...]'");
+    expect(systemInstruction).toContain("Nao responda a mensagem citada como se ela tivesse acabado de chegar");
+    expect(systemInstruction).toContain("Se a citacao for audio, imagem, video ou documento sem texto legivel");
   });
 });
