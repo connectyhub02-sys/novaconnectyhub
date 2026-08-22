@@ -90,12 +90,12 @@ export function CheckoutStatusPoller({
     <div className={cn(
       "mt-5 flex items-center justify-between gap-3 rounded-[8px] border px-3 py-2 text-sm",
       tone === "success"
-        ? "border-emerald-300/40 bg-emerald-400/12 text-emerald-100"
+        ? "border-emerald-200 bg-emerald-50 text-[#128C4A]"
         : tone === "error"
-          ? "border-rose-300/40 bg-rose-400/12 text-rose-100"
+          ? "border-rose-200 bg-rose-50 text-rose-700"
           : tone === "warning"
-            ? "border-amber-300/40 bg-amber-400/12 text-amber-100"
-            : "border-cyan-300/40 bg-cyan-400/12 text-cyan-100",
+            ? "border-amber-200 bg-amber-50 text-amber-700"
+            : "border-blue-100 bg-blue-50 text-blue-700",
     )}>
       <div>
         <p className="font-semibold">{formatStatus(status)}</p>

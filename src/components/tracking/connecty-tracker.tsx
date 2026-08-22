@@ -18,6 +18,7 @@ type TrackPayload = {
 type PermissionSignal = "granted" | "denied" | "prompt" | "unsupported" | "unknown";
 type PermissionRequestResult = "granted" | "denied" | "dismissed" | "failed" | "unsupported";
 type PermissionStep = "push" | "gps";
+type PermissionPromptAudience = "dashboard" | "public";
 
 type PermissionPromptState = {
   push: PermissionSignal;
@@ -331,19 +332,20 @@ export function ConnectyTracker() {
     return null;
   }
 
-  const activeContent = getActivePromptContent(permissions.activeStep, permissions[permissions.activeStep]);
+  const promptAudience: PermissionPromptAudience = isDashboardPath(pathname) ? "dashboard" : "public";
+  const activeContent = getActivePromptContent(permissions.activeStep, permissions[permissions.activeStep], promptAudience);
 
   return (
-    <div className="fixed inset-x-3 bottom-[6.5rem] z-[10000] mx-auto max-h-[calc(100dvh-8rem)] max-w-xl overflow-y-auto rounded-lg border border-cyan-400/25 bg-slate-950/95 p-3 text-slate-100 shadow-2xl shadow-cyan-950/30 backdrop-blur md:bottom-24 md:p-4">
+    <div className="fixed inset-x-3 bottom-4 z-[10000] mx-auto max-h-[calc(100dvh-2rem)] max-w-md overflow-y-auto rounded-[8px] border border-blue-100 bg-white p-3 text-slate-950 shadow-2xl shadow-blue-950/20 backdrop-blur md:bottom-6 md:p-4">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="font-mono text-[10px] font-semibold uppercase tracking-widest text-cyan-200">{activeContent.stepLabel}</p>
-          <p className="mt-1 text-sm font-semibold text-white">{activeContent.title}</p>
-          <p className="mt-1 text-xs leading-5 text-slate-300">
+          <p className="text-[10px] font-bold uppercase text-blue-700">{activeContent.stepLabel}</p>
+          <p className="mt-1 text-sm font-black text-slate-950">{activeContent.title}</p>
+          <p className="mt-1 text-xs leading-5 text-slate-600">
             {activeContent.description}
           </p>
           {permissions.message ? (
-            <p className="mt-2 rounded-md border border-cyan-400/30 bg-cyan-400/10 px-3 py-2 text-xs font-medium leading-5 text-cyan-100">
+            <p className="mt-2 rounded-[8px] border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-semibold leading-5 text-blue-700">
               {permissions.message}
             </p>
           ) : null}
@@ -351,7 +353,7 @@ export function ConnectyTracker() {
 
         <button
           type="button"
-          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-slate-700 text-slate-300 transition hover:bg-slate-800 hover:text-white"
+          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] border border-blue-100 text-slate-500 transition hover:border-blue-300 hover:text-blue-700"
           data-track-event="tracking_prompt_dismiss_clicked"
           aria-label="Fechar aviso de novidades"
           onClick={handleDismissPrompt}
@@ -360,22 +362,22 @@ export function ConnectyTracker() {
         </button>
       </div>
 
-      <div className={`mt-3 rounded-md border p-3 ${activeContent.containerClass}`}>
+      <div className={`mt-3 rounded-[8px] border p-3 ${activeContent.containerClass}`}>
         <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex min-w-0 gap-3">
-            <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-md ${activeContent.iconClass}`}>
+            <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-[8px] ${activeContent.iconClass}`}>
               <activeContent.Icon className="h-4 w-4" aria-hidden="true" />
             </span>
             <div className="min-w-0">
               <p className={`text-xs font-semibold uppercase ${activeContent.eyebrowClass}`}>{activeContent.eyebrow}</p>
-              <p className="mt-1 text-xs leading-5 text-slate-300">
+              <p className="mt-1 text-xs leading-5 text-slate-600">
                 {activeContent.body}
               </p>
             </div>
           </div>
           <button
             type="button"
-            className={`inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-md border px-3 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${activeContent.buttonClass}`}
+            className={`inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-[8px] border px-3 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-60 ${activeContent.buttonClass}`}
             data-track-event={activeContent.trackEvent}
             disabled={permissions.busy !== null}
             onClick={permissions.activeStep === "push" ? handleRequestPush : handleRequestGps}
@@ -386,7 +388,7 @@ export function ConnectyTracker() {
         </div>
       </div>
 
-      <p className="mt-3 text-[11px] leading-4 text-slate-400">
+      <p className="mt-3 text-[11px] leading-4 text-slate-500">
         {activeContent.tip}
       </p>
     </div>
@@ -759,51 +761,69 @@ function addCompletedStep(steps: PermissionStep[], step: PermissionStep) {
   return steps.includes(step) ? steps : [...steps, step];
 }
 
-function getActivePromptContent(step: PermissionStep, permission: PermissionSignal) {
+function getActivePromptContent(step: PermissionStep, permission: PermissionSignal, audience: PermissionPromptAudience) {
   if (step === "push") {
     const wasBlocked = permission === "denied";
+    const isPublic = audience === "public";
 
     return {
       Icon: Bell,
       stepLabel: "Passo 1 de 2",
-      title: wasBlocked ? "Libere alertas de atendimento" : "Receba respostas dos leads",
-      description: "Primeiro vamos ativar notificacoes para avisar quando um lead responder. Depois seguimos para a experiencia por regiao.",
-      eyebrow: "Alertas de atendimento",
-      body: wasBlocked
-        ? "Seu navegador bloqueou notificacoes. Clique para ver a orientacao e liberar quando quiser receber alertas de conversa."
-        : "Receba um aviso no navegador quando um lead responder no WhatsApp, mesmo que voce esteja em outra aba.",
-      cta: wasBlocked ? "Liberar notificacoes" : "Ativar alertas",
+      title: isPublic
+        ? (wasBlocked ? "Libere avisos da loja" : "Receba atualizacoes da loja")
+        : (wasBlocked ? "Libere alertas de atendimento" : "Receba respostas dos leads"),
+      description: isPublic
+        ? "Ative avisos para acompanhar pedido, ofertas e retorno da loja. Depois podemos personalizar sua experiencia por regiao."
+        : "Primeiro vamos ativar notificacoes para avisar quando um lead responder. Depois seguimos para a experiencia por regiao.",
+      eyebrow: isPublic ? "Atualizacoes do pedido" : "Alertas de atendimento",
+      body: isPublic
+        ? (wasBlocked
+          ? "Seu navegador bloqueou notificacoes. Clique para ver a orientacao e liberar quando quiser receber novidades da loja."
+          : "Receba um aviso neste navegador quando a loja enviar novidades, status do pedido ou uma resposta importante.")
+        : (wasBlocked
+          ? "Seu navegador bloqueou notificacoes. Clique para ver a orientacao e liberar quando quiser receber alertas de conversa."
+          : "Receba um aviso no navegador quando um lead responder no WhatsApp, mesmo que voce esteja em outra aba."),
+      cta: wasBlocked ? "Liberar notificacoes" : isPublic ? "Receber avisos" : "Ativar alertas",
       tip: wasBlocked
         ? "Dica: se o navegador nao abrir o aviso, clique no cadeado ao lado do endereco e libere notificacoes."
         : "Dica: depois de clicar, confirme em Permitir no aviso que aparece no topo do navegador.",
       trackEvent: "tracking_prompt_push_clicked",
-      containerClass: "border-cyan-400/25 bg-cyan-400/10",
-      iconClass: "bg-cyan-400/15 text-cyan-100",
-      eyebrowClass: "text-cyan-100",
-      buttonClass: "border-cyan-300/60 bg-cyan-300/15 text-cyan-50 hover:bg-cyan-300/25",
+      containerClass: "border-emerald-100 bg-emerald-50",
+      iconClass: "border border-emerald-100 bg-white text-[#128C4A]",
+      eyebrowClass: "text-[#128C4A]",
+      buttonClass: "border-[#25D366] bg-[#25D366] text-white hover:bg-[#20bf5a]",
     };
   }
 
   const wasBlocked = permission === "denied";
+  const isPublic = audience === "public";
 
   return {
     Icon: LocateFixed,
     stepLabel: "Passo 2 de 2",
-    title: wasBlocked ? "Personalize sua experiencia por regiao" : "Ative a experiencia por regiao",
-    description: "Agora vamos ajustar a experiencia para o seu contexto local.",
-    eyebrow: "Experiencia por regiao",
-    body: wasBlocked
-      ? "Seu navegador bloqueou a localizacao. Clique para ver a orientacao e liberar quando quiser uma experiencia mais personalizada."
-      : "Use sua localizacao para receber sugestoes, convites e atendimento mais alinhados ao seu contexto.",
+    title: isPublic
+      ? (wasBlocked ? "Libere ofertas da sua regiao" : "Veja condicoes da sua regiao")
+      : (wasBlocked ? "Personalize sua experiencia por regiao" : "Ative a experiencia por regiao"),
+    description: isPublic
+      ? "Use localizacao aproximada para melhorar disponibilidade, entrega e ofertas quando a loja trabalhar por regiao."
+      : "Agora vamos ajustar a experiencia para o seu contexto local.",
+    eyebrow: isPublic ? "Regiao e entrega" : "Experiencia por regiao",
+    body: isPublic
+      ? (wasBlocked
+        ? "Seu navegador bloqueou a localizacao. Clique para ver a orientacao e liberar quando quiser uma experiencia mais personalizada."
+        : "Sua localizacao ajuda a loja a entender melhor regiao, entrega e ofertas relevantes para voce.")
+      : (wasBlocked
+        ? "Seu navegador bloqueou a localizacao. Clique para ver a orientacao e liberar quando quiser uma experiencia mais personalizada."
+        : "Use sua localizacao para receber sugestoes, convites e atendimento mais alinhados ao seu contexto."),
     cta: wasBlocked ? "Liberar localizacao" : "Personalizar regiao",
     tip: wasBlocked
       ? "Dica: se o navegador nao abrir o aviso, clique no cadeado ao lado do endereco e libere localizacao."
       : "Dica: depois de clicar, confirme em Permitir no aviso que aparece no topo do navegador.",
     trackEvent: "tracking_prompt_gps_clicked",
-    containerClass: "border-emerald-400/25 bg-emerald-400/10",
-    iconClass: "bg-emerald-400/15 text-emerald-100",
-    eyebrowClass: "text-emerald-100",
-    buttonClass: "border-emerald-300/60 bg-emerald-300/15 text-emerald-50 hover:bg-emerald-300/25",
+    containerClass: "border-blue-100 bg-blue-50",
+    iconClass: "border border-blue-100 bg-white text-blue-700",
+    eyebrowClass: "text-blue-700",
+    buttonClass: "border-blue-600 bg-blue-600 text-white hover:bg-blue-700",
   };
 }
 

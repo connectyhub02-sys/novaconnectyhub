@@ -147,7 +147,7 @@ export function CheckoutPaymentOptions({
       ) : null}
 
       {showCard ? (
-        <div className="mt-5 grid grid-cols-2 gap-2 rounded-[8px] border border-slate-700 bg-slate-900/70 p-1">
+        <div className="mt-5 grid grid-cols-2 gap-2 rounded-[8px] border border-blue-100 bg-blue-50 p-1">
           <PaymentMethodButton
             active={activeMethod === "pix"}
             icon={<QrCode className="h-4 w-4" />}
@@ -210,16 +210,16 @@ function OrderBumpSelector({
   onToggle: (productId: string) => void;
 }) {
   return (
-    <section className="rounded-[8px] border border-amber-300/35 bg-amber-400/10 p-4">
+    <section className="rounded-[8px] border border-amber-200 bg-amber-50 p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="inline-flex items-center gap-2 text-sm font-semibold text-white">
-            <BadgePercent className="h-4 w-4 text-amber-200" />
+          <p className="inline-flex items-center gap-2 text-sm font-black text-slate-950">
+            <BadgePercent className="h-4 w-4 text-amber-600" />
             Ofertas extras
           </p>
-          <p className="mt-1 text-xs leading-5 text-amber-50/80">Adicione ao pedido e pague tudo em uma unica compra.</p>
+          <p className="mt-1 text-xs leading-5 text-slate-600">Adicione ao pedido e pague tudo em uma unica compra.</p>
         </div>
-        <span className="rounded-full border border-amber-200/35 bg-amber-300/15 px-3 py-1 text-xs font-semibold text-amber-100">
+        <span className="rounded-full border border-amber-200 bg-white px-3 py-1 text-xs font-bold text-amber-700">
           Total {totalLabel}
         </span>
       </div>
@@ -236,8 +236,8 @@ function OrderBumpSelector({
               className={cn(
                 "flex min-h-[88px] items-center gap-3 rounded-[8px] border p-3 text-left transition",
                 selected
-                  ? "border-emerald-300/45 bg-emerald-400/12"
-                  : "border-slate-700 bg-slate-900/65 hover:border-amber-200/45",
+                  ? "border-[#25D366] bg-emerald-50"
+                  : "border-blue-100 bg-white hover:border-amber-300",
               )}
             >
               {item.mediaUrl ? (
@@ -250,29 +250,29 @@ function OrderBumpSelector({
                   unoptimized
                 />
               ) : (
-                <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-[7px] border border-amber-200/25 bg-amber-300/10">
-                  <BadgePercent className="h-5 w-5 text-amber-100" />
+                <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-[7px] border border-amber-200 bg-amber-100">
+                  <BadgePercent className="h-5 w-5 text-amber-700" />
                 </span>
               )}
               <span className="min-w-0 flex-1">
                 <span className="flex flex-wrap items-center gap-2">
-                  <span className="text-sm font-semibold text-white">{item.title}</span>
+                  <span className="text-sm font-black text-slate-950">{item.title}</span>
                   {item.badge ? (
-                    <span className="rounded-full border border-amber-200/35 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-100">
+                    <span className="rounded-full border border-amber-200 bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-700">
                       {item.badge}
                     </span>
                   ) : null}
                 </span>
                 {item.description ? (
-                  <span className="mt-1 line-clamp-2 block text-xs leading-5 text-slate-300">{item.description}</span>
+                  <span className="mt-1 line-clamp-2 block text-xs leading-5 text-slate-600">{item.description}</span>
                 ) : null}
-                <span className="mt-2 block text-sm font-semibold text-amber-100">{item.priceLabel}</span>
+                <span className="mt-2 block text-sm font-black text-blue-700">{item.priceLabel}</span>
               </span>
               <span className={cn(
                 "flex h-7 w-7 shrink-0 items-center justify-center rounded-[7px] border",
                 selected
-                  ? "border-emerald-200 bg-emerald-300 text-emerald-950"
-                  : "border-slate-600 text-slate-400",
+                  ? "border-[#25D366] bg-[#25D366] text-white"
+                  : "border-blue-100 text-slate-400",
               )}>
                 {selected ? <Check className="h-4 w-4" /> : null}
               </span>
@@ -296,22 +296,22 @@ function PixOrderBumpUpdatePanel({
   onUpdate: () => void;
 }) {
   return (
-    <div className="mt-5 rounded-[8px] border border-cyan-300/35 bg-cyan-400/10 p-4">
-      <p className="text-sm font-semibold text-white">Atualize o Pix com as ofertas</p>
-      <p className="mt-2 text-xs leading-5 text-cyan-50/80">
+    <div className="mt-5 rounded-[8px] border border-blue-100 bg-blue-50 p-4">
+      <p className="text-sm font-black text-slate-950">Atualize o Pix com as ofertas</p>
+      <p className="mt-2 text-xs leading-5 text-slate-600">
         O QR Code atual ainda esta no valor anterior. Gere um novo Pix com total de {totalLabel}.
       </p>
       <button
         type="button"
         onClick={onUpdate}
         disabled={loading}
-        className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-[8px] bg-cyan-300 px-4 text-sm font-semibold text-slate-950 transition hover:bg-cyan-200 disabled:cursor-wait disabled:opacity-70"
+        className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-[8px] bg-blue-600 px-4 text-sm font-bold text-white transition hover:bg-blue-700 disabled:cursor-wait disabled:opacity-70"
       >
         {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <QrCode className="h-4 w-4" />}
         Gerar Pix atualizado
       </button>
       {error ? (
-        <p className="mt-3 rounded-[8px] border border-rose-300/35 bg-rose-400/12 px-3 py-2 text-xs leading-5 text-rose-100">
+        <p className="mt-3 rounded-[8px] border border-rose-200 bg-rose-50 px-3 py-2 text-xs leading-5 text-rose-700">
           {error}
         </p>
       ) : null}
@@ -337,8 +337,8 @@ function PaymentMethodButton({
       className={cn(
         "inline-flex min-h-10 items-center justify-center gap-2 rounded-[7px] px-3 text-sm font-semibold transition",
         active
-          ? "bg-cyan-300 text-slate-950"
-          : "text-slate-300 hover:bg-slate-800 hover:text-white",
+          ? "bg-blue-600 text-white shadow-sm shadow-blue-950/20"
+          : "text-slate-600 hover:bg-white hover:text-blue-700",
       )}
     >
       {icon}
@@ -373,7 +373,7 @@ function PixPaymentPanel({
   return (
     <div className="mt-5">
       {pixQrCodeBase64 ? (
-        <div className="flex justify-center rounded-[8px] border border-slate-700 bg-white p-4">
+        <div className="flex justify-center rounded-[8px] border border-blue-100 bg-white p-4">
           <Image
             src={`data:image/png;base64,${pixQrCodeBase64}`}
             alt="QR Code Pix"
@@ -384,22 +384,22 @@ function PixPaymentPanel({
           />
         </div>
       ) : (
-        <div className="rounded-[8px] border border-cyan-300/40 bg-cyan-400/12 p-4">
-          <p className="font-semibold text-white">Pix sendo gerado</p>
-          <p className="mt-2 text-sm leading-6 text-slate-300">Aguarde alguns instantes ou solicite um novo link pelo WhatsApp.</p>
+        <div className="rounded-[8px] border border-blue-100 bg-blue-50 p-4">
+          <p className="font-bold text-slate-950">Pix sendo gerado</p>
+          <p className="mt-2 text-sm leading-6 text-slate-600">Aguarde alguns instantes ou solicite um novo link pelo WhatsApp.</p>
         </div>
       )}
 
       {pixQrCode ? (
         <div className="mt-5">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <label className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-300" htmlFor="pix-code">
+            <label className="text-xs font-bold uppercase text-blue-700" htmlFor="pix-code">
               Pix copia e cola
             </label>
             <button
               type="button"
               onClick={copyPixCode}
-              className="inline-flex min-h-9 items-center gap-2 rounded-[8px] border border-cyan-300/35 px-3 text-xs font-semibold text-cyan-100 transition hover:bg-cyan-400/10"
+              className="inline-flex min-h-9 items-center gap-2 rounded-[8px] border border-blue-100 bg-white px-3 text-xs font-bold text-blue-700 transition hover:border-blue-300"
             >
               <Copy className="h-3.5 w-3.5" />
               {copied ? "Copiado" : "Copiar codigo"}
@@ -409,9 +409,9 @@ function PixPaymentPanel({
             id="pix-code"
             readOnly
             value={pixQrCode}
-            className="mt-2 h-32 w-full resize-none rounded-[8px] border border-slate-700 bg-slate-900 p-3 text-xs leading-5 text-cyan-50 outline-none"
+            className="mt-2 h-32 w-full resize-none rounded-[8px] border border-blue-100 bg-white p-3 text-xs leading-5 text-slate-700 outline-none focus:border-blue-300"
           />
-          <p className="mt-2 text-xs leading-5 text-slate-400">
+          <p className="mt-2 text-xs leading-5 text-slate-500">
             Depois de pagar, volte para a conversa no WhatsApp. O pedido sera atualizado automaticamente.
           </p>
         </div>
@@ -422,7 +422,7 @@ function PixPaymentPanel({
           href={pixTicketUrl}
           target="_blank"
           rel="noreferrer"
-          className="mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-[8px] bg-cyan-300 px-4 text-sm font-semibold text-slate-950 transition hover:bg-cyan-200"
+          className="mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-[8px] bg-[#25D366] px-4 text-sm font-bold text-white transition hover:bg-[#20bf5a]"
         >
           Abrir pagamento no Mercado Pago
         </a>

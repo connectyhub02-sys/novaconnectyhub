@@ -22,7 +22,7 @@ export function SalesCatalogMediaGallery({ title, media }: SalesCatalogMediaGall
 
   if (!activeMedia) {
     return (
-      <div className="flex h-full min-h-[320px] items-center justify-center bg-gradient-to-br from-blue-50 via-white to-emerald-50">
+      <div className="flex aspect-[4/3] min-h-[260px] w-full min-w-0 items-center justify-center bg-gradient-to-br from-blue-50 via-white to-emerald-50 lg:min-h-[520px]">
         <Package className="h-20 w-20 text-blue-200" aria-hidden="true" />
       </div>
     );
@@ -36,9 +36,9 @@ export function SalesCatalogMediaGallery({ title, media }: SalesCatalogMediaGall
   }
 
   return (
-    <div className="flex h-full min-h-[320px] flex-col bg-gradient-to-br from-blue-50 via-white to-emerald-50">
+    <div className="flex h-full w-full min-w-0 flex-col bg-gradient-to-br from-blue-50 via-white to-emerald-50">
       <div
-        className="relative min-h-[320px] flex-1"
+        className="relative aspect-[4/3] min-h-[260px] w-full min-w-0 flex-1 lg:min-h-[520px]"
         data-track-event="sales_catalog_product_gallery_viewed"
         data-track-label={activeMedia.fileName}
       >
@@ -46,7 +46,7 @@ export function SalesCatalogMediaGallery({ title, media }: SalesCatalogMediaGall
           <video
             key={activeMedia.id}
             src={activeMedia.storageUrl}
-            className="h-full min-h-[320px] w-full object-contain p-4"
+            className="h-full min-h-[260px] w-full object-contain p-4 lg:min-h-[520px]"
             controls
             preload="metadata"
           />
@@ -102,7 +102,7 @@ export function SalesCatalogMediaGallery({ title, media }: SalesCatalogMediaGall
               type="button"
               className={cn(
                 "relative h-16 w-16 shrink-0 overflow-hidden rounded-[8px] border bg-white transition",
-                  index === normalizedActiveIndex
+                index === normalizedActiveIndex
                   ? "border-[#25D366] ring-2 ring-[#25D366]/25"
                   : "border-blue-100 hover:border-blue-300",
               )}
@@ -121,7 +121,7 @@ export function SalesCatalogMediaGallery({ title, media }: SalesCatalogMediaGall
                   className="object-cover"
                 />
               ) : (
-                <span className="grid h-full w-full place-items-center bg-slate-950 text-white">
+                <span className="grid h-full w-full place-items-center bg-emerald-50 text-[#128C4A]">
                   <PlayCircle className="h-6 w-6" />
                 </span>
               )}

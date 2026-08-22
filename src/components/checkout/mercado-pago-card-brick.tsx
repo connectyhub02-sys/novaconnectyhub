@@ -93,23 +93,23 @@ export type CardPaymentStatusChange = {
 
 let mercadoPagoSdkPromise: Promise<void> | null = null;
 
-const cardBrickSecureFieldBackgroundColor = "#111827";
+const cardBrickSecureFieldBackgroundColor = "#ffffff";
 
 const cardBrickCustomVariables: JsonRecord = {
-  baseColor: "#67e8f9",
-  baseColorFirstVariant: "#22d3ee",
-  baseColorSecondVariant: "#0891b2",
-  textPrimaryColor: "#f8fafc",
-  textSecondaryColor: "#cbd5e1",
+  baseColor: "#2563eb",
+  baseColorFirstVariant: "#1d4ed8",
+  baseColorSecondVariant: "#1e40af",
+  textPrimaryColor: "#020617",
+  textSecondaryColor: "#475569",
   inputBackgroundColor: cardBrickSecureFieldBackgroundColor,
-  formBackgroundColor: "#1e293b",
-  outlinePrimaryColor: "#64748b",
-  outlineSecondaryColor: "#94a3b8",
-  errorColor: "#fb7185",
-  successColor: "#34d399",
-  buttonTextColor: "#020617",
-  inputFocusedBoxShadow: "0 0 0 1px rgba(103, 232, 249, 0.72)",
-  inputErrorFocusedBoxShadow: "0 0 0 1px rgba(251, 113, 133, 0.72)",
+  formBackgroundColor: "#ffffff",
+  outlinePrimaryColor: "#bfdbfe",
+  outlineSecondaryColor: "#93c5fd",
+  errorColor: "#e11d48",
+  successColor: "#25D366",
+  buttonTextColor: "#ffffff",
+  inputFocusedBoxShadow: "0 0 0 1px rgba(37, 99, 235, 0.72)",
+  inputErrorFocusedBoxShadow: "0 0 0 1px rgba(225, 29, 72, 0.72)",
   inputBorderWidth: "1px",
   inputFocusedBorderWidth: "1px",
   borderRadiusSmall: "6px",
@@ -191,7 +191,7 @@ export function MercadoPagoCardBrick({
       }
 
       const mercadoPago = new window.MercadoPago(publicKey, { locale: "pt-BR" });
-      const bricksBuilder = mercadoPago.bricks({ theme: "dark" });
+      const bricksBuilder = mercadoPago.bricks({ theme: "flat" });
       controllerRef.current = await bricksBuilder.create("cardPayment", containerId, {
         initialization: {
           amount,
@@ -202,7 +202,7 @@ export function MercadoPagoCardBrick({
         customization: {
           visual: {
             style: {
-              theme: "dark",
+              theme: "flat",
               customVariables: cardBrickCustomVariables,
             },
           },
@@ -329,13 +329,13 @@ export function MercadoPagoCardBrick({
   }, [amount, containerId, extraPayload, onPaymentStatusChange, payerEmail, pendingMessage, publicKey, rejectedMessage, sessionId, showRejectionModal, submitPath, successMessage]);
 
   return (
-    <div className="mt-6 rounded-[8px] border border-slate-700 bg-slate-900/70 p-4">
+    <div className="mt-6 rounded-[8px] border border-blue-100 bg-white p-4">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="text-sm font-semibold text-white">Cartao de credito ou debito</p>
-          <p className="mt-1 text-xs text-slate-400">Pagamento transparente com Mercado Pago.</p>
+          <p className="text-sm font-black text-slate-950">Cartao de credito ou debito</p>
+          <p className="mt-1 text-xs text-slate-600">Pagamento transparente com Mercado Pago.</p>
         </div>
-        {!ready || submitting ? <Loader2 className="h-4 w-4 animate-spin text-cyan-200" /> : null}
+        {!ready || submitting ? <Loader2 className="h-4 w-4 animate-spin text-blue-600" /> : null}
       </div>
 
       <div id={containerId} className="mercado-pago-card-brick mt-4 min-h-[260px]" />
@@ -352,10 +352,10 @@ export function MercadoPagoCardBrick({
         <div className={cn(
           "mt-4 rounded-[8px] border px-3 py-2 text-sm leading-5",
           result.tone === "success"
-            ? "border-emerald-300/40 bg-emerald-400/12 text-emerald-100"
+            ? "border-emerald-200 bg-emerald-50 text-[#128C4A]"
             : result.tone === "warning"
-              ? "border-amber-300/40 bg-amber-400/12 text-amber-100"
-              : "border-rose-300/40 bg-rose-400/12 text-rose-100",
+              ? "border-amber-200 bg-amber-50 text-amber-700"
+              : "border-rose-200 bg-rose-50 text-rose-700",
         )} role="status" aria-live="polite">
           {result.message}
         </div>
@@ -394,7 +394,7 @@ function MercadoPagoThreeDSChallenge({
   }, [challenge]);
 
   return (
-    <div className="mt-4 overflow-hidden rounded-[8px] border border-amber-300/35 bg-slate-950/80">
+    <div className="mt-4 overflow-hidden rounded-[8px] border border-amber-200 bg-white">
       <iframe
         className="h-[520px] w-full border-0 bg-white"
         name={frameName}
@@ -421,7 +421,7 @@ function styleMercadoPagoSecureFields(containerId: string) {
     iframe.style.setProperty("background", cardBrickSecureFieldBackgroundColor, "important");
     iframe.style.setProperty("background-color", cardBrickSecureFieldBackgroundColor, "important");
     iframe.style.setProperty("border-radius", "6px", "important");
-    iframe.style.setProperty("color-scheme", "dark", "important");
+    iframe.style.setProperty("color-scheme", "light", "important");
   });
 }
 
@@ -437,7 +437,7 @@ export function buildRejectedPaymentCopy(statusDetail: string | null | undefined
   const detail = normalizePaymentStatus(statusDetail);
   const commonSteps = [
     "Confira numero, validade, codigo de seguranca, CPF e nome do titular.",
-    "Tente outro cartao ou use Pix para liberar o plano imediatamente.",
+    "Tente outro cartao ou use Pix para concluir o pedido.",
   ];
 
   if (detail === "cc_rejected_insufficient_amount") {
@@ -560,7 +560,7 @@ export function buildRejectedPaymentCopy(statusDetail: string | null | undefined
       title: "Muitas tentativas com este cartao",
       description: "Por seguranca, o Mercado Pago bloqueou novas tentativas parecidas com este cartao por enquanto.",
       reason: "Limite de tentativas atingido.",
-      recommendation: "Tente outro cartao ou use Pix para liberar o plano agora.",
+      recommendation: "Tente outro cartao ou use Pix para concluir o pedido agora.",
       nextSteps: [
         "Evite insistir varias vezes com os mesmos dados.",
         "Use outro cartao ou Pix para concluir sem esperar.",
@@ -575,11 +575,11 @@ export function buildRejectedPaymentCopy(statusDetail: string | null | undefined
       title: "A compra nao passou na validacao de seguranca",
       description: "O Mercado Pago ou o banco emissor recusou esta tentativa automaticamente. Isso pode acontecer por regra antifraude, muitas tentativas recentes, cartao vinculado a outra conta ou divergencia nos dados.",
       reason: "Validacao de seguranca do Mercado Pago ou do banco emissor.",
-      recommendation: "Para liberar o plano agora, use Pix ou tente outro cartao com dados do titular corretos.",
+      recommendation: "Para concluir o pedido agora, use Pix ou tente outro cartao com dados do titular corretos.",
       nextSteps: [
         "Use um cartao diferente, com CPF e nome do titular corretos.",
         "Evite varias tentativas seguidas com o mesmo cartao.",
-        "Escolha Pix se quiser liberar o plano imediatamente.",
+        "Escolha Pix se quiser concluir o pedido imediatamente.",
       ],
       statusDetail: detail,
     };
@@ -616,25 +616,25 @@ function CardPaymentRejectionModal({
 
   return (
     <div
-      className="fixed inset-0 z-[10000] grid place-items-center bg-black/75 px-4 py-6 backdrop-blur-md"
+      className="fixed inset-0 z-[10000] grid place-items-center bg-slate-950/50 px-4 py-6 backdrop-blur-md"
       role="dialog"
       aria-modal="true"
       aria-labelledby="card-rejection-title"
     >
-      <div className="w-full max-w-[620px] overflow-hidden rounded-[8px] border border-rose-200/25 bg-slate-950 shadow-2xl shadow-black/50">
-        <div className="flex items-start justify-between gap-4 border-b border-slate-700/80 p-5">
+      <div className="w-full max-w-[620px] overflow-hidden rounded-[8px] border border-rose-200 bg-white shadow-2xl shadow-blue-950/20">
+        <div className="flex items-start justify-between gap-4 border-b border-rose-100 p-5">
           <div className="flex items-start gap-3">
-            <div className="grid h-11 w-11 shrink-0 place-items-center rounded-[8px] border border-rose-300/35 bg-rose-400/12 text-rose-100">
+            <div className="grid h-11 w-11 shrink-0 place-items-center rounded-[8px] border border-rose-200 bg-rose-50 text-rose-700">
               <ShieldAlert className="h-5 w-5" />
             </div>
             <div>
-              <p className="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-rose-200">
+              <p className="text-xs font-bold uppercase text-rose-700">
                 Cartao recusado
               </p>
-              <h2 id="card-rejection-title" className="mt-1 text-[22px] font-black leading-tight text-white">
+              <h2 id="card-rejection-title" className="mt-1 text-[22px] font-black leading-tight text-slate-950">
                 {rejection.title}
               </h2>
-              <p className="mt-2 text-sm leading-6 text-slate-300">
+              <p className="mt-2 text-sm leading-6 text-slate-600">
                 {rejection.description}
               </p>
             </div>
@@ -642,7 +642,7 @@ function CardPaymentRejectionModal({
           <button
             type="button"
             onClick={onClose}
-            className="grid h-9 w-9 shrink-0 place-items-center rounded-[8px] border border-slate-600 text-slate-300 transition hover:border-slate-400 hover:text-white"
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-[8px] border border-blue-100 text-slate-500 transition hover:border-blue-300 hover:text-blue-700"
             aria-label="Fechar aviso"
           >
             <X className="h-4 w-4" />
@@ -665,38 +665,38 @@ function CardPaymentRejectionModal({
             />
           </div>
 
-          <div className="rounded-[8px] border border-amber-300/35 bg-amber-300/10 p-4">
-            <p className="text-sm font-bold text-amber-100">O que fazer agora</p>
-            <p className="mt-2 text-sm leading-6 text-amber-50/85">
+          <div className="rounded-[8px] border border-amber-200 bg-amber-50 p-4">
+            <p className="text-sm font-bold text-amber-700">O que fazer agora</p>
+            <p className="mt-2 text-sm leading-6 text-slate-700">
               {rejection.recommendation}
             </p>
           </div>
 
-          <div className="rounded-[8px] border border-slate-700 bg-slate-900/70 p-4">
-            <p className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-cyan-200">
+          <div className="rounded-[8px] border border-blue-100 bg-blue-50 p-4">
+            <p className="text-xs font-bold uppercase text-blue-700">
               Proximos passos
             </p>
             <div className="mt-3 space-y-2">
               {rejection.nextSteps.map((step) => (
-                <div key={step} className="flex gap-2 text-sm leading-5 text-slate-300">
-                  <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-cyan-300" />
+                <div key={step} className="flex gap-2 text-sm leading-5 text-slate-700">
+                  <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500" />
                   <span>{step}</span>
                 </div>
               ))}
             </div>
             {rejection.statusDetail ? (
-              <p className="mt-3 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+              <p className="mt-3 text-xs font-semibold uppercase text-slate-500">
                 Codigo do provedor: {rejection.statusDetail}
               </p>
             ) : null}
           </div>
         </div>
 
-        <div className="grid gap-2 border-t border-slate-700/80 p-5 sm:grid-cols-2">
+        <div className="grid gap-2 border-t border-blue-100 p-5 sm:grid-cols-2">
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-[7px] border border-slate-600 px-4 text-sm font-bold text-slate-100 transition hover:border-cyan-300/60 hover:bg-cyan-300/10"
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-[7px] border border-blue-100 px-4 text-sm font-bold text-blue-700 transition hover:border-blue-300 hover:bg-blue-50"
           >
             <RefreshCw className="h-4 w-4" />
             Tentar outro cartao
@@ -707,7 +707,7 @@ function CardPaymentRejectionModal({
               onUsePix?.();
               onClose();
             }}
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-[7px] bg-cyan-300 px-4 text-sm font-black text-slate-950 transition hover:bg-cyan-200"
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-[7px] bg-[#25D366] px-4 text-sm font-black text-white transition hover:bg-[#20bf5a]"
           >
             <QrCode className="h-4 w-4" />
             Usar Pix agora
@@ -733,17 +733,17 @@ function PaymentRejectionFact({
     <div className={cn(
       "rounded-[8px] border p-3",
       tone === "emerald"
-        ? "border-emerald-300/30 bg-emerald-400/10"
-        : "border-rose-300/30 bg-rose-400/10",
+        ? "border-emerald-200 bg-emerald-50"
+        : "border-rose-200 bg-rose-50",
     )}>
       <div className={cn(
-        "flex items-center gap-2 font-mono text-[10px] font-bold uppercase tracking-[0.18em]",
-        tone === "emerald" ? "text-emerald-200" : "text-rose-200",
+        "flex items-center gap-2 text-xs font-bold uppercase",
+        tone === "emerald" ? "text-[#128C4A]" : "text-rose-700",
       )}>
         {icon}
         {label}
       </div>
-      <p className="mt-2 text-sm font-semibold leading-5 text-white">{value}</p>
+      <p className="mt-2 text-sm font-bold leading-5 text-slate-950">{value}</p>
     </div>
   );
 }

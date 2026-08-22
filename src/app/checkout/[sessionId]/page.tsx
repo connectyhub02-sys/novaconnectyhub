@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Script from "next/script";
 import type { ReactNode } from "react";
+import { MessageCircle, PackageCheck, ShieldCheck } from "lucide-react";
 import { CheckoutPaymentOptions } from "@/components/checkout/checkout-payment-options";
 import {
   CheckoutPaymentFeedbackModal,
@@ -153,11 +154,11 @@ export default async function CheckoutPage({
     return (
       <CheckoutShell>
         <section className="mx-auto flex min-h-[70vh] w-full max-w-2xl flex-col items-center justify-center px-6 text-center">
-          <span className="mb-4 rounded-full border border-cyan-400/30 bg-cyan-400/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-cyan-200">
+          <span className="mb-4 rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-bold uppercase text-blue-700">
             ConnectyHub Checkout
           </span>
-          <h1 className="text-3xl font-semibold text-white">Checkout indisponivel</h1>
-          <p className="mt-3 max-w-xl text-sm leading-6 text-slate-300">
+          <h1 className="text-3xl font-black text-slate-950">Checkout indisponivel</h1>
+          <p className="mt-3 max-w-xl text-sm leading-6 text-slate-600">
             Nao encontramos esta sessao de pagamento. Volte para a conversa no WhatsApp e solicite um novo link de pagamento.
           </p>
         </section>
@@ -208,75 +209,66 @@ export default async function CheckoutPage({
 
   return (
     <CheckoutShell publicTrackingContext={publicTrackingContext}>
-      <main className="mx-auto grid min-h-screen w-full max-w-6xl gap-6 px-4 py-6 sm:px-6 lg:grid-cols-[minmax(0,1fr)_390px] lg:px-8 lg:py-10">
-        <section className="flex flex-col justify-between rounded-[8px] border border-cyan-400/20 bg-slate-950/72 p-5 shadow-2xl shadow-black/30 sm:p-8">
-          <div>
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex min-w-0 items-center gap-3">
-                <CheckoutStoreLogo branding={branding} />
-                <div className="min-w-0">
-                  <span className="text-xs font-semibold uppercase tracking-[0.24em] text-cyan-200">Pedido WhatsApp</span>
-                  <h1 className="mt-2 truncate text-2xl font-semibold text-white sm:text-3xl">{branding.displayName}</h1>
-                </div>
+      <main className="mx-auto grid w-full max-w-7xl gap-4 px-4 py-4 sm:px-6 lg:grid-cols-[minmax(0,1fr)_420px] lg:px-8 lg:py-8">
+        <section className="order-1 rounded-[8px] border border-blue-100 bg-white p-4 shadow-xl shadow-blue-950/10 sm:p-6">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="flex min-w-0 items-center gap-3">
+              <CheckoutStoreLogo branding={branding} />
+              <div className="min-w-0">
+                <span className="text-xs font-bold uppercase text-blue-700">Pedido WhatsApp</span>
+                <h1 className="mt-1 truncate text-2xl font-black text-slate-950 sm:text-3xl">{branding.displayName}</h1>
               </div>
-              <span className={cn(
-                "rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em]",
-                paid
-                  ? "border-emerald-300/40 bg-emerald-400/12 text-emerald-200"
-                  : failed
-                    ? "border-rose-300/40 bg-rose-400/12 text-rose-200"
-                    : "border-cyan-300/40 bg-cyan-400/12 text-cyan-100",
-              )}>
-                {formatSalesCatalogPaymentSessionStatus(status)}
-              </span>
             </div>
+            <span className={cn(
+              "rounded-full border px-3 py-1 text-xs font-bold uppercase",
+              paid
+                ? "border-emerald-200 bg-emerald-50 text-[#128C4A]"
+                : failed
+                  ? "border-rose-200 bg-rose-50 text-rose-700"
+                  : "border-blue-100 bg-blue-50 text-blue-700",
+            )}>
+              {formatSalesCatalogPaymentSessionStatus(status)}
+            </span>
+          </div>
 
-            <CheckoutStatusPoller
-              sessionId={session.id}
-              initialStatus={status}
-              initialOrderStatus={order.status}
-            />
+          <CheckoutStatusPoller
+            sessionId={session.id}
+            initialStatus={status}
+            initialOrderStatus={order.status}
+          />
 
-            <div className="mt-8 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              <CheckoutMetric label="Total" value={amount} />
-              <CheckoutMetric label="Pedido" value={`#${order.id.slice(0, 8).toUpperCase()}`} />
-              <CheckoutMetric label="Pagamento" value={session.method === "card" ? "Cartao" : "Pix"} />
-              <CheckoutMetric label="Recebedor" value={commercialContext.receiverLabel} />
-            </div>
-
-            <div className="mt-8">
-              <h2 className="text-sm font-semibold uppercase tracking-[0.22em] text-slate-300">Itens</h2>
-              <div className="mt-3 divide-y divide-slate-700/70 overflow-hidden rounded-[8px] border border-slate-700/70 bg-slate-900/70">
-                {items.length > 0 ? items.map((item) => (
-                  <CheckoutItemCard key={item.id} item={item} />
-                )) : (
-                  <div className="px-4 py-4 text-sm text-slate-300">Pedido registrado no catalogo de vendas.</div>
-                )}
-              </div>
+          <div className="mt-5 rounded-[8px] border border-[#25D366]/25 bg-[#25D366]/10 p-4">
+            <p className="text-xs font-bold uppercase text-[#128C4A]">Total para finalizar</p>
+            <div className="mt-2 flex flex-wrap items-end justify-between gap-3">
+              <p className="text-3xl font-black text-slate-950 sm:text-4xl">{amount ?? "A combinar"}</p>
+              <p className="max-w-[360px] text-sm font-semibold leading-6 text-slate-700">
+                Seu pedido ficou pronto. Conclua o pagamento e continue o atendimento pelo WhatsApp da loja.
+              </p>
             </div>
           </div>
 
-          <dl className="mt-8 grid gap-3 border-t border-slate-700/70 pt-5 text-sm text-slate-300 sm:grid-cols-2">
-            <CheckoutDetail label="Cliente" value={order.customer_name ?? order.customer_phone ?? "Lead WhatsApp"} />
-            <CheckoutDetail label="Subtotal" value={subtotal} />
-            <CheckoutDetail label="Frete" value={shipping ?? order.shipping_method ?? "A combinar"} />
-            <CheckoutDetail label="Origem da venda" value={commercialContext.flowLabel} />
-            <CheckoutDetail label="Ultima atualizacao" value={updatedAt ?? "Agora"} />
-          </dl>
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            <CheckoutTrustItem icon={<ShieldCheck className="h-4 w-4" />} label="Pagamento seguro" />
+            <CheckoutTrustItem icon={<MessageCircle className="h-4 w-4" />} label="Retorno ao WhatsApp" />
+            <CheckoutTrustItem icon={<PackageCheck className="h-4 w-4" />} label="Pedido registrado" />
+          </div>
         </section>
 
-        <aside className="rounded-[8px] border border-cyan-400/20 bg-slate-950/80 p-5 shadow-2xl shadow-black/30 sm:p-6">
+        <aside className="order-2 rounded-[8px] border border-blue-100 bg-white p-4 shadow-2xl shadow-blue-950/10 sm:p-6 lg:sticky lg:top-6 lg:order-none lg:row-span-3 lg:self-start">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <span className="text-xs font-semibold uppercase tracking-[0.22em] text-cyan-200">Mercado Pago</span>
-              <h2 className="mt-2 text-2xl font-semibold text-white">{session.method === "card" ? "Pagamento do pedido" : "Pague com Pix"}</h2>
+              <span className="text-xs font-bold uppercase text-blue-700">Mercado Pago</span>
+              <h2 className="mt-2 text-2xl font-black text-slate-950">{session.method === "card" ? "Pagamento do pedido" : "Pague com Pix"}</h2>
             </div>
-            <span className="rounded-full border border-slate-600 px-3 py-1 text-xs font-semibold text-slate-200">Seguro</span>
+            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-xs font-bold text-[#128C4A]">
+              <ShieldCheck className="h-3.5 w-3.5" />
+              Seguro
+            </span>
           </div>
 
-          <div className="mt-5 rounded-[8px] border border-slate-700/70 bg-slate-900/70 p-4">
-            <p className="text-sm font-semibold text-white">{commercialContext.flowLabel}</p>
-            <p className="mt-2 text-xs leading-5 text-slate-400">{commercialContext.checkoutNote}</p>
+          <div className="mt-5 rounded-[8px] border border-blue-100 bg-blue-50/75 p-4">
+            <p className="text-sm font-bold text-slate-950">{commercialContext.flowLabel}</p>
+            <p className="mt-2 text-xs leading-5 text-slate-600">{commercialContext.checkoutNote}</p>
           </div>
 
           {paid ? (
@@ -337,6 +329,44 @@ export default async function CheckoutPage({
             whatsappHref={whatsappReturn?.href ?? null}
           />
         </aside>
+
+        <section className="order-3 rounded-[8px] border border-blue-100 bg-white p-4 shadow-xl shadow-blue-950/10 sm:p-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-bold uppercase text-blue-700">Resumo</p>
+              <h2 className="mt-1 text-xl font-black text-slate-950">Seu pedido</h2>
+            </div>
+            <span className="rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">
+              #{order.id.slice(0, 8).toUpperCase()}
+            </span>
+          </div>
+
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <CheckoutMetric label="Total" value={amount} />
+            <CheckoutMetric label="Pagamento" value={session.method === "card" ? "Cartao" : "Pix"} />
+            <CheckoutMetric label="Recebedor" value={commercialContext.receiverLabel} />
+            <CheckoutMetric label="Status" value={formatSalesCatalogPaymentSessionStatus(status)} />
+          </div>
+
+          <div className="mt-5 divide-y divide-blue-100 overflow-hidden rounded-[8px] border border-blue-100 bg-white">
+            {items.length > 0 ? items.map((item) => (
+              <CheckoutItemCard key={item.id} item={item} />
+            )) : (
+              <div className="px-4 py-4 text-sm text-slate-600">Pedido registrado no catalogo de vendas.</div>
+            )}
+          </div>
+        </section>
+
+        <section className="order-4 rounded-[8px] border border-blue-100 bg-white p-4 shadow-xl shadow-blue-950/10 sm:p-6">
+          <p className="text-xs font-bold uppercase text-blue-700">Dados do pedido</p>
+          <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+            <CheckoutDetail label="Cliente" value={order.customer_name ?? order.customer_phone ?? "Lead WhatsApp"} />
+            <CheckoutDetail label="Subtotal" value={subtotal} />
+            <CheckoutDetail label="Frete" value={shipping ?? order.shipping_method ?? "A combinar"} />
+            <CheckoutDetail label="Origem da venda" value={commercialContext.flowLabel} />
+            <CheckoutDetail label="Ultima atualizacao" value={updatedAt ?? "Agora"} />
+          </dl>
+        </section>
       </main>
       <PoweredByConnectyHub />
     </CheckoutShell>
@@ -351,7 +381,7 @@ function CheckoutShell({
   publicTrackingContext?: ConnectyPublicTrackingContext | null;
 }) {
   return (
-    <div className="min-h-screen bg-[#050912] text-white">
+    <div className="min-h-screen bg-[#f4f9ff] text-slate-950">
       {publicTrackingContext ? (
         <script
           id="connecty-public-tracking-context"
@@ -366,7 +396,7 @@ function CheckoutShell({
         strategy="afterInteractive"
         {...mercadoPagoSecurityScriptAttributes}
       />
-      <div className="absolute inset-x-0 top-0 h-64 bg-[radial-gradient(circle_at_top,_rgba(34,211,238,0.22),_transparent_55%)]" />
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-80 bg-gradient-to-b from-blue-100/70 via-emerald-50/50 to-transparent" />
       <div className="relative">{children}</div>
     </div>
   );
@@ -398,25 +428,25 @@ function safeJson(value: unknown) {
 
 function CheckoutMetric({ label, value }: { label: string; value: string | null }) {
   return (
-    <div className="rounded-[8px] border border-slate-700/70 bg-slate-900/70 p-4">
-      <dt className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">{label}</dt>
-      <dd className="mt-2 text-lg font-semibold text-cyan-100">{value ?? "A combinar"}</dd>
+    <div className="rounded-[8px] border border-blue-100 bg-blue-50/70 p-3">
+      <dt className="text-xs font-bold uppercase text-blue-700">{label}</dt>
+      <dd className="mt-2 truncate text-base font-black text-slate-950">{value ?? "A combinar"}</dd>
     </div>
   );
 }
 
 function CheckoutDetail({ label, value }: { label: string; value: string | null }) {
   return (
-    <div>
-      <dt className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</dt>
-      <dd className="mt-1 font-medium text-slate-100">{value ?? "A combinar"}</dd>
+    <div className="rounded-[8px] border border-blue-100 bg-slate-50 px-3 py-2">
+      <dt className="text-xs font-bold uppercase text-slate-500">{label}</dt>
+      <dd className="mt-1 font-bold text-slate-950">{value ?? "A combinar"}</dd>
     </div>
   );
 }
 
 function CheckoutStoreLogo({ branding }: { branding: OrganizationBranding }) {
   return (
-    <div className="relative grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-[8px] border border-cyan-300/25 bg-white text-slate-950 shadow-lg shadow-black/20">
+    <div className="relative grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-[8px] border border-blue-100 bg-white text-slate-950 shadow-sm">
       {branding.logoUrl ? (
         <Image
           alt={branding.logoAlt}
@@ -440,7 +470,7 @@ function CheckoutItemCard({ item }: { item: CheckoutOrderItemRow }) {
 
   return (
     <div className="flex gap-3 px-4 py-4">
-      <div className="relative grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-[8px] border border-slate-700/80 bg-slate-950/70">
+      <div className="relative grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-[8px] border border-blue-100 bg-slate-50">
         {item.catalogImageUrl ? (
           <Image
             alt={item.title}
@@ -451,13 +481,13 @@ function CheckoutItemCard({ item }: { item: CheckoutOrderItemRow }) {
             className="object-cover"
           />
         ) : (
-          <span className="text-[10px] font-black uppercase tracking-[0.12em] text-cyan-200">Item</span>
+          <span className="text-[10px] font-black uppercase text-blue-600">Item</span>
         )}
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
           <p
-            className="min-w-0 text-sm font-semibold leading-5 text-white"
+            className="min-w-0 text-sm font-bold leading-5 text-slate-950"
             style={{
               display: "-webkit-box",
               WebkitBoxOrient: "vertical",
@@ -470,16 +500,16 @@ function CheckoutItemCard({ item }: { item: CheckoutOrderItemRow }) {
           </p>
           <ItemOriginBadge item={item} />
         </div>
-        <p className="mt-1 text-xs text-slate-400">
+        <p className="mt-1 text-xs text-slate-500">
           {item.sku_code ? `SKU ${item.sku_code}` : item.catalogCategory ?? "Item do catalogo"} - Qtd. {item.quantity ?? 1}
         </p>
         {description ? (
-          <div className="mt-2 text-xs leading-5 text-slate-400">
+          <div className="mt-2 text-xs leading-5 text-slate-600">
             <p>{description}</p>
             {hasLongDescription ? (
               <details className="mt-1">
-                <summary className="cursor-pointer font-semibold text-cyan-200">Ver detalhes</summary>
-                <p className="mt-2 rounded-[8px] border border-slate-700/80 bg-slate-950/60 p-3 text-slate-300">
+                <summary className="cursor-pointer font-bold text-blue-700">Ver detalhes</summary>
+                <p className="mt-2 rounded-[8px] border border-blue-100 bg-blue-50 p-3 text-slate-700">
                   {item.catalogDescription}
                 </p>
               </details>
@@ -487,7 +517,7 @@ function CheckoutItemCard({ item }: { item: CheckoutOrderItemRow }) {
           </div>
         ) : null}
       </div>
-      <span className="shrink-0 text-sm font-semibold text-cyan-100">{price ?? "A combinar"}</span>
+      <span className="shrink-0 text-sm font-black text-blue-700">{price ?? "A combinar"}</span>
     </div>
   );
 }
@@ -507,9 +537,18 @@ function ItemOriginBadge({ item }: { item: CheckoutOrderItemRow }) {
   if (!label) return null;
 
   return (
-    <span className="rounded-full border border-cyan-300/30 bg-cyan-400/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-cyan-100">
+    <span className="rounded-full border border-blue-100 bg-blue-50 px-2 py-0.5 text-[10px] font-bold uppercase text-blue-700">
       {label}
     </span>
+  );
+}
+
+function CheckoutTrustItem({ icon, label }: { icon: ReactNode; label: string }) {
+  return (
+    <div className="flex min-h-11 items-center gap-2 rounded-[8px] border border-blue-100 bg-white px-3 text-xs font-bold text-slate-700">
+      <span className="text-[#128C4A]">{icon}</span>
+      <span>{label}</span>
+    </div>
   );
 }
 
@@ -526,22 +565,25 @@ function CheckoutState({
     <div className={cn(
       "mt-6 rounded-[8px] border p-4",
       tone === "success"
-        ? "border-emerald-300/40 bg-emerald-400/12"
+        ? "border-emerald-200 bg-emerald-50"
         : tone === "error"
-          ? "border-rose-300/40 bg-rose-400/12"
-          : "border-cyan-300/40 bg-cyan-400/12",
+          ? "border-rose-200 bg-rose-50"
+          : "border-blue-100 bg-blue-50",
     )}>
-      <p className="font-semibold text-white">{title}</p>
-      <p className="mt-2 text-sm leading-6 text-slate-300">{body}</p>
+      <p className={cn(
+        "font-bold",
+        tone === "success" ? "text-[#128C4A]" : tone === "error" ? "text-rose-700" : "text-blue-700",
+      )}>{title}</p>
+      <p className="mt-2 text-sm leading-6 text-slate-700">{body}</p>
     </div>
   );
 }
 
 function CheckoutWhatsAppReturn({ link }: { link: CheckoutWhatsappReturn | null }) {
   return (
-    <div className="mt-5 rounded-[8px] border border-emerald-300/30 bg-emerald-400/10 p-4">
-      <p className="text-sm font-semibold text-white">Continue pelo WhatsApp</p>
-      <p className="mt-2 text-xs leading-5 text-emerald-50/80">
+    <div className="mt-5 rounded-[8px] border border-emerald-100 bg-emerald-50 p-4">
+      <p className="text-sm font-bold text-[#128C4A]">Continue pelo WhatsApp</p>
+      <p className="mt-2 text-xs leading-5 text-slate-600">
         O atendimento do pedido continua na conversa oficial da loja.
       </p>
       {link ? (
@@ -554,12 +596,12 @@ function CheckoutWhatsAppReturn({ link }: { link: CheckoutWhatsappReturn | null 
           >
             Voltar ao WhatsApp
           </a>
-          <p className="mt-2 text-center text-[11px] text-emerald-50/70">
+          <p className="mt-2 text-center text-[11px] font-semibold text-[#128C4A]">
             {link.displayName ? `${link.displayName} - ` : ""}{link.phoneLabel}
           </p>
         </>
       ) : (
-        <p className="mt-3 rounded-[8px] border border-emerald-300/20 bg-emerald-400/10 px-3 py-2 text-xs leading-5 text-emerald-50/75">
+        <p className="mt-3 rounded-[8px] border border-emerald-100 bg-white px-3 py-2 text-xs leading-5 text-slate-600">
           Volte para a conversa em que recebeu este checkout para concluir o atendimento.
         </p>
       )}
