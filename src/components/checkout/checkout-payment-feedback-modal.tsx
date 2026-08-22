@@ -124,7 +124,7 @@ export function CheckoutPaymentFeedbackModal({
             {whatsappHref ? (
               <a
                 href={whatsappHref}
-                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-[7px] bg-emerald-300 px-4 text-sm font-black text-slate-950 transition hover:bg-emerald-200"
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-[7px] bg-[#25D366] px-4 text-sm font-black text-white transition hover:bg-[#20bf5a]"
               >
                 <CheckCircle2 className="h-4 w-4" />
                 Voltar ao WhatsApp
@@ -133,7 +133,7 @@ export function CheckoutPaymentFeedbackModal({
               <button
                 type="button"
                 onClick={close}
-                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-[7px] bg-emerald-300 px-4 text-sm font-black text-slate-950 transition hover:bg-emerald-200"
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-[7px] bg-[#25D366] px-4 text-sm font-black text-white transition hover:bg-[#20bf5a]"
               >
                 <CheckCircle2 className="h-4 w-4" />
                 Entendi
@@ -263,7 +263,7 @@ export function CheckoutPaymentFeedbackModal({
           ) : whatsappHref ? (
             <a
               href={whatsappHref}
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-[7px] bg-cyan-300 px-4 text-sm font-black text-slate-950 transition hover:bg-cyan-200"
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-[7px] bg-[#25D366] px-4 text-sm font-black text-white transition hover:bg-[#20bf5a]"
             >
               Voltar ao WhatsApp
             </a>
@@ -292,7 +292,16 @@ function CheckoutFeedbackSummary({
         <div className="mt-4 divide-y divide-slate-700 overflow-hidden rounded-[8px] border border-slate-700/80">
           {feedback.items.slice(0, 5).map((item, index) => (
             <div key={`${item.title}-${index}`} className="flex items-center justify-between gap-3 px-3 py-3">
-              <span className="min-w-0 truncate text-sm font-semibold text-white">
+              <span
+                className="min-w-0 text-sm font-semibold leading-5 text-white"
+                title={`${item.quantity}x ${item.title}`}
+                style={{
+                  display: "-webkit-box",
+                  WebkitBoxOrient: "vertical",
+                  WebkitLineClamp: 2,
+                  overflow: "hidden",
+                }}
+              >
                 {item.quantity}x {item.title}
               </span>
               <span className="shrink-0 font-mono text-xs font-bold text-cyan-100">{item.total ?? "A combinar"}</span>

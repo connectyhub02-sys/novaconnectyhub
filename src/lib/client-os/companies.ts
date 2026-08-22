@@ -8,11 +8,15 @@ export type ClientCompany = {
   id: string;
   name: string;
   slug: string | null;
+  brandLogoUrl: string | null;
+  brandLogoAlt: string | null;
   planCode: string;
   status: string;
   role: string;
   createdAt: string | null;
 };
+
+type JsonRecord = Record<string, unknown>;
 
 type OrganizationRow = {
   id: string;
@@ -20,6 +24,7 @@ type OrganizationRow = {
   slug: string | null;
   plan_code: string;
   status: string;
+  metadata?: JsonRecord | null;
   created_at: string | null;
 };
 
@@ -30,11 +35,16 @@ type MembershipRow = {
 
 const maxCompanyNameLength = 96;
 const clientCompanySlugPrefix = "empresa-cliente-";
+const organizationSelect = "id, name, slug, plan_code, status, metadata, created_at";
+const organizationMembershipSelect = `role, organizations(${organizationSelect})`;
 
-export async function listClientCompanies(userId: string, client: SupabaseClient = createServiceClient()) {
+export async function listClientCompanies(
+  userId: string,
+  client: SupabaseClient = createServiceClient(),
+): Promise<ClientCompany[]> {
   const { data, error } = await client
     .from("organization_members")
-    .select("role, organizations(id, name, slug, plan_code, status, created_at)")
+    .select(organizationMembershipSelect)
     .eq("user_id", userId)
     .order("created_at", { ascending: true });
 
@@ -74,7 +84,7 @@ export async function createClientCompany(input: {
       plan_code: "trial",
       status: "trial",
     })
-    .select("id, name, slug, plan_code, status, created_at")
+    .select(organizationSelect)
     .single<OrganizationRow>();
 
   if (organizationError || !organization) {
@@ -103,6 +113,8 @@ export async function createClientCompany(input: {
     id: organization.id,
     name: organization.name,
     slug: organization.slug,
+    brandLogoUrl: readString(readRecord(organization.metadata).brand_logo_url),
+    brandLogoAlt: readString(readRecord(organization.metadata).brand_logo_alt) ?? organization.name,
     planCode: organization.plan_code,
     status: organization.status,
     role: "owner",
@@ -145,7 +157,7 @@ export async function deleteClientCompany(input: {
     .update({ status: "archived", updated_at: new Date().toISOString() })
     .eq("id", company.id)
     .eq("owner_id", input.userId)
-    .select("id, name, slug, plan_code, status, created_at")
+    .select(organizationSelect)
     .maybeSingle<OrganizationRow>();
 
   if (error) {
@@ -179,7 +191,7 @@ export async function updateClientCompany(input: {
     .update({ name, updated_at: new Date().toISOString() })
     .eq("id", company.id)
     .eq("owner_id", input.userId)
-    .select("id, name, slug, plan_code, status, created_at")
+    .select(organizationSelect)
     .maybeSingle<OrganizationRow>();
 
   if (error) {
@@ -194,6 +206,8 @@ export async function updateClientCompany(input: {
     id: data.id,
     name: data.name,
     slug: data.slug,
+    brandLogoUrl: readString(readRecord(data.metadata).brand_logo_url),
+    brandLogoAlt: readString(readRecord(data.metadata).brand_logo_alt) ?? data.name,
     planCode: data.plan_code,
     status: data.status,
     role: company.role,
@@ -209,7 +223,7 @@ export async function requireClientCompanyAccess(input: {
   const client = input.client ?? createServiceClient();
   const { data, error } = await client
     .from("organization_members")
-    .select("role, organizations(id, name, slug, plan_code, status, created_at)")
+    .select(organizationMembershipSelect)
     .eq("user_id", input.userId)
     .eq("organization_id", input.companyId)
     .maybeSingle<MembershipRow>();
@@ -242,7 +256,7 @@ async function countLinkedCompanyAgents(client: SupabaseClient, companyId: strin
   return count ?? 0;
 }
 
-function mapCompany(row: MembershipRow) {
+function mapCompany(row: MembershipRow): ClientCompany | null {
   const organization = Array.isArray(row.organizations) ? row.organizations[0] : row.organizations;
 
   if (!organization) {
@@ -253,6 +267,8 @@ function mapCompany(row: MembershipRow) {
     id: organization.id,
     name: organization.name,
     slug: organization.slug,
+    brandLogoUrl: readString(readRecord(organization.metadata).brand_logo_url),
+    brandLogoAlt: readString(readRecord(organization.metadata).brand_logo_alt) ?? organization.name,
     planCode: organization.plan_code,
     status: organization.status,
     role: row.role,
@@ -337,4 +353,12 @@ function normalizeCompanyNameForComparison(value: string) {
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase();
+}
+
+function readRecord(value: unknown): JsonRecord {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as JsonRecord) : {};
+}
+
+function readString(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }

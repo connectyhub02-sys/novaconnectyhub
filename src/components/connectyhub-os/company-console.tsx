@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
-import { Building2, GitBranch, Loader2, Pencil, Plus, Save, Trash2, UserPlus, X } from "lucide-react";
+import { Building2, Camera, GitBranch, Loader2, Pencil, Plus, Save, Trash2, UserPlus, X } from "lucide-react";
 import { NeonBadge, Panel, SectionHeader } from "./panel-primitives";
 import { InfinityLoader } from "./infinity-loader";
 import { cn } from "@/lib/utils";
@@ -11,6 +12,8 @@ type ClientCompany = {
   id: string;
   name: string;
   slug: string | null;
+  brandLogoUrl: string | null;
+  brandLogoAlt: string | null;
   planCode: string;
   status: string;
   role: string;
@@ -57,6 +60,7 @@ export function CompanyConsole() {
   const [creatingSector, setCreatingSector] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [logoUploadingId, setLogoUploadingId] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
 
   useEffect(() => {
@@ -239,6 +243,34 @@ export function CompanyConsole() {
     }
   }
 
+  async function uploadCompanyLogo(company: ClientCompany, file: File) {
+    setLogoUploadingId(company.id);
+    setNotice(null);
+
+    try {
+      const formData = new FormData();
+      formData.set("companyId", company.id);
+      formData.set("logo", file);
+
+      const response = await fetch("/api/dashboard/companies/logo", {
+        method: "POST",
+        body: formData,
+      });
+      const data = (await response.json().catch(() => null)) as { company?: ClientCompany; error?: string } | null;
+
+      if (!response.ok || !data?.company) {
+        throw new Error(data?.error ?? "Nao foi possivel salvar o logotipo.");
+      }
+
+      setCompanies((current) => current.map((item) => (item.id === data.company!.id ? data.company! : item)));
+      setNotice({ tone: "success", message: "Logotipo publico da loja atualizado." });
+    } catch (error) {
+      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao atualizar logotipo." });
+    } finally {
+      setLogoUploadingId(null);
+    }
+  }
+
   function openEditCompany(company: ClientCompany) {
     setEditCompanyId(company.id);
     setEditName(company.name);
@@ -344,6 +376,8 @@ export function CompanyConsole() {
                 onCloseSector={closeSectorForm}
                 onSaveSector={createSector}
                 onDelete={() => deleteCompany(company)}
+                logoUploading={logoUploadingId === company.id}
+                onLogoUpload={(file) => uploadCompanyLogo(company, file)}
               />
             ))}
           </div>
@@ -415,6 +449,8 @@ function CompanyBlock({
   onCloseSector,
   onSaveSector,
   onDelete,
+  logoUploading,
+  onLogoUpload,
 }: {
   company: ClientCompany;
   agents: ClientAgent[];
@@ -439,12 +475,25 @@ function CompanyBlock({
   onCloseSector: () => void;
   onSaveSector: () => void;
   onDelete: () => void;
+  logoUploading: boolean;
+  onLogoUpload: (file: File) => void;
 }) {
   return (
     <div className="rounded-xl border p-4" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
-        <div className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-cyan-400/10 text-cyan-300">
-          <Building2 className="h-6 w-6" />
+        <div className="relative grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-xl border border-cyan-400/20 bg-white text-cyan-300">
+          {company.brandLogoUrl ? (
+            <Image
+              alt={company.brandLogoAlt ?? company.name}
+              src={company.brandLogoUrl}
+              fill
+              unoptimized
+              sizes="48px"
+              className="object-contain p-1"
+            />
+          ) : (
+            <Building2 className="h-6 w-6" />
+          )}
         </div>
 
         <div className="min-w-0 flex-1">
@@ -522,6 +571,26 @@ function CompanyBlock({
               {deleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
               {confirmDelete ? "Confirmar" : "Excluir"}
             </button>
+            <label
+              className={cn(
+                "inline-flex min-h-9 cursor-pointer items-center justify-center gap-2 rounded-lg border border-blue-400/25 bg-blue-400/10 px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-blue-200 transition hover:bg-blue-400/15",
+                logoUploading && "pointer-events-none opacity-60",
+              )}
+            >
+              {logoUploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Camera className="h-3.5 w-3.5" />}
+              Logotipo
+              <input
+                accept="image/jpeg,image/png,image/webp"
+                className="sr-only"
+                disabled={logoUploading}
+                type="file"
+                onChange={(event) => {
+                  const file = event.currentTarget.files?.[0] ?? null;
+                  event.currentTarget.value = "";
+                  if (file) onLogoUpload(file);
+                }}
+              />
+            </label>
           </div>
         ) : null}
       </div>

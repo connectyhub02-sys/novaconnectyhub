@@ -5859,6 +5859,8 @@ async function recordSalesCatalogOrderIntent(input: {
           created_from: "whatsapp_agent_runtime",
           agent_run_id: input.context.run.id,
           agent_id: input.context.agent.id,
+          whatsapp_instance_id: input.context.instance.id,
+          provider_instance_id: input.context.instance.provider_instance_id,
           selected_catalog_item_ids: items.map((item) => item.id),
           selected_catalog_item_tags: items.map((item) => item.tag),
           conversation_cart_items: orderSelections.map((selection) => ({
@@ -5976,6 +5978,8 @@ async function recordSalesCatalogOrderIntent(input: {
         order_id: order.id,
         lead_id: input.context.lead?.id ?? null,
         conversation_id: input.context.conversationId,
+        whatsapp_instance_id: input.context.instance.id,
+        provider_instance_id: input.context.instance.provider_instance_id,
         agent_run_id: input.context.run.id,
         product_ids: items.map((item) => item.id),
         product_tags: items.map((item) => item.tag),

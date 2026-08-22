@@ -14,6 +14,8 @@ export function currentOrganizationToClientCompany(
     id: organization.id,
     name: organization.name,
     slug: organization.slug,
+    brandLogoUrl: null,
+    brandLogoAlt: organization.name,
     planCode: organization.planCode,
     status: organization.status,
     role: organization.role,

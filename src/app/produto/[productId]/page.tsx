@@ -3,7 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
-import { ArrowRight, CheckCircle2, FileText, MessageCircle, Package, ShieldCheck, Sparkles } from "lucide-react";
+import { ArrowRight, CheckCircle2, FileText, MessageCircle, Package, ShieldCheck, Sparkles, Store } from "lucide-react";
 import { ProductCheckoutButton } from "@/components/checkout/sales-catalog-product-actions";
 import { mapSalesCatalogItem } from "@/lib/client-os/sales-catalog";
 import { normalizeCurrencyAmount } from "@/lib/sales-catalog/mercado-pago";
@@ -12,6 +12,7 @@ import type { ClientSalesCatalogItem } from "@/lib/sales-catalog/shared";
 import { createServiceClient } from "@/lib/supabase/service";
 import { createOrganizationTrackingToken } from "@/lib/tracking/organization-attribution";
 import type { ConnectyPublicTrackingContext } from "@/lib/tracking/public-context";
+import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -36,6 +37,13 @@ type OrganizationRow = {
   id: string;
   name: string;
   slug: string | null;
+  metadata?: JsonRecord | null;
+};
+
+type OrganizationBranding = {
+  displayName: string;
+  logoUrl: string | null;
+  logoAlt: string;
 };
 
 export async function generateMetadata({ params }: ProductPageProps): Promise<Metadata> {
@@ -98,6 +106,9 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
     conversationId,
     trackingLinkId,
   });
+  const branding = resolveOrganizationBranding(organization);
+  const descriptionPreview = createShortDescription(item.description);
+  const hasLongDescription = isLongDescription(item.description, descriptionPreview);
 
   return (
     <main className="min-h-screen bg-[#f3f8ff] text-slate-950">
@@ -130,15 +141,22 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
 
             <div className="flex min-h-[420px] flex-col p-5 sm:p-7">
               <div>
-                <p className="font-mono text-[11px] font-bold uppercase tracking-[0.24em] text-[#25D366]">
-                  {organization.name}
-                </p>
-                <h1 className="mt-3 text-3xl font-black leading-tight text-slate-950 sm:text-4xl">
+                <StoreIdentity branding={branding} />
+                <h1 className="mt-5 text-2xl font-black leading-tight text-slate-950 sm:text-3xl">
                   {item.title}
                 </h1>
                 <p className="mt-4 text-sm leading-6 text-slate-600">
-                  {item.description}
+                  {descriptionPreview}
                 </p>
+                {hasLongDescription ? (
+                  <a
+                    href="#descricao-completa"
+                    className="mt-3 inline-flex items-center gap-2 rounded-[8px] border border-[#25D366]/35 bg-[#25D366]/10 px-3 py-2 text-xs font-bold text-[#128C4A] transition hover:bg-[#25D366]/15"
+                  >
+                    Ver mais
+                    <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+                  </a>
+                ) : null}
               </div>
 
               <div className="mt-6 grid gap-3 sm:grid-cols-3">
@@ -233,12 +251,22 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
         </aside>
 
         <section className="rounded-[8px] border border-blue-100 bg-white p-5 shadow-xl shadow-blue-950/10 lg:col-span-2 sm:p-7">
-          <p className="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-blue-600">Descricao completa</p>
-          <div className="mt-4 space-y-4 text-sm leading-7 text-slate-700">
-            {splitDescription(item.description).map((paragraph, index) => (
-              <p key={`${index}-${paragraph.slice(0, 16)}`}>{paragraph}</p>
-            ))}
-          </div>
+          <details id="descricao-completa" className="group">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
+              <span>
+                <span className="block font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-blue-600">Descricao completa</span>
+                <span className="mt-1 block text-lg font-black text-slate-950">Detalhes do produto</span>
+              </span>
+              <span className="rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700 transition group-open:bg-[#25D366] group-open:text-white">
+                Ver mais
+              </span>
+            </summary>
+            <div className="mt-4 space-y-4 text-sm leading-7 text-slate-700">
+              {splitDescription(item.description).map((paragraph, index) => (
+                <p key={`${index}-${paragraph.slice(0, 16)}`}>{paragraph}</p>
+              ))}
+            </div>
+          </details>
 
           {videos.length > 0 || documents.length > 0 ? (
             <div className="mt-6 grid gap-3 sm:grid-cols-2">
@@ -260,6 +288,7 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
           ) : null}
         </section>
       </section>
+      <PoweredByConnectyHub tone="light" />
     </main>
   );
 }
@@ -283,7 +312,7 @@ async function loadProductRow(client: ReturnType<typeof createServiceClient>, pr
 async function loadOrganization(client: ReturnType<typeof createServiceClient>, organizationId: string) {
   const { data } = await client
     .from("organizations")
-    .select("id, name, slug")
+    .select("id, name, slug, metadata")
     .eq("id", organizationId)
     .maybeSingle<OrganizationRow>();
 
@@ -345,12 +374,77 @@ function buildProductPublicTrackingContext(input: {
   };
 }
 
+function resolveOrganizationBranding(organization: OrganizationRow): OrganizationBranding {
+  const metadata = readRecord(organization.metadata);
+  const logoUrl = readString(metadata.brand_logo_url);
+  const displayName = readString(metadata.public_display_name) ?? organization.name;
+
+  return {
+    displayName,
+    logoUrl,
+    logoAlt: readString(metadata.brand_logo_alt) ?? displayName,
+  };
+}
+
+function createShortDescription(value: string) {
+  const firstParagraph = splitDescription(value)[0] ?? value;
+  const compact = firstParagraph.replace(/\s+/g, " ").trim();
+
+  if (compact.length <= 240) return compact;
+
+  const slice = compact.slice(0, 240);
+  const lastBreak = Math.max(slice.lastIndexOf("."), slice.lastIndexOf(","), slice.lastIndexOf(" "));
+  const ending = lastBreak > 120 ? slice.slice(0, lastBreak) : slice;
+
+  return `${ending.trim()}...`;
+}
+
+function isLongDescription(fullDescription: string, preview: string) {
+  return fullDescription.replace(/\s+/g, " ").trim().length > preview.replace(/\s+/g, " ").trim().length;
+}
+
 function ProductFact({ icon, label }: { icon: ReactNode; label: string }) {
   return (
     <div className="flex min-h-12 items-center gap-2 rounded-[8px] border border-emerald-100 bg-emerald-50 px-3 text-xs font-bold text-[#128C4A]">
       {icon}
       <span>{label}</span>
     </div>
+  );
+}
+
+function StoreIdentity({ branding }: { branding: OrganizationBranding }) {
+  return (
+    <div className="flex items-center gap-3">
+      <div className="relative grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-[8px] border border-blue-100 bg-white shadow-sm">
+        {branding.logoUrl ? (
+          <Image
+            alt={branding.logoAlt}
+            src={branding.logoUrl}
+            fill
+            unoptimized
+            sizes="48px"
+            className="object-contain p-1"
+          />
+        ) : (
+          <Store className="h-5 w-5 text-blue-600" aria-hidden="true" />
+        )}
+      </div>
+      <div className="min-w-0">
+        <p className="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-[#25D366]">Loja oficial</p>
+        <p className="truncate text-sm font-black text-slate-950">{branding.displayName}</p>
+      </div>
+    </div>
+  );
+}
+
+function PoweredByConnectyHub({ tone }: { tone: "light" | "dark" }) {
+  return (
+    <footer className={cn(
+      "mx-auto w-full max-w-6xl px-4 pb-8 text-center text-xs font-semibold sm:px-6 lg:px-8",
+      tone === "dark" ? "text-slate-500" : "text-slate-500",
+    )}>
+      Desenvolvido por ConnectyHub
+    </footer>
   );
 }
 
@@ -408,6 +502,14 @@ function readSearchString(value: string | string[] | undefined) {
   }
 
   return value?.trim() || null;
+}
+
+function readRecord(value: unknown): JsonRecord {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as JsonRecord) : {};
+}
+
+function readString(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 function normalizeUuid(value: string | null | undefined) {

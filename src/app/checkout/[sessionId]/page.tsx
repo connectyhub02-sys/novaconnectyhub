@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import Script from "next/script";
 import type { ReactNode } from "react";
 import { CheckoutPaymentOptions } from "@/components/checkout/checkout-payment-options";
@@ -13,6 +14,7 @@ import {
   loadSalesCatalogCheckoutOrderBumps,
   type SalesCatalogCheckoutOrderBump,
 } from "@/lib/sales-catalog/checkout-order-bumps";
+import { mapSalesCatalogItem } from "@/lib/client-os/sales-catalog";
 import { loadMercadoPagoPlatformBillingConfig } from "@/lib/sales-catalog/mercado-pago";
 import {
   formatSalesCatalogPaymentSessionStatus,
@@ -96,12 +98,16 @@ type CheckoutOrderItemRow = {
   commercial_flow_type?: string | null;
   commission_eligible?: boolean | null;
   metadata?: JsonRecord | null;
+  catalogDescription?: string | null;
+  catalogImageUrl?: string | null;
+  catalogCategory?: string | null;
 };
 
 type OrganizationRow = {
   id: string;
   name: string;
   slug: string | null;
+  metadata?: JsonRecord | null;
 };
 
 type CheckoutIntegrationRow = {
@@ -117,10 +123,21 @@ type CheckoutWhatsappRow = {
   status: string | null;
 };
 
+type CheckoutConversationRow = {
+  whatsapp_instance_id: string | null;
+  metadata: JsonRecord | null;
+};
+
 type CheckoutWhatsappReturn = {
   href: string;
   phoneLabel: string;
   displayName: string | null;
+};
+
+type OrganizationBranding = {
+  displayName: string;
+  logoUrl: string | null;
+  logoAlt: string;
 };
 
 export default async function CheckoutPage({
@@ -167,10 +184,11 @@ export default async function CheckoutPage({
     && integration?.status === "connected"
     && Boolean(integration.public_key);
   const commercialContext = resolveCheckoutCommercialContext(session, order);
+  const branding = resolveOrganizationBranding(organization);
   const whatsappReturn = buildCheckoutWhatsappReturn({
     phoneNumber: whatsapp?.phone_number ?? null,
     displayName: whatsapp?.display_name ?? null,
-    organizationName: organization.name,
+    organizationName: branding.displayName,
     orderId: order.id,
     status,
   });
@@ -179,7 +197,7 @@ export default async function CheckoutPage({
     session,
     order,
     items,
-    organizationName: organization.name,
+    organizationName: branding.displayName,
     amountLabel: amount,
   });
   const publicTrackingContext = buildCheckoutPublicTrackingContext({
@@ -194,9 +212,12 @@ export default async function CheckoutPage({
         <section className="flex flex-col justify-between rounded-[8px] border border-cyan-400/20 bg-slate-950/72 p-5 shadow-2xl shadow-black/30 sm:p-8">
           <div>
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <span className="text-xs font-semibold uppercase tracking-[0.24em] text-cyan-200">Pedido WhatsApp</span>
-                <h1 className="mt-2 text-3xl font-semibold text-white sm:text-4xl">{organization.name}</h1>
+              <div className="flex min-w-0 items-center gap-3">
+                <CheckoutStoreLogo branding={branding} />
+                <div className="min-w-0">
+                  <span className="text-xs font-semibold uppercase tracking-[0.24em] text-cyan-200">Pedido WhatsApp</span>
+                  <h1 className="mt-2 truncate text-2xl font-semibold text-white sm:text-3xl">{branding.displayName}</h1>
+                </div>
               </div>
               <span className={cn(
                 "rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em]",
@@ -227,18 +248,7 @@ export default async function CheckoutPage({
               <h2 className="text-sm font-semibold uppercase tracking-[0.22em] text-slate-300">Itens</h2>
               <div className="mt-3 divide-y divide-slate-700/70 overflow-hidden rounded-[8px] border border-slate-700/70 bg-slate-900/70">
                 {items.length > 0 ? items.map((item) => (
-                  <div key={item.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-4">
-                    <div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="text-sm font-semibold text-white">{item.title}</p>
-                        <ItemOriginBadge item={item} />
-                      </div>
-                      <p className="mt-1 text-xs text-slate-400">
-                        {item.sku_code ? `SKU ${item.sku_code}` : "Item do catalogo"} · Qtd. {item.quantity ?? 1}
-                      </p>
-                    </div>
-                    <span className="text-sm font-semibold text-cyan-100">{formatCurrency(item.total ?? item.sale_price ?? item.unit_price)}</span>
-                  </div>
+                  <CheckoutItemCard key={item.id} item={item} />
                 )) : (
                   <div className="px-4 py-4 text-sm text-slate-300">Pedido registrado no catalogo de vendas.</div>
                 )}
@@ -305,7 +315,7 @@ export default async function CheckoutPage({
               pixQrCode={session.pix_qr_code}
               pixQrCodeBase64={session.pix_qr_code_base64}
               pixTicketUrl={session.pix_ticket_url}
-              organizationName={organization.name}
+              organizationName={branding.displayName}
               orderCode={order.id.slice(0, 8).toUpperCase()}
               items={items.map((item) => ({
                 title: item.title,
@@ -328,6 +338,7 @@ export default async function CheckoutPage({
           />
         </aside>
       </main>
+      <PoweredByConnectyHub />
     </CheckoutShell>
   );
 }
@@ -403,6 +414,84 @@ function CheckoutDetail({ label, value }: { label: string; value: string | null 
   );
 }
 
+function CheckoutStoreLogo({ branding }: { branding: OrganizationBranding }) {
+  return (
+    <div className="relative grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-[8px] border border-cyan-300/25 bg-white text-slate-950 shadow-lg shadow-black/20">
+      {branding.logoUrl ? (
+        <Image
+          alt={branding.logoAlt}
+          src={branding.logoUrl}
+          fill
+          unoptimized
+          sizes="56px"
+          className="object-contain p-1.5"
+        />
+      ) : (
+        <span className="text-lg font-black">{branding.displayName.slice(0, 1).toUpperCase()}</span>
+      )}
+    </div>
+  );
+}
+
+function CheckoutItemCard({ item }: { item: CheckoutOrderItemRow }) {
+  const description = createShortCheckoutDescription(item.catalogDescription ?? readString(readRecord(item.metadata).cart_item_note));
+  const hasLongDescription = Boolean(item.catalogDescription && isLongCheckoutDescription(item.catalogDescription, description));
+  const price = formatCurrency(item.total ?? item.sale_price ?? item.unit_price);
+
+  return (
+    <div className="flex gap-3 px-4 py-4">
+      <div className="relative grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-[8px] border border-slate-700/80 bg-slate-950/70">
+        {item.catalogImageUrl ? (
+          <Image
+            alt={item.title}
+            src={item.catalogImageUrl}
+            fill
+            unoptimized
+            sizes="56px"
+            className="object-cover"
+          />
+        ) : (
+          <span className="text-[10px] font-black uppercase tracking-[0.12em] text-cyan-200">Item</span>
+        )}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <p
+            className="min-w-0 text-sm font-semibold leading-5 text-white"
+            style={{
+              display: "-webkit-box",
+              WebkitBoxOrient: "vertical",
+              WebkitLineClamp: 2,
+              overflow: "hidden",
+            }}
+            title={item.title}
+          >
+            {item.title}
+          </p>
+          <ItemOriginBadge item={item} />
+        </div>
+        <p className="mt-1 text-xs text-slate-400">
+          {item.sku_code ? `SKU ${item.sku_code}` : item.catalogCategory ?? "Item do catalogo"} - Qtd. {item.quantity ?? 1}
+        </p>
+        {description ? (
+          <div className="mt-2 text-xs leading-5 text-slate-400">
+            <p>{description}</p>
+            {hasLongDescription ? (
+              <details className="mt-1">
+                <summary className="cursor-pointer font-semibold text-cyan-200">Ver detalhes</summary>
+                <p className="mt-2 rounded-[8px] border border-slate-700/80 bg-slate-950/60 p-3 text-slate-300">
+                  {item.catalogDescription}
+                </p>
+              </details>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+      <span className="shrink-0 text-sm font-semibold text-cyan-100">{price ?? "A combinar"}</span>
+    </div>
+  );
+}
+
 function ItemOriginBadge({ item }: { item: CheckoutOrderItemRow }) {
   const metadata = readRecord(item.metadata);
   const flow = normalizeCommercialFlowType(item.commercial_flow_type ?? readString(metadata.commercial_flow_type));
@@ -461,7 +550,7 @@ function CheckoutWhatsAppReturn({ link }: { link: CheckoutWhatsappReturn | null 
             href={link.href}
             target="_blank"
             rel="noreferrer"
-            className="mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-[8px] bg-emerald-300 px-4 text-sm font-semibold text-emerald-950 transition hover:bg-emerald-200"
+            className="mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-[8px] bg-[#25D366] px-4 text-sm font-semibold text-white transition hover:bg-[#20bf5a]"
           >
             Voltar ao WhatsApp
           </a>
@@ -497,7 +586,7 @@ async function loadCheckoutData(client: ReturnType<typeof createServiceClient>, 
     };
   }
 
-  const [orderResult, itemsResult, organizationResult, whatsappResult, integration] = await Promise.all([
+  const [orderResult, itemsResult, organizationResult, integration] = await Promise.all([
     client
       .from("sales_catalog_orders")
       .select("id, lead_id, conversation_id, customer_name, customer_phone, subtotal, shipping_total, total, shipping_method, status, payment_status, commercial_flow_type, revenue_owner_type, contains_platform_products, commission_eligible, metadata")
@@ -512,22 +601,25 @@ async function loadCheckoutData(client: ReturnType<typeof createServiceClient>, 
       .order("created_at", { ascending: true }),
     client
       .from("organizations")
-      .select("id, name, slug")
+      .select("id, name, slug, metadata")
       .eq("id", session.organization_id)
       .maybeSingle<OrganizationRow>(),
-    client
-      .from("whatsapp_instances")
-      .select("id, phone_number, display_name, status")
-      .eq("organization_id", session.organization_id)
-      .eq("status", "connected")
-      .not("phone_number", "is", null)
-      .order("connected_at", { ascending: false, nullsFirst: false })
-      .limit(1)
-      .maybeSingle<CheckoutWhatsappRow>(),
     loadCheckoutIntegration(client, session),
   ]);
 
-  const items = (itemsResult.data ?? []) as CheckoutOrderItemRow[];
+  const rawItems = (itemsResult.data ?? []) as CheckoutOrderItemRow[];
+  const order = orderResult.data ?? null;
+  const [items, whatsapp] = await Promise.all([
+    enrichCheckoutItemsWithCatalog(client, rawItems, session.organization_id),
+    order
+      ? loadCheckoutWhatsapp(client, {
+          organizationId: session.organization_id,
+          conversationId: order.conversation_id,
+          orderMetadata: order.metadata,
+          sessionMetadata: session.metadata,
+        })
+      : Promise.resolve(null),
+  ]);
   const orderBumps = orderResult.data
     ? await loadSalesCatalogCheckoutOrderBumps({
         client,
@@ -540,13 +632,123 @@ async function loadCheckoutData(client: ReturnType<typeof createServiceClient>, 
 
   return {
     session,
-    order: orderResult.data ?? null,
+    order,
     items,
     organization: organizationResult.data ?? null,
     integration,
-    whatsapp: whatsappResult.data ?? null,
+    whatsapp,
     orderBumps,
   };
+}
+
+async function enrichCheckoutItemsWithCatalog(
+  client: ReturnType<typeof createServiceClient>,
+  items: CheckoutOrderItemRow[],
+  organizationId: string,
+) {
+  const catalogItemIds = Array.from(new Set(
+    items
+      .map((item) => item.catalog_item_id)
+      .filter((item): item is string => typeof item === "string" && item.length > 0),
+  ));
+
+  if (catalogItemIds.length === 0) {
+    return items;
+  }
+
+  const { data } = await client
+    .from("intelligence_memory")
+    .select("id, organization_id, title, content, metadata, created_at, updated_at")
+    .eq("scope", "organization")
+    .eq("organization_id", organizationId)
+    .eq("memory_type", "sales_catalog_item")
+    .in("id", catalogItemIds);
+  const catalogById = new Map(
+    ((data ?? []) as Array<{
+      id: string;
+      organization_id: string | null;
+      title: string;
+      content: string;
+      metadata: JsonRecord | null;
+      created_at: string | null;
+      updated_at: string | null;
+    }>).map((row) => [row.id, mapSalesCatalogItem(row)]),
+  );
+
+  return items.map((item) => {
+    const catalogItem = item.catalog_item_id ? catalogById.get(item.catalog_item_id) ?? null : null;
+    const cover = catalogItem?.media.find((media) => media.kind === "image") ?? null;
+
+    return {
+      ...item,
+      catalogDescription: catalogItem?.description ?? readString(readRecord(item.metadata).product_description),
+      catalogImageUrl: cover?.storageUrl ?? readString(readRecord(item.metadata).product_image_url),
+      catalogCategory: catalogItem?.category ?? readString(readRecord(item.metadata).category),
+    };
+  });
+}
+
+async function loadCheckoutWhatsapp(
+  client: ReturnType<typeof createServiceClient>,
+  input: {
+    organizationId: string;
+    conversationId: string | null;
+    orderMetadata?: JsonRecord | null;
+    sessionMetadata?: JsonRecord | null;
+  },
+) {
+  const candidateInstanceIds: string[] = [];
+  if (input.conversationId) {
+    const { data: conversation } = await client
+      .from("conversations")
+      .select("whatsapp_instance_id, metadata")
+      .eq("id", input.conversationId)
+      .eq("organization_id", input.organizationId)
+      .maybeSingle<CheckoutConversationRow>();
+    const metadata = readRecord(conversation?.metadata);
+    const conversationWhatsappInstanceId = conversation?.whatsapp_instance_id ?? readString(metadata.whatsapp_instance_id);
+
+    if (conversationWhatsappInstanceId) {
+      candidateInstanceIds.push(conversationWhatsappInstanceId);
+    }
+  }
+
+  for (const metadata of [input.orderMetadata, input.sessionMetadata]) {
+    const record = readRecord(metadata);
+    const instanceId = readString(record.whatsapp_instance_id)
+      ?? readString(record.source_whatsapp_instance_id)
+      ?? readString(record.conversation_whatsapp_instance_id);
+
+    if (instanceId && !candidateInstanceIds.includes(instanceId)) {
+      candidateInstanceIds.push(instanceId);
+    }
+  }
+
+  for (const instanceId of candidateInstanceIds) {
+    const { data: instance } = await client
+      .from("whatsapp_instances")
+      .select("id, phone_number, display_name, status")
+      .eq("id", instanceId)
+      .eq("organization_id", input.organizationId)
+      .not("phone_number", "is", null)
+      .maybeSingle<CheckoutWhatsappRow>();
+
+    if (instance?.phone_number) {
+      return instance;
+    }
+  }
+
+  const { data } = await client
+    .from("whatsapp_instances")
+    .select("id, phone_number, display_name, status")
+    .eq("organization_id", input.organizationId)
+    .eq("status", "connected")
+    .not("phone_number", "is", null)
+    .order("connected_at", { ascending: false, nullsFirst: false })
+    .limit(1)
+    .maybeSingle<CheckoutWhatsappRow>();
+
+  return data ?? null;
 }
 
 async function loadCheckoutIntegration(client: ReturnType<typeof createServiceClient>, session: CheckoutSessionRow) {
@@ -682,12 +884,27 @@ function buildCheckoutPaymentFeedback(input: {
   const status = normalizeCheckoutFeedbackStatus(input.status);
   if (!status) return null;
 
+  const gatewayUnavailable = status === "error"
+    && (input.session.provider_status === "gateway_unavailable" || input.session.provider_status === "gateway_error");
+
   return {
     status,
     organizationName: input.organizationName,
     orderCode: input.order.id.slice(0, 8).toUpperCase(),
     amountLabel: input.amountLabel,
-    providerStatusDetail: input.session.provider_status_detail,
+    providerStatusDetail: input.session.provider_status_detail ?? input.session.provider_status,
+    rejection: gatewayUnavailable ? {
+      inlineMessage: "Pagamento temporariamente indisponivel. O pedido foi criado, mas a loja precisa ajustar o gateway de pagamento.",
+      title: "Pagamento temporariamente indisponivel",
+      description: "Seu pedido foi criado, mas a loja ainda precisa ajustar o gateway de pagamento antes de receber online.",
+      reason: "Gateway de pagamento indisponivel.",
+      recommendation: "Volte ao WhatsApp oficial da loja para combinar o proximo passo do pedido.",
+      nextSteps: [
+        "O pedido ja ficou registrado com os itens escolhidos.",
+        "Continue pelo WhatsApp oficial da loja enquanto o pagamento online e ajustado.",
+      ],
+      statusDetail: input.session.provider_status_detail ?? input.session.provider_status,
+    } : null,
     items: input.items.map((item) => ({
       title: item.title,
       quantity: item.quantity ?? 1,
@@ -709,6 +926,45 @@ function normalizeCheckoutFeedbackStatus(status: string): CheckoutPaymentFeedbac
   }
 
   return null;
+}
+
+function resolveOrganizationBranding(organization: OrganizationRow): OrganizationBranding {
+  const metadata = readRecord(organization.metadata);
+  const logoUrl = readString(metadata.brand_logo_url);
+  const displayName = readString(metadata.public_display_name) ?? organization.name;
+
+  return {
+    displayName,
+    logoUrl,
+    logoAlt: readString(metadata.brand_logo_alt) ?? displayName,
+  };
+}
+
+function createShortCheckoutDescription(value: string | null | undefined) {
+  const compact = value?.replace(/\s+/g, " ").trim() ?? "";
+
+  if (!compact) return null;
+  if (compact.length <= 120) return compact;
+
+  const slice = compact.slice(0, 120);
+  const lastBreak = Math.max(slice.lastIndexOf("."), slice.lastIndexOf(","), slice.lastIndexOf(" "));
+  const ending = lastBreak > 60 ? slice.slice(0, lastBreak) : slice;
+
+  return `${ending.trim()}...`;
+}
+
+function isLongCheckoutDescription(fullDescription: string, preview: string | null) {
+  if (!preview) return Boolean(fullDescription.trim());
+
+  return fullDescription.replace(/\s+/g, " ").trim().length > preview.replace(/\s+/g, " ").trim().length;
+}
+
+function PoweredByConnectyHub() {
+  return (
+    <footer className="mx-auto w-full max-w-6xl px-4 pb-8 text-center text-xs font-semibold text-slate-500 sm:px-6 lg:px-8">
+      Desenvolvido por ConnectyHub
+    </footer>
+  );
 }
 
 function readRecord(value: unknown): JsonRecord {

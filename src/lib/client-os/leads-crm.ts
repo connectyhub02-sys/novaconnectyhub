@@ -344,6 +344,8 @@ export async function getAdminLeadCrmWorkspace(input: {
     id: organization.id,
     name: organization.name,
     slug: organization.slug,
+    brandLogoUrl: null,
+    brandLogoAlt: organization.name,
     planCode: organization.plan_code,
     status: organization.status,
     role: "platform_admin",
