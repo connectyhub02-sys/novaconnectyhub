@@ -60,6 +60,7 @@ import {
   type ClientSalesCatalogOrder,
   type ClientSalesCatalogSettings,
   type ClientSalesCatalogShippingSettings,
+  type SalesCatalogItemAttribute,
   type SalesCatalogMedia,
   type SalesCatalogShippingQuote,
 } from "@/lib/sales-catalog/shared";
@@ -3189,6 +3190,7 @@ function buildSalesCatalogLines(items: RuntimeSalesCatalogItem[]) {
     "- Se o lead pedir dois ou mais produtos juntos, confirme os itens escolhidos de forma curta; o sistema deve criar um unico checkout com todos os itens somados.",
     "- Se o lead vier escolhendo produtos em mensagens separadas e depois disser para fechar/pagar/comprar, trate os produtos recentes da conversa como um carrinho unico. Resuma o carrinho em uma frase curta, sem repetir ficha tecnica.",
     "- Se o lead pedir quantidade, use a quantidade pedida. Se falar 'meia', 'meio' ou 'metade', reconheca naturalmente como fracionamento/combinacao e confirme antes de inventar regra de preco.",
+    "- Se o lead pedir variacao, sabor, tamanho, combo ou adicional cadastrado, use exatamente o que existe no catalogo/SKUs/atributos. Se houver preco explicito do adicional, o sistema pode somar no pedido.",
     "- Quando o lead escolher uma opcao ou disser que quer comprar/fechar/pagar, use a tag do item escolhido e responda curto; o sistema registra pedido e gera checkout/botao quando possivel.",
     "- Nunca escreva 'toque no botao abaixo', 'vou te enviar o botao' ou equivalente se a resposta nao tiver a tag exata do produto ou link que gera a acao.",
     "- Nunca mencione ao lead campos internos como destino da venda, checkout ConnectyHub, status, quantidade em estoque, alerta de estoque, arquivos, execucao, SKU, tipo de produto ou midias, a menos que ele pergunte diretamente.",
@@ -5390,7 +5392,7 @@ type RuntimeSalesCatalogOrderSelection = {
 };
 
 const salesCatalogCartHistoryMessageLimit = 18;
-const salesCatalogCheckoutItemLimit = 8;
+const salesCatalogCheckoutItemLimit = 10;
 
 function resolveSalesCatalogOrderSelections(input: {
   context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
@@ -5574,6 +5576,7 @@ function clampRuntimeOrderQuantity(value: number) {
 
 function resolveSalesCatalogCartBoundaryMs(orders: RuntimeSalesCatalogOrder[]) {
   const timestamps = orders
+    .filter((order) => order.status !== "pending_payment" || order.paymentStatus !== "pending")
     .flatMap((order) => [order.createdAt, order.updatedAt])
     .map((value) => Date.parse(value ?? ""))
     .filter((value) => Number.isFinite(value));
@@ -5611,13 +5614,23 @@ function buildSalesCatalogTokenFrequency(items: RuntimeSalesCatalogItem[]) {
   return frequency;
 }
 
+function formatSalesCatalogAttributeSearchValues(attributes: SalesCatalogItemAttribute[]) {
+  return attributes.flatMap((attribute) => [
+    attribute.name,
+    ...attribute.values,
+    ...attribute.values.map((value) => `${attribute.name} ${value}`),
+  ]);
+}
+
 function buildSalesCatalogSearchTokens(item: RuntimeSalesCatalogItem) {
   const values = [
     item.title,
     item.category ?? "",
     item.platformProductCode ?? "",
+    ...formatSalesCatalogAttributeSearchValues(item.attributes),
     ...item.skus.map((sku) => sku.title ?? ""),
     ...item.skus.map((sku) => sku.skuCode ?? ""),
+    ...item.skus.flatMap((sku) => formatSalesCatalogAttributeSearchValues(sku.attributes)),
   ];
   const tokens = values
     .flatMap((value) => normalizeSearch(value).split(" "))
@@ -5639,15 +5652,25 @@ function salesCatalogCandidateTokensMatch(normalizedText: string, candidate: str
 }
 
 const salesCatalogIgnoredSearchTokens = new Set([
+  "adicional",
+  "adicionais",
   "ampola",
+  "borda",
+  "bordas",
   "capsula",
   "capsulas",
   "comprimido",
   "comprimidos",
+  "combo",
+  "combos",
   "produto",
   "produtos",
+  "sabor",
+  "sabores",
   "servico",
   "servicos",
+  "tamanho",
+  "tamanhos",
   "injetavel",
   "injetaveis",
   "testosterona",
@@ -5749,6 +5772,10 @@ async function recordSalesCatalogOrderIntent(input: {
     return null;
   }
 
+  if (isSalesCatalogCartAdditionOnlyIntent(intentText)) {
+    return null;
+  }
+
   try {
     const { data: existingData } = await input.client
       .from("sales_catalog_orders")
@@ -5772,21 +5799,30 @@ async function recordSalesCatalogOrderIntent(input: {
     const customerPhone = input.context.lead?.phone_number ?? input.context.phoneNumber ?? null;
     const orderSelections = orderCatalogSelections.map((selection) => {
       const { item } = selection;
-      const sku = resolveRuntimeOrderSku(item);
+      const mentionText = [selection.mentionText, intentText, input.text].filter(Boolean).join(" ");
+      const sku = resolveRuntimeOrderSku(item, mentionText);
+      const selectedAttributes = resolveRuntimeOrderSelectedAttributes(item, sku, mentionText);
       const unitPrice = sku?.price ?? item.price;
       const salePrice = sku?.salePrice ?? item.offer.salePrice;
       const unitTotal = salePrice ?? unitPrice;
-      const total = multiplyRuntimeOrderItemTotal(unitTotal, selection.quantity);
+      const total = multiplyRuntimeOrderItemTotal(unitTotal, selection.quantity, selectedAttributes.modifierAmount);
 
       return {
         item,
         sku,
         quantity: selection.quantity,
+        attributes: selectedAttributes.attributes.length > 0
+          ? selectedAttributes.attributes
+          : sku?.attributes.length
+            ? sku.attributes
+            : item.attributes,
+        attributeModifiers: selectedAttributes.modifiers,
+        attributeModifierTotal: selectedAttributes.modifierTotal,
         unitPrice,
         salePrice,
         total,
         source: selection.source,
-        mentionText: selection.mentionText,
+        mentionText,
         quantitySignal: selection.quantitySignal,
         fractionalQuantity: selection.fractionalQuantity,
       };
@@ -5833,6 +5869,9 @@ async function recordSalesCatalogOrderIntent(input: {
             source: selection.source,
             quantity_signal: selection.quantitySignal,
             fractional_quantity: selection.fractionalQuantity,
+            selected_attributes: selection.attributes,
+            attribute_modifiers: selection.attributeModifiers,
+            attribute_modifier_total: selection.attributeModifierTotal,
             mention_preview: selection.mentionText,
           })),
           commercial_flow_type: commercialFlowType,
@@ -5858,6 +5897,9 @@ async function recordSalesCatalogOrderIntent(input: {
       unitPrice,
       salePrice,
       total: itemTotal,
+      attributes,
+      attributeModifiers,
+      attributeModifierTotal,
       source,
       mentionText,
       quantitySignal,
@@ -5880,7 +5922,7 @@ async function recordSalesCatalogOrderIntent(input: {
         revenue_owner_type: item.revenueOwnerType,
         commission_eligible: item.commissionEligible,
         platform_product_id: item.platformProductId,
-        attributes: (sku?.attributes.length ? sku.attributes : item.attributes).map((attribute) => ({
+        attributes: attributes.map((attribute) => ({
           id: attribute.id,
           name: attribute.name,
           values: attribute.values,
@@ -5909,6 +5951,9 @@ async function recordSalesCatalogOrderIntent(input: {
           conversation_cart_source: source,
           conversation_cart_quantity_signal: quantitySignal,
           conversation_cart_fractional_quantity: fractionalQuantity,
+          conversation_cart_selected_attributes: attributes,
+          conversation_cart_attribute_modifiers: attributeModifiers,
+          conversation_cart_attribute_modifier_total: attributeModifierTotal,
           conversation_cart_mention_preview: mentionText,
         },
       };
@@ -5942,6 +5987,9 @@ async function recordSalesCatalogOrderIntent(input: {
           source: selection.source,
           quantity_signal: selection.quantitySignal,
           fractional_quantity: selection.fractionalQuantity,
+          selected_attributes: selection.attributes,
+          attribute_modifiers: selection.attributeModifiers,
+          attribute_modifier_total: selection.attributeModifierTotal,
         })),
       },
     });
@@ -6223,26 +6271,192 @@ async function maybeSendSalesCatalogProductPageLinks(input: {
   return message;
 }
 
-function resolveRuntimeOrderSku(item: RuntimeSalesCatalogItem): RuntimeSalesCatalogItem["skus"][number] | null {
+function resolveRuntimeOrderSku(
+  item: RuntimeSalesCatalogItem,
+  mentionText?: string | null,
+): RuntimeSalesCatalogItem["skus"][number] | null {
   const activeSkus = item.skus.filter((sku) => (
     sku.status === "active"
     && (sku.stockStatus !== "out_of_stock" || item.inventory.allowBackorder)
   ));
 
+  if (mentionText?.trim() && activeSkus.length > 1) {
+    const normalizedText = normalizeSearch(mentionText);
+    const matchedSkus = activeSkus
+      .map((sku) => ({
+        sku,
+        score: scoreRuntimeOrderSkuMatch(normalizedText, sku),
+      }))
+      .filter((entry) => entry.score > 0)
+      .sort((a, b) => b.score - a.score);
+
+    if (matchedSkus[0]) {
+      return matchedSkus[0].sku;
+    }
+  }
+
   return activeSkus.length === 1 ? activeSkus[0] : null;
 }
 
-function multiplyRuntimeOrderItemTotal(total: string | null, quantity: number) {
+function scoreRuntimeOrderSkuMatch(
+  normalizedText: string,
+  sku: RuntimeSalesCatalogItem["skus"][number],
+) {
+  let score = 0;
+
+  for (const candidate of buildRuntimeOrderSkuSearchCandidates(sku)) {
+    if (normalizedText.includes(candidate)) {
+      score = Math.max(score, candidate.length + 20);
+      continue;
+    }
+
+    if (salesCatalogCandidateTokensMatch(normalizedText, candidate)) {
+      score = Math.max(score, candidate.length);
+    }
+  }
+
+  return score;
+}
+
+function buildRuntimeOrderSkuSearchCandidates(sku: RuntimeSalesCatalogItem["skus"][number]) {
+  return [
+    sku.title ?? "",
+    sku.skuCode ?? "",
+    ...sku.attributes.flatMap((attribute) => [
+      ...attribute.values,
+      ...attribute.values.map((value) => `${attribute.name} ${value}`),
+    ]),
+  ]
+    .map((value) => normalizeSearch(value))
+    .filter((value) => value.length >= 3 && !salesCatalogIgnoredSearchTokens.has(value))
+    .sort((a, b) => b.length - a.length);
+}
+
+type RuntimeSalesCatalogAttributeModifier = {
+  attributeId: string;
+  attributeName: string;
+  value: string;
+  amount: string;
+};
+
+function resolveRuntimeOrderSelectedAttributes(
+  item: RuntimeSalesCatalogItem,
+  sku: RuntimeSalesCatalogItem["skus"][number] | null,
+  mentionText: string,
+) {
+  const normalizedText = normalizeSearch(mentionText);
+  const selectedItemAttributes = selectRuntimeOrderMentionedAttributes(item.attributes, normalizedText);
+  const selectedSkuAttributes = sku ? selectRuntimeOrderMentionedAttributes(sku.attributes, normalizedText) : [];
+  const attributes = mergeRuntimeOrderAttributes(selectedSkuAttributes, selectedItemAttributes);
+  const modifiers: RuntimeSalesCatalogAttributeModifier[] = selectedItemAttributes.flatMap((attribute) => (
+    attribute.values.flatMap((value) => {
+      const amount = parseRuntimeAttributeModifierAmount(value);
+      return amount ? [{ attributeId: attribute.id, attributeName: attribute.name, value, amount }] : [];
+    })
+  ));
+  const modifierAmount = modifiers.reduce((total, modifier) => {
+    const amount = normalizeCurrencyAmount(modifier.amount);
+    return total + (typeof amount === "number" && Number.isFinite(amount) ? amount : 0);
+  }, 0);
+
+  return {
+    attributes,
+    modifiers,
+    modifierAmount,
+    modifierTotal: modifierAmount > 0 ? formatRuntimeOrderMoney(modifierAmount) : null,
+  };
+}
+
+function selectRuntimeOrderMentionedAttributes(
+  attributes: SalesCatalogItemAttribute[],
+  normalizedText: string,
+): SalesCatalogItemAttribute[] {
+  if (!normalizedText) return [];
+
+  return attributes.flatMap((attribute) => {
+    const values = attribute.values.filter((value) => runtimeAttributeValueMatches(normalizedText, value));
+
+    return values.length > 0
+      ? [{
+          id: attribute.id,
+          name: attribute.name,
+          values,
+        }]
+      : [];
+  });
+}
+
+function runtimeAttributeValueMatches(normalizedText: string, value: string) {
+  const normalizedValue = normalizeSearch(value);
+
+  if (normalizedValue.length >= 3 && normalizedText.includes(normalizedValue)) {
+    return true;
+  }
+
+  return buildRuntimeAttributeValueTokens(value).some((token) => normalizedText.includes(token));
+}
+
+function buildRuntimeAttributeValueTokens(value: string) {
+  return normalizeSearch(value)
+    .split(" ")
+    .filter((token) => (
+      token.length >= 3
+      && !salesCatalogIgnoredSearchTokens.has(token)
+      && !/^\d+$/.test(token)
+      && token !== "brl"
+    ));
+}
+
+function mergeRuntimeOrderAttributes(
+  ...groups: SalesCatalogItemAttribute[][]
+): SalesCatalogItemAttribute[] {
+  const merged = new Map<string, SalesCatalogItemAttribute>();
+
+  for (const group of groups) {
+    for (const attribute of group) {
+      const current = merged.get(attribute.id);
+
+      if (!current) {
+        merged.set(attribute.id, {
+          ...attribute,
+          values: [...attribute.values],
+        });
+        continue;
+      }
+
+      current.values = Array.from(new Set([...current.values, ...attribute.values]));
+    }
+  }
+
+  return Array.from(merged.values());
+}
+
+function parseRuntimeAttributeModifierAmount(value: string) {
+  const match = value.match(/(?:\+|\bmais\b)\s*(?:r\$\s*)?(\d{1,6}(?:[.,]\d{1,2})?)/i);
+  if (!match) return null;
+
+  const amount = normalizeCurrencyAmount(match[1]);
+  return typeof amount === "number" && Number.isFinite(amount) && amount > 0
+    ? formatRuntimeOrderMoney(amount)
+    : null;
+}
+
+function multiplyRuntimeOrderItemTotal(total: string | null, quantity: number, modifierAmount = 0) {
   const safeQuantity = clampRuntimeOrderQuantity(quantity);
 
-  if (safeQuantity <= 1) {
+  if (safeQuantity <= 1 && modifierAmount <= 0) {
     return total;
   }
 
-  const amount = normalizeCurrencyAmount(total);
-  if (!amount) return total;
+  const baseAmount = normalizeCurrencyAmount(total);
 
-  return formatRuntimeOrderMoney(amount * safeQuantity);
+  if (typeof baseAmount !== "number" || !Number.isFinite(baseAmount)) {
+    return total;
+  }
+
+  const finalAmount = (baseAmount + Math.max(0, modifierAmount)) * safeQuantity;
+
+  return formatRuntimeOrderMoney(finalAmount);
 }
 
 function sumRuntimeOrderTotal(items: Array<{ total: string | null }>) {
@@ -6372,6 +6586,22 @@ function hasSalesCatalogOrderIntent(text: string) {
     || /\b(quero esse|quero essa|quero um|quero uma|vou querer|pode mandar|manda pra mim|separa pra mim|fecha pra mim)\b/.test(normalized)
   )
     && !/\b(nao quero|nao vou|sem interesse|apenas olhando|so olhando|so ver|somente ver)\b/.test(normalized);
+}
+
+function isSalesCatalogCartAdditionOnlyIntent(text: string) {
+  const normalized = normalizeSearch(text);
+
+  if (!normalized) return false;
+  if (hasSalesCatalogCheckoutClosingIntent(normalized)) return false;
+
+  return (
+    /\b(tambem|também|mais|adiciona|adicionar|adiciona ai|coloca|colocar|inclui|incluir|poe|põe|bota|botar|acrescenta|acrescentar|extra|adicional|com)\b/.test(normalized)
+    || /^(?:e|mais)\s+(?:um|uma|dois|duas|\d)/.test(normalized)
+  );
+}
+
+function hasSalesCatalogCheckoutClosingIntent(normalizedText: string) {
+  return /\b(fechar|fechamos|fecha|finalizar|finaliza|checkout|pagamento|pagar|pix|cartao|cartão|boleto|link de pagamento|botao de pagamento|comprar|compra|comprovante)\b/.test(normalizedText);
 }
 
 async function sendSalesCatalogMediaAttachments(input: {
