@@ -86,6 +86,12 @@ type AttendanceQueueFilter = {
   avatarUrl: string | null;
 };
 
+type AttendanceAgentIdentity = {
+  avatarUrl: string | null;
+  detail: string | null;
+  name: string;
+};
+
 type LeadCrmConsoleProps = {
   attendanceNotificationHref?: string;
   commerceEnabled?: boolean;
@@ -838,6 +844,7 @@ function AttendanceCenterView({
   );
   const selectedQueueExists = queueFilters.some((queue) => queue.key === selectedQueueKey);
   const effectiveQueueKey = selectedQueueExists ? selectedQueueKey : "all";
+  const activeQueueFilter = queueFilters.find((queue) => queue.key === effectiveQueueKey) ?? null;
   const queueThreads = useMemo(
     () => attendanceThreads.filter((thread) => matchesAttendanceQueue(thread, effectiveQueueKey)),
     [attendanceThreads, effectiveQueueKey],
@@ -857,6 +864,7 @@ function AttendanceCenterView({
   const activeConversation = activeThread?.conversation ?? null;
   const activeHumanIntervention = activeThread ? getThreadHumanIntervention(activeThread, handoffOverrides) : emptyClientHumanIntervention();
   const activeConversationId = activeThread?.conversationId ?? null;
+  const activeAgentIdentity = getAttendanceAgentIdentity(activeThread, activeQueueFilter, effectiveQueueKey);
   const activeMessages = activeThread
     ? mergeConversationMessages(
         activeConversation?.messages ?? activeThread.lead.conversation.messages,
@@ -1400,22 +1408,21 @@ function AttendanceCenterView({
             )}
             style={{ borderColor: "var(--ch-border)" }}
           >
-            <div className="border-b px-4 py-4" style={{ borderColor: "var(--ch-border)" }}>
+            <div className="border-b bg-[#f0f2f5] px-4 py-4" style={{ borderColor: "#d1d7db" }}>
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">Central WhatsApp</p>
+                  <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-emerald-700">Central WhatsApp</p>
                   <h2 className="mt-1 text-[20px] font-bold text-slate-950">Atendimento</h2>
                   <p className="mt-1 text-[11px] text-slate-500">
                     {queueThreads.length} conversas / {queueThreads.filter((thread) => thread.lead.status === "active").length} em atendimento
                   </p>
                 </div>
                 <Link
-                  className="grid h-10 w-10 place-items-center rounded-xl border text-slate-700 transition hover:bg-slate-100"
+                  className="grid h-11 w-11 place-items-center rounded-full border border-emerald-200 bg-white shadow-sm transition hover:border-emerald-400 hover:bg-emerald-50"
                   href="/dashboard/whatsapp"
-                  style={{ borderColor: "var(--ch-border)" }}
-                  title="Configurar agentes"
+                  title={`Configurar agente ${activeAgentIdentity.name}`}
                 >
-                  <Bot className="h-4 w-4" />
+                  <AgentAvatar avatarUrl={activeAgentIdentity.avatarUrl} name={activeAgentIdentity.name} size="sm" />
                 </Link>
               </div>
 
@@ -1427,8 +1434,8 @@ function AttendanceCenterView({
                       className={cn(
                         "inline-flex h-9 max-w-[210px] shrink-0 items-center gap-2 rounded-full border px-3 text-[12px] font-semibold transition",
                         effectiveQueueKey === queue.key
-                          ? "border-blue-600 bg-blue-600 text-white shadow-[0_10px_22px_rgba(24,119,242,0.18)]"
-                          : "border-slate-200 bg-white text-slate-700 hover:border-slate-400 hover:text-slate-950",
+                          ? "border-emerald-600 bg-[#008069] text-white shadow-[0_10px_22px_rgba(0,128,105,0.18)]"
+                          : "border-slate-200 bg-white text-slate-700 hover:border-emerald-300 hover:text-emerald-800",
                       )}
                       onClick={() => {
                         setSelectedQueueKey(queue.key);
@@ -1437,6 +1444,7 @@ function AttendanceCenterView({
                       title={queue.detail ?? queue.label}
                       type="button"
                     >
+                      {queue.key !== "all" ? <AgentAvatar avatarUrl={queue.avatarUrl} name={queue.label} size="xs" /> : null}
                       <span className="truncate">{queue.label}</span>
                       <span className={cn("font-mono text-[10px]", effectiveQueueKey === queue.key ? "text-white/75" : "text-slate-400")}>
                         {queue.count}
@@ -1447,12 +1455,11 @@ function AttendanceCenterView({
               ) : null}
 
               <label className="relative mt-4 block">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-emerald-700" />
                 <input
-                  className="h-11 w-full rounded-full border bg-slate-100/80 pl-10 pr-3 text-[13px] text-slate-950 outline-none transition placeholder:text-slate-500 focus:border-blue-500/45 focus:bg-white"
+                  className="h-11 w-full rounded-full border border-slate-200 bg-white pl-10 pr-3 text-[13px] text-slate-950 outline-none transition placeholder:text-slate-500 focus:border-emerald-500/55 focus:bg-white"
                   onChange={(event) => setSearch(event.target.value)}
                   placeholder="Pesquisar ou comecar atendimento"
-                  style={{ borderColor: "var(--ch-border)" }}
                   type="search"
                   value={search}
                 />
@@ -1465,8 +1472,8 @@ function AttendanceCenterView({
                     className={cn(
                       "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-3 text-[12px] font-semibold transition",
                       inboxTab === item.value
-                        ? "border-blue-500 bg-blue-600 text-white shadow-[0_10px_22px_rgba(24,119,242,0.18)]"
-                        : "border-slate-200 bg-white text-slate-700 hover:border-blue-300 hover:text-blue-600",
+                        ? "border-emerald-600 bg-[#008069] text-white shadow-[0_10px_22px_rgba(0,128,105,0.18)]"
+                        : "border-slate-200 bg-white text-slate-700 hover:border-emerald-300 hover:text-emerald-800",
                     )}
                     onClick={() => setInboxTab(item.value)}
                     type="button"
@@ -1491,7 +1498,7 @@ function AttendanceCenterView({
                     key={thread.key}
                     className={cn(
                       "grid w-full grid-cols-[48px_minmax(0,1fr)] gap-3 border-b px-4 py-3 text-left transition",
-                      selected ? "bg-blue-50" : "bg-white hover:bg-slate-50",
+                      selected ? "bg-[#e7f8ef]" : "bg-white hover:bg-[#f4fbf7]",
                     )}
                     onClick={() => {
                       setSelectedThreadKey(thread.key);
@@ -1531,7 +1538,7 @@ function AttendanceCenterView({
           <main className={cn("min-h-0 bg-[#efeae2]", conversationPane === "inbox" && "hidden xl:block")}>
             {activeLead ? (
               <div className="flex h-full min-h-0 flex-col">
-                <div className="flex min-h-[70px] flex-col gap-3 border-b bg-white px-4 py-3 lg:flex-row lg:items-center lg:justify-between" style={{ borderColor: "var(--ch-border)" }}>
+                <div className="flex min-h-[70px] flex-col gap-3 border-b bg-[#f0f2f5] px-4 py-3 lg:flex-row lg:items-center lg:justify-between" style={{ borderColor: "#d1d7db" }}>
                   <div className="flex min-w-0 items-center gap-3">
                     <button
                       className="grid h-9 w-9 shrink-0 place-items-center rounded-full border text-slate-700 xl:hidden"
@@ -1541,11 +1548,11 @@ function AttendanceCenterView({
                     >
                       <ChevronDown className="h-4 w-4 rotate-90" />
                     </button>
-                    <LeadAvatar lead={activeLead} />
+                    <AgentAvatar avatarUrl={activeAgentIdentity.avatarUrl} name={activeAgentIdentity.name} size="md" />
                     <div className="min-w-0">
                       <p className="truncate text-[15px] font-semibold text-slate-950">{activeLead.name}</p>
                       <p className="truncate text-[12px] text-slate-500">
-                        {[activeLead.phone, activeThread ? formatThreadQueueLabel(activeThread) : null].filter(Boolean).join(" / ") || activeLead.companyName}
+                        {[activeLead.phone, activeAgentIdentity.name].filter(Boolean).join(" / ") || activeLead.companyName}
                       </p>
                     </div>
                   </div>
@@ -1556,9 +1563,8 @@ function AttendanceCenterView({
                       humanIntervention={activeHumanIntervention}
                     />
                     <button
-                      className="hidden h-9 items-center gap-2 rounded-full border px-3 text-[12px] font-semibold text-slate-700 transition hover:bg-slate-100 sm:inline-flex"
+                      className="hidden h-9 items-center gap-2 rounded-full border border-emerald-200 bg-white px-3 text-[12px] font-semibold text-slate-700 transition hover:border-emerald-400 hover:bg-emerald-50 hover:text-emerald-800 sm:inline-flex"
                       onClick={() => setDetailsLeadId(activeLead.id)}
-                      style={{ borderColor: "var(--ch-border)" }}
                       type="button"
                     >
                       <FileText className="h-4 w-4" />
@@ -1581,7 +1587,7 @@ function AttendanceCenterView({
                   <ChatMessages messages={activeMessages} />
                 </div>
 
-                <div className="border-t bg-white px-3 py-2" style={{ borderColor: "var(--ch-border)" }}>
+                <div className="border-t bg-[#f0f2f5] px-3 py-2" style={{ borderColor: "#d1d7db" }}>
                   {pushPrompt.visible ? (
                     <AttendancePushPermissionPrompt
                       busy={pushPrompt.busy}
@@ -1594,12 +1600,11 @@ function AttendanceCenterView({
                   <form className="flex flex-col gap-2 lg:flex-row lg:items-end" onSubmit={handleManualReplySubmit}>
                     <label className="relative block min-w-0 flex-1">
                       <textarea
-                        className="max-h-24 min-h-10 w-full resize-none rounded-2xl border bg-slate-100/80 px-4 py-2 text-[13px] leading-6 text-slate-950 outline-none transition placeholder:text-slate-500 focus:border-blue-500/45 focus:bg-white lg:h-10"
+                        className="max-h-24 min-h-10 w-full resize-none rounded-2xl border border-transparent bg-white px-4 py-2 text-[13px] leading-6 text-slate-950 outline-none transition placeholder:text-slate-500 focus:border-emerald-500/55 lg:h-10"
                         disabled={replyBusy}
                         onKeyDown={handleManualReplyKeyDown}
                         onChange={(event) => setManualReply(event.target.value)}
                         placeholder="Digite uma resposta aqui no painel..."
-                        style={{ borderColor: "var(--ch-border)" }}
                         value={manualReply}
                       />
                     </label>
@@ -1609,7 +1614,7 @@ function AttendanceCenterView({
                           "inline-flex h-10 items-center justify-center gap-2 rounded-xl px-3 text-[11px] font-bold transition lg:w-[112px]",
                           activeHumanIntervention.active
                             ? "border border-slate-200 bg-white text-slate-800 hover:bg-slate-100"
-                            : "bg-blue-600 text-white hover:bg-blue-700",
+                            : "bg-[#008069] text-white hover:bg-[#006d5b]",
                         )}
                         disabled={handoffBusy || replyBusy}
                         onClick={() => void updateHumanHandoff(activeHumanIntervention.active ? "resume" : "pause")}
@@ -1622,7 +1627,7 @@ function AttendanceCenterView({
                         className={cn(
                           "inline-flex h-10 items-center justify-center gap-2 rounded-xl px-3 text-[11px] font-bold transition lg:w-[122px]",
                           activeConversationId && manualReply.trim() && !replyBusy
-                            ? "bg-blue-600 text-white hover:bg-blue-700"
+                            ? "bg-[#008069] text-white hover:bg-[#006d5b]"
                             : "bg-slate-200 text-slate-500",
                         )}
                         disabled={!activeConversationId || !manualReply.trim() || replyBusy}
@@ -2391,6 +2396,39 @@ function normalizeAttendanceQueueKey(queue: ClientLeadAttendanceQueue) {
 function matchesAttendanceQueue(thread: AttendanceThread, key: string) {
   if (key === "all") return true;
   return thread.queueKey === key;
+}
+
+function getAttendanceAgentIdentity(
+  thread: AttendanceThread | null,
+  queue: AttendanceQueueFilter | null,
+  queueKey: string,
+): AttendanceAgentIdentity {
+  const threadIdentity = thread ? getThreadAgentIdentity(thread) : null;
+
+  if (queueKey !== "all" && queue) {
+    return {
+      avatarUrl: queue.avatarUrl ?? threadIdentity?.avatarUrl ?? null,
+      detail: queue.detail ?? threadIdentity?.detail ?? null,
+      name: queue.label || threadIdentity?.name || "Agente WhatsApp",
+    };
+  }
+
+  return threadIdentity ?? {
+    avatarUrl: null,
+    detail: "Configure seus agentes",
+    name: "Agente WhatsApp",
+  };
+}
+
+function getThreadAgentIdentity(thread: AttendanceThread): AttendanceAgentIdentity {
+  const conversation = thread.conversation;
+  const lead = thread.lead;
+
+  return {
+    avatarUrl: conversation?.agentAvatarUrl ?? lead.conversation.agentAvatarUrl ?? lead.agentAvatarUrl ?? null,
+    detail: conversation?.whatsappInstancePhone ?? lead.conversation.whatsappInstancePhone ?? lead.phone ?? lead.companyName,
+    name: conversation?.agentName ?? lead.conversation.agentName ?? lead.agentName ?? formatThreadQueueLabel(thread) ?? "Agente WhatsApp",
+  };
 }
 
 function buildAttendanceThreadTabs(
@@ -3273,6 +3311,69 @@ function LeadAvatar({ lead, size = "md" }: { lead: ClientLeadRecord; size?: "md"
       {lead.name.slice(0, 1).toUpperCase()}
     </span>
   );
+}
+
+function AgentAvatar({
+  avatarUrl,
+  name,
+  size = "md",
+}: {
+  avatarUrl: string | null;
+  name: string;
+  size?: "xs" | "sm" | "md" | "lg";
+}) {
+  const dimensions = {
+    lg: "h-12 w-12",
+    md: "h-10 w-10",
+    sm: "h-8 w-8",
+    xs: "h-5 w-5",
+  }[size];
+  const fontSize = {
+    lg: "text-[14px]",
+    md: "text-[13px]",
+    sm: "text-[11px]",
+    xs: "text-[9px]",
+  }[size];
+  const imageSize = {
+    lg: "48px",
+    md: "40px",
+    sm: "32px",
+    xs: "20px",
+  }[size];
+
+  if (avatarUrl) {
+    return (
+      <span className={cn("relative block shrink-0 overflow-hidden rounded-full border border-emerald-300 bg-emerald-50", dimensions)}>
+        <Image alt={`Foto do agente ${name}`} className="object-cover" fill sizes={imageSize} src={avatarUrl} unoptimized />
+      </span>
+    );
+  }
+
+  return (
+    <span
+      className={cn(
+        "flex shrink-0 items-center justify-center rounded-full border border-emerald-300 bg-[#dcf8c6] font-mono font-bold text-[#075e54]",
+        dimensions,
+        fontSize,
+      )}
+    >
+      {getInitials(name)}
+    </span>
+  );
+}
+
+function getInitials(value: string) {
+  const parts = value
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  if (!parts.length) return "IA";
+
+  return parts
+    .slice(0, 2)
+    .map((part) => part.slice(0, 1).toUpperCase())
+    .join("");
 }
 
 function StatusPill({ status }: { status: ClientLeadStatus }) {
