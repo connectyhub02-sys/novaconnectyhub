@@ -2012,7 +2012,7 @@ function AttendanceSalesBagPanel({
           Monte o pedido de {lead.name} sem gastar credito de IA.
         </p>
 
-        <div className="mt-2 flex items-center gap-1.5">
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
           <span className="inline-flex min-w-0 items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">
             <span className="font-mono text-[8px] uppercase tracking-wide text-slate-500">Total</span>
             <span className="truncate text-[12px] font-black text-slate-950">{formatCurrencyCents(totalCents)}</span>
@@ -2020,6 +2020,10 @@ function AttendanceSalesBagPanel({
           <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">
             <span className="font-mono text-[8px] uppercase tracking-wide text-slate-500">Itens</span>
             <span className="text-[12px] font-black text-slate-950">{cartItems.reduce((total, item) => total + item.quantity, 0)}</span>
+          </span>
+          <span className="inline-flex min-w-0 items-center gap-1.5 rounded-full border border-blue-100 bg-blue-50 px-2.5 py-1">
+            <span className="font-mono text-[8px] uppercase tracking-wide text-blue-500">Fechamento</span>
+            <span className="truncate text-[12px] font-black text-slate-950">{formatCurrencyCents(totalCents)}</span>
           </span>
         </div>
 
@@ -2269,41 +2273,35 @@ function AttendanceSalesBagPanel({
       </div>
 
       <div className="border-t bg-white p-3" style={{ borderColor: "var(--ch-border)" }}>
-        <div className="flex items-center justify-between gap-2 rounded-2xl border border-blue-100 bg-blue-50 px-3 py-2">
-          <span className="min-w-0">
-            <p className="font-mono text-[8px] uppercase tracking-[0.16em] text-blue-500">Fechamento</p>
-            <p className="truncate text-[16px] font-black text-slate-950">{formatCurrencyCents(totalCents)}</p>
-          </span>
-          <CreditCard className="h-4 w-4 shrink-0 text-blue-600" />
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            className={cn(
+              "inline-flex h-10 min-w-0 items-center justify-center gap-1.5 rounded-2xl px-2 text-[11px] font-bold transition",
+              cartItems.length && !checkoutBusy ? "bg-blue-600 text-white hover:bg-blue-700" : "bg-slate-200 text-slate-500",
+            )}
+            disabled={!cartItems.length || checkoutBusy}
+            onClick={onCreateCheckout}
+            type="button"
+          >
+            {checkoutBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CreditCard className="h-3.5 w-3.5" />}
+            <span className="truncate">{checkoutBusy ? "Gerando" : "Enviar checkout"}</span>
+          </button>
+
+          <button
+            className={cn(
+              "inline-flex h-10 min-w-0 items-center justify-center gap-1.5 rounded-2xl border px-2 text-[11px] font-bold transition",
+              cartItems.length && !checkoutBusy
+                ? "border-slate-200 bg-white text-slate-800 hover:bg-slate-100"
+                : "border-slate-200 bg-slate-100 text-slate-400",
+            )}
+            disabled={!cartItems.length || checkoutBusy}
+            onClick={onUseSummary}
+            type="button"
+          >
+            <Copy className="h-3.5 w-3.5" />
+            <span className="truncate">Usar resumo</span>
+          </button>
         </div>
-
-        <button
-          className={cn(
-            "mt-2 inline-flex h-10 w-full items-center justify-center gap-2 rounded-2xl text-[12px] font-bold transition",
-            cartItems.length && !checkoutBusy ? "bg-blue-600 text-white hover:bg-blue-700" : "bg-slate-200 text-slate-500",
-          )}
-          disabled={!cartItems.length || checkoutBusy}
-          onClick={onCreateCheckout}
-          type="button"
-        >
-          {checkoutBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CreditCard className="h-3.5 w-3.5" />}
-          {checkoutBusy ? "Gerando checkout" : "Gerar e enviar checkout"}
-        </button>
-
-        <button
-          className={cn(
-            "mt-2 inline-flex h-9 w-full items-center justify-center gap-2 rounded-2xl border text-[12px] font-bold transition",
-            cartItems.length && !checkoutBusy
-              ? "border-slate-200 bg-white text-slate-800 hover:bg-slate-100"
-              : "border-slate-200 bg-slate-100 text-slate-400",
-          )}
-          disabled={!cartItems.length || checkoutBusy}
-          onClick={onUseSummary}
-          type="button"
-        >
-          <Copy className="h-3.5 w-3.5" />
-          Usar resumo no chat
-        </button>
       </div>
     </div>
   );
