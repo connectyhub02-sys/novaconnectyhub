@@ -104,6 +104,15 @@ type LeadCrmConsoleProps = {
 
 type BrowserPushPermissionState = NotificationPermission | "unsupported" | "unknown";
 
+type AttendancePushSubscriptionContext = {
+  conversationId: string | null;
+  leadId: string | null;
+  leadPhone: string | null;
+  organizationId: string | null;
+};
+
+type AttendancePushSubscriptionResult = "granted" | "denied" | "dismissed" | "unsupported" | "failed";
+
 type AttendancePushPromptState = {
   busy: boolean;
   dismissed: boolean;
@@ -837,6 +846,7 @@ function AttendanceCenterView({
   const manualReplyTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const notifiedLeadMessages = useRef(new Set<string>());
   const notificationSeeded = useRef(false);
+  const syncedPushContextKeys = useRef(new Set<string>());
 
   const attendanceThreads = useMemo(() => buildAttendanceThreads(filteredLeads), [filteredLeads]);
   const queueFilters = useMemo(
@@ -866,6 +876,11 @@ function AttendanceCenterView({
   const activeHumanIntervention = activeThread ? getThreadHumanIntervention(activeThread, handoffOverrides) : emptyClientHumanIntervention();
   const activeConversationId = activeThread?.conversationId ?? null;
   const activeAgentIdentity = getAttendanceAgentIdentity(activeThread, activeQueueFilter, effectiveQueueKey);
+  const activePushContext = useMemo(
+    () => buildAttendancePushContext(activeLead, activeConversation),
+    [activeConversation, activeLead],
+  );
+  const chatLockedByPush = Boolean(activeThread && shouldRequireAttendancePush(pushPrompt.permission));
   const activeMessages = activeThread
     ? mergeConversationMessages(
         activeConversation?.messages ?? activeThread.lead.conversation.messages,
@@ -1207,7 +1222,7 @@ function AttendanceCenterView({
     }));
   }
 
-  async function enableAttendancePushNotifications() {
+  async function enableAttendancePushNotifications(context = activePushContext) {
     setPushPrompt((current) => ({
       ...current,
       busy: true,
@@ -1215,8 +1230,12 @@ function AttendanceCenterView({
       visible: true,
     }));
 
-    const result = await requestAttendancePushSubscription();
+    const result = await requestAttendancePushSubscription(context);
     const permission = readAttendancePushPermissionState();
+
+    if (result === "granted") {
+      syncedPushContextKeys.current.add(formatAttendancePushContextKey(context));
+    }
 
     setPushPrompt((current) => ({
       ...current,
@@ -1240,6 +1259,63 @@ function AttendanceCenterView({
     const interval = window.setInterval(() => setHandoffTick(Date.now()), 1000);
     return () => window.clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof document === "undefined") {
+      return;
+    }
+
+    const refreshPermission = () => {
+      const permission = readAttendancePushPermissionState();
+
+      setPushPrompt((current) => current.permission === permission
+        ? current
+        : {
+            ...current,
+            message: permission === "granted" ? null : current.message,
+            permission,
+            visible: permission === "granted" ? false : current.visible,
+          });
+    };
+
+    refreshPermission();
+    window.addEventListener("focus", refreshPermission);
+    document.addEventListener("visibilitychange", refreshPermission);
+
+    return () => {
+      window.removeEventListener("focus", refreshPermission);
+      document.removeEventListener("visibilitychange", refreshPermission);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (pushPrompt.permission !== "granted" || !activePushContext.organizationId) {
+      return;
+    }
+
+    const contextKey = formatAttendancePushContextKey(activePushContext);
+
+    if (syncedPushContextKeys.current.has(contextKey)) {
+      return;
+    }
+
+    syncedPushContextKeys.current.add(contextKey);
+
+    void requestAttendancePushSubscription(activePushContext, { requestPermission: false }).then((result) => {
+      const permission = readAttendancePushPermissionState();
+
+      if (result !== "granted") {
+        syncedPushContextKeys.current.delete(contextKey);
+      }
+
+      setPushPrompt((current) => ({
+        ...current,
+        message: result === "granted" ? null : current.message,
+        permission,
+        visible: result === "granted" ? false : current.visible,
+      }));
+    });
+  }, [activePushContext, pushPrompt.permission]);
 
   useEffect(() => {
     if (!activeConversationId) {
@@ -1583,7 +1659,7 @@ function AttendanceCenterView({
                           ? "border border-blue-200 bg-white text-blue-700 hover:bg-blue-50"
                           : "bg-blue-600 text-white shadow-[0_10px_22px_rgba(24,119,242,0.18)] hover:bg-blue-700",
                       )}
-                      disabled={handoffBusy || replyBusy}
+                      disabled={handoffBusy || replyBusy || chatLockedByPush}
                       onClick={() => void updateHumanHandoff(activeHumanIntervention.active ? "resume" : "pause")}
                       type="button"
                     >
@@ -1602,7 +1678,7 @@ function AttendanceCenterView({
                 </div>
 
                 <div
-                  className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-6"
+                  className="relative min-h-0 flex-1 overflow-hidden"
                   style={{
                     backgroundColor: "#efeae2",
                     backgroundImage:
@@ -1612,16 +1688,25 @@ function AttendanceCenterView({
                     backgroundSize: "420px auto",
                   }}
                 >
-                  <ChatMessages messages={activeMessages} />
+                  <div className={cn("h-full overflow-y-auto px-3 py-4 sm:px-6", chatLockedByPush && "pointer-events-none opacity-35 blur-[1px]")}>
+                    <ChatMessages messages={activeMessages} />
+                  </div>
+                  {chatLockedByPush ? (
+                    <AttendancePushRequiredOverlay
+                      busy={pushPrompt.busy}
+                      onEnable={() => void enableAttendancePushNotifications(activePushContext)}
+                      permission={pushPrompt.permission}
+                    />
+                  ) : null}
                 </div>
 
                 <div className="border-t bg-[#f0f2f5] px-3 py-2" style={{ borderColor: "#d1d7db" }}>
-                  {pushPrompt.visible ? (
+                  {pushPrompt.visible && !chatLockedByPush ? (
                     <AttendancePushPermissionPrompt
                       busy={pushPrompt.busy}
                       message={pushPrompt.message}
                       onDismiss={dismissAttendancePushPrompt}
-                      onEnable={() => void enableAttendancePushNotifications()}
+                      onEnable={() => void enableAttendancePushNotifications(activePushContext)}
                       permission={pushPrompt.permission}
                     />
                   ) : null}
@@ -1630,7 +1715,7 @@ function AttendanceCenterView({
                       <textarea
                         ref={manualReplyTextareaRef}
                         className="max-h-[220px] min-h-10 w-full resize-none overflow-hidden rounded-2xl border border-transparent bg-white px-4 py-2 text-[13px] leading-6 text-slate-950 outline-none transition placeholder:text-slate-500 focus:border-emerald-500/55"
-                        disabled={replyBusy}
+                        disabled={replyBusy || chatLockedByPush}
                         onKeyDown={handleManualReplyKeyDown}
                         onChange={(event) => setManualReply(event.target.value)}
                         placeholder="Digite uma resposta aqui no painel..."
@@ -1641,11 +1726,11 @@ function AttendanceCenterView({
                       <button
                         className={cn(
                           "inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl px-3 text-[11px] font-bold transition lg:w-[122px]",
-                          activeConversationId && manualReply.trim() && !replyBusy
+                          activeConversationId && manualReply.trim() && !replyBusy && !chatLockedByPush
                             ? "border border-[#25D366] bg-[#25D366] text-white shadow-[0_10px_20px_rgba(37,211,102,0.16)] hover:bg-[#25D366] hover:opacity-90"
                             : "bg-slate-200 text-slate-500",
                         )}
-                        disabled={!activeConversationId || !manualReply.trim() || replyBusy}
+                        disabled={!activeConversationId || !manualReply.trim() || replyBusy || chatLockedByPush}
                         type="submit"
                       >
                         {replyBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
@@ -1774,7 +1859,7 @@ function AttendancePushPermissionPrompt({
             <p className="mt-1 leading-5 text-slate-600">
               {blocked
                 ? "Para receber avisos, clique no cadeado ao lado do endereco do site e libere Notificacoes."
-                : "Quando um lead responder e voce estiver em outra aba, o ConnectyHub avisa pelo navegador."}
+                : "Quando um lead responder, o ConnectyHub avisa pelo navegador mesmo com o painel aberto ou em outra aba."}
             </p>
             {message ? (
               <p className="mt-2 rounded-xl border border-red-200 bg-white px-3 py-2 text-[11px] leading-4 text-red-700">
@@ -1810,6 +1895,48 @@ function AttendancePushPermissionPrompt({
         <span className="text-[11px] text-slate-500">
           O navegador sempre vai pedir uma confirmacao sua antes de ativar.
         </span>
+      </div>
+    </div>
+  );
+}
+
+function AttendancePushRequiredOverlay({
+  busy,
+  onEnable,
+  permission,
+}: {
+  busy: boolean;
+  onEnable: () => void;
+  permission: BrowserPushPermissionState;
+}) {
+  const blocked = permission === "denied";
+  const unknown = permission === "unknown";
+
+  return (
+    <div className="absolute inset-0 z-10 grid place-items-center bg-[#f0f2f5]/80 px-4 py-6 backdrop-blur-[2px]">
+      <div className="w-full max-w-[440px] rounded-2xl border border-[#25D366]/35 bg-white p-4 text-center shadow-[0_18px_42px_rgba(15,23,42,0.16)]">
+        <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-[#25D366] text-white">
+          <Bell className="h-5 w-5" />
+        </div>
+        <p className="mt-3 text-[15px] font-bold text-slate-950">
+          {blocked ? "Notificacoes bloqueadas" : "Ative notificacoes para usar o atendimento"}
+        </p>
+        <p className="mt-2 text-[12px] leading-5 text-slate-600">
+          {blocked
+            ? "Para abrir e responder conversas, libere Notificacoes no cadeado ao lado do endereco do site e tente novamente."
+            : unknown
+              ? "Estamos verificando se este navegador permite alertas. Ative para continuar acompanhando os leads em tempo real."
+              : "Assim que um lead responder, o operador recebe o aviso do navegador e nao perde a conversa."}
+        </p>
+        <button
+          className="mt-4 inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-[#25D366] px-4 text-[12px] font-bold text-white shadow-[0_10px_20px_rgba(37,211,102,0.20)] transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-70"
+          disabled={busy}
+          onClick={onEnable}
+          type="button"
+        >
+          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bell className="h-4 w-4" />}
+          {busy ? "Aguardando" : blocked ? "Verificar novamente" : "Ativar notificacoes"}
+        </button>
       </div>
     </div>
   );
@@ -2607,7 +2734,35 @@ function readAttendancePushPermissionState(): BrowserPushPermissionState {
   return Notification.permission;
 }
 
-async function requestAttendancePushSubscription(): Promise<"granted" | "denied" | "dismissed" | "unsupported" | "failed"> {
+function shouldRequireAttendancePush(permission: BrowserPushPermissionState) {
+  return permission !== "granted" && permission !== "unsupported";
+}
+
+function buildAttendancePushContext(
+  lead: ClientLeadRecord | null,
+  conversation: ClientLeadConversationFile | null,
+): AttendancePushSubscriptionContext {
+  return {
+    conversationId: conversation?.id ?? lead?.conversation.id ?? null,
+    leadId: lead?.id ?? null,
+    leadPhone: lead?.phone ?? null,
+    organizationId: lead?.companyId ?? null,
+  };
+}
+
+function formatAttendancePushContextKey(context: AttendancePushSubscriptionContext) {
+  return [
+    context.organizationId ?? "no-org",
+    context.leadId ?? "no-lead",
+    context.conversationId ?? "no-conversation",
+    context.leadPhone ?? "no-phone",
+  ].join(":");
+}
+
+async function requestAttendancePushSubscription(
+  context: AttendancePushSubscriptionContext,
+  options: { requestPermission?: boolean } = {},
+): Promise<AttendancePushSubscriptionResult> {
   if (
     typeof window === "undefined"
     || typeof Notification === "undefined"
@@ -2624,7 +2779,9 @@ async function requestAttendancePushSubscription(): Promise<"granted" | "denied"
   }
 
   try {
-    const permission = await Notification.requestPermission();
+    const permission = options.requestPermission === false
+      ? Notification.permission
+      : await Notification.requestPermission();
 
     if (permission !== "granted") {
       return permission === "denied" ? "denied" : "dismissed";
@@ -2643,6 +2800,7 @@ async function requestAttendancePushSubscription(): Promise<"granted" | "denied"
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        organization_id: context.organizationId,
         visitor_cookie_id: snapshot.visitorId,
         session_cookie_id: snapshot.sessionId,
         permission,
@@ -2652,6 +2810,12 @@ async function requestAttendancePushSubscription(): Promise<"granted" | "denied"
           page_url: window.location.href,
           page_title: document.title,
           source: "attendance_center_prompt",
+          attendance_push_context: {
+            organization_id: context.organizationId,
+            lead_id: context.leadId,
+            lead_phone: context.leadPhone,
+            conversation_id: context.conversationId,
+          },
           first_touch: snapshot.firstTouch,
           last_touch: snapshot.lastTouch,
           attribution: snapshot.attribution,
@@ -2734,7 +2898,7 @@ function showLeadBrowserNotification(lead: ClientLeadRecord, message: ClientLead
     return;
   }
 
-  if (Notification.permission !== "granted" || document.visibilityState === "visible") {
+  if (Notification.permission !== "granted") {
     return;
   }
 
