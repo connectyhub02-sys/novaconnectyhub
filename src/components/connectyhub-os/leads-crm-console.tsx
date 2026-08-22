@@ -1448,7 +1448,7 @@ function AttendanceCenterView({
                       className={cn(
                         "inline-flex h-9 max-w-[210px] shrink-0 items-center gap-2 rounded-full border px-3 text-[12px] font-semibold transition",
                         effectiveQueueKey === queue.key
-                          ? "border-[#25D366] bg-[#25D366] text-white shadow-[0_10px_22px_rgba(37,211,102,0.16)]"
+                          ? "border-[#25D366] bg-white text-slate-950 shadow-[0_10px_22px_rgba(37,211,102,0.12)]"
                           : "border-slate-200 bg-white text-slate-700 hover:border-[#25D366] hover:text-[#075E54]",
                       )}
                       onClick={() => {
@@ -1460,7 +1460,7 @@ function AttendanceCenterView({
                     >
                       {queue.key !== "all" ? <AgentAvatar avatarUrl={queue.avatarUrl} name={queue.label} size="xs" /> : null}
                       <span className="truncate">{queue.label}</span>
-                      <span className={cn("font-mono text-[10px]", effectiveQueueKey === queue.key ? "text-white/80" : "text-slate-400")}>
+                      <span className={cn("font-mono text-[10px]", effectiveQueueKey === queue.key ? "text-slate-700" : "text-slate-400")}>
                         {queue.count}
                       </span>
                     </button>
@@ -1486,14 +1486,14 @@ function AttendanceCenterView({
                     className={cn(
                       "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-3 text-[12px] font-semibold transition",
                       inboxTab === item.value
-                        ? "border-[#25D366] bg-[#25D366] text-white shadow-[0_10px_22px_rgba(37,211,102,0.16)]"
+                        ? "border-[#25D366] bg-white text-slate-950 shadow-[0_10px_22px_rgba(37,211,102,0.12)]"
                         : "border-slate-200 bg-white text-slate-700 hover:border-[#25D366] hover:text-[#075E54]",
                     )}
                     onClick={() => setInboxTab(item.value)}
                     type="button"
                   >
                     {item.label}
-                    <span className={cn("font-mono text-[10px]", inboxTab === item.value ? "text-white/80" : "text-slate-400")}>{item.count}</span>
+                    <span className={cn("font-mono text-[10px]", inboxTab === item.value ? "text-slate-700" : "text-slate-400")}>{item.count}</span>
                   </button>
                 ))}
               </div>
