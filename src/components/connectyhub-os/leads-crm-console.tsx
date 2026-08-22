@@ -834,6 +834,7 @@ function AttendanceCenterView({
     permission: readAttendancePushPermissionState(),
     visible: false,
   }));
+  const manualReplyTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const notifiedLeadMessages = useRef(new Set<string>());
   const notificationSeeded = useRef(false);
 
@@ -879,6 +880,19 @@ function AttendanceCenterView({
     () => (commerceEnabled ? salesCatalogItems.filter((item) => !deletedCatalogItemIds.has(item.id)) : []),
     [commerceEnabled, deletedCatalogItemIds, salesCatalogItems],
   );
+
+  useEffect(() => {
+    const textarea = manualReplyTextareaRef.current;
+
+    if (!textarea) {
+      return;
+    }
+
+    const maxHeight = 220;
+    textarea.style.height = "auto";
+    textarea.style.height = `${Math.min(textarea.scrollHeight, maxHeight)}px`;
+    textarea.style.overflowY = textarea.scrollHeight > maxHeight ? "auto" : "hidden";
+  }, [manualReply]);
   const availableCatalogItemIds = useMemo(
     () => new Set(visibleCatalogItems.filter((item) => item.status === "active").map((item) => item.id)),
     [visibleCatalogItems],
@@ -1614,7 +1628,8 @@ function AttendanceCenterView({
                   <form className="flex flex-col gap-2 lg:flex-row lg:items-end" onSubmit={handleManualReplySubmit}>
                     <label className="relative block min-w-0 flex-1">
                       <textarea
-                        className="max-h-24 min-h-10 w-full resize-none rounded-2xl border border-transparent bg-white px-4 py-2 text-[13px] leading-6 text-slate-950 outline-none transition placeholder:text-slate-500 focus:border-emerald-500/55 lg:h-10"
+                        ref={manualReplyTextareaRef}
+                        className="max-h-[220px] min-h-10 w-full resize-none overflow-hidden rounded-2xl border border-transparent bg-white px-4 py-2 text-[13px] leading-6 text-slate-950 outline-none transition placeholder:text-slate-500 focus:border-emerald-500/55"
                         disabled={replyBusy}
                         onKeyDown={handleManualReplyKeyDown}
                         onChange={(event) => setManualReply(event.target.value)}
