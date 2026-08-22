@@ -72,6 +72,7 @@ import {
   isMercadoPagoTestTokenEnabled,
 } from "@/lib/sales-catalog/mercado-pago";
 import { createSalesCatalogPixPaymentSession } from "@/lib/sales-catalog/payment-sessions";
+import { buildSalesCatalogProductUrl } from "@/lib/sales-catalog/public-urls";
 import { calculateSalesCatalogShippingQuotes, normalizeSalesCatalogCep } from "@/lib/sales-catalog/shipping-calculator";
 import { exportWhatsappCatalogProducts, importWhatsappCatalog, setWhatsappCatalogVisibility } from "@/lib/sales-catalog/whatsapp-sync";
 import {
@@ -346,6 +347,9 @@ export async function POST(request: NextRequest) {
 
     const tag = readFormString(existingMetadata.tag) ?? createSalesCatalogTag(title, itemId);
     const existingLinkButtonId = readFormString(existingMetadata.link_button_id) ?? readFormString(existingMetadata.external_link_button_id);
+    const productPageUrl = salesDestination === "connectyhub_checkout"
+      ? buildSalesCatalogProductUrl(itemId)
+      : null;
     const trackedLink = salesDestination === "external_site" && productUrl
       ? await upsertProductTrackedLinkButton({
           client,
@@ -417,6 +421,7 @@ export async function POST(request: NextRequest) {
       source: metadataSource,
       sales_destination: salesDestination,
       source_product_url: productUrl,
+      product_page_url: productPageUrl,
       link_button_id: trackedLink?.id ?? null,
       link_button_label: trackedLink?.label ?? null,
       link_button_tag: trackedLink?.tag ?? null,

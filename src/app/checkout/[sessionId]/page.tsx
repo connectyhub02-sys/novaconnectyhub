@@ -151,6 +151,8 @@ export default async function CheckoutPage({
   const status = normalizePaymentSessionStatus(session.status);
   const paid = status === "approved";
   const failed = status === "rejected" || status === "cancelled" || status === "expired" || status === "error";
+  const gatewayUnavailable = status === "error"
+    && (session.provider_status === "gateway_unavailable" || session.provider_status === "gateway_error");
   const amount = formatCurrency(session.amount ?? order.total ?? order.subtotal);
   const amountNumber = normalizeCurrency(session.amount ?? order.total ?? order.subtotal);
   const subtotal = formatCurrency(order.subtotal);
@@ -275,9 +277,11 @@ export default async function CheckoutPage({
             />
           ) : failed ? (
             <CheckoutState
-              tone="error"
-              title="Pagamento nao concluido"
-              body={session.failure_reason ?? "Solicite um novo link no WhatsApp para tentar novamente."}
+              tone={gatewayUnavailable ? "info" : "error"}
+              title={gatewayUnavailable ? "Pagamento temporariamente indisponivel" : "Pagamento nao concluido"}
+              body={gatewayUnavailable
+                ? "Seu pedido foi criado, mas a loja ainda precisa ajustar o gateway de pagamento. Volte ao WhatsApp para combinar o proximo passo com o atendimento."
+                : session.failure_reason ?? "Solicite um novo link no WhatsApp para tentar novamente."}
             />
           ) : shippingBlocked ? (
             <CheckoutState

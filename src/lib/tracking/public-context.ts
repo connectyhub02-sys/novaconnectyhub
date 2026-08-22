@@ -8,6 +8,8 @@ export type ConnectyPublicTrackingContext = {
   order_id?: string | null;
   payment_session_id?: string | null;
   tracking_link_id?: string | null;
+  product_id?: string | null;
+  catalog_item_id?: string | null;
   tracking_source?: string | null;
 };
 
@@ -21,6 +23,8 @@ const contextKeys = [
   "order_id",
   "payment_session_id",
   "tracking_link_id",
+  "product_id",
+  "catalog_item_id",
   "tracking_source",
 ] as const;
 
@@ -105,6 +109,8 @@ export function buildPublicTrackingApiBody(context: ConnectyPublicTrackingContex
     order_id: context.order_id,
     payment_session_id: context.payment_session_id,
     tracking_link_id: context.tracking_link_id,
+    product_id: context.product_id,
+    catalog_item_id: context.catalog_item_id,
     tracking_source: context.tracking_source,
   };
 }
@@ -122,6 +128,8 @@ export function buildPublicTrackingMetadata(context: ConnectyPublicTrackingConte
     order_id: context.order_id,
     payment_session_id: context.payment_session_id,
     tracking_link_id: context.tracking_link_id,
+    product_id: context.product_id,
+    catalog_item_id: context.catalog_item_id,
     tracking_source: context.tracking_source,
   };
 }

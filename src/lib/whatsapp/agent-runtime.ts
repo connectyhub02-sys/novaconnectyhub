@@ -49,6 +49,7 @@ import {
 } from "@/lib/client-os/sales-catalog";
 import { createSalesCatalogPixPaymentSession } from "@/lib/sales-catalog/payment-sessions";
 import { normalizeCurrencyAmount } from "@/lib/sales-catalog/mercado-pago";
+import { buildLeadAwareSalesCatalogProductUrl } from "@/lib/sales-catalog/public-urls";
 import {
   formatSalesCatalogFulfillmentMode,
   formatSalesCatalogFulfillmentStatus,
@@ -222,6 +223,7 @@ type SalesCatalogPaymentLinkResult = {
   trackingUrl: string | null;
   pixQrCode: string | null;
   pixTicketUrl: string | null;
+  gatewayUnavailable?: boolean;
 };
 type RuntimeSalesCatalogShippingQuote = {
   itemId: string;
@@ -3183,6 +3185,7 @@ function buildSalesCatalogLines(items: RuntimeSalesCatalogItem[]) {
     "- Use o catalogo como memoria interna para conversar como uma pessoa real. Nunca copie a ficha tecnica completa para o lead.",
     "- Quando o lead perguntar se tem um produto, responda em ate 2 mensagens curtas, confirme que tem e apresente no maximo 3 opcoes com nome, preco e uma frase simples de contexto.",
     "- Quando o lead pedir detalhe, aprofunde aos poucos e pergunte o que ele prefere. Nao despeje descricao, beneficios, estoque, arquivos ou dados tecnicos de uma vez.",
+    "- Para produto de checkout ConnectyHub, deixe detalhes longos para a pagina de produto; o sistema pode enviar automaticamente o botao Ver produto.",
     "- Quando o lead escolher uma opcao ou disser que quer comprar/fechar/pagar, use a tag do item escolhido e responda curto; o sistema registra pedido e gera checkout/botao quando possivel.",
     "- Nunca escreva 'toque no botao abaixo', 'vou te enviar o botao' ou equivalente se a resposta nao tiver a tag exata do produto ou link que gera a acao.",
     "- Nunca mencione ao lead campos internos como destino da venda, checkout ConnectyHub, status, quantidade em estoque, alerta de estoque, arquivos, execucao, SKU, tipo de produto ou midias, a menos que ele pergunte diretamente.",
@@ -4436,7 +4439,8 @@ async function sendAgentResponse(input: {
   const renderedCatalog = renderSalesCatalogTags(renderedLinks, context.salesCatalog);
   const customerCatalogText = sanitizeSalesCatalogCustomerText(renderedCatalog.text, context.salesCatalog.length > 0);
   const cleanText = normalizeAssistantText(ensureLinkPromiseIsActionable(customerCatalogText, context));
-  const orderIntentText = buildSalesCatalogOrderIntentText(latestInbound, cleanText);
+  const orderIntentText = latestInbound?.text_content?.trim() ?? "";
+  const hasOrderIntent = hasSalesCatalogOrderIntent(orderIntentText);
   const { chunks, shouldSendAudio } = resolveOutboundDelivery(context, latestInbound, cleanText, renderedCatalog.items.length > 0);
   const mixedCandidateChunks = shouldSendAudioResponse(context, latestInbound) && renderedCatalog.items.length === 0
     ? splitChunksAroundLinkLines(chunks, context)
@@ -4511,6 +4515,25 @@ async function sendAgentResponse(input: {
       outbound.push(message);
     }
 
+    if (!hasOrderIntent) {
+      const productChunkIndex = mixedCandidateChunks.length + 1;
+      const productOutbound = await maybeSendSalesCatalogProductPageLinks({
+        client: input.client,
+        context,
+        token: input.token,
+        phone: input.phone,
+        latestInbound,
+        items: renderedCatalog.items,
+        chunkIndex: productChunkIndex,
+        chunksTotal: productChunkIndex,
+        persistedChunks: persistedTextChunks,
+      });
+
+      if (productOutbound) {
+        outbound.push(productOutbound);
+      }
+    }
+
     return outbound;
   }
 
@@ -4583,6 +4606,26 @@ async function sendAgentResponse(input: {
         outbound.push(paymentOutbound);
       } catch {
         // O pedido e a sessao ficam salvos no painel mesmo se o envio do link falhar.
+      }
+    }
+
+    if (!paymentLink && !hasOrderIntent) {
+      const textPersistedChunks = await loadPersistedOutboundChunks(input.client, context.run.id, "text");
+      const productChunkIndex = chunks.length + 1;
+      const productOutbound = await maybeSendSalesCatalogProductPageLinks({
+        client: input.client,
+        context,
+        token: input.token,
+        phone: input.phone,
+        latestInbound,
+        items: renderedCatalog.items,
+        chunkIndex: productChunkIndex,
+        chunksTotal: productChunkIndex,
+        persistedChunks: textPersistedChunks,
+      });
+
+      if (productOutbound) {
+        outbound.push(productOutbound);
       }
     }
 
@@ -4667,6 +4710,25 @@ async function sendAgentResponse(input: {
       outbound.push(paymentOutbound);
     } catch {
       // O pedido e a sessao ficam salvos no painel mesmo se o envio do link falhar.
+    }
+  }
+
+  if (!paymentLink && !hasOrderIntent) {
+    const productChunkIndex = correctedChunks.length + catalogAttachments.length + 1;
+    const productOutbound = await maybeSendSalesCatalogProductPageLinks({
+      client: input.client,
+      context,
+      token: input.token,
+      phone: input.phone,
+      latestInbound,
+      items: renderedCatalog.items,
+      chunkIndex: productChunkIndex,
+      chunksTotal: productChunkIndex,
+      persistedChunks,
+    });
+
+    if (productOutbound) {
+      outbound.push(productOutbound);
     }
   }
 
@@ -5354,12 +5416,6 @@ function shouldSendSalesCatalogMediaAttachments(latestInbound: ConversationMessa
   return /\b(foto|fotos|imagem|imagens|video|videos|arquivo|arquivos|pdf|midia|midias|catalogo|catalogos|embalagem|mostra|mostrar)\b/.test(normalized);
 }
 
-function buildSalesCatalogOrderIntentText(latestInbound: ConversationMessageRow | null, text: string) {
-  const inboundText = latestInbound?.text_content?.trim() ?? "";
-
-  return [inboundText, text].filter(Boolean).join("\n");
-}
-
 async function recordSalesCatalogOrderIntent(input: {
   client: SupabaseClient;
   context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
@@ -5583,6 +5639,7 @@ async function maybeCreateSalesCatalogPaymentLink(input: {
       trackingUrl: result.trackingUrl ?? null,
       pixQrCode: result.pixQrCode,
       pixTicketUrl: result.pixTicketUrl,
+      gatewayUnavailable: result.gatewayUnavailable === true,
     };
   } catch (error) {
     await input.client.from("intelligence_events").insert({
@@ -5614,7 +5671,7 @@ async function sendSalesCatalogPaymentLink(input: {
   phone: string;
   payment: SalesCatalogPaymentLinkResult;
 }): Promise<OutboundMessage> {
-  const text = "Perfeito, gerei um checkout seguro para concluir seu pedido pelo Pix.";
+  const text = "Perfeito, deixei um checkout seguro separado para concluir seu pedido.";
   let providerResponse: unknown;
   let messageText = text;
   let interactiveButton = false;
@@ -5630,7 +5687,7 @@ async function sendSalesCatalogPaymentLink(input: {
       token: input.token,
       phone: input.phone,
       text,
-      choices: [`Pagar agora|${paymentUrl}`],
+      choices: [`Finalizar pedido|${paymentUrl}`],
       footerText: resolveInteractiveButtonFooterText(input.context.organization),
       trackId: `agent_payment_button_${input.context.run.id}_${input.payment.orderId.slice(0, 8)}`,
       mentions: resolveGroupMentions(input.context),
@@ -5638,7 +5695,7 @@ async function sendSalesCatalogPaymentLink(input: {
     interactiveButton = true;
   } catch (error) {
     const errorMessage = describeRuntimeError(error, "Falha desconhecida ao enviar botao de pagamento.");
-    messageText = `Gerei o checkout seguro para concluir seu pedido. Finalizar pagamento: ${paymentUrl}`;
+    messageText = `Gerei o checkout seguro para concluir seu pedido. Finalizar pedido: ${paymentUrl}`;
     const textProviderResponse = await sendWhatsappText({
       credentials: input.context.credentials,
       token: input.token,
@@ -5674,6 +5731,143 @@ async function sendSalesCatalogPaymentLink(input: {
   };
 
   await saveOutboundMessage(input.client, input.context, message);
+
+  return message;
+}
+
+async function maybeSendSalesCatalogProductPageLinks(input: {
+  client: SupabaseClient;
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
+  token: string;
+  phone: string;
+  latestInbound: ConversationMessageRow | null;
+  items: RuntimeSalesCatalogItem[];
+  chunkIndex: number;
+  chunksTotal: number;
+  persistedChunks: Set<number>;
+}): Promise<OutboundMessage | null> {
+  if (input.persistedChunks.has(input.chunkIndex)) {
+    return null;
+  }
+
+  const items = input.items
+    .filter((item) => (
+      item.salesDestination === "connectyhub_checkout"
+      && item.status === "active"
+      && isSalesCatalogItemSellable(item)
+    ))
+    .slice(0, 3);
+
+  if (items.length === 0) {
+    return null;
+  }
+
+  const choices = items.map((item) => {
+    const label = items.length === 1
+      ? "Ver produto"
+      : `Ver ${preview(item.title, 18)}`;
+    const url = buildLeadAwareSalesCatalogProductUrl({
+      productId: item.id,
+      organizationId: input.context.organization.id,
+      leadId: input.context.lead?.id ?? null,
+      leadPhone: normalizePhone(input.context.lead?.phone_number),
+      conversationId: input.context.conversationId,
+    });
+
+    return `${label}|${url}`;
+  });
+  const text = items.length === 1
+    ? "Separei a pagina do produto com os detalhes completos pra voce ver com calma."
+    : "Separei as paginas dos produtos com os detalhes completos pra voce comparar com calma.";
+  let messageText = text;
+  let providerResponse: unknown;
+  let interactiveButton = false;
+  let buttonFallback = false;
+
+  try {
+    providerResponse = await sendWhatsappInteractiveButtons({
+      credentials: input.context.credentials,
+      token: input.token,
+      phone: input.phone,
+      text,
+      choices,
+      footerText: resolveInteractiveButtonFooterText(input.context.organization),
+      trackId: `agent_product_button_${input.context.run.id}_${items[0].id.slice(0, 8)}`,
+      replyId: input.latestInbound?.provider_message_id ?? undefined,
+      mentions: resolveGroupMentions(input.context),
+    });
+    interactiveButton = true;
+  } catch (error) {
+    const errorMessage = describeRuntimeError(error, "Falha desconhecida ao enviar botao de produto.");
+    const fallbackLinks = choices
+      .map((choice) => {
+        const [label, url] = choice.split("|");
+        return `${label}: ${url}`;
+      })
+      .join("\n");
+    messageText = `${text}\n${fallbackLinks}`;
+    const textProviderResponse = await sendWhatsappText({
+      credentials: input.context.credentials,
+      token: input.token,
+      phone: input.phone,
+      text: messageText,
+      trackId: `agent_product_button_fallback_${input.context.run.id}_${items[0].id.slice(0, 8)}`,
+      replyId: input.latestInbound?.provider_message_id ?? undefined,
+      mentions: resolveGroupMentions(input.context),
+    });
+
+    providerResponse = {
+      fallback: true,
+      reason: "product_interactive_button_failed",
+      error: errorMessage,
+      textProviderResponse,
+      productIds: items.map((item) => item.id),
+    };
+    buttonFallback = true;
+    await persistInteractiveButtonFallbackEvent(input.client, input.context, {
+      chunkIndex: input.chunkIndex,
+      chunksTotal: input.chunksTotal,
+      errorMessage,
+      providerResponse,
+    });
+  }
+
+  const message: OutboundMessage = {
+    text: messageText,
+    mode: "text",
+    providerResponse,
+    interactiveButton,
+    buttonFallback,
+    chunkIndex: input.chunkIndex,
+    chunksTotal: input.chunksTotal,
+    persisted: true,
+  };
+
+  await saveOutboundMessage(input.client, input.context, message);
+  input.persistedChunks.add(input.chunkIndex);
+
+  await input.client.from("intelligence_events").insert({
+    scope: "organization",
+    organization_id: input.context.organization.id,
+    source_type: "sales_catalog",
+    source_id: input.context.conversationId,
+    producer_agent_id: input.context.agent.id,
+    event_type: "sales_catalog.product_page_link_sent",
+    title: "Pagina de produto enviada no WhatsApp",
+    summary: items.map((item) => item.title).join(", "),
+    confidence: 1,
+    visibility: "organization",
+    tags: ["sales_catalog", "product_page", "whatsapp", "lead_tracking"],
+    payload: {
+      agentRunId: input.context.run.id,
+      agentId: input.context.agent.id,
+      leadId: input.context.lead?.id ?? null,
+      conversationId: input.context.conversationId,
+      productIds: items.map((item) => item.id),
+      productTags: items.map((item) => item.tag),
+      buttonFallback,
+    },
+  });
 
   return message;
 }
@@ -5807,7 +6001,10 @@ async function persistSalesCatalogUnavailableOrderAttempt(input: {
 function hasSalesCatalogOrderIntent(text: string) {
   const normalized = normalizeSearch(text);
 
-  return /\b(fechar|fechamos|confirmar|confirmo|confirmado|comprar|compra|pedido|pedir|reservar|reservo|reservado|pagamento|pagar|pix|comprovante|entrega|frete|cep)\b/.test(normalized)
+  return (
+    /\b(fechar|fechamos|confirmar|confirmo|confirmado|comprar|compra|pedido|pedir|reservar|reservo|reservado|pagamento|pagar|pix|comprovante|entrega|frete|cep)\b/.test(normalized)
+    || /\b(quero esse|quero essa|quero um|quero uma|vou querer|pode mandar|manda pra mim|separa pra mim|fecha pra mim)\b/.test(normalized)
+  )
     && !/\b(nao quero|nao vou|sem interesse|apenas olhando|so olhando|so ver|somente ver)\b/.test(normalized);
 }
 
