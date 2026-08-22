@@ -441,6 +441,21 @@ textarea {
   color: #ffffff !important;
 }
 
+[data-connecty-mode] .bg-blue-600,
+[data-connecty-mode] .bg-blue-700,
+[data-connecty-mode] .bg-emerald-600,
+[data-connecty-mode] .bg-emerald-700,
+[data-connecty-mode] .bg-indigo-600,
+[data-connecty-mode] .bg-indigo-700,
+[data-connecty-mode] .bg-rose-600,
+[data-connecty-mode] .bg-rose-700,
+[data-connecty-mode] .hover\:bg-blue-700:hover,
+[data-connecty-mode] .hover\:bg-emerald-700:hover,
+[data-connecty-mode] .hover\:bg-indigo-700:hover,
+[data-connecty-mode] .hover\:bg-rose-700:hover {
+  color: #ffffff !important;
+}
+
 [data-connecty-mode] .bg-cyan-300\/5,
 [data-connecty-mode] .bg-cyan-300\/8,
 [data-connecty-mode] .bg-cyan-300\/10,

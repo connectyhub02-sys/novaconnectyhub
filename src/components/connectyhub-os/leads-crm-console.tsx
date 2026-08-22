@@ -161,12 +161,23 @@ const statusOptions: Array<{ value: "all" | ClientLeadStatus; label: string }> =
   { value: "archived", label: "Arquivados" },
 ];
 
-const statusMeta: Record<ClientLeadStatus, { label: string; tone: "cyan" | "green" | "amber" | "rose" | "violet" | "zinc"; dot: string }> = {
-  new: { label: "Novo", tone: "violet", dot: "bg-violet-400" },
-  active: { label: "Em atendimento", tone: "cyan", dot: "bg-cyan-400" },
-  qualified: { label: "Qualificado", tone: "green", dot: "bg-emerald-400" },
-  won: { label: "Convertido", tone: "green", dot: "bg-emerald-400" },
-  lost: { label: "Perdido", tone: "rose", dot: "bg-rose-400" },
+type LeadTone = "cyan" | "green" | "amber" | "rose" | "violet" | "zinc";
+
+const lightToneClassName: Record<LeadTone, string> = {
+  amber: "border-amber-500/30 bg-amber-50 text-amber-800",
+  cyan: "border-blue-500/25 bg-blue-50 text-blue-700",
+  green: "border-emerald-500/25 bg-emerald-50 text-emerald-700",
+  rose: "border-rose-500/25 bg-rose-50 text-rose-700",
+  violet: "border-indigo-500/25 bg-indigo-50 text-indigo-700",
+  zinc: "border-slate-300 bg-slate-100 text-slate-600",
+};
+
+const statusMeta: Record<ClientLeadStatus, { label: string; tone: LeadTone; dot: string }> = {
+  new: { label: "Novo", tone: "violet", dot: "bg-indigo-500" },
+  active: { label: "Em atendimento", tone: "cyan", dot: "bg-blue-500" },
+  qualified: { label: "Qualificado", tone: "green", dot: "bg-emerald-500" },
+  won: { label: "Convertido", tone: "green", dot: "bg-emerald-500" },
+  lost: { label: "Perdido", tone: "rose", dot: "bg-rose-500" },
   archived: { label: "Arquivado", tone: "zinc", dot: "bg-slate-400" },
 };
 
@@ -251,17 +262,17 @@ export function LeadCrmConsole({
         ) : (
           <Panel eyebrow="Workspace" title="Nenhuma empresa cadastrada">
             <div className="flex min-h-[260px] flex-col items-center justify-center gap-4 text-center">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-500/10 text-cyan-300">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-700">
                 <Building2 className="h-5 w-5" />
               </div>
               <div>
-                <p className="text-[15px] font-semibold text-white">Crie sua primeira empresa</p>
+                <p className="text-[15px] font-semibold text-slate-950">Crie sua primeira empresa</p>
                 <p className="mt-1 max-w-[440px] text-[12px] leading-5 text-slate-400">
                   Depois disso, o WhatsApp, os agentes e os leads ficam vinculados a empresa correta.
                 </p>
               </div>
               <Link
-                className="inline-flex h-10 items-center rounded-xl bg-cyan-300 px-4 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-950 transition hover:bg-cyan-200"
+                className="inline-flex h-10 items-center rounded-xl bg-blue-600 px-4 font-mono text-[10px] font-bold uppercase tracking-wide text-white transition hover:bg-blue-700"
                 href="/dashboard/empresa"
               >
                 Nova empresa
@@ -413,7 +424,7 @@ function LeadsView({
           return (
             <button
               key={lead.id}
-              className="grid gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3 text-left transition hover:border-cyan-400/30 hover:bg-cyan-400/5"
+              className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-3 text-left transition hover:border-blue-300 hover:bg-blue-50/70"
               onClick={() => setDetailsLeadId(lead.id)}
               type="button"
             >
@@ -422,7 +433,7 @@ function LeadsView({
                 <div className="min-w-0 flex-1">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <p className="truncate text-[13px] font-semibold text-white">{lead.name}</p>
+                      <p className="truncate text-[13px] font-semibold text-slate-950">{lead.name}</p>
                       <p className="mt-1 truncate text-[12px] text-slate-400">{lead.phone ?? lead.email ?? "Sem contato"}</p>
                     </div>
                     <StatusPill status={lead.status} />
@@ -449,7 +460,7 @@ function LeadsView({
 
       <div className="mt-4 hidden overflow-x-auto md:block">
         <div className="min-w-[1320px]">
-          <div className="grid grid-cols-[1.2fr_150px_170px_150px_130px_170px_140px_130px_110px] gap-3 border-b border-white/10 px-3 pb-3 font-mono text-[9px] uppercase tracking-widest text-slate-500">
+          <div className="grid grid-cols-[1.2fr_150px_170px_150px_130px_170px_140px_130px_110px] gap-3 border-b border-slate-200 px-3 pb-3 font-mono text-[9px] uppercase tracking-widest text-slate-500">
             <span>Nome</span>
             <span>Contato</span>
             <span>Perfil / persona</span>
@@ -460,19 +471,19 @@ function LeadsView({
             <span>IP / data</span>
             <span className="text-right">Acoes</span>
           </div>
-          <div className="divide-y divide-white/10">
+          <div className="divide-y divide-slate-100">
             {filteredLeads.map((lead) => {
               const temperature = getTemperatureMeta(lead.qualification.temperature);
 
               return (
                 <button
                   key={lead.id}
-                  className="grid w-full grid-cols-[1.2fr_150px_170px_150px_130px_170px_140px_130px_110px] items-center gap-3 px-3 py-4 text-left transition hover:bg-cyan-500/5"
+                  className="grid w-full grid-cols-[1.2fr_150px_170px_150px_130px_170px_140px_130px_110px] items-center gap-3 px-3 py-4 text-left transition hover:bg-blue-50/70"
                   onClick={() => setDetailsLeadId(lead.id)}
                   type="button"
                 >
                   <LeadIdentity lead={lead} />
-                  <div className="min-w-0 text-[12px] text-slate-300">
+                  <div className="min-w-0 text-[12px] text-slate-600">
                     <p className="truncate">{lead.phone ?? "Sem telefone"}</p>
                     {lead.email ? <p className="mt-1 truncate text-slate-500">{lead.email}</p> : null}
                   </div>
@@ -483,23 +494,23 @@ function LeadsView({
                     <p className="mt-1 truncate text-[11px] text-slate-400">Score {lead.score}/100</p>
                   </div>
                   <div className="min-w-0">
-                    <p className="truncate text-[12px] font-semibold text-white">{lead.agentName ?? "Sem agente"}</p>
+                    <p className="truncate text-[12px] font-semibold text-slate-950">{lead.agentName ?? "Sem agente"}</p>
                     <p className="mt-1 truncate font-mono text-[9px] uppercase tracking-wide text-slate-500">{lead.companyName}</p>
                   </div>
                   <StatusPill status={lead.status} />
-                  <div className="min-w-0 text-[12px] text-slate-300">
+                  <div className="min-w-0 text-[12px] text-slate-600">
                     <p className="truncate">{formatPublicSource(lead.source)}</p>
                     <p className="mt-1 truncate text-slate-500">{lead.technical.location ?? "Local desconhecido"}</p>
                   </div>
-                  <div className="min-w-0 text-[12px] text-slate-300">
+                  <div className="min-w-0 text-[12px] text-slate-600">
                     <p className="truncate">{lead.technical.device ?? "Nao identificado"}</p>
                     <p className="mt-1 truncate text-slate-500">{[lead.technical.os, lead.technical.browser].filter(Boolean).join(" / ") || "-"}</p>
                   </div>
-                  <div className="min-w-0 text-[12px] text-slate-300">
+                  <div className="min-w-0 text-[12px] text-slate-600">
                     <p className="truncate font-mono text-[11px] text-slate-400">{lead.technical.ipAddress ?? "-"}</p>
                     <p className="mt-1 text-slate-500">{formatDate(lead.lastMessageAt ?? lead.updatedAt)}</p>
                   </div>
-                  <span className="justify-self-end rounded-lg border border-cyan-400/25 bg-cyan-400/10 px-3 py-2 font-mono text-[9px] font-bold uppercase tracking-wide text-cyan-300">
+                  <span className="justify-self-end rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 font-mono text-[9px] font-bold uppercase tracking-wide text-blue-700">
                     Ver arquivo
                   </span>
                 </button>
@@ -540,7 +551,7 @@ function CrmView({
           const expanded = expandedLeadId === lead.id;
 
           return (
-            <div key={lead.id} className="rounded-2xl border border-white/10 bg-white/[0.02]">
+            <div key={lead.id} className="rounded-2xl border border-slate-200 bg-white">
               <button
                 className="grid w-full gap-3 p-4 text-left md:grid-cols-[minmax(0,1.4fr)_130px_130px_130px_34px]"
                 onClick={() => setExpandedLeadId(expanded ? null : lead.id)}
@@ -550,17 +561,17 @@ function CrmView({
                 <ScoreRing score={lead.score} />
                 <StatusPill status={lead.status} />
                 <span className="self-center text-[12px] text-slate-400">{formatDateTime(lead.lastMessageAt ?? lead.updatedAt)}</span>
-                <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 text-slate-400">
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-500">
                   {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                 </span>
               </button>
               {expanded ? (
-                <div className="grid gap-4 border-t border-white/10 p-4 lg:grid-cols-[1fr_1.1fr]">
+                <div className="grid gap-4 border-t border-slate-200 p-4 lg:grid-cols-[1fr_1.1fr]">
                   <div className="space-y-3">
                     <InfoPanel title="Resumo inteligente" text={lead.summary} />
                     <QualificationGrid lead={lead} />
                     <button
-                      className="inline-flex h-9 items-center gap-2 rounded-xl border border-cyan-400/25 bg-cyan-400/10 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-cyan-300 transition hover:bg-cyan-400/15"
+                      className="inline-flex h-9 items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-blue-700 transition hover:bg-blue-100"
                       onClick={() => setDetailsLeadId(lead.id)}
                       type="button"
                     >
@@ -568,7 +579,7 @@ function CrmView({
                       <ExternalLink className="h-3.5 w-3.5" />
                     </button>
                   </div>
-                  <div className="rounded-2xl border border-white/10 bg-slate-950/30 p-3">
+                  <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-3">
                     <MiniChat lead={lead} messages={lead.conversation.messages.slice(-4)} />
                   </div>
                 </div>
@@ -688,8 +699,8 @@ function ConversationsView({
                 className={cn(
                   "w-full rounded-2xl border p-3 text-left transition",
                   selectedLeadId === lead.id
-                    ? "border-cyan-400/45 bg-cyan-400/10"
-                    : "border-white/10 bg-white/[0.02] hover:border-cyan-400/25 hover:bg-cyan-400/5",
+                    ? "border-emerald-400/45 bg-emerald-50"
+                    : "border-slate-200 bg-white hover:border-emerald-300 hover:bg-emerald-50/60",
                 )}
                 onClick={() => {
                   setSelectedLeadId(lead.id);
@@ -701,13 +712,13 @@ function ConversationsView({
                   <LeadAvatar lead={lead} />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">
-                      <p className="truncate text-[13px] font-semibold text-white">{lead.name}</p>
+                      <p className="truncate text-[13px] font-semibold text-slate-950">{lead.name}</p>
                       <span className="shrink-0 font-mono text-[9px] text-slate-500">{formatTime(lead.lastMessageAt ?? lead.updatedAt)}</span>
                     </div>
                     <p className="mt-1 truncate text-[12px] text-slate-400">{lead.conversation.preview ?? lead.summary}</p>
                     <div className="mt-2 flex flex-wrap items-center gap-2">
                       <StatusPill status={lead.status} />
-                      <span className="rounded-md border border-white/10 px-2 py-1 font-mono text-[9px] uppercase tracking-wide text-slate-500">
+                      <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 font-mono text-[9px] uppercase tracking-wide text-slate-500">
                         {lead.companyName}
                       </span>
                     </div>
@@ -727,7 +738,7 @@ function ConversationsView({
             selectedLead ? (
               <div className="flex items-center gap-2">
                 <button
-                  className="inline-flex h-9 items-center gap-2 rounded-xl border border-white/10 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-300 transition hover:bg-white/10 xl:hidden"
+                  className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-700 transition hover:bg-slate-50 xl:hidden"
                   onClick={() => setConversationPane("inbox")}
                   type="button"
                 >
@@ -741,14 +752,14 @@ function ConversationsView({
         >
           {selectedLead ? (
             <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
-              <div className="min-h-[calc(100svh-280px)] rounded-2xl border border-white/10 bg-slate-950/30 p-3 sm:p-4 lg:min-h-[620px]">
+              <div className="min-h-[calc(100svh-280px)] rounded-2xl border border-emerald-200 bg-emerald-50/60 p-3 sm:p-4 lg:min-h-[620px]">
                 <ConversationHeader lead={selectedLead} />
-                <div className="mt-3 h-[min(520px,calc(100svh-390px))] min-h-[340px] overflow-y-auto rounded-2xl border border-white/10 bg-slate-950/40 p-3 sm:mt-4 sm:p-4">
+                <div className="mt-3 h-[min(520px,calc(100svh-390px))] min-h-[340px] overflow-y-auto rounded-2xl border border-emerald-200 bg-[#efeae2] p-3 sm:mt-4 sm:p-4">
                   <ChatMessages messages={selectedLead.conversation.messages} />
                 </div>
                 <div className="mt-3 grid gap-2 sm:hidden">
                   <button
-                    className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-cyan-400/25 bg-cyan-400/10 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-cyan-200 transition hover:bg-cyan-400/15"
+                    className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-emerald-300 bg-emerald-600 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-white transition hover:bg-emerald-700"
                     onClick={() => setDetailsLeadId(selectedLead.id)}
                     type="button"
                   >
@@ -1416,7 +1427,7 @@ function AttendanceCenterView({
                       className={cn(
                         "inline-flex h-9 max-w-[210px] shrink-0 items-center gap-2 rounded-full border px-3 text-[12px] font-semibold transition",
                         effectiveQueueKey === queue.key
-                          ? "border-slate-950 bg-slate-950 text-white shadow-[0_10px_22px_rgba(15,23,42,0.16)]"
+                          ? "border-blue-600 bg-blue-600 text-white shadow-[0_10px_22px_rgba(24,119,242,0.18)]"
                           : "border-slate-200 bg-white text-slate-700 hover:border-slate-400 hover:text-slate-950",
                       )}
                       onClick={() => {
@@ -1611,7 +1622,7 @@ function AttendanceCenterView({
                         className={cn(
                           "inline-flex h-10 items-center justify-center gap-2 rounded-xl px-3 text-[11px] font-bold transition lg:w-[122px]",
                           activeConversationId && manualReply.trim() && !replyBusy
-                            ? "bg-slate-950 text-white hover:bg-slate-800"
+                            ? "bg-blue-600 text-white hover:bg-blue-700"
                             : "bg-slate-200 text-slate-500",
                         )}
                         disabled={!activeConversationId || !manualReply.trim() || replyBusy}
@@ -2111,7 +2122,7 @@ function AttendanceSalesBagPanel({
                   Cadastre produtos no Catalogo de Vendas para eles aparecerem aqui automaticamente.
                 </p>
                 <Link
-                  className="mt-3 inline-flex h-9 items-center justify-center rounded-xl bg-slate-950 px-3 text-[11px] font-bold text-white transition hover:bg-slate-800"
+                  className="mt-3 inline-flex h-9 items-center justify-center rounded-xl bg-blue-600 px-3 text-[11px] font-bold text-white transition hover:bg-blue-700"
                   href="/dashboard/links"
                 >
                   Cadastrar produtos
@@ -2151,7 +2162,7 @@ function AttendanceSalesBagPanel({
             <button
               className={cn(
                 "inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl text-[12px] font-bold transition",
-                canAddManualItem ? "bg-slate-950 text-white hover:bg-slate-800" : "bg-slate-200 text-slate-500",
+                canAddManualItem ? "bg-blue-600 text-white hover:bg-blue-700" : "bg-slate-200 text-slate-500",
               )}
               disabled={!canAddManualItem}
               type="submit"
@@ -2748,8 +2759,8 @@ function SocialApprovalQueue({
           <div className={cn(
             "rounded-xl border px-3 py-2 text-[12px]",
             notice.tone === "success"
-              ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-100"
-              : "border-rose-400/25 bg-rose-400/10 text-rose-100",
+              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+              : "border-rose-200 bg-rose-50 text-rose-700",
           )}>
             {notice.message}
           </div>
@@ -2762,42 +2773,42 @@ function SocialApprovalQueue({
           return (
             <div
               key={item.id}
-              className="grid gap-3 rounded-2xl border border-amber-400/20 bg-amber-400/[0.045] p-3 lg:grid-cols-[minmax(0,1fr)_minmax(280px,420px)]"
+              className="grid gap-3 rounded-2xl border border-amber-200 bg-amber-50/60 p-3 lg:grid-cols-[minmax(0,1fr)_minmax(280px,420px)]"
             >
               <div className="min-w-0 space-y-3">
                 <div className="flex flex-wrap items-center gap-2">
                   <NeonBadge tone={item.publicSurface ? "amber" : "cyan"}>{item.channelLabel}</NeonBadge>
-                  <span className="rounded-lg border border-white/10 px-2 py-1 font-mono text-[9px] uppercase tracking-wide text-slate-400">
+                  <span className="rounded-lg border border-amber-200 bg-white/70 px-2 py-1 font-mono text-[9px] uppercase tracking-wide text-slate-500">
                     {item.companyName}
                   </span>
-                  <span className="rounded-lg border border-white/10 px-2 py-1 font-mono text-[9px] uppercase tracking-wide text-slate-400">
+                  <span className="rounded-lg border border-amber-200 bg-white/70 px-2 py-1 font-mono text-[9px] uppercase tracking-wide text-slate-500">
                     {formatDateTime(item.preparedAt ?? item.createdAt)}
                   </span>
                 </div>
 
                 <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_160px]">
                   <div className="min-w-0">
-                    <p className="truncate text-[13px] font-semibold text-white">{item.leadName}</p>
+                    <p className="truncate text-[13px] font-semibold text-slate-950">{item.leadName}</p>
                     <p className="mt-1 truncate text-[11px] text-slate-400">{item.leadPhone ?? item.providerChatId ?? "Contato social"}</p>
                   </div>
                   <div className="min-w-0 text-left sm:text-right">
                     <p className="truncate font-mono text-[9px] uppercase tracking-wide text-slate-500">Agente</p>
-                    <p className="truncate text-[12px] font-semibold text-slate-200">{item.agentName}</p>
+                    <p className="truncate text-[12px] font-semibold text-slate-950">{item.agentName}</p>
                   </div>
                 </div>
 
-                <div className="rounded-xl border border-white/10 bg-slate-950/40 p-3">
+                <div className="rounded-xl border border-slate-200 bg-white p-3">
                   <div className="mb-2 flex items-center justify-between gap-2">
                     <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Mensagem do lead</p>
-                    {item.publicSurface ? <ShieldCheck className="h-3.5 w-3.5 text-amber-300" /> : <MessageCircle className="h-3.5 w-3.5 text-cyan-300" />}
+                    {item.publicSurface ? <ShieldCheck className="h-3.5 w-3.5 text-amber-600" /> : <MessageCircle className="h-3.5 w-3.5 text-emerald-700" />}
                   </div>
-                  <p className="line-clamp-3 whitespace-pre-wrap text-[12px] leading-5 text-slate-200">{item.leadMessage}</p>
+                  <p className="line-clamp-3 whitespace-pre-wrap text-[12px] leading-5 text-slate-700">{item.leadMessage}</p>
                 </div>
 
                 {item.approvalReasons.length ? (
                   <div className="flex flex-wrap gap-1.5">
                     {item.approvalReasons.slice(0, 4).map((reason) => (
-                      <span key={reason} className="rounded-md border border-amber-300/20 bg-amber-300/10 px-2 py-1 font-mono text-[8px] uppercase tracking-wide text-amber-100">
+                      <span key={reason} className="rounded-md border border-amber-200 bg-amber-100 px-2 py-1 font-mono text-[8px] uppercase tracking-wide text-amber-800">
                         {formatApprovalReason(reason)}
                       </span>
                     ))}
@@ -2806,7 +2817,7 @@ function SocialApprovalQueue({
 
                 {item.leadId ? (
                   <button
-                    className="inline-flex h-9 items-center gap-2 rounded-xl border border-cyan-400/25 bg-cyan-400/10 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-cyan-200 transition hover:bg-cyan-400/15"
+                    className="inline-flex h-9 items-center gap-2 rounded-xl border border-emerald-300 bg-emerald-50 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-emerald-700 transition hover:bg-emerald-100"
                     onClick={() => onSelectLead(item.leadId!)}
                     type="button"
                   >
@@ -2820,7 +2831,7 @@ function SocialApprovalQueue({
                 <label className="grid gap-2">
                   <span className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Rascunho</span>
                   <textarea
-                    className="min-h-[126px] resize-y rounded-xl border border-white/10 bg-slate-950/70 px-3 py-3 text-[13px] leading-5 text-slate-100 outline-none transition placeholder:text-slate-600 focus:border-cyan-300/45"
+                    className="min-h-[126px] resize-y rounded-xl border border-slate-200 bg-white px-3 py-3 text-[13px] leading-5 text-slate-950 outline-none transition placeholder:text-slate-400 focus:border-blue-400"
                     disabled={isReviewing}
                     maxLength={1500}
                     onChange={(event) => setDrafts((current) => ({ ...current, [item.id]: event.target.value }))}
@@ -2830,7 +2841,7 @@ function SocialApprovalQueue({
 
                 <div className="grid gap-2 sm:grid-cols-2">
                   <button
-                    className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-emerald-300/25 bg-emerald-300/15 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-emerald-100 transition hover:bg-emerald-300/20 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-emerald-300 bg-emerald-600 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
                     disabled={isReviewing}
                     onClick={() => reviewApproval(item, "approve")}
                     type="button"
@@ -2839,7 +2850,7 @@ function SocialApprovalQueue({
                     Aprovar rascunho
                   </button>
                   <button
-                    className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-rose-300/25 bg-rose-300/10 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-rose-100 transition hover:bg-rose-300/15 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
                     disabled={isReviewing}
                     onClick={() => reviewApproval(item, "reject")}
                     type="button"
@@ -2930,7 +2941,7 @@ function SocialDispatchMonitorPanel({
             {monitor.summary.failed ? `${monitor.summary.failed} falhas` : `${monitor.summary.sent} enviados`}
           </NeonBadge>
           <button
-            className="inline-flex h-8 items-center gap-2 rounded-xl border border-white/10 px-3 font-mono text-[9px] font-bold uppercase tracking-wide text-slate-300 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-55"
+            className="inline-flex h-8 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 font-mono text-[9px] font-bold uppercase tracking-wide text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-55"
             disabled={refreshing}
             onClick={() => void refresh()}
             type="button"
@@ -2955,8 +2966,8 @@ function SocialDispatchMonitorPanel({
           <div className={cn(
             "rounded-xl border px-3 py-2 text-[12px]",
             notice.tone === "success"
-              ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-100"
-              : "border-rose-400/25 bg-rose-400/10 text-rose-100",
+              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+              : "border-rose-200 bg-rose-50 text-rose-700",
           )}>
             {notice.message}
           </div>
@@ -2969,55 +2980,55 @@ function SocialDispatchMonitorPanel({
               const lastAudit = item.audit[0] ?? null;
 
               return (
-                <div key={item.id} className="grid gap-3 rounded-2xl border border-white/10 bg-slate-950/35 p-3 lg:grid-cols-[minmax(0,1fr)_220px]">
+                <div key={item.id} className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-3 lg:grid-cols-[minmax(0,1fr)_220px]">
                   <div className="min-w-0 space-y-2">
                     <div className="flex flex-wrap items-center gap-2">
                       <MetaDispatchStatusPill label={item.dispatchStatusLabel} status={item.dispatchStatus} />
                       <NeonBadge tone={item.publicSurface ? "amber" : "cyan"}>{item.channelLabel}</NeonBadge>
-                      <span className="rounded-lg border border-white/10 px-2 py-1 font-mono text-[9px] uppercase tracking-wide text-slate-500">
+                      <span className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 font-mono text-[9px] uppercase tracking-wide text-slate-500">
                         {item.companyName}
                       </span>
-                      <span className="rounded-lg border border-white/10 px-2 py-1 font-mono text-[9px] uppercase tracking-wide text-slate-500">
+                      <span className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 font-mono text-[9px] uppercase tracking-wide text-slate-500">
                         {formatDateTime(item.sentAt ?? item.failedAt ?? item.startedAt ?? item.approvedAt ?? item.createdAt)}
                       </span>
                     </div>
 
                     <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_180px]">
                       <div className="min-w-0">
-                        <p className="truncate text-[13px] font-semibold text-white">{item.leadName}</p>
+                        <p className="truncate text-[13px] font-semibold text-slate-950">{item.leadName}</p>
                         <p className="mt-1 line-clamp-2 text-[12px] leading-5 text-slate-400">{item.approvedReply}</p>
                       </div>
                       <div className="min-w-0 text-left sm:text-right">
                         <p className="truncate font-mono text-[9px] uppercase tracking-wide text-slate-500">Agente</p>
-                        <p className="truncate text-[12px] font-semibold text-slate-200">{item.agentName}</p>
+                        <p className="truncate text-[12px] font-semibold text-slate-950">{item.agentName}</p>
                       </div>
                     </div>
 
                     {item.lastError ? (
-                      <p className="line-clamp-2 rounded-xl border border-rose-300/20 bg-rose-300/10 px-3 py-2 text-[12px] leading-5 text-rose-100">
+                      <p className="line-clamp-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-[12px] leading-5 text-rose-700">
                         {item.lastError}
                       </p>
                     ) : null}
 
                     <div className="flex flex-wrap gap-1.5">
-                      <span className="rounded-md border border-white/10 px-2 py-1 font-mono text-[8px] uppercase tracking-wide text-slate-500">
+                      <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 font-mono text-[8px] uppercase tracking-wide text-slate-500">
                         Tentativas {item.attempts}
                       </span>
-                      <span className="rounded-md border border-white/10 px-2 py-1 font-mono text-[8px] uppercase tracking-wide text-slate-500">
+                      <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 font-mono text-[8px] uppercase tracking-wide text-slate-500">
                         Retry {item.retryCount}
                       </span>
                       {item.httpStatus ? (
-                        <span className="rounded-md border border-white/10 px-2 py-1 font-mono text-[8px] uppercase tracking-wide text-slate-500">
+                        <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 font-mono text-[8px] uppercase tracking-wide text-slate-500">
                           HTTP {item.httpStatus}
                         </span>
                       ) : null}
                       {item.targetKind ? (
-                        <span className="rounded-md border border-white/10 px-2 py-1 font-mono text-[8px] uppercase tracking-wide text-slate-500">
+                        <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 font-mono text-[8px] uppercase tracking-wide text-slate-500">
                           {formatDispatchTarget(item.targetKind)}
                         </span>
                       ) : null}
                       {lastAudit ? (
-                        <span className="rounded-md border border-white/10 px-2 py-1 font-mono text-[8px] uppercase tracking-wide text-slate-500">
+                        <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 font-mono text-[8px] uppercase tracking-wide text-slate-500">
                           {formatDispatchAuditType(lastAudit.type)}
                         </span>
                       ) : null}
@@ -3027,7 +3038,7 @@ function SocialDispatchMonitorPanel({
                   <div className="grid content-start gap-2">
                     {item.leadId ? (
                       <button
-                        className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-cyan-400/25 bg-cyan-400/10 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-cyan-200 transition hover:bg-cyan-400/15"
+                        className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-emerald-300 bg-emerald-50 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-emerald-700 transition hover:bg-emerald-100"
                         onClick={() => onSelectLead(item.leadId!)}
                         type="button"
                       >
@@ -3037,7 +3048,7 @@ function SocialDispatchMonitorPanel({
                     ) : null}
                     {item.retryable ? (
                       <button
-                        className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-violet-300/25 bg-violet-300/10 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-violet-100 transition hover:bg-violet-300/15 disabled:cursor-not-allowed disabled:opacity-60"
+                        className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-indigo-700 transition hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-60"
                         disabled={isRetrying || refreshing}
                         onClick={() => void retryDispatch(item)}
                         type="button"
@@ -3046,7 +3057,7 @@ function SocialDispatchMonitorPanel({
                         Reenfileirar
                       </button>
                     ) : (
-                      <span className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-white/10 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                      <span className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-500">
                         <Send className="h-3.5 w-3.5" />
                         Sem acao
                       </span>
@@ -3074,11 +3085,11 @@ function SocialDispatchMetric({
   value: number;
 }) {
   const toneClassName = {
-    amber: "border-amber-400/20 bg-amber-400/10 text-amber-100",
-    cyan: "border-cyan-400/20 bg-cyan-400/10 text-cyan-100",
-    green: "border-emerald-400/20 bg-emerald-400/10 text-emerald-100",
-    rose: "border-rose-400/20 bg-rose-400/10 text-rose-100",
-    violet: "border-violet-400/20 bg-violet-400/10 text-violet-100",
+    amber: "border-amber-200 bg-amber-50 text-amber-800",
+    cyan: "border-blue-200 bg-blue-50 text-blue-700",
+    green: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    rose: "border-rose-200 bg-rose-50 text-rose-700",
+    violet: "border-indigo-200 bg-indigo-50 text-indigo-700",
   }[tone];
 
   return (
@@ -3204,9 +3215,9 @@ function LeadFilters({
   return (
     <div className={cn("grid gap-3", compact ? "grid-cols-1" : "md:grid-cols-[minmax(0,1fr)_220px]")}>
       <label className="relative block">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-blue-500" />
         <input
-          className="h-11 w-full rounded-xl border border-white/15 bg-white/[0.03] pl-10 pr-3 text-[13px] text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400/45"
+          className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-3 text-[13px] text-slate-950 outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:bg-blue-50/30"
           onChange={(event) => setSearch(event.target.value)}
           placeholder="Buscar por nome, telefone, empresa ou regiao..."
           type="search"
@@ -3214,14 +3225,14 @@ function LeadFilters({
         />
       </label>
       <label className="relative block">
-        <Filter className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+        <Filter className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-blue-500" />
         <select
-          className="h-11 w-full appearance-none rounded-xl border border-white/15 bg-white/[0.03] pl-10 pr-8 text-[13px] text-white outline-none transition focus:border-cyan-400/45"
+          className="h-11 w-full appearance-none rounded-xl border border-slate-200 bg-white pl-10 pr-8 text-[13px] text-slate-950 outline-none transition focus:border-blue-400 focus:bg-blue-50/30"
           onChange={(event) => setStatus(event.target.value as "all" | ClientLeadStatus)}
           value={status}
         >
           {statusOptions.map((option) => (
-            <option key={option.value} className="bg-slate-950 text-white" value={option.value}>
+            <option key={option.value} className="bg-white text-slate-950" value={option.value}>
               {option.label}
             </option>
           ))}
@@ -3237,7 +3248,7 @@ function LeadIdentity({ lead }: { lead: ClientLeadRecord }) {
     <div className="flex min-w-0 items-center gap-3">
       <LeadAvatar lead={lead} />
       <div className="min-w-0">
-        <p className="truncate text-[13px] font-semibold text-white">{lead.name}</p>
+        <p className="truncate text-[13px] font-semibold text-slate-950">{lead.name}</p>
         <p className="mt-1 truncate font-mono text-[9px] uppercase tracking-wide text-slate-500">
           {lead.channel} / {lead.leadFile.messageCount} mensagens
         </p>
@@ -3251,14 +3262,14 @@ function LeadAvatar({ lead, size = "md" }: { lead: ClientLeadRecord; size?: "md"
 
   if (lead.avatarUrl) {
     return (
-      <span className={cn("relative block shrink-0 overflow-hidden rounded-xl border border-cyan-400/35 bg-cyan-500/10", dimensions)}>
+      <span className={cn("relative block shrink-0 overflow-hidden rounded-xl border border-emerald-300 bg-emerald-50", dimensions)}>
         <Image alt={`Foto do lead ${lead.name}`} className="object-cover" fill sizes={size === "lg" ? "48px" : "40px"} src={lead.avatarUrl} unoptimized />
       </span>
     );
   }
 
   return (
-    <span className={cn("flex shrink-0 items-center justify-center rounded-xl border border-cyan-400/25 bg-cyan-500/10 font-mono font-bold text-cyan-300", dimensions)}>
+    <span className={cn("flex shrink-0 items-center justify-center rounded-xl border border-emerald-300 bg-emerald-50 font-mono font-bold text-emerald-700", dimensions)}>
       {lead.name.slice(0, 1).toUpperCase()}
     </span>
   );
@@ -3271,12 +3282,7 @@ function StatusPill({ status }: { status: ClientLeadStatus }) {
     <span
       className={cn(
         "inline-flex w-fit items-center gap-1.5 rounded-lg border px-2 py-1 font-mono text-[9px] font-bold uppercase tracking-wide",
-        meta.tone === "green" && "border-emerald-400/25 bg-emerald-400/10 text-emerald-300",
-        meta.tone === "cyan" && "border-cyan-400/25 bg-cyan-400/10 text-cyan-300",
-        meta.tone === "amber" && "border-amber-400/25 bg-amber-400/10 text-amber-300",
-        meta.tone === "rose" && "border-rose-400/25 bg-rose-400/10 text-rose-300",
-        meta.tone === "violet" && "border-violet-400/25 bg-violet-400/10 text-violet-300",
-        meta.tone === "zinc" && "border-slate-400/20 bg-slate-400/10 text-slate-300",
+        lightToneClassName[meta.tone],
       )}
     >
       <span className={cn("h-1.5 w-1.5 rounded-full", meta.dot)} />
@@ -3288,7 +3294,7 @@ function StatusPill({ status }: { status: ClientLeadStatus }) {
 function ScoreRing({ score }: { score: number }) {
   return (
     <div className="flex items-center gap-2 self-center">
-      <div className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-slate-950/50 font-mono text-[11px] font-bold text-cyan-300">
+      <div className="flex h-10 w-10 items-center justify-center rounded-full border border-blue-200 bg-blue-50 font-mono text-[11px] font-bold text-blue-700">
         {score}
       </div>
       <div className="min-w-0 flex-1">
@@ -3301,22 +3307,22 @@ function ScoreRing({ score }: { score: number }) {
 
 function InfoPanel({ title, text }: { title: string; text: string }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-      <p className="font-mono text-[9px] uppercase tracking-widest text-cyan-300">{title}</p>
-      <p className="mt-3 text-[12px] leading-5 text-slate-200">{redactInternalProviderNames(text)}</p>
+    <div className="rounded-2xl border border-slate-200 bg-white p-4">
+      <p className="font-mono text-[9px] uppercase tracking-widest text-blue-700">{title}</p>
+      <p className="mt-3 text-[12px] leading-5 text-slate-600">{redactInternalProviderNames(text)}</p>
     </div>
   );
 }
 
 function LeadFileSnapshot({ lead }: { lead: ClientLeadRecord }) {
   return (
-    <div className="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-4">
+    <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="font-mono text-[9px] uppercase tracking-widest text-cyan-200">Dossie do lead</p>
-          <p className="mt-1 text-[13px] font-semibold text-white">CRM, conversas e rastreamento</p>
+          <p className="font-mono text-[9px] uppercase tracking-widest text-blue-700">Dossie do lead</p>
+          <p className="mt-1 text-[13px] font-semibold text-slate-950">CRM, conversas e rastreamento</p>
         </div>
-        <Archive className="h-5 w-5 text-cyan-200" />
+        <Archive className="h-5 w-5 text-blue-600" />
       </div>
       <div className="mt-3 grid grid-cols-2 gap-2">
         <InfoMini label="Conversas" value={String(lead.leadFile.conversationCount)} />
@@ -3342,23 +3348,23 @@ function ConversationSelector({
   const selectedConversation = conversations.find((conversation) => conversation.id === selectedId) ?? null;
 
   return (
-    <div className="border-t border-white/10 bg-slate-900/80 p-3">
-      <div className="flex items-center gap-3 rounded-full border border-white/10 bg-slate-950/60 px-4 py-2">
-        <MessageCircle className="h-4 w-4 shrink-0 text-cyan-300" />
+    <div className="border-t border-slate-200 bg-white p-3">
+      <div className="flex items-center gap-3 rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2">
+        <MessageCircle className="h-4 w-4 shrink-0 text-emerald-700" />
         {conversations.length > 1 ? (
           <select
-            className="min-w-0 flex-1 appearance-none bg-transparent text-[13px] text-slate-200 outline-none"
+            className="min-w-0 flex-1 appearance-none bg-transparent text-[13px] text-slate-800 outline-none"
             onChange={(event) => onSelect(event.target.value)}
             value={selectedId ?? ""}
           >
             {conversations.map((conversation) => (
-              <option key={conversation.id} className="bg-slate-950 text-white" value={conversation.id}>
+              <option key={conversation.id} className="bg-white text-slate-950" value={conversation.id}>
                 {formatConversationLabel(conversation)}
               </option>
             ))}
           </select>
         ) : (
-          <span className="min-w-0 flex-1 truncate text-[13px] text-slate-300">
+          <span className="min-w-0 flex-1 truncate text-[13px] text-slate-700">
             {selectedConversation ? formatConversationLabel(selectedConversation) : "Historico geral"}
           </span>
         )}
@@ -3404,16 +3410,16 @@ function redactInternalProviderNames(value: string) {
 
 function TrackingArchive({ events }: { events: ClientLeadActivity[] }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+    <div className="rounded-2xl border border-slate-200 bg-white p-4">
       <div className="flex items-center justify-between gap-3">
-        <p className="font-mono text-[9px] uppercase tracking-widest text-amber-300">Atividade no site</p>
+        <p className="font-mono text-[9px] uppercase tracking-widest text-amber-700">Atividade no site</p>
         <NeonBadge tone="amber">{events.length}</NeonBadge>
       </div>
       <div className="mt-3 space-y-2">
         {events.slice(0, 10).map((event) => (
-          <div key={event.id} className="rounded-xl border border-white/10 bg-slate-950/30 p-3">
+          <div key={event.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
             <div className="flex items-center justify-between gap-2">
-              <p className="truncate text-[12px] font-semibold text-white">{redactInternalProviderNames(event.title)}</p>
+              <p className="truncate text-[12px] font-semibold text-slate-950">{redactInternalProviderNames(event.title)}</p>
               <span className="shrink-0 font-mono text-[9px] text-slate-500">{formatDateTime(event.occurredAt)}</span>
             </div>
             <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-slate-400">{redactInternalProviderNames(event.summary)}</p>
@@ -3437,27 +3443,27 @@ function QualificationGrid({ lead }: { lead: ClientLeadRecord }) {
   const temperature = getTemperatureMeta(lead.qualification.temperature);
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+    <div className="rounded-2xl border border-slate-200 bg-white p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="font-mono text-[9px] uppercase tracking-widest text-cyan-300">Panorama de qualificacao</p>
+        <p className="font-mono text-[9px] uppercase tracking-widest text-blue-700">Panorama de qualificacao</p>
         <span className={cn("rounded-lg border px-2 py-1 font-mono text-[9px] font-bold uppercase tracking-wide", temperature.className)}>
           {temperature.label}
         </span>
       </div>
       <div className="mt-3 grid gap-2 md:grid-cols-3">
-        <div className="rounded-xl border border-white/10 bg-slate-950/30 p-3">
+        <div className="rounded-xl border border-blue-100 bg-blue-50 p-3">
           <div className="flex items-center gap-2 font-mono text-[9px] uppercase tracking-wide text-slate-500">
-            <Activity className="h-3.5 w-3.5 text-cyan-300" />
+            <Activity className="h-3.5 w-3.5 text-blue-600" />
             Score
           </div>
-          <p className="mt-2 text-[12px] font-semibold text-white">{lead.score}/100</p>
+          <p className="mt-2 text-[12px] font-semibold text-slate-950">{lead.score}/100</p>
         </div>
-        <div className="rounded-xl border border-white/10 bg-slate-950/30 p-3 md:col-span-2">
+        <div className="rounded-xl border border-indigo-100 bg-indigo-50 p-3 md:col-span-2">
           <div className="flex items-center gap-2 font-mono text-[9px] uppercase tracking-wide text-slate-500">
-            <Target className="h-3.5 w-3.5 text-cyan-300" />
+            <Target className="h-3.5 w-3.5 text-indigo-600" />
             Proxima acao
           </div>
-          <p className="mt-2 text-[12px] font-semibold leading-5 text-white">{lead.qualification.nextBestAction ?? "Continuar qualificando o lead."}</p>
+          <p className="mt-2 text-[12px] font-semibold leading-5 text-slate-950">{lead.qualification.nextBestAction ?? "Continuar qualificando o lead."}</p>
         </div>
       </div>
       <div className="mt-3 grid grid-cols-2 gap-2">
@@ -3465,45 +3471,45 @@ function QualificationGrid({ lead }: { lead: ClientLeadRecord }) {
           const Icon = item.icon;
 
           return (
-            <div key={item.label} className="rounded-xl border border-white/10 bg-slate-950/30 p-3">
+            <div key={item.label} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
               <div className="flex items-center gap-2 font-mono text-[9px] uppercase tracking-wide text-slate-500">
-                <Icon className="h-3.5 w-3.5 text-cyan-300" />
+                <Icon className="h-3.5 w-3.5 text-blue-600" />
                 {item.label}
               </div>
-              <p className="mt-2 text-[12px] font-semibold text-white">{item.value}</p>
+              <p className="mt-2 text-[12px] font-semibold text-slate-950">{item.value}</p>
             </div>
           );
         })}
       </div>
 
       {lead.qualification.nextBestQuestion ? (
-        <div className="mt-2 rounded-xl border border-cyan-400/20 bg-cyan-400/10 p-3">
-          <div className="flex items-center gap-2 font-mono text-[9px] uppercase tracking-wide text-cyan-200">
+        <div className="mt-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+          <div className="flex items-center gap-2 font-mono text-[9px] uppercase tracking-wide text-emerald-700">
             <MessageCircle className="h-3.5 w-3.5" />
             Proxima pergunta sugerida
           </div>
-          <p className="mt-2 text-[12px] font-semibold leading-5 text-cyan-50">{lead.qualification.nextBestQuestion}</p>
+          <p className="mt-2 text-[12px] font-semibold leading-5 text-slate-950">{lead.qualification.nextBestQuestion}</p>
         </div>
       ) : null}
 
       {lead.qualification.nextStepAcceptance ? (
-        <div className="mt-2 rounded-xl border border-white/10 bg-slate-950/30 p-3">
+        <div className="mt-2 rounded-xl border border-blue-100 bg-blue-50 p-3">
           <div className="flex items-center gap-2 font-mono text-[9px] uppercase tracking-wide text-slate-500">
-            <ExternalLink className="h-3.5 w-3.5 text-cyan-300" />
+            <ExternalLink className="h-3.5 w-3.5 text-blue-600" />
             Aceite do proximo passo
           </div>
-          <p className="mt-2 text-[12px] font-semibold leading-5 text-white">{lead.qualification.nextStepAcceptance}</p>
+          <p className="mt-2 text-[12px] font-semibold leading-5 text-slate-950">{lead.qualification.nextStepAcceptance}</p>
         </div>
       ) : null}
 
       {lead.qualification.fields.length ? (
-        <div className="mt-3 rounded-xl border border-white/10 bg-slate-950/30 p-3">
+        <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
           <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Campos personalizados capturados</p>
           <div className="mt-3 grid gap-2 md:grid-cols-2">
             {lead.qualification.fields.map((field) => (
-              <div key={field.key} className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2">
+              <div key={field.key} className="rounded-lg border border-slate-200 bg-white px-3 py-2">
                 <p className="font-mono text-[9px] uppercase tracking-wide text-slate-500">{field.label}</p>
-                <p className="mt-1 text-[12px] font-semibold leading-5 text-white">{field.value}</p>
+                <p className="mt-1 text-[12px] font-semibold leading-5 text-slate-950">{field.value}</p>
               </div>
             ))}
           </div>
@@ -3521,31 +3527,31 @@ function QualificationGrid({ lead }: { lead: ClientLeadRecord }) {
 
 function InfoMini({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-white/10 bg-slate-950/30 px-3 py-2">
+    <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
       <p className="font-mono text-[9px] uppercase tracking-wide text-slate-500">{label}</p>
-      <p className="mt-1 truncate text-[12px] font-semibold text-white">{redactInternalProviderNames(value)}</p>
+      <p className="mt-1 truncate text-[12px] font-semibold text-slate-950">{redactInternalProviderNames(value)}</p>
     </div>
   );
 }
 
 function getTemperatureMeta(value: ClientLeadRecord["qualification"]["temperature"]) {
   if (value === "vip") {
-    return { label: "VIP", className: "border-emerald-300/30 bg-emerald-300/10 text-emerald-200" };
+    return { label: "VIP", className: "border-emerald-500/30 bg-emerald-50 text-emerald-700" };
   }
 
   if (value === "hot") {
-    return { label: "Quente", className: "border-emerald-400/25 bg-emerald-400/10 text-emerald-300" };
+    return { label: "Quente", className: "border-emerald-500/25 bg-emerald-50 text-emerald-700" };
   }
 
   if (value === "warm") {
-    return { label: "Morno", className: "border-amber-400/25 bg-amber-400/10 text-amber-300" };
+    return { label: "Morno", className: "border-amber-500/30 bg-amber-50 text-amber-800" };
   }
 
   if (value === "cold") {
-    return { label: "Frio", className: "border-slate-400/20 bg-slate-400/10 text-slate-300" };
+    return { label: "Frio", className: "border-slate-300 bg-slate-100 text-slate-600" };
   }
 
-  return { label: "Sem temperatura", className: "border-slate-400/20 bg-slate-400/10 text-slate-400" };
+  return { label: "Sem temperatura", className: "border-slate-300 bg-slate-100 text-slate-500" };
 }
 
 function LeadTechnicalFile({ lead }: { lead: ClientLeadRecord }) {
@@ -3559,19 +3565,19 @@ function LeadTechnicalFile({ lead }: { lead: ClientLeadRecord }) {
   ];
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-      <p className="font-mono text-[9px] uppercase tracking-widest text-cyan-300">Ficha tecnica</p>
+    <div className="rounded-2xl border border-slate-200 bg-white p-4">
+      <p className="font-mono text-[9px] uppercase tracking-widest text-blue-700">Ficha tecnica</p>
       <div className="mt-3 space-y-2">
         {rows.map((row) => {
           const Icon = row.icon;
 
           return (
-            <div key={row.label} className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-slate-950/30 px-3 py-2">
-              <span className="flex items-center gap-2 text-[11px] text-slate-400">
-                <Icon className="h-3.5 w-3.5 text-cyan-300" />
+            <div key={row.label} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+              <span className="flex items-center gap-2 text-[11px] text-slate-500">
+                <Icon className="h-3.5 w-3.5 text-blue-600" />
                 {row.label}
               </span>
-              <span className="max-w-[170px] truncate text-right text-[11px] font-semibold text-white">{redactInternalProviderNames(row.value)}</span>
+              <span className="max-w-[170px] truncate text-right text-[11px] font-semibold text-slate-950">{redactInternalProviderNames(row.value)}</span>
             </div>
           );
         })}
@@ -3582,15 +3588,15 @@ function LeadTechnicalFile({ lead }: { lead: ClientLeadRecord }) {
 
 function ActivityTimeline({ activities }: { activities: ClientLeadActivity[] }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-      <p className="font-mono text-[9px] uppercase tracking-widest text-cyan-300">Atividade no ecossistema</p>
+    <div className="rounded-2xl border border-slate-200 bg-white p-4">
+      <p className="font-mono text-[9px] uppercase tracking-widest text-blue-700">Atividade no ecossistema</p>
       <div className="mt-3 space-y-2">
         {activities.slice(0, 10).map((activity) => (
-          <div key={activity.id} className="grid grid-cols-[10px_1fr] gap-3 rounded-xl border border-white/10 bg-slate-950/30 p-3">
+          <div key={activity.id} className="grid grid-cols-[10px_1fr] gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
             <span className={cn("mt-1.5 h-2 w-2 rounded-full", activity.tone === "green" && "bg-emerald-400", activity.tone === "cyan" && "bg-cyan-400", activity.tone === "amber" && "bg-amber-400", activity.tone === "rose" && "bg-rose-400", activity.tone === "zinc" && "bg-slate-500")} />
             <div className="min-w-0">
               <div className="flex items-center justify-between gap-2">
-                <p className="truncate text-[12px] font-semibold text-white">{redactInternalProviderNames(activity.title)}</p>
+                <p className="truncate text-[12px] font-semibold text-slate-950">{redactInternalProviderNames(activity.title)}</p>
                 <span className="shrink-0 font-mono text-[9px] text-slate-500">{formatDate(activity.occurredAt)}</span>
               </div>
               <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-slate-400">{redactInternalProviderNames(activity.summary)}</p>
@@ -3613,11 +3619,11 @@ function ConversationHeader({
   const messageCount = conversation?.messageCount ?? lead.conversation.messageCount;
 
   return (
-    <div className="flex flex-col gap-3 bg-slate-900/90 p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4">
+    <div className="flex flex-col gap-3 rounded-2xl border border-emerald-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4">
       <div className="flex min-w-0 items-center gap-3">
         <LeadAvatar lead={lead} />
         <div className="min-w-0">
-          <p className="truncate text-[14px] font-semibold text-white">{lead.name}</p>
+          <p className="truncate text-[14px] font-semibold text-slate-950">{lead.name}</p>
           <p className="truncate text-[11px] text-slate-400">{lead.phone ?? lead.companyName}</p>
         </div>
       </div>
@@ -3712,7 +3718,7 @@ function LeadSideFile({ className, lead, onDetails }: { className?: string; lead
       <LeadQualificationSnapshot lead={lead} />
       <LeadTechnicalFile lead={lead} />
       <button
-        className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-cyan-300 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-950 transition hover:bg-cyan-200"
+        className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-white transition hover:bg-blue-700"
         onClick={onDetails}
         type="button"
       >
@@ -3727,9 +3733,9 @@ function LeadQualificationSnapshot({ lead }: { lead: ClientLeadRecord }) {
   const temperature = getTemperatureMeta(lead.qualification.temperature);
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+    <div className="rounded-2xl border border-slate-200 bg-white p-4">
       <div className="flex items-center justify-between gap-3">
-        <p className="font-mono text-[9px] uppercase tracking-widest text-cyan-300">Qualificacao</p>
+        <p className="font-mono text-[9px] uppercase tracking-widest text-blue-700">Qualificacao</p>
         <span className={cn("rounded-lg border px-2 py-1 font-mono text-[9px] font-bold uppercase tracking-wide", temperature.className)}>
           {temperature.label}
         </span>
@@ -3738,7 +3744,7 @@ function LeadQualificationSnapshot({ lead }: { lead: ClientLeadRecord }) {
         <InfoMini label="Score" value={`${lead.score}/100`} />
         <InfoMini label="Status" value={statusMeta[lead.status].label} />
       </div>
-      <p className="mt-3 text-[12px] font-semibold leading-5 text-white">
+      <p className="mt-3 text-[12px] font-semibold leading-5 text-slate-950">
         {lead.qualification.nextBestAction ?? "Continuar qualificando o lead."}
       </p>
     </div>
@@ -3747,9 +3753,9 @@ function LeadQualificationSnapshot({ lead }: { lead: ClientLeadRecord }) {
 
 function EmptyState({ title, detail }: { title: string; detail: string }) {
   return (
-    <div className="flex min-h-[220px] flex-col items-center justify-center rounded-2xl border border-dashed border-white/10 bg-white/[0.02] p-6 text-center">
-      <Archive className="h-8 w-8 text-slate-600" />
-      <p className="mt-3 text-[14px] font-semibold text-white">{title}</p>
+    <div className="flex min-h-[220px] flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center">
+      <Archive className="h-8 w-8 text-slate-400" />
+      <p className="mt-3 text-[14px] font-semibold text-slate-950">{title}</p>
       <p className="mt-1 max-w-[420px] text-[12px] leading-5 text-slate-500">{detail}</p>
     </div>
   );
