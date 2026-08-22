@@ -52,6 +52,8 @@ type QueryBuilder = PromiseLike<QueryResponse> & {
   eq(column: string, value: unknown): QueryBuilder;
   in(column: string, value: unknown): QueryBuilder;
   limit(value: number): QueryBuilder;
+  neq(column: string, value: unknown): QueryBuilder;
+  not(column: string, operator: string, value: unknown): QueryBuilder;
   order(column: string, options?: unknown): QueryBuilder;
   select(columns: string): QueryBuilder;
 };
@@ -115,6 +117,48 @@ describe("client dashboard scoped loaders", () => {
 
 function createQueryRecorder() {
   const filters: RecordedFilter[] = [];
+  const tableRows: Record<string, unknown[]> = {
+    whatsapp_instances: [{
+      id: "wa-a",
+      organization_id: companyA.id,
+      connectyhub_api_client_id: null,
+      connectyhub_api_visibility: null,
+      phone_number: "5511999999999",
+      display_name: "WhatsApp A",
+      status: "connected",
+      metadata: { client_agent: true },
+    }],
+    conversations: [{
+      id: "conversation-a",
+      organization_id: companyA.id,
+      lead_id: "lead-a",
+      whatsapp_instance_id: "wa-a",
+      channel: "whatsapp",
+      provider: "uazapi",
+      provider_chat_id: "5511999999999@s.whatsapp.net",
+      status: "open",
+      last_message_preview: "Oi",
+      last_message_at: "2026-08-22T12:00:00.000Z",
+      metadata: {},
+      created_at: "2026-08-22T12:00:00.000Z",
+      updated_at: "2026-08-22T12:00:00.000Z",
+    }],
+    leads: [{
+      id: "lead-a",
+      organization_id: companyA.id,
+      channel: "whatsapp",
+      phone_number: "5511999999999",
+      display_name: "Lead A",
+      status: "active",
+      score: 10,
+      source: "whatsapp",
+      last_event_summary: "Oi",
+      last_message_at: "2026-08-22T12:00:00.000Z",
+      metadata: {},
+      created_at: "2026-08-22T12:00:00.000Z",
+      updated_at: "2026-08-22T12:00:00.000Z",
+    }],
+  };
 
   return {
     client: {
@@ -133,12 +177,20 @@ function createQueryRecorder() {
           filters.push({ column, table, value });
           return chain();
         };
+        builder.neq = (column, value) => {
+          filters.push({ column, table, value });
+          return chain();
+        };
+        builder.not = (column, operator, value) => {
+          filters.push({ column, table, value: [operator, value] });
+          return chain();
+        };
         builder.contains = (column, value) => {
           filters.push({ column, table, value });
           return chain();
         };
         builder.then = (onfulfilled, onrejected) =>
-          Promise.resolve({ data: [], error: null }).then(onfulfilled, onrejected);
+          Promise.resolve({ data: tableRows[table] ?? [], error: null }).then(onfulfilled, onrejected);
 
         return builder;
       },

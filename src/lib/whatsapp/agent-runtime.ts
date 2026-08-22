@@ -508,7 +508,7 @@ export async function processWhatsappAgentRun(input: {
     });
 
     if (behavior.quotedReplyContext && latestInbound) {
-      const quotedContext = extractQuotedMessageContext(latestInbound);
+      const quotedContext = extractQuotedMessageContext(latestInbound, context.messages);
       if (quotedContext) {
         userText = `[Respondendo a mensagem: "${quotedContext}"]\n${userText}`;
       }
@@ -1869,7 +1869,7 @@ async function generateAgentResponse(input: {
       systemInstruction: {
         parts: [{ text: buildSystemInstruction(input) }],
       },
-      contents: buildGeminiContents(input.messages, input.userText, input.latestInbound?.id ?? null),
+      contents: buildGeminiContents(input.messages, input.userText, input.latestInbound?.id ?? null, input.userText),
       generationConfig: {
         temperature: 0.55,
         topP: 0.9,
@@ -3565,10 +3565,15 @@ function normalizeLinkReference(value: string) {
     .replace(/^_+|_+$/g, "");
 }
 
-function buildGeminiContents(messages: ConversationMessageRow[], fallbackUserText: string, activeInboundMessageId: string | null = null) {
+function buildGeminiContents(
+  messages: ConversationMessageRow[],
+  fallbackUserText: string,
+  activeInboundMessageId: string | null = null,
+  activeInboundText: string | null = null,
+) {
   const contents = messages
     .map((message) => {
-      const text = buildMessageText(message, { activeInboundMessageId });
+      const text = buildMessageText(message, { activeInboundMessageId, activeInboundText });
       if (!text) return null;
 
       return {
@@ -3588,7 +3593,7 @@ function buildGeminiContents(messages: ConversationMessageRow[], fallbackUserTex
   return contents;
 }
 
-function extractQuotedMessageContext(message: ConversationMessageRow): string | null {
+function extractQuotedMessageContext(message: ConversationMessageRow, messages: ConversationMessageRow[] = []): string | null {
   const payload = readRecord(message.payload);
   if (!payload) return null;
 
@@ -3597,9 +3602,17 @@ function extractQuotedMessageContext(message: ConversationMessageRow): string | 
     findNestedQuotedText(payload, "quotedMessage") ??
     findNestedQuotedText(payload, "contextInfo");
 
-  if (!quotedText) return null;
-  const trimmed = quotedText.trim();
-  return trimmed.length > 0 ? trimmed.slice(0, 500) : null;
+  if (quotedText) {
+    const trimmed = quotedText.trim();
+    if (trimmed.length > 0) {
+      return trimmed.slice(0, 500);
+    }
+  }
+
+  const quotedProviderMessageId = findQuotedProviderMessageId(payload);
+  return quotedProviderMessageId
+    ? findQuotedMessageTextByProviderId(messages, quotedProviderMessageId, message.id)
+    : null;
 }
 
 function findNestedQuotedText(payload: Record<string, unknown>, rootKey: string): string | null {
@@ -3634,14 +3647,77 @@ function findNestedQuotedText(payload: Record<string, unknown>, rootKey: string)
   return null;
 }
 
+function findQuotedProviderMessageId(payload: JsonRecord) {
+  return findString(payload, [
+    "quoted",
+    "quotedId",
+    "quoted_id",
+    "quotedMsgId",
+    "quoted_msg_id",
+    "quotedMessageId",
+    "quoted_message_id",
+    "quotedStanzaId",
+    "quoted_stanza_id",
+    "stanzaId",
+    "stanza_id",
+  ]);
+}
+
+function findQuotedMessageTextByProviderId(
+  messages: ConversationMessageRow[],
+  quotedProviderMessageId: string,
+  activeMessageId: string,
+) {
+  for (const candidate of [...messages].reverse()) {
+    if (candidate.id === activeMessageId || !candidate.provider_message_id) {
+      continue;
+    }
+
+    if (!providerMessageIdsMatch(candidate.provider_message_id, quotedProviderMessageId)) {
+      continue;
+    }
+
+    const text = buildMessageText(candidate)?.trim();
+    return text ? text.slice(0, 500) : null;
+  }
+
+  return null;
+}
+
+function providerMessageIdsMatch(left: string, right: string) {
+  const normalizedLeft = normalizeProviderMessageId(left);
+  const normalizedRight = normalizeProviderMessageId(right);
+
+  if (!normalizedLeft || !normalizedRight) {
+    return false;
+  }
+
+  if (normalizedLeft === normalizedRight) {
+    return true;
+  }
+
+  return normalizedLeft.length >= 8
+    && normalizedRight.length >= 8
+    && (normalizedLeft.endsWith(normalizedRight) || normalizedRight.endsWith(normalizedLeft));
+}
+
+function normalizeProviderMessageId(value: string) {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 function buildMessageText(
   message: ConversationMessageRow,
-  options: { activeInboundMessageId?: string | null } = {},
+  options: { activeInboundMessageId?: string | null; activeInboundText?: string | null } = {},
 ) {
+  const activeInboundText = options.activeInboundText?.trim();
+  if (activeInboundText && options.activeInboundMessageId && message.id === options.activeInboundMessageId) {
+    return activeInboundText;
+  }
+
   const text = message.text_content?.trim();
 
   if (text) {
