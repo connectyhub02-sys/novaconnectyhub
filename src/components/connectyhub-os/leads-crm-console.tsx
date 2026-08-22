@@ -1411,14 +1411,14 @@ function AttendanceCenterView({
             <div className="border-b bg-[#f0f2f5] px-4 py-4" style={{ borderColor: "#d1d7db" }}>
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-emerald-700">Central WhatsApp</p>
+                  <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-[#25D366]">Central WhatsApp</p>
                   <h2 className="mt-1 text-[20px] font-bold text-slate-950">Atendimento</h2>
                   <p className="mt-1 text-[11px] text-slate-500">
                     {queueThreads.length} conversas / {queueThreads.filter((thread) => thread.lead.status === "active").length} em atendimento
                   </p>
                 </div>
                 <Link
-                  className="grid h-11 w-11 place-items-center rounded-full border border-emerald-200 bg-white shadow-sm transition hover:border-emerald-400 hover:bg-emerald-50"
+                  className="grid h-11 w-11 place-items-center rounded-full border border-[#25D366]/45 bg-white shadow-sm transition hover:border-[#25D366] hover:bg-[#effff4]"
                   href="/dashboard/whatsapp"
                   title={`Configurar agente ${activeAgentIdentity.name}`}
                 >
@@ -1434,8 +1434,8 @@ function AttendanceCenterView({
                       className={cn(
                         "inline-flex h-9 max-w-[210px] shrink-0 items-center gap-2 rounded-full border px-3 text-[12px] font-semibold transition",
                         effectiveQueueKey === queue.key
-                          ? "border-emerald-600 bg-[#008069] text-white shadow-[0_10px_22px_rgba(0,128,105,0.18)]"
-                          : "border-slate-200 bg-white text-slate-700 hover:border-emerald-300 hover:text-emerald-800",
+                          ? "border-[#25D366] bg-gradient-to-r from-white via-[#ecfff1] to-[#25D366] text-[#075E54] shadow-[0_10px_22px_rgba(37,211,102,0.12)]"
+                          : "border-slate-200 bg-white text-slate-700 hover:border-[#25D366] hover:text-[#075E54]",
                       )}
                       onClick={() => {
                         setSelectedQueueKey(queue.key);
@@ -1446,7 +1446,7 @@ function AttendanceCenterView({
                     >
                       {queue.key !== "all" ? <AgentAvatar avatarUrl={queue.avatarUrl} name={queue.label} size="xs" /> : null}
                       <span className="truncate">{queue.label}</span>
-                      <span className={cn("font-mono text-[10px]", effectiveQueueKey === queue.key ? "text-white/75" : "text-slate-400")}>
+                      <span className={cn("font-mono text-[10px]", effectiveQueueKey === queue.key ? "text-[#075E54]/70" : "text-slate-400")}>
                         {queue.count}
                       </span>
                     </button>
@@ -1455,9 +1455,9 @@ function AttendanceCenterView({
               ) : null}
 
               <label className="relative mt-4 block">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-emerald-700" />
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#25D366]" />
                 <input
-                  className="h-11 w-full rounded-full border border-slate-200 bg-white pl-10 pr-3 text-[13px] text-slate-950 outline-none transition placeholder:text-slate-500 focus:border-emerald-500/55 focus:bg-white"
+                  className="h-11 w-full rounded-full border border-slate-200 bg-white pl-10 pr-3 text-[13px] text-slate-950 outline-none transition placeholder:text-slate-500 focus:border-[#25D366] focus:bg-white"
                   onChange={(event) => setSearch(event.target.value)}
                   placeholder="Pesquisar ou comecar atendimento"
                   type="search"
@@ -1472,14 +1472,14 @@ function AttendanceCenterView({
                     className={cn(
                       "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-3 text-[12px] font-semibold transition",
                       inboxTab === item.value
-                        ? "border-emerald-600 bg-[#008069] text-white shadow-[0_10px_22px_rgba(0,128,105,0.18)]"
-                        : "border-slate-200 bg-white text-slate-700 hover:border-emerald-300 hover:text-emerald-800",
+                        ? "border-[#25D366] bg-gradient-to-r from-white via-[#ecfff1] to-[#25D366] text-[#075E54] shadow-[0_10px_22px_rgba(37,211,102,0.12)]"
+                        : "border-slate-200 bg-white text-slate-700 hover:border-[#25D366] hover:text-[#075E54]",
                     )}
                     onClick={() => setInboxTab(item.value)}
                     type="button"
                   >
                     {item.label}
-                    <span className={cn("font-mono text-[10px]", inboxTab === item.value ? "text-white/80" : "text-slate-400")}>{item.count}</span>
+                    <span className={cn("font-mono text-[10px]", inboxTab === item.value ? "text-[#075E54]/70" : "text-slate-400")}>{item.count}</span>
                   </button>
                 ))}
               </div>
@@ -1577,7 +1577,7 @@ function AttendanceCenterView({
                       {activeHumanIntervention.active ? "Retomar IA" : "Assumir"}
                     </button>
                     <button
-                      className="hidden h-9 items-center gap-2 rounded-full border border-emerald-200 bg-white px-3 text-[12px] font-semibold text-slate-700 transition hover:border-emerald-400 hover:bg-emerald-50 hover:text-emerald-800 sm:inline-flex"
+                      className="hidden h-9 items-center gap-2 rounded-full border border-[#25D366]/45 bg-white px-3 text-[12px] font-semibold text-slate-700 transition hover:border-[#25D366] hover:bg-[#effff4] hover:text-[#075E54] sm:inline-flex"
                       onClick={() => setDetailsLeadId(activeLead.id)}
                       type="button"
                     >
@@ -1627,7 +1627,7 @@ function AttendanceCenterView({
                         className={cn(
                           "inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl px-3 text-[11px] font-bold transition lg:w-[122px]",
                           activeConversationId && manualReply.trim() && !replyBusy
-                            ? "border border-emerald-300 bg-gradient-to-r from-white via-[#dcf8c6] to-[#25d366] text-[#075e54] shadow-[0_10px_20px_rgba(37,211,102,0.18)] hover:border-emerald-400 hover:from-[#f7fff9] hover:via-[#d4f8cf] hover:to-[#20c65a]"
+                            ? "border border-[#25D366] bg-gradient-to-r from-white via-[#ecfff1] to-[#25D366] text-[#075E54] shadow-[0_10px_20px_rgba(37,211,102,0.14)] hover:from-[#f7fff9] hover:via-[#ddffe6] hover:to-[#25D366]"
                             : "bg-slate-200 text-slate-500",
                         )}
                         disabled={!activeConversationId || !manualReply.trim() || replyBusy}
@@ -3343,7 +3343,7 @@ function AgentAvatar({
 
   if (avatarUrl) {
     return (
-      <span className={cn("relative block shrink-0 overflow-hidden rounded-full border border-emerald-300 bg-emerald-50", dimensions)}>
+      <span className={cn("relative block shrink-0 overflow-hidden rounded-full border border-[#25D366]/55 bg-[#effff4]", dimensions)}>
         <Image alt={`Foto do agente ${name}`} className="object-cover" fill sizes={imageSize} src={avatarUrl} unoptimized />
       </span>
     );
@@ -3352,7 +3352,7 @@ function AgentAvatar({
   return (
     <span
       className={cn(
-        "flex shrink-0 items-center justify-center rounded-full border border-emerald-300 bg-[#dcf8c6] font-mono font-bold text-[#075e54]",
+        "flex shrink-0 items-center justify-center rounded-full border border-[#25D366] bg-gradient-to-r from-white via-[#ecfff1] to-[#25D366] font-mono font-bold text-[#075E54]",
         dimensions,
         fontSize,
       )}

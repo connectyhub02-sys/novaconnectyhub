@@ -7,6 +7,7 @@ import {
   syncLeadAvatarFromUazapi,
   type LeadAvatarSyncInstance,
 } from "@/lib/whatsapp/lead-avatar-sync";
+import { readWhatsappInstanceProfileImageUrl } from "@/lib/whatsapp/instance-profile-image";
 import { resolveLeadPersonalName } from "@/lib/whatsapp/lead-names";
 import { listClientCompanies, type ClientCompany } from "./companies";
 
@@ -889,7 +890,7 @@ function mapLeadRecord(input: {
     companyName,
     companyPlan: input.company ? `${input.company.planCode} / ${input.company.status}` : "sem plano",
     agentName: readString(input.agent?.persona_name) ?? input.agent?.name ?? null,
-    agentAvatarUrl: input.agent?.avatar_url ?? null,
+    agentAvatarUrl: activeConversationFile?.agentAvatarUrl ?? input.agent?.avatar_url ?? null,
     avatarUrl,
     name,
     phone: input.lead.phone_number,
@@ -992,7 +993,7 @@ function buildAttendanceQueues(input: {
       detail,
       phone: instance.phone_number,
       status: instance.status,
-      avatarUrl: agent?.avatar_url ?? null,
+      avatarUrl: readWhatsappInstanceAvatarUrl(instance) ?? agent?.avatar_url ?? null,
     });
   }
 
@@ -1017,6 +1018,10 @@ function buildAttendanceQueues(input: {
   }
 
   return queues.sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
+}
+
+function readWhatsappInstanceAvatarUrl(instance: WhatsappInstanceQueueRow | null | undefined) {
+  return readWhatsappInstanceProfileImageUrl(instance?.metadata);
 }
 
 function mapMessage(row: MessageRow): ClientLeadMessage {
@@ -1144,7 +1149,7 @@ function buildConversationFiles(input: {
         whatsappInstanceStatus: instance?.status ?? null,
         agentId,
         agentName,
-        agentAvatarUrl: agent?.avatar_url ?? null,
+        agentAvatarUrl: readWhatsappInstanceAvatarUrl(instance) ?? agent?.avatar_url ?? null,
         channel: conversation.channel,
         provider: conversation.provider,
         providerChatId: conversation.provider_chat_id,
