@@ -1563,6 +1563,20 @@ function AttendanceCenterView({
                       humanIntervention={activeHumanIntervention}
                     />
                     <button
+                      className={cn(
+                        "inline-flex h-9 items-center justify-center gap-2 rounded-full px-3 text-[12px] font-bold transition disabled:cursor-not-allowed disabled:opacity-70",
+                        activeHumanIntervention.active
+                          ? "border border-blue-200 bg-white text-blue-700 hover:bg-blue-50"
+                          : "bg-blue-600 text-white shadow-[0_10px_22px_rgba(24,119,242,0.18)] hover:bg-blue-700",
+                      )}
+                      disabled={handoffBusy || replyBusy}
+                      onClick={() => void updateHumanHandoff(activeHumanIntervention.active ? "resume" : "pause")}
+                      type="button"
+                    >
+                      {handoffBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : activeHumanIntervention.active ? <PlayCircle className="h-4 w-4" /> : <PauseCircle className="h-4 w-4" />}
+                      {activeHumanIntervention.active ? "Retomar IA" : "Assumir"}
+                    </button>
+                    <button
                       className="hidden h-9 items-center gap-2 rounded-full border border-emerald-200 bg-white px-3 text-[12px] font-semibold text-slate-700 transition hover:border-emerald-400 hover:bg-emerald-50 hover:text-emerald-800 sm:inline-flex"
                       onClick={() => setDetailsLeadId(activeLead.id)}
                       type="button"
@@ -1608,26 +1622,12 @@ function AttendanceCenterView({
                         value={manualReply}
                       />
                     </label>
-                    <div className="grid grid-cols-2 gap-2 lg:flex lg:w-auto lg:shrink-0">
+                    <div className="flex lg:w-auto lg:shrink-0">
                       <button
                         className={cn(
-                          "inline-flex h-10 items-center justify-center gap-2 rounded-xl px-3 text-[11px] font-bold transition lg:w-[112px]",
-                          activeHumanIntervention.active
-                            ? "border border-slate-200 bg-white text-slate-800 hover:bg-slate-100"
-                            : "bg-[#008069] text-white hover:bg-[#006d5b]",
-                        )}
-                        disabled={handoffBusy || replyBusy}
-                        onClick={() => void updateHumanHandoff(activeHumanIntervention.active ? "resume" : "pause")}
-                        type="button"
-                      >
-                        {handoffBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : activeHumanIntervention.active ? <PlayCircle className="h-4 w-4" /> : <PauseCircle className="h-4 w-4" />}
-                        {activeHumanIntervention.active ? "Retomar IA" : "Assumir"}
-                      </button>
-                      <button
-                        className={cn(
-                          "inline-flex h-10 items-center justify-center gap-2 rounded-xl px-3 text-[11px] font-bold transition lg:w-[122px]",
+                          "inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl px-3 text-[11px] font-bold transition lg:w-[122px]",
                           activeConversationId && manualReply.trim() && !replyBusy
-                            ? "bg-[#008069] text-white hover:bg-[#006d5b]"
+                            ? "border border-emerald-300 bg-gradient-to-r from-white via-[#dcf8c6] to-[#25d366] text-[#075e54] shadow-[0_10px_20px_rgba(37,211,102,0.18)] hover:border-emerald-400 hover:from-[#f7fff9] hover:via-[#d4f8cf] hover:to-[#20c65a]"
                             : "bg-slate-200 text-slate-500",
                         )}
                         disabled={!activeConversationId || !manualReply.trim() || replyBusy}
