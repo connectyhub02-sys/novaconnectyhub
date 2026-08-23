@@ -584,6 +584,7 @@ export function SalesCatalogConsole({
   const [checkoutStageFilter, setCheckoutStageFilter] = useState<CheckoutStageFilter>("all");
   const [settingsDraft, setSettingsDraft] = useState<SettingsDraft>(() => buildSettingsDraft(initialSelectedSettings));
   const [shippingDraft, setShippingDraft] = useState<ShippingDraft>(() => buildShippingDraft(initialSelectedShippingSettings));
+  const [storefrontSettingsHighlighted, setStorefrontSettingsHighlighted] = useState(false);
   const [selectedShippingUf, setSelectedShippingUf] = useState(() => initialSelectedShippingSettings?.rules.find((rule) => rule.active)?.uf ?? "SP");
   const [savingSettings, setSavingSettings] = useState(false);
   const [savingShipping, setSavingShipping] = useState(false);
@@ -2271,12 +2272,15 @@ export function SalesCatalogConsole({
 
   function openStorefrontSettings() {
     setActiveTab("setup");
+    setStorefrontSettingsHighlighted(true);
     window.setTimeout(() => {
       document.getElementById("sales-catalog-storefront-settings")?.scrollIntoView({
         behavior: "smooth",
-        block: "start",
+        block: "center",
       });
+      document.getElementById("sales-catalog-storefront-hero-title")?.focus();
     }, 0);
+    window.setTimeout(() => setStorefrontSettingsHighlighted(false), 3600);
   }
 
   function editItem(item: ClientSalesCatalogItem) {
@@ -2568,11 +2572,26 @@ export function SalesCatalogConsole({
                 </select>
               </label>
 
-              <AccordionSection id="sales-catalog-storefront-settings" icon={Store} title="Loja publica" tone="cyan" defaultOpen>
+              <AccordionSection
+                id="sales-catalog-storefront-settings"
+                icon={Store}
+                title="Editar frase inicial da loja"
+                tone="cyan"
+                defaultOpen
+                className={storefrontSettingsHighlighted ? "ring-2 ring-blue-500/70 ring-offset-2 ring-offset-white" : undefined}
+              >
                 <div className="grid gap-3">
+                  <div className="rounded-lg border border-blue-300/40 bg-blue-50 px-3 py-2">
+                    <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-blue-600">Previa da frase que aparece no topo da loja</p>
+                    <p className="mt-1 text-[13px] font-bold leading-5 text-slate-950">
+                      {storefrontHeroTitle} <span className="text-blue-600">{storefrontHeroHighlight}</span>
+                    </p>
+                    <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-slate-600">{storefrontHeroSubtitle}</p>
+                  </div>
                   <label className="block">
-                    <FieldLabel>Chamada principal</FieldLabel>
+                    <FieldLabel>Frase principal em preto</FieldLabel>
                     <input
+                      id="sales-catalog-storefront-hero-title"
                       value={settingsDraft.storefront.heroTitle ?? ""}
                       onChange={(event) => updateStorefrontSettings({ heroTitle: event.target.value.slice(0, 90) })}
                       className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
@@ -2581,7 +2600,7 @@ export function SalesCatalogConsole({
                     />
                   </label>
                   <label className="block">
-                    <FieldLabel>Trecho azul</FieldLabel>
+                    <FieldLabel>Frase em azul</FieldLabel>
                     <input
                       value={settingsDraft.storefront.heroHighlight ?? ""}
                       onChange={(event) => updateStorefrontSettings({ heroHighlight: event.target.value.slice(0, 90) })}
@@ -2591,7 +2610,7 @@ export function SalesCatalogConsole({
                     />
                   </label>
                   <label className="block">
-                    <FieldLabel>Subtitulo</FieldLabel>
+                    <FieldLabel>Descricao abaixo da frase</FieldLabel>
                     <textarea
                       value={settingsDraft.storefront.heroSubtitle ?? ""}
                       onChange={(event) => updateStorefrontSettings({ heroSubtitle: event.target.value.slice(0, 180) })}
@@ -2601,8 +2620,17 @@ export function SalesCatalogConsole({
                     />
                   </label>
                   <p className="text-[11px] leading-4 text-slate-500">
-                    Esses textos aparecem no topo da loja publica. O produto marcado como destaque principal aparece ao lado da chamada.
+                    Depois de editar, clique em salvar para atualizar a frase da loja publica.
                   </p>
+                  <button
+                    type="button"
+                    disabled={!selectedCompanyId || savingSettings}
+                    onClick={saveSettings}
+                    className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-[12px] font-bold text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {savingSettings ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                    Salvar frase da loja
+                  </button>
                 </div>
               </AccordionSection>
 
