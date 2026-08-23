@@ -4148,7 +4148,7 @@ export function SalesCatalogConsole({
                 <span className="min-w-0">
                   <span className="block text-[12px] font-semibold text-slate-100">Produto principal da loja</span>
                   <span className="mt-1 block text-[11px] leading-4 text-slate-500">
-                    Apenas um produto pode ocupar o topo da loja publica. Ao salvar, este produto substitui qualquer destaque anterior.
+                    Apenas um produto pode ocupar o topo da loja publica. Para ficar bonito no celular, prefira imagem quadrada em PNG sem fundo. Ao salvar, este produto substitui qualquer destaque anterior.
                   </span>
                 </span>
               </label>

@@ -431,7 +431,7 @@ function StorefrontHero({
           </div>
 
           <button
-            className="relative inline-grid h-11 w-11 shrink-0 place-items-center rounded-[8px] border text-sm font-black shadow-lg shadow-[#063f2c]/20 transition brightness-100 hover:brightness-110 sm:inline-flex sm:w-auto sm:px-4"
+            className="relative hidden h-11 shrink-0 place-items-center rounded-[8px] border text-sm font-black shadow-lg shadow-[#063f2c]/20 transition brightness-100 hover:brightness-110 sm:inline-flex sm:w-auto sm:px-4"
             onClick={onCart}
             style={{
               backgroundColor: "var(--store-button)",
@@ -450,7 +450,7 @@ function StorefrontHero({
           </button>
         </div>
 
-        <div className="grid grid-cols-[minmax(0,1fr)_118px] items-start gap-3 sm:grid-cols-[minmax(0,0.9fr)_minmax(220px,0.7fr)] sm:gap-8 lg:grid-cols-[minmax(0,0.92fr)_minmax(360px,1fr)] lg:items-center">
+        <div className="grid grid-cols-[minmax(0,1fr)_142px] items-start gap-2 sm:grid-cols-[minmax(0,0.9fr)_minmax(220px,0.7fr)] sm:gap-8 lg:grid-cols-[minmax(0,0.92fr)_minmax(360px,1fr)] lg:items-center">
           <div className="min-w-0">
             <p className="inline-flex items-center gap-1.5 text-xs font-black text-[color:var(--store-accent)] sm:gap-2 sm:text-sm">
               <Sparkles className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
@@ -498,9 +498,9 @@ function StorefrontHero({
 
 function HeroProductPanel({ product }: { product: PublicStorefrontProduct | null }) {
   return (
-    <div className="relative min-h-[150px] overflow-hidden rounded-[8px] bg-[#f1e7d8] p-2 sm:min-h-[300px] sm:p-6 lg:min-h-[360px] lg:p-8">
-      <div className="absolute bottom-0 right-0 h-full w-3/4 rounded-l-full bg-[#ead7c1]" />
-      <div className="relative flex h-full min-h-[136px] items-center justify-center sm:min-h-[270px] lg:min-h-[250px]">
+    <div className="relative min-h-[172px] overflow-hidden rounded-[8px] bg-transparent p-0 sm:min-h-[300px] sm:bg-[#f1e7d8] sm:p-6 lg:min-h-[360px] lg:p-8">
+      <div className="absolute bottom-0 right-0 hidden h-full w-3/4 rounded-l-full bg-[#ead7c1] sm:block" />
+      <div className="relative flex h-full min-h-[172px] items-center justify-center sm:min-h-[270px] lg:min-h-[250px]">
         {product ? (
           <a
             className="relative block aspect-[4/3] w-full max-w-[430px]"
@@ -508,10 +508,10 @@ function HeroProductPanel({ product }: { product: PublicStorefrontProduct | null
             data-track-label={product.title}
             href={product.productUrl}
           >
-            <ProductImage product={product} priority sizes="(max-width: 640px) 118px, (max-width: 1024px) 38vw, 430px" variant="hero" />
+            <ProductImage product={product} priority sizes="(max-width: 640px) 142px, (max-width: 1024px) 38vw, 430px" variant="hero" />
           </a>
         ) : (
-          <div className="grid h-full min-h-[136px] w-full place-items-center rounded-[8px] bg-white/60 text-[color:var(--store-accent)] sm:min-h-64">
+          <div className="grid h-full min-h-[172px] w-full place-items-center rounded-[8px] bg-white/60 text-[color:var(--store-accent)] sm:min-h-64">
             <Package className="h-10 w-10 sm:h-16 sm:w-16" />
           </div>
         )}
@@ -739,7 +739,7 @@ function ProductImage({
       className={cn(
         "object-contain transition duration-500",
         variant === "hero"
-          ? "p-3 drop-shadow-[0_26px_28px_rgba(40,24,12,0.2)] group-hover:scale-105"
+          ? "scale-[1.45] p-0 drop-shadow-[0_22px_24px_rgba(40,24,12,0.2)] group-hover:scale-[1.5] sm:scale-100 sm:p-3 sm:drop-shadow-[0_26px_28px_rgba(40,24,12,0.2)] sm:group-hover:scale-105"
           : "p-3 group-hover:scale-105",
       )}
       fill
