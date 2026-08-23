@@ -382,8 +382,11 @@ export async function processQueuedWhatsappAgentRuns(input: {
   };
 }
 
-const ZOMBIE_TIMEOUT_MS = 5 * 60 * 1000;
+const ZOMBIE_TIMEOUT_MS = 12 * 60 * 1000;
 const QUEUED_EXPIRY_MS = 60 * 60 * 1000;
+const OUTBOUND_MESSAGE_INSERT_TIMEOUT_MS = 8000;
+const OUTBOUND_AUXILIARY_WRITE_TIMEOUT_MS = 5000;
+const SALES_CATALOG_REPLY_ITEM_LIMIT = 3;
 
 async function expireZombieRuns(client: SupabaseClient) {
   const now = new Date().toISOString();
@@ -395,11 +398,11 @@ async function expireZombieRuns(client: SupabaseClient) {
       .from("agent_runs")
       .update({
         run_status: "failed",
-        error_message: "Timeout: run travado por mais de 5 minutos.",
+        error_message: "Timeout: run travado por mais de 12 minutos.",
         finished_at: now,
       })
       .eq("run_status", "running")
-      .lt("created_at", zombieCutoff)
+      .or(`started_at.lt.${zombieCutoff},and(started_at.is.null,created_at.lt.${zombieCutoff})`)
       .select("id"),
     client
       .from("agent_runs")
@@ -518,6 +521,12 @@ export async function processWhatsappAgentRun(input: {
         userText = `[Respondendo a mensagem: "${quotedContext}"]\n${userText}`;
       }
     }
+
+    userText = resolveFollowUpProbeUserText({
+      userText,
+      latestInbound,
+      messages: context.messages,
+    });
 
     if (isGroupChat) {
       const groupSkipReason = getGroupMessageSkipReason(context, latestInbound, userText);
@@ -4453,13 +4462,19 @@ async function sendAgentResponse(input: {
     selectSalesCatalogItemsFromText(context.salesCatalog, orderIntentText),
     selectSalesCatalogItemsFromText(context.salesCatalog, cleanText),
   );
-  const { chunks, shouldSendAudio } = resolveOutboundDelivery(context, latestInbound, cleanText, selectedCatalogItems.length > 0);
+  const hasCatalogSelection = selectedCatalogItems.length > 0;
+  const deliveryText = prepareSalesCatalogDeliveryText({
+    text: cleanText,
+    items: selectedCatalogItems,
+    hasOrderIntent,
+  });
+  const { chunks, shouldSendAudio } = resolveOutboundDelivery(context, latestInbound, deliveryText, hasCatalogSelection);
   const mixedCandidateChunks = shouldSendAudioResponse(context, latestInbound) && selectedCatalogItems.length === 0
     ? splitChunksAroundLinkLines(chunks, context)
     : chunks;
-  const shouldUseMixedAudio = shouldUseMixedAudioDelivery(context, latestInbound, mixedCandidateChunks, selectedCatalogItems.length > 0);
+  const shouldUseMixedAudio = shouldUseMixedAudioDelivery(context, latestInbound, mixedCandidateChunks, hasCatalogSelection);
   const outbound: OutboundMessage[] = [];
-  const catalogAttachments = shouldSendSalesCatalogMediaAttachments(latestInbound, cleanText)
+  const catalogAttachments = shouldSendSalesCatalogMediaAttachments(latestInbound, deliveryText)
     ? collectSalesCatalogAttachments(selectedCatalogItems)
     : [];
 
@@ -4549,7 +4564,7 @@ async function sendAgentResponse(input: {
     return outbound;
   }
 
-  const correctedChunks = shouldSendAudio ? chunks : applyMidMessageCorrection(chunks, context.behavior);
+  const correctedChunks = shouldSendAudio || hasCatalogSelection ? chunks : applyMidMessageCorrection(chunks, context.behavior);
   const replyTargets = await resolveOutboundReplyTargets(input.client, context, correctedChunks).catch(() => []);
   const persistedChunks = await loadPersistedOutboundChunks(input.client, context.run.id, shouldSendAudio ? "audio" : "text");
 
@@ -5326,6 +5341,75 @@ function formatSalesCatalogCustomerMention(item: RuntimeSalesCatalogItem) {
   const highlightText = item.highlightLabel ? ` (${item.highlightLabel})` : "";
 
   return `${item.title}${highlightText}${priceText}`.replace(/\s+/g, " ").trim();
+}
+
+function prepareSalesCatalogDeliveryText(input: {
+  text: string;
+  items: RuntimeSalesCatalogItem[];
+  hasOrderIntent: boolean;
+}) {
+  const items = input.items
+    .filter((item) => isSalesCatalogItemSellable(item))
+    .slice(0, SALES_CATALOG_REPLY_ITEM_LIMIT);
+
+  if (items.length === 0) {
+    return input.text;
+  }
+
+  const intro = resolveSalesCatalogDeliveryIntro(input.text, input.hasOrderIntent);
+  const itemLines = items.map((item) => `- ${formatSalesCatalogCustomerMention(item)}`);
+  const closing = input.hasOrderIntent
+    ? "Vou deixar o checkout separado para voce concluir com seguranca."
+    : "Qual dessas opcoes faz mais sentido para voce?";
+
+  return [intro, itemLines.join("\n"), closing]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+function resolveSalesCatalogDeliveryIntro(text: string, hasOrderIntent: boolean) {
+  const candidate = extractFirstSalesCatalogSentence(text);
+
+  if (!candidate || isWeakSalesCatalogIntro(candidate)) {
+    return hasOrderIntent
+      ? "Fechado. Separei o pedido para voce:"
+      : "Tenho sim. Separei algumas opcoes boas para voce:";
+  }
+
+  return preview(candidate.replace(/[:;]\s*$/, "."), 180);
+}
+
+function extractFirstSalesCatalogSentence(text: string) {
+  const lines = text
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  for (const line of lines) {
+    if (/^-/.test(line)) continue;
+
+    const sentences = line.match(/[^.!?\n]+[.!?]?/g) ?? [line];
+
+    for (const sentence of sentences) {
+      const candidate = sentence.trim();
+      if (!candidate || isShortSalesCatalogGreeting(candidate)) continue;
+      return candidate;
+    }
+  }
+
+  return "";
+}
+
+function isShortSalesCatalogGreeting(text: string) {
+  const normalized = normalizeSearch(text);
+
+  return normalized.length <= 30 && /\b(boa|bom dia|boa tarde|boa noite|ola|oi|opa|show|perfeito|fechado)\b/.test(normalized);
+}
+
+function isWeakSalesCatalogIntro(text: string) {
+  const normalized = normalizeSearch(text);
+
+  return /\b(algumas opcoes|varios produtos|opcoes bem fortes|separei as paginas|detalhes completos|qual desses|segue o link|botao abaixo)\b/.test(normalized);
 }
 
 function referencesSalesCatalogItem(normalizedText: string, item: RuntimeSalesCatalogItem) {
@@ -7512,55 +7596,71 @@ async function saveOutboundMessage(
     chunk_index: message.chunkIndex ?? null,
     chunks_total: message.chunksTotal ?? null,
   };
+  const occurredAt = new Date().toISOString();
 
-  await client.from("conversation_messages").insert({
-    organization_id: context.organization.id,
-    conversation_id: context.conversationId,
-    lead_id: context.lead?.id ?? null,
-    whatsapp_instance_id: context.instance.id,
-    provider: "uazapi",
-    provider_message_id: providerMessageId,
-    provider_chat_id: context.providerChatId,
-    direction: "outbound",
-    message_type: message.mode,
-    text_content: message.text,
-    payload,
-    occurred_at: new Date().toISOString(),
-  });
+  const insertResult = await withTimeout(
+    Promise.resolve(client.from("conversation_messages").insert({
+      organization_id: context.organization.id,
+      conversation_id: context.conversationId,
+      lead_id: context.lead?.id ?? null,
+      whatsapp_instance_id: context.instance.id,
+      provider: "uazapi",
+      provider_message_id: providerMessageId,
+      provider_chat_id: context.providerChatId,
+      direction: "outbound",
+      message_type: message.mode,
+      text_content: message.text,
+      payload,
+      occurred_at: occurredAt,
+    })),
+    OUTBOUND_MESSAGE_INSERT_TIMEOUT_MS,
+    "Salvar mensagem enviada no WhatsApp",
+  );
 
-  await client
-    .from("conversations")
-    .update({
-      status: "waiting_customer",
-      last_message_preview: preview(message.text, 240),
-      last_message_at: new Date().toISOString(),
-    })
-    .eq("id", context.conversationId);
+  if (insertResult.error) {
+    throw new Error(`Falha ao salvar mensagem enviada: ${insertResult.error.message}`);
+  }
+
+  const auxiliaryWrites: Array<Promise<unknown>> = [
+    Promise.resolve(client
+      .from("conversations")
+      .update({
+        status: "waiting_customer",
+        last_message_preview: preview(message.text, 240),
+        last_message_at: occurredAt,
+      })
+      .eq("id", context.conversationId)),
+    Promise.resolve(client.from("intelligence_events").insert({
+      scope: "organization",
+      organization_id: context.organization.id,
+      source_type: "whatsapp",
+      source_id: context.conversationId,
+      producer_agent_id: context.agent.id,
+      event_type: "whatsapp.agent.responded",
+      title: "Agente respondeu no WhatsApp",
+      summary: preview(message.text, 500),
+      confidence: 0.82,
+      visibility: "organization",
+      tags: ["whatsapp", "agent", message.mode],
+      payload,
+    })),
+  ];
 
   if (context.lead?.id) {
-    await client
+    auxiliaryWrites.push(Promise.resolve(client
       .from("leads")
       .update({
         last_event_summary: preview(message.text, 240),
-        last_message_at: new Date().toISOString(),
+        last_message_at: occurredAt,
       })
-      .eq("id", context.lead.id);
+      .eq("id", context.lead.id)));
   }
 
-  await client.from("intelligence_events").insert({
-    scope: "organization",
-    organization_id: context.organization.id,
-    source_type: "whatsapp",
-    source_id: context.conversationId,
-    producer_agent_id: context.agent.id,
-    event_type: "whatsapp.agent.responded",
-    title: "Agente respondeu no WhatsApp",
-    summary: preview(message.text, 500),
-    confidence: 0.82,
-    visibility: "organization",
-    tags: ["whatsapp", "agent", message.mode],
-    payload,
-  });
+  await Promise.all(auxiliaryWrites.map((write, index) => withTimeout(
+    write,
+    OUTBOUND_AUXILIARY_WRITE_TIMEOUT_MS,
+    `Persistencia secundaria da mensagem ${index + 1}`,
+  ).catch(() => null)));
 }
 
 async function persistCloneRealTestTurn(
@@ -11115,6 +11215,76 @@ function findLatestInbound(messages: ConversationMessageRow[]) {
   }
 
   return null;
+}
+
+function resolveFollowUpProbeUserText(input: {
+  userText: string;
+  latestInbound: ConversationMessageRow | null;
+  messages: ConversationMessageRow[];
+}) {
+  const text = input.userText.trim();
+
+  if (!input.latestInbound || !isFollowUpProbeMessage(text)) {
+    return input.userText;
+  }
+
+  const previousInbound = findPreviousUnansweredInbound(input.messages, input.latestInbound);
+  const previousText = previousInbound ? buildMessageText(previousInbound).trim() : "";
+
+  if (!previousText || isFollowUpProbeMessage(previousText)) {
+    return input.userText;
+  }
+
+  return [
+    `Nota interna: o lead cobrou resposta com "${preview(text || "?", 40)}".`,
+    `Pedido anterior ainda sem resposta completa: ${previousText}`,
+    "Responda agora ao pedido anterior de forma objetiva, comercial e completa, sem pedir para o lead repetir.",
+  ].join("\n");
+}
+
+function findPreviousUnansweredInbound(messages: ConversationMessageRow[], latestInbound: ConversationMessageRow) {
+  const latestIndex = messages.findIndex((message) => message.id === latestInbound.id);
+
+  if (latestIndex <= 0) {
+    return null;
+  }
+
+  for (let index = latestIndex - 1; index >= 0; index--) {
+    const message = messages[index];
+
+    if (message.direction === "outbound") {
+      return null;
+    }
+
+    if (message.direction === "inbound" && message.id !== latestInbound.id) {
+      const text = buildMessageText(message).trim();
+      if (text) {
+        return message;
+      }
+    }
+  }
+
+  return null;
+}
+
+function isFollowUpProbeMessage(text: string) {
+  const raw = text.trim();
+
+  if (!raw) {
+    return false;
+  }
+
+  if (/^[?!.]+$/.test(raw)) {
+    return true;
+  }
+
+  const normalized = normalizeSearch(raw);
+
+  if (normalized.length > 45) {
+    return false;
+  }
+
+  return /\b(cade|e ai|eai|responde|me responde|vc viu|viu|ta ai|fala comigo|alguem ai|opa)\b/.test(normalized);
 }
 
 function getRecentInboundCluster(messages: ConversationMessageRow[]) {
