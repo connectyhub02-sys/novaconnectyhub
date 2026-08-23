@@ -1224,7 +1224,6 @@ export function SalesCatalogConsole({
       });
       const data = await response.json().catch(() => null) as {
         settings?: ClientSalesCatalogSettings;
-        clearedFeaturedItemIds?: string[];
         error?: string;
       } | null;
 
@@ -1233,7 +1232,6 @@ export function SalesCatalogConsole({
       }
 
       setSettings((current) => [data.settings!, ...current.filter((entry) => entry.companyId !== data.settings!.companyId)]);
-      applyClearedFeaturedItems(data.clearedFeaturedItemIds);
       setSettingsDraft(buildSettingsDraft(data.settings));
       setActiveTab("products");
       setNotice({ tone: "success", message: "Configuracao do catalogo salva." });
@@ -1511,7 +1509,6 @@ export function SalesCatalogConsole({
       });
       const data = await response.json().catch(() => null) as {
         item?: ClientSalesCatalogItem;
-        clearedFeaturedItemIds?: string[];
         error?: string;
       } | null;
 
@@ -1520,14 +1517,7 @@ export function SalesCatalogConsole({
       }
 
       setItems((current) => {
-        const clearedFeaturedItemIds = new Set(data.clearedFeaturedItemIds ?? []);
-        const nextItems = current.map((item) => (
-          clearedFeaturedItemIds.has(item.id)
-            ? { ...item, storeFeatured: false, storeFeaturedRank: null, storeFeaturedAt: null }
-            : item
-        ));
-
-        return [data.item!, ...nextItems.filter((item) => item.id !== data.item!.id)];
+        return [data.item!, ...current.filter((item) => item.id !== data.item!.id)];
       });
       publishSalesCatalogUpdated({ companyId: data.item.companyId, itemIds: [data.item.id] });
       resetForm();
@@ -1558,17 +1548,6 @@ export function SalesCatalogConsole({
 
       return [...missing, ...refreshed];
     });
-  }
-
-  function applyClearedFeaturedItems(itemIds?: string[]) {
-    if (!itemIds?.length) return;
-
-    const clearedFeaturedItemIds = new Set(itemIds);
-    setItems((current) => current.map((item) => (
-      clearedFeaturedItemIds.has(item.id)
-        ? { ...item, storeFeatured: false, storeFeaturedRank: null, storeFeaturedAt: null }
-        : item
-    )));
   }
 
   async function createOrder() {
@@ -2548,8 +2527,8 @@ export function SalesCatalogConsole({
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <NeonBadge tone={featuredProductsCount > 1 ? "amber" : featuredProductsCount === 1 ? "green" : "zinc"}>
-              {featuredProductsCount > 1 ? `${featuredProductsCount} em conflito` : `${featuredProductsCount} destaque`}
+            <NeonBadge tone={featuredProductsCount > 0 ? "green" : "zinc"}>
+              {featuredProductsCount === 1 ? "1 destaque" : `${featuredProductsCount} destaques`}
             </NeonBadge>
             <button
               type="button"
@@ -4146,16 +4125,30 @@ export function SalesCatalogConsole({
                   type="checkbox"
                 />
                 <span className="min-w-0">
-                  <span className="block text-[12px] font-semibold text-slate-100">Produto principal da loja</span>
+                  <span className="block text-[12px] font-semibold text-slate-100">Produto no carrossel da loja</span>
                   <span className="mt-1 block text-[11px] leading-4 text-slate-500">
-                    Apenas um produto pode ocupar o topo da loja publica. Para ficar bonito no celular, prefira imagem quadrada em PNG sem fundo. Ao salvar, este produto substitui qualquer destaque anterior.
+                    Marque quantos produtos quiser para o carrossel do topo da loja publica. Para ficar bonito no celular e no computador, prefira imagem quadrada em PNG sem fundo.
                   </span>
                 </span>
               </label>
-              {storeFeatured && currentFeaturedItem && currentFeaturedItem.id !== editingItemId ? (
-                <p className="rounded-lg border border-amber-300/30 bg-amber-300/10 px-3 py-2 text-[11px] leading-4 text-amber-100">
-                  Destaque atual: {currentFeaturedItem.title}. Ao salvar, ele sera desmarcado automaticamente.
-                </p>
+              {storeFeatured ? (
+                <label className="block">
+                  <FieldLabel>Ordem no carrossel</FieldLabel>
+                  <input
+                    className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                    inputMode="numeric"
+                    max="999"
+                    min="1"
+                    onChange={(event) => setStoreFeaturedRank(event.target.value.replace(/\D/g, "").slice(0, 3))}
+                    placeholder="Ex.: 1"
+                    style={{ borderColor: "var(--ch-border)" }}
+                    type="number"
+                    value={storeFeaturedRank}
+                  />
+                  <span className="mt-1 block text-[11px] leading-4 text-slate-500">
+                    Produtos com numero menor aparecem primeiro. Se deixar igual, a loja usa a ordem mais recente.
+                  </span>
+                </label>
               ) : null}
             </div>
 

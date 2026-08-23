@@ -468,16 +468,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: error?.message ?? "Nao foi possivel salvar o produto." }, { status: 500 });
     }
 
-    const clearedFeaturedItemIds = storeFeatured
-      ? await enforceSingleStoreFeaturedProduct({
-        client,
-        companyId: company.id,
-        userId: workspace.user.id,
-        preferredItemId: data.id,
-        now,
-      })
-      : [];
-
     if (removedMedia.length > 0) {
       removedMediaCleanup = await cleanupSalesCatalogMediaStorage({
         client,
@@ -571,7 +561,6 @@ export async function POST(request: NextRequest) {
         actor_id: workspace.user.id,
         removed_media_count: removedMedia.length,
         media_cleanup: removedMediaCleanup,
-        cleared_featured_item_ids: clearedFeaturedItemIds,
       },
     });
 
@@ -598,7 +587,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       item: mapSalesCatalogItem(data),
       mode: existingRow ? "updated" : "created",
-      clearedFeaturedItemIds,
     });
   } catch (error) {
     return NextResponse.json(formatRouteError(error, "Erro ao cadastrar produto."), { status: statusForRouteError(error, 500) });
@@ -1081,13 +1069,6 @@ async function saveCatalogSettings(input: {
     throw new Error(error?.message ?? "Nao foi possivel salvar a configuracao do catalogo.");
   }
 
-  const clearedFeaturedItemIds = await enforceSingleStoreFeaturedProduct({
-    client: input.client,
-    companyId: company.id,
-    userId: input.userId,
-    now,
-  });
-
   await input.client.from("intelligence_events").insert({
     scope: "organization",
     organization_id: company.id,
@@ -1109,97 +1090,13 @@ async function saveCatalogSettings(input: {
       payment_methods_count: enabledPayments.length,
       reservation_policy: orderPolicy.reservationPolicy,
       required_lead_fields: leadDataPolicy.requiredFields,
-      cleared_featured_item_ids: clearedFeaturedItemIds,
       updated_by: input.userId,
     },
   });
 
   return {
     settings: mapSalesCatalogSettings(data),
-    clearedFeaturedItemIds,
   };
-}
-
-async function enforceSingleStoreFeaturedProduct(input: {
-  client: ReturnType<typeof createServiceClient>;
-  companyId: string;
-  userId: string;
-  preferredItemId?: string | null;
-  now?: string;
-}) {
-  const { data, error } = await input.client
-    .from("intelligence_memory")
-    .select("id, metadata, updated_at")
-    .eq("scope", "organization")
-    .eq("organization_id", input.companyId)
-    .eq("memory_type", "sales_catalog_item")
-    .filter("metadata->>store_featured", "eq", "true")
-    .returns<Array<{ id: string; metadata: JsonRecord | null; updated_at: string | null }>>();
-
-  if (error) {
-    throw new Error(`Nao foi possivel normalizar o destaque da loja: ${error.message}`);
-  }
-
-  const rows = data ?? [];
-  if (rows.length <= 1) return [];
-
-  const preferred = input.preferredItemId
-    ? rows.find((row) => row.id === input.preferredItemId) ?? null
-    : null;
-  const keeper = preferred ?? [...rows].sort(compareFeaturedRows)[0] ?? null;
-  if (!keeper) return [];
-
-  const now = input.now ?? new Date().toISOString();
-  const clearedIds: string[] = [];
-
-  for (const row of rows) {
-    if (row.id === keeper.id) continue;
-
-    const metadata = readRecord(row.metadata) ?? {};
-    const nextMetadata = {
-      ...metadata,
-      store_featured: false,
-      store_featured_rank: null,
-      store_featured_at: null,
-      updated_by: input.userId,
-      updated_from: "sales_catalog_single_featured_guard",
-    };
-    const update = await input.client
-      .from("intelligence_memory")
-      .update({
-        metadata: nextMetadata,
-        updated_at: now,
-      })
-      .eq("id", row.id)
-      .eq("scope", "organization")
-      .eq("organization_id", input.companyId)
-      .eq("memory_type", "sales_catalog_item");
-
-    if (update.error) {
-      throw new Error(`Nao foi possivel remover destaque duplicado: ${update.error.message}`);
-    }
-
-    clearedIds.push(row.id);
-  }
-
-  return clearedIds;
-}
-
-function compareFeaturedRows(
-  a: { metadata: JsonRecord | null; updated_at: string | null },
-  b: { metadata: JsonRecord | null; updated_at: string | null },
-) {
-  const metadataA = readRecord(a.metadata) ?? {};
-  const metadataB = readRecord(b.metadata) ?? {};
-  const rankA = normalizeNullableInteger(metadataA.store_featured_rank ?? metadataA.storeFeaturedRank, 1, 999) ?? 999;
-  const rankB = normalizeNullableInteger(metadataB.store_featured_rank ?? metadataB.storeFeaturedRank, 1, 999) ?? 999;
-
-  if (rankA !== rankB) return rankA - rankB;
-
-  const featuredAtA = Date.parse(readFormString(metadataA.store_featured_at ?? metadataA.storeFeaturedAt) ?? a.updated_at ?? "");
-  const featuredAtB = Date.parse(readFormString(metadataB.store_featured_at ?? metadataB.storeFeaturedAt) ?? b.updated_at ?? "");
-
-  return (Number.isFinite(featuredAtB) ? featuredAtB : 0) - (Number.isFinite(featuredAtA) ? featuredAtA : 0);
 }
 
 async function saveShippingSettings(input: {

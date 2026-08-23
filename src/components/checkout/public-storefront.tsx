@@ -170,12 +170,38 @@ export function PublicStorefront({ storeSlug, branding, storefront, products, tr
     category === ALL_CATEGORY ? products : products.filter((product) => product.category === category)
   ), [category, products]);
 
-  const featuredProduct = visibleProducts.find((product) => product.isFeatured)
-    ?? visibleProducts.find((product) => product.canCheckout)
-    ?? products.find((product) => product.isFeatured)
-    ?? products.find((product) => product.canCheckout)
-    ?? products[0]
-    ?? null;
+  const featuredProducts = useMemo(() => {
+    const categoryFeaturedProducts = visibleProducts.filter((product) => product.isFeatured);
+    if (categoryFeaturedProducts.length > 0) return categoryFeaturedProducts;
+
+    const categoryFallbackProduct = visibleProducts.find((product) => product.canCheckout)
+      ?? visibleProducts[0]
+      ?? null;
+    if (categoryFallbackProduct) return [categoryFallbackProduct];
+
+    const storeFeaturedProducts = products.filter((product) => product.isFeatured);
+    if (storeFeaturedProducts.length > 0) return storeFeaturedProducts;
+
+    const storeFallbackProduct = products.find((product) => product.canCheckout)
+      ?? products[0]
+      ?? null;
+
+    return storeFallbackProduct ? [storeFallbackProduct] : [];
+  }, [products, visibleProducts]);
+  const [featuredIndex, setFeaturedIndex] = useState(0);
+
+  useEffect(() => {
+    if (featuredProducts.length <= 1) return;
+
+    const timer = window.setInterval(() => {
+      setFeaturedIndex((current) => (current + 1) % featuredProducts.length);
+    }, 4200);
+
+    return () => window.clearInterval(timer);
+  }, [featuredProducts.length]);
+
+  const activeFeaturedIndex = featuredProducts.length > 0 ? featuredIndex % featuredProducts.length : 0;
+  const featuredProduct = featuredProducts[activeFeaturedIndex] ?? null;
   const promotionProduct = visibleProducts.find((product) => product.compareAtLabel)
     ?? visibleProducts.find((product) => product.highlightLabel)
     ?? featuredProduct;
@@ -305,7 +331,9 @@ export function PublicStorefront({ storeSlug, branding, storefront, products, tr
   return (
     <main className="min-h-screen bg-[#fbfaf6] pb-20 text-[color:var(--store-text)] lg:pb-0" style={publicLayoutStyle}>
       <StorefrontHero
+        activeFeaturedIndex={activeFeaturedIndex}
         branding={branding}
+        featuredCount={featuredProducts.length}
         featuredProduct={featuredProduct}
         headerText={headerText}
         heroHighlight={heroHighlight}
@@ -398,7 +426,9 @@ export function PublicStorefront({ storeSlug, branding, storefront, products, tr
 }
 
 function StorefrontHero({
+  activeFeaturedIndex,
   branding,
+  featuredCount,
   featuredProduct,
   headerText,
   heroHighlight,
@@ -408,7 +438,9 @@ function StorefrontHero({
   onCart,
   onShopNow,
 }: {
+  activeFeaturedIndex: number;
   branding: PublicStorefrontBranding;
+  featuredCount: number;
   featuredProduct: PublicStorefrontProduct | null;
   headerText: string;
   heroHighlight: string;
@@ -431,7 +463,8 @@ function StorefrontHero({
           </div>
 
           <button
-            className="relative hidden h-11 shrink-0 place-items-center rounded-[8px] border text-sm font-black shadow-lg shadow-[#063f2c]/20 transition brightness-100 hover:brightness-110 sm:inline-flex sm:w-auto sm:px-4"
+            aria-label={totalItems > 0 ? `Abrir carrinho com ${totalItems} itens` : "Abrir carrinho"}
+            className="relative hidden h-11 w-11 shrink-0 place-items-center rounded-[8px] border text-sm font-black shadow-lg shadow-[#063f2c]/20 transition brightness-100 hover:brightness-110 sm:inline-grid"
             onClick={onCart}
             style={{
               backgroundColor: "var(--store-button)",
@@ -441,7 +474,6 @@ function StorefrontHero({
             type="button"
           >
             <ShoppingCart className="h-4 w-4" />
-            <span className="hidden sm:inline">Carrinho</span>
             {totalItems > 0 ? (
               <span className="absolute -right-2 -top-2 grid h-6 min-w-6 place-items-center rounded-full bg-[#f97316] px-1 text-xs font-black text-white ring-2 ring-white">
                 {totalItems}
@@ -489,20 +521,28 @@ function StorefrontHero({
             </div>
           </div>
 
-          <HeroProductPanel product={featuredProduct} />
+          <HeroProductPanel activeIndex={activeFeaturedIndex} product={featuredProduct} total={featuredCount} />
         </div>
       </div>
     </section>
   );
 }
 
-function HeroProductPanel({ product }: { product: PublicStorefrontProduct | null }) {
+function HeroProductPanel({
+  activeIndex,
+  product,
+  total,
+}: {
+  activeIndex: number;
+  product: PublicStorefrontProduct | null;
+  total: number;
+}) {
   return (
-    <div className="relative min-h-[172px] overflow-hidden rounded-[8px] bg-transparent p-0 sm:min-h-[300px] sm:bg-[#f1e7d8] sm:p-6 lg:min-h-[360px] lg:p-8">
-      <div className="absolute bottom-0 right-0 hidden h-full w-3/4 rounded-l-full bg-[#ead7c1] sm:block" />
+    <div className="relative min-h-[172px] overflow-hidden rounded-[8px] bg-transparent p-0 sm:min-h-[300px] lg:min-h-[360px]">
       <div className="relative flex h-full min-h-[172px] items-center justify-center sm:min-h-[270px] lg:min-h-[250px]">
         {product ? (
           <a
+            key={product.id}
             className="relative block aspect-[4/3] w-full max-w-[430px]"
             data-track-event="sales_catalog_store_featured_product_clicked"
             data-track-label={product.title}
@@ -516,6 +556,21 @@ function HeroProductPanel({ product }: { product: PublicStorefrontProduct | null
           </div>
         )}
       </div>
+      {total > 1 ? (
+        <div className="absolute bottom-1 left-1/2 hidden -translate-x-1/2 items-center gap-1.5 rounded-full bg-white/80 px-2 py-1 shadow-sm sm:flex">
+          {Array.from({ length: Math.min(total, 6) }).map((_, index) => (
+            <span
+              className={cn(
+                "h-1.5 rounded-full transition-all",
+                index === activeIndex % Math.min(total, 6)
+                  ? "w-5 bg-[color:var(--store-button)]"
+                  : "w-1.5 bg-[color:var(--store-button)] opacity-30",
+              )}
+              key={index}
+            />
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -739,7 +794,7 @@ function ProductImage({
       className={cn(
         "object-contain transition duration-500",
         variant === "hero"
-          ? "scale-[1.45] p-0 drop-shadow-[0_22px_24px_rgba(40,24,12,0.2)] group-hover:scale-[1.5] sm:scale-100 sm:p-3 sm:drop-shadow-[0_26px_28px_rgba(40,24,12,0.2)] sm:group-hover:scale-105"
+          ? "scale-[1.58] p-0 drop-shadow-[0_22px_24px_rgba(40,24,12,0.2)] group-hover:scale-[1.62] sm:scale-[1.14] sm:p-0 sm:drop-shadow-[0_26px_28px_rgba(40,24,12,0.2)] sm:group-hover:scale-[1.18] lg:scale-[1.08] lg:group-hover:scale-[1.12]"
           : "p-3 group-hover:scale-105",
       )}
       fill
