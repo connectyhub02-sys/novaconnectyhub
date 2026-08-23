@@ -1057,6 +1057,7 @@ export function mapSalesCatalogSettings(row: SalesCatalogMemoryRow): ClientSales
     businessType,
     categories: readStringList(metadata.categories, []),
     attributes: readAttributeList(metadata.attributes, []),
+    storefront: readStorefrontSettings(metadata.storefront ?? metadata.storefront_settings ?? metadata.storefrontSettings),
     trackInventory: readNullableBoolean(metadata.track_inventory) ?? false,
     variationMedia: readNullableBoolean(metadata.variation_media) ?? false,
     paymentMethods: readPaymentMethods(metadata.payment_methods, commerceDefaults.paymentMethods),
@@ -1719,6 +1720,16 @@ function readPaymentMethods(value: unknown, fallback: SalesCatalogPaymentMethod[
   }
 
   return salesCatalogPaymentMethodTemplates.map((method) => methodsById.get(method.id) ?? { ...method });
+}
+
+function readStorefrontSettings(value: unknown): ClientSalesCatalogSettings["storefront"] {
+  const record = readRecord(value) ?? {};
+
+  return {
+    heroTitle: readString(record.hero_title ?? record.heroTitle),
+    heroHighlight: readString(record.hero_highlight ?? record.heroHighlight),
+    heroSubtitle: readString(record.hero_subtitle ?? record.heroSubtitle),
+  };
 }
 
 function readOrderPolicy(value: unknown, fallback: ClientSalesCatalogSettings["orderPolicy"]) {

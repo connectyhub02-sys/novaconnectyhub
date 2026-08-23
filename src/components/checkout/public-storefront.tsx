@@ -35,6 +35,12 @@ export type PublicStorefrontBranding = {
   logoAlt: string;
 };
 
+export type PublicStorefrontSettings = {
+  heroTitle: string | null;
+  heroHighlight: string | null;
+  heroSubtitle: string | null;
+};
+
 export type PublicStorefrontTrackingParams = {
   organizationId: string;
   leadId: string | null;
@@ -69,6 +75,7 @@ type CartLine = {
 type PublicStorefrontProps = {
   storeSlug: string;
   branding: PublicStorefrontBranding;
+  storefront: PublicStorefrontSettings;
   products: PublicStorefrontProduct[];
   tracking: PublicStorefrontTrackingParams;
 };
@@ -84,7 +91,7 @@ const sortOptions: Array<{ label: string; value: SortMode }> = [
   { label: "Nome A-Z", value: "name" },
 ];
 
-export function PublicStorefront({ storeSlug, branding, products, tracking }: PublicStorefrontProps) {
+export function PublicStorefront({ storeSlug, branding, storefront, products, tracking }: PublicStorefrontProps) {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState(ALL_CATEGORY);
   const [sortMode, setSortMode] = useState<SortMode>("relevant");
@@ -168,13 +175,14 @@ export function PublicStorefront({ storeSlug, branding, products, tracking }: Pu
     ?? products.find((product) => product.canCheckout)
     ?? products[0]
     ?? null;
-  const featuredSecondary = products.find((product) => product.id !== featuredProduct?.id && product.coverUrl)
-    ?? products.find((product) => product.id !== featuredProduct?.id)
-    ?? null;
   const totalItems = cart.reduce((total, line) => total + line.quantity, 0);
   const totalCents = cart.reduce((total, line) => total + (line.product.priceCents ?? 0) * line.quantity, 0);
   const checkoutReady = cart.length > 0 && cart.every((line) => line.product.canCheckout && line.product.priceCents);
   const activeSortLabel = sortOptions.find((option) => option.value === sortMode)?.label ?? "Mais relevantes";
+  const heroTitle = storefront.heroTitle || "Qualidade que voce sente.";
+  const heroHighlight = storefront.heroHighlight || "Resultados que voce ve.";
+  const heroSubtitle = storefront.heroSubtitle
+    || `Produtos selecionados pela ${branding.displayName}, compra segura e atendimento conectado ao WhatsApp.`;
 
   function addToCart(product: PublicStorefrontProduct) {
     if (!product.canCheckout) {
@@ -269,10 +277,10 @@ export function PublicStorefront({ storeSlug, branding, products, tracking }: Pu
               {featuredProduct?.category ?? "Loja oficial"}
             </p>
             <h1 className="mt-3 max-w-2xl text-[34px] font-black leading-[0.98] text-slate-950 sm:text-6xl">
-              Qualidade que voce sente. <span className="text-blue-600">Resultados que voce ve.</span>
+              {heroTitle} <span className="text-blue-600">{heroHighlight}</span>
             </h1>
             <p className="mt-5 max-w-xl text-[15px] leading-7 text-slate-600 sm:text-lg">
-              Produtos selecionados pela {branding.displayName}, compra segura e atendimento conectado ao WhatsApp.
+              {heroSubtitle}
             </p>
             <div className="mt-6 flex flex-col gap-3 sm:flex-row">
               <button
@@ -300,7 +308,7 @@ export function PublicStorefront({ storeSlug, branding, products, tracking }: Pu
             </div>
           </div>
 
-          <HeroProductShowcase featuredProduct={featuredProduct} secondaryProduct={featuredSecondary} />
+          <HeroProductShowcase featuredProduct={featuredProduct} />
         </div>
       </section>
 
@@ -582,10 +590,8 @@ function CategoryNav({
 
 function HeroProductShowcase({
   featuredProduct,
-  secondaryProduct,
 }: {
   featuredProduct: PublicStorefrontProduct | null;
-  secondaryProduct: PublicStorefrontProduct | null;
 }) {
   if (!featuredProduct) {
     return (
@@ -604,9 +610,8 @@ function HeroProductShowcase({
     >
       <div className="absolute inset-x-6 bottom-8 h-16 rounded-full border border-blue-200 bg-blue-100/60 blur-xl" />
       <div className="absolute right-0 top-0 h-full w-1/2 bg-[radial-gradient(circle_at_top_right,rgba(37,99,235,0.16),transparent_55%)]" />
-      <div className="relative grid w-full max-w-[440px] grid-cols-2 items-end gap-3">
+      <div className="relative w-full max-w-[360px]">
         <ProductHeroImage product={featuredProduct} large />
-        {secondaryProduct ? <ProductHeroImage product={secondaryProduct} /> : null}
       </div>
     </a>
   );
@@ -614,13 +619,13 @@ function HeroProductShowcase({
 
 function ProductHeroImage({ large = false, product }: { large?: boolean; product: PublicStorefrontProduct }) {
   return (
-    <div className={cn("relative overflow-hidden rounded-[8px] bg-white/20", large ? "aspect-[3/4]" : "aspect-[4/5]")}>
+    <div className={cn("relative overflow-hidden rounded-[8px] bg-white/20", large ? "aspect-[4/3]" : "aspect-[4/5]")}>
       {product.coverUrl ? (
         <Image
           alt={product.title}
-          className="object-contain p-2 drop-shadow-[0_24px_22px_rgba(15,23,42,0.2)]"
+          className="object-contain p-3 drop-shadow-[0_24px_22px_rgba(15,23,42,0.2)]"
           fill
-          sizes={large ? "(max-width: 1024px) 45vw, 220px" : "(max-width: 1024px) 35vw, 180px"}
+          sizes={large ? "(max-width: 1024px) 80vw, 360px" : "(max-width: 1024px) 35vw, 180px"}
           src={product.coverUrl}
           unoptimized
         />

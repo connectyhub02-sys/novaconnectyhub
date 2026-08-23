@@ -89,6 +89,7 @@ import {
   type SalesCatalogShippingService,
   type SalesCatalogShippingWeightTier,
   type SalesCatalogStockStatus,
+  type SalesCatalogStorefrontSettings,
   type SalesCatalogWhatsAppMessageTemplates,
 } from "@/lib/sales-catalog/shared";
 import type {
@@ -331,6 +332,7 @@ type SettingsDraft = {
   businessType: SalesCatalogBusinessType;
   categoriesText: string;
   attributes: SalesCatalogAttribute[];
+  storefront: SalesCatalogStorefrontSettings;
   trackInventory: boolean;
   variationMedia: boolean;
   paymentMethods: SalesCatalogPaymentMethod[];
@@ -764,6 +766,10 @@ export function SalesCatalogConsole({
     () => visibleItems.filter((item) => item.storeFeatured && item.status === "active").length,
     [visibleItems],
   );
+  const currentFeaturedItem = useMemo(
+    () => visibleItems.find((item) => item.storeFeatured && item.status === "active") ?? null,
+    [visibleItems],
+  );
   const selectedStoreSlug = selectedCompany?.slug ?? selectedCompany?.id ?? "";
   const selectedStorePath = selectedStoreSlug ? `/loja/${encodeURIComponent(selectedStoreSlug)}` : "";
   const hasConfiguredSettings = Boolean(selectedSettings?.configured);
@@ -940,6 +946,13 @@ export function SalesCatalogConsole({
     setSettingsDraft((current) => ({
       ...current,
       businessType: value,
+    }));
+  }
+
+  function updateStorefrontSettings(patch: Partial<SalesCatalogStorefrontSettings>) {
+    setSettingsDraft((current) => ({
+      ...current,
+      storefront: { ...current.storefront, ...patch },
     }));
   }
 
@@ -1146,6 +1159,11 @@ export function SalesCatalogConsole({
           businessType: settingsDraft.businessType,
           categories,
           attributes,
+          storefront: {
+            heroTitle: cleanInput(settingsDraft.storefront.heroTitle, 90),
+            heroHighlight: cleanInput(settingsDraft.storefront.heroHighlight, 90),
+            heroSubtitle: cleanInput(settingsDraft.storefront.heroSubtitle, 180),
+          },
           trackInventory: settingsDraft.trackInventory,
           variationMedia: settingsDraft.variationMedia,
           paymentMethods: settingsDraft.paymentMethods.map((method) => ({
@@ -1174,13 +1192,18 @@ export function SalesCatalogConsole({
           orderBumps: settingsDraft.orderBumps,
         }),
       });
-      const data = await response.json().catch(() => null) as { settings?: ClientSalesCatalogSettings; error?: string } | null;
+      const data = await response.json().catch(() => null) as {
+        settings?: ClientSalesCatalogSettings;
+        clearedFeaturedItemIds?: string[];
+        error?: string;
+      } | null;
 
       if (!response.ok || !data?.settings) {
         throw new Error(data?.error ?? "Nao foi possivel salvar a configuracao.");
       }
 
       setSettings((current) => [data.settings!, ...current.filter((entry) => entry.companyId !== data.settings!.companyId)]);
+      applyClearedFeaturedItems(data.clearedFeaturedItemIds);
       setSettingsDraft(buildSettingsDraft(data.settings));
       setActiveTab("products");
       setNotice({ tone: "success", message: "Configuracao do catalogo salva." });
@@ -1456,13 +1479,26 @@ export function SalesCatalogConsole({
         method: "POST",
         body: formData,
       });
-      const data = await response.json().catch(() => null) as { item?: ClientSalesCatalogItem; error?: string } | null;
+      const data = await response.json().catch(() => null) as {
+        item?: ClientSalesCatalogItem;
+        clearedFeaturedItemIds?: string[];
+        error?: string;
+      } | null;
 
       if (!response.ok || !data?.item) {
         throw new Error(data?.error ?? (isEditing ? "Nao foi possivel atualizar o item." : "Nao foi possivel cadastrar o item."));
       }
 
-      setItems((current) => [data.item!, ...current.filter((item) => item.id !== data.item!.id)]);
+      setItems((current) => {
+        const clearedFeaturedItemIds = new Set(data.clearedFeaturedItemIds ?? []);
+        const nextItems = current.map((item) => (
+          clearedFeaturedItemIds.has(item.id)
+            ? { ...item, storeFeatured: false, storeFeaturedRank: null, storeFeaturedAt: null }
+            : item
+        ));
+
+        return [data.item!, ...nextItems.filter((item) => item.id !== data.item!.id)];
+      });
       publishSalesCatalogUpdated({ companyId: data.item.companyId, itemIds: [data.item.id] });
       resetForm();
       setNotice({ tone: "success", message: isEditing ? "Item atualizado no catalogo." : "Item cadastrado no catalogo." });
@@ -1492,6 +1528,17 @@ export function SalesCatalogConsole({
 
       return [...missing, ...refreshed];
     });
+  }
+
+  function applyClearedFeaturedItems(itemIds?: string[]) {
+    if (!itemIds?.length) return;
+
+    const clearedFeaturedItemIds = new Set(itemIds);
+    setItems((current) => current.map((item) => (
+      clearedFeaturedItemIds.has(item.id)
+        ? { ...item, storeFeatured: false, storeFeaturedRank: null, storeFeaturedAt: null }
+        : item
+    )));
   }
 
   async function createOrder() {
@@ -2423,7 +2470,9 @@ export function SalesCatalogConsole({
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <NeonBadge tone={featuredProductsCount > 0 ? "green" : "zinc"}>{featuredProductsCount} destaque(s)</NeonBadge>
+            <NeonBadge tone={featuredProductsCount > 1 ? "amber" : featuredProductsCount === 1 ? "green" : "zinc"}>
+              {featuredProductsCount > 1 ? `${featuredProductsCount} em conflito` : `${featuredProductsCount} destaque`}
+            </NeonBadge>
             {selectedStorePath ? (
               <>
                 <button
@@ -2489,6 +2538,44 @@ export function SalesCatalogConsole({
                   ))}
                 </select>
               </label>
+
+              <AccordionSection icon={Store} title="Loja publica" tone="cyan" defaultOpen>
+                <div className="grid gap-3">
+                  <label className="block">
+                    <FieldLabel>Chamada principal</FieldLabel>
+                    <input
+                      value={settingsDraft.storefront.heroTitle ?? ""}
+                      onChange={(event) => updateStorefrontSettings({ heroTitle: event.target.value.slice(0, 90) })}
+                      className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                      placeholder="Qualidade que voce sente."
+                      style={{ borderColor: "var(--ch-border)" }}
+                    />
+                  </label>
+                  <label className="block">
+                    <FieldLabel>Trecho azul</FieldLabel>
+                    <input
+                      value={settingsDraft.storefront.heroHighlight ?? ""}
+                      onChange={(event) => updateStorefrontSettings({ heroHighlight: event.target.value.slice(0, 90) })}
+                      className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                      placeholder="Resultados que voce ve."
+                      style={{ borderColor: "var(--ch-border)" }}
+                    />
+                  </label>
+                  <label className="block">
+                    <FieldLabel>Subtitulo</FieldLabel>
+                    <textarea
+                      value={settingsDraft.storefront.heroSubtitle ?? ""}
+                      onChange={(event) => updateStorefrontSettings({ heroSubtitle: event.target.value.slice(0, 180) })}
+                      className="min-h-20 w-full resize-y rounded-lg border bg-transparent px-3 py-2 text-[12px] leading-5 outline-none"
+                      placeholder="Produtos certificados, procedencia garantida e entrega segura para todo o Brasil."
+                      style={{ borderColor: "var(--ch-border)" }}
+                    />
+                  </label>
+                  <p className="text-[11px] leading-4 text-slate-500">
+                    Esses textos aparecem no topo da loja publica. O produto marcado como destaque principal aparece ao lado da chamada.
+                  </p>
+                </div>
+              </AccordionSection>
 
               <AccordionSection id="sales-catalog-tour-categories" icon={Tags} title="Categorias" tone="green" defaultOpen>
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -3715,33 +3802,33 @@ export function SalesCatalogConsole({
               />
             </div>
 
-            <div className="grid gap-3 rounded-xl border p-3 sm:grid-cols-[minmax(0,1fr)_120px]" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+            <div className="grid gap-3 rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
               <label className="flex items-start gap-3">
                 <input
                   checked={storeFeatured}
                   className="mt-1 h-4 w-4"
-                  onChange={(event) => setStoreFeatured(event.target.checked)}
+                  onChange={(event) => {
+                    setStoreFeatured(event.target.checked);
+                    if (event.target.checked) {
+                      setStoreFeaturedRank("1");
+                    } else {
+                      setStoreFeaturedRank("");
+                    }
+                  }}
                   type="checkbox"
                 />
                 <span className="min-w-0">
-                  <span className="block text-[12px] font-semibold text-slate-100">Destacar na loja</span>
+                  <span className="block text-[12px] font-semibold text-slate-100">Produto principal da loja</span>
                   <span className="mt-1 block text-[11px] leading-4 text-slate-500">
-                    Produtos destacados aparecem primeiro e podem ocupar o topo da loja publica.
+                    Apenas um produto pode ocupar o topo da loja publica. Ao salvar, este produto substitui qualquer destaque anterior.
                   </span>
                 </span>
               </label>
-              <label className="block">
-                <FieldLabel>Ordem</FieldLabel>
-                <input
-                  value={storeFeaturedRank}
-                  onChange={(event) => setStoreFeaturedRank(digitsOnly(event.target.value, 3))}
-                  disabled={!storeFeatured}
-                  className="h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none disabled:opacity-50"
-                  inputMode="numeric"
-                  placeholder="1"
-                  style={{ borderColor: "var(--ch-border)" }}
-                />
-              </label>
+              {storeFeatured && currentFeaturedItem && currentFeaturedItem.id !== editingItemId ? (
+                <p className="rounded-lg border border-amber-300/30 bg-amber-300/10 px-3 py-2 text-[11px] leading-4 text-amber-100">
+                  Destaque atual: {currentFeaturedItem.title}. Ao salvar, ele sera desmarcado automaticamente.
+                </p>
+              ) : null}
             </div>
 
             <label className="block">
@@ -7039,6 +7126,11 @@ function buildSettingsDraft(settings: ClientSalesCatalogSettings | null): Settin
     businessType: settings?.businessType ?? "simple",
     categoriesText: (settings?.categories ?? []).join("\n"),
     attributes: cloneAttributes(settings?.attributes ?? []),
+    storefront: {
+      heroTitle: settings?.storefront.heroTitle ?? "",
+      heroHighlight: settings?.storefront.heroHighlight ?? "",
+      heroSubtitle: settings?.storefront.heroSubtitle ?? "",
+    },
     trackInventory: settings?.trackInventory ?? false,
     variationMedia: settings?.variationMedia ?? false,
     paymentMethods: clonePaymentMethods(settings?.paymentMethods.length ? settings.paymentMethods : commerceDefaults.paymentMethods),

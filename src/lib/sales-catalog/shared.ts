@@ -588,6 +588,7 @@ export type ClientSalesCatalogSettings = {
   businessType: SalesCatalogBusinessType;
   categories: string[];
   attributes: SalesCatalogAttribute[];
+  storefront: SalesCatalogStorefrontSettings;
   trackInventory: boolean;
   variationMedia: boolean;
   paymentMethods: SalesCatalogPaymentMethod[];
@@ -598,6 +599,12 @@ export type ClientSalesCatalogSettings = {
   orderBumps: SalesCatalogOrderBumpSettings;
   createdAt: string | null;
   updatedAt: string | null;
+};
+
+export type SalesCatalogStorefrontSettings = {
+  heroTitle: string | null;
+  heroHighlight: string | null;
+  heroSubtitle: string | null;
 };
 
 export type SalesCatalogCommerceSettings = Pick<

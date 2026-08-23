@@ -3,10 +3,11 @@ import { notFound } from "next/navigation";
 import {
   PublicStorefront,
   type PublicStorefrontBranding,
+  type PublicStorefrontSettings,
   type PublicStorefrontProduct,
   type PublicStorefrontTrackingParams,
 } from "@/components/checkout/public-storefront";
-import { mapSalesCatalogItem } from "@/lib/client-os/sales-catalog";
+import { getOrganizationSalesCatalogSettings, mapSalesCatalogItem } from "@/lib/client-os/sales-catalog";
 import { normalizeCurrencyAmount } from "@/lib/sales-catalog/mercado-pago";
 import { buildLeadAwareSalesCatalogProductUrl } from "@/lib/sales-catalog/public-urls";
 import { isSalesCatalogDisplayableProduct, type ClientSalesCatalogItem } from "@/lib/sales-catalog/shared";
@@ -83,6 +84,8 @@ export default async function StorePage({ params, searchParams }: StorePageProps
     conversationId,
     trackingLinkId,
   });
+  const catalogSettings = await getOrganizationSalesCatalogSettings(client, organization.id);
+  const storefront = catalogSettings?.storefront ?? null;
   const publicTrackingContext = buildStorePublicTrackingContext({
     organizationId: organization.id,
     leadId,
@@ -109,6 +112,7 @@ export default async function StorePage({ params, searchParams }: StorePageProps
       <PublicStorefront
         storeSlug={publicSlug}
         branding={branding}
+        storefront={resolveStorefrontSettings(storefront)}
         products={products}
         tracking={tracking}
       />
@@ -153,11 +157,20 @@ async function loadStoreProducts(
     .limit(96)
     .returns<SalesCatalogMemoryRow[]>();
 
-  return ((data ?? []) as SalesCatalogMemoryRow[])
+  const items = ((data ?? []) as SalesCatalogMemoryRow[])
     .map(mapSalesCatalogItem)
     .filter((item) => item.status === "active" && isSalesCatalogDisplayableProduct(item))
-    .sort(compareStoreCatalogItems)
-    .map((item) => mapStorefrontProduct(item, input));
+    .sort(compareStoreCatalogItems);
+  let featuredAssigned = false;
+
+  return items.map((item) => {
+    const isStoreFeatured = item.storeFeatured && !featuredAssigned;
+    if (isStoreFeatured) {
+      featuredAssigned = true;
+    }
+
+    return mapStorefrontProduct(item, input, isStoreFeatured);
+  });
 }
 
 function mapStorefrontProduct(
@@ -169,6 +182,7 @@ function mapStorefrontProduct(
     conversationId: string | null;
     trackingLinkId: string | null;
   },
+  isStoreFeatured: boolean,
 ): PublicStorefrontProduct {
   const salePrice = normalizeCurrencyAmount(item.offer.salePrice);
   const basePrice = normalizeCurrencyAmount(item.price);
@@ -193,8 +207,8 @@ function mapStorefrontProduct(
     coverUrl: cover?.storageUrl ?? null,
     stockLabel: formatStockLabel(item),
     fulfillmentLabel: formatFulfillment(item.fulfillment.mode),
-    highlightLabel: item.storeFeatured ? item.highlightLabel ?? "Destaque" : item.highlightLabel ?? (item.offer.salePrice ? "Oferta" : null),
-    isFeatured: item.storeFeatured,
+    highlightLabel: isStoreFeatured ? item.highlightLabel ?? "Destaque" : item.highlightLabel ?? (item.offer.salePrice ? "Oferta" : null),
+    isFeatured: isStoreFeatured,
     canCheckout,
     productUrl: buildLeadAwareSalesCatalogProductUrl({
       productId: item.id,
@@ -257,6 +271,14 @@ function resolveOrganizationBranding(organization: OrganizationRow): PublicStore
     displayName,
     logoUrl,
     logoAlt: readString(metadata.brand_logo_alt) ?? displayName,
+  };
+}
+
+function resolveStorefrontSettings(settings: PublicStorefrontSettings | null): PublicStorefrontSettings {
+  return {
+    heroTitle: readString(settings?.heroTitle),
+    heroHighlight: readString(settings?.heroHighlight),
+    heroSubtitle: readString(settings?.heroSubtitle),
   };
 }
 
