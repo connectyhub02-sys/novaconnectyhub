@@ -346,7 +346,7 @@ export function PublicStorefront({ storeSlug, branding, storefront, products, tr
 
       <BenefitStrip />
 
-      <PromoBanner branding={branding} product={promotionProduct} onShopNow={scrollToProducts} />
+      <CategoryShowcase categories={categories} category={category} onSelect={selectCategory} />
 
       <section id="produtos" className="mx-auto w-full max-w-6xl px-5 py-4 sm:px-8 sm:py-7 lg:py-9">
         {bestSellerProducts.length > 0 ? (
@@ -371,7 +371,7 @@ export function PublicStorefront({ storeSlug, branding, storefront, products, tr
         ) : null}
       </section>
 
-      <CategoryShowcase categories={categories} category={category} onSelect={selectCategory} />
+      <PromoBanner branding={branding} product={promotionProduct} onShopNow={scrollToProducts} />
 
       <CustomerLove branding={branding} />
 
@@ -685,7 +685,7 @@ function ProductShowcaseSection({
   return (
     <section className={className}>
       <SectionHeading eyebrow={eyebrow} title={title} />
-      <div className="mt-7 grid grid-cols-2 gap-4 md:grid-cols-4 md:gap-6">
+      <div className="mt-5 grid grid-cols-2 gap-4 md:mt-7 md:grid-cols-4 md:gap-6">
         {products.map((product) => (
           <ProductCard key={product.id} product={product} onAddToCart={onAddToCart} />
         ))}
@@ -697,13 +697,13 @@ function ProductShowcaseSection({
 function SectionHeading({ eyebrow, title }: { eyebrow: string; title: string }) {
   return (
     <div className="text-center">
-      <p className="text-xs font-black uppercase text-[color:var(--store-text)]">{eyebrow}</p>
-      <div className="mt-2 flex items-center justify-center gap-5">
+      <p className="text-[11px] font-semibold uppercase text-[color:var(--store-text)] sm:text-xs sm:font-black">{eyebrow}</p>
+      <div className="mt-2 flex items-center justify-center gap-3 sm:gap-5">
         <span className="hidden h-px w-24 bg-current opacity-45 sm:block" style={{ color: "var(--store-text)" }} />
-        <h2 className="font-serif text-[34px] font-black leading-none text-[color:var(--store-text)] sm:text-[42px]">
+        <h2 className="font-serif text-[24px] font-medium leading-[1.05] text-[color:var(--store-text)] sm:text-[42px] sm:font-black sm:leading-none">
           {title}
         </h2>
-        <Heart className="h-6 w-6 text-[#d84f66]" />
+        <Heart className="h-5 w-5 text-[#d84f66] sm:h-6 sm:w-6" />
         <span className="hidden h-px w-24 bg-current opacity-45 sm:block" style={{ color: "var(--store-text)" }} />
       </div>
     </div>
@@ -734,7 +734,7 @@ function ProductCard({
       </a>
 
       <div className="flex flex-1 flex-col p-3 text-center sm:p-4">
-        <h3 className="line-clamp-2 min-h-10 text-[13px] font-black leading-5 text-[color:var(--store-card-text)] sm:text-sm">
+        <h3 className="line-clamp-2 min-h-10 text-[12px] font-semibold leading-5 text-[color:var(--store-card-text)] sm:text-sm sm:font-black">
           {product.title}
         </h3>
         <div className="mt-2 flex items-center justify-center gap-1 text-[#f5a400]">
@@ -816,10 +816,10 @@ function CategoryShowcase({
   onSelect: (value: string) => void;
 }) {
   return (
-    <section id="categorias" className="bg-[#f2f6f0] py-8">
+    <section id="categorias" className="bg-[#f2f6f0] py-6 sm:py-8">
       <div className="mx-auto w-full max-w-6xl px-5 sm:px-8">
-        <h2 className="text-center text-sm font-black uppercase text-[color:var(--store-text)]">Comprar por categoria</h2>
-        <div className="mt-6 grid grid-cols-4 gap-4 sm:grid-cols-6 lg:grid-cols-8">
+        <h2 className="text-center text-xs font-bold uppercase text-[color:var(--store-text)] sm:text-sm sm:font-black">Comprar por categoria</h2>
+        <div className="mt-5 grid grid-cols-4 gap-3 sm:mt-6 sm:grid-cols-6 sm:gap-4 lg:grid-cols-8">
           {categories.map((item, index) => (
             <CategoryButton
               active={category === item.id}
@@ -863,35 +863,35 @@ function CategoryButton({
       >
         {icon}
       </span>
-      <span className="mt-2 block truncate text-[11px] font-bold text-[color:var(--store-text)] sm:text-xs">{label}</span>
+      <span className="mt-2 block truncate text-[11px] font-medium text-[color:var(--store-text)] sm:text-xs sm:font-semibold">{label}</span>
     </button>
   );
 }
 
 function CustomerLove({ branding }: { branding: PublicStorefrontBranding }) {
   return (
-    <section className="mx-auto w-full max-w-6xl px-5 py-8 sm:px-8">
-      <div className="grid overflow-hidden rounded-[8px] border border-[#e5e2d8] bg-white md:grid-cols-[300px_minmax(0,1fr)]">
-        <div className="border-b border-[#e5e2d8] bg-[#f7f4ee] p-7 md:border-b-0 md:border-r">
-          <p className="text-xs font-black uppercase text-[color:var(--store-text)]">Clientes da loja</p>
-          <h2 className="mt-2 font-serif text-[32px] font-black leading-none text-[color:var(--store-text)]">
+    <section className="mx-auto w-full max-w-6xl px-5 py-5 sm:px-8 sm:py-8">
+      <div className="grid grid-cols-[0.86fr_1fr] overflow-hidden rounded-[8px] border border-[#e5e2d8] bg-white md:grid-cols-[300px_minmax(0,1fr)]">
+        <div className="border-r border-[#e5e2d8] bg-[#f7f4ee] p-4 sm:p-7">
+          <p className="text-[9px] font-bold uppercase text-[color:var(--store-text)] sm:text-xs sm:font-black">Clientes da loja</p>
+          <h2 className="mt-1 font-serif text-[20px] font-semibold leading-[1.02] text-[color:var(--store-text)] sm:mt-2 sm:text-[32px] sm:font-black sm:leading-none">
             Compra simples e acompanhada.
           </h2>
-          <p className="mt-4 text-sm font-semibold leading-6 text-[color:var(--store-text-muted)]">
+          <p className="mt-2 line-clamp-3 text-[11px] font-medium leading-4 text-[color:var(--store-text-muted)] sm:mt-4 sm:text-sm sm:font-semibold sm:leading-6">
             A {branding.displayName} recebe o pedido e continua o atendimento pelo WhatsApp.
           </p>
         </div>
-        <div className="grid items-center gap-5 p-7 sm:grid-cols-[1fr_220px]">
+        <div className="grid items-center gap-3 p-4 sm:grid-cols-[1fr_220px] sm:gap-5 sm:p-7">
           <div>
             <div className="flex gap-1 text-[#f5a400]">
               {[0, 1, 2, 3, 4].map((item) => (
-                <Star className="h-5 w-5 fill-current" key={item} />
+                <Star className="h-3.5 w-3.5 fill-current sm:h-5 sm:w-5" key={item} />
               ))}
             </div>
-            <p className="mt-4 max-w-xl text-base font-semibold leading-7 text-[color:var(--store-text)]">
+            <p className="mt-2 line-clamp-4 max-w-xl text-[12px] font-medium leading-5 text-[color:var(--store-text)] sm:mt-4 sm:text-base sm:font-semibold sm:leading-7">
               Atendimento rapido, produtos organizados e pagamento em um fluxo claro para o cliente.
             </p>
-            <p className="mt-4 text-sm font-black text-[color:var(--store-accent)]">ConnectyHub Checkout</p>
+            <p className="mt-2 text-[11px] font-bold text-[color:var(--store-accent)] sm:mt-4 sm:text-sm sm:font-black">ConnectyHub Checkout</p>
           </div>
           <div className="hidden min-h-44 items-center justify-center rounded-[8px] bg-[#f4f0ea] sm:flex">
             <MessageCircle className="h-20 w-20 text-[color:var(--store-accent)]" />
@@ -913,7 +913,7 @@ function TrustStrip() {
   return (
     <section className="mx-auto w-full max-w-6xl px-5 pb-8 sm:px-8">
       <div
-        className="grid overflow-hidden rounded-[8px] border md:grid-cols-4 md:divide-x md:divide-white/20"
+        className="grid grid-cols-4 overflow-hidden rounded-[8px] border divide-x divide-white/20"
         style={{
           backgroundColor: "var(--store-primary)",
           borderColor: "var(--store-primary-border)",
@@ -921,11 +921,11 @@ function TrustStrip() {
         }}
       >
         {items.map((item) => (
-          <div className="flex min-h-20 items-center gap-4 px-5 py-4" key={item.title}>
-            <span className="shrink-0">{item.icon}</span>
-            <div>
-              <h2 className="text-sm font-black uppercase">{item.title}</h2>
-              <p className="mt-1 text-xs font-semibold opacity-75">{item.text}</p>
+          <div className="flex min-h-[86px] flex-col items-center justify-center gap-2 px-2 py-3 text-center md:min-h-20 md:flex-row md:justify-start md:gap-4 md:px-5 md:py-4 md:text-left" key={item.title}>
+            <span className="shrink-0 [&>svg]:h-5 [&>svg]:w-5 md:[&>svg]:h-7 md:[&>svg]:w-7">{item.icon}</span>
+            <div className="min-w-0">
+              <h2 className="text-[9px] font-black uppercase leading-3 md:text-sm md:leading-5">{item.title}</h2>
+              <p className="mt-1 hidden text-xs font-semibold opacity-75 md:block">{item.text}</p>
             </div>
           </div>
         ))}
