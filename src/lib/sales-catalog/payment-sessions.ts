@@ -7,6 +7,7 @@ import {
   type SalesCatalogPaymentSessionRow,
 } from "@/lib/client-os/sales-catalog";
 import { resolveSalesCatalogOrderPaymentOwner } from "@/lib/platform-product-sales";
+import { requiresSalesCatalogShippingBeforePayment } from "@/lib/sales-catalog/checkout-guards";
 import {
   buildMercadoPagoAdditionalInfo,
   buildMercadoPagoWebhookUrl,
@@ -49,6 +50,7 @@ type OrderItemRow = {
   sale_price: string | null;
   total: string | null;
   sku_code: string | null;
+  fulfillment?: unknown;
 };
 
 const paymentSessionSelect = "id, organization_id, order_id, integration_id, provider, method, status, amount, currency, payer_email, provider_payment_id, provider_status, provider_status_detail, checkout_url, pix_qr_code, pix_qr_code_base64, pix_ticket_url, external_reference, expires_at, paid_at, failure_reason, payment_owner_type, commercial_flow_type, revenue_owner_type, commission_context, metadata, created_at, updated_at";
@@ -79,7 +81,7 @@ export async function createSalesCatalogPixPaymentSession(input: {
 
   const { data: itemRows } = await input.client
     .from("sales_catalog_order_items")
-    .select("id, title, quantity, unit_price, sale_price, total, sku_code")
+    .select("id, title, quantity, unit_price, sale_price, total, sku_code, fulfillment")
     .eq("order_id", order.id)
     .order("created_at", { ascending: true });
   const items = (itemRows ?? []) as OrderItemRow[];
@@ -89,6 +91,17 @@ export async function createSalesCatalogPixPaymentSession(input: {
 
   if (!amount) {
     throw new Error("Informe o total do pedido antes de gerar Pix.");
+  }
+
+  if (requiresSalesCatalogShippingBeforePayment(order, items)) {
+    return createDeferredSalesCatalogCheckoutSession({
+      ...input,
+      order,
+      items,
+      amount,
+      reason: "shipping_required",
+      reasonLabel: "Frete pendente",
+    });
   }
 
   const paymentOwner = await resolveSalesCatalogOrderPaymentOwner({
@@ -289,6 +302,8 @@ export async function createSalesCatalogPixPaymentSession(input: {
       pixQrCode: null,
       pixTicketUrl: null,
       gatewayUnavailable: true,
+      paymentDeferred: false,
+      paymentDeferredReason: null,
     };
   }
 
@@ -397,6 +412,8 @@ export async function createSalesCatalogPixPaymentSession(input: {
       pixQrCode: pixData.pixQrCode,
       pixTicketUrl: pixData.pixTicketUrl,
       gatewayUnavailable: false,
+      paymentDeferred: false,
+      paymentDeferredReason: null,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Erro ao gerar Pix Mercado Pago.";
@@ -477,8 +494,191 @@ export async function createSalesCatalogPixPaymentSession(input: {
       pixQrCode: null,
       pixTicketUrl: null,
       gatewayUnavailable: true,
+      paymentDeferred: false,
+      paymentDeferredReason: null,
     };
   }
+}
+
+async function createDeferredSalesCatalogCheckoutSession(input: {
+  client: SupabaseClient;
+  organizationId: string;
+  orderId: string;
+  amount: string | number;
+  payerEmail?: string | null;
+  source: "dashboard" | "whatsapp_agent" | "checkout";
+  actorId?: string | null;
+  order: OrderRow;
+  items: OrderItemRow[];
+  reason: "shipping_required";
+  reasonLabel: string;
+}) {
+  const paymentOwner = await resolveSalesCatalogOrderPaymentOwner({
+    client: input.client,
+    organizationId: input.organizationId,
+    orderId: input.order.id,
+  });
+  const connectyHubOwned = paymentOwner.owner === "connectyhub";
+  const sessionId = randomUUID();
+  const idempotencyKey = randomUUID();
+  const externalReference = `sales_catalog_order:${input.order.id}:${sessionId}`;
+  const checkoutUrl = buildSalesCatalogCheckoutUrl(sessionId);
+  const payerEmail = normalizePayerEmail(input.payerEmail ?? input.order.customer_email, input.order.id);
+  const now = new Date().toISOString();
+
+  const { data: inserted, error: insertError } = await input.client
+    .from("sales_catalog_payment_sessions")
+    .insert({
+      id: sessionId,
+      organization_id: input.organizationId,
+      order_id: input.order.id,
+      integration_id: null,
+      provider: "mercado_pago",
+      method: "pix",
+      status: "created",
+      amount: input.amount,
+      currency: "BRL",
+      provider_status: "payment_deferred",
+      provider_status_detail: input.reason,
+      failure_reason: null,
+      payment_owner_type: paymentOwner.owner === "connectyhub" ? "connectyhub" : "client",
+      commercial_flow_type: paymentOwner.commercialFlowType,
+      revenue_owner_type: paymentOwner.revenueOwnerType,
+      payer_email: payerEmail,
+      checkout_url: checkoutUrl,
+      idempotency_key: idempotencyKey,
+      external_reference: externalReference,
+      commission_context: {
+        eligible: paymentOwner.commissionEligible,
+        platform_product_ids: paymentOwner.platformProductIds,
+        catalog_item_ids: paymentOwner.catalogItemIds,
+      },
+      metadata: {
+        created_from: input.source,
+        actor_id: input.actorId ?? null,
+        order_item_count: input.items.length,
+        payment_owner: paymentOwner.owner,
+        commercial_flow_type: paymentOwner.commercialFlowType,
+        revenue_owner_type: paymentOwner.revenueOwnerType,
+        commission_eligible: paymentOwner.commissionEligible,
+        payment_receiver: connectyHubOwned ? "connectyhub" : "seller",
+        platform_product_marketplace: connectyHubOwned,
+        platform_product_ids: paymentOwner.platformProductIds,
+        platform_catalog_item_ids: paymentOwner.catalogItemIds,
+        gateway_available: true,
+        payment_deferred: true,
+        payment_deferred_reason: input.reason,
+        payment_deferred_label: input.reasonLabel,
+      },
+      created_at: now,
+      updated_at: now,
+    })
+    .select(paymentSessionSelect)
+    .single<SalesCatalogPaymentSessionRow>();
+
+  if (insertError || !inserted) {
+    throw new Error(insertError?.message ?? "Nao foi possivel iniciar o checkout pendente.");
+  }
+
+  const checkoutTracking = await createPaymentSessionTrackedLink({
+    client: input.client,
+    organizationId: input.organizationId,
+    order: input.order,
+    items: input.items,
+    sessionId,
+    checkoutUrl,
+    amount: input.amount,
+    source: input.source,
+    actorId: input.actorId ?? null,
+    itemCount: input.items.length,
+  }).catch(() => null);
+
+  const { data: updated, error: updateError } = await input.client
+    .from("sales_catalog_payment_sessions")
+    .update({
+      metadata: buildPaymentSessionMetadata({
+        sessionMetadata: inserted.metadata,
+        checkoutTracking,
+        paymentOwner,
+        connectyHubOwned,
+        gatewayAvailable: true,
+        providerStatus: "payment_deferred",
+        extra: {
+          payment_deferred: true,
+          payment_deferred_reason: input.reason,
+          payment_deferred_label: input.reasonLabel,
+        },
+      }),
+    })
+    .eq("id", sessionId)
+    .eq("organization_id", input.organizationId)
+    .select(paymentSessionSelect)
+    .single<SalesCatalogPaymentSessionRow>();
+
+  if (updateError || !updated) {
+    throw new Error(updateError?.message ?? "Checkout criado, mas nao foi possivel atualizar rastreio.");
+  }
+
+  await persistCheckoutOrderReference({
+    client: input.client,
+    organizationId: input.organizationId,
+    order: input.order,
+    sessionId,
+    checkoutUrl,
+    checkoutTracking,
+    paymentOwner,
+    connectyHubOwned,
+    paymentStatus: "pending",
+    orderStatus: "pending_payment",
+    paymentMethod: "Checkout pendente",
+    paymentDeferredReason: input.reason,
+  });
+
+  await input.client.from("intelligence_events").insert({
+    scope: "organization",
+    organization_id: input.organizationId,
+    source_type: "sales_catalog_payment_session",
+    source_id: sessionId,
+    event_type: "sales_catalog.payment_session_deferred",
+    title: "Checkout aguardando frete",
+    summary: "Pagamento adiado ate confirmar frete, retirada ou entrega.",
+    confidence: 0.92,
+    visibility: "organization",
+    tags: ["sales_catalog", "sales_catalog_order", "payment", "checkout", "shipping", "lead_tracking"],
+    payload: {
+      order_id: input.order.id,
+      payment_session_id: sessionId,
+      checkout_url: checkoutUrl,
+      tracking_url: checkoutTracking?.trackingUrl ?? null,
+      tracking_link_id: checkoutTracking?.id ?? null,
+      tracking_tag: checkoutTracking?.tag ?? null,
+      amount: input.amount,
+      items: summarizePaymentItems(input.items),
+      lead_id: input.order.lead_id,
+      conversation_id: input.order.conversation_id,
+      lead_phone: input.order.customer_phone,
+      source: input.source,
+      payment_deferred_reason: input.reason,
+      payment_owner: paymentOwner.owner,
+      commercial_flow_type: paymentOwner.commercialFlowType,
+      revenue_owner_type: paymentOwner.revenueOwnerType,
+      commission_eligible: paymentOwner.commissionEligible,
+      platform_product_marketplace: connectyHubOwned,
+    },
+  });
+
+  return {
+    session: mapSalesCatalogPaymentSession(updated),
+    checkoutUrl,
+    trackingUrl: checkoutTracking?.trackingUrl ?? null,
+    trackingLinkId: checkoutTracking?.id ?? null,
+    trackingTag: checkoutTracking?.tag ?? null,
+    pixQrCode: null,
+    pixTicketUrl: null,
+    gatewayUnavailable: false,
+    paymentDeferred: true,
+    paymentDeferredReason: input.reason,
+  };
 }
 
 async function persistCheckoutOrderReference(input: {
@@ -492,14 +692,16 @@ async function persistCheckoutOrderReference(input: {
   connectyHubOwned: boolean;
   paymentStatus: "pending" | "confirmed";
   orderStatus: "pending_payment" | "paid";
+  paymentMethod?: string;
   providerPaymentId?: string | null;
   failureReason?: string | null;
+  paymentDeferredReason?: string | null;
 }) {
   await input.client
     .from("sales_catalog_orders")
     .update({
       latest_payment_session_id: input.sessionId,
-      payment_method: "Pix Mercado Pago",
+      payment_method: input.paymentMethod ?? "Pix Mercado Pago",
       payment_status: input.paymentStatus,
       status: input.orderStatus,
       metadata: {
@@ -513,6 +715,7 @@ async function persistCheckoutOrderReference(input: {
         latest_payment_method: "pix",
         latest_provider_payment_id: input.providerPaymentId ?? null,
         latest_payment_failure_reason: input.failureReason ?? null,
+        latest_payment_deferred_reason: input.paymentDeferredReason ?? null,
         latest_payment_owner: input.paymentOwner.owner,
         latest_commercial_flow_type: input.paymentOwner.commercialFlowType,
         latest_revenue_owner_type: input.paymentOwner.revenueOwnerType,

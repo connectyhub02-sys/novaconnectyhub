@@ -1,6 +1,6 @@
 import "server-only";
 
-import { createHmac, randomUUID } from "node:crypto";
+import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { MercadoPagoConfig, Payment } from "mercadopago";
 import type { AdditionalInfo, PaymentCreateRequest } from "mercadopago/dist/clients/payment/create/types";
@@ -1029,9 +1029,16 @@ export function verifyMercadoPagoWebhookSignature(input: {
   dataId: string | null;
   secret: string | null;
 }) {
-  if (!input.secret) return { ok: true, skipped: true };
+  if (!input.secret) {
+    return {
+      ok: shouldAllowUnsignedMercadoPagoWebhook(),
+      skipped: true,
+      reason: "missing_webhook_secret",
+    };
+  }
+
   if (!input.signatureHeader || !input.requestId || !input.dataId) {
-    return { ok: false, skipped: false };
+    return { ok: false, skipped: false, reason: "missing_signature_headers" };
   }
 
   const parts = Object.fromEntries(input.signatureHeader.split(",").map((part) => {
@@ -1042,13 +1049,38 @@ export function verifyMercadoPagoWebhookSignature(input: {
   const expected = parts.v1;
 
   if (!ts || !expected) {
-    return { ok: false, skipped: false };
+    return { ok: false, skipped: false, reason: "malformed_signature_header" };
   }
 
   const manifest = `id:${input.dataId};request-id:${input.requestId};ts:${ts};`;
   const digest = createHmac("sha256", input.secret).update(manifest).digest("hex");
+  const matches = timingSafeHexEqual(digest, expected);
 
-  return { ok: digest === expected, skipped: false };
+  return {
+    ok: matches,
+    skipped: false,
+    reason: matches ? null : "signature_mismatch",
+  };
+}
+
+function shouldAllowUnsignedMercadoPagoWebhook() {
+  if (process.env.MERCADO_PAGO_ALLOW_UNSIGNED_WEBHOOKS === "true") {
+    return true;
+  }
+
+  return process.env.NODE_ENV !== "production" && process.env.MERCADO_PAGO_ALLOW_UNSIGNED_WEBHOOKS !== "false";
+}
+
+function timingSafeHexEqual(left: string, right: string) {
+  if (!/^[a-f0-9]+$/i.test(left) || !/^[a-f0-9]+$/i.test(right) || left.length !== right.length) {
+    return false;
+  }
+
+  try {
+    return timingSafeEqual(Buffer.from(left, "hex"), Buffer.from(right, "hex"));
+  } catch {
+    return false;
+  }
 }
 
 export function normalizeCurrencyAmount(value: string | number | null | undefined) {

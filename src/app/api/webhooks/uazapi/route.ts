@@ -1,9 +1,11 @@
+import { timingSafeEqual } from "node:crypto";
 import { NextRequest } from "next/server";
 import { gatewayWebhookDeliveryRequestedEventName } from "@/lib/connectyhub-api/gateway";
 import { inngest } from "@/lib/inngest/client";
 import { ingestUazapiWebhook } from "@/lib/whatsapp/webhook-ingest";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 export const maxDuration = 60;
 
 export async function GET() {
@@ -11,7 +13,7 @@ export async function GET() {
     ok: true,
     service: "connectyhub-uazapi-webhook",
     accepts: ["connection", "history", "messages", "messages_update", "presence", "chats", "contacts", "groups", "labels", "chat_labels", "newsletter_messages", "call", "blocks", "sender"],
-    secretConfigured: Boolean(process.env.UAZAPI_WEBHOOK_SECRET),
+    authentication: "secret_required",
   });
 }
 
@@ -70,7 +72,7 @@ function isValidWebhookRequest(request: NextRequest) {
   const expected = process.env.UAZAPI_WEBHOOK_SECRET;
 
   if (!expected) {
-    return true;
+    return shouldAllowUnsignedUazapiWebhook();
   }
 
   const provided =
@@ -78,7 +80,30 @@ function isValidWebhookRequest(request: NextRequest) {
     request.headers.get("x-connectyhub-webhook-secret") ||
     request.nextUrl.searchParams.get("secret");
 
-  return provided === expected;
+  return timingSafeTextEqual(provided, expected);
+}
+
+function shouldAllowUnsignedUazapiWebhook() {
+  if (process.env.UAZAPI_ALLOW_UNSIGNED_WEBHOOKS === "true") {
+    return true;
+  }
+
+  return process.env.NODE_ENV !== "production" && process.env.UAZAPI_ALLOW_UNSIGNED_WEBHOOKS !== "false";
+}
+
+function timingSafeTextEqual(left: string | null, right: string) {
+  if (!left) {
+    return false;
+  }
+
+  const leftBuffer = Buffer.from(left);
+  const rightBuffer = Buffer.from(right);
+
+  if (leftBuffer.length !== rightBuffer.length) {
+    return false;
+  }
+
+  return timingSafeEqual(leftBuffer, rightBuffer);
 }
 
 function extractWebhookEvent(payload: unknown, request: NextRequest) {

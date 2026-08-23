@@ -23,7 +23,7 @@
     "inngest": "4.13.0",
     "lucide-react": "^1.17.0",
     "mercadopago": "^3.2.0",
-    "next": "16.2.10",
+    "next": "16.3.2",
     "next-themes": "^0.4.6",
     "radix-ui": "^1.4.3",
     "react": "19.2.4",
@@ -40,7 +40,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.2.10",
+    "eslint-config-next": "16.3.2",
     "playwright": "^1.60.0",
     "shadcn": "^4.10.0",
     "tailwindcss": "^4",
@@ -48,6 +48,13 @@
     "vitest": "4.1.10"
   },
   "overrides": {
-    "postcss": "8.5.19"
+    "@hono/node-server": "1.19.15",
+    "body-parser": "2.3.0",
+    "brace-expansion": "2.1.4",
+    "fast-uri": "3.1.5",
+    "hono": "4.13.3",
+    "ip-address": "10.5.0",
+    "js-yaml": "4.3.1",
+    "postcss": "8.5.23"
   }
 }

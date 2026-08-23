@@ -1029,6 +1029,9 @@ async function saveCatalogSettings(input: {
     categories.length ? `Categorias: ${categories.join(", ")}` : "",
     storefront.heroTitle ? `Chamada da loja: ${storefront.heroTitle}${storefront.heroHighlight ? ` ${storefront.heroHighlight}` : ""}` : "",
     storefront.heroSubtitle ? `Subtitulo da loja: ${storefront.heroSubtitle}` : "",
+    storefront.headerText ? `Header publico: ${storefront.headerText}` : "",
+    storefront.footerText ? `Sobre no footer: ${storefront.footerText}` : "",
+    storefront.footerContactText ? `Contato no footer: ${storefront.footerContactText}` : "",
     attributes.length ? "Variacoes:" : "",
     ...attributes.map((attribute) => `- ${attribute.name}: ${attribute.values.join(", ")}`),
     trackInventory ? "Controle de estoque por variacao: sim" : "Controle de estoque por variacao: nao",
@@ -3213,7 +3216,18 @@ function normalizeStorefrontSettings(value: unknown): SalesCatalogStorefrontSett
     heroTitle: normalizeOptionalText(readFormString(record.heroTitle ?? record.hero_title), 90),
     heroHighlight: normalizeOptionalText(readFormString(record.heroHighlight ?? record.hero_highlight), 90),
     heroSubtitle: normalizeOptionalText(readFormString(record.heroSubtitle ?? record.hero_subtitle), 180),
+    headerText: normalizeOptionalText(readFormString(record.headerText ?? record.header_text), 140),
+    footerText: normalizeOptionalText(readFormString(record.footerText ?? record.footer_text), 320),
+    footerContactText: normalizeOptionalText(readFormString(record.footerContactText ?? record.footer_contact_text), 180),
+    primaryColor: normalizeStorefrontPrimaryColor(readFormString(record.primaryColor ?? record.primary_color)),
   };
+}
+
+function normalizeStorefrontPrimaryColor(value: string | null) {
+  if (!value) return null;
+
+  const normalized = value.trim().toLowerCase();
+  return /^#[0-9a-f]{6}$/.test(normalized) ? normalized : null;
 }
 
 function normalizePaymentMethods(value: unknown, fallback: SalesCatalogPaymentMethod[]) {
@@ -3373,6 +3387,10 @@ function serializeStorefrontSettings(settings: SalesCatalogStorefrontSettings) {
     hero_title: settings.heroTitle,
     hero_highlight: settings.heroHighlight,
     hero_subtitle: settings.heroSubtitle,
+    header_text: settings.headerText,
+    footer_text: settings.footerText,
+    footer_contact_text: settings.footerContactText,
+    primary_color: settings.primaryColor,
   };
 }
 

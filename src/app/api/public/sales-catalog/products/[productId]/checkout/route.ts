@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { mapSalesCatalogItem } from "@/lib/client-os/sales-catalog";
 import { normalizeCurrencyAmount } from "@/lib/sales-catalog/mercado-pago";
 import { createSalesCatalogPixPaymentSession } from "@/lib/sales-catalog/payment-sessions";
+import { createPublicCheckoutIntentKey, findRecentPublicCheckoutSession } from "@/lib/sales-catalog/public-checkout-idempotency";
 import { isSalesCatalogDisplayableProduct } from "@/lib/sales-catalog/shared";
 import { validatePublicWriteRequest, type PublicWriteGuardResult } from "@/lib/security/public-request-guard";
 import { createServiceClient } from "@/lib/supabase/service";
@@ -40,7 +41,7 @@ export async function POST(
     routeKey: "sales-catalog-product-checkout",
     maxPayloadBytes: 16 * 1024,
     rateLimit: {
-      limit: 30,
+      limit: 10,
       windowMs: 60_000,
     },
   });
@@ -94,6 +95,32 @@ export async function POST(
   const customerPhone = normalizePhone(lead?.phone_number) ?? leadPhone;
   const customerName = readString(lead?.display_name) ?? "Lead WhatsApp";
   const customerEmail = readString(readRecord(lead?.metadata)?.email) ?? readString(readRecord(lead?.metadata)?.customer_email);
+  const checkoutIntentKey = createPublicCheckoutIntentKey([
+    "sales_catalog_public_product",
+    row.organization_id,
+    item.id,
+    lead?.id ?? leadId,
+    conversationId,
+    customerPhone,
+    trackingLinkId,
+  ]);
+  const existingCheckout = await findRecentPublicCheckoutSession({
+    client,
+    organizationId: row.organization_id,
+    checkoutIntentKey,
+  });
+
+  if (existingCheckout) {
+    return NextResponse.json({
+      ok: true,
+      reused: true,
+      orderId: existingCheckout.orderId,
+      sessionId: existingCheckout.sessionId,
+      checkoutUrl: existingCheckout.checkoutUrl,
+      trackingUrl: existingCheckout.trackingUrl ?? existingCheckout.checkoutUrl,
+    });
+  }
+
   const now = new Date().toISOString();
   const orderId = randomUUID();
 
@@ -130,6 +157,7 @@ export async function POST(
         tracking_link_id: trackingLinkId,
         lead_phone: customerPhone,
         product_page_checkout: true,
+        checkout_intent_key: checkoutIntentKey,
         currency: item.currency,
         category: item.category,
         platform_product_id: item.platformProductId,
@@ -247,6 +275,8 @@ export async function POST(
     checkoutUrl: payment.checkoutUrl,
     trackingUrl: checkoutUrl,
     gatewayUnavailable: payment.gatewayUnavailable === true,
+    paymentDeferred: payment.paymentDeferred === true,
+    paymentDeferredReason: payment.paymentDeferredReason ?? null,
   });
 }
 

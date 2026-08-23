@@ -507,6 +507,16 @@ export async function processWhatsappAgentRun(input: {
     }
 
     const latestInbound = findLatestInbound(context.messages);
+
+    if (await hasCompletedWhatsappRunForInbound(client, context, latestInbound)) {
+      return await completeRun(client, run.id, "Mensagem WhatsApp ja respondida por outra execucao.", {
+        skipped: true,
+        reason: "inbound_already_handled",
+        duplicate_message_id: latestInbound?.id ?? null,
+        duplicate_provider_message_id: latestInbound?.provider_message_id ?? null,
+      });
+    }
+
     let userText = await resolveInboundUserText({
       client,
       context,
@@ -4455,7 +4465,7 @@ async function sendAgentResponse(input: {
   const renderedCatalog = renderSalesCatalogTags(renderedLinks, context.salesCatalog);
   const customerCatalogText = sanitizeSalesCatalogCustomerText(renderedCatalog.text, context.salesCatalog.length > 0);
   const cleanText = normalizeAssistantText(ensureLinkPromiseIsActionable(customerCatalogText, context));
-  const orderIntentText = latestInbound?.text_content?.trim() ?? "";
+  const orderIntentText = buildSalesCatalogOrderIntentText(latestInbound, cleanText);
   const hasOrderIntent = hasSalesCatalogOrderIntent(orderIntentText);
   const selectedCatalogItems = mergeRuntimeSalesCatalogItems(
     renderedCatalog.items,
@@ -4474,7 +4484,7 @@ async function sendAgentResponse(input: {
     : chunks;
   const shouldUseMixedAudio = shouldUseMixedAudioDelivery(context, latestInbound, mixedCandidateChunks, hasCatalogSelection);
   const outbound: OutboundMessage[] = [];
-  const catalogAttachments = shouldSendSalesCatalogMediaAttachments(latestInbound, deliveryText)
+  const catalogAttachments = shouldSendSalesCatalogMediaAttachments(latestInbound, cleanText)
     ? collectSalesCatalogAttachments(selectedCatalogItems)
     : [];
 
@@ -5807,7 +5817,10 @@ function collectSalesCatalogAttachments(items: RuntimeSalesCatalogItem[]) {
     if (!media) continue;
 
     attachments.push({ item, media });
-    break;
+
+    if (attachments.length >= 2) {
+      break;
+    }
   }
 
   return attachments;
@@ -5827,6 +5840,11 @@ function shouldSendSalesCatalogMediaAttachments(latestInbound: ConversationMessa
   const normalized = normalizeSearch([inboundText, text].filter(Boolean).join(" "));
 
   return /\b(foto|fotos|imagem|imagens|video|videos|arquivo|arquivos|pdf|midia|midias|catalogo|catalogos|embalagem|mostra|mostrar)\b/.test(normalized);
+}
+
+function buildSalesCatalogOrderIntentText(latestInbound: ConversationMessageRow | null, _assistantText: string) {
+  void _assistantText;
+  return latestInbound?.text_content?.trim() ?? "";
 }
 
 async function recordSalesCatalogOrderIntent(input: {
@@ -6127,6 +6145,10 @@ async function maybeCreateSalesCatalogPaymentLink(input: {
       source: "whatsapp_agent",
       actorId: null,
     });
+
+    if (result.paymentDeferred) {
+      return null;
+    }
 
     return {
       orderId: input.orderId,
@@ -8684,6 +8706,16 @@ async function archiveLeadForOptOut(
 }
 
 async function claimRun(client: SupabaseClient, runId: string): Promise<boolean> {
+  const rpcResult = await client.rpc("claim_whatsapp_agent_run", { p_run_id: runId });
+
+  if (!rpcResult.error) {
+    return rpcResult.data === true;
+  }
+
+  if (!isMissingRpcFunctionError(rpcResult.error)) {
+    throw new Error(`Nao foi possivel reivindicar execucao WhatsApp: ${rpcResult.error.message}`);
+  }
+
   const { data } = await client
     .from("agent_runs")
     .update({ run_status: "running", started_at: new Date().toISOString() })
@@ -8693,6 +8725,38 @@ async function claimRun(client: SupabaseClient, runId: string): Promise<boolean>
     .maybeSingle<{ id: string }>();
 
   return Boolean(data);
+}
+
+async function hasCompletedWhatsappRunForInbound(
+  client: SupabaseClient,
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+  latestInbound: ConversationMessageRow | null,
+) {
+  if (!latestInbound?.provider_message_id) {
+    return false;
+  }
+
+  const { data } = await client
+    .from("agent_runs")
+    .select("id")
+    .eq("agent_id", context.agent.id)
+    .eq("trigger_source", "connectyhub/whatsapp.message.received")
+    .eq("run_status", "completed")
+    .neq("id", context.run.id)
+    .contains("metadata", {
+      conversationId: context.conversationId,
+      providerMessageId: latestInbound.provider_message_id,
+      sent: true,
+    })
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<{ id: string }>();
+
+  return Boolean(data?.id);
+}
+
+function isMissingRpcFunctionError(error: { code?: string; message?: string }) {
+  return error.code === "PGRST202" || /function .*claim_whatsapp_agent_run/i.test(error.message ?? "");
 }
 
 async function markRun(client: SupabaseClient, runId: string, status: string, errorMessage?: string) {

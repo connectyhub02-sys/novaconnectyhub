@@ -1,6 +1,7 @@
 import { revalidatePath } from "next/cache";
 import { NextResponse, type NextRequest } from "next/server";
 import { applySalesCatalogCheckoutOrderBumps } from "@/lib/sales-catalog/checkout-order-bumps";
+import { requiresSalesCatalogShippingBeforePayment } from "@/lib/sales-catalog/checkout-guards";
 import { createSalesCatalogPixPaymentSession } from "@/lib/sales-catalog/payment-sessions";
 import { createServiceClient } from "@/lib/supabase/service";
 
@@ -51,6 +52,12 @@ export async function POST(
       orderId: sourceSession.order_id,
       selectedProductIds: selectedOrderBumpIds,
     });
+
+    if (requiresSalesCatalogShippingBeforePayment(orderBumpApplication.order, orderBumpApplication.items)) {
+      return NextResponse.json({
+        error: "Confirme frete, retirada ou entrega antes de atualizar o Pix deste pedido.",
+      }, { status: 400 });
+    }
 
     if (!orderBumpApplication.totalAmount) {
       return NextResponse.json({ error: "Nao foi possivel calcular o novo total do pedido." }, { status: 400 });

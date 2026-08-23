@@ -153,7 +153,7 @@ type SalesCatalogConsoleProps = {
   initialCompanyId: string | null;
 };
 
-type CatalogTab = "setup" | "shipping" | "products" | "checkout" | "orders" | "payments" | "whatsapp";
+type CatalogTab = "setup" | "storefront" | "shipping" | "products" | "checkout" | "orders" | "payments" | "whatsapp";
 type SalesCatalogProductFormTab = "essential" | "pricing" | "media" | "stock" | "delivery";
 type CommercialFlowFilter = "all" | SalesCatalogCommercialFlowType;
 type CheckoutStageFilter = "all" | SalesCatalogCheckoutStage;
@@ -569,7 +569,7 @@ export function SalesCatalogConsole({
   const initialSelectedCompanyId = initialCompanyId ?? initialCompanies[0]?.id ?? "";
   const initialSelectedSettings = initialSettings.find((settings) => settings.companyId === initialSelectedCompanyId) ?? null;
   const initialSelectedShippingSettings = initialShippingSettings.find((settings) => settings.companyId === initialSelectedCompanyId) ?? null;
-  const [companies] = useState(initialCompanies);
+  const [companies, setCompanies] = useState(initialCompanies);
   const [items, setItems] = useState(initialItems);
   const [orders, setOrders] = useState(initialOrders);
   const [paymentSessions, setPaymentSessions] = useState(initialPaymentSessions);
@@ -585,6 +585,7 @@ export function SalesCatalogConsole({
   const [settingsDraft, setSettingsDraft] = useState<SettingsDraft>(() => buildSettingsDraft(initialSelectedSettings));
   const [shippingDraft, setShippingDraft] = useState<ShippingDraft>(() => buildShippingDraft(initialSelectedShippingSettings));
   const [storefrontSettingsHighlighted, setStorefrontSettingsHighlighted] = useState(false);
+  const [logoUploadingId, setLogoUploadingId] = useState<string | null>(null);
   const [selectedShippingUf, setSelectedShippingUf] = useState(() => initialSelectedShippingSettings?.rules.find((rule) => rule.active)?.uf ?? "SP");
   const [savingSettings, setSavingSettings] = useState(false);
   const [savingShipping, setSavingShipping] = useState(false);
@@ -777,6 +778,12 @@ export function SalesCatalogConsole({
   const storefrontHeroHighlight = settingsDraft.storefront.heroHighlight?.trim() || "Resultados que voce ve.";
   const storefrontHeroSubtitle = settingsDraft.storefront.heroSubtitle?.trim()
     || `Produtos selecionados pela ${selectedCompany?.name ?? "sua loja"}, compra segura e atendimento conectado ao WhatsApp.`;
+  const legacyStorefrontHeaderText = `${storefrontHeroTitle} ${storefrontHeroHighlight}`.trim();
+  const storefrontHeaderText = settingsDraft.storefront.headerText?.trim() || legacyStorefrontHeaderText || storefrontHeroSubtitle;
+  const storefrontFooterText = settingsDraft.storefront.footerText?.trim()
+    || `${selectedCompany?.name ?? "Sua empresa"} atende seus clientes com catalogo, checkout e suporte conectados ao WhatsApp.`;
+  const storefrontFooterContactText = settingsDraft.storefront.footerContactText?.trim() || "Atendimento pelo WhatsApp oficial da loja.";
+  const storefrontPrimaryColor = settingsDraft.storefront.primaryColor ?? "#063f2c";
   const hasConfiguredSettings = Boolean(selectedSettings?.configured);
   const productAttributes = useMemo(
     () => (selectedSettings?.configured ? selectedSettings.attributes : settingsDraft.attributes).filter((attribute) => attribute.values.length > 0),
@@ -1168,6 +1175,10 @@ export function SalesCatalogConsole({
             heroTitle: cleanInput(settingsDraft.storefront.heroTitle, 90),
             heroHighlight: cleanInput(settingsDraft.storefront.heroHighlight, 90),
             heroSubtitle: cleanInput(settingsDraft.storefront.heroSubtitle, 180),
+            headerText: cleanInput(settingsDraft.storefront.headerText, 140),
+            footerText: cleanInput(settingsDraft.storefront.footerText, 320),
+            footerContactText: cleanInput(settingsDraft.storefront.footerContactText, 180),
+            primaryColor: settingsDraft.storefront.primaryColor,
           },
           trackInventory: settingsDraft.trackInventory,
           variationMedia: settingsDraft.variationMedia,
@@ -2270,15 +2281,45 @@ export function SalesCatalogConsole({
     }
   }
 
+  async function uploadCompanyLogoFromStorefront(file: File | null) {
+    if (!selectedCompany || !file || logoUploadingId) return;
+
+    setLogoUploadingId(selectedCompany.id);
+    setNotice(null);
+
+    try {
+      const formData = new FormData();
+      formData.set("companyId", selectedCompany.id);
+      formData.set("logo", file);
+
+      const response = await fetch("/api/dashboard/companies/logo", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await response.json().catch(() => null) as { company?: ClientCompany; error?: string } | null;
+
+      if (!response.ok || !data?.company) {
+        throw new Error(data?.error ?? "Nao foi possivel salvar o logotipo.");
+      }
+
+      setCompanies((current) => current.map((company) => (company.id === data.company!.id ? data.company! : company)));
+      setNotice({ tone: "success", message: "Logotipo publico da loja atualizado." });
+    } catch (error) {
+      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao atualizar logotipo." });
+    } finally {
+      setLogoUploadingId(null);
+    }
+  }
+
   function openStorefrontSettings() {
-    setActiveTab("setup");
+    setActiveTab("storefront");
     setStorefrontSettingsHighlighted(true);
     window.setTimeout(() => {
       document.getElementById("sales-catalog-storefront-settings")?.scrollIntoView({
         behavior: "smooth",
         block: "center",
       });
-      document.getElementById("sales-catalog-storefront-hero-title")?.focus();
+      document.getElementById("sales-catalog-storefront-header-text")?.focus();
     }, 0);
     window.setTimeout(() => setStorefrontSettingsHighlighted(false), 3600);
   }
@@ -2485,12 +2526,10 @@ export function SalesCatalogConsole({
               <p className="mt-1 text-[11px] leading-4 text-slate-500">
                 {selectedStorePath ? selectedStorePath : "Escolha uma empresa para liberar o link da loja."}
               </p>
-              <div className="mt-3 max-w-3xl rounded-lg border border-cyan-300/25 bg-cyan-300/5 px-3 py-2">
-                <p className="font-mono text-[8px] uppercase tracking-[0.16em] text-cyan-200">Frase inicial da loja</p>
-                <p className="mt-1 text-[12px] font-semibold leading-4 text-slate-100">
-                  {storefrontHeroTitle} <span className="text-blue-300">{storefrontHeroHighlight}</span>
-                </p>
-                <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-slate-400">{storefrontHeroSubtitle}</p>
+              <div className="mt-3 max-w-3xl rounded-lg border border-emerald-300/25 bg-emerald-300/5 px-3 py-2">
+                <p className="font-mono text-[8px] uppercase tracking-[0.16em] text-emerald-200">Identidade publica</p>
+                <p className="mt-1 line-clamp-2 text-[12px] font-semibold leading-4 text-slate-100">{storefrontHeaderText}</p>
+                <p className="mt-1 line-clamp-1 text-[11px] leading-4 text-slate-400">{storefrontFooterContactText}</p>
               </div>
             </div>
           </div>
@@ -2504,7 +2543,7 @@ export function SalesCatalogConsole({
               className="inline-flex min-h-9 items-center gap-2 rounded-lg bg-blue-600 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-500"
             >
               <PencilLine className="h-3.5 w-3.5" />
-              Editar frase
+              Loja publica
             </button>
             {selectedStorePath ? (
               <>
@@ -2533,6 +2572,7 @@ export function SalesCatalogConsole({
 
       <div id="sales-catalog-tour-tabs" className="mb-4 grid grid-cols-3 gap-1.5 sm:flex sm:flex-wrap sm:gap-2">
         <TabButton active={activeTab === "setup"} icon={Settings2} label="Configuracao" mobileLabel="Config." onClick={() => setActiveTab("setup")} />
+        <TabButton active={activeTab === "storefront"} icon={Store} label="Loja Publica" mobileLabel="Loja" onClick={() => setActiveTab("storefront")} />
         <TabButton active={activeTab === "shipping"} icon={Truck} label="Entrega e Frete" mobileLabel="Frete" onClick={() => setActiveTab("shipping")} />
         <TabButton active={activeTab === "products"} icon={PackagePlus} label="Produtos" onClick={() => setActiveTab("products")} />
         <TabButton active={activeTab === "checkout"} icon={CreditCard} label="Checkouts" mobileLabel="Checkouts" onClick={() => setActiveTab("checkout")} />
@@ -2571,68 +2611,6 @@ export function SalesCatalogConsole({
                   ))}
                 </select>
               </label>
-
-              <AccordionSection
-                id="sales-catalog-storefront-settings"
-                icon={Store}
-                title="Editar frase inicial da loja"
-                tone="cyan"
-                defaultOpen
-                className={storefrontSettingsHighlighted ? "ring-2 ring-blue-500/70 ring-offset-2 ring-offset-white" : undefined}
-              >
-                <div className="grid gap-3">
-                  <div className="rounded-lg border border-blue-300/40 bg-blue-50 px-3 py-2">
-                    <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-blue-600">Previa da frase que aparece no topo da loja</p>
-                    <p className="mt-1 text-[13px] font-bold leading-5 text-slate-950">
-                      {storefrontHeroTitle} <span className="text-blue-600">{storefrontHeroHighlight}</span>
-                    </p>
-                    <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-slate-600">{storefrontHeroSubtitle}</p>
-                  </div>
-                  <label className="block">
-                    <FieldLabel>Frase principal em preto</FieldLabel>
-                    <input
-                      id="sales-catalog-storefront-hero-title"
-                      value={settingsDraft.storefront.heroTitle ?? ""}
-                      onChange={(event) => updateStorefrontSettings({ heroTitle: event.target.value.slice(0, 90) })}
-                      className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
-                      placeholder="Qualidade que voce sente."
-                      style={{ borderColor: "var(--ch-border)" }}
-                    />
-                  </label>
-                  <label className="block">
-                    <FieldLabel>Frase em azul</FieldLabel>
-                    <input
-                      value={settingsDraft.storefront.heroHighlight ?? ""}
-                      onChange={(event) => updateStorefrontSettings({ heroHighlight: event.target.value.slice(0, 90) })}
-                      className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
-                      placeholder="Resultados que voce ve."
-                      style={{ borderColor: "var(--ch-border)" }}
-                    />
-                  </label>
-                  <label className="block">
-                    <FieldLabel>Descricao abaixo da frase</FieldLabel>
-                    <textarea
-                      value={settingsDraft.storefront.heroSubtitle ?? ""}
-                      onChange={(event) => updateStorefrontSettings({ heroSubtitle: event.target.value.slice(0, 180) })}
-                      className="min-h-20 w-full resize-y rounded-lg border bg-transparent px-3 py-2 text-[12px] leading-5 outline-none"
-                      placeholder="Produtos certificados, procedencia garantida e entrega segura para todo o Brasil."
-                      style={{ borderColor: "var(--ch-border)" }}
-                    />
-                  </label>
-                  <p className="text-[11px] leading-4 text-slate-500">
-                    Depois de editar, clique em salvar para atualizar a frase da loja publica.
-                  </p>
-                  <button
-                    type="button"
-                    disabled={!selectedCompanyId || savingSettings}
-                    onClick={saveSettings}
-                    className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-[12px] font-bold text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {savingSettings ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                    Salvar frase da loja
-                  </button>
-                </div>
-              </AccordionSection>
 
               <AccordionSection id="sales-catalog-tour-categories" icon={Tags} title="Categorias" tone="green" defaultOpen>
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -2945,6 +2923,224 @@ export function SalesCatalogConsole({
                 {savingSettings ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                 Salvar e continuar
               </button>
+            </div>
+          </div>
+        </Panel>
+      ) : activeTab === "storefront" ? (
+        <Panel
+          id="sales-catalog-storefront-settings"
+          title="Loja Publica"
+          eyebrow={selectedCompany?.name ?? "personalizacao"}
+          tone="green"
+          compact
+          className={storefrontSettingsHighlighted ? "ring-2 ring-emerald-400/70 ring-offset-2 ring-offset-white" : undefined}
+        >
+          <div className="grid gap-4 xl:grid-cols-[minmax(280px,0.38fr)_minmax(0,1fr)]">
+            <div className="space-y-3">
+              <label className="block">
+                <FieldLabel>Empresa</FieldLabel>
+                <select
+                  value={selectedCompanyId}
+                  onChange={(event) => changeCompany(event.target.value)}
+                  className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                  style={{ borderColor: "var(--ch-border)" }}
+                >
+                  {companies.map((company) => (
+                    <option key={company.id} value={company.id}>{company.name}</option>
+                  ))}
+                </select>
+              </label>
+
+              <div className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+                <div className="flex items-center gap-3">
+                  <div className="relative grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-lg border border-emerald-300/25 bg-white">
+                    {selectedCompany?.brandLogoUrl ? (
+                      <Image
+                        alt={selectedCompany.brandLogoAlt ?? selectedCompany.name}
+                        className="object-contain p-1.5"
+                        fill
+                        sizes="56px"
+                        src={selectedCompany.brandLogoUrl}
+                        unoptimized
+                      />
+                    ) : (
+                      <Store className="h-6 w-6 text-emerald-500" />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-emerald-200">Logotipo publico</p>
+                    <p className="mt-1 truncate text-[12px] font-semibold text-slate-100">{selectedCompany?.name ?? "Empresa"}</p>
+                    <p className="mt-1 text-[11px] leading-4 text-slate-500">Aparece na loja, produto, checkout e confirmacao.</p>
+                  </div>
+                </div>
+                <label
+                  className={cn(
+                    "mt-3 inline-flex min-h-10 w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-emerald-400 px-3 font-mono text-[10px] font-black uppercase tracking-wide text-slate-950 transition hover:bg-emerald-300",
+                    logoUploadingId === selectedCompany?.id && "pointer-events-none opacity-60",
+                  )}
+                >
+                  {logoUploadingId === selectedCompany?.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+                  Enviar logotipo
+                  <input
+                    accept="image/jpeg,image/png,image/webp"
+                    className="sr-only"
+                    disabled={logoUploadingId === selectedCompany?.id}
+                    type="file"
+                    onChange={(event) => {
+                      const file = event.currentTarget.files?.[0] ?? null;
+                      event.currentTarget.value = "";
+                      void uploadCompanyLogoFromStorefront(file);
+                    }}
+                  />
+                </label>
+              </div>
+
+              <label className="block">
+                <FieldLabel>Texto do header</FieldLabel>
+                <textarea
+                  id="sales-catalog-storefront-header-text"
+                  value={settingsDraft.storefront.headerText ?? ""}
+                  onChange={(event) => updateStorefrontSettings({ headerText: event.target.value.slice(0, 140) })}
+                  className="min-h-24 w-full resize-y rounded-lg border bg-transparent px-3 py-2 text-[12px] leading-5 outline-none"
+                  placeholder="Ex.: Produtos selecionados, compra segura e atendimento pelo WhatsApp."
+                  style={{ borderColor: "var(--ch-border)" }}
+                />
+              </label>
+
+              <label className="block">
+                <FieldLabel>Sobre a empresa no footer</FieldLabel>
+                <textarea
+                  value={settingsDraft.storefront.footerText ?? ""}
+                  onChange={(event) => updateStorefrontSettings({ footerText: event.target.value.slice(0, 320) })}
+                  className="min-h-28 w-full resize-y rounded-lg border bg-transparent px-3 py-2 text-[12px] leading-5 outline-none"
+                  placeholder="Ex.: Loja especializada em produtos de qualidade, com suporte direto pelo WhatsApp."
+                  style={{ borderColor: "var(--ch-border)" }}
+                />
+              </label>
+
+              <label className="block">
+                <FieldLabel>Contato no footer</FieldLabel>
+                <input
+                  value={settingsDraft.storefront.footerContactText ?? ""}
+                  onChange={(event) => updateStorefrontSettings({ footerContactText: event.target.value.slice(0, 180) })}
+                  className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                  placeholder="Ex.: Atendimento pelo WhatsApp oficial da loja."
+                  style={{ borderColor: "var(--ch-border)" }}
+                />
+              </label>
+
+              <label className="block">
+                <FieldLabel>Cor principal</FieldLabel>
+                <div className="grid grid-cols-[48px_minmax(0,1fr)] gap-2">
+                  <input
+                    aria-label="Cor principal da loja"
+                    className="h-11 w-12 rounded-lg border bg-transparent p-1"
+                    type="color"
+                    value={storefrontPrimaryColor}
+                    onChange={(event) => updateStorefrontSettings({ primaryColor: event.target.value })}
+                    style={{ borderColor: "var(--ch-border)" }}
+                  />
+                  <input
+                    value={settingsDraft.storefront.primaryColor ?? ""}
+                    onChange={(event) => updateStorefrontSettings({ primaryColor: event.target.value.slice(0, 7) })}
+                    className="h-11 w-full rounded-lg border bg-transparent px-3 font-mono text-[12px] outline-none"
+                    placeholder="#063f2c"
+                    style={{ borderColor: "var(--ch-border)" }}
+                  />
+                </div>
+              </label>
+
+              <button
+                type="button"
+                disabled={!selectedCompanyId || savingSettings}
+                onClick={saveSettings}
+                className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-emerald-400 px-4 text-[12px] font-bold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {savingSettings ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                Salvar loja publica
+              </button>
+            </div>
+
+            <div className="min-w-0 rounded-xl border border-emerald-300/25 bg-white p-4 text-slate-950 shadow-xl shadow-emerald-950/10">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4">
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="relative grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-lg border border-slate-200 bg-white">
+                    {selectedCompany?.brandLogoUrl ? (
+                      <Image
+                        alt={selectedCompany.brandLogoAlt ?? selectedCompany.name}
+                        className="object-contain p-1.5"
+                        fill
+                        sizes="48px"
+                        src={selectedCompany.brandLogoUrl}
+                        unoptimized
+                      />
+                    ) : (
+                      <Store className="h-5 w-5" style={{ color: storefrontPrimaryColor }} />
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="truncate text-[15px] font-black">{selectedCompany?.name ?? "Sua loja"}</p>
+                    <p className="line-clamp-1 text-[11px] font-semibold text-slate-500">{storefrontHeaderText}</p>
+                  </div>
+                </div>
+                <span className="rounded-lg px-3 py-2 text-[11px] font-black text-white" style={{ backgroundColor: storefrontPrimaryColor }}>
+                  Sacola
+                </span>
+              </div>
+
+              <div className="grid gap-4 py-5 lg:grid-cols-[minmax(0,1fr)_220px]">
+                <div className="min-w-0">
+                  <p className="font-mono text-[9px] font-black uppercase tracking-[0.18em]" style={{ color: storefrontPrimaryColor }}>
+                    Loja oficial
+                  </p>
+                  <h3 className="mt-2 text-3xl font-black leading-none">Produtos prontos para comprar</h3>
+                  <p className="mt-3 line-clamp-2 max-w-xl text-[13px] leading-5 text-slate-600">{storefrontHeaderText}</p>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <span className="rounded-lg px-4 py-2 text-[11px] font-black text-white" style={{ backgroundColor: storefrontPrimaryColor }}>
+                      Ver produtos
+                    </span>
+                    <span className="rounded-lg border border-slate-200 px-4 py-2 text-[11px] font-black text-slate-700">
+                      WhatsApp
+                    </span>
+                  </div>
+                </div>
+                <div className="grid min-h-40 place-items-center rounded-lg bg-slate-50">
+                  {currentFeaturedItem?.media[0]?.storageUrl ? (
+                    <div className="relative h-full min-h-40 w-full overflow-hidden rounded-lg">
+                      <Image alt={currentFeaturedItem.title} className="object-cover" fill sizes="220px" src={currentFeaturedItem.media[0].storageUrl} unoptimized />
+                    </div>
+                  ) : (
+                    <PackagePlus className="h-12 w-12 text-slate-300" />
+                  )}
+                </div>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-3">
+                {visibleItems.slice(0, 3).map((item) => (
+                  <div key={item.id} className="overflow-hidden rounded-lg border border-slate-100 bg-white shadow-sm">
+                    <div className="relative aspect-[4/3] bg-slate-50">
+                      {item.media[0]?.storageUrl ? (
+                        <Image alt={item.title} className="object-cover" fill sizes="180px" src={item.media[0].storageUrl} unoptimized />
+                      ) : (
+                        <div className="grid h-full place-items-center text-slate-300">
+                          <PackagePlus className="h-8 w-8" />
+                        </div>
+                      )}
+                    </div>
+                    <div className="p-3">
+                      <p className="line-clamp-1 text-[12px] font-black">{item.title}</p>
+                      <p className="mt-1 text-[11px] font-semibold text-slate-500">{item.price ?? "Preco sob consulta"}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-5 rounded-lg border border-slate-100 bg-slate-50 p-4">
+                <p className="text-[13px] font-black">{selectedCompany?.name ?? "Sua empresa"}</p>
+                <p className="mt-1 line-clamp-3 text-[12px] leading-5 text-slate-600">{storefrontFooterText}</p>
+                <p className="mt-2 text-[11px] font-semibold" style={{ color: storefrontPrimaryColor }}>{storefrontFooterContactText}</p>
+                <p className="mt-3 text-[10px] font-bold uppercase tracking-wide text-slate-400">Desenvolvido por Connect Hub</p>
+              </div>
             </div>
           </div>
         </Panel>
@@ -7187,6 +7383,10 @@ function buildSettingsDraft(settings: ClientSalesCatalogSettings | null): Settin
       heroTitle: settings?.storefront.heroTitle ?? "",
       heroHighlight: settings?.storefront.heroHighlight ?? "",
       heroSubtitle: settings?.storefront.heroSubtitle ?? "",
+      headerText: settings?.storefront.headerText ?? "",
+      footerText: settings?.storefront.footerText ?? "",
+      footerContactText: settings?.storefront.footerContactText ?? "",
+      primaryColor: settings?.storefront.primaryColor ?? "#063f2c",
     },
     trackInventory: settings?.trackInventory ?? false,
     variationMedia: settings?.variationMedia ?? false,

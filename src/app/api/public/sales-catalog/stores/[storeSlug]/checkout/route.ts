@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { mapSalesCatalogItem } from "@/lib/client-os/sales-catalog";
 import { normalizeCurrencyAmount } from "@/lib/sales-catalog/mercado-pago";
 import { createSalesCatalogPixPaymentSession } from "@/lib/sales-catalog/payment-sessions";
+import { createPublicCheckoutIntentKey, findRecentPublicCheckoutSession } from "@/lib/sales-catalog/public-checkout-idempotency";
 import { isSalesCatalogDisplayableProduct } from "@/lib/sales-catalog/shared";
 import { validatePublicWriteRequest, type PublicWriteGuardResult } from "@/lib/security/public-request-guard";
 import { createServiceClient } from "@/lib/supabase/service";
@@ -52,7 +53,7 @@ export async function POST(
     routeKey: "sales-catalog-store-checkout",
     maxPayloadBytes: 24 * 1024,
     rateLimit: {
-      limit: 30,
+      limit: 10,
       windowMs: 60_000,
     },
   });
@@ -160,6 +161,36 @@ export async function POST(
   const subtotalCents = resolvedItems.reduce((total, entry) => total + entry.totalCents, 0);
   const subtotal = formatMoneyCents(subtotalCents);
   const total = subtotal;
+  const checkoutIntentKey = createPublicCheckoutIntentKey([
+    "sales_catalog_public_store",
+    organization.id,
+    resolvedItems.map((entry) => ({
+      productId: entry.item.id,
+      quantity: entry.quantity,
+      unitPriceCents: entry.unitPriceCents,
+    })).sort((left, right) => left.productId.localeCompare(right.productId)),
+    lead?.id ?? leadId,
+    conversationId,
+    customerPhone,
+    trackingLinkId,
+  ]);
+  const existingCheckout = await findRecentPublicCheckoutSession({
+    client,
+    organizationId: organization.id,
+    checkoutIntentKey,
+  });
+
+  if (existingCheckout) {
+    return NextResponse.json({
+      ok: true,
+      reused: true,
+      orderId: existingCheckout.orderId,
+      sessionId: existingCheckout.sessionId,
+      checkoutUrl: existingCheckout.checkoutUrl,
+      trackingUrl: existingCheckout.trackingUrl ?? existingCheckout.checkoutUrl,
+    });
+  }
+
   const now = new Date().toISOString();
   const orderId = randomUUID();
   const firstItem = resolvedItems[0]?.item;
@@ -196,6 +227,7 @@ export async function POST(
       metadata: {
         created_from: "sales_catalog_public_store",
         source: "public_store_page",
+        checkout_intent_key: checkoutIntentKey,
         cart_item_count: resolvedItems.length,
         cart_total_cents: subtotalCents,
         currency: "BRL",
@@ -318,6 +350,8 @@ export async function POST(
     checkoutUrl: payment.checkoutUrl,
     trackingUrl: checkoutUrl,
     gatewayUnavailable: payment.gatewayUnavailable === true,
+    paymentDeferred: payment.paymentDeferred === true,
+    paymentDeferredReason: payment.paymentDeferredReason ?? null,
   });
 }
 

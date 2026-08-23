@@ -1729,6 +1729,10 @@ function readStorefrontSettings(value: unknown): ClientSalesCatalogSettings["sto
     heroTitle: readString(record.hero_title ?? record.heroTitle),
     heroHighlight: readString(record.hero_highlight ?? record.heroHighlight),
     heroSubtitle: readString(record.hero_subtitle ?? record.heroSubtitle),
+    headerText: readString(record.header_text ?? record.headerText),
+    footerText: readString(record.footer_text ?? record.footerText),
+    footerContactText: readString(record.footer_contact_text ?? record.footerContactText),
+    primaryColor: readString(record.primary_color ?? record.primaryColor),
   };
 }
 

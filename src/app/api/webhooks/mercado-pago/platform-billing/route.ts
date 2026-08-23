@@ -62,7 +62,9 @@ export async function POST(request: NextRequest) {
       action,
       requestId,
       processingStatus: "failed",
-      errorMessage: "Assinatura Mercado Pago billing invalida.",
+      errorMessage: signature.skipped
+        ? "Assinatura Mercado Pago billing nao configurada."
+        : "Assinatura Mercado Pago billing invalida.",
       payload,
       result: null,
     });
@@ -87,7 +89,7 @@ export async function POST(request: NextRequest) {
       action,
       requestId,
       processingStatus: result.processingStatus,
-      errorMessage: result.reason ?? (signature.skipped ? "Assinatura nao configurada; evento aceito para processamento." : null),
+      errorMessage: result.reason ?? (signature.skipped ? "Assinatura nao configurada; evento aceito por ambiente nao produtivo." : null),
       payload,
       result,
     });

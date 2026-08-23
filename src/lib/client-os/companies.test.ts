@@ -87,6 +87,8 @@ describe("client companies", () => {
         id: "org-auto",
         name: "Connectyhub20",
         slug: "connectyhub20-mabc123",
+        brandLogoUrl: null,
+        brandLogoAlt: "Connectyhub20",
         planCode: "trial",
         status: "trial",
         role: "owner",

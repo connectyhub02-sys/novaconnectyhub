@@ -154,7 +154,9 @@ export async function POST(request: NextRequest) {
       organizationId: session.organization_id,
       paymentSessionId: session.id,
       processingStatus: "failed",
-      errorMessage: "Assinatura Mercado Pago invalida.",
+      errorMessage: signature.skipped
+        ? "Assinatura Mercado Pago nao configurada."
+        : "Assinatura Mercado Pago invalida.",
     });
 
     return NextResponse.json({ error: "invalid_signature" }, { status: 401 });

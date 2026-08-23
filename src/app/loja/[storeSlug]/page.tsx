@@ -279,6 +279,10 @@ function resolveStorefrontSettings(settings: PublicStorefrontSettings | null): P
     heroTitle: readString(settings?.heroTitle),
     heroHighlight: readString(settings?.heroHighlight),
     heroSubtitle: readString(settings?.heroSubtitle),
+    headerText: readString(settings?.headerText),
+    footerText: readString(settings?.footerText),
+    footerContactText: readString(settings?.footerContactText),
+    primaryColor: readString(settings?.primaryColor),
   };
 }
 

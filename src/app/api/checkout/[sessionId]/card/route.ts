@@ -13,6 +13,7 @@ import {
 } from "@/lib/sales-catalog/mercado-pago";
 import { resolveSalesCatalogOrderPaymentOwner } from "@/lib/platform-product-sales";
 import { applySalesCatalogCheckoutOrderBumps } from "@/lib/sales-catalog/checkout-order-bumps";
+import { requiresSalesCatalogShippingBeforePayment } from "@/lib/sales-catalog/checkout-guards";
 import { handleSalesCatalogApprovedPayment } from "@/lib/sales-catalog/post-payment";
 import { createServiceClient } from "@/lib/supabase/service";
 
@@ -26,6 +27,7 @@ type PaymentSessionRow = {
   organization_id: string;
   order_id: string;
   integration_id: string | null;
+  status: string | null;
   amount: string | number | null;
   currency: string | null;
   payer_email: string | null;
@@ -40,6 +42,8 @@ type OrderRow = {
   id: string;
   lead_id: string | null;
   conversation_id: string | null;
+  status: string | null;
+  payment_status: string | null;
   customer_name: string | null;
   customer_document: string | null;
   customer_email: string | null;
@@ -49,6 +53,7 @@ type OrderRow = {
   shipping_method: string | null;
   total: string | null;
   subtotal: string | null;
+  latest_payment_session_id: string | null;
   metadata: JsonRecord | null;
 };
 
@@ -60,6 +65,13 @@ type OrderItemRow = {
   sale_price: string | number | null;
   total: string | number | null;
   sku_code: string | null;
+  fulfillment?: unknown;
+};
+
+type ActiveCardSessionRow = {
+  id: string;
+  checkout_url: string | null;
+  status: string | null;
 };
 
 export async function POST(
@@ -72,12 +84,16 @@ export async function POST(
   const client = createServiceClient();
   const { data: sourceSession, error: sessionError } = await client
     .from("sales_catalog_payment_sessions")
-    .select("id, organization_id, order_id, integration_id, amount, currency, payer_email, payment_owner_type, commercial_flow_type, revenue_owner_type, commission_context, metadata")
+    .select("id, organization_id, order_id, integration_id, status, amount, currency, payer_email, payment_owner_type, commercial_flow_type, revenue_owner_type, commission_context, metadata")
     .eq("id", sessionId)
     .maybeSingle<PaymentSessionRow>();
 
   if (sessionError || !sourceSession) {
     return NextResponse.json({ error: "Sessao de pagamento nao encontrada." }, { status: 404 });
+  }
+
+  if (isFinalPaymentSessionStatus(sourceSession.status)) {
+    return NextResponse.json({ error: "Este pagamento ja foi finalizado." }, { status: 400 });
   }
 
   const token = readString(formData.token);
@@ -100,7 +116,7 @@ export async function POST(
 
   const { data: order, error: orderError } = await client
     .from("sales_catalog_orders")
-    .select("id, lead_id, conversation_id, customer_name, customer_document, customer_email, customer_phone, destination_cep, shipping_total, shipping_method, total, subtotal, metadata")
+    .select("id, lead_id, conversation_id, status, payment_status, customer_name, customer_document, customer_email, customer_phone, destination_cep, shipping_total, shipping_method, total, subtotal, latest_payment_session_id, metadata")
     .eq("id", sourceSession.order_id)
     .eq("organization_id", sourceSession.organization_id)
     .maybeSingle<OrderRow>();
@@ -109,9 +125,13 @@ export async function POST(
     return NextResponse.json({ error: "Pedido nao encontrado." }, { status: 404 });
   }
 
+  if (isClosedOrder(order)) {
+    return NextResponse.json({ error: "Este pedido ja foi finalizado." }, { status: 400 });
+  }
+
   const { data: itemRows } = await client
     .from("sales_catalog_order_items")
-    .select("id, title, quantity, unit_price, sale_price, total, sku_code")
+    .select("id, title, quantity, unit_price, sale_price, total, sku_code, fulfillment")
     .eq("order_id", order.id)
     .eq("organization_id", sourceSession.organization_id)
     .order("created_at", { ascending: true });
@@ -119,6 +139,20 @@ export async function POST(
   let cardSessionId: string | null = null;
 
   try {
+    const activeCardSession = await findActiveCardSession({
+      client,
+      organizationId: sourceSession.organization_id,
+      orderId: order.id,
+    });
+
+    if (activeCardSession) {
+      return NextResponse.json({
+        error: "Ja existe uma tentativa de cartao em processamento para este pedido.",
+        sessionId: activeCardSession.id,
+        checkoutUrl: activeCardSession.checkout_url,
+      }, { status: 409 });
+    }
+
     const orderBumpApplication = await applySalesCatalogCheckoutOrderBumps({
       client,
       organizationId: sourceSession.organization_id,
@@ -133,7 +167,15 @@ export async function POST(
       sale_price: item.sale_price,
       total: item.total,
       sku_code: item.sku_code,
+      fulfillment: item.fulfillment,
     }));
+
+    if (requiresSalesCatalogShippingBeforePayment(orderBumpApplication.order, items)) {
+      return NextResponse.json({
+        error: "Confirme frete, retirada ou entrega antes de pagar este pedido.",
+      }, { status: 400 });
+    }
+
     const amount = orderBumpApplication.totalAmount
       ?? sessionAmount
       ?? frontendAmount
@@ -412,6 +454,38 @@ function buildCardPaymentDescription(items: OrderItemRow[], orderId: string) {
     : [`Pedido ${orderId.slice(0, 8)}`];
 
   return titles.join(", ").slice(0, 220);
+}
+
+async function findActiveCardSession(input: {
+  client: ReturnType<typeof createServiceClient>;
+  organizationId: string;
+  orderId: string;
+}) {
+  const cutoff = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+  const { data } = await input.client
+    .from("sales_catalog_payment_sessions")
+    .select("id, checkout_url, status")
+    .eq("organization_id", input.organizationId)
+    .eq("order_id", input.orderId)
+    .eq("method", "card")
+    .in("status", ["created", "pending"])
+    .gte("created_at", cutoff)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<ActiveCardSessionRow>();
+
+  return data ?? null;
+}
+
+function isFinalPaymentSessionStatus(status: string | null) {
+  return status === "approved" || status === "refunded";
+}
+
+function isClosedOrder(order: Pick<OrderRow, "status" | "payment_status">) {
+  return order.status === "paid"
+    || order.status === "cancelled"
+    || order.payment_status === "confirmed"
+    || order.payment_status === "refunded";
 }
 
 function summarizePaymentItems(items: OrderItemRow[]) {

@@ -424,7 +424,7 @@ export const defaultSalesCatalogAbandonedCheckoutMinutes = 30;
 
 export function resolveSalesCatalogCheckoutStatus(input: {
   order: Pick<ClientSalesCatalogOrder, "status" | "paymentStatus" | "createdAt" | "updatedAt">;
-  paymentSession?: Pick<ClientSalesCatalogPaymentSession, "status" | "createdAt" | "updatedAt" | "paidAt" | "expiresAt"> | null;
+  paymentSession?: Pick<ClientSalesCatalogPaymentSession, "status" | "createdAt" | "updatedAt" | "paidAt" | "expiresAt" | "failureReason"> | null;
   abandonedAfterMinutes?: number | null;
   now?: Date | string | number;
 }): SalesCatalogCheckoutStatusSummary {
@@ -605,6 +605,10 @@ export type SalesCatalogStorefrontSettings = {
   heroTitle: string | null;
   heroHighlight: string | null;
   heroSubtitle: string | null;
+  headerText: string | null;
+  footerText: string | null;
+  footerContactText: string | null;
+  primaryColor: string | null;
 };
 
 export type SalesCatalogCommerceSettings = Pick<

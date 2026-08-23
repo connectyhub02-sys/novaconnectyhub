@@ -52,11 +52,12 @@ export function ProductCheckoutButton({ productId, disabled = false }: ProductCh
     <div>
       <button
         type="button"
-        className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-[8px] bg-blue-600 px-5 text-sm font-bold text-white shadow-lg shadow-blue-700/25 transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:bg-slate-400"
+        className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-[8px] px-5 text-sm font-bold text-white shadow-lg shadow-slate-950/20 transition brightness-100 hover:brightness-110 disabled:cursor-not-allowed disabled:bg-slate-400"
         disabled={disabled || busy}
         data-track-event="sales_catalog_product_buy_clicked"
         data-track-label="Comprar agora"
         onClick={handleCheckout}
+        style={{ backgroundColor: disabled || busy ? undefined : "var(--store-primary, #063f2c)" }}
       >
         {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <ShoppingBag className="h-4 w-4" aria-hidden="true" />}
         {busy ? "Abrindo checkout..." : "Comprar agora"}

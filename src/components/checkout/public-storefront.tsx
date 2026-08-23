@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import {
   ArrowDownUp,
@@ -39,6 +39,10 @@ export type PublicStorefrontSettings = {
   heroTitle: string | null;
   heroHighlight: string | null;
   heroSubtitle: string | null;
+  headerText: string | null;
+  footerText: string | null;
+  footerContactText: string | null;
+  primaryColor: string | null;
 };
 
 export type PublicStorefrontTrackingParams = {
@@ -83,6 +87,9 @@ type PublicStorefrontProps = {
 type SortMode = "relevant" | "price_asc" | "price_desc" | "name";
 
 const ALL_CATEGORY = "todos";
+const defaultStorefrontPrimaryColor = "#063f2c";
+const storefrontActionColor = "#f97316";
+const connectHubPublicUrl = process.env.NEXT_PUBLIC_CONNECTYHUB_SITE_URL ?? "https://connectyhub.com.br";
 
 const sortOptions: Array<{ label: string; value: SortMode }> = [
   { label: "Mais relevantes", value: "relevant" },
@@ -179,10 +186,20 @@ export function PublicStorefront({ storeSlug, branding, storefront, products, tr
   const totalCents = cart.reduce((total, line) => total + (line.product.priceCents ?? 0) * line.quantity, 0);
   const checkoutReady = cart.length > 0 && cart.every((line) => line.product.canCheckout && line.product.priceCents);
   const activeSortLabel = sortOptions.find((option) => option.value === sortMode)?.label ?? "Mais relevantes";
+  const primaryColor = normalizeStorefrontPrimaryColor(storefront.primaryColor) ?? defaultStorefrontPrimaryColor;
+  const publicLayoutStyle = {
+    "--store-primary": primaryColor,
+    "--store-action": storefrontActionColor,
+  } as CSSProperties;
   const heroTitle = storefront.heroTitle || "Qualidade que voce sente.";
   const heroHighlight = storefront.heroHighlight || "Resultados que voce ve.";
+  const legacyHeaderText = `${heroTitle} ${heroHighlight}`.trim();
   const heroSubtitle = storefront.heroSubtitle
     || `Produtos selecionados pela ${branding.displayName}, compra segura e atendimento conectado ao WhatsApp.`;
+  const headerText = storefront.headerText || legacyHeaderText || heroSubtitle;
+  const footerText = storefront.footerText
+    || `${branding.displayName} atende pelo WhatsApp com catalogo, checkout seguro e acompanhamento do pedido em um so lugar.`;
+  const footerContactText = storefront.footerContactText || "Atendimento pelo WhatsApp oficial da loja.";
 
   function addToCart(product: PublicStorefrontProduct) {
     if (!product.canCheckout) {
@@ -259,9 +276,10 @@ export function PublicStorefront({ storeSlug, branding, storefront, products, tr
   }
 
   return (
-    <main className="min-h-screen bg-[#f4f8ff] pb-24 text-[#08142f]">
+    <main className="min-h-screen bg-[#f7f8f5] pb-24 text-[#08142f]" style={publicLayoutStyle}>
       <StoreHeader
         branding={branding}
+        headerText={headerText}
         query={query}
         setQuery={setQuery}
         totalItems={totalItems}
@@ -273,26 +291,28 @@ export function PublicStorefront({ storeSlug, branding, storefront, products, tr
       <section className="bg-white">
         <div className="mx-auto grid w-full max-w-7xl gap-6 px-4 py-7 sm:px-6 lg:grid-cols-[minmax(0,1fr)_minmax(360px,480px)] lg:px-8 lg:py-12">
           <div className="flex min-w-0 flex-col justify-center">
-            <p className="font-mono text-[11px] font-black uppercase tracking-[0.2em] text-blue-700">
+            <p className="font-mono text-[11px] font-black uppercase tracking-[0.2em]" style={{ color: primaryColor }}>
               {featuredProduct?.category ?? "Loja oficial"}
             </p>
             <h1 className="mt-3 max-w-2xl text-[34px] font-black leading-[0.98] text-slate-950 sm:text-6xl">
-              {heroTitle} <span className="text-blue-600">{heroHighlight}</span>
+              {branding.displayName}
             </h1>
             <p className="mt-5 max-w-xl text-[15px] leading-7 text-slate-600 sm:text-lg">
-              {heroSubtitle}
+              {headerText || heroSubtitle}
             </p>
             <div className="mt-6 flex flex-col gap-3 sm:flex-row">
               <button
-                className="inline-flex min-h-12 items-center justify-center rounded-[8px] bg-blue-600 px-8 text-sm font-black text-white shadow-lg shadow-blue-950/20 transition hover:bg-blue-700"
+                className="inline-flex min-h-12 items-center justify-center rounded-[8px] px-8 text-sm font-black text-white shadow-lg shadow-slate-950/20 transition brightness-100 hover:brightness-110"
                 onClick={() => document.getElementById("produtos")?.scrollIntoView({ behavior: "smooth" })}
+                style={{ backgroundColor: primaryColor }}
                 type="button"
               >
                 Ver produtos
               </button>
               <button
-                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-[8px] border border-blue-200 bg-white px-8 text-sm font-black text-blue-700 transition hover:border-blue-300 hover:bg-blue-50"
+                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-[8px] border border-slate-200 bg-white px-8 text-sm font-black transition hover:bg-slate-50"
                 onClick={() => setCartOpen(true)}
+                style={{ color: primaryColor }}
                 type="button"
               >
                 <MessageCircle className="h-4 w-4" />
@@ -424,7 +444,7 @@ export function PublicStorefront({ storeSlug, branding, storefront, products, tr
         </div>
       </section>
 
-      <StoreFooter branding={branding} />
+      <StoreFooter branding={branding} footerContactText={footerContactText} footerText={footerText} />
 
       <MobileBottomNav
         totalItems={totalItems}
@@ -470,12 +490,14 @@ export function PublicStorefront({ storeSlug, branding, storefront, products, tr
 
 function StoreHeader({
   branding,
+  headerText,
   query,
   setQuery,
   totalItems,
   onOpenCart,
 }: {
   branding: PublicStorefrontBranding;
+  headerText: string;
   query: string;
   setQuery: (value: string) => void;
   totalItems: number;
@@ -502,7 +524,7 @@ function StoreHeader({
           </div>
           <div className="min-w-0">
             <p className="truncate text-base font-black text-slate-950">{branding.displayName}</p>
-            <p className="text-[11px] font-semibold text-slate-500">by ConnectyHub</p>
+            <p className="line-clamp-1 text-[11px] font-semibold text-slate-500">{headerText}</p>
           </div>
         </div>
 
@@ -527,8 +549,9 @@ function StoreHeader({
 
         <button
           aria-label="Abrir sacola"
-          className="relative inline-flex min-h-11 items-center gap-2 rounded-[8px] bg-blue-600 px-4 text-sm font-black text-white shadow-lg shadow-blue-950/20 transition hover:bg-blue-700"
+          className="relative inline-flex min-h-11 items-center gap-2 rounded-[8px] px-4 text-sm font-black text-white shadow-lg shadow-slate-950/20 transition brightness-100 hover:brightness-110"
           onClick={onOpenCart}
+          style={{ backgroundColor: "var(--store-primary)" }}
           type="button"
         >
           <ShoppingBag className="h-4 w-4" />
@@ -921,27 +944,39 @@ function HelpCard({ branding, onOpenCart }: { branding: PublicStorefrontBranding
   );
 }
 
-function StoreFooter({ branding }: { branding: PublicStorefrontBranding }) {
+function StoreFooter({
+  branding,
+  footerContactText,
+  footerText,
+}: {
+  branding: PublicStorefrontBranding;
+  footerContactText: string;
+  footerText: string;
+}) {
   return (
-    <footer className="border-t border-blue-100 bg-white">
-      <div className="mx-auto grid w-full max-w-7xl gap-6 px-4 py-8 sm:px-6 md:grid-cols-4 lg:px-8">
+    <footer className="border-t border-slate-200 bg-white">
+      <div className="mx-auto grid w-full max-w-7xl gap-6 px-4 py-8 sm:px-6 md:grid-cols-[1.4fr_1fr_1fr_1fr] lg:px-8">
         <div>
-          <h2 className="text-base font-black text-slate-950">Fique por dentro</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-500">Receba novidades, ofertas e conteudos especiais.</p>
+          <h2 className="text-base font-black text-slate-950">{branding.displayName}</h2>
+          <p className="mt-2 text-sm leading-6 text-slate-500">{footerText}</p>
+          <p className="mt-3 text-sm font-black" style={{ color: "var(--store-primary)" }}>{footerContactText}</p>
         </div>
-        <FooterColumn title="Institucional" items={["Sobre nos", "Como comprar", "Politica de privacidade"]} />
-        <FooterColumn title="Minha conta" items={["Meus pedidos", "Dados cadastrais", "Formas de pagamento"]} />
+        <FooterColumn title="Loja" items={["Produtos", "Categorias", "Sacola"]} />
+        <FooterColumn title="Atendimento" items={["WhatsApp", "Meus pedidos", "Suporte"]} />
         <div>
           <h3 className="text-sm font-black text-slate-950">Pagamento</h3>
           <div className="mt-3 flex flex-wrap gap-2">
             {["VISA", "PIX", "CARD"].map((item) => (
-              <span className="rounded-[8px] border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-black text-blue-700" key={item}>{item}</span>
+              <span className="rounded-[8px] border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-black text-slate-700" key={item}>{item}</span>
             ))}
           </div>
         </div>
       </div>
-      <p className="border-t border-blue-100 px-4 py-4 text-center text-xs font-semibold text-slate-500">
-        {branding.displayName} by ConnectyHub - Desenvolvido por ConnectyHub
+      <p className="border-t border-slate-100 px-4 py-4 text-center text-xs font-semibold text-slate-500">
+        {branding.displayName} - Desenvolvido por{" "}
+        <a className="font-black hover:underline" href={connectHubPublicUrl} rel="noreferrer" target="_blank">
+          Connect Hub
+        </a>
       </p>
     </footer>
   );
@@ -1086,6 +1121,13 @@ function normalizeSearch(value: string) {
 function clampQuantity(value: number) {
   if (!Number.isFinite(value)) return 1;
   return Math.min(20, Math.max(1, Math.round(value)));
+}
+
+function normalizeStorefrontPrimaryColor(value: string | null) {
+  if (!value) return null;
+
+  const normalized = value.trim().toLowerCase();
+  return /^#[0-9a-f]{6}$/.test(normalized) ? normalized : null;
 }
 
 function formatCurrencyCents(value: number) {

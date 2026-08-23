@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import Script from "next/script";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { MessageCircle, PackageCheck, ShieldCheck } from "lucide-react";
 import { CheckoutPaymentOptions } from "@/components/checkout/checkout-payment-options";
 import {
@@ -15,12 +15,14 @@ import {
   loadSalesCatalogCheckoutOrderBumps,
   type SalesCatalogCheckoutOrderBump,
 } from "@/lib/sales-catalog/checkout-order-bumps";
-import { mapSalesCatalogItem } from "@/lib/client-os/sales-catalog";
+import { requiresSalesCatalogShippingBeforePayment } from "@/lib/sales-catalog/checkout-guards";
+import { getOrganizationSalesCatalogSettings, mapSalesCatalogItem } from "@/lib/client-os/sales-catalog";
 import { loadMercadoPagoPlatformBillingConfig } from "@/lib/sales-catalog/mercado-pago";
 import {
   formatSalesCatalogPaymentSessionStatus,
   type SalesCatalogCommercialFlowType,
   type SalesCatalogRevenueOwnerType,
+  type SalesCatalogStorefrontSettings,
 } from "@/lib/sales-catalog/shared";
 import { createOrganizationTrackingToken } from "@/lib/tracking/organization-attribution";
 import type { ConnectyPublicTrackingContext } from "@/lib/tracking/public-context";
@@ -36,6 +38,8 @@ export const metadata: Metadata = {
 const mercadoPagoSecurityScriptAttributes: Record<string, string> = {
   view: "checkout",
 };
+const defaultStorefrontPrimaryColor = "#063f2c";
+const connectHubPublicUrl = process.env.NEXT_PUBLIC_CONNECTYHUB_SITE_URL ?? "https://connectyhub.com.br";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -141,6 +145,16 @@ type OrganizationBranding = {
   logoAlt: string;
 };
 
+type PublicPageStorefrontSettings = {
+  heroTitle: string | null;
+  heroHighlight: string | null;
+  heroSubtitle: string | null;
+  headerText: string;
+  footerText: string;
+  footerContactText: string;
+  primaryColor: string;
+};
+
 export default async function CheckoutPage({
   params,
 }: {
@@ -186,6 +200,11 @@ export default async function CheckoutPage({
     && Boolean(integration.public_key);
   const commercialContext = resolveCheckoutCommercialContext(session, order);
   const branding = resolveOrganizationBranding(organization);
+  const catalogSettings = await getOrganizationSalesCatalogSettings(client, organization.id).catch(() => null);
+  const storefront = resolvePublicPageStorefront(catalogSettings?.storefront ?? null, branding);
+  const publicLayoutStyle = {
+    "--store-primary": storefront.primaryColor ?? defaultStorefrontPrimaryColor,
+  } as CSSProperties;
   const whatsappReturn = buildCheckoutWhatsappReturn({
     phoneNumber: whatsapp?.phone_number ?? null,
     displayName: whatsapp?.display_name ?? null,
@@ -208,15 +227,16 @@ export default async function CheckoutPage({
   });
 
   return (
-    <CheckoutShell publicTrackingContext={publicTrackingContext}>
+    <CheckoutShell publicTrackingContext={publicTrackingContext} style={publicLayoutStyle}>
       <main className="mx-auto grid w-full max-w-7xl gap-4 px-4 py-4 sm:px-6 lg:grid-cols-[minmax(0,1fr)_420px] lg:px-8 lg:py-8">
         <section className="order-1 rounded-[8px] border border-blue-100 bg-white p-4 shadow-xl shadow-blue-950/10 sm:p-6">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="flex min-w-0 items-center gap-3">
               <CheckoutStoreLogo branding={branding} />
               <div className="min-w-0">
-                <span className="text-xs font-bold uppercase text-blue-700">Pedido WhatsApp</span>
+                <span className="text-xs font-bold uppercase" style={{ color: "var(--store-primary)" }}>Pedido WhatsApp</span>
                 <h1 className="mt-1 truncate text-2xl font-black text-slate-950 sm:text-3xl">{branding.displayName}</h1>
+                <p className="mt-1 line-clamp-1 text-sm font-semibold text-slate-500">{storefront.headerText}</p>
               </div>
             </div>
             <span className={cn(
@@ -368,7 +388,7 @@ export default async function CheckoutPage({
           </dl>
         </section>
       </main>
-      <PoweredByConnectyHub />
+      <PublicStoreFooter branding={branding} footerContactText={storefront.footerContactText} footerText={storefront.footerText} />
     </CheckoutShell>
   );
 }
@@ -376,12 +396,14 @@ export default async function CheckoutPage({
 function CheckoutShell({
   children,
   publicTrackingContext,
+  style,
 }: {
   children: ReactNode;
   publicTrackingContext?: ConnectyPublicTrackingContext | null;
+  style?: CSSProperties;
 }) {
   return (
-    <div className="min-h-screen bg-[#f4f9ff] text-slate-950">
+    <div className="min-h-screen bg-[#f7f8f5] text-slate-950" style={style}>
       {publicTrackingContext ? (
         <script
           id="connecty-public-tracking-context"
@@ -396,7 +418,7 @@ function CheckoutShell({
         strategy="afterInteractive"
         {...mercadoPagoSecurityScriptAttributes}
       />
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-80 bg-gradient-to-b from-blue-100/70 via-emerald-50/50 to-transparent" />
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-80 bg-gradient-to-b from-emerald-100/70 via-orange-50/50 to-transparent" />
       <div className="relative">{children}</div>
     </div>
   );
@@ -1002,12 +1024,70 @@ function isLongCheckoutDescription(fullDescription: string, preview: string | nu
   return fullDescription.replace(/\s+/g, " ").trim().length > preview.replace(/\s+/g, " ").trim().length;
 }
 
-function PoweredByConnectyHub() {
+function PublicStoreFooter({
+  branding,
+  footerContactText,
+  footerText,
+}: {
+  branding: OrganizationBranding;
+  footerContactText: string;
+  footerText: string;
+}) {
   return (
-    <footer className="mx-auto w-full max-w-6xl px-4 pb-8 text-center text-xs font-semibold text-slate-500 sm:px-6 lg:px-8">
-      Desenvolvido por ConnectyHub
+    <footer className="border-t border-slate-200 bg-white">
+      <div className="mx-auto grid w-full max-w-7xl gap-5 px-4 py-7 sm:px-6 md:grid-cols-[1.4fr_1fr_1fr] lg:px-8">
+        <div>
+          <p className="text-base font-black text-slate-950">{branding.displayName}</p>
+          <p className="mt-2 max-w-xl text-sm leading-6 text-slate-500">{footerText}</p>
+        </div>
+        <div>
+          <p className="text-sm font-black text-slate-950">Atendimento</p>
+          <p className="mt-2 text-sm font-semibold leading-6" style={{ color: "var(--store-primary)" }}>{footerContactText}</p>
+        </div>
+        <div>
+          <p className="text-sm font-black text-slate-950">Checkout seguro</p>
+          <p className="mt-2 text-sm leading-6 text-slate-500">Pagamento protegido e pedido acompanhado no WhatsApp.</p>
+        </div>
+      </div>
+      <p className="border-t border-slate-100 px-4 py-4 text-center text-xs font-semibold text-slate-500">
+        Desenvolvido por{" "}
+        <a className="font-black hover:underline" href={connectHubPublicUrl} rel="noreferrer" target="_blank">
+          Connect Hub
+        </a>
+      </p>
     </footer>
   );
+}
+
+function resolvePublicPageStorefront(
+  settings: SalesCatalogStorefrontSettings | null,
+  branding: OrganizationBranding,
+): PublicPageStorefrontSettings {
+  const heroTitle = readString(settings?.heroTitle);
+  const heroHighlight = readString(settings?.heroHighlight);
+  const heroSubtitle = readString(settings?.heroSubtitle);
+  const legacyHeaderText = [heroTitle, heroHighlight].filter(Boolean).join(" ").trim();
+
+  return {
+    heroTitle,
+    heroHighlight,
+    heroSubtitle,
+    headerText: readString(settings?.headerText)
+      ?? legacyHeaderText
+      ?? heroSubtitle
+      ?? `Produtos selecionados pela ${branding.displayName}, compra segura e atendimento conectado ao WhatsApp.`,
+    footerText: readString(settings?.footerText)
+      ?? `${branding.displayName} atende pelo WhatsApp com catalogo, checkout seguro e acompanhamento do pedido em um so lugar.`,
+    footerContactText: readString(settings?.footerContactText) ?? "Atendimento pelo WhatsApp oficial da loja.",
+    primaryColor: normalizeStorefrontPrimaryColor(settings?.primaryColor) ?? defaultStorefrontPrimaryColor,
+  };
+}
+
+function normalizeStorefrontPrimaryColor(value: string | null | undefined) {
+  if (!value) return null;
+
+  const normalized = value.trim().toLowerCase();
+  return /^#[0-9a-f]{6}$/.test(normalized) ? normalized : null;
 }
 
 function readRecord(value: unknown): JsonRecord {
@@ -1118,18 +1198,5 @@ function formatDateTime(value: string | null) {
 }
 
 function requiresShippingBeforePayment(order: CheckoutOrderRow, items: CheckoutOrderItemRow[]) {
-  const hasPhysicalItem = items.some((item) => readFulfillmentMode(item.fulfillment) === "physical");
-
-  if (!hasPhysicalItem) {
-    return false;
-  }
-
-  return !order.shipping_method && !order.shipping_total;
-}
-
-function readFulfillmentMode(value: unknown) {
-  const record = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
-  const mode = typeof record.mode === "string" ? record.mode : null;
-
-  return mode === "digital" || mode === "service" || mode === "subscription" ? mode : "physical";
+  return requiresSalesCatalogShippingBeforePayment(order, items);
 }

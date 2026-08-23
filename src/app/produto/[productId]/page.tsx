@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import {
   ArrowLeft,
   ArrowRight,
@@ -12,7 +12,6 @@ import {
   ChevronDown,
   CreditCard,
   FileText,
-  Headphones,
   Home,
   LockKeyhole,
   Menu,
@@ -29,16 +28,19 @@ import {
 } from "lucide-react";
 import { SalesCatalogMediaGallery } from "@/components/checkout/sales-catalog-media-gallery";
 import { ProductCheckoutButton } from "@/components/checkout/sales-catalog-product-actions";
-import { mapSalesCatalogItem } from "@/lib/client-os/sales-catalog";
+import { getOrganizationSalesCatalogSettings, mapSalesCatalogItem } from "@/lib/client-os/sales-catalog";
 import { normalizeCurrencyAmount } from "@/lib/sales-catalog/mercado-pago";
 import { buildLeadAwareSalesCatalogProductUrl, buildLeadAwareSalesCatalogStoreUrl } from "@/lib/sales-catalog/public-urls";
-import { isSalesCatalogDisplayableProduct, type ClientSalesCatalogItem } from "@/lib/sales-catalog/shared";
+import { isSalesCatalogDisplayableProduct, type ClientSalesCatalogItem, type SalesCatalogStorefrontSettings } from "@/lib/sales-catalog/shared";
 import { createServiceClient } from "@/lib/supabase/service";
 import { createOrganizationTrackingToken } from "@/lib/tracking/organization-attribution";
 import type { ConnectyPublicTrackingContext } from "@/lib/tracking/public-context";
 import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
+
+const defaultStorefrontPrimaryColor = "#063f2c";
+const connectHubPublicUrl = process.env.NEXT_PUBLIC_CONNECTYHUB_SITE_URL ?? "https://connectyhub.com.br";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -80,6 +82,16 @@ type OrganizationBranding = {
   displayName: string;
   logoUrl: string | null;
   logoAlt: string;
+};
+
+type PublicPageStorefrontSettings = {
+  heroTitle: string | null;
+  heroHighlight: string | null;
+  heroSubtitle: string | null;
+  headerText: string;
+  footerText: string;
+  footerContactText: string;
+  primaryColor: string;
 };
 
 type ProductWhatsappReturn = {
@@ -141,16 +153,19 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
   const leadPhone = readSearchString(query.lead_phone);
   const conversationId = readSearchString(query.conversation_id);
   const trackingLinkId = readSearchString(query.tracking_link_id);
-  const [related, whatsapp] = await Promise.all([
+  const [related, whatsapp, catalogSettings] = await Promise.all([
     loadRelatedProducts(client, item, row.organization_id),
     loadProductWhatsapp(client, {
       organizationId: row.organization_id,
       conversationId,
       item,
     }),
+    getOrganizationSalesCatalogSettings(client, row.organization_id).catch(() => null),
   ]);
   const price = normalizeCurrencyAmount(item.offer.salePrice) ?? normalizeCurrencyAmount(item.price);
-  const canCheckout = item.salesDestination === "connectyhub_checkout" && price !== null;
+  const canCheckout = item.salesDestination === "connectyhub_checkout"
+    && price !== null
+    && !(item.inventory.status === "out_of_stock" && !item.inventory.allowBackorder);
   const priceLabel = price !== null ? formatCurrency(price) : "Sob consulta";
   const installments = price !== null ? formatCurrency(price / 6) : null;
   const galleryMedia = item.media.filter((media) => media.kind === "image" || media.kind === "video");
@@ -164,6 +179,11 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
     trackingLinkId,
   });
   const branding = resolveOrganizationBranding(organization);
+  const storefront = resolvePublicPageStorefront(catalogSettings?.storefront ?? null, branding);
+  const primaryColor = storefront.primaryColor ?? defaultStorefrontPrimaryColor;
+  const publicLayoutStyle = {
+    "--store-primary": primaryColor,
+  } as CSSProperties;
   const storeSlug = organization.slug ?? organization.id;
   const storeUrl = buildLeadAwareSalesCatalogStoreUrl({
     storeSlug,
@@ -189,14 +209,14 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
   const application = findAttributeValue(item, "aplicacao") ?? formatFulfillment(item.fulfillment.mode);
 
   return (
-    <main className="min-h-screen bg-white pb-24 text-slate-950 sm:pb-0">
+    <main className="min-h-screen bg-[#f7f8f5] pb-24 text-slate-950 sm:pb-0" style={publicLayoutStyle}>
       <script
         id="connecty-public-tracking-context"
         dangerouslySetInnerHTML={{
           __html: `window.__CONNECTYHUB_TRACKING_CONTEXT__=${safeJson(publicTrackingContext)};`,
         }}
       />
-      <ProductTopBar branding={branding} storeUrl={storeUrl} />
+      <ProductTopBar branding={branding} headerText={storefront.headerText} storeUrl={storeUrl} />
 
       <section className="mx-auto w-full max-w-7xl px-4 py-4 sm:px-6 lg:px-8 lg:py-7">
         <nav className="hidden items-center gap-2 text-xs font-semibold text-slate-500 lg:flex">
@@ -408,7 +428,7 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
         </a>
       ) : null}
       <MobileBottomNav storeUrl={storeUrl} whatsappHref={whatsappReturn?.href ?? null} />
-      <PoweredByConnectyHub />
+      <PublicStoreFooter branding={branding} footerContactText={storefront.footerContactText} footerText={storefront.footerText} />
     </main>
   );
 }
@@ -550,25 +570,33 @@ function buildProductPublicTrackingContext(input: {
   };
 }
 
-function ProductTopBar({ branding, storeUrl }: { branding: OrganizationBranding; storeUrl: string }) {
+function ProductTopBar({
+  branding,
+  headerText,
+  storeUrl,
+}: {
+  branding: OrganizationBranding;
+  headerText: string;
+  storeUrl: string;
+}) {
   return (
-    <header className="sticky top-0 z-30 border-b border-blue-100 bg-white/95 backdrop-blur">
+    <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
       <div className="mx-auto flex min-h-20 w-full max-w-7xl items-center gap-3 px-4 sm:px-6 lg:px-8">
         <div className="flex min-w-0 items-center gap-3 lg:w-[260px]">
-          <Link href={storeUrl} className="grid h-10 w-10 place-items-center rounded-full text-slate-950 transition hover:bg-blue-50 lg:hidden" aria-label="Voltar para loja">
+          <Link href={storeUrl} className="grid h-10 w-10 place-items-center rounded-full text-slate-950 transition hover:bg-slate-50 lg:hidden" aria-label="Voltar para loja">
             <ArrowLeft className="h-5 w-5" />
           </Link>
-          <button type="button" className="hidden h-10 w-10 place-items-center rounded-full text-slate-950 transition hover:bg-blue-50 sm:grid lg:hidden" aria-label="Menu">
+          <button type="button" className="hidden h-10 w-10 place-items-center rounded-full text-slate-950 transition hover:bg-slate-50 sm:grid lg:hidden" aria-label="Menu">
             <Menu className="h-5 w-5" />
           </button>
-          <StoreIdentity branding={branding} storeUrl={storeUrl} />
+          <StoreIdentity branding={branding} headerText={headerText} storeUrl={storeUrl} />
         </div>
 
         <label className="relative hidden min-w-0 flex-1 lg:block">
           <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
           <input
             readOnly
-            className="h-12 w-full rounded-lg border border-blue-100 bg-white px-12 text-sm font-medium text-slate-500 outline-none"
+            className="h-12 w-full rounded-lg border border-slate-200 bg-white px-12 text-sm font-medium text-slate-500 outline-none"
             value=""
             placeholder="Buscar produtos..."
           />
@@ -578,9 +606,9 @@ function ProductTopBar({ branding, storeUrl }: { branding: OrganizationBranding;
           <HeaderTrust icon={<ShieldCheck className="h-5 w-5" />} label="Compra segura" />
           <HeaderTrust icon={<MessageCircle className="h-5 w-5" />} label="Atendimento WhatsApp" />
           <HeaderTrust icon={<Box className="h-5 w-5" />} label="Disponivel para envio" />
-          <Link href={storeUrl} className="relative grid h-11 w-11 place-items-center rounded-lg bg-blue-600 text-white shadow-lg shadow-blue-700/20" aria-label="Sacola">
+          <Link href={storeUrl} className="relative grid h-11 w-11 place-items-center rounded-lg text-white shadow-lg shadow-slate-950/20" style={{ backgroundColor: "var(--store-primary)" }} aria-label="Sacola">
             <ShoppingCart className="h-5 w-5" />
-            <span className="absolute -right-1 -top-1 grid h-5 w-5 place-items-center rounded-full bg-blue-800 text-[11px] font-black text-white">0</span>
+            <span className="absolute -right-1 -top-1 grid h-5 w-5 place-items-center rounded-full bg-orange-500 text-[11px] font-black text-white">0</span>
           </Link>
         </div>
       </div>
@@ -649,10 +677,18 @@ function PurchaseCard({
   );
 }
 
-function StoreIdentity({ branding, storeUrl }: { branding: OrganizationBranding; storeUrl: string }) {
+function StoreIdentity({
+  branding,
+  headerText,
+  storeUrl,
+}: {
+  branding: OrganizationBranding;
+  headerText: string;
+  storeUrl: string;
+}) {
   return (
     <Link href={storeUrl} className="flex min-w-0 items-center gap-3">
-      <div className="relative grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-lg border border-blue-100 bg-white shadow-sm">
+      <div className="relative grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
         {branding.logoUrl ? (
           <Image
             alt={branding.logoAlt}
@@ -663,11 +699,11 @@ function StoreIdentity({ branding, storeUrl }: { branding: OrganizationBranding;
             className="object-contain p-1"
           />
         ) : (
-          <Store className="h-5 w-5 text-blue-600" aria-hidden="true" />
+          <Store className="h-5 w-5" style={{ color: "var(--store-primary)" }} aria-hidden="true" />
         )}
       </div>
       <div className="min-w-0">
-        <p className="text-[11px] font-bold uppercase leading-4 text-slate-600">Loja oficial</p>
+        <p className="line-clamp-1 text-[11px] font-bold leading-4 text-slate-500">{headerText}</p>
         <p className="truncate text-base font-black leading-5 text-slate-950">{branding.displayName}</p>
       </div>
     </Link>
@@ -792,12 +828,10 @@ function MobileAccordion({ title, children }: { title: string; children: ReactNo
 
 function MobileBottomNav({ storeUrl, whatsappHref }: { storeUrl: string; whatsappHref: string | null }) {
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-blue-100 bg-white px-2 py-2 shadow-[0_-16px_40px_rgba(15,23,42,0.12)] sm:hidden">
-      <MobileNavItem href={storeUrl} icon={<Home className="h-5 w-5" />} label="Inicio" active />
-      <MobileNavItem href={storeUrl} icon={<Package className="h-5 w-5" />} label="Categorias" />
-      <MobileNavItem href={storeUrl} icon={<Box className="h-5 w-5" />} label="Pedidos" />
+    <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-3 border-t border-blue-100 bg-white px-2 py-2 shadow-[0_-16px_40px_rgba(15,23,42,0.12)] sm:hidden">
+      <MobileNavItem href={storeUrl} icon={<Home className="h-5 w-5" />} label="Loja" active />
+      <MobileNavItem href={storeUrl} icon={<Package className="h-5 w-5" />} label="Produtos" />
       <MobileNavItem href={whatsappHref ?? storeUrl} icon={<MessageCircle className="h-5 w-5" />} label="WhatsApp" external={Boolean(whatsappHref)} />
-      <MobileNavItem href={storeUrl} icon={<Headphones className="h-5 w-5" />} label="Conta" />
     </nav>
   );
 }
@@ -816,12 +850,70 @@ function MobileNavItem({ active, external, href, icon, label }: { active?: boole
   );
 }
 
-function PoweredByConnectyHub() {
+function PublicStoreFooter({
+  branding,
+  footerContactText,
+  footerText,
+}: {
+  branding: OrganizationBranding;
+  footerContactText: string;
+  footerText: string;
+}) {
   return (
-    <footer className="mx-auto w-full max-w-6xl px-4 pb-8 text-center text-xs font-semibold text-slate-500 sm:px-6 lg:px-8">
-      Desenvolvido por ConnectyHub
+    <footer className="border-t border-slate-200 bg-white">
+      <div className="mx-auto grid w-full max-w-7xl gap-5 px-4 py-7 sm:px-6 md:grid-cols-[1.4fr_1fr_1fr] lg:px-8">
+        <div>
+          <p className="text-base font-black text-slate-950">{branding.displayName}</p>
+          <p className="mt-2 max-w-xl text-sm leading-6 text-slate-500">{footerText}</p>
+        </div>
+        <div>
+          <p className="text-sm font-black text-slate-950">Atendimento</p>
+          <p className="mt-2 text-sm font-semibold leading-6" style={{ color: "var(--store-primary)" }}>{footerContactText}</p>
+        </div>
+        <div>
+          <p className="text-sm font-black text-slate-950">Compra segura</p>
+          <p className="mt-2 text-sm leading-6 text-slate-500">Checkout protegido e acompanhamento pelo WhatsApp.</p>
+        </div>
+      </div>
+      <p className="border-t border-slate-100 px-4 py-4 text-center text-xs font-semibold text-slate-500">
+        Desenvolvido por{" "}
+        <a className="font-black hover:underline" href={connectHubPublicUrl} rel="noreferrer" target="_blank">
+          Connect Hub
+        </a>
+      </p>
     </footer>
   );
+}
+
+function resolvePublicPageStorefront(
+  settings: SalesCatalogStorefrontSettings | null,
+  branding: OrganizationBranding,
+): PublicPageStorefrontSettings {
+  const heroTitle = readString(settings?.heroTitle);
+  const heroHighlight = readString(settings?.heroHighlight);
+  const heroSubtitle = readString(settings?.heroSubtitle);
+  const legacyHeaderText = [heroTitle, heroHighlight].filter(Boolean).join(" ").trim();
+
+  return {
+    heroTitle,
+    heroHighlight,
+    heroSubtitle,
+    headerText: readString(settings?.headerText)
+      ?? legacyHeaderText
+      ?? heroSubtitle
+      ?? `Produtos selecionados pela ${branding.displayName}, compra segura e atendimento conectado ao WhatsApp.`,
+    footerText: readString(settings?.footerText)
+      ?? `${branding.displayName} atende pelo WhatsApp com catalogo, checkout seguro e acompanhamento do pedido em um so lugar.`,
+    footerContactText: readString(settings?.footerContactText) ?? "Atendimento pelo WhatsApp oficial da loja.",
+    primaryColor: normalizeStorefrontPrimaryColor(settings?.primaryColor) ?? defaultStorefrontPrimaryColor,
+  };
+}
+
+function normalizeStorefrontPrimaryColor(value: string | null | undefined) {
+  if (!value) return null;
+
+  const normalized = value.trim().toLowerCase();
+  return /^#[0-9a-f]{6}$/.test(normalized) ? normalized : null;
 }
 
 function resolveOrganizationBranding(organization: OrganizationRow): OrganizationBranding {

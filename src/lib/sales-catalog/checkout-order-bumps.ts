@@ -28,6 +28,7 @@ type SalesCatalogOrderRow = {
   subtotal: string | number | null;
   discount_total: string | number | null;
   shipping_total: string | number | null;
+  shipping_method: string | null;
   total: string | number | null;
   metadata: JsonRecord | null;
 };
@@ -42,6 +43,7 @@ export type SalesCatalogCheckoutOrderItem = {
   unit_price: string | number | null;
   sale_price: string | number | null;
   total: string | number | null;
+  fulfillment?: unknown;
   metadata?: JsonRecord | null;
 };
 
@@ -213,7 +215,7 @@ async function loadCatalogItems(client: SupabaseClient, organizationId: string, 
 async function loadOrder(client: SupabaseClient, organizationId: string, orderId: string) {
   const { data, error } = await client
     .from("sales_catalog_orders")
-    .select("id, organization_id, status, payment_status, subtotal, discount_total, shipping_total, total, metadata")
+    .select("id, organization_id, status, payment_status, subtotal, discount_total, shipping_total, shipping_method, total, metadata")
     .eq("id", orderId)
     .eq("organization_id", organizationId)
     .maybeSingle<SalesCatalogOrderRow>();
@@ -232,7 +234,7 @@ async function loadOrder(client: SupabaseClient, organizationId: string, orderId
 async function loadOrderItems(client: SupabaseClient, organizationId: string, orderId: string) {
   const { data, error } = await client
     .from("sales_catalog_order_items")
-    .select("id, catalog_item_id, sku_id, sku_code, title, quantity, unit_price, sale_price, total, metadata")
+    .select("id, catalog_item_id, sku_id, sku_code, title, quantity, unit_price, sale_price, total, fulfillment, metadata")
     .eq("order_id", orderId)
     .eq("organization_id", organizationId)
     .order("created_at", { ascending: true });
@@ -301,7 +303,7 @@ async function insertOrderBumpItems(input: {
   const { data, error } = await input.client
     .from("sales_catalog_order_items")
     .insert(rows)
-    .select("id, catalog_item_id, sku_id, sku_code, title, quantity, unit_price, sale_price, total, metadata");
+    .select("id, catalog_item_id, sku_id, sku_code, title, quantity, unit_price, sale_price, total, fulfillment, metadata");
 
   if (error) {
     throw new Error(`Nao foi possivel adicionar as ofertas ao pedido: ${error.message}`);
@@ -350,7 +352,7 @@ async function updateOrderTotals(input: {
     })
     .eq("id", input.order.id)
     .eq("organization_id", input.organizationId)
-    .select("id, organization_id, status, payment_status, subtotal, discount_total, shipping_total, total, metadata")
+    .select("id, organization_id, status, payment_status, subtotal, discount_total, shipping_total, shipping_method, total, metadata")
     .single<SalesCatalogOrderRow>();
 
   if (error || !data) {
