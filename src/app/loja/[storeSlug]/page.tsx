@@ -194,6 +194,7 @@ function mapStorefrontProduct(
     stockLabel: formatStockLabel(item),
     fulfillmentLabel: formatFulfillment(item.fulfillment.mode),
     highlightLabel: item.storeFeatured ? item.highlightLabel ?? "Destaque" : item.highlightLabel ?? (item.offer.salePrice ? "Oferta" : null),
+    isFeatured: item.storeFeatured,
     canCheckout,
     productUrl: buildLeadAwareSalesCatalogProductUrl({
       productId: item.id,
