@@ -8,7 +8,7 @@ import { SalesCatalogMediaGallery } from "@/components/checkout/sales-catalog-me
 import { ProductCheckoutButton } from "@/components/checkout/sales-catalog-product-actions";
 import { mapSalesCatalogItem } from "@/lib/client-os/sales-catalog";
 import { normalizeCurrencyAmount } from "@/lib/sales-catalog/mercado-pago";
-import { buildLeadAwareSalesCatalogProductUrl } from "@/lib/sales-catalog/public-urls";
+import { buildLeadAwareSalesCatalogProductUrl, buildLeadAwareSalesCatalogStoreUrl } from "@/lib/sales-catalog/public-urls";
 import type { ClientSalesCatalogItem } from "@/lib/sales-catalog/shared";
 import { createServiceClient } from "@/lib/supabase/service";
 import { createOrganizationTrackingToken } from "@/lib/tracking/organization-attribution";
@@ -108,6 +108,15 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
     trackingLinkId,
   });
   const branding = resolveOrganizationBranding(organization);
+  const storeSlug = organization.slug ?? organization.id;
+  const storeUrl = buildLeadAwareSalesCatalogStoreUrl({
+    storeSlug,
+    organizationId: organization.id,
+    leadId,
+    leadPhone,
+    conversationId,
+    trackingLinkId,
+  });
   const descriptionPreview = createShortDescription(item.description);
   const hasLongDescription = isLongDescription(item.description, descriptionPreview);
 
@@ -123,6 +132,15 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
         <header className="flex flex-col gap-4 rounded-[8px] border border-blue-100 bg-white/95 p-4 shadow-lg shadow-blue-950/10 sm:flex-row sm:items-center sm:justify-between">
           <StoreIdentity branding={branding} />
           <div className="flex flex-wrap gap-2">
+            <Link
+              href={storeUrl}
+              className="inline-flex min-h-9 items-center gap-2 rounded-full border border-[#25D366]/30 bg-[#25D366]/10 px-3 text-xs font-bold text-[#128C4A] transition hover:border-[#25D366] hover:bg-[#25D366] hover:text-white"
+              data-track-event="sales_catalog_product_store_clicked"
+              data-track-label={branding.displayName}
+            >
+              <Store className="h-4 w-4" aria-hidden="true" />
+              Ver loja
+            </Link>
             <TrustPill icon={<ShieldCheck className="h-4 w-4" />} label="Compra segura" />
             <TrustPill icon={<MessageCircle className="h-4 w-4" />} label="Atendimento WhatsApp" />
             <TrustPill icon={<CheckCircle2 className="h-4 w-4" />} label={formatStockLabel(item)} />

@@ -12,6 +12,7 @@
 
 # testing
 /coverage
+/tmp/
 
 # next.js
 /.next/
@@ -24,6 +25,9 @@
 .DS_Store
 *.pem
 .claude/
+.codex-dev-server/
+.codex-home-check/
+.codex-remote-attachments/
 
 # debug
 npm-debug.log*
