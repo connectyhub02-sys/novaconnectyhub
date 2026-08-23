@@ -198,6 +198,10 @@ export async function POST(request: NextRequest) {
   const fulfillment = readProductFulfillmentPayload(formData);
   const shipping = readProductShippingPayload(formData);
   const skus = readProductSkusPayload(formData.get("skus"));
+  const storeFeatured = readFormBoolean(formData.get("storeFeatured")) ?? false;
+  const storeFeaturedRank = storeFeatured
+    ? normalizeNullableInteger(formData.get("storeFeaturedRank"), 1, 999)
+    : null;
   const files = formData.getAll("files").filter(isFormFile);
   const keepMediaIds = readKeepMediaIds(formData.get("keepMediaIds"));
 
@@ -414,6 +418,11 @@ export async function POST(request: NextRequest) {
       status,
       tag,
       highlight_label: highlightLabel,
+      store_featured: storeFeatured,
+      store_featured_rank: storeFeaturedRank,
+      store_featured_at: storeFeatured
+        ? readFormString(existingMetadata.store_featured_at) ?? readFormString(existingMetadata.storeFeaturedAt) ?? now
+        : null,
       attributes: serializeItemAttributes(attributes),
       inventory: serializeProductInventory(inventory),
       offer: serializeProductOffer(offer),
@@ -540,6 +549,8 @@ export async function POST(request: NextRequest) {
         inventory_status: inventory.status,
         stock_quantity: inventory.quantity,
         sale_price: offer.salePrice,
+        store_featured: storeFeatured,
+        store_featured_rank: storeFeaturedRank,
         coupon_code: offer.couponCode,
         fulfillment_mode: fulfillment.mode,
         sales_destination: salesDestination,
@@ -570,6 +581,7 @@ export async function POST(request: NextRequest) {
 
     revalidatePath("/dashboard/links");
     revalidatePath("/dashboard/whatsapp");
+    revalidatePath(`/loja/${company.slug ?? company.id}`);
 
     return NextResponse.json({ item: mapSalesCatalogItem(data), mode: existingRow ? "updated" : "created" });
   } catch (error) {

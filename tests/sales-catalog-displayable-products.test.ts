@@ -16,6 +16,9 @@ const baseItem: ClientSalesCatalogItem = {
   status: "active",
   tag: "PIZZA_PEPPERONI",
   highlightLabel: null,
+  storeFeatured: false,
+  storeFeaturedRank: null,
+  storeFeaturedAt: null,
   media: [],
   attributes: [],
   inventory: {

@@ -4,7 +4,11 @@ import { ConnectyShell } from "@/components/connectyhub-os/connecty-shell";
 import { LeadCrmConsole } from "@/components/connectyhub-os/leads-crm-console";
 import { currentOrganizationToClientCompany } from "@/lib/client-os/current-company";
 import { getClientLeadCrmWorkspace } from "@/lib/client-os/leads-crm";
-import { listClientSalesCatalog } from "@/lib/client-os/sales-catalog";
+import {
+  listClientSalesCatalog,
+  listClientSalesCatalogOrders,
+  listClientSalesCatalogPaymentSessions,
+} from "@/lib/client-os/sales-catalog";
 import {
   listClientSocialApprovals,
   listClientSocialDispatchMonitor,
@@ -41,6 +45,16 @@ export default async function AttendancePage() {
     userId: workspace.user.id,
     companyId: organization.id,
   }).catch(() => []);
+  const [salesCatalogOrders, salesCatalogPaymentSessions] = await Promise.all([
+    listClientSalesCatalogOrders({
+      userId: workspace.user.id,
+      companyId: organization.id,
+    }).catch(() => []),
+    listClientSalesCatalogPaymentSessions({
+      userId: workspace.user.id,
+      companyId: organization.id,
+    }).catch(() => []),
+  ]);
   const socialApprovals = await listClientSocialApprovals({
     userId: workspace.user.id,
     organizationId: organization.id,
@@ -64,6 +78,8 @@ export default async function AttendancePage() {
       <LeadCrmConsole
         mode="atendimento"
         salesCatalogItems={salesCatalogItems}
+        salesCatalogOrders={salesCatalogOrders}
+        salesCatalogPaymentSessions={salesCatalogPaymentSessions}
         socialApprovals={socialApprovals}
         socialDispatchMonitor={socialDispatchMonitor ?? undefined}
         workspace={leadWorkspace}

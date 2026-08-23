@@ -28,6 +28,7 @@ import {
   Settings2,
   ShieldCheck,
   SlidersHorizontal,
+  Store,
   Tags,
   Trash2,
   Truck,
@@ -42,6 +43,7 @@ import {
   brazilianStates,
   createDefaultSalesCatalogCommerceSettings,
   defaultSalesCatalogShippingRules,
+  defaultSalesCatalogAbandonedCheckoutMinutes,
   formatSalesCatalogFulfillmentStatus,
   formatSalesCatalogFulfillmentMode,
   formatSalesCatalogOrderStatus,
@@ -50,6 +52,7 @@ import {
   formatSalesCatalogSalesDestination,
   formatSalesCatalogStockStatus,
   formatSalesCatalogWeight,
+  resolveSalesCatalogCheckoutStatus,
   salesCatalogLeadDataFields,
   salesCatalogBusinessTemplates,
   type ClientSalesCatalogItem,
@@ -61,6 +64,7 @@ import {
   type ClientSalesCatalogWhatsappInstance,
   type SalesCatalogAttribute,
   type SalesCatalogBusinessType,
+  type SalesCatalogCheckoutStage,
   type SalesCatalogCommercialFlowType,
   type SalesCatalogFulfillmentStatus,
   type SalesCatalogItemAttribute,
@@ -148,9 +152,20 @@ type SalesCatalogConsoleProps = {
   initialCompanyId: string | null;
 };
 
-type CatalogTab = "setup" | "shipping" | "products" | "orders" | "payments" | "whatsapp";
+type CatalogTab = "setup" | "shipping" | "products" | "checkout" | "orders" | "payments" | "whatsapp";
 type SalesCatalogProductFormTab = "essential" | "pricing" | "media" | "stock" | "delivery";
 type CommercialFlowFilter = "all" | SalesCatalogCommercialFlowType;
+type CheckoutStageFilter = "all" | SalesCatalogCheckoutStage;
+type SalesCatalogCheckoutRecord = {
+  abandonedMinutes: number;
+  amount: number;
+  customerLabel: string;
+  customerPhone: string | null;
+  latestAt: string | null;
+  order: ClientSalesCatalogOrder;
+  paymentSession: ClientSalesCatalogPaymentSession | null;
+  status: ReturnType<typeof resolveSalesCatalogCheckoutStatus>;
+};
 type CatalogImportPatchMap = Record<string, SalesCatalogImportItemPatch>;
 type CatalogImportMonitorStatus = ClientSalesCatalogImportJob["status"] | "preparing" | "uploading";
 type CatalogImportPreviewItemStatus = "queued" | "scanning" | "ready" | "warning" | "failed";
@@ -462,6 +477,16 @@ const commercialFlowFilterOptions: Array<{ value: CommercialFlowFilter; label: s
   { value: "external_marketplace", label: "Marketplace externo" },
 ];
 
+const checkoutStageFilterOptions: Array<{ value: CheckoutStageFilter; label: string }> = [
+  { value: "all", label: "Todos" },
+  { value: "paid", label: "Pagos" },
+  { value: "pending", label: "Aguardando" },
+  { value: "abandoned", label: "Abandonados" },
+  { value: "failed", label: "Falhas" },
+  { value: "cancelled", label: "Cancelados" },
+  { value: "refunded", label: "Reembolsos" },
+];
+
 const salesCatalogHelpText: Record<string, string> = {
   Empresa: "Escolha em qual empresa esta configuracao, produto ou pedido sera aplicado.",
   "Tipo de venda": "Defina o modelo principal do catalogo. Ele serve como base, mas categorias e variacoes continuam livres para voce criar.",
@@ -554,6 +579,7 @@ export function SalesCatalogConsole({
   const [productFormTab, setProductFormTab] = useState<SalesCatalogProductFormTab>("essential");
   const [orderFlowFilter, setOrderFlowFilter] = useState<CommercialFlowFilter>("all");
   const [paymentFlowFilter, setPaymentFlowFilter] = useState<CommercialFlowFilter>("all");
+  const [checkoutStageFilter, setCheckoutStageFilter] = useState<CheckoutStageFilter>("all");
   const [settingsDraft, setSettingsDraft] = useState<SettingsDraft>(() => buildSettingsDraft(initialSelectedSettings));
   const [shippingDraft, setShippingDraft] = useState<ShippingDraft>(() => buildShippingDraft(initialSelectedShippingSettings));
   const [selectedShippingUf, setSelectedShippingUf] = useState(() => initialSelectedShippingSettings?.rules.find((rule) => rule.active)?.uf ?? "SP");
@@ -566,6 +592,8 @@ export function SalesCatalogConsole({
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("");
   const [highlightLabel, setHighlightLabel] = useState("");
+  const [storeFeatured, setStoreFeatured] = useState(false);
+  const [storeFeaturedRank, setStoreFeaturedRank] = useState("");
   const [price, setPrice] = useState("");
   const [salesDestination, setSalesDestination] = useState<SalesCatalogSalesDestination>("connectyhub_checkout");
   const [productUrl, setProductUrl] = useState("");
@@ -720,6 +748,24 @@ export function SalesCatalogConsole({
     () => shippingSettings.find((entry) => entry.companyId === selectedCompanyId) ?? null,
     [shippingSettings, selectedCompanyId],
   );
+  const abandonedCheckoutMinutes = selectedSettings?.orderPolicy.abandonedCartMinutes ?? defaultSalesCatalogAbandonedCheckoutMinutes;
+  const checkoutRecords = useMemo(
+    () => buildSalesCatalogCheckoutRecords(visibleOrders, visiblePaymentSessions, abandonedCheckoutMinutes),
+    [abandonedCheckoutMinutes, visibleOrders, visiblePaymentSessions],
+  );
+  const filteredCheckoutRecords = useMemo(
+    () => checkoutStageFilter === "all"
+      ? checkoutRecords
+      : checkoutRecords.filter((record) => record.status.stage === checkoutStageFilter),
+    [checkoutRecords, checkoutStageFilter],
+  );
+  const checkoutSummary = useMemo(() => buildCheckoutStageSummary(checkoutRecords), [checkoutRecords]);
+  const featuredProductsCount = useMemo(
+    () => visibleItems.filter((item) => item.storeFeatured && item.status === "active").length,
+    [visibleItems],
+  );
+  const selectedStoreSlug = selectedCompany?.slug ?? selectedCompany?.id ?? "";
+  const selectedStorePath = selectedStoreSlug ? `/loja/${encodeURIComponent(selectedStoreSlug)}` : "";
   const hasConfiguredSettings = Boolean(selectedSettings?.configured);
   const productAttributes = useMemo(
     () => (selectedSettings?.configured ? selectedSettings.attributes : settingsDraft.attributes).filter((attribute) => attribute.values.length > 0),
@@ -864,6 +910,7 @@ export function SalesCatalogConsole({
     const nextSettings = settings.find((entry) => entry.companyId === companyId) ?? null;
     const nextShippingSettings = shippingSettings.find((entry) => entry.companyId === companyId) ?? null;
     setSelectedCompanyId(companyId);
+    setCheckoutStageFilter("all");
     setSettingsDraft(buildSettingsDraft(nextSettings));
     setShippingDraft(buildShippingDraft(nextShippingSettings));
     setSelectedShippingUf(nextShippingSettings?.rules.find((rule) => rule.active)?.uf ?? "SP");
@@ -1356,6 +1403,8 @@ export function SalesCatalogConsole({
       formData.set("description", description);
       formData.set("category", category);
       formData.set("highlightLabel", highlightLabel);
+      formData.set("storeFeatured", String(storeFeatured));
+      formData.set("storeFeaturedRank", storeFeaturedRank);
       formData.set("price", price);
       formData.set("currency", "BRL");
       formData.set("salesDestination", salesDestination);
@@ -2157,6 +2206,18 @@ export function SalesCatalogConsole({
     }
   }
 
+  async function copyStoreLink() {
+    if (!selectedStorePath) return;
+
+    const url = `${window.location.origin}${selectedStorePath}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      setNotice({ tone: "success", message: "Link da loja copiado." });
+    } catch {
+      setNotice({ tone: "warning", message: url });
+    }
+  }
+
   function editItem(item: ClientSalesCatalogItem) {
     if (item.companyId && item.companyId !== selectedCompanyId) {
       changeCompany(item.companyId);
@@ -2167,6 +2228,8 @@ export function SalesCatalogConsole({
     setTitle(item.title);
     setCategory(item.category ?? "");
     setHighlightLabel(item.highlightLabel ?? "");
+    setStoreFeatured(item.storeFeatured);
+    setStoreFeaturedRank(item.storeFeaturedRank !== null ? String(item.storeFeaturedRank) : "");
     setPrice(item.price ?? "");
     setSalesDestination(item.salesDestination);
     setProductUrl(item.productUrl ?? "");
@@ -2226,6 +2289,8 @@ export function SalesCatalogConsole({
     setTitle("");
     setCategory("");
     setHighlightLabel("");
+    setStoreFeatured(false);
+    setStoreFeaturedRank("");
     setPrice("");
     setSalesDestination("connectyhub_checkout");
     setProductUrl("");
@@ -2343,10 +2408,52 @@ export function SalesCatalogConsole({
         <CommerceTile label="Comissao" value={String(stats.commissionOrders)} tone="amber" />
       </div>
 
+      <div className="mb-4 rounded-xl border p-3" style={{ background: "var(--ch-panel)", borderColor: "var(--ch-border)" }}>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-start gap-3">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-emerald-400/30 bg-emerald-400/10 text-emerald-300">
+              <Store className="h-4 w-4" />
+            </span>
+            <div className="min-w-0">
+              <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Loja publica</p>
+              <p className="mt-1 truncate text-[14px] font-semibold text-slate-100">{selectedCompany?.name ?? "Empresa"}</p>
+              <p className="mt-1 text-[11px] leading-4 text-slate-500">
+                {selectedStorePath ? selectedStorePath : "Escolha uma empresa para liberar o link da loja."}
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <NeonBadge tone={featuredProductsCount > 0 ? "green" : "zinc"}>{featuredProductsCount} destaque(s)</NeonBadge>
+            {selectedStorePath ? (
+              <>
+                <button
+                  type="button"
+                  onClick={copyStoreLink}
+                  className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10"
+                  style={{ borderColor: "var(--ch-border)" }}
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                  Copiar link
+                </button>
+                <Link
+                  className="inline-flex min-h-9 items-center gap-2 rounded-lg bg-emerald-400 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-950 transition hover:bg-emerald-300"
+                  href={selectedStorePath}
+                  target="_blank"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  Abrir loja
+                </Link>
+              </>
+            ) : null}
+          </div>
+        </div>
+      </div>
+
       <div id="sales-catalog-tour-tabs" className="mb-4 grid grid-cols-3 gap-1.5 sm:flex sm:flex-wrap sm:gap-2">
         <TabButton active={activeTab === "setup"} icon={Settings2} label="Configuracao" mobileLabel="Config." onClick={() => setActiveTab("setup")} />
         <TabButton active={activeTab === "shipping"} icon={Truck} label="Entrega e Frete" mobileLabel="Frete" onClick={() => setActiveTab("shipping")} />
         <TabButton active={activeTab === "products"} icon={PackagePlus} label="Produtos" onClick={() => setActiveTab("products")} />
+        <TabButton active={activeTab === "checkout"} icon={CreditCard} label="Checkouts" mobileLabel="Checkouts" onClick={() => setActiveTab("checkout")} />
         <TabButton active={activeTab === "orders"} icon={ClipboardList} label="Pedidos WhatsApp" mobileLabel="Pedidos" onClick={() => setActiveTab("orders")} />
         <TabButton active={activeTab === "payments"} icon={CreditCard} label="Pagamentos" mobileLabel="Pagto." onClick={() => setActiveTab("payments")} />
       </div>
@@ -3068,6 +3175,33 @@ export function SalesCatalogConsole({
             </AccordionSection>
           </div>
         </Panel>
+      ) : activeTab === "checkout" ? (
+        <div className="grid gap-4">
+          <Panel title="Checkouts e pedidos" eyebrow={selectedCompany?.name ?? "acompanhamento"} tone="cyan" compact>
+            <CheckoutStageOverview summary={checkoutSummary} />
+            <CheckoutStageFilterBar
+              className="mt-4"
+              value={checkoutStageFilter}
+              onChange={setCheckoutStageFilter}
+            />
+
+            <div className="mt-4 rounded-xl border border-amber-400/25 bg-amber-400/10 px-4 py-3 text-[12px] leading-5 text-amber-100">
+              Checkouts abandonados sao calculados a partir de pedidos pendentes sem pagamento confirmado por mais de {abandonedCheckoutMinutes} minuto(s). Eles continuam no historico do lead e nao entram como produto cadastrado.
+            </div>
+
+            {filteredCheckoutRecords.length > 0 ? (
+              <div className="mt-4 grid gap-3">
+                {filteredCheckoutRecords.map((record) => (
+                  <CheckoutRecordCard key={`${record.order.id}-${record.paymentSession?.id ?? "no-session"}`} record={record} />
+                ))}
+              </div>
+            ) : (
+              <div className="mt-4 rounded-xl border border-dashed px-4 py-10 text-center text-[12px] text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
+                Nenhum checkout encontrado neste filtro.
+              </div>
+            )}
+          </Panel>
+        </div>
       ) : activeTab === "payments" ? (
         <div className="grid gap-4">
           <Panel title="Sessoes de pagamento" eyebrow={selectedCompany?.name ?? "checkout"} tone="amber" compact>
@@ -3579,6 +3713,35 @@ export function SalesCatalogConsole({
                 placeholder="Ex.: Mais vendido, Mais procurado, Oferta especial"
                 suggestions={highlightLabelSuggestions}
               />
+            </div>
+
+            <div className="grid gap-3 rounded-xl border p-3 sm:grid-cols-[minmax(0,1fr)_120px]" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+              <label className="flex items-start gap-3">
+                <input
+                  checked={storeFeatured}
+                  className="mt-1 h-4 w-4"
+                  onChange={(event) => setStoreFeatured(event.target.checked)}
+                  type="checkbox"
+                />
+                <span className="min-w-0">
+                  <span className="block text-[12px] font-semibold text-slate-100">Destacar na loja</span>
+                  <span className="mt-1 block text-[11px] leading-4 text-slate-500">
+                    Produtos destacados aparecem primeiro e podem ocupar o topo da loja publica.
+                  </span>
+                </span>
+              </label>
+              <label className="block">
+                <FieldLabel>Ordem</FieldLabel>
+                <input
+                  value={storeFeaturedRank}
+                  onChange={(event) => setStoreFeaturedRank(digitsOnly(event.target.value, 3))}
+                  disabled={!storeFeatured}
+                  className="h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none disabled:opacity-50"
+                  inputMode="numeric"
+                  placeholder="1"
+                  style={{ borderColor: "var(--ch-border)" }}
+                />
+              </label>
             </div>
 
             <label className="block">
@@ -5276,6 +5439,165 @@ function CatalogImportItemEditor({
   );
 }
 
+function CheckoutStageOverview({ summary }: { summary: Record<SalesCatalogCheckoutStage, { count: number; amount: number }> }) {
+  return (
+    <div className="grid grid-cols-2 gap-2 lg:grid-cols-6">
+      <CheckoutMetric label="Pagos" value={String(summary.paid.count)} hint={formatCurrency(summary.paid.amount)} tone="green" />
+      <CheckoutMetric label="Aguardando" value={String(summary.pending.count)} hint={formatCurrency(summary.pending.amount)} tone="cyan" />
+      <CheckoutMetric label="Abandonados" value={String(summary.abandoned.count)} hint={formatCurrency(summary.abandoned.amount)} tone="amber" />
+      <CheckoutMetric label="Falhas" value={String(summary.failed.count)} hint={formatCurrency(summary.failed.amount)} tone="rose" />
+      <CheckoutMetric label="Cancelados" value={String(summary.cancelled.count)} hint={formatCurrency(summary.cancelled.amount)} tone="zinc" />
+      <CheckoutMetric label="Reembolsos" value={String(summary.refunded.count)} hint={formatCurrency(summary.refunded.amount)} tone="violet" />
+    </div>
+  );
+}
+
+function CheckoutMetric({
+  hint,
+  label,
+  tone,
+  value,
+}: {
+  hint: string;
+  label: string;
+  tone: SalesCatalogTone;
+  value: string;
+}) {
+  const toneStyle = salesCatalogToneStyles[tone];
+
+  return (
+    <div
+      className="min-w-0 rounded-xl border px-3 py-2.5"
+      style={{
+        background: `linear-gradient(135deg, rgba(${toneStyle.rgb},0.12), rgba(255,255,255,0.018)), var(--ch-panel)`,
+        borderColor: `rgba(${toneStyle.rgb},0.34)`,
+      }}
+    >
+      <p className="truncate font-mono text-[8px] uppercase tracking-[0.14em] text-slate-500">{label}</p>
+      <p className={cn("mt-1 font-mono text-[18px] font-bold leading-none", toneStyle.text)}>{value}</p>
+      <p className="mt-1 truncate text-[10px] text-slate-500">{hint}</p>
+    </div>
+  );
+}
+
+function CheckoutStageFilterBar({
+  className,
+  onChange,
+  value,
+}: {
+  className?: string;
+  onChange: (value: CheckoutStageFilter) => void;
+  value: CheckoutStageFilter;
+}) {
+  return (
+    <div className={cn("flex flex-wrap gap-2", className)}>
+      {checkoutStageFilterOptions.map((option) => {
+        const active = value === option.value;
+
+        return (
+          <button
+            key={option.value}
+            type="button"
+            onClick={() => onChange(option.value)}
+            className={cn(
+              "inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide transition",
+              active ? "border-cyan-300/50 bg-cyan-300/15 text-cyan-100" : "text-slate-400 hover:bg-cyan-400/10 hover:text-cyan-100",
+            )}
+            style={{ borderColor: active ? undefined : "var(--ch-border)" }}
+          >
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function CheckoutRecordCard({ record }: { record: SalesCatalogCheckoutRecord }) {
+  const itemSummary = record.order.items.length > 0
+    ? record.order.items.map((item) => `${item.quantity}x ${item.title}`).join(", ")
+    : "Pedido sem item vinculado";
+  const checkoutUrl = record.paymentSession?.checkoutUrl ?? null;
+
+  return (
+    <div className="rounded-xl border p-3" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="truncate text-[14px] font-semibold text-slate-100">{record.customerLabel}</p>
+            <NeonBadge tone={checkoutStageTone(record.status.stage)}>{record.status.label}</NeonBadge>
+          </div>
+          <p className="mt-1 flex flex-wrap gap-2 text-[11px] text-slate-500">
+            {record.customerPhone ? <span>{record.customerPhone}</span> : null}
+            <span>Pedido {record.order.id.slice(0, 8)}</span>
+            {record.latestAt ? <span>{formatDateTime(record.latestAt)}</span> : null}
+          </p>
+        </div>
+        <div className="flex flex-wrap justify-end gap-1.5">
+          <NeonBadge tone={commercialFlowTone(record.order.commercialFlowType)}>{formatCommercialFlowLabel(record.order.commercialFlowType)}</NeonBadge>
+          <NeonBadge tone={paymentStatusTone(record.order.paymentStatus)}>{formatSalesCatalogPaymentStatus(record.order.paymentStatus)}</NeonBadge>
+          {record.paymentSession ? <NeonBadge tone={paymentSessionTone(record.paymentSession.status)}>{formatSalesCatalogPaymentSessionStatus(record.paymentSession.status)}</NeonBadge> : null}
+        </div>
+      </div>
+
+      <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_180px]">
+        <div className="rounded-lg border px-3 py-2" style={{ borderColor: "var(--ch-border)", background: "var(--ch-panel)" }}>
+          <p className="line-clamp-2 text-[12px] text-slate-300">{itemSummary}</p>
+          <p className="mt-2 text-[11px] leading-4 text-slate-500">{record.status.description}</p>
+          {record.paymentSession?.failureReason ? (
+            <p className="mt-2 rounded-lg border border-rose-400/25 bg-rose-400/10 px-3 py-2 text-[11px] text-rose-100">
+              {record.paymentSession.failureReason}
+            </p>
+          ) : null}
+        </div>
+        <div className="rounded-lg border px-3 py-2" style={{ borderColor: "var(--ch-border)", background: "var(--ch-panel)" }}>
+          <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Valor</p>
+          <p className="mt-1 font-mono text-[18px] font-bold text-cyan-200">{formatCurrency(record.amount)}</p>
+          <p className="mt-1 text-[10px] leading-4 text-slate-500">
+            {record.status.stage === "abandoned" ? `Parado ha mais de ${record.abandonedMinutes} min.` : record.paymentSession ? "Checkout rastreado" : "Sem sessao de checkout"}
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-3 flex flex-wrap gap-2">
+        {checkoutUrl ? (
+          <>
+            <button
+              type="button"
+              onClick={() => navigator.clipboard.writeText(checkoutUrl)}
+              className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-400/10"
+              style={{ borderColor: "var(--ch-border)" }}
+            >
+              <Copy className="h-3.5 w-3.5" />
+              Copiar checkout
+            </button>
+            <a
+              className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-slate-300 transition hover:bg-cyan-400/10 hover:text-cyan-100"
+              href={checkoutUrl}
+              rel="noreferrer"
+              target="_blank"
+              style={{ borderColor: "var(--ch-border)" }}
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+              Abrir checkout
+            </a>
+          </>
+        ) : null}
+        {record.order.leadId ? (
+          <Link
+            className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-emerald-100 transition hover:bg-emerald-400/10"
+            href="/dashboard/atendimento"
+            style={{ borderColor: "var(--ch-border)" }}
+          >
+            <MessageSquareText className="h-3.5 w-3.5" />
+            Ver lead
+          </Link>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 function OrderCard({
   order,
   paymentSession,
@@ -5628,6 +5950,7 @@ function CatalogItemCard({
             </p>
           </div>
           <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
+            {item.storeFeatured ? <NeonBadge tone="green">Destaque loja{item.storeFeaturedRank ? ` #${item.storeFeaturedRank}` : ""}</NeonBadge> : null}
             {item.highlightLabel ? <NeonBadge tone="amber">{item.highlightLabel}</NeonBadge> : null}
             <NeonBadge tone={salesDestinationTone(item.salesDestination)}>{formatSalesCatalogSalesDestination(item.salesDestination)}</NeonBadge>
             <NeonBadge tone={item.source === "whatsapp_catalog" ? "green" : "cyan"}>{sourceLabel}</NeonBadge>
@@ -7223,6 +7546,72 @@ function operationToneLabel(tone: SalesCatalogTone) {
   return "pendente";
 }
 
+function buildSalesCatalogCheckoutRecords(
+  orders: ClientSalesCatalogOrder[],
+  paymentSessions: ClientSalesCatalogPaymentSession[],
+  abandonedMinutes: number,
+): SalesCatalogCheckoutRecord[] {
+  const sessionsByOrder = new Map<string, ClientSalesCatalogPaymentSession[]>();
+
+  for (const session of paymentSessions) {
+    const current = sessionsByOrder.get(session.orderId) ?? [];
+    current.push(session);
+    sessionsByOrder.set(session.orderId, current);
+  }
+
+  return orders
+    .map((order) => {
+      const sessions = (sessionsByOrder.get(order.id) ?? [])
+        .sort((a, b) => toComparableTimestamp(b.updatedAt ?? b.createdAt) - toComparableTimestamp(a.updatedAt ?? a.createdAt));
+      const paymentSession = order.latestPaymentSessionId
+        ? sessions.find((session) => session.id === order.latestPaymentSessionId) ?? sessions[0] ?? null
+        : sessions[0] ?? null;
+      const status = resolveSalesCatalogCheckoutStatus({
+        order,
+        paymentSession,
+        abandonedAfterMinutes: abandonedMinutes,
+      });
+      const latestAt = pickLatestDate([
+        paymentSession?.paidAt,
+        paymentSession?.updatedAt,
+        paymentSession?.createdAt,
+        order.updatedAt,
+        order.createdAt,
+      ]);
+      const amount = parseCurrency(order.total) || parseCurrency(paymentSession?.amount);
+
+      return {
+        abandonedMinutes,
+        amount,
+        customerLabel: order.customerName ?? order.customerPhone ?? "Lead sem nome",
+        customerPhone: order.customerPhone,
+        latestAt,
+        order,
+        paymentSession,
+        status,
+      };
+    })
+    .sort((a, b) => toComparableTimestamp(b.latestAt) - toComparableTimestamp(a.latestAt));
+}
+
+function buildCheckoutStageSummary(records: SalesCatalogCheckoutRecord[]) {
+  const summary: Record<SalesCatalogCheckoutStage, { count: number; amount: number }> = {
+    abandoned: { count: 0, amount: 0 },
+    cancelled: { count: 0, amount: 0 },
+    failed: { count: 0, amount: 0 },
+    paid: { count: 0, amount: 0 },
+    pending: { count: 0, amount: 0 },
+    refunded: { count: 0, amount: 0 },
+  };
+
+  for (const record of records) {
+    summary[record.status.stage].count += 1;
+    summary[record.status.stage].amount += record.amount;
+  }
+
+  return summary;
+}
+
 function buildCommerceSummary(
   orders: ClientSalesCatalogOrder[],
   paymentSessions: ClientSalesCatalogPaymentSession[],
@@ -7383,6 +7772,21 @@ function parseCurrency(value: string | null | undefined) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function pickLatestDate(values: Array<string | null | undefined>) {
+  const latest = values
+    .filter((value): value is string => Boolean(value))
+    .sort((a, b) => toComparableTimestamp(b) - toComparableTimestamp(a))[0];
+
+  return latest ?? null;
+}
+
+function toComparableTimestamp(value: string | null | undefined) {
+  if (!value) return 0;
+
+  const timestamp = new Date(value).getTime();
+  return Number.isNaN(timestamp) ? 0 : timestamp;
+}
+
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("pt-BR", {
     style: "currency",
@@ -7435,6 +7839,15 @@ function revenueOwnerTone(owner: SalesCatalogRevenueOwnerType): SalesCatalogTone
   if (owner === "split") return "amber";
   if (owner === "external_provider") return "violet";
   return "green";
+}
+
+function checkoutStageTone(stage: SalesCatalogCheckoutStage): SalesCatalogTone {
+  if (stage === "paid") return "green";
+  if (stage === "pending") return "cyan";
+  if (stage === "abandoned") return "amber";
+  if (stage === "failed") return "rose";
+  if (stage === "refunded") return "violet";
+  return "zinc";
 }
 
 function orderStatusTone(status: SalesCatalogOrderStatus): SalesCatalogTone {

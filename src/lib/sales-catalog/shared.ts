@@ -212,6 +212,9 @@ export type ClientSalesCatalogItem = {
   status: SalesCatalogItemStatus;
   tag: string;
   highlightLabel: string | null;
+  storeFeatured: boolean;
+  storeFeaturedRank: number | null;
+  storeFeaturedAt: string | null;
   media: SalesCatalogMedia[];
   attributes: SalesCatalogItemAttribute[];
   inventory: SalesCatalogProductInventory;
@@ -406,6 +409,130 @@ export type ClientSalesCatalogPaymentSession = {
   createdAt: string | null;
   updatedAt: string | null;
 };
+
+export type SalesCatalogCheckoutStage = "paid" | "pending" | "abandoned" | "failed" | "cancelled" | "refunded";
+
+export type SalesCatalogCheckoutStatusSummary = {
+  stage: SalesCatalogCheckoutStage;
+  label: string;
+  description: string;
+  isAbandoned: boolean;
+  isTerminal: boolean;
+};
+
+export const defaultSalesCatalogAbandonedCheckoutMinutes = 30;
+
+export function resolveSalesCatalogCheckoutStatus(input: {
+  order: Pick<ClientSalesCatalogOrder, "status" | "paymentStatus" | "createdAt" | "updatedAt">;
+  paymentSession?: Pick<ClientSalesCatalogPaymentSession, "status" | "createdAt" | "updatedAt" | "paidAt" | "expiresAt"> | null;
+  abandonedAfterMinutes?: number | null;
+  now?: Date | string | number;
+}): SalesCatalogCheckoutStatusSummary {
+  const order = input.order;
+  const session = input.paymentSession ?? null;
+
+  if (order.paymentStatus === "confirmed" || order.status === "paid" || session?.status === "approved") {
+    return {
+      stage: "paid",
+      label: "Pago",
+      description: "Pagamento confirmado. O pedido ja pode seguir para preparo, entrega ou execucao.",
+      isAbandoned: false,
+      isTerminal: true,
+    };
+  }
+
+  if (order.paymentStatus === "refunded" || session?.status === "refunded") {
+    return {
+      stage: "refunded",
+      label: "Reembolsado",
+      description: "Pagamento reembolsado. Confira estoque, repasse e continuidade do atendimento.",
+      isAbandoned: false,
+      isTerminal: true,
+    };
+  }
+
+  if (order.paymentStatus === "failed" || session?.status === "rejected" || session?.status === "error") {
+    return {
+      stage: "failed",
+      label: "Falhou",
+      description: "Pagamento recusado ou com erro. Reenvie checkout ou assuma o atendimento.",
+      isAbandoned: false,
+      isTerminal: false,
+    };
+  }
+
+  if (order.status === "cancelled" || session?.status === "cancelled" || session?.status === "expired") {
+    return {
+      stage: "cancelled",
+      label: session?.status === "expired" ? "Expirado" : "Cancelado",
+      description: "Pedido cancelado ou checkout expirado. O lead pode precisar de recuperacao manual.",
+      isAbandoned: false,
+      isTerminal: true,
+    };
+  }
+
+  const abandonedAfterMinutes = input.abandonedAfterMinutes ?? defaultSalesCatalogAbandonedCheckoutMinutes;
+  const lastActivity = getCheckoutLastActivityMs(order, session);
+  const nowMs = normalizeCheckoutNowMs(input.now);
+  const canBeAbandoned = order.status === "pending_payment"
+    || order.paymentStatus === "pending"
+    || session?.status === "created"
+    || session?.status === "pending";
+
+  if (canBeAbandoned && lastActivity > 0 && nowMs - lastActivity >= abandonedAfterMinutes * 60_000) {
+    return {
+      stage: "abandoned",
+      label: "Abandonado",
+      description: "O lead chegou ao checkout, mas nao concluiu dentro do tempo definido.",
+      isAbandoned: true,
+      isTerminal: false,
+    };
+  }
+
+  return {
+    stage: "pending",
+    label: "Aguardando",
+    description: session ? "Checkout gerado e aguardando pagamento." : "Pedido criado, mas ainda sem checkout gerado.",
+    isAbandoned: false,
+    isTerminal: false,
+  };
+}
+
+function getCheckoutLastActivityMs(
+  order: Pick<ClientSalesCatalogOrder, "createdAt" | "updatedAt">,
+  session: Pick<ClientSalesCatalogPaymentSession, "createdAt" | "updatedAt" | "paidAt" | "expiresAt"> | null,
+) {
+  return Math.max(
+    normalizeCheckoutDateMs(session?.paidAt),
+    normalizeCheckoutDateMs(session?.updatedAt),
+    normalizeCheckoutDateMs(session?.createdAt),
+    normalizeCheckoutDateMs(order.updatedAt),
+    normalizeCheckoutDateMs(order.createdAt),
+  );
+}
+
+function normalizeCheckoutNowMs(value: Date | string | number | undefined) {
+  if (value instanceof Date) {
+    return value.getTime();
+  }
+
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  return normalizeCheckoutDateMs(value) || Date.now();
+}
+
+function normalizeCheckoutDateMs(value: string | number | null | undefined) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (!value) return 0;
+
+  const timestamp = new Date(value).getTime();
+  return Number.isNaN(timestamp) ? 0 : timestamp;
+}
 
 export type SalesCatalogShippingRule = {
   uf: string;

@@ -61,7 +61,16 @@ import type {
   ClientLeadRecord,
   ClientLeadStatus,
 } from "@/lib/client-os/leads-crm";
-import type { ClientSalesCatalogItem } from "@/lib/sales-catalog/shared";
+import {
+  defaultSalesCatalogAbandonedCheckoutMinutes,
+  formatSalesCatalogPaymentSessionStatus,
+  formatSalesCatalogPaymentStatus,
+  resolveSalesCatalogCheckoutStatus,
+  type ClientSalesCatalogItem,
+  type ClientSalesCatalogOrder,
+  type ClientSalesCatalogPaymentSession,
+  type SalesCatalogCheckoutStage,
+} from "@/lib/sales-catalog/shared";
 
 type ConsoleMode = "leads" | "crm" | "conversas" | "atendimento";
 
@@ -97,6 +106,8 @@ type LeadCrmConsoleProps = {
   commerceEnabled?: boolean;
   mode: ConsoleMode;
   salesCatalogItems?: ClientSalesCatalogItem[];
+  salesCatalogOrders?: ClientSalesCatalogOrder[];
+  salesCatalogPaymentSessions?: ClientSalesCatalogPaymentSession[];
   socialApprovals?: ClientSocialApproval[];
   socialDispatchMonitor?: ClientSocialDispatchMonitor;
   workspace: ClientLeadCrmWorkspace;
@@ -137,6 +148,17 @@ type AttendanceQuickProduct = {
   id: string;
   name: string;
   priceCents: number;
+};
+
+type LeadCheckoutRecord = {
+  checkoutUrl: string | null;
+  id: string;
+  itemSummary: string;
+  latestAt: string | null;
+  order: ClientSalesCatalogOrder;
+  paymentSession: ClientSalesCatalogPaymentSession | null;
+  status: ReturnType<typeof resolveSalesCatalogCheckoutStatus>;
+  totalCents: number;
 };
 
 const salesCatalogBrowserEventsChannel = "connectyhub:sales-catalog-events";
@@ -219,6 +241,8 @@ export function LeadCrmConsole({
   commerceEnabled = true,
   mode,
   salesCatalogItems = [],
+  salesCatalogOrders = [],
+  salesCatalogPaymentSessions = [],
   socialApprovals: initialSocialApprovals = [],
   socialDispatchMonitor: initialSocialDispatchMonitor = emptySocialDispatchMonitor,
   workspace,
@@ -259,6 +283,10 @@ export function LeadCrmConsole({
 
   const selectedLead = workspace.leads.find((lead) => lead.id === selectedLeadId) ?? filteredLeads[0] ?? workspace.leads[0] ?? null;
   const detailsLead = workspace.leads.find((lead) => lead.id === detailsLeadId) ?? null;
+  const checkoutRecordsByLead = useMemo(
+    () => buildLeadCheckoutRecordMap(workspace.leads, salesCatalogOrders, salesCatalogPaymentSessions),
+    [salesCatalogOrders, salesCatalogPaymentSessions, workspace.leads],
+  );
   const header = getHeaderCopy(mode);
   const warnings = workspace.warnings ?? [];
 
@@ -332,6 +360,7 @@ export function LeadCrmConsole({
 
       {mode === "conversas" ? (
         <ConversationsView
+          checkoutRecordsByLead={checkoutRecordsByLead}
           conversationPane={conversationPane}
           filteredLeads={filteredLeads}
           search={search}
@@ -353,6 +382,7 @@ export function LeadCrmConsole({
 
       {mode === "atendimento" ? (
         <AttendanceCenterView
+          checkoutRecordsByLead={checkoutRecordsByLead}
           commerceEnabled={commerceEnabled}
           conversationPane={conversationPane}
           filteredLeads={filteredLeads}
@@ -368,7 +398,13 @@ export function LeadCrmConsole({
         />
       ) : null}
 
-      {detailsLead ? <LeadDetailsModal lead={detailsLead} onClose={() => setDetailsLeadId(null)} /> : null}
+      {detailsLead ? (
+        <LeadDetailsModal
+          checkoutRecords={checkoutRecordsByLead.get(detailsLead.id) ?? []}
+          lead={detailsLead}
+          onClose={() => setDetailsLeadId(null)}
+        />
+      ) : null}
     </section>
   );
 }
@@ -609,6 +645,7 @@ function CrmView({
 }
 
 function ConversationsView({
+  checkoutRecordsByLead,
   conversationPane,
   filteredLeads,
   search,
@@ -626,6 +663,7 @@ function ConversationsView({
   status,
   totalLeads,
 }: {
+  checkoutRecordsByLead: Map<string, LeadCheckoutRecord[]>;
   conversationPane: "inbox" | "chat";
   filteredLeads: ClientLeadRecord[];
   search: string;
@@ -783,7 +821,12 @@ function ConversationsView({
                   </button>
                 </div>
               </div>
-              <LeadSideFile className="hidden lg:block" lead={selectedLead} onDetails={() => setDetailsLeadId(selectedLead.id)} />
+              <LeadSideFile
+                checkoutRecords={checkoutRecordsByLead.get(selectedLead.id) ?? []}
+                className="hidden lg:block"
+                lead={selectedLead}
+                onDetails={() => setDetailsLeadId(selectedLead.id)}
+              />
             </div>
           ) : (
             <EmptyState title="Sem conversa selecionada" detail="Escolha um lead para ver o historico completo." />
@@ -795,6 +838,7 @@ function ConversationsView({
 }
 
 function AttendanceCenterView({
+  checkoutRecordsByLead,
   commerceEnabled,
   conversationPane,
   filteredLeads,
@@ -808,6 +852,7 @@ function AttendanceCenterView({
   setSelectedLeadId,
   workspace,
 }: {
+  checkoutRecordsByLead: Map<string, LeadCheckoutRecord[]>;
   commerceEnabled: boolean;
   conversationPane: "inbox" | "chat";
   filteredLeads: ClientLeadRecord[];
@@ -891,6 +936,7 @@ function AttendanceCenterView({
   const activeCartKey = activeConversationId ?? activeThread?.key ?? activeLead?.id ?? null;
   const activeCartItems = activeCartKey ? leadCarts[activeCartKey] ?? [] : [];
   const activeCartTotalCents = activeCartItems.reduce((total, item) => total + (item.unitPriceCents * item.quantity), 0);
+  const activeCheckoutRecords = activeLead ? checkoutRecordsByLead.get(activeLead.id) ?? [] : [];
   const visibleCatalogItems = useMemo(
     () => (commerceEnabled ? salesCatalogItems.filter((item) => !deletedCatalogItemIds.has(item.id)) : []),
     [commerceEnabled, deletedCatalogItemIds, salesCatalogItems],
@@ -1753,6 +1799,7 @@ function AttendanceCenterView({
                 <AttendanceSalesBagPanel
                   cartItems={activeCartItems}
                   checkoutBusy={cartCheckoutBusy}
+                  checkoutRecords={activeCheckoutRecords}
                   lead={activeLead}
                   onAddManualItem={addManualCartItem}
                   onAddQuickItem={addQuickCartItem}
@@ -2042,6 +2089,7 @@ function AdminContextLine({
 function AttendanceSalesBagPanel({
   cartItems,
   checkoutBusy,
+  checkoutRecords,
   lead,
   onAddManualItem,
   onAddQuickItem,
@@ -2057,6 +2105,7 @@ function AttendanceSalesBagPanel({
 }: {
   cartItems: AttendanceCartItem[];
   checkoutBusy: boolean;
+  checkoutRecords: LeadCheckoutRecord[];
   lead: ClientLeadRecord;
   onAddManualItem: (input: { name: string; priceCents: number; quantity: number }) => void;
   onAddQuickItem: (product: AttendanceQuickProduct) => void;
@@ -2159,6 +2208,9 @@ function AttendanceSalesBagPanel({
           </span>
         </div>
 
+        {checkoutRecords.length ? (
+          <LeadCheckoutMiniList records={checkoutRecords} />
+        ) : null}
       </div>
 
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
@@ -3337,7 +3389,15 @@ function MetaDispatchStatusPill({
   return <NeonBadge tone={getDispatchStatusTone(status)}>{label}</NeonBadge>;
 }
 
-function LeadDetailsModal({ lead, onClose }: { lead: ClientLeadRecord; onClose: () => void }) {
+function LeadDetailsModal({
+  checkoutRecords,
+  lead,
+  onClose,
+}: {
+  checkoutRecords: LeadCheckoutRecord[];
+  lead: ClientLeadRecord;
+  onClose: () => void;
+}) {
   const preferredConversationId = lead.conversation.id ?? lead.leadFile.conversations[0]?.id ?? null;
   const [conversationSelection, setConversationSelection] = useState<{ leadId: string; conversationId: string | null }>({
     leadId: lead.id,
@@ -3394,6 +3454,7 @@ function LeadDetailsModal({ lead, onClose }: { lead: ClientLeadRecord; onClose: 
               <LeadTechnicalFile lead={lead} />
               <TrackingArchive events={lead.leadFile.trackingEvents} />
               <LeadFileSnapshot lead={lead} />
+              <LeadCheckoutSnapshot records={checkoutRecords} />
               <ActivityTimeline activities={lead.activities} />
             </div>
           </aside>
@@ -3622,6 +3683,106 @@ function LeadFileSnapshot({ lead }: { lead: ClientLeadRecord }) {
         <InfoMini label="Primeira aparicao" value={formatDateTime(lead.leadFile.firstSeenAt)} />
         <InfoMini label="Ultimo sinal" value={formatDateTime(lead.leadFile.lastSeenAt)} />
       </div>
+    </div>
+  );
+}
+
+function LeadCheckoutSnapshot({ records }: { records: LeadCheckoutRecord[] }) {
+  const summary = buildLeadCheckoutSummary(records);
+  const latest = records.slice(0, 5);
+
+  return (
+    <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="font-mono text-[9px] uppercase tracking-widest text-emerald-700">Checkouts do lead</p>
+          <p className="mt-1 text-[13px] font-semibold text-slate-950">Pedidos, pagamentos e abandono</p>
+        </div>
+        <CreditCard className="h-5 w-5 text-emerald-700" />
+      </div>
+
+      <div className="mt-3 grid grid-cols-3 gap-2">
+        <InfoMini label="Pagos" value={`${summary.paid.count} / ${formatCurrencyCents(summary.paid.totalCents)}`} />
+        <InfoMini label="Abertos" value={`${summary.open.count} / ${formatCurrencyCents(summary.open.totalCents)}`} />
+        <InfoMini label="Falhas" value={`${summary.problem.count} / ${formatCurrencyCents(summary.problem.totalCents)}`} />
+      </div>
+
+      {latest.length ? (
+        <div className="mt-3 space-y-2">
+          {latest.map((record) => (
+            <LeadCheckoutRecordRow key={record.id} record={record} />
+          ))}
+        </div>
+      ) : (
+        <p className="mt-3 rounded-xl border border-emerald-200/70 bg-white/70 px-3 py-2 text-[12px] leading-5 text-slate-600">
+          Nenhum checkout encontrado para este lead ainda.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function LeadCheckoutMiniList({ records }: { records: LeadCheckoutRecord[] }) {
+  const latest = records.slice(0, 2);
+
+  if (!latest.length) {
+    return null;
+  }
+
+  return (
+    <div className="mt-3 rounded-2xl border border-emerald-200 bg-white p-3">
+      <div className="flex items-center justify-between gap-2">
+        <p className="font-mono text-[9px] uppercase tracking-widest text-emerald-700">Checkouts</p>
+        <NeonBadge tone={getLeadCheckoutStageTone(latest[0].status.stage)}>{latest[0].status.label}</NeonBadge>
+      </div>
+      <div className="mt-2 space-y-1.5">
+        {latest.map((record) => (
+          <LeadCheckoutRecordRow compact key={record.id} record={record} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function LeadCheckoutRecordRow({ compact = false, record }: { compact?: boolean; record: LeadCheckoutRecord }) {
+  const paymentDetails = [
+    formatSalesCatalogPaymentStatus(record.order.paymentStatus),
+    record.paymentSession ? formatSalesCatalogPaymentSessionStatus(record.paymentSession.status) : null,
+  ].filter(Boolean).join(" / ");
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="truncate text-[12px] font-semibold text-slate-950">{record.itemSummary}</p>
+          <p className="mt-1 flex flex-wrap items-center gap-1.5 font-mono text-[9px] uppercase tracking-wide text-slate-500">
+            <span>{formatCurrencyCents(record.totalCents)}</span>
+            <span>#{record.order.id.slice(0, 8)}</span>
+            {paymentDetails ? <span>{paymentDetails}</span> : null}
+            {record.latestAt ? <span>{formatDateTime(record.latestAt)}</span> : null}
+          </p>
+        </div>
+        <span className={cn("shrink-0 rounded-lg border px-2 py-1 font-mono text-[8px] font-bold uppercase tracking-wide", lightToneClassName[getLeadCheckoutStageTone(record.status.stage)])}>
+          {record.status.label}
+        </span>
+      </div>
+      {!compact ? (
+        <div className="mt-2 flex items-center justify-between gap-2">
+          <p className="line-clamp-2 text-[11px] leading-4 text-slate-500">{record.status.description}</p>
+          {record.checkoutUrl ? (
+            <a
+              aria-label="Abrir checkout do lead"
+              className="inline-flex h-8 shrink-0 items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2 text-[10px] font-bold text-blue-700 transition hover:bg-blue-100"
+              href={record.checkoutUrl}
+              rel="noreferrer"
+              target="_blank"
+            >
+              Abrir
+              <ExternalLink className="h-3 w-3" />
+            </a>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -4033,12 +4194,23 @@ function MiniChat({ lead, messages }: { lead: ClientLeadRecord; messages: Client
   );
 }
 
-function LeadSideFile({ className, lead, onDetails }: { className?: string; lead: ClientLeadRecord; onDetails: () => void }) {
+function LeadSideFile({
+  checkoutRecords,
+  className,
+  lead,
+  onDetails,
+}: {
+  checkoutRecords?: LeadCheckoutRecord[];
+  className?: string;
+  lead: ClientLeadRecord;
+  onDetails: () => void;
+}) {
   return (
     <aside className={cn("space-y-3", className)}>
       <InfoPanel title="Resumo" text={lead.summary} />
       <LeadQualificationSnapshot lead={lead} />
       <LeadTechnicalFile lead={lead} />
+      {checkoutRecords?.length ? <LeadCheckoutMiniList records={checkoutRecords} /> : null}
       <button
         className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-white transition hover:bg-blue-700"
         onClick={onDetails}
@@ -4071,6 +4243,178 @@ function LeadQualificationSnapshot({ lead }: { lead: ClientLeadRecord }) {
       </p>
     </div>
   );
+}
+
+function buildLeadCheckoutRecordMap(
+  leads: ClientLeadRecord[],
+  orders: ClientSalesCatalogOrder[],
+  paymentSessions: ClientSalesCatalogPaymentSession[],
+) {
+  const recordsByLead = new Map<string, LeadCheckoutRecord[]>();
+  const leadIds = new Set(leads.map((lead) => lead.id));
+  const phoneLeadIds = new Map<string, Set<string>>();
+  const conversationLeadIds = new Map<string, string>();
+  const sessionsByOrder = new Map<string, ClientSalesCatalogPaymentSession[]>();
+
+  for (const lead of leads) {
+    for (const key of getLeadCheckoutPhoneKeys(lead.phone)) {
+      const current = phoneLeadIds.get(key) ?? new Set<string>();
+      current.add(lead.id);
+      phoneLeadIds.set(key, current);
+    }
+
+    for (const conversation of lead.leadFile.conversations) {
+      if (conversation.id) {
+        conversationLeadIds.set(conversation.id, lead.id);
+      }
+    }
+  }
+
+  for (const session of paymentSessions) {
+    const current = sessionsByOrder.get(session.orderId) ?? [];
+    current.push(session);
+    sessionsByOrder.set(session.orderId, current);
+  }
+
+  for (const order of orders) {
+    const matchedLeadIds = new Set<string>();
+
+    if (order.leadId && leadIds.has(order.leadId)) {
+      matchedLeadIds.add(order.leadId);
+    }
+
+    if (order.conversationId) {
+      const leadId = conversationLeadIds.get(order.conversationId);
+      if (leadId) matchedLeadIds.add(leadId);
+    }
+
+    for (const key of getLeadCheckoutPhoneKeys(order.customerPhone)) {
+      for (const leadId of phoneLeadIds.get(key) ?? []) {
+        matchedLeadIds.add(leadId);
+      }
+    }
+
+    if (!matchedLeadIds.size) {
+      continue;
+    }
+
+    const sessions = (sessionsByOrder.get(order.id) ?? [])
+      .sort((a, b) => toLeadCheckoutTimestamp(b.updatedAt ?? b.createdAt) - toLeadCheckoutTimestamp(a.updatedAt ?? a.createdAt));
+    const paymentSession = order.latestPaymentSessionId
+      ? sessions.find((session) => session.id === order.latestPaymentSessionId) ?? sessions[0] ?? null
+      : sessions[0] ?? null;
+    const status = resolveSalesCatalogCheckoutStatus({
+      abandonedAfterMinutes: defaultSalesCatalogAbandonedCheckoutMinutes,
+      order,
+      paymentSession,
+    });
+    const latestAt = pickLeadCheckoutLatestDate([
+      paymentSession?.paidAt,
+      paymentSession?.updatedAt,
+      paymentSession?.createdAt,
+      order.updatedAt,
+      order.createdAt,
+    ]);
+    const totalCents = parseCurrencyInputToCents(order.total ?? paymentSession?.amount ?? "0");
+    const record: LeadCheckoutRecord = {
+      checkoutUrl: paymentSession?.checkoutUrl ?? null,
+      id: `${order.id}-${paymentSession?.id ?? "pedido"}`,
+      itemSummary: formatLeadCheckoutItems(order),
+      latestAt,
+      order,
+      paymentSession,
+      status,
+      totalCents,
+    };
+
+    for (const leadId of matchedLeadIds) {
+      const current = recordsByLead.get(leadId) ?? [];
+      current.push(record);
+      recordsByLead.set(leadId, current);
+    }
+  }
+
+  for (const [leadId, records] of recordsByLead) {
+    recordsByLead.set(
+      leadId,
+      records.sort((a, b) => toLeadCheckoutTimestamp(b.latestAt) - toLeadCheckoutTimestamp(a.latestAt)),
+    );
+  }
+
+  return recordsByLead;
+}
+
+function buildLeadCheckoutSummary(records: LeadCheckoutRecord[]) {
+  const summary = {
+    open: { count: 0, totalCents: 0 },
+    paid: { count: 0, totalCents: 0 },
+    problem: { count: 0, totalCents: 0 },
+  };
+
+  for (const record of records) {
+    const bucket = record.status.stage === "paid"
+      ? summary.paid
+      : record.status.stage === "pending" || record.status.stage === "abandoned"
+        ? summary.open
+        : summary.problem;
+
+    bucket.count += 1;
+    bucket.totalCents += record.totalCents;
+  }
+
+  return summary;
+}
+
+function formatLeadCheckoutItems(order: ClientSalesCatalogOrder) {
+  if (!order.items.length) {
+    return "Pedido sem itens vinculados";
+  }
+
+  return order.items
+    .slice(0, 3)
+    .map((item) => `${item.quantity}x ${item.title}`)
+    .join(", ");
+}
+
+function getLeadCheckoutStageTone(stage: SalesCatalogCheckoutStage): LeadTone {
+  if (stage === "paid") return "green";
+  if (stage === "pending") return "cyan";
+  if (stage === "abandoned") return "amber";
+  if (stage === "refunded") return "violet";
+  return "rose";
+}
+
+function getLeadCheckoutPhoneKeys(value: string | null | undefined) {
+  const digits = value?.replace(/\D/g, "") ?? "";
+  const keys = new Set<string>();
+
+  if (!digits) return keys;
+
+  keys.add(digits);
+
+  if (digits.length > 11) {
+    keys.add(digits.slice(-11));
+  }
+
+  if (digits.length === 11 && !digits.startsWith("55")) {
+    keys.add(`55${digits}`);
+  }
+
+  return keys;
+}
+
+function pickLeadCheckoutLatestDate(values: Array<string | null | undefined>) {
+  return values
+    .filter((value): value is string => Boolean(value))
+    .sort((a, b) => toLeadCheckoutTimestamp(b) - toLeadCheckoutTimestamp(a))[0] ?? null;
+}
+
+function toLeadCheckoutTimestamp(value: string | null | undefined) {
+  if (!value) return 0;
+
+  const timestamp = new Date(value).getTime();
+
+  return Number.isNaN(timestamp) ? 0 : timestamp;
 }
 
 function EmptyState({ title, detail }: { title: string; detail: string }) {

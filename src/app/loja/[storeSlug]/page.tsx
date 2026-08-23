@@ -156,6 +156,7 @@ async function loadStoreProducts(
   return ((data ?? []) as SalesCatalogMemoryRow[])
     .map(mapSalesCatalogItem)
     .filter((item) => item.status === "active" && isSalesCatalogDisplayableProduct(item))
+    .sort(compareStoreCatalogItems)
     .map((item) => mapStorefrontProduct(item, input));
 }
 
@@ -192,7 +193,7 @@ function mapStorefrontProduct(
     coverUrl: cover?.storageUrl ?? null,
     stockLabel: formatStockLabel(item),
     fulfillmentLabel: formatFulfillment(item.fulfillment.mode),
-    highlightLabel: item.highlightLabel ?? (item.offer.salePrice ? "Oferta" : null),
+    highlightLabel: item.storeFeatured ? item.highlightLabel ?? "Destaque" : item.highlightLabel ?? (item.offer.salePrice ? "Oferta" : null),
     canCheckout,
     productUrl: buildLeadAwareSalesCatalogProductUrl({
       productId: item.id,
@@ -203,6 +204,26 @@ function mapStorefrontProduct(
       trackingLinkId: input.trackingLinkId,
     }),
   };
+}
+
+function compareStoreCatalogItems(a: ClientSalesCatalogItem, b: ClientSalesCatalogItem) {
+  const featuredA = a.storeFeatured ? 0 : 1;
+  const featuredB = b.storeFeatured ? 0 : 1;
+
+  if (featuredA !== featuredB) {
+    return featuredA - featuredB;
+  }
+
+  if (a.storeFeatured || b.storeFeatured) {
+    const rankA = a.storeFeaturedRank ?? 999;
+    const rankB = b.storeFeaturedRank ?? 999;
+
+    if (rankA !== rankB) {
+      return rankA - rankB;
+    }
+  }
+
+  return toStoreCatalogTimestamp(b.updatedAt ?? b.createdAt) - toStoreCatalogTimestamp(a.updatedAt ?? a.createdAt);
 }
 
 function buildStorePublicTrackingContext(input: {
@@ -274,6 +295,14 @@ function formatFulfillment(value: ClientSalesCatalogItem["fulfillment"]["mode"])
   if (value === "service") return "Servico";
   if (value === "subscription") return "Assinatura";
   return "Produto fisico";
+}
+
+function toStoreCatalogTimestamp(value: string | null | undefined) {
+  if (!value) return 0;
+
+  const timestamp = new Date(value).getTime();
+
+  return Number.isNaN(timestamp) ? 0 : timestamp;
 }
 
 function readSearchString(value: string | string[] | undefined) {
