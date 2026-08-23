@@ -9,7 +9,7 @@ import { ProductCheckoutButton } from "@/components/checkout/sales-catalog-produ
 import { mapSalesCatalogItem } from "@/lib/client-os/sales-catalog";
 import { normalizeCurrencyAmount } from "@/lib/sales-catalog/mercado-pago";
 import { buildLeadAwareSalesCatalogProductUrl, buildLeadAwareSalesCatalogStoreUrl } from "@/lib/sales-catalog/public-urls";
-import type { ClientSalesCatalogItem } from "@/lib/sales-catalog/shared";
+import { isSalesCatalogDisplayableProduct, type ClientSalesCatalogItem } from "@/lib/sales-catalog/shared";
 import { createServiceClient } from "@/lib/supabase/service";
 import { createOrganizationTrackingToken } from "@/lib/tracking/organization-attribution";
 import type { ConnectyPublicTrackingContext } from "@/lib/tracking/public-context";
@@ -61,6 +61,13 @@ export async function generateMetadata({ params }: ProductPageProps): Promise<Me
 
   const item = mapSalesCatalogItem(row);
 
+  if (!isSalesCatalogDisplayableProduct(item)) {
+    return {
+      title: "Produto | ConnectyHub",
+      description: "Produto indisponivel no catalogo ConnectyHub.",
+    };
+  }
+
   return {
     title: `${item.title} | ConnectyHub`,
     description: item.description.slice(0, 155),
@@ -79,7 +86,7 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
 
   const item = mapSalesCatalogItem(row);
 
-  if (item.status !== "active") {
+  if (item.status !== "active" || !isSalesCatalogDisplayableProduct(item)) {
     notFound();
   }
 
@@ -375,6 +382,7 @@ async function loadRelatedProducts(
     .filter((related) => (
       related.salesDestination === "connectyhub_checkout"
       && related.status === "active"
+      && isSalesCatalogDisplayableProduct(related)
       && !(related.inventory.status === "out_of_stock" && !related.inventory.allowBackorder)
     ))
     .slice(0, 4);

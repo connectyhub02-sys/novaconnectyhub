@@ -251,6 +251,29 @@ export type ClientSalesCatalogItem = {
   updatedAt: string | null;
 };
 
+export function isSalesCatalogCheckoutTrackingProduct(
+  item: Pick<ClientSalesCatalogItem, "title" | "category" | "description" | "salesDestination" | "productUrl" | "externalLinkButtonId" | "source">,
+) {
+  const title = normalizeCatalogVisibilityText(item.title);
+  const category = normalizeCatalogVisibilityText(item.category);
+  const description = normalizeCatalogVisibilityText(item.description);
+  const source = normalizeCatalogVisibilityText(item.source);
+  const isLegacyImportedLink = Boolean(item.externalLinkButtonId)
+    || category === "links importados"
+    || description.includes("produto importado dos botoes antigos");
+
+  return isLegacyImportedLink && (
+    title.startsWith("pagamento pedido")
+    || source === "sales_catalog_checkout"
+    || item.salesDestination === "connectyhub_checkout"
+    || isSalesCatalogCheckoutUrl(item.productUrl)
+  );
+}
+
+export function isSalesCatalogDisplayableProduct(item: ClientSalesCatalogItem) {
+  return item.status !== "archived" && !isSalesCatalogCheckoutTrackingProduct(item);
+}
+
 export type ClientSalesCatalogOrderItem = {
   id: string;
   orderId: string;
@@ -276,6 +299,24 @@ export type ClientSalesCatalogOrderItem = {
   platformProductCommissionReleaseDays: number | null;
   createdAt: string | null;
 };
+
+function normalizeCatalogVisibilityText(value: unknown) {
+  return typeof value === "string"
+    ? value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim()
+    : "";
+}
+
+function isSalesCatalogCheckoutUrl(value: string | null) {
+  if (!value) return false;
+
+  try {
+    const url = new URL(value);
+    const path = url.pathname.toLowerCase();
+    return path === "/checkout" || path.startsWith("/checkout/");
+  } catch {
+    return false;
+  }
+}
 
 export type ClientSalesCatalogOrder = {
   id: string;

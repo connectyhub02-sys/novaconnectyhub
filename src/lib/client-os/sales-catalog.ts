@@ -66,6 +66,7 @@ import {
   type SalesCatalogSkuStatus,
   type SalesCatalogWhatsappExportStatus,
   type SalesCatalogWhatsappExportTarget,
+  isSalesCatalogDisplayableProduct,
 } from "@/lib/sales-catalog/shared";
 import { buildTrackedLinkUrl, createTrackedLinkTag } from "@/lib/tracking/tracked-links";
 
@@ -273,7 +274,7 @@ export async function listClientSalesCatalog(input: {
     client,
     ((data ?? []) as SalesCatalogMemoryRow[])
       .map(mapSalesCatalogItem)
-      .filter((item) => item.status !== "archived"),
+      .filter(isSalesCatalogDisplayableProduct),
   );
 }
 
@@ -595,7 +596,7 @@ export async function listOrganizationSalesCatalog(
     client,
     ((data ?? []) as SalesCatalogMemoryRow[])
       .map(mapSalesCatalogItem)
-      .filter((item) => item.status !== "archived"),
+      .filter(isSalesCatalogDisplayableProduct),
   );
 }
 
@@ -684,6 +685,10 @@ function buildLegacyLinkButtonPromotion(
     return null;
   }
 
+  if (isCheckoutTrackedLinkButton(metadata, tags)) {
+    return null;
+  }
+
   if (
     readString(metadata.catalog_item_id)
     || readString(metadata.sales_catalog_item_id)
@@ -698,6 +703,10 @@ function buildLegacyLinkButtonPromotion(
   const productUrl = normalizeLegacyTrackedLinkButtonUrl(readString(metadata.url) ?? readString(row.content));
 
   if (!organizationId || !title || !productUrl) {
+    return null;
+  }
+
+  if (isCheckoutUrl(productUrl) || /^pagamento pedido\b/i.test(title)) {
     return null;
   }
 
@@ -853,6 +862,33 @@ function normalizeLegacyTrackedLinkButtonUrl(value: string | null) {
     return url.protocol === "http:" || url.protocol === "https:" ? url.toString() : null;
   } catch {
     return null;
+  }
+}
+
+function isCheckoutTrackedLinkButton(metadata: JsonRecord, tags: Set<string>) {
+  if (
+    tags.has("sales_catalog_checkout")
+    || tags.has("sales_catalog_order")
+    || tags.has("payment")
+  ) {
+    return true;
+  }
+
+  return readString(metadata.source) === "sales_catalog_checkout"
+    || readString(metadata.sales_destination) === "connectyhub_checkout"
+    || Boolean(readString(metadata.order_id))
+    || Boolean(readString(metadata.payment_session_id))
+    || isCheckoutUrl(readString(metadata.url));
+}
+
+function isCheckoutUrl(value: string | null) {
+  if (!value) return false;
+
+  try {
+    const path = new URL(value).pathname.toLowerCase();
+    return path === "/checkout" || path.startsWith("/checkout/");
+  } catch {
+    return false;
   }
 }
 

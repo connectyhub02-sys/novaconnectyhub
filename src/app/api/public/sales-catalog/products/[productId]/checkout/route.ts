@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { mapSalesCatalogItem } from "@/lib/client-os/sales-catalog";
 import { normalizeCurrencyAmount } from "@/lib/sales-catalog/mercado-pago";
 import { createSalesCatalogPixPaymentSession } from "@/lib/sales-catalog/payment-sessions";
+import { isSalesCatalogDisplayableProduct } from "@/lib/sales-catalog/shared";
 import { validatePublicWriteRequest, type PublicWriteGuardResult } from "@/lib/security/public-request-guard";
 import { createServiceClient } from "@/lib/supabase/service";
 import { appendLeadTrackingParams } from "@/lib/tracking/tracked-links";
@@ -71,7 +72,7 @@ export async function POST(
 
   const item = mapSalesCatalogItem(row);
 
-  if (item.status !== "active" || item.salesDestination !== "connectyhub_checkout") {
+  if (!isSalesCatalogDisplayableProduct(item) || item.status !== "active" || item.salesDestination !== "connectyhub_checkout") {
     return NextResponse.json({ error: "Este produto nao esta disponivel para checkout online." }, { status: 422 });
   }
 

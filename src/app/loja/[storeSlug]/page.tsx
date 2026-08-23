@@ -9,7 +9,7 @@ import {
 import { mapSalesCatalogItem } from "@/lib/client-os/sales-catalog";
 import { normalizeCurrencyAmount } from "@/lib/sales-catalog/mercado-pago";
 import { buildLeadAwareSalesCatalogProductUrl } from "@/lib/sales-catalog/public-urls";
-import type { ClientSalesCatalogItem } from "@/lib/sales-catalog/shared";
+import { isSalesCatalogDisplayableProduct, type ClientSalesCatalogItem } from "@/lib/sales-catalog/shared";
 import { createServiceClient } from "@/lib/supabase/service";
 import { createOrganizationTrackingToken } from "@/lib/tracking/organization-attribution";
 import type { ConnectyPublicTrackingContext } from "@/lib/tracking/public-context";
@@ -155,7 +155,7 @@ async function loadStoreProducts(
 
   return ((data ?? []) as SalesCatalogMemoryRow[])
     .map(mapSalesCatalogItem)
-    .filter((item) => item.status === "active")
+    .filter((item) => item.status === "active" && isSalesCatalogDisplayableProduct(item))
     .map((item) => mapStorefrontProduct(item, input));
 }
 

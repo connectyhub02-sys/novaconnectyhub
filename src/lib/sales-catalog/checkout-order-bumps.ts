@@ -5,7 +5,7 @@ import {
   getOrganizationSalesCatalogSettings,
   mapSalesCatalogItem,
 } from "@/lib/client-os/sales-catalog";
-import type { ClientSalesCatalogItem } from "@/lib/sales-catalog/shared";
+import { isSalesCatalogDisplayableProduct, type ClientSalesCatalogItem } from "@/lib/sales-catalog/shared";
 import { normalizeCurrencyAmount } from "@/lib/sales-catalog/mercado-pago";
 
 type JsonRecord = Record<string, unknown>;
@@ -365,7 +365,7 @@ function toCheckoutOrderBump(
   config: { badge: string | null; title: string | null; description: string | null },
 ): SalesCatalogCheckoutOrderBump | null {
   const price = normalizeCurrencyAmount(item.price);
-  if (item.status !== "active" || item.salesDestination !== "connectyhub_checkout" || !price) {
+  if (!isSalesCatalogDisplayableProduct(item) || item.status !== "active" || item.salesDestination !== "connectyhub_checkout" || !price) {
     return null;
   }
 
