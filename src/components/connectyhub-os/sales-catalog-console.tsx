@@ -787,6 +787,7 @@ export function SalesCatalogConsole({
     || `${selectedCompany?.name ?? "Sua empresa"} atende seus clientes com catalogo, checkout e suporte conectados ao WhatsApp.`;
   const storefrontFooterContactText = settingsDraft.storefront.footerContactText?.trim() || "Atendimento pelo WhatsApp oficial da loja.";
   const storefrontPrimaryColor = normalizeStorefrontPreviewColor(settingsDraft.storefront.primaryColor) ?? "#063f2c";
+  const storefrontTextColor = normalizeStorefrontTextPreviewColor(settingsDraft.storefront.textColor) ?? "#111111";
   const hasConfiguredSettings = Boolean(selectedSettings?.configured);
   const productAttributes = useMemo(
     () => (selectedSettings?.configured ? selectedSettings.attributes : settingsDraft.attributes).filter((attribute) => attribute.values.length > 0),
@@ -1182,6 +1183,7 @@ export function SalesCatalogConsole({
             footerText: cleanInput(settingsDraft.storefront.footerText, 320),
             footerContactText: cleanInput(settingsDraft.storefront.footerContactText, 180),
             primaryColor: settingsDraft.storefront.primaryColor,
+            textColor: settingsDraft.storefront.textColor,
           },
           trackInventory: settingsDraft.trackInventory,
           variationMedia: settingsDraft.variationMedia,
@@ -3067,6 +3069,27 @@ export function SalesCatalogConsole({
                 </div>
               </label>
 
+              <label className="block">
+                <FieldLabel>Cor das letras</FieldLabel>
+                <div className="grid grid-cols-[48px_minmax(0,1fr)] gap-2">
+                  <input
+                    aria-label="Cor das letras da loja"
+                    className="h-11 w-12 rounded-lg border bg-transparent p-1"
+                    type="color"
+                    value={storefrontTextColor}
+                    onChange={(event) => updateStorefrontSettings({ textColor: event.target.value })}
+                    style={{ borderColor: "var(--ch-border)" }}
+                  />
+                  <input
+                    value={settingsDraft.storefront.textColor ?? ""}
+                    onChange={(event) => updateStorefrontSettings({ textColor: event.target.value.slice(0, 7) })}
+                    className="h-11 w-full rounded-lg border bg-transparent px-3 font-mono text-[12px] outline-none"
+                    placeholder="#111111"
+                    style={{ borderColor: "var(--ch-border)" }}
+                  />
+                </div>
+              </label>
+
               <button
                 type="button"
                 disabled={!selectedCompanyId || savingSettings}
@@ -3078,7 +3101,7 @@ export function SalesCatalogConsole({
               </button>
             </div>
 
-            <div className="min-w-0 rounded-xl border border-emerald-300/25 bg-white p-4 text-slate-950 shadow-xl shadow-emerald-950/10">
+            <div className="min-w-0 rounded-xl border border-emerald-300/25 bg-white p-4 shadow-xl shadow-emerald-950/10" style={{ color: storefrontTextColor }}>
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4">
                 <div className="flex min-w-0 items-center gap-3">
                   <div className="relative grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-lg border border-slate-200 bg-white">
@@ -3097,7 +3120,7 @@ export function SalesCatalogConsole({
                   </div>
                   <div className="min-w-0">
                     <p className="truncate text-[15px] font-black">{selectedCompany?.name ?? "Sua loja"}</p>
-                    <p className="line-clamp-1 text-[11px] font-semibold text-slate-500">{storefrontHeaderText}</p>
+                    <p className="line-clamp-1 text-[11px] font-semibold opacity-70">{storefrontHeaderText}</p>
                   </div>
                 </div>
                 <span className="rounded-lg px-3 py-2 text-[11px] font-black text-white" style={{ backgroundColor: storefrontPrimaryColor }}>
@@ -3114,7 +3137,7 @@ export function SalesCatalogConsole({
                     {storefrontHeroTitle}
                     {storefrontHeroHighlight ? <span className="block">{storefrontHeroHighlight}</span> : null}
                   </h3>
-                  <p className="mt-3 line-clamp-2 max-w-xl text-[13px] leading-5 text-slate-600">{storefrontHeroSubtitle}</p>
+                  <p className="mt-3 line-clamp-2 max-w-xl text-[13px] leading-5 opacity-75">{storefrontHeroSubtitle}</p>
                   <div className="mt-4 flex flex-wrap gap-2">
                     <span className="rounded-lg px-4 py-2 text-[11px] font-black text-white" style={{ backgroundColor: storefrontPrimaryColor }}>
                       Ver produtos
@@ -3149,7 +3172,7 @@ export function SalesCatalogConsole({
                     </div>
                     <div className="p-3">
                       <p className="line-clamp-1 text-[12px] font-black">{item.title}</p>
-                      <p className="mt-1 text-[11px] font-semibold text-slate-500">{item.price ?? "Preco sob consulta"}</p>
+                      <p className="mt-1 text-[11px] font-semibold opacity-70">{item.price ?? "Preco sob consulta"}</p>
                     </div>
                   </div>
                 ))}
@@ -3157,9 +3180,9 @@ export function SalesCatalogConsole({
 
               <div className="mt-5 rounded-lg border border-slate-100 bg-slate-50 p-4">
                 <p className="text-[13px] font-black">{selectedCompany?.name ?? "Sua empresa"}</p>
-                <p className="mt-1 line-clamp-3 text-[12px] leading-5 text-slate-600">{storefrontFooterText}</p>
+                <p className="mt-1 line-clamp-3 text-[12px] leading-5 opacity-75">{storefrontFooterText}</p>
                 <p className="mt-2 text-[11px] font-semibold" style={{ color: storefrontPrimaryColor }}>{storefrontFooterContactText}</p>
-                <p className="mt-3 text-[10px] font-bold uppercase tracking-wide text-slate-400">Desenvolvido por Connect Hub</p>
+                <p className="mt-3 text-[10px] font-bold uppercase tracking-wide opacity-55">Desenvolvido por ConnectyHub</p>
               </div>
             </div>
           </div>
@@ -7406,6 +7429,13 @@ function normalizeStorefrontPreviewColor(value: string | null | undefined) {
   return luminance < 0.82 ? normalized : null;
 }
 
+function normalizeStorefrontTextPreviewColor(value: string | null | undefined) {
+  if (!value) return null;
+
+  const normalized = value.trim().toLowerCase();
+  return /^#[0-9a-f]{6}$/.test(normalized) ? normalized : null;
+}
+
 function buildSettingsDraft(settings: ClientSalesCatalogSettings | null): SettingsDraft {
   const commerceDefaults = createDefaultSalesCatalogCommerceSettings();
 
@@ -7421,6 +7451,7 @@ function buildSettingsDraft(settings: ClientSalesCatalogSettings | null): Settin
       footerText: settings?.storefront.footerText ?? "",
       footerContactText: settings?.storefront.footerContactText ?? "",
       primaryColor: settings?.storefront.primaryColor ?? "#063f2c",
+      textColor: settings?.storefront.textColor ?? "#111111",
     },
     trackInventory: settings?.trackInventory ?? false,
     variationMedia: settings?.variationMedia ?? false,

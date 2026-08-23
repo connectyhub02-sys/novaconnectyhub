@@ -42,6 +42,7 @@ export type PublicStorefrontSettings = {
   footerText: string | null;
   footerContactText: string | null;
   primaryColor: string | null;
+  textColor: string | null;
 };
 
 export type PublicStorefrontTrackingParams = {
@@ -181,16 +182,19 @@ export function PublicStorefront({ storeSlug, branding, storefront, products, tr
   const checkoutReady = cart.length > 0
     && cart.every((line) => line.product.canCheckout && typeof line.product.priceCents === "number");
   const primaryColor = normalizeStorefrontPrimaryColor(storefront.primaryColor) ?? defaultStorefrontPrimaryColor;
+  const textColor = normalizeStorefrontTextColor(storefront.textColor) ?? "#111111";
   const publicLayoutStyle = {
     "--store-primary": primaryColor,
     "--store-action": storefrontActionColor,
+    "--store-text": textColor,
+    "--store-text-muted": `color-mix(in srgb, ${textColor} 72%, white 28%)`,
   } as CSSProperties;
   const customHeroTitle = storefront.heroTitle?.trim() || storefront.headerText?.trim() || "";
   const heroTitle = customHeroTitle || "Produtos favoritos,";
   const heroHighlight = customHeroTitle ? (storefront.heroHighlight?.trim() || "") : (storefront.heroHighlight || `da ${branding.displayName} ate voce.`);
   const legacyHeaderText = `${heroTitle} ${heroHighlight}`.trim();
   const heroSubtitle = storefront.heroSubtitle
-    || `Produtos selecionados pela ${branding.displayName}, atendimento pelo WhatsApp e checkout seguro pela Connect Hub.`;
+    || `Produtos selecionados pela ${branding.displayName}, atendimento pelo WhatsApp e checkout seguro pela ConnectyHub.`;
   const headerText = storefront.heroSubtitle || storefront.headerText || legacyHeaderText || heroSubtitle;
   const footerText = storefront.footerText
     || `${branding.displayName} atende pelo WhatsApp com catalogo, checkout seguro e acompanhamento do pedido em um so lugar.`;
@@ -280,7 +284,7 @@ export function PublicStorefront({ storeSlug, branding, storefront, products, tr
   }
 
   return (
-    <main className="min-h-screen bg-[#fbfaf6] pb-20 text-[#111111] lg:pb-0" style={publicLayoutStyle}>
+    <main className="min-h-screen bg-[#fbfaf6] pb-20 text-[color:var(--store-text)] lg:pb-0" style={publicLayoutStyle}>
       <StorefrontHero
         branding={branding}
         featuredProduct={featuredProduct}
@@ -425,11 +429,11 @@ function StorefrontHero({
               <Sparkles className="h-4 w-4" />
               Loja oficial. Compra facil.
             </p>
-            <h1 className="mt-4 max-w-2xl font-serif text-[44px] font-black leading-[0.98] text-[#111111] sm:text-[58px] lg:text-[68px]">
+            <h1 className="mt-4 max-w-2xl font-serif text-[44px] font-black leading-[0.98] text-[color:var(--store-text)] sm:text-[58px] lg:text-[68px]">
               {heroTitle}
               {heroHighlight ? <span className="block">{heroHighlight}</span> : null}
             </h1>
-            <p className="mt-6 max-w-xl text-base font-medium leading-7 text-[#4f5b54] sm:text-lg">
+            <p className="mt-6 max-w-xl text-base font-medium leading-7 text-[color:var(--store-text-muted)] sm:text-lg">
               {heroSubtitle}
             </p>
             <div className="mt-7 flex flex-col gap-3 sm:flex-row">
@@ -494,7 +498,7 @@ function BenefitStrip() {
     {
       icon: <ShieldCheck className="h-8 w-8" />,
       title: "Pagamento seguro",
-      text: "Checkout protegido no ecossistema Connect Hub.",
+      text: "Checkout protegido no ecossistema ConnectyHub.",
     },
     {
       icon: <RotateCcw className="h-8 w-8" />,
@@ -513,10 +517,10 @@ function BenefitStrip() {
       <div className="grid overflow-hidden rounded-[8px] border border-[#e5e2d8] bg-white shadow-sm shadow-slate-950/5 md:grid-cols-4 md:divide-x md:divide-[#e5e2d8]">
         {benefits.map((benefit) => (
           <div className="flex min-h-24 items-center gap-4 px-5 py-4" key={benefit.title}>
-            <span className="shrink-0 text-[#111111]">{benefit.icon}</span>
+            <span className="shrink-0 text-[color:var(--store-text)]">{benefit.icon}</span>
             <div className="min-w-0">
-              <h2 className="text-sm font-black uppercase text-[#111111]">{benefit.title}</h2>
-              <p className="mt-1 text-xs font-semibold leading-5 text-[#5d665f]">{benefit.text}</p>
+              <h2 className="text-sm font-black uppercase text-[color:var(--store-text)]">{benefit.title}</h2>
+              <p className="mt-1 text-xs font-semibold leading-5 text-[color:var(--store-text-muted)]">{benefit.text}</p>
             </div>
           </div>
         ))}
@@ -594,14 +598,14 @@ function ProductShowcaseSection({
 function SectionHeading({ eyebrow, title }: { eyebrow: string; title: string }) {
   return (
     <div className="text-center">
-      <p className="text-xs font-black uppercase text-[#111111]">{eyebrow}</p>
+      <p className="text-xs font-black uppercase text-[color:var(--store-text)]">{eyebrow}</p>
       <div className="mt-2 flex items-center justify-center gap-5">
-        <span className="hidden h-px w-24 bg-[#111111]/45 sm:block" />
-        <h2 className="font-serif text-[34px] font-black leading-none text-[#111111] sm:text-[42px]">
+        <span className="hidden h-px w-24 bg-current opacity-45 sm:block" style={{ color: "var(--store-text)" }} />
+        <h2 className="font-serif text-[34px] font-black leading-none text-[color:var(--store-text)] sm:text-[42px]">
           {title}
         </h2>
         <Heart className="h-6 w-6 text-[#d84f66]" />
-        <span className="hidden h-px w-24 bg-[#111111]/45 sm:block" />
+        <span className="hidden h-px w-24 bg-current opacity-45 sm:block" style={{ color: "var(--store-text)" }} />
       </div>
     </div>
   );
@@ -631,17 +635,17 @@ function ProductCard({
       </a>
 
       <div className="flex flex-1 flex-col p-3 text-center sm:p-4">
-        <h3 className="line-clamp-2 min-h-10 text-[13px] font-black leading-5 text-[#111111] sm:text-sm">
+        <h3 className="line-clamp-2 min-h-10 text-[13px] font-black leading-5 text-[color:var(--store-text)] sm:text-sm">
           {product.title}
         </h3>
         <div className="mt-2 flex items-center justify-center gap-1 text-[#f5a400]">
           {[0, 1, 2, 3, 4].map((item) => (
             <Star className="h-3.5 w-3.5 fill-current" key={item} />
           ))}
-          <span className="ml-1 text-xs font-bold text-[#5d665f]">(4.8)</span>
+          <span className="ml-1 text-xs font-bold text-[color:var(--store-text-muted)]">(4.8)</span>
         </div>
         <div className="mt-2 flex min-h-7 items-center justify-center gap-2">
-          <p className="text-base font-black text-[#111111]">{product.priceLabel}</p>
+          <p className="text-base font-black text-[color:var(--store-text)]">{product.priceLabel}</p>
           {product.compareAtLabel ? (
             <p className="text-xs font-semibold text-[#8b918c] line-through">{product.compareAtLabel}</p>
           ) : null}
@@ -711,7 +715,7 @@ function CategoryShowcase({
   return (
     <section id="categorias" className="bg-[#f2f6f0] py-8">
       <div className="mx-auto w-full max-w-6xl px-5 sm:px-8">
-        <h2 className="text-center text-sm font-black uppercase text-[#111111]">Comprar por categoria</h2>
+        <h2 className="text-center text-sm font-black uppercase text-[color:var(--store-text)]">Comprar por categoria</h2>
         <div className="mt-6 grid grid-cols-4 gap-4 sm:grid-cols-6 lg:grid-cols-8">
           {categories.map((item, index) => (
             <CategoryButton
@@ -751,7 +755,7 @@ function CategoryButton({
       >
         {icon}
       </span>
-      <span className="mt-2 block truncate text-[11px] font-bold text-[#29312c] sm:text-xs">{label}</span>
+      <span className="mt-2 block truncate text-[11px] font-bold text-[color:var(--store-text)] sm:text-xs">{label}</span>
     </button>
   );
 }
@@ -761,11 +765,11 @@ function CustomerLove({ branding }: { branding: PublicStorefrontBranding }) {
     <section className="mx-auto w-full max-w-6xl px-5 py-8 sm:px-8">
       <div className="grid overflow-hidden rounded-[8px] border border-[#e5e2d8] bg-white md:grid-cols-[300px_minmax(0,1fr)]">
         <div className="border-b border-[#e5e2d8] bg-[#f7f4ee] p-7 md:border-b-0 md:border-r">
-          <p className="text-xs font-black uppercase text-[#111111]">Clientes da loja</p>
-          <h2 className="mt-2 font-serif text-[32px] font-black leading-none text-[#111111]">
+          <p className="text-xs font-black uppercase text-[color:var(--store-text)]">Clientes da loja</p>
+          <h2 className="mt-2 font-serif text-[32px] font-black leading-none text-[color:var(--store-text)]">
             Compra simples e acompanhada.
           </h2>
-          <p className="mt-4 text-sm font-semibold leading-6 text-[#5d665f]">
+          <p className="mt-4 text-sm font-semibold leading-6 text-[color:var(--store-text-muted)]">
             A {branding.displayName} recebe o pedido e continua o atendimento pelo WhatsApp.
           </p>
         </div>
@@ -776,10 +780,10 @@ function CustomerLove({ branding }: { branding: PublicStorefrontBranding }) {
                 <Star className="h-5 w-5 fill-current" key={item} />
               ))}
             </div>
-            <p className="mt-4 max-w-xl text-base font-semibold leading-7 text-[#29312c]">
+            <p className="mt-4 max-w-xl text-base font-semibold leading-7 text-[color:var(--store-text)]">
               Atendimento rapido, produtos organizados e pagamento em um fluxo claro para o cliente.
             </p>
-            <p className="mt-4 text-sm font-black text-[#123f2d]">Connect Hub Checkout</p>
+            <p className="mt-4 text-sm font-black text-[#123f2d]">ConnectyHub Checkout</p>
           </div>
           <div className="hidden min-h-44 items-center justify-center rounded-[8px] bg-[#f4f0ea] sm:flex">
             <MessageCircle className="h-20 w-20 text-[#123f2d]" />
@@ -795,7 +799,7 @@ function TrustStrip() {
     { icon: <BadgeCheck className="h-7 w-7" />, title: "Produtos da loja", text: "Catalogo sempre organizado" },
     { icon: <CreditCard className="h-7 w-7" />, title: "Checkout unico", text: "Sacola e pagamento juntos" },
     { icon: <Truck className="h-7 w-7" />, title: "Pedido acompanhado", text: "Fluxo integrado ao WhatsApp" },
-    { icon: <ShieldCheck className="h-7 w-7" />, title: "Compra segura", text: "Ambiente Connect Hub" },
+    { icon: <ShieldCheck className="h-7 w-7" />, title: "Compra segura", text: "Ambiente ConnectyHub" },
   ];
 
   return (
@@ -822,8 +826,8 @@ function EmptyCatalog({ branding }: { branding: PublicStorefrontBranding }) {
   return (
     <div className="rounded-[8px] border border-dashed border-[#d9ded7] bg-white p-10 text-center">
       <Package className="mx-auto h-10 w-10 text-[#123f2d]" />
-      <h2 className="mt-4 font-serif text-3xl font-black text-[#111111]">Vitrine em montagem</h2>
-      <p className="mx-auto mt-3 max-w-md text-sm font-semibold leading-6 text-[#5d665f]">
+      <h2 className="mt-4 font-serif text-3xl font-black text-[color:var(--store-text)]">Vitrine em montagem</h2>
+      <p className="mx-auto mt-3 max-w-md text-sm font-semibold leading-6 text-[color:var(--store-text-muted)]">
         A {branding.displayName} ainda esta preparando os produtos desta categoria.
       </p>
     </div>
@@ -846,30 +850,30 @@ function StoreFooter({
           <div className="flex items-center gap-3">
             <BrandLogo branding={branding} compact />
             <div>
-              <h2 className="text-base font-black uppercase text-[#111111]">{branding.displayName}</h2>
+              <h2 className="text-base font-black uppercase text-[color:var(--store-text)]">{branding.displayName}</h2>
               <p className="text-xs font-black uppercase text-[#526057]">Loja oficial</p>
             </div>
           </div>
-          <p className="mt-4 text-sm font-semibold leading-6 text-[#5d665f]">{footerText}</p>
+          <p className="mt-4 text-sm font-semibold leading-6 text-[color:var(--store-text-muted)]">{footerText}</p>
         </div>
         <FooterColumn title="Loja" items={["Produtos", "Categorias", "Sacola"]} />
         <FooterColumn title="Atendimento" items={["WhatsApp", "Meus pedidos", "Suporte"]} />
         <div>
-          <h3 className="text-sm font-black uppercase text-[#111111]">Pagamento</h3>
-          <p className="mt-3 text-sm font-semibold leading-6 text-[#5d665f]">{footerContactText}</p>
+          <h3 className="text-sm font-black uppercase text-[color:var(--store-text)]">Pagamento</h3>
+          <p className="mt-3 text-sm font-semibold leading-6 text-[color:var(--store-text-muted)]">{footerContactText}</p>
           <div className="mt-4 flex flex-wrap gap-2">
             {["VISA", "PIX", "CARD"].map((item) => (
-              <span className="rounded-[8px] border border-[#e5e2d8] bg-[#f8f7f2] px-3 py-2 text-xs font-black text-[#29312c]" key={item}>
+              <span className="rounded-[8px] border border-[#e5e2d8] bg-[#f8f7f2] px-3 py-2 text-xs font-black text-[color:var(--store-text)]" key={item}>
                 {item}
               </span>
             ))}
           </div>
         </div>
       </div>
-      <p className="border-t border-[#f0eee8] px-4 py-4 text-center text-xs font-semibold text-[#5d665f]">
+      <p className="border-t border-[#f0eee8] px-4 py-4 text-center text-xs font-semibold text-[color:var(--store-text-muted)]">
         {branding.displayName} - Desenvolvido por{" "}
         <a className="font-black text-[#123f2d] hover:underline" href={connectHubPublicUrl} rel="noreferrer" target="_blank">
-          Connect Hub
+          ConnectyHub
         </a>
       </p>
     </footer>
@@ -879,10 +883,10 @@ function StoreFooter({
 function FooterColumn({ items, title }: { items: string[]; title: string }) {
   return (
     <div>
-      <h3 className="text-sm font-black uppercase text-[#111111]">{title}</h3>
+      <h3 className="text-sm font-black uppercase text-[color:var(--store-text)]">{title}</h3>
       <div className="mt-4 grid gap-2">
         {items.map((item) => (
-          <span className="text-sm font-semibold text-[#5d665f]" key={item}>{item}</span>
+          <span className="text-sm font-semibold text-[color:var(--store-text-muted)]" key={item}>{item}</span>
         ))}
       </div>
     </div>
@@ -948,9 +952,9 @@ function CartDrawer({
         <div className="flex items-center justify-between gap-3 border-b border-[#e5e2d8] px-4 py-4">
           <div className="min-w-0">
             <p className="text-xs font-black uppercase text-[#123f2d]">Sacola</p>
-            <h2 className="truncate text-xl font-black text-[#111111]">{branding.displayName}</h2>
+            <h2 className="truncate text-xl font-black text-[color:var(--store-text)]">{branding.displayName}</h2>
           </div>
-          <button aria-label="Fechar" className="grid h-10 w-10 shrink-0 place-items-center rounded-[8px] border border-[#e5e2d8] bg-white text-[#5d665f] transition hover:bg-[#f8f7f2]" onClick={onClose} type="button">
+          <button aria-label="Fechar" className="grid h-10 w-10 shrink-0 place-items-center rounded-[8px] border border-[#e5e2d8] bg-white text-[color:var(--store-text-muted)] transition hover:bg-[#f8f7f2]" onClick={onClose} type="button">
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -968,14 +972,14 @@ function CartDrawer({
                     )}
                   </div>
                   <div className="min-w-0">
-                    <p className="line-clamp-2 text-sm font-black leading-5 text-[#111111]">{line.product.title}</p>
+                    <p className="line-clamp-2 text-sm font-black leading-5 text-[color:var(--store-text)]">{line.product.title}</p>
                     <p className="mt-1 text-sm font-black text-[#123f2d]">{line.product.priceLabel}</p>
                     <div className="mt-3 inline-flex h-9 items-center rounded-[8px] border border-[#e5e2d8] bg-white">
-                      <button aria-label="Diminuir" className="grid h-9 w-9 place-items-center text-[#5d665f] transition hover:text-[#123f2d]" onClick={() => onUpdateQuantity(line.product.id, line.quantity - 1)} type="button">
+                      <button aria-label="Diminuir" className="grid h-9 w-9 place-items-center text-[color:var(--store-text-muted)] transition hover:text-[#123f2d]" onClick={() => onUpdateQuantity(line.product.id, line.quantity - 1)} type="button">
                         <Minus className="h-3.5 w-3.5" />
                       </button>
                       <span className="min-w-8 text-center text-sm font-black">{line.quantity}</span>
-                      <button aria-label="Aumentar" className="grid h-9 w-9 place-items-center text-[#5d665f] transition hover:text-[#123f2d]" onClick={() => onUpdateQuantity(line.product.id, line.quantity + 1)} type="button">
+                      <button aria-label="Aumentar" className="grid h-9 w-9 place-items-center text-[color:var(--store-text-muted)] transition hover:text-[#123f2d]" onClick={() => onUpdateQuantity(line.product.id, line.quantity + 1)} type="button">
                         <Plus className="h-3.5 w-3.5" />
                       </button>
                     </div>
@@ -986,8 +990,8 @@ function CartDrawer({
           ) : (
             <div className="rounded-[8px] border border-dashed border-[#d9ded7] bg-[#fbfaf6] p-6 text-center">
               <ShoppingBag className="mx-auto h-8 w-8 text-[#123f2d]" />
-              <h3 className="mt-3 text-lg font-black text-[#111111]">Sua sacola esta vazia</h3>
-              <p className="mt-2 text-sm leading-6 text-[#5d665f]">Adicione produtos para gerar um checkout unico.</p>
+              <h3 className="mt-3 text-lg font-black text-[color:var(--store-text)]">Sua sacola esta vazia</h3>
+              <p className="mt-2 text-sm leading-6 text-[color:var(--store-text-muted)]">Adicione produtos para gerar um checkout unico.</p>
             </div>
           )}
 
@@ -1006,7 +1010,7 @@ function CartDrawer({
         <div className="border-t border-[#e5e2d8] bg-white px-4 py-4">
           <div className="mb-3 flex items-center justify-between gap-3 rounded-[8px] border border-[#e5e2d8] bg-[#fbfaf6] px-4 py-3">
             <span className="text-sm font-black uppercase text-[#123f2d]">Total</span>
-            <span className="text-2xl font-black text-[#111111]">{formatCurrencyCents(totalCents)}</span>
+            <span className="text-2xl font-black text-[color:var(--store-text)]">{formatCurrencyCents(totalCents)}</span>
           </div>
           {error ? (
             <p className="mb-3 rounded-[8px] border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold leading-5 text-rose-700">
@@ -1023,7 +1027,7 @@ function CartDrawer({
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShoppingBag className="h-4 w-4" />}
             {busy ? "Abrindo checkout..." : "Finalizar compra"}
           </button>
-          <p className="mt-3 text-center text-xs font-semibold leading-5 text-[#5d665f]">
+          <p className="mt-3 text-center text-xs font-semibold leading-5 text-[color:var(--store-text-muted)]">
             O pedido continua acompanhado pela loja no WhatsApp.
           </p>
         </div>
@@ -1069,7 +1073,7 @@ function MobileNavButton({
     <button
       className={cn(
         "relative flex min-h-12 flex-col items-center justify-center gap-1 rounded-[8px] text-[11px] font-bold",
-        active ? "text-[#123f2d]" : "text-[#5d665f]",
+        active ? "text-[color:var(--store-primary)]" : "text-[color:var(--store-text-muted)]",
       )}
       onClick={onClick}
       type="button"
@@ -1114,6 +1118,13 @@ function normalizeStorefrontPrimaryColor(value: string | null) {
   return isReadableActionColor(normalized) ? normalized : null;
 }
 
+function normalizeStorefrontTextColor(value: string | null) {
+  if (!value) return null;
+
+  const normalized = value.trim().toLowerCase();
+  return /^#[0-9a-f]{6}$/.test(normalized) ? normalized : null;
+}
+
 function isReadableActionColor(hex: string) {
   const red = Number.parseInt(hex.slice(1, 3), 16);
   const green = Number.parseInt(hex.slice(3, 5), 16);
@@ -1130,4 +1141,4 @@ function formatCurrencyCents(value: number) {
   }).format(value / 100);
 }
 
-const inputClassName = "min-h-11 w-full rounded-[8px] border border-[#e5e2d8] bg-[#fbfaf6] px-3 text-sm font-semibold text-[#111111] outline-none transition placeholder:text-[#8b918c] focus:border-[#123f2d] focus:bg-white focus:ring-4 focus:ring-[#123f2d]/10";
+const inputClassName = "min-h-11 w-full rounded-[8px] border border-[#e5e2d8] bg-[#fbfaf6] px-3 text-sm font-semibold text-[color:var(--store-text)] outline-none transition placeholder:text-[#8b918c] focus:border-[#123f2d] focus:bg-white focus:ring-4 focus:ring-[#123f2d]/10";

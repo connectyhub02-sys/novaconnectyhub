@@ -283,6 +283,7 @@ function resolveStorefrontSettings(settings: PublicStorefrontSettings | null): P
     footerText: readString(settings?.footerText),
     footerContactText: readString(settings?.footerContactText),
     primaryColor: readString(settings?.primaryColor),
+    textColor: readString(settings?.textColor),
   };
 }
 

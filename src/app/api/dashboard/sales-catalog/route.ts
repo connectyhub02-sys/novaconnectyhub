@@ -3213,13 +3213,14 @@ function normalizeStorefrontSettings(value: unknown): SalesCatalogStorefrontSett
   const record = readRecord(value) ?? {};
 
   return {
-    heroTitle: normalizeOptionalText(readFormString(record.heroTitle ?? record.hero_title), 90),
+    heroTitle: normalizeOptionalText(readFormString(record.heroTitle ?? record.hero_title), 120),
     heroHighlight: normalizeOptionalText(readFormString(record.heroHighlight ?? record.hero_highlight), 90),
     heroSubtitle: normalizeOptionalText(readFormString(record.heroSubtitle ?? record.hero_subtitle), 180),
     headerText: normalizeOptionalText(readFormString(record.headerText ?? record.header_text), 140),
     footerText: normalizeOptionalText(readFormString(record.footerText ?? record.footer_text), 320),
     footerContactText: normalizeOptionalText(readFormString(record.footerContactText ?? record.footer_contact_text), 180),
     primaryColor: normalizeStorefrontPrimaryColor(readFormString(record.primaryColor ?? record.primary_color)),
+    textColor: normalizeStorefrontTextColor(readFormString(record.textColor ?? record.text_color)),
   };
 }
 
@@ -3230,6 +3231,13 @@ function normalizeStorefrontPrimaryColor(value: string | null) {
   if (!/^#[0-9a-f]{6}$/.test(normalized)) return null;
 
   return isReadableActionColor(normalized) ? normalized : null;
+}
+
+function normalizeStorefrontTextColor(value: string | null) {
+  if (!value) return null;
+
+  const normalized = value.trim().toLowerCase();
+  return /^#[0-9a-f]{6}$/.test(normalized) ? normalized : null;
 }
 
 function isReadableActionColor(hex: string) {
@@ -3402,6 +3410,7 @@ function serializeStorefrontSettings(settings: SalesCatalogStorefrontSettings) {
     footer_text: settings.footerText,
     footer_contact_text: settings.footerContactText,
     primary_color: settings.primaryColor,
+    text_color: settings.textColor,
   };
 }
 

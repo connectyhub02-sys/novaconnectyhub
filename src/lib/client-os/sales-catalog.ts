@@ -1733,6 +1733,7 @@ function readStorefrontSettings(value: unknown): ClientSalesCatalogSettings["sto
     footerText: readString(record.footer_text ?? record.footerText),
     footerContactText: readString(record.footer_contact_text ?? record.footerContactText),
     primaryColor: readString(record.primary_color ?? record.primaryColor),
+    textColor: readString(record.text_color ?? record.textColor),
   };
 }
 

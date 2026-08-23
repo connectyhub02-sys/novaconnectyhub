@@ -92,6 +92,7 @@ type PublicPageStorefrontSettings = {
   footerText: string;
   footerContactText: string;
   primaryColor: string;
+  textColor: string;
 };
 
 type ProductWhatsappReturn = {
@@ -183,6 +184,8 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
   const primaryColor = storefront.primaryColor ?? defaultStorefrontPrimaryColor;
   const publicLayoutStyle = {
     "--store-primary": primaryColor,
+    "--store-text": storefront.textColor,
+    "--store-text-muted": `color-mix(in srgb, ${storefront.textColor} 72%, white 28%)`,
   } as CSSProperties;
   const storeSlug = organization.slug ?? organization.id;
   const storeUrl = buildLeadAwareSalesCatalogStoreUrl({
@@ -209,7 +212,7 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
   const application = findAttributeValue(item, "aplicacao") ?? formatFulfillment(item.fulfillment.mode);
 
   return (
-    <main className="min-h-screen bg-[#f7f8f5] pb-24 text-slate-950 sm:pb-0" style={publicLayoutStyle}>
+    <main className="min-h-screen bg-[#f7f8f5] pb-24 text-[color:var(--store-text)] sm:pb-0" style={publicLayoutStyle}>
       <script
         id="connecty-public-tracking-context"
         dangerouslySetInnerHTML={{
@@ -863,22 +866,22 @@ function PublicStoreFooter({
     <footer className="border-t border-slate-200 bg-white">
       <div className="mx-auto grid w-full max-w-7xl gap-5 px-4 py-7 sm:px-6 md:grid-cols-[1.4fr_1fr_1fr] lg:px-8">
         <div>
-          <p className="text-base font-black text-slate-950">{branding.displayName}</p>
-          <p className="mt-2 max-w-xl text-sm leading-6 text-slate-500">{footerText}</p>
+          <p className="text-base font-black text-[color:var(--store-text)]">{branding.displayName}</p>
+          <p className="mt-2 max-w-xl text-sm leading-6 text-[color:var(--store-text-muted)]">{footerText}</p>
         </div>
         <div>
-          <p className="text-sm font-black text-slate-950">Atendimento</p>
+          <p className="text-sm font-black text-[color:var(--store-text)]">Atendimento</p>
           <p className="mt-2 text-sm font-semibold leading-6" style={{ color: "var(--store-primary)" }}>{footerContactText}</p>
         </div>
         <div>
-          <p className="text-sm font-black text-slate-950">Compra segura</p>
-          <p className="mt-2 text-sm leading-6 text-slate-500">Checkout protegido e acompanhamento pelo WhatsApp.</p>
+          <p className="text-sm font-black text-[color:var(--store-text)]">Compra segura</p>
+          <p className="mt-2 text-sm leading-6 text-[color:var(--store-text-muted)]">Checkout protegido e acompanhamento pelo WhatsApp.</p>
         </div>
       </div>
-      <p className="border-t border-slate-100 px-4 py-4 text-center text-xs font-semibold text-slate-500">
+      <p className="border-t border-slate-100 px-4 py-4 text-center text-xs font-semibold text-[color:var(--store-text-muted)]">
         Desenvolvido por{" "}
         <a className="font-black hover:underline" href={connectHubPublicUrl} rel="noreferrer" target="_blank">
-          Connect Hub
+          ConnectyHub
         </a>
       </p>
     </footer>
@@ -906,6 +909,7 @@ function resolvePublicPageStorefront(
       ?? `${branding.displayName} atende pelo WhatsApp com catalogo, checkout seguro e acompanhamento do pedido em um so lugar.`,
     footerContactText: readString(settings?.footerContactText) ?? "Atendimento pelo WhatsApp oficial da loja.",
     primaryColor: normalizeStorefrontPrimaryColor(settings?.primaryColor) ?? defaultStorefrontPrimaryColor,
+    textColor: normalizeStorefrontTextColor(settings?.textColor) ?? "#111111",
   };
 }
 
@@ -925,6 +929,13 @@ function isReadableActionColor(hex: string) {
   const luminance = (0.2126 * red + 0.7152 * green + 0.0722 * blue) / 255;
 
   return luminance < 0.82;
+}
+
+function normalizeStorefrontTextColor(value: string | null | undefined) {
+  if (!value) return null;
+
+  const normalized = value.trim().toLowerCase();
+  return /^#[0-9a-f]{6}$/.test(normalized) ? normalized : null;
 }
 
 function resolveOrganizationBranding(organization: OrganizationRow): OrganizationBranding {

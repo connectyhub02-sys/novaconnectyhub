@@ -609,6 +609,7 @@ export type SalesCatalogStorefrontSettings = {
   footerText: string | null;
   footerContactText: string | null;
   primaryColor: string | null;
+  textColor: string | null;
 };
 
 export type SalesCatalogCommerceSettings = Pick<
