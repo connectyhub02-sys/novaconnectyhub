@@ -19,6 +19,7 @@ import {
   RotateCcw,
   ShieldCheck,
   ShoppingBag,
+  ShoppingCart,
   Sparkles,
   Star,
   Store,
@@ -319,7 +320,7 @@ export function PublicStorefront({ storeSlug, branding, storefront, products, tr
 
       <PromoBanner branding={branding} product={promotionProduct} onShopNow={scrollToProducts} />
 
-      <section id="produtos" className="mx-auto w-full max-w-6xl px-5 py-7 sm:px-8 lg:py-9">
+      <section id="produtos" className="mx-auto w-full max-w-6xl px-5 py-4 sm:px-8 sm:py-7 lg:py-9">
         {bestSellerProducts.length > 0 ? (
           <ProductShowcaseSection
             eyebrow={category === ALL_CATEGORY ? "Escolhas da loja" : activeCategoryLabel}
@@ -369,7 +370,7 @@ export function PublicStorefront({ storeSlug, branding, storefront, products, tr
           }}
           type="button"
         >
-          <ShoppingBag className="h-5 w-5" />
+          <ShoppingCart className="h-5 w-5" />
           {totalItems}
         </button>
       ) : null}
@@ -419,8 +420,8 @@ function StorefrontHero({
 }) {
   return (
     <section className="bg-white">
-      <div className="mx-auto w-full max-w-6xl px-5 pb-7 pt-7 sm:px-8 lg:pb-10 lg:pt-10">
-        <div className="mb-8 flex items-center justify-between gap-4">
+      <div className="mx-auto w-full max-w-6xl px-5 pb-5 pt-6 sm:px-8 lg:pb-10 lg:pt-10">
+        <div className="mb-4 flex items-center justify-between gap-4 sm:mb-8">
           <div className="flex min-w-0 items-center gap-3">
             <BrandLogo branding={branding} />
             <div className="min-w-0">
@@ -430,7 +431,7 @@ function StorefrontHero({
           </div>
 
           <button
-            className="relative inline-flex min-h-11 items-center gap-2 rounded-[8px] border px-4 text-sm font-black shadow-lg shadow-[#063f2c]/20 transition brightness-100 hover:brightness-110"
+            className="relative inline-grid h-11 w-11 shrink-0 place-items-center rounded-[8px] border text-sm font-black shadow-lg shadow-[#063f2c]/20 transition brightness-100 hover:brightness-110 sm:inline-flex sm:w-auto sm:px-4"
             onClick={onCart}
             style={{
               backgroundColor: "var(--store-button)",
@@ -439,8 +440,8 @@ function StorefrontHero({
             }}
             type="button"
           >
-            <ShoppingBag className="h-4 w-4" />
-            <span className="hidden sm:inline">Sacola</span>
+            <ShoppingCart className="h-4 w-4" />
+            <span className="hidden sm:inline">Carrinho</span>
             {totalItems > 0 ? (
               <span className="absolute -right-2 -top-2 grid h-6 min-w-6 place-items-center rounded-full bg-[#f97316] px-1 text-xs font-black text-white ring-2 ring-white">
                 {totalItems}
@@ -449,22 +450,22 @@ function StorefrontHero({
           </button>
         </div>
 
-        <div className="grid items-center gap-8 lg:grid-cols-[minmax(0,0.92fr)_minmax(360px,1fr)]">
+        <div className="grid grid-cols-[minmax(0,1fr)_118px] items-start gap-3 sm:grid-cols-[minmax(0,0.9fr)_minmax(220px,0.7fr)] sm:gap-8 lg:grid-cols-[minmax(0,0.92fr)_minmax(360px,1fr)] lg:items-center">
           <div className="min-w-0">
-            <p className="inline-flex items-center gap-2 text-sm font-black text-[color:var(--store-accent)]">
-              <Sparkles className="h-4 w-4" />
+            <p className="inline-flex items-center gap-1.5 text-xs font-black text-[color:var(--store-accent)] sm:gap-2 sm:text-sm">
+              <Sparkles className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               Loja oficial. Compra facil.
             </p>
-            <h1 className="mt-4 max-w-2xl font-serif text-[44px] font-black leading-[0.98] text-[color:var(--store-text)] sm:text-[58px] lg:text-[68px]">
+            <h1 className="mt-3 max-w-2xl font-serif text-[34px] font-black leading-[0.98] text-[color:var(--store-text)] sm:mt-4 sm:text-[58px] lg:text-[68px]">
               {heroTitle}
               {heroHighlight ? <span className="block">{heroHighlight}</span> : null}
             </h1>
-            <p className="mt-6 max-w-xl text-base font-medium leading-7 text-[color:var(--store-text-muted)] sm:text-lg">
+            <p className="mt-3 max-w-xl text-sm font-medium leading-6 text-[color:var(--store-text-muted)] sm:mt-6 sm:text-lg sm:leading-7">
               {heroSubtitle}
             </p>
-            <div className="mt-7 flex flex-col gap-3 sm:flex-row">
+            <div className="mt-4 grid grid-cols-2 gap-2 sm:mt-7 sm:flex sm:gap-3">
               <button
-                className="inline-flex min-h-12 items-center justify-center gap-3 rounded-[8px] border px-8 text-sm font-black uppercase shadow-xl shadow-[#063f2c]/20 transition brightness-100 hover:brightness-110"
+                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-[8px] border px-3 text-[11px] font-black uppercase shadow-xl shadow-[#063f2c]/20 transition brightness-100 hover:brightness-110 sm:min-h-12 sm:gap-3 sm:px-8 sm:text-sm"
                 onClick={onShopNow}
                 style={{
                   backgroundColor: "var(--store-button)",
@@ -473,15 +474,16 @@ function StorefrontHero({
                 }}
                 type="button"
               >
-                Comprar agora
-                <ArrowRight className="h-4 w-4" />
+                <span className="sm:hidden">Comprar</span>
+                <span className="hidden sm:inline">Comprar agora</span>
+                <ArrowRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               </button>
               <button
-                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-[8px] border border-[#dfe6df] bg-white px-8 text-sm font-black text-[color:var(--store-accent)] transition hover:bg-[#f4f7f1]"
+                className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-[8px] border border-[#dfe6df] bg-white px-3 text-[11px] font-black text-[color:var(--store-accent)] transition hover:bg-[#f4f7f1] sm:min-h-12 sm:gap-2 sm:px-8 sm:text-sm"
                 onClick={onCart}
                 type="button"
               >
-                <MessageCircle className="h-4 w-4" />
+                <MessageCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                 Atendimento
               </button>
             </div>
@@ -496,9 +498,9 @@ function StorefrontHero({
 
 function HeroProductPanel({ product }: { product: PublicStorefrontProduct | null }) {
   return (
-    <div className="relative min-h-[280px] overflow-hidden rounded-[8px] bg-[#f1e7d8] p-5 sm:min-h-[360px] sm:p-8">
+    <div className="relative min-h-[150px] overflow-hidden rounded-[8px] bg-[#f1e7d8] p-2 sm:min-h-[300px] sm:p-6 lg:min-h-[360px] lg:p-8">
       <div className="absolute bottom-0 right-0 h-full w-3/4 rounded-l-full bg-[#ead7c1]" />
-      <div className="relative flex h-full min-h-[250px] items-center justify-center">
+      <div className="relative flex h-full min-h-[136px] items-center justify-center sm:min-h-[270px] lg:min-h-[250px]">
         {product ? (
           <a
             className="relative block aspect-[4/3] w-full max-w-[430px]"
@@ -506,11 +508,11 @@ function HeroProductPanel({ product }: { product: PublicStorefrontProduct | null
             data-track-label={product.title}
             href={product.productUrl}
           >
-            <ProductImage product={product} priority sizes="(max-width: 1024px) 80vw, 430px" variant="hero" />
+            <ProductImage product={product} priority sizes="(max-width: 640px) 118px, (max-width: 1024px) 38vw, 430px" variant="hero" />
           </a>
         ) : (
-          <div className="grid h-64 w-full place-items-center rounded-[8px] bg-white/60 text-[color:var(--store-accent)]">
-            <Package className="h-16 w-16" />
+          <div className="grid h-full min-h-[136px] w-full place-items-center rounded-[8px] bg-white/60 text-[color:var(--store-accent)] sm:min-h-64">
+            <Package className="h-10 w-10 sm:h-16 sm:w-16" />
           </div>
         )}
       </div>
@@ -523,34 +525,41 @@ function BenefitStrip() {
     {
       icon: <Truck className="h-8 w-8" />,
       title: "Entrega combinada",
+      mobileTitle: "Entrega",
       text: "A loja orienta o envio pelo WhatsApp.",
     },
     {
       icon: <ShieldCheck className="h-8 w-8" />,
       title: "Pagamento seguro",
+      mobileTitle: "Pagamento",
       text: "Checkout protegido no ecossistema ConnectyHub.",
     },
     {
       icon: <RotateCcw className="h-8 w-8" />,
       title: "Compra acompanhada",
+      mobileTitle: "Compra",
       text: "Pedido e atendimento em um so lugar.",
     },
     {
       icon: <Headphones className="h-8 w-8" />,
       title: "Suporte da loja",
+      mobileTitle: "Suporte",
       text: "Atendimento direto pelo WhatsApp oficial.",
     },
   ];
 
   return (
     <section className="mx-auto w-full max-w-6xl px-5 sm:px-8">
-      <div className="grid overflow-hidden rounded-[8px] border border-[#e5e2d8] bg-white shadow-sm shadow-slate-950/5 md:grid-cols-4 md:divide-x md:divide-[#e5e2d8]">
+      <div className="grid grid-cols-4 overflow-hidden rounded-[8px] border border-[#e5e2d8] bg-white shadow-sm shadow-slate-950/5 divide-x divide-[#e5e2d8]">
         {benefits.map((benefit) => (
-          <div className="flex min-h-24 items-center gap-4 px-5 py-4" key={benefit.title}>
-            <span className="shrink-0 text-[color:var(--store-text)]">{benefit.icon}</span>
+          <div className="flex min-h-[70px] flex-col items-center justify-center gap-1 px-1.5 py-2 text-center sm:min-h-24 sm:flex-row sm:justify-start sm:gap-4 sm:px-5 sm:py-4 sm:text-left" key={benefit.title}>
+            <span className="shrink-0 text-[color:var(--store-text)] [&>svg]:h-5 [&>svg]:w-5 sm:[&>svg]:h-8 sm:[&>svg]:w-8">{benefit.icon}</span>
             <div className="min-w-0">
-              <h2 className="text-sm font-black uppercase text-[color:var(--store-text)]">{benefit.title}</h2>
-              <p className="mt-1 text-xs font-semibold leading-5 text-[color:var(--store-text-muted)]">{benefit.text}</p>
+              <h2 className="text-[9px] font-black uppercase leading-3 text-[color:var(--store-text)] sm:text-sm sm:leading-5">
+                <span className="sm:hidden">{benefit.mobileTitle}</span>
+                <span className="hidden sm:inline">{benefit.title}</span>
+              </h2>
+              <p className="mt-1 hidden text-xs font-semibold leading-5 text-[color:var(--store-text-muted)] sm:block">{benefit.text}</p>
             </div>
           </div>
         ))}
@@ -569,9 +578,9 @@ function PromoBanner({
   onShopNow: () => void;
 }) {
   return (
-    <section className="mx-auto w-full max-w-6xl px-5 py-7 sm:px-8">
+    <section className="mx-auto w-full max-w-6xl px-5 py-4 sm:px-8 sm:py-7">
       <div
-        className="grid min-h-36 overflow-hidden rounded-[8px] border p-5 shadow-xl shadow-[#063f2c]/20 md:grid-cols-[180px_minmax(0,1fr)_240px] md:items-center md:p-7"
+        className="grid min-h-0 grid-cols-[minmax(0,1fr)_108px] items-center gap-3 overflow-hidden rounded-[8px] border p-3 shadow-lg shadow-[#063f2c]/12 sm:p-5 md:min-h-36 md:grid-cols-[180px_minmax(0,1fr)_240px] md:p-7"
         style={{
           backgroundColor: "var(--store-primary)",
           borderColor: "var(--store-primary-border)",
@@ -584,16 +593,16 @@ function PromoBanner({
           </span>
         </div>
         <div className="min-w-0">
-          <p className="text-sm font-black uppercase opacity-90">Oferta especial da {branding.displayName}</p>
-          <h2 className="mt-2 font-serif text-[34px] font-black leading-none sm:text-[44px]">
+          <p className="text-[10px] font-black uppercase leading-4 opacity-90 sm:text-sm">Oferta especial da {branding.displayName}</p>
+          <h2 className="mt-1 line-clamp-1 font-serif text-[24px] font-black leading-none sm:mt-2 sm:text-[34px] md:text-[44px]">
             {product?.highlightLabel || "Produtos selecionados"}
           </h2>
-          <p className="mt-3 max-w-xl text-sm font-semibold leading-6 text-[color:var(--store-offer-text-muted)]">
+          <p className="mt-3 hidden max-w-xl text-sm font-semibold leading-6 text-[color:var(--store-offer-text-muted)] sm:block">
             Escolha seus produtos, adicione na sacola e finalize tudo em um checkout unico.
           </p>
         </div>
         <button
-          className="mt-5 inline-flex min-h-14 items-center justify-center rounded-[8px] border border-dashed px-6 text-sm font-black uppercase transition hover:bg-white/10 md:mt-0"
+          className="inline-flex min-h-10 items-center justify-center rounded-[8px] border border-dashed px-3 text-[10px] font-black uppercase transition hover:bg-white/10 sm:min-h-12 sm:px-5 sm:text-xs md:min-h-14 md:px-6 md:text-sm"
           onClick={onShopNow}
           style={{ borderColor: "color-mix(in srgb, var(--store-offer-text) 60%, transparent 40%)" }}
           type="button"
@@ -1103,7 +1112,7 @@ function MobileBottomNav({
     <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-3 border-t border-[#e5e2d8] bg-white px-2 py-2 shadow-[0_-12px_30px_rgba(15,23,42,0.08)] lg:hidden">
       <MobileNavButton active icon={<Home className="h-5 w-5" />} label="Inicio" onClick={onHome} />
       <MobileNavButton icon={<Store className="h-5 w-5" />} label="Categorias" onClick={onCategories} />
-      <MobileNavButton badge={totalItems} icon={<ShoppingBag className="h-5 w-5" />} label="Sacola" onClick={onCart} />
+      <MobileNavButton badge={totalItems} icon={<ShoppingCart className="h-5 w-5" />} label="Carrinho" onClick={onCart} />
     </nav>
   );
 }
