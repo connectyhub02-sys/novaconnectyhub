@@ -84,9 +84,15 @@ const defaultPresentation: Record<string, { description: string; tagline: string
 
 export function buildPublicPricingPlans(plans: PublicPricingBillingPlan[]) {
   return plans
-    .filter((plan) => plan.status === "active")
+    .filter((plan) => plan.status === "active" && isPublicCommercialPlan(plan))
     .sort((left, right) => left.sortOrder - right.sortOrder || left.monthlyPriceBrl - right.monthlyPriceBrl)
     .map(buildPublicPricingPlan);
+}
+
+function isPublicCommercialPlan(plan: PublicPricingBillingPlan) {
+  const code = normalizeCode(plan.planCode);
+
+  return code !== "internal";
 }
 
 export function buildPublicPricingPlan(plan: PublicPricingBillingPlan): PublicPricingPlan {
