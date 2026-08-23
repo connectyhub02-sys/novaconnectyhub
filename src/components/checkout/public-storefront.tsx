@@ -341,7 +341,7 @@ export function PublicStorefront({ storeSlug, branding, storefront, products, tr
         heroTitle={heroTitle}
         totalItems={totalItems}
         onCart={() => setCartOpen(true)}
-        onShopNow={scrollToProducts}
+        onFeaturedAction={() => (featuredProduct ? addToCart(featuredProduct) : scrollToProducts())}
       />
 
       <BenefitStrip />
@@ -388,7 +388,7 @@ export function PublicStorefront({ storeSlug, branding, storefront, products, tr
 
       {totalItems > 0 ? (
         <button
-          aria-label="Abrir sacola"
+          aria-label="Abrir carrinho"
           className="fixed bottom-6 right-6 z-30 hidden h-14 min-w-14 items-center justify-center gap-2 rounded-full border px-5 text-sm font-black shadow-2xl shadow-slate-950/25 transition brightness-100 hover:brightness-110 lg:inline-flex"
           onClick={() => setCartOpen(true)}
           style={{
@@ -436,7 +436,7 @@ function StorefrontHero({
   heroTitle,
   totalItems,
   onCart,
-  onShopNow,
+  onFeaturedAction,
 }: {
   activeFeaturedIndex: number;
   branding: PublicStorefrontBranding;
@@ -448,8 +448,11 @@ function StorefrontHero({
   heroTitle: string;
   totalItems: number;
   onCart: () => void;
-  onShopNow: () => void;
+  onFeaturedAction: () => void;
 }) {
+  const featuredActionLabel = featuredProduct?.canCheckout ? "Adicionar ao carrinho" : featuredProduct ? "Ver produto" : "Ver vitrine";
+  const featuredActionMobileLabel = featuredProduct?.canCheckout ? "Adicionar" : featuredActionLabel;
+
   return (
     <section className="bg-white">
       <div className="mx-auto w-full max-w-6xl px-5 pb-5 pt-6 sm:px-8 lg:pb-10 lg:pt-10">
@@ -498,7 +501,7 @@ function StorefrontHero({
             <div className="mt-4 grid grid-cols-2 gap-2 sm:mt-7 sm:flex sm:gap-3">
               <button
                 className="inline-flex min-h-10 items-center justify-center gap-2 rounded-[8px] border px-3 text-[11px] font-black uppercase shadow-xl shadow-[#063f2c]/20 transition brightness-100 hover:brightness-110 sm:min-h-12 sm:gap-3 sm:px-8 sm:text-sm"
-                onClick={onShopNow}
+                onClick={onFeaturedAction}
                 style={{
                   backgroundColor: "var(--store-button)",
                   borderColor: "var(--store-button-border)",
@@ -506,9 +509,13 @@ function StorefrontHero({
                 }}
                 type="button"
               >
-                <span className="sm:hidden">Comprar</span>
-                <span className="hidden sm:inline">Comprar agora</span>
-                <ArrowRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                <span className="sm:hidden">{featuredActionMobileLabel}</span>
+                <span className="hidden sm:inline">{featuredActionLabel}</span>
+                {featuredProduct?.canCheckout ? (
+                  <ShoppingCart className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                ) : (
+                  <ArrowRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                )}
               </button>
               <button
                 className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-[8px] border border-[#dfe6df] bg-white px-3 text-[11px] font-black text-[color:var(--store-accent)] transition hover:bg-[#f4f7f1] sm:min-h-12 sm:gap-2 sm:px-8 sm:text-sm"
@@ -653,7 +660,7 @@ function PromoBanner({
             {product?.highlightLabel || "Produtos selecionados"}
           </h2>
           <p className="mt-3 hidden max-w-xl text-sm font-semibold leading-6 text-[color:var(--store-offer-text-muted)] sm:block">
-            Escolha seus produtos, adicione na sacola e finalize tudo em um checkout unico.
+            Escolha seus produtos, adicione no carrinho e finalize tudo em um checkout unico.
           </p>
         </div>
         <button
@@ -762,7 +769,15 @@ function ProductCard({
           } : undefined}
           type="button"
         >
-          {product.canCheckout ? "Comprar" : "Ver produto"}
+          {product.canCheckout ? (
+            <>
+              <ShoppingCart className="h-3.5 w-3.5" />
+              <span className="sm:hidden">Adicionar</span>
+              <span className="hidden sm:inline">Adicionar ao carrinho</span>
+            </>
+          ) : (
+            "Ver produto"
+          )}
         </button>
       </div>
     </article>
@@ -905,7 +920,7 @@ function CustomerLove({ branding }: { branding: PublicStorefrontBranding }) {
 function TrustStrip() {
   const items = [
     { icon: <BadgeCheck className="h-7 w-7" />, title: "Produtos da loja", text: "Catalogo sempre organizado" },
-    { icon: <CreditCard className="h-7 w-7" />, title: "Checkout unico", text: "Sacola e pagamento juntos" },
+    { icon: <CreditCard className="h-7 w-7" />, title: "Checkout unico", text: "Carrinho e pagamento juntos" },
     { icon: <Truck className="h-7 w-7" />, title: "Pedido acompanhado", text: "Fluxo integrado ao WhatsApp" },
     { icon: <ShieldCheck className="h-7 w-7" />, title: "Compra segura", text: "Ambiente ConnectyHub" },
   ];
@@ -968,7 +983,7 @@ function StoreFooter({
           </div>
           <p className="mt-4 text-sm font-semibold leading-6 text-[color:var(--store-text-muted)]">{footerText}</p>
         </div>
-        <FooterColumn title="Loja" items={["Produtos", "Categorias", "Sacola"]} />
+        <FooterColumn title="Loja" items={["Produtos", "Categorias", "Carrinho"]} />
         <FooterColumn title="Atendimento" items={["WhatsApp", "Meus pedidos", "Suporte"]} />
         <div>
           <h3 className="text-sm font-black uppercase text-[color:var(--store-text)]">Pagamento</h3>
@@ -1059,11 +1074,11 @@ function CartDrawer({
 
   return (
     <div className="fixed inset-0 z-50">
-      <button aria-label="Fechar sacola" className="absolute inset-0 bg-slate-950/45" onClick={onClose} type="button" />
+      <button aria-label="Fechar carrinho" className="absolute inset-0 bg-slate-950/45" onClick={onClose} type="button" />
       <aside className="absolute right-0 top-0 flex h-full w-full max-w-md flex-col bg-white shadow-2xl shadow-slate-950/30">
         <div className="flex items-center justify-between gap-3 border-b border-[#e5e2d8] px-4 py-4">
           <div className="min-w-0">
-            <p className="text-xs font-black uppercase text-[color:var(--store-accent)]">Sacola</p>
+            <p className="text-xs font-black uppercase text-[color:var(--store-accent)]">Carrinho</p>
             <h2 className="truncate text-xl font-black text-[color:var(--store-text)]">{branding.displayName}</h2>
           </div>
           <button aria-label="Fechar" className="grid h-10 w-10 shrink-0 place-items-center rounded-[8px] border border-[#e5e2d8] bg-white text-[color:var(--store-text-muted)] transition hover:bg-[#f8f7f2]" onClick={onClose} type="button">
@@ -1102,7 +1117,7 @@ function CartDrawer({
           ) : (
             <div className="rounded-[8px] border border-dashed border-[#d9ded7] bg-[#fbfaf6] p-6 text-center">
               <ShoppingBag className="mx-auto h-8 w-8 text-[color:var(--store-accent)]" />
-              <h3 className="mt-3 text-lg font-black text-[color:var(--store-text)]">Sua sacola esta vazia</h3>
+              <h3 className="mt-3 text-lg font-black text-[color:var(--store-text)]">Seu carrinho esta vazio</h3>
               <p className="mt-2 text-sm leading-6 text-[color:var(--store-text-muted)]">Adicione produtos para gerar um checkout unico.</p>
             </div>
           )}
