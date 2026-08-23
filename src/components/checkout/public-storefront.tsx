@@ -99,6 +99,8 @@ const ALL_CATEGORY = "todos";
 const defaultStorefrontPrimaryColor = "#063f2c";
 const storefrontActionColor = "#f97316";
 const connectHubPublicUrl = process.env.NEXT_PUBLIC_CONNECTYHUB_SITE_URL ?? "https://connectyhub.com.br";
+const genericStoreCategoryDisplayLabel = "Outros produtos";
+const genericStoreCategoryLabels = new Set(["produto", "produtos"]);
 
 export function PublicStorefront({ storeSlug, branding, storefront, products, tracking }: PublicStorefrontProps) {
   const [category, setCategory] = useState(ALL_CATEGORY);
@@ -155,6 +157,8 @@ export function PublicStorefront({ storeSlug, branding, storefront, products, tr
   const categories = useMemo<StoreCategory[]>(() => {
     const counts = new Map<string, number>();
     for (const product of products) {
+      if (isGenericStoreCategory(product.category)) continue;
+
       counts.set(product.category, (counts.get(product.category) ?? 0) + 1);
     }
 
@@ -206,7 +210,29 @@ export function PublicStorefront({ storeSlug, branding, storefront, products, tr
     ?? visibleProducts.find((product) => product.highlightLabel)
     ?? featuredProduct;
   const bestSellerProducts = visibleProducts.slice(0, 4);
-  const newArrivalProducts = visibleProducts.slice(4);
+  const newArrivalProducts = category === ALL_CATEGORY ? visibleProducts.slice(4, 8) : visibleProducts.slice(4);
+  const offerProducts = useMemo(() => (
+    visibleProducts.filter((product) => product.compareAtLabel || product.highlightLabel).slice(0, 4)
+  ), [visibleProducts]);
+  const categoryProductSections = useMemo(() => {
+    if (category !== ALL_CATEGORY) return [];
+
+    const groups = new Map<string, PublicStorefrontProduct[]>();
+    for (const product of products) {
+      const label = getStoreCategoryDisplayLabel(product.category);
+      const current = groups.get(label) ?? [];
+      current.push(product);
+      groups.set(label, current);
+    }
+
+    return Array.from(groups.entries())
+      .sort(([labelA], [labelB]) => {
+        if (labelA === genericStoreCategoryDisplayLabel) return 1;
+        if (labelB === genericStoreCategoryDisplayLabel) return -1;
+        return labelA.localeCompare(labelB, "pt-BR");
+      })
+      .map(([label, items]) => ({ label, products: items }));
+  }, [category, products]);
   const activeCategoryLabel = categories.find((item) => item.id === category)?.label ?? "Produtos";
   const totalItems = cart.reduce((total, line) => total + line.quantity, 0);
   const totalCents = cart.reduce((total, line) => total + (line.product.priceCents ?? 0) * line.quantity, 0);
@@ -369,6 +395,30 @@ export function PublicStorefront({ storeSlug, branding, storefront, products, tr
             onAddToCart={addToCart}
           />
         ) : null}
+
+        {offerProducts.length > 0 ? (
+          <ProductShowcaseSection
+            className="mt-12"
+            eyebrow={category === ALL_CATEGORY ? "Oportunidades da loja" : activeCategoryLabel}
+            products={offerProducts}
+            title={category === ALL_CATEGORY ? "Ofertas da loja" : "Ofertas da categoria"}
+            onAddToCart={addToCart}
+          />
+        ) : null}
+
+        {categoryProductSections.length > 0 ? (
+          <div className="mt-12 grid gap-12">
+            {categoryProductSections.map((section) => (
+              <ProductShowcaseSection
+                eyebrow="Catalogo por categoria"
+                key={section.label}
+                products={section.products}
+                title={section.label}
+                onAddToCart={addToCart}
+              />
+            ))}
+          </div>
+        ) : null}
       </section>
 
       <PromoBanner branding={branding} product={promotionProduct} onShopNow={scrollToProducts} />
@@ -498,9 +548,9 @@ function StorefrontHero({
             <p className="mt-3 max-w-xl text-sm font-medium leading-6 text-[color:var(--store-text-muted)] sm:mt-6 sm:text-lg sm:leading-7">
               {heroSubtitle}
             </p>
-            <div className="mt-4 grid grid-cols-2 gap-2 sm:mt-7 sm:flex sm:gap-3">
+            <div className="mt-4 sm:mt-7">
               <button
-                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-[8px] border px-3 text-[11px] font-black uppercase shadow-xl shadow-[#063f2c]/20 transition brightness-100 hover:brightness-110 sm:min-h-12 sm:gap-3 sm:px-8 sm:text-sm"
+                className="inline-flex min-h-10 w-full max-w-[260px] items-center justify-center gap-2 rounded-[8px] border px-3 text-[11px] font-black uppercase shadow-xl shadow-[#063f2c]/20 transition brightness-100 hover:brightness-110 sm:min-h-12 sm:w-auto sm:min-w-[290px] sm:max-w-none sm:gap-3 sm:px-8 sm:text-sm [&_span]:whitespace-nowrap"
                 onClick={onFeaturedAction}
                 style={{
                   backgroundColor: "var(--store-button)",
@@ -516,14 +566,6 @@ function StorefrontHero({
                 ) : (
                   <ArrowRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                 )}
-              </button>
-              <button
-                className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-[8px] border border-[#dfe6df] bg-white px-3 text-[11px] font-black text-[color:var(--store-accent)] transition hover:bg-[#f4f7f1] sm:min-h-12 sm:gap-2 sm:px-8 sm:text-sm"
-                onClick={onCart}
-                type="button"
-              >
-                <MessageCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                Atendimento
               </button>
             </div>
           </div>
@@ -834,7 +876,7 @@ function CategoryShowcase({
     <section id="categorias" className="bg-[#f2f6f0] py-6 sm:py-8">
       <div className="mx-auto w-full max-w-6xl px-5 sm:px-8">
         <h2 className="text-center text-xs font-bold uppercase text-[color:var(--store-text)] sm:text-sm sm:font-black">Comprar por categoria</h2>
-        <div className="mt-5 grid grid-cols-4 gap-3 sm:mt-6 sm:grid-cols-6 sm:gap-4 lg:grid-cols-8">
+        <div className="mt-5 flex flex-wrap justify-center gap-x-7 gap-y-5 sm:mt-6 sm:gap-x-12 lg:gap-x-16">
           {categories.map((item, index) => (
             <CategoryButton
               active={category === item.id}
@@ -862,7 +904,7 @@ function CategoryButton({
   onClick: () => void;
 }) {
   return (
-    <button className="group min-w-0 text-center" onClick={onClick} type="button">
+    <button className="group w-20 min-w-0 text-center sm:w-24" onClick={onClick} type="button">
       <span
         className={cn(
           "mx-auto grid h-14 w-14 place-items-center rounded-full border transition sm:h-16 sm:w-16",
@@ -1233,6 +1275,16 @@ function categoryIcon(index: number) {
   ];
 
   return icons[index % icons.length];
+}
+
+function isGenericStoreCategory(category: string) {
+  const normalized = category.trim().toLowerCase();
+  return !normalized || genericStoreCategoryLabels.has(normalized);
+}
+
+function getStoreCategoryDisplayLabel(category: string) {
+  const normalized = category.trim();
+  return isGenericStoreCategory(normalized) ? genericStoreCategoryDisplayLabel : normalized;
 }
 
 function clampQuantity(value: number) {
