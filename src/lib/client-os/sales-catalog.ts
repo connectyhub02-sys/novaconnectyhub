@@ -1734,6 +1734,10 @@ function readStorefrontSettings(value: unknown): ClientSalesCatalogSettings["sto
     footerContactText: readString(record.footer_contact_text ?? record.footerContactText),
     primaryColor: readString(record.primary_color ?? record.primaryColor),
     textColor: readString(record.text_color ?? record.textColor),
+    buttonColor: readString(record.button_color ?? record.buttonColor),
+    buttonTextColor: readString(record.button_text_color ?? record.buttonTextColor),
+    cardTextColor: readString(record.card_text_color ?? record.cardTextColor),
+    offerTextColor: readString(record.offer_text_color ?? record.offerTextColor),
   };
 }
 

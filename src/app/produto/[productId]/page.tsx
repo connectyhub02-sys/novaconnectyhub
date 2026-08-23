@@ -93,6 +93,10 @@ type PublicPageStorefrontSettings = {
   footerContactText: string;
   primaryColor: string;
   textColor: string;
+  buttonColor: string;
+  buttonTextColor: string;
+  cardTextColor: string;
+  offerTextColor: string;
 };
 
 type ProductWhatsappReturn = {
@@ -182,10 +186,19 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
   const branding = resolveOrganizationBranding(organization);
   const storefront = resolvePublicPageStorefront(catalogSettings?.storefront ?? null, branding);
   const primaryColor = storefront.primaryColor ?? defaultStorefrontPrimaryColor;
+  const accentColor = getReadableAccentColor(primaryColor, storefront.textColor);
   const publicLayoutStyle = {
     "--store-primary": primaryColor,
+    "--store-accent": accentColor,
     "--store-text": storefront.textColor,
     "--store-text-muted": `color-mix(in srgb, ${storefront.textColor} 72%, white 28%)`,
+    "--store-button": storefront.buttonColor,
+    "--store-button-text": storefront.buttonTextColor,
+    "--store-button-border": getReadableBorderColor(storefront.buttonColor),
+    "--store-card-text": storefront.cardTextColor,
+    "--store-card-text-muted": `color-mix(in srgb, ${storefront.cardTextColor} 72%, white 28%)`,
+    "--store-offer-text": storefront.offerTextColor,
+    "--store-primary-border": getReadableBorderColor(primaryColor),
   } as CSSProperties;
   const storeSlug = organization.slug ?? organization.id;
   const storeUrl = buildLeadAwareSalesCatalogStoreUrl({
@@ -222,12 +235,12 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
       <ProductTopBar branding={branding} headerText={storefront.headerText} storeUrl={storeUrl} />
 
       <section className="mx-auto w-full max-w-7xl px-4 py-4 sm:px-6 lg:px-8 lg:py-7">
-        <nav className="hidden items-center gap-2 text-xs font-semibold text-slate-500 lg:flex">
-          <Link href={storeUrl} className="transition hover:text-blue-600">Inicio</Link>
+        <nav className="hidden items-center gap-2 text-xs font-semibold text-[color:var(--store-text-muted)] lg:flex">
+          <Link href={storeUrl} className="transition hover:text-[color:var(--store-accent)]">Inicio</Link>
           <ArrowRight className="h-3.5 w-3.5" />
           <span>{item.category ?? "Produto"}</span>
           <ArrowRight className="h-3.5 w-3.5" />
-          <span className="line-clamp-1 max-w-sm text-slate-950">{item.title}</span>
+          <span className="line-clamp-1 max-w-sm text-[color:var(--store-text)]">{item.title}</span>
         </nav>
 
         <div className="mt-4 hidden flex-wrap items-center justify-end gap-3 lg:flex">
@@ -246,29 +259,29 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
                 <ProductBadge tone="green">{formatStockLabel(item)}</ProductBadge>
               </div>
 
-              <h1 className="mt-4 text-2xl font-black uppercase leading-tight text-[#070b1d] sm:text-3xl xl:text-[34px]">
+              <h1 className="mt-4 text-2xl font-black uppercase leading-tight text-[color:var(--store-text)] sm:text-3xl xl:text-[34px]">
                 {item.title}
               </h1>
 
               <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
-                <div className="flex items-center gap-1 text-blue-600" aria-label="Produto em destaque da loja">
+                <div className="flex items-center gap-1 text-[color:var(--store-accent)]" aria-label="Produto em destaque da loja">
                   {Array.from({ length: 5 }).map((_, index) => (
                     <Star key={index} className="h-4 w-4 fill-current" />
                   ))}
                 </div>
-                <span className="font-semibold text-slate-600">Produto da loja oficial</span>
+                <span className="font-semibold text-[color:var(--store-text-muted)]">Produto da loja oficial</span>
                 <span className="hidden h-4 w-px bg-slate-200 sm:block" />
-                <span className="font-mono text-xs font-semibold text-slate-500">SKU: {sku}</span>
+                <span className="font-mono text-xs font-semibold text-[color:var(--store-text-muted)]">SKU: {sku}</span>
               </div>
 
-              <p className="mt-4 text-sm leading-6 text-slate-600">
+              <p className="mt-4 text-sm leading-6 text-[color:var(--store-text-muted)]">
                 {descriptionPreview}
               </p>
 
               <ul className="mt-5 grid gap-2.5">
                 {highlights.map((highlight) => (
-                  <li key={highlight} className="flex gap-2 text-sm font-semibold leading-5 text-slate-700">
-                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
+                  <li key={highlight} className="flex gap-2 text-sm font-semibold leading-5 text-[color:var(--store-text)]">
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[color:var(--store-accent)]" />
                     <span>{highlight}</span>
                   </li>
                 ))}
@@ -303,14 +316,14 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
         <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(300px,0.46fr)]">
           <section className="rounded-lg border border-blue-100 bg-white shadow-lg shadow-blue-950/5">
             <div className="grid border-b border-blue-100 text-center text-sm font-bold text-slate-600 sm:grid-cols-4">
-              <span className="border-b-2 border-blue-600 px-4 py-4 text-blue-600">Descricao completa</span>
+              <span className="border-b-2 px-4 py-4 text-[color:var(--store-accent)]" style={{ borderColor: "var(--store-accent)" }}>Descricao completa</span>
               <span className="px-4 py-4">Modo de uso</span>
               <span className="px-4 py-4">Informacoes de envio</span>
               <span className="px-4 py-4">Perguntas frequentes</span>
             </div>
 
             <div className="grid gap-5 p-5 sm:p-6 md:grid-cols-[minmax(0,1fr)_280px]">
-              <div className="space-y-4 text-sm leading-7 text-slate-700">
+              <div className="space-y-4 text-sm leading-7 text-[color:var(--store-text-muted)]">
                 {descriptionParagraphs.map((paragraph, index) => (
                   <p key={`${index}-${paragraph.slice(0, 16)}`}>{paragraph}</p>
                 ))}
@@ -337,9 +350,9 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
               <aside className="rounded-lg border border-blue-100 bg-slate-50 p-4">
                 <div className="flex items-center gap-2 text-blue-600">
                   <ReceiptText className="h-4 w-4" />
-                  <p className="text-sm font-black text-slate-950">Importante</p>
+                  <p className="text-sm font-black text-[color:var(--store-text)]">Importante</p>
                 </div>
-                <p className="mt-3 text-sm leading-6 text-slate-600">
+                <p className="mt-3 text-sm leading-6 text-[color:var(--store-text-muted)]">
                   Confira os dados do pedido antes de finalizar. O atendimento continua pelo WhatsApp oficial da loja.
                 </p>
               </aside>
@@ -348,7 +361,7 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
 
           <aside className="grid content-start gap-5">
             <section className="rounded-lg border border-blue-100 bg-white p-5 shadow-lg shadow-blue-950/5">
-              <p className="text-sm font-black text-slate-950">Detalhes rapidos</p>
+              <p className="text-sm font-black text-[color:var(--store-text)]">Detalhes rapidos</p>
               <div className="mt-4 grid gap-3 text-sm">
                 <DetailLine label="Categoria" value={item.category ?? "Produto"} />
                 <DetailLine label="Entrega" value={formatFulfillment(item.fulfillment.mode)} />
@@ -378,8 +391,8 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
             {related.length > 0 ? (
               <section className="rounded-lg border border-blue-100 bg-white p-5 shadow-lg shadow-blue-950/5">
                 <div className="flex items-center justify-between gap-3">
-                  <p className="text-sm font-black text-slate-950">Produtos semelhantes</p>
-                  <Link href={storeUrl} className="text-xs font-bold text-blue-600">Ver todos</Link>
+                  <p className="text-sm font-black text-[color:var(--store-text)]">Produtos semelhantes</p>
+                  <Link href={storeUrl} className="text-xs font-bold text-[color:var(--store-accent)]">Ver todos</Link>
                 </div>
                 <div className="mt-4 grid gap-3">
                   {related.map((relatedItem) => (
@@ -609,7 +622,16 @@ function ProductTopBar({
           <HeaderTrust icon={<ShieldCheck className="h-5 w-5" />} label="Compra segura" />
           <HeaderTrust icon={<MessageCircle className="h-5 w-5" />} label="Atendimento WhatsApp" />
           <HeaderTrust icon={<Box className="h-5 w-5" />} label="Disponivel para envio" />
-          <Link href={storeUrl} className="relative grid h-11 w-11 place-items-center rounded-lg text-white shadow-lg shadow-slate-950/20" style={{ backgroundColor: "var(--store-primary)" }} aria-label="Sacola">
+          <Link
+            href={storeUrl}
+            className="relative grid h-11 w-11 place-items-center rounded-lg border shadow-lg shadow-slate-950/20"
+            style={{
+              backgroundColor: "var(--store-button)",
+              borderColor: "var(--store-button-border)",
+              color: "var(--store-button-text)",
+            }}
+            aria-label="Sacola"
+          >
             <ShoppingCart className="h-5 w-5" />
             <span className="absolute -right-1 -top-1 grid h-5 w-5 place-items-center rounded-full bg-orange-500 text-[11px] font-black text-white">0</span>
           </Link>
@@ -639,11 +661,11 @@ function PurchaseCard({
   return (
     <aside className="lg:sticky lg:top-28 lg:self-start">
       <div className="rounded-lg border border-blue-100 bg-white p-5 shadow-2xl shadow-blue-950/10">
-        <p className="text-sm font-semibold text-slate-600">Valor do produto</p>
-        <p className="mt-1 text-4xl font-black text-blue-600">{priceLabel}</p>
+        <p className="text-sm font-semibold text-[color:var(--store-card-text-muted)]">Valor do produto</p>
+        <p className="mt-1 text-4xl font-black text-[color:var(--store-card-text)]">{priceLabel}</p>
         {installments ? (
-          <p className="mt-2 text-sm font-semibold text-slate-600">
-            ou 6x de <span className="font-black text-blue-600">{installments}</span> sem juros
+          <p className="mt-2 text-sm font-semibold text-[color:var(--store-card-text-muted)]">
+            ou 6x de <span className="font-black text-[color:var(--store-card-text)]">{installments}</span> sem juros
           </p>
         ) : null}
 
@@ -670,10 +692,10 @@ function PurchaseCard({
           </a>
         </div>
 
-        <div className="mt-5 grid gap-3 border-t border-blue-100 pt-5 text-sm font-semibold text-slate-700">
-          <span className="flex items-center gap-3"><ShieldCheck className="h-4 w-4 text-blue-600" /> Checkout 100% seguro</span>
-          <span className="flex items-center gap-3"><LockKeyhole className="h-4 w-4 text-blue-600" /> Seus dados sempre protegidos</span>
-          <span className="flex items-center gap-3"><BadgeCheck className="h-4 w-4 text-blue-600" /> Satisfacao garantida pela loja</span>
+        <div className="mt-5 grid gap-3 border-t border-blue-100 pt-5 text-sm font-semibold text-[color:var(--store-card-text)]">
+          <span className="flex items-center gap-3"><ShieldCheck className="h-4 w-4 text-[color:var(--store-accent)]" /> Checkout 100% seguro</span>
+          <span className="flex items-center gap-3"><LockKeyhole className="h-4 w-4 text-[color:var(--store-accent)]" /> Seus dados sempre protegidos</span>
+          <span className="flex items-center gap-3"><BadgeCheck className="h-4 w-4 text-[color:var(--store-accent)]" /> Satisfacao garantida pela loja</span>
         </div>
       </div>
     </aside>
@@ -702,12 +724,12 @@ function StoreIdentity({
             className="object-contain p-1"
           />
         ) : (
-          <Store className="h-5 w-5" style={{ color: "var(--store-primary)" }} aria-hidden="true" />
+          <Store className="h-5 w-5" style={{ color: "var(--store-accent)" }} aria-hidden="true" />
         )}
       </div>
       <div className="min-w-0">
-        <p className="line-clamp-1 text-[11px] font-bold leading-4 text-slate-500">{headerText}</p>
-        <p className="truncate text-base font-black leading-5 text-slate-950">{branding.displayName}</p>
+        <p className="line-clamp-1 text-[11px] font-bold leading-4 text-[color:var(--store-text-muted)]">{headerText}</p>
+        <p className="truncate text-base font-black leading-5 text-[color:var(--store-text)]">{branding.displayName}</p>
       </div>
     </Link>
   );
@@ -764,10 +786,10 @@ function MicroTrust({ icon, title, subtitle }: { icon: ReactNode; title: string;
 function Benefit({ icon, title, subtitle }: { icon: ReactNode; title: string; subtitle: string }) {
   return (
     <div className="flex min-w-0 items-center gap-3 border-blue-100 sm:border-r sm:last:border-r-0">
-      <span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-blue-50 text-blue-600">{icon}</span>
+      <span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-blue-50 text-[color:var(--store-accent)]">{icon}</span>
       <span className="min-w-0">
-        <span className="block truncate text-sm font-black text-slate-950">{title}</span>
-        <span className="block truncate text-xs font-medium text-slate-500">{subtitle}</span>
+        <span className="block truncate text-sm font-black text-[color:var(--store-text)]">{title}</span>
+        <span className="block truncate text-xs font-medium text-[color:var(--store-text-muted)]">{subtitle}</span>
       </span>
     </div>
   );
@@ -776,8 +798,8 @@ function Benefit({ icon, title, subtitle }: { icon: ReactNode; title: string; su
 function DetailLine({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-2 last:border-0 last:pb-0">
-      <span className="text-slate-500">{label}</span>
-      <span className="max-w-[58%] truncate text-right font-bold text-slate-950">{value}</span>
+      <span className="text-[color:var(--store-text-muted)]">{label}</span>
+      <span className="max-w-[58%] truncate text-right font-bold text-[color:var(--store-text)]">{value}</span>
     </div>
   );
 }
@@ -807,10 +829,10 @@ function RelatedProductCard({ item, href }: { item: ClientSalesCatalogItem; href
         )}
       </div>
       <div className="min-w-0">
-        <p className="line-clamp-2 text-sm font-black leading-5 text-slate-950">{item.title}</p>
-        <p className="mt-1 text-sm font-black text-blue-600">{formatProductPrice(item)}</p>
+        <p className="line-clamp-2 text-sm font-black leading-5 text-[color:var(--store-card-text)]">{item.title}</p>
+        <p className="mt-1 text-sm font-black text-[color:var(--store-card-text)]">{formatProductPrice(item)}</p>
       </div>
-      <ArrowRight className="h-4 w-4 text-slate-400 transition group-hover:text-blue-600" />
+      <ArrowRight className="h-4 w-4 text-slate-400 transition group-hover:text-[color:var(--store-accent)]" />
     </Link>
   );
 }
@@ -818,7 +840,7 @@ function RelatedProductCard({ item, href }: { item: ClientSalesCatalogItem; href
 function MobileAccordion({ title, children }: { title: string; children: ReactNode }) {
   return (
     <details className="rounded-lg border border-blue-100 bg-white shadow-lg shadow-blue-950/5">
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-4 text-sm font-bold text-slate-950">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-4 text-sm font-bold text-[color:var(--store-text)]">
         {title}
         <ChevronDown className="h-4 w-4 text-blue-600" />
       </summary>
@@ -871,7 +893,7 @@ function PublicStoreFooter({
         </div>
         <div>
           <p className="text-sm font-black text-[color:var(--store-text)]">Atendimento</p>
-          <p className="mt-2 text-sm font-semibold leading-6" style={{ color: "var(--store-primary)" }}>{footerContactText}</p>
+          <p className="mt-2 text-sm font-semibold leading-6" style={{ color: "var(--store-accent)" }}>{footerContactText}</p>
         </div>
         <div>
           <p className="text-sm font-black text-[color:var(--store-text)]">Compra segura</p>
@@ -896,6 +918,10 @@ function resolvePublicPageStorefront(
   const heroHighlight = readString(settings?.heroHighlight);
   const heroSubtitle = readString(settings?.heroSubtitle);
   const legacyHeaderText = [heroTitle, heroHighlight].filter(Boolean).join(" ").trim();
+  const primaryColor = normalizeStorefrontPrimaryColor(settings?.primaryColor) ?? defaultStorefrontPrimaryColor;
+  const textColor = normalizeStorefrontTextColor(settings?.textColor) ?? "#111111";
+  const buttonColor = normalizeStorefrontTextColor(settings?.buttonColor) ?? primaryColor;
+  const cardTextColor = normalizeStorefrontTextColor(settings?.cardTextColor) ?? textColor;
 
   return {
     heroTitle,
@@ -908,8 +934,12 @@ function resolvePublicPageStorefront(
     footerText: readString(settings?.footerText)
       ?? `${branding.displayName} atende pelo WhatsApp com catalogo, checkout seguro e acompanhamento do pedido em um so lugar.`,
     footerContactText: readString(settings?.footerContactText) ?? "Atendimento pelo WhatsApp oficial da loja.",
-    primaryColor: normalizeStorefrontPrimaryColor(settings?.primaryColor) ?? defaultStorefrontPrimaryColor,
-    textColor: normalizeStorefrontTextColor(settings?.textColor) ?? "#111111",
+    primaryColor,
+    textColor,
+    buttonColor,
+    buttonTextColor: normalizeStorefrontTextColor(settings?.buttonTextColor) ?? getReadableTextColor(buttonColor),
+    cardTextColor,
+    offerTextColor: normalizeStorefrontTextColor(settings?.offerTextColor) ?? getReadableTextColor(primaryColor),
   };
 }
 
@@ -917,18 +947,7 @@ function normalizeStorefrontPrimaryColor(value: string | null | undefined) {
   if (!value) return null;
 
   const normalized = value.trim().toLowerCase();
-  if (!/^#[0-9a-f]{6}$/.test(normalized)) return null;
-
-  return isReadableActionColor(normalized) ? normalized : null;
-}
-
-function isReadableActionColor(hex: string) {
-  const red = Number.parseInt(hex.slice(1, 3), 16);
-  const green = Number.parseInt(hex.slice(3, 5), 16);
-  const blue = Number.parseInt(hex.slice(5, 7), 16);
-  const luminance = (0.2126 * red + 0.7152 * green + 0.0722 * blue) / 255;
-
-  return luminance < 0.82;
+  return /^#[0-9a-f]{6}$/.test(normalized) ? normalized : null;
 }
 
 function normalizeStorefrontTextColor(value: string | null | undefined) {
@@ -936,6 +955,26 @@ function normalizeStorefrontTextColor(value: string | null | undefined) {
 
   const normalized = value.trim().toLowerCase();
   return /^#[0-9a-f]{6}$/.test(normalized) ? normalized : null;
+}
+
+function getReadableTextColor(hex: string) {
+  return getColorLuminance(hex) > 0.66 ? "#111111" : "#ffffff";
+}
+
+function getReadableAccentColor(hex: string, fallbackTextColor: string) {
+  return getColorLuminance(hex) > 0.82 ? fallbackTextColor : hex;
+}
+
+function getReadableBorderColor(hex: string) {
+  return getColorLuminance(hex) > 0.82 ? "#d9ded7" : `color-mix(in srgb, ${hex} 78%, black 22%)`;
+}
+
+function getColorLuminance(hex: string) {
+  const red = Number.parseInt(hex.slice(1, 3), 16);
+  const green = Number.parseInt(hex.slice(3, 5), 16);
+  const blue = Number.parseInt(hex.slice(5, 7), 16);
+
+  return (0.2126 * red + 0.7152 * green + 0.0722 * blue) / 255;
 }
 
 function resolveOrganizationBranding(organization: OrganizationRow): OrganizationBranding {

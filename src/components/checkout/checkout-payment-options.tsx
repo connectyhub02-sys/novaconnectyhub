@@ -210,7 +210,7 @@ function OrderBumpSelector({
   onToggle: (productId: string) => void;
 }) {
   return (
-    <section className="rounded-[8px] border border-amber-200 bg-amber-50 p-4">
+    <section className="rounded-[8px] border border-amber-200 bg-amber-50 p-4 text-[color:var(--store-card-text,#0f172a)]">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="inline-flex items-center gap-2 text-sm font-black text-slate-950">
@@ -256,7 +256,7 @@ function OrderBumpSelector({
               )}
               <span className="min-w-0 flex-1">
                 <span className="flex flex-wrap items-center gap-2">
-                  <span className="text-sm font-black text-slate-950">{item.title}</span>
+                  <span className="text-sm font-black text-[color:var(--store-card-text,#0f172a)]">{item.title}</span>
                   {item.badge ? (
                     <span className="rounded-full border border-amber-200 bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-700">
                       {item.badge}
@@ -266,7 +266,7 @@ function OrderBumpSelector({
                 {item.description ? (
                   <span className="mt-1 line-clamp-2 block text-xs leading-5 text-slate-600">{item.description}</span>
                 ) : null}
-                <span className="mt-2 block text-sm font-black text-blue-700">{item.priceLabel}</span>
+                <span className="mt-2 block text-sm font-black text-[color:var(--store-card-text,#0f172a)]">{item.priceLabel}</span>
               </span>
               <span className={cn(
                 "flex h-7 w-7 shrink-0 items-center justify-center rounded-[7px] border",
@@ -305,7 +305,12 @@ function PixOrderBumpUpdatePanel({
         type="button"
         onClick={onUpdate}
         disabled={loading}
-        className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-[8px] bg-blue-600 px-4 text-sm font-bold text-white transition hover:bg-blue-700 disabled:cursor-wait disabled:opacity-70"
+        className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-[8px] border px-4 text-sm font-bold transition brightness-100 hover:brightness-110 disabled:cursor-wait disabled:opacity-70"
+        style={{
+          backgroundColor: "var(--store-button, #2563eb)",
+          borderColor: "var(--store-button-border, #2563eb)",
+          color: "var(--store-button-text, #ffffff)",
+        }}
       >
         {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <QrCode className="h-4 w-4" />}
         Gerar Pix atualizado
@@ -337,9 +342,14 @@ function PaymentMethodButton({
       className={cn(
         "inline-flex min-h-10 items-center justify-center gap-2 rounded-[7px] px-3 text-sm font-semibold transition",
         active
-          ? "bg-blue-600 text-white shadow-sm shadow-blue-950/20"
+          ? "border shadow-sm shadow-blue-950/20"
           : "text-slate-600 hover:bg-white hover:text-blue-700",
       )}
+      style={active ? {
+        backgroundColor: "var(--store-button, #2563eb)",
+        borderColor: "var(--store-button-border, #2563eb)",
+        color: "var(--store-button-text, #ffffff)",
+      } : undefined}
     >
       {icon}
       {label}
@@ -422,7 +432,12 @@ function PixPaymentPanel({
           href={pixTicketUrl}
           target="_blank"
           rel="noreferrer"
-          className="mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-[8px] bg-[#25D366] px-4 text-sm font-bold text-white transition hover:bg-[#20bf5a]"
+          className="mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-[8px] border px-4 text-sm font-bold transition brightness-100 hover:brightness-110"
+          style={{
+            backgroundColor: "var(--store-button, #25D366)",
+            borderColor: "var(--store-button-border, #25D366)",
+            color: "var(--store-button-text, #ffffff)",
+          }}
         >
           Abrir pagamento no Mercado Pago
         </a>

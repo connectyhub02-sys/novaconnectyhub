@@ -3221,6 +3221,10 @@ function normalizeStorefrontSettings(value: unknown): SalesCatalogStorefrontSett
     footerContactText: normalizeOptionalText(readFormString(record.footerContactText ?? record.footer_contact_text), 180),
     primaryColor: normalizeStorefrontPrimaryColor(readFormString(record.primaryColor ?? record.primary_color)),
     textColor: normalizeStorefrontTextColor(readFormString(record.textColor ?? record.text_color)),
+    buttonColor: normalizeStorefrontTextColor(readFormString(record.buttonColor ?? record.button_color)),
+    buttonTextColor: normalizeStorefrontTextColor(readFormString(record.buttonTextColor ?? record.button_text_color)),
+    cardTextColor: normalizeStorefrontTextColor(readFormString(record.cardTextColor ?? record.card_text_color)),
+    offerTextColor: normalizeStorefrontTextColor(readFormString(record.offerTextColor ?? record.offer_text_color)),
   };
 }
 
@@ -3228,9 +3232,7 @@ function normalizeStorefrontPrimaryColor(value: string | null) {
   if (!value) return null;
 
   const normalized = value.trim().toLowerCase();
-  if (!/^#[0-9a-f]{6}$/.test(normalized)) return null;
-
-  return isReadableActionColor(normalized) ? normalized : null;
+  return /^#[0-9a-f]{6}$/.test(normalized) ? normalized : null;
 }
 
 function normalizeStorefrontTextColor(value: string | null) {
@@ -3238,15 +3240,6 @@ function normalizeStorefrontTextColor(value: string | null) {
 
   const normalized = value.trim().toLowerCase();
   return /^#[0-9a-f]{6}$/.test(normalized) ? normalized : null;
-}
-
-function isReadableActionColor(hex: string) {
-  const red = Number.parseInt(hex.slice(1, 3), 16);
-  const green = Number.parseInt(hex.slice(3, 5), 16);
-  const blue = Number.parseInt(hex.slice(5, 7), 16);
-  const luminance = (0.2126 * red + 0.7152 * green + 0.0722 * blue) / 255;
-
-  return luminance < 0.82;
 }
 
 function normalizePaymentMethods(value: unknown, fallback: SalesCatalogPaymentMethod[]) {
@@ -3411,6 +3404,10 @@ function serializeStorefrontSettings(settings: SalesCatalogStorefrontSettings) {
     footer_contact_text: settings.footerContactText,
     primary_color: settings.primaryColor,
     text_color: settings.textColor,
+    button_color: settings.buttonColor,
+    button_text_color: settings.buttonTextColor,
+    card_text_color: settings.cardTextColor,
+    offer_text_color: settings.offerTextColor,
   };
 }
 

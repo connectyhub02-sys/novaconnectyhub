@@ -284,6 +284,10 @@ function resolveStorefrontSettings(settings: PublicStorefrontSettings | null): P
     footerContactText: readString(settings?.footerContactText),
     primaryColor: readString(settings?.primaryColor),
     textColor: readString(settings?.textColor),
+    buttonColor: readString(settings?.buttonColor),
+    buttonTextColor: readString(settings?.buttonTextColor),
+    cardTextColor: readString(settings?.cardTextColor),
+    offerTextColor: readString(settings?.offerTextColor),
   };
 }
 

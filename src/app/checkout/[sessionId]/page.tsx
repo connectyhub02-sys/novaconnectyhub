@@ -154,6 +154,10 @@ type PublicPageStorefrontSettings = {
   footerContactText: string;
   primaryColor: string;
   textColor: string;
+  buttonColor: string;
+  buttonTextColor: string;
+  cardTextColor: string;
+  offerTextColor: string;
 };
 
 export default async function CheckoutPage({
@@ -203,10 +207,19 @@ export default async function CheckoutPage({
   const branding = resolveOrganizationBranding(organization);
   const catalogSettings = await getOrganizationSalesCatalogSettings(client, organization.id).catch(() => null);
   const storefront = resolvePublicPageStorefront(catalogSettings?.storefront ?? null, branding);
+  const primaryColor = storefront.primaryColor ?? defaultStorefrontPrimaryColor;
   const publicLayoutStyle = {
-    "--store-primary": storefront.primaryColor ?? defaultStorefrontPrimaryColor,
+    "--store-primary": primaryColor,
+    "--store-accent": getReadableAccentColor(primaryColor, storefront.textColor),
     "--store-text": storefront.textColor,
     "--store-text-muted": `color-mix(in srgb, ${storefront.textColor} 72%, white 28%)`,
+    "--store-button": storefront.buttonColor,
+    "--store-button-text": storefront.buttonTextColor,
+    "--store-button-border": getReadableBorderColor(storefront.buttonColor),
+    "--store-card-text": storefront.cardTextColor,
+    "--store-card-text-muted": `color-mix(in srgb, ${storefront.cardTextColor} 72%, white 28%)`,
+    "--store-offer-text": storefront.offerTextColor,
+    "--store-primary-border": getReadableBorderColor(primaryColor),
   } as CSSProperties;
   const whatsappReturn = buildCheckoutWhatsappReturn({
     phoneNumber: whatsapp?.phone_number ?? null,
@@ -237,8 +250,8 @@ export default async function CheckoutPage({
             <div className="flex min-w-0 items-center gap-3">
               <CheckoutStoreLogo branding={branding} />
               <div className="min-w-0">
-                <span className="text-xs font-bold uppercase" style={{ color: "var(--store-primary)" }}>Pedido WhatsApp</span>
-                <h1 className="mt-1 truncate text-2xl font-black text-slate-950 sm:text-3xl">{branding.displayName}</h1>
+                <span className="text-xs font-bold uppercase" style={{ color: "var(--store-accent)" }}>Pedido WhatsApp</span>
+                <h1 className="mt-1 truncate text-2xl font-black text-[color:var(--store-text)] sm:text-3xl">{branding.displayName}</h1>
                 <p className="mt-1 line-clamp-1 text-sm font-semibold text-slate-500">{storefront.headerText}</p>
               </div>
             </div>
@@ -260,11 +273,18 @@ export default async function CheckoutPage({
             initialOrderStatus={order.status}
           />
 
-          <div className="mt-5 rounded-[8px] border border-[#25D366]/25 bg-[#25D366]/10 p-4">
-            <p className="text-xs font-bold uppercase text-[#128C4A]">Total para finalizar</p>
+          <div
+            className="mt-5 rounded-[8px] border p-4"
+            style={{
+              backgroundColor: "var(--store-primary)",
+              borderColor: "var(--store-primary-border)",
+              color: "var(--store-offer-text)",
+            }}
+          >
+            <p className="text-xs font-bold uppercase opacity-80">Total para finalizar</p>
             <div className="mt-2 flex flex-wrap items-end justify-between gap-3">
-              <p className="text-3xl font-black text-slate-950 sm:text-4xl">{amount ?? "A combinar"}</p>
-              <p className="max-w-[360px] text-sm font-semibold leading-6 text-slate-700">
+              <p className="text-3xl font-black sm:text-4xl">{amount ?? "A combinar"}</p>
+              <p className="max-w-[360px] text-sm font-semibold leading-6 opacity-75">
                 Seu pedido ficou pronto. Conclua o pagamento e continue o atendimento pelo WhatsApp da loja.
               </p>
             </div>
@@ -280,8 +300,8 @@ export default async function CheckoutPage({
         <aside className="order-2 rounded-[8px] border border-blue-100 bg-white p-4 shadow-2xl shadow-blue-950/10 sm:p-6 lg:sticky lg:top-6 lg:order-none lg:row-span-3 lg:self-start">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <span className="text-xs font-bold uppercase text-blue-700">Mercado Pago</span>
-              <h2 className="mt-2 text-2xl font-black text-slate-950">{session.method === "card" ? "Pagamento do pedido" : "Pague com Pix"}</h2>
+              <span className="text-xs font-bold uppercase text-[color:var(--store-accent)]">Mercado Pago</span>
+              <h2 className="mt-2 text-2xl font-black text-[color:var(--store-text)]">{session.method === "card" ? "Pagamento do pedido" : "Pague com Pix"}</h2>
             </div>
             <span className="inline-flex items-center gap-1 rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-xs font-bold text-[#128C4A]">
               <ShieldCheck className="h-3.5 w-3.5" />
@@ -356,8 +376,8 @@ export default async function CheckoutPage({
         <section className="order-3 rounded-[8px] border border-blue-100 bg-white p-4 shadow-xl shadow-blue-950/10 sm:p-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="text-xs font-bold uppercase text-blue-700">Resumo</p>
-              <h2 className="mt-1 text-xl font-black text-slate-950">Seu pedido</h2>
+              <p className="text-xs font-bold uppercase text-[color:var(--store-accent)]">Resumo</p>
+              <h2 className="mt-1 text-xl font-black text-[color:var(--store-text)]">Seu pedido</h2>
             </div>
             <span className="rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">
               #{order.id.slice(0, 8).toUpperCase()}
@@ -381,7 +401,7 @@ export default async function CheckoutPage({
         </section>
 
         <section className="order-4 rounded-[8px] border border-blue-100 bg-white p-4 shadow-xl shadow-blue-950/10 sm:p-6">
-          <p className="text-xs font-bold uppercase text-blue-700">Dados do pedido</p>
+          <p className="text-xs font-bold uppercase text-[color:var(--store-accent)]">Dados do pedido</p>
           <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
             <CheckoutDetail label="Cliente" value={order.customer_name ?? order.customer_phone ?? "Lead WhatsApp"} />
             <CheckoutDetail label="Subtotal" value={subtotal} />
@@ -454,8 +474,8 @@ function safeJson(value: unknown) {
 function CheckoutMetric({ label, value }: { label: string; value: string | null }) {
   return (
     <div className="rounded-[8px] border border-blue-100 bg-blue-50/70 p-3">
-      <dt className="text-xs font-bold uppercase text-blue-700">{label}</dt>
-      <dd className="mt-2 truncate text-base font-black text-slate-950">{value ?? "A combinar"}</dd>
+      <dt className="text-xs font-bold uppercase text-[color:var(--store-accent)]">{label}</dt>
+      <dd className="mt-2 truncate text-base font-black text-[color:var(--store-card-text)]">{value ?? "A combinar"}</dd>
     </div>
   );
 }
@@ -463,8 +483,8 @@ function CheckoutMetric({ label, value }: { label: string; value: string | null 
 function CheckoutDetail({ label, value }: { label: string; value: string | null }) {
   return (
     <div className="rounded-[8px] border border-blue-100 bg-slate-50 px-3 py-2">
-      <dt className="text-xs font-bold uppercase text-slate-500">{label}</dt>
-      <dd className="mt-1 font-bold text-slate-950">{value ?? "A combinar"}</dd>
+      <dt className="text-xs font-bold uppercase text-[color:var(--store-card-text-muted)]">{label}</dt>
+      <dd className="mt-1 font-bold text-[color:var(--store-card-text)]">{value ?? "A combinar"}</dd>
     </div>
   );
 }
@@ -512,7 +532,7 @@ function CheckoutItemCard({ item }: { item: CheckoutOrderItemRow }) {
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
           <p
-            className="min-w-0 text-sm font-bold leading-5 text-slate-950"
+            className="min-w-0 text-sm font-bold leading-5 text-[color:var(--store-card-text)]"
             style={{
               display: "-webkit-box",
               WebkitBoxOrient: "vertical",
@@ -542,7 +562,7 @@ function CheckoutItemCard({ item }: { item: CheckoutOrderItemRow }) {
           </div>
         ) : null}
       </div>
-      <span className="shrink-0 text-sm font-black text-blue-700">{price ?? "A combinar"}</span>
+      <span className="shrink-0 text-sm font-black text-[color:var(--store-card-text)]">{price ?? "A combinar"}</span>
     </div>
   );
 }
@@ -1045,7 +1065,7 @@ function PublicStoreFooter({
         </div>
         <div>
           <p className="text-sm font-black text-[color:var(--store-text,#0f172a)]">Atendimento</p>
-          <p className="mt-2 text-sm font-semibold leading-6" style={{ color: "var(--store-primary)" }}>{footerContactText}</p>
+          <p className="mt-2 text-sm font-semibold leading-6" style={{ color: "var(--store-accent)" }}>{footerContactText}</p>
         </div>
         <div>
           <p className="text-sm font-black text-[color:var(--store-text,#0f172a)]">Checkout seguro</p>
@@ -1070,6 +1090,10 @@ function resolvePublicPageStorefront(
   const heroHighlight = readString(settings?.heroHighlight);
   const heroSubtitle = readString(settings?.heroSubtitle);
   const legacyHeaderText = [heroTitle, heroHighlight].filter(Boolean).join(" ").trim();
+  const primaryColor = normalizeStorefrontPrimaryColor(settings?.primaryColor) ?? defaultStorefrontPrimaryColor;
+  const textColor = normalizeStorefrontTextColor(settings?.textColor) ?? "#111111";
+  const buttonColor = normalizeStorefrontTextColor(settings?.buttonColor) ?? primaryColor;
+  const cardTextColor = normalizeStorefrontTextColor(settings?.cardTextColor) ?? textColor;
 
   return {
     heroTitle,
@@ -1082,8 +1106,12 @@ function resolvePublicPageStorefront(
     footerText: readString(settings?.footerText)
       ?? `${branding.displayName} atende pelo WhatsApp com catalogo, checkout seguro e acompanhamento do pedido em um so lugar.`,
     footerContactText: readString(settings?.footerContactText) ?? "Atendimento pelo WhatsApp oficial da loja.",
-    primaryColor: normalizeStorefrontPrimaryColor(settings?.primaryColor) ?? defaultStorefrontPrimaryColor,
-    textColor: normalizeStorefrontTextColor(settings?.textColor) ?? "#111111",
+    primaryColor,
+    textColor,
+    buttonColor,
+    buttonTextColor: normalizeStorefrontTextColor(settings?.buttonTextColor) ?? getReadableTextColor(buttonColor),
+    cardTextColor,
+    offerTextColor: normalizeStorefrontTextColor(settings?.offerTextColor) ?? getReadableTextColor(primaryColor),
   };
 }
 
@@ -1091,18 +1119,7 @@ function normalizeStorefrontPrimaryColor(value: string | null | undefined) {
   if (!value) return null;
 
   const normalized = value.trim().toLowerCase();
-  if (!/^#[0-9a-f]{6}$/.test(normalized)) return null;
-
-  return isReadableActionColor(normalized) ? normalized : null;
-}
-
-function isReadableActionColor(hex: string) {
-  const red = Number.parseInt(hex.slice(1, 3), 16);
-  const green = Number.parseInt(hex.slice(3, 5), 16);
-  const blue = Number.parseInt(hex.slice(5, 7), 16);
-  const luminance = (0.2126 * red + 0.7152 * green + 0.0722 * blue) / 255;
-
-  return luminance < 0.82;
+  return /^#[0-9a-f]{6}$/.test(normalized) ? normalized : null;
 }
 
 function normalizeStorefrontTextColor(value: string | null | undefined) {
@@ -1110,6 +1127,26 @@ function normalizeStorefrontTextColor(value: string | null | undefined) {
 
   const normalized = value.trim().toLowerCase();
   return /^#[0-9a-f]{6}$/.test(normalized) ? normalized : null;
+}
+
+function getReadableTextColor(hex: string) {
+  return getColorLuminance(hex) > 0.66 ? "#111111" : "#ffffff";
+}
+
+function getReadableAccentColor(hex: string, fallbackTextColor: string) {
+  return getColorLuminance(hex) > 0.82 ? fallbackTextColor : hex;
+}
+
+function getReadableBorderColor(hex: string) {
+  return getColorLuminance(hex) > 0.82 ? "#d9ded7" : `color-mix(in srgb, ${hex} 78%, black 22%)`;
+}
+
+function getColorLuminance(hex: string) {
+  const red = Number.parseInt(hex.slice(1, 3), 16);
+  const green = Number.parseInt(hex.slice(3, 5), 16);
+  const blue = Number.parseInt(hex.slice(5, 7), 16);
+
+  return (0.2126 * red + 0.7152 * green + 0.0722 * blue) / 255;
 }
 
 function readRecord(value: unknown): JsonRecord {

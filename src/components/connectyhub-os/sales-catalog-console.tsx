@@ -788,6 +788,11 @@ export function SalesCatalogConsole({
   const storefrontFooterContactText = settingsDraft.storefront.footerContactText?.trim() || "Atendimento pelo WhatsApp oficial da loja.";
   const storefrontPrimaryColor = normalizeStorefrontPreviewColor(settingsDraft.storefront.primaryColor) ?? "#063f2c";
   const storefrontTextColor = normalizeStorefrontTextPreviewColor(settingsDraft.storefront.textColor) ?? "#111111";
+  const storefrontAccentColor = getPreviewReadableAccentColor(storefrontPrimaryColor, storefrontTextColor);
+  const storefrontButtonColor = normalizeStorefrontTextPreviewColor(settingsDraft.storefront.buttonColor) ?? storefrontPrimaryColor;
+  const storefrontButtonTextColor = normalizeStorefrontTextPreviewColor(settingsDraft.storefront.buttonTextColor) ?? getPreviewReadableTextColor(storefrontButtonColor);
+  const storefrontCardTextColor = normalizeStorefrontTextPreviewColor(settingsDraft.storefront.cardTextColor) ?? storefrontTextColor;
+  const storefrontOfferTextColor = normalizeStorefrontTextPreviewColor(settingsDraft.storefront.offerTextColor) ?? getPreviewReadableTextColor(storefrontPrimaryColor);
   const hasConfiguredSettings = Boolean(selectedSettings?.configured);
   const productAttributes = useMemo(
     () => (selectedSettings?.configured ? selectedSettings.attributes : settingsDraft.attributes).filter((attribute) => attribute.values.length > 0),
@@ -1184,6 +1189,10 @@ export function SalesCatalogConsole({
             footerContactText: cleanInput(settingsDraft.storefront.footerContactText, 180),
             primaryColor: settingsDraft.storefront.primaryColor,
             textColor: settingsDraft.storefront.textColor,
+            buttonColor: settingsDraft.storefront.buttonColor,
+            buttonTextColor: settingsDraft.storefront.buttonTextColor,
+            cardTextColor: settingsDraft.storefront.cardTextColor,
+            offerTextColor: settingsDraft.storefront.offerTextColor,
           },
           trackInventory: settingsDraft.trackInventory,
           variationMedia: settingsDraft.variationMedia,
@@ -3048,47 +3057,53 @@ export function SalesCatalogConsole({
                 />
               </label>
 
-              <label className="block">
-                <FieldLabel>Cor principal</FieldLabel>
-                <div className="grid grid-cols-[48px_minmax(0,1fr)] gap-2">
-                  <input
-                    aria-label="Cor principal da loja"
-                    className="h-11 w-12 rounded-lg border bg-transparent p-1"
-                    type="color"
-                    value={storefrontPrimaryColor}
-                    onChange={(event) => updateStorefrontSettings({ primaryColor: event.target.value })}
-                    style={{ borderColor: "var(--ch-border)" }}
-                  />
-                  <input
-                    value={settingsDraft.storefront.primaryColor ?? ""}
-                    onChange={(event) => updateStorefrontSettings({ primaryColor: event.target.value.slice(0, 7) })}
-                    className="h-11 w-full rounded-lg border bg-transparent px-3 font-mono text-[12px] outline-none"
+              <div className="rounded-xl border border-slate-200/80 bg-slate-50/70 p-3">
+                <p className="mb-3 text-[11px] font-black uppercase tracking-wide text-slate-600">Tema visual</p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <ThemeColorField
+                    label="Cor do tema"
+                    value={settingsDraft.storefront.primaryColor}
+                    previewValue={storefrontPrimaryColor}
                     placeholder="#063f2c"
-                    style={{ borderColor: "var(--ch-border)" }}
+                    onChange={(primaryColor) => updateStorefrontSettings({ primaryColor })}
                   />
-                </div>
-              </label>
-
-              <label className="block">
-                <FieldLabel>Cor das letras</FieldLabel>
-                <div className="grid grid-cols-[48px_minmax(0,1fr)] gap-2">
-                  <input
-                    aria-label="Cor das letras da loja"
-                    className="h-11 w-12 rounded-lg border bg-transparent p-1"
-                    type="color"
-                    value={storefrontTextColor}
-                    onChange={(event) => updateStorefrontSettings({ textColor: event.target.value })}
-                    style={{ borderColor: "var(--ch-border)" }}
-                  />
-                  <input
-                    value={settingsDraft.storefront.textColor ?? ""}
-                    onChange={(event) => updateStorefrontSettings({ textColor: event.target.value.slice(0, 7) })}
-                    className="h-11 w-full rounded-lg border bg-transparent px-3 font-mono text-[12px] outline-none"
+                  <ThemeColorField
+                    label="Cor dos textos"
+                    value={settingsDraft.storefront.textColor}
+                    previewValue={storefrontTextColor}
                     placeholder="#111111"
-                    style={{ borderColor: "var(--ch-border)" }}
+                    onChange={(textColor) => updateStorefrontSettings({ textColor })}
+                  />
+                  <ThemeColorField
+                    label="Cor dos botoes"
+                    value={settingsDraft.storefront.buttonColor}
+                    previewValue={storefrontButtonColor}
+                    placeholder="#063f2c"
+                    onChange={(buttonColor) => updateStorefrontSettings({ buttonColor })}
+                  />
+                  <ThemeColorField
+                    label="Letra dos botoes"
+                    value={settingsDraft.storefront.buttonTextColor}
+                    previewValue={storefrontButtonTextColor}
+                    placeholder="#ffffff"
+                    onChange={(buttonTextColor) => updateStorefrontSettings({ buttonTextColor })}
+                  />
+                  <ThemeColorField
+                    label="Letra dos cards"
+                    value={settingsDraft.storefront.cardTextColor}
+                    previewValue={storefrontCardTextColor}
+                    placeholder="#111111"
+                    onChange={(cardTextColor) => updateStorefrontSettings({ cardTextColor })}
+                  />
+                  <ThemeColorField
+                    label="Letra do card de oferta"
+                    value={settingsDraft.storefront.offerTextColor}
+                    previewValue={storefrontOfferTextColor}
+                    placeholder="#ffffff"
+                    onChange={(offerTextColor) => updateStorefrontSettings({ offerTextColor })}
                   />
                 </div>
-              </label>
+              </div>
 
               <button
                 type="button"
@@ -3115,7 +3130,7 @@ export function SalesCatalogConsole({
                         unoptimized
                       />
                     ) : (
-                      <Store className="h-5 w-5" style={{ color: storefrontPrimaryColor }} />
+                      <Store className="h-5 w-5" style={{ color: storefrontAccentColor }} />
                     )}
                   </div>
                   <div className="min-w-0">
@@ -3123,14 +3138,18 @@ export function SalesCatalogConsole({
                     <p className="line-clamp-1 text-[11px] font-semibold opacity-70">{storefrontHeaderText}</p>
                   </div>
                 </div>
-                <span className="rounded-lg px-3 py-2 text-[11px] font-black text-white" style={{ backgroundColor: storefrontPrimaryColor }}>
+                <span className="rounded-lg border px-3 py-2 text-[11px] font-black" style={{
+                  backgroundColor: storefrontButtonColor,
+                  borderColor: getPreviewReadableBorderColor(storefrontButtonColor),
+                  color: storefrontButtonTextColor,
+                }}>
                   Sacola
                 </span>
               </div>
 
               <div className="grid gap-4 py-5 lg:grid-cols-[minmax(0,1fr)_220px]">
                 <div className="min-w-0">
-                  <p className="font-mono text-[9px] font-black uppercase tracking-[0.18em]" style={{ color: storefrontPrimaryColor }}>
+                  <p className="font-mono text-[9px] font-black uppercase tracking-[0.18em]" style={{ color: storefrontAccentColor }}>
                     Loja oficial
                   </p>
                   <h3 className="mt-2 text-3xl font-black leading-none">
@@ -3139,10 +3158,14 @@ export function SalesCatalogConsole({
                   </h3>
                   <p className="mt-3 line-clamp-2 max-w-xl text-[13px] leading-5 opacity-75">{storefrontHeroSubtitle}</p>
                   <div className="mt-4 flex flex-wrap gap-2">
-                    <span className="rounded-lg px-4 py-2 text-[11px] font-black text-white" style={{ backgroundColor: storefrontPrimaryColor }}>
+                    <span className="rounded-lg border px-4 py-2 text-[11px] font-black" style={{
+                      backgroundColor: storefrontButtonColor,
+                      borderColor: getPreviewReadableBorderColor(storefrontButtonColor),
+                      color: storefrontButtonTextColor,
+                    }}>
                       Ver produtos
                     </span>
-                    <span className="rounded-lg border border-slate-200 px-4 py-2 text-[11px] font-black text-slate-700">
+                    <span className="rounded-lg border border-slate-200 px-4 py-2 text-[11px] font-black opacity-85">
                       WhatsApp
                     </span>
                   </div>
@@ -3158,9 +3181,18 @@ export function SalesCatalogConsole({
                 </div>
               </div>
 
+              <div className="mb-4 rounded-lg border px-4 py-3" style={{
+                backgroundColor: storefrontPrimaryColor,
+                borderColor: getPreviewReadableBorderColor(storefrontPrimaryColor),
+                color: storefrontOfferTextColor,
+              }}>
+                <p className="text-[11px] font-black uppercase opacity-85">Card de oferta</p>
+                <p className="mt-1 line-clamp-1 text-[13px] font-black">Produtos selecionados para comprar agora</p>
+              </div>
+
               <div className="grid gap-3 sm:grid-cols-3">
                 {visibleItems.slice(0, 3).map((item) => (
-                  <div key={item.id} className="overflow-hidden rounded-lg border border-slate-100 bg-white shadow-sm">
+                  <div key={item.id} className="overflow-hidden rounded-lg border border-slate-100 bg-white shadow-sm" style={{ color: storefrontCardTextColor }}>
                     <div className="relative aspect-[4/3] bg-slate-50">
                       {item.media[0]?.storageUrl ? (
                         <Image alt={item.title} className="object-cover" fill sizes="180px" src={item.media[0].storageUrl} unoptimized />
@@ -3181,7 +3213,7 @@ export function SalesCatalogConsole({
               <div className="mt-5 rounded-lg border border-slate-100 bg-slate-50 p-4">
                 <p className="text-[13px] font-black">{selectedCompany?.name ?? "Sua empresa"}</p>
                 <p className="mt-1 line-clamp-3 text-[12px] leading-5 opacity-75">{storefrontFooterText}</p>
-                <p className="mt-2 text-[11px] font-semibold" style={{ color: storefrontPrimaryColor }}>{storefrontFooterContactText}</p>
+                <p className="mt-2 text-[11px] font-semibold" style={{ color: storefrontAccentColor }}>{storefrontFooterContactText}</p>
                 <p className="mt-3 text-[10px] font-bold uppercase tracking-wide opacity-55">Desenvolvido por ConnectyHub</p>
               </div>
             </div>
@@ -6949,6 +6981,43 @@ function FieldLabel({ children, help }: { children: string; help?: string }) {
   );
 }
 
+function ThemeColorField({
+  label,
+  onChange,
+  placeholder,
+  previewValue,
+  value,
+}: {
+  label: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  previewValue: string;
+  value: string | null;
+}) {
+  return (
+    <label className="block">
+      <FieldLabel>{label}</FieldLabel>
+      <div className="grid grid-cols-[44px_minmax(0,1fr)] gap-2">
+        <input
+          aria-label={label}
+          className="h-11 w-11 rounded-lg border bg-transparent p-1"
+          type="color"
+          value={previewValue}
+          onChange={(event) => onChange(event.target.value)}
+          style={{ borderColor: "var(--ch-border)" }}
+        />
+        <input
+          value={value ?? ""}
+          onChange={(event) => onChange(event.target.value.slice(0, 7))}
+          className="h-11 w-full rounded-lg border bg-transparent px-3 font-mono text-[12px] outline-none"
+          placeholder={placeholder}
+          style={{ borderColor: "var(--ch-border)" }}
+        />
+      </div>
+    </label>
+  );
+}
+
 function MediaIcon({ media }: { media: SalesCatalogMedia }) {
   if (media.kind === "image") return <ImageIcon className="h-3 w-3" />;
   if (media.kind === "video") return <Video className="h-3 w-3" />;
@@ -7419,14 +7488,7 @@ function normalizeStorefrontPreviewColor(value: string | null | undefined) {
   if (!value) return null;
 
   const normalized = value.trim().toLowerCase();
-  if (!/^#[0-9a-f]{6}$/.test(normalized)) return null;
-
-  const red = Number.parseInt(normalized.slice(1, 3), 16);
-  const green = Number.parseInt(normalized.slice(3, 5), 16);
-  const blue = Number.parseInt(normalized.slice(5, 7), 16);
-  const luminance = (0.2126 * red + 0.7152 * green + 0.0722 * blue) / 255;
-
-  return luminance < 0.82 ? normalized : null;
+  return /^#[0-9a-f]{6}$/.test(normalized) ? normalized : null;
 }
 
 function normalizeStorefrontTextPreviewColor(value: string | null | undefined) {
@@ -7434,6 +7496,26 @@ function normalizeStorefrontTextPreviewColor(value: string | null | undefined) {
 
   const normalized = value.trim().toLowerCase();
   return /^#[0-9a-f]{6}$/.test(normalized) ? normalized : null;
+}
+
+function getPreviewReadableTextColor(hex: string) {
+  return getPreviewColorLuminance(hex) > 0.66 ? "#111111" : "#ffffff";
+}
+
+function getPreviewReadableAccentColor(hex: string, fallbackTextColor: string) {
+  return getPreviewColorLuminance(hex) > 0.82 ? fallbackTextColor : hex;
+}
+
+function getPreviewReadableBorderColor(hex: string) {
+  return getPreviewColorLuminance(hex) > 0.82 ? "#d9ded7" : hex;
+}
+
+function getPreviewColorLuminance(hex: string) {
+  const red = Number.parseInt(hex.slice(1, 3), 16);
+  const green = Number.parseInt(hex.slice(3, 5), 16);
+  const blue = Number.parseInt(hex.slice(5, 7), 16);
+
+  return (0.2126 * red + 0.7152 * green + 0.0722 * blue) / 255;
 }
 
 function buildSettingsDraft(settings: ClientSalesCatalogSettings | null): SettingsDraft {
@@ -7452,6 +7534,10 @@ function buildSettingsDraft(settings: ClientSalesCatalogSettings | null): Settin
       footerContactText: settings?.storefront.footerContactText ?? "",
       primaryColor: settings?.storefront.primaryColor ?? "#063f2c",
       textColor: settings?.storefront.textColor ?? "#111111",
+      buttonColor: settings?.storefront.buttonColor ?? "",
+      buttonTextColor: settings?.storefront.buttonTextColor ?? "",
+      cardTextColor: settings?.storefront.cardTextColor ?? "",
+      offerTextColor: settings?.storefront.offerTextColor ?? "",
     },
     trackInventory: settings?.trackInventory ?? false,
     variationMedia: settings?.variationMedia ?? false,

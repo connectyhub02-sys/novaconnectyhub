@@ -610,6 +610,10 @@ export type SalesCatalogStorefrontSettings = {
   footerContactText: string | null;
   primaryColor: string | null;
   textColor: string | null;
+  buttonColor: string | null;
+  buttonTextColor: string | null;
+  cardTextColor: string | null;
+  offerTextColor: string | null;
 };
 
 export type SalesCatalogCommerceSettings = Pick<

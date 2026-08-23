@@ -43,6 +43,10 @@ export type PublicStorefrontSettings = {
   footerContactText: string | null;
   primaryColor: string | null;
   textColor: string | null;
+  buttonColor: string | null;
+  buttonTextColor: string | null;
+  cardTextColor: string | null;
+  offerTextColor: string | null;
 };
 
 export type PublicStorefrontTrackingParams = {
@@ -183,11 +187,25 @@ export function PublicStorefront({ storeSlug, branding, storefront, products, tr
     && cart.every((line) => line.product.canCheckout && typeof line.product.priceCents === "number");
   const primaryColor = normalizeStorefrontPrimaryColor(storefront.primaryColor) ?? defaultStorefrontPrimaryColor;
   const textColor = normalizeStorefrontTextColor(storefront.textColor) ?? "#111111";
+  const accentColor = getReadableAccentColor(primaryColor, textColor);
+  const buttonColor = normalizeStorefrontTextColor(storefront.buttonColor) ?? primaryColor;
+  const buttonTextColor = normalizeStorefrontTextColor(storefront.buttonTextColor) ?? getReadableTextColor(buttonColor);
+  const cardTextColor = normalizeStorefrontTextColor(storefront.cardTextColor) ?? textColor;
+  const offerTextColor = normalizeStorefrontTextColor(storefront.offerTextColor) ?? getReadableTextColor(primaryColor);
   const publicLayoutStyle = {
     "--store-primary": primaryColor,
     "--store-action": storefrontActionColor,
+    "--store-accent": accentColor,
     "--store-text": textColor,
     "--store-text-muted": `color-mix(in srgb, ${textColor} 72%, white 28%)`,
+    "--store-button": buttonColor,
+    "--store-button-text": buttonTextColor,
+    "--store-button-border": getReadableBorderColor(buttonColor),
+    "--store-card-text": cardTextColor,
+    "--store-card-text-muted": `color-mix(in srgb, ${cardTextColor} 72%, white 28%)`,
+    "--store-offer-text": offerTextColor,
+    "--store-offer-text-muted": `color-mix(in srgb, ${offerTextColor} 76%, transparent 24%)`,
+    "--store-primary-border": getReadableBorderColor(primaryColor),
   } as CSSProperties;
   const customHeroTitle = storefront.heroTitle?.trim() || storefront.headerText?.trim() || "";
   const heroTitle = customHeroTitle || "Produtos favoritos,";
@@ -342,9 +360,13 @@ export function PublicStorefront({ storeSlug, branding, storefront, products, tr
       {totalItems > 0 ? (
         <button
           aria-label="Abrir sacola"
-          className="fixed bottom-6 right-6 z-30 hidden h-14 min-w-14 items-center justify-center gap-2 rounded-full px-5 text-sm font-black text-white shadow-2xl shadow-slate-950/25 transition brightness-100 hover:brightness-110 lg:inline-flex"
+          className="fixed bottom-6 right-6 z-30 hidden h-14 min-w-14 items-center justify-center gap-2 rounded-full border px-5 text-sm font-black shadow-2xl shadow-slate-950/25 transition brightness-100 hover:brightness-110 lg:inline-flex"
           onClick={() => setCartOpen(true)}
-          style={{ backgroundColor: "var(--store-primary)" }}
+          style={{
+            backgroundColor: "var(--store-button)",
+            borderColor: "var(--store-button-border)",
+            color: "var(--store-button-text)",
+          }}
           type="button"
         >
           <ShoppingBag className="h-5 w-5" />
@@ -402,15 +424,19 @@ function StorefrontHero({
           <div className="flex min-w-0 items-center gap-3">
             <BrandLogo branding={branding} />
             <div className="min-w-0">
-              <p className="truncate text-sm font-black text-[#123f2d]">{branding.displayName}</p>
-              <p className="line-clamp-1 text-xs font-semibold text-[#516056]">{headerText}</p>
+              <p className="truncate text-sm font-black text-[color:var(--store-accent)]">{branding.displayName}</p>
+              <p className="line-clamp-1 text-xs font-semibold text-[color:var(--store-text-muted)]">{headerText}</p>
             </div>
           </div>
 
           <button
-            className="relative inline-flex min-h-11 items-center gap-2 rounded-[8px] px-4 text-sm font-black text-white shadow-lg shadow-[#063f2c]/20 transition brightness-100 hover:brightness-110"
+            className="relative inline-flex min-h-11 items-center gap-2 rounded-[8px] border px-4 text-sm font-black shadow-lg shadow-[#063f2c]/20 transition brightness-100 hover:brightness-110"
             onClick={onCart}
-            style={{ backgroundColor: "var(--store-primary)" }}
+            style={{
+              backgroundColor: "var(--store-button)",
+              borderColor: "var(--store-button-border)",
+              color: "var(--store-button-text)",
+            }}
             type="button"
           >
             <ShoppingBag className="h-4 w-4" />
@@ -425,7 +451,7 @@ function StorefrontHero({
 
         <div className="grid items-center gap-8 lg:grid-cols-[minmax(0,0.92fr)_minmax(360px,1fr)]">
           <div className="min-w-0">
-            <p className="inline-flex items-center gap-2 text-sm font-black text-[#123f2d]">
+            <p className="inline-flex items-center gap-2 text-sm font-black text-[color:var(--store-accent)]">
               <Sparkles className="h-4 w-4" />
               Loja oficial. Compra facil.
             </p>
@@ -438,16 +464,20 @@ function StorefrontHero({
             </p>
             <div className="mt-7 flex flex-col gap-3 sm:flex-row">
               <button
-                className="inline-flex min-h-12 items-center justify-center gap-3 rounded-[8px] px-8 text-sm font-black uppercase text-white shadow-xl shadow-[#063f2c]/20 transition brightness-100 hover:brightness-110"
+                className="inline-flex min-h-12 items-center justify-center gap-3 rounded-[8px] border px-8 text-sm font-black uppercase shadow-xl shadow-[#063f2c]/20 transition brightness-100 hover:brightness-110"
                 onClick={onShopNow}
-                style={{ backgroundColor: "var(--store-primary)" }}
+                style={{
+                  backgroundColor: "var(--store-button)",
+                  borderColor: "var(--store-button-border)",
+                  color: "var(--store-button-text)",
+                }}
                 type="button"
               >
                 Comprar agora
                 <ArrowRight className="h-4 w-4" />
               </button>
               <button
-                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-[8px] border border-[#dfe6df] bg-white px-8 text-sm font-black text-[#123f2d] transition hover:bg-[#f4f7f1]"
+                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-[8px] border border-[#dfe6df] bg-white px-8 text-sm font-black text-[color:var(--store-accent)] transition hover:bg-[#f4f7f1]"
                 onClick={onCart}
                 type="button"
               >
@@ -479,7 +509,7 @@ function HeroProductPanel({ product }: { product: PublicStorefrontProduct | null
             <ProductImage product={product} priority sizes="(max-width: 1024px) 80vw, 430px" variant="hero" />
           </a>
         ) : (
-          <div className="grid h-64 w-full place-items-center rounded-[8px] bg-white/60 text-[#123f2d]">
+          <div className="grid h-64 w-full place-items-center rounded-[8px] bg-white/60 text-[color:var(--store-accent)]">
             <Package className="h-16 w-16" />
           </div>
         )}
@@ -541,26 +571,31 @@ function PromoBanner({
   return (
     <section className="mx-auto w-full max-w-6xl px-5 py-7 sm:px-8">
       <div
-        className="grid min-h-36 overflow-hidden rounded-[8px] p-5 text-white shadow-xl shadow-[#063f2c]/20 md:grid-cols-[180px_minmax(0,1fr)_240px] md:items-center md:p-7"
-        style={{ backgroundColor: "var(--store-primary)" }}
+        className="grid min-h-36 overflow-hidden rounded-[8px] border p-5 shadow-xl shadow-[#063f2c]/20 md:grid-cols-[180px_minmax(0,1fr)_240px] md:items-center md:p-7"
+        style={{
+          backgroundColor: "var(--store-primary)",
+          borderColor: "var(--store-primary-border)",
+          color: "var(--store-offer-text)",
+        }}
       >
         <div className="hidden items-center justify-center md:flex">
-          <span className="grid h-24 w-24 rotate-[-10deg] place-items-center rounded-[8px] bg-white text-[#123f2d]">
+          <span className="grid h-24 w-24 rotate-[-10deg] place-items-center rounded-[8px] bg-white text-[color:var(--store-accent)]">
             <Tag className="h-14 w-14" />
           </span>
         </div>
         <div className="min-w-0">
-          <p className="text-sm font-black uppercase text-white/90">Oferta especial da {branding.displayName}</p>
+          <p className="text-sm font-black uppercase opacity-90">Oferta especial da {branding.displayName}</p>
           <h2 className="mt-2 font-serif text-[34px] font-black leading-none sm:text-[44px]">
             {product?.highlightLabel || "Produtos selecionados"}
           </h2>
-          <p className="mt-3 max-w-xl text-sm font-semibold leading-6 text-white/82">
+          <p className="mt-3 max-w-xl text-sm font-semibold leading-6 text-[color:var(--store-offer-text-muted)]">
             Escolha seus produtos, adicione na sacola e finalize tudo em um checkout unico.
           </p>
         </div>
         <button
-          className="mt-5 inline-flex min-h-14 items-center justify-center rounded-[8px] border border-dashed border-white/60 px-6 text-sm font-black uppercase text-white transition hover:bg-white/10 md:mt-0"
+          className="mt-5 inline-flex min-h-14 items-center justify-center rounded-[8px] border border-dashed px-6 text-sm font-black uppercase transition hover:bg-white/10 md:mt-0"
           onClick={onShopNow}
+          style={{ borderColor: "color-mix(in srgb, var(--store-offer-text) 60%, transparent 40%)" }}
           type="button"
         >
           Ver vitrine
@@ -635,28 +670,32 @@ function ProductCard({
       </a>
 
       <div className="flex flex-1 flex-col p-3 text-center sm:p-4">
-        <h3 className="line-clamp-2 min-h-10 text-[13px] font-black leading-5 text-[color:var(--store-text)] sm:text-sm">
+        <h3 className="line-clamp-2 min-h-10 text-[13px] font-black leading-5 text-[color:var(--store-card-text)] sm:text-sm">
           {product.title}
         </h3>
         <div className="mt-2 flex items-center justify-center gap-1 text-[#f5a400]">
           {[0, 1, 2, 3, 4].map((item) => (
             <Star className="h-3.5 w-3.5 fill-current" key={item} />
           ))}
-          <span className="ml-1 text-xs font-bold text-[color:var(--store-text-muted)]">(4.8)</span>
+          <span className="ml-1 text-xs font-bold text-[color:var(--store-card-text-muted)]">(4.8)</span>
         </div>
         <div className="mt-2 flex min-h-7 items-center justify-center gap-2">
-          <p className="text-base font-black text-[color:var(--store-text)]">{product.priceLabel}</p>
+          <p className="text-base font-black text-[color:var(--store-card-text)]">{product.priceLabel}</p>
           {product.compareAtLabel ? (
             <p className="text-xs font-semibold text-[#8b918c] line-through">{product.compareAtLabel}</p>
           ) : null}
         </div>
         <button
           className={cn(
-            "mt-auto inline-flex min-h-10 w-full items-center justify-center rounded-[8px] px-3 text-xs font-black uppercase text-white transition brightness-100 hover:brightness-110",
-            product.canCheckout ? "shadow-lg shadow-[#063f2c]/15" : "bg-[#7c8580]",
+            "mt-auto inline-flex min-h-10 w-full items-center justify-center rounded-[8px] border px-3 text-xs font-black uppercase transition brightness-100 hover:brightness-110",
+            product.canCheckout ? "shadow-lg shadow-[#063f2c]/15" : "border-[#7c8580] bg-[#7c8580] text-white",
           )}
           onClick={() => onAddToCart(product)}
-          style={product.canCheckout ? { backgroundColor: "var(--store-primary)" } : undefined}
+          style={product.canCheckout ? {
+            backgroundColor: "var(--store-button)",
+            borderColor: "var(--store-button-border)",
+            color: "var(--store-button-text)",
+          } : undefined}
           type="button"
         >
           {product.canCheckout ? "Comprar" : "Ver produto"}
@@ -679,7 +718,7 @@ function ProductImage({
 }) {
   if (!product.coverUrl) {
     return (
-      <div className="grid h-full w-full place-items-center text-[#123f2d]/40">
+      <div className="grid h-full w-full place-items-center text-[color:var(--store-accent)] opacity-40">
         <Package className={variant === "hero" ? "h-20 w-20" : "h-12 w-12"} />
       </div>
     );
@@ -749,9 +788,14 @@ function CategoryButton({
         className={cn(
           "mx-auto grid h-14 w-14 place-items-center rounded-full border transition sm:h-16 sm:w-16",
           active
-            ? "border-[#123f2d] bg-[#123f2d] text-white shadow-lg shadow-[#063f2c]/15"
-            : "border-[#e2e7df] bg-white text-[#123f2d] group-hover:border-[#123f2d]",
+            ? "shadow-lg shadow-[#063f2c]/15"
+            : "border-[#e2e7df] bg-white text-[color:var(--store-accent)]",
         )}
+        style={active ? {
+          backgroundColor: "var(--store-primary)",
+          borderColor: "var(--store-primary-border)",
+          color: "var(--store-offer-text)",
+        } : undefined}
       >
         {icon}
       </span>
@@ -783,10 +827,10 @@ function CustomerLove({ branding }: { branding: PublicStorefrontBranding }) {
             <p className="mt-4 max-w-xl text-base font-semibold leading-7 text-[color:var(--store-text)]">
               Atendimento rapido, produtos organizados e pagamento em um fluxo claro para o cliente.
             </p>
-            <p className="mt-4 text-sm font-black text-[#123f2d]">ConnectyHub Checkout</p>
+            <p className="mt-4 text-sm font-black text-[color:var(--store-accent)]">ConnectyHub Checkout</p>
           </div>
           <div className="hidden min-h-44 items-center justify-center rounded-[8px] bg-[#f4f0ea] sm:flex">
-            <MessageCircle className="h-20 w-20 text-[#123f2d]" />
+            <MessageCircle className="h-20 w-20 text-[color:var(--store-accent)]" />
           </div>
         </div>
       </div>
@@ -805,15 +849,19 @@ function TrustStrip() {
   return (
     <section className="mx-auto w-full max-w-6xl px-5 pb-8 sm:px-8">
       <div
-        className="grid overflow-hidden rounded-[8px] text-white md:grid-cols-4 md:divide-x md:divide-white/20"
-        style={{ backgroundColor: "var(--store-primary)" }}
+        className="grid overflow-hidden rounded-[8px] border md:grid-cols-4 md:divide-x md:divide-white/20"
+        style={{
+          backgroundColor: "var(--store-primary)",
+          borderColor: "var(--store-primary-border)",
+          color: "var(--store-offer-text)",
+        }}
       >
         {items.map((item) => (
           <div className="flex min-h-20 items-center gap-4 px-5 py-4" key={item.title}>
             <span className="shrink-0">{item.icon}</span>
             <div>
               <h2 className="text-sm font-black uppercase">{item.title}</h2>
-              <p className="mt-1 text-xs font-semibold text-white/75">{item.text}</p>
+              <p className="mt-1 text-xs font-semibold opacity-75">{item.text}</p>
             </div>
           </div>
         ))}
@@ -825,7 +873,7 @@ function TrustStrip() {
 function EmptyCatalog({ branding }: { branding: PublicStorefrontBranding }) {
   return (
     <div className="rounded-[8px] border border-dashed border-[#d9ded7] bg-white p-10 text-center">
-      <Package className="mx-auto h-10 w-10 text-[#123f2d]" />
+      <Package className="mx-auto h-10 w-10 text-[color:var(--store-accent)]" />
       <h2 className="mt-4 font-serif text-3xl font-black text-[color:var(--store-text)]">Vitrine em montagem</h2>
       <p className="mx-auto mt-3 max-w-md text-sm font-semibold leading-6 text-[color:var(--store-text-muted)]">
         A {branding.displayName} ainda esta preparando os produtos desta categoria.
@@ -872,7 +920,7 @@ function StoreFooter({
       </div>
       <p className="border-t border-[#f0eee8] px-4 py-4 text-center text-xs font-semibold text-[color:var(--store-text-muted)]">
         {branding.displayName} - Desenvolvido por{" "}
-        <a className="font-black text-[#123f2d] hover:underline" href={connectHubPublicUrl} rel="noreferrer" target="_blank">
+        <a className="font-black text-[color:var(--store-accent)] hover:underline" href={connectHubPublicUrl} rel="noreferrer" target="_blank">
           ConnectyHub
         </a>
       </p>
@@ -902,7 +950,7 @@ function BrandLogo({ branding, compact = false }: { branding: PublicStorefrontBr
       {branding.logoUrl ? (
         <Image alt={branding.logoAlt} className="object-contain p-1" fill sizes={compact ? "40px" : "48px"} src={branding.logoUrl} unoptimized />
       ) : (
-        <Store className="h-5 w-5 text-[#123f2d]" />
+        <Store className="h-5 w-5 text-[color:var(--store-accent)]" />
       )}
     </span>
   );
@@ -951,7 +999,7 @@ function CartDrawer({
       <aside className="absolute right-0 top-0 flex h-full w-full max-w-md flex-col bg-white shadow-2xl shadow-slate-950/30">
         <div className="flex items-center justify-between gap-3 border-b border-[#e5e2d8] px-4 py-4">
           <div className="min-w-0">
-            <p className="text-xs font-black uppercase text-[#123f2d]">Sacola</p>
+            <p className="text-xs font-black uppercase text-[color:var(--store-accent)]">Sacola</p>
             <h2 className="truncate text-xl font-black text-[color:var(--store-text)]">{branding.displayName}</h2>
           </div>
           <button aria-label="Fechar" className="grid h-10 w-10 shrink-0 place-items-center rounded-[8px] border border-[#e5e2d8] bg-white text-[color:var(--store-text-muted)] transition hover:bg-[#f8f7f2]" onClick={onClose} type="button">
@@ -968,18 +1016,18 @@ function CartDrawer({
                     {line.product.coverUrl ? (
                       <Image alt={line.product.title} className="object-contain p-1" fill sizes="72px" src={line.product.coverUrl} unoptimized />
                     ) : (
-                      <Package className="m-5 h-8 w-8 text-[#123f2d]/40" />
+                      <Package className="m-5 h-8 w-8 text-[color:var(--store-accent)] opacity-40" />
                     )}
                   </div>
                   <div className="min-w-0">
                     <p className="line-clamp-2 text-sm font-black leading-5 text-[color:var(--store-text)]">{line.product.title}</p>
-                    <p className="mt-1 text-sm font-black text-[#123f2d]">{line.product.priceLabel}</p>
+                    <p className="mt-1 text-sm font-black text-[color:var(--store-card-text)]">{line.product.priceLabel}</p>
                     <div className="mt-3 inline-flex h-9 items-center rounded-[8px] border border-[#e5e2d8] bg-white">
-                      <button aria-label="Diminuir" className="grid h-9 w-9 place-items-center text-[color:var(--store-text-muted)] transition hover:text-[#123f2d]" onClick={() => onUpdateQuantity(line.product.id, line.quantity - 1)} type="button">
+                      <button aria-label="Diminuir" className="grid h-9 w-9 place-items-center text-[color:var(--store-text-muted)] transition hover:text-[color:var(--store-accent)]" onClick={() => onUpdateQuantity(line.product.id, line.quantity - 1)} type="button">
                         <Minus className="h-3.5 w-3.5" />
                       </button>
                       <span className="min-w-8 text-center text-sm font-black">{line.quantity}</span>
-                      <button aria-label="Aumentar" className="grid h-9 w-9 place-items-center text-[color:var(--store-text-muted)] transition hover:text-[#123f2d]" onClick={() => onUpdateQuantity(line.product.id, line.quantity + 1)} type="button">
+                      <button aria-label="Aumentar" className="grid h-9 w-9 place-items-center text-[color:var(--store-text-muted)] transition hover:text-[color:var(--store-accent)]" onClick={() => onUpdateQuantity(line.product.id, line.quantity + 1)} type="button">
                         <Plus className="h-3.5 w-3.5" />
                       </button>
                     </div>
@@ -989,7 +1037,7 @@ function CartDrawer({
             </div>
           ) : (
             <div className="rounded-[8px] border border-dashed border-[#d9ded7] bg-[#fbfaf6] p-6 text-center">
-              <ShoppingBag className="mx-auto h-8 w-8 text-[#123f2d]" />
+              <ShoppingBag className="mx-auto h-8 w-8 text-[color:var(--store-accent)]" />
               <h3 className="mt-3 text-lg font-black text-[color:var(--store-text)]">Sua sacola esta vazia</h3>
               <p className="mt-2 text-sm leading-6 text-[color:var(--store-text-muted)]">Adicione produtos para gerar um checkout unico.</p>
             </div>
@@ -997,7 +1045,7 @@ function CartDrawer({
 
           {cart.length > 0 ? (
             <div className="mt-4 rounded-[8px] border border-[#e5e2d8] bg-white p-4">
-              <p className="text-xs font-black uppercase text-[#123f2d]">Dados para acompanhamento</p>
+              <p className="text-xs font-black uppercase text-[color:var(--store-accent)]">Dados para acompanhamento</p>
               <div className="mt-3 grid gap-3">
                 <input className={inputClassName} onChange={(event) => setCustomerName(event.target.value)} placeholder="Seu nome" value={customerName} />
                 <input className={inputClassName} onChange={(event) => setCustomerPhone(event.target.value)} placeholder="WhatsApp com DDD" value={customerPhone} />
@@ -1009,7 +1057,7 @@ function CartDrawer({
 
         <div className="border-t border-[#e5e2d8] bg-white px-4 py-4">
           <div className="mb-3 flex items-center justify-between gap-3 rounded-[8px] border border-[#e5e2d8] bg-[#fbfaf6] px-4 py-3">
-            <span className="text-sm font-black uppercase text-[#123f2d]">Total</span>
+            <span className="text-sm font-black uppercase text-[color:var(--store-accent)]">Total</span>
             <span className="text-2xl font-black text-[color:var(--store-text)]">{formatCurrencyCents(totalCents)}</span>
           </div>
           {error ? (
@@ -1018,10 +1066,14 @@ function CartDrawer({
             </p>
           ) : null}
           <button
-            className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-[8px] px-5 text-sm font-black uppercase text-white shadow-lg shadow-[#063f2c]/20 transition brightness-100 hover:brightness-110 disabled:cursor-not-allowed disabled:bg-slate-300"
+            className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-[8px] border px-5 text-sm font-black uppercase shadow-lg shadow-[#063f2c]/20 transition brightness-100 hover:brightness-110 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500"
             disabled={!checkoutReady || busy}
             onClick={onCheckout}
-            style={{ backgroundColor: checkoutReady ? "var(--store-primary)" : undefined }}
+            style={checkoutReady ? {
+              backgroundColor: "var(--store-button)",
+              borderColor: "var(--store-button-border)",
+              color: "var(--store-button-text)",
+            } : undefined}
             type="button"
           >
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShoppingBag className="h-4 w-4" />}
@@ -1073,7 +1125,7 @@ function MobileNavButton({
     <button
       className={cn(
         "relative flex min-h-12 flex-col items-center justify-center gap-1 rounded-[8px] text-[11px] font-bold",
-        active ? "text-[color:var(--store-primary)]" : "text-[color:var(--store-text-muted)]",
+        active ? "text-[color:var(--store-accent)]" : "text-[color:var(--store-text-muted)]",
       )}
       onClick={onClick}
       type="button"
@@ -1113,9 +1165,7 @@ function normalizeStorefrontPrimaryColor(value: string | null) {
   if (!value) return null;
 
   const normalized = value.trim().toLowerCase();
-  if (!/^#[0-9a-f]{6}$/.test(normalized)) return null;
-
-  return isReadableActionColor(normalized) ? normalized : null;
+  return /^#[0-9a-f]{6}$/.test(normalized) ? normalized : null;
 }
 
 function normalizeStorefrontTextColor(value: string | null) {
@@ -1125,13 +1175,24 @@ function normalizeStorefrontTextColor(value: string | null) {
   return /^#[0-9a-f]{6}$/.test(normalized) ? normalized : null;
 }
 
-function isReadableActionColor(hex: string) {
+function getReadableTextColor(hex: string) {
+  return getColorLuminance(hex) > 0.66 ? "#111111" : "#ffffff";
+}
+
+function getReadableAccentColor(hex: string, fallbackTextColor: string) {
+  return getColorLuminance(hex) > 0.82 ? fallbackTextColor : hex;
+}
+
+function getReadableBorderColor(hex: string) {
+  return getColorLuminance(hex) > 0.82 ? "#d9ded7" : `color-mix(in srgb, ${hex} 78%, black 22%)`;
+}
+
+function getColorLuminance(hex: string) {
   const red = Number.parseInt(hex.slice(1, 3), 16);
   const green = Number.parseInt(hex.slice(3, 5), 16);
   const blue = Number.parseInt(hex.slice(5, 7), 16);
-  const luminance = (0.2126 * red + 0.7152 * green + 0.0722 * blue) / 255;
 
-  return luminance < 0.82;
+  return (0.2126 * red + 0.7152 * green + 0.0722 * blue) / 255;
 }
 
 function formatCurrencyCents(value: number) {
@@ -1141,4 +1202,4 @@ function formatCurrencyCents(value: number) {
   }).format(value / 100);
 }
 
-const inputClassName = "min-h-11 w-full rounded-[8px] border border-[#e5e2d8] bg-[#fbfaf6] px-3 text-sm font-semibold text-[color:var(--store-text)] outline-none transition placeholder:text-[#8b918c] focus:border-[#123f2d] focus:bg-white focus:ring-4 focus:ring-[#123f2d]/10";
+const inputClassName = "min-h-11 w-full rounded-[8px] border border-[#e5e2d8] bg-[#fbfaf6] px-3 text-sm font-semibold text-[color:var(--store-text)] outline-none transition placeholder:text-[#8b918c] focus:border-[color:var(--store-accent)] focus:bg-white focus:ring-4 focus:ring-[#123f2d]/10";
