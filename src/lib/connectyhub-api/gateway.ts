@@ -278,6 +278,8 @@ type GatewayWebhookInstanceRow = {
   connectyhub_api_instance_id: string;
 };
 
+export const gatewayWebhookDeliveryRequestedEventName = "connectyhub/gateway.webhook.delivery.requested";
+
 const gatewayWebhookEndpointColumns =
   "id, client_id, organization_id, url, description, status, events, secret_preview, secret_encrypted, metadata, last_success_at, last_failure_at, created_at, updated_at";
 

@@ -1,8 +1,7 @@
 import { NextRequest } from "next/server";
-import { after } from "next/server";
-import { dispatchGatewayWebhookDeliveries } from "@/lib/connectyhub-api/gateway";
+import { gatewayWebhookDeliveryRequestedEventName } from "@/lib/connectyhub-api/gateway";
+import { inngest } from "@/lib/inngest/client";
 import { ingestUazapiWebhook } from "@/lib/whatsapp/webhook-ingest";
-import { getWhatsappAgentRunDelaySeconds, processWhatsappAgentRun } from "@/lib/whatsapp/agent-runtime";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -37,12 +36,8 @@ export async function POST(request: NextRequest) {
     headers: request.headers,
   });
 
-  if (ingest.agentRunId) {
-    scheduleWhatsappAgentFallback(ingest.agentRunId);
-  }
-
   if (ingest.whatsappInstanceId && !ingest.duplicate) {
-    scheduleGatewayWebhookDelivery({
+    await enqueueGatewayWebhookDelivery({
       payload,
       eventType: event,
       webhookEventId: ingest.eventId,
@@ -105,43 +100,26 @@ function previewPayload(payload: unknown) {
   return text.length > 1200 ? `${text.slice(0, 1200)}...` : text;
 }
 
-function scheduleWhatsappAgentFallback(runId: string) {
-  after(async () => {
-    const delaySeconds = await getWhatsappAgentRunDelaySeconds({ runId }).catch(() => 0);
-    await sleep(Math.max(delaySeconds * 1000, 8_000));
-    await processWhatsappAgentRun({ runId }).catch((error: unknown) => {
-      console.error(
-        "[uazapi:webhook:fallback]",
-        JSON.stringify({
-          runId,
-          error: error instanceof Error ? error.message : "Falha desconhecida no fallback do agente WhatsApp.",
-        }),
-      );
-    });
-  });
-}
-
-function scheduleGatewayWebhookDelivery(input: {
+async function enqueueGatewayWebhookDelivery(input: {
   payload: unknown;
   eventType: string;
   webhookEventId: string | null;
   whatsappInstanceId: string;
   ingest: unknown;
 }) {
-  after(async () => {
-    await dispatchGatewayWebhookDeliveries(input).catch((error: unknown) => {
+  await inngest
+    .send({
+      name: gatewayWebhookDeliveryRequestedEventName,
+      data: input,
+    })
+    .catch((error: unknown) => {
       console.error(
-        "[uazapi:webhook:gateway-delivery]",
+        "[uazapi:webhook:gateway-delivery-enqueue]",
         JSON.stringify({
           whatsappInstanceId: input.whatsappInstanceId,
           eventType: input.eventType,
-          error: error instanceof Error ? error.message : "Falha ao entregar webhook ao cliente API.",
+          error: error instanceof Error ? error.message : "Falha ao enfileirar entrega de webhook ao cliente API.",
         }),
       );
     });
-  });
-}
-
-function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }

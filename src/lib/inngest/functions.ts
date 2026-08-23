@@ -38,7 +38,11 @@ import { processPendingPlatformBillingNotifications } from "@/lib/billing/platfo
 import { processPaidBillingLifecycleNotifications } from "@/lib/billing/paid-lifecycle-notifications";
 import { processPendingTrialConversionMessages } from "@/lib/billing/trial-notifications";
 import { syncConnectyhubApiAccessGuards } from "@/lib/connectyhub-api/access-sync";
-import { runConnectyHubGatewayHealthCheck } from "@/lib/connectyhub-api/gateway";
+import {
+  dispatchGatewayWebhookDeliveries,
+  gatewayWebhookDeliveryRequestedEventName,
+  runConnectyHubGatewayHealthCheck,
+} from "@/lib/connectyhub-api/gateway";
 import {
   processQueuedSalesCatalogImportJobs,
   salesCatalogImportProcessRequestedEventName,
@@ -382,6 +386,46 @@ export const connectyhubApiHealthMonitor = inngest.createFunction(
   },
 );
 
+export const connectyhubGatewayWebhookDelivery = inngest.createFunction(
+  {
+    id: "connectyhub-gateway-webhook-delivery",
+    name: "ConnectyHub Gateway Webhook Delivery",
+    retries: 3,
+    triggers: [{ event: gatewayWebhookDeliveryRequestedEventName }],
+  },
+  async ({ event, step }) => {
+    const data = event.data as {
+      whatsappInstanceId?: string | null;
+      webhookEventId?: string | null;
+      eventType?: string;
+      payload?: unknown;
+      ingest?: unknown;
+    } | undefined;
+    const whatsappInstanceId = data?.whatsappInstanceId ?? null;
+    const webhookEventId = data?.webhookEventId ?? null;
+    const eventType = data?.eventType ?? null;
+    const payload = data?.payload;
+    const ingest = data?.ingest;
+
+    if (!whatsappInstanceId || !eventType) {
+      return {
+        status: "skipped",
+        reason: "missing_gateway_webhook_delivery_data",
+      };
+    }
+
+    return step.run("dispatch-gateway-webhook-deliveries", () =>
+      dispatchGatewayWebhookDeliveries({
+        whatsappInstanceId,
+        webhookEventId,
+        eventType,
+        payload,
+        ingest,
+      }),
+    );
+  },
+);
+
 export const connectyhubApiAccessGuardSync = inngest.createFunction(
   {
     id: "connectyhub-api-access-guard-sync",
@@ -624,6 +668,7 @@ export const functions = [
   connectyhubWhatsappOutboundSweep,
   connectyhubApiAccessGuardSync,
   connectyhubApiHealthMonitor,
+  connectyhubGatewayWebhookDelivery,
   connectyhubWhatsappHandoffNotifier,
   connectyhubWhatsappCloneProfileImport,
   connectyhubWhatsappFollowUp,
