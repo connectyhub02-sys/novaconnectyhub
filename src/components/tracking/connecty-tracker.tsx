@@ -53,6 +53,7 @@ export function ConnectyTracker() {
     busy: null,
     message: null,
   });
+  const suppressPermissionPrompt = isCommercePublicPath(pathname);
 
   useEffect(() => {
     if (isTrackingDisabled() || trackedSession.current) {
@@ -220,17 +221,17 @@ export function ConnectyTracker() {
   }, []);
 
   useEffect(() => {
-    if (isTrackingDisabled()) {
+    if (isTrackingDisabled() || suppressPermissionPrompt) {
       return;
     }
 
     const timer = setTimeout(() => setPermissionPromptReady(true), permissionPromptDelayMs);
 
     return () => clearTimeout(timer);
-  }, []);
+  }, [suppressPermissionPrompt]);
 
   useEffect(() => {
-    if (isTrackingDisabled() || !permissionPromptReady) {
+    if (isTrackingDisabled() || suppressPermissionPrompt || !permissionPromptReady) {
       return;
     }
 
@@ -256,7 +257,7 @@ export function ConnectyTracker() {
     return () => {
       active = false;
     };
-  }, [permissionPromptReady]);
+  }, [permissionPromptReady, suppressPermissionPrompt]);
 
   useEffect(() => {
     if (!permissions.promptVisible || !permissions.activeStep || promptShownTracked.current.has(permissions.activeStep)) {
@@ -328,7 +329,7 @@ export function ConnectyTracker() {
     });
   }
 
-  if (!permissionPromptReady || !permissions.promptVisible || !permissions.activeStep) {
+  if (suppressPermissionPrompt || !permissionPromptReady || !permissions.promptVisible || !permissions.activeStep) {
     return null;
   }
 
@@ -990,4 +991,8 @@ function summarizeText(value: string | null) {
 
 function isDashboardPath(pathname: string | null) {
   return Boolean(pathname?.startsWith("/dashboard") || pathname?.startsWith("/admin"));
+}
+
+function isCommercePublicPath(pathname: string | null) {
+  return Boolean(pathname?.startsWith("/loja/") || pathname?.startsWith("/produto/") || pathname?.startsWith("/checkout/"));
 }
