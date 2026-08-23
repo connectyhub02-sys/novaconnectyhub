@@ -774,16 +774,19 @@ export function SalesCatalogConsole({
   );
   const selectedStoreSlug = selectedCompany?.slug ?? selectedCompany?.id ?? "";
   const selectedStorePath = selectedStoreSlug ? `/loja/${encodeURIComponent(selectedStoreSlug)}` : "";
-  const storefrontHeroTitle = settingsDraft.storefront.heroTitle?.trim() || "Qualidade que voce sente.";
-  const storefrontHeroHighlight = settingsDraft.storefront.heroHighlight?.trim() || "Resultados que voce ve.";
+  const customStorefrontHeroTitle = settingsDraft.storefront.heroTitle?.trim() || settingsDraft.storefront.headerText?.trim() || "";
+  const storefrontHeroTitle = customStorefrontHeroTitle || "Produtos favoritos,";
+  const storefrontHeroHighlight = customStorefrontHeroTitle
+    ? (settingsDraft.storefront.heroHighlight?.trim() || "")
+    : (settingsDraft.storefront.heroHighlight?.trim() || `da ${selectedCompany?.name ?? "sua loja"} ate voce.`);
   const storefrontHeroSubtitle = settingsDraft.storefront.heroSubtitle?.trim()
     || `Produtos selecionados pela ${selectedCompany?.name ?? "sua loja"}, compra segura e atendimento conectado ao WhatsApp.`;
   const legacyStorefrontHeaderText = `${storefrontHeroTitle} ${storefrontHeroHighlight}`.trim();
-  const storefrontHeaderText = settingsDraft.storefront.headerText?.trim() || legacyStorefrontHeaderText || storefrontHeroSubtitle;
+  const storefrontHeaderText = storefrontHeroSubtitle || legacyStorefrontHeaderText;
   const storefrontFooterText = settingsDraft.storefront.footerText?.trim()
     || `${selectedCompany?.name ?? "Sua empresa"} atende seus clientes com catalogo, checkout e suporte conectados ao WhatsApp.`;
   const storefrontFooterContactText = settingsDraft.storefront.footerContactText?.trim() || "Atendimento pelo WhatsApp oficial da loja.";
-  const storefrontPrimaryColor = settingsDraft.storefront.primaryColor ?? "#063f2c";
+  const storefrontPrimaryColor = normalizeStorefrontPreviewColor(settingsDraft.storefront.primaryColor) ?? "#063f2c";
   const hasConfiguredSettings = Boolean(selectedSettings?.configured);
   const productAttributes = useMemo(
     () => (selectedSettings?.configured ? selectedSettings.attributes : settingsDraft.attributes).filter((attribute) => attribute.values.length > 0),
@@ -1172,10 +1175,10 @@ export function SalesCatalogConsole({
           categories,
           attributes,
           storefront: {
-            heroTitle: cleanInput(settingsDraft.storefront.heroTitle, 90),
+            heroTitle: cleanInput(settingsDraft.storefront.heroTitle, 120),
             heroHighlight: cleanInput(settingsDraft.storefront.heroHighlight, 90),
             heroSubtitle: cleanInput(settingsDraft.storefront.heroSubtitle, 180),
-            headerText: cleanInput(settingsDraft.storefront.headerText, 140),
+            headerText: cleanInput(settingsDraft.storefront.heroTitle || settingsDraft.storefront.headerText, 140),
             footerText: cleanInput(settingsDraft.storefront.footerText, 320),
             footerContactText: cleanInput(settingsDraft.storefront.footerContactText, 180),
             primaryColor: settingsDraft.storefront.primaryColor,
@@ -2996,12 +2999,26 @@ export function SalesCatalogConsole({
               </div>
 
               <label className="block">
-                <FieldLabel>Texto do header</FieldLabel>
+                <FieldLabel>Titulo do header</FieldLabel>
                 <textarea
                   id="sales-catalog-storefront-header-text"
-                  value={settingsDraft.storefront.headerText ?? ""}
-                  onChange={(event) => updateStorefrontSettings({ headerText: event.target.value.slice(0, 140) })}
-                  className="min-h-24 w-full resize-y rounded-lg border bg-transparent px-3 py-2 text-[12px] leading-5 outline-none"
+                  value={settingsDraft.storefront.heroTitle ?? ""}
+                  onChange={(event) => {
+                    const value = event.target.value.slice(0, 120);
+                    updateStorefrontSettings({ heroTitle: value, headerText: value });
+                  }}
+                  className="min-h-20 w-full resize-y rounded-lg border bg-transparent px-3 py-2 text-[12px] leading-5 outline-none"
+                  placeholder="Ex.: Produtos prontos para comprar"
+                  style={{ borderColor: "var(--ch-border)" }}
+                />
+              </label>
+
+              <label className="block">
+                <FieldLabel>Frase de apoio do header</FieldLabel>
+                <textarea
+                  value={settingsDraft.storefront.heroSubtitle ?? ""}
+                  onChange={(event) => updateStorefrontSettings({ heroSubtitle: event.target.value.slice(0, 180) })}
+                  className="min-h-20 w-full resize-y rounded-lg border bg-transparent px-3 py-2 text-[12px] leading-5 outline-none"
                   placeholder="Ex.: Produtos selecionados, compra segura e atendimento pelo WhatsApp."
                   style={{ borderColor: "var(--ch-border)" }}
                 />
@@ -3093,8 +3110,11 @@ export function SalesCatalogConsole({
                   <p className="font-mono text-[9px] font-black uppercase tracking-[0.18em]" style={{ color: storefrontPrimaryColor }}>
                     Loja oficial
                   </p>
-                  <h3 className="mt-2 text-3xl font-black leading-none">Produtos prontos para comprar</h3>
-                  <p className="mt-3 line-clamp-2 max-w-xl text-[13px] leading-5 text-slate-600">{storefrontHeaderText}</p>
+                  <h3 className="mt-2 text-3xl font-black leading-none">
+                    {storefrontHeroTitle}
+                    {storefrontHeroHighlight ? <span className="block">{storefrontHeroHighlight}</span> : null}
+                  </h3>
+                  <p className="mt-3 line-clamp-2 max-w-xl text-[13px] leading-5 text-slate-600">{storefrontHeroSubtitle}</p>
                   <div className="mt-4 flex flex-wrap gap-2">
                     <span className="rounded-lg px-4 py-2 text-[11px] font-black text-white" style={{ backgroundColor: storefrontPrimaryColor }}>
                       Ver produtos
@@ -7372,6 +7392,20 @@ function formatBytes(value: number) {
   return `${(value / 1024 / 1024).toFixed(1)} MB`;
 }
 
+function normalizeStorefrontPreviewColor(value: string | null | undefined) {
+  if (!value) return null;
+
+  const normalized = value.trim().toLowerCase();
+  if (!/^#[0-9a-f]{6}$/.test(normalized)) return null;
+
+  const red = Number.parseInt(normalized.slice(1, 3), 16);
+  const green = Number.parseInt(normalized.slice(3, 5), 16);
+  const blue = Number.parseInt(normalized.slice(5, 7), 16);
+  const luminance = (0.2126 * red + 0.7152 * green + 0.0722 * blue) / 255;
+
+  return luminance < 0.82 ? normalized : null;
+}
+
 function buildSettingsDraft(settings: ClientSalesCatalogSettings | null): SettingsDraft {
   const commerceDefaults = createDefaultSalesCatalogCommerceSettings();
 
@@ -7380,7 +7414,7 @@ function buildSettingsDraft(settings: ClientSalesCatalogSettings | null): Settin
     categoriesText: (settings?.categories ?? []).join("\n"),
     attributes: cloneAttributes(settings?.attributes ?? []),
     storefront: {
-      heroTitle: settings?.storefront.heroTitle ?? "",
+      heroTitle: settings?.storefront.heroTitle ?? settings?.storefront.headerText ?? "",
       heroHighlight: settings?.storefront.heroHighlight ?? "",
       heroSubtitle: settings?.storefront.heroSubtitle ?? "",
       headerText: settings?.storefront.headerText ?? "",

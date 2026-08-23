@@ -1087,7 +1087,18 @@ function normalizeStorefrontPrimaryColor(value: string | null | undefined) {
   if (!value) return null;
 
   const normalized = value.trim().toLowerCase();
-  return /^#[0-9a-f]{6}$/.test(normalized) ? normalized : null;
+  if (!/^#[0-9a-f]{6}$/.test(normalized)) return null;
+
+  return isReadableActionColor(normalized) ? normalized : null;
+}
+
+function isReadableActionColor(hex: string) {
+  const red = Number.parseInt(hex.slice(1, 3), 16);
+  const green = Number.parseInt(hex.slice(3, 5), 16);
+  const blue = Number.parseInt(hex.slice(5, 7), 16);
+  const luminance = (0.2126 * red + 0.7152 * green + 0.0722 * blue) / 255;
+
+  return luminance < 0.82;
 }
 
 function readRecord(value: unknown): JsonRecord {

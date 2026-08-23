@@ -185,13 +185,13 @@ export function PublicStorefront({ storeSlug, branding, storefront, products, tr
     "--store-primary": primaryColor,
     "--store-action": storefrontActionColor,
   } as CSSProperties;
-  const heroTitle = storefront.heroTitle || "Produtos favoritos,";
-  const heroHighlight = storefront.heroHighlight || `da ${branding.displayName} ate voce.`;
+  const customHeroTitle = storefront.heroTitle?.trim() || storefront.headerText?.trim() || "";
+  const heroTitle = customHeroTitle || "Produtos favoritos,";
+  const heroHighlight = customHeroTitle ? (storefront.heroHighlight?.trim() || "") : (storefront.heroHighlight || `da ${branding.displayName} ate voce.`);
   const legacyHeaderText = `${heroTitle} ${heroHighlight}`.trim();
   const heroSubtitle = storefront.heroSubtitle
-    || storefront.headerText
     || `Produtos selecionados pela ${branding.displayName}, atendimento pelo WhatsApp e checkout seguro pela Connect Hub.`;
-  const headerText = storefront.headerText || legacyHeaderText || heroSubtitle;
+  const headerText = storefront.heroSubtitle || storefront.headerText || legacyHeaderText || heroSubtitle;
   const footerText = storefront.footerText
     || `${branding.displayName} atende pelo WhatsApp com catalogo, checkout seguro e acompanhamento do pedido em um so lugar.`;
   const footerContactText = storefront.footerContactText || "Atendimento pelo WhatsApp oficial da loja.";
@@ -427,7 +427,7 @@ function StorefrontHero({
             </p>
             <h1 className="mt-4 max-w-2xl font-serif text-[44px] font-black leading-[0.98] text-[#111111] sm:text-[58px] lg:text-[68px]">
               {heroTitle}
-              <span className="block">{heroHighlight}</span>
+              {heroHighlight ? <span className="block">{heroHighlight}</span> : null}
             </h1>
             <p className="mt-6 max-w-xl text-base font-medium leading-7 text-[#4f5b54] sm:text-lg">
               {heroSubtitle}
@@ -1109,7 +1109,18 @@ function normalizeStorefrontPrimaryColor(value: string | null) {
   if (!value) return null;
 
   const normalized = value.trim().toLowerCase();
-  return /^#[0-9a-f]{6}$/.test(normalized) ? normalized : null;
+  if (!/^#[0-9a-f]{6}$/.test(normalized)) return null;
+
+  return isReadableActionColor(normalized) ? normalized : null;
+}
+
+function isReadableActionColor(hex: string) {
+  const red = Number.parseInt(hex.slice(1, 3), 16);
+  const green = Number.parseInt(hex.slice(3, 5), 16);
+  const blue = Number.parseInt(hex.slice(5, 7), 16);
+  const luminance = (0.2126 * red + 0.7152 * green + 0.0722 * blue) / 255;
+
+  return luminance < 0.82;
 }
 
 function formatCurrencyCents(value: number) {
