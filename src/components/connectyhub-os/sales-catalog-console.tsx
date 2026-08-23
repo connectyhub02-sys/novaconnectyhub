@@ -772,6 +772,10 @@ export function SalesCatalogConsole({
   );
   const selectedStoreSlug = selectedCompany?.slug ?? selectedCompany?.id ?? "";
   const selectedStorePath = selectedStoreSlug ? `/loja/${encodeURIComponent(selectedStoreSlug)}` : "";
+  const storefrontHeroTitle = settingsDraft.storefront.heroTitle?.trim() || "Qualidade que voce sente.";
+  const storefrontHeroHighlight = settingsDraft.storefront.heroHighlight?.trim() || "Resultados que voce ve.";
+  const storefrontHeroSubtitle = settingsDraft.storefront.heroSubtitle?.trim()
+    || `Produtos selecionados pela ${selectedCompany?.name ?? "sua loja"}, compra segura e atendimento conectado ao WhatsApp.`;
   const hasConfiguredSettings = Boolean(selectedSettings?.configured);
   const productAttributes = useMemo(
     () => (selectedSettings?.configured ? selectedSettings.attributes : settingsDraft.attributes).filter((attribute) => attribute.values.length > 0),
@@ -2265,6 +2269,16 @@ export function SalesCatalogConsole({
     }
   }
 
+  function openStorefrontSettings() {
+    setActiveTab("setup");
+    window.setTimeout(() => {
+      document.getElementById("sales-catalog-storefront-settings")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 0);
+  }
+
   function editItem(item: ClientSalesCatalogItem) {
     if (item.companyId && item.companyId !== selectedCompanyId) {
       changeCompany(item.companyId);
@@ -2467,12 +2481,27 @@ export function SalesCatalogConsole({
               <p className="mt-1 text-[11px] leading-4 text-slate-500">
                 {selectedStorePath ? selectedStorePath : "Escolha uma empresa para liberar o link da loja."}
               </p>
+              <div className="mt-3 max-w-3xl rounded-lg border border-cyan-300/25 bg-cyan-300/5 px-3 py-2">
+                <p className="font-mono text-[8px] uppercase tracking-[0.16em] text-cyan-200">Frase inicial da loja</p>
+                <p className="mt-1 text-[12px] font-semibold leading-4 text-slate-100">
+                  {storefrontHeroTitle} <span className="text-blue-300">{storefrontHeroHighlight}</span>
+                </p>
+                <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-slate-400">{storefrontHeroSubtitle}</p>
+              </div>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <NeonBadge tone={featuredProductsCount > 1 ? "amber" : featuredProductsCount === 1 ? "green" : "zinc"}>
               {featuredProductsCount > 1 ? `${featuredProductsCount} em conflito` : `${featuredProductsCount} destaque`}
             </NeonBadge>
+            <button
+              type="button"
+              onClick={openStorefrontSettings}
+              className="inline-flex min-h-9 items-center gap-2 rounded-lg bg-blue-600 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-500"
+            >
+              <PencilLine className="h-3.5 w-3.5" />
+              Editar frase
+            </button>
             {selectedStorePath ? (
               <>
                 <button
@@ -2539,7 +2568,7 @@ export function SalesCatalogConsole({
                 </select>
               </label>
 
-              <AccordionSection icon={Store} title="Loja publica" tone="cyan" defaultOpen>
+              <AccordionSection id="sales-catalog-storefront-settings" icon={Store} title="Loja publica" tone="cyan" defaultOpen>
                 <div className="grid gap-3">
                   <label className="block">
                     <FieldLabel>Chamada principal</FieldLabel>
