@@ -280,6 +280,7 @@ function resolveStorefrontSettings(settings: PublicStorefrontSettings | null): P
     buttonTextColor: readString(settings?.buttonTextColor),
     cardTextColor: readString(settings?.cardTextColor),
     offerTextColor: readString(settings?.offerTextColor),
+    categoryIcons: settings?.categoryIcons ?? {},
   };
 }
 

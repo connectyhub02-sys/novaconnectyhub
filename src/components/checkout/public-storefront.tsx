@@ -7,7 +7,6 @@ import {
   ArrowRight,
   BadgeCheck,
   CreditCard,
-  Gift,
   Headphones,
   Heart,
   Home,
@@ -28,6 +27,11 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { SalesCatalogCategoryIconGlyph } from "@/components/sales-catalog/category-icon-glyph";
+import {
+  resolveSalesCatalogCategoryIconId,
+  type SalesCatalogCategoryIconId,
+} from "@/lib/sales-catalog/category-icons";
 
 export type PublicStorefrontBranding = {
   displayName: string;
@@ -48,6 +52,7 @@ export type PublicStorefrontSettings = {
   buttonTextColor: string | null;
   cardTextColor: string | null;
   offerTextColor: string | null;
+  categoryIcons: Record<string, SalesCatalogCategoryIconId>;
 };
 
 export type PublicStorefrontTrackingParams = {
@@ -93,6 +98,7 @@ type StoreCategory = {
   id: string;
   label: string;
   count: number;
+  iconId: SalesCatalogCategoryIconId;
 };
 
 const ALL_CATEGORY = "todos";
@@ -162,13 +168,20 @@ export function PublicStorefront({ storeSlug, branding, storefront, products, tr
       counts.set(product.category, (counts.get(product.category) ?? 0) + 1);
     }
 
+    const categoryIcons = storefront.categoryIcons ?? {};
+
     return [
-      { id: ALL_CATEGORY, label: "Todas", count: products.length },
+      { id: ALL_CATEGORY, label: "Todas", count: products.length, iconId: "shopping-bag" },
       ...Array.from(counts.entries())
         .sort(([a], [b]) => a.localeCompare(b, "pt-BR"))
-        .map(([label, count]) => ({ id: label, label, count })),
+        .map(([label, count]) => ({
+          id: label,
+          label,
+          count,
+          iconId: resolveSalesCatalogCategoryIconId(label, categoryIcons[label]),
+        })),
     ];
-  }, [products]);
+  }, [products, storefront.categoryIcons]);
 
   const visibleProducts = useMemo(() => (
     category === ALL_CATEGORY ? products : products.filter((product) => product.category === category)
@@ -623,24 +636,32 @@ function BenefitStrip() {
   const benefits = [
     {
       icon: <Truck className="h-8 w-8" />,
+      iconBg: "#dff7e8",
+      iconColor: "#087443",
       title: "Entrega combinada",
       mobileTitle: "Entrega",
       text: "A loja orienta o envio pelo WhatsApp.",
     },
     {
       icon: <ShieldCheck className="h-8 w-8" />,
+      iconBg: "#e7f0ff",
+      iconColor: "#1d4ed8",
       title: "Pagamento seguro",
       mobileTitle: "Pagamento",
       text: "Checkout protegido no ecossistema ConnectyHub.",
     },
     {
       icon: <RotateCcw className="h-8 w-8" />,
+      iconBg: "#fff3d6",
+      iconColor: "#b45309",
       title: "Compra acompanhada",
       mobileTitle: "Compra",
       text: "Pedido e atendimento em um so lugar.",
     },
     {
       icon: <Headphones className="h-8 w-8" />,
+      iconBg: "#fce7f3",
+      iconColor: "#be185d",
       title: "Suporte da loja",
       mobileTitle: "Suporte",
       text: "Atendimento direto pelo WhatsApp oficial.",
@@ -652,7 +673,12 @@ function BenefitStrip() {
       <div className="grid grid-cols-4 overflow-hidden rounded-[8px] border border-[#e5e2d8] bg-white shadow-sm shadow-slate-950/5 divide-x divide-[#e5e2d8]">
         {benefits.map((benefit) => (
           <div className="flex min-h-[70px] flex-col items-center justify-center gap-1 px-1.5 py-2 text-center sm:min-h-24 sm:flex-row sm:justify-start sm:gap-4 sm:px-5 sm:py-4 sm:text-left" key={benefit.title}>
-            <span className="shrink-0 text-[color:var(--store-text)] [&>svg]:h-5 [&>svg]:w-5 sm:[&>svg]:h-8 sm:[&>svg]:w-8">{benefit.icon}</span>
+            <span
+              className="grid h-8 w-8 shrink-0 place-items-center rounded-full [&>svg]:h-5 [&>svg]:w-5 sm:h-11 sm:w-11 sm:[&>svg]:h-6 sm:[&>svg]:w-6"
+              style={{ backgroundColor: benefit.iconBg, color: benefit.iconColor }}
+            >
+              {benefit.icon}
+            </span>
             <div className="min-w-0">
               <h2 className="text-[9px] font-black uppercase leading-3 text-[color:var(--store-text)] sm:text-sm sm:leading-5">
                 <span className="sm:hidden">{benefit.mobileTitle}</span>
@@ -869,10 +895,10 @@ function CategoryShowcase({
       <div className="mx-auto w-full max-w-6xl px-5 sm:px-8">
         <h2 className="text-center text-xs font-bold uppercase text-[color:var(--store-text)] sm:text-sm sm:font-black">Comprar por categoria</h2>
         <div className="mt-5 flex flex-wrap justify-center gap-x-7 gap-y-5 sm:mt-6 sm:gap-x-12 lg:gap-x-16">
-          {categories.map((item, index) => (
+          {categories.map((item) => (
             <CategoryButton
               active={category === item.id}
-              icon={categoryIcon(index)}
+              icon={<SalesCatalogCategoryIconGlyph className="h-6 w-6" id={item.iconId} />}
               key={item.id}
               label={item.id === ALL_CATEGORY ? "Tudo" : item.label}
               onClick={() => onSelect(item.id)}
@@ -1252,21 +1278,6 @@ function MobileNavButton({
       ) : null}
     </button>
   );
-}
-
-function categoryIcon(index: number) {
-  const icons = [
-    <ShoppingBag className="h-6 w-6" key="bag" />,
-    <Package className="h-6 w-6" key="package" />,
-    <Home className="h-6 w-6" key="home" />,
-    <Gift className="h-6 w-6" key="gift" />,
-    <Sparkles className="h-6 w-6" key="sparkles" />,
-    <Truck className="h-6 w-6" key="truck" />,
-    <BadgeCheck className="h-6 w-6" key="badge" />,
-    <Tag className="h-6 w-6" key="tag" />,
-  ];
-
-  return icons[index % icons.length];
 }
 
 function isGenericStoreCategory(category: string) {

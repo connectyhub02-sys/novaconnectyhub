@@ -1,3 +1,5 @@
+import type { SalesCatalogCategoryIconId } from "./category-icons";
+
 export type SalesCatalogItemStatus = "active" | "draft" | "archived";
 export type SalesCatalogMediaKind = "image" | "video" | "document";
 export type SalesCatalogSource = "manual" | "whatsapp_catalog";
@@ -614,6 +616,7 @@ export type SalesCatalogStorefrontSettings = {
   buttonTextColor: string | null;
   cardTextColor: string | null;
   offerTextColor: string | null;
+  categoryIcons: Record<string, SalesCatalogCategoryIconId>;
 };
 
 export type SalesCatalogCommerceSettings = Pick<

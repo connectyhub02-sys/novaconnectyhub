@@ -68,6 +68,7 @@ import {
   type SalesCatalogWhatsappExportTarget,
   isSalesCatalogDisplayableProduct,
 } from "@/lib/sales-catalog/shared";
+import { normalizeSalesCatalogCategoryIconMap } from "@/lib/sales-catalog/category-icons";
 import { buildTrackedLinkUrl, createTrackedLinkTag } from "@/lib/tracking/tracked-links";
 
 type JsonRecord = Record<string, unknown>;
@@ -1049,15 +1050,16 @@ export function mapSalesCatalogSettings(row: SalesCatalogMemoryRow): ClientSales
   const metadata = readRecord(row.metadata) ?? {};
   const businessType = normalizeBusinessType(readString(metadata.business_type));
   const commerceDefaults = createDefaultSalesCatalogCommerceSettings();
+  const categories = readStringList(metadata.categories, []);
 
   return {
     id: row.id,
     companyId: readString(row.organization_id) ?? "",
     configured: readBoolean(metadata.configured),
     businessType,
-    categories: readStringList(metadata.categories, []),
+    categories,
     attributes: readAttributeList(metadata.attributes, []),
-    storefront: readStorefrontSettings(metadata.storefront ?? metadata.storefront_settings ?? metadata.storefrontSettings),
+    storefront: readStorefrontSettings(metadata.storefront ?? metadata.storefront_settings ?? metadata.storefrontSettings, categories),
     trackInventory: readNullableBoolean(metadata.track_inventory) ?? false,
     variationMedia: readNullableBoolean(metadata.variation_media) ?? false,
     paymentMethods: readPaymentMethods(metadata.payment_methods, commerceDefaults.paymentMethods),
@@ -1722,7 +1724,7 @@ function readPaymentMethods(value: unknown, fallback: SalesCatalogPaymentMethod[
   return salesCatalogPaymentMethodTemplates.map((method) => methodsById.get(method.id) ?? { ...method });
 }
 
-function readStorefrontSettings(value: unknown): ClientSalesCatalogSettings["storefront"] {
+function readStorefrontSettings(value: unknown, categories: string[] = []): ClientSalesCatalogSettings["storefront"] {
   const record = readRecord(value) ?? {};
 
   return {
@@ -1738,6 +1740,7 @@ function readStorefrontSettings(value: unknown): ClientSalesCatalogSettings["sto
     buttonTextColor: readString(record.button_text_color ?? record.buttonTextColor),
     cardTextColor: readString(record.card_text_color ?? record.cardTextColor),
     offerTextColor: readString(record.offer_text_color ?? record.offerTextColor),
+    categoryIcons: normalizeSalesCatalogCategoryIconMap(record.category_icons ?? record.categoryIcons, categories),
   };
 }
 

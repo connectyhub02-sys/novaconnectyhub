@@ -72,6 +72,7 @@ import {
   buildMercadoPagoWebhookUrl,
   isMercadoPagoTestTokenEnabled,
 } from "@/lib/sales-catalog/mercado-pago";
+import { normalizeSalesCatalogCategoryIconMap } from "@/lib/sales-catalog/category-icons";
 import { createSalesCatalogPixPaymentSession } from "@/lib/sales-catalog/payment-sessions";
 import { buildSalesCatalogProductUrl } from "@/lib/sales-catalog/public-urls";
 import { calculateSalesCatalogShippingQuotes, normalizeSalesCatalogCep } from "@/lib/sales-catalog/shipping-calculator";
@@ -983,7 +984,7 @@ async function saveCatalogSettings(input: {
     ?? salesCatalogBusinessTemplates[salesCatalogBusinessTemplates.length - 1];
   const categories = normalizeStringList(input.body?.categories, [], 30, 80);
   const attributes = normalizeSettingsAttributes(input.body?.attributes, []);
-  const storefront = normalizeStorefrontSettings(input.body?.storefront);
+  const storefront = normalizeStorefrontSettings(input.body?.storefront, categories);
   const trackInventory = readBoolean(input.body?.trackInventory) ?? false;
   const variationMedia = readBoolean(input.body?.variationMedia) ?? false;
   const commerceDefaults = createDefaultSalesCatalogCommerceSettings();
@@ -3106,7 +3107,7 @@ function normalizeSettingsAttributes(value: unknown, fallback: SalesCatalogAttri
   return attributes;
 }
 
-function normalizeStorefrontSettings(value: unknown): SalesCatalogStorefrontSettings {
+function normalizeStorefrontSettings(value: unknown, categories: string[] = []): SalesCatalogStorefrontSettings {
   const record = readRecord(value) ?? {};
 
   return {
@@ -3122,6 +3123,7 @@ function normalizeStorefrontSettings(value: unknown): SalesCatalogStorefrontSett
     buttonTextColor: normalizeStorefrontTextColor(readFormString(record.buttonTextColor ?? record.button_text_color)),
     cardTextColor: normalizeStorefrontTextColor(readFormString(record.cardTextColor ?? record.card_text_color)),
     offerTextColor: normalizeStorefrontTextColor(readFormString(record.offerTextColor ?? record.offer_text_color)),
+    categoryIcons: normalizeSalesCatalogCategoryIconMap(record.categoryIcons ?? record.category_icons, categories),
   };
 }
 
@@ -3305,6 +3307,7 @@ function serializeStorefrontSettings(settings: SalesCatalogStorefrontSettings) {
     button_text_color: settings.buttonTextColor,
     card_text_color: settings.cardTextColor,
     offer_text_color: settings.offerTextColor,
+    category_icons: settings.categoryIcons,
   };
 }
 

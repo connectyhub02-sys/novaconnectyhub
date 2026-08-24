@@ -92,6 +92,12 @@ import {
   type SalesCatalogStorefrontSettings,
   type SalesCatalogWhatsAppMessageTemplates,
 } from "@/lib/sales-catalog/shared";
+import { SalesCatalogCategoryIconGlyph } from "@/components/sales-catalog/category-icon-glyph";
+import {
+  resolveSalesCatalogCategoryIconId,
+  salesCatalogCategoryIconOptions,
+  type SalesCatalogCategoryIconId,
+} from "@/lib/sales-catalog/category-icons";
 import type {
   ClientSalesCatalogImportJob,
   ClientSalesCatalogImportItem,
@@ -1020,9 +1026,26 @@ export function SalesCatalogConsole({
   }
 
   function updateCategoryRow(index: number, value: string) {
+    const previousCategory = cleanCategoryIconKey(categoryRows[index] ?? "");
+    const nextCategory = cleanCategoryIconKey(value);
     const rows = [...categoryRows];
     rows[index] = value;
-    setCategoryRows(rows);
+    setSettingsDraft((current) => {
+      const categoryIcons = { ...current.storefront.categoryIcons };
+      if (previousCategory && nextCategory && previousCategory !== nextCategory && categoryIcons[previousCategory] && !categoryIcons[nextCategory]) {
+        categoryIcons[nextCategory] = categoryIcons[previousCategory];
+        delete categoryIcons[previousCategory];
+      }
+
+      return {
+        ...current,
+        categoriesText: rows.map((row) => row.replace(/\s+/g, " ").slice(0, 80)).join("\n").slice(0, 1400),
+        storefront: {
+          ...current.storefront,
+          categoryIcons,
+        },
+      };
+    });
   }
 
   function addCategoryRow(value = "") {
@@ -1031,8 +1054,40 @@ export function SalesCatalogConsole({
   }
 
   function removeCategoryRow(index: number) {
+    const category = cleanCategoryIconKey(categoryRows[index] ?? "");
     const rows = categoryRows.filter((_, rowIndex) => rowIndex !== index);
-    setCategoryRows(rows.length > 0 ? rows : [""]);
+    setSettingsDraft((current) => {
+      const categoryIcons = { ...current.storefront.categoryIcons };
+      if (category) {
+        delete categoryIcons[category];
+      }
+
+      const nextRows = rows.length > 0 ? rows : [""];
+      return {
+        ...current,
+        categoriesText: nextRows.map((row) => row.replace(/\s+/g, " ").slice(0, 80)).join("\n").slice(0, 1400),
+        storefront: {
+          ...current.storefront,
+          categoryIcons,
+        },
+      };
+    });
+  }
+
+  function updateCategoryIcon(categoryName: string, iconId: string) {
+    const category = cleanCategoryIconKey(categoryName);
+    if (!category) return;
+
+    setSettingsDraft((current) => ({
+      ...current,
+      storefront: {
+        ...current.storefront,
+        categoryIcons: {
+          ...current.storefront.categoryIcons,
+          [category]: resolveSalesCatalogCategoryIconId(category, iconId),
+        },
+      },
+    }));
   }
 
   function updatePaymentMethod(methodId: SalesCatalogPaymentMethod["id"], patch: Partial<SalesCatalogPaymentMethod>) {
@@ -1162,6 +1217,7 @@ export function SalesCatalogConsole({
 
     try {
       const categories = parseLines(settingsDraft.categoriesText);
+      const categoryIcons = buildCategoryIconPayload(categories, settingsDraft.storefront.categoryIcons);
       const attributes = settingsDraft.attributes
         .map((attribute) => ({
           ...attribute,
@@ -1193,6 +1249,7 @@ export function SalesCatalogConsole({
             buttonTextColor: settingsDraft.storefront.buttonTextColor,
             cardTextColor: settingsDraft.storefront.cardTextColor,
             offerTextColor: settingsDraft.storefront.offerTextColor,
+            categoryIcons,
           },
           trackInventory: settingsDraft.trackInventory,
           variationMedia: settingsDraft.variationMedia,
@@ -2620,26 +2677,52 @@ export function SalesCatalogConsole({
                 </div>
 
                 <div className="grid gap-2">
-                  {categoryRows.map((categoryName, index) => (
-                    <div key={index} className="grid grid-cols-[minmax(0,1fr)_40px] gap-2">
-                      <input
-                        value={categoryName}
-                        onChange={(event) => updateCategoryRow(index, event.target.value)}
-                        className="h-10 min-w-0 rounded-lg border bg-transparent px-3 text-[12px] outline-none"
-                        placeholder="Nome da categoria"
-                        style={{ borderColor: "var(--ch-border)" }}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => removeCategoryRow(index)}
-                        className="grid h-10 w-10 place-items-center rounded-lg border text-slate-400 transition hover:bg-rose-400/10 hover:text-rose-100"
-                        style={{ borderColor: "var(--ch-border)" }}
-                        title="Remover categoria"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
-                    </div>
-                  ))}
+                  {categoryRows.map((categoryName, index) => {
+                    const categoryIconId = resolveSalesCatalogCategoryIconId(
+                      categoryName,
+                      settingsDraft.storefront.categoryIcons[cleanCategoryIconKey(categoryName)],
+                    );
+
+                    return (
+                      <div key={index} className="rounded-lg border p-2" style={{ borderColor: "var(--ch-border)" }}>
+                        <div className="grid grid-cols-[36px_minmax(0,1fr)_40px] gap-2">
+                          <span className="grid h-10 w-9 place-items-center rounded-lg border bg-white/5 text-emerald-200" style={{ borderColor: "var(--ch-border)" }}>
+                            <SalesCatalogCategoryIconGlyph className="h-4 w-4" id={categoryIconId} />
+                          </span>
+                          <input
+                            value={categoryName}
+                            onChange={(event) => updateCategoryRow(index, event.target.value)}
+                            className="h-10 min-w-0 rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                            placeholder="Nome da categoria"
+                            style={{ borderColor: "var(--ch-border)" }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => removeCategoryRow(index)}
+                            className="grid h-10 w-10 place-items-center rounded-lg border text-slate-400 transition hover:bg-rose-400/10 hover:text-rose-100"
+                            style={{ borderColor: "var(--ch-border)" }}
+                            title="Remover categoria"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+
+                        <label className="mt-2 block">
+                          <span className="mb-1 block font-mono text-[9px] uppercase tracking-[0.16em] text-slate-500">Icone da categoria</span>
+                          <select
+                            value={categoryIconId}
+                            onChange={(event) => updateCategoryIcon(categoryName, event.target.value)}
+                            className="h-9 w-full rounded-lg border bg-transparent px-3 text-[11px] outline-none"
+                            style={{ borderColor: "var(--ch-border)" }}
+                          >
+                            {salesCatalogCategoryIconOptions.map((option) => (
+                              <option key={option.id} value={option.id}>{option.label}</option>
+                            ))}
+                          </select>
+                        </label>
+                      </div>
+                    );
+                  })}
                 </div>
 
               </AccordionSection>
@@ -7531,6 +7614,7 @@ function buildSettingsDraft(settings: ClientSalesCatalogSettings | null): Settin
       buttonTextColor: settings?.storefront.buttonTextColor ?? "",
       cardTextColor: settings?.storefront.cardTextColor ?? "",
       offerTextColor: settings?.storefront.offerTextColor ?? "",
+      categoryIcons: { ...(settings?.storefront.categoryIcons ?? {}) },
     },
     trackInventory: settings?.trackInventory ?? false,
     variationMedia: settings?.variationMedia ?? false,
@@ -7586,6 +7670,23 @@ function buildShippingDraft(settings: ClientSalesCatalogShippingSettings | null)
 function getCategoryRows(value: string) {
   const rows = value.split("\n").map((row) => row.replace(/\s+/g, " ").trim());
   return rows.length > 0 ? rows : [""];
+}
+
+function buildCategoryIconPayload(
+  categories: string[],
+  categoryIcons: Record<string, SalesCatalogCategoryIconId>,
+) {
+  const output: Record<string, SalesCatalogCategoryIconId> = {};
+
+  for (const category of categories) {
+    output[category] = resolveSalesCatalogCategoryIconId(category, categoryIcons[category]);
+  }
+
+  return output;
+}
+
+function cleanCategoryIconKey(value: string) {
+  return value.replace(/\s+/g, " ").trim().slice(0, 80);
 }
 
 function cloneAttributes(attributes: SalesCatalogAttribute[]) {
