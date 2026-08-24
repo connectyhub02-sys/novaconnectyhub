@@ -25,6 +25,7 @@ import {
   RefreshCw,
   QrCode,
   Save,
+  Search,
   Settings2,
   ShieldCheck,
   SlidersHorizontal,
@@ -4890,6 +4891,16 @@ function CategoryIconPickerModal({
   onClose: () => void;
   onSelect: (iconId: SalesCatalogCategoryIconId) => void;
 }) {
+  const [searchTerm, setSearchTerm] = useState("");
+  const filteredIconOptions = useMemo(() => {
+    const query = normalizeIconPickerSearch(searchTerm);
+    if (!query) return salesCatalogCategoryIconOptions;
+
+    return salesCatalogCategoryIconOptions.filter((option) => (
+      normalizeIconPickerSearch(`${option.label} ${option.id}`).includes(query)
+    ));
+  }, [searchTerm]);
+
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/70 px-4 py-6 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label={`Escolher figurinha da categoria ${categoryName}`}>
       <button className="absolute inset-0 cursor-default" type="button" aria-label="Fechar seletor de figurinha" onClick={onClose} />
@@ -4910,35 +4921,72 @@ function CategoryIconPickerModal({
           </button>
         </div>
 
-        <div className="overflow-y-auto p-4 sm:p-5">
-          <div className="grid grid-cols-3 gap-2 sm:grid-cols-5 md:grid-cols-6">
-            {salesCatalogCategoryIconOptions.map((option) => {
-              const active = option.id === selectedIconId;
-
-              return (
+        <div className="border-b border-white/10 px-4 py-3 sm:px-5">
+          <label className="block">
+            <span className="sr-only">Buscar figurinha</span>
+            <span className="relative block">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-emerald-200" />
+              <input
+                autoFocus
+                type="search"
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+                placeholder="Buscar por nome: fitness, pix, entrega..."
+                className="h-11 w-full rounded-xl border border-white/10 bg-white/[0.04] pl-9 pr-10 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-emerald-300/50 focus:bg-white/[0.07]"
+              />
+              {searchTerm ? (
                 <button
                   type="button"
-                  key={option.id}
-                  onClick={() => onSelect(option.id)}
-                  className={cn(
-                    "group grid min-h-24 place-items-center gap-2 rounded-xl border p-2 text-center transition",
-                    active
-                      ? "border-emerald-300 bg-emerald-300/15 text-emerald-100 shadow-lg shadow-emerald-950/30"
-                      : "border-white/10 bg-white/[0.03] text-slate-300 hover:border-emerald-300/45 hover:bg-emerald-300/10 hover:text-emerald-100",
-                  )}
-                  aria-pressed={active}
+                  onClick={() => setSearchTerm("")}
+                  className="absolute right-2 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-lg text-slate-400 transition hover:bg-white/10 hover:text-white"
+                  aria-label="Limpar busca"
                 >
-                  <span className={cn(
-                    "grid h-11 w-11 place-items-center rounded-xl transition",
-                    active ? "bg-emerald-300 text-slate-950" : "bg-white/5 text-emerald-200 group-hover:bg-emerald-300/20",
-                  )}>
-                    <SalesCatalogCategoryIconGlyph className="h-6 w-6" id={option.id} />
-                  </span>
-                  <span className="line-clamp-2 text-[10px] font-bold leading-3">{option.label}</span>
+                  <X className="h-3.5 w-3.5" />
                 </button>
-              );
-            })}
-          </div>
+              ) : null}
+            </span>
+          </label>
+          <p className="mt-2 text-[11px] text-slate-500">{filteredIconOptions.length} figurinhas encontradas</p>
+        </div>
+
+        <div className="overflow-y-auto p-4 sm:p-5">
+          {filteredIconOptions.length ? (
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-5 md:grid-cols-6">
+              {filteredIconOptions.map((option) => {
+                const active = option.id === selectedIconId;
+
+                return (
+                  <button
+                    type="button"
+                    key={option.id}
+                    onClick={() => onSelect(option.id)}
+                    className={cn(
+                      "group grid min-h-24 place-items-center gap-2 rounded-xl border p-2 text-center transition",
+                      active
+                        ? "border-emerald-300 bg-emerald-300/15 text-emerald-100 shadow-lg shadow-emerald-950/30"
+                        : "border-white/10 bg-white/[0.03] text-slate-300 hover:border-emerald-300/45 hover:bg-emerald-300/10 hover:text-emerald-100",
+                    )}
+                    aria-pressed={active}
+                  >
+                    <span className={cn(
+                      "grid h-11 w-11 place-items-center rounded-xl transition",
+                      active ? "bg-emerald-300 text-slate-950" : "bg-white/5 text-emerald-200 group-hover:bg-emerald-300/20",
+                    )}>
+                      <SalesCatalogCategoryIconGlyph className="h-6 w-6" id={option.id} />
+                    </span>
+                    <span className="line-clamp-2 text-[10px] font-bold leading-3">{option.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="grid min-h-40 place-items-center rounded-xl border border-dashed border-white/10 bg-white/[0.03] px-4 text-center">
+              <div>
+                <p className="text-sm font-bold text-white">Nenhuma figurinha encontrada</p>
+                <p className="mt-1 text-[12px] text-slate-500">Tente buscar por outro nome ou limpe o campo.</p>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -7788,6 +7836,14 @@ function cleanCategoryIconKey(value: string) {
 
 function getCategoryIconOptionLabel(iconId: SalesCatalogCategoryIconId) {
   return salesCatalogCategoryIconOptions.find((option) => option.id === iconId)?.label ?? "Figurinha";
+}
+
+function normalizeIconPickerSearch(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
 }
 
 function cloneAttributes(attributes: SalesCatalogAttribute[]) {
