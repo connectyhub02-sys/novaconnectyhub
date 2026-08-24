@@ -1035,17 +1035,19 @@ async function saveCatalogSettings(input: {
   ].filter(Boolean).join("\n");
   const { data: existing, error: existingError } = await input.client
     .from("intelligence_memory")
-    .select("id")
+    .select("id, metadata")
     .eq("scope", "organization")
     .eq("organization_id", company.id)
     .eq("memory_type", "sales_catalog_settings")
     .limit(1)
-    .maybeSingle<{ id: string }>();
+    .maybeSingle<{ id: string; metadata: JsonRecord | null }>();
 
   if (existingError) {
     throw new Error(`Nao foi possivel verificar a configuracao atual: ${existingError.message}`);
   }
 
+  const previousCategories = normalizeStringList(readRecord(existing?.metadata)?.categories, [], 30, 80);
+  const categoryRenames = normalizeCategoryRenames(input.body?.categoryRenames ?? input.body?.category_renames, previousCategories, categories);
   const settingsId = existing?.id ?? randomUUID();
   const payload = {
     id: settingsId,
@@ -1070,6 +1072,14 @@ async function saveCatalogSettings(input: {
     throw new Error(error?.message ?? "Nao foi possivel salvar a configuracao do catalogo.");
   }
 
+  const renamedProductsCount = await applySalesCatalogCategoryRenames({
+    client: input.client,
+    companyId: company.id,
+    renames: categoryRenames,
+    updatedAt: now,
+    userId: input.userId,
+  });
+
   await input.client.from("intelligence_events").insert({
     scope: "organization",
     organization_id: company.id,
@@ -1084,6 +1094,8 @@ async function saveCatalogSettings(input: {
     payload: {
       business_type: businessType,
       categories_count: categories.length,
+      category_renames: categoryRenames,
+      category_renamed_products_count: renamedProductsCount,
       attributes_count: attributes.length,
       storefront,
       track_inventory: trackInventory,
@@ -3076,6 +3088,161 @@ function normalizeStringList(value: unknown, fallback: string[], limit: number, 
   }
 
   return output;
+}
+
+type SalesCatalogCategoryRename = {
+  from: string;
+  to: string;
+};
+
+function normalizeCategoryRenames(
+  value: unknown,
+  previousCategories: string[],
+  nextCategories: string[],
+): SalesCatalogCategoryRename[] {
+  const previousByKey = new Map(previousCategories.map((category) => [normalizeCategoryLookupKey(category), category]));
+  const nextByKey = new Map(nextCategories.map((category) => [normalizeCategoryLookupKey(category), category]));
+  const output = new Map<string, SalesCatalogCategoryRename>();
+
+  function addRename(fromValue: unknown, toValue: unknown) {
+    const from = normalizeOptionalText(readFormString(fromValue), 80);
+    const to = normalizeOptionalText(readFormString(toValue), 80);
+    if (!from || !to) return;
+
+    const fromKey = normalizeCategoryLookupKey(from);
+    const toKey = normalizeCategoryLookupKey(to);
+    if (!fromKey || !toKey || fromKey === toKey) return;
+
+    const canonicalFrom = previousByKey.get(fromKey);
+    const canonicalTo = nextByKey.get(toKey);
+    if (!canonicalFrom || !canonicalTo) return;
+
+    output.set(fromKey, { from: canonicalFrom, to: canonicalTo });
+  }
+
+  const record = readRecord(value);
+  if (record) {
+    for (const [from, to] of Object.entries(record)) {
+      addRename(from, to);
+    }
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const itemRecord = readRecord(item);
+      if (!itemRecord) continue;
+
+      addRename(itemRecord.from ?? itemRecord.old ?? itemRecord.previous, itemRecord.to ?? itemRecord.next ?? itemRecord.new);
+    }
+  }
+
+  for (let index = 0; index < Math.max(previousCategories.length, nextCategories.length); index += 1) {
+    const previous = previousCategories[index];
+    const next = nextCategories[index];
+    if (!previous || !next) continue;
+
+    const previousKey = normalizeCategoryLookupKey(previous);
+    const nextKey = normalizeCategoryLookupKey(next);
+    if (previousKey === nextKey) continue;
+    if (nextByKey.has(previousKey) || previousByKey.has(nextKey)) continue;
+
+    addRename(previous, next);
+  }
+
+  return Array.from(output.values());
+}
+
+function normalizeCategoryLookupKey(value: string | null | undefined) {
+  return value
+    ?.normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim() ?? "";
+}
+
+async function applySalesCatalogCategoryRenames(input: {
+  client: ReturnType<typeof createServiceClient>;
+  companyId: string;
+  renames: SalesCatalogCategoryRename[];
+  updatedAt: string;
+  userId: string;
+}) {
+  if (input.renames.length === 0) return 0;
+
+  const renameByKey = new Map(input.renames.map((rename) => [normalizeCategoryLookupKey(rename.from), rename]));
+  let updatedCount = 0;
+  const pageSize = 500;
+
+  for (let from = 0; ; from += pageSize) {
+    const { data: rows, error } = await input.client
+      .from("intelligence_memory")
+      .select("id, organization_id, title, content, metadata, created_at, updated_at")
+      .eq("scope", "organization")
+      .eq("organization_id", input.companyId)
+      .eq("memory_type", "sales_catalog_item")
+      .order("created_at", { ascending: true })
+      .range(from, from + pageSize - 1);
+
+    if (error) {
+      throw new Error(`Nao foi possivel carregar produtos para renomear categoria: ${error.message}`);
+    }
+
+    const items = (rows ?? []) as SalesCatalogMemoryRow[];
+    for (const row of items) {
+      const metadata = readRecord(row.metadata) ?? {};
+      const currentCategory = normalizeOptionalText(readFormString(metadata.category), 80);
+      if (!currentCategory) continue;
+
+      const rename = renameByKey.get(normalizeCategoryLookupKey(currentCategory));
+      if (!rename) continue;
+
+      const item = mapSalesCatalogItem(row);
+      const nextMetadata = {
+        ...metadata,
+        category: rename.to,
+        category_renamed_from: currentCategory,
+        category_renamed_at: input.updatedAt,
+        category_renamed_by: input.userId,
+      };
+      const nextContent = buildSalesCatalogContent({
+        title: item.title,
+        description: item.description,
+        category: rename.to,
+        price: item.price,
+        currency: item.currency,
+        media: item.media,
+        attributes: item.attributes,
+        inventory: item.inventory,
+        offer: item.offer,
+        fulfillment: item.fulfillment,
+        shipping: item.shipping,
+        salesDestination: item.salesDestination,
+        productUrl: item.productUrl,
+        externalLinkButtonTag: item.externalLinkButtonTag,
+      });
+      const { error: updateError } = await input.client
+        .from("intelligence_memory")
+        .update({
+          content: nextContent,
+          metadata: nextMetadata,
+          updated_at: input.updatedAt,
+        })
+        .eq("id", row.id)
+        .eq("organization_id", input.companyId)
+        .eq("memory_type", "sales_catalog_item");
+
+      if (updateError) {
+        throw new Error(`Nao foi possivel renomear categoria do produto ${item.title}: ${updateError.message}`);
+      }
+
+      updatedCount += 1;
+    }
+
+    if (items.length < pageSize) break;
+  }
+
+  return updatedCount;
 }
 
 function normalizeSettingsAttributes(value: unknown, fallback: SalesCatalogAttribute[]) {
