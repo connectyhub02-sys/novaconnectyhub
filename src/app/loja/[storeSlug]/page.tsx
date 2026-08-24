@@ -161,16 +161,8 @@ async function loadStoreProducts(
     .map(mapSalesCatalogItem)
     .filter((item) => item.status === "active" && isSalesCatalogDisplayableProduct(item))
     .sort(compareStoreCatalogItems);
-  let featuredAssigned = false;
 
-  return items.map((item) => {
-    const isStoreFeatured = item.storeFeatured && !featuredAssigned;
-    if (isStoreFeatured) {
-      featuredAssigned = true;
-    }
-
-    return mapStorefrontProduct(item, input, isStoreFeatured);
-  });
+  return items.map((item) => mapStorefrontProduct(item, input, item.storeFeatured));
 }
 
 function mapStorefrontProduct(
