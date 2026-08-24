@@ -589,6 +589,7 @@ export function SalesCatalogConsole({
   const [paymentFlowFilter, setPaymentFlowFilter] = useState<CommercialFlowFilter>("all");
   const [checkoutStageFilter, setCheckoutStageFilter] = useState<CheckoutStageFilter>("all");
   const [settingsDraft, setSettingsDraft] = useState<SettingsDraft>(() => buildSettingsDraft(initialSelectedSettings));
+  const [categoryIconPicker, setCategoryIconPicker] = useState<string | null>(null);
   const [shippingDraft, setShippingDraft] = useState<ShippingDraft>(() => buildShippingDraft(initialSelectedShippingSettings));
   const [storefrontSettingsHighlighted, setStorefrontSettingsHighlighted] = useState(false);
   const [logoUploadingId, setLogoUploadingId] = useState<string | null>(null);
@@ -967,6 +968,7 @@ export function SalesCatalogConsole({
     setSelectedCatalogExportInstanceId("");
     setCatalogImportAgentScopeId("");
     setSelectedCatalogExportItemIds([]);
+    setCategoryIconPicker(null);
   }
 
   function applyBusinessTemplate(value: SalesCatalogBusinessType) {
@@ -1088,6 +1090,13 @@ export function SalesCatalogConsole({
         },
       },
     }));
+  }
+
+  function openCategoryIconPicker(categoryName: string) {
+    const category = cleanCategoryIconKey(categoryName);
+    if (!category) return;
+
+    setCategoryIconPicker(category);
   }
 
   function updatePaymentMethod(methodId: SalesCatalogPaymentMethod["id"], patch: Partial<SalesCatalogPaymentMethod>) {
@@ -2707,19 +2716,26 @@ export function SalesCatalogConsole({
                           </button>
                         </div>
 
-                        <label className="mt-2 block">
-                          <span className="mb-1 block font-mono text-[9px] uppercase tracking-[0.16em] text-slate-500">Icone da categoria</span>
-                          <select
-                            value={categoryIconId}
-                            onChange={(event) => updateCategoryIcon(categoryName, event.target.value)}
-                            className="h-9 w-full rounded-lg border bg-transparent px-3 text-[11px] outline-none"
+                        <div className="mt-2">
+                          <span className="mb-1 block font-mono text-[9px] uppercase tracking-[0.16em] text-slate-500">Figurinha da categoria</span>
+                          <button
+                            type="button"
+                            onClick={() => openCategoryIconPicker(categoryName)}
+                            className="flex min-h-11 w-full items-center justify-between gap-3 rounded-lg border bg-white/5 px-2.5 text-left text-[11px] outline-none transition hover:border-emerald-300/60 hover:bg-emerald-300/10"
                             style={{ borderColor: "var(--ch-border)" }}
                           >
-                            {salesCatalogCategoryIconOptions.map((option) => (
-                              <option key={option.id} value={option.id}>{option.label}</option>
-                            ))}
-                          </select>
-                        </label>
+                            <span className="flex min-w-0 items-center gap-2">
+                              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-emerald-300/15 text-emerald-200">
+                                <SalesCatalogCategoryIconGlyph className="h-4 w-4" id={categoryIconId} />
+                              </span>
+                              <span className="min-w-0">
+                                <span className="block truncate font-semibold text-slate-200">{getCategoryIconOptionLabel(categoryIconId)}</span>
+                                <span className="block truncate text-[10px] text-slate-500">Clique para escolher na grade</span>
+                              </span>
+                            </span>
+                            <PencilLine className="h-3.5 w-3.5 shrink-0 text-emerald-200" />
+                          </button>
+                        </div>
                       </div>
                     );
                   })}
@@ -4844,7 +4860,88 @@ export function SalesCatalogConsole({
         </Panel>
       </div>
       )}
+
+      {categoryIconPicker ? (
+        <CategoryIconPickerModal
+          categoryName={categoryIconPicker}
+          selectedIconId={resolveSalesCatalogCategoryIconId(
+            categoryIconPicker,
+            settingsDraft.storefront.categoryIcons[categoryIconPicker],
+          )}
+          onClose={() => setCategoryIconPicker(null)}
+          onSelect={(iconId) => {
+            updateCategoryIcon(categoryIconPicker, iconId);
+            setCategoryIconPicker(null);
+          }}
+        />
+      ) : null}
     </>
+  );
+}
+
+function CategoryIconPickerModal({
+  categoryName,
+  selectedIconId,
+  onClose,
+  onSelect,
+}: {
+  categoryName: string;
+  selectedIconId: SalesCatalogCategoryIconId;
+  onClose: () => void;
+  onSelect: (iconId: SalesCatalogCategoryIconId) => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/70 px-4 py-6 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label={`Escolher figurinha da categoria ${categoryName}`}>
+      <button className="absolute inset-0 cursor-default" type="button" aria-label="Fechar seletor de figurinha" onClick={onClose} />
+      <div className="relative flex max-h-[88vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-emerald-300/20 bg-slate-950 shadow-2xl shadow-black/40">
+        <div className="flex items-start justify-between gap-3 border-b border-white/10 px-4 py-4 sm:px-5">
+          <div className="min-w-0">
+            <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-emerald-300">Figurinha da categoria</p>
+            <h2 className="mt-1 truncate text-lg font-black text-white">{categoryName}</h2>
+            <p className="mt-1 text-[12px] leading-5 text-slate-400">Escolha um icone visual para aparecer na loja publica.</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-white/10 text-slate-300 transition hover:bg-white/10 hover:text-white"
+            aria-label="Fechar"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="overflow-y-auto p-4 sm:p-5">
+          <div className="grid grid-cols-3 gap-2 sm:grid-cols-5 md:grid-cols-6">
+            {salesCatalogCategoryIconOptions.map((option) => {
+              const active = option.id === selectedIconId;
+
+              return (
+                <button
+                  type="button"
+                  key={option.id}
+                  onClick={() => onSelect(option.id)}
+                  className={cn(
+                    "group grid min-h-24 place-items-center gap-2 rounded-xl border p-2 text-center transition",
+                    active
+                      ? "border-emerald-300 bg-emerald-300/15 text-emerald-100 shadow-lg shadow-emerald-950/30"
+                      : "border-white/10 bg-white/[0.03] text-slate-300 hover:border-emerald-300/45 hover:bg-emerald-300/10 hover:text-emerald-100",
+                  )}
+                  aria-pressed={active}
+                >
+                  <span className={cn(
+                    "grid h-11 w-11 place-items-center rounded-xl transition",
+                    active ? "bg-emerald-300 text-slate-950" : "bg-white/5 text-emerald-200 group-hover:bg-emerald-300/20",
+                  )}>
+                    <SalesCatalogCategoryIconGlyph className="h-6 w-6" id={option.id} />
+                  </span>
+                  <span className="line-clamp-2 text-[10px] font-bold leading-3">{option.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -7687,6 +7784,10 @@ function buildCategoryIconPayload(
 
 function cleanCategoryIconKey(value: string) {
   return value.replace(/\s+/g, " ").trim().slice(0, 80);
+}
+
+function getCategoryIconOptionLabel(iconId: SalesCatalogCategoryIconId) {
+  return salesCatalogCategoryIconOptions.find((option) => option.id === iconId)?.label ?? "Figurinha";
 }
 
 function cloneAttributes(attributes: SalesCatalogAttribute[]) {
