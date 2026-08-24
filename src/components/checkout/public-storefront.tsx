@@ -233,7 +233,6 @@ export function PublicStorefront({ storeSlug, branding, storefront, products, tr
       })
       .map(([label, items]) => ({ label, products: items }));
   }, [category, products]);
-  const activeCategoryLabel = categories.find((item) => item.id === category)?.label ?? "Produtos";
   const totalItems = cart.reduce((total, line) => total + line.quantity, 0);
   const totalCents = cart.reduce((total, line) => total + (line.product.priceCents ?? 0) * line.quantity, 0);
   const checkoutReady = cart.length > 0
@@ -377,7 +376,6 @@ export function PublicStorefront({ storeSlug, branding, storefront, products, tr
       <section id="produtos" className="mx-auto w-full max-w-6xl px-5 py-4 sm:px-8 sm:py-7 lg:py-9">
         {bestSellerProducts.length > 0 ? (
           <ProductShowcaseSection
-            eyebrow={category === ALL_CATEGORY ? "Escolhas da loja" : activeCategoryLabel}
             products={bestSellerProducts}
             title={category === ALL_CATEGORY ? "Mais vendidos" : "Produtos em destaque"}
             onAddToCart={addToCart}
@@ -389,7 +387,6 @@ export function PublicStorefront({ storeSlug, branding, storefront, products, tr
         {newArrivalProducts.length > 0 ? (
           <ProductShowcaseSection
             className="mt-12"
-            eyebrow={category === ALL_CATEGORY ? "Confira novidades" : `${newArrivalProducts.length} opcoes`}
             products={newArrivalProducts}
             title={category === ALL_CATEGORY ? "Novidades" : "Mais produtos"}
             onAddToCart={addToCart}
@@ -399,7 +396,6 @@ export function PublicStorefront({ storeSlug, branding, storefront, products, tr
         {offerProducts.length > 0 ? (
           <ProductShowcaseSection
             className="mt-12"
-            eyebrow={category === ALL_CATEGORY ? "Oportunidades da loja" : activeCategoryLabel}
             products={offerProducts}
             title={category === ALL_CATEGORY ? "Ofertas da loja" : "Ofertas da categoria"}
             onAddToCart={addToCart}
@@ -410,7 +406,6 @@ export function PublicStorefront({ storeSlug, branding, storefront, products, tr
           <div className="mt-12 grid gap-12">
             {categoryProductSections.map((section) => (
               <ProductShowcaseSection
-                eyebrow="Catalogo por categoria"
                 key={section.label}
                 products={section.products}
                 title={section.label}
@@ -720,20 +715,18 @@ function PromoBanner({
 
 function ProductShowcaseSection({
   className,
-  eyebrow,
   products,
   title,
   onAddToCart,
 }: {
   className?: string;
-  eyebrow: string;
   products: PublicStorefrontProduct[];
   title: string;
   onAddToCart: (product: PublicStorefrontProduct) => void;
 }) {
   return (
     <section className={className}>
-      <SectionHeading eyebrow={eyebrow} title={title} />
+      <SectionHeading title={title} />
       <div className="mt-5 grid grid-cols-2 gap-4 md:mt-7 md:grid-cols-4 md:gap-6">
         {products.map((product) => (
           <ProductCard key={product.id} product={product} onAddToCart={onAddToCart} />
@@ -743,11 +736,10 @@ function ProductShowcaseSection({
   );
 }
 
-function SectionHeading({ eyebrow, title }: { eyebrow: string; title: string }) {
+function SectionHeading({ title }: { title: string }) {
   return (
     <div className="text-center">
-      <p className="text-[11px] font-semibold uppercase text-[color:var(--store-text)] sm:text-xs sm:font-black">{eyebrow}</p>
-      <div className="mt-2 flex items-center justify-center gap-3 sm:gap-5">
+      <div className="flex items-center justify-center gap-3 sm:gap-5">
         <span className="hidden h-px w-24 bg-current opacity-45 sm:block" style={{ color: "var(--store-text)" }} />
         <h2 className="font-serif text-[24px] font-medium leading-[1.05] text-[color:var(--store-text)] sm:text-[42px] sm:font-black sm:leading-none">
           {title}
