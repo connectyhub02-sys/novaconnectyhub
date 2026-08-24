@@ -5,13 +5,10 @@ import type { CSSProperties, ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import {
   ArrowRight,
-  BadgeCheck,
-  CreditCard,
   Headphones,
   Heart,
   Home,
   Loader2,
-  MessageCircle,
   Minus,
   Package,
   Plus,
@@ -219,13 +216,10 @@ export function PublicStorefront({ storeSlug, branding, storefront, products, tr
 
   const activeFeaturedIndex = featuredProducts.length > 0 ? featuredIndex % featuredProducts.length : 0;
   const featuredProduct = featuredProducts[activeFeaturedIndex] ?? null;
-  const promotionProduct = visibleProducts.find((product) => product.compareAtLabel)
-    ?? visibleProducts.find((product) => product.highlightLabel)
-    ?? featuredProduct;
   const bestSellerProducts = visibleProducts.slice(0, 4);
   const newArrivalProducts = category === ALL_CATEGORY ? visibleProducts.slice(4, 8) : visibleProducts.slice(4);
   const offerProducts = useMemo(() => (
-    visibleProducts.filter((product) => product.compareAtLabel || product.highlightLabel).slice(0, 4)
+    visibleProducts.filter(isOfferProduct).slice(0, 4)
   ), [visibleProducts]);
   const categoryProductSections = useMemo(() => {
     if (category !== ALL_CATEGORY) return [];
@@ -386,6 +380,15 @@ export function PublicStorefront({ storeSlug, branding, storefront, products, tr
 
       <CategoryShowcase categories={categories} category={category} onSelect={selectCategory} />
 
+      {offerProducts.length > 0 ? (
+        <OfferSpotlight
+          branding={branding}
+          products={offerProducts}
+          onAddToCart={addToCart}
+          onShopNow={scrollToProducts}
+        />
+      ) : null}
+
       <section id="produtos" className="mx-auto w-full max-w-6xl px-5 py-4 sm:px-8 sm:py-7 lg:py-9">
         {bestSellerProducts.length > 0 ? (
           <ProductShowcaseSection
@@ -406,15 +409,6 @@ export function PublicStorefront({ storeSlug, branding, storefront, products, tr
           />
         ) : null}
 
-        {offerProducts.length > 0 ? (
-          <ProductShowcaseSection
-            className="mt-12"
-            products={offerProducts}
-            title={category === ALL_CATEGORY ? "Ofertas da loja" : "Ofertas da categoria"}
-            onAddToCart={addToCart}
-          />
-        ) : null}
-
         {categoryProductSections.length > 0 ? (
           <div className="mt-12 grid gap-12">
             {categoryProductSections.map((section) => (
@@ -428,12 +422,6 @@ export function PublicStorefront({ storeSlug, branding, storefront, products, tr
           </div>
         ) : null}
       </section>
-
-      <PromoBanner branding={branding} product={promotionProduct} onShopNow={scrollToProducts} />
-
-      <CustomerLove branding={branding} />
-
-      <TrustStrip />
 
       <StoreFooter branding={branding} footerContactText={footerContactText} footerText={footerText} />
 
@@ -693,47 +681,85 @@ function BenefitStrip() {
   );
 }
 
-function PromoBanner({
+function OfferSpotlight({
   branding,
-  product,
+  products,
+  onAddToCart,
   onShopNow,
 }: {
   branding: PublicStorefrontBranding;
-  product: PublicStorefrontProduct | null;
+  products: PublicStorefrontProduct[];
+  onAddToCart: (product: PublicStorefrontProduct) => void;
   onShopNow: () => void;
 }) {
   return (
-    <section className="mx-auto w-full max-w-6xl px-5 py-4 sm:px-8 sm:py-7">
+    <section className="mx-auto w-full max-w-6xl px-5 pt-4 sm:px-8 sm:pt-7">
       <div
-        className="grid min-h-0 grid-cols-[minmax(0,1fr)_108px] items-center gap-3 overflow-hidden rounded-[8px] border p-3 shadow-lg shadow-[#063f2c]/12 sm:p-5 md:min-h-36 md:grid-cols-[180px_minmax(0,1fr)_240px] md:p-7"
+        className="overflow-hidden rounded-[8px] border p-4 shadow-lg shadow-[#063f2c]/12 sm:p-5 md:p-7"
         style={{
           backgroundColor: "var(--store-primary)",
           borderColor: "var(--store-primary-border)",
           color: "var(--store-offer-text)",
         }}
       >
-        <div className="hidden items-center justify-center md:flex">
-          <span className="grid h-24 w-24 rotate-[-10deg] place-items-center rounded-[8px] bg-white text-[color:var(--store-accent)]">
-            <Tag className="h-14 w-14" />
-          </span>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="grid h-12 w-12 shrink-0 place-items-center rounded-[8px] bg-white text-[color:var(--store-accent)] sm:h-14 sm:w-14">
+              <Tag className="h-7 w-7 sm:h-8 sm:w-8" />
+            </span>
+            <div className="min-w-0">
+              <p className="text-[10px] font-black uppercase leading-4 opacity-90 sm:text-xs">Oferta especial da {branding.displayName}</p>
+              <h2 className="mt-1 font-serif text-[24px] font-black leading-none sm:text-[34px]">Produtos em oferta</h2>
+            </div>
+          </div>
+          <button
+            className="inline-flex min-h-10 items-center justify-center rounded-[8px] border border-dashed px-3 text-[10px] font-black uppercase transition hover:bg-white/10 sm:px-5 sm:text-xs"
+            onClick={onShopNow}
+            style={{ borderColor: "color-mix(in srgb, var(--store-offer-text) 60%, transparent 40%)" }}
+            type="button"
+          >
+            Ver vitrine
+          </button>
         </div>
-        <div className="min-w-0">
-          <p className="text-[10px] font-black uppercase leading-4 opacity-90 sm:text-sm">Oferta especial da {branding.displayName}</p>
-          <h2 className="mt-1 line-clamp-1 font-serif text-[24px] font-black leading-none sm:mt-2 sm:text-[34px] md:text-[44px]">
-            {product?.highlightLabel || "Produtos selecionados"}
-          </h2>
-          <p className="mt-3 hidden max-w-xl text-sm font-semibold leading-6 text-[color:var(--store-offer-text-muted)] sm:block">
-            Escolha seus produtos, adicione no carrinho e finalize tudo em um checkout unico.
-          </p>
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {products.map((product) => (
+            <article className="grid grid-cols-[78px_minmax(0,1fr)] items-center gap-3 rounded-[8px] bg-white p-2 text-[#111111] shadow-sm sm:grid-cols-[92px_minmax(0,1fr)]" key={product.id}>
+              <a className="relative block aspect-square overflow-hidden rounded-[8px] bg-[#f4f0ea]" href={product.productUrl}>
+                <ProductImage product={product} sizes="96px" />
+              </a>
+              <div className="min-w-0">
+                <p className="line-clamp-2 text-[11px] font-black leading-4">{product.title}</p>
+                <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <span className="text-sm font-black text-[color:var(--store-accent)]">{product.priceLabel}</span>
+                  {product.compareAtLabel ? <span className="text-[11px] font-semibold text-[#7c8580] line-through">{product.compareAtLabel}</span> : null}
+                </div>
+                <button
+                  className={cn(
+                    "mt-2 inline-flex min-h-8 w-full items-center justify-center gap-1 rounded-[8px] border px-2 text-[10px] font-black uppercase transition brightness-100 hover:brightness-110",
+                    product.canCheckout ? "" : "border-[#7c8580] bg-[#7c8580] text-white",
+                  )}
+                  onClick={() => onAddToCart(product)}
+                  style={product.canCheckout ? {
+                    backgroundColor: "var(--store-button)",
+                    borderColor: "var(--store-button-border)",
+                    color: "var(--store-button-text)",
+                  } : undefined}
+                  type="button"
+                >
+                  {product.canCheckout ? (
+                    <>
+                      <ShoppingCart className="h-3 w-3" />
+                      Adicionar
+                    </>
+                  ) : (
+                    "Ver produto"
+                  )}
+                </button>
+              </div>
+            </article>
+          ))}
         </div>
-        <button
-          className="inline-flex min-h-10 items-center justify-center rounded-[8px] border border-dashed px-3 text-[10px] font-black uppercase transition hover:bg-white/10 sm:min-h-12 sm:px-5 sm:text-xs md:min-h-14 md:px-6 md:text-sm"
-          onClick={onShopNow}
-          style={{ borderColor: "color-mix(in srgb, var(--store-offer-text) 60%, transparent 40%)" }}
-          type="button"
-        >
-          Ver vitrine
-        </button>
       </div>
     </section>
   );
@@ -940,72 +966,6 @@ function CategoryButton({
       </span>
       <span className="mt-2 block truncate text-[11px] font-medium text-[color:var(--store-text)] sm:text-xs sm:font-semibold">{label}</span>
     </button>
-  );
-}
-
-function CustomerLove({ branding }: { branding: PublicStorefrontBranding }) {
-  return (
-    <section className="mx-auto w-full max-w-6xl px-5 py-5 sm:px-8 sm:py-8">
-      <div className="grid grid-cols-[0.86fr_1fr] overflow-hidden rounded-[8px] border border-[#e5e2d8] bg-white md:grid-cols-[300px_minmax(0,1fr)]">
-        <div className="border-r border-[#e5e2d8] bg-[#f7f4ee] p-4 sm:p-7">
-          <p className="text-[9px] font-bold uppercase text-[color:var(--store-text)] sm:text-xs sm:font-black">Clientes da loja</p>
-          <h2 className="mt-1 font-serif text-[20px] font-semibold leading-[1.02] text-[color:var(--store-text)] sm:mt-2 sm:text-[32px] sm:font-black sm:leading-none">
-            Compra simples e acompanhada.
-          </h2>
-          <p className="mt-2 line-clamp-3 text-[11px] font-medium leading-4 text-[color:var(--store-text-muted)] sm:mt-4 sm:text-sm sm:font-semibold sm:leading-6">
-            A {branding.displayName} recebe o pedido e continua o atendimento pelo WhatsApp.
-          </p>
-        </div>
-        <div className="grid items-center gap-3 p-4 sm:grid-cols-[1fr_220px] sm:gap-5 sm:p-7">
-          <div>
-            <div className="flex gap-1 text-[#f5a400]">
-              {[0, 1, 2, 3, 4].map((item) => (
-                <Star className="h-3.5 w-3.5 fill-current sm:h-5 sm:w-5" key={item} />
-              ))}
-            </div>
-            <p className="mt-2 line-clamp-4 max-w-xl text-[12px] font-medium leading-5 text-[color:var(--store-text)] sm:mt-4 sm:text-base sm:font-semibold sm:leading-7">
-              Atendimento rapido, produtos organizados e pagamento em um fluxo claro para o cliente.
-            </p>
-            <p className="mt-2 text-[11px] font-bold text-[color:var(--store-accent)] sm:mt-4 sm:text-sm sm:font-black">ConnectyHub Checkout</p>
-          </div>
-          <div className="hidden min-h-44 items-center justify-center rounded-[8px] bg-[#f4f0ea] sm:flex">
-            <MessageCircle className="h-20 w-20 text-[color:var(--store-accent)]" />
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function TrustStrip() {
-  const items = [
-    { icon: <BadgeCheck className="h-7 w-7" />, title: "Produtos da loja", text: "Catalogo sempre organizado" },
-    { icon: <CreditCard className="h-7 w-7" />, title: "Checkout unico", text: "Carrinho e pagamento juntos" },
-    { icon: <Truck className="h-7 w-7" />, title: "Pedido acompanhado", text: "Fluxo integrado ao WhatsApp" },
-    { icon: <ShieldCheck className="h-7 w-7" />, title: "Compra segura", text: "Ambiente ConnectyHub" },
-  ];
-
-  return (
-    <section className="mx-auto w-full max-w-6xl px-5 pb-8 sm:px-8">
-      <div
-        className="grid grid-cols-4 overflow-hidden rounded-[8px] border divide-x divide-white/20"
-        style={{
-          backgroundColor: "var(--store-primary)",
-          borderColor: "var(--store-primary-border)",
-          color: "var(--store-offer-text)",
-        }}
-      >
-        {items.map((item) => (
-          <div className="flex min-h-[86px] flex-col items-center justify-center gap-2 px-2 py-3 text-center md:min-h-20 md:flex-row md:justify-start md:gap-4 md:px-5 md:py-4 md:text-left" key={item.title}>
-            <span className="shrink-0 [&>svg]:h-5 [&>svg]:w-5 md:[&>svg]:h-7 md:[&>svg]:w-7">{item.icon}</span>
-            <div className="min-w-0">
-              <h2 className="text-[9px] font-black uppercase leading-3 md:text-sm md:leading-5">{item.title}</h2>
-              <p className="mt-1 hidden text-xs font-semibold opacity-75 md:block">{item.text}</p>
-            </div>
-          </div>
-        ))}
-      </div>
-    </section>
   );
 }
 
@@ -1288,6 +1248,17 @@ function isGenericStoreCategory(category: string) {
 function getStoreCategoryDisplayLabel(category: string) {
   const normalized = category.trim();
   return isGenericStoreCategory(normalized) ? genericStoreCategoryDisplayLabel : normalized;
+}
+
+function isOfferProduct(product: PublicStorefrontProduct) {
+  if (product.compareAtLabel) return true;
+
+  const normalizedLabel = product.highlightLabel
+    ?.normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase() ?? "";
+
+  return /(oferta|promo|desconto|sale)/.test(normalizedLabel);
 }
 
 function clampQuantity(value: number) {
