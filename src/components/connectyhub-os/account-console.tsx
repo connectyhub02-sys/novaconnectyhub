@@ -7,6 +7,7 @@ import {
   useState,
   type ButtonHTMLAttributes,
   type ChangeEvent,
+  type CSSProperties,
   type FormEvent,
   type ReactNode,
 } from "react";
@@ -222,6 +223,26 @@ const billingTabs: Array<{ icon: LucideIcon; label: string; value: BillingTab }>
 
 const LIST_LIMIT = 6;
 
+const accountConsoleTheme = {
+  colorScheme: "light",
+  "--ch-bg": "#f6f9fe",
+  "--ch-surface": "#ffffff",
+  "--ch-surface-2": "#f8fbff",
+  "--ch-surface-3": "#eef6ff",
+  "--ch-panel": "linear-gradient(180deg, #ffffff 0%, #f8fbff 100%)",
+  "--ch-panel-2": "linear-gradient(180deg, #ffffff 0%, #f8fbff 100%)",
+  "--ch-border": "rgba(148, 163, 184, 0.38)",
+  "--ch-border-soft": "rgba(148, 163, 184, 0.24)",
+  "--ch-border-strong": "rgba(148, 163, 184, 0.46)",
+  "--ch-text": "#0f172a",
+  "--ch-muted": "#475569",
+  "--ch-subtle": "#64748b",
+  "--ch-accent": "#1877f2",
+  "--ch-accent-rgb": "24, 119, 242",
+  "--ch-accent-2": "#0a58ca",
+  "--ch-accent-2-rgb": "10, 88, 202",
+} as CSSProperties;
+
 export function AccountConsole() {
   const [account, setAccount] = useState<AccountData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -353,7 +374,7 @@ export function AccountConsole() {
 
   if (error) {
     return (
-      <section className="mx-auto max-w-[1380px] space-y-4">
+      <section className="connecty-account-console mx-auto max-w-[1380px] space-y-4" style={accountConsoleTheme}>
         <AccountHeader onRefresh={() => loadAccount("refresh")} refreshing={refreshing} />
         <ErrorState message={error} refreshing={refreshing} onRetry={() => loadAccount("refresh")} />
       </section>
@@ -367,7 +388,7 @@ export function AccountConsole() {
   const pendingCheckoutHref = account.actions.pendingCheckoutHref;
 
   return (
-    <section className="mx-auto max-w-[1460px] space-y-4">
+    <section className="connecty-account-console mx-auto max-w-[1460px] space-y-4" style={accountConsoleTheme}>
       <AccountHeader
         account={account}
         completionSummary={completionSummary}
@@ -419,9 +440,9 @@ function AccountHeader({
     <header className="flex flex-col gap-4 py-1 lg:flex-row lg:items-start lg:justify-between">
       <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-start">
         <div className="min-w-0">
-          <h1 className="text-[22px] font-semibold leading-tight text-white sm:text-2xl">Minha conta</h1>
-          <p className="mt-1 text-sm leading-5 text-slate-400">
-            Gerencie seus dados, seguranca, plano e faturamento.
+          <h1 className="text-[22px] font-semibold leading-tight text-slate-950 sm:text-2xl">Minha conta</h1>
+          <p className="mt-1 text-sm leading-5 text-slate-600">
+            Gerencie seus dados, segurança, plano e faturamento.
           </p>
           {completionSummary ? <p className="mt-1 text-xs font-medium text-slate-500">{completionSummary}</p> : null}
         </div>
@@ -686,7 +707,7 @@ function AccountDetailsCard({
     <Surface className="flex xl:col-span-5">
       <div className="flex min-h-full flex-1 flex-col gap-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <h2 className="text-base font-semibold text-white">Dados da conta</h2>
+          <h2 className="text-base font-semibold text-slate-950">Dados da conta</h2>
           <div className="flex flex-wrap gap-2">
             <ActionButton
               icon={Edit3}
@@ -725,10 +746,10 @@ function AccountDetailsCard({
             <AccountAvatar avatarUrl={profile.avatarUrl} name={profile.fullName ?? profile.email ?? account.organization.name} />
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <h2 className="truncate text-xl font-semibold text-white">{profile.fullName ?? "Usuario ConnectyHub"}</h2>
+                <h2 className="truncate text-xl font-semibold text-slate-950">{profile.fullName ?? "Usuario ConnectyHub"}</h2>
                 <StatusBadge status={profile.completion.isComplete ? "approved" : "pending"} />
               </div>
-              <p className="mt-1 break-all text-sm text-slate-400">{profile.email ?? "email nao informado"}</p>
+              <p className="mt-1 break-all text-sm text-slate-500">{profile.email ?? "email nao informado"}</p>
             </div>
           </div>
         </div>
@@ -736,7 +757,7 @@ function AccountDetailsCard({
         {avatarError ? <Feedback tone="error">{avatarError}</Feedback> : null}
 
         {editingProfile ? (
-          <form className="rounded-md bg-white/[0.035] p-4" onSubmit={handleProfileSubmit}>
+          <form className="rounded-md border border-slate-200 bg-slate-50/80 p-4" onSubmit={handleProfileSubmit}>
             <div className="grid gap-4 md:grid-cols-2">
               <Field label="Nome">
                 <input
@@ -764,7 +785,7 @@ function AccountDetailsCard({
             </div>
           </form>
         ) : (
-          <dl className="grid overflow-hidden rounded-lg border border-white/10 bg-[#081322]/70 sm:grid-cols-2">
+          <dl className="grid overflow-hidden rounded-lg border border-slate-200 bg-slate-50/80 sm:grid-cols-2">
             <AccountFact label="WhatsApp" value={profile.phone ?? "Nao informado"} />
             <AccountFact label="CPF/CNPJ" value={profile.cpfPreview ?? "Pendente"} />
             <AccountFact label="Empresa" value={profile.companyName ?? account.organization.name} />
@@ -773,7 +794,7 @@ function AccountDetailsCard({
         )}
 
         {editingWhatsapp ? (
-          <div className="rounded-md bg-emerald-300/[0.035] p-4">
+          <div className="rounded-md border border-emerald-200 bg-emerald-50/70 p-4">
             <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto_auto] lg:items-end">
               <Field label="Alterar WhatsApp">
                 <input
@@ -859,20 +880,20 @@ function PlanUsageCard({ account, pendingCheckoutHref }: { account: AccountData;
       <div className="flex min-h-full flex-1 flex-col gap-4">
         <div className="flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2">
-            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-cyan-300/10 text-cyan-200">
+            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-blue-50 text-blue-600">
               <WalletCards className="h-4 w-4" />
             </span>
-            <h2 className="truncate text-base font-semibold text-white">Plano e utilizacao</h2>
+            <h2 className="truncate text-base font-semibold text-slate-950">Plano e utilização</h2>
           </div>
           <StatusBadge status={account.organization.status} />
         </div>
 
         <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_112px] sm:items-center">
           <div className="min-w-0">
-            <h3 className="truncate text-2xl font-semibold text-white">{planName}</h3>
-            <p className="mt-1 text-sm text-slate-300">{formatCredits(access.includedCredits)} creditos</p>
+            <h3 className="truncate text-2xl font-semibold text-slate-950">{planName}</h3>
+            <p className="mt-1 text-sm text-slate-600">{formatCredits(access.includedCredits)} créditos</p>
             {trialText ? (
-              <p className="mt-4 inline-flex rounded-full border border-cyan-300/15 bg-cyan-300/10 px-2.5 py-1 text-xs font-semibold text-cyan-100">
+              <p className="mt-4 inline-flex rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
                 Teste gratis: {trialText}
               </p>
             ) : null}
@@ -882,10 +903,10 @@ function PlanUsageCard({ account, pendingCheckoutHref }: { account: AccountData;
 
         <div>
           <div className="flex items-center justify-between gap-3 text-sm">
-            <span className="text-slate-400">
-              <span className="font-semibold text-cyan-200">{formatCredits(access.usedCredits)}</span> de {formatCredits(access.includedCredits)} creditos utilizados
+            <span className="text-slate-600">
+              <span className="font-semibold text-blue-700">{formatCredits(access.usedCredits)}</span> de {formatCredits(access.includedCredits)} créditos utilizados
             </span>
-            <span className="font-semibold text-slate-200">{Math.round(clamp(usagePercent, 0, 100))}%</span>
+            <span className="font-semibold text-slate-800">{Math.round(clamp(usagePercent, 0, 100))}%</span>
           </div>
           <ProgressBar value={usagePercent} />
         </div>
@@ -902,15 +923,15 @@ function PlanUsageCard({ account, pendingCheckoutHref }: { account: AccountData;
           <PlanMetric label="Valor mensal" value={formatCurrency(monthlyPrice)} />
         </div>
 
-        <div className="rounded-lg border border-white/10 bg-[#081322]/70 p-3">
+        <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-3">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="text-sm text-slate-400">Ultimo consumo / proxima cobranca</p>
-              <p className="mt-1 font-semibold text-white">
-                {usageSummary.lastEventAt ? formatDateTime(usageSummary.lastEventAt) : "Sem consumo recente"} / {nextBillingAt ? formatDate(nextBillingAt) : "Nao agendada"}
+              <p className="text-sm text-slate-500">Ultimo consumo / proxima cobranca</p>
+              <p className="mt-1 font-semibold text-slate-950">
+                {usageSummary.lastEventAt ? formatDateTime(usageSummary.lastEventAt) : "Sem consumo recente"} / {nextBillingAt ? formatDate(nextBillingAt) : "Não agendada"}
               </p>
             </div>
-            <CalendarDays className="h-5 w-5 shrink-0 text-slate-500" />
+            <CalendarDays className="h-5 w-5 shrink-0 text-slate-400" />
           </div>
         </div>
 
@@ -1021,17 +1042,17 @@ function SecurityAccessCard({ email, onReload }: { email: string | null; onReloa
     <Surface className="flex xl:col-span-3">
       <div className="flex min-h-full flex-1 flex-col gap-5">
         <div className="flex min-w-0 items-center gap-2">
-          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-cyan-300/10 text-cyan-200">
+          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-blue-50 text-blue-600">
             <ShieldCheck className="h-4 w-4" />
           </span>
-          <h2 className="text-base font-semibold text-white">Seguranca e acesso</h2>
+          <h2 className="text-base font-semibold text-slate-950">Segurança e acesso</h2>
         </div>
 
         <div className="space-y-5">
-          <div className="border-t border-white/10 pt-4">
+          <div className="border-t border-slate-200 pt-4">
             <p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">E-mail de acesso</p>
             <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between xl:flex-col xl:items-start">
-              <p className="break-all text-sm font-semibold text-white">{email ?? "sem email atual"}</p>
+              <p className="break-all text-sm font-semibold text-slate-950">{email ?? "sem email atual"}</p>
               <ActionButton
                 icon={Mail}
                 type="button"
@@ -1047,10 +1068,10 @@ function SecurityAccessCard({ email, onReload }: { email: string | null; onReloa
             </div>
           </div>
 
-          <div className="border-t border-white/10 pt-4">
+          <div className="border-t border-slate-200 pt-4">
             <p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">Senha</p>
             <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between xl:flex-col xl:items-start">
-              <p className="text-sm font-semibold text-white">************</p>
+              <p className="text-sm font-semibold text-slate-950">************</p>
               <ActionButton
                 icon={KeyRound}
                 type="button"
@@ -1068,7 +1089,7 @@ function SecurityAccessCard({ email, onReload }: { email: string | null; onReloa
         </div>
 
         {securityMode === "email" ? (
-        <form className="grid gap-3 rounded-md bg-white/[0.035] p-4" onSubmit={handleEmailSubmit}>
+        <form className="grid gap-3 rounded-md border border-slate-200 bg-slate-50/80 p-4" onSubmit={handleEmailSubmit}>
           <Field label="Novo e-mail">
             <input
               className={inputClassName}
@@ -1091,7 +1112,7 @@ function SecurityAccessCard({ email, onReload }: { email: string | null; onReloa
       ) : null}
 
       {securityMode === "password" ? (
-        <form className="grid gap-3 rounded-md bg-white/[0.035] p-4" onSubmit={handlePasswordSubmit}>
+        <form className="grid gap-3 rounded-md border border-slate-200 bg-slate-50/80 p-4" onSubmit={handlePasswordSubmit}>
           <Field label="Nova senha">
             <input
               className={inputClassName}
@@ -1126,10 +1147,10 @@ function SecurityAccessCard({ email, onReload }: { email: string | null; onReloa
         </form>
       ) : null}
 
-        <div className="mt-auto rounded-lg border border-white/10 bg-white/[0.035] p-3">
+        <div className="mt-auto rounded-lg border border-blue-100 bg-blue-50/70 p-3">
           <div className="flex items-start gap-3">
-            <KeyRound className="mt-0.5 h-4 w-4 shrink-0 text-cyan-200" />
-            <p className="text-sm leading-5 text-slate-300">
+            <KeyRound className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
+            <p className="text-sm leading-5 text-slate-600">
               Mantenha seus dados sempre seguros. Recomendamos alterar sua senha regularmente.
             </p>
           </div>
@@ -1151,13 +1172,13 @@ function BillingWorkspace({
   return (
     <Surface>
       <div className="flex flex-col gap-1">
-        <h2 className="text-xl font-semibold text-white">Faturamento e consumo</h2>
-        <p className="text-sm text-slate-400">Acompanhe seus pagamentos, assinaturas, creditos e ciclos de uso.</p>
+        <h2 className="text-xl font-semibold text-slate-950">Faturamento e consumo</h2>
+        <p className="text-sm text-slate-600">Acompanhe seus pagamentos, assinaturas, créditos e ciclos de uso.</p>
       </div>
 
       <Tabs className="mt-5 gap-4" value={activeTab} onValueChange={(value) => onTabChange(value as BillingTab)}>
         <div className="overflow-x-auto overflow-y-hidden pb-1">
-          <TabsList className="w-max min-w-full justify-start gap-0 border-b border-white/10 bg-transparent p-0" variant="line">
+          <TabsList className="w-max min-w-full justify-start gap-0 border-b border-slate-200 bg-transparent p-0" variant="line">
             {billingTabs.map((tab) => {
               const Icon = tab.icon;
               const count = billingTabCount(account, tab.value);
@@ -1165,12 +1186,12 @@ function BillingWorkspace({
               return (
                 <TabsTrigger
                   key={tab.value}
-                  className="h-11 min-w-[132px] rounded-none border-0 border-b-2 border-transparent bg-transparent px-4 text-sm font-semibold text-slate-400 hover:bg-white/[0.025] hover:text-white data-active:border-cyan-300 data-active:bg-transparent data-active:text-cyan-200"
+                  className="h-11 min-w-[132px] rounded-none border-0 border-b-2 border-transparent bg-transparent px-4 text-sm font-semibold text-slate-500 hover:bg-blue-50/70 hover:text-slate-950 data-active:border-blue-600 data-active:bg-transparent data-active:text-blue-700"
                   value={tab.value}
                 >
                   <Icon className="h-4 w-4" />
                   {tab.label}
-                  <span className="rounded-full bg-white/10 px-1.5 py-0.5 text-[11px]">{count}</span>
+                  <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-600">{count}</span>
                 </TabsTrigger>
               );
             })}
@@ -1208,15 +1229,15 @@ function PaymentsTab({ payments }: { payments: AccountData["payments"] }) {
   return (
     <div className="space-y-4">
       <div className="hidden overflow-x-auto overflow-y-hidden sm:block">
-        <table className="w-full min-w-[760px] overflow-hidden rounded-lg border border-white/10 bg-[#081322]/55 text-left">
-          <thead className="bg-white/[0.035]">
-            <tr className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-400">
-              <th className="border-b border-white/10 px-4 py-3">Valor</th>
-              <th className="border-b border-white/10 px-4 py-3">Plano</th>
-              <th className="border-b border-white/10 px-4 py-3">Status</th>
-              <th className="border-b border-white/10 px-4 py-3">Data</th>
-              <th className="border-b border-white/10 px-4 py-3">Fatura</th>
-              <th className="border-b border-white/10 px-4 py-3 text-right">Acao</th>
+        <table className="w-full min-w-[760px] overflow-hidden rounded-lg border border-slate-200 bg-white text-left">
+          <thead className="bg-slate-50">
+            <tr className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">
+              <th className="border-b border-slate-200 px-4 py-3">Valor</th>
+              <th className="border-b border-slate-200 px-4 py-3">Plano</th>
+              <th className="border-b border-slate-200 px-4 py-3">Status</th>
+              <th className="border-b border-slate-200 px-4 py-3">Data</th>
+              <th className="border-b border-slate-200 px-4 py-3">Fatura</th>
+              <th className="border-b border-slate-200 px-4 py-3 text-right">Ação</th>
             </tr>
           </thead>
           <tbody>
@@ -1243,29 +1264,29 @@ function PaymentTableRow({ payment }: { payment: AccountData["payments"][number]
 
   return (
     <tr className="group">
-      <td className="border-b border-white/10 px-4 py-3 align-top text-sm font-semibold text-white">
+      <td className="border-b border-slate-200 px-4 py-3 align-top text-sm font-semibold text-slate-950">
         {formatCurrency(payment.amountBrl)}
       </td>
-      <td className="border-b border-white/10 px-4 py-3 align-top">
-        <p className="text-sm font-semibold text-white">{formatPlanName(payment.planCode ?? "Plano")}</p>
+      <td className="border-b border-slate-200 px-4 py-3 align-top">
+        <p className="text-sm font-semibold text-slate-950">{formatPlanName(payment.planCode ?? "Plano")}</p>
         {reference ? <InternalReference value={reference} /> : null}
       </td>
-      <td className="border-b border-white/10 px-4 py-3 align-top">
+      <td className="border-b border-slate-200 px-4 py-3 align-top">
         <StatusBadge status={payment.status} />
       </td>
-      <td className="border-b border-white/10 px-4 py-3 align-top text-sm text-slate-300">
+      <td className="border-b border-slate-200 px-4 py-3 align-top text-sm text-slate-600">
         {formatDateTime(payment.paidAt ?? payment.createdAt)}
       </td>
-      <td className="border-b border-white/10 px-4 py-3 align-top">
+      <td className="border-b border-slate-200 px-4 py-3 align-top">
         {payment.invoiceHref ? (
           <ActionLink href={payment.invoiceHref} variant="ghost">
             Ver fatura
           </ActionLink>
         ) : (
-          <span className="text-sm text-slate-500">Nao disponivel</span>
+          <span className="text-sm text-slate-500">Não disponível</span>
         )}
       </td>
-      <td className="border-b border-white/10 px-4 py-3 align-top">
+      <td className="border-b border-slate-200 px-4 py-3 align-top">
         <PaymentActions payment={payment} />
       </td>
     </tr>
@@ -1276,15 +1297,15 @@ function PaymentMobileRow({ payment }: { payment: AccountData["payments"][number
   const reference = internalReference([payment.planCode, payment.providerStatus ?? payment.invoiceStatus]);
 
   return (
-    <article className="rounded-md bg-white/[0.035] p-4">
+    <article className="rounded-md border border-slate-200 bg-white p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-base font-semibold text-white">{formatCurrency(payment.amountBrl)}</p>
-          <p className="mt-1 text-sm text-slate-400">{formatPlanName(payment.planCode ?? "Plano")}</p>
+          <p className="text-base font-semibold text-slate-950">{formatCurrency(payment.amountBrl)}</p>
+          <p className="mt-1 text-sm text-slate-500">{formatPlanName(payment.planCode ?? "Plano")}</p>
         </div>
         <StatusBadge status={payment.status} />
       </div>
-      <p className="mt-3 text-sm text-slate-300">{formatDateTime(payment.paidAt ?? payment.createdAt)}</p>
+      <p className="mt-3 text-sm text-slate-600">{formatDateTime(payment.paidAt ?? payment.createdAt)}</p>
       {reference ? <InternalReference value={reference} /> : null}
       <div className="mt-3 flex flex-wrap gap-2">
         {payment.invoiceHref ? (
@@ -1335,28 +1356,28 @@ function SubscriptionsTab({
         <table className="w-full min-w-[820px] border-separate border-spacing-0 text-left">
           <thead>
             <tr className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">
-              <th className="border-b border-white/10 pb-3 pr-4">Plano</th>
-              <th className="border-b border-white/10 pb-3 pr-4">Valor</th>
-              <th className="border-b border-white/10 pb-3 pr-4">Creditos</th>
-              <th className="border-b border-white/10 pb-3 pr-4">Status</th>
-              <th className="border-b border-white/10 pb-3 pr-4">Inicio</th>
-              <th className="border-b border-white/10 pb-3 pr-4">Renovacao</th>
-              <th className="border-b border-white/10 pb-3 text-right">Acao</th>
+              <th className="border-b border-slate-200 pb-3 pr-4">Plano</th>
+              <th className="border-b border-slate-200 pb-3 pr-4">Valor</th>
+              <th className="border-b border-slate-200 pb-3 pr-4">Créditos</th>
+              <th className="border-b border-slate-200 pb-3 pr-4">Status</th>
+              <th className="border-b border-slate-200 pb-3 pr-4">Início</th>
+              <th className="border-b border-slate-200 pb-3 pr-4">Renovação</th>
+              <th className="border-b border-slate-200 pb-3 text-right">Ação</th>
             </tr>
           </thead>
           <tbody>
             {visibleItems.map((subscription, index) => (
-              <tr key={subscription.id} className={cn(isCurrentSubscription(subscription, index) ? "bg-cyan-300/[0.035]" : "")}>
-                <td className="border-b border-white/10 py-3 pl-2 pr-4 align-top">
-                  <p className="text-sm font-semibold text-white">{subscription.planName}</p>
-                  {isCurrentSubscription(subscription, index) ? <p className="mt-1 text-xs font-semibold text-cyan-200">Assinatura atual</p> : null}
+              <tr key={subscription.id} className={cn(isCurrentSubscription(subscription, index) ? "bg-blue-50/70" : "")}>
+                <td className="border-b border-slate-200 py-3 pl-2 pr-4 align-top">
+                  <p className="text-sm font-semibold text-slate-950">{subscription.planName}</p>
+                  {isCurrentSubscription(subscription, index) ? <p className="mt-1 text-xs font-semibold text-blue-700">Assinatura atual</p> : null}
                 </td>
-                <td className="border-b border-white/10 py-3 pr-4 align-top text-sm text-slate-300">{formatCurrency(subscription.monthlyPriceBrl)}</td>
-                <td className="border-b border-white/10 py-3 pr-4 align-top text-sm text-slate-300">{formatCredits(subscription.includedCredits)}</td>
-                <td className="border-b border-white/10 py-3 pr-4 align-top"><StatusBadge status={subscription.status} /></td>
-                <td className="border-b border-white/10 py-3 pr-4 align-top text-sm text-slate-300">{formatDate(subscription.currentPeriodStart ?? subscription.createdAt)}</td>
-                <td className="border-b border-white/10 py-3 pr-4 align-top text-sm text-slate-300">{subscription.nextBillingAt ? formatDate(subscription.nextBillingAt) : "Nao agendada"}</td>
-                <td className="border-b border-white/10 py-3 text-right align-top">
+                <td className="border-b border-slate-200 py-3 pr-4 align-top text-sm text-slate-600">{formatCurrency(subscription.monthlyPriceBrl)}</td>
+                <td className="border-b border-slate-200 py-3 pr-4 align-top text-sm text-slate-600">{formatCredits(subscription.includedCredits)}</td>
+                <td className="border-b border-slate-200 py-3 pr-4 align-top"><StatusBadge status={subscription.status} /></td>
+                <td className="border-b border-slate-200 py-3 pr-4 align-top text-sm text-slate-600">{formatDate(subscription.currentPeriodStart ?? subscription.createdAt)}</td>
+                <td className="border-b border-slate-200 py-3 pr-4 align-top text-sm text-slate-600">{subscription.nextBillingAt ? formatDate(subscription.nextBillingAt) : "Não agendada"}</td>
+                <td className="border-b border-slate-200 py-3 text-right align-top">
                   <ActionLink href={subscription.checkoutHref ?? plansHref} icon={ExternalLink} variant={subscription.checkoutHref ? "warning" : "ghost"}>
                     {subscription.checkoutHref ? "Finalizar pagamento" : "Gerenciar"}
                   </ActionLink>
@@ -1369,17 +1390,17 @@ function SubscriptionsTab({
 
       <div className="space-y-3 sm:hidden">
         {visibleItems.map((subscription, index) => (
-          <article key={subscription.id} className={cn("rounded-md bg-white/[0.035] p-4", isCurrentSubscription(subscription, index) ? "ring-1 ring-cyan-300/25" : "")}>
+          <article key={subscription.id} className={cn("rounded-md border border-slate-200 bg-white p-4", isCurrentSubscription(subscription, index) ? "ring-1 ring-blue-200" : "")}>
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-base font-semibold text-white">{subscription.planName}</p>
-                <p className="mt-1 text-sm text-slate-400">{formatCurrency(subscription.monthlyPriceBrl)} - {formatCredits(subscription.includedCredits)} creditos</p>
+                <p className="text-base font-semibold text-slate-950">{subscription.planName}</p>
+                <p className="mt-1 text-sm text-slate-500">{formatCurrency(subscription.monthlyPriceBrl)} - {formatCredits(subscription.includedCredits)} créditos</p>
               </div>
               <StatusBadge status={subscription.status} />
             </div>
-            <dl className="mt-3 grid gap-2 text-sm text-slate-300">
-              <PlanFact label="Inicio" value={formatDate(subscription.currentPeriodStart ?? subscription.createdAt)} />
-              <PlanFact label="Renovacao" value={subscription.nextBillingAt ? formatDate(subscription.nextBillingAt) : "Nao agendada"} />
+            <dl className="mt-3 grid gap-2 text-sm text-slate-600">
+              <PlanFact label="Início" value={formatDate(subscription.currentPeriodStart ?? subscription.createdAt)} />
+              <PlanFact label="Renovação" value={subscription.nextBillingAt ? formatDate(subscription.nextBillingAt) : "Não agendada"} />
             </dl>
             <div className="mt-3">
               <ActionLink href={subscription.checkoutHref ?? plansHref} icon={ExternalLink} variant={subscription.checkoutHref ? "warning" : "ghost"}>
@@ -1407,7 +1428,7 @@ function CreditsTab({
   const { hasMore, setExpanded, visibleItems } = useVisibleItems(transactions);
 
   if (!transactions.length && !usageEvents.length) {
-    return <EmptyState text="Nenhuma movimentacao de creditos foi registrada ainda." />;
+    return <EmptyState text="Nenhuma movimentação de créditos foi registrada ainda." />;
   }
 
   return (
@@ -1420,17 +1441,17 @@ function CreditsTab({
       </div>
 
       {usageSummary.byCategory.length ? (
-        <div className="space-y-3 rounded-md border border-white/10 bg-white/[0.025] p-4">
+        <div className="space-y-3 rounded-md border border-slate-200 bg-slate-50/80 p-4">
           <SectionLabel>Resumo por tipo de consumo</SectionLabel>
           <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
             {usageSummary.byCategory.map((item) => (
-              <div key={item.category} className="rounded-md bg-[#081322]/70 p-3">
+              <div key={item.category} className="rounded-md border border-slate-200 bg-white p-3">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-white">{item.category}</p>
+                    <p className="truncate text-sm font-semibold text-slate-950">{item.category}</p>
                     <p className="mt-1 text-xs text-slate-500">{formatCredits(item.events)} evento{item.events === 1 ? "" : "s"}</p>
                   </div>
-                  <p className="shrink-0 text-sm font-semibold text-rose-300">-{formatCredits(item.chargeCredits)}</p>
+                  <p className="shrink-0 text-sm font-semibold text-rose-600">-{formatCredits(item.chargeCredits)}</p>
                 </div>
               </div>
             ))}
@@ -1445,21 +1466,21 @@ function CreditsTab({
           const sign = positive ? "+" : "-";
 
           return (
-            <article key={transaction.id} className="flex flex-col gap-3 border-b border-white/10 pb-3 last:border-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between">
+            <article key={transaction.id} className="flex flex-col gap-3 border-b border-slate-200 pb-3 last:border-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0">
-                <p className="text-sm font-semibold text-white">{transaction.description ?? transactionTypeLabel(transaction.type)}</p>
-                <p className="mt-1 text-sm text-slate-400">{formatDateTime(transaction.createdAt)}</p>
-                <p className="mt-1 text-xs text-slate-500">Saldo apos movimentacao: {formatCredits(transaction.balanceAfterCredits)} creditos</p>
+                <p className="text-sm font-semibold text-slate-950">{transaction.description ?? transactionTypeLabel(transaction.type)}</p>
+                <p className="mt-1 text-sm text-slate-500">{formatDateTime(transaction.createdAt)}</p>
+                <p className="mt-1 text-xs text-slate-500">Saldo após movimentação: {formatCredits(transaction.balanceAfterCredits)} créditos</p>
               </div>
               <div className="text-left sm:text-right">
-                <p className={cn("text-lg font-semibold", positive ? "text-emerald-300" : "text-rose-300")}>
+                <p className={cn("text-lg font-semibold", positive ? "text-emerald-600" : "text-rose-600")}>
                   {sign}{formatCredits(Math.abs(transaction.amountCredits))}
                 </p>
                 <p className="text-xs text-slate-500">{positive ? "Entrada" : "Saida"}</p>
               </div>
             </article>
           );
-        }) : <EmptyState text="Nenhuma movimentacao de carteira encontrada." />}
+        }) : <EmptyState text="Nenhuma movimentação de carteira encontrada." />}
 
         {hasMore ? <ShowMoreButton total={transactions.length} onClick={() => setExpanded(true)} /> : null}
       </div>
@@ -1467,16 +1488,16 @@ function CreditsTab({
       <div className="space-y-3">
         <SectionLabel>Consumo recente dos agentes</SectionLabel>
         {usageEvents.length ? usageEvents.map((event) => (
-          <article key={event.id} className="flex flex-col gap-3 rounded-md bg-white/[0.035] p-3 sm:flex-row sm:items-center sm:justify-between">
+          <article key={event.id} className="flex flex-col gap-3 rounded-md border border-slate-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
-              <p className="text-sm font-semibold text-white">{usageFeatureLabel(event.featureCode)}</p>
-              <p className="mt-1 text-sm text-slate-400">{formatDateTime(event.createdAt)}</p>
+              <p className="text-sm font-semibold text-slate-950">{usageFeatureLabel(event.featureCode)}</p>
+              <p className="mt-1 text-sm text-slate-500">{formatDateTime(event.createdAt)}</p>
               <p className="mt-1 truncate text-xs text-slate-500">
                 {event.publicCategory}
               </p>
             </div>
             <div className="text-left sm:text-right">
-              <p className="text-lg font-semibold text-rose-300">-{formatCredits(event.chargeCredits)}</p>
+              <p className="text-lg font-semibold text-rose-600">-{formatCredits(event.chargeCredits)}</p>
               <p className="text-xs text-slate-500">{formatUsageUnits(event)}</p>
             </div>
           </article>
@@ -1540,22 +1561,22 @@ function CyclesTab({ cycles }: { cycles: AccountData["cycles"] }) {
         const percent = usagePercentage(cycle.usedCredits, cycle.includedCredits);
 
         return (
-          <article key={cycle.id} className="rounded-md bg-white/[0.035] p-4">
+          <article key={cycle.id} className="rounded-md border border-slate-200 bg-white p-4">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="truncate text-base font-semibold text-white">{cycle.planName ?? formatPlanName(cycle.planCode ?? "Ciclo")}</p>
-                <p className="mt-1 text-sm text-slate-400">{formatDate(cycle.cycleStart)} ate {formatDate(cycle.cycleEnd)}</p>
+                <p className="truncate text-base font-semibold text-slate-950">{cycle.planName ?? formatPlanName(cycle.planCode ?? "Ciclo")}</p>
+                <p className="mt-1 text-sm text-slate-500">{formatDate(cycle.cycleStart)} ate {formatDate(cycle.cycleEnd)}</p>
               </div>
               <StatusBadge status={cycle.status} />
             </div>
             <div className="mt-4">
               <div className="flex items-center justify-between gap-3 text-sm">
-                <span className="font-medium text-slate-300">{formatCredits(cycle.usedCredits)} de {formatCredits(cycle.includedCredits)} creditos utilizados</span>
-                <span className="font-semibold text-white">{Math.round(percent)}%</span>
+                <span className="font-medium text-slate-600">{formatCredits(cycle.usedCredits)} de {formatCredits(cycle.includedCredits)} créditos utilizados</span>
+                <span className="font-semibold text-slate-950">{Math.round(percent)}%</span>
               </div>
               <ProgressBar value={percent} />
               {cycle.overageCredits > 0 ? (
-                <p className="mt-2 text-xs font-semibold text-amber-200">Excedente: {formatCredits(cycle.overageCredits)} creditos</p>
+                <p className="mt-2 text-xs font-semibold text-amber-700">Excedente: {formatCredits(cycle.overageCredits)} créditos</p>
               ) : null}
             </div>
           </article>
@@ -1573,7 +1594,7 @@ function CyclesTab({ cycles }: { cycles: AccountData["cycles"] }) {
 
 function Surface({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <section className={cn("rounded-lg border border-white/10 bg-[#07101d] p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.035),0_22px_60px_rgba(0,0,0,0.2)]", className)}>
+    <section className={cn("connecty-account-surface rounded-lg border border-slate-200 bg-white p-5 shadow-[0_18px_50px_rgba(15,23,42,0.07)]", className)}>
       {children}
     </section>
   );
@@ -1583,10 +1604,10 @@ function HeaderPill({ icon: Icon, tone, value }: { icon: LucideIcon; tone: "info
   return (
     <span
       className={cn(
-        "inline-flex min-h-10 items-center gap-2 rounded-md border px-3 text-sm font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]",
+        "inline-flex min-h-10 items-center gap-2 rounded-md border px-3 text-sm font-semibold shadow-sm",
         tone === "success"
-          ? "border-emerald-300/15 bg-emerald-300/10 text-emerald-200"
-          : "border-sky-300/15 bg-sky-300/10 text-sky-100",
+          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+          : "border-sky-200 bg-sky-50 text-sky-700",
       )}
     >
       <Icon className="h-4 w-4" />
@@ -1661,15 +1682,15 @@ function ActionLink({
 
 function actionButtonClass(variant: ActionTone, className?: string) {
   const variantClass = {
-    ghost: "border-transparent bg-transparent text-cyan-100 hover:bg-cyan-300/10",
-    primary: "border-cyan-300 bg-cyan-300 text-slate-950 hover:bg-cyan-200",
-    secondary: "border-white/10 bg-white/[0.055] text-slate-100 hover:bg-white/[0.085]",
-    success: "border-emerald-300 bg-emerald-300 text-slate-950 hover:bg-emerald-200",
-    warning: "border-amber-300 bg-amber-300 text-slate-950 hover:bg-amber-200",
+    ghost: "border-transparent bg-transparent text-blue-700 hover:bg-blue-50",
+    primary: "border-blue-600 bg-blue-600 text-white shadow-sm hover:bg-blue-500",
+    secondary: "border-slate-200 bg-white text-slate-700 shadow-sm hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700",
+    success: "border-emerald-600 bg-emerald-600 text-white shadow-sm hover:bg-emerald-500",
+    warning: "border-amber-400 bg-amber-300 text-amber-950 shadow-sm hover:bg-amber-200",
   }[variant];
 
   return cn(
-    "inline-flex min-h-9 items-center justify-center gap-2 rounded-md border px-3 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/45 disabled:pointer-events-none disabled:opacity-55",
+    "inline-flex min-h-9 items-center justify-center gap-2 rounded-md border px-3 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30 disabled:pointer-events-none disabled:opacity-55",
     variantClass,
     className,
   );
@@ -1684,22 +1705,22 @@ function Field({ children, label }: { children: ReactNode; label: string }) {
   );
 }
 
-const inputClassName = "h-10 w-full rounded-md border border-white/10 bg-[#162238] px-3 text-sm font-medium text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-300/50 focus:ring-2 focus:ring-cyan-300/15";
+const inputClassName = "h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-950 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15";
 
 function AccountFact({ label, value }: { label: string; value: string }) {
   return (
-    <div className="min-w-0 border-b border-white/10 p-4 last:border-b-0 sm:[&:nth-child(2n+1)]:border-r sm:[&:nth-last-child(-n+2)]:border-b-0">
+    <div className="min-w-0 border-b border-slate-200 p-4 last:border-b-0 sm:[&:nth-child(2n+1)]:border-r sm:[&:nth-last-child(-n+2)]:border-b-0">
       <dt className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">{label}</dt>
-      <dd className="mt-1 break-words text-sm font-semibold text-slate-100">{value}</dd>
+      <dd className="mt-1 break-words text-sm font-semibold text-slate-950">{value}</dd>
     </div>
   );
 }
 
 function PlanMetric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-white/10 bg-[#081322]/70 p-3">
+    <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-3">
       <p className="text-xs text-slate-500">{label}</p>
-      <p className="mt-1 text-base font-semibold text-white">{value}</p>
+      <p className="mt-1 text-base font-semibold text-slate-950">{value}</p>
     </div>
   );
 }
@@ -1710,13 +1731,13 @@ function UsageRing({ value }: { value: number }) {
   return (
     <div
       className="grid h-28 w-28 place-items-center rounded-full"
-      style={{ background: `conic-gradient(#22d3ee ${percent * 3.6}deg, rgba(148,163,184,0.2) 0deg)` }}
+      style={{ background: `conic-gradient(#2563eb ${percent * 3.6}deg, #dbeafe 0deg)` }}
       aria-label={`${percent}% utilizado`}
     >
-      <div className="grid h-[84px] w-[84px] place-items-center rounded-full bg-[#07101d] text-center">
+      <div className="grid h-[84px] w-[84px] place-items-center rounded-full bg-white text-center shadow-inner">
         <div>
-          <p className="text-2xl font-semibold text-white">{percent}%</p>
-          <p className="text-xs text-slate-400">utilizado</p>
+          <p className="text-2xl font-semibold text-slate-950">{percent}%</p>
+          <p className="text-xs text-slate-500">utilizado</p>
         </div>
       </div>
     </div>
@@ -1727,7 +1748,7 @@ function PlanFact({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-start justify-between gap-4">
       <dt className="text-slate-500">{label}</dt>
-      <dd className="text-right font-semibold text-slate-100">{value}</dd>
+      <dd className="text-right font-semibold text-slate-950">{value}</dd>
     </div>
   );
 }
@@ -1737,7 +1758,7 @@ function Feedback({ children, tone }: { children: ReactNode; tone: "error" | "ne
     <p
       className={cn(
         "mt-3 text-sm font-medium",
-        tone === "success" ? "text-emerald-300" : tone === "error" ? "text-rose-300" : "text-slate-300",
+        tone === "success" ? "text-emerald-700" : tone === "error" ? "text-rose-600" : "text-slate-600",
       )}
     >
       {children}
@@ -1749,8 +1770,8 @@ function ProgressBar({ value }: { value: number }) {
   const percent = clamp(value, 0, 100);
 
   return (
-    <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/10" aria-label={`Uso de ${Math.round(percent)}%`}>
-      <div className="h-full rounded-full bg-cyan-300" style={{ width: `${percent}%` }} />
+    <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100" aria-label={`Uso de ${Math.round(percent)}%`}>
+      <div className="h-full rounded-full bg-blue-600" style={{ width: `${percent}%` }} />
     </div>
   );
 }
@@ -1761,7 +1782,7 @@ function AccountAvatar({ avatarUrl, name }: { avatarUrl: string | null; name: st
   const showImage = Boolean(avatarUrl && failedAvatarUrl !== avatarUrl);
 
   return (
-    <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-full border border-white/15 bg-cyan-300/12 shadow-[inset_0_0_0_1px_rgba(34,211,238,0.1)]">
+    <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-full border border-slate-200 bg-blue-50 shadow-sm">
       {showImage && avatarUrl ? (
         <Image
           alt=""
@@ -1773,7 +1794,7 @@ function AccountAvatar({ avatarUrl, name }: { avatarUrl: string | null; name: st
           onError={() => setFailedAvatarUrl(avatarUrl)}
         />
       ) : (
-        <div className="grid h-full w-full place-items-center text-3xl font-semibold text-cyan-300">{initials}</div>
+        <div className="grid h-full w-full place-items-center text-3xl font-semibold text-blue-600">{initials}</div>
       )}
     </div>
   );
@@ -1792,14 +1813,14 @@ function StatusBadge({ status }: { status: string }) {
 function InternalReference({ value }: { value: string }) {
   return (
     <p className="mt-1 text-xs text-slate-500">
-      Referencia interna: <span className="font-mono">{value}</span>
+      Referência interna: <span className="font-mono">{value}</span>
     </p>
   );
 }
 
 function EmptyState({ text }: { text: string }) {
   return (
-    <div className="rounded-md border border-dashed border-white/12 bg-white/[0.025] p-5 text-sm font-medium text-slate-400">
+    <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 p-5 text-sm font-medium text-slate-600">
       {text}
     </div>
   );
@@ -1828,12 +1849,12 @@ function ErrorState({
     <Surface>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex items-start gap-3">
-          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-rose-400/10 text-rose-200">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-rose-50 text-rose-600">
             <AlertTriangle className="h-5 w-5" />
           </span>
           <div>
-            <h2 className="text-base font-semibold text-white">Conta indisponivel</h2>
-            <p className="mt-1 text-sm leading-6 text-slate-400">{message}</p>
+            <h2 className="text-base font-semibold text-slate-950">Conta indisponível</h2>
+            <p className="mt-1 text-sm leading-6 text-slate-600">{message}</p>
           </div>
         </div>
         <ActionButton icon={RefreshCw} loading={refreshing} type="button" variant="secondary" onClick={onRetry}>
@@ -1846,11 +1867,13 @@ function ErrorState({
 
 function AccountLoadingState() {
   return (
-    <InfinityLoadingPanel
-      className="mx-auto max-w-[1380px]"
-      label="Carregando minha conta..."
-      description="Preparando perfil, seguranca, creditos e faturas."
-    />
+    <section className="connecty-account-console mx-auto max-w-[1380px]" style={accountConsoleTheme}>
+      <InfinityLoadingPanel
+        className="w-full"
+        label="Carregando minha conta..."
+        description="Preparando perfil, segurança, créditos e faturas."
+      />
+    </section>
   );
 }
 
@@ -2005,7 +2028,7 @@ function statusLabel(status: string | null | undefined) {
     paid: "Pago",
     paid_active: "Ativo",
     paid_expired: "Pagamento expirado",
-    paid_no_credits: "Sem creditos",
+    paid_no_credits: "Sem créditos",
     past_due: "Atrasado",
     paused: "Pausado",
     pending: "Pendente",
@@ -2015,8 +2038,8 @@ function statusLabel(status: string | null | undefined) {
     trial: "Teste",
     trial_active: "Teste ativo",
     trial_expired: "Teste expirado",
-    trial_low_credits: "Teste com poucos creditos",
-    trial_no_credits: "Teste sem creditos",
+    trial_low_credits: "Teste com poucos créditos",
+    trial_no_credits: "Teste sem créditos",
     trial_pending: "Teste pendente",
   };
 
@@ -2029,8 +2052,8 @@ function transactionTypeLabel(type: string) {
   const labels: Record<string, string> = {
     admin_adjustment: "Ajuste manual",
     bonus: "Bonus",
-    credit_pack: "Pacote de creditos",
-    debit: "Uso de creditos",
+    credit_pack: "Pacote de créditos",
+    debit: "Uso de créditos",
     grant: "Credito concedido",
     refund: "Estorno",
     trial_grant: "Credito de teste",
@@ -2041,24 +2064,24 @@ function transactionTypeLabel(type: string) {
 
 function statusTone(status: string) {
   if (["active", "approved", "paid", "paid_active", "trial", "trial_active", "complete"].includes(status)) {
-    return "border-emerald-300/30 bg-emerald-300/12 text-emerald-200";
+    return "border-emerald-200 bg-emerald-50 text-emerald-700";
   }
 
   if (["pending", "incomplete", "in_process", "trial_pending", "trial_low_credits"].includes(status)) {
-    return "border-amber-300/30 bg-amber-300/12 text-amber-200";
+    return "border-amber-200 bg-amber-50 text-amber-700";
   }
 
   if (["open", "paused"].includes(status)) {
-    return "border-sky-300/30 bg-sky-300/12 text-sky-200";
+    return "border-sky-200 bg-sky-50 text-sky-700";
   }
 
   if (["refunded"].includes(status)) {
-    return "border-violet-300/30 bg-violet-300/12 text-violet-200";
+    return "border-violet-200 bg-violet-50 text-violet-700";
   }
 
   if (["blocked", "rejected", "canceled", "cancelled", "past_due", "paid_expired", "trial_expired", "trial_no_credits"].includes(status)) {
-    return "border-rose-300/30 bg-rose-300/12 text-rose-200";
+    return "border-rose-200 bg-rose-50 text-rose-700";
   }
 
-  return "border-slate-300/20 bg-slate-300/10 text-slate-200";
+  return "border-slate-300 bg-slate-100 text-slate-700";
 }

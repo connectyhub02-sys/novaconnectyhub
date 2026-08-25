@@ -4113,6 +4113,113 @@ html {
   color: #0f172a !important;
 }
 
+[data-connecty-mode] .connecty-account-console {
+  color-scheme: light;
+  --ch-bg: #f6f9fe;
+  --ch-surface: #ffffff;
+  --ch-surface-2: #f8fbff;
+  --ch-surface-3: #eef6ff;
+  --ch-panel: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+  --ch-panel-2: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+  --ch-border: rgba(148, 163, 184, 0.38);
+  --ch-border-soft: rgba(148, 163, 184, 0.24);
+  --ch-border-strong: rgba(148, 163, 184, 0.46);
+  --ch-text: #0f172a;
+  --ch-muted: #475569;
+  --ch-subtle: #64748b;
+  --ch-accent: #1877f2;
+  --ch-accent-rgb: 24, 119, 242;
+  --ch-accent-2: #0a58ca;
+  --ch-accent-2-rgb: 10, 88, 202;
+  color: #0f172a !important;
+}
+
+[data-connecty-mode] .connecty-account-console .connecty-account-surface {
+  background: #ffffff !important;
+  border-color: rgba(203, 213, 225, 0.95) !important;
+  color: #0f172a !important;
+  box-shadow: 0 18px 50px rgba(15, 23, 42, 0.07) !important;
+}
+
+[data-connecty-mode] .connecty-account-console .bg-white,
+[data-connecty-mode] .connecty-account-console [class*="bg-[#07101d]"],
+[data-connecty-mode] .connecty-account-console [class*="bg-[#081322]"],
+[data-connecty-mode] .connecty-account-console [class*="bg-[#162238]"],
+[data-connecty-mode] .connecty-account-console [class*="bg-slate-950"],
+[data-connecty-mode] .connecty-account-console [class*="bg-slate-900"] {
+  background: #ffffff !important;
+  border-color: rgba(203, 213, 225, 0.95) !important;
+  color: #0f172a !important;
+}
+
+[data-connecty-mode] .connecty-account-console .bg-slate-50,
+[data-connecty-mode] .connecty-account-console .bg-slate-50\/80,
+[data-connecty-mode] .connecty-account-console [class*="bg-white/"],
+[data-connecty-mode] .connecty-account-console [class*="bg-blue-50"] {
+  background: #f8fbff !important;
+}
+
+[data-connecty-mode] .connecty-account-console .bg-emerald-50,
+[data-connecty-mode] .connecty-account-console .bg-emerald-50\/70 {
+  background: #ecfdf5 !important;
+}
+
+[data-connecty-mode] .connecty-account-console .text-white,
+[data-connecty-mode] .connecty-account-console .text-slate-50,
+[data-connecty-mode] .connecty-account-console .text-slate-100,
+[data-connecty-mode] .connecty-account-console .text-slate-200,
+[data-connecty-mode] .connecty-account-console .text-slate-800,
+[data-connecty-mode] .connecty-account-console .text-slate-900,
+[data-connecty-mode] .connecty-account-console .text-slate-950 {
+  color: #0f172a !important;
+}
+
+[data-connecty-mode] .connecty-account-console .text-slate-300,
+[data-connecty-mode] .connecty-account-console .text-slate-400,
+[data-connecty-mode] .connecty-account-console .text-slate-500,
+[data-connecty-mode] .connecty-account-console .text-slate-600,
+[data-connecty-mode] .connecty-account-console .text-slate-700,
+[data-connecty-mode] .connecty-account-console .text-muted-foreground {
+  color: #475569 !important;
+}
+
+[data-connecty-mode] .connecty-account-console [class*="border-white/"],
+[data-connecty-mode] .connecty-account-console [class*="border-slate"] {
+  border-color: rgba(203, 213, 225, 0.95) !important;
+}
+
+[data-connecty-mode] .connecty-account-console [class*="text-cyan"],
+[data-connecty-mode] .connecty-account-console [class*="text-sky"],
+[data-connecty-mode] .connecty-account-console [class*="text-blue"] {
+  color: #0a58ca !important;
+}
+
+[data-connecty-mode] .connecty-account-console .bg-blue-600,
+[data-connecty-mode] .connecty-account-console .bg-blue-700,
+[data-connecty-mode] .connecty-account-console .hover\:bg-blue-500:hover,
+[data-connecty-mode] .connecty-account-console .hover\:bg-blue-700:hover {
+  background: #1877f2 !important;
+  border-color: #1877f2 !important;
+  color: #ffffff !important;
+}
+
+[data-connecty-mode] .connecty-account-console .bg-emerald-600,
+[data-connecty-mode] .connecty-account-console .bg-emerald-700,
+[data-connecty-mode] .connecty-account-console .hover\:bg-emerald-500:hover,
+[data-connecty-mode] .connecty-account-console .hover\:bg-emerald-700:hover {
+  background: #059669 !important;
+  border-color: #059669 !important;
+  color: #ffffff !important;
+}
+
+[data-connecty-mode] .connecty-account-console input,
+[data-connecty-mode] .connecty-account-console select,
+[data-connecty-mode] .connecty-account-console textarea {
+  background: #ffffff !important;
+  border-color: rgba(203, 213, 225, 0.95) !important;
+  color: #0f172a !important;
+}
+
 .connecty-lead-file-modal {
   color-scheme: light;
   --lead-file-accent: #1877f2;
