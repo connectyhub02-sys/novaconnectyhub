@@ -4472,21 +4472,22 @@ async function sendAgentResponse(input: {
     selectSalesCatalogItemsFromText(context.salesCatalog, orderIntentText),
     selectSalesCatalogItemsFromText(context.salesCatalog, cleanText),
   );
-  const hasCatalogSelection = selectedCatalogItems.length > 0;
   const deliveryText = prepareSalesCatalogDeliveryText({
     text: cleanText,
     items: selectedCatalogItems,
     hasOrderIntent,
   });
-  const { chunks, shouldSendAudio } = resolveOutboundDelivery(context, latestInbound, deliveryText, hasCatalogSelection);
-  const mixedCandidateChunks = shouldSendAudioResponse(context, latestInbound) && selectedCatalogItems.length === 0
-    ? splitChunksAroundLinkLines(chunks, context)
-    : chunks;
-  const shouldUseMixedAudio = shouldUseMixedAudioDelivery(context, latestInbound, mixedCandidateChunks, hasCatalogSelection);
-  const outbound: OutboundMessage[] = [];
+  const shouldOfferProductPageLinks = shouldSendSalesCatalogProductPageLinks(latestInbound, cleanText);
   const catalogAttachments = shouldSendSalesCatalogMediaAttachments(latestInbound, cleanText)
     ? collectSalesCatalogAttachments(selectedCatalogItems)
     : [];
+  const hasCatalogAction = hasOrderIntent || catalogAttachments.length > 0 || shouldOfferProductPageLinks;
+  const { chunks, shouldSendAudio } = resolveOutboundDelivery(context, latestInbound, deliveryText, hasCatalogAction);
+  const mixedCandidateChunks = shouldSendAudioResponse(context, latestInbound) && !hasCatalogAction
+    ? splitChunksAroundLinkLines(chunks, context)
+    : chunks;
+  const shouldUseMixedAudio = shouldUseMixedAudioDelivery(context, latestInbound, mixedCandidateChunks, hasCatalogAction);
+  const outbound: OutboundMessage[] = [];
 
   if (shouldUseMixedAudio) {
     const replyTargets = await resolveOutboundReplyTargets(input.client, context, mixedCandidateChunks).catch(() => []);
@@ -4552,7 +4553,7 @@ async function sendAgentResponse(input: {
       outbound.push(message);
     }
 
-    if (!hasOrderIntent) {
+    if (!hasOrderIntent && shouldOfferProductPageLinks) {
       const productChunkIndex = mixedCandidateChunks.length + 1;
       const productOutbound = await maybeSendSalesCatalogProductPageLinks({
         client: input.client,
@@ -4574,7 +4575,7 @@ async function sendAgentResponse(input: {
     return outbound;
   }
 
-  const correctedChunks = shouldSendAudio || hasCatalogSelection ? chunks : applyMidMessageCorrection(chunks, context.behavior);
+  const correctedChunks = shouldSendAudio || hasCatalogAction ? chunks : applyMidMessageCorrection(chunks, context.behavior);
   const replyTargets = await resolveOutboundReplyTargets(input.client, context, correctedChunks).catch(() => []);
   const persistedChunks = await loadPersistedOutboundChunks(input.client, context.run.id, shouldSendAudio ? "audio" : "text");
 
@@ -4646,7 +4647,7 @@ async function sendAgentResponse(input: {
       }
     }
 
-    if (!paymentLink && !hasOrderIntent) {
+    if (!paymentLink && !hasOrderIntent && shouldOfferProductPageLinks) {
       const textPersistedChunks = await loadPersistedOutboundChunks(input.client, context.run.id, "text");
       const productChunkIndex = chunks.length + 1;
       const productOutbound = await maybeSendSalesCatalogProductPageLinks({
@@ -4750,7 +4751,7 @@ async function sendAgentResponse(input: {
     }
   }
 
-  if (!paymentLink && !hasOrderIntent) {
+  if (!paymentLink && !hasOrderIntent && shouldOfferProductPageLinks) {
     const productChunkIndex = correctedChunks.length + catalogAttachments.length + 1;
     const productOutbound = await maybeSendSalesCatalogProductPageLinks({
       client: input.client,
@@ -5366,6 +5367,10 @@ function prepareSalesCatalogDeliveryText(input: {
     return input.text;
   }
 
+  if (!input.hasOrderIntent && hasSubstantiveSalesCatalogAnswer(input.text)) {
+    return input.text;
+  }
+
   const intro = resolveSalesCatalogDeliveryIntro(input.text, input.hasOrderIntent);
   const itemLines = items.map((item) => `- ${formatSalesCatalogCustomerMention(item)}`);
   const closing = input.hasOrderIntent
@@ -5376,6 +5381,36 @@ function prepareSalesCatalogDeliveryText(input: {
     .filter(Boolean)
     .join("\n\n");
 }
+
+function hasSubstantiveSalesCatalogAnswer(text: string) {
+  const normalized = normalizeSearch(text);
+  const words = normalized
+    .split(/\s+/)
+    .filter((word) => word.length >= 3 && !salesCatalogWeakAnswerWords.has(word));
+  const sentenceCount = text
+    .split(/[.!?]\s+|\n+/)
+    .map((part) => part.trim())
+    .filter((part) => normalizeSearch(part).length >= 12)
+    .length;
+
+  return words.length >= 18 || (sentenceCount >= 2 && words.length >= 12);
+}
+
+const salesCatalogWeakAnswerWords = new Set([
+  "produto",
+  "produtos",
+  "opcao",
+  "opcoes",
+  "link",
+  "links",
+  "botao",
+  "botoes",
+  "pagina",
+  "paginas",
+  "preco",
+  "valor",
+  "brl",
+]);
 
 function resolveSalesCatalogDeliveryIntro(text: string, hasOrderIntent: boolean) {
   const candidate = extractFirstSalesCatalogSentence(text);
@@ -5840,6 +5875,22 @@ function shouldSendSalesCatalogMediaAttachments(latestInbound: ConversationMessa
   const normalized = normalizeSearch([inboundText, text].filter(Boolean).join(" "));
 
   return /\b(foto|fotos|imagem|imagens|video|videos|arquivo|arquivos|pdf|midia|midias|catalogo|catalogos|embalagem|mostra|mostrar)\b/.test(normalized);
+}
+
+function shouldSendSalesCatalogProductPageLinks(latestInbound: ConversationMessageRow | null, _assistantText: string) {
+  void _assistantText;
+  const normalized = normalizeSearch(latestInbound?.text_content?.trim() ?? "");
+
+  if (!normalized) {
+    return false;
+  }
+
+  return [
+    /\b(?:link|links|botao|botoes|pagina|paginas|url|site)\b.{0,60}\b(?:produto|produtos|opcao|opcoes|detalhe|detalhes|foto|fotos|catalogo|catalogos)\b/,
+    /\b(?:produto|produtos|opcao|opcoes|detalhe|detalhes|foto|fotos|catalogo|catalogos)\b.{0,60}\b(?:link|links|botao|botoes|pagina|paginas|url|site)\b/,
+    /\b(?:me manda|me mande|manda|mande|envia|envie|mostra|mostrar|quero ver|posso ver|tem como ver|abre|abrir)\b.{0,70}\b(?:produto|produtos|opcao|opcoes|detalhe|detalhes|foto|fotos|imagem|imagens|video|videos|catalogo|catalogos|pagina|paginas|link|links)\b/,
+    /\b(?:foto|fotos|imagem|imagens|video|videos|catalogo|catalogos|detalhes completos|pagina do produto|paginas dos produtos|ver produto)\b/,
+  ].some((pattern) => pattern.test(normalized));
 }
 
 function buildSalesCatalogOrderIntentText(latestInbound: ConversationMessageRow | null, _assistantText: string) {

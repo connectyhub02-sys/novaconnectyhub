@@ -58,4 +58,20 @@ describe("WhatsApp sales catalog humanized replies", () => {
     expect(catalogRuntime).toContain("const intentText = input.intentText ?? input.text");
     expect(catalogRuntime).toContain("hasSalesCatalogOrderIntent(intentText)");
   });
+
+  it("preserves substantive product explanations before offering product pages", () => {
+    const delivery = sourceBetween("async function sendAgentResponse", "type CompanyLocationReply");
+    const renderer = sourceBetween(
+      "function renderSalesCatalogTags",
+      "async function recordSalesCatalogOrderIntent",
+    );
+
+    expect(delivery).toContain("const shouldOfferProductPageLinks = shouldSendSalesCatalogProductPageLinks(latestInbound, cleanText);");
+    expect(delivery).toContain("!hasOrderIntent && shouldOfferProductPageLinks");
+    expect(delivery).toContain("const hasCatalogAction = hasOrderIntent || catalogAttachments.length > 0 || shouldOfferProductPageLinks;");
+    expect(renderer).toContain("hasSubstantiveSalesCatalogAnswer(input.text)");
+    expect(renderer).toContain("return input.text;");
+    expect(renderer).toContain("function shouldSendSalesCatalogProductPageLinks");
+    expect(renderer).toContain("latestInbound?.text_content");
+  });
 });
