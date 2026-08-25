@@ -1519,9 +1519,30 @@ export async function dispatchGatewayWebhookDeliveries(input: {
   });
 
   let delivered = 0;
+  let duplicateDeliveries = 0;
   const failures: string[] = [];
 
   for (const endpoint of matchingEndpoints) {
+    if (input.webhookEventId) {
+      const { data: existingDelivery, error: duplicateLookupError } = await client
+        .from("connectyhub_webhook_deliveries")
+        .select("id")
+        .eq("endpoint_id", endpoint.id)
+        .eq("webhook_event_id", input.webhookEventId)
+        .limit(1)
+        .maybeSingle<{ id: string }>();
+
+      if (duplicateLookupError) {
+        failures.push(`${endpoint.url}: falha ao verificar entrega duplicada (${duplicateLookupError.message})`);
+        continue;
+      }
+
+      if (existingDelivery?.id) {
+        duplicateDeliveries += 1;
+        continue;
+      }
+    }
+
     const result = await deliverGatewayWebhook(client, {
       endpoint,
       apiClientId: instance.connectyhub_api_client_id,
@@ -1544,6 +1565,7 @@ export async function dispatchGatewayWebhookDeliveries(input: {
   return {
     delivered,
     attempted: matchingEndpoints.length,
+    duplicateDeliveries,
     failures,
   };
 }

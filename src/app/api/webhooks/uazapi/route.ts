@@ -1,6 +1,9 @@
 import { timingSafeEqual } from "node:crypto";
-import { NextRequest } from "next/server";
-import { gatewayWebhookDeliveryRequestedEventName } from "@/lib/connectyhub-api/gateway";
+import { after, NextRequest } from "next/server";
+import {
+  dispatchGatewayWebhookDeliveries,
+  gatewayWebhookDeliveryRequestedEventName,
+} from "@/lib/connectyhub-api/gateway";
 import { inngest } from "@/lib/inngest/client";
 import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
 import { createServiceClient } from "@/lib/supabase/service";
@@ -41,12 +44,17 @@ export async function POST(request: NextRequest) {
   });
 
   if (ingest.whatsappInstanceId && !ingest.duplicate) {
-    await enqueueGatewayWebhookDelivery({
+    const deliveryInput = {
       payload,
       eventType: event,
       webhookEventId: ingest.eventId,
       whatsappInstanceId: ingest.whatsappInstanceId,
       ingest,
+    };
+    const enqueued = await enqueueGatewayWebhookDelivery(deliveryInput);
+    scheduleGatewayWebhookDeliveryFallback(deliveryInput, {
+      reason: enqueued ? "post_response_guard" : "inngest_enqueue_failed",
+      delayMs: enqueued ? 8_000 : 0,
     });
   }
 
@@ -220,19 +228,71 @@ async function enqueueGatewayWebhookDelivery(input: {
   whatsappInstanceId: string;
   ingest: unknown;
 }) {
-  await inngest
-    .send({
+  try {
+    await inngest.send({
       name: gatewayWebhookDeliveryRequestedEventName,
       data: input,
-    })
-    .catch((error: unknown) => {
-      console.error(
-        "[uazapi:webhook:gateway-delivery-enqueue]",
-        JSON.stringify({
-          whatsappInstanceId: input.whatsappInstanceId,
-          eventType: input.eventType,
-          error: error instanceof Error ? error.message : "Falha ao enfileirar entrega de webhook ao cliente API.",
-        }),
-      );
     });
+    return true;
+  } catch (error) {
+    console.error(
+      "[uazapi:webhook:gateway-delivery-enqueue]",
+      JSON.stringify({
+        whatsappInstanceId: input.whatsappInstanceId,
+        eventType: input.eventType,
+        error: error instanceof Error ? error.message : "Falha ao enfileirar entrega de webhook ao cliente API.",
+      }),
+    );
+    return false;
+  }
+}
+
+function scheduleGatewayWebhookDeliveryFallback(
+  input: {
+    payload: unknown;
+    eventType: string;
+    webhookEventId: string | null;
+    whatsappInstanceId: string;
+    ingest: unknown;
+  },
+  options: {
+    reason: "post_response_guard" | "inngest_enqueue_failed";
+    delayMs: number;
+  },
+) {
+  after(async () => {
+    if (options.delayMs > 0) {
+      await sleep(options.delayMs);
+    }
+
+    await dispatchGatewayWebhookDeliveries(input)
+      .then((result) => {
+        console.info(
+          "[uazapi:webhook:gateway-delivery-fallback]",
+          JSON.stringify({
+            whatsappInstanceId: input.whatsappInstanceId,
+            webhookEventId: input.webhookEventId,
+            eventType: input.eventType,
+            reason: options.reason,
+            result,
+          }),
+        );
+      })
+      .catch((error: unknown) => {
+        console.error(
+          "[uazapi:webhook:gateway-delivery-fallback]",
+          JSON.stringify({
+            whatsappInstanceId: input.whatsappInstanceId,
+            webhookEventId: input.webhookEventId,
+            eventType: input.eventType,
+            reason: options.reason,
+            error: error instanceof Error ? error.message : "Falha ao entregar webhook ao cliente API.",
+          }),
+        );
+      });
+  });
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
