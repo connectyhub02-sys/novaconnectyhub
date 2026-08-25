@@ -5,6 +5,7 @@ import {
   hasOrganizationLocationCoordinates,
   normalizeOrganizationLocations,
 } from "../src/lib/company-locations/shared";
+import { normalizeWhatsappBehaviorConfig } from "../src/lib/whatsapp/agent-behavior";
 
 const runtimeSource = readFileSync("src/lib/whatsapp/agent-runtime.ts", "utf8");
 const behaviorSource = readFileSync("src/lib/whatsapp/agent-behavior.ts", "utf8");
@@ -71,8 +72,10 @@ describe("WhatsApp standard behavior and company location", () => {
       "behavior.readReceiptDelay = true",
       "behavior.readReceiptMinSeconds = 3",
       "behavior.readReceiptMaxSeconds = 12",
-      "behavior.spontaneousAudio = false",
-      "behavior.spontaneousAudioProbability = 0",
+      "behavior.emojiReactions = true",
+      "behavior.spontaneousAudio = true",
+      "behavior.spontaneousAudioProbability = 15",
+      "behavior.mirrorTextFallbackProbability = 30",
       "behavior.circadianTiming = true",
       "behavior.naturalAudioFillers = true",
       "behavior.wpmTypingModel = true",
@@ -111,6 +114,24 @@ describe("WhatsApp standard behavior and company location", () => {
       "behavior.conversationArcMemory = true",
       "behavior.negotiationTracking = true",
     ].forEach((line) => expect(standardizer).toContain(line));
+  });
+
+  it("keeps humanized delivery variation enabled for every active agent", () => {
+    const behavior = normalizeWhatsappBehaviorConfig({
+      agentEnabled: true,
+      emojiReactions: false,
+      reactionProbability: 0,
+      responseMode: "mirror",
+      spontaneousAudio: false,
+      spontaneousAudioProbability: 0,
+      mirrorTextFallbackProbability: 0,
+    });
+
+    expect(behavior.emojiReactions).toBe(true);
+    expect(behavior.reactionProbability).toBe(40);
+    expect(behavior.spontaneousAudio).toBe(true);
+    expect(behavior.spontaneousAudioProbability).toBe(15);
+    expect(behavior.mirrorTextFallbackProbability).toBe(30);
   });
 
   it("removes critical infrastructure toggles from the client behavior panel", () => {
@@ -253,7 +274,7 @@ describe("WhatsApp standard behavior and company location", () => {
     expect(resolver).toContain("digita");
   });
 
-  it("keeps mirror mode strict even when spontaneous audio is enabled", () => {
+  it("allows mirror mode to vary delivery without ignoring explicit text requests", () => {
     const resolver = sourceBetween(
       runtimeSource,
       "function shouldSendAudioResponse",
@@ -261,9 +282,12 @@ describe("WhatsApp standard behavior and company location", () => {
     );
 
     expect(resolver).toContain("const mirrorInboundIsAudio = latestInbound ? isAudioMessage(latestInbound)");
-    expect(resolver).toContain('context.behavior.responseMode === "mirror" && mirrorInboundIsAudio');
-    expect(resolver).toContain('context.behavior.responseMode !== "mirror"');
-    expect(resolver).not.toContain('context.behavior.responseMode === "mirror" && (inboundType.includes("audio")');
+    expect(resolver).toContain("shouldUseMirrorTextFallback(context, latestInbound)");
+    expect(resolver).toContain("shouldUseSpontaneousMirrorAudio(context, latestInbound)");
+    expect(resolver).toContain("leadExplicitlyRequestsTextReply(latestInbound)");
+    expect(runtimeSource).toContain("stableHumanizationPercent");
+    expect(runtimeSource).toContain("spontaneous_mirror_audio");
+    expect(runtimeSource).toContain("mirror_text_fallback");
   });
 
   it("stops stale overlapping WhatsApp runs before sending more chunks", () => {

@@ -1,5 +1,6 @@
 import "server-only";
 
+import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { normalizeBrazilPhone } from "@/lib/account/signup-completion";
 import { buildAgentChannelRuntimeInstruction } from "@/lib/agents/multichannel";
@@ -7114,22 +7115,59 @@ function shouldSendAudioResponse(
   }
 
   const visualMediaKind = detectInboundMediaKind(latestInbound);
-  const mirrorInboundIsAudio = latestInbound ? isAudioMessage(latestInbound) : context.messageType.toLowerCase().includes("audio");
-  const shouldSendAudio = context.behavior.responseMode === "audio"
-    || (context.behavior.responseMode === "mirror" && mirrorInboundIsAudio);
-
-  if (
-    !shouldSendAudio
-    && context.behavior.responseMode !== "mirror"
-    && context.behavior.spontaneousAudio
-    && hasConfiguredAudioVoice(context.behavior)
-  ) {
-    if (Math.random() * 100 < context.behavior.spontaneousAudioProbability) {
-      return !visualMediaKind;
-    }
+  if (visualMediaKind) {
+    return false;
   }
 
-  return shouldSendAudio && !visualMediaKind;
+  const mirrorInboundIsAudio = latestInbound ? isAudioMessage(latestInbound) : context.messageType.toLowerCase().includes("audio");
+
+  if (context.behavior.responseMode === "audio") {
+    return true;
+  }
+
+  if (context.behavior.responseMode !== "mirror") {
+    return false;
+  }
+
+  if (mirrorInboundIsAudio) {
+    return !shouldUseMirrorTextFallback(context, latestInbound);
+  }
+
+  return shouldUseSpontaneousMirrorAudio(context, latestInbound);
+}
+
+function shouldUseMirrorTextFallback(
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+  latestInbound: ConversationMessageRow | null,
+) {
+  return passesStableHumanizationChance(
+    context.behavior.mirrorTextFallbackProbability,
+    "mirror_text_fallback",
+    context.run.id,
+    context.conversationId,
+    latestInbound?.id ?? null,
+    latestInbound?.provider_message_id ?? null,
+    context.providerMessageId,
+  );
+}
+
+function shouldUseSpontaneousMirrorAudio(
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>,
+  latestInbound: ConversationMessageRow | null,
+) {
+  if (!context.behavior.spontaneousAudio || !hasConfiguredAudioVoice(context.behavior)) {
+    return false;
+  }
+
+  return passesStableHumanizationChance(
+    context.behavior.spontaneousAudioProbability,
+    "spontaneous_mirror_audio",
+    context.run.id,
+    context.conversationId,
+    latestInbound?.id ?? null,
+    latestInbound?.provider_message_id ?? null,
+    context.providerMessageId,
+  );
 }
 
 function leadExplicitlyRequestsTextReply(message: ConversationMessageRow | null) {
@@ -9769,7 +9807,7 @@ async function sendEmojiReaction(input: {
   userText: string;
 }) {
   if (!input.behavior.emojiReactions) return;
-  if (Math.random() * 100 >= input.behavior.reactionProbability) return;
+  if (!passesStableHumanizationChance(input.behavior.reactionProbability, "emoji_reaction", input.phone, input.messageId, input.userText)) return;
 
   const emoji = pickContextualEmoji(input.userText);
 
@@ -9788,6 +9826,22 @@ async function sendEmojiReaction(input: {
   } catch {
     return;
   }
+}
+
+function passesStableHumanizationChance(probability: number, ...parts: Array<string | null | undefined>) {
+  const normalized = Math.max(0, Math.min(100, Math.round(probability)));
+
+  if (normalized <= 0) return false;
+  if (normalized >= 100) return true;
+
+  return stableHumanizationPercent(parts) < normalized;
+}
+
+function stableHumanizationPercent(parts: Array<string | null | undefined>) {
+  const seed = parts.map((part) => part?.trim() || "-").join("|");
+  const hash = createHash("sha256").update(seed).digest();
+
+  return (hash.readUInt32BE(0) / 0x100000000) * 100;
 }
 
 function pickContextualEmoji(text: string): string {

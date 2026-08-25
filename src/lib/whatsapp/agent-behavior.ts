@@ -90,6 +90,7 @@ export type WhatsappBehaviorConfig = {
   readReceiptMaxSeconds: number;
   spontaneousAudio: boolean;
   spontaneousAudioProbability: number;
+  mirrorTextFallbackProbability: number;
   intentionalTypos: boolean;
   circadianTiming: boolean;
   naturalAudioFillers: boolean;
@@ -309,6 +310,7 @@ export const defaultWhatsappBehaviorConfig: WhatsappBehaviorConfig = {
   readReceiptMaxSeconds: 12,
   spontaneousAudio: false,
   spontaneousAudioProbability: 15,
+  mirrorTextFallbackProbability: 30,
   intentionalTypos: false,
   circadianTiming: true,
   naturalAudioFillers: true,
@@ -495,8 +497,10 @@ function forceStandardBehaviorForActiveAgents(behavior: WhatsappBehaviorConfig) 
   behavior.readReceiptDelay = true;
   behavior.readReceiptMinSeconds = 3;
   behavior.readReceiptMaxSeconds = 12;
-  behavior.spontaneousAudio = false;
-  behavior.spontaneousAudioProbability = 0;
+  behavior.emojiReactions = true;
+  behavior.spontaneousAudio = true;
+  behavior.spontaneousAudioProbability = 15;
+  behavior.mirrorTextFallbackProbability = 30;
   behavior.circadianTiming = true;
   behavior.naturalAudioFillers = true;
   behavior.wpmTypingModel = true;
@@ -618,7 +622,7 @@ function readNumber(value: unknown, fallback: number, key: keyof WhatsappBehavio
   if (key === "timingContextEventSeconds") return clamp(Math.round(safe), 2, 60);
   if (key === "timingMediaBurstSeconds" || key === "timingAudioQualitySeconds") return clamp(Math.round(safe), 5, 180);
   if (key === "reactionProbability") return clamp(Math.round(safe), 0, 100);
-  if (key === "spontaneousAudioProbability") return clamp(Math.round(safe), 0, 100);
+  if (key === "spontaneousAudioProbability" || key === "mirrorTextFallbackProbability") return clamp(Math.round(safe), 0, 100);
   if (key === "readReceiptMinSeconds") return clamp(Math.round(safe), 1, 30);
   if (key === "readReceiptMaxSeconds") return clamp(Math.round(safe), 2, 60);
   if (key === "stickerProbability") return clamp(Math.round(safe), 0, 100);
