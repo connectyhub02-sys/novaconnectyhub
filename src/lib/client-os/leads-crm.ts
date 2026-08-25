@@ -110,6 +110,8 @@ type WhatsappInstanceQueueRow = {
   metadata: JsonRecord | null;
 };
 
+type AdminLeadCrmWorkspaceScope = "all" | "platform_internal";
+
 export type ClientLeadStatus = "new" | "active" | "qualified" | "won" | "lost" | "archived";
 
 export type ClientLeadMessageDirection = "inbound" | "outbound" | "system" | "unknown";
@@ -286,6 +288,8 @@ export type ClientLeadCrmWorkspace = {
   warnings?: string[];
 };
 
+const platformWhatsappOrganizationSlug = "connectyhub-platform-whatsapp";
+
 export async function getClientLeadCrmWorkspace(input: {
   userId: string;
   organizationId?: string | null;
@@ -320,16 +324,27 @@ export async function getClientLeadCrmWorkspace(input: {
 export async function getAdminLeadCrmWorkspace(input: {
   client?: SupabaseClient;
   limit?: number;
+  scope?: AdminLeadCrmWorkspaceScope;
 } = {}): Promise<ClientLeadCrmWorkspace> {
   const client = input.client ?? createServiceClient();
+  const scope = input.scope ?? "all";
   let organizationRows: OrganizationRow[] = [];
 
   try {
-    const organizationsResult = await client
+    let organizationsQuery = client
       .from("organizations")
       .select("id, name, slug, plan_code, status, created_at")
-      .order("created_at", { ascending: false })
-      .limit(500);
+      .order("created_at", { ascending: false });
+
+    if (scope === "platform_internal") {
+      organizationsQuery = organizationsQuery
+        .eq("slug", platformWhatsappOrganizationSlug)
+        .limit(1);
+    } else {
+      organizationsQuery = organizationsQuery.limit(500);
+    }
+
+    const organizationsResult = await organizationsQuery;
 
     if (organizationsResult.error) {
       return buildEmptyWorkspace([], [toLoadWarning("organizacoes", organizationsResult.error)]);

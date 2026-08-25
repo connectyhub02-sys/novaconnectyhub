@@ -19,7 +19,10 @@ export default async function AdminWhatsappAtendimentoPage() {
     return <AccessDenied />;
   }
 
-  const leadWorkspace = await getAdminLeadCrmWorkspace({ limit: 400 });
+  const leadWorkspace = await getAdminLeadCrmWorkspace({
+    limit: 400,
+    scope: "platform_internal",
+  });
 
   return (
     <ConnectyShell
