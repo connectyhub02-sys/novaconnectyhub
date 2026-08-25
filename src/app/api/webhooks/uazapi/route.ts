@@ -2,6 +2,8 @@ import { timingSafeEqual } from "node:crypto";
 import { NextRequest } from "next/server";
 import { gatewayWebhookDeliveryRequestedEventName } from "@/lib/connectyhub-api/gateway";
 import { inngest } from "@/lib/inngest/client";
+import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
+import { createServiceClient } from "@/lib/supabase/service";
 import { ingestUazapiWebhook } from "@/lib/whatsapp/webhook-ingest";
 
 export const dynamic = "force-dynamic";
@@ -13,21 +15,21 @@ export async function GET() {
     ok: true,
     service: "connectyhub-uazapi-webhook",
     accepts: ["connection", "history", "messages", "messages_update", "presence", "chats", "contacts", "groups", "labels", "chat_labels", "newsletter_messages", "call", "blocks", "sender"],
-    authentication: "secret_required",
+    authentication: "secret_or_instance_token_required",
   });
 }
 
 export async function POST(request: NextRequest) {
-  if (!isValidWebhookRequest(request)) {
-    return Response.json({ ok: false, error: "Webhook não autorizado" }, { status: 401 });
-  }
-
   let payload: unknown;
 
   try {
     payload = await request.json();
   } catch {
     return Response.json({ ok: false, error: "JSON inválido" }, { status: 400 });
+  }
+
+  if (!(await isValidWebhookRequest(request, payload))) {
+    return Response.json({ ok: false, error: "Webhook não autorizado" }, { status: 401 });
   }
 
   const event = extractWebhookEvent(payload, request);
@@ -68,19 +70,22 @@ export async function POST(request: NextRequest) {
   });
 }
 
-function isValidWebhookRequest(request: NextRequest) {
+async function isValidWebhookRequest(request: NextRequest, payload: unknown) {
   const expected = process.env.UAZAPI_WEBHOOK_SECRET;
-
-  if (!expected) {
-    return shouldAllowUnsignedUazapiWebhook();
-  }
-
   const provided =
     request.headers.get("x-uazapi-secret") ||
     request.headers.get("x-connectyhub-webhook-secret") ||
     request.nextUrl.searchParams.get("secret");
 
-  return timingSafeTextEqual(provided, expected);
+  if (expected && timingSafeTextEqual(provided, expected)) {
+    return true;
+  }
+
+  if (!expected && shouldAllowUnsignedUazapiWebhook()) {
+    return shouldAllowUnsignedUazapiWebhook();
+  }
+
+  return isValidInstanceTokenWebhook(request, payload);
 }
 
 function shouldAllowUnsignedUazapiWebhook() {
@@ -121,8 +126,91 @@ function extractWebhookEvent(payload: unknown, request: NextRequest) {
 }
 
 function previewPayload(payload: unknown) {
-  const text = JSON.stringify(payload);
+  const text = JSON.stringify(redactSensitivePayload(payload));
   return text.length > 1200 ? `${text.slice(0, 1200)}...` : text;
+}
+
+async function isValidInstanceTokenWebhook(request: NextRequest, payload: unknown) {
+  const providerInstanceId = extractProviderInstanceId(request, payload);
+  const providedToken =
+    request.headers.get("token") ||
+    request.headers.get("x-uazapi-token") ||
+    findString(payload, ["token", "instanceToken", "instance_token"]);
+
+  if (!providerInstanceId || !providedToken) {
+    return false;
+  }
+
+  const client = createServiceClient();
+  const { data } = await client
+    .from("whatsapp_instances")
+    .select("instance_token_encrypted")
+    .eq("provider", "uazapi")
+    .eq("provider_instance_id", providerInstanceId)
+    .neq("status", "archived")
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<{ instance_token_encrypted: string | null }>();
+
+  if (!data?.instance_token_encrypted) {
+    return false;
+  }
+
+  try {
+    return timingSafeTextEqual(providedToken, decryptCredentialValue(data.instance_token_encrypted));
+  } catch {
+    return false;
+  }
+}
+
+function extractProviderInstanceId(request: NextRequest, payload: unknown) {
+  return request.nextUrl.searchParams.get("instanceId")
+    ?? request.nextUrl.searchParams.get("instance_id")
+    ?? request.nextUrl.searchParams.get("instance")
+    ?? findString(payload, ["instanceId", "instance_id", "instanceid"]);
+}
+
+function findString(value: unknown, keys: string[]) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  for (const key of keys) {
+    const candidate = record[key];
+    if (typeof candidate === "string" && candidate.trim()) {
+      return candidate.trim();
+    }
+  }
+
+  return null;
+}
+
+function redactSensitivePayload(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(redactSensitivePayload);
+  }
+
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+
+  return Object.fromEntries(
+    Object.entries(value).map(([key, nestedValue]) => {
+      const normalizedKey = key.toLowerCase();
+
+      if (
+        normalizedKey.includes("token") ||
+        normalizedKey.includes("secret") ||
+        normalizedKey.includes("apikey") ||
+        normalizedKey.includes("qrcode")
+      ) {
+        return [key, "__redacted__"];
+      }
+
+      return [key, redactSensitivePayload(nestedValue)];
+    }),
+  );
 }
 
 async function enqueueGatewayWebhookDelivery(input: {
