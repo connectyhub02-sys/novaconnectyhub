@@ -16,6 +16,7 @@ import {
   Settings2,
   Shield,
   TimerReset,
+  Trash2,
   User,
   WalletCards,
   X,
@@ -123,6 +124,12 @@ type ControlDraft = {
   userLimit: string;
 };
 
+type DeleteDraft = {
+  confirmation: string;
+  reason: string;
+  scope: "user" | "client";
+};
+
 const STATUS_COLORS: Record<string, string> = {
   active: "text-emerald-300 border-emerald-400/30 bg-emerald-400/10",
   trial: "text-amber-300 border-amber-400/30 bg-amber-400/10",
@@ -146,6 +153,9 @@ export function AdminUsersConsole({ initialSnapshot }: { initialSnapshot?: Admin
   const [controlUser, setControlUser] = useState<PlatformUser | null>(null);
   const [controlDraft, setControlDraft] = useState<ControlDraft | null>(null);
   const [controlLoading, setControlLoading] = useState(false);
+  const [deleteUser, setDeleteUser] = useState<PlatformUser | null>(null);
+  const [deleteDraft, setDeleteDraft] = useState<DeleteDraft | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
   const [search, setSearch] = useState("");
 
   useEffect(() => {
@@ -346,6 +356,54 @@ export function AdminUsersConsole({ initialSnapshot }: { initialSnapshot?: Admin
     });
   }
 
+  function openDeleteUser(user: PlatformUser) {
+    setDeleteUser(user);
+    setDeleteDraft({
+      confirmation: "",
+      reason: "Conta duplicada",
+      scope: user.organizationId ? "client" : "user",
+    });
+  }
+
+  async function submitDeleteUser(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!deleteUser || !deleteDraft) {
+      return;
+    }
+
+    setDeleteLoading(true);
+    setNotice(null);
+
+    try {
+      const response = await fetch("/api/admin/users", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: deleteUser.id,
+          organizationId: deleteUser.organizationId,
+          deleteOrganization: deleteDraft.scope === "client",
+          confirmation: deleteDraft.confirmation,
+          reason: deleteDraft.reason,
+        }),
+      });
+      const data = (await response.json().catch(() => null)) as { message?: string; error?: string } | null;
+
+      if (!response.ok || !data) {
+        throw new Error(data?.error ?? "Não foi possível excluir o usuário.");
+      }
+
+      await refreshUsers();
+      setNotice({ tone: "success", message: data.message ?? "Exclusão concluída." });
+      setDeleteUser(null);
+      setDeleteDraft(null);
+    } catch (error) {
+      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Falha ao excluir usuário." });
+    } finally {
+      setDeleteLoading(false);
+    }
+  }
+
   async function submitCustomerControl(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -485,10 +543,12 @@ export function AdminUsersConsole({ initialSnapshot }: { initialSnapshot?: Admin
                 isSendingLink={linkUserId === user.id}
                 isSyncingAvatar={avatarUserId === user.id}
                 isCopied={copiedUserId === user.id}
+                isDeleting={deleteLoading && deleteUser?.id === user.id}
                 onAccessPanel={() => handleAccessPanel(user.id)}
                 onSendLink={() => handleSendLink(user.id)}
                 onSyncWhatsappAvatar={() => handleSyncWhatsappAvatar(user.id)}
                 onOpenControl={() => openCustomerControl(user)}
+                onOpenDelete={() => openDeleteUser(user)}
               />
             ))}
           </div>
@@ -509,6 +569,22 @@ export function AdminUsersConsole({ initialSnapshot }: { initialSnapshot?: Admin
             }
           }}
           onSubmit={submitCustomerControl}
+        />
+      )}
+
+      {deleteUser && deleteDraft && (
+        <DeleteUserModal
+          draft={deleteDraft}
+          loading={deleteLoading}
+          onChange={(nextDraft) => setDeleteDraft(nextDraft)}
+          onClose={() => {
+            if (!deleteLoading) {
+              setDeleteUser(null);
+              setDeleteDraft(null);
+            }
+          }}
+          onSubmit={submitDeleteUser}
+          user={deleteUser}
         />
       )}
     </>
@@ -609,6 +685,162 @@ function storageFillClass(tone: "cyan" | "amber" | "rose") {
   if (tone === "rose") return "bg-rose-400";
   if (tone === "amber") return "bg-amber-400";
   return "bg-cyan-400";
+}
+
+function DeleteUserModal({
+  draft,
+  loading,
+  onChange,
+  onClose,
+  onSubmit,
+  user,
+}: {
+  draft: DeleteDraft;
+  loading: boolean;
+  onChange: (draft: DeleteDraft) => void;
+  onClose: () => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  user: PlatformUser;
+}) {
+  const displayName = getUserDisplayName(user) ?? user.email ?? "Usuário";
+  const canDeleteClient = Boolean(user.organizationId);
+  const confirmationValid = draft.confirmation.trim().toUpperCase() === "EXCLUIR";
+
+  function update(patch: Partial<DeleteDraft>) {
+    onChange({ ...draft, ...patch });
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/75 px-3 py-6 backdrop-blur-sm">
+      <form
+        onSubmit={onSubmit}
+        className="w-full max-w-2xl rounded-2xl border shadow-2xl"
+        style={{ background: "var(--ch-panel)", borderColor: "rgba(251,113,133,0.35)" }}
+      >
+        <div
+          className="flex items-start justify-between gap-4 border-b px-4 py-4"
+          style={{ borderColor: "var(--ch-border)" }}
+        >
+          <div className="min-w-0">
+            <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-rose-300">exclusão administrativa</p>
+            <h2 className="mt-1 truncate text-[18px] font-bold text-white">Excluir {displayName}</h2>
+            <p className="mt-1 text-[12px] leading-5 text-slate-400">
+              Esta ação remove acesso e dados vinculados conforme a opção escolhida.
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled={loading}
+            onClick={onClose}
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border text-slate-300 transition hover:bg-white/5 disabled:opacity-40"
+            style={{ borderColor: "var(--ch-border)" }}
+            aria-label="Fechar"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="space-y-4 p-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label
+              className={cn(
+                "min-h-[132px] cursor-pointer rounded-xl border p-3 text-[12px] leading-5 transition",
+                draft.scope === "user"
+                  ? "border-amber-300/60 bg-amber-300/15 text-amber-100"
+                  : "border-slate-700/70 bg-slate-950/35 text-slate-300 hover:border-amber-300/35",
+              )}
+            >
+              <input
+                checked={draft.scope === "user"}
+                className="sr-only"
+                disabled={loading}
+                onChange={() => update({ scope: "user" })}
+                type="radio"
+              />
+              <span className="flex items-center gap-2 font-semibold">
+                <User className="h-4 w-4" />
+                Excluir só o usuário
+              </span>
+              <span className="mt-2 block text-slate-400">
+                Remove login, perfil e vínculos desse usuário. O cliente/workspace vinculado permanece no banco.
+              </span>
+            </label>
+
+            <label
+              className={cn(
+                "min-h-[132px] rounded-xl border p-3 text-[12px] leading-5 transition",
+                canDeleteClient ? "cursor-pointer" : "cursor-not-allowed opacity-45",
+                draft.scope === "client"
+                  ? "border-rose-300/70 bg-rose-400/15 text-rose-100"
+                  : "border-slate-700/70 bg-slate-950/35 text-slate-300 hover:border-rose-300/35",
+              )}
+            >
+              <input
+                checked={draft.scope === "client"}
+                className="sr-only"
+                disabled={loading || !canDeleteClient}
+                onChange={() => update({ scope: "client" })}
+                type="radio"
+              />
+              <span className="flex items-center gap-2 font-semibold">
+                <Trash2 className="h-4 w-4" />
+                Excluir usuário e cliente
+              </span>
+              <span className="mt-2 block text-slate-400">
+                Remove o usuário e o workspace {user.orgName ? `"${user.orgName}"` : "vinculado"}, incluindo dados que dependem dessa organização.
+              </span>
+            </label>
+          </div>
+
+          {draft.scope === "client" ? (
+            <div className="rounded-xl border border-rose-400/25 bg-rose-400/10 p-3 text-[12px] leading-5 text-rose-100">
+              Esta opção é definitiva. O backend bloqueia a exclusão se o workspace tiver mais de um usuário vinculado ou se o usuário selecionado não for o dono.
+            </div>
+          ) : null}
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <ControlField label="Confirmação">
+              <input
+                className={controlInputClass}
+                disabled={loading}
+                onChange={(event) => update({ confirmation: event.target.value })}
+                placeholder="Digite EXCLUIR"
+                value={draft.confirmation}
+              />
+            </ControlField>
+            <ControlField label="Motivo">
+              <input
+                className={controlInputClass}
+                disabled={loading}
+                onChange={(event) => update({ reason: event.target.value })}
+                placeholder="Conta duplicada"
+                value={draft.reason}
+              />
+            </ControlField>
+          </div>
+
+          <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+            <button
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-700/70 px-4 font-mono text-[11px] font-bold uppercase tracking-wide text-slate-300 transition hover:bg-white/5 disabled:opacity-40"
+              disabled={loading}
+              onClick={onClose}
+              type="button"
+            >
+              Cancelar
+            </button>
+            <button
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-rose-500 px-4 font-mono text-[11px] font-bold uppercase tracking-wide text-white transition hover:bg-rose-400 disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={loading || !confirmationValid || (draft.scope === "client" && !canDeleteClient)}
+              type="submit"
+            >
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+              Confirmar exclusão
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  );
 }
 
 function CustomerControlModal({
@@ -918,20 +1150,24 @@ function UserRow({
   isSendingLink,
   isSyncingAvatar,
   isCopied,
+  isDeleting,
   onAccessPanel,
   onSendLink,
   onSyncWhatsappAvatar,
   onOpenControl,
+  onOpenDelete,
 }: {
   user: PlatformUser;
   isAccessingPanel: boolean;
   isSendingLink: boolean;
   isSyncingAvatar: boolean;
   isCopied: boolean;
+  isDeleting: boolean;
   onAccessPanel: () => void;
   onSendLink: () => void;
   onSyncWhatsappAvatar: () => void;
   onOpenControl: () => void;
+  onOpenDelete: () => void;
 }) {
   const displayName = user.fullName || user.companyName || user.email?.split("@")[0] || "—";
   const statusColor = STATUS_COLORS[user.orgStatus ?? ""] ?? STATUS_COLORS["inactive"];
@@ -999,7 +1235,7 @@ function UserRow({
       <div className="flex shrink-0 items-center gap-2">
         <button
           type="button"
-          disabled={!canSyncAvatar || isSyncingAvatar || isSendingLink || isAccessingPanel}
+          disabled={!canSyncAvatar || isSyncingAvatar || isSendingLink || isAccessingPanel || isDeleting}
           onClick={onSyncWhatsappAvatar}
           title={!canSyncAvatar ? "Cliente sem WhatsApp salvo" : hasWhatsappAvatar ? "Atualizar foto do WhatsApp" : "Buscar foto do WhatsApp"}
           aria-label={!canSyncAvatar ? "Cliente sem WhatsApp salvo" : hasWhatsappAvatar ? "Atualizar foto do WhatsApp" : "Buscar foto do WhatsApp"}
@@ -1015,7 +1251,7 @@ function UserRow({
 
         <button
           type="button"
-          disabled={!user.organizationId || isAccessingPanel || isSendingLink || isSyncingAvatar}
+          disabled={!user.organizationId || isAccessingPanel || isSendingLink || isSyncingAvatar || isDeleting}
           onClick={onOpenControl}
           className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-amber-400/25 bg-amber-400/10 px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-amber-200 transition hover:bg-amber-400/15 disabled:cursor-not-allowed disabled:opacity-40"
         >
@@ -1025,7 +1261,7 @@ function UserRow({
 
         <button
           type="button"
-          disabled={isSendingLink || isAccessingPanel || isSyncingAvatar}
+          disabled={isSendingLink || isAccessingPanel || isSyncingAvatar || isDeleting}
           onClick={onSendLink}
           className={cn(
             "inline-flex min-h-8 items-center gap-1.5 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide transition disabled:cursor-not-allowed disabled:opacity-50",
@@ -1044,7 +1280,7 @@ function UserRow({
 
         <button
           type="button"
-          disabled={isAccessingPanel || isSendingLink || isSyncingAvatar}
+          disabled={isAccessingPanel || isSendingLink || isSyncingAvatar || isDeleting}
           onClick={onAccessPanel}
           className="inline-flex min-h-8 items-center gap-1.5 rounded-lg bg-cyan-300 px-3 font-mono text-[10px] font-bold uppercase tracking-wide text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-40"
         >
@@ -1054,6 +1290,17 @@ function UserRow({
             <ExternalLink className="h-3 w-3" />
           )}
           Acessar painel
+        </button>
+
+        <button
+          type="button"
+          disabled={user.isPlatformAdmin || isAccessingPanel || isSendingLink || isSyncingAvatar || isDeleting}
+          onClick={onOpenDelete}
+          title={user.isPlatformAdmin ? "Administradores da plataforma não podem ser excluídos por aqui" : "Excluir usuário ou cliente"}
+          className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-rose-400/25 bg-rose-400/10 px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-rose-200 transition hover:bg-rose-400/15 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {isDeleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+          Excluir
         </button>
       </div>
     </div>

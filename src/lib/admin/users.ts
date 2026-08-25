@@ -93,6 +93,14 @@ export type AdminUsersSnapshot = {
   warnings: string[];
 };
 
+export type AdminDeletePlatformUserResult = {
+  deletedOrganizationId: string | null;
+  deletedOrganizationName: string | null;
+  deletedUserEmail: string | null;
+  deletedUserId: string;
+  message: string;
+};
+
 type ProfileRow = {
   id: string;
   full_name: string | null;
@@ -104,6 +112,14 @@ type ProfileRow = {
   is_platform_admin: boolean | null;
 };
 
+type DeleteProfileRow = {
+  id: string;
+  email: string | null;
+  full_name: string | null;
+  company_name: string | null;
+  is_platform_admin: boolean | null;
+};
+
 type OrgInfo = {
   id: string;
   name: string;
@@ -111,11 +127,24 @@ type OrgInfo = {
   plan_code: string;
 };
 
+type DeleteOrgInfo = {
+  id: string;
+  name: string;
+  owner_id: string | null;
+  slug: string | null;
+  status: string | null;
+};
+
 type RawMembership = {
   user_id: string;
   role: string;
   created_at: string | null;
   organizations: OrgInfo | OrgInfo[] | null;
+};
+
+type DeleteMembershipRow = {
+  role: string;
+  organizations: DeleteOrgInfo | DeleteOrgInfo[] | null;
 };
 
 type WalletRow = {
@@ -388,6 +417,203 @@ export async function getAdminBillingPlanOptions(
       })),
     warnings: [],
   };
+}
+
+export async function deleteAdminPlatformUser(input: {
+  actorUserId: string;
+  confirmation: string | null;
+  deleteOrganization?: boolean;
+  organizationId?: string | null;
+  reason?: string | null;
+  userId: string;
+  client?: ReturnType<typeof createServiceClient>;
+}): Promise<AdminDeletePlatformUserResult> {
+  const service = input.client ?? createServiceClient();
+  const targetUserId = input.userId.trim();
+  const deleteOrganization = input.deleteOrganization === true;
+  const confirmation = input.confirmation?.trim().toUpperCase() ?? "";
+
+  if (!targetUserId) {
+    throw new Error("Informe o usuário que será excluído.");
+  }
+
+  if (targetUserId === input.actorUserId) {
+    throw new Error("Você não pode excluir o próprio usuário administrador.");
+  }
+
+  if (confirmation !== "EXCLUIR") {
+    throw new Error("Digite EXCLUIR para confirmar esta operação.");
+  }
+
+  const { data: authData, error: authError } = await service.auth.admin.getUserById(targetUserId);
+
+  if (authError || !authData.user) {
+    throw new Error(authError?.message ?? "Usuário não encontrado no Supabase Auth.");
+  }
+
+  const profile = await loadDeleteProfile(service, targetUserId);
+  const targetEmail = profile?.email ?? authData.user.email ?? null;
+
+  if (profile?.is_platform_admin) {
+    throw new Error("Usuários administradores da plataforma não podem ser excluídos por este painel.");
+  }
+
+  const memberships = await loadDeleteMemberships(service, targetUserId);
+  const requestedOrganizationId = input.organizationId?.trim() || null;
+  const selectedMembership = requestedOrganizationId
+    ? memberships.find((membership) => membership.organization?.id === requestedOrganizationId) ?? null
+    : memberships[0] ?? null;
+  let deletedOrganizationId: string | null = null;
+  let deletedOrganizationName: string | null = null;
+
+  if (deleteOrganization) {
+    if (!selectedMembership?.organization) {
+      throw new Error("Este usuário não possui cliente/workspace vinculado para excluir.");
+    }
+
+    if (selectedMembership.organization.owner_id && selectedMembership.organization.owner_id !== targetUserId && selectedMembership.role !== "owner") {
+      throw new Error("Para excluir o cliente completo, selecione o usuário dono do workspace.");
+    }
+
+    const memberCount = await countOrganizationMembers(service, selectedMembership.organization.id);
+
+    if (memberCount > 1) {
+      throw new Error(`Este cliente possui ${memberCount} usuários vinculados. Remova os demais usuários antes de excluir o workspace completo.`);
+    }
+
+    const deleted = await deleteOrganizationRow(service, selectedMembership.organization.id);
+    deletedOrganizationId = deleted.id;
+    deletedOrganizationName = deleted.name;
+  }
+
+  const { error: deleteUserError } = await service.auth.admin.deleteUser(targetUserId);
+
+  if (deleteUserError) {
+    throw new Error(`Não foi possível excluir o usuário no Supabase Auth: ${deleteUserError.message}`);
+  }
+
+  await writeAdminUserDeleteAuditLog(service, {
+    actorUserId: input.actorUserId,
+    deleteOrganization,
+    deletedOrganizationId,
+    deletedOrganizationName,
+    reason: input.reason,
+    targetEmail,
+    targetUserId,
+  });
+
+  return {
+    deletedOrganizationId,
+    deletedOrganizationName,
+    deletedUserEmail: targetEmail,
+    deletedUserId: targetUserId,
+    message: deleteOrganization && deletedOrganizationName
+      ? `Usuário e cliente ${deletedOrganizationName} excluídos.`
+      : "Usuário excluído.",
+  };
+}
+
+async function loadDeleteProfile(service: ReturnType<typeof createServiceClient>, userId: string) {
+  const { data, error } = await service
+    .from("profiles")
+    .select("id, email, full_name, company_name, is_platform_admin")
+    .eq("id", userId)
+    .maybeSingle<DeleteProfileRow>();
+
+  if (error) {
+    throw new Error(`Não foi possível carregar o perfil do usuário: ${error.message}`);
+  }
+
+  return data ?? null;
+}
+
+async function loadDeleteMemberships(service: ReturnType<typeof createServiceClient>, userId: string) {
+  const { data, error } = await service
+    .from("organization_members")
+    .select("role, organizations(id, name, slug, owner_id, status)")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    throw new Error(`Não foi possível carregar os vínculos do usuário: ${error.message}`);
+  }
+
+  return ((data ?? []) as unknown as DeleteMembershipRow[])
+    .map((membership) => ({
+      organization: resolveDeleteOrg(membership.organizations),
+      role: membership.role,
+    }))
+    .filter((membership) => Boolean(membership.organization));
+}
+
+function resolveDeleteOrg(raw: DeleteOrgInfo | DeleteOrgInfo[] | null): DeleteOrgInfo | null {
+  if (!raw) return null;
+  return Array.isArray(raw) ? raw[0] ?? null : raw;
+}
+
+async function countOrganizationMembers(service: ReturnType<typeof createServiceClient>, organizationId: string) {
+  const { count, error } = await service
+    .from("organization_members")
+    .select("id", { count: "exact", head: true })
+    .eq("organization_id", organizationId);
+
+  if (error) {
+    throw new Error(`Não foi possível validar os usuários vinculados ao cliente: ${error.message}`);
+  }
+
+  return count ?? 0;
+}
+
+async function deleteOrganizationRow(service: ReturnType<typeof createServiceClient>, organizationId: string) {
+  const { data, error } = await service
+    .from("organizations")
+    .delete()
+    .eq("id", organizationId)
+    .select("id, name")
+    .maybeSingle<{ id: string; name: string }>();
+
+  if (error) {
+    throw new Error(`Não foi possível excluir o cliente/workspace: ${error.message}`);
+  }
+
+  if (!data) {
+    throw new Error("Cliente/workspace não encontrado para exclusão.");
+  }
+
+  return data;
+}
+
+async function writeAdminUserDeleteAuditLog(
+  service: ReturnType<typeof createServiceClient>,
+  input: {
+    actorUserId: string;
+    deleteOrganization: boolean;
+    deletedOrganizationId: string | null;
+    deletedOrganizationName: string | null;
+    reason: string | null | undefined;
+    targetEmail: string | null;
+    targetUserId: string;
+  },
+) {
+  const metadata = {
+    delete_organization: input.deleteOrganization,
+    deleted_organization_id: input.deletedOrganizationId,
+    deleted_organization_name: input.deletedOrganizationName,
+    reason: input.reason?.trim() || null,
+    target_email: input.targetEmail,
+    target_user_id: input.targetUserId,
+  };
+  const { error } = await service.from("maintenance_audit_logs").insert({
+    actor_id: input.actorUserId,
+    event_type: input.deleteOrganization ? "admin.customer.deleted" : "admin.user.deleted",
+    target_id: input.targetUserId,
+    target_table: "auth.users",
+    metadata,
+  });
+
+  if (error) {
+    console.warn("[AdminUsers] Falha ao registrar auditoria de exclusão", error.message);
+  }
 }
 
 async function loadOrganizationState(service: ReturnType<typeof createServiceClient>, organizationIds: string[]) {
