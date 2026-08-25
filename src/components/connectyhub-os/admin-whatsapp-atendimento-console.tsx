@@ -55,6 +55,7 @@ export function AdminWhatsappAtendimentoConsole({
         <LeadCrmConsole
           attendanceNotificationHref="/admin/whatsapp/atendimento"
           commerceEnabled={false}
+          conversationPanelScope="platform_internal"
           mode="atendimento"
           workspace={leadWorkspace}
         />

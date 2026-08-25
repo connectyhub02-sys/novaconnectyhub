@@ -6,6 +6,10 @@ import {
   cancelQueuedWhatsappRunsForConversation,
   resolveHumanInterventionMinutesForInstance,
 } from "@/lib/whatsapp/human-intervention";
+import {
+  ensureConversationPanelScope,
+  parseConversationPanelScope,
+} from "@/lib/whatsapp/conversation-panel-scope";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -41,9 +45,11 @@ export async function POST(request: NextRequest) {
     action?: unknown;
     conversationId?: unknown;
     minutes?: unknown;
+    panelScope?: unknown;
   }>(request);
   const action = body?.action === "pause" || body?.action === "resume" ? body.action : null;
   const conversationId = typeof body?.conversationId === "string" ? body.conversationId : "";
+  const panelScope = parseConversationPanelScope(body?.panelScope);
 
   if (!action || !conversationId) {
     return NextResponse.json({ error: "Acao ou conversa invalida." }, { status: 400 });
@@ -70,6 +76,16 @@ export async function POST(request: NextRequest) {
   }
 
   const organizationId = conversation.organization_id;
+  const panelScopeCheck = await ensureConversationPanelScope({
+    client,
+    organizationId,
+    panelScope,
+  });
+
+  if (!panelScopeCheck.ok) {
+    return NextResponse.json({ error: panelScopeCheck.error }, { status: panelScopeCheck.status });
+  }
+
   const now = new Date().toISOString();
   const metadata = readRecord(conversation.metadata) ?? {};
   const currentHuman = readRecord(metadata.human_intervention) ?? {};

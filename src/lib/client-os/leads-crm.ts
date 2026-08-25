@@ -9,6 +9,7 @@ import {
 } from "@/lib/whatsapp/lead-avatar-sync";
 import { readWhatsappInstanceProfileImageUrl } from "@/lib/whatsapp/instance-profile-image";
 import { resolveLeadPersonalName } from "@/lib/whatsapp/lead-names";
+import { platformWhatsappOrganizationSlug, type ConversationPanelScope } from "@/lib/whatsapp/conversation-panel-scope";
 import { listClientCompanies, type ClientCompany } from "./companies";
 
 type JsonRecord = Record<string, unknown>;
@@ -110,7 +111,7 @@ type WhatsappInstanceQueueRow = {
   metadata: JsonRecord | null;
 };
 
-type AdminLeadCrmWorkspaceScope = "all" | "platform_internal";
+type AdminLeadCrmWorkspaceScope = "all" | ConversationPanelScope;
 
 export type ClientLeadStatus = "new" | "active" | "qualified" | "won" | "lost" | "archived";
 
@@ -287,8 +288,6 @@ export type ClientLeadCrmWorkspace = {
   };
   warnings?: string[];
 };
-
-const platformWhatsappOrganizationSlug = "connectyhub-platform-whatsapp";
 
 export async function getClientLeadCrmWorkspace(input: {
   userId: string;

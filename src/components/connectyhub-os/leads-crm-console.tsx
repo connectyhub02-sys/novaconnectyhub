@@ -73,6 +73,7 @@ import {
 } from "@/lib/sales-catalog/shared";
 
 type ConsoleMode = "leads" | "crm" | "conversas" | "atendimento";
+type ConversationPanelScope = "platform_internal";
 
 type AttendanceInboxTab = "all" | "unread" | "active" | "paused" | "qualified" | "won" | "archived";
 
@@ -104,6 +105,7 @@ type AttendanceAgentIdentity = {
 type LeadCrmConsoleProps = {
   attendanceNotificationHref?: string;
   commerceEnabled?: boolean;
+  conversationPanelScope?: ConversationPanelScope;
   mode: ConsoleMode;
   salesCatalogItems?: ClientSalesCatalogItem[];
   salesCatalogOrders?: ClientSalesCatalogOrder[];
@@ -239,6 +241,7 @@ let attendanceVapidPublicKeyPromise: Promise<string> | null = null;
 export function LeadCrmConsole({
   attendanceNotificationHref = "/dashboard/atendimento",
   commerceEnabled = true,
+  conversationPanelScope,
   mode,
   salesCatalogItems = [],
   salesCatalogOrders = [],
@@ -384,6 +387,7 @@ export function LeadCrmConsole({
         <AttendanceCenterView
           checkoutRecordsByLead={checkoutRecordsByLead}
           commerceEnabled={commerceEnabled}
+          conversationPanelScope={conversationPanelScope}
           conversationPane={conversationPane}
           filteredLeads={filteredLeads}
           notificationHref={attendanceNotificationHref}
@@ -840,6 +844,7 @@ function ConversationsView({
 function AttendanceCenterView({
   checkoutRecordsByLead,
   commerceEnabled,
+  conversationPanelScope,
   conversationPane,
   filteredLeads,
   notificationHref,
@@ -854,6 +859,7 @@ function AttendanceCenterView({
 }: {
   checkoutRecordsByLead: Map<string, LeadCheckoutRecord[]>;
   commerceEnabled: boolean;
+  conversationPanelScope?: ConversationPanelScope;
   conversationPane: "inbox" | "chat";
   filteredLeads: ClientLeadRecord[];
   notificationHref: string;
@@ -1419,6 +1425,7 @@ function AttendanceCenterView({
           action,
           conversationId: activeConversationId,
           minutes: 60,
+          panelScope: conversationPanelScope,
         }),
       });
       const payload = await response.json().catch(() => ({})) as {
@@ -1475,6 +1482,7 @@ function AttendanceCenterView({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           conversationId: activeConversationId,
+          panelScope: conversationPanelScope,
           text,
         }),
       });

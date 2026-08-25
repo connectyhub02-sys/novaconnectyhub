@@ -7,6 +7,10 @@ import {
   cancelQueuedWhatsappRunsForConversation,
   resolveHumanInterventionMinutesForInstance,
 } from "@/lib/whatsapp/human-intervention";
+import {
+  ensureConversationPanelScope,
+  parseConversationPanelScope,
+} from "@/lib/whatsapp/conversation-panel-scope";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -58,9 +62,11 @@ export async function POST(request: NextRequest) {
 
   const body = await readJson<{
     conversationId?: unknown;
+    panelScope?: unknown;
     text?: unknown;
   }>(request);
   const conversationId = asString(body?.conversationId) ?? "";
+  const panelScope = parseConversationPanelScope(body?.panelScope);
   const text = normalizeReplyText(asString(body?.text));
 
   if (!conversationId) {
@@ -96,6 +102,15 @@ export async function POST(request: NextRequest) {
   }
 
   const organizationId = conversation.organization_id;
+  const panelScopeCheck = await ensureConversationPanelScope({
+    client,
+    organizationId,
+    panelScope,
+  });
+
+  if (!panelScopeCheck.ok) {
+    return NextResponse.json({ error: panelScopeCheck.error }, { status: panelScopeCheck.status });
+  }
 
   if (!conversation.whatsapp_instance_id) {
     return NextResponse.json({ error: "Esta conversa ainda nao tem WhatsApp conectado para resposta direta." }, { status: 409 });
