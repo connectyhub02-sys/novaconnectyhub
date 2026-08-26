@@ -30,6 +30,13 @@ import {
   whatsappCloneProfileImportEventName,
 } from "@/lib/whatsapp/clone-profile-history";
 import {
+  processWhatsappReconnectCatchup,
+} from "@/lib/whatsapp/reconnect-catchup";
+import {
+  type WhatsappReconnectCatchupEventData,
+  whatsappReconnectCatchupEventName,
+} from "@/lib/whatsapp/reconnect-catchup-event";
+import {
   processWhatsappProactiveFollowUp,
   type WhatsappFollowUpEventData,
   whatsappFollowUpEventName,
@@ -193,6 +200,31 @@ export const connectyhubWhatsappAgentSweep = inngest.createFunction(
       status: "swept",
       summary,
     };
+  },
+);
+
+export const connectyhubWhatsappReconnectCatchup = inngest.createFunction(
+  {
+    id: "connectyhub-whatsapp-reconnect-catchup",
+    name: "ConnectyHub WhatsApp Reconnect Catch-up",
+    retries: 2,
+    triggers: [{ event: whatsappReconnectCatchupEventName }],
+  },
+  async ({ event, step }) => {
+    const data = event.data as WhatsappReconnectCatchupEventData | undefined;
+
+    if (!data?.whatsappInstanceId) {
+      return { status: "skipped", reason: "missing_whatsapp_instance_id" };
+    }
+
+    await step.sleep("wait-for-uazapi-history-sync", "15s");
+
+    return step.run("process-whatsapp-reconnect-catchup", () =>
+      processWhatsappReconnectCatchup({
+        data,
+        client: createServiceClient(),
+      }),
+    );
   },
 );
 
@@ -658,6 +690,7 @@ export const functions = [
   connectyhubUazapiCostGuard,
   connectyhubWhatsappAgentResponse,
   connectyhubWhatsappAgentSweep,
+  connectyhubWhatsappReconnectCatchup,
   connectyhubMetaSocialMessageQueue,
   connectyhubMetaSocialCommentQueue,
   connectyhubMetaSocialAgentSweep,

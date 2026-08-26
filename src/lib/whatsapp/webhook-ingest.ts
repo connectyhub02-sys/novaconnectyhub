@@ -6,6 +6,7 @@ import { inngest } from "@/lib/inngest/client";
 import { sendLeadReplyPushNotifications } from "@/lib/push/web-push";
 import { createServiceClient } from "@/lib/supabase/service";
 import { resolveUazapiWhatsappStatus } from "@/lib/uazapi/status";
+import { whatsappReconnectCatchupEventName } from "./reconnect-catchup-event";
 import {
   mergeLeadProfileImageMetadata,
   readLeadProfileImageUrl,
@@ -41,7 +42,11 @@ type WhatsappGroupTargetPolicy = {
 type WhatsappInstanceRow = {
   id: string;
   organization_id: string;
+  provider_instance_id: string | null;
   instance_token_encrypted: string | null;
+  status: string | null;
+  disconnected_at: string | null;
+  last_message_at: string | null;
   metadata: JsonRecord | null;
 };
 
@@ -85,6 +90,9 @@ export async function ingestUazapiWebhook(input: {
   requestUrl: string;
   headers: Headers;
   client?: SupabaseClient;
+  suppressAgentRun?: boolean;
+  suppressNotifications?: boolean;
+  source?: string;
 }): Promise<UazapiWebhookIngestResult> {
   const client = input.client ?? createServiceClient();
   const payload = normalizePayload(input.payload);
@@ -103,6 +111,7 @@ export async function ingestUazapiWebhook(input: {
     organizationId: instance?.organization_id ?? null,
     providerMessageId: message.providerMessageId,
     providerChatId: message.providerChatId,
+    source: input.source ?? "connectyhub-webhook",
   });
 
   if (eventResult.duplicate) {
@@ -142,11 +151,19 @@ export async function ingestUazapiWebhook(input: {
     };
   }
 
-  await syncInstanceConnectionFromWebhook(client, {
+  const connectionSync = await syncInstanceConnectionFromWebhook(client, {
     eventType,
     instance,
     payload,
   });
+
+  if (connectionSync?.shouldScheduleCatchup) {
+    await dispatchWhatsappReconnectCatchup(client, {
+      eventId: eventResult.eventId,
+      instance,
+      connectionSync,
+    });
+  }
 
   if (!isConversationMessageWebhookEvent(eventType)) {
     await markWebhookEvent(client, eventResult.eventId, "processed");
@@ -220,7 +237,13 @@ export async function ingestUazapiWebhook(input: {
       });
       await markConversationHandledByHuman(client, conversation.id, message, humanInterventionMinutes);
     }
-    if (message.direction === "inbound" && lead && !message.isGroupChat && !isHandoffNotificationReply) {
+    if (
+      !input.suppressNotifications &&
+      message.direction === "inbound" &&
+      lead &&
+      !message.isGroupChat &&
+      !isHandoffNotificationReply
+    ) {
       await sendLeadReplyPushNotifications({
         client,
         organizationId: instance.organization_id,
@@ -234,7 +257,7 @@ export async function ingestUazapiWebhook(input: {
           providerMessageId: message.providerMessageId,
         })
       : null;
-    const agentRun = message.direction === "inbound"
+    const agentRun = !input.suppressAgentRun && message.direction === "inbound"
       ? await enqueueWhatsappAgentRun(client, {
           organizationId: instance.organization_id,
           leadId: lead?.id ?? null,
@@ -254,25 +277,10 @@ export async function ingestUazapiWebhook(input: {
       : null;
 
     if (agentRun?.id) {
-      await inngest.send({
-        name: "connectyhub/whatsapp.message.received",
-        data: {
-          runId: agentRun.id,
-          organizationId: instance.organization_id,
-          conversationId: conversation.id,
-          whatsappInstanceId: instance.id,
-        },
-      }).catch(async (error: unknown) => {
-        await client
-          .from("agent_runs")
-          .update({
-            metadata: {
-              ...(agentRun.metadata ?? {}),
-              inngest_dispatch_error: error instanceof Error ? error.message : "Falha ao disparar Inngest.",
-              inngest_dispatch_failed_at: new Date().toISOString(),
-            },
-          })
-          .eq("id", agentRun.id);
+      await dispatchWhatsappAgentRun(client, agentRun, {
+        organizationId: instance.organization_id,
+        conversationId: conversation.id,
+        whatsappInstanceId: instance.id,
       });
     }
 
@@ -327,7 +335,7 @@ export async function ingestUazapiWebhook(input: {
 async function findWhatsappInstance(client: SupabaseClient, providerInstanceId: string) {
   const { data } = await client
     .from("whatsapp_instances")
-    .select("id, organization_id, instance_token_encrypted, metadata")
+    .select("id, organization_id, provider_instance_id, instance_token_encrypted, status, disconnected_at, last_message_at, metadata")
     .eq("provider", "uazapi")
     .eq("provider_instance_id", providerInstanceId)
     .neq("status", "archived")
@@ -341,7 +349,7 @@ async function findWhatsappInstance(client: SupabaseClient, providerInstanceId: 
 
   const { data: byProviderName } = await client
     .from("whatsapp_instances")
-    .select("id, organization_id, instance_token_encrypted, metadata")
+    .select("id, organization_id, provider_instance_id, instance_token_encrypted, status, disconnected_at, last_message_at, metadata")
     .eq("provider", "uazapi")
     .contains("metadata", { provider_name: providerInstanceId })
     .neq("status", "archived")
@@ -361,16 +369,18 @@ async function syncInstanceConnectionFromWebhook(
   },
 ) {
   if (!isConnectionWebhookEvent(input.eventType)) {
-    return;
+    return null;
   }
 
   const status = resolveUazapiWhatsappStatus(input.payload, "draft");
 
   if (status === "draft") {
-    return;
+    return null;
   }
 
   const now = new Date().toISOString();
+  const previousStatus = asString(input.instance.status);
+  const shouldScheduleCatchup = shouldScheduleReconnectCatchup(input.instance, status, now);
   const update: JsonRecord = {
     status,
     last_heartbeat_at: now,
@@ -380,6 +390,11 @@ async function syncInstanceConnectionFromWebhook(
       last_connection_event: input.eventType,
       last_connection_event_status: status,
       last_connection_event_synced_at: now,
+      ...(shouldScheduleCatchup ? {
+        last_reconnect_catchup_enqueued_at: now,
+        last_reconnect_catchup_status: "queued",
+        last_reconnect_catchup_previous_status: previousStatus,
+      } : {}),
     },
   };
 
@@ -397,6 +412,80 @@ async function syncInstanceConnectionFromWebhook(
     .update(update)
     .eq("id", input.instance.id)
     .neq("status", "archived");
+
+  return {
+    status,
+    previousStatus,
+    connectedAt: status === "connected" ? now : null,
+    disconnectedAt: input.instance.disconnected_at,
+    shouldScheduleCatchup,
+  };
+}
+
+function shouldScheduleReconnectCatchup(instance: WhatsappInstanceRow, nextStatus: string, nowIso: string) {
+  if (nextStatus !== "connected") {
+    return false;
+  }
+
+  if (instance.status === "connected" && !instance.disconnected_at) {
+    return false;
+  }
+
+  const metadata = readRecord(instance.metadata);
+  const lastEnqueuedAt = asString(metadata?.last_reconnect_catchup_enqueued_at);
+  const lastEnqueuedMs = lastEnqueuedAt ? Date.parse(lastEnqueuedAt) : Number.NaN;
+  const nowMs = Date.parse(nowIso);
+
+  if (Number.isFinite(lastEnqueuedMs) && Number.isFinite(nowMs) && nowMs - lastEnqueuedMs < 5 * 60 * 1000) {
+    return false;
+  }
+
+  return true;
+}
+
+async function dispatchWhatsappReconnectCatchup(
+  client: SupabaseClient,
+  input: {
+    eventId: string | null;
+    instance: WhatsappInstanceRow;
+    connectionSync: {
+      previousStatus: string | null;
+      connectedAt: string | null;
+      disconnectedAt: string | null;
+    };
+  },
+) {
+  await inngest.send({
+    name: whatsappReconnectCatchupEventName,
+    data: {
+      whatsappInstanceId: input.instance.id,
+      organizationId: input.instance.organization_id,
+      providerInstanceId: input.instance.provider_instance_id,
+      webhookEventId: input.eventId,
+      previousStatus: input.connectionSync.previousStatus,
+      disconnectedAt: input.connectionSync.disconnectedAt,
+      connectedAt: input.connectionSync.connectedAt,
+    },
+  }).catch(async (error: unknown) => {
+    const { data } = await client
+      .from("whatsapp_instances")
+      .select("metadata")
+      .eq("id", input.instance.id)
+      .maybeSingle<{ metadata: JsonRecord | null }>();
+    const metadata = readRecord(data?.metadata);
+
+    await client
+      .from("whatsapp_instances")
+      .update({
+        metadata: {
+          ...(metadata ?? {}),
+          last_reconnect_catchup_status: "dispatch_failed",
+          last_reconnect_catchup_error: error instanceof Error ? error.message : "Falha ao disparar catch-up pos-reconexao.",
+          last_reconnect_catchup_dispatch_failed_at: new Date().toISOString(),
+        },
+      })
+      .eq("id", input.instance.id);
+  });
 }
 
 function isConnectionWebhookEvent(eventType: string) {
@@ -426,6 +515,7 @@ async function insertWebhookEvent(
     organizationId: string | null;
     providerMessageId: string | null;
     providerChatId: string | null;
+    source: string;
   },
 ) {
   const { data, error } = await client
@@ -442,7 +532,7 @@ async function insertWebhookEvent(
       payload: input.payload,
       headers: input.headers,
       metadata: {
-        ingested_by: "connectyhub-webhook",
+        ingested_by: input.source,
       },
     })
     .select("id")
@@ -774,7 +864,7 @@ async function markConversationHandledByHuman(
   );
 }
 
-async function enqueueWhatsappAgentRun(
+export async function enqueueWhatsappAgentRun(
   client: SupabaseClient,
   input: {
     organizationId: string;
@@ -791,6 +881,7 @@ async function enqueueWhatsappAgentRun(
     eventType: string;
     allowPausedConversation?: boolean;
     humanFallbackResumeAt?: string | null;
+    metadata?: JsonRecord | null;
   },
 ) {
   const instanceMetadata = await loadWhatsappInstanceMetadata(client, input.whatsappInstanceId);
@@ -880,6 +971,7 @@ async function enqueueWhatsappAgentRun(
           phoneNumber: input.phoneNumber,
           messageType: input.messageType,
           providerEventType: input.eventType,
+          ...(input.metadata ?? {}),
           debounced: true,
           debounced_at: new Date().toISOString(),
           messageGroupingSeconds,
@@ -940,6 +1032,7 @@ async function enqueueWhatsappAgentRun(
         messageType: input.messageType,
         providerEventType: input.eventType,
         messageGroupingSeconds,
+        ...(input.metadata ?? {}),
         ...(input.humanFallbackResumeAt
           ? {
               humanFallback: true,
@@ -969,6 +1062,37 @@ async function enqueueWhatsappAgentRun(
   }
 
   return data;
+}
+
+export async function dispatchWhatsappAgentRun(
+  client: SupabaseClient,
+  agentRun: { id: string; metadata: JsonRecord | null },
+  input: {
+    organizationId: string;
+    conversationId: string;
+    whatsappInstanceId: string;
+  },
+) {
+  await inngest.send({
+    name: "connectyhub/whatsapp.message.received",
+    data: {
+      runId: agentRun.id,
+      organizationId: input.organizationId,
+      conversationId: input.conversationId,
+      whatsappInstanceId: input.whatsappInstanceId,
+    },
+  }).catch(async (error: unknown) => {
+    await client
+      .from("agent_runs")
+      .update({
+        metadata: {
+          ...(agentRun.metadata ?? {}),
+          inngest_dispatch_error: error instanceof Error ? error.message : "Falha ao disparar Inngest.",
+          inngest_dispatch_failed_at: new Date().toISOString(),
+        },
+      })
+      .eq("id", agentRun.id);
+  });
 }
 
 async function loadWhatsappInstanceMetadata(client: SupabaseClient, whatsappInstanceId: string) {
@@ -1179,8 +1303,9 @@ type MessageSnapshot = {
 
 function extractMessageSnapshot(payload: JsonRecord): MessageSnapshot {
   const messageRecord = findMessageRecord(payload) ?? payload;
-  const providerChatId = findString(messageRecord, ["chatid", "chatId", "chat_id", "remoteJid", "jid", "from", "to"])
+  const rawProviderChatId = findString(messageRecord, ["chatid", "chatId", "chat_id", "remoteJid", "jid", "from", "to"])
     ?? findNestedString(messageRecord, ["remoteJid", "participant"]);
+  const providerChatId = resolveCanonicalProviderChatId(payload, messageRecord, rawProviderChatId);
   const isGroupChat = isWhatsappGroupChatId(providerChatId)
     || findBoolean(messageRecord, ["isGroup", "is_group", "fromGroup", "from_group"])
     || findNestedBoolean(messageRecord, ["isGroup", "is_group", "fromGroup", "from_group"])
@@ -1233,6 +1358,71 @@ function buildConversationMessagePayload(payload: JsonRecord, message: MessageSn
     is_group_chat: message.isGroupChat,
     chat_kind: message.isGroupChat ? "group" : "direct",
   };
+}
+
+function resolveCanonicalProviderChatId(
+  payload: JsonRecord,
+  messageRecord: JsonRecord,
+  rawProviderChatId: string | null,
+) {
+  const directCanonical = [
+    findString(messageRecord, ["sender_pn", "senderPn", "chat_pn", "chatPn", "participant_pn", "participantPn"]),
+    findString(messageRecord, ["wa_chatid", "waChatId"]),
+  ].find((candidate) => isCanonicalWhatsappChatId(candidate));
+
+  if (directCanonical) {
+    return directCanonical;
+  }
+
+  const matchingChat = findMatchingChatRecord(payload, rawProviderChatId);
+  const chatCanonical = matchingChat
+    ? [
+        findString(matchingChat, ["wa_chatid", "waChatId", "chatid", "chatId"]),
+        normalizePhoneToWhatsappChatId(findString(matchingChat, ["phone"])),
+      ].find((candidate) => isCanonicalWhatsappChatId(candidate))
+    : null;
+
+  if (chatCanonical) {
+    return chatCanonical;
+  }
+
+  return rawProviderChatId;
+}
+
+function findMatchingChatRecord(payload: JsonRecord, rawProviderChatId: string | null) {
+  const candidates = [
+    payload.chat,
+    payload.Chat,
+    ...(Array.isArray(payload.chats) ? payload.chats : []),
+  ].filter(isRecord);
+
+  if (!candidates.length) {
+    return null;
+  }
+
+  if (!rawProviderChatId) {
+    return candidates.length === 1 ? candidates[0] : null;
+  }
+
+  return candidates.find((chat) => {
+    const ids = [
+      findString(chat, ["wa_chatlid", "waChatLid", "chatlid", "chatLid"]),
+      findString(chat, ["wa_chatid", "waChatId", "chatid", "chatId"]),
+      normalizePhoneToWhatsappChatId(findString(chat, ["phone"])),
+    ].filter(Boolean);
+
+    return ids.includes(rawProviderChatId);
+  }) ?? null;
+}
+
+function isCanonicalWhatsappChatId(value: string | null | undefined) {
+  return typeof value === "string" && /@s\.whatsapp\.net$/i.test(value.trim());
+}
+
+function normalizePhoneToWhatsappChatId(value: string | null) {
+  const phone = normalizePhone(value);
+
+  return phone ? `${phone}@s.whatsapp.net` : null;
 }
 
 function resolveWebhookMessageAuthor(message: MessageSnapshot, payload: JsonRecord): {
