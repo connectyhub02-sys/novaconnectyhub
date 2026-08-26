@@ -1236,17 +1236,7 @@ async function findOrganizationWhatsappAgent(client: SupabaseClient, organizatio
     return clientAgent;
   }
 
-  const { data: globalAgent } = await client
-    .from("agent_registry")
-    .select("id, metadata")
-    .eq("scope", "organization")
-    .eq("organization_id", organizationId)
-    .eq("agent_code", "agente-whatsapp-global")
-    .order("updated_at", { ascending: false })
-    .limit(1)
-    .maybeSingle<AgentRow>();
-
-  return globalAgent ?? null;
+  return null;
 }
 
 async function resolveWebhookBehaviorConfig(
