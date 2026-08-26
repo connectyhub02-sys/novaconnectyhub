@@ -203,14 +203,16 @@ export async function ingestUazapiWebhook(input: {
       message.direction === "inbound" &&
       !readLeadProfileImageUrl(lead.metadata)
     ) {
-      await syncLeadAvatarFromUazapi({
-        client,
-        leadId: lead.id,
-        phoneNumber: message.phoneNumber,
-        providerChatId: message.providerChatId,
-        instance,
-        existingMetadata: lead.metadata,
-      });
+      runWebhookSideEffect("lead-avatar-sync", () =>
+        syncLeadAvatarFromUazapi({
+          client,
+          leadId: lead.id,
+          phoneNumber: message.phoneNumber,
+          providerChatId: message.providerChatId,
+          instance,
+          existingMetadata: lead.metadata,
+        }),
+      );
     }
     const conversation = await ensureConversation(client, {
       organizationId: instance.organization_id,
@@ -236,18 +238,6 @@ export async function ingestUazapiWebhook(input: {
         instanceMetadata: readRecord(instance.metadata),
       });
       await markConversationHandledByHuman(client, conversation.id, message, humanInterventionMinutes);
-    }
-    if (
-      !input.suppressNotifications &&
-      message.direction === "inbound" &&
-      lead &&
-      !message.isGroupChat &&
-      !isHandoffNotificationReply
-    ) {
-      await sendLeadReplyPushNotifications({
-        client,
-        organizationId: instance.organization_id,
-      }).catch(() => undefined);
     }
     const autoResume = message.direction === "inbound" && lead && !message.isGroupChat && !isHandoffNotificationReply
       ? await scheduleHumanInterventionAutoResumeForLead({
@@ -282,6 +272,21 @@ export async function ingestUazapiWebhook(input: {
         conversationId: conversation.id,
         whatsappInstanceId: instance.id,
       });
+    }
+
+    if (
+      !input.suppressNotifications &&
+      message.direction === "inbound" &&
+      lead &&
+      !message.isGroupChat &&
+      !isHandoffNotificationReply
+    ) {
+      runWebhookSideEffect("lead-reply-push", () =>
+        sendLeadReplyPushNotifications({
+          client,
+          organizationId: instance.organization_id,
+        }),
+      );
     }
 
     await client
@@ -583,6 +588,18 @@ async function markWebhookEvent(client: SupabaseClient, eventId: string | null, 
       error_message: errorMessage ?? null,
     })
     .eq("id", eventId);
+}
+
+function runWebhookSideEffect(label: string, task: () => Promise<unknown>) {
+  void task().catch((error: unknown) => {
+    console.warn(
+      "[uazapi:webhook:side-effect]",
+      JSON.stringify({
+        label,
+        error: error instanceof Error ? error.message : "Falha em efeito auxiliar do webhook.",
+      }),
+    );
+  });
 }
 
 async function ensureLead(
@@ -1205,7 +1222,7 @@ async function findOrganizationWhatsappAgent(client: SupabaseClient, organizatio
     }
   }
 
-  const { data } = await client
+  const { data: clientAgent } = await client
     .from("agent_registry")
     .select("id, metadata")
     .eq("scope", "organization")
@@ -1215,7 +1232,21 @@ async function findOrganizationWhatsappAgent(client: SupabaseClient, organizatio
     .limit(1)
     .maybeSingle<AgentRow>();
 
-  return data ?? null;
+  if (clientAgent) {
+    return clientAgent;
+  }
+
+  const { data: globalAgent } = await client
+    .from("agent_registry")
+    .select("id, metadata")
+    .eq("scope", "organization")
+    .eq("organization_id", organizationId)
+    .eq("agent_code", "agente-whatsapp-global")
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<AgentRow>();
+
+  return globalAgent ?? null;
 }
 
 async function resolveWebhookBehaviorConfig(
