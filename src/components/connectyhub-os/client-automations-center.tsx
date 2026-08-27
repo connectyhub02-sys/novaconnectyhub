@@ -285,7 +285,7 @@ export function ClientAutomationsCenter({
           </label>
 
           <label className="block">
-            <FieldLabel>WhatsApp padrao para automacoes</FieldLabel>
+            <FieldLabel>Agente e WhatsApp das automacoes</FieldLabel>
             <select
               value={draft.automationSettings.defaultWhatsappInstanceId ?? ""}
               onChange={(event) => {
@@ -327,7 +327,8 @@ export function ClientAutomationsCenter({
         companyId={selectedCompanyId}
         companyName={selectedCompany?.name ?? "Workspace"}
         products={companyProducts}
-        whatsappInstances={companyWhatsappInstances}
+        selectedAutomationAgentId={draft.automationSettings.defaultAgentId ?? selectedWhatsapp?.agentId ?? null}
+        selectedAutomationWhatsappLabel={selectedWhatsapp?.label ?? null}
       />
 
       <Panel

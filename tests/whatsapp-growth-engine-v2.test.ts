@@ -32,6 +32,8 @@ describe("WhatsApp growth engine v2", () => {
     expect(studioSource).toContain("Carrossel");
     expect(studioSource).toContain("Ajustes avancados");
     expect(studioSource).toContain("URL de midia externa (opcional)");
+    expect(studioSource).toContain("Agente em uso");
+    expect(studioSource).not.toContain("Agente executor");
     expect(studioSource).toContain("Segmentos sugeridos");
   });
 });

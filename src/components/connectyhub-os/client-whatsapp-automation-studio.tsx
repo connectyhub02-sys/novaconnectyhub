@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { NeonBadge, Panel } from "./panel-primitives";
-import type { ClientSalesCatalogItem, ClientSalesCatalogWhatsappInstance } from "@/lib/sales-catalog/shared";
+import type { ClientSalesCatalogItem } from "@/lib/sales-catalog/shared";
 import { cn } from "@/lib/utils";
 
 export type ClientAutomationAgent = {
@@ -181,7 +181,8 @@ type Props = {
   companyName: string;
   agents: ClientAutomationAgent[];
   products: ClientSalesCatalogItem[];
-  whatsappInstances: ClientSalesCatalogWhatsappInstance[];
+  selectedAutomationAgentId: string | null;
+  selectedAutomationWhatsappLabel: string | null;
 };
 
 export function ClientWhatsappAutomationStudio({
@@ -189,21 +190,12 @@ export function ClientWhatsappAutomationStudio({
   companyId,
   companyName,
   products,
-  whatsappInstances,
+  selectedAutomationAgentId,
+  selectedAutomationWhatsappLabel,
 }: Props) {
   const companyAgents = useMemo(() => agents.filter((agent) => agent.companyId === companyId), [agents, companyId]);
-  const companyWhatsappInstances = useMemo(
-    () => whatsappInstances.filter((instance) => instance.companyId === companyId),
-    [companyId, whatsappInstances],
-  );
-  const defaultAgentId = useMemo(
-    () => resolveDefaultAgentId(companyAgents, companyWhatsappInstances),
-    [companyAgents, companyWhatsappInstances],
-  );
-  const [selectedAgentIdDraft, setSelectedAgentIdDraft] = useState("");
-  const selectedAgentId = companyAgents.some((agent) => agent.id === selectedAgentIdDraft)
-    ? selectedAgentIdDraft
-    : defaultAgentId;
+  const selectedAutomationAgent = companyAgents.find((agent) => agent.id === selectedAutomationAgentId) ?? null;
+  const selectedAgentId = selectedAutomationAgent?.id ?? "";
   const [operations, setOperations] = useState<WhatsappOperationsState | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [runningAction, setRunningAction] = useState<string | null>(null);
@@ -306,7 +298,11 @@ export function ClientWhatsappAutomationStudio({
     let cancelled = false;
 
     async function load() {
-      if (!companyId || !selectedAgentId) return;
+      if (!companyId || !selectedAgentId) {
+        setOperations(null);
+        setSelectedTargetIds([]);
+        return;
+      }
       setRunningAction("load_channels");
       setNotice(null);
 
@@ -553,29 +549,15 @@ export function ClientWhatsappAutomationStudio({
     >
       <div className="grid gap-4">
         <div className="grid gap-3 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-          <label className="block">
-            <FieldLabel>Agente executor</FieldLabel>
-            <select
-              value={selectedAgentId}
-              onChange={(event) => {
-                setSelectedAgentIdDraft(event.target.value);
-                setSelectedTargetIds([]);
-                setOperations(null);
-                setNotice(null);
-              }}
-              className="h-11 w-full rounded-xl border bg-transparent px-3 text-sm outline-none"
-              style={{ borderColor: "var(--ch-border)", color: "var(--ch-text)" }}
-            >
-              {companyAgents.length ? companyAgents.map((agent) => (
-                <option key={agent.id} value={agent.id}>{agent.name} / {agent.roleTitle}</option>
-              )) : (
-                <option value="">Nenhum agente WhatsApp</option>
-              )}
-              {selectedAgentId && !companyAgents.some((agent) => agent.id === selectedAgentId) ? (
-                <option value={selectedAgentId}>Agente conectado</option>
-              ) : null}
-            </select>
-          </label>
+          <div className="rounded-xl border border-slate-200 bg-white/60 p-3">
+            <FieldLabel>Agente em uso</FieldLabel>
+            <p className="truncate text-sm font-semibold" style={{ color: "var(--ch-text)" }}>
+              {selectedAutomationAgent ? `${selectedAutomationAgent.name} / ${selectedAutomationAgent.roleTitle}` : "Escolha o WhatsApp padrao acima"}
+            </p>
+            <p className="mt-1 truncate text-[11px] text-slate-500">
+              {selectedAutomationWhatsappLabel ?? "O bloco de grupos herda o agente e o numero definidos em Base das automacoes."}
+            </p>
+          </div>
 
           <div className="grid gap-2 sm:grid-cols-3">
             <Metric icon={Users} label="Destinos" value={`${groups.length}/${newsletters.length}`} detail="grupos / canais" />
@@ -1211,13 +1193,6 @@ function EmptyState({ icon: Icon, text }: { icon: LucideIcon; text: string }) {
 
 function FieldLabel({ children }: { children: string }) {
   return <span className="mb-1 block font-mono text-[9px] uppercase tracking-wide text-slate-500">{children}</span>;
-}
-
-function resolveDefaultAgentId(
-  agents: ClientAutomationAgent[],
-  instances: ClientSalesCatalogWhatsappInstance[],
-) {
-  return agents[0]?.id ?? instances.find((instance) => instance.agentId)?.agentId ?? "";
 }
 
 function buildLocalDateTime(offsetMinutes: number) {
