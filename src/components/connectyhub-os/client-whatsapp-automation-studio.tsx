@@ -537,8 +537,8 @@ export function ClientWhatsappAutomationStudio({
     await runAction("enable_group_replies");
   }
 
-  async function enableAutomationCapability(capability: WhatsappAutomationCapability) {
-    await runAction("enable_automation_capability", { capability });
+  async function setAutomationCapability(capability: WhatsappAutomationCapability, enabled: boolean) {
+    await runAction("set_automation_capability", { capability, enabled });
   }
 
   async function toggleTargetSetting(target: WhatsappTarget, key: "enabled" | "campaignEnabled") {
@@ -610,8 +610,8 @@ export function ClientWhatsappAutomationStudio({
         <FeatureGates
           behavior={behavior}
           disabled={operationsLocked}
-          loading={runningAction === "enable_automation_capability"}
-          onEnable={enableAutomationCapability}
+          loading={runningAction === "set_automation_capability"}
+          onToggle={setAutomationCapability}
         />
 
         <div className="grid gap-4 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
@@ -756,6 +756,7 @@ export function ClientWhatsappAutomationStudio({
                   </div>
                 </div>
                 <WhatsappCampaignPreview
+                  behavior={behavior}
                   buttonEnabled={campaignButtonEnabled}
                   buttonLabel={campaignButtonLabel}
                   format={growthFormatPreference}
@@ -763,6 +764,7 @@ export function ClientWhatsappAutomationStudio({
                   objective={growthObjective}
                   plan={growthPlan}
                   products={automaticCampaignProducts}
+                  selectedTargets={selectedTargets}
                 />
                 {growthPlan ? (
                   <div className="grid gap-3 rounded-xl border border-cyan-500/20 bg-cyan-500/10 p-3 xl:col-span-2">
@@ -953,19 +955,19 @@ function FeatureGates({
   behavior,
   disabled,
   loading,
-  onEnable,
+  onToggle,
 }: {
   behavior?: WhatsappOperationsState["behavior"];
   disabled?: boolean;
   loading?: boolean;
-  onEnable: (capability: WhatsappAutomationCapability) => void | Promise<void | ChannelActionResponse | null>;
+  onToggle: (capability: WhatsappAutomationCapability, enabled: boolean) => void | Promise<void | ChannelActionResponse | null>;
 }) {
   const gates = [
-    { label: "Responder grupos", active: behavior?.groups, capability: "groups" },
-    { label: "Status", active: behavior?.statusBroadcasts, capability: "status" },
-    { label: "Campanhas", active: behavior?.campaignBroadcasts, capability: "campaigns" },
-    { label: "Canais", active: behavior?.newsletterBroadcasts, capability: "newsletters" },
-    { label: "Botoes/enquetes", active: behavior?.interactiveMessages, capability: "interactive" },
+    { label: "Atendimento em grupos", detail: "respostas e janelas", active: behavior?.groups, capability: "groups" },
+    { label: "Status do agente", detail: "stories do WhatsApp", active: behavior?.statusBroadcasts, capability: "status" },
+    { label: "Envios para destinos", detail: "grupos e canais", active: behavior?.campaignBroadcasts, capability: "campaigns" },
+    { label: "Canais WhatsApp", detail: "newsletters/canais", active: behavior?.newsletterBroadcasts, capability: "newsletters" },
+    { label: "Interacoes", detail: "botoes e enquetes", active: behavior?.interactiveMessages, capability: "interactive" },
   ] as const;
 
   return (
@@ -977,18 +979,22 @@ function FeatureGates({
         )}>
           <div className="min-w-0">
             <p className="truncate font-mono text-[9px] uppercase tracking-wide text-slate-500">{gate.label}</p>
+            <p className="mt-1 truncate text-[10px] text-slate-500">{gate.detail}</p>
             <p className={cn("mt-1 text-sm font-semibold", gate.active ? "text-emerald-700" : "text-slate-500")}>{gate.active ? "Ativo" : "Pausado"}</p>
           </div>
-          {!gate.active ? (
-            <button
-              type="button"
-              disabled={disabled || loading}
-              onClick={() => onEnable(gate.capability)}
-              className="inline-flex min-h-8 items-center justify-center rounded-lg border border-emerald-500/25 bg-white/70 px-2 font-mono text-[9px] font-bold uppercase tracking-wide text-emerald-700 transition hover:bg-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {loading ? "Ativando..." : "Ativar"}
-            </button>
-          ) : null}
+          <button
+            type="button"
+            disabled={disabled || loading}
+            onClick={() => onToggle(gate.capability, !gate.active)}
+            className={cn(
+              "inline-flex min-h-8 items-center justify-center rounded-lg border bg-white/70 px-2 font-mono text-[9px] font-bold uppercase tracking-wide transition disabled:cursor-not-allowed disabled:opacity-50",
+              gate.active
+                ? "border-slate-300 text-slate-500 hover:bg-slate-100"
+                : "border-emerald-500/25 text-emerald-700 hover:bg-emerald-500/10",
+            )}
+          >
+            {loading ? "Salvando..." : gate.active ? "Desativar" : "Ativar"}
+          </button>
         </div>
       ))}
     </div>
@@ -1062,6 +1068,7 @@ function ProductPicker({
 }
 
 function WhatsappCampaignPreview({
+  behavior,
   buttonEnabled,
   buttonLabel,
   format,
@@ -1069,7 +1076,9 @@ function WhatsappCampaignPreview({
   objective,
   plan,
   products,
+  selectedTargets,
 }: {
+  behavior?: WhatsappOperationsState["behavior"];
   buttonEnabled: boolean;
   buttonLabel: string;
   format: GrowthFormatPreference;
@@ -1077,14 +1086,18 @@ function WhatsappCampaignPreview({
   objective: string;
   plan: GrowthPlan | null;
   products: ClientSalesCatalogItem[];
+  selectedTargets: WhatsappTarget[];
 }) {
   const product = products[0] ?? null;
   const previewItem = plan?.items[0] ?? null;
-  const effectiveFormat: GrowthPlanItem["type"] = previewItem?.type ?? (format === "mixed" ? "text" : format);
+  const effectiveFormat = resolveCampaignPreviewFormat(previewItem?.type, format, objective);
   const mediaUrl = firstProductMediaUrl(product ? [product] : products);
   const text = previewItem?.text ?? buildCampaignPreviewText(product, objective, effectiveFormat);
   const pollChoices = previewItem?.pollChoices.length ? previewItem.pollChoices : buildCampaignPreviewPollChoices(products);
   const style = mediaUrl ? { backgroundImage: `url("${mediaUrl.replace(/"/g, "%22")}")` } : undefined;
+  const destination = describeCampaignPreviewDestination(effectiveFormat, selectedTargets);
+  const automationPlan = describeCampaignAutomationPlan(objective, effectiveFormat, products);
+  const blockedRequirements = listCampaignPreviewBlockedRequirements(effectiveFormat, behavior);
 
   return (
     <div className="mx-auto grid w-full max-w-[300px] gap-2">
@@ -1142,6 +1155,17 @@ function WhatsappCampaignPreview({
       <p className="text-center font-mono text-[9px] uppercase tracking-wide text-slate-500">
         Previa WhatsApp
       </p>
+      <div className="grid gap-2 rounded-xl border border-slate-200 bg-white/70 p-3">
+        <FieldLabel>Resumo da rotina</FieldLabel>
+        <p className="text-[12px] leading-5 text-slate-600">{automationPlan}</p>
+        <div className="grid gap-2 text-[11px] leading-4 text-slate-500">
+          <p><span className="font-semibold text-slate-700">Destino:</span> {destination}</p>
+          <p><span className="font-semibold text-slate-700">Formato:</span> {formatGrowthPlanType(effectiveFormat)}</p>
+          {blockedRequirements.length ? (
+            <p><span className="font-semibold text-amber-700">Ativar:</span> {blockedRequirements.join(", ")}</p>
+          ) : null}
+        </div>
+      </div>
     </div>
   );
 }
@@ -1458,12 +1482,36 @@ function resolveGrowthPreferredFormats(format: GrowthFormatPreference) {
   return [format];
 }
 
+function resolveCampaignPreviewFormat(
+  plannedType: GrowthPlanItem["type"] | undefined,
+  preference: GrowthFormatPreference,
+  objective: string,
+): GrowthPlanItem["type"] {
+  if (plannedType) return plannedType;
+  if (preference !== "mixed") return preference;
+
+  const normalized = normalizePreviewText(objective);
+  if (normalized.includes("enquete") || normalized.includes("interesse") || normalized.includes("engajar")) return "poll";
+  if (normalized.includes("carrossel") || normalized.includes("vitrine")) return "carousel";
+  if (normalized.includes("status")) return "status";
+  if (normalized.includes("audio")) return "audio";
+  return "text";
+}
+
 function buildCampaignPreviewText(
   product: ClientSalesCatalogItem | null,
   objective: string,
   format: GrowthPlanItem["type"],
 ) {
+  const normalized = normalizePreviewText(objective);
+
   if (format === "poll") {
+    if (normalized.includes("interesse")) {
+      return product
+        ? `O que mais te faria considerar ${product.title} hoje?`
+        : "Qual tipo de oferta voces teriam mais interesse hoje?";
+    }
+
     return product
       ? `Qual desses pontos mais pesa pra voce quando escolhe ${product.title}?`
       : "Qual tema voces querem ver primeiro por aqui?";
@@ -1477,7 +1525,7 @@ function buildCampaignPreviewText(
 
   const name = product?.title ?? "produto selecionado";
   const price = product?.price ? ` por ${product.price} ${product.currency}` : "";
-  const educational = objective.toLowerCase().includes("informar");
+  const educational = normalized.includes("informar");
 
   if (educational) {
     return `${name} tem alguns detalhes que fazem diferenca no uso. Separei um resumo rapido pra ficar mais facil comparar${price}.`;
@@ -1489,6 +1537,80 @@ function buildCampaignPreviewText(
 function buildCampaignPreviewPollChoices(products: ClientSalesCatalogItem[]) {
   const productChoices = products.slice(0, 3).map((product) => product.title.slice(0, 40));
   return productChoices.length >= 2 ? productChoices : ["Quero saber preco", "Quero indicacao", "Ver opcoes"];
+}
+
+function describeCampaignPreviewDestination(
+  format: GrowthPlanItem["type"],
+  selectedTargets: WhatsappTarget[],
+) {
+  if (format === "status") return "status do agente";
+  if (selectedTargets.length === 0) return "selecione grupos ou canais";
+
+  const groupCount = selectedTargets.filter((target) => target.type === "group").length;
+  const channelCount = selectedTargets.filter((target) => target.type === "newsletter").length;
+  return [
+    groupCount ? `${groupCount} grupo(s)` : "",
+    channelCount ? `${channelCount} canal(is)` : "",
+  ].filter(Boolean).join(" e ");
+}
+
+function describeCampaignAutomationPlan(
+  objective: string,
+  format: GrowthPlanItem["type"],
+  products: ClientSalesCatalogItem[],
+) {
+  const productText = products.length
+    ? `usando ${products.length} produto(s) selecionado(s)`
+    : "usando produtos ativos do catalogo";
+  const normalized = normalizePreviewText(objective);
+
+  if (format === "poll") {
+    return normalized.includes("interesse")
+      ? `A IA cria perguntas de interesse ${productText}, compara respostas e envia nos horarios da rotina.`
+      : `A IA cria enquetes de conversa ${productText}, com opcoes curtas para o grupo votar.`;
+  }
+
+  if (format === "carousel") {
+    return `A IA monta uma vitrine ${productText}, usa as midias do catalogo e conduz para o botao de compra.`;
+  }
+
+  if (format === "status") {
+    return `A IA transforma ${productText} em posts de status para gerar respostas no privado.`;
+  }
+
+  if (format === "audio" || format === "text_audio") {
+    return `A IA escreve a copy ${productText} e gera audio com a voz configurada do agente.`;
+  }
+
+  if (normalized.includes("informar")) {
+    return `A IA explica beneficios e contexto ${productText}, depois fecha com uma chamada de compra.`;
+  }
+
+  return `A IA cria posts comerciais ${productText}, alternando ganchos conforme o objetivo escolhido.`;
+}
+
+function listCampaignPreviewBlockedRequirements(
+  format: GrowthPlanItem["type"],
+  behavior?: WhatsappOperationsState["behavior"],
+) {
+  if (!behavior) return [];
+  const requirements: string[] = [];
+
+  if (format === "status") {
+    if (!behavior.statusBroadcasts) requirements.push("Status do agente");
+  } else if (!behavior.campaignBroadcasts && !behavior.newsletterBroadcasts) {
+    requirements.push("Envios para destinos");
+  }
+
+  if ((format === "poll" || format === "carousel") && !behavior.interactiveMessages) {
+    requirements.push("Interacoes");
+  }
+
+  return requirements;
+}
+
+function normalizePreviewText(value: string) {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 }
 
 function formatGrowthPlanType(type: GrowthPlanItem["type"]) {

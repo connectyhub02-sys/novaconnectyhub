@@ -1568,6 +1568,7 @@ export async function enableWhatsappGroupReplies(
 ) {
   return enableWhatsappAutomationCapability(client, context, {
     capability: "groups",
+    enabled: true,
     updatedBy: input.updatedBy,
   });
 }
@@ -1577,6 +1578,7 @@ export async function enableWhatsappAutomationCapability(
   context: WhatsappOperationalContext,
   input: {
     capability: string;
+    enabled?: boolean | null;
     updatedBy?: string | null;
   },
 ) {
@@ -1588,14 +1590,15 @@ export async function enableWhatsappAutomationCapability(
   }
 
   const now = new Date().toISOString();
-  const nextBehavior = buildEnabledAutomationBehavior(context.behavior, capability);
+  const enabled = input.enabled !== false;
+  const nextBehavior = buildAutomationCapabilityBehavior(context.behavior, capability, enabled);
   const instanceMetadata = readRecord(context.instance.metadata) ?? {};
   const nextInstanceMetadata = {
     ...instanceMetadata,
     behavior_config: nextBehavior,
     behavior_updated_at: now,
     behavior_updated_by: input.updatedBy ?? null,
-    last_client_action: `enable_${capability}`,
+    last_client_action: `${enabled ? "enable" : "disable"}_${capability}`,
   };
 
   const { error: instanceError } = await client
@@ -1604,7 +1607,7 @@ export async function enableWhatsappAutomationCapability(
     .eq("id", context.instance.id);
 
   if (instanceError) {
-    throw new Error(`Nao foi possivel ativar ${describeAutomationCapability(capability)} nesta instancia: ${instanceError.message}`);
+    throw new Error(`Nao foi possivel ${enabled ? "ativar" : "desativar"} ${describeAutomationCapability(capability)} nesta instancia: ${instanceError.message}`);
   }
 
   const agentId = asString(instanceMetadata.agent_id);
@@ -1622,9 +1625,10 @@ export async function enableWhatsappAutomationCapability(
     }
 
     const agentMetadata = readRecord(agent?.metadata) ?? {};
-    const currentAgentBehavior = buildEnabledAutomationBehavior(
+    const currentAgentBehavior = buildAutomationCapabilityBehavior(
       normalizeWhatsappBehaviorConfig(agentMetadata.whatsapp_behavior_config ?? nextBehavior),
       capability,
+      enabled,
     );
     const { error: agentUpdateError } = await client
       .from("agent_registry")
@@ -1645,7 +1649,7 @@ export async function enableWhatsappAutomationCapability(
       .eq("organization_id", context.organizationId);
 
     if (agentUpdateError) {
-      throw new Error(`Nao foi possivel ativar ${describeAutomationCapability(capability)} no agente: ${agentUpdateError.message}`);
+      throw new Error(`Nao foi possivel ${enabled ? "ativar" : "desativar"} ${describeAutomationCapability(capability)} no agente: ${agentUpdateError.message}`);
     }
   }
 
@@ -1661,27 +1665,29 @@ export async function enableWhatsappAutomationCapability(
       newsletterBroadcasts: nextBehavior.newsletterBroadcasts,
       campaignBroadcasts: nextBehavior.campaignBroadcasts,
       interactiveMessages: nextBehavior.interactiveMessages,
+      enabled,
     },
   };
 }
 
-function buildEnabledAutomationBehavior(
+function buildAutomationCapabilityBehavior(
   behavior: WhatsappBehaviorConfig,
   capability: WhatsappAutomationCapability,
+  enabled: boolean,
 ) {
   const nextBehavior = normalizeWhatsappBehaviorConfig(behavior);
 
   if (capability === "groups") {
-    nextBehavior.allowGroupChats = true;
+    nextBehavior.allowGroupChats = enabled;
     nextBehavior.groupReplyMode = nextBehavior.groupReplyMode || "all";
   } else if (capability === "status") {
-    nextBehavior.statusBroadcasts = true;
+    nextBehavior.statusBroadcasts = enabled;
   } else if (capability === "campaigns") {
-    nextBehavior.campaignBroadcasts = true;
+    nextBehavior.campaignBroadcasts = enabled;
   } else if (capability === "newsletters") {
-    nextBehavior.newsletterBroadcasts = true;
+    nextBehavior.newsletterBroadcasts = enabled;
   } else if (capability === "interactive") {
-    nextBehavior.interactiveMessages = true;
+    nextBehavior.interactiveMessages = enabled;
   }
 
   return nextBehavior;

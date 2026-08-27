@@ -362,12 +362,18 @@ export async function POST(request: NextRequest) {
     } else if (action === "enable_group_replies") {
       result = await enableWhatsappGroupReplies(client, whatsapp, { updatedBy: auth.userId });
       notice = "Responder grupos ativado para esta instancia interna.";
-    } else if (action === "enable_automation_capability") {
+    } else if (action === "enable_automation_capability" || action === "set_automation_capability") {
+      const enabled = action === "set_automation_capability"
+        ? (readOptionalBoolean(body?.enabled) ?? true)
+        : true;
       result = await enableWhatsappAutomationCapability(client, whatsapp, {
         capability: asString(body?.capability) ?? "",
+        enabled,
         updatedBy: auth.userId,
       });
-      notice = "Recurso de automacao WhatsApp ativado para esta instancia interna.";
+      notice = enabled
+        ? "Recurso de automacao WhatsApp ativado para esta instancia interna."
+        : "Recurso de automacao WhatsApp desativado para esta instancia interna.";
     } else if (action === "update_target_settings") {
       result = {
         target: await updateWhatsappChannelTargetSettings(client, whatsapp, {
