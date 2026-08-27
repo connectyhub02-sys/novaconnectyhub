@@ -2,7 +2,9 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { ClientAutomationsCenter } from "@/components/connectyhub-os/client-automations-center";
 import { ConnectyShell } from "@/components/connectyhub-os/connecty-shell";
+import { getClientAgentsWorkspace } from "@/lib/client-os/agents";
 import { listClientCompanies } from "@/lib/client-os/companies";
+import { currentOrganizationToClientCompany } from "@/lib/client-os/current-company";
 import {
   listClientSalesCatalog,
   listClientSalesCatalogSettings,
@@ -36,6 +38,13 @@ export default async function DashboardAutomacoesPage() {
   const organizationCompanyId = organization && companies.some((company) => company.id === organization.id)
     ? organization.id
     : null;
+  const agentWorkspace = organization
+    ? await getClientAgentsWorkspace({
+        userId: workspace.user.id,
+        organizationId: organization.id,
+        company: currentOrganizationToClientCompany(organization),
+      })
+    : null;
 
   return (
     <ConnectyShell
@@ -47,6 +56,7 @@ export default async function DashboardAutomacoesPage() {
       workspaceName={organization?.name ?? workspace.profile.companyName ?? "Workspace"}
     >
       <ClientAutomationsCenter
+        agents={agentWorkspace?.agents ?? []}
         companies={companies}
         initialCompanyId={organizationCompanyId ?? companies[0]?.id ?? null}
         initialSettings={settings}

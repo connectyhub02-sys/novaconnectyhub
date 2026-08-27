@@ -11,6 +11,7 @@ import {
   ToggleLeft,
   ToggleRight,
 } from "lucide-react";
+import { ClientWhatsappAutomationStudio, type ClientAutomationAgent } from "./client-whatsapp-automation-studio";
 import { NeonBadge, PageHeader, Panel } from "./panel-primitives";
 import type { ClientCompany } from "@/lib/client-os/companies";
 import {
@@ -36,6 +37,7 @@ type AutomationsDraft = {
 };
 
 type ClientAutomationsCenterProps = {
+  agents: ClientAutomationAgent[];
   companies: ClientCompany[];
   initialSettings: ClientSalesCatalogSettings[];
   products: ClientSalesCatalogItem[];
@@ -61,6 +63,7 @@ const messageTemplateFields: Array<{
 const variableChips = ["{cliente}", "{pedido}", "{itens}", "{valor}", "{metodo_pagamento}"];
 
 export function ClientAutomationsCenter({
+  agents,
   companies,
   initialSettings,
   products,
@@ -318,6 +321,14 @@ export function ClientAutomationsCenter({
           />
         </div>
       </Panel>
+
+      <ClientWhatsappAutomationStudio
+        agents={agents}
+        companyId={selectedCompanyId}
+        companyName={selectedCompany?.name ?? "Workspace"}
+        products={companyProducts}
+        whatsappInstances={companyWhatsappInstances}
+      />
 
       <Panel
         title="Mensagens automaticas"

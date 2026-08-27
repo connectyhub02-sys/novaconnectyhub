@@ -29,7 +29,6 @@ import {
   Mic,
   Package,
   PenLine,
-  PenOff,
   PlugZap,
   Power,
   Plus,
@@ -919,8 +918,12 @@ export function WhatsAppConsole({
               setNotice(data.notice);
             }
           } else {
-            setQrCode((current) => data.qrCode ?? current);
-            setPairCode((current) => data.pairCode ?? current);
+            const responsePairCode = data.pairCode ?? null;
+            const responseQrCode = data.qrCode ?? null;
+            const pollingPhoneMode = latestAttempt?.mode === "phone" || Boolean(responsePairCode);
+
+            setQrCode((current) => pollingPhoneMode ? null : responseQrCode ?? current);
+            setPairCode((current) => responsePairCode ?? current);
           }
         }
       } catch {
@@ -1345,6 +1348,11 @@ export function WhatsAppConsole({
     setRunning(action);
     setNotice(null);
 
+    if (action === "connect" || action === "reset_connection") {
+      setQrCode(null);
+      setPairCode(null);
+    }
+
     try {
       const response = await fetch(variant.endpoints.action, {
         method: "POST",
@@ -1358,8 +1366,9 @@ export function WhatsAppConsole({
       }
 
       applyWhatsappState(data.state, { preserveDrafts: true });
-      setQrCode(data.state.instance?.status === "connected" ? null : data.qrCode ?? null);
-      setPairCode(data.state.instance?.status === "connected" ? null : data.pairCode ?? null);
+      const nextPairCode = data.state.instance?.status === "connected" ? null : data.pairCode ?? null;
+      setQrCode(data.state.instance?.status === "connected" || nextPairCode ? null : data.qrCode ?? null);
+      setPairCode(nextPairCode);
       setNotice(data.notice ?? { tone: "success", message: "Acao concluida." });
     } catch (error) {
       setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro inesperado no WhatsApp." });
@@ -2106,7 +2115,11 @@ export function WhatsAppConsole({
                 migrationCopying={migrationCopying}
                 onConnect={() => runAction("connect", connectMode === "phone" ? { connectPhone: normalizeConnectPhoneInput(connectPhone) } : {})}
                 onCopyMigrationCredential={copyMigrationCredential}
-                onConnectModeChange={setConnectMode}
+                onConnectModeChange={(mode) => {
+                  setConnectMode(mode);
+                  setQrCode(null);
+                  setPairCode(null);
+                }}
                 onConnectPhoneChange={setConnectPhone}
                 onDisconnect={() => {
                   const confirmed = window.confirm("Remover esta conexao WhatsApp?\n\nA instancia sera excluida do painel e da Uazapi para evitar cobranca duplicada. Para conectar novamente, gere um novo QR Code ou codigo.");
@@ -2357,7 +2370,6 @@ export function WhatsAppConsole({
               <BehaviorSection title="Simulacao humana" description="Comportamentos que fazem o agente parecer uma pessoa real no WhatsApp.">
                 <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
                   <ToggleTile icon={Smile} label="Reacoes emoji" description="Reage a mensagens do lead com emoji contextual antes de responder." checked={behaviorDraft.emojiReactions} onChange={() => updateBehavior("emojiReactions", !behaviorDraft.emojiReactions)} />
-                  <ToggleTile icon={PenOff} label="Erros intencionais" description="A IA simula erros de digitacao e autocorrecoes naturais como um humano real." checked={behaviorDraft.intentionalTypos} onChange={() => updateBehavior("intentionalTypos", !behaviorDraft.intentionalTypos)} />
                   <ToggleTile icon={Sticker} label="Figurinhas" description="Envia stickers contextuais ocasionalmente para simular comportamento natural do WhatsApp." checked={behaviorDraft.sendStickers} onChange={() => updateBehavior("sendStickers", !behaviorDraft.sendStickers)} />
                   <ToggleTile icon={Forward} label="Midia proativa" description="Permite que o agente envie imagens, catalogos ou midias relevantes de forma espontanea." checked={behaviorDraft.proactiveMedia} onChange={() => updateBehavior("proactiveMedia", !behaviorDraft.proactiveMedia)} />
                   <ToggleTile icon={Coffee} label="Small talk" description="Injeta contexto cultural e temporal brasileiro para papo leve quando o lead abrir espaco." checked={behaviorDraft.smallTalk} onChange={() => updateBehavior("smallTalk", !behaviorDraft.smallTalk)} />
@@ -3099,7 +3111,6 @@ const whatsappConsoleTabs: Array<{
   { id: "qualification", label: "Qualificacao", description: "CRM e score", icon: CheckCircle2 },
   { id: "behavior", label: "Comportamento", description: "Modos e timers", icon: Shuffle },
   { id: "channels", label: "Redes sociais", description: "Instagram / Facebook", icon: Globe2, comingSoon: true },
-  { id: "multichannel", label: "Grupos e campanhas", description: "WhatsApp", icon: Forward },
 ];
 
 function WhatsappConsoleCommandBar({
@@ -4445,8 +4456,8 @@ function CloneProfileEditor({
           />
           <TextAreaField
             label="Vocabulario"
-            description="Palavras, girias, abreviacoes e expressoes que combinam com a pessoa."
-            placeholder="Ex.: show, boa, fechado, me diz uma coisa, top demais, vc, pq."
+            description="Palavras, gírias e expressões que combinam com a pessoa, sem abreviações de chat."
+            placeholder="Ex.: show, boa, fechado, me diz uma coisa, top demais, combinado."
             value={profile.vocabulary}
             onChange={(vocabulary) => onChange({ vocabulary, source: "manual" })}
           />
@@ -5930,13 +5941,11 @@ function BehaviorSummary({
     behavior.composingPause,
     behavior.readReceiptDelay,
     behavior.spontaneousAudio,
-    behavior.intentionalTypos,
     behavior.circadianTiming,
     behavior.naturalAudioFillers,
     behavior.sendStickers,
     behavior.proactiveMedia,
     behavior.wpmTypingModel,
-    behavior.midMessageCorrections,
     behavior.smallTalk,
   ].filter(Boolean).length;
 
@@ -5945,7 +5954,7 @@ function BehaviorSummary({
       <p className="font-mono text-[9px] uppercase tracking-widest text-slate-500">Resumo</p>
       <div className="mt-4 space-y-3">
         <PromptCheck label="Agente ativo" active={behavior.agentEnabled} />
-        <PromptCheck label={`${activeHuman}/14 simulacao humana`} active={activeHuman >= 7} />
+        <PromptCheck label={`${activeHuman}/12 simulacao humana`} active={activeHuman >= 6} />
         <PromptCheck label="Citacao inteligente" active={behavior.quoteReplyMode !== "off"} />
         <PromptCheck label="Intervencao humana" active={behavior.humanIntervention} />
         <PromptCheck label="Aviso humano WhatsApp" active={behavior.humanHandoffNotifications && Boolean(behavior.humanHandoffNotificationNumbers.trim())} />
@@ -7373,7 +7382,7 @@ function CompactConnectionCard({
   const [qrModalOpen, setQrModalOpen] = useState(false);
   const [passkeyModalOpen, setPasskeyModalOpen] = useState(false);
   const [migrationModalOpen, setMigrationModalOpen] = useState(false);
-  const prevQrRef = useRef<string | null>(null);
+  const [pairCodeCopied, setPairCodeCopied] = useState(false);
   const notifiedPasskeyAttemptRef = useRef<string | null>(null);
   const status = instance?.status ?? "draft";
   const meta = getStatusMeta(status);
@@ -7383,9 +7392,9 @@ function CompactConnectionCard({
   const latestConnectionAttempt = instance?.connectionDiagnostics?.latestAttempt ?? null;
   const connectionAttemptFinished = Boolean(latestConnectionAttempt && latestConnectionAttempt.finalStatus !== "pending");
   const passkeyBlockedAttempt = latestConnectionAttempt?.finalStatus === "passkey_blocked" ? latestConnectionAttempt : null;
-  const visibleQrCode = status === "connected" || connectionAttemptFinished ? null : qrCode;
-  const visiblePairCode = status === "connected" || connectionAttemptFinished ? null : pairCode;
   const phoneModeSelected = connectMode === "phone";
+  const visibleQrCode = phoneModeSelected || status === "connected" || connectionAttemptFinished ? null : qrCode;
+  const visiblePairCode = !phoneModeSelected || status === "connected" || connectionAttemptFinished ? null : pairCode;
   const connectPhoneDigits = normalizeConnectPhoneInput(connectPhone);
   const connectionActionDisabled = !enabled || (phoneModeSelected && connectPhoneDigits.length < 10);
   const resetActionDisabled = !enabled || !instance || (phoneModeSelected && connectPhoneDigits.length < 10);
@@ -7401,10 +7410,12 @@ function CompactConnectionCard({
     : !enabled
       ? disabledReason
       : visiblePairCode
-        ? "Digite o codigo no WhatsApp para concluir."
+        ? "Digite este codigo no WhatsApp do celular principal do cliente. Nao ha campo no ConnectyHub para inserir o codigo."
         : visibleQrCode
           ? "Escaneie o QR Code pelo WhatsApp para concluir."
-          : meta.description;
+          : phoneModeSelected
+            ? "Informe o telefone com DDI e gere o codigo. O codigo aparecera aqui para ser digitado no WhatsApp do cliente."
+            : meta.description;
   const qrModeActiveStyle = {
     background: "rgba(var(--ch-whatsapp-rgb),0.12)",
     color: "var(--ch-whatsapp-deep)",
@@ -7415,11 +7426,17 @@ function CompactConnectionCard({
   };
 
   useEffect(() => {
-    if (visibleQrCode && !connectionAttemptFinished && visibleQrCode !== prevQrRef.current) {
-      setQrModalOpen(true);
+    if (!visibleQrCode || phoneModeSelected || connectionAttemptFinished) {
+      let cancelled = false;
+      queueMicrotask(() => {
+        if (!cancelled) setQrModalOpen(false);
+      });
+
+      return () => {
+        cancelled = true;
+      };
     }
-    prevQrRef.current = visibleQrCode;
-  }, [connectionAttemptFinished, visibleQrCode]);
+  }, [connectionAttemptFinished, phoneModeSelected, visibleQrCode]);
 
   useEffect(() => {
     if (!passkeyBlockedAttempt) {
@@ -7433,6 +7450,30 @@ function CompactConnectionCard({
     notifiedPasskeyAttemptRef.current = passkeyBlockedAttempt.id;
     setPasskeyModalOpen(true);
   }, [passkeyBlockedAttempt]);
+
+  useEffect(() => {
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled) setPairCodeCopied(false);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [visiblePairCode]);
+
+  async function copyVisiblePairCode() {
+    if (!visiblePairCode) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(visiblePairCode);
+      setPairCodeCopied(true);
+    } catch {
+      setPairCodeCopied(false);
+    }
+  }
 
   return (
     <div
@@ -7475,8 +7516,22 @@ function CompactConnectionCard({
             <p className="mt-2 text-[11px] leading-4 text-sky-700">
               Codigo de pareamento
             </p>
-            <p className="mt-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 font-mono text-[18px] font-bold text-sky-800">
-              {formatPairCode(visiblePairCode)}
+            <div className="mt-2 inline-flex max-w-full items-center overflow-hidden rounded-lg border border-sky-200 bg-sky-50 text-sky-800">
+              <p className="px-3 py-2 font-mono text-[18px] font-bold leading-none">
+                {formatPairCode(visiblePairCode)}
+              </p>
+              <button
+                aria-label="Copiar codigo de pareamento"
+                className="grid min-h-10 w-10 shrink-0 place-items-center border-l border-sky-200 text-sky-700 transition hover:bg-sky-100"
+                onClick={copyVisiblePairCode}
+                title="Copiar codigo"
+                type="button"
+              >
+                {pairCodeCopied ? <CheckCircle2 className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+              </button>
+            </div>
+            <p className="mt-2 max-w-[220px] text-[11px] leading-4 text-slate-500">
+              O cliente digita este codigo no WhatsApp do celular principal.
             </p>
           </div>
         ) : visibleQrCode ? (
@@ -7501,7 +7556,7 @@ function CompactConnectionCard({
               <QrCode className="h-6 w-6" />
             </div>
             <p className="mt-2 text-[11px] leading-4 text-slate-500">
-              QR aparece aqui
+              {phoneModeSelected ? "Codigo aparece aqui" : "QR aparece aqui"}
             </p>
           </div>
         )}
@@ -7552,21 +7607,26 @@ function CompactConnectionCard({
         </div>
 
         {phoneModeSelected ? (
-          <label className="grid gap-1">
-            <span className="flex items-center gap-1.5 font-mono text-[9px] uppercase text-slate-500">
-              Telefone com DDI
-              <InfoHint text="Use somente numeros, incluindo pais e DDD. Exemplo: 5511999999999." />
-            </span>
-            <input
-              className="min-h-10 rounded-lg border bg-white px-3 text-[13px] text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-sky-400/70"
-              inputMode="tel"
-              onChange={(event) => onConnectPhoneChange(event.target.value)}
-              placeholder="5511999999999"
-              style={{ borderColor: "var(--ch-border)" }}
-              type="tel"
-              value={connectPhone}
-            />
-          </label>
+          <div className="grid gap-2">
+            <label className="grid gap-1">
+              <span className="flex items-center gap-1.5 font-mono text-[9px] uppercase text-slate-500">
+                Telefone com DDI
+                <InfoHint text="Use somente numeros, incluindo pais e DDD. Exemplo: 5511999999999." />
+              </span>
+              <input
+                className="min-h-10 rounded-lg border bg-white px-3 text-[13px] text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-sky-400/70"
+                inputMode="tel"
+                onChange={(event) => onConnectPhoneChange(event.target.value)}
+                placeholder="5511999999999"
+                style={{ borderColor: "var(--ch-border)" }}
+                type="tel"
+                value={connectPhone}
+              />
+            </label>
+            <div className="rounded-lg border border-sky-100 bg-sky-50 px-3 py-2 text-[11px] leading-4 text-slate-600">
+              Gere o codigo aqui. No celular do cliente: WhatsApp &gt; Aparelhos conectados &gt; Conectar aparelho &gt; Conectar com numero de telefone.
+            </div>
+          </div>
         ) : null}
       </div>
 
@@ -7682,7 +7742,7 @@ function CompactConnectionCard({
               {PASSKEY_CONNECTION_HELP_TEXT}
             </p>
             <p className="mt-3 text-xs leading-5 text-slate-500">
-              Voce pode tentar resetar a conexao e gerar um novo QR Code. {PASSKEY_CONNECTION_ASSISTED_TEXT}
+              Você pode tentar resetar a conexão e gerar um novo QR Code. {PASSKEY_CONNECTION_ASSISTED_TEXT}
             </p>
 
             <div className="mt-5 flex flex-col gap-2 sm:flex-row">
@@ -7866,7 +7926,7 @@ function ConnectionDiagnosticsPanel({ attempt }: { attempt: ConnectionAttemptDia
         <div className="min-w-0">
           <p className="font-mono text-[9px] uppercase tracking-wide text-slate-500">Diagnostico</p>
           <p className={cn("mt-1 text-[12px] font-semibold leading-4", tone.text)}>
-            {formatConnectionFinalStatus(attempt.finalStatus)}
+            {formatConnectionFinalStatus(attempt.finalStatus, attempt.mode)}
           </p>
         </div>
         <span className={cn("rounded-full px-2 py-1 font-mono text-[9px] font-semibold uppercase", tone.badge)}>
@@ -7897,7 +7957,9 @@ function ConnectionDiagnosticsPanel({ attempt }: { attempt: ConnectionAttemptDia
 
       {attempt.scanDetected !== null ? (
         <p className="mt-2 text-[10px] leading-4 text-slate-500">
-          {attempt.scanDetected ? "Leitura do QR detectada" : "Leitura do QR nao confirmada"}
+          {attempt.mode === "phone"
+            ? attempt.scanDetected ? "Pareamento por codigo detectado" : "Pareamento por codigo nao confirmado"
+            : attempt.scanDetected ? "Leitura do QR detectada" : "Leitura do QR nao confirmada"}
         </p>
       ) : null}
 
@@ -8138,12 +8200,12 @@ function formatDate(value: string | null | undefined) {
   }).format(date);
 }
 
-function formatConnectionFinalStatus(status: ConnectionFinalStatus) {
+function formatConnectionFinalStatus(status: ConnectionFinalStatus, mode?: ConnectionMode) {
   const labels: Record<ConnectionFinalStatus, string> = {
     pending: "Tentativa em andamento",
     success: "Conexao concluida",
     passkey_blocked: "Verificacao extra solicitada",
-    qr_timeout: "QR expirou antes de conectar",
+    qr_timeout: mode === "phone" ? "Codigo expirou antes de conectar" : "QR expirou antes de conectar",
     disconnected: "Desconectou durante a tentativa",
     provider_error: "Erro na conexao",
     reset: "Sessao resetada",

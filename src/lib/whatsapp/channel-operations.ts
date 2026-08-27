@@ -13,12 +13,14 @@ import { loadUazapiCredentials, type UazapiCredentials } from "./uazapi-credenti
 
 type JsonRecord = Record<string, unknown>;
 type WhatsappScope = "platform" | "organization";
-type WhatsappOutboundOperation = "status" | "campaign_simple" | "newsletter_text";
+type WhatsappOutboundOperation = "status" | "campaign_simple" | "newsletter_text" | "target_poll" | "group_announce_mode";
 type WhatsappTargetType = "group" | "newsletter";
 type WhatsappTargetReplyMode = "off" | "all" | "mentions" | "admins" | "observer";
 type WhatsappTargetMentionMode = "none" | "author" | "all";
 type WhatsappCampaignRecurrenceFrequency = "daily" | "weekly";
 type WhatsappCampaignDeliveryMode = "text" | "audio" | "text_audio";
+type WhatsappCampaignInteractiveMode = "none" | "button";
+type WhatsappStatusPayloadType = "text" | "image" | "video" | "audio" | "myaudio" | "ptt";
 type WhatsappGroupIntelligenceStatus = "fresh" | "stale" | "missing" | "error";
 type WhatsappGroupRiskLevel = "low" | "medium" | "high";
 type SalesCatalogItemMapperInput = Parameters<typeof mapSalesCatalogItem>[0];
@@ -228,8 +230,34 @@ export type WhatsappTargetCampaignDraft = {
   responseData: unknown;
 };
 
+export type WhatsappStatusDraft = {
+  text: string;
+  backgroundColor: number;
+  approvalChecklist: string[];
+  productNames: string[];
+  mediaUrl: string | null;
+  mediaKind: "image" | "video" | null;
+  modelId: string;
+  systemInstruction: string;
+  prompt: string;
+  responseData: unknown;
+};
+
+export type WhatsappLeadStatusWatchProbe = {
+  checkedAt: string;
+  available: boolean;
+  confidence: "low" | "medium";
+  message: string;
+  testedEndpoints: string[];
+  statusChatFound: boolean;
+  statusMessageFound: boolean;
+  chatSamples: unknown[];
+  messageSamples: unknown[];
+  errors: string[];
+};
+
 const instanceSelect = "id, organization_id, provider_instance_id, phone_number, display_name, status, instance_token_encrypted, metadata";
-const outboundTypes = ["whatsapp_status", "whatsapp_campaign", "whatsapp_newsletter"];
+const outboundTypes = ["whatsapp_status", "whatsapp_campaign", "whatsapp_newsletter", "whatsapp_group_window"];
 
 export async function resolveClientWhatsappOperationalContext(
   client: SupabaseClient,
@@ -546,6 +574,10 @@ export async function queueWhatsappStatusBroadcast(
     maxRecipients?: number;
     backgroundColor?: number;
     scheduledFor?: string | null;
+    statusType?: string | null;
+    mediaUrl?: string | null;
+    mediaCaption?: string | null;
+    catalogItemIds?: string[];
   },
 ) {
   assertWhatsappConnected(context);
@@ -554,8 +586,17 @@ export async function queueWhatsappStatusBroadcast(
     throw new Error("Ative Status no comportamento do agente antes de publicar stories.");
   }
 
-  const text = input.text.trim();
-  if (!text) throw new Error("Escreva o texto do status.");
+  const text = input.text.trim().slice(0, 656);
+  const catalogItems = await listSalesCatalogCampaignItems(client, context, input.catalogItemIds ?? []);
+  const requestedType = normalizeWhatsappStatusPayloadType(input.statusType);
+  const catalogMedia = buildCatalogStatusMedia(catalogItems)[0] ?? null;
+  const manualMedia = normalizeStatusMediaAttachment(input.mediaUrl, input.statusType, input.mediaCaption);
+  const selectedMedia = requestedType === "text" ? null : manualMedia ?? catalogMedia;
+  const statusType = selectedMedia ? selectedMedia.type : "text";
+
+  if (!text && !selectedMedia) {
+    throw new Error("Escreva o texto do status ou selecione uma midia publica.");
+  }
 
   const maxRecipients = clamp(
     Math.round(input.maxRecipients ?? context.behavior.whatsappMaxStatusRecipients),
@@ -566,15 +607,25 @@ export async function queueWhatsappStatusBroadcast(
   return queueWhatsappOutbound(client, context, {
     operation: "status",
     title: `Status WhatsApp - ${new Date().toLocaleDateString("pt-BR")}`,
-    summary: preview(text, 180),
+    summary: preview(text || selectedMedia?.text || "Status com midia", 180),
     body: text,
     scheduledFor: input.scheduledFor,
     payload: {
-      type: "text",
+      type: statusType,
       text,
+      file: selectedMedia?.file,
+      media_caption: selectedMedia?.text,
       backgroundColor: clamp(Math.round(input.backgroundColor ?? 4), 1, 19),
       max_recipients: maxRecipients,
       recipients: normalizeRecipientList(input.recipients),
+      catalog_items: catalogItems.map((item) => ({
+        id: item.id,
+        title: item.title,
+        tag: item.tag,
+        price: item.price,
+        currency: item.currency,
+        media_count: item.media.length,
+      })),
     },
   });
 }
@@ -669,6 +720,9 @@ export async function queueWhatsappTargetTextCampaign(
     mediaKind?: string | null;
     mediaCaption?: string | null;
     catalogItemIds?: string[];
+    interactiveMode?: string | null;
+    buttonLabel?: string | null;
+    buttonUrl?: string | null;
   },
 ) {
   assertWhatsappConnected(context);
@@ -710,6 +764,13 @@ export async function queueWhatsappTargetTextCampaign(
     ...normalizeManualCampaignAttachments(input.mediaUrl, input.mediaKind, input.mediaCaption),
     ...buildCatalogCampaignAttachments(catalogItems),
   ].slice(0, 6);
+  const button = normalizeCampaignButton(input.buttonLabel, input.buttonUrl, catalogItems);
+  const interactiveMode = button && normalizeCampaignInteractiveMode(input.interactiveMode) === "button" ? "button" : "none";
+
+  if (interactiveMode === "button" && !context.behavior.interactiveMessages) {
+    throw new Error("Ative Botoes e mensagens interativas no comportamento do agente antes de enviar botao de compra.");
+  }
+
   const title = input.title.trim() || `Campanha WhatsApp - ${new Date().toLocaleDateString("pt-BR")}`;
   return queueWhatsappOutbound(client, context, {
     operation: "campaign_simple",
@@ -730,6 +791,8 @@ export async function queueWhatsappTargetTextCampaign(
       })),
       mentions: mentionAll ? "all" : undefined,
       media_attachments: mediaAttachments,
+      interactive_mode: interactiveMode,
+      buttons: button ? [button] : [],
       catalog_items: catalogItems.map((item) => ({
         id: item.id,
         title: item.title,
@@ -784,8 +847,8 @@ export async function generateWhatsappTargetCampaignDraft(
   const currentText = input.currentText?.trim().slice(0, 1600) ?? "";
   const catalogItems = await listSalesCatalogCampaignItems(client, context, input.catalogItemIds ?? []);
 
-  if (!brief && !currentTitle && !currentText) {
-    throw new Error("Informe um tema, oferta ou mensagem inicial para a IA criar o rascunho.");
+  if (!brief && !currentTitle && !currentText && catalogItems.length === 0) {
+    throw new Error("Informe um tema, oferta, mensagem inicial ou selecione produtos para a IA criar o rascunho.");
   }
 
   const credentials = await loadGeminiCredentials(client);
@@ -794,11 +857,12 @@ export async function generateWhatsappTargetCampaignDraft(
     occurrences: input.recurrenceOccurrences,
   });
   const systemInstruction = [
-    "Voce cria rascunhos de campanhas para grupos e canais do WhatsApp.",
-    "Escreva em portugues do Brasil, com tom comercial natural, claro e sem parecer spam.",
-    "Nao invente desconto, garantia, preco, prazo, estoque, link ou bonus que nao esteja no briefing.",
-    "Nao use markdown pesado. Evite excesso de emojis e evite caixa alta.",
+    "Você cria rascunhos de campanhas para grupos e canais do WhatsApp.",
+    "Escreva em português do Brasil, com tom comercial natural, claro e sem parecer spam.",
+    "Não invente desconto, garantia, preço, prazo, estoque, link ou bônus que não esteja no briefing.",
+    "Não use markdown pesado. Evite excesso de emojis e evite caixa alta.",
     "Se houver grupos, a mensagem deve funcionar em conversa coletiva. Se houver canais, deve funcionar como post de broadcast.",
+    "Quando houver produtos do catalogo, escolha um gancho comercial claro e conduza para compra sem soar mecanico.",
     "Retorne somente JSON valido com as chaves title, text e approvalChecklist.",
     "title deve ter no maximo 90 caracteres. text deve ter no maximo 1400 caracteres.",
   ].join("\n");
@@ -842,6 +906,325 @@ export async function generateWhatsappTargetCampaignDraft(
     systemInstruction,
     prompt,
     responseData,
+  };
+}
+
+export async function generateWhatsappStatusDraft(
+  client: SupabaseClient,
+  context: WhatsappOperationalContext,
+  input: {
+    brief?: string | null;
+    currentText?: string | null;
+    catalogItemIds?: string[];
+  },
+): Promise<WhatsappStatusDraft> {
+  if (!context.behavior.statusBroadcasts) {
+    throw new Error("Ative Status no comportamento do agente antes de criar rascunhos com IA.");
+  }
+
+  const brief = input.brief?.trim().slice(0, 900) ?? "";
+  const currentText = input.currentText?.trim().slice(0, 656) ?? "";
+  const catalogItems = await listSalesCatalogCampaignItems(client, context, input.catalogItemIds ?? []);
+
+  if (!brief && !currentText && catalogItems.length === 0) {
+    throw new Error("Informe uma ideia ou selecione produtos para a IA criar o status.");
+  }
+
+  const credentials = await loadGeminiCredentials(client);
+  const statusMedia = buildCatalogStatusMedia(catalogItems)[0] ?? null;
+  const systemInstruction = [
+    "Voce cria textos curtos para Status/Stories de WhatsApp de uma empresa.",
+    "Escreva em portugues do Brasil, com tom natural de atendente humano e foco comercial leve.",
+    "Nao invente desconto, garantia, prazo, estoque, link ou bonus que nao esteja no briefing ou no catalogo.",
+    "O texto precisa caber no status do WhatsApp: maximo de 656 caracteres.",
+    "Evite markdown, excesso de emojis e caixa alta.",
+    "Retorne somente JSON valido com as chaves text, backgroundColor e approvalChecklist.",
+    "backgroundColor deve ser um numero de 1 a 19.",
+  ].join("\n");
+  const prompt = [
+    `Escopo: ${context.scope === "platform" ? "status interno ConnectyHub" : "status de cliente ConnectyHub"}`,
+    `WhatsApp conectado: ${context.instance.display_name ?? context.instance.phone_number ?? context.instance.provider_instance_id ?? "sem nome"}`,
+    catalogItems.length ? "Produtos selecionados:" : "",
+    catalogItems.map((item, index) => formatCampaignCatalogPromptItem(item, index)).join("\n"),
+    statusMedia ? `Midia sugerida para acompanhar o status: ${statusMedia.type} ${statusMedia.file}` : "Sem midia de produto selecionada.",
+    brief ? `Ideia do usuario: ${brief}` : "",
+    currentText ? `Texto atual para aproveitar ou melhorar: ${currentText}` : "",
+    "Crie um status que gere resposta natural do lead, sem parecer disparo frio.",
+    "Checklist esperado: 3 a 5 itens curtos que o humano deve conferir antes de aprovar.",
+  ].filter(Boolean).join("\n\n");
+  const responseData = await callGeminiGenerateContent(credentials, systemInstruction, prompt, {
+    temperature: 0.78,
+    maxOutputTokens: 650,
+  });
+  const rawText = extractGeminiText(responseData);
+  const parsed = parseGeminiStatusDraft(rawText);
+
+  if (!parsed.text) {
+    throw new Error("Gemini nao retornou texto para o status.");
+  }
+
+  return {
+    text: parsed.text.slice(0, 656),
+    backgroundColor: parsed.backgroundColor,
+    approvalChecklist: parsed.approvalChecklist.slice(0, 5),
+    productNames: catalogItems.map((item) => item.title).slice(0, 6),
+    mediaUrl: statusMedia?.file ?? null,
+    mediaKind: statusMedia?.type === "image" || statusMedia?.type === "video" ? statusMedia.type : null,
+    modelId: credentials.model,
+    systemInstruction,
+    prompt,
+    responseData,
+  };
+}
+
+export async function queueWhatsappTargetPollCampaign(
+  client: SupabaseClient,
+  context: WhatsappOperationalContext,
+  input: {
+    title?: string | null;
+    question: string;
+    choices: string[];
+    targetIds: string[];
+    scheduledFor?: string | null;
+    recurrenceFrequency?: string | null;
+    recurrenceOccurrences?: number | null;
+    selectableCount?: number | null;
+    mentionAll?: boolean;
+  },
+) {
+  assertWhatsappConnected(context);
+
+  if (!context.behavior.campaignBroadcasts) {
+    throw new Error("Ative Campanhas no comportamento do agente antes de agendar enquetes.");
+  }
+
+  if (!context.behavior.interactiveMessages) {
+    throw new Error("Ative Botoes e mensagens interativas no comportamento do agente antes de enviar enquetes.");
+  }
+
+  const question = input.question.trim().slice(0, 600);
+  const choices = normalizePollChoices(input.choices);
+  if (!question) throw new Error("Escreva a pergunta da enquete.");
+  if (choices.length < 2) throw new Error("Informe pelo menos duas opcoes para a enquete.");
+
+  const targets = await listWhatsappChannelTargetsByIds(client, context, input.targetIds);
+  if (targets.length === 0) {
+    throw new Error("Selecione pelo menos um grupo sincronizado para a enquete.");
+  }
+
+  const newsletterTarget = targets.find((target) => target.type === "newsletter");
+  if (newsletterTarget) {
+    throw new Error("Enquetes interativas da Uazapi usam /send/menu e atualmente so sao seguras para grupos, nao canais.");
+  }
+
+  const blocked = targets.filter((target) => !target.campaignEnabled);
+  if (blocked.length > 0) {
+    throw new Error(`Destino sem campanhas liberadas: ${blocked[0]?.name ?? blocked[0]?.jid}.`);
+  }
+
+  const mentionAll = Boolean(input.mentionAll);
+  const title = input.title?.trim().slice(0, 90) || `Enquete WhatsApp - ${new Date().toLocaleDateString("pt-BR")}`;
+
+  return queueWhatsappOutbound(client, context, {
+    operation: "target_poll",
+    title,
+    summary: `${targets.length} grupo(s), ${choices.length} opcao(oes): ${preview(question, 140)}`,
+    body: question,
+    scheduledFor: input.scheduledFor,
+    payload: {
+      type: "poll",
+      text: question,
+      choices,
+      selectable_count: clamp(Math.round(input.selectableCount ?? 1), 1, Math.max(1, choices.length)),
+      target_mode: "whatsapp_targets",
+      targets: targets.map((target) => ({
+        id: target.id,
+        type: target.type,
+        jid: target.jid,
+        name: target.name,
+      })),
+      mentions: mentionAll ? "all" : undefined,
+    },
+    recurrence: normalizeCampaignRecurrence({
+      frequency: input.recurrenceFrequency,
+      occurrences: input.recurrenceOccurrences,
+    }),
+  });
+}
+
+export async function queueWhatsappGroupWindow(
+  client: SupabaseClient,
+  context: WhatsappOperationalContext,
+  input: {
+    targetId: string;
+    openScheduledFor: string;
+    closeScheduledFor: string;
+    openingText?: string | null;
+    preCloseText?: string | null;
+    closingText?: string | null;
+    preCloseMinutes?: number | null;
+    mentionAll?: boolean;
+  },
+) {
+  assertWhatsappConnected(context);
+
+  if (!context.behavior.allowGroupChats) {
+    throw new Error("Ative Responder em grupos no comportamento do agente antes de criar janela de conversa.");
+  }
+
+  const target = await loadWhatsappChannelTargetById(client, context, input.targetId.trim());
+  if (!target) throw new Error("Grupo nao encontrado para esta instancia.");
+  if (target.target_type !== "group") throw new Error("Janela de conversa so pode ser criada para grupos.");
+  if (target.is_admin === false) {
+    throw new Error("Este WhatsApp precisa ser admin do grupo para abrir ou fechar a conversa.");
+  }
+
+  const openScheduledFor = normalizeRequiredScheduledFor(input.openScheduledFor, "Informe quando o grupo deve abrir.");
+  const closeScheduledFor = normalizeRequiredScheduledFor(input.closeScheduledFor, "Informe quando o grupo deve fechar.");
+  if (closeScheduledFor.getTime() <= openScheduledFor.getTime()) {
+    throw new Error("O horario de fechamento precisa ser depois da abertura.");
+  }
+
+  const targetName = target.display_name?.trim() || target.provider_jid;
+  const mentionAll = Boolean(input.mentionAll);
+  const openingText = normalizeGroupWindowMessage(
+    input.openingText,
+    "Oi pessoal, abri o grupo por um tempo para duvidas e troca de ideias. Podem mandar as perguntas por aqui que eu vou respondendo.",
+  );
+  const preCloseText = normalizeGroupWindowMessage(
+    input.preCloseText,
+    "Vou deixar o grupo aberto mais alguns minutos. Quem tiver duvida, manda agora que eu tento responder todo mundo.",
+  );
+  const closingText = normalizeGroupWindowMessage(
+    input.closingText,
+    "Fechando o grupo agora, pessoal. Quem quiser continuar, pode chamar no privado ou tocar no botao de compra quando eu enviar uma oferta.",
+  );
+  const items: WhatsappOutboundItem[] = [];
+
+  items.push(await queueWhatsappOutbound(client, context, {
+    operation: "group_announce_mode",
+    title: `Abrir grupo - ${targetName}`.slice(0, 140),
+    summary: preview(openingText, 180),
+    body: openingText,
+    scheduledFor: openScheduledFor.toISOString(),
+    payload: buildGroupWindowPayload({
+      phase: "open",
+      targetId: target.id,
+      targetJid: target.provider_jid,
+      targetName,
+      announce: false,
+      text: openingText,
+      mentions: mentionAll ? "all" : undefined,
+    }),
+  }));
+
+  const preCloseMinutes = clamp(Math.round(input.preCloseMinutes ?? 5), 1, 120);
+  const preCloseScheduledFor = new Date(closeScheduledFor.getTime() - preCloseMinutes * 60_000);
+  if (preCloseScheduledFor.getTime() > openScheduledFor.getTime() + 60_000) {
+    items.push(await queueWhatsappOutbound(client, context, {
+      operation: "group_announce_mode",
+      title: `Aviso de fechamento - ${targetName}`.slice(0, 140),
+      summary: preview(preCloseText, 180),
+      body: preCloseText,
+      scheduledFor: preCloseScheduledFor.toISOString(),
+      payload: buildGroupWindowPayload({
+        phase: "pre_close",
+        targetId: target.id,
+        targetJid: target.provider_jid,
+        targetName,
+        announce: null,
+        text: preCloseText,
+        mentions: mentionAll ? "all" : undefined,
+      }),
+    }));
+  }
+
+  items.push(await queueWhatsappOutbound(client, context, {
+    operation: "group_announce_mode",
+    title: `Fechar grupo - ${targetName}`.slice(0, 140),
+    summary: preview(closingText, 180),
+    body: closingText,
+    scheduledFor: closeScheduledFor.toISOString(),
+    payload: buildGroupWindowPayload({
+      phase: "close",
+      targetId: target.id,
+      targetJid: target.provider_jid,
+      targetName,
+      announce: true,
+      text: closingText,
+      mentions: mentionAll ? "all" : undefined,
+    }),
+  }));
+
+  return {
+    target: mapWhatsappChannelTarget(target),
+    items,
+  };
+}
+
+export async function probeWhatsappLeadStatusWatch(
+  context: WhatsappOperationalContext,
+): Promise<WhatsappLeadStatusWatchProbe> {
+  assertWhatsappConnected(context);
+
+  const checkedAt = new Date().toISOString();
+  const testedEndpoints = ["/chat/find", "/message/find"];
+  const errors: string[] = [];
+  let chatSamples: unknown[] = [];
+  let messageSamples: unknown[] = [];
+
+  try {
+    const chats = await callUazapi(context, "/chat/find", {
+      method: "POST",
+      body: {
+        operator: "OR",
+        sort: "-wa_lastMsgTimestamp",
+        limit: 5,
+        offset: 0,
+        wa_chatid: "status@broadcast",
+        wa_name: "status",
+      },
+    });
+    chatSamples = extractProviderItems(chats.data, ["chats", "data", "items", "response"])
+      .slice(0, 5)
+      .map(sanitizeProviderData);
+  } catch (error) {
+    errors.push(`/chat/find: ${error instanceof Error ? error.message : "falha ao consultar chat de status"}`);
+  }
+
+  try {
+    const messages = await callUazapi(context, "/message/find", {
+      method: "POST",
+      body: {
+        chatid: "status@broadcast",
+        limit: 5,
+        offset: 0,
+      },
+    });
+    messageSamples = extractProviderItems(messages.data, ["messages", "data", "items", "response"])
+      .slice(0, 5)
+      .map(sanitizeProviderData);
+  } catch (error) {
+    errors.push(`/message/find: ${error instanceof Error ? error.message : "falha ao consultar mensagens de status"}`);
+  }
+
+  const statusChatFound = chatSamples.length > 0;
+  const statusMessageFound = messageSamples.length > 0;
+  const available = statusChatFound || statusMessageFound;
+
+  return {
+    checkedAt,
+    available,
+    confidence: available ? "medium" : "low",
+    message: available
+      ? "A Uazapi retornou registros ligados a status@broadcast. Da para seguir com piloto controlado de status dos leads."
+      : "A Uazapi respondeu sem confirmar uma caixa de status dos leads. O recurso deve continuar como experimental ate validacao com status recente ou endpoint dedicado.",
+    testedEndpoints,
+    statusChatFound,
+    statusMessageFound,
+    chatSamples,
+    messageSamples,
+    errors,
   };
 }
 
@@ -961,7 +1344,8 @@ async function processWhatsappOutboundItem(client: SupabaseClient, item: Content
         method: "POST",
         body: cleanPayload({
           type: payload.type ?? "text",
-          text: payload.text ?? item.body,
+          text: asString(payload.text) ?? asString(payload.media_caption) ?? item.body,
+          file: payload.file,
           backgroundColor: payload.backgroundColor,
           max_recipients: payload.max_recipients,
           recipients: payload.recipients,
@@ -993,6 +1377,21 @@ async function processWhatsappOutboundItem(client: SupabaseClient, item: Content
           }),
         }).then((result) => result.data);
       }
+    } else if (operation === "target_poll") {
+      const targetRecipients = readCampaignTargetRecipients(payload);
+
+      if (!targetRecipients) {
+        throw new Error("Enquete sem grupos de destino.");
+      }
+
+      const responses = [];
+      for (const recipient of targetRecipients) {
+        const sent = await sendTargetPollPayloadToRecipient(context, item, payload, recipient);
+        responses.push({ recipient, responses: sanitizeProviderData(sent) });
+      }
+      providerResponse = { target_mode: "whatsapp_targets", sent: responses };
+    } else if (operation === "group_announce_mode") {
+      providerResponse = await sendGroupWindowPayload(context, item, payload);
     } else if (operation === "newsletter_text") {
       providerResponse = await callUazapi(context, "/send/text", {
         method: "POST",
@@ -1067,21 +1466,41 @@ async function sendTargetCampaignPayloadToRecipient(
   const text = asString(payload.text) ?? item.body ?? "";
   const deliveryMode = normalizeCampaignDeliveryMode(payload.delivery_mode);
   const mentions = payload.mentions;
+  const buttons = readCampaignButtons(payload.buttons);
+  const interactiveMode = buttons.length > 0 ? normalizeCampaignInteractiveMode(payload.interactive_mode) : "none";
   const responses: Array<JsonRecord> = [];
 
   if ((deliveryMode === "text" || deliveryMode === "text_audio") && text) {
-    const textResponse = await callUazapi(context, "/send/text", {
-      method: "POST",
-      body: cleanPayload({
-        number: recipient,
-        text,
-        mentions,
-        linkPreview: true,
-        track_source: "connectyhub",
-        track_id: `campaign_${item.id}_text`,
-      }),
-    }).then((result) => result.data);
-    responses.push({ mode: "text", response: sanitizeProviderData(textResponse) as JsonRecord });
+    if (interactiveMode === "button" && !recipient.endsWith("@newsletter")) {
+      const menuResponse = await callUazapi(context, "/send/menu", {
+        method: "POST",
+        body: cleanPayload({
+          number: recipient,
+          type: "button",
+          text,
+          mentions,
+          choices: buttons.map((button) => button.choice),
+          imageButton: asString(payload.image_button),
+          footerText: "ConnectyHub",
+          track_source: "connectyhub",
+          track_id: `campaign_${item.id}_button`,
+        }),
+      }).then((result) => result.data);
+      responses.push({ mode: "button", response: sanitizeProviderData(menuResponse) as JsonRecord });
+    } else {
+      const textResponse = await callUazapi(context, "/send/text", {
+        method: "POST",
+        body: cleanPayload({
+          number: recipient,
+          text,
+          mentions,
+          linkPreview: true,
+          track_source: "connectyhub",
+          track_id: `campaign_${item.id}_text`,
+        }),
+      }).then((result) => result.data);
+      responses.push({ mode: "text", response: sanitizeProviderData(textResponse) as JsonRecord });
+    }
   }
 
   if ((deliveryMode === "audio" || deliveryMode === "text_audio") && text) {
@@ -1114,6 +1533,99 @@ async function sendTargetCampaignPayloadToRecipient(
   }
 
   return responses;
+}
+
+async function sendTargetPollPayloadToRecipient(
+  context: WhatsappOperationalContext,
+  item: ContentPipelineRow,
+  payload: JsonRecord,
+  recipient: string,
+) {
+  const question = asString(payload.text) ?? item.body ?? "";
+  const choices = normalizePollChoices(readStringArray(payload.choices));
+
+  if (!question || choices.length < 2) {
+    throw new Error("Enquete sem pergunta ou opcoes validas.");
+  }
+
+  const providerResponse = await callUazapi(context, "/send/menu", {
+    method: "POST",
+    body: cleanPayload({
+      number: recipient,
+      type: "poll",
+      text: question,
+      choices,
+      selectableCount: clamp(readInteger(payload.selectable_count, 1), 1, choices.length),
+      mentions: payload.mentions,
+      track_source: "connectyhub",
+      track_id: `poll_${item.id}`,
+    }),
+  }).then((result) => result.data);
+
+  return [{
+    mode: "poll",
+    response: sanitizeProviderData(providerResponse) as JsonRecord,
+  }];
+}
+
+async function sendGroupWindowPayload(
+  context: WhatsappOperationalContext,
+  item: ContentPipelineRow,
+  payload: JsonRecord,
+) {
+  const targetJid = asString(payload.target_jid);
+  const text = asString(payload.text) ?? item.body ?? "";
+  const phase = asString(payload.phase) ?? "message";
+  const announce = typeof payload.announce === "boolean" ? payload.announce : null;
+  const responses: Array<JsonRecord> = [];
+
+  if (!targetJid?.endsWith("@g.us")) {
+    throw new Error("Janela de grupo sem JID de grupo valido.");
+  }
+
+  async function updateAnnounce() {
+    if (announce === null) return;
+    const response = await callUazapi(context, "/group/updateAnnounce", {
+      method: "POST",
+      body: {
+        groupjid: targetJid,
+        announce,
+      },
+    }).then((result) => result.data);
+    responses.push({ mode: "group_announce", announce, response: sanitizeProviderData(response) as JsonRecord });
+  }
+
+  async function sendMessage() {
+    if (!text) return;
+    const response = await callUazapi(context, "/send/text", {
+      method: "POST",
+      body: cleanPayload({
+        number: targetJid,
+        text,
+        mentions: payload.mentions,
+        linkPreview: true,
+        track_source: "connectyhub",
+        track_id: `group_window_${item.id}_${phase}`,
+      }),
+    }).then((result) => result.data);
+    responses.push({ mode: "group_message", response: sanitizeProviderData(response) as JsonRecord });
+  }
+
+  if (phase === "open") {
+    await updateAnnounce();
+    await sendMessage();
+  } else if (phase === "close") {
+    await sendMessage();
+    await updateAnnounce();
+  } else {
+    await sendMessage();
+  }
+
+  return {
+    targetJid,
+    phase,
+    responses,
+  };
 }
 
 async function sendCampaignAudioToRecipient(
@@ -1323,7 +1835,9 @@ async function queueWhatsappOutbound(
   const scheduledFor = normalizeScheduledFor(input.scheduledFor);
   const contentType = input.operation === "status"
     ? "whatsapp_status"
-    : input.operation === "campaign_simple"
+    : input.operation === "group_announce_mode"
+      ? "whatsapp_group_window"
+      : input.operation === "campaign_simple" || input.operation === "target_poll"
       ? "whatsapp_campaign"
       : "whatsapp_newsletter";
 
@@ -1660,8 +2174,8 @@ function buildWhatsappOperationsAnalytics(rows: ContentPipelineRow[]): WhatsappO
     if (row.status === "published") summary.published += 1;
     if (row.status === "review" || providerStatus === "failed") summary.failed += 1;
     if (readStoredRecurrence(metadata.recurrence)) summary.recurring += 1;
-    if (attachmentCount > 0) summary.withMedia += 1;
-    if (deliveryMode === "audio" || deliveryMode === "text_audio") summary.withAudio += 1;
+    if (attachmentCount > 0 || asString(payload.file)) summary.withMedia += 1;
+    if (deliveryMode === "audio" || deliveryMode === "text_audio" || ["audio", "myaudio", "ptt"].includes(asString(payload.type) ?? "")) summary.withAudio += 1;
     summary.totalRecipients += targetCount;
     if (campaignTracking) {
       summary.trackedMessages += campaignTracking.total;
@@ -2446,6 +2960,38 @@ function normalizeScheduledFor(value: string | null | undefined) {
   return Number.isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString();
 }
 
+function normalizeRequiredScheduledFor(value: string | null | undefined, message: string) {
+  if (!value) throw new Error(message);
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) throw new Error(message);
+  return date;
+}
+
+function normalizeGroupWindowMessage(value: string | null | undefined, fallback: string) {
+  return (value?.trim() || fallback).replace(/\s+/g, " ").slice(0, 1200);
+}
+
+function buildGroupWindowPayload(input: {
+  phase: "open" | "pre_close" | "close";
+  targetId: string;
+  targetJid: string;
+  targetName: string;
+  announce: boolean | null;
+  text: string;
+  mentions?: string;
+}) {
+  return cleanPayload({
+    type: "group_announce_mode",
+    phase: input.phase,
+    target_id: input.targetId,
+    target_jid: input.targetJid,
+    target_name: input.targetName,
+    announce: input.announce,
+    text: input.text,
+    mentions: input.mentions,
+  });
+}
+
 function normalizeCampaignRecurrence(input: {
   frequency?: string | null;
   occurrences?: number | null;
@@ -2519,12 +3065,124 @@ function readCampaignTargetCount(payload: JsonRecord) {
   if (Array.isArray(payload.targets)) return payload.targets.length;
   if (Array.isArray(payload.numbers)) return payload.numbers.length;
   if (asString(payload.jid)) return 1;
+  if (asString(payload.target_jid)) return 1;
   return 0;
+}
+
+function normalizeWhatsappStatusPayloadType(value: unknown): WhatsappStatusPayloadType {
+  if (value === "image" || value === "video" || value === "audio" || value === "myaudio" || value === "ptt") {
+    return value;
+  }
+  return "text";
+}
+
+function normalizeStatusMediaAttachment(
+  mediaUrl: string | null | undefined,
+  statusType: string | null | undefined,
+  mediaCaption: string | null | undefined,
+) {
+  const file = normalizePublicMediaUrl(mediaUrl);
+  const type = normalizeWhatsappStatusPayloadType(statusType);
+
+  if (!file || type === "text") return null;
+
+  return {
+    type,
+    file,
+    text: mediaCaption?.trim().slice(0, 656) || null,
+    source: "manual_url",
+    catalogItemId: null as string | null,
+  };
+}
+
+function buildCatalogStatusMedia(items: ClientSalesCatalogItem[]) {
+  return items
+    .map((item) => {
+      const media = item.media.find((entry) => (entry.kind === "image" || entry.kind === "video") && normalizePublicMediaUrl(entry.storageUrl));
+      if (!media) return null;
+
+      return {
+        type: media.kind,
+        file: media.storageUrl,
+        text: buildCampaignCatalogCaption(item, media),
+        source: "sales_catalog",
+        catalogItemId: item.id,
+      };
+    })
+    .filter((item): item is NonNullable<typeof item> => Boolean(item));
 }
 
 function normalizeCampaignDeliveryMode(value: unknown): WhatsappCampaignDeliveryMode {
   if (value === "audio" || value === "text_audio") return value;
   return "text";
+}
+
+function normalizeCampaignInteractiveMode(value: unknown): WhatsappCampaignInteractiveMode {
+  return value === "button" ? "button" : "none";
+}
+
+function normalizeCampaignButton(
+  labelValue: string | null | undefined,
+  urlValue: string | null | undefined,
+  catalogItems: ClientSalesCatalogItem[],
+) {
+  const firstProduct = catalogItems[0] ?? null;
+  const label = (
+    labelValue?.trim()
+    || firstProduct?.externalLinkButtonLabel
+    || firstProduct?.offer.callToAction
+    || "Comprar agora"
+  ).slice(0, 24);
+  const productUrl = normalizePublicMediaUrl(urlValue)
+    ?? normalizePublicMediaUrl(firstProduct?.externalLinkButtonTrackingUrl ?? null)
+    ?? normalizePublicMediaUrl(firstProduct?.productUrl ?? null);
+  const fallbackId = `comprar_${firstProduct?.id.slice(0, 8) ?? "agora"}`;
+  const choice = productUrl ? `${label}|${productUrl}` : `${label}|${fallbackId}`;
+
+  if (!label) return null;
+
+  return {
+    label,
+    url: productUrl,
+    choice,
+    kind: productUrl ? "url" : "reply",
+    productId: firstProduct?.id ?? null,
+  };
+}
+
+function readCampaignButtons(value: unknown) {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item) => readRecord(item))
+    .map((item) => {
+      const choice = asString(item?.choice);
+      if (!choice) return null;
+
+      return {
+        label: asString(item?.label),
+        url: asString(item?.url),
+        choice,
+        kind: asString(item?.kind),
+        productId: asString(item?.productId),
+      };
+    })
+    .filter((item): item is NonNullable<typeof item> => Boolean(item))
+    .slice(0, 3);
+}
+
+function normalizePollChoices(value: unknown) {
+  const source = Array.isArray(value)
+    ? value
+    : typeof value === "string"
+      ? value.split(/[\n;]/)
+      : [];
+
+  return Array.from(new Set(source
+    .map((item) => String(item).trim().replace(/\s+/g, " "))
+    .filter(Boolean)
+    .map((item) => item.slice(0, 80))))
+    .slice(0, 12);
 }
 
 function normalizeManualCampaignAttachments(
@@ -2827,6 +3485,27 @@ function parseGeminiCampaignDraft(value: string) {
         "Confirmar se a oferta e as condicoes estao corretas.",
         "Conferir se o tom combina com o grupo ou canal.",
         "Remover qualquer promessa que nao esteja aprovada.",
+      ],
+  };
+}
+
+function parseGeminiStatusDraft(value: string) {
+  const cleaned = stripCodeFence(value).trim();
+  const jsonText = extractJsonObject(cleaned) ?? cleaned;
+  const parsed = parseJsonObject(jsonText);
+  const text = asString(parsed?.text) ?? asString(parsed?.texto) ?? asString(parsed?.message) ?? (parsed ? "" : cleaned);
+  const checklist = readStringArray(parsed?.approvalChecklist ?? parsed?.checklist ?? parsed?.approval_checklist)
+    .map((item) => item.slice(0, 160));
+
+  return {
+    text,
+    backgroundColor: clamp(readInteger(parsed?.backgroundColor ?? parsed?.background_color, 4), 1, 19),
+    approvalChecklist: checklist.length > 0
+      ? checklist
+      : [
+        "Confirmar se produto, preco e disponibilidade estao corretos.",
+        "Conferir se o texto parece natural para status.",
+        "Remover promessa ou condicao que nao esteja aprovada.",
       ],
   };
 }

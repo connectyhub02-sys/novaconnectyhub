@@ -9,11 +9,15 @@ import {
   fetchWhatsappGroups,
   fetchWhatsappMessageLimits,
   fetchWhatsappNewsletters,
+  generateWhatsappStatusDraft,
   generateWhatsappTargetCampaignDraft,
   getWhatsappOperationsDashboard,
+  probeWhatsappLeadStatusWatch,
+  queueWhatsappGroupWindow,
   queueWhatsappNewsletterText,
   queueWhatsappSimpleCampaign,
   queueWhatsappStatusBroadcast,
+  queueWhatsappTargetPollCampaign,
   queueWhatsappTargetTextCampaign,
   resolvePlatformWhatsappOperationalContext,
   syncWhatsappCampaignTracking,
@@ -36,6 +40,7 @@ type ChannelActionBody = {
   scheduledFor?: unknown;
   maxRecipients?: unknown;
   backgroundColor?: unknown;
+  statusType?: unknown;
   targetIds?: unknown;
   mentionAll?: unknown;
   recurrenceFrequency?: unknown;
@@ -48,6 +53,20 @@ type ChannelActionBody = {
   mediaKind?: unknown;
   mediaCaption?: unknown;
   catalogItemIds?: unknown;
+  interactiveMode?: unknown;
+  buttonLabel?: unknown;
+  buttonUrl?: unknown;
+  pollTitle?: unknown;
+  pollQuestion?: unknown;
+  pollChoices?: unknown;
+  pollSelectableCount?: unknown;
+  groupTargetId?: unknown;
+  openScheduledFor?: unknown;
+  closeScheduledFor?: unknown;
+  openingText?: unknown;
+  preCloseText?: unknown;
+  closingText?: unknown;
+  preCloseMinutes?: unknown;
   targetId?: unknown;
   enabled?: unknown;
   campaignEnabled?: unknown;
@@ -132,6 +151,10 @@ export async function POST(request: NextRequest) {
         maxRecipients: asNumber(body?.maxRecipients),
         backgroundColor: asNumber(body?.backgroundColor),
         scheduledFor: asString(body?.scheduledFor),
+        statusType: asString(body?.statusType),
+        mediaUrl: asString(body?.mediaUrl),
+        mediaCaption: asString(body?.mediaCaption),
+        catalogItemIds: readStringList(body?.catalogItemIds),
       });
       await dispatchOutboundIfDue(item);
       result = { item };
@@ -185,6 +208,31 @@ export async function POST(request: NextRequest) {
       }).catch(() => null);
       result = { draft: toSafeCampaignDraft(draft) };
       notice = "Rascunho IA interno criado. Revise e clique em Agendar post para aprovar.";
+    } else if (action === "generate_status_draft") {
+      const draft = await generateWhatsappStatusDraft(client, whatsapp, {
+        brief: asString(body?.brief),
+        currentText: asString(body?.currentText),
+        catalogItemIds: readStringList(body?.catalogItemIds),
+      });
+      await meterGeminiGenerationUsage({
+        client,
+        featureCode: "whatsapp_status_ai_draft",
+        modelId: draft.modelId,
+        agentScope: "platform",
+        billingMode: "internal_shadow",
+        promptText: [draft.systemInstruction, draft.prompt],
+        outputText: draft.text,
+        responseData: draft.responseData,
+        debitDescription: "Rascunho IA de status WhatsApp interno",
+        metadata: {
+          source: "admin_whatsapp_automations",
+          sectorId: sector.id,
+          sectorCode: sector.sector_code,
+          productNames: draft.productNames,
+        },
+      }).catch(() => null);
+      result = { draft: toSafeStatusDraft(draft) };
+      notice = "Status IA interno criado. Revise o texto e publique quando estiver pronto.";
     } else if (action === "send_target_campaign") {
       const item = await queueWhatsappTargetTextCampaign(client, whatsapp, {
         title: asString(body?.title) ?? "",
@@ -199,10 +247,47 @@ export async function POST(request: NextRequest) {
         mediaKind: asString(body?.mediaKind),
         mediaCaption: asString(body?.mediaCaption),
         catalogItemIds: readStringList(body?.catalogItemIds),
+        interactiveMode: asString(body?.interactiveMode),
+        buttonLabel: asString(body?.buttonLabel),
+        buttonUrl: asString(body?.buttonUrl),
       });
       await dispatchOutboundIfDue(item);
       result = { item };
       notice = "Campanha interna para grupos/canais agendada pelo Inngest.";
+    } else if (action === "send_target_poll") {
+      const item = await queueWhatsappTargetPollCampaign(client, whatsapp, {
+        title: asString(body?.pollTitle) ?? "",
+        question: asString(body?.pollQuestion) ?? "",
+        choices: readStringList(body?.pollChoices),
+        targetIds: readStringList(body?.targetIds),
+        scheduledFor: asString(body?.scheduledFor),
+        mentionAll: asBoolean(body?.mentionAll),
+        recurrenceFrequency: asString(body?.recurrenceFrequency),
+        recurrenceOccurrences: asNumber(body?.recurrenceOccurrences) ?? null,
+        selectableCount: asNumber(body?.pollSelectableCount) ?? null,
+      });
+      await dispatchOutboundIfDue(item);
+      result = { item };
+      notice = "Enquete interna para grupos agendada pelo Inngest.";
+    } else if (action === "schedule_group_window") {
+      const groupWindow = await queueWhatsappGroupWindow(client, whatsapp, {
+        targetId: asString(body?.groupTargetId) ?? "",
+        openScheduledFor: asString(body?.openScheduledFor) ?? "",
+        closeScheduledFor: asString(body?.closeScheduledFor) ?? "",
+        openingText: asString(body?.openingText),
+        preCloseText: asString(body?.preCloseText),
+        closingText: asString(body?.closingText),
+        preCloseMinutes: asNumber(body?.preCloseMinutes) ?? null,
+        mentionAll: asBoolean(body?.mentionAll),
+      });
+      for (const item of groupWindow.items) {
+        await dispatchOutboundIfDue(item);
+      }
+      result = groupWindow;
+      notice = "Janela interna do grupo agendada com abertura, aviso e fechamento.";
+    } else if (action === "probe_lead_status_watch") {
+      result = { probe: await probeWhatsappLeadStatusWatch(whatsapp) };
+      notice = "Teste experimental de status dos leads concluido.";
     } else if (action === "update_target_settings") {
       result = {
         target: await updateWhatsappChannelTargetSettings(client, whatsapp, {
@@ -311,6 +396,26 @@ function toSafeCampaignDraft(draft: {
     approvalChecklist: draft.approvalChecklist,
     targetCount: draft.targetCount,
     targetNames: draft.targetNames,
+    modelId: draft.modelId,
+  };
+}
+
+function toSafeStatusDraft(draft: {
+  text: string;
+  backgroundColor: number;
+  approvalChecklist: string[];
+  productNames: string[];
+  mediaUrl: string | null;
+  mediaKind: "image" | "video" | null;
+  modelId: string;
+}) {
+  return {
+    text: draft.text,
+    backgroundColor: draft.backgroundColor,
+    approvalChecklist: draft.approvalChecklist,
+    productNames: draft.productNames,
+    mediaUrl: draft.mediaUrl,
+    mediaKind: draft.mediaKind,
     modelId: draft.modelId,
   };
 }

@@ -32,6 +32,10 @@ export default async function AgentsPage({ searchParams }: AgentsPageProps) {
   const profile = workspace.profile;
   const organization = workspace.organization;
 
+  if (isWhatsappAutomationTab(params.tab)) {
+    redirect("/dashboard/automacoes");
+  }
+
   return (
     <ConnectyShell
       activeHref="/dashboard/whatsapp"
@@ -41,15 +45,15 @@ export default async function AgentsPage({ searchParams }: AgentsPageProps) {
       userLabel={profile.email ?? undefined}
       workspaceName={organization.name ?? profile.companyName ?? "Workspace"}
     >
-      <WhatsAppConsole initialTab={resolveInitialWhatsappTab(params.tab)} />
+      <WhatsAppConsole initialTab="connection" />
     </ConnectyShell>
   );
 }
 
-function resolveInitialWhatsappTab(value: string | undefined) {
+function isWhatsappAutomationTab(value: string | undefined) {
   if (value === "campanhas" || value === "grupos-campanhas" || value === "grupos") {
-    return "multichannel" as const;
+    return true;
   }
 
-  return "connection" as const;
+  return false;
 }
