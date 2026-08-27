@@ -26,10 +26,12 @@ describe("WhatsApp growth engine v2", () => {
   });
 
   it("surfaces the new automation controls in the client WhatsApp studio", () => {
-    expect(studioSource).toContain("Rotina IA");
+    expect(studioSource).toContain("Campanha automatica");
     expect(studioSource).toContain("Planejar rotina");
     expect(studioSource).toContain("Agendar rotina");
     expect(studioSource).toContain("Carrossel");
+    expect(studioSource).toContain("Ajustes avancados");
+    expect(studioSource).toContain("URL de midia externa (opcional)");
     expect(studioSource).toContain("Segmentos sugeridos");
   });
 });

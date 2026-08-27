@@ -12,6 +12,7 @@ import {
   MessageCircle,
   RefreshCcw,
   Send,
+  Settings2,
   ShieldCheck,
   Sparkles,
   Users,
@@ -225,9 +226,9 @@ export function ClientWhatsappAutomationStudio({
   const [campaignButtonEnabled, setCampaignButtonEnabled] = useState(true);
   const [campaignButtonLabel, setCampaignButtonLabel] = useState("Comprar agora");
   const [campaignButtonUrl, setCampaignButtonUrl] = useState("");
+  const [advancedToolsOpen, setAdvancedToolsOpen] = useState(false);
 
   const [growthObjective, setGrowthObjective] = useState("Vender os produtos selecionados com presenca diaria no WhatsApp");
-  const [growthBrief, setGrowthBrief] = useState("");
   const [growthDurationDays, setGrowthDurationDays] = useState(7);
   const [growthPostsPerDay, setGrowthPostsPerDay] = useState(3);
   const [growthStartFrom, setGrowthStartFrom] = useState(() => buildLocalDateTime(90));
@@ -266,7 +267,12 @@ export function ClientWhatsappAutomationStudio({
   const selectedTargetIdsValid = selectedTargets.map((target) => target.id);
   const selectedPollTargetIds = selectedTargets.filter((target) => target.type === "group").map((target) => target.id);
   const selectedCampaignProducts = products.filter((product) => selectedCampaignProductIds.includes(product.id));
+  const automaticCampaignProductIds = selectedCampaignProductIds.length > 0
+    ? selectedCampaignProductIds
+    : products.slice(0, 6).map((product) => product.id);
+  const automaticCampaignProducts = products.filter((product) => automaticCampaignProductIds.includes(product.id));
   const selectedStatusProducts = products.filter((product) => selectedStatusProductIds.includes(product.id));
+  const selectedCampaignMediaCount = automaticCampaignProducts.reduce((total, product) => total + product.media.length, 0);
   const campaignProductUrl = firstProductUrl(selectedCampaignProducts);
   const statusProductMediaReady = statusType !== "text"
     && selectedStatusProducts.some((product) => product.media.some((media) => media.kind === statusType));
@@ -279,7 +285,7 @@ export function ClientWhatsappAutomationStudio({
   const growthPlanReady = !operationsLocked
     && Boolean(behavior?.campaignBroadcasts || behavior?.newsletterBroadcasts || behavior?.statusBroadcasts)
     && (selectedTargets.length > 0 || Boolean(behavior?.statusBroadcasts))
-    && (selectedCampaignProducts.length > 0 || growthBrief.trim().length > 0 || growthObjective.trim().length > 0);
+    && (automaticCampaignProducts.length > 0 || campaignBrief.trim().length > 0 || growthObjective.trim().length > 0);
   const scheduleGrowthPlanReady = !operationsLocked && Boolean(growthPlan?.items.length);
   const statusReady = !operationsLocked
     && Boolean(behavior?.statusBroadcasts)
@@ -443,9 +449,9 @@ export function ClientWhatsappAutomationStudio({
   async function generateGrowthPlan() {
     const data = await runAction("generate_growth_plan", {
       targetIds: selectedTargetIdsValid,
-      catalogItemIds: selectedCampaignProductIds,
+      catalogItemIds: automaticCampaignProductIds,
       objective: growthObjective,
-      brief: growthBrief || campaignBrief,
+      brief: campaignBrief,
       durationDays: growthDurationDays,
       postsPerDay: growthPostsPerDay,
       startFrom: localDatetimeToIso(growthStartFrom),
@@ -465,7 +471,7 @@ export function ClientWhatsappAutomationStudio({
 
     await runAction("schedule_growth_plan", {
       targetIds: selectedTargetIdsValid,
-      catalogItemIds: selectedCampaignProductIds,
+      catalogItemIds: automaticCampaignProductIds,
       mentionAll: campaignMentionAll,
       buttonLabel: campaignButtonLabel,
       planItems: growthPlan.items,
@@ -660,63 +666,22 @@ export function ClientWhatsappAutomationStudio({
           </div>
 
           <div className="grid gap-4">
-            <Section title="Campanha com IA" badge="produtos / audio / botao">
+            <Section title="Campanha automatica" badge="IA faz a copy">
               <div className="grid gap-3">
                 <ProductPicker products={products} selectedIds={selectedCampaignProductIds} onToggle={(id) => toggleProduct(id, "campaign")} />
-                <Textarea label="Briefing para IA" value={campaignBrief} onChange={setCampaignBrief} rows={3} placeholder="Tema, oferta, objetivo, cuidados do post..." />
-                <Input label="Nome da campanha" value={campaignTitle} onChange={setCampaignTitle} />
-                <Textarea label="Mensagem" value={campaignText} onChange={setCampaignText} rows={6} placeholder="A IA pode criar a copy ou voce pode escrever aqui." />
-                {campaignChecklist.length ? (
-                  <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-3 text-[12px] text-emerald-700">
-                    {campaignChecklist.map((item) => <p key={item}>- {item}</p>)}
-                  </div>
-                ) : null}
-                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                  <SelectField label="Formato" value={campaignFormat} onChange={(value) => setCampaignFormat(value as typeof campaignFormat)} options={[
-                    ["single", "Post unico"],
-                    ["carousel", "Carrossel"],
-                  ]} />
-                  <SelectField label="Entrega" value={campaignDeliveryMode} onChange={(value) => setCampaignDeliveryMode(value as typeof campaignDeliveryMode)} options={[
-                    ["text", "Texto"],
-                    ["audio", "Audio"],
-                    ["text_audio", "Texto + audio"],
-                  ]} />
-                  <DateInput label="Quando" value={campaignScheduledFor} onChange={setCampaignScheduledFor} />
-                  <NumberInput label="Repeticoes" value={campaignOccurrences} min={2} max={365} onChange={setCampaignOccurrences} />
+                <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-[12px] leading-5 text-emerald-700">
+                  {selectedCampaignProductIds.length > 0
+                    ? `${selectedCampaignProductIds.length} produto(s) selecionado(s). A IA usa automaticamente as midias cadastradas no produto.`
+                    : `Nenhum produto selecionado. A IA pode testar ate ${automaticCampaignProducts.length} produto(s) ativo(s) do catalogo.`}
+                  {selectedCampaignMediaCount > 0 ? ` Midias encontradas: ${selectedCampaignMediaCount}.` : " Cadastre midias nos produtos para usar carrossel e anexos."}
                 </div>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <SelectField label="Recorrencia" value={campaignRecurrence} onChange={(value) => setCampaignRecurrence(value as typeof campaignRecurrence)} options={[
-                    ["none", "Unico"],
-                    ["daily", "Diario"],
-                    ["weekly", "Semanal"],
-                  ]} />
-                  <SelectField label="Midia" value={campaignMediaKind} onChange={(value) => setCampaignMediaKind(value as typeof campaignMediaKind)} options={[
-                    ["image", "Imagem"],
-                    ["video", "Video"],
-                    ["document", "Documento"],
-                  ]} />
-                </div>
-                <Input label="URL publica da midia" value={campaignMediaUrl} onChange={setCampaignMediaUrl} placeholder="https://..." />
-                <Input label="Legenda da midia" value={campaignMediaCaption} onChange={setCampaignMediaCaption} />
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <MiniToggle checked={campaignButtonEnabled} label="Enviar botao de compra" onClick={() => setCampaignButtonEnabled((current) => !current)} />
-                  <MiniToggle checked={campaignMentionAll} label="Mencionar todos nos grupos" onClick={() => setCampaignMentionAll((current) => !current)} />
-                </div>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <Input label="Texto do botao" value={campaignButtonLabel} onChange={setCampaignButtonLabel} />
-                  <Input label="URL do botao" value={campaignButtonUrl} onChange={setCampaignButtonUrl} icon={LinkIcon} />
-                </div>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <ActionButton icon={Sparkles} label="Criar copy IA" disabled={operationsLocked || selectedTargets.length === 0 || (!campaignBrief.trim() && selectedCampaignProducts.length === 0 && !campaignText.trim())} loading={runningAction === "generate_target_campaign_draft"} onClick={generateCampaignDraft} />
-                  <ActionButton icon={Send} label={campaignFormat === "carousel" ? "Agendar carrossel" : "Agendar campanha"} disabled={!campaignReady} loading={runningAction === "send_target_campaign" || runningAction === "send_target_carousel"} onClick={scheduleCampaign} />
-                </div>
-              </div>
-            </Section>
-
-            <Section title="Rotina IA" badge={`${growthPlan?.items.length ?? 0} posts`}>
-              <div className="grid gap-3">
-                <Input label="Objetivo" value={growthObjective} onChange={setGrowthObjective} />
-                <Textarea label="Briefing da rotina" value={growthBrief} onChange={setGrowthBrief} rows={3} placeholder="Ex.: 7 dias de ofertas, alternando prova social, enquete e produto do dia." />
+                <Input label="Nome interno (opcional)" value={campaignTitle} onChange={setCampaignTitle} placeholder="Ex.: Campanha da semana" />
+                <SelectField label="Objetivo da IA" value={growthObjective} onChange={setGrowthObjective} options={[
+                  ["Vender os produtos selecionados com presenca diaria no WhatsApp", "Vender produtos"],
+                  ["Descobrir quais produtos geram mais interesse no grupo", "Testar interesse"],
+                  ["Criar conversa no grupo com enquetes e ofertas leves", "Engajar grupo"],
+                  ["Publicar uma vitrine com carrossel e botao de compra", "Vitrine/carrossel"],
+                ]} />
                 <div className="grid gap-2 sm:grid-cols-3">
                   <DateInput label="Inicio" value={growthStartFrom} onChange={setGrowthStartFrom} />
                   <NumberInput label="Dias" value={growthDurationDays} min={1} max={14} onChange={setGrowthDurationDays} />
@@ -756,49 +721,109 @@ export function ClientWhatsappAutomationStudio({
               </div>
             </Section>
 
-            <Section title="Status do agente" badge="stories / produtos">
+            <Section title="Ajustes avancados" badge={advancedToolsOpen ? "aberto" : "opcional"}>
               <div className="grid gap-3">
-                <ProductPicker products={products} selectedIds={selectedStatusProductIds} onToggle={(id) => toggleProduct(id, "status")} />
-                <Textarea label="Ideia para IA" value={statusBrief} onChange={setStatusBrief} rows={3} placeholder="Oferta do dia, pergunta, chamada para responder no privado..." />
-                <Textarea label="Texto do status" value={statusText} onChange={setStatusText} rows={4} />
-                <div className="grid gap-2 sm:grid-cols-3">
-                  <SelectField label="Tipo" value={statusType} onChange={(value) => setStatusType(value as typeof statusType)} options={[
-                    ["text", "Texto"],
-                    ["image", "Imagem"],
-                    ["video", "Video"],
-                    ["audio", "Audio"],
-                  ]} />
-                  <NumberInput label="Fundo" value={statusBackgroundColor} min={1} max={19} onChange={setStatusBackgroundColor} />
-                  <NumberInput label="Alcance max." value={statusMaxRecipients} min={1} max={5000} onChange={setStatusMaxRecipients} />
-                </div>
-                <Input label="URL da midia do status" value={statusMediaUrl} onChange={setStatusMediaUrl} placeholder="https://..." />
-                <Input label="Legenda da midia" value={statusMediaCaption} onChange={setStatusMediaCaption} />
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <ActionButton icon={Sparkles} label="Criar status IA" disabled={operationsLocked || (!statusBrief.trim() && selectedStatusProductIds.length === 0 && !statusText.trim())} loading={runningAction === "generate_status_draft"} onClick={generateStatusDraft} />
-                  <ActionButton icon={Megaphone} label="Publicar status" disabled={!statusReady} loading={runningAction === "send_status"} onClick={publishStatus} />
-                </div>
-              </div>
-            </Section>
+                <ActionButton icon={Settings2} label={advancedToolsOpen ? "Ocultar ajustes" : "Mostrar ajustes"} onClick={() => setAdvancedToolsOpen((current) => !current)} />
+                {advancedToolsOpen ? (
+                  <div className="grid gap-4">
+                    <SubSection title="Post unico manual">
+                      <div className="grid gap-3">
+                        <Textarea label="Direcao extra para IA" value={campaignBrief} onChange={setCampaignBrief} rows={2} placeholder="Opcional: tom, oferta, cuidado ou tema." />
+                        <Textarea label="Mensagem manual" value={campaignText} onChange={setCampaignText} rows={5} placeholder="Opcional. Se ficar vazio, use Planejar rotina." />
+                        {campaignChecklist.length ? (
+                          <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-3 text-[12px] text-emerald-700">
+                            {campaignChecklist.map((item) => <p key={item}>- {item}</p>)}
+                          </div>
+                        ) : null}
+                        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                          <SelectField label="Formato" value={campaignFormat} onChange={(value) => setCampaignFormat(value as typeof campaignFormat)} options={[
+                            ["single", "Post unico"],
+                            ["carousel", "Carrossel"],
+                          ]} />
+                          <SelectField label="Entrega" value={campaignDeliveryMode} onChange={(value) => setCampaignDeliveryMode(value as typeof campaignDeliveryMode)} options={[
+                            ["text", "Texto"],
+                            ["audio", "Audio"],
+                            ["text_audio", "Texto + audio"],
+                          ]} />
+                          <DateInput label="Quando" value={campaignScheduledFor} onChange={setCampaignScheduledFor} />
+                          <NumberInput label="Repeticoes" value={campaignOccurrences} min={2} max={365} onChange={setCampaignOccurrences} />
+                        </div>
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          <SelectField label="Recorrencia" value={campaignRecurrence} onChange={(value) => setCampaignRecurrence(value as typeof campaignRecurrence)} options={[
+                            ["none", "Unico"],
+                            ["daily", "Diario"],
+                            ["weekly", "Semanal"],
+                          ]} />
+                          <SelectField label="Midia externa" value={campaignMediaKind} onChange={(value) => setCampaignMediaKind(value as typeof campaignMediaKind)} options={[
+                            ["image", "Imagem"],
+                            ["video", "Video"],
+                            ["document", "Documento"],
+                          ]} />
+                        </div>
+                        <Input label="URL de midia externa (opcional)" value={campaignMediaUrl} onChange={setCampaignMediaUrl} placeholder="https://..." />
+                        <Input label="Legenda da midia externa" value={campaignMediaCaption} onChange={setCampaignMediaCaption} />
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          <MiniToggle checked={campaignButtonEnabled} label="Enviar botao de compra" onClick={() => setCampaignButtonEnabled((current) => !current)} />
+                          <MiniToggle checked={campaignMentionAll} label="Mencionar todos nos grupos" onClick={() => setCampaignMentionAll((current) => !current)} />
+                        </div>
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          <Input label="Texto do botao" value={campaignButtonLabel} onChange={setCampaignButtonLabel} />
+                          <Input label="URL do botao externo" value={campaignButtonUrl} onChange={setCampaignButtonUrl} icon={LinkIcon} />
+                        </div>
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          <ActionButton icon={Sparkles} label="Criar post IA" disabled={operationsLocked || selectedTargets.length === 0 || (!campaignBrief.trim() && automaticCampaignProducts.length === 0 && !campaignText.trim())} loading={runningAction === "generate_target_campaign_draft"} onClick={generateCampaignDraft} />
+                          <ActionButton icon={Send} label={campaignFormat === "carousel" ? "Agendar carrossel" : "Agendar post"} disabled={!campaignReady} loading={runningAction === "send_target_campaign" || runningAction === "send_target_carousel"} onClick={scheduleCampaign} />
+                        </div>
+                      </div>
+                    </SubSection>
 
-            <Section title="Enquete diaria" badge="grupos">
-              <div className="grid gap-3">
-                <Textarea label="Pergunta" value={pollQuestion} onChange={setPollQuestion} rows={2} />
-                <Textarea label="Opcoes" value={pollChoices} onChange={setPollChoices} rows={4} />
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <DateInput label="Quando" value={pollScheduledFor} onChange={setPollScheduledFor} />
-                  <NumberInput label="Selecionaveis" value={pollSelectableCount} min={1} max={12} onChange={setPollSelectableCount} />
-                </div>
-                <ActionButton icon={Vote} label="Agendar enquete" disabled={!pollReady} loading={runningAction === "send_target_poll"} onClick={schedulePoll} />
-              </div>
-            </Section>
+                    <SubSection title="Status do agente">
+                      <div className="grid gap-3">
+                        <ProductPicker products={products} selectedIds={selectedStatusProductIds} onToggle={(id) => toggleProduct(id, "status")} />
+                        <Textarea label="Ideia opcional" value={statusBrief} onChange={setStatusBrief} rows={2} placeholder="Opcional: oferta do dia, pergunta ou chamada." />
+                        <Textarea label="Texto do status" value={statusText} onChange={setStatusText} rows={4} />
+                        <div className="grid gap-2 sm:grid-cols-3">
+                          <SelectField label="Tipo" value={statusType} onChange={(value) => setStatusType(value as typeof statusType)} options={[
+                            ["text", "Texto"],
+                            ["image", "Imagem"],
+                            ["video", "Video"],
+                            ["audio", "Audio"],
+                          ]} />
+                          <NumberInput label="Fundo" value={statusBackgroundColor} min={1} max={19} onChange={setStatusBackgroundColor} />
+                          <NumberInput label="Alcance max." value={statusMaxRecipients} min={1} max={5000} onChange={setStatusMaxRecipients} />
+                        </div>
+                        <Input label="Midia externa do status (opcional)" value={statusMediaUrl} onChange={setStatusMediaUrl} placeholder="https://..." />
+                        <Input label="Legenda da midia externa" value={statusMediaCaption} onChange={setStatusMediaCaption} />
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          <ActionButton icon={Sparkles} label="Criar status IA" disabled={operationsLocked || (!statusBrief.trim() && selectedStatusProductIds.length === 0 && !statusText.trim())} loading={runningAction === "generate_status_draft"} onClick={generateStatusDraft} />
+                          <ActionButton icon={Megaphone} label="Publicar status" disabled={!statusReady} loading={runningAction === "send_status"} onClick={publishStatus} />
+                        </div>
+                      </div>
+                    </SubSection>
 
-            <Section title="Status dos leads" badge="experimental">
-              <div className="grid gap-3">
-                <p className="text-[12px] leading-5 text-slate-500">
-                  A spec atual confirma publicar status do agente. Para assistir status dos leads, este teste procura sinais via status@broadcast; deixe como piloto ate validar com a Uazapi em numero real.
-                </p>
-                {leadStatusProbe ? <p className="rounded-xl border border-amber-500/25 bg-amber-500/10 p-3 text-[12px] leading-5 text-amber-700">{leadStatusProbe}</p> : null}
-                <ActionButton icon={MessageCircle} label="Testar disponibilidade" disabled={operationsLocked} loading={runningAction === "probe_lead_status_watch"} onClick={probeLeadStatusWatch} />
+                    <SubSection title="Enquete manual">
+                      <div className="grid gap-3">
+                        <Textarea label="Pergunta" value={pollQuestion} onChange={setPollQuestion} rows={2} />
+                        <Textarea label="Opcoes" value={pollChoices} onChange={setPollChoices} rows={4} />
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          <DateInput label="Quando" value={pollScheduledFor} onChange={setPollScheduledFor} />
+                          <NumberInput label="Selecionaveis" value={pollSelectableCount} min={1} max={12} onChange={setPollSelectableCount} />
+                        </div>
+                        <ActionButton icon={Vote} label="Agendar enquete" disabled={!pollReady} loading={runningAction === "send_target_poll"} onClick={schedulePoll} />
+                      </div>
+                    </SubSection>
+
+                    <SubSection title="Status dos leads">
+                      <div className="grid gap-3">
+                        <p className="text-[12px] leading-5 text-slate-500">
+                          Piloto experimental via status@broadcast. Use apenas em numero real de teste antes de liberar para clientes.
+                        </p>
+                        {leadStatusProbe ? <p className="rounded-xl border border-amber-500/25 bg-amber-500/10 p-3 text-[12px] leading-5 text-amber-700">{leadStatusProbe}</p> : null}
+                        <ActionButton icon={MessageCircle} label="Testar disponibilidade" disabled={operationsLocked} loading={runningAction === "probe_lead_status_watch"} onClick={probeLeadStatusWatch} />
+                      </div>
+                    </SubSection>
+                  </div>
+                ) : null}
               </div>
             </Section>
           </div>
@@ -894,6 +919,15 @@ function Section({ badge, children, title }: { badge: string; children: ReactNod
         <h3 className="text-sm font-semibold" style={{ color: "var(--ch-text)" }}>{title}</h3>
         <NeonBadge tone="zinc">{badge}</NeonBadge>
       </div>
+      {children}
+    </div>
+  );
+}
+
+function SubSection({ children, title }: { children: ReactNode; title: string }) {
+  return (
+    <div className="grid gap-3 border-t border-slate-200 pt-3 first:border-t-0 first:pt-0">
+      <h4 className="text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>{title}</h4>
       {children}
     </div>
   );
