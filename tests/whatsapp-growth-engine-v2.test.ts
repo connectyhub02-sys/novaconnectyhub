@@ -33,6 +33,9 @@ describe("WhatsApp growth engine v2", () => {
     expect(studioSource).toContain("Campanha automatica");
     expect(studioSource).toContain("Tipo de campanha");
     expect(studioSource).toContain("Destino da campanha");
+    expect(studioSource).toContain("campaignTargetFocusId");
+    expect(studioSource).toContain("Selecionado para campanha");
+    expect(studioSource).toContain("Limite por hora");
     expect(studioSource).toContain("Campanhas em canais");
     expect(studioSource).toContain("Publicar no canal");
     expect(studioSource).toContain("Planejar rotina");

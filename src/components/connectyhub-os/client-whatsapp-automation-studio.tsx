@@ -205,6 +205,7 @@ export function ClientWhatsappAutomationStudio({
 
   const [selectedTargetIds, setSelectedTargetIds] = useState<string[]>([]);
   const [campaignDestinationMode, setCampaignDestinationMode] = useState<CampaignDestinationMode>("groups");
+  const [campaignTargetFocusId, setCampaignTargetFocusId] = useState("");
   const [selectedCampaignProductIds, setSelectedCampaignProductIds] = useState<string[]>([]);
   const [campaignBrief, setCampaignBrief] = useState("");
   const [campaignTitle, setCampaignTitle] = useState("");
@@ -265,6 +266,8 @@ export function ClientWhatsappAutomationStudio({
       ? selectedGroupTargets
       : [];
   const selectedCampaignTargetIds = selectedCampaignTargets.map((target) => target.id);
+  const focusedCampaignTarget = campaignDestinationTargets.find((target) => target.id === campaignTargetFocusId) ?? campaignDestinationTargets[0] ?? null;
+  const effectiveCampaignTargetFocusId = focusedCampaignTarget?.id ?? "";
   const selectedPollTargetIds = selectedGroupTargets.map((target) => target.id);
   const selectedCampaignProducts = products.filter((product) => selectedCampaignProductIds.includes(product.id));
   const automaticCampaignProductIds = selectedCampaignProductIds.length > 0
@@ -434,6 +437,7 @@ export function ClientWhatsappAutomationStudio({
 
   function selectCampaignDestinationMode(mode: CampaignDestinationMode) {
     setCampaignDestinationMode(mode);
+    setCampaignTargetFocusId("");
     setGrowthPlan(null);
     if (mode === "status") {
       setGrowthFormatPreference("status");
@@ -665,64 +669,73 @@ export function ClientWhatsappAutomationStudio({
                     Status nao usa grupo ou canal selecionado. A rotina publica no status do WhatsApp do agente em uso e gera respostas no privado.
                   </div>
                 ) : null}
-                {campaignDestinationMode !== "status" && campaignDestinationTargets.length ? campaignDestinationTargets.map((target) => (
-                  <div
-                    key={target.id}
-                    className={cn(
-                      "grid gap-3 rounded-xl border p-3",
-                      selectedTargetIds.includes(target.id) ? "border-emerald-500/35 bg-emerald-500/10" : "border-slate-200 bg-white/60",
-                    )}
-                  >
-                    <button type="button" onClick={() => toggleTarget(target.id)} className="flex min-w-0 items-start gap-3 text-left">
-                      <span className={cn(
-                        "mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-md border",
-                        selectedTargetIds.includes(target.id) ? "border-emerald-500 bg-emerald-500 text-white" : "border-slate-300 text-transparent",
-                      )}>
-                        <Check className="h-3 w-3" />
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="flex min-w-0 flex-wrap items-center gap-2">
-                          <span className="truncate text-sm font-semibold" style={{ color: "var(--ch-text)" }}>{target.name}</span>
-                          <NeonBadge tone={target.type === "group" ? "green" : "cyan"}>{target.type === "group" ? "grupo" : "canal"}</NeonBadge>
-                          {target.isAdmin ? <NeonBadge tone="amber">admin</NeonBadge> : null}
-                        </span>
-                        <span className="mt-1 block truncate text-[11px] text-slate-500">{target.jid}</span>
-                      </span>
-                    </button>
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      <MiniToggle checked={target.enabled} label={target.type === "group" ? "Atendimento no grupo" : "Canal ativo"} onClick={() => toggleTargetSetting(target, "enabled")} loading={runningAction === "update_target_settings"} />
-                      <MiniToggle checked={target.campaignEnabled} label={target.type === "group" ? "Campanhas liberadas" : "Publicar no canal"} onClick={() => toggleTargetSetting(target, "campaignEnabled")} loading={runningAction === "update_target_settings"} />
-                    </div>
-                    {target.type === "group" ? (
-                      <div className="grid gap-2 sm:grid-cols-3">
-                        <SelectField label="Responder" value={target.replyMode} disabled={runningAction === "update_target_settings"} onChange={(value) => updateTargetPolicy(target, { replyMode: value })} options={[
-                          ["all", "Todas"],
-                          ["mentions", "So mencoes"],
-                          ["observer", "Observador"],
-                          ["admins", "Admins"],
-                          ["off", "Desligado"],
-                        ]} />
-                        <SelectField label="@ nas respostas" value={target.mentionMode} disabled={runningAction === "update_target_settings"} onChange={(value) => updateTargetPolicy(target, { mentionMode: value })} options={[
-                          ["none", "Sem @"],
-                          ["author", "@ autor"],
-                          ["all", "@ todos"],
-                        ]} />
-                        <SelectField label="Limite/h" value={String(target.maxRepliesPerHour)} disabled={runningAction === "update_target_settings"} onChange={(value) => updateTargetPolicy(target, { maxRepliesPerHour: Number(value) })} options={[
-                          ["0", "0/h"],
-                          ["3", "3/h"],
-                          ["6", "6/h"],
-                          ["12", "12/h"],
-                          ["24", "24/h"],
-                        ]} />
+                {campaignDestinationMode !== "status" && campaignDestinationTargets.length ? (
+                  <div className="grid gap-3">
+                    <label>
+                      <FieldLabel>{campaignDestinationMode === "channels" ? "Canal" : "Grupo"}</FieldLabel>
+                      <select value={effectiveCampaignTargetFocusId} onChange={(event) => setCampaignTargetFocusId(event.target.value)} className="h-10 w-full rounded-lg border bg-transparent px-3 text-sm outline-none" style={{ borderColor: "var(--ch-border)", color: "var(--ch-text)" }}>
+                        {campaignDestinationTargets.map((target) => <option key={target.id} value={target.id}>{target.name}</option>)}
+                      </select>
+                    </label>
+                    {focusedCampaignTarget ? (
+                      <div
+                        className={cn(
+                          "grid gap-3 rounded-xl border p-3",
+                          selectedTargetIds.includes(focusedCampaignTarget.id) ? "border-emerald-500/35 bg-emerald-500/10" : "border-slate-200 bg-white/60",
+                        )}
+                      >
+                        <div className="flex min-w-0 items-start gap-3">
+                          <span className={cn(
+                            "mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-md border",
+                            selectedTargetIds.includes(focusedCampaignTarget.id) ? "border-emerald-500 bg-emerald-500 text-white" : "border-slate-300 text-transparent",
+                          )}>
+                            <Check className="h-3 w-3" />
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="flex min-w-0 flex-wrap items-center gap-2">
+                              <span className="truncate text-sm font-semibold" style={{ color: "var(--ch-text)" }}>{focusedCampaignTarget.name}</span>
+                              <NeonBadge tone={focusedCampaignTarget.type === "group" ? "green" : "cyan"}>{focusedCampaignTarget.type === "group" ? "grupo" : "canal"}</NeonBadge>
+                              {focusedCampaignTarget.isAdmin ? <NeonBadge tone="amber">admin</NeonBadge> : null}
+                            </span>
+                            <span className="mt-1 block truncate text-[11px] text-slate-500">{focusedCampaignTarget.jid}</span>
+                          </span>
+                        </div>
+                        <div className="grid gap-2 sm:grid-cols-3">
+                          <MiniToggle checked={selectedTargetIds.includes(focusedCampaignTarget.id)} label="Selecionado para campanha" onClick={() => toggleTarget(focusedCampaignTarget.id)} loading={false} />
+                          <MiniToggle checked={focusedCampaignTarget.enabled} label={focusedCampaignTarget.type === "group" ? "Atendimento no grupo" : "Canal ativo"} onClick={() => toggleTargetSetting(focusedCampaignTarget, "enabled")} loading={runningAction === "update_target_settings"} />
+                          <MiniToggle checked={focusedCampaignTarget.campaignEnabled} label={focusedCampaignTarget.type === "group" ? "Campanhas liberadas" : "Publicar no canal"} onClick={() => toggleTargetSetting(focusedCampaignTarget, "campaignEnabled")} loading={runningAction === "update_target_settings"} />
+                        </div>
+                        {focusedCampaignTarget.type === "group" ? (
+                          <div className="grid gap-2 sm:grid-cols-3">
+                            <SelectField label="Responder" value={focusedCampaignTarget.replyMode} disabled={runningAction === "update_target_settings"} onChange={(value) => updateTargetPolicy(focusedCampaignTarget, { replyMode: value })} options={[
+                              ["all", "Todas"],
+                              ["mentions", "So mencoes"],
+                              ["observer", "Observador"],
+                              ["admins", "Admins"],
+                              ["off", "Desligado"],
+                            ]} />
+                            <SelectField label="@ nas respostas" value={focusedCampaignTarget.mentionMode} disabled={runningAction === "update_target_settings"} onChange={(value) => updateTargetPolicy(focusedCampaignTarget, { mentionMode: value })} options={[
+                              ["none", "Sem @"],
+                              ["author", "@ autor"],
+                              ["all", "@ todos"],
+                            ]} />
+                            <SelectField label="Limite por hora" value={String(focusedCampaignTarget.maxRepliesPerHour)} disabled={runningAction === "update_target_settings"} onChange={(value) => updateTargetPolicy(focusedCampaignTarget, { maxRepliesPerHour: Number(value) })} options={[
+                              ["0", "0 resp/h"],
+                              ["3", "3 resp/h"],
+                              ["6", "6 resp/h"],
+                              ["12", "12 resp/h"],
+                              ["24", "24 resp/h"],
+                            ]} />
+                          </div>
+                        ) : (
+                          <p className="text-[11px] leading-5 text-slate-500">
+                            Canais recebem posts de broadcast. Mencoes e enquetes ficam disponiveis somente para grupos.
+                          </p>
+                        )}
                       </div>
                     ) : null}
-                    {target.type === "newsletter" ? (
-                      <p className="text-[11px] leading-5 text-slate-500">
-                        Canais recebem posts de broadcast. Mencoes e enquetes ficam disponiveis somente para grupos.
-                      </p>
-                    ) : null}
                   </div>
-                )) : null}
+                ) : null}
                 {campaignDestinationMode !== "status" && !campaignDestinationTargets.length ? (
                   <EmptyState
                     icon={campaignDestinationMode === "channels" ? Megaphone : Users}
