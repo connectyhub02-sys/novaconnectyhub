@@ -266,7 +266,9 @@ export function ClientWhatsappAutomationStudio({
       ? selectedGroupTargets
       : [];
   const selectedCampaignTargetIds = selectedCampaignTargets.map((target) => target.id);
-  const focusedCampaignTarget = campaignDestinationTargets.find((target) => target.id === campaignTargetFocusId) ?? campaignDestinationTargets[0] ?? null;
+  const focusedCampaignTarget = campaignDestinationTargets.find((target) => target.id === campaignTargetFocusId)
+    ?? selectedCampaignTargets[0]
+    ?? null;
   const effectiveCampaignTargetFocusId = focusedCampaignTarget?.id ?? "";
   const selectedPollTargetIds = selectedGroupTargets.map((target) => target.id);
   const selectedCampaignProducts = products.filter((product) => selectedCampaignProductIds.includes(product.id));
@@ -420,13 +422,6 @@ export function ClientWhatsappAutomationStudio({
     }
   }
 
-  function toggleTarget(targetId: string) {
-    setGrowthPlan(null);
-    setSelectedTargetIds((current) => current.includes(targetId)
-      ? current.filter((id) => id !== targetId)
-      : [...current, targetId]);
-  }
-
   function toggleProduct(targetId: string, mode: "campaign" | "status") {
     const setter = mode === "campaign" ? setSelectedCampaignProductIds : setSelectedStatusProductIds;
     if (mode === "campaign") setGrowthPlan(null);
@@ -446,6 +441,16 @@ export function ClientWhatsappAutomationStudio({
     }
     setGrowthFormatPreference((current) => current === "status" ? "mixed" : current);
     if (mode === "channels") setCampaignMentionAll(false);
+  }
+
+  function selectCampaignTarget(targetId: string) {
+    setCampaignTargetFocusId(targetId);
+    setGrowthPlan(null);
+    setSelectedTargetIds((current) => {
+      const currentModeTargetIds = new Set(campaignDestinationTargets.map((target) => target.id));
+      const next = current.filter((id) => !currentModeTargetIds.has(id));
+      return targetId ? [...next, targetId] : next;
+    });
   }
 
   function updateGrowthObjective(value: string) {
@@ -673,7 +678,8 @@ export function ClientWhatsappAutomationStudio({
                   <div className="grid gap-3">
                     <label>
                       <FieldLabel>{campaignDestinationMode === "channels" ? "Canal" : "Grupo"}</FieldLabel>
-                      <select value={effectiveCampaignTargetFocusId} onChange={(event) => setCampaignTargetFocusId(event.target.value)} className="h-10 w-full rounded-lg border bg-transparent px-3 text-sm outline-none" style={{ borderColor: "var(--ch-border)", color: "var(--ch-text)" }}>
+                      <select value={effectiveCampaignTargetFocusId} onChange={(event) => selectCampaignTarget(event.target.value)} className="h-10 w-full rounded-lg border bg-transparent px-3 text-sm outline-none" style={{ borderColor: "var(--ch-border)", color: "var(--ch-text)" }}>
+                        <option value="">Nenhum</option>
                         {campaignDestinationTargets.map((target) => <option key={target.id} value={target.id}>{target.name}</option>)}
                       </select>
                     </label>
@@ -700,8 +706,7 @@ export function ClientWhatsappAutomationStudio({
                             <span className="mt-1 block truncate text-[11px] text-slate-500">{focusedCampaignTarget.jid}</span>
                           </span>
                         </div>
-                        <div className="grid gap-2 sm:grid-cols-3">
-                          <MiniToggle checked={selectedTargetIds.includes(focusedCampaignTarget.id)} label="Selecionado para campanha" onClick={() => toggleTarget(focusedCampaignTarget.id)} loading={false} />
+                        <div className="grid gap-2 sm:grid-cols-2">
                           <MiniToggle checked={focusedCampaignTarget.enabled} label={focusedCampaignTarget.type === "group" ? "Atendimento no grupo" : "Canal ativo"} onClick={() => toggleTargetSetting(focusedCampaignTarget, "enabled")} loading={runningAction === "update_target_settings"} />
                           <MiniToggle checked={focusedCampaignTarget.campaignEnabled} label={focusedCampaignTarget.type === "group" ? "Campanhas liberadas" : "Publicar no canal"} onClick={() => toggleTargetSetting(focusedCampaignTarget, "campaignEnabled")} loading={runningAction === "update_target_settings"} />
                         </div>
