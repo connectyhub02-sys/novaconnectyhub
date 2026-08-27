@@ -36,6 +36,8 @@ describe("WhatsApp growth engine v2", () => {
       expect(source).toContain("enable_group_replies");
       expect(source).toContain("enable_automation_capability");
       expect(source).toContain("set_automation_capability");
+      expect(source).toContain("sync_outbound_insights");
+      expect(source).toContain("syncWhatsappOutboundInsights");
       expect(source).toContain("preferredFormats");
       expect(source).toContain("whatsapp_growth_plan_ai");
       expect(source).toContain("toSafeGrowthPlan");
@@ -67,5 +69,8 @@ describe("WhatsApp growth engine v2", () => {
     expect(studioSource).toContain("Resumo da rotina");
     expect(studioSource).toContain("Falta ativar Responder grupos");
     expect(studioSource).toContain("Segmentos sugeridos");
+    expect(studioSource).toContain("Atualizar metricas");
+    expect(studioSource).toContain("Raio-x da campanha");
+    expect(studioSource).toContain("Leads CRM");
   });
 });

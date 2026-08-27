@@ -156,6 +156,7 @@ export type WhatsappOutboundItem = {
   providerStatus: string | null;
   error: string | null;
   campaignTracking: WhatsappCampaignDeliveryTracking | null;
+  outboundInsights: WhatsappOutboundInsights | null;
   recurrence: {
     frequency: WhatsappCampaignRecurrenceFrequency;
     occurrenceIndex: number;
@@ -189,6 +190,65 @@ export type WhatsappCampaignDeliveryTracking = {
   samples: WhatsappCampaignDeliverySample[];
 };
 
+export type WhatsappOutboundInsightSample = {
+  id: string | null;
+  chatId: string | null;
+  sender: string | null;
+  senderName: string | null;
+  status: string | null;
+  type: string | null;
+  text: string | null;
+  occurredAt: string | null;
+  source: "message_find" | "target_chat" | "newsletter" | "click";
+};
+
+export type WhatsappOutboundInsights = {
+  syncedAt: string | null;
+  sources: string[];
+  delivery: {
+    total: number;
+    sent: number;
+    delivered: number;
+    read: number;
+    played: number;
+    failed: number;
+    pending: number;
+    unknown: number;
+    error: string | null;
+  };
+  engagement: {
+    views: number | null;
+    reactions: Record<string, number>;
+    replies: number;
+    pollVotes: number;
+    buttonClicks: number;
+    linkClicks: number;
+    knownLeads: number;
+  };
+  audience: {
+    targetCount: number;
+    targetTypes: WhatsappTargetType[];
+    mentionedAll: boolean;
+    mentionedCount: number;
+    maxRecipients: number | null;
+    statusPrivacyType: string | null;
+  };
+  tracking: {
+    trackIds: string[];
+    messageIds: string[];
+    trackingLinkIds: string[];
+    newsletterServerIds: number[];
+  };
+  crm: {
+    eventCount: number;
+    lastEventAt: string | null;
+    attributionReady: boolean;
+    segments: string[];
+  };
+  limitations: string[];
+  samples: WhatsappOutboundInsightSample[];
+};
+
 export type WhatsappOperationsAnalytics = {
   summary: {
     total: number;
@@ -206,6 +266,11 @@ export type WhatsappOperationsAnalytics = {
     carouselPosts: number;
     pollPosts: number;
     statusPosts: number;
+    views: number;
+    reactions: number;
+    replies: number;
+    linkClicks: number;
+    knownLeads: number;
   };
   calendar: Array<{
     id: string;
@@ -530,6 +595,67 @@ export async function syncWhatsappCampaignTracking(
     campaigns: results.length,
     skipped: rows.length - candidates.length,
     totals: summarizeCampaignTrackingResults(results.map((item) => item.tracking)),
+    results,
+  };
+}
+
+export async function syncWhatsappOutboundInsights(
+  client: SupabaseClient,
+  context: WhatsappOperationalContext,
+  input: { limit?: number } = {},
+) {
+  assertWhatsappConnected(context);
+
+  const rows = await listWhatsappOutboundRows(client, context, 80);
+  const limit = clamp(Math.round(input.limit ?? 20), 1, 40);
+  const candidates = rows
+    .filter((row) => row.status === "published" || row.status === "review" || Boolean(row.published_at))
+    .slice(0, limit);
+  const syncedAt = new Date().toISOString();
+  const results: Array<{
+    itemId: string;
+    title: string;
+    operation: string;
+    insights: WhatsappOutboundInsights;
+  }> = [];
+
+  for (const row of candidates) {
+    const metadata = readRecord(row.metadata) ?? {};
+    const collection = await collectWhatsappOutboundInsights(client, context, row, syncedAt);
+    const nextMetadata: JsonRecord = {
+      ...metadata,
+      outbound_insights: collection.insights,
+      outbound_insights_synced_at: syncedAt,
+    };
+
+    if (collection.campaignTracking) {
+      nextMetadata.campaign_tracking = collection.campaignTracking;
+      nextMetadata.campaign_tracking_synced_at = syncedAt;
+      nextMetadata.provider_status = collection.campaignTracking.error
+        ? asString(metadata.provider_status) ?? "sent"
+        : normalizeProviderStatusFromTracking(collection.campaignTracking, asString(metadata.provider_status));
+    }
+
+    await client
+      .from("content_pipeline_items")
+      .update({ metadata: nextMetadata })
+      .eq("id", row.id);
+
+    await recordOutboundInsightsEvent(client, context, row, collection.insights).catch(() => null);
+
+    results.push({
+      itemId: row.id,
+      title: row.title,
+      operation: asString(metadata.operation) ?? row.content_type,
+      insights: collection.insights,
+    });
+  }
+
+  return {
+    fetchedAt: syncedAt,
+    inspected: candidates.length,
+    skipped: Math.max(0, rows.length - candidates.length),
+    totals: summarizeOutboundInsightResults(results.map((item) => item.insights)),
     results,
   };
 }
@@ -2733,6 +2859,11 @@ function buildWhatsappOperationsAnalytics(rows: ContentPipelineRow[]): WhatsappO
     carouselPosts: 0,
     pollPosts: 0,
     statusPosts: 0,
+    views: 0,
+    reactions: 0,
+    replies: 0,
+    linkClicks: 0,
+    knownLeads: 0,
   };
   const publishedHours = new Map<number, number>();
   const productCounts = new Map<string, { id: string; title: string; count: number }>();
@@ -2747,6 +2878,7 @@ function buildWhatsappOperationsAnalytics(rows: ContentPipelineRow[]): WhatsappO
     const attachmentCount = readCampaignMediaAttachments(payload.media_attachments).length;
     const targetCount = readCampaignTargetCount(payload);
     const campaignTracking = readCampaignTracking(metadata.campaign_tracking);
+    const outboundInsights = readOutboundInsights(metadata.outbound_insights);
 
     if (row.status === "scheduled") summary.scheduled += 1;
     if (row.status === "published") summary.published += 1;
@@ -2763,6 +2895,13 @@ function buildWhatsappOperationsAnalytics(rows: ContentPipelineRow[]): WhatsappO
       summary.sentMessages += campaignTracking.sent;
       summary.failedMessages += campaignTracking.failed;
       summary.pendingMessages += campaignTracking.pending;
+    }
+    if (outboundInsights) {
+      summary.views += outboundInsights.engagement.views ?? 0;
+      summary.reactions += countReactions(outboundInsights.engagement.reactions);
+      summary.replies += outboundInsights.engagement.replies;
+      summary.linkClicks += outboundInsights.engagement.linkClicks;
+      summary.knownLeads += outboundInsights.engagement.knownLeads;
     }
     for (const product of readPayloadCatalogItems(payload.catalog_items)) {
       const current = productCounts.get(product.id) ?? { ...product, count: 0 };
@@ -2865,6 +3004,179 @@ async function recordOutboundEvent(
       contentPipelineItemId: item.id,
       whatsappInstanceId: context.instance.id,
       providerResponse: sanitizeProviderData(providerResponse),
+    },
+  });
+}
+
+async function collectWhatsappOutboundInsights(
+  client: SupabaseClient,
+  context: WhatsappOperationalContext,
+  row: ContentPipelineRow,
+  syncedAt: string,
+): Promise<{ insights: WhatsappOutboundInsights; campaignTracking: WhatsappCampaignDeliveryTracking | null }> {
+  const metadata = readRecord(row.metadata) ?? {};
+  const payload = readRecord(metadata.payload) ?? {};
+  const operation = asString(metadata.operation) ?? row.content_type;
+  const providerResponse = metadata.provider_response;
+  const targets = readOutboundTargetRefs(payload);
+  const trackIds = buildOutboundTrackIds(row, operation, payload);
+  const messageIds = extractProviderMessageIds(providerResponse);
+  const trackingLinkIds = extractTrackingLinkIdsFromOutbound(metadata);
+  const newsletterServerIds = extractNewsletterServerIds(providerResponse);
+  const insights = createEmptyOutboundInsights({
+    syncedAt,
+    operation,
+    payload,
+    targets,
+    trackIds,
+    messageIds,
+    trackingLinkIds,
+    newsletterServerIds,
+    providerResponse,
+  });
+  let campaignTracking: WhatsappCampaignDeliveryTracking | null = null;
+
+  const folderId = operation === "campaign_simple" ? readSenderCampaignFolderId(metadata) : null;
+  if (folderId) {
+    try {
+      const response = await callUazapi(context, "/sender/listmessages", {
+        method: "POST",
+        body: {
+          folder_id: folderId,
+          limit: 1000,
+          offset: 0,
+        },
+      });
+      campaignTracking = normalizeCampaignTrackingResponse(response.data, folderId, syncedAt);
+      mergeCampaignDeliveryTracking(insights, campaignTracking);
+      addInsightSource(insights, "sender/listmessages");
+    } catch (error) {
+      campaignTracking = buildCampaignTrackingError(folderId, syncedAt, error instanceof Error ? error.message : "Nao foi possivel consultar mensagens da campanha.");
+      insights.delivery.error = campaignTracking.error;
+      insights.limitations.push("A consulta de entrega da campanha em massa falhou neste ciclo.");
+    }
+  } else {
+    const storedTracking = readCampaignTracking(metadata.campaign_tracking);
+    if (storedTracking) {
+      mergeCampaignDeliveryTracking(insights, storedTracking);
+      addInsightSource(insights, "metadata.campaign_tracking");
+    }
+  }
+
+  for (const trackId of trackIds.slice(0, 12)) {
+    try {
+      const response = await callUazapi(context, "/message/find", {
+        method: "POST",
+        body: {
+          track_source: "connectyhub",
+          track_id: trackId,
+          limit: 100,
+          offset: 0,
+        },
+      });
+      const messages = extractProviderItems(response.data, ["messages", "data", "items", "response"]);
+      mergeMessageFindInsights(insights, messages, "message_find", row.published_at ?? row.created_at);
+      addInsightSource(insights, "message/find:track_id");
+    } catch {
+      insights.limitations.push(`Nao foi possivel consultar mensagens pelo track_id ${trackId}.`);
+    }
+  }
+
+  for (const target of targets.filter((item) => item.type === "group").slice(0, 5)) {
+    try {
+      const response = await callUazapi(context, "/message/find", {
+        method: "POST",
+        body: {
+          chatid: target.jid,
+          limit: 80,
+          offset: 0,
+        },
+      });
+      const messages = extractProviderItems(response.data, ["messages", "data", "items", "response"]);
+      mergeGroupChatSignals(insights, messages, row.published_at ?? row.created_at);
+      addInsightSource(insights, "message/find:group_chat");
+    } catch {
+      insights.limitations.push(`Nao foi possivel consultar mensagens recentes do grupo ${target.name}.`);
+    }
+  }
+
+  for (const target of resolveNewsletterTargets(payload, targets).slice(0, 5)) {
+    try {
+      const response = await callUazapi(context, "/newsletter/messages", {
+        method: "POST",
+        body: {
+          jid: target.jid,
+          count: 25,
+        },
+      });
+      const messages = extractProviderItems(response.data, ["response", "messages", "data", "items"]);
+      mergeNewsletterMessageInsights(insights, messages, row);
+      addInsightSource(insights, "newsletter/messages");
+    } catch {
+      insights.limitations.push(`Nao foi possivel consultar posts recentes do canal ${target.name}.`);
+    }
+
+    try {
+      const response = await callUazapi(context, "/newsletter/updates", {
+        method: "POST",
+        body: cleanPayload({
+          jid: target.jid,
+          since: readIsoTime(row.published_at ?? row.created_at) || null,
+        }),
+      });
+      const updates = extractProviderItems(response.data, ["response", "updates", "messages", "data", "items"]);
+      mergeNewsletterMessageInsights(insights, updates, row);
+      addInsightSource(insights, "newsletter/updates");
+    } catch {
+      insights.limitations.push(`Nao foi possivel consultar updates do canal ${target.name}.`);
+    }
+  }
+
+  if (trackingLinkIds.length) {
+    const clickInsights = await loadTrackedLinkClickInsights(client, context, trackingLinkIds);
+    insights.engagement.linkClicks += clickInsights.clicks;
+    insights.engagement.knownLeads += clickInsights.knownLeads;
+    insights.crm.eventCount += clickInsights.events;
+    insights.crm.lastEventAt = maxIso(insights.crm.lastEventAt, clickInsights.lastEventAt);
+    clickInsights.samples.forEach((sample) => addInsightSample(insights, sample));
+    if (clickInsights.clicks > 0) addInsightSource(insights, "tracked_link.clicked");
+  }
+
+  insights.crm.attributionReady = insights.engagement.linkClicks > 0
+    || insights.engagement.replies > 0
+    || insights.engagement.pollVotes > 0
+    || insights.engagement.buttonClicks > 0;
+  insights.crm.segments = buildOutboundInsightSegments(operation, insights);
+  insights.limitations = Array.from(new Set(insights.limitations)).slice(0, 8);
+  insights.sources = Array.from(new Set(insights.sources)).slice(0, 10);
+  insights.samples = insights.samples.slice(0, 12);
+
+  return { insights, campaignTracking };
+}
+
+async function recordOutboundInsightsEvent(
+  client: SupabaseClient,
+  context: WhatsappOperationalContext,
+  row: ContentPipelineRow,
+  insights: WhatsappOutboundInsights,
+) {
+  const operation = asString(readRecord(row.metadata)?.operation) ?? row.content_type;
+  await client.from("intelligence_events").insert({
+    scope: context.scope,
+    organization_id: context.scope === "organization" ? context.organizationId : null,
+    source_type: "whatsapp_outbound_campaign",
+    source_id: row.id,
+    event_type: "whatsapp.outbound.insights.synced",
+    title: `Metricas WhatsApp: ${row.title}`.slice(0, 140),
+    summary: buildOutboundInsightsSummary(insights),
+    confidence: 0.9,
+    visibility: context.scope,
+    tags: ["whatsapp", "campaign_metrics", "crm", operation],
+    payload: {
+      contentPipelineItemId: row.id,
+      whatsappInstanceId: context.instance.id,
+      operation,
+      insights,
     },
   });
 }
@@ -3018,6 +3330,7 @@ function mapOutboundItem(row: ContentPipelineRow): WhatsappOutboundItem {
     providerStatus: asString(metadata.provider_status),
     error: asString(metadata.provider_error),
     campaignTracking: readCampaignTracking(metadata.campaign_tracking),
+    outboundInsights: readOutboundInsights(metadata.outbound_insights),
     recurrence: recurrence
       ? {
         frequency: recurrence.frequency,
@@ -3186,6 +3499,106 @@ function readCampaignTrackingSamples(value: unknown): WhatsappCampaignDeliverySa
     .slice(0, 8);
 }
 
+function readOutboundInsights(value: unknown): WhatsappOutboundInsights | null {
+  const record = readRecord(value);
+  if (!record) return null;
+
+  const delivery = readRecord(record.delivery) ?? {};
+  const engagement = readRecord(record.engagement) ?? {};
+  const audience = readRecord(record.audience) ?? {};
+  const tracking = readRecord(record.tracking) ?? {};
+  const crm = readRecord(record.crm) ?? {};
+
+  return {
+    syncedAt: asString(record.syncedAt),
+    sources: readStringArray(record.sources).slice(0, 10),
+    delivery: {
+      total: readInteger(delivery.total, 0),
+      sent: readInteger(delivery.sent, 0),
+      delivered: readInteger(delivery.delivered, 0),
+      read: readInteger(delivery.read, 0),
+      played: readInteger(delivery.played, 0),
+      failed: readInteger(delivery.failed, 0),
+      pending: readInteger(delivery.pending, 0),
+      unknown: readInteger(delivery.unknown, 0),
+      error: asString(delivery.error),
+    },
+    engagement: {
+      views: readNullableInteger(engagement.views),
+      reactions: readReactionCountRecord(engagement.reactions),
+      replies: readInteger(engagement.replies, 0),
+      pollVotes: readInteger(engagement.pollVotes, 0),
+      buttonClicks: readInteger(engagement.buttonClicks, 0),
+      linkClicks: readInteger(engagement.linkClicks, 0),
+      knownLeads: readInteger(engagement.knownLeads, 0),
+    },
+    audience: {
+      targetCount: readInteger(audience.targetCount, 0),
+      targetTypes: readStringArray(audience.targetTypes).filter((item): item is WhatsappTargetType => item === "group" || item === "newsletter"),
+      mentionedAll: findBooleanShallow(audience, ["mentionedAll", "mentioned_all"]) ?? false,
+      mentionedCount: readInteger(audience.mentionedCount, 0),
+      maxRecipients: readNullableInteger(audience.maxRecipients),
+      statusPrivacyType: asString(audience.statusPrivacyType),
+    },
+    tracking: {
+      trackIds: readStringArray(tracking.trackIds).slice(0, 40),
+      messageIds: readStringArray(tracking.messageIds).slice(0, 40),
+      trackingLinkIds: readStringArray(tracking.trackingLinkIds).slice(0, 40),
+      newsletterServerIds: readNumberArray(tracking.newsletterServerIds).slice(0, 40),
+    },
+    crm: {
+      eventCount: readInteger(crm.eventCount, 0),
+      lastEventAt: asString(crm.lastEventAt),
+      attributionReady: findBooleanShallow(crm, ["attributionReady", "attribution_ready"]) ?? false,
+      segments: readStringArray(crm.segments).slice(0, 12),
+    },
+    limitations: readStringArray(record.limitations).slice(0, 8),
+    samples: readOutboundInsightSamples(record.samples),
+  };
+}
+
+function readOutboundInsightSamples(value: unknown): WhatsappOutboundInsightSample[] {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item) => readRecord(item))
+    .map((item) => {
+      if (!item) return null;
+      const source = item.source === "target_chat" || item.source === "newsletter" || item.source === "click" ? item.source : "message_find";
+      return {
+        id: asString(item.id),
+        chatId: asString(item.chatId),
+        sender: asString(item.sender),
+        senderName: asString(item.senderName),
+        status: asString(item.status),
+        type: asString(item.type),
+        text: asString(item.text),
+        occurredAt: asString(item.occurredAt),
+        source,
+      };
+    })
+    .filter((item): item is WhatsappOutboundInsightSample => Boolean(item))
+    .slice(0, 12);
+}
+
+function readReactionCountRecord(value: unknown) {
+  const record = readRecord(value);
+  if (!record) return {};
+
+  return Object.fromEntries(
+    Object.entries(record)
+      .map(([key, item]) => [key, readNullableInteger(item)] as const)
+      .filter((entry): entry is readonly [string, number] => entry[1] !== null),
+  );
+}
+
+function readNumberArray(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => readNullableInteger(item))
+    .filter((item): item is number => item !== null);
+}
+
 function normalizeCampaignTrackingStatus(value: unknown): WhatsappCampaignDeliveryTracking["status"] {
   if (value === "pending" || value === "sent" || value === "failed" || value === "partial" || value === "unknown") return value;
   return "unknown";
@@ -3213,6 +3626,562 @@ function summarizeCampaignTrackingResults(items: WhatsappCampaignDeliveryTrackin
     }),
     { messages: 0, sent: 0, failed: 0, pending: 0, errors: 0 },
   );
+}
+
+type WhatsappOutboundTargetRef = {
+  id: string | null;
+  type: WhatsappTargetType;
+  jid: string;
+  name: string;
+};
+type WhatsappDeliveryMetricKey = "sent" | "delivered" | "read" | "played" | "failed" | "pending" | "unknown";
+
+function createEmptyOutboundInsights(input: {
+  syncedAt: string;
+  operation: string;
+  payload: JsonRecord;
+  targets: WhatsappOutboundTargetRef[];
+  trackIds: string[];
+  messageIds: string[];
+  trackingLinkIds: string[];
+  newsletterServerIds: number[];
+  providerResponse: unknown;
+}): WhatsappOutboundInsights {
+  const mentionText = asString(input.payload.mentions);
+  const mentionedAll = mentionText === "all";
+  const mentionedCount = mentionedAll ? 0 : readMentionCount(mentionText);
+  const targetTypes = Array.from(new Set(input.targets.map((target) => target.type)));
+  const targetCount = Math.max(readCampaignTargetCount(input.payload), input.targets.length);
+  const limitations: string[] = [];
+
+  if (input.operation === "status") {
+    limitations.push("Status do WhatsApp nao expos visualizadores nominais no contrato atual; registramos publicacao, resposta, clique e erro.");
+  }
+  if (targetTypes.includes("newsletter")) {
+    limitations.push("Canais retornam visualizacoes e reacoes agregadas; a API atual nao retornou lista nominal de visualizadores.");
+  }
+  if (targetTypes.includes("group")) {
+    limitations.push("Grupos nao retornam visualizacao por membro; usamos respostas, votos, reacoes e cliques como sinais de CRM.");
+  }
+
+  return {
+    syncedAt: input.syncedAt,
+    sources: [],
+    delivery: {
+      total: 0,
+      sent: 0,
+      delivered: 0,
+      read: 0,
+      played: 0,
+      failed: 0,
+      pending: 0,
+      unknown: 0,
+      error: null,
+    },
+    engagement: {
+      views: null,
+      reactions: {},
+      replies: 0,
+      pollVotes: 0,
+      buttonClicks: 0,
+      linkClicks: 0,
+      knownLeads: 0,
+    },
+    audience: {
+      targetCount,
+      targetTypes,
+      mentionedAll,
+      mentionedCount,
+      maxRecipients: readNullableInteger(input.payload.max_recipients ?? input.payload.maxRecipients),
+      statusPrivacyType: findString(input.providerResponse, ["status_privacy_type", "statusPrivacyType"]),
+    },
+    tracking: {
+      trackIds: input.trackIds,
+      messageIds: input.messageIds,
+      trackingLinkIds: input.trackingLinkIds,
+      newsletterServerIds: input.newsletterServerIds,
+    },
+    crm: {
+      eventCount: 0,
+      lastEventAt: null,
+      attributionReady: false,
+      segments: [],
+    },
+    limitations,
+    samples: [],
+  };
+}
+
+function mergeCampaignDeliveryTracking(
+  insights: WhatsappOutboundInsights,
+  tracking: WhatsappCampaignDeliveryTracking,
+) {
+  insights.delivery.total = Math.max(insights.delivery.total, tracking.total);
+  insights.delivery.sent = Math.max(insights.delivery.sent, tracking.sent);
+  insights.delivery.failed = Math.max(insights.delivery.failed, tracking.failed);
+  insights.delivery.pending = Math.max(insights.delivery.pending, tracking.pending);
+  insights.delivery.unknown = Math.max(0, insights.delivery.total - insights.delivery.sent - insights.delivery.failed - insights.delivery.pending);
+  insights.delivery.error = insights.delivery.error ?? tracking.error;
+  tracking.samples.forEach((sample) => addInsightSample(insights, {
+    id: sample.id,
+    chatId: sample.number,
+    sender: sample.number,
+    senderName: null,
+    status: sample.providerStatus ?? sample.status,
+    type: "campaign_message",
+    text: sample.error,
+    occurredAt: sample.sentAt ?? sample.scheduledFor,
+    source: "message_find",
+  }));
+}
+
+function mergeMessageFindInsights(
+  insights: WhatsappOutboundInsights,
+  values: unknown[],
+  source: "message_find" | "target_chat",
+  referenceDate: string | null,
+) {
+  for (const value of values) {
+    const record = readRecord(value);
+    if (!record) continue;
+
+    addDeliveryStatus(insights, findString(record, ["messageStatus", "message_status", "status", "Status", "state", "sendStatus"]));
+    mergeMessageEngagement(insights, record, referenceDate);
+    addInsightSample(insights, mapOutboundInsightSample(record, source));
+  }
+}
+
+function mergeGroupChatSignals(
+  insights: WhatsappOutboundInsights,
+  values: unknown[],
+  referenceDate: string | null,
+) {
+  const minTime = readIsoTime(referenceDate) - 2 * 60_000;
+  const maxTime = readIsoTime(referenceDate) + 72 * 60 * 60_000;
+
+  for (const value of values) {
+    const record = readRecord(value);
+    if (!record) continue;
+    const occurredAt = readMessageOccurredAt(record);
+    const occurredMs = readIsoTime(occurredAt);
+    if (occurredMs && (occurredMs < minTime || occurredMs > maxTime)) continue;
+
+    const fromMe = findBoolean(record, ["fromMe", "from_me", "fromApi", "wasSentByApi"]) === true;
+    if (!fromMe) {
+      insights.engagement.replies += hasMessageText(record) ? 1 : 0;
+      mergeMessageEngagement(insights, record, referenceDate);
+      addInsightSample(insights, mapOutboundInsightSample(record, "target_chat"));
+    }
+  }
+}
+
+function mergeNewsletterMessageInsights(
+  insights: WhatsappOutboundInsights,
+  values: unknown[],
+  row: ContentPipelineRow,
+) {
+  const matches = values
+    .map((value) => readRecord(value))
+    .filter((record): record is JsonRecord => Boolean(record))
+    .filter((record) => isNewsletterInsightMatch(record, row, insights));
+
+  const selected = matches.length ? matches : values
+    .map((value) => readRecord(value))
+    .filter((record): record is JsonRecord => Boolean(record))
+    .filter((record) => isRecentNewsletterItem(record, row))
+    .slice(0, 3);
+
+  if (!selected.length) return;
+
+  let views = insights.engagement.views ?? 0;
+  for (const record of selected) {
+    const viewsCount = readNullableInteger(findValue(record, (key) => key.toLowerCase().replace(/[_-]/g, "") === "viewscount"));
+    if (viewsCount !== null) views = Math.max(views, viewsCount);
+    mergeReactionCounts(insights.engagement.reactions, readRecord(findValue(record, (key) => key.toLowerCase().replace(/[_-]/g, "") === "reactioncounts")));
+    const serverId = readNullableInteger(findValue(record, (key) => key.toLowerCase() === "serverid"));
+    if (serverId !== null && !insights.tracking.newsletterServerIds.includes(serverId)) {
+      insights.tracking.newsletterServerIds.push(serverId);
+    }
+    addInsightSample(insights, mapOutboundInsightSample(record, "newsletter"));
+  }
+  insights.engagement.views = views;
+}
+
+async function loadTrackedLinkClickInsights(
+  client: SupabaseClient,
+  context: WhatsappOperationalContext,
+  trackingLinkIds: string[],
+) {
+  const ids = Array.from(new Set(trackingLinkIds)).slice(0, 20);
+  if (!ids.length) {
+    return { clicks: 0, knownLeads: 0, events: 0, lastEventAt: null as string | null, samples: [] as WhatsappOutboundInsightSample[] };
+  }
+
+  let query = client
+    .from("intelligence_events")
+    .select("id, source_id, title, summary, payload, occurred_at")
+    .eq("event_type", "tracked_link.clicked")
+    .in("source_id", ids)
+    .order("occurred_at", { ascending: false })
+    .limit(200);
+
+  if (context.scope === "organization" && context.organizationId) {
+    query = query.eq("organization_id", context.organizationId);
+  } else {
+    query = query.eq("scope", context.scope);
+  }
+
+  const { data, error } = await query;
+  if (error) {
+    return { clicks: 0, knownLeads: 0, events: 0, lastEventAt: null as string | null, samples: [] as WhatsappOutboundInsightSample[] };
+  }
+
+  const rows = (data ?? []) as Array<{
+    id: string;
+    title: string | null;
+    summary: string | null;
+    payload: JsonRecord | null;
+    occurred_at: string | null;
+  }>;
+  const known = new Set<string>();
+  for (const row of rows) {
+    const payload = readRecord(row.payload) ?? {};
+    const lead = asString(payload.lead_id) ?? asString(payload.lead_phone);
+    if (lead) known.add(lead);
+  }
+
+  return {
+    clicks: rows.length,
+    knownLeads: known.size,
+    events: rows.length,
+    lastEventAt: rows[0]?.occurred_at ?? null,
+    samples: rows.slice(0, 6).map((row) => {
+      const payload = readRecord(row.payload) ?? {};
+      return {
+        id: row.id,
+        chatId: asString(payload.conversation_id),
+        sender: asString(payload.lead_phone) ?? asString(payload.lead_id),
+        senderName: null,
+        status: "clicked",
+        type: "tracked_link",
+        text: row.summary ?? row.title,
+        occurredAt: row.occurred_at,
+        source: "click" as const,
+      };
+    }),
+  };
+}
+
+function summarizeOutboundInsightResults(items: WhatsappOutboundInsights[]) {
+  return items.reduce(
+    (total, item) => ({
+      delivered: total.delivered + item.delivery.delivered,
+      read: total.read + item.delivery.read,
+      failed: total.failed + item.delivery.failed,
+      views: total.views + (item.engagement.views ?? 0),
+      reactions: total.reactions + countReactions(item.engagement.reactions),
+      replies: total.replies + item.engagement.replies,
+      pollVotes: total.pollVotes + item.engagement.pollVotes,
+      buttonClicks: total.buttonClicks + item.engagement.buttonClicks,
+      linkClicks: total.linkClicks + item.engagement.linkClicks,
+      knownLeads: total.knownLeads + item.engagement.knownLeads,
+    }),
+    { delivered: 0, read: 0, failed: 0, views: 0, reactions: 0, replies: 0, pollVotes: 0, buttonClicks: 0, linkClicks: 0, knownLeads: 0 },
+  );
+}
+
+function buildOutboundInsightsSummary(insights: WhatsappOutboundInsights) {
+  const parts = [
+    insights.delivery.total ? `${insights.delivery.total} envio(s) monitorado(s)` : null,
+    insights.delivery.read ? `${insights.delivery.read} lido(s)` : null,
+    insights.engagement.views !== null ? `${insights.engagement.views} visualizacao(oes)` : null,
+    countReactions(insights.engagement.reactions) ? `${countReactions(insights.engagement.reactions)} reacao(oes)` : null,
+    insights.engagement.replies ? `${insights.engagement.replies} resposta(s)` : null,
+    insights.engagement.linkClicks ? `${insights.engagement.linkClicks} clique(s)` : null,
+  ].filter(Boolean);
+
+  return parts.length ? parts.join(" / ") : "Snapshot de metricas WhatsApp atualizado.";
+}
+
+function buildOutboundInsightSegments(operation: string, insights: WhatsappOutboundInsights) {
+  const segments: string[] = [];
+  if (operation === "status" && insights.engagement.replies > 0) segments.push("respondeu_status");
+  if (insights.engagement.views !== null && insights.engagement.views > 0) segments.push("visualizou_canal");
+  if (insights.engagement.linkClicks > 0) segments.push("clicou_link_campanha");
+  if (insights.engagement.pollVotes > 0) segments.push("votou_enquete");
+  if (insights.engagement.buttonClicks > 0) segments.push("clicou_botao_lista");
+  if (insights.engagement.replies > 0) segments.push("respondeu_grupo_campanha");
+  return Array.from(new Set(segments));
+}
+
+function buildOutboundTrackIds(row: ContentPipelineRow, operation: string, payload: JsonRecord) {
+  const trackIds: string[] = [];
+  const attachments = readCampaignMediaAttachments(payload.media_attachments);
+  const phase = asString(payload.phase) ?? "message";
+  const targets = readOutboundTargetRefs(payload);
+  const hasNewsletter = targets.some((target) => target.type === "newsletter");
+
+  if (operation === "newsletter_text") trackIds.push(`newsletter_${row.id}`);
+  if (operation === "target_poll") trackIds.push(`poll_${row.id}`);
+  if (operation === "target_carousel") {
+    trackIds.push(hasNewsletter ? `carousel_${row.id}_newsletter_text` : `carousel_${row.id}`);
+    attachments.forEach((_, index) => trackIds.push(`carousel_${row.id}_newsletter_media_${index + 1}`));
+  }
+  if (operation === "group_announce_mode") trackIds.push(`group_window_${row.id}_${phase}`);
+  if (operation === "campaign_simple") {
+    trackIds.push(`campaign_${row.id}_text`, `campaign_${row.id}_button`, `campaign_${row.id}_audio`);
+    attachments.forEach((_, index) => trackIds.push(`campaign_${row.id}_media_${index + 1}`));
+  }
+
+  return Array.from(new Set(trackIds));
+}
+
+function readOutboundTargetRefs(payload: JsonRecord): WhatsappOutboundTargetRef[] {
+  const targets = Array.isArray(payload.targets)
+    ? payload.targets
+    : asString(payload.jid)
+      ? [{ type: "newsletter", jid: asString(payload.jid), name: asString(payload.jid) }]
+      : [];
+
+  return targets
+    .map((item) => readRecord(item))
+    .map((item) => {
+      const type = item?.type === "newsletter" ? "newsletter" : item?.type === "group" ? "group" : null;
+      const jid = asString(item?.jid);
+      if (!type || !jid) return null;
+      return {
+        id: asString(item?.id),
+        type,
+        jid,
+        name: asString(item?.name) ?? jid,
+      };
+    })
+    .filter((item): item is WhatsappOutboundTargetRef => Boolean(item));
+}
+
+function resolveNewsletterTargets(payload: JsonRecord, targets: WhatsappOutboundTargetRef[]) {
+  const explicit = targets.filter((target) => target.type === "newsletter");
+  const payloadJid = asString(payload.jid);
+  const jid = payloadJid ? normalizeNewsletterJid(payloadJid) : null;
+  if (!jid) return explicit;
+  return explicit.some((target) => target.jid === jid) ? explicit : [{ id: null, type: "newsletter" as const, jid, name: jid }, ...explicit];
+}
+
+function addDeliveryStatus(insights: WhatsappOutboundInsights, rawStatus: string | null) {
+  const status = normalizeOutboundDeliveryStatus(rawStatus);
+  insights.delivery.total += 1;
+  insights.delivery[status] += 1;
+}
+
+function normalizeOutboundDeliveryStatus(rawStatus: string | null): WhatsappDeliveryMetricKey {
+  const normalized = rawStatus?.trim().toLowerCase().replace(/[\s_-]+/g, "") ?? "";
+  if (["read", "lido"].includes(normalized)) return "read";
+  if (["played", "reproduced", "ouvido", "visto"].includes(normalized)) return "played";
+  if (["delivered", "entregue"].includes(normalized)) return "delivered";
+  if (["sent", "success", "succeeded", "completed", "done", "processed"].includes(normalized)) return "sent";
+  if (["failed", "error", "erro", "undelivered", "notdelivered", "notsent", "canceled", "cancelled"].includes(normalized)) return "failed";
+  if (["scheduled", "pending", "queued", "queue", "processing", "running", "waiting", "active", "created"].includes(normalized)) return "pending";
+  return "unknown";
+}
+
+function mergeMessageEngagement(
+  insights: WhatsappOutboundInsights,
+  record: JsonRecord,
+  referenceDate: string | null,
+) {
+  const vote = findString(record, ["vote", "pollVote", "poll_vote"]);
+  const button = findString(record, ["buttonOrListid", "button_or_list_id", "selectedButtonId", "selected_button_id", "listResponseId"]);
+  const reaction = findString(record, ["reaction", "emoji"]);
+  const occurredAt = readMessageOccurredAt(record);
+
+  if (referenceDate && occurredAt && readIsoTime(occurredAt) && readIsoTime(referenceDate) && readIsoTime(occurredAt) < readIsoTime(referenceDate) - 2 * 60_000) {
+    return;
+  }
+
+  if (vote) insights.engagement.pollVotes += 1;
+  if (button || findString(record, ["convertOptions", "convert_options"])) insights.engagement.buttonClicks += 1;
+  if (reaction) {
+    insights.engagement.reactions[reaction] = (insights.engagement.reactions[reaction] ?? 0) + 1;
+  }
+}
+
+function addInsightSample(insights: WhatsappOutboundInsights, sample: WhatsappOutboundInsightSample) {
+  const key = sample.id ? `${sample.source}:${sample.id}` : `${sample.source}:${sample.chatId}:${sample.occurredAt}:${sample.text}`;
+  const exists = insights.samples.some((item) => {
+    const itemKey = item.id ? `${item.source}:${item.id}` : `${item.source}:${item.chatId}:${item.occurredAt}:${item.text}`;
+    return itemKey === key;
+  });
+  if (!exists) insights.samples.push(sample);
+}
+
+function addInsightSource(insights: WhatsappOutboundInsights, source: string) {
+  if (!insights.sources.includes(source)) insights.sources.push(source);
+}
+
+function mapOutboundInsightSample(record: JsonRecord, source: WhatsappOutboundInsightSample["source"]): WhatsappOutboundInsightSample {
+  return {
+    id: findString(record, ["messageid", "messageId", "message_id", "id", "serverid"]),
+    chatId: findString(record, ["chatid", "chatId", "remoteJid", "jid"]),
+    sender: findString(record, ["sender", "participant", "from", "sender_pn", "senderPn", "PhoneNumber"]),
+    senderName: findString(record, ["senderName", "pushName", "name", "displayName", "DisplayName"]),
+    status: findString(record, ["messageStatus", "message_status", "status", "Status", "state", "sendStatus"]),
+    type: findString(record, ["messageType", "message_type", "type"]),
+    text: preview(findString(record, ["text", "body", "caption", "conversation"]) ?? findNestedMessageText(record) ?? "", 160),
+    occurredAt: readMessageOccurredAt(record),
+    source,
+  };
+}
+
+function findNestedMessageText(record: JsonRecord) {
+  const value = findValue(record, (key, item) => ["conversation", "text", "caption"].includes(key) && typeof item === "string");
+  return asString(value);
+}
+
+function hasMessageText(record: JsonRecord) {
+  return Boolean(findString(record, ["text", "body", "caption", "conversation"]) ?? findNestedMessageText(record));
+}
+
+function readMessageOccurredAt(record: JsonRecord) {
+  const value = findValue(record, (key) => ["timestamp", "messagetimestamp", "created", "createdat", "updated", "updatedat", "date"].includes(key.toLowerCase().replace(/[_-]/g, "")));
+  if (typeof value === "number" && Number.isFinite(value)) {
+    const ms = value > 10_000_000_000 ? value : value * 1000;
+    return new Date(ms).toISOString();
+  }
+  if (typeof value === "string" && value.trim()) {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? value.trim() : date.toISOString();
+  }
+  return null;
+}
+
+function readIsoTime(value: string | null | undefined) {
+  if (!value) return 0;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? 0 : date.getTime();
+}
+
+function isNewsletterInsightMatch(record: JsonRecord, row: ContentPipelineRow, insights: WhatsappOutboundInsights) {
+  const messageId = findString(record, ["messageid", "messageId", "message_id", "id"]);
+  if (messageId && insights.tracking.messageIds.includes(messageId)) return true;
+
+  const serverId = readNullableInteger(findValue(record, (key) => key.toLowerCase() === "serverid"));
+  if (serverId !== null && insights.tracking.newsletterServerIds.includes(serverId)) return true;
+
+  const text = normalizeInsightText(findNestedMessageText(record) ?? findString(record, ["text", "body", "caption"]) ?? "");
+  const body = normalizeInsightText(row.body ?? row.summary ?? "");
+  return Boolean(text && body && (text.includes(body.slice(0, 45)) || body.includes(text.slice(0, 45))));
+}
+
+function isRecentNewsletterItem(record: JsonRecord, row: ContentPipelineRow) {
+  const occurredAt = readMessageOccurredAt(record);
+  const reference = readIsoTime(row.published_at ?? row.created_at);
+  const occurred = readIsoTime(occurredAt);
+  if (!reference || !occurred) return false;
+  return occurred >= reference - 15 * 60_000 && occurred <= reference + 72 * 60 * 60_000;
+}
+
+function mergeReactionCounts(target: Record<string, number>, source: JsonRecord | null) {
+  if (!source) return;
+  for (const [key, value] of Object.entries(source)) {
+    const count = readNullableInteger(value);
+    if (count !== null) target[key] = Math.max(target[key] ?? 0, count);
+  }
+}
+
+function countReactions(reactions: Record<string, number>) {
+  return Object.values(reactions).reduce((sum, count) => sum + Math.max(0, count), 0);
+}
+
+function readMentionCount(value: string | null) {
+  if (!value) return 0;
+  return value.split(/[,\s;]+/).map((item) => item.trim()).filter(Boolean).length;
+}
+
+function extractProviderMessageIds(value: unknown) {
+  const ids = new Set<string>();
+  collectStringFields(value, (key, item) => {
+    const normalizedKey = key.toLowerCase().replace(/[_-]/g, "");
+    if (!["messageid", "keyid", "waid"].includes(normalizedKey) && normalizedKey !== "id") return;
+    if (normalizedKey === "id" && !/^[a-f0-9]{12,}$/i.test(item)) return;
+    ids.add(item);
+  });
+  return Array.from(ids).slice(0, 40);
+}
+
+function extractNewsletterServerIds(value: unknown) {
+  const ids = new Set<number>();
+  collectStringFields(value, (key, item) => {
+    if (key.toLowerCase().replace(/[_-]/g, "") !== "serverid") return;
+    const parsed = readNullableInteger(item);
+    if (parsed !== null) ids.add(parsed);
+  });
+  collectNumberFields(value, (key, item) => {
+    if (key.toLowerCase().replace(/[_-]/g, "") === "serverid") ids.add(item);
+  });
+  return Array.from(ids).slice(0, 40);
+}
+
+function extractTrackingLinkIdsFromOutbound(value: unknown) {
+  const ids = new Set<string>();
+  collectStringFields(value, (key, item) => {
+    if (key.toLowerCase().replace(/[_-]/g, "") === "trackinglinkid" && isUuid(item)) {
+      ids.add(item);
+    }
+    for (const id of extractTrackingLinkIdsFromString(item)) ids.add(id);
+  });
+  return Array.from(ids).slice(0, 40);
+}
+
+function extractTrackingLinkIdsFromString(value: string) {
+  const ids: string[] = [];
+  const regexes = [
+    /\/r\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/gi,
+    /tracking_link_id=([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/gi,
+  ];
+  for (const regex of regexes) {
+    for (const match of value.matchAll(regex)) {
+      if (match[1]) ids.push(match[1]);
+    }
+  }
+  return ids;
+}
+
+function collectStringFields(value: unknown, visitor: (key: string, value: string) => void) {
+  if (!value || typeof value !== "object") return;
+  if (Array.isArray(value)) {
+    value.forEach((item) => collectStringFields(item, visitor));
+    return;
+  }
+  for (const [key, item] of Object.entries(value as JsonRecord)) {
+    if (typeof item === "string" && item.trim()) visitor(key, item.trim());
+    collectStringFields(item, visitor);
+  }
+}
+
+function collectNumberFields(value: unknown, visitor: (key: string, value: number) => void) {
+  if (!value || typeof value !== "object") return;
+  if (Array.isArray(value)) {
+    value.forEach((item) => collectNumberFields(item, visitor));
+    return;
+  }
+  for (const [key, item] of Object.entries(value as JsonRecord)) {
+    if (typeof item === "number" && Number.isFinite(item)) visitor(key, Math.round(item));
+    collectNumberFields(item, visitor);
+  }
+}
+
+function normalizeInsightText(value: string) {
+  return value.toLowerCase().replace(/\s+/g, " ").trim().slice(0, 240);
+}
+
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+}
+
+function maxIso(left: string | null, right: string | null) {
+  if (!left) return right;
+  if (!right) return left;
+  return readIsoTime(right) > readIsoTime(left) ? right : left;
 }
 
 function readSenderCampaignFolderId(metadata: JsonRecord) {

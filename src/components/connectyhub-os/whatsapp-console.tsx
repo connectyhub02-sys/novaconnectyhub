@@ -404,6 +404,65 @@ type MigrationCredentialResponse = {
   error?: string;
 };
 
+type WhatsappOutboundInsightSample = {
+  id: string | null;
+  chatId: string | null;
+  sender: string | null;
+  senderName: string | null;
+  status: string | null;
+  type: string | null;
+  text: string | null;
+  occurredAt: string | null;
+  source: "message_find" | "target_chat" | "newsletter" | "click";
+};
+
+type WhatsappOutboundInsights = {
+  syncedAt: string | null;
+  sources: string[];
+  delivery: {
+    total: number;
+    sent: number;
+    delivered: number;
+    read: number;
+    played: number;
+    failed: number;
+    pending: number;
+    unknown: number;
+    error: string | null;
+  };
+  engagement: {
+    views: number | null;
+    reactions: Record<string, number>;
+    replies: number;
+    pollVotes: number;
+    buttonClicks: number;
+    linkClicks: number;
+    knownLeads: number;
+  };
+  audience: {
+    targetCount: number;
+    targetTypes: Array<"group" | "newsletter">;
+    mentionedAll: boolean;
+    mentionedCount: number;
+    maxRecipients: number | null;
+    statusPrivacyType: string | null;
+  };
+  tracking: {
+    trackIds: string[];
+    messageIds: string[];
+    trackingLinkIds: string[];
+    newsletterServerIds: number[];
+  };
+  crm: {
+    eventCount: number;
+    lastEventAt: string | null;
+    attributionReady: boolean;
+    segments: string[];
+  };
+  limitations: string[];
+  samples: WhatsappOutboundInsightSample[];
+};
+
 type WhatsappChannelOutboundItem = {
   id: string;
   operation: string;
@@ -436,6 +495,7 @@ type WhatsappChannelOutboundItem = {
       sentAt: string | null;
     }>;
   } | null;
+  outboundInsights: WhatsappOutboundInsights | null;
   recurrence: {
     frequency: "daily" | "weekly";
     occurrenceIndex: number;
@@ -524,6 +584,11 @@ type WhatsappChannelOperationsState = {
       sentMessages: number;
       failedMessages: number;
       pendingMessages: number;
+      views: number;
+      reactions: number;
+      replies: number;
+      linkClicks: number;
+      knownLeads: number;
     };
     calendar: Array<{
       id: string;
@@ -6205,7 +6270,7 @@ function WhatsappChannelOperationsPanel({
                 </span>
               </span>
             </summary>
-            <div className="grid gap-2 border-t p-3 sm:grid-cols-2 xl:grid-cols-5" style={{ borderColor: "var(--ch-border)" }}>
+            <div className="grid gap-2 border-t p-3 sm:grid-cols-2 xl:grid-cols-6" style={{ borderColor: "var(--ch-border)" }}>
               <SecondaryAction
                 icon={Brain}
                 label="Detalhes"
@@ -6237,6 +6302,14 @@ function WhatsappChannelOperationsPanel({
                 disabled={operationsLocked}
                 loading={channelAction === "sync_campaign_tracking"}
                 onClick={() => onRunAction("sync_campaign_tracking")}
+              />
+              <SecondaryAction
+                icon={Eye}
+                label="Metricas"
+                description="Atualiza views, respostas, reacoes, cliques e sinais CRM."
+                disabled={operationsLocked}
+                loading={channelAction === "sync_outbound_insights"}
+                onClick={() => onRunAction("sync_outbound_insights")}
               />
               <SecondaryAction
                 icon={RefreshCcw}
@@ -6911,6 +6984,9 @@ function WhatsappChannelOperationsPanel({
                   {item.campaignTracking ? (
                     <CampaignTrackingSummary tracking={item.campaignTracking} />
                   ) : null}
+                  {item.outboundInsights ? (
+                    <OutboundInsightsSummary insights={item.outboundInsights} />
+                  ) : null}
                   {item.error ? (
                     <p className="mt-2 rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-[11px] leading-4 text-rose-700">{item.error}</p>
                   ) : null}
@@ -6985,6 +7061,41 @@ function CampaignTrackingSummary({
   );
 }
 
+function OutboundInsightsSummary({
+  insights,
+}: {
+  insights: WhatsappOutboundInsights;
+}) {
+  const reactions = sumWhatsappInsightReactions(insights.engagement.reactions);
+
+  return (
+    <div className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-emerald-700">
+          <Eye className="h-3.5 w-3.5" />
+          Metricas WhatsApp
+        </p>
+        <NeonBadge tone={insights.crm.attributionReady ? "green" : "zinc"}>
+          {insights.crm.attributionReady ? "crm pronto" : "sem interacao"}
+        </NeonBadge>
+      </div>
+      <div className="mt-2 grid grid-cols-2 gap-1.5 sm:grid-cols-5">
+        <TrackingMiniStat label="Views" value={insights.engagement.views ?? 0} tone="cyan" />
+        <TrackingMiniStat label="Respostas" value={insights.engagement.replies} tone="green" />
+        <TrackingMiniStat label="Reacoes" value={reactions} tone="cyan" />
+        <TrackingMiniStat label="Cliques" value={insights.engagement.linkClicks} tone="green" />
+        <TrackingMiniStat label="Leads" value={insights.engagement.knownLeads} tone="green" />
+      </div>
+      <p className="mt-2 font-mono text-[8px] uppercase tracking-widest text-slate-500">
+        Sync {formatDate(insights.syncedAt)} / fontes {insights.sources.length || 0}
+      </p>
+      {insights.limitations.length ? (
+        <p className="mt-2 line-clamp-2 text-[11px] leading-4 text-amber-700">{insights.limitations[0]}</p>
+      ) : null}
+    </div>
+  );
+}
+
 function TrackingMiniStat({
   label,
   value,
@@ -7008,6 +7119,10 @@ function TrackingMiniStat({
       <p className={cn("mt-0.5 text-[12px] font-semibold", toneClass)}>{value.toLocaleString("pt-BR")}</p>
     </div>
   );
+}
+
+function sumWhatsappInsightReactions(reactions: Record<string, number>) {
+  return Object.values(reactions).reduce((total, count) => total + Math.max(0, Number(count) || 0), 0);
 }
 
 function CampaignAnalyticsPanel({
@@ -7039,6 +7154,11 @@ function CampaignAnalyticsPanel({
           <MetricMiniCard icon={Mic} label="Audio" value={summary.withAudio} />
           <MetricMiniCard icon={Gauge} label="Rastreadas" value={summary.trackedMessages} />
           <MetricMiniCard icon={Power} label="Falhas API" value={summary.failedMessages} />
+          <MetricMiniCard icon={Eye} label="Views" value={summary.views} />
+          <MetricMiniCard icon={MessageCircle} label="Respostas" value={summary.replies} />
+          <MetricMiniCard icon={Smile} label="Reacoes" value={summary.reactions} />
+          <MetricMiniCard icon={Link2} label="Cliques" value={summary.linkClicks} />
+          <MetricMiniCard icon={UserRound} label="Leads CRM" value={summary.knownLeads} />
         </div>
       ) : (
         <div className="mt-3 rounded-lg border px-3 py-5 text-center text-[12px] text-slate-500" style={{ borderColor: "var(--ch-border)" }}>

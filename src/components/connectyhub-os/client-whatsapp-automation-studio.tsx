@@ -2,13 +2,16 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
+  BarChart3,
   CalendarClock,
   Check,
   Clock3,
+  Eye,
   FileAudio,
   Loader2,
   Megaphone,
   MessageCircle,
+  MousePointerClick,
   RefreshCcw,
   Send,
   Settings2,
@@ -16,6 +19,7 @@ import {
   Sparkles,
   Users,
   Vote,
+  X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { NeonBadge, Panel } from "./panel-primitives";
@@ -54,6 +58,87 @@ type WhatsappTarget = {
   muteUntil: string | null;
 };
 
+type WhatsappOutboundInsightSample = {
+  id: string | null;
+  chatId: string | null;
+  sender: string | null;
+  senderName: string | null;
+  status: string | null;
+  type: string | null;
+  text: string | null;
+  occurredAt: string | null;
+  source: "message_find" | "target_chat" | "newsletter" | "click";
+};
+
+type WhatsappOutboundInsights = {
+  syncedAt: string | null;
+  sources: string[];
+  delivery: {
+    total: number;
+    sent: number;
+    delivered: number;
+    read: number;
+    played: number;
+    failed: number;
+    pending: number;
+    unknown: number;
+    error: string | null;
+  };
+  engagement: {
+    views: number | null;
+    reactions: Record<string, number>;
+    replies: number;
+    pollVotes: number;
+    buttonClicks: number;
+    linkClicks: number;
+    knownLeads: number;
+  };
+  audience: {
+    targetCount: number;
+    targetTypes: Array<"group" | "newsletter">;
+    mentionedAll: boolean;
+    mentionedCount: number;
+    maxRecipients: number | null;
+    statusPrivacyType: string | null;
+  };
+  tracking: {
+    trackIds: string[];
+    messageIds: string[];
+    trackingLinkIds: string[];
+    newsletterServerIds: number[];
+  };
+  crm: {
+    eventCount: number;
+    lastEventAt: string | null;
+    attributionReady: boolean;
+    segments: string[];
+  };
+  limitations: string[];
+  samples: WhatsappOutboundInsightSample[];
+};
+
+type WhatsappCampaignDeliveryTracking = {
+  folderId: string;
+  status: "pending" | "sent" | "failed" | "partial" | "unknown";
+  total: number;
+  sent: number;
+  failed: number;
+  scheduled: number;
+  pending: number;
+  lastSyncedAt: string;
+  source: "uazapi_sender";
+  error: string | null;
+  samples: Array<{
+    id: string | null;
+    number: string | null;
+    status: "scheduled" | "sent" | "failed" | "unknown";
+    providerStatus: string | null;
+    error: string | null;
+    scheduledFor: string | null;
+    sentAt: string | null;
+  }>;
+};
+
 type WhatsappOperationsState = {
   instance: {
     id: string;
@@ -84,6 +169,8 @@ type WhatsappOperationsState = {
     publishedAt: string | null;
     providerStatus: string | null;
     error: string | null;
+    campaignTracking: WhatsappCampaignDeliveryTracking | null;
+    outboundInsights: WhatsappOutboundInsights | null;
   }>;
   analytics: {
     summary: {
@@ -101,6 +188,11 @@ type WhatsappOperationsState = {
       carouselPosts: number;
       pollPosts: number;
       statusPosts: number;
+      views: number;
+      reactions: number;
+      replies: number;
+      linkClicks: number;
+      knownLeads: number;
     };
     topProducts: Array<{
       id: string;
@@ -121,6 +213,8 @@ type WhatsappOperationsState = {
     };
   };
 };
+
+type WhatsappHistoryItem = WhatsappOperationsState["history"][number];
 
 type GrowthPlanItem = {
   id: string;
@@ -202,6 +296,7 @@ export function ClientWhatsappAutomationStudio({
   const [operations, setOperations] = useState<WhatsappOperationsState | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [runningAction, setRunningAction] = useState<string | null>(null);
+  const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null);
 
   const [selectedTargetIds, setSelectedTargetIds] = useState<string[]>([]);
   const [campaignDestinationMode, setCampaignDestinationMode] = useState<CampaignDestinationMode>("groups");
@@ -253,6 +348,7 @@ export function ClientWhatsappAutomationStudio({
   const behavior = operations?.behavior;
   const connected = operations?.instance.status === "connected";
   const targets = operations?.targets ?? [];
+  const selectedHistoryItem = operations?.history.find((item) => item.id === selectedHistoryId) ?? null;
   const groups = targets.filter((target) => target.type === "group");
   const newsletters = targets.filter((target) => target.type === "newsletter");
   const effectiveGroupWindowTargetId = groupWindowTargetId || groups[0]?.id || "";
@@ -324,6 +420,12 @@ export function ClientWhatsappAutomationStudio({
     && selectedPollTargetIds.length > 0
     && pollQuestion.trim().length > 0
     && parseLines(pollChoices).length >= 2;
+
+  useEffect(() => {
+    if (selectedHistoryId && !operations?.history.some((item) => item.id === selectedHistoryId)) {
+      setSelectedHistoryId(null);
+    }
+  }, [operations?.history, selectedHistoryId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -651,11 +753,12 @@ export function ClientWhatsappAutomationStudio({
           </div>
         ) : null}
 
-        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
           <ActionButton icon={RefreshCcw} label="Atualizar" loading={runningAction === "load_channels"} onClick={refreshChannels} />
           <ActionButton icon={Users} label="Buscar grupos" disabled={!selectedAgentId} loading={runningAction === "refresh_groups"} onClick={() => runAction("refresh_groups")} />
           <ActionButton icon={Megaphone} label="Buscar canais" disabled={!selectedAgentId} loading={runningAction === "refresh_newsletters"} onClick={() => runAction("refresh_newsletters")} />
           <ActionButton icon={ShieldCheck} label="Analisar grupos" disabled={operationsLocked || groups.length === 0} loading={runningAction === "sync_group_intelligence"} onClick={() => runAction("sync_group_intelligence")} />
+          <ActionButton icon={BarChart3} label="Atualizar metricas" disabled={operationsLocked || !operations?.history.length} loading={runningAction === "sync_outbound_insights"} onClick={() => runAction("sync_outbound_insights")} />
         </div>
 
         <FeatureGates
@@ -983,10 +1086,10 @@ export function ClientWhatsappAutomationStudio({
         <Section title="Inteligencia" badge={operations?.analytics.optimization.confidence ?? "low"}>
           <div className="grid gap-3">
             <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-              <Metric icon={Megaphone} label="Carrossel" value={String(operations?.analytics.summary.carouselPosts ?? 0)} detail="vitrines enviadas" />
-              <Metric icon={Vote} label="Enquetes" value={String(operations?.analytics.summary.pollPosts ?? 0)} detail="posts de voto" />
-              <Metric icon={MessageCircle} label="Status" value={String(operations?.analytics.summary.statusPosts ?? 0)} detail="stories publicados" />
-              <Metric icon={Send} label="Rastreamento" value={String(operations?.analytics.summary.trackedMessages ?? 0)} detail="mensagens monitoradas" />
+              <Metric icon={Eye} label="Views" value={formatCompactNumber(operations?.analytics.summary.views ?? 0)} detail="canais/status disponiveis" />
+              <Metric icon={MessageCircle} label="Respostas" value={formatCompactNumber(operations?.analytics.summary.replies ?? 0)} detail="grupos e status" />
+              <Metric icon={MousePointerClick} label="Cliques" value={formatCompactNumber(operations?.analytics.summary.linkClicks ?? 0)} detail="links rastreados" />
+              <Metric icon={Users} label="Leads CRM" value={formatCompactNumber(operations?.analytics.summary.knownLeads ?? 0)} detail="contatos identificados" />
             </div>
             {operations?.analytics.optimization.reasons.length ? (
               <div className="rounded-xl border border-slate-200 bg-white/60 p-3 text-[12px] leading-5 text-slate-600">
@@ -1019,21 +1122,37 @@ export function ClientWhatsappAutomationStudio({
         <Section title="Historico recente" badge={`${operations?.history.length ?? 0} registros`}>
           <div className="grid gap-2">
             {operations?.history.length ? operations.history.map((item) => (
-              <div key={item.id} className="grid gap-1 rounded-xl border border-slate-200 bg-white/60 p-3 sm:grid-cols-[1fr_auto] sm:items-center">
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setSelectedHistoryId(item.id)}
+                className="grid gap-2 rounded-xl border border-slate-200 bg-white/60 p-3 text-left transition hover:border-emerald-500/30 hover:bg-emerald-500/5 sm:grid-cols-[1fr_auto] sm:items-center"
+              >
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold" style={{ color: "var(--ch-text)" }}>{item.title}</p>
-                  <p className="mt-1 truncate text-[11px] text-slate-500">{item.summary ?? item.operation}</p>
+                  <p className="mt-1 truncate text-[11px] text-slate-500">{item.summary ?? formatHistoryOperation(item.operation)}</p>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {buildHistoryMetricPills(item).map((metric) => (
+                      <HistoryMetricPill key={metric.label} label={metric.label} value={metric.value} />
+                    ))}
+                  </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                   <NeonBadge tone={item.status === "published" ? "green" : item.status === "review" ? "rose" : "amber"}>{item.status}</NeonBadge>
                   <span className="font-mono text-[10px] text-slate-500">{formatDateTime(item.scheduledFor ?? item.publishedAt)}</span>
                 </div>
-              </div>
+              </button>
             )) : (
               <EmptyState icon={CalendarClock} text="Nenhum envio de grupos, canais ou status registrado ainda." />
             )}
           </div>
         </Section>
+        <HistoryInsightDrawer
+          item={selectedHistoryItem}
+          loading={runningAction === "sync_outbound_insights"}
+          onClose={() => setSelectedHistoryId(null)}
+          onSync={() => runAction("sync_outbound_insights")}
+        />
       </div>
     </Panel>
   );
@@ -1086,6 +1205,163 @@ function FeatureGates({
         </div>
       ))}
     </div>
+  );
+}
+
+function HistoryInsightDrawer({
+  item,
+  loading,
+  onClose,
+  onSync,
+}: {
+  item: WhatsappHistoryItem | null;
+  loading: boolean;
+  onClose: () => void;
+  onSync: () => void | Promise<void | ChannelActionResponse | null>;
+}) {
+  if (!item) return null;
+
+  const insights = item.outboundInsights;
+  const reactions = insights ? sumReactionCounts(insights.engagement.reactions) : 0;
+  const deliveryTotal = insights?.delivery.total || item.campaignTracking?.total || 0;
+  const deliveryDone = insights
+    ? insights.delivery.sent + insights.delivery.delivered + insights.delivery.read + insights.delivery.played
+    : item.campaignTracking?.sent ?? 0;
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-end bg-slate-950/35 p-3 sm:p-5">
+      <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-slate-200 bg-white p-4 shadow-2xl">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="font-mono text-[9px] uppercase tracking-wide text-slate-500">Raio-x da campanha</p>
+            <h3 className="mt-1 truncate text-base font-semibold" style={{ color: "var(--ch-text)" }}>{item.title}</h3>
+            <p className="mt-1 text-[12px] leading-5 text-slate-500">
+              {formatHistoryOperation(item.operation)} / {formatDateTime(item.publishedAt ?? item.scheduledFor)}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="grid h-9 w-9 place-items-center rounded-lg border border-slate-200 text-slate-500 transition hover:bg-slate-50"
+            aria-label="Fechar metricas"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          <InsightStat icon={Send} label="Entrega" value={`${formatCompactNumber(deliveryDone)}/${formatCompactNumber(deliveryTotal)}`} detail="mensagens acompanhadas" />
+          <InsightStat icon={Eye} label="Views" value={formatCompactNumber(insights?.engagement.views ?? 0)} detail={insights?.engagement.views === null ? "nao exposto para este tipo" : "canais/status quando disponivel"} />
+          <InsightStat icon={MessageCircle} label="Respostas" value={formatCompactNumber(insights?.engagement.replies ?? 0)} detail="grupo, canal ou status" />
+          <InsightStat icon={MousePointerClick} label="Cliques" value={formatCompactNumber(insights?.engagement.linkClicks ?? 0)} detail="links rastreados" />
+          <InsightStat icon={Vote} label="Votos" value={formatCompactNumber(insights?.engagement.pollVotes ?? 0)} detail="enquetes em grupos" />
+          <InsightStat icon={Sparkles} label="Reacoes" value={formatCompactNumber(reactions)} detail="reactions agregadas" />
+          <InsightStat icon={Users} label="Leads CRM" value={formatCompactNumber(insights?.engagement.knownLeads ?? 0)} detail="contatos identificados" />
+          <InsightStat icon={BarChart3} label="Eventos" value={formatCompactNumber(insights?.crm.eventCount ?? 0)} detail="registrados no CRM" />
+        </div>
+
+        {insights ? (
+          <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(220px,0.45fr)]">
+            <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <FieldLabel>Amostras e sinais</FieldLabel>
+                <NeonBadge tone={insights.crm.attributionReady ? "green" : "zinc"}>
+                  {insights.crm.attributionReady ? "crm pronto" : "aguardando interacao"}
+                </NeonBadge>
+              </div>
+              <div className="mt-2 grid gap-2">
+                {insights.samples.length ? insights.samples.map((sample, index) => (
+                  <div key={`${sample.source}-${sample.id ?? sample.occurredAt ?? index}`} className="rounded-lg border border-slate-200 bg-white p-2">
+                    <p className="truncate font-mono text-[9px] uppercase tracking-wide text-slate-500">
+                      {formatInsightSource(sample.source)} / {formatDateTime(sample.occurredAt)} / {sample.status ?? sample.type ?? "sinal"}
+                    </p>
+                    <p className="mt-1 truncate text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>
+                      {sample.senderName ?? sample.sender ?? sample.chatId ?? "Contato WhatsApp"}
+                    </p>
+                    {sample.text ? <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-slate-500">{sample.text}</p> : null}
+                  </div>
+                )) : (
+                  <p className="text-[12px] leading-5 text-slate-500">Nenhuma resposta, clique, voto ou update retornou nesta sincronizacao.</p>
+                )}
+              </div>
+            </div>
+
+            <div className="grid content-start gap-3">
+              <div className="rounded-xl border border-slate-200 bg-white/70 p-3">
+                <FieldLabel>Fontes consultadas</FieldLabel>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {insights.sources.length ? insights.sources.map((source) => (
+                    <NeonBadge key={source} tone="cyan">{source}</NeonBadge>
+                  )) : <span className="text-[12px] text-slate-500">Ainda sem sync de metricas.</span>}
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 bg-white/70 p-3">
+                <FieldLabel>Segmentos CRM</FieldLabel>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {insights.crm.segments.length ? insights.crm.segments.map((segment) => (
+                    <NeonBadge key={segment} tone="green">{segment}</NeonBadge>
+                  )) : <span className="text-[12px] text-slate-500">Sem segmento novo.</span>}
+                </div>
+              </div>
+
+              {insights.limitations.length ? (
+                <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 p-3">
+                  <FieldLabel>Limites do WhatsApp</FieldLabel>
+                  <div className="mt-2 grid gap-1">
+                    {insights.limitations.map((limitation) => (
+                      <p key={limitation} className="text-[11px] leading-4 text-amber-700">- {limitation}</p>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        ) : (
+          <div className="mt-4">
+            <EmptyState icon={BarChart3} text="Este envio ainda nao tem metricas sincronizadas. Clique em Atualizar metricas para consultar a Uazapi e registrar sinais no CRM." />
+          </div>
+        )}
+
+        <div className="mt-4 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+          <p className="text-[11px] leading-5 text-slate-500">
+            Status nao expoe lista nominal de visualizadores no contrato atual; quando houver resposta, clique ou voto, o CRM recebe o sinal com atribuicao.
+          </p>
+          <ActionButton icon={BarChart3} label="Atualizar metricas" loading={loading} onClick={onSync} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function InsightStat({
+  detail,
+  icon: Icon,
+  label,
+  value,
+}: {
+  detail: string;
+  icon: LucideIcon;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3">
+      <div className="flex items-center justify-between gap-2">
+        <p className="font-mono text-[9px] uppercase tracking-wide text-slate-500">{label}</p>
+        <Icon className="h-4 w-4 text-emerald-600" />
+      </div>
+      <p className="mt-2 text-lg font-black text-emerald-700">{value}</p>
+      <p className="mt-1 text-[11px] leading-4 text-slate-500">{detail}</p>
+    </div>
+  );
+}
+
+function HistoryMetricPill({ label, value }: { label: string; value: string }) {
+  return (
+    <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 font-mono text-[9px] uppercase tracking-wide text-slate-500">
+      {label}: {value}
+    </span>
   );
 }
 
@@ -1812,6 +2088,52 @@ function listCampaignPreviewBlockedRequirements(
   }
 
   return requirements;
+}
+
+function buildHistoryMetricPills(item: WhatsappHistoryItem) {
+  const insights = item.outboundInsights;
+  const pills: Array<{ label: string; value: string }> = [];
+
+  if (insights) {
+    if (insights.engagement.views !== null) pills.push({ label: "views", value: formatCompactNumber(insights.engagement.views) });
+    if (insights.engagement.replies > 0) pills.push({ label: "respostas", value: formatCompactNumber(insights.engagement.replies) });
+    if (insights.engagement.linkClicks > 0) pills.push({ label: "cliques", value: formatCompactNumber(insights.engagement.linkClicks) });
+    const reactions = sumReactionCounts(insights.engagement.reactions);
+    if (reactions > 0) pills.push({ label: "reacoes", value: formatCompactNumber(reactions) });
+    if (insights.engagement.knownLeads > 0) pills.push({ label: "crm", value: formatCompactNumber(insights.engagement.knownLeads) });
+  }
+
+  if (item.campaignTracking) {
+    pills.push({ label: "envios", value: `${formatCompactNumber(item.campaignTracking.sent)}/${formatCompactNumber(item.campaignTracking.total)}` });
+    if (item.campaignTracking.failed > 0) pills.push({ label: "falhas", value: formatCompactNumber(item.campaignTracking.failed) });
+  }
+
+  return pills.length ? pills.slice(0, 5) : [{ label: "metricas", value: "abrir" }];
+}
+
+function sumReactionCounts(reactions: Record<string, number> | null | undefined) {
+  return Object.values(reactions ?? {}).reduce((total, count) => total + Math.max(0, Number(count) || 0), 0);
+}
+
+function formatCompactNumber(value: number | null | undefined) {
+  return Math.max(0, Number(value) || 0).toLocaleString("pt-BR");
+}
+
+function formatHistoryOperation(operation: string) {
+  if (operation === "status") return "Status WhatsApp";
+  if (operation === "target_poll") return "Enquete em grupo";
+  if (operation === "target_carousel") return "Carrossel";
+  if (operation === "newsletter_text") return "Canal WhatsApp";
+  if (operation === "group_announce_mode") return "Janela de grupo";
+  if (operation === "campaign_simple") return "Campanha em massa";
+  return "Campanha WhatsApp";
+}
+
+function formatInsightSource(source: WhatsappOutboundInsightSample["source"]) {
+  if (source === "target_chat") return "mensagem do grupo";
+  if (source === "newsletter") return "canal";
+  if (source === "click") return "clique";
+  return "message/find";
 }
 
 function normalizePreviewText(value: string) {

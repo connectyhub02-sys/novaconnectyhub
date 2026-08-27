@@ -27,6 +27,7 @@ import {
   resolvePlatformWhatsappOperationalContext,
   syncWhatsappCampaignTracking,
   syncWhatsappGroupIntelligence,
+  syncWhatsappOutboundInsights,
   type WhatsappOutboundItem,
   updateWhatsappChannelTargetSettings,
 } from "@/lib/whatsapp/channel-operations";
@@ -153,6 +154,9 @@ export async function POST(request: NextRequest) {
     } else if (action === "sync_campaign_tracking") {
       result = await syncWhatsappCampaignTracking(client, whatsapp);
       notice = "Rastreamento interno de campanhas atualizado pela Uazapi.";
+    } else if (action === "sync_outbound_insights") {
+      result = await syncWhatsappOutboundInsights(client, whatsapp);
+      notice = "Metricas internas de grupos, canais, status e CRM atualizadas.";
     } else if (action === "sync_group_intelligence") {
       result = await syncWhatsappGroupIntelligence(client, whatsapp);
       notice = "Detalhes internos dos grupos atualizados pela Uazapi.";
