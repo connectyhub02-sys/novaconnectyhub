@@ -79,6 +79,7 @@ type ChannelActionBody = {
   postsPerDay?: unknown;
   objective?: unknown;
   startFrom?: unknown;
+  preferredFormats?: unknown;
   planItems?: unknown;
   groupTargetId?: unknown;
   openScheduledFor?: unknown;
@@ -242,6 +243,7 @@ export async function POST(request: NextRequest) {
         postsPerDay: asNumber(body?.postsPerDay) ?? null,
         startFrom: asString(body?.startFrom),
         mentionAll: asBoolean(body?.mentionAll),
+        preferredFormats: readStringList(body?.preferredFormats),
       });
       await meterGeminiGenerationUsage({
         client,

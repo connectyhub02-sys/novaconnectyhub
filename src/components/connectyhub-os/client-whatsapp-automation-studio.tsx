@@ -6,7 +6,6 @@ import {
   Check,
   Clock3,
   FileAudio,
-  Link as LinkIcon,
   Loader2,
   Megaphone,
   MessageCircle,
@@ -152,6 +151,8 @@ type GrowthPlan = {
   modelId: string;
 };
 
+type GrowthFormatPreference = "mixed" | "text" | "audio" | "text_audio" | "carousel" | "poll" | "status";
+
 type ChannelActionResponse = {
   operations?: WhatsappOperationsState | null;
   result?: {
@@ -209,18 +210,15 @@ export function ClientWhatsappAutomationStudio({
   const [campaignScheduledFor, setCampaignScheduledFor] = useState(() => buildLocalDateTime(45));
   const [campaignFormat, setCampaignFormat] = useState<"single" | "carousel">("single");
   const [campaignDeliveryMode, setCampaignDeliveryMode] = useState<"text" | "audio" | "text_audio">("text");
-  const [campaignMediaKind, setCampaignMediaKind] = useState<"image" | "video" | "document">("image");
-  const [campaignMediaUrl, setCampaignMediaUrl] = useState("");
-  const [campaignMediaCaption, setCampaignMediaCaption] = useState("");
   const [campaignMentionAll, setCampaignMentionAll] = useState(false);
   const [campaignRecurrence, setCampaignRecurrence] = useState<"none" | "daily" | "weekly">("daily");
   const [campaignOccurrences, setCampaignOccurrences] = useState(7);
   const [campaignButtonEnabled, setCampaignButtonEnabled] = useState(true);
   const [campaignButtonLabel, setCampaignButtonLabel] = useState("Comprar agora");
-  const [campaignButtonUrl, setCampaignButtonUrl] = useState("");
   const [advancedToolsOpen, setAdvancedToolsOpen] = useState(false);
 
   const [growthObjective, setGrowthObjective] = useState("Vender os produtos selecionados com presenca diaria no WhatsApp");
+  const [growthFormatPreference, setGrowthFormatPreference] = useState<GrowthFormatPreference>("mixed");
   const [growthDurationDays, setGrowthDurationDays] = useState(7);
   const [growthPostsPerDay, setGrowthPostsPerDay] = useState(3);
   const [growthStartFrom, setGrowthStartFrom] = useState(() => buildLocalDateTime(90));
@@ -232,7 +230,6 @@ export function ClientWhatsappAutomationStudio({
   const [statusBackgroundColor, setStatusBackgroundColor] = useState(4);
   const [statusType, setStatusType] = useState<"text" | "image" | "video" | "audio">("text");
   const [statusMediaUrl, setStatusMediaUrl] = useState("");
-  const [statusMediaCaption, setStatusMediaCaption] = useState("");
   const [statusMaxRecipients, setStatusMaxRecipients] = useState(180);
 
   const [pollQuestion, setPollQuestion] = useState("Qual produto voces querem ver em oferta primeiro?");
@@ -263,6 +260,7 @@ export function ClientWhatsappAutomationStudio({
     ? selectedCampaignProductIds
     : products.slice(0, 6).map((product) => product.id);
   const automaticCampaignProducts = products.filter((product) => automaticCampaignProductIds.includes(product.id));
+  const preferredGrowthFormats = resolveGrowthPreferredFormats(growthFormatPreference);
   const selectedStatusProducts = products.filter((product) => selectedStatusProductIds.includes(product.id));
   const selectedCampaignMediaCount = automaticCampaignProducts.reduce((total, product) => total + product.media.length, 0);
   const campaignProductUrl = firstProductUrl(selectedCampaignProducts);
@@ -440,13 +438,10 @@ export function ClientWhatsappAutomationStudio({
       recurrenceFrequency: campaignRecurrence === "none" ? null : campaignRecurrence,
       recurrenceOccurrences: campaignRecurrence === "none" ? null : campaignOccurrences,
       deliveryMode: campaignDeliveryMode,
-      mediaUrl: campaignMediaUrl,
-      mediaKind: campaignMediaKind,
-      mediaCaption: campaignMediaCaption,
       catalogItemIds: selectedCampaignProductIds,
       interactiveMode: campaignButtonEnabled ? "button" : "none",
       buttonLabel: campaignButtonLabel,
-      buttonUrl: campaignButtonUrl || campaignProductUrl,
+      buttonUrl: campaignProductUrl,
     });
   }
 
@@ -460,6 +455,7 @@ export function ClientWhatsappAutomationStudio({
       postsPerDay: growthPostsPerDay,
       startFrom: localDatetimeToIso(growthStartFrom),
       mentionAll: campaignMentionAll,
+      preferredFormats: preferredGrowthFormats,
     });
     const plan = data?.result?.growthPlan;
 
@@ -477,8 +473,10 @@ export function ClientWhatsappAutomationStudio({
       targetIds: selectedTargetIdsValid,
       catalogItemIds: automaticCampaignProductIds,
       mentionAll: campaignMentionAll,
-      buttonLabel: campaignButtonLabel,
-      planItems: growthPlan.items,
+      buttonLabel: campaignButtonEnabled ? campaignButtonLabel : null,
+      planItems: campaignButtonEnabled
+        ? growthPlan.items
+        : growthPlan.items.map((item) => ({ ...item, buttonLabel: null })),
     });
   }
 
@@ -501,7 +499,7 @@ export function ClientWhatsappAutomationStudio({
       text: statusText,
       statusType,
       mediaUrl: statusMediaUrl,
-      mediaCaption: statusMediaCaption,
+      mediaCaption: "",
       backgroundColor: statusBackgroundColor,
       maxRecipients: statusMaxRecipients,
       catalogItemIds: selectedStatusProductIds,
@@ -537,6 +535,13 @@ export function ClientWhatsappAutomationStudio({
     await runAction("update_target_settings", {
       targetId: target.id,
       [key]: !target[key],
+    });
+  }
+
+  async function updateTargetPolicy(target: WhatsappTarget, payload: Record<string, unknown>) {
+    await runAction("update_target_settings", {
+      targetId: target.id,
+      ...payload,
     });
   }
 
@@ -626,6 +631,29 @@ export function ClientWhatsappAutomationStudio({
                       <MiniToggle checked={target.enabled} label="Atendimento no grupo" onClick={() => toggleTargetSetting(target, "enabled")} loading={runningAction === "update_target_settings"} />
                       <MiniToggle checked={target.campaignEnabled} label="Campanhas liberadas" onClick={() => toggleTargetSetting(target, "campaignEnabled")} loading={runningAction === "update_target_settings"} />
                     </div>
+                    {target.type === "group" ? (
+                      <div className="grid gap-2 sm:grid-cols-3">
+                        <SelectField label="Responder" value={target.replyMode} disabled={runningAction === "update_target_settings"} onChange={(value) => updateTargetPolicy(target, { replyMode: value })} options={[
+                          ["all", "Todas"],
+                          ["mentions", "So mencoes"],
+                          ["observer", "Observador"],
+                          ["admins", "Admins"],
+                          ["off", "Desligado"],
+                        ]} />
+                        <SelectField label="@ nas respostas" value={target.mentionMode} disabled={runningAction === "update_target_settings"} onChange={(value) => updateTargetPolicy(target, { mentionMode: value })} options={[
+                          ["none", "Sem @"],
+                          ["author", "@ autor"],
+                          ["all", "@ todos"],
+                        ]} />
+                        <SelectField label="Limite/h" value={String(target.maxRepliesPerHour)} disabled={runningAction === "update_target_settings"} onChange={(value) => updateTargetPolicy(target, { maxRepliesPerHour: Number(value) })} options={[
+                          ["0", "0/h"],
+                          ["3", "3/h"],
+                          ["6", "6/h"],
+                          ["12", "12/h"],
+                          ["24", "24/h"],
+                        ]} />
+                      </div>
+                    ) : null}
                   </div>
                 )) : (
                   <EmptyState icon={Users} text="Sincronize grupos e canais para montar campanhas." />
@@ -662,32 +690,64 @@ export function ClientWhatsappAutomationStudio({
 
           <div className="grid gap-4">
             <Section title="Campanha automatica" badge="IA faz a copy">
-              <div className="grid gap-3">
-                <ProductPicker products={products} selectedIds={selectedCampaignProductIds} onToggle={(id) => toggleProduct(id, "campaign")} />
-                <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-[12px] leading-5 text-emerald-700">
-                  {selectedCampaignProductIds.length > 0
-                    ? `${selectedCampaignProductIds.length} produto(s) selecionado(s). A IA usa automaticamente as midias cadastradas no produto.`
-                    : `Nenhum produto selecionado. A IA pode testar ate ${automaticCampaignProducts.length} produto(s) ativo(s) do catalogo.`}
-                  {selectedCampaignMediaCount > 0 ? ` Midias encontradas: ${selectedCampaignMediaCount}.` : " Cadastre midias nos produtos para usar carrossel e anexos."}
+              <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(240px,0.48fr)]">
+                <div className="grid gap-3">
+                  <ProductPicker products={products} selectedIds={selectedCampaignProductIds} onToggle={(id) => toggleProduct(id, "campaign")} />
+                  <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-[12px] leading-5 text-emerald-700">
+                    {selectedCampaignProductIds.length > 0
+                      ? `${selectedCampaignProductIds.length} produto(s) selecionado(s). A IA usa automaticamente as midias cadastradas no produto.`
+                      : `Nenhum produto selecionado. A IA pode testar ate ${automaticCampaignProducts.length} produto(s) ativo(s) do catalogo.`}
+                    {selectedCampaignMediaCount > 0 ? ` Midias encontradas: ${selectedCampaignMediaCount}.` : " Cadastre midias nos produtos para usar carrossel e anexos."}
+                  </div>
+                  <Input label="Nome interno (opcional)" value={campaignTitle} onChange={setCampaignTitle} placeholder="Ex.: Campanha da semana" />
+                  <SelectField label="Objetivo da IA" value={growthObjective} onChange={setGrowthObjective} options={[
+                    ["Vender os produtos selecionados com presenca diaria no WhatsApp", "Vender produtos"],
+                    ["Informar sobre o produto, explicar beneficios e vender com botao no final", "Informativo + venda"],
+                    ["Descobrir quais produtos geram mais interesse no grupo", "Testar interesse"],
+                    ["Criar conversa no grupo com enquetes e ofertas leves", "Engajar grupo"],
+                    ["Criar enquetes automaticas para entender desejo de compra", "Enquete automatica"],
+                    ["Publicar uma vitrine com carrossel e botao de compra", "Vitrine/carrossel"],
+                  ]} />
+                  <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                    <SelectField label="Formato principal" value={growthFormatPreference} onChange={(value) => setGrowthFormatPreference(value as GrowthFormatPreference)} options={[
+                      ["mixed", "IA escolhe"],
+                      ["text", "Texto"],
+                      ["audio", "Audio"],
+                      ["text_audio", "Texto + audio"],
+                      ["carousel", "Carrossel"],
+                      ["poll", "Enquete"],
+                      ["status", "Status"],
+                    ]} />
+                    <SelectField label="Mencoes dos posts" value={campaignMentionAll ? "all" : "none"} onChange={(value) => setCampaignMentionAll(value === "all")} options={[
+                      ["none", "Sem @"],
+                      ["all", "@ todos"],
+                    ]} />
+                    <Input label="Texto do botao" value={campaignButtonLabel} onChange={setCampaignButtonLabel} />
+                    <div className="self-end">
+                      <MiniToggle checked={campaignButtonEnabled} label="Botao de compra" onClick={() => setCampaignButtonEnabled((current) => !current)} />
+                    </div>
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-3">
+                    <DateInput label="Inicio" value={growthStartFrom} onChange={setGrowthStartFrom} />
+                    <NumberInput label="Dias" value={growthDurationDays} min={1} max={14} onChange={setGrowthDurationDays} />
+                    <NumberInput label="Posts/dia" value={growthPostsPerDay} min={1} max={5} onChange={setGrowthPostsPerDay} />
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <ActionButton icon={Sparkles} label="Planejar rotina" disabled={!growthPlanReady} loading={runningAction === "generate_growth_plan"} onClick={generateGrowthPlan} />
+                    <ActionButton icon={CalendarClock} label="Agendar rotina" disabled={!scheduleGrowthPlanReady} loading={runningAction === "schedule_growth_plan"} onClick={scheduleGrowthPlan} />
+                  </div>
                 </div>
-                <Input label="Nome interno (opcional)" value={campaignTitle} onChange={setCampaignTitle} placeholder="Ex.: Campanha da semana" />
-                <SelectField label="Objetivo da IA" value={growthObjective} onChange={setGrowthObjective} options={[
-                  ["Vender os produtos selecionados com presenca diaria no WhatsApp", "Vender produtos"],
-                  ["Descobrir quais produtos geram mais interesse no grupo", "Testar interesse"],
-                  ["Criar conversa no grupo com enquetes e ofertas leves", "Engajar grupo"],
-                  ["Publicar uma vitrine com carrossel e botao de compra", "Vitrine/carrossel"],
-                ]} />
-                <div className="grid gap-2 sm:grid-cols-3">
-                  <DateInput label="Inicio" value={growthStartFrom} onChange={setGrowthStartFrom} />
-                  <NumberInput label="Dias" value={growthDurationDays} min={1} max={14} onChange={setGrowthDurationDays} />
-                  <NumberInput label="Posts/dia" value={growthPostsPerDay} min={1} max={5} onChange={setGrowthPostsPerDay} />
-                </div>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <ActionButton icon={Sparkles} label="Planejar rotina" disabled={!growthPlanReady} loading={runningAction === "generate_growth_plan"} onClick={generateGrowthPlan} />
-                  <ActionButton icon={CalendarClock} label="Agendar rotina" disabled={!scheduleGrowthPlanReady} loading={runningAction === "schedule_growth_plan"} onClick={scheduleGrowthPlan} />
-                </div>
+                <WhatsappCampaignPreview
+                  buttonEnabled={campaignButtonEnabled}
+                  buttonLabel={campaignButtonLabel}
+                  format={growthFormatPreference}
+                  mentionAll={campaignMentionAll}
+                  objective={growthObjective}
+                  plan={growthPlan}
+                  products={automaticCampaignProducts}
+                />
                 {growthPlan ? (
-                  <div className="grid gap-3 rounded-xl border border-cyan-500/20 bg-cyan-500/10 p-3">
+                  <div className="grid gap-3 rounded-xl border border-cyan-500/20 bg-cyan-500/10 p-3 xl:col-span-2">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold text-cyan-800">{growthPlan.title}</p>
                       <p className="mt-1 text-[12px] leading-5 text-cyan-700">{growthPlan.strategySummary}</p>
@@ -716,12 +776,12 @@ export function ClientWhatsappAutomationStudio({
               </div>
             </Section>
 
-            <Section title="Ajustes avancados" badge={advancedToolsOpen ? "aberto" : "opcional"}>
+            <Section title="Envio manual" badge={advancedToolsOpen ? "aberto" : "opcional"}>
               <div className="grid gap-3">
-                <ActionButton icon={Settings2} label={advancedToolsOpen ? "Ocultar ajustes" : "Mostrar ajustes"} onClick={() => setAdvancedToolsOpen((current) => !current)} />
+                <ActionButton icon={Settings2} label={advancedToolsOpen ? "Ocultar envio manual" : "Mostrar envio manual"} onClick={() => setAdvancedToolsOpen((current) => !current)} />
                 {advancedToolsOpen ? (
                   <div className="grid gap-4">
-                    <SubSection title="Post unico manual">
+                    <SubSection title="Post manual">
                       <div className="grid gap-3">
                         <Textarea label="Direcao extra para IA" value={campaignBrief} onChange={setCampaignBrief} rows={2} placeholder="Opcional: tom, oferta, cuidado ou tema." />
                         <Textarea label="Mensagem manual" value={campaignText} onChange={setCampaignText} rows={5} placeholder="Opcional. Se ficar vazio, use Planejar rotina." />
@@ -749,21 +809,11 @@ export function ClientWhatsappAutomationStudio({
                             ["daily", "Diario"],
                             ["weekly", "Semanal"],
                           ]} />
-                          <SelectField label="Midia externa" value={campaignMediaKind} onChange={(value) => setCampaignMediaKind(value as typeof campaignMediaKind)} options={[
-                            ["image", "Imagem"],
-                            ["video", "Video"],
-                            ["document", "Documento"],
-                          ]} />
+                          <Input label="Texto do botao" value={campaignButtonLabel} onChange={setCampaignButtonLabel} />
                         </div>
-                        <Input label="URL de midia externa (opcional)" value={campaignMediaUrl} onChange={setCampaignMediaUrl} placeholder="https://..." />
-                        <Input label="Legenda da midia externa" value={campaignMediaCaption} onChange={setCampaignMediaCaption} />
                         <div className="grid gap-2 sm:grid-cols-2">
                           <MiniToggle checked={campaignButtonEnabled} label="Enviar botao de compra" onClick={() => setCampaignButtonEnabled((current) => !current)} />
                           <MiniToggle checked={campaignMentionAll} label="Mencionar todos nos grupos" onClick={() => setCampaignMentionAll((current) => !current)} />
-                        </div>
-                        <div className="grid gap-2 sm:grid-cols-2">
-                          <Input label="Texto do botao" value={campaignButtonLabel} onChange={setCampaignButtonLabel} />
-                          <Input label="URL do botao externo" value={campaignButtonUrl} onChange={setCampaignButtonUrl} icon={LinkIcon} />
                         </div>
                         <div className="grid gap-2 sm:grid-cols-2">
                           <ActionButton icon={Sparkles} label="Criar post IA" disabled={operationsLocked || selectedTargets.length === 0 || (!campaignBrief.trim() && automaticCampaignProducts.length === 0 && !campaignText.trim())} loading={runningAction === "generate_target_campaign_draft"} onClick={generateCampaignDraft} />
@@ -787,8 +837,6 @@ export function ClientWhatsappAutomationStudio({
                           <NumberInput label="Fundo" value={statusBackgroundColor} min={1} max={19} onChange={setStatusBackgroundColor} />
                           <NumberInput label="Alcance max." value={statusMaxRecipients} min={1} max={5000} onChange={setStatusMaxRecipients} />
                         </div>
-                        <Input label="Midia externa do status (opcional)" value={statusMediaUrl} onChange={setStatusMediaUrl} placeholder="https://..." />
-                        <Input label="Legenda da midia externa" value={statusMediaCaption} onChange={setStatusMediaCaption} />
                         <div className="grid gap-2 sm:grid-cols-2">
                           <ActionButton icon={Sparkles} label="Criar status IA" disabled={operationsLocked || (!statusBrief.trim() && selectedStatusProductIds.length === 0 && !statusText.trim())} loading={runningAction === "generate_status_draft"} onClick={generateStatusDraft} />
                           <ActionButton icon={Megaphone} label="Publicar status" disabled={!statusReady} loading={runningAction === "send_status"} onClick={publishStatus} />
@@ -969,6 +1017,91 @@ function ProductPicker({
           <p className="px-2 py-3 text-[12px] text-slate-500">Cadastre produtos ativos para a IA criar campanhas automaticamente.</p>
         )}
       </div>
+    </div>
+  );
+}
+
+function WhatsappCampaignPreview({
+  buttonEnabled,
+  buttonLabel,
+  format,
+  mentionAll,
+  objective,
+  plan,
+  products,
+}: {
+  buttonEnabled: boolean;
+  buttonLabel: string;
+  format: GrowthFormatPreference;
+  mentionAll: boolean;
+  objective: string;
+  plan: GrowthPlan | null;
+  products: ClientSalesCatalogItem[];
+}) {
+  const product = products[0] ?? null;
+  const previewItem = plan?.items[0] ?? null;
+  const effectiveFormat: GrowthPlanItem["type"] = previewItem?.type ?? (format === "mixed" ? "text" : format);
+  const mediaUrl = firstProductMediaUrl(product ? [product] : products);
+  const text = previewItem?.text ?? buildCampaignPreviewText(product, objective, effectiveFormat);
+  const pollChoices = previewItem?.pollChoices.length ? previewItem.pollChoices : buildCampaignPreviewPollChoices(products);
+  const style = mediaUrl ? { backgroundImage: `url("${mediaUrl.replace(/"/g, "%22")}")` } : undefined;
+
+  return (
+    <div className="mx-auto grid w-full max-w-[300px] gap-2">
+      <div className="rounded-[28px] border border-slate-300 bg-slate-950 p-2 shadow-sm">
+        <div className="overflow-hidden rounded-[22px] bg-[#e8f5e9]">
+          <div className="flex items-center gap-2 bg-emerald-700 px-3 py-2 text-white">
+            <div className="grid h-7 w-7 place-items-center rounded-full bg-white/20 text-[10px] font-black">CH</div>
+            <div className="min-w-0">
+              <p className="truncate text-[12px] font-semibold">Grupo selecionado</p>
+              <p className="text-[9px] text-emerald-100">{formatGrowthPlanType(effectiveFormat)}</p>
+            </div>
+          </div>
+          <div className="grid min-h-[320px] content-end gap-2 px-3 py-4">
+            <div className="ml-auto max-w-[92%] rounded-lg bg-white p-2 shadow-sm">
+              {mentionAll ? <p className="mb-1 text-[11px] font-semibold text-emerald-700">@todos</p> : null}
+              {effectiveFormat === "audio" || effectiveFormat === "text_audio" ? (
+                <div className="mb-2 flex items-center gap-2 rounded-md bg-slate-50 px-2 py-2">
+                  <FileAudio className="h-4 w-4 text-emerald-700" />
+                  <div className="h-1 flex-1 rounded-full bg-slate-200">
+                    <div className="h-1 w-2/3 rounded-full bg-emerald-500" />
+                  </div>
+                  <span className="font-mono text-[9px] text-slate-500">0:22</span>
+                </div>
+              ) : null}
+              {mediaUrl && effectiveFormat !== "audio" && effectiveFormat !== "poll" ? (
+                <div className="mb-2 aspect-square rounded-md bg-slate-200 bg-cover bg-center" style={style} />
+              ) : null}
+              {effectiveFormat === "carousel" ? (
+                <div className="mb-2 flex gap-1 overflow-hidden">
+                  {products.slice(0, 3).map((item) => (
+                    <div key={item.id} className="h-12 min-w-12 rounded-md bg-emerald-100 px-1 py-2 text-center text-[8px] font-semibold text-emerald-800">
+                      {item.title.slice(0, 16)}
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+              <p className="whitespace-pre-line text-[11px] leading-4 text-slate-700">{text}</p>
+              {effectiveFormat === "poll" ? (
+                <div className="mt-2 grid gap-1">
+                  {pollChoices.slice(0, 4).map((choice) => (
+                    <div key={choice} className="rounded-full border border-emerald-500/25 px-2 py-1 text-[10px] text-emerald-700">{choice}</div>
+                  ))}
+                </div>
+              ) : null}
+              {buttonEnabled && effectiveFormat !== "poll" && effectiveFormat !== "status" ? (
+                <div className="mt-2 rounded-md border border-emerald-500/25 px-2 py-1 text-center text-[10px] font-semibold text-emerald-700">
+                  {buttonLabel || "Comprar agora"}
+                </div>
+              ) : null}
+              <p className="mt-1 text-right font-mono text-[9px] text-slate-400">10:30</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p className="text-center font-mono text-[9px] uppercase tracking-wide text-slate-500">
+        Previa WhatsApp
+      </p>
     </div>
   );
 }
@@ -1175,11 +1308,13 @@ function NumberInput({
 }
 
 function SelectField({
+  disabled,
   label,
   onChange,
   options,
   value,
 }: {
+  disabled?: boolean;
   label: string;
   onChange: (value: string) => void;
   options: Array<[string, string]>;
@@ -1188,7 +1323,7 @@ function SelectField({
   return (
     <label className="block">
       <FieldLabel>{label}</FieldLabel>
-      <select value={value} onChange={(event) => onChange(event.target.value)} className="h-10 w-full rounded-lg border bg-transparent px-3 text-sm outline-none" style={{ borderColor: "var(--ch-border)", color: "var(--ch-text)" }}>
+      <select disabled={disabled} value={value} onChange={(event) => onChange(event.target.value)} className="h-10 w-full rounded-lg border bg-transparent px-3 text-sm outline-none disabled:cursor-not-allowed disabled:opacity-50" style={{ borderColor: "var(--ch-border)", color: "var(--ch-text)" }}>
         {options.map(([optionValue, labelText]) => <option key={optionValue} value={optionValue}>{labelText}</option>)}
       </select>
     </label>
@@ -1268,6 +1403,52 @@ function firstProductUrl(products: ClientSalesCatalogItem[]) {
     if (product.productUrl) return product.productUrl;
   }
   return "";
+}
+
+function firstProductMediaUrl(products: ClientSalesCatalogItem[]) {
+  for (const product of products) {
+    const media = product.media.find((item) => item.kind === "image" || item.kind === "video");
+    if (media?.storageUrl) return media.storageUrl;
+  }
+  return "";
+}
+
+function resolveGrowthPreferredFormats(format: GrowthFormatPreference) {
+  if (format === "mixed") return [];
+  return [format];
+}
+
+function buildCampaignPreviewText(
+  product: ClientSalesCatalogItem | null,
+  objective: string,
+  format: GrowthPlanItem["type"],
+) {
+  if (format === "poll") {
+    return product
+      ? `Qual desses pontos mais pesa pra voce quando escolhe ${product.title}?`
+      : "Qual tema voces querem ver primeiro por aqui?";
+  }
+
+  if (format === "status") {
+    return product
+      ? `${product.title} passando por aqui hoje. Quem quiser entender se faz sentido, me chama.`
+      : "Atualizacao rapida por aqui. Quem quiser saber mais, me chama.";
+  }
+
+  const name = product?.title ?? "produto selecionado";
+  const price = product?.price ? ` por ${product.price} ${product.currency}` : "";
+  const educational = objective.toLowerCase().includes("informar");
+
+  if (educational) {
+    return `${name} tem alguns detalhes que fazem diferenca no uso. Separei um resumo rapido pra ficar mais facil comparar${price}.`;
+  }
+
+  return `Separei ${name}${price} para quem esta procurando uma opcao direta hoje. Se fizer sentido, o botao ja deixa o caminho mais facil.`;
+}
+
+function buildCampaignPreviewPollChoices(products: ClientSalesCatalogItem[]) {
+  const productChoices = products.slice(0, 3).map((product) => product.title.slice(0, 40));
+  return productChoices.length >= 2 ? productChoices : ["Quero saber preco", "Quero indicacao", "Ver opcoes"];
 }
 
 function formatGrowthPlanType(type: GrowthPlanItem["type"]) {

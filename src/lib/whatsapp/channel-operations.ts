@@ -1115,6 +1115,7 @@ export async function generateWhatsappGrowthCampaignPlan(
     postsPerDay?: number | null;
     startFrom?: string | null;
     mentionAll?: boolean;
+    preferredFormats?: string[] | null;
   },
 ): Promise<WhatsappGrowthCampaignPlan> {
   if (!context.behavior.campaignBroadcasts && !context.behavior.newsletterBroadcasts && !context.behavior.statusBroadcasts) {
@@ -1145,12 +1146,14 @@ export async function generateWhatsappGrowthCampaignPlan(
   }
 
   const credentials = await loadGeminiCredentials(client);
-  const allowedFormats = resolveAllowedGrowthPlanFormats(context, targets, catalogItems);
+  const availableFormats = resolveAllowedGrowthPlanFormats(context, targets, catalogItems);
+  const allowedFormats = resolvePreferredGrowthPlanFormats(availableFormats, input.preferredFormats ?? []);
   const systemInstruction = [
     "Voce e estrategista de crescimento para WhatsApp, grupos, canais e status.",
     "Monte uma rotina de campanha que reduza o trabalho do usuario: ele escolhe produtos e voce planeja a cadencia.",
     "Escreva em portugues do Brasil com tom comercial humano, natural e sem parecer spam.",
     "Alterne formatos quando fizer sentido: texto, audio, texto_audio, carousel, status e poll.",
+    "Quando o usuario escolher um formato principal, respeite os formatos permitidos do prompt e nao troque para outro formato.",
     "Use carousel quando houver 2 ou mais produtos com midia. Use poll para gerar conversa em grupos.",
     "Nao invente preco, estoque, desconto, prazo, garantia, link ou bonus que nao esteja no catalogo ou briefing.",
     "Cada texto deve ter no maximo 900 caracteres e deve conduzir para conversa ou compra.",
@@ -1162,6 +1165,7 @@ export async function generateWhatsappGrowthCampaignPlan(
     `Duracao: ${durationDays} dia(s). Posts por dia: ${postsPerDay}.`,
     `Data inicial ISO: ${startFrom}. Fuso operacional: America/Sao_Paulo.`,
     `Formatos permitidos: ${allowedFormats.join(", ")}.`,
+    input.preferredFormats?.length ? `Formato principal escolhido pelo usuario: ${input.preferredFormats.join(", ")}.` : "Formato principal escolhido pelo usuario: IA pode alternar.",
     `Mencao geral em grupos: ${input.mentionAll ? "permitida quando fizer sentido" : "nao usar por padrao"}.`,
     targets.length ? "Destinos:" : "Destino principal: status do agente.",
     targets.map((target, index) => [
@@ -3737,6 +3741,34 @@ function resolveAllowedGrowthPlanFormats(
   }
 
   return Array.from(new Set(formats.length ? formats : ["text"]));
+}
+
+function resolvePreferredGrowthPlanFormats(
+  availableFormats: WhatsappGrowthPlanItemType[],
+  preferredFormats: string[],
+) {
+  const preferred = Array.from(new Set(preferredFormats
+    .map((format) => normalizeGrowthPlanFormatPreference(format))
+    .filter((format): format is WhatsappGrowthPlanItemType => Boolean(format))));
+
+  if (preferred.length === 0) return availableFormats;
+
+  const available = new Set(availableFormats);
+  const selected = preferred.filter((format) => available.has(format));
+
+  if (selected.length === 0) {
+    throw new Error("O formato escolhido nao esta habilitado para este agente ou destino. Ative campanhas, botoes/enquetes, status ou selecione produtos com midia.");
+  }
+
+  return selected;
+}
+
+function normalizeGrowthPlanFormatPreference(value: string): WhatsappGrowthPlanItemType | null {
+  if (value === "audio_text") return "text_audio";
+  if (value === "text" || value === "audio" || value === "text_audio" || value === "carousel" || value === "status" || value === "poll") {
+    return value;
+  }
+  return null;
 }
 
 function parseGeminiGrowthPlan(value: string) {
