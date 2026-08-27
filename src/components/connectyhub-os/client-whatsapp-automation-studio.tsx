@@ -287,6 +287,14 @@ export function ClientWhatsappAutomationStudio({
     && Boolean(effectiveGroupWindowTargetId)
     && Boolean(openScheduledFor)
     && Boolean(closeScheduledFor);
+  const groupWindowBlockReason = getGroupWindowBlockReason({
+    selectedAgentId,
+    connected,
+    groupsEnabled: Boolean(behavior?.groups),
+    targetId: effectiveGroupWindowTargetId,
+    openScheduledFor,
+    closeScheduledFor,
+  });
   const pollReady = !operationsLocked
     && Boolean(behavior?.campaignBroadcasts)
     && Boolean(behavior?.interactiveMessages)
@@ -642,7 +650,12 @@ export function ClientWhatsappAutomationStudio({
                 <Textarea label="Mensagem de abertura" value={openingText} onChange={setOpeningText} rows={3} />
                 <Textarea label="Aviso antes de fechar" value={preCloseText} onChange={setPreCloseText} rows={3} />
                 <Textarea label="Mensagem de fechamento" value={closingText} onChange={setClosingText} rows={3} />
-                <ActionButton icon={Clock3} label="Agendar janela" disabled={!groupWindowReady} loading={runningAction === "schedule_group_window"} onClick={scheduleGroupWindow} />
+                <div className="grid gap-2">
+                  <ActionButton icon={Clock3} label="Agendar janela" disabled={!groupWindowReady} loading={runningAction === "schedule_group_window"} onClick={scheduleGroupWindow} />
+                  {groupWindowBlockReason ? (
+                    <p className="text-[11px] leading-5 text-amber-700">{groupWindowBlockReason}</p>
+                  ) : null}
+                </div>
               </div>
             </Section>
           </div>
@@ -1212,6 +1225,37 @@ function localDatetimeToIso(value: string) {
   const [hour, minute] = (timePart ?? "00:00").split(":").map(Number);
   const date = new Date(year, month - 1, day, hour, minute, 0, 0);
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+function getGroupWindowBlockReason({
+  closeScheduledFor,
+  connected,
+  groupsEnabled,
+  openScheduledFor,
+  selectedAgentId,
+  targetId,
+}: {
+  closeScheduledFor: string;
+  connected: boolean;
+  groupsEnabled: boolean;
+  openScheduledFor: string;
+  selectedAgentId: string;
+  targetId: string;
+}) {
+  if (!selectedAgentId) return "Escolha o agente e WhatsApp das automacoes na base acima.";
+  if (!connected) return "Conecte o WhatsApp deste agente antes de abrir ou fechar grupos.";
+  if (!groupsEnabled) return "Ative Responder grupos em Comportamento para liberar janelas de conversa.";
+  if (!targetId) return "Busque os grupos deste WhatsApp e escolha um grupo para a janela.";
+  if (!openScheduledFor || !closeScheduledFor) return "Informe horario de abertura e fechamento.";
+
+  const openDate = localDatetimeToIso(openScheduledFor);
+  const closeDate = localDatetimeToIso(closeScheduledFor);
+  if (!openDate || !closeDate) return "Revise os horarios da janela do grupo.";
+  if (new Date(closeDate).getTime() <= new Date(openDate).getTime()) {
+    return "O fechamento precisa ficar depois da abertura.";
+  }
+
+  return null;
 }
 
 function parseLines(value: string) {
