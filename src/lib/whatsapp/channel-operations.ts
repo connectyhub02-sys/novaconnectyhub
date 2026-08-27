@@ -638,10 +638,11 @@ export async function queueWhatsappStatusBroadcast(
 
   const text = truncateUtf8Text(input.text, whatsappStatusTextMaxBytes);
   const catalogItems = await listSalesCatalogCampaignItems(client, context, input.catalogItemIds ?? []);
-  const requestedType = normalizeWhatsappStatusPayloadType(input.statusType);
-  const catalogMedia = buildCatalogStatusMedia(catalogItems)[0] ?? null;
+  const requestedTypeRaw = input.statusType?.trim() ?? "";
+  const requestedType = normalizeWhatsappStatusPayloadType(requestedTypeRaw);
+  const catalogMedia = buildCatalogStatusMedia(catalogItems, requestedTypeRaw ? requestedType : null)[0] ?? null;
   const manualMedia = normalizeStatusMediaAttachment(input.mediaUrl, input.statusType, input.mediaCaption);
-  const selectedMedia = requestedType === "text" ? null : manualMedia ?? catalogMedia;
+  const selectedMedia = manualMedia ?? (requestedTypeRaw && requestedType === "text" ? null : catalogMedia);
   const statusType = selectedMedia ? selectedMedia.type : "text";
 
   if (!text && !selectedMedia) {
@@ -3708,10 +3709,16 @@ function normalizeStatusMediaAttachment(
   };
 }
 
-function buildCatalogStatusMedia(items: ClientSalesCatalogItem[]) {
+function buildCatalogStatusMedia(items: ClientSalesCatalogItem[], requestedType: WhatsappStatusPayloadType | null = null) {
   return items
     .map((item) => {
-      const media = item.media.find((entry) => (entry.kind === "image" || entry.kind === "video") && normalizePublicMediaUrl(entry.storageUrl));
+      const media = item.media.find((entry) => {
+        if ((entry.kind !== "image" && entry.kind !== "video") || !normalizePublicMediaUrl(entry.storageUrl)) {
+          return false;
+        }
+
+        return requestedType === "image" || requestedType === "video" ? entry.kind === requestedType : true;
+      });
       if (!media) return null;
 
       return {

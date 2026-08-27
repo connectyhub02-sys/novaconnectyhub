@@ -23,6 +23,9 @@ describe("WhatsApp growth engine v2", () => {
     expect(operationsSource).toContain("background_color");
     expect(operationsSource).toContain("...(maxRecipients ? { max_recipients: maxRecipients } : {})");
     expect(operationsSource).toContain("...(recipients.length ? { recipients } : {})");
+    expect(operationsSource).toContain("requestedTypeRaw");
+    expect(operationsSource).toContain("manualMedia ?? (requestedTypeRaw && requestedType === \"text\" ? null : catalogMedia)");
+    expect(operationsSource).toContain("buildCatalogStatusMedia(catalogItems, requestedTypeRaw ? requestedType : null)");
   });
 
   it("exposes the AI growth plan globally for customer and admin flows", () => {
