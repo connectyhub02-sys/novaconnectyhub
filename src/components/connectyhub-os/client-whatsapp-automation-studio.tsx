@@ -152,6 +152,7 @@ type GrowthPlan = {
 };
 
 type GrowthFormatPreference = "mixed" | "text" | "audio" | "text_audio" | "carousel" | "poll" | "status";
+type CampaignDestinationMode = "groups" | "channels" | "status";
 type WhatsappAutomationCapability = "groups" | "status" | "campaigns" | "newsletters" | "interactive";
 
 type ChannelActionResponse = {
@@ -203,6 +204,7 @@ export function ClientWhatsappAutomationStudio({
   const [runningAction, setRunningAction] = useState<string | null>(null);
 
   const [selectedTargetIds, setSelectedTargetIds] = useState<string[]>([]);
+  const [campaignDestinationMode, setCampaignDestinationMode] = useState<CampaignDestinationMode>("groups");
   const [selectedCampaignProductIds, setSelectedCampaignProductIds] = useState<string[]>([]);
   const [campaignBrief, setCampaignBrief] = useState("");
   const [campaignTitle, setCampaignTitle] = useState("");
@@ -254,28 +256,43 @@ export function ClientWhatsappAutomationStudio({
   const newsletters = targets.filter((target) => target.type === "newsletter");
   const effectiveGroupWindowTargetId = groupWindowTargetId || groups[0]?.id || "";
   const selectedTargets = targets.filter((target) => selectedTargetIds.includes(target.id));
-  const selectedTargetIdsValid = selectedTargets.map((target) => target.id);
-  const selectedPollTargetIds = selectedTargets.filter((target) => target.type === "group").map((target) => target.id);
+  const selectedGroupTargets = selectedTargets.filter((target) => target.type === "group");
+  const selectedNewsletterTargets = selectedTargets.filter((target) => target.type === "newsletter");
+  const campaignDestinationTargets = campaignDestinationMode === "channels" ? newsletters : campaignDestinationMode === "groups" ? groups : [];
+  const selectedCampaignTargets = campaignDestinationMode === "channels"
+    ? selectedNewsletterTargets
+    : campaignDestinationMode === "groups"
+      ? selectedGroupTargets
+      : [];
+  const selectedCampaignTargetIds = selectedCampaignTargets.map((target) => target.id);
+  const selectedPollTargetIds = selectedGroupTargets.map((target) => target.id);
   const selectedCampaignProducts = products.filter((product) => selectedCampaignProductIds.includes(product.id));
   const automaticCampaignProductIds = selectedCampaignProductIds.length > 0
     ? selectedCampaignProductIds
     : products.slice(0, 6).map((product) => product.id);
   const automaticCampaignProducts = products.filter((product) => automaticCampaignProductIds.includes(product.id));
-  const preferredGrowthFormats = resolveGrowthPreferredFormats(growthFormatPreference);
+  const effectiveGrowthFormatPreference = campaignDestinationMode === "status" ? "status" : growthFormatPreference === "status" ? "mixed" : growthFormatPreference;
+  const preferredGrowthFormats = resolveGrowthPreferredFormats(effectiveGrowthFormatPreference);
   const selectedStatusProducts = products.filter((product) => selectedStatusProductIds.includes(product.id));
   const selectedCampaignMediaCount = automaticCampaignProducts.reduce((total, product) => total + product.media.length, 0);
   const campaignProductUrl = firstProductUrl(selectedCampaignProducts);
+  const targetCampaignCapabilityReady = campaignDestinationMode === "channels"
+    ? Boolean(behavior?.newsletterBroadcasts)
+    : Boolean(behavior?.campaignBroadcasts);
+  const automaticCampaignDestinationReady = campaignDestinationMode === "status"
+    ? Boolean(behavior?.statusBroadcasts)
+    : selectedCampaignTargetIds.length > 0 && targetCampaignCapabilityReady;
   const statusProductMediaReady = statusType !== "text"
     && selectedStatusProducts.some((product) => product.media.some((media) => media.kind === statusType));
   const statusHasMediaSource = statusMediaUrl.trim().length > 0 || statusProductMediaReady;
   const operationsLocked = !selectedAgentId || !connected;
   const campaignReady = !operationsLocked
-    && selectedTargetIdsValid.length > 0
+    && campaignDestinationMode !== "status"
+    && selectedCampaignTargetIds.length > 0
     && (campaignFormat === "carousel" ? selectedCampaignProducts.length > 0 : campaignText.trim().length > 0)
-    && Boolean(behavior?.campaignBroadcasts || behavior?.newsletterBroadcasts);
+    && targetCampaignCapabilityReady;
   const growthPlanReady = !operationsLocked
-    && Boolean(behavior?.campaignBroadcasts || behavior?.newsletterBroadcasts || behavior?.statusBroadcasts)
-    && (selectedTargets.length > 0 || Boolean(behavior?.statusBroadcasts))
+    && automaticCampaignDestinationReady
     && (automaticCampaignProducts.length > 0 || campaignBrief.trim().length > 0 || growthObjective.trim().length > 0);
   const scheduleGrowthPlanReady = !operationsLocked && Boolean(growthPlan?.items.length);
   const statusReady = !operationsLocked
@@ -296,6 +313,7 @@ export function ClientWhatsappAutomationStudio({
   });
   const canEnableGroupReplies = !operationsLocked && behavior !== undefined && !behavior.groups;
   const pollReady = !operationsLocked
+    && campaignDestinationMode === "groups"
     && Boolean(behavior?.campaignBroadcasts)
     && Boolean(behavior?.interactiveMessages)
     && selectedPollTargetIds.length > 0
@@ -400,6 +418,7 @@ export function ClientWhatsappAutomationStudio({
   }
 
   function toggleTarget(targetId: string) {
+    setGrowthPlan(null);
     setSelectedTargetIds((current) => current.includes(targetId)
       ? current.filter((id) => id !== targetId)
       : [...current, targetId]);
@@ -407,14 +426,37 @@ export function ClientWhatsappAutomationStudio({
 
   function toggleProduct(targetId: string, mode: "campaign" | "status") {
     const setter = mode === "campaign" ? setSelectedCampaignProductIds : setSelectedStatusProductIds;
+    if (mode === "campaign") setGrowthPlan(null);
     setter((current) => current.includes(targetId)
       ? current.filter((id) => id !== targetId)
       : [...current, targetId].slice(-6));
   }
 
+  function selectCampaignDestinationMode(mode: CampaignDestinationMode) {
+    setCampaignDestinationMode(mode);
+    setGrowthPlan(null);
+    if (mode === "status") {
+      setGrowthFormatPreference("status");
+      setCampaignMentionAll(false);
+      return;
+    }
+    setGrowthFormatPreference((current) => current === "status" ? "mixed" : current);
+    if (mode === "channels") setCampaignMentionAll(false);
+  }
+
+  function updateGrowthObjective(value: string) {
+    setGrowthObjective(value);
+    setGrowthPlan(null);
+  }
+
+  function updateGrowthFormatPreference(value: string) {
+    setGrowthFormatPreference(value as GrowthFormatPreference);
+    setGrowthPlan(null);
+  }
+
   async function generateCampaignDraft() {
     const data = await runAction("generate_target_campaign_draft", {
-      targetIds: selectedTargetIdsValid,
+      targetIds: selectedCampaignTargetIds,
       catalogItemIds: selectedCampaignProductIds,
       brief: campaignBrief,
       currentTitle: campaignTitle,
@@ -434,7 +476,7 @@ export function ClientWhatsappAutomationStudio({
     await runAction(campaignFormat === "carousel" ? "send_target_carousel" : "send_target_campaign", {
       title: campaignTitle,
       text: campaignText,
-      targetIds: selectedTargetIdsValid,
+      targetIds: selectedCampaignTargetIds,
       scheduledFor: localDatetimeToIso(campaignScheduledFor),
       mentionAll: campaignMentionAll,
       recurrenceFrequency: campaignRecurrence === "none" ? null : campaignRecurrence,
@@ -449,7 +491,7 @@ export function ClientWhatsappAutomationStudio({
 
   async function generateGrowthPlan() {
     const data = await runAction("generate_growth_plan", {
-      targetIds: selectedTargetIdsValid,
+      targetIds: selectedCampaignTargetIds,
       catalogItemIds: automaticCampaignProductIds,
       objective: growthObjective,
       brief: campaignBrief,
@@ -472,7 +514,7 @@ export function ClientWhatsappAutomationStudio({
     if (!growthPlan) return;
 
     await runAction("schedule_growth_plan", {
-      targetIds: selectedTargetIdsValid,
+      targetIds: selectedCampaignTargetIds,
       catalogItemIds: automaticCampaignProductIds,
       mentionAll: campaignMentionAll,
       buttonLabel: campaignButtonEnabled ? campaignButtonLabel : null,
@@ -616,9 +658,14 @@ export function ClientWhatsappAutomationStudio({
 
         <div className="grid gap-4 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
           <div className="grid gap-4">
-            <Section title="Destinos" badge={`${selectedTargets.length} selecionado(s)`}>
+            <Section title="Destino da campanha" badge={campaignDestinationMode === "status" ? "status do agente" : `${selectedCampaignTargets.length} selecionado(s)`}>
               <div className="grid gap-2">
-                {targets.length ? targets.map((target) => (
+                {campaignDestinationMode === "status" ? (
+                  <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-3 text-[12px] leading-5 text-emerald-700">
+                    Status nao usa grupo ou canal selecionado. A rotina publica no status do WhatsApp do agente em uso e gera respostas no privado.
+                  </div>
+                ) : null}
+                {campaignDestinationMode !== "status" && campaignDestinationTargets.length ? campaignDestinationTargets.map((target) => (
                   <div
                     key={target.id}
                     className={cn(
@@ -643,8 +690,8 @@ export function ClientWhatsappAutomationStudio({
                       </span>
                     </button>
                     <div className="grid gap-2 sm:grid-cols-2">
-                      <MiniToggle checked={target.enabled} label="Atendimento no grupo" onClick={() => toggleTargetSetting(target, "enabled")} loading={runningAction === "update_target_settings"} />
-                      <MiniToggle checked={target.campaignEnabled} label="Campanhas liberadas" onClick={() => toggleTargetSetting(target, "campaignEnabled")} loading={runningAction === "update_target_settings"} />
+                      <MiniToggle checked={target.enabled} label={target.type === "group" ? "Atendimento no grupo" : "Canal ativo"} onClick={() => toggleTargetSetting(target, "enabled")} loading={runningAction === "update_target_settings"} />
+                      <MiniToggle checked={target.campaignEnabled} label={target.type === "group" ? "Campanhas liberadas" : "Publicar no canal"} onClick={() => toggleTargetSetting(target, "campaignEnabled")} loading={runningAction === "update_target_settings"} />
                     </div>
                     {target.type === "group" ? (
                       <div className="grid gap-2 sm:grid-cols-3">
@@ -669,10 +716,19 @@ export function ClientWhatsappAutomationStudio({
                         ]} />
                       </div>
                     ) : null}
+                    {target.type === "newsletter" ? (
+                      <p className="text-[11px] leading-5 text-slate-500">
+                        Canais recebem posts de broadcast. Mencoes e enquetes ficam disponiveis somente para grupos.
+                      </p>
+                    ) : null}
                   </div>
-                )) : (
-                  <EmptyState icon={Users} text="Sincronize grupos e canais para montar campanhas." />
-                )}
+                )) : null}
+                {campaignDestinationMode !== "status" && !campaignDestinationTargets.length ? (
+                  <EmptyState
+                    icon={campaignDestinationMode === "channels" ? Megaphone : Users}
+                    text={campaignDestinationMode === "channels" ? "Clique em Buscar canais para carregar canais/newsletters deste WhatsApp." : "Clique em Buscar grupos para carregar grupos deste WhatsApp."}
+                  />
+                ) : null}
               </div>
             </Section>
 
@@ -710,6 +766,15 @@ export function ClientWhatsappAutomationStudio({
             <Section title="Campanha automatica" badge="IA faz a copy">
               <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(240px,0.48fr)]">
                 <div className="grid gap-3">
+                  <CampaignDestinationSelector
+                    groupCount={groups.length}
+                    newsletterCount={newsletters.length}
+                    onChange={selectCampaignDestinationMode}
+                    selectedGroupCount={selectedGroupTargets.length}
+                    selectedNewsletterCount={selectedNewsletterTargets.length}
+                    statusEnabled={Boolean(behavior?.statusBroadcasts)}
+                    value={campaignDestinationMode}
+                  />
                   <ProductPicker products={products} selectedIds={selectedCampaignProductIds} onToggle={(id) => toggleProduct(id, "campaign")} />
                   <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-[12px] leading-5 text-emerald-700">
                     {selectedCampaignProductIds.length > 0
@@ -718,7 +783,7 @@ export function ClientWhatsappAutomationStudio({
                     {selectedCampaignMediaCount > 0 ? ` Midias encontradas: ${selectedCampaignMediaCount}.` : " Cadastre midias nos produtos para usar carrossel e anexos."}
                   </div>
                   <Input label="Nome interno (opcional)" value={campaignTitle} onChange={setCampaignTitle} placeholder="Ex.: Campanha da semana" />
-                  <SelectField label="Objetivo da IA" value={growthObjective} onChange={setGrowthObjective} options={[
+                  <SelectField label="Objetivo da IA" value={growthObjective} onChange={updateGrowthObjective} options={[
                     ["Vender os produtos selecionados com presenca diaria no WhatsApp", "Vender produtos"],
                     ["Informar sobre o produto, explicar beneficios e vender com botao no final", "Informativo + venda"],
                     ["Descobrir quais produtos geram mais interesse no grupo", "Testar interesse"],
@@ -726,29 +791,33 @@ export function ClientWhatsappAutomationStudio({
                     ["Criar enquetes automaticas para entender desejo de compra", "Enquete automatica"],
                     ["Publicar uma vitrine com carrossel e botao de compra", "Vitrine/carrossel"],
                   ]} />
-                  <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                    <SelectField label="Formato principal" value={growthFormatPreference} onChange={(value) => setGrowthFormatPreference(value as GrowthFormatPreference)} options={[
-                      ["mixed", "IA escolhe"],
-                      ["text", "Texto"],
-                      ["audio", "Audio"],
-                      ["text_audio", "Texto + audio"],
-                      ["carousel", "Carrossel"],
-                      ["poll", "Enquete"],
-                      ["status", "Status"],
-                    ]} />
-                    <SelectField label="Mencoes dos posts" value={campaignMentionAll ? "all" : "none"} onChange={(value) => setCampaignMentionAll(value === "all")} options={[
-                      ["none", "Sem @"],
-                      ["all", "@ todos"],
-                    ]} />
-                    <Input label="Texto do botao" value={campaignButtonLabel} onChange={setCampaignButtonLabel} />
-                    <div className="self-end">
-                      <MiniToggle checked={campaignButtonEnabled} label="Botao de compra" onClick={() => setCampaignButtonEnabled((current) => !current)} />
-                    </div>
+                  <div className={cn("grid gap-2", campaignDestinationMode === "status" ? "sm:grid-cols-1" : "sm:grid-cols-2 xl:grid-cols-4")}>
+                    <SelectField
+                      disabled={campaignDestinationMode === "status"}
+                      label="Formato principal"
+                      value={effectiveGrowthFormatPreference}
+                      onChange={updateGrowthFormatPreference}
+                      options={getGrowthFormatOptions(campaignDestinationMode)}
+                    />
+                    {campaignDestinationMode !== "status" ? (
+                      <>
+                        {campaignDestinationMode === "groups" ? (
+                          <SelectField label="Mencoes dos posts" value={campaignMentionAll ? "all" : "none"} onChange={(value) => setCampaignMentionAll(value === "all")} options={[
+                            ["none", "Sem @"],
+                            ["all", "@ todos"],
+                          ]} />
+                        ) : null}
+                        <Input label="Texto do botao" value={campaignButtonLabel} onChange={setCampaignButtonLabel} />
+                        <div className="self-end">
+                          <MiniToggle checked={campaignButtonEnabled} label="Botao de compra" onClick={() => setCampaignButtonEnabled((current) => !current)} />
+                        </div>
+                      </>
+                    ) : null}
                   </div>
                   <div className="grid gap-2 sm:grid-cols-3">
-                    <DateInput label="Inicio" value={growthStartFrom} onChange={setGrowthStartFrom} />
-                    <NumberInput label="Dias" value={growthDurationDays} min={1} max={14} onChange={setGrowthDurationDays} />
-                    <NumberInput label="Posts/dia" value={growthPostsPerDay} min={1} max={5} onChange={setGrowthPostsPerDay} />
+                    <DateInput label="Inicio" value={growthStartFrom} onChange={(value) => { setGrowthStartFrom(value); setGrowthPlan(null); }} />
+                    <NumberInput label="Dias" value={growthDurationDays} min={1} max={14} onChange={(value) => { setGrowthDurationDays(value); setGrowthPlan(null); }} />
+                    <NumberInput label="Posts/dia" value={growthPostsPerDay} min={1} max={5} onChange={(value) => { setGrowthPostsPerDay(value); setGrowthPlan(null); }} />
                   </div>
                   <div className="grid gap-2 sm:grid-cols-2">
                     <ActionButton icon={Sparkles} label="Planejar rotina" disabled={!growthPlanReady} loading={runningAction === "generate_growth_plan"} onClick={generateGrowthPlan} />
@@ -759,12 +828,13 @@ export function ClientWhatsappAutomationStudio({
                   behavior={behavior}
                   buttonEnabled={campaignButtonEnabled}
                   buttonLabel={campaignButtonLabel}
-                  format={growthFormatPreference}
+                  destinationMode={campaignDestinationMode}
+                  format={effectiveGrowthFormatPreference}
                   mentionAll={campaignMentionAll}
                   objective={growthObjective}
                   plan={growthPlan}
                   products={automaticCampaignProducts}
-                  selectedTargets={selectedTargets}
+                  selectedTargets={selectedCampaignTargets}
                 />
                 {growthPlan ? (
                   <div className="grid gap-3 rounded-xl border border-cyan-500/20 bg-cyan-500/10 p-3 xl:col-span-2">
@@ -801,7 +871,7 @@ export function ClientWhatsappAutomationStudio({
                 <ActionButton icon={Settings2} label={advancedToolsOpen ? "Ocultar envio manual" : "Mostrar envio manual"} onClick={() => setAdvancedToolsOpen((current) => !current)} />
                 {advancedToolsOpen ? (
                   <div className="grid gap-4">
-                    <SubSection title="Post manual">
+                    <SubSection title="Post manual para grupos/canais">
                       <div className="grid gap-3">
                         <Textarea label="Direcao extra para IA" value={campaignBrief} onChange={setCampaignBrief} rows={2} placeholder="Opcional: tom, oferta, cuidado ou tema." />
                         <Textarea label="Mensagem manual" value={campaignText} onChange={setCampaignText} rows={5} placeholder="Opcional. Se ficar vazio, use Planejar rotina." />
@@ -836,7 +906,7 @@ export function ClientWhatsappAutomationStudio({
                           <MiniToggle checked={campaignMentionAll} label="Mencionar todos nos grupos" onClick={() => setCampaignMentionAll((current) => !current)} />
                         </div>
                         <div className="grid gap-2 sm:grid-cols-2">
-                          <ActionButton icon={Sparkles} label="Criar post IA" disabled={operationsLocked || selectedTargets.length === 0 || (!campaignBrief.trim() && automaticCampaignProducts.length === 0 && !campaignText.trim())} loading={runningAction === "generate_target_campaign_draft"} onClick={generateCampaignDraft} />
+                          <ActionButton icon={Sparkles} label="Criar post IA" disabled={operationsLocked || campaignDestinationMode === "status" || selectedCampaignTargets.length === 0 || (!campaignBrief.trim() && automaticCampaignProducts.length === 0 && !campaignText.trim())} loading={runningAction === "generate_target_campaign_draft"} onClick={generateCampaignDraft} />
                           <ActionButton icon={Send} label={campaignFormat === "carousel" ? "Agendar carrossel" : "Agendar post"} disabled={!campaignReady} loading={runningAction === "send_target_campaign" || runningAction === "send_target_carousel"} onClick={scheduleCampaign} />
                         </div>
                       </div>
@@ -964,9 +1034,9 @@ function FeatureGates({
 }) {
   const gates = [
     { label: "Atendimento em grupos", detail: "respostas e janelas", active: behavior?.groups, capability: "groups" },
+    { label: "Campanhas em grupos", detail: "posts para grupos", active: behavior?.campaignBroadcasts, capability: "campaigns" },
+    { label: "Campanhas em canais", detail: "posts em canais", active: behavior?.newsletterBroadcasts, capability: "newsletters" },
     { label: "Status do agente", detail: "stories do WhatsApp", active: behavior?.statusBroadcasts, capability: "status" },
-    { label: "Envios para destinos", detail: "grupos e canais", active: behavior?.campaignBroadcasts, capability: "campaigns" },
-    { label: "Canais WhatsApp", detail: "newsletters/canais", active: behavior?.newsletterBroadcasts, capability: "newsletters" },
     { label: "Interacoes", detail: "botoes e enquetes", active: behavior?.interactiveMessages, capability: "interactive" },
   ] as const;
 
@@ -997,6 +1067,75 @@ function FeatureGates({
           </button>
         </div>
       ))}
+    </div>
+  );
+}
+
+function CampaignDestinationSelector({
+  groupCount,
+  newsletterCount,
+  onChange,
+  selectedGroupCount,
+  selectedNewsletterCount,
+  statusEnabled,
+  value,
+}: {
+  groupCount: number;
+  newsletterCount: number;
+  onChange: (mode: CampaignDestinationMode) => void;
+  selectedGroupCount: number;
+  selectedNewsletterCount: number;
+  statusEnabled: boolean;
+  value: CampaignDestinationMode;
+}) {
+  const options = [
+    {
+      mode: "groups" as const,
+      icon: Users,
+      label: "Grupos",
+      detail: `${selectedGroupCount}/${groupCount} selecionado(s)`,
+    },
+    {
+      mode: "channels" as const,
+      icon: Megaphone,
+      label: "Canais",
+      detail: `${selectedNewsletterCount}/${newsletterCount} selecionado(s)`,
+    },
+    {
+      mode: "status" as const,
+      icon: MessageCircle,
+      label: "Status",
+      detail: statusEnabled ? "status do agente" : "ative Status",
+    },
+  ];
+
+  return (
+    <div className="grid gap-2">
+      <FieldLabel>Tipo de campanha</FieldLabel>
+      <div className="grid gap-2 sm:grid-cols-3">
+        {options.map((option) => {
+          const Icon = option.icon;
+          const active = value === option.mode;
+          return (
+            <button
+              key={option.mode}
+              type="button"
+              onClick={() => onChange(option.mode)}
+              className={cn(
+                "grid min-h-20 gap-1 rounded-xl border px-3 py-2 text-left transition",
+                active ? "border-emerald-500/35 bg-emerald-500/10 text-emerald-700" : "border-slate-200 bg-white/60 text-slate-600 hover:border-emerald-500/25",
+              )}
+            >
+              <span className="flex items-center gap-2 text-[12px] font-semibold">
+                <Icon className="h-4 w-4" />
+                {option.label}
+              </span>
+              <span className="text-[10px] leading-4 text-slate-500">{option.detail}</span>
+            </button>
+          );
+        })}
+      </div>
+      <p className="text-[11px] leading-5 text-slate-500">{describeCampaignDestinationMode(value)}</p>
     </div>
   );
 }
@@ -1071,6 +1210,7 @@ function WhatsappCampaignPreview({
   behavior,
   buttonEnabled,
   buttonLabel,
+  destinationMode,
   format,
   mentionAll,
   objective,
@@ -1081,6 +1221,7 @@ function WhatsappCampaignPreview({
   behavior?: WhatsappOperationsState["behavior"];
   buttonEnabled: boolean;
   buttonLabel: string;
+  destinationMode: CampaignDestinationMode;
   format: GrowthFormatPreference;
   mentionAll: boolean;
   objective: string;
@@ -1095,9 +1236,10 @@ function WhatsappCampaignPreview({
   const text = previewItem?.text ?? buildCampaignPreviewText(product, objective, effectiveFormat);
   const pollChoices = previewItem?.pollChoices.length ? previewItem.pollChoices : buildCampaignPreviewPollChoices(products);
   const style = mediaUrl ? { backgroundImage: `url("${mediaUrl.replace(/"/g, "%22")}")` } : undefined;
-  const destination = describeCampaignPreviewDestination(effectiveFormat, selectedTargets);
-  const automationPlan = describeCampaignAutomationPlan(objective, effectiveFormat, products);
-  const blockedRequirements = listCampaignPreviewBlockedRequirements(effectiveFormat, behavior);
+  const destination = describeCampaignPreviewDestination(destinationMode, effectiveFormat, selectedTargets);
+  const automationPlan = describeCampaignAutomationPlan(objective, effectiveFormat, products, destinationMode);
+  const blockedRequirements = listCampaignPreviewBlockedRequirements(effectiveFormat, behavior, destinationMode);
+  const previewTitle = destinationMode === "channels" ? "Canal selecionado" : destinationMode === "status" ? "Status do agente" : "Grupo selecionado";
 
   return (
     <div className="mx-auto grid w-full max-w-[300px] gap-2">
@@ -1106,7 +1248,7 @@ function WhatsappCampaignPreview({
           <div className="flex items-center gap-2 bg-emerald-700 px-3 py-2 text-white">
             <div className="grid h-7 w-7 place-items-center rounded-full bg-white/20 text-[10px] font-black">CH</div>
             <div className="min-w-0">
-              <p className="truncate text-[12px] font-semibold">Grupo selecionado</p>
+              <p className="truncate text-[12px] font-semibold">{previewTitle}</p>
               <p className="text-[9px] text-emerald-100">{formatGrowthPlanType(effectiveFormat)}</p>
             </div>
           </div>
@@ -1482,6 +1624,38 @@ function resolveGrowthPreferredFormats(format: GrowthFormatPreference) {
   return [format];
 }
 
+function getGrowthFormatOptions(mode: CampaignDestinationMode): Array<[string, string]> {
+  if (mode === "status") {
+    return [["status", "Status"]];
+  }
+
+  const options: Array<[string, string]> = [
+    ["mixed", "IA escolhe"],
+    ["text", "Texto"],
+    ["audio", "Audio"],
+    ["text_audio", "Texto + audio"],
+    ["carousel", "Carrossel"],
+  ];
+
+  if (mode === "groups") {
+    options.push(["poll", "Enquete"]);
+  }
+
+  return options;
+}
+
+function describeCampaignDestinationMode(mode: CampaignDestinationMode) {
+  if (mode === "channels") {
+    return "A IA cria posts para canais/newsletters do WhatsApp. Selecione os canais na lista de destinos.";
+  }
+
+  if (mode === "status") {
+    return "A IA publica no status do agente. Nao precisa selecionar grupo ou canal.";
+  }
+
+  return "A IA cria posts para grupos. Selecione os grupos e ajuste mencoes, enquetes e respostas.";
+}
+
 function resolveCampaignPreviewFormat(
   plannedType: GrowthPlanItem["type"] | undefined,
   preference: GrowthFormatPreference,
@@ -1540,11 +1714,12 @@ function buildCampaignPreviewPollChoices(products: ClientSalesCatalogItem[]) {
 }
 
 function describeCampaignPreviewDestination(
+  mode: CampaignDestinationMode,
   format: GrowthPlanItem["type"],
   selectedTargets: WhatsappTarget[],
 ) {
-  if (format === "status") return "status do agente";
-  if (selectedTargets.length === 0) return "selecione grupos ou canais";
+  if (format === "status" || mode === "status") return "status do agente";
+  if (selectedTargets.length === 0) return mode === "channels" ? "selecione canais" : "selecione grupos";
 
   const groupCount = selectedTargets.filter((target) => target.type === "group").length;
   const channelCount = selectedTargets.filter((target) => target.type === "newsletter").length;
@@ -1558,6 +1733,7 @@ function describeCampaignAutomationPlan(
   objective: string,
   format: GrowthPlanItem["type"],
   products: ClientSalesCatalogItem[],
+  mode: CampaignDestinationMode,
 ) {
   const productText = products.length
     ? `usando ${products.length} produto(s) selecionado(s)`
@@ -1571,7 +1747,9 @@ function describeCampaignAutomationPlan(
   }
 
   if (format === "carousel") {
-    return `A IA monta uma vitrine ${productText}, usa as midias do catalogo e conduz para o botao de compra.`;
+    return mode === "channels"
+      ? `A IA monta uma vitrine para canal ${productText}, usa as midias do catalogo e conduz para compra.`
+      : `A IA monta uma vitrine ${productText}, usa as midias do catalogo e conduz para o botao de compra.`;
   }
 
   if (format === "status") {
@@ -1579,27 +1757,36 @@ function describeCampaignAutomationPlan(
   }
 
   if (format === "audio" || format === "text_audio") {
-    return `A IA escreve a copy ${productText} e gera audio com a voz configurada do agente.`;
+    return mode === "channels"
+      ? `A IA escreve posts para canal ${productText} e gera audio quando esse formato estiver selecionado.`
+      : `A IA escreve a copy ${productText} e gera audio com a voz configurada do agente.`;
   }
 
   if (normalized.includes("informar")) {
     return `A IA explica beneficios e contexto ${productText}, depois fecha com uma chamada de compra.`;
   }
 
-  return `A IA cria posts comerciais ${productText}, alternando ganchos conforme o objetivo escolhido.`;
+  if (mode === "channels") {
+    return `A IA cria posts de broadcast para canais ${productText}, com chamada para conversa ou compra.`;
+  }
+
+  return `A IA cria posts comerciais para grupos ${productText}, alternando ganchos conforme o objetivo escolhido.`;
 }
 
 function listCampaignPreviewBlockedRequirements(
   format: GrowthPlanItem["type"],
   behavior?: WhatsappOperationsState["behavior"],
+  mode?: CampaignDestinationMode,
 ) {
   if (!behavior) return [];
   const requirements: string[] = [];
 
-  if (format === "status") {
+  if (format === "status" || mode === "status") {
     if (!behavior.statusBroadcasts) requirements.push("Status do agente");
-  } else if (!behavior.campaignBroadcasts && !behavior.newsletterBroadcasts) {
-    requirements.push("Envios para destinos");
+  } else if (mode === "channels") {
+    if (!behavior.newsletterBroadcasts) requirements.push("Campanhas em canais");
+  } else if (!behavior.campaignBroadcasts) {
+    requirements.push("Campanhas em grupos");
   }
 
   if ((format === "poll" || format === "carousel") && !behavior.interactiveMessages) {

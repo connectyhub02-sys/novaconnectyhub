@@ -31,6 +31,10 @@ describe("WhatsApp growth engine v2", () => {
 
   it("surfaces the new automation controls in the client WhatsApp studio", () => {
     expect(studioSource).toContain("Campanha automatica");
+    expect(studioSource).toContain("Tipo de campanha");
+    expect(studioSource).toContain("Destino da campanha");
+    expect(studioSource).toContain("Campanhas em canais");
+    expect(studioSource).toContain("Publicar no canal");
     expect(studioSource).toContain("Planejar rotina");
     expect(studioSource).toContain("Agendar rotina");
     expect(studioSource).toContain("Carrossel");
