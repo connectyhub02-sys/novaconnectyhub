@@ -12,14 +12,17 @@ import {
   fetchWhatsappGroups,
   fetchWhatsappMessageLimits,
   fetchWhatsappNewsletters,
+  generateWhatsappGrowthCampaignPlan,
   generateWhatsappStatusDraft,
   generateWhatsappTargetCampaignDraft,
   getWhatsappOperationsDashboard,
   probeWhatsappLeadStatusWatch,
+  queueWhatsappGrowthCampaignPlan,
   queueWhatsappNewsletterText,
   queueWhatsappGroupWindow,
   queueWhatsappSimpleCampaign,
   queueWhatsappStatusBroadcast,
+  queueWhatsappTargetCarouselCampaign,
   queueWhatsappTargetPollCampaign,
   queueWhatsappTargetTextCampaign,
   resolveClientWhatsappOperationalContext,
@@ -72,6 +75,11 @@ type ChannelActionBody = {
   pollQuestion?: unknown;
   pollChoices?: unknown;
   pollSelectableCount?: unknown;
+  durationDays?: unknown;
+  postsPerDay?: unknown;
+  objective?: unknown;
+  startFrom?: unknown;
+  planItems?: unknown;
   groupTargetId?: unknown;
   openScheduledFor?: unknown;
   closeScheduledFor?: unknown;
@@ -224,6 +232,38 @@ export async function POST(request: NextRequest) {
       });
       result = { draft: toSafeCampaignDraft(draft) };
       notice = "Rascunho IA criado. Revise o texto e clique em Agendar post para aprovar.";
+    } else if (action === "generate_growth_plan") {
+      const plan = await generateWhatsappGrowthCampaignPlan(client, whatsapp, {
+        targetIds: readStringList(body?.targetIds),
+        catalogItemIds: readStringList(body?.catalogItemIds),
+        objective: asString(body?.objective),
+        brief: asString(body?.brief),
+        durationDays: asNumber(body?.durationDays) ?? null,
+        postsPerDay: asNumber(body?.postsPerDay) ?? null,
+        startFrom: asString(body?.startFrom),
+        mentionAll: asBoolean(body?.mentionAll),
+      });
+      await meterGeminiGenerationUsage({
+        client,
+        organizationId: context.organization.id,
+        userId: context.userId,
+        featureCode: "whatsapp_growth_plan_ai",
+        modelId: plan.modelId,
+        agentScope: "customer",
+        promptText: [plan.systemInstruction, plan.prompt],
+        outputText: plan.items.map((item) => item.text).join("\n\n"),
+        responseData: plan.responseData,
+        debitDescription: "Plano IA de rotina WhatsApp",
+        metadata: {
+          source: "dashboard_whatsapp_automations",
+          companyId: context.organization.id,
+          agentId: context.selectedAgentId,
+          targetCount: plan.targetCount,
+          itemCount: plan.items.length,
+        },
+      });
+      result = { growthPlan: toSafeGrowthPlan(plan) };
+      notice = "Rotina IA criada. Revise os posts e agende o plano quando estiver pronto.";
     } else if (action === "generate_status_draft") {
       const draft = await generateWhatsappStatusDraft(client, whatsapp, {
         brief: asString(body?.brief),
@@ -271,6 +311,33 @@ export async function POST(request: NextRequest) {
       await dispatchOutboundIfDue(item);
       result = { item };
       notice = "Campanha para grupos/canais agendada pelo Inngest.";
+    } else if (action === "send_target_carousel") {
+      const item = await queueWhatsappTargetCarouselCampaign(client, whatsapp, {
+        title: asString(body?.title) ?? "",
+        text: asString(body?.text),
+        targetIds: readStringList(body?.targetIds),
+        scheduledFor: asString(body?.scheduledFor),
+        mentionAll: asBoolean(body?.mentionAll),
+        catalogItemIds: readStringList(body?.catalogItemIds),
+        buttonLabel: asString(body?.buttonLabel),
+        buttonUrl: asString(body?.buttonUrl),
+      });
+      await dispatchOutboundIfDue(item);
+      result = { item };
+      notice = "Carrossel de produtos agendado pelo Inngest.";
+    } else if (action === "schedule_growth_plan") {
+      const queued = await queueWhatsappGrowthCampaignPlan(client, whatsapp, {
+        planItems: body?.planItems,
+        targetIds: readStringList(body?.targetIds),
+        catalogItemIds: readStringList(body?.catalogItemIds),
+        mentionAll: asBoolean(body?.mentionAll),
+        buttonLabel: asString(body?.buttonLabel),
+      });
+      for (const item of queued.items) {
+        await dispatchOutboundIfDue(item);
+      }
+      result = queued;
+      notice = `${queued.count} post(s) da rotina IA foram agendados.`;
     } else if (action === "send_target_poll") {
       const item = await queueWhatsappTargetPollCampaign(client, whatsapp, {
         title: asString(body?.pollTitle) ?? "",
@@ -495,5 +562,47 @@ function toSafeCampaignDraft(draft: {
     targetCount: draft.targetCount,
     targetNames: draft.targetNames,
     modelId: draft.modelId,
+  };
+}
+
+function toSafeGrowthPlan(plan: {
+  title: string;
+  objective: string;
+  strategySummary: string;
+  durationDays: number;
+  postsPerDay: number;
+  timezone: string;
+  approvalChecklist: string[];
+  targetCount: number;
+  targetNames: string[];
+  productNames: string[];
+  items: Array<{
+    id: string;
+    day: number;
+    slot: number;
+    type: string;
+    title: string;
+    text: string;
+    scheduledFor: string;
+    targetIds: string[];
+    productIds: string[];
+    pollChoices: string[];
+    buttonLabel: string | null;
+  }>;
+  modelId: string;
+}) {
+  return {
+    title: plan.title,
+    objective: plan.objective,
+    strategySummary: plan.strategySummary,
+    durationDays: plan.durationDays,
+    postsPerDay: plan.postsPerDay,
+    timezone: plan.timezone,
+    approvalChecklist: plan.approvalChecklist,
+    targetCount: plan.targetCount,
+    targetNames: plan.targetNames,
+    productNames: plan.productNames,
+    items: plan.items,
+    modelId: plan.modelId,
   };
 }

@@ -1,0 +1,35 @@
+import { readFileSync } from "node:fs";
+import { describe, expect, it } from "vitest";
+
+const operationsSource = readFileSync("src/lib/whatsapp/channel-operations.ts", "utf8");
+const dashboardRouteSource = readFileSync("src/app/api/dashboard/whatsapp/channels/route.ts", "utf8");
+const adminRouteSource = readFileSync("src/app/api/admin/whatsapp/internal/channels/route.ts", "utf8");
+const studioSource = readFileSync("src/components/connectyhub-os/client-whatsapp-automation-studio.tsx", "utf8");
+
+describe("WhatsApp growth engine v2", () => {
+  it("supports product carousel campaigns with provider fallback", () => {
+    expect(operationsSource).toContain('"target_carousel"');
+    expect(operationsSource).toContain("queueWhatsappTargetCarouselCampaign");
+    expect(operationsSource).toContain('"/send/carousel"');
+    expect(operationsSource).toContain("newsletter_text_fallback");
+    expect(operationsSource).toContain("buildCampaignCarouselCards");
+  });
+
+  it("exposes the AI growth plan globally for customer and admin flows", () => {
+    for (const source of [dashboardRouteSource, adminRouteSource]) {
+      expect(source).toContain("generate_growth_plan");
+      expect(source).toContain("schedule_growth_plan");
+      expect(source).toContain("send_target_carousel");
+      expect(source).toContain("whatsapp_growth_plan_ai");
+      expect(source).toContain("toSafeGrowthPlan");
+    }
+  });
+
+  it("surfaces the new automation controls in the client WhatsApp studio", () => {
+    expect(studioSource).toContain("Rotina IA");
+    expect(studioSource).toContain("Planejar rotina");
+    expect(studioSource).toContain("Agendar rotina");
+    expect(studioSource).toContain("Carrossel");
+    expect(studioSource).toContain("Segmentos sugeridos");
+  });
+});

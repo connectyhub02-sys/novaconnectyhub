@@ -94,7 +94,25 @@ type WhatsappOperationsState = {
       withMedia: number;
       withAudio: number;
       totalRecipients: number;
+      trackedMessages: number;
+      sentMessages: number;
+      failedMessages: number;
+      pendingMessages: number;
+      carouselPosts: number;
+      pollPosts: number;
+      statusPosts: number;
     };
+    topProducts: Array<{
+      id: string;
+      title: string;
+      count: number;
+    }>;
+    segments: Array<{
+      id: string;
+      label: string;
+      count: number;
+      description: string;
+    }>;
     optimization: {
       nextSuggestedFor: string;
       recommendedHour: number;
@@ -102,6 +120,35 @@ type WhatsappOperationsState = {
       reasons: string[];
     };
   };
+};
+
+type GrowthPlanItem = {
+  id: string;
+  day: number;
+  slot: number;
+  type: "text" | "audio" | "text_audio" | "carousel" | "status" | "poll";
+  title: string;
+  text: string;
+  scheduledFor: string;
+  targetIds: string[];
+  productIds: string[];
+  pollChoices: string[];
+  buttonLabel: string | null;
+};
+
+type GrowthPlan = {
+  title: string;
+  objective: string;
+  strategySummary: string;
+  durationDays: number;
+  postsPerDay: number;
+  timezone: string;
+  approvalChecklist: string[];
+  targetCount: number;
+  targetNames: string[];
+  productNames: string[];
+  items: GrowthPlanItem[];
+  modelId: string;
 };
 
 type ChannelActionResponse = {
@@ -115,6 +162,7 @@ type ChannelActionResponse = {
       mediaUrl?: string | null;
       mediaKind?: "image" | "video" | null;
     };
+    growthPlan?: GrowthPlan;
     probe?: {
       available: boolean;
       confidence: "low" | "medium";
@@ -166,6 +214,7 @@ export function ClientWhatsappAutomationStudio({
   const [campaignText, setCampaignText] = useState("");
   const [campaignChecklist, setCampaignChecklist] = useState<string[]>([]);
   const [campaignScheduledFor, setCampaignScheduledFor] = useState(() => buildLocalDateTime(45));
+  const [campaignFormat, setCampaignFormat] = useState<"single" | "carousel">("single");
   const [campaignDeliveryMode, setCampaignDeliveryMode] = useState<"text" | "audio" | "text_audio">("text");
   const [campaignMediaKind, setCampaignMediaKind] = useState<"image" | "video" | "document">("image");
   const [campaignMediaUrl, setCampaignMediaUrl] = useState("");
@@ -176,6 +225,13 @@ export function ClientWhatsappAutomationStudio({
   const [campaignButtonEnabled, setCampaignButtonEnabled] = useState(true);
   const [campaignButtonLabel, setCampaignButtonLabel] = useState("Comprar agora");
   const [campaignButtonUrl, setCampaignButtonUrl] = useState("");
+
+  const [growthObjective, setGrowthObjective] = useState("Vender os produtos selecionados com presenca diaria no WhatsApp");
+  const [growthBrief, setGrowthBrief] = useState("");
+  const [growthDurationDays, setGrowthDurationDays] = useState(7);
+  const [growthPostsPerDay, setGrowthPostsPerDay] = useState(3);
+  const [growthStartFrom, setGrowthStartFrom] = useState(() => buildLocalDateTime(90));
+  const [growthPlan, setGrowthPlan] = useState<GrowthPlan | null>(null);
 
   const [selectedStatusProductIds, setSelectedStatusProductIds] = useState<string[]>([]);
   const [statusBrief, setStatusBrief] = useState("");
@@ -218,8 +274,13 @@ export function ClientWhatsappAutomationStudio({
   const operationsLocked = !selectedAgentId || !connected;
   const campaignReady = !operationsLocked
     && selectedTargetIdsValid.length > 0
-    && campaignText.trim().length > 0
+    && (campaignFormat === "carousel" ? selectedCampaignProducts.length > 0 : campaignText.trim().length > 0)
     && Boolean(behavior?.campaignBroadcasts || behavior?.newsletterBroadcasts);
+  const growthPlanReady = !operationsLocked
+    && Boolean(behavior?.campaignBroadcasts || behavior?.newsletterBroadcasts || behavior?.statusBroadcasts)
+    && (selectedTargets.length > 0 || Boolean(behavior?.statusBroadcasts))
+    && (selectedCampaignProducts.length > 0 || growthBrief.trim().length > 0 || growthObjective.trim().length > 0);
+  const scheduleGrowthPlanReady = !operationsLocked && Boolean(growthPlan?.items.length);
   const statusReady = !operationsLocked
     && Boolean(behavior?.statusBroadcasts)
     && (statusText.trim().length > 0 || statusHasMediaSource);
@@ -360,7 +421,7 @@ export function ClientWhatsappAutomationStudio({
   }
 
   async function scheduleCampaign() {
-    await runAction("send_target_campaign", {
+    await runAction(campaignFormat === "carousel" ? "send_target_carousel" : "send_target_campaign", {
       title: campaignTitle,
       text: campaignText,
       targetIds: selectedTargetIdsValid,
@@ -376,6 +437,38 @@ export function ClientWhatsappAutomationStudio({
       interactiveMode: campaignButtonEnabled ? "button" : "none",
       buttonLabel: campaignButtonLabel,
       buttonUrl: campaignButtonUrl || campaignProductUrl,
+    });
+  }
+
+  async function generateGrowthPlan() {
+    const data = await runAction("generate_growth_plan", {
+      targetIds: selectedTargetIdsValid,
+      catalogItemIds: selectedCampaignProductIds,
+      objective: growthObjective,
+      brief: growthBrief || campaignBrief,
+      durationDays: growthDurationDays,
+      postsPerDay: growthPostsPerDay,
+      startFrom: localDatetimeToIso(growthStartFrom),
+      mentionAll: campaignMentionAll,
+    });
+    const plan = data?.result?.growthPlan;
+
+    if (plan) {
+      setGrowthPlan(plan);
+      if (!campaignTitle) setCampaignTitle(plan.title);
+      if (!campaignText && plan.items[0]?.text) setCampaignText(plan.items[0].text);
+    }
+  }
+
+  async function scheduleGrowthPlan() {
+    if (!growthPlan) return;
+
+    await runAction("schedule_growth_plan", {
+      targetIds: selectedTargetIdsValid,
+      catalogItemIds: selectedCampaignProductIds,
+      mentionAll: campaignMentionAll,
+      buttonLabel: campaignButtonLabel,
+      planItems: growthPlan.items,
     });
   }
 
@@ -578,7 +671,11 @@ export function ClientWhatsappAutomationStudio({
                     {campaignChecklist.map((item) => <p key={item}>- {item}</p>)}
                   </div>
                 ) : null}
-                <div className="grid gap-2 sm:grid-cols-3">
+                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                  <SelectField label="Formato" value={campaignFormat} onChange={(value) => setCampaignFormat(value as typeof campaignFormat)} options={[
+                    ["single", "Post unico"],
+                    ["carousel", "Carrossel"],
+                  ]} />
                   <SelectField label="Entrega" value={campaignDeliveryMode} onChange={(value) => setCampaignDeliveryMode(value as typeof campaignDeliveryMode)} options={[
                     ["text", "Texto"],
                     ["audio", "Audio"],
@@ -611,8 +708,51 @@ export function ClientWhatsappAutomationStudio({
                 </div>
                 <div className="grid gap-2 sm:grid-cols-2">
                   <ActionButton icon={Sparkles} label="Criar copy IA" disabled={operationsLocked || selectedTargets.length === 0 || (!campaignBrief.trim() && selectedCampaignProducts.length === 0 && !campaignText.trim())} loading={runningAction === "generate_target_campaign_draft"} onClick={generateCampaignDraft} />
-                  <ActionButton icon={Send} label="Agendar campanha" disabled={!campaignReady} loading={runningAction === "send_target_campaign"} onClick={scheduleCampaign} />
+                  <ActionButton icon={Send} label={campaignFormat === "carousel" ? "Agendar carrossel" : "Agendar campanha"} disabled={!campaignReady} loading={runningAction === "send_target_campaign" || runningAction === "send_target_carousel"} onClick={scheduleCampaign} />
                 </div>
+              </div>
+            </Section>
+
+            <Section title="Rotina IA" badge={`${growthPlan?.items.length ?? 0} posts`}>
+              <div className="grid gap-3">
+                <Input label="Objetivo" value={growthObjective} onChange={setGrowthObjective} />
+                <Textarea label="Briefing da rotina" value={growthBrief} onChange={setGrowthBrief} rows={3} placeholder="Ex.: 7 dias de ofertas, alternando prova social, enquete e produto do dia." />
+                <div className="grid gap-2 sm:grid-cols-3">
+                  <DateInput label="Inicio" value={growthStartFrom} onChange={setGrowthStartFrom} />
+                  <NumberInput label="Dias" value={growthDurationDays} min={1} max={14} onChange={setGrowthDurationDays} />
+                  <NumberInput label="Posts/dia" value={growthPostsPerDay} min={1} max={5} onChange={setGrowthPostsPerDay} />
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <ActionButton icon={Sparkles} label="Planejar rotina" disabled={!growthPlanReady} loading={runningAction === "generate_growth_plan"} onClick={generateGrowthPlan} />
+                  <ActionButton icon={CalendarClock} label="Agendar rotina" disabled={!scheduleGrowthPlanReady} loading={runningAction === "schedule_growth_plan"} onClick={scheduleGrowthPlan} />
+                </div>
+                {growthPlan ? (
+                  <div className="grid gap-3 rounded-xl border border-cyan-500/20 bg-cyan-500/10 p-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-cyan-800">{growthPlan.title}</p>
+                      <p className="mt-1 text-[12px] leading-5 text-cyan-700">{growthPlan.strategySummary}</p>
+                    </div>
+                    {growthPlan.approvalChecklist.length ? (
+                      <div className="grid gap-1 text-[11px] leading-5 text-cyan-800">
+                        {growthPlan.approvalChecklist.map((item) => <p key={item}>- {item}</p>)}
+                      </div>
+                    ) : null}
+                    <div className="max-h-80 overflow-y-auto rounded-lg border border-cyan-500/20 bg-white/70 p-2">
+                      {growthPlan.items.map((item) => (
+                        <div key={item.id} className="mb-2 grid gap-2 rounded-lg border border-slate-200 bg-white p-2 last:mb-0">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span className="text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>{item.title}</span>
+                            <span className="font-mono text-[10px] text-slate-500">D{item.day} / {formatGrowthPlanType(item.type)} / {formatDateTime(item.scheduledFor)}</span>
+                          </div>
+                          <p className="line-clamp-3 text-[12px] leading-5 text-slate-600">{item.text}</p>
+                          {item.pollChoices.length && item.type === "poll" ? (
+                            <p className="truncate text-[10px] text-cyan-700">{item.pollChoices.join(" / ")}</p>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
               </div>
             </Section>
 
@@ -663,6 +803,42 @@ export function ClientWhatsappAutomationStudio({
             </Section>
           </div>
         </div>
+
+        <Section title="Inteligencia" badge={operations?.analytics.optimization.confidence ?? "low"}>
+          <div className="grid gap-3">
+            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+              <Metric icon={Megaphone} label="Carrossel" value={String(operations?.analytics.summary.carouselPosts ?? 0)} detail="vitrines enviadas" />
+              <Metric icon={Vote} label="Enquetes" value={String(operations?.analytics.summary.pollPosts ?? 0)} detail="posts de voto" />
+              <Metric icon={MessageCircle} label="Status" value={String(operations?.analytics.summary.statusPosts ?? 0)} detail="stories publicados" />
+              <Metric icon={Send} label="Rastreamento" value={String(operations?.analytics.summary.trackedMessages ?? 0)} detail="mensagens monitoradas" />
+            </div>
+            {operations?.analytics.optimization.reasons.length ? (
+              <div className="rounded-xl border border-slate-200 bg-white/60 p-3 text-[12px] leading-5 text-slate-600">
+                {operations.analytics.optimization.reasons.map((reason) => <p key={reason}>- {reason}</p>)}
+              </div>
+            ) : null}
+            <div className="grid gap-3 lg:grid-cols-2">
+              <MiniList
+                emptyText="Produtos ainda sem historico de campanha."
+                items={(operations?.analytics.topProducts ?? []).map((item) => ({
+                  id: item.id,
+                  title: item.title,
+                  detail: `${item.count} uso(s) recente(s)`,
+                }))}
+                title="Produtos mais usados"
+              />
+              <MiniList
+                emptyText="Segmentos aparecem conforme campanhas e respostas forem registradas."
+                items={(operations?.analytics.segments ?? []).map((item) => ({
+                  id: item.id,
+                  title: item.label,
+                  detail: `${item.count} sinal(is) - ${item.description}`,
+                }))}
+                title="Segmentos sugeridos"
+              />
+            </div>
+          </div>
+        </Section>
 
         <Section title="Historico recente" badge={`${operations?.history.length ?? 0} registros`}>
           <div className="grid gap-2">
@@ -764,6 +940,34 @@ function ProductPicker({
           <p className="px-2 py-3 text-[12px] text-slate-500">Cadastre produtos ativos para a IA criar campanhas automaticamente.</p>
         )}
       </div>
+    </div>
+  );
+}
+
+function MiniList({
+  emptyText,
+  items,
+  title,
+}: {
+  emptyText: string;
+  items: Array<{ id: string; title: string; detail: string }>;
+  title: string;
+}) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white/60 p-3">
+      <p className="mb-2 font-mono text-[9px] uppercase tracking-wide text-slate-500">{title}</p>
+      {items.length ? (
+        <div className="grid gap-2">
+          {items.map((item) => (
+            <div key={item.id} className="rounded-lg border border-slate-200 bg-white p-2">
+              <p className="truncate text-[12px] font-semibold" style={{ color: "var(--ch-text)" }}>{item.title}</p>
+              <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-slate-500">{item.detail}</p>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="text-[12px] leading-5 text-slate-500">{emptyText}</p>
+      )}
     </div>
   );
 }
@@ -1011,6 +1215,15 @@ function firstProductUrl(products: ClientSalesCatalogItem[]) {
     if (product.productUrl) return product.productUrl;
   }
   return "";
+}
+
+function formatGrowthPlanType(type: GrowthPlanItem["type"]) {
+  if (type === "text_audio") return "texto + audio";
+  if (type === "audio") return "audio";
+  if (type === "carousel") return "carrossel";
+  if (type === "status") return "status";
+  if (type === "poll") return "enquete";
+  return "texto";
 }
 
 function formatDateTime(value: string | null | undefined) {

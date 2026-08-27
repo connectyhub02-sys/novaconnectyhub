@@ -13,13 +13,14 @@ import { loadUazapiCredentials, type UazapiCredentials } from "./uazapi-credenti
 
 type JsonRecord = Record<string, unknown>;
 type WhatsappScope = "platform" | "organization";
-type WhatsappOutboundOperation = "status" | "campaign_simple" | "newsletter_text" | "target_poll" | "group_announce_mode";
+type WhatsappOutboundOperation = "status" | "campaign_simple" | "newsletter_text" | "target_poll" | "group_announce_mode" | "target_carousel";
 type WhatsappTargetType = "group" | "newsletter";
 type WhatsappTargetReplyMode = "off" | "all" | "mentions" | "admins" | "observer";
 type WhatsappTargetMentionMode = "none" | "author" | "all";
 type WhatsappCampaignRecurrenceFrequency = "daily" | "weekly";
 type WhatsappCampaignDeliveryMode = "text" | "audio" | "text_audio";
 type WhatsappCampaignInteractiveMode = "none" | "button";
+type WhatsappGrowthPlanItemType = "text" | "audio" | "text_audio" | "carousel" | "status" | "poll";
 type WhatsappStatusPayloadType = "text" | "image" | "video" | "audio" | "myaudio" | "ptt";
 type WhatsappGroupIntelligenceStatus = "fresh" | "stale" | "missing" | "error";
 type WhatsappGroupRiskLevel = "low" | "medium" | "high";
@@ -199,6 +200,9 @@ export type WhatsappOperationsAnalytics = {
     sentMessages: number;
     failedMessages: number;
     pendingMessages: number;
+    carouselPosts: number;
+    pollPosts: number;
+    statusPosts: number;
   };
   calendar: Array<{
     id: string;
@@ -216,6 +220,17 @@ export type WhatsappOperationsAnalytics = {
     confidence: "low" | "medium" | "high";
     reasons: string[];
   };
+  topProducts: Array<{
+    id: string;
+    title: string;
+    count: number;
+  }>;
+  segments: Array<{
+    id: string;
+    label: string;
+    count: number;
+    description: string;
+  }>;
 };
 
 export type WhatsappTargetCampaignDraft = {
@@ -237,6 +252,38 @@ export type WhatsappStatusDraft = {
   productNames: string[];
   mediaUrl: string | null;
   mediaKind: "image" | "video" | null;
+  modelId: string;
+  systemInstruction: string;
+  prompt: string;
+  responseData: unknown;
+};
+
+export type WhatsappGrowthPlanItem = {
+  id: string;
+  day: number;
+  slot: number;
+  type: WhatsappGrowthPlanItemType;
+  title: string;
+  text: string;
+  scheduledFor: string;
+  targetIds: string[];
+  productIds: string[];
+  pollChoices: string[];
+  buttonLabel: string | null;
+};
+
+export type WhatsappGrowthCampaignPlan = {
+  title: string;
+  objective: string;
+  strategySummary: string;
+  durationDays: number;
+  postsPerDay: number;
+  timezone: string;
+  approvalChecklist: string[];
+  targetCount: number;
+  targetNames: string[];
+  productNames: string[];
+  items: WhatsappGrowthPlanItem[];
   modelId: string;
   systemInstruction: string;
   prompt: string;
@@ -809,6 +856,85 @@ export async function queueWhatsappTargetTextCampaign(
   });
 }
 
+export async function queueWhatsappTargetCarouselCampaign(
+  client: SupabaseClient,
+  context: WhatsappOperationalContext,
+  input: {
+    title: string;
+    text?: string | null;
+    targetIds: string[];
+    scheduledFor?: string | null;
+    mentionAll?: boolean;
+    catalogItemIds?: string[];
+    buttonLabel?: string | null;
+    buttonUrl?: string | null;
+  },
+) {
+  assertWhatsappConnected(context);
+
+  if (!context.behavior.campaignBroadcasts && !context.behavior.newsletterBroadcasts) {
+    throw new Error("Ative Campanhas ou Canais no comportamento do agente antes de agendar carrossel.");
+  }
+
+  if (!context.behavior.interactiveMessages) {
+    throw new Error("Ative Botoes e mensagens interativas no comportamento do agente antes de enviar carrossel.");
+  }
+
+  const targets = await listWhatsappChannelTargetsByIds(client, context, input.targetIds);
+  if (targets.length === 0) {
+    throw new Error("Selecione pelo menos um grupo ou canal sincronizado.");
+  }
+
+  const blocked = targets.filter((target) => !target.campaignEnabled);
+  if (blocked.length > 0) {
+    throw new Error(`Destino sem campanhas liberadas: ${blocked[0]?.name ?? blocked[0]?.jid}.`);
+  }
+
+  const mentionAll = Boolean(input.mentionAll);
+  if (mentionAll && targets.some((target) => target.type !== "group")) {
+    throw new Error("Mencionar todos so pode ser usado em grupos.");
+  }
+
+  const catalogItems = await listSalesCatalogCampaignItems(client, context, input.catalogItemIds ?? []);
+  const carouselCards = buildCampaignCarouselCards(catalogItems, input.buttonLabel, input.buttonUrl);
+  if (carouselCards.length === 0) {
+    throw new Error("Selecione produtos ativos com imagem, video ou documento publico para montar o carrossel.");
+  }
+
+  const text = (input.text?.trim() || buildCarouselIntroText(catalogItems)).slice(0, 900);
+  const title = input.title.trim() || `Carrossel WhatsApp - ${new Date().toLocaleDateString("pt-BR")}`;
+
+  return queueWhatsappOutbound(client, context, {
+    operation: "target_carousel",
+    title,
+    summary: `${targets.length} destino(s), ${carouselCards.length} card(s): ${preview(text, 140)}`,
+    body: text,
+    scheduledFor: input.scheduledFor,
+    payload: {
+      type: "carousel",
+      text,
+      target_mode: "whatsapp_targets",
+      targets: targets.map((target) => ({
+        id: target.id,
+        type: target.type,
+        jid: target.jid,
+        name: target.name,
+      })),
+      mentions: mentionAll ? "all" : undefined,
+      carousel: carouselCards,
+      media_attachments: buildCatalogCampaignAttachments(catalogItems).slice(0, 6),
+      catalog_items: catalogItems.map((item) => ({
+        id: item.id,
+        title: item.title,
+        tag: item.tag,
+        price: item.price,
+        currency: item.currency,
+        media_count: item.media.length,
+      })),
+    },
+  });
+}
+
 export async function generateWhatsappTargetCampaignDraft(
   client: SupabaseClient,
   context: WhatsappOperationalContext,
@@ -974,6 +1100,206 @@ export async function generateWhatsappStatusDraft(
     systemInstruction,
     prompt,
     responseData,
+  };
+}
+
+export async function generateWhatsappGrowthCampaignPlan(
+  client: SupabaseClient,
+  context: WhatsappOperationalContext,
+  input: {
+    targetIds: string[];
+    catalogItemIds?: string[];
+    objective?: string | null;
+    brief?: string | null;
+    durationDays?: number | null;
+    postsPerDay?: number | null;
+    startFrom?: string | null;
+    mentionAll?: boolean;
+  },
+): Promise<WhatsappGrowthCampaignPlan> {
+  if (!context.behavior.campaignBroadcasts && !context.behavior.newsletterBroadcasts && !context.behavior.statusBroadcasts) {
+    throw new Error("Ative Campanhas, Canais ou Status no comportamento do agente antes de criar uma rotina IA.");
+  }
+
+  const durationDays = clamp(Math.round(input.durationDays ?? 7), 1, 14);
+  const postsPerDay = clamp(Math.round(input.postsPerDay ?? 3), 1, 5);
+  const startFrom = normalizeScheduledFor(input.startFrom);
+  const objective = (input.objective?.trim() || "Vender mais pelo WhatsApp com conteudo recorrente").slice(0, 220);
+  const brief = input.brief?.trim().slice(0, 1600) ?? "";
+  const targets = input.targetIds.length > 0
+    ? await listWhatsappChannelTargetsByIds(client, context, input.targetIds)
+    : [];
+  const catalogItems = await listSalesCatalogCampaignItems(client, context, input.catalogItemIds ?? []);
+
+  if (targets.length === 0 && !context.behavior.statusBroadcasts) {
+    throw new Error("Selecione grupos/canais ou ative Status para a IA montar a rotina.");
+  }
+
+  if (!brief && catalogItems.length === 0) {
+    throw new Error("Informe um objetivo/briefing ou selecione produtos para a IA planejar a rotina.");
+  }
+
+  const blocked = targets.filter((target) => !target.campaignEnabled);
+  if (blocked.length > 0) {
+    throw new Error(`Destino sem campanhas liberadas: ${blocked[0]?.name ?? blocked[0]?.jid}.`);
+  }
+
+  const credentials = await loadGeminiCredentials(client);
+  const allowedFormats = resolveAllowedGrowthPlanFormats(context, targets, catalogItems);
+  const systemInstruction = [
+    "Voce e estrategista de crescimento para WhatsApp, grupos, canais e status.",
+    "Monte uma rotina de campanha que reduza o trabalho do usuario: ele escolhe produtos e voce planeja a cadencia.",
+    "Escreva em portugues do Brasil com tom comercial humano, natural e sem parecer spam.",
+    "Alterne formatos quando fizer sentido: texto, audio, texto_audio, carousel, status e poll.",
+    "Use carousel quando houver 2 ou mais produtos com midia. Use poll para gerar conversa em grupos.",
+    "Nao invente preco, estoque, desconto, prazo, garantia, link ou bonus que nao esteja no catalogo ou briefing.",
+    "Cada texto deve ter no maximo 900 caracteres e deve conduzir para conversa ou compra.",
+    "Retorne somente JSON valido com as chaves title, strategySummary, approvalChecklist e items.",
+    "Cada item deve ter: day, slot, type, title, text, productRefs, pollChoices e buttonLabel.",
+  ].join("\n");
+  const prompt = [
+    `Objetivo: ${objective}`,
+    `Duracao: ${durationDays} dia(s). Posts por dia: ${postsPerDay}.`,
+    `Data inicial ISO: ${startFrom}. Fuso operacional: America/Sao_Paulo.`,
+    `Formatos permitidos: ${allowedFormats.join(", ")}.`,
+    `Mencao geral em grupos: ${input.mentionAll ? "permitida quando fizer sentido" : "nao usar por padrao"}.`,
+    targets.length ? "Destinos:" : "Destino principal: status do agente.",
+    targets.map((target, index) => [
+      `${index + 1}. ${target.type === "newsletter" ? "Canal" : "Grupo"}: ${target.name}`,
+      target.participantCount !== null ? `${target.participantCount} membros` : "",
+      target.isAnnouncement ? "somente avisos" : "",
+    ].filter(Boolean).join(" / ")).join("\n"),
+    catalogItems.length ? "Produtos disponiveis, referencie como P1, P2...:" : "",
+    catalogItems.map((item, index) => `P${index + 1}: ${formatCampaignCatalogPromptItem(item, index)}`).join("\n"),
+    brief ? `Briefing adicional: ${brief}` : "",
+    "Crie exatamente a quantidade solicitada de itens quando possivel.",
+    "Para enquetes, pollChoices deve ter 2 a 5 opcoes.",
+  ].filter(Boolean).join("\n\n");
+  const responseData = await callGeminiGenerateContent(credentials, systemInstruction, prompt, {
+    temperature: 0.78,
+    maxOutputTokens: 2400,
+  });
+  const rawText = extractGeminiText(responseData);
+  const parsed = parseGeminiGrowthPlan(rawText);
+  const items = normalizeGrowthPlanItems({
+    rawItems: parsed.items,
+    allowedFormats,
+    catalogItems,
+    targets,
+    durationDays,
+    postsPerDay,
+    startFrom,
+  });
+
+  return {
+    title: (parsed.title || `Rotina WhatsApp IA - ${new Date().toLocaleDateString("pt-BR")}`).slice(0, 90),
+    objective,
+    strategySummary: (parsed.strategySummary || buildFallbackGrowthStrategySummary(catalogItems, targets)).slice(0, 480),
+    durationDays,
+    postsPerDay,
+    timezone: "America/Sao_Paulo",
+    approvalChecklist: parsed.approvalChecklist.length > 0
+      ? parsed.approvalChecklist.slice(0, 6)
+      : buildGrowthPlanApprovalChecklist(allowedFormats),
+    targetCount: targets.length,
+    targetNames: targets.map((target) => target.name).slice(0, 12),
+    productNames: catalogItems.map((item) => item.title).slice(0, 12),
+    items,
+    modelId: credentials.model,
+    systemInstruction,
+    prompt,
+    responseData,
+  };
+}
+
+export async function queueWhatsappGrowthCampaignPlan(
+  client: SupabaseClient,
+  context: WhatsappOperationalContext,
+  input: {
+    planItems: unknown;
+    targetIds: string[];
+    catalogItemIds?: string[];
+    mentionAll?: boolean;
+    buttonLabel?: string | null;
+  },
+) {
+  assertWhatsappConnected(context);
+
+  const targets = await listWhatsappChannelTargetsByIds(client, context, input.targetIds);
+  const groupTargetIds = targets.filter((target) => target.type === "group").map((target) => target.id);
+  const fallbackTargetIds = targets.map((target) => target.id);
+  const fallbackProductIds = Array.from(new Set((input.catalogItemIds ?? []).map((id) => id.trim()).filter(Boolean)));
+  const planItems = normalizeQueuedGrowthPlanItems(input.planItems, fallbackTargetIds, fallbackProductIds);
+
+  if (planItems.length === 0) {
+    throw new Error("Gere ou informe uma rotina IA antes de agendar.");
+  }
+
+  const queued: WhatsappOutboundItem[] = [];
+
+  for (const planItem of planItems.slice(0, 70)) {
+    const targetIds = planItem.targetIds.length > 0 ? intersectStrings(planItem.targetIds, fallbackTargetIds) : fallbackTargetIds;
+    const productIds = planItem.productIds.length > 0 ? planItem.productIds : fallbackProductIds.slice(0, 4);
+    const title = planItem.title || `Rotina IA WhatsApp - dia ${planItem.day}`;
+
+    if (planItem.type === "status") {
+      queued.push(await queueWhatsappStatusBroadcast(client, context, {
+        text: planItem.text,
+        scheduledFor: planItem.scheduledFor,
+        catalogItemIds: productIds,
+      }));
+    } else if (planItem.type === "poll") {
+      if (groupTargetIds.length === 0) {
+        queued.push(await queueWhatsappTargetTextCampaign(client, context, {
+          title,
+          text: planItem.text,
+          targetIds,
+          scheduledFor: planItem.scheduledFor,
+          mentionAll: input.mentionAll,
+          catalogItemIds: productIds,
+          interactiveMode: "button",
+          buttonLabel: planItem.buttonLabel ?? input.buttonLabel ?? "Quero saber mais",
+        }));
+      } else {
+        const pollTargetIds = intersectStrings(targetIds, groupTargetIds);
+        queued.push(await queueWhatsappTargetPollCampaign(client, context, {
+          title,
+          question: planItem.text,
+          choices: planItem.pollChoices,
+          targetIds: pollTargetIds.length > 0 ? pollTargetIds : groupTargetIds,
+          scheduledFor: planItem.scheduledFor,
+          mentionAll: input.mentionAll,
+          selectableCount: 1,
+        }));
+      }
+    } else if (planItem.type === "carousel") {
+      queued.push(await queueWhatsappTargetCarouselCampaign(client, context, {
+        title,
+        text: planItem.text,
+        targetIds,
+        scheduledFor: planItem.scheduledFor,
+        mentionAll: input.mentionAll,
+        catalogItemIds: productIds,
+        buttonLabel: planItem.buttonLabel ?? input.buttonLabel,
+      }));
+    } else {
+      queued.push(await queueWhatsappTargetTextCampaign(client, context, {
+        title,
+        text: planItem.text,
+        targetIds,
+        scheduledFor: planItem.scheduledFor,
+        mentionAll: input.mentionAll,
+        deliveryMode: planItem.type === "audio" || planItem.type === "text_audio" ? planItem.type : "text",
+        catalogItemIds: productIds,
+        interactiveMode: "button",
+        buttonLabel: planItem.buttonLabel ?? input.buttonLabel ?? "Comprar agora",
+      }));
+    }
+  }
+
+  return {
+    count: queued.length,
+    items: queued,
   };
 }
 
@@ -1390,6 +1716,19 @@ async function processWhatsappOutboundItem(client: SupabaseClient, item: Content
         responses.push({ recipient, responses: sanitizeProviderData(sent) });
       }
       providerResponse = { target_mode: "whatsapp_targets", sent: responses };
+    } else if (operation === "target_carousel") {
+      const targetRecipients = readCampaignTargetRecipients(payload);
+
+      if (!targetRecipients) {
+        throw new Error("Carrossel sem destinos.");
+      }
+
+      const responses = [];
+      for (const recipient of targetRecipients) {
+        const sent = await sendTargetCarouselPayloadToRecipient(context, item, payload, recipient);
+        responses.push({ recipient, responses: sanitizeProviderData(sent) });
+      }
+      providerResponse = { target_mode: "whatsapp_targets", sent: responses };
     } else if (operation === "group_announce_mode") {
       providerResponse = await sendGroupWindowPayload(context, item, payload);
     } else if (operation === "newsletter_text") {
@@ -1566,6 +1905,81 @@ async function sendTargetPollPayloadToRecipient(
     mode: "poll",
     response: sanitizeProviderData(providerResponse) as JsonRecord,
   }];
+}
+
+async function sendTargetCarouselPayloadToRecipient(
+  context: WhatsappOperationalContext,
+  item: ContentPipelineRow,
+  payload: JsonRecord,
+  recipient: string,
+) {
+  const text = asString(payload.text) ?? item.body ?? "";
+  const mentions = payload.mentions;
+  const carousel = readCampaignCarouselCards(payload.carousel);
+  const responses: Array<JsonRecord> = [];
+
+  if (carousel.length === 0) {
+    throw new Error("Carrossel sem cards validos.");
+  }
+
+  if (!recipient.endsWith("@newsletter")) {
+    const providerResponse = await callUazapi(context, "/send/carousel", {
+      method: "POST",
+      body: cleanPayload({
+        number: recipient,
+        text,
+        carousel,
+        mentions,
+        readchat: true,
+        track_source: "connectyhub",
+        track_id: `carousel_${item.id}`,
+      }),
+    }).then((result) => result.data);
+
+    return [{
+      mode: "carousel",
+      response: sanitizeProviderData(providerResponse) as JsonRecord,
+    }];
+  }
+
+  if (text) {
+    const textResponse = await callUazapi(context, "/send/text", {
+      method: "POST",
+      body: cleanPayload({
+        number: recipient,
+        text,
+        linkPreview: true,
+        track_source: "connectyhub",
+        track_id: `carousel_${item.id}_newsletter_text`,
+      }),
+    }).then((result) => result.data);
+    responses.push({ mode: "newsletter_text_fallback", response: sanitizeProviderData(textResponse) as JsonRecord });
+  }
+
+  const attachments = readCampaignMediaAttachments(payload.media_attachments);
+  for (let index = 0; index < attachments.length; index++) {
+    const attachment = attachments[index];
+    const mediaResponse = await callUazapi(context, "/send/media", {
+      method: "POST",
+      body: cleanPayload({
+        number: recipient,
+        type: attachment.type,
+        file: attachment.file,
+        text: attachment.text,
+        track_source: "connectyhub",
+        track_id: `carousel_${item.id}_newsletter_media_${index + 1}`,
+      }),
+    }).then((result) => result.data);
+    responses.push({
+      mode: "newsletter_media_fallback",
+      mediaType: attachment.type,
+      source: attachment.source,
+      catalogItemId: attachment.catalogItemId,
+      response: sanitizeProviderData(mediaResponse) as JsonRecord,
+    });
+  }
+
+  return responses;
 }
 
 async function sendGroupWindowPayload(
@@ -1837,7 +2251,7 @@ async function queueWhatsappOutbound(
     ? "whatsapp_status"
     : input.operation === "group_announce_mode"
       ? "whatsapp_group_window"
-      : input.operation === "campaign_simple" || input.operation === "target_poll"
+      : input.operation === "campaign_simple" || input.operation === "target_poll" || input.operation === "target_carousel"
       ? "whatsapp_campaign"
       : "whatsapp_newsletter";
 
@@ -2158,12 +2572,18 @@ function buildWhatsappOperationsAnalytics(rows: ContentPipelineRow[]): WhatsappO
     sentMessages: 0,
     failedMessages: 0,
     pendingMessages: 0,
+    carouselPosts: 0,
+    pollPosts: 0,
+    statusPosts: 0,
   };
   const publishedHours = new Map<number, number>();
+  const productCounts = new Map<string, { id: string; title: string; count: number }>();
+  const targetTypeCounts = new Map<string, number>();
 
   for (const row of rows) {
     const metadata = readRecord(row.metadata) ?? {};
     const payload = readRecord(metadata.payload) ?? {};
+    const operation = asString(metadata.operation);
     const providerStatus = asString(metadata.provider_status);
     const deliveryMode = normalizeCampaignDeliveryMode(payload.delivery_mode);
     const attachmentCount = readCampaignMediaAttachments(payload.media_attachments).length;
@@ -2176,12 +2596,23 @@ function buildWhatsappOperationsAnalytics(rows: ContentPipelineRow[]): WhatsappO
     if (readStoredRecurrence(metadata.recurrence)) summary.recurring += 1;
     if (attachmentCount > 0 || asString(payload.file)) summary.withMedia += 1;
     if (deliveryMode === "audio" || deliveryMode === "text_audio" || ["audio", "myaudio", "ptt"].includes(asString(payload.type) ?? "")) summary.withAudio += 1;
+    if (operation === "target_carousel") summary.carouselPosts += 1;
+    if (operation === "target_poll") summary.pollPosts += 1;
+    if (operation === "status") summary.statusPosts += 1;
     summary.totalRecipients += targetCount;
     if (campaignTracking) {
       summary.trackedMessages += campaignTracking.total;
       summary.sentMessages += campaignTracking.sent;
       summary.failedMessages += campaignTracking.failed;
       summary.pendingMessages += campaignTracking.pending;
+    }
+    for (const product of readPayloadCatalogItems(payload.catalog_items)) {
+      const current = productCounts.get(product.id) ?? { ...product, count: 0 };
+      current.count += 1;
+      productCounts.set(product.id, current);
+    }
+    for (const targetType of readPayloadTargetTypes(payload.targets)) {
+      targetTypeCounts.set(targetType, (targetTypeCounts.get(targetType) ?? 0) + 1);
     }
 
     if (row.status === "published" && row.published_at) {
@@ -2220,6 +2651,10 @@ function buildWhatsappOperationsAnalytics(rows: ContentPipelineRow[]): WhatsappO
       confidence: publishedHours.size >= 3 ? "high" : rows.length >= 8 ? "medium" : "low",
       reasons: buildCampaignOptimizationReasons(summary, calendar.length, publishedHours, recommendedHour),
     },
+    topProducts: Array.from(productCounts.values())
+      .sort((a, b) => b.count - a.count || a.title.localeCompare(b.title))
+      .slice(0, 6),
+    segments: buildWhatsappCampaignSegments(summary, targetTypeCounts, productCounts),
   };
 }
 
@@ -3171,6 +3606,461 @@ function readCampaignButtons(value: unknown) {
     .slice(0, 3);
 }
 
+function buildCampaignCarouselCards(
+  items: ClientSalesCatalogItem[],
+  labelValue: string | null | undefined,
+  urlValue: string | null | undefined,
+) {
+  return items
+    .map((item) => {
+      const media = item.media.find((entry) => normalizeCampaignMediaKind(entry.kind) && normalizePublicMediaUrl(entry.storageUrl));
+      if (!media) return null;
+
+      const productUrl = normalizePublicMediaUrl(urlValue)
+        ?? normalizePublicMediaUrl(item.externalLinkButtonTrackingUrl)
+        ?? normalizePublicMediaUrl(item.productUrl);
+      const label = (
+        labelValue?.trim()
+        || item.externalLinkButtonLabel
+        || item.offer.callToAction
+        || "Comprar agora"
+      ).slice(0, 24);
+      const buttons = [{
+        id: productUrl ?? `quero_${item.id.slice(0, 8)}`,
+        text: label,
+        type: productUrl ? "URL" : "REPLY",
+      }];
+      const card = cleanPayload({
+        text: buildCarouselCardText(item),
+        image: media.kind === "image" ? media.storageUrl : undefined,
+        video: media.kind === "video" ? media.storageUrl : undefined,
+        document: media.kind === "document" ? media.storageUrl : undefined,
+        filename: media.kind === "document" ? media.fileName || `${item.title}.pdf` : undefined,
+        buttons,
+      });
+
+      return card;
+    })
+    .filter((item): item is JsonRecord => Boolean(item))
+    .slice(0, 10);
+}
+
+function readCampaignCarouselCards(value: unknown) {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item) => readRecord(item))
+    .map((item) => {
+      const text = asString(item?.text);
+      const buttons = readCarouselButtons(item?.buttons);
+      if (!text || buttons.length === 0) return null;
+
+      return cleanPayload({
+        text,
+        image: normalizePublicMediaUrl(asString(item?.image)),
+        video: normalizePublicMediaUrl(asString(item?.video)),
+        document: normalizePublicMediaUrl(asString(item?.document)),
+        filename: asString(item?.filename),
+        buttons,
+      });
+    })
+    .filter((item): item is JsonRecord => Boolean(item))
+    .slice(0, 10);
+}
+
+function readCarouselButtons(value: unknown) {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item) => readRecord(item))
+    .map((item) => {
+      const id = asString(item?.id);
+      const text = asString(item?.text);
+      const type = normalizeCarouselButtonType(item?.type, id);
+      if (!id || !text) return null;
+
+      return {
+        id,
+        text: text.slice(0, 24),
+        type,
+      };
+    })
+    .filter((item): item is { id: string; text: string; type: "REPLY" | "URL" | "CALL" | "COPY" } => Boolean(item))
+    .slice(0, 4);
+}
+
+function normalizeCarouselButtonType(value: unknown, id: string | null): "REPLY" | "URL" | "CALL" | "COPY" {
+  if (value === "URL" || value === "CALL" || value === "COPY" || value === "REPLY") return value;
+  if (id && normalizePublicMediaUrl(id)) return "URL";
+  return "REPLY";
+}
+
+function buildCarouselIntroText(items: ClientSalesCatalogItem[]) {
+  if (items.length === 1) return `Separei essa opcao pra voce: ${items[0].title}.`;
+  const names = items.map((item) => item.title).slice(0, 3).join(", ");
+  return `Separei algumas opcoes da loja pra voce ver: ${names}.`;
+}
+
+function buildCarouselCardText(item: ClientSalesCatalogItem) {
+  const parts = [
+    item.title,
+    item.price ? `${item.price} ${item.currency}` : "",
+    item.highlightLabel,
+    item.description ? preview(item.description, 180) : "",
+  ];
+
+  return parts.filter(Boolean).join("\n").slice(0, 500);
+}
+
+function resolveAllowedGrowthPlanFormats(
+  context: WhatsappOperationalContext,
+  targets: WhatsappChannelTarget[],
+  catalogItems: ClientSalesCatalogItem[],
+): WhatsappGrowthPlanItemType[] {
+  const formats: WhatsappGrowthPlanItemType[] = [];
+
+  if (context.behavior.campaignBroadcasts || context.behavior.newsletterBroadcasts) {
+    formats.push("text");
+    if (context.organizationId) {
+      formats.push("audio", "text_audio");
+    }
+    if (context.behavior.interactiveMessages && catalogItems.filter((item) => item.media.some((media) => normalizeCampaignMediaKind(media.kind))).length >= 1) {
+      formats.push("carousel");
+    }
+    if (context.behavior.interactiveMessages && targets.some((target) => target.type === "group")) {
+      formats.push("poll");
+    }
+  }
+
+  if (context.behavior.statusBroadcasts) {
+    formats.push("status");
+  }
+
+  return Array.from(new Set(formats.length ? formats : ["text"]));
+}
+
+function parseGeminiGrowthPlan(value: string) {
+  const cleaned = stripCodeFence(value).trim();
+  const jsonText = extractJsonObject(cleaned) ?? cleaned;
+  const parsed = parseJsonObject(jsonText);
+  const rawItems = Array.isArray(parsed?.items) ? parsed.items : [];
+
+  return {
+    title: asString(parsed?.title) ?? asString(parsed?.titulo) ?? "",
+    strategySummary: asString(parsed?.strategySummary) ?? asString(parsed?.strategy_summary) ?? asString(parsed?.summary) ?? "",
+    approvalChecklist: readStringArray(parsed?.approvalChecklist ?? parsed?.checklist ?? parsed?.approval_checklist)
+      .map((item) => item.slice(0, 160)),
+    items: rawItems,
+  };
+}
+
+function normalizeGrowthPlanItems(input: {
+  rawItems: unknown[];
+  allowedFormats: WhatsappGrowthPlanItemType[];
+  catalogItems: ClientSalesCatalogItem[];
+  targets: WhatsappChannelTarget[];
+  durationDays: number;
+  postsPerDay: number;
+  startFrom: string;
+}): WhatsappGrowthPlanItem[] {
+  const expectedCount = clamp(input.durationDays * input.postsPerDay, 1, 70);
+  const fallback = buildFallbackGrowthPlanItems(input);
+  const normalized = input.rawItems
+    .map((rawItem, index) => normalizeGrowthPlanAiItem(rawItem, index, input, fallback[index]))
+    .filter((item): item is WhatsappGrowthPlanItem => Boolean(item))
+    .slice(0, expectedCount);
+
+  if (normalized.length >= expectedCount) {
+    return normalized;
+  }
+
+  const existingKeys = new Set(normalized.map((item) => `${item.day}:${item.slot}`));
+  const missing = fallback.filter((item) => !existingKeys.has(`${item.day}:${item.slot}`));
+  return normalized.concat(missing).slice(0, expectedCount);
+}
+
+function normalizeGrowthPlanAiItem(
+  rawItem: unknown,
+  index: number,
+  input: Parameters<typeof normalizeGrowthPlanItems>[0],
+  fallback: WhatsappGrowthPlanItem | undefined,
+): WhatsappGrowthPlanItem | null {
+  const record = readRecord(rawItem);
+  if (!record) return fallback ?? null;
+
+  const type = normalizeGrowthPlanItemType(record.type ?? record.format ?? record.tipo, input.allowedFormats, fallback?.type ?? "text");
+  const productIds = readGrowthPlanProductIds(record.productIds ?? record.product_ids ?? record.productRefs ?? record.products, input.catalogItems);
+  const day = clamp(readInteger(record.day ?? record.dia, fallback?.day ?? Math.floor(index / input.postsPerDay) + 1), 1, input.durationDays);
+  const slot = clamp(readInteger(record.slot ?? record.post ?? record.ordem, fallback?.slot ?? (index % input.postsPerDay) + 1), 1, input.postsPerDay);
+  const text = (
+    asString(record.text)
+    ?? asString(record.message)
+    ?? asString(record.copy)
+    ?? fallback?.text
+    ?? buildFallbackGrowthPostText(type, productIds, input.catalogItems)
+  ).slice(0, type === "status" ? 656 : 900);
+  const pollChoices = normalizePollChoices(record.pollChoices ?? record.poll_choices ?? record.options ?? fallback?.pollChoices);
+  const selectedTargetIds = readStringArray(record.targetIds ?? record.target_ids);
+  const targetIds = selectedTargetIds.length > 0
+    ? intersectStrings(selectedTargetIds, input.targets.map((target) => target.id))
+    : input.targets.map((target) => target.id);
+
+  return {
+    id: `growth_${day}_${slot}_${index + 1}`,
+    day,
+    slot,
+    type,
+    title: (asString(record.title) ?? asString(record.titulo) ?? fallback?.title ?? `Post ${index + 1}`).slice(0, 90),
+    text,
+    scheduledFor: buildGrowthPlanScheduledFor(input.startFrom, index, input.postsPerDay),
+    targetIds: type === "status" ? [] : targetIds,
+    productIds: productIds.length > 0 ? productIds : fallback?.productIds ?? [],
+    pollChoices: pollChoices.length >= 2 ? pollChoices : fallback?.pollChoices ?? buildFallbackPollChoices(input.catalogItems),
+    buttonLabel: (asString(record.buttonLabel) ?? asString(record.button_label) ?? fallback?.buttonLabel)?.slice(0, 24) ?? null,
+  };
+}
+
+function buildFallbackGrowthPlanItems(input: {
+  allowedFormats: WhatsappGrowthPlanItemType[];
+  catalogItems: ClientSalesCatalogItem[];
+  targets: WhatsappChannelTarget[];
+  durationDays: number;
+  postsPerDay: number;
+  startFrom: string;
+}): WhatsappGrowthPlanItem[] {
+  const productIds = input.catalogItems.map((item) => item.id);
+  const targetIds = input.targets.map((target) => target.id);
+  const count = clamp(input.durationDays * input.postsPerDay, 1, 70);
+  const items: WhatsappGrowthPlanItem[] = [];
+
+  for (let index = 0; index < count; index++) {
+    const type = pickGrowthPlanType(input.allowedFormats, index, productIds.length);
+    const itemProductIds = pickRollingProductIds(productIds, index, type === "carousel" ? 4 : 1);
+    const day = Math.floor(index / input.postsPerDay) + 1;
+    const slot = (index % input.postsPerDay) + 1;
+
+    items.push({
+      id: `growth_${day}_${slot}_${index + 1}`,
+      day,
+      slot,
+      type,
+      title: buildFallbackGrowthPostTitle(type, input.catalogItems, itemProductIds, index),
+      text: buildFallbackGrowthPostText(type, itemProductIds, input.catalogItems),
+      scheduledFor: buildGrowthPlanScheduledFor(input.startFrom, index, input.postsPerDay),
+      targetIds: type === "status" ? [] : targetIds,
+      productIds: itemProductIds,
+      pollChoices: buildFallbackPollChoices(input.catalogItems),
+      buttonLabel: type === "poll" ? null : "Comprar agora",
+    });
+  }
+
+  return items;
+}
+
+function normalizeQueuedGrowthPlanItems(value: unknown, fallbackTargetIds: string[], fallbackProductIds: string[]): WhatsappGrowthPlanItem[] {
+  const source = Array.isArray(value) ? value : [];
+  return source
+    .map((item, index) => {
+      const record = readRecord(item);
+      if (!record) return null;
+
+      const scheduledFor = asString(record.scheduledFor) ?? asString(record.scheduled_for);
+      const text = asString(record.text) ?? asString(record.message);
+      if (!scheduledFor || !text) return null;
+
+      const type = normalizeGrowthPlanItemType(record.type, ["text", "audio", "text_audio", "carousel", "status", "poll"], "text");
+      const productIds = readFlexibleStringArray(record.productIds ?? record.product_ids);
+      const targetIds = readFlexibleStringArray(record.targetIds ?? record.target_ids);
+      const day = clamp(readInteger(record.day, Math.floor(index / 3) + 1), 1, 365);
+      const slot = clamp(readInteger(record.slot, (index % 3) + 1), 1, 12);
+
+      return {
+        id: asString(record.id) ?? `queued_growth_${index + 1}`,
+        day,
+        slot,
+        type,
+        title: (asString(record.title) ?? `Rotina IA WhatsApp - ${index + 1}`).slice(0, 90),
+        text: text.slice(0, type === "status" ? 656 : 900),
+        scheduledFor: normalizeScheduledFor(scheduledFor),
+        targetIds: targetIds.length > 0 ? targetIds : fallbackTargetIds,
+        productIds: productIds.length > 0 ? productIds : fallbackProductIds.slice(0, 4),
+        pollChoices: normalizePollChoices(record.pollChoices ?? record.poll_choices).length >= 2
+          ? normalizePollChoices(record.pollChoices ?? record.poll_choices)
+          : ["Quero esse", "Quero outra opcao", "Me chama no privado"],
+        buttonLabel: asString(record.buttonLabel) ?? asString(record.button_label),
+      };
+    })
+    .filter((item): item is WhatsappGrowthPlanItem => Boolean(item))
+    .slice(0, 70);
+}
+
+function normalizeGrowthPlanItemType(
+  value: unknown,
+  allowedFormats: WhatsappGrowthPlanItemType[],
+  fallback: WhatsappGrowthPlanItemType,
+): WhatsappGrowthPlanItemType {
+  const normalized = typeof value === "string" ? value.trim().toLowerCase().replace(/[-\s]+/g, "_") : "";
+  const candidate = normalized === "audio_text" ? "text_audio" : normalized;
+  if (candidate === "text" || candidate === "audio" || candidate === "text_audio" || candidate === "carousel" || candidate === "status" || candidate === "poll") {
+    return allowedFormats.includes(candidate) ? candidate : fallback;
+  }
+  return fallback;
+}
+
+function pickGrowthPlanType(allowedFormats: WhatsappGrowthPlanItemType[], index: number, productCount: number): WhatsappGrowthPlanItemType {
+  const candidates: WhatsappGrowthPlanItemType[] = [];
+  if (productCount >= 2) candidates.push("carousel");
+  candidates.push("text_audio", "status", "poll", "text", "audio");
+  return candidates.find((candidate, offset) => allowedFormats.includes(candidate) && (index + offset) % Math.max(2, candidates.length - 1) === 0)
+    ?? candidates.find((candidate) => allowedFormats.includes(candidate))
+    ?? "text";
+}
+
+function readGrowthPlanProductIds(value: unknown, catalogItems: ClientSalesCatalogItem[]) {
+  const byReference = new Map<string, string>();
+  catalogItems.forEach((item, index) => {
+    byReference.set(item.id, item.id);
+    byReference.set(`p${index + 1}`, item.id);
+    byReference.set(String(index + 1), item.id);
+    byReference.set(item.title.toLowerCase(), item.id);
+  });
+
+  return Array.from(new Set(readFlexibleStringArray(value)
+    .map((entry) => byReference.get(entry.toLowerCase()) ?? byReference.get(entry) ?? null)
+    .filter((entry): entry is string => Boolean(entry))))
+    .slice(0, 6);
+}
+
+function readFlexibleStringArray(value: unknown) {
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => {
+      const record = readRecord(item);
+      if (record) {
+        return [
+          asString(record.id),
+          asString(record.ref),
+          asString(record.reference),
+          asString(record.title),
+          asString(record.name),
+        ].filter((entry): entry is string => Boolean(entry));
+      }
+
+      return String(item)
+        .split(/[,\n;]/)
+        .map((entry) => entry.trim())
+        .filter(Boolean);
+    });
+  }
+
+  if (typeof value === "string") {
+    return value
+      .split(/[,\n;]/)
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+  }
+
+  return [];
+}
+
+function buildGrowthPlanScheduledFor(startFrom: string, index: number, postsPerDay: number) {
+  const start = new Date(startFrom);
+  const date = Number.isNaN(start.getTime()) ? new Date(Date.now() + 60 * 60_000) : start;
+  const dayOffset = Math.floor(index / postsPerDay);
+  const slotOffset = index % postsPerDay;
+  const minutesBetweenSlots = Math.floor((10 * 60) / Math.max(1, postsPerDay));
+
+  date.setUTCDate(date.getUTCDate() + dayOffset);
+  date.setUTCMinutes(date.getUTCMinutes() + slotOffset * minutesBetweenSlots);
+
+  return date.toISOString();
+}
+
+function pickRollingProductIds(productIds: string[], index: number, count: number) {
+  if (productIds.length === 0) return [];
+
+  const selected = [];
+  for (let offset = 0; offset < Math.min(count, productIds.length); offset++) {
+    selected.push(productIds[(index + offset) % productIds.length]);
+  }
+
+  return selected;
+}
+
+function buildFallbackGrowthPostTitle(
+  type: WhatsappGrowthPlanItemType,
+  catalogItems: ClientSalesCatalogItem[],
+  productIds: string[],
+  index: number,
+) {
+  const product = catalogItems.find((item) => productIds.includes(item.id));
+  if (type === "carousel") return "Vitrine de produtos";
+  if (type === "poll") return "Enquete de preferencia";
+  if (type === "status") return "Status de relacionamento";
+  return product?.title ? `Oferta: ${product.title}` : `Post WhatsApp ${index + 1}`;
+}
+
+function buildFallbackGrowthPostText(
+  type: WhatsappGrowthPlanItemType,
+  productIds: string[],
+  catalogItems: ClientSalesCatalogItem[],
+) {
+  const selected = catalogItems.filter((item) => productIds.includes(item.id));
+  const product = selected[0] ?? catalogItems[0];
+
+  if (type === "poll") {
+    return "Qual dessas opcoes voces querem que eu detalhe melhor hoje?";
+  }
+
+  if (type === "carousel" && selected.length > 1) {
+    return `Separei ${selected.length} opcoes que estao disponiveis na loja. Olha qual combina melhor com o que voce procura e me chama aqui.`;
+  }
+
+  if (!product) {
+    return "Passei pra lembrar que temos novidades disponiveis hoje. Quem quiser, me chama que eu separo as melhores opcoes.";
+  }
+
+  return [
+    `${product.title} esta disponivel na loja.`,
+    product.price ? `Valor: ${product.price} ${product.currency}.` : "",
+    product.description ? preview(product.description, 220) : "",
+    "Quem quiser, me chama que eu ajudo a escolher certinho.",
+  ].filter(Boolean).join(" ");
+}
+
+function buildFallbackPollChoices(items: ClientSalesCatalogItem[]) {
+  const choices = items.map((item) => item.title).slice(0, 4);
+  return (choices.length >= 2 ? choices : ["Quero oferta", "Quero indicacao", "Tenho duvida"]).slice(0, 5);
+}
+
+function buildFallbackGrowthStrategySummary(items: ClientSalesCatalogItem[], targets: WhatsappChannelTarget[]) {
+  const targetText = targets.length ? `${targets.length} destino(s)` : "status do agente";
+  const productText = items.length ? `${items.length} produto(s)` : "tema informado";
+  return `Rotina baseada em ${productText}, alternando formatos para manter presenca comercial em ${targetText}.`;
+}
+
+function buildGrowthPlanApprovalChecklist(formats: WhatsappGrowthPlanItemType[]) {
+  const checklist = [
+    "Confirmar precos, estoque e links dos produtos selecionados.",
+    "Conferir se os horarios respeitam a rotina do grupo ou canal.",
+    "Validar se o tom combina com o agente escolhido.",
+  ];
+
+  if (formats.includes("audio") || formats.includes("text_audio")) {
+    checklist.push("Revisar consumo de creditos dos audios antes de aprovar a rotina.");
+  }
+
+  if (formats.includes("poll")) {
+    checklist.push("Conferir se as opcoes da enquete ajudam a tomar decisao comercial.");
+  }
+
+  return checklist;
+}
+
+function intersectStrings(source: string[], allowed: string[]) {
+  const allowedSet = new Set(allowed);
+  return source.filter((item) => allowedSet.has(item));
+}
+
 function normalizePollChoices(value: unknown) {
   const source = Array.isArray(value)
     ? value
@@ -3368,6 +4258,74 @@ function buildCampaignOptimizationReasons(
   }
 
   return reasons.slice(0, 4);
+}
+
+function readPayloadCatalogItems(value: unknown) {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item) => readRecord(item))
+    .map((item) => {
+      const id = asString(item?.id);
+      const title = asString(item?.title);
+      if (!id || !title) return null;
+      return { id, title };
+    })
+    .filter((item): item is { id: string; title: string } => Boolean(item));
+}
+
+function readPayloadTargetTypes(value: unknown) {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item) => readRecord(item))
+    .map((item) => asString(item?.type))
+    .filter((item): item is string => item === "group" || item === "newsletter");
+}
+
+function buildWhatsappCampaignSegments(
+  summary: WhatsappOperationsAnalytics["summary"],
+  targetTypeCounts: Map<string, number>,
+  productCounts: Map<string, { id: string; title: string; count: number }>,
+) {
+  const segments = [
+    {
+      id: "status_viewers",
+      label: "Respondeu status",
+      count: summary.statusPosts,
+      description: "Usar quando leads responderem ao status do agente e entrarem em conversa quente.",
+    },
+    {
+      id: "poll_engaged",
+      label: "Votou em enquete",
+      count: summary.pollPosts,
+      description: "Separar quem interagiu com perguntas de preferencia para campanhas de oferta.",
+    },
+    {
+      id: "carousel_interested",
+      label: "Recebeu carrossel",
+      count: summary.carouselPosts,
+      description: "Puxar follow-up por produto visualizado ou botao clicado quando houver webhook.",
+    },
+    {
+      id: "group_relationship",
+      label: "Relacionamento em grupo",
+      count: targetTypeCounts.get("group") ?? 0,
+      description: "Agrupar conversas nascidas de grupos para medir temas e ofertas que mais aquecem.",
+    },
+  ];
+
+  const topProduct = Array.from(productCounts.values()).sort((a, b) => b.count - a.count)[0];
+  if (topProduct) {
+    segments.unshift({
+      id: `product_${topProduct.id}`,
+      label: `Interesse: ${topProduct.title}`.slice(0, 64),
+      count: topProduct.count,
+      description: "Produto mais usado nas campanhas recentes; bom candidato para rotina de follow-up.",
+    });
+  }
+
+  return segments.filter((segment) => segment.count > 0).slice(0, 5);
 }
 
 function normalizeRecipientList(value: unknown) {
