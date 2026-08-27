@@ -21,6 +21,8 @@ describe("WhatsApp growth engine v2", () => {
     expect(operationsSource).toContain('Buffer.byteLength(text, "utf8")');
     expect(operationsSource).toContain("normalizeGrowthPlanText(type, text)");
     expect(operationsSource).toContain("background_color");
+    expect(operationsSource).toContain("...(maxRecipients ? { max_recipients: maxRecipients } : {})");
+    expect(operationsSource).toContain("...(recipients.length ? { recipients } : {})");
   });
 
   it("exposes the AI growth plan globally for customer and admin flows", () => {

@@ -648,11 +648,10 @@ export async function queueWhatsappStatusBroadcast(
     throw new Error("Escreva o texto do status ou selecione uma midia publica.");
   }
 
-  const maxRecipients = clamp(
-    Math.round(input.maxRecipients ?? context.behavior.whatsappMaxStatusRecipients),
-    1,
-    context.behavior.whatsappMaxStatusRecipients,
-  );
+  const maxRecipients = typeof input.maxRecipients === "number" && Number.isFinite(input.maxRecipients)
+    ? clamp(Math.round(input.maxRecipients), 1, context.behavior.whatsappMaxStatusRecipients)
+    : null;
+  const recipients = normalizeRecipientList(input.recipients);
 
   return queueWhatsappOutbound(client, context, {
     operation: "status",
@@ -666,8 +665,8 @@ export async function queueWhatsappStatusBroadcast(
       file: selectedMedia?.file,
       media_caption: selectedMedia?.text,
       backgroundColor: clamp(Math.round(input.backgroundColor ?? 4), 1, 19),
-      max_recipients: maxRecipients,
-      recipients: normalizeRecipientList(input.recipients),
+      ...(maxRecipients ? { max_recipients: maxRecipients } : {}),
+      ...(recipients.length ? { recipients } : {}),
       catalog_items: catalogItems.map((item) => ({
         id: item.id,
         title: item.title,
