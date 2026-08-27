@@ -17,6 +17,7 @@ type WhatsappOutboundOperation = "status" | "campaign_simple" | "newsletter_text
 type WhatsappTargetType = "group" | "newsletter";
 type WhatsappTargetReplyMode = "off" | "all" | "mentions" | "admins" | "observer";
 type WhatsappTargetMentionMode = "none" | "author" | "all";
+type WhatsappAutomationCapability = "groups" | "status" | "campaigns" | "newsletters" | "interactive";
 type WhatsappCampaignRecurrenceFrequency = "daily" | "weekly";
 type WhatsappCampaignDeliveryMode = "text" | "audio" | "text_audio";
 type WhatsappCampaignInteractiveMode = "none" | "button";
@@ -1565,21 +1566,36 @@ export async function enableWhatsappGroupReplies(
     updatedBy?: string | null;
   } = {},
 ) {
+  return enableWhatsappAutomationCapability(client, context, {
+    capability: "groups",
+    updatedBy: input.updatedBy,
+  });
+}
+
+export async function enableWhatsappAutomationCapability(
+  client: SupabaseClient,
+  context: WhatsappOperationalContext,
+  input: {
+    capability: string;
+    updatedBy?: string | null;
+  },
+) {
   assertWhatsappConnected(context);
 
+  const capability = normalizeAutomationCapability(input.capability);
+  if (!capability) {
+    throw new Error("Escolha qual recurso de automacao WhatsApp deseja ativar.");
+  }
+
   const now = new Date().toISOString();
-  const nextBehavior = normalizeWhatsappBehaviorConfig({
-    ...context.behavior,
-    allowGroupChats: true,
-    groupReplyMode: context.behavior.groupReplyMode || "all",
-  });
+  const nextBehavior = buildEnabledAutomationBehavior(context.behavior, capability);
   const instanceMetadata = readRecord(context.instance.metadata) ?? {};
   const nextInstanceMetadata = {
     ...instanceMetadata,
     behavior_config: nextBehavior,
     behavior_updated_at: now,
     behavior_updated_by: input.updatedBy ?? null,
-    last_client_action: "enable_group_replies",
+    last_client_action: `enable_${capability}`,
   };
 
   const { error: instanceError } = await client
@@ -1588,7 +1604,7 @@ export async function enableWhatsappGroupReplies(
     .eq("id", context.instance.id);
 
   if (instanceError) {
-    throw new Error(`Nao foi possivel ativar respostas em grupos nesta instancia: ${instanceError.message}`);
+    throw new Error(`Nao foi possivel ativar ${describeAutomationCapability(capability)} nesta instancia: ${instanceError.message}`);
   }
 
   const agentId = asString(instanceMetadata.agent_id);
@@ -1606,22 +1622,21 @@ export async function enableWhatsappGroupReplies(
     }
 
     const agentMetadata = readRecord(agent?.metadata) ?? {};
-    const currentAgentBehavior = normalizeWhatsappBehaviorConfig(agentMetadata.whatsapp_behavior_config ?? nextBehavior);
+    const currentAgentBehavior = buildEnabledAutomationBehavior(
+      normalizeWhatsappBehaviorConfig(agentMetadata.whatsapp_behavior_config ?? nextBehavior),
+      capability,
+    );
     const { error: agentUpdateError } = await client
       .from("agent_registry")
       .update({
         metadata: {
           ...agentMetadata,
-          whatsapp_behavior_config: {
-            ...currentAgentBehavior,
-            allowGroupChats: true,
-            groupReplyMode: currentAgentBehavior.groupReplyMode || nextBehavior.groupReplyMode,
-          },
+          whatsapp_behavior_config: currentAgentBehavior,
           prompt_control: {
             ...(readRecord(agentMetadata.prompt_control) ?? {}),
             last_updated_at: now,
             last_updated_by: input.updatedBy ?? null,
-            source: "whatsapp_automations_group_window",
+            source: "whatsapp_automations_capability",
           },
         },
       })
@@ -1630,7 +1645,7 @@ export async function enableWhatsappGroupReplies(
       .eq("organization_id", context.organizationId);
 
     if (agentUpdateError) {
-      throw new Error(`Nao foi possivel ativar respostas em grupos no agente: ${agentUpdateError.message}`);
+      throw new Error(`Nao foi possivel ativar ${describeAutomationCapability(capability)} no agente: ${agentUpdateError.message}`);
     }
   }
 
@@ -1642,8 +1657,50 @@ export async function enableWhatsappGroupReplies(
       groups: nextBehavior.allowGroupChats,
       groupReplyMode: nextBehavior.groupReplyMode,
       groupMentionAll: nextBehavior.groupMentionAll,
+      statusBroadcasts: nextBehavior.statusBroadcasts,
+      newsletterBroadcasts: nextBehavior.newsletterBroadcasts,
+      campaignBroadcasts: nextBehavior.campaignBroadcasts,
+      interactiveMessages: nextBehavior.interactiveMessages,
     },
   };
+}
+
+function buildEnabledAutomationBehavior(
+  behavior: WhatsappBehaviorConfig,
+  capability: WhatsappAutomationCapability,
+) {
+  const nextBehavior = normalizeWhatsappBehaviorConfig(behavior);
+
+  if (capability === "groups") {
+    nextBehavior.allowGroupChats = true;
+    nextBehavior.groupReplyMode = nextBehavior.groupReplyMode || "all";
+  } else if (capability === "status") {
+    nextBehavior.statusBroadcasts = true;
+  } else if (capability === "campaigns") {
+    nextBehavior.campaignBroadcasts = true;
+  } else if (capability === "newsletters") {
+    nextBehavior.newsletterBroadcasts = true;
+  } else if (capability === "interactive") {
+    nextBehavior.interactiveMessages = true;
+  }
+
+  return nextBehavior;
+}
+
+function normalizeAutomationCapability(value: string | null | undefined): WhatsappAutomationCapability | null {
+  if (value === "groups" || value === "status" || value === "campaigns" || value === "newsletters" || value === "interactive") {
+    return value;
+  }
+
+  return null;
+}
+
+function describeAutomationCapability(capability: WhatsappAutomationCapability) {
+  if (capability === "groups") return "respostas em grupos";
+  if (capability === "status") return "posts no status";
+  if (capability === "campaigns") return "campanhas";
+  if (capability === "newsletters") return "canais";
+  return "botoes e enquetes";
 }
 
 export async function updateWhatsappChannelTargetSettings(

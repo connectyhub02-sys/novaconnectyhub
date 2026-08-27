@@ -152,6 +152,7 @@ type GrowthPlan = {
 };
 
 type GrowthFormatPreference = "mixed" | "text" | "audio" | "text_audio" | "carousel" | "poll" | "status";
+type WhatsappAutomationCapability = "groups" | "status" | "campaigns" | "newsletters" | "interactive";
 
 type ChannelActionResponse = {
   operations?: WhatsappOperationsState | null;
@@ -536,6 +537,10 @@ export function ClientWhatsappAutomationStudio({
     await runAction("enable_group_replies");
   }
 
+  async function enableAutomationCapability(capability: WhatsappAutomationCapability) {
+    await runAction("enable_automation_capability", { capability });
+  }
+
   async function toggleTargetSetting(target: WhatsappTarget, key: "enabled" | "campaignEnabled") {
     await runAction("update_target_settings", {
       targetId: target.id,
@@ -602,7 +607,12 @@ export function ClientWhatsappAutomationStudio({
           <ActionButton icon={ShieldCheck} label="Analisar grupos" disabled={operationsLocked || groups.length === 0} loading={runningAction === "sync_group_intelligence"} onClick={() => runAction("sync_group_intelligence")} />
         </div>
 
-        <FeatureGates behavior={behavior} />
+        <FeatureGates
+          behavior={behavior}
+          disabled={operationsLocked}
+          loading={runningAction === "enable_automation_capability"}
+          onEnable={enableAutomationCapability}
+        />
 
         <div className="grid gap-4 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
           <div className="grid gap-4">
@@ -939,24 +949,46 @@ export function ClientWhatsappAutomationStudio({
   );
 }
 
-function FeatureGates({ behavior }: { behavior?: WhatsappOperationsState["behavior"] }) {
+function FeatureGates({
+  behavior,
+  disabled,
+  loading,
+  onEnable,
+}: {
+  behavior?: WhatsappOperationsState["behavior"];
+  disabled?: boolean;
+  loading?: boolean;
+  onEnable: (capability: WhatsappAutomationCapability) => void | Promise<void | ChannelActionResponse | null>;
+}) {
   const gates = [
-    ["Responder grupos", behavior?.groups],
-    ["Status", behavior?.statusBroadcasts],
-    ["Campanhas", behavior?.campaignBroadcasts],
-    ["Canais", behavior?.newsletterBroadcasts],
-    ["Botoes/enquetes", behavior?.interactiveMessages],
+    { label: "Responder grupos", active: behavior?.groups, capability: "groups" },
+    { label: "Status", active: behavior?.statusBroadcasts, capability: "status" },
+    { label: "Campanhas", active: behavior?.campaignBroadcasts, capability: "campaigns" },
+    { label: "Canais", active: behavior?.newsletterBroadcasts, capability: "newsletters" },
+    { label: "Botoes/enquetes", active: behavior?.interactiveMessages, capability: "interactive" },
   ] as const;
 
   return (
     <div className="grid gap-2 sm:grid-cols-5">
-      {gates.map(([label, active]) => (
-        <div key={label} className={cn(
-          "rounded-xl border px-3 py-2",
-          active ? "border-emerald-500/25 bg-emerald-500/10" : "border-slate-200 bg-slate-50",
+      {gates.map((gate) => (
+        <div key={gate.label} className={cn(
+          "grid gap-2 rounded-xl border px-3 py-2",
+          gate.active ? "border-emerald-500/25 bg-emerald-500/10" : "border-slate-200 bg-slate-50",
         )}>
-          <p className="truncate font-mono text-[9px] uppercase tracking-wide text-slate-500">{label}</p>
-          <p className={cn("mt-1 text-sm font-semibold", active ? "text-emerald-700" : "text-slate-500")}>{active ? "Ativo" : "Pausado"}</p>
+          <div className="min-w-0">
+            <p className="truncate font-mono text-[9px] uppercase tracking-wide text-slate-500">{gate.label}</p>
+            <p className={cn("mt-1 text-sm font-semibold", gate.active ? "text-emerald-700" : "text-slate-500")}>{gate.active ? "Ativo" : "Pausado"}</p>
+          </div>
+          {!gate.active ? (
+            <button
+              type="button"
+              disabled={disabled || loading}
+              onClick={() => onEnable(gate.capability)}
+              className="inline-flex min-h-8 items-center justify-center rounded-lg border border-emerald-500/25 bg-white/70 px-2 font-mono text-[9px] font-bold uppercase tracking-wide text-emerald-700 transition hover:bg-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {loading ? "Ativando..." : "Ativar"}
+            </button>
+          ) : null}
         </div>
       ))}
     </div>

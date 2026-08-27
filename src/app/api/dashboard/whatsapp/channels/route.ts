@@ -8,6 +8,7 @@ import { inngest } from "@/lib/inngest/client";
 import { getCurrentWorkspace, type CurrentOrganization } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
 import {
+  enableWhatsappAutomationCapability,
   enableWhatsappGroupReplies,
   fetchWhatsappCampaignFolders,
   fetchWhatsappGroups,
@@ -81,6 +82,7 @@ type ChannelActionBody = {
   objective?: unknown;
   startFrom?: unknown;
   preferredFormats?: unknown;
+  capability?: unknown;
   planItems?: unknown;
   groupTargetId?: unknown;
   openScheduledFor?: unknown;
@@ -378,6 +380,12 @@ export async function POST(request: NextRequest) {
     } else if (action === "enable_group_replies") {
       result = await enableWhatsappGroupReplies(client, whatsapp, { updatedBy: context.userId });
       notice = "Responder grupos ativado para este agente e WhatsApp.";
+    } else if (action === "enable_automation_capability") {
+      result = await enableWhatsappAutomationCapability(client, whatsapp, {
+        capability: asString(body?.capability) ?? "",
+        updatedBy: context.userId,
+      });
+      notice = "Recurso de automacao WhatsApp ativado para este agente.";
     } else if (action === "update_target_settings") {
       result = {
         target: await updateWhatsappChannelTargetSettings(client, whatsapp, {
