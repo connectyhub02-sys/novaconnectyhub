@@ -1558,6 +1558,94 @@ export async function probeWhatsappLeadStatusWatch(
   };
 }
 
+export async function enableWhatsappGroupReplies(
+  client: SupabaseClient,
+  context: WhatsappOperationalContext,
+  input: {
+    updatedBy?: string | null;
+  } = {},
+) {
+  assertWhatsappConnected(context);
+
+  const now = new Date().toISOString();
+  const nextBehavior = normalizeWhatsappBehaviorConfig({
+    ...context.behavior,
+    allowGroupChats: true,
+    groupReplyMode: context.behavior.groupReplyMode || "all",
+  });
+  const instanceMetadata = readRecord(context.instance.metadata) ?? {};
+  const nextInstanceMetadata = {
+    ...instanceMetadata,
+    behavior_config: nextBehavior,
+    behavior_updated_at: now,
+    behavior_updated_by: input.updatedBy ?? null,
+    last_client_action: "enable_group_replies",
+  };
+
+  const { error: instanceError } = await client
+    .from("whatsapp_instances")
+    .update({ metadata: nextInstanceMetadata })
+    .eq("id", context.instance.id);
+
+  if (instanceError) {
+    throw new Error(`Nao foi possivel ativar respostas em grupos nesta instancia: ${instanceError.message}`);
+  }
+
+  const agentId = asString(instanceMetadata.agent_id);
+  if (context.scope === "organization" && context.organizationId && agentId) {
+    const { data: agent, error: agentLoadError } = await client
+      .from("agent_registry")
+      .select("metadata")
+      .eq("id", agentId)
+      .eq("scope", "organization")
+      .eq("organization_id", context.organizationId)
+      .maybeSingle<AgentBehaviorRow>();
+
+    if (agentLoadError) {
+      throw new Error(`Nao foi possivel carregar o comportamento do agente: ${agentLoadError.message}`);
+    }
+
+    const agentMetadata = readRecord(agent?.metadata) ?? {};
+    const currentAgentBehavior = normalizeWhatsappBehaviorConfig(agentMetadata.whatsapp_behavior_config ?? nextBehavior);
+    const { error: agentUpdateError } = await client
+      .from("agent_registry")
+      .update({
+        metadata: {
+          ...agentMetadata,
+          whatsapp_behavior_config: {
+            ...currentAgentBehavior,
+            allowGroupChats: true,
+            groupReplyMode: currentAgentBehavior.groupReplyMode || nextBehavior.groupReplyMode,
+          },
+          prompt_control: {
+            ...(readRecord(agentMetadata.prompt_control) ?? {}),
+            last_updated_at: now,
+            last_updated_by: input.updatedBy ?? null,
+            source: "whatsapp_automations_group_window",
+          },
+        },
+      })
+      .eq("id", agentId)
+      .eq("scope", "organization")
+      .eq("organization_id", context.organizationId);
+
+    if (agentUpdateError) {
+      throw new Error(`Nao foi possivel ativar respostas em grupos no agente: ${agentUpdateError.message}`);
+    }
+  }
+
+  context.instance.metadata = nextInstanceMetadata;
+  context.behavior = nextBehavior;
+
+  return {
+    behavior: {
+      groups: nextBehavior.allowGroupChats,
+      groupReplyMode: nextBehavior.groupReplyMode,
+      groupMentionAll: nextBehavior.groupMentionAll,
+    },
+  };
+}
+
 export async function updateWhatsappChannelTargetSettings(
   client: SupabaseClient,
   context: WhatsappOperationalContext,

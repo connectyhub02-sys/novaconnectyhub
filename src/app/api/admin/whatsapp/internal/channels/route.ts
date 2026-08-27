@@ -5,6 +5,7 @@ import { inngest } from "@/lib/inngest/client";
 import { requirePlatformAdmin } from "@/lib/supabase/admin-auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import {
+  enableWhatsappGroupReplies,
   fetchWhatsappCampaignFolders,
   fetchWhatsappGroups,
   fetchWhatsappMessageLimits,
@@ -356,6 +357,9 @@ export async function POST(request: NextRequest) {
     } else if (action === "probe_lead_status_watch") {
       result = { probe: await probeWhatsappLeadStatusWatch(whatsapp) };
       notice = "Teste experimental de status dos leads concluido.";
+    } else if (action === "enable_group_replies") {
+      result = await enableWhatsappGroupReplies(client, whatsapp, { updatedBy: auth.userId });
+      notice = "Responder grupos ativado para esta instancia interna.";
     } else if (action === "update_target_settings") {
       result = {
         target: await updateWhatsappChannelTargetSettings(client, whatsapp, {

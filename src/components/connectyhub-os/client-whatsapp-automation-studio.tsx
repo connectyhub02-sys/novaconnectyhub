@@ -293,6 +293,7 @@ export function ClientWhatsappAutomationStudio({
     openScheduledFor,
     closeScheduledFor,
   });
+  const canEnableGroupReplies = !operationsLocked && behavior !== undefined && !behavior.groups;
   const pollReady = !operationsLocked
     && Boolean(behavior?.campaignBroadcasts)
     && Boolean(behavior?.interactiveMessages)
@@ -531,6 +532,10 @@ export function ClientWhatsappAutomationStudio({
     });
   }
 
+  async function enableGroupReplies() {
+    await runAction("enable_group_replies");
+  }
+
   async function toggleTargetSetting(target: WhatsappTarget, key: "enabled" | "campaignEnabled") {
     await runAction("update_target_settings", {
       targetId: target.id,
@@ -682,6 +687,9 @@ export function ClientWhatsappAutomationStudio({
                   <ActionButton icon={Clock3} label="Agendar janela" disabled={!groupWindowReady} loading={runningAction === "schedule_group_window"} onClick={scheduleGroupWindow} />
                   {groupWindowBlockReason ? (
                     <p className="text-[11px] leading-5 text-amber-700">{groupWindowBlockReason}</p>
+                  ) : null}
+                  {canEnableGroupReplies ? (
+                    <ActionButton icon={MessageCircle} label="Ativar responder grupos" loading={runningAction === "enable_group_replies"} onClick={enableGroupReplies} />
                   ) : null}
                 </div>
               </div>
@@ -1379,7 +1387,7 @@ function getGroupWindowBlockReason({
 }) {
   if (!selectedAgentId) return "Escolha o agente e WhatsApp das automacoes na base acima.";
   if (!connected) return "Conecte o WhatsApp deste agente antes de abrir ou fechar grupos.";
-  if (!groupsEnabled) return "Ative Responder grupos em Comportamento para liberar janelas de conversa.";
+  if (!groupsEnabled) return "Falta ativar Responder grupos no comportamento global deste agente. A regra do card vale so para este grupo.";
   if (!targetId) return "Busque os grupos deste WhatsApp e escolha um grupo para a janela.";
   if (!openScheduledFor || !closeScheduledFor) return "Informe horario de abertura e fechamento.";
 
