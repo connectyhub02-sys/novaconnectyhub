@@ -15,6 +15,14 @@ describe("WhatsApp growth engine v2", () => {
     expect(operationsSource).toContain("buildCampaignCarouselCards");
   });
 
+  it("keeps WhatsApp status text under provider byte limits", () => {
+    expect(operationsSource).toContain("whatsappStatusTextMaxBytes");
+    expect(operationsSource).toContain("truncateUtf8Text");
+    expect(operationsSource).toContain('Buffer.byteLength(text, "utf8")');
+    expect(operationsSource).toContain("normalizeGrowthPlanText(type, text)");
+    expect(operationsSource).toContain("background_color");
+  });
+
   it("exposes the AI growth plan globally for customer and admin flows", () => {
     for (const source of [dashboardRouteSource, adminRouteSource]) {
       expect(source).toContain("generate_growth_plan");

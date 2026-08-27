@@ -28,6 +28,8 @@ type WhatsappGroupRiskLevel = "low" | "medium" | "high";
 type SalesCatalogItemMapperInput = Parameters<typeof mapSalesCatalogItem>[0];
 
 const outboundAudioDeliveryTimeoutMs = 30000;
+const whatsappStatusTextMaxBytes = 620;
+const whatsappStatusAiTargetChars = 420;
 
 type WhatsappInstanceRow = {
   id: string;
@@ -634,7 +636,7 @@ export async function queueWhatsappStatusBroadcast(
     throw new Error("Ative Status no comportamento do agente antes de publicar stories.");
   }
 
-  const text = input.text.trim().slice(0, 656);
+  const text = truncateUtf8Text(input.text, whatsappStatusTextMaxBytes);
   const catalogItems = await listSalesCatalogCampaignItems(client, context, input.catalogItemIds ?? []);
   const requestedType = normalizeWhatsappStatusPayloadType(input.statusType);
   const catalogMedia = buildCatalogStatusMedia(catalogItems)[0] ?? null;
@@ -1050,7 +1052,7 @@ export async function generateWhatsappStatusDraft(
   }
 
   const brief = input.brief?.trim().slice(0, 900) ?? "";
-  const currentText = input.currentText?.trim().slice(0, 656) ?? "";
+  const currentText = truncateUtf8Text(input.currentText ?? "", whatsappStatusTextMaxBytes);
   const catalogItems = await listSalesCatalogCampaignItems(client, context, input.catalogItemIds ?? []);
 
   if (!brief && !currentText && catalogItems.length === 0) {
@@ -1063,7 +1065,7 @@ export async function generateWhatsappStatusDraft(
     "Voce cria textos curtos para Status/Stories de WhatsApp de uma empresa.",
     "Escreva em portugues do Brasil, com tom natural de atendente humano e foco comercial leve.",
     "Nao invente desconto, garantia, prazo, estoque, link ou bonus que nao esteja no briefing ou no catalogo.",
-    "O texto precisa caber no status do WhatsApp: maximo de 656 caracteres.",
+    `O texto precisa caber no status do WhatsApp: mire ate ${whatsappStatusAiTargetChars} caracteres e evite texto longo.`,
     "Evite markdown, excesso de emojis e caixa alta.",
     "Retorne somente JSON valido com as chaves text, backgroundColor e approvalChecklist.",
     "backgroundColor deve ser um numero de 1 a 19.",
@@ -1091,7 +1093,7 @@ export async function generateWhatsappStatusDraft(
   }
 
   return {
-    text: parsed.text.slice(0, 656),
+    text: truncateUtf8Text(parsed.text, whatsappStatusTextMaxBytes),
     backgroundColor: parsed.backgroundColor,
     approvalChecklist: parsed.approvalChecklist.slice(0, 5),
     productNames: catalogItems.map((item) => item.title).slice(0, 6),
@@ -1157,7 +1159,7 @@ export async function generateWhatsappGrowthCampaignPlan(
     "Quando o usuario escolher um formato principal, respeite os formatos permitidos do prompt e nao troque para outro formato.",
     "Use carousel quando houver 2 ou mais produtos com midia. Use poll para gerar conversa em grupos.",
     "Nao invente preco, estoque, desconto, prazo, garantia, link ou bonus que nao esteja no catalogo ou briefing.",
-    "Cada texto deve ter no maximo 900 caracteres e deve conduzir para conversa ou compra.",
+    `Cada texto deve ter no maximo 900 caracteres e deve conduzir para conversa ou compra. Quando type=status, mire ate ${whatsappStatusAiTargetChars} caracteres.`,
     "Retorne somente JSON valido com as chaves title, strategySummary, approvalChecklist e items.",
     "Cada item deve ter: day, slot, type, title, text, productRefs, pollChoices e buttonLabel.",
   ].join("\n");
@@ -1828,6 +1830,7 @@ async function processWhatsappOutboundItem(client: SupabaseClient, item: Content
           text: asString(payload.text) ?? asString(payload.media_caption) ?? item.body,
           file: payload.file,
           backgroundColor: payload.backgroundColor,
+          background_color: payload.backgroundColor ?? payload.background_color,
           max_recipients: payload.max_recipients,
           recipients: payload.recipients,
         }),
@@ -3666,6 +3669,27 @@ function normalizeWhatsappStatusPayloadType(value: unknown): WhatsappStatusPaylo
   return "text";
 }
 
+function truncateUtf8Text(value: string | null | undefined, maxBytes: number) {
+  const text = value?.trim() ?? "";
+  if (!text) return "";
+  if (Buffer.byteLength(text, "utf8") <= maxBytes) return text;
+
+  let output = "";
+  for (const char of text) {
+    const next = output + char;
+    if (Buffer.byteLength(next, "utf8") > maxBytes) break;
+    output = next;
+  }
+
+  return output.trimEnd();
+}
+
+function normalizeGrowthPlanText(type: WhatsappGrowthPlanItemType, text: string) {
+  return type === "status"
+    ? truncateUtf8Text(text, whatsappStatusTextMaxBytes)
+    : text.trim().slice(0, 900);
+}
+
 function normalizeStatusMediaAttachment(
   mediaUrl: string | null | undefined,
   statusType: string | null | undefined,
@@ -3679,7 +3703,7 @@ function normalizeStatusMediaAttachment(
   return {
     type,
     file,
-    text: mediaCaption?.trim().slice(0, 656) || null,
+    text: truncateUtf8Text(mediaCaption, whatsappStatusTextMaxBytes) || null,
     source: "manual_url",
     catalogItemId: null as string | null,
   };
@@ -3694,7 +3718,7 @@ function buildCatalogStatusMedia(items: ClientSalesCatalogItem[]) {
       return {
         type: media.kind,
         file: media.storageUrl,
-        text: buildCampaignCatalogCaption(item, media),
+        text: truncateUtf8Text(buildCampaignCatalogCaption(item, media), whatsappStatusTextMaxBytes),
         source: "sales_catalog",
         catalogItemId: item.id,
       };
@@ -3975,13 +3999,13 @@ function normalizeGrowthPlanAiItem(
   const productIds = readGrowthPlanProductIds(record.productIds ?? record.product_ids ?? record.productRefs ?? record.products, input.catalogItems);
   const day = clamp(readInteger(record.day ?? record.dia, fallback?.day ?? Math.floor(index / input.postsPerDay) + 1), 1, input.durationDays);
   const slot = clamp(readInteger(record.slot ?? record.post ?? record.ordem, fallback?.slot ?? (index % input.postsPerDay) + 1), 1, input.postsPerDay);
-  const text = (
+  const text = normalizeGrowthPlanText(type, (
     asString(record.text)
     ?? asString(record.message)
     ?? asString(record.copy)
     ?? fallback?.text
     ?? buildFallbackGrowthPostText(type, productIds, input.catalogItems)
-  ).slice(0, type === "status" ? 656 : 900);
+  ));
   const pollChoices = normalizePollChoices(record.pollChoices ?? record.poll_choices ?? record.options ?? fallback?.pollChoices);
   const selectedTargetIds = readStringArray(record.targetIds ?? record.target_ids);
   const targetIds = selectedTargetIds.length > 0
@@ -4028,7 +4052,7 @@ function buildFallbackGrowthPlanItems(input: {
       slot,
       type,
       title: buildFallbackGrowthPostTitle(type, input.catalogItems, itemProductIds, index),
-      text: buildFallbackGrowthPostText(type, itemProductIds, input.catalogItems),
+      text: normalizeGrowthPlanText(type, buildFallbackGrowthPostText(type, itemProductIds, input.catalogItems)),
       scheduledFor: buildGrowthPlanScheduledFor(input.startFrom, index, input.postsPerDay),
       targetIds: type === "status" ? [] : targetIds,
       productIds: itemProductIds,
@@ -4063,7 +4087,7 @@ function normalizeQueuedGrowthPlanItems(value: unknown, fallbackTargetIds: strin
         slot,
         type,
         title: (asString(record.title) ?? `Rotina IA WhatsApp - ${index + 1}`).slice(0, 90),
-        text: text.slice(0, type === "status" ? 656 : 900),
+        text: normalizeGrowthPlanText(type, text),
         scheduledFor: normalizeScheduledFor(scheduledFor),
         targetIds: targetIds.length > 0 ? targetIds : fallbackTargetIds,
         productIds: productIds.length > 0 ? productIds : fallbackProductIds.slice(0, 4),
