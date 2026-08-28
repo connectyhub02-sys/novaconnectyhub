@@ -680,6 +680,7 @@ type WhatsappConsoleVariant = {
   connectionEnabled: boolean;
   connectionDisabledReason?: string;
   voiceCloneEnabled: boolean;
+  hiddenTabs?: WhatsappConsoleTab[];
 };
 
 type VoiceCloneResponse = {
@@ -778,6 +779,7 @@ export const adminWhatsappConsoleVariant = {
   connectionEnabled: true,
   connectionDisabledReason: "Crie o agente do setor antes de conectar o WhatsApp interno.",
   voiceCloneEnabled: true,
+  hiddenTabs: ["multichannel"],
 } satisfies WhatsappConsoleVariant;
 
 export function WhatsAppConsole({
@@ -839,6 +841,10 @@ export function WhatsAppConsole({
   const [newsletterText, setNewsletterText] = useState("");
   const [channelScheduledFor, setChannelScheduledFor] = useState("");
   const [activeTab, setActiveTab] = useState<WhatsappConsoleTab>(initialTab);
+  const visibleWhatsappTabs = useMemo(
+    () => whatsappConsoleTabs.filter((tab) => !variant.hiddenTabs?.includes(tab.id)),
+    [variant.hiddenTabs],
+  );
   const [migrationCopying, setMigrationCopying] = useState<MigrationCredentialKind | null>(null);
   const cloneProfileImportBaselineRef = useRef<string | null>(null);
   const appliedCloneProfileImportRef = useRef<string | null>(null);
@@ -856,6 +862,14 @@ export function WhatsAppConsole({
     () => buildRuntimeAlertNotifications(state?.runtimeAlerts ?? []),
     [state?.runtimeAlerts],
   );
+
+  useEffect(() => {
+    if (visibleWhatsappTabs.some((tab) => tab.id === activeTab)) {
+      return;
+    }
+
+    setActiveTab(visibleWhatsappTabs[0]?.id ?? "connection");
+  }, [activeTab, visibleWhatsappTabs]);
 
   useEffect(() => {
     shellNotifications?.setNotificationGroup("whatsapp-runtime-alerts", runtimeAlertNotifications);
@@ -2145,7 +2159,7 @@ export function WhatsAppConsole({
           onSave={saveAgentSettings}
         />
 
-        <WhatsappConsoleTabs activeTab={activeTab} onChange={handleWhatsappTabChange} />
+        <WhatsappConsoleTabs activeTab={activeTab} onChange={handleWhatsappTabChange} tabs={visibleWhatsappTabs} />
 
         {activeTab === "connection" ? (
           <Panel
@@ -3269,9 +3283,11 @@ function WhatsappConsoleCommandBar({
 function WhatsappConsoleTabs({
   activeTab,
   onChange,
+  tabs,
 }: {
   activeTab: WhatsappConsoleTab;
   onChange: (tab: WhatsappConsoleTab) => void;
+  tabs: typeof whatsappConsoleTabs;
 }) {
   return (
     <div
@@ -3281,7 +3297,7 @@ function WhatsappConsoleTabs({
       style={{ background: "var(--ch-panel)", borderColor: "var(--ch-border-strong)" }}
     >
       <div className="flex min-w-max gap-1 overflow-x-auto pb-1 sm:grid sm:min-w-0 sm:grid-cols-3 sm:overflow-visible sm:pb-0 md:grid-cols-4 xl:grid-cols-7">
-        {whatsappConsoleTabs.map((tab) => {
+        {tabs.map((tab) => {
           const active = tab.id === activeTab;
           const comingSoon = tab.comingSoon && metaFeatureLaunchPaused;
           const Icon = tab.icon;

@@ -280,12 +280,16 @@ type Props = {
   products: ClientSalesCatalogItem[];
   selectedAutomationAgentId: string | null;
   selectedAutomationWhatsappLabel: string | null;
+  channelEndpoint?: string;
+  entityIdKey?: "companyId" | "sectorId";
 };
 
 export function ClientWhatsappAutomationStudio({
   agents,
+  channelEndpoint = "/api/dashboard/whatsapp/channels",
   companyId,
   companyName,
+  entityIdKey = "companyId",
   products,
   selectedAutomationAgentId,
   selectedAutomationWhatsappLabel,
@@ -440,8 +444,8 @@ export function ClientWhatsappAutomationStudio({
       setNotice(null);
 
       try {
-        const params = new URLSearchParams({ companyId, agentId: selectedAgentId });
-        const response = await fetch(`/api/dashboard/whatsapp/channels?${params.toString()}`, { cache: "no-store" });
+        const params = new URLSearchParams({ [entityIdKey]: companyId, agentId: selectedAgentId });
+        const response = await fetch(`${channelEndpoint}?${params.toString()}`, { cache: "no-store" });
         const data = await response.json().catch(() => null) as ChannelActionResponse | null;
 
         if (cancelled) return;
@@ -466,7 +470,7 @@ export function ClientWhatsappAutomationStudio({
     return () => {
       cancelled = true;
     };
-  }, [companyId, selectedAgentId]);
+  }, [channelEndpoint, companyId, entityIdKey, selectedAgentId]);
 
   async function runAction(action: string, payload: Record<string, unknown> = {}) {
     if (!companyId || !selectedAgentId) return null;
@@ -474,11 +478,11 @@ export function ClientWhatsappAutomationStudio({
     setNotice(null);
 
     try {
-      const response = await fetch("/api/dashboard/whatsapp/channels", {
+      const response = await fetch(channelEndpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          companyId,
+          [entityIdKey]: companyId,
           agentId: selectedAgentId,
           action,
           ...payload,
@@ -507,8 +511,8 @@ export function ClientWhatsappAutomationStudio({
     setNotice(null);
 
     try {
-      const params = new URLSearchParams({ companyId, agentId: selectedAgentId });
-      const response = await fetch(`/api/dashboard/whatsapp/channels?${params.toString()}`, { cache: "no-store" });
+      const params = new URLSearchParams({ [entityIdKey]: companyId, agentId: selectedAgentId });
+      const response = await fetch(`${channelEndpoint}?${params.toString()}`, { cache: "no-store" });
       const data = await response.json().catch(() => null) as ChannelActionResponse | null;
 
       if (!response.ok || !data?.operations) {

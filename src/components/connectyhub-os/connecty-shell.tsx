@@ -172,7 +172,6 @@ const adminSections: NavSection[] = [
       { label: "Dashboard",   href: "/admin",              icon: BarChart3, tone: "blue" },
       { label: "Agentes",     href: "/admin/agentes",      icon: Bot, tone: "violet" },
       { label: "WhatsApp Interno", href: "/admin/whatsapp/atendimento", icon: MessageCircle, tone: "emerald" },
-      { label: "Campanhas WhatsApp", href: "/admin/whatsapp/campanhas", icon: Megaphone, tone: "emerald" },
       { label: "Inteligencia",href: "/admin/inteligencia", icon: BrainCircuit, tone: "violet" },
       { label: "Criativos IA", href: "/admin/conteudo",     icon: Globe2, tone: "sky" },
       { label: "Setores",     href: "/admin/setores",      icon: GitBranch, tone: "teal" },

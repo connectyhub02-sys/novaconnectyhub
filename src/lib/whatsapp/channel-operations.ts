@@ -4,6 +4,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { assertOrganizationFeatureAccess } from "@/lib/billing/access-control";
 import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
 import { mapSalesCatalogItem } from "@/lib/client-os/sales-catalog";
+import { PLATFORM_PRODUCT_SELECT, mapPlatformProductRow, type PlatformProductRow } from "@/lib/platform-products";
+import { mapPlatformProductToClientSalesCatalogItem } from "@/lib/platform-products-sales-catalog";
 import { buildSalesCatalogProductUrl } from "@/lib/sales-catalog/public-urls";
 import type { ClientSalesCatalogItem, SalesCatalogMedia, SalesCatalogMediaKind } from "@/lib/sales-catalog/shared";
 import { loadGeminiCredentials, type GeminiCredentials } from "@/lib/gemini/credentials";
@@ -2766,7 +2768,13 @@ async function listSalesCatalogCampaignItems(
   ids: string[],
 ): Promise<ClientSalesCatalogItem[]> {
   const uniqueIds = Array.from(new Set(ids.map((id) => id.trim()).filter(Boolean))).slice(0, 6);
-  if (uniqueIds.length === 0 || context.scope !== "organization" || !context.organizationId) return [];
+  if (uniqueIds.length === 0) return [];
+
+  if (context.scope === "platform") {
+    return listPlatformProductCampaignItems(client, context, uniqueIds);
+  }
+
+  if (!context.organizationId) return [];
 
   const { data, error } = await client
     .from("intelligence_memory")
@@ -2783,6 +2791,32 @@ async function listSalesCatalogCampaignItems(
   return ((data ?? []) as SalesCatalogMemoryRow[])
     .map((row) => mapSalesCatalogItem(row as SalesCatalogItemMapperInput))
     .filter((item) => item.status === "active");
+}
+
+async function listPlatformProductCampaignItems(
+  client: SupabaseClient,
+  context: WhatsappOperationalContext,
+  ids: string[],
+): Promise<ClientSalesCatalogItem[]> {
+  const { data, error } = await client
+    .from("platform_products")
+    .select(PLATFORM_PRODUCT_SELECT)
+    .eq("status", "active")
+    .in("id", ids);
+
+  if (error) {
+    throw new Error(`Nao foi possivel carregar produtos ConnectyHub da campanha: ${error.message}`);
+  }
+
+  const items = ((data ?? []) as unknown as PlatformProductRow[])
+    .map(mapPlatformProductRow)
+    .map((product) => mapPlatformProductToClientSalesCatalogItem(product, context.sectorId ?? "connectyhub-platform"))
+    .filter((item) => item.status === "active");
+  const itemsById = new Map(items.map((item) => [item.id, item]));
+
+  return ids
+    .map((id) => itemsById.get(id))
+    .filter((item): item is ClientSalesCatalogItem => Boolean(item));
 }
 
 async function syncWhatsappChannelTargets(
