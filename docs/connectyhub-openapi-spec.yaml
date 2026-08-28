@@ -20847,6 +20847,21 @@ paths:
           description: ID publico da instancia ConnectyHub. Em metodos com body, tambem pode ser enviado no corpo.
           example: ch-api-atendimento-01
       operationId: providerPostBusinessCatalogHide
+x-connectyhub-webhook-events:
+  - messages
+  - messages_update
+  - connection
+  - chats
+  - contacts
+  - history
+  - presence
+  - groups
+  - labels
+  - chat_labels
+  - newsletter_messages
+  - call
+  - blocks
+  - sender
 x-connectyhub-uazapi-coverage:
   source:
     title: uazapiGO - WhatsApp API

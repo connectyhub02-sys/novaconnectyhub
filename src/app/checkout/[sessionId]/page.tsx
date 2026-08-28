@@ -173,7 +173,7 @@ export default async function CheckoutPage({
     return (
       <CheckoutShell>
         <section className="mx-auto flex min-h-[70vh] w-full max-w-2xl flex-col items-center justify-center px-6 text-center">
-          <span className="mb-4 rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-bold uppercase text-blue-700">
+          <span className="mb-4 rounded-full border border-black/10 bg-[#f0f0f0] px-3 py-1 text-xs font-bold uppercase text-black">
             ConnectyHub Checkout
           </span>
           <h1 className="text-3xl font-black text-slate-950">Checkout indisponivel</h1>
@@ -236,6 +236,7 @@ export default async function CheckoutPage({
     organizationName: branding.displayName,
     amountLabel: amount,
   });
+  const publicStoreUrl = `/loja/${encodeURIComponent(organization.slug ?? organization.id)}`;
   const publicTrackingContext = buildCheckoutPublicTrackingContext({
     organizationId: organization.id,
     order,
@@ -244,14 +245,35 @@ export default async function CheckoutPage({
 
   return (
     <CheckoutShell publicTrackingContext={publicTrackingContext} style={publicLayoutStyle}>
-      <main className="mx-auto grid w-full max-w-7xl gap-4 px-4 py-4 sm:px-6 lg:grid-cols-[minmax(0,1fr)_420px] lg:px-8 lg:py-8">
-        <section className="order-1 rounded-[8px] border border-blue-100 bg-white p-4 shadow-xl shadow-blue-950/10 sm:p-6">
+      <div className="bg-black px-4 py-2 text-center text-xs font-medium text-white sm:text-sm">
+        Checkout seguro da {branding.displayName}.{" "}
+        <a className="font-bold underline underline-offset-2" href={publicStoreUrl}>
+          Voltar para loja
+        </a>
+      </div>
+      <header className="sticky top-0 z-30 bg-white">
+        <div className="mx-auto flex w-full max-w-[1240px] items-center justify-between gap-4 px-4 py-5 sm:px-6 lg:py-6">
+          <a className="flex min-w-0 items-center gap-3" href={publicStoreUrl}>
+            <CheckoutStoreLogo branding={branding} />
+            <span className="truncate text-xl font-bold uppercase leading-none text-black lg:text-2xl">
+              {branding.displayName}
+            </span>
+          </a>
+          <div className="hidden items-center gap-6 text-sm text-black md:flex">
+            <a className="font-medium hover:text-black/70" href={publicStoreUrl}>Loja</a>
+            <span className="font-bold">Checkout</span>
+          </div>
+        </div>
+      </header>
+
+      <main className="mx-auto grid w-full max-w-[1240px] gap-5 px-4 py-6 sm:px-6 lg:grid-cols-[minmax(0,1fr)_420px] lg:py-9">
+        <section className="order-1 rounded-[20px] border border-black/10 bg-white p-4 shadow-xl shadow-black/5 sm:p-6">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="flex min-w-0 items-center gap-3">
               <CheckoutStoreLogo branding={branding} />
               <div className="min-w-0">
                 <span className="text-xs font-bold uppercase" style={{ color: "var(--store-accent)" }}>Pedido WhatsApp</span>
-                <h1 className="mt-1 truncate text-2xl font-black text-[color:var(--store-text)] sm:text-3xl">{branding.displayName}</h1>
+                <h1 className="mt-1 truncate text-2xl font-bold text-[color:var(--store-text)] sm:text-3xl">{branding.displayName}</h1>
                 <p className="mt-1 line-clamp-1 text-sm font-semibold text-slate-500">{storefront.headerText}</p>
               </div>
             </div>
@@ -261,7 +283,7 @@ export default async function CheckoutPage({
                 ? "border-emerald-200 bg-emerald-50 text-[#128C4A]"
                 : failed
                   ? "border-rose-200 bg-rose-50 text-rose-700"
-                  : "border-blue-100 bg-blue-50 text-blue-700",
+                  : "border-black/10 bg-[#f0f0f0] text-black",
             )}>
               {formatSalesCatalogPaymentSessionStatus(status)}
             </span>
@@ -274,7 +296,7 @@ export default async function CheckoutPage({
           />
 
           <div
-            className="mt-5 rounded-[8px] border p-4"
+            className="mt-5 rounded-[20px] border p-4"
             style={{
               backgroundColor: "var(--store-primary)",
               borderColor: "var(--store-primary-border)",
@@ -297,7 +319,7 @@ export default async function CheckoutPage({
           </div>
         </section>
 
-        <aside className="order-2 rounded-[8px] border border-blue-100 bg-white p-4 shadow-2xl shadow-blue-950/10 sm:p-6 lg:sticky lg:top-6 lg:order-none lg:row-span-3 lg:self-start">
+        <aside className="order-2 rounded-[20px] border border-black/10 bg-white p-4 shadow-2xl shadow-black/10 sm:p-6 lg:sticky lg:top-28 lg:order-none lg:row-span-3 lg:self-start">
           <div className="flex items-start justify-between gap-4">
             <div>
               <span className="text-xs font-bold uppercase text-[color:var(--store-accent)]">Mercado Pago</span>
@@ -309,7 +331,7 @@ export default async function CheckoutPage({
             </span>
           </div>
 
-          <div className="mt-5 rounded-[8px] border border-blue-100 bg-blue-50/75 p-4">
+          <div className="mt-5 rounded-[20px] border border-black/10 bg-[#f0f0f0] p-4">
             <p className="text-sm font-bold text-slate-950">{commercialContext.flowLabel}</p>
             <p className="mt-2 text-xs leading-5 text-slate-600">{commercialContext.checkoutNote}</p>
           </div>
@@ -373,13 +395,13 @@ export default async function CheckoutPage({
           />
         </aside>
 
-        <section className="order-3 rounded-[8px] border border-blue-100 bg-white p-4 shadow-xl shadow-blue-950/10 sm:p-6">
+        <section className="order-3 rounded-[20px] border border-black/10 bg-white p-4 shadow-xl shadow-black/5 sm:p-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="text-xs font-bold uppercase text-[color:var(--store-accent)]">Resumo</p>
               <h2 className="mt-1 text-xl font-black text-[color:var(--store-text)]">Seu pedido</h2>
             </div>
-            <span className="rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">
+            <span className="rounded-full border border-black/10 bg-[#f0f0f0] px-3 py-1 text-xs font-bold text-black">
               #{order.id.slice(0, 8).toUpperCase()}
             </span>
           </div>
@@ -391,7 +413,7 @@ export default async function CheckoutPage({
             <CheckoutMetric label="Status" value={formatSalesCatalogPaymentSessionStatus(status)} />
           </div>
 
-          <div className="mt-5 divide-y divide-blue-100 overflow-hidden rounded-[8px] border border-blue-100 bg-white">
+          <div className="mt-5 divide-y divide-black/10 overflow-hidden rounded-[20px] border border-black/10 bg-white">
             {items.length > 0 ? items.map((item) => (
               <CheckoutItemCard key={item.id} item={item} />
             )) : (
@@ -400,7 +422,7 @@ export default async function CheckoutPage({
           </div>
         </section>
 
-        <section className="order-4 rounded-[8px] border border-blue-100 bg-white p-4 shadow-xl shadow-blue-950/10 sm:p-6">
+        <section className="order-4 rounded-[20px] border border-black/10 bg-white p-4 shadow-xl shadow-black/5 sm:p-6">
           <p className="text-xs font-bold uppercase text-[color:var(--store-accent)]">Dados do pedido</p>
           <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
             <CheckoutDetail label="Cliente" value={order.customer_name ?? order.customer_phone ?? "Lead WhatsApp"} />
@@ -426,7 +448,7 @@ function CheckoutShell({
   style?: CSSProperties;
 }) {
   return (
-    <div className="min-h-screen bg-[#f7f8f5] text-[color:var(--store-text,#0f172a)]" style={style}>
+    <div className="min-h-screen bg-white text-[color:var(--store-text,#0f172a)]" style={style}>
       {publicTrackingContext ? (
         <script
           id="connecty-public-tracking-context"
@@ -441,7 +463,6 @@ function CheckoutShell({
         strategy="afterInteractive"
         {...mercadoPagoSecurityScriptAttributes}
       />
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-80 bg-gradient-to-b from-emerald-100/70 via-orange-50/50 to-transparent" />
       <div className="relative">{children}</div>
     </div>
   );
@@ -473,7 +494,7 @@ function safeJson(value: unknown) {
 
 function CheckoutMetric({ label, value }: { label: string; value: string | null }) {
   return (
-    <div className="rounded-[8px] border border-blue-100 bg-blue-50/70 p-3">
+    <div className="rounded-[16px] border border-black/10 bg-[#f0f0f0] p-3">
       <dt className="text-xs font-bold uppercase text-[color:var(--store-accent)]">{label}</dt>
       <dd className="mt-2 truncate text-base font-black text-[color:var(--store-card-text)]">{value ?? "A combinar"}</dd>
     </div>
@@ -482,7 +503,7 @@ function CheckoutMetric({ label, value }: { label: string; value: string | null 
 
 function CheckoutDetail({ label, value }: { label: string; value: string | null }) {
   return (
-    <div className="rounded-[8px] border border-blue-100 bg-slate-50 px-3 py-2">
+    <div className="rounded-[16px] border border-black/10 bg-[#f0f0f0] px-3 py-2">
       <dt className="text-xs font-bold uppercase text-[color:var(--store-card-text-muted)]">{label}</dt>
       <dd className="mt-1 font-bold text-[color:var(--store-card-text)]">{value ?? "A combinar"}</dd>
     </div>
@@ -491,7 +512,7 @@ function CheckoutDetail({ label, value }: { label: string; value: string | null 
 
 function CheckoutStoreLogo({ branding }: { branding: OrganizationBranding }) {
   return (
-    <div className="relative grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-[8px] border border-blue-100 bg-white text-slate-950 shadow-sm">
+    <div className="relative grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-[8px] border border-black/10 bg-white text-slate-950 shadow-sm">
       {branding.logoUrl ? (
         <Image
           alt={branding.logoAlt}
@@ -515,7 +536,7 @@ function CheckoutItemCard({ item }: { item: CheckoutOrderItemRow }) {
 
   return (
     <div className="flex gap-3 px-4 py-4">
-      <div className="relative grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-[8px] border border-blue-100 bg-slate-50">
+      <div className="relative grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-[13px] border border-black/10 bg-[#f0f0f0]">
         {item.catalogImageUrl ? (
           <Image
             alt={item.title}
@@ -526,7 +547,7 @@ function CheckoutItemCard({ item }: { item: CheckoutOrderItemRow }) {
             className="object-cover"
           />
         ) : (
-          <span className="text-[10px] font-black uppercase text-blue-600">Item</span>
+          <span className="text-[10px] font-black uppercase text-black/50">Item</span>
         )}
       </div>
       <div className="min-w-0 flex-1">
@@ -553,8 +574,8 @@ function CheckoutItemCard({ item }: { item: CheckoutOrderItemRow }) {
             <p>{description}</p>
             {hasLongDescription ? (
               <details className="mt-1">
-                <summary className="cursor-pointer font-bold text-blue-700">Ver detalhes</summary>
-                <p className="mt-2 rounded-[8px] border border-blue-100 bg-blue-50 p-3 text-slate-700">
+                <summary className="cursor-pointer font-bold text-black">Ver detalhes</summary>
+                <p className="mt-2 rounded-[16px] border border-black/10 bg-[#f0f0f0] p-3 text-slate-700">
                   {item.catalogDescription}
                 </p>
               </details>
@@ -582,7 +603,7 @@ function ItemOriginBadge({ item }: { item: CheckoutOrderItemRow }) {
   if (!label) return null;
 
   return (
-    <span className="rounded-full border border-blue-100 bg-blue-50 px-2 py-0.5 text-[10px] font-bold uppercase text-blue-700">
+    <span className="rounded-full border border-black/10 bg-[#f0f0f0] px-2 py-0.5 text-[10px] font-bold uppercase text-black">
       {label}
     </span>
   );
@@ -590,7 +611,7 @@ function ItemOriginBadge({ item }: { item: CheckoutOrderItemRow }) {
 
 function CheckoutTrustItem({ icon, label }: { icon: ReactNode; label: string }) {
   return (
-    <div className="flex min-h-11 items-center gap-2 rounded-[8px] border border-blue-100 bg-white px-3 text-xs font-bold text-slate-700">
+    <div className="flex min-h-11 items-center gap-2 rounded-full border border-black/10 bg-white px-3 text-xs font-bold text-slate-700">
       <span className="text-[#128C4A]">{icon}</span>
       <span>{label}</span>
     </div>
@@ -613,11 +634,11 @@ function CheckoutState({
         ? "border-emerald-200 bg-emerald-50"
         : tone === "error"
           ? "border-rose-200 bg-rose-50"
-          : "border-blue-100 bg-blue-50",
+          : "border-black/10 bg-[#f0f0f0]",
     )}>
       <p className={cn(
         "font-bold",
-        tone === "success" ? "text-[#128C4A]" : tone === "error" ? "text-rose-700" : "text-blue-700",
+        tone === "success" ? "text-[#128C4A]" : tone === "error" ? "text-rose-700" : "text-black",
       )}>{title}</p>
       <p className="mt-2 text-sm leading-6 text-slate-700">{body}</p>
     </div>
@@ -1057,28 +1078,61 @@ function PublicStoreFooter({
   footerText: string;
 }) {
   return (
-    <footer className="border-t border-slate-200 bg-white">
-      <div className="mx-auto grid w-full max-w-7xl gap-5 px-4 py-7 sm:px-6 md:grid-cols-[1.4fr_1fr_1fr] lg:px-8">
+    <footer className="mt-12 bg-[#f0f0f0]">
+      <div className="mx-auto grid w-full max-w-[1240px] gap-8 px-4 py-10 sm:px-6 md:grid-cols-[1.4fr_1fr_1fr]">
         <div>
-          <p className="text-base font-black text-[color:var(--store-text,#0f172a)]">{branding.displayName}</p>
-          <p className="mt-2 max-w-xl text-sm leading-6 text-[color:var(--store-text-muted,#64748b)]">{footerText}</p>
+          <div className="flex items-center gap-3">
+            <CheckoutStoreLogo branding={branding} />
+            <p className="text-[22px] font-bold uppercase leading-none text-black">{branding.displayName}</p>
+          </div>
+          <p className="mt-4 max-w-xl text-sm leading-6 text-black/60">{footerText}</p>
         </div>
         <div>
-          <p className="text-sm font-black text-[color:var(--store-text,#0f172a)]">Atendimento</p>
-          <p className="mt-2 text-sm font-semibold leading-6" style={{ color: "var(--store-accent)" }}>{footerContactText}</p>
+          <p className="text-sm font-bold uppercase tracking-[3px] text-black">Atendimento</p>
+          <p className="mt-4 text-sm leading-6 text-black/60">{footerContactText}</p>
         </div>
         <div>
-          <p className="text-sm font-black text-[color:var(--store-text,#0f172a)]">Checkout seguro</p>
-          <p className="mt-2 text-sm leading-6 text-[color:var(--store-text-muted,#64748b)]">Pagamento protegido e pedido acompanhado no WhatsApp.</p>
+          <p className="text-sm font-bold uppercase tracking-[3px] text-black">Checkout seguro</p>
+          <p className="mt-4 text-sm leading-6 text-black/60">Checkout seguro pela ConnectyHub, pagamento protegido e pedido acompanhado no WhatsApp.</p>
+          <div className="mt-5 flex flex-wrap gap-2">
+            {checkoutPaymentBadges.map((item) => (
+              <CheckoutPaymentBadge key={item.label} label={item.label} tone={item.tone} />
+            ))}
+          </div>
         </div>
       </div>
-      <p className="border-t border-slate-100 px-4 py-4 text-center text-xs font-semibold text-[color:var(--store-text-muted,#64748b)]">
-        Desenvolvido por{" "}
-        <a className="font-black hover:underline" href={connectHubPublicUrl} rel="noreferrer" target="_blank">
+      <p className="mx-auto w-full max-w-[1240px] border-t border-black/10 px-4 py-5 text-xs text-black/60">
+        Checkout seguro pela{" "}
+        <a className="font-bold text-black hover:underline" href={connectHubPublicUrl} rel="noreferrer" target="_blank">
           ConnectyHub
         </a>
       </p>
     </footer>
+  );
+}
+
+type CheckoutPaymentBadgeTone = "visa" | "pix" | "card" | "mp";
+
+const checkoutPaymentBadges: Array<{ label: string; tone: CheckoutPaymentBadgeTone }> = [
+  { label: "Visa", tone: "visa" },
+  { label: "Pix", tone: "pix" },
+  { label: "Card", tone: "card" },
+  { label: "MP", tone: "mp" },
+];
+
+function CheckoutPaymentBadge({ label, tone }: { label: string; tone: CheckoutPaymentBadgeTone }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex min-h-8 items-center rounded-[6px] border px-3 text-xs font-bold shadow-sm",
+        tone === "visa" && "border-[#1a1f71]/20 bg-[#1a1f71] text-white",
+        tone === "pix" && "border-[#32bcad]/20 bg-[#32bcad] text-white",
+        tone === "card" && "border-[#eb001b]/20 bg-gradient-to-r from-[#eb001b] to-[#f79e1b] text-white",
+        tone === "mp" && "border-[#009ee3]/20 bg-[#009ee3] text-white",
+      )}
+    >
+      {label}
+    </span>
   );
 }
 
@@ -1227,7 +1281,7 @@ function resolveCheckoutCommercialContext(session: CheckoutSessionRow, order: Ch
     commissionEligible,
     flowLabel: "Produto da loja",
     receiverLabel: "Loja parceira",
-    checkoutNote: "O pagamento vai para a conta configurada pela loja. Voce continua acompanhando tudo pelo WhatsApp.",
+    checkoutNote: "O pagamento vai para a conta configurada pela loja. Você continua acompanhando tudo pelo WhatsApp.",
   };
 }
 

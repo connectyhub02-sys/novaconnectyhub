@@ -1635,7 +1635,7 @@ async function extractDraftsWithGemini(input: {
   const credentials = await loadGeminiCredentials(input.client) as GeminiCredentials;
   const modelId = credentials.model;
   const systemInstruction = [
-    "Voce extrai catalogos comerciais para a ConnectyHub.",
+    "Você extrai catálogos comerciais para a ConnectyHub.",
     "Responda somente JSON valido.",
     "Nao invente produtos, precos, links, frete, estoque ou condicoes que nao aparecam na fonte.",
     "Quando houver incerteza, use warnings e reduza confidence.",

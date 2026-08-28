@@ -700,7 +700,7 @@ async function requestGpsPermission(): Promise<PermissionRequestResult> {
 
 function getPushResultMessage(result: PermissionRequestResult) {
   if (result === "granted") {
-    return "Pronto. Voce vai receber alertas importantes quando leads responderem e quando houver novidades da ConnectyHub.";
+    return "Pronto. Você vai receber alertas importantes quando leads responderem e quando houver novidades da ConnectyHub.";
   }
 
   if (result === "denied") {
@@ -708,7 +708,7 @@ function getPushResultMessage(result: PermissionRequestResult) {
   }
 
   if (result === "dismissed") {
-    return "Voce pode confirmar o push depois. O navegador mostra essa escolha no topo da tela.";
+    return "Você pode confirmar o push depois. O navegador mostra essa escolha no topo da tela.";
   }
 
   if (result === "unsupported") {
@@ -731,7 +731,7 @@ function getGpsResultMessage(result: PermissionRequestResult) {
     return "Este navegador nao liberou localizacao nesta sessao.";
   }
 
-  return "Nao conseguimos ler sua localizacao agora. Voce pode tentar novamente depois.";
+  return "Não conseguimos ler sua localização agora. Você pode tentar novamente depois.";
 }
 
 function getNextPermissionStep(snapshot: Pick<PermissionPromptState, "push" | "gps">, completedSteps: PermissionStep[]): PermissionStep | null {
@@ -783,7 +783,7 @@ function getActivePromptContent(step: PermissionStep, permission: PermissionSign
           : "Receba um aviso neste navegador quando a loja enviar novidades, status do pedido ou uma resposta importante.")
         : (wasBlocked
           ? "Seu navegador bloqueou notificacoes. Clique para ver a orientacao e liberar quando quiser receber alertas de conversa."
-          : "Receba um aviso no navegador quando um lead responder no WhatsApp, mesmo que voce esteja em outra aba."),
+          : "Receba um aviso no navegador quando um lead responder no WhatsApp, mesmo que você esteja em outra aba."),
       cta: wasBlocked ? "Liberar notificacoes" : isPublic ? "Receber avisos" : "Ativar alertas",
       tip: wasBlocked
         ? "Dica: se o navegador nao abrir o aviso, clique no cadeado ao lado do endereco e libere notificacoes."
@@ -812,7 +812,7 @@ function getActivePromptContent(step: PermissionStep, permission: PermissionSign
     body: isPublic
       ? (wasBlocked
         ? "Seu navegador bloqueou a localizacao. Clique para ver a orientacao e liberar quando quiser uma experiencia mais personalizada."
-        : "Sua localizacao ajuda a loja a entender melhor regiao, entrega e ofertas relevantes para voce.")
+        : "Sua localização ajuda a loja a entender melhor região, entrega e ofertas relevantes para você.")
       : (wasBlocked
         ? "Seu navegador bloqueou a localizacao. Clique para ver a orientacao e liberar quando quiser uma experiencia mais personalizada."
         : "Use sua localizacao para receber sugestoes, convites e atendimento mais alinhados ao seu contexto."),

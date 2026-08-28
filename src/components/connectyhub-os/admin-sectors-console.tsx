@@ -120,7 +120,7 @@ export function AdminSectorsConsole() {
       setDescription("");
       setShowForm(false);
       setConfirmDeleteId(null);
-      setNotice({ tone: "success", message: "Setor cadastrado. Agora voce pode criar o agente WhatsApp para esse setor." });
+      setNotice({ tone: "success", message: "Setor cadastrado. Agora você pode criar o agente WhatsApp para esse setor." });
     } catch (error) {
       setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao cadastrar setor." });
     } finally {

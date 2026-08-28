@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 const leadsCrmSource = readFileSync("src/lib/client-os/leads-crm.ts", "utf8");
 const leadsCrmConsoleSource = readFileSync("src/components/connectyhub-os/leads-crm-console.tsx", "utf8");
+const attendanceMediaRouteSource = readFileSync("src/app/api/dashboard/attendance/media/[messageId]/route.ts", "utf8");
 
 function sourceBetween(source: string, start: string, end: string) {
   const startIndex = source.indexOf(start);
@@ -43,5 +44,25 @@ describe("Lead CRM quoted message preview", () => {
     expect(chatMessages).toContain("Mensagem citada");
     expect(chatMessages).toContain("line-clamp-2");
     expect(chatMessages).toContain("redactInternalProviderNames(message.quotedMessage.text)");
+  });
+
+  it("exposes audio media with playback and transcription in the shared chat UI", () => {
+    const messageType = sourceBetween(leadsCrmSource, "export type ClientLeadMessage", "export type ClientLeadActivity");
+    const mapper = sourceBetween(leadsCrmSource, "function mapMessage", "function resolveMessageAuthor");
+    const chatMessages = sourceBetween(leadsCrmConsoleSource, "function ChatMessages", "function MiniChat");
+    const audioMessage = sourceBetween(leadsCrmConsoleSource, "function ChatAudioMessage", "function MiniChat");
+
+    expect(messageType).toContain("mediaKind: WhatsappMessageMediaKind");
+    expect(messageType).toContain("mediaTranscription");
+    expect(mapper).toContain("resolveConversationMessageMedia(row");
+    expect(mapper).toContain('proxyBasePath: "/api/dashboard/attendance/media"');
+    expect(chatMessages).toContain('message.mediaKind === "audio"');
+    expect(chatMessages).toContain("<ChatAudioMessage");
+    expect(audioMessage).toContain("<audio");
+    expect(audioMessage).toContain("controls");
+    expect(audioMessage).toContain("Transcrição");
+    expect(attendanceMediaRouteSource).toContain("buildUazapiDownloadBodies");
+    expect(attendanceMediaRouteSource).toContain("/message/download");
+    expect(attendanceMediaRouteSource).toContain("Range");
   });
 });

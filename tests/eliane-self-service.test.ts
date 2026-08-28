@@ -7,8 +7,8 @@ const agentRuntimeSource = readFileSync("src/lib/whatsapp/agent-runtime.ts", "ut
 describe("Eliane self-service positioning", () => {
   it("guides leads to execute onboarding inside their own panel", () => {
     expect(elianeAgentSource).toContain("POSTURA DE AUTOATENDIMENTO GUIADO");
-    expect(elianeAgentSource).toContain("voce cria/configura/importa no painel");
-    expect(elianeAgentSource).toContain("Voce faz o cadastro e entra no painel");
+    expect(elianeAgentSource).toContain("você cria/configura/importa no painel");
+    expect(elianeAgentSource).toContain("Você faz o cadastro e entra no painel");
     expect(elianeAgentSource).toContain("botao/link de cadastro");
   });
 
@@ -22,7 +22,7 @@ describe("Eliane self-service positioning", () => {
   it("documents the correct wording for beginners in digital marketing", () => {
     expect(elianeAgentSource).toContain("Lead iniciante no marketing digital");
     expect(elianeAgentSource).toContain("cadastro > entrar no painel > criar empresa > Atendimento > Configurar agente > criar agente clone");
-    expect(elianeAgentSource).toContain("Exemplo correto: 'vc entra no painel");
+    expect(elianeAgentSource).toContain("Exemplo correto: 'você entra no painel");
     expect(elianeAgentSource).toContain("Exemplo proibido: 'a gente cria seu clone");
   });
 

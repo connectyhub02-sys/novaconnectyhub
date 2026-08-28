@@ -80,6 +80,24 @@ type AppendConnectionDiagnosticInput = {
 const diagnosticsMetadataKey = "connection_diagnostics";
 const maxStoredAttempts = 8;
 const maxStoredEvents = 24;
+const providerPairCodeKeys = [
+  "paircode",
+  "pairCode",
+  "pair_code",
+  "pairingcode",
+  "pairingCode",
+  "pairing_code",
+  "phonePairCode",
+  "phone_pair_code",
+  "phonePairingCode",
+  "phone_pairing_code",
+  "loginPairCode",
+  "login_pair_code",
+  "loginPairingCode",
+  "login_pairing_code",
+  "linkPairingCode",
+  "link_pairing_code",
+];
 
 export function readConnectionDiagnostics(metadata: unknown): WhatsappConnectionDiagnostics {
   const record = isRecord(metadata) ? readRecord(metadata[diagnosticsMetadataKey]) : null;
@@ -197,7 +215,7 @@ export function resolveConnectionDiagnosticEventType(input: {
 
 export function summarizeConnectionProviderPayload(value: unknown) {
   const qrCode = findString(value, ["qrcode", "qrCode", "qr", "base64"]);
-  const pairCode = findString(value, ["paircode", "pairCode", "pair_code"]);
+  const pairCode = extractWhatsappPairCode(value);
   const lastDisconnectReason = findString(value, [
     "lastDisconnectReason",
     "last_disconnect_reason",
@@ -216,6 +234,22 @@ export function summarizeConnectionProviderPayload(value: unknown) {
     lastDisconnectReason,
     message: findString(value, ["error", "message", "detail", "reason"]),
   };
+}
+
+export function extractWhatsappPairCode(value: unknown) {
+  const rawCode = findString(value, providerPairCodeKeys);
+
+  if (!rawCode) {
+    return null;
+  }
+
+  const compactCode = rawCode.replace(/[\s-]+/g, "");
+
+  if (/^[a-z0-9]{6,12}$/i.test(compactCode)) {
+    return compactCode.toUpperCase();
+  }
+
+  return rawCode;
 }
 
 export function isPasskeyDisconnectReason(value: string | null | undefined) {

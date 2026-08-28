@@ -411,7 +411,7 @@ export function PricingPlansGrid({
                 </div>
                 <h2 className="mt-2 text-xl font-black text-slate-950">Trocar plano escolhido?</h2>
                 <p className="mt-2 text-sm leading-6 text-slate-600">
-                  Voce ja tem o plano {switchPrompt.fromPlanName} aguardando pagamento. Se confirmar, vamos cancelar essa solicitacao e abrir o checkout do plano {switchPrompt.toPlan.name}.
+                  Você já tem o plano {switchPrompt.fromPlanName} aguardando pagamento. Se confirmar, vamos cancelar essa solicitação e abrir o checkout do plano {switchPrompt.toPlan.name}.
                 </p>
               </div>
             </div>

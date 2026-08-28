@@ -336,38 +336,38 @@ export function ClientAutomationsCenter({
         eyebrow="checkout / whatsapp"
         tone="violet"
         action={<NeonBadge tone="violet">{messageTemplateFields.length} templates</NeonBadge>}
+        collapsible
       >
         <div className="mb-3 flex flex-wrap gap-2">
           {variableChips.map((variable) => (
-            <span key={variable} className="rounded-lg border border-cyan-300/20 bg-cyan-300/10 px-2 py-1 font-mono text-[10px] text-cyan-200">
+            <span key={variable} className="rounded-lg border border-blue-200 bg-blue-50 px-2 py-1 font-mono text-[10px] font-semibold text-blue-700">
               {variable}
             </span>
           ))}
         </div>
         <div className="grid gap-3 lg:grid-cols-2">
           {messageTemplateFields.map((field) => (
-            <label key={field.key} className="block rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "rgba(15,23,42,0.38)" }}>
+            <label key={field.key} className="block rounded-xl border border-blue-100 bg-white p-3 shadow-sm shadow-slate-950/5">
               <span className="flex items-center justify-between gap-2">
                 <span>
                   <FieldLabel>{field.title}</FieldLabel>
-                  <span className="mt-0.5 block text-[11px] text-slate-500">{field.event}</span>
+                  <span className="mt-0.5 block text-[11px] font-medium text-slate-500">{field.event}</span>
                 </span>
-                <span className="font-mono text-[10px] text-slate-500">
+                <span className="font-mono text-[10px] font-semibold text-slate-500">
                   {draft.messageTemplates[field.key].length}/{field.maxLength}
                 </span>
               </span>
               <textarea
                 value={draft.messageTemplates[field.key]}
                 onChange={(event) => updateMessageTemplate(field.key, event.target.value, field.maxLength)}
-                className="mt-2 min-h-24 w-full resize-y rounded-lg border bg-transparent px-3 py-2 text-[12px] leading-5 outline-none"
-                style={{ borderColor: "var(--ch-border)", color: "var(--ch-text)" }}
+                className="mt-2 min-h-24 w-full resize-y rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[12px] leading-5 text-slate-950 outline-none transition placeholder:text-slate-400 focus:border-blue-300 focus:bg-white focus:ring-2 focus:ring-blue-100"
               />
             </label>
           ))}
         </div>
-        <div className="mt-3 rounded-xl border border-emerald-300/20 bg-emerald-300/10 p-3">
-          <p className="font-mono text-[10px] uppercase tracking-wide text-emerald-300">Preview pagamento aprovado</p>
-          <p className="mt-2 whitespace-pre-line text-sm leading-6 text-slate-200">{messagePreview}</p>
+        <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+          <p className="font-mono text-[10px] font-bold uppercase tracking-wide text-emerald-700">Preview pagamento aprovado</p>
+          <p className="mt-2 whitespace-pre-line text-sm leading-6 text-slate-800">{messagePreview}</p>
         </div>
       </Panel>
 

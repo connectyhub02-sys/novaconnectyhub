@@ -426,12 +426,6 @@ export function ClientWhatsappAutomationStudio({
     && parseLines(pollChoices).length >= 2;
 
   useEffect(() => {
-    if (selectedHistoryId && !operations?.history.some((item) => item.id === selectedHistoryId)) {
-      setSelectedHistoryId(null);
-    }
-  }, [operations?.history, selectedHistoryId]);
-
-  useEffect(() => {
     let cancelled = false;
 
     async function load() {

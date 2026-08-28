@@ -65,8 +65,8 @@ describe("agent multichannel config", () => {
       },
     });
 
-    expect(instruction).toContain("comentario publico");
-    expect(instruction).toContain("nao exponha dados pessoais");
-    expect(instruction).toContain("aprovacao humana");
+    expect(instruction).toContain("comentário público");
+    expect(instruction).toContain("não exponha dados pessoais");
+    expect(instruction).toContain("aprovação humana");
   });
 });

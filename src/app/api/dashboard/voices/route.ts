@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
   const files = formData.getAll("files").filter(isFormFile);
 
   if (!consentAccepted) {
-    return NextResponse.json({ error: "Confirme que voce tem direito e consentimento para clonar esta voz." }, { status: 422 });
+    return NextResponse.json({ error: "Confirme que você tem direito e consentimento para clonar esta voz." }, { status: 422 });
   }
 
   try {

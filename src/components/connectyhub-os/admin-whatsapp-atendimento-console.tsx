@@ -60,6 +60,7 @@ export function AdminWhatsappAtendimentoConsole({
           attendanceNotificationHref="/admin/whatsapp/atendimento"
           commerceEnabled={false}
           conversationPanelScope="platform_internal"
+          liveEndpoint="/api/admin/whatsapp/attendance/live?scope=platform_internal"
           mode="atendimento"
           workspace={leadWorkspace}
         />

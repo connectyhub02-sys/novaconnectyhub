@@ -231,7 +231,7 @@ function parseCredentialInput(body: unknown): ParsedCredentialInput {
   }
 
   if (field.kind === "endpoint" && !isValidUrl(value)) {
-    return { ok: false, error: "Este campo espera uma URL valida. Confira se voce selecionou a credencial correta." };
+    return { ok: false, error: "Este campo espera uma URL válida. Confira se você selecionou a credencial correta." };
   }
 
   if (scope === "organization" && !organizationId) {

@@ -14,6 +14,36 @@ function sourceBetween(start: string, end: string) {
 }
 
 describe("WhatsApp media followed by text or audio", () => {
+  it("sends a generated visual-media acknowledgement before media analysis", () => {
+    const processBody = sourceBetween("export async function processWhatsappAgentRun", "async function loadRunContext");
+    const acknowledgement = sourceBetween("async function maybeSendMediaProcessingAcknowledgement", "function selectMediaAcknowledgementTarget");
+    const generator = sourceBetween("async function generateMediaProcessingAcknowledgement", "function buildMediaAcknowledgementSystemInstruction");
+
+    expect(processBody.indexOf("await maybeSendMediaProcessingAcknowledgement")).toBeGreaterThanOrEqual(0);
+    expect(processBody.indexOf("await maybeSendMediaProcessingAcknowledgement")).toBeLessThan(processBody.indexOf("let userText = await resolveInboundUserText"));
+    expect(acknowledgement).toContain("selectMediaAcknowledgementTarget");
+    expect(acknowledgement).toContain("hasSentMediaProcessingAcknowledgement");
+    expect(acknowledgement).toContain("collectRecentMediaAcknowledgementTexts");
+    expect(acknowledgement).toContain("sendWhatsappText");
+    expect(acknowledgement).toContain("media_processing_acknowledgement");
+    expect(generator).toContain("temperature: 0.9");
+    expect(generator).toContain("maxOutputTokens: 70");
+  });
+
+  it("keeps media acknowledgements variable and avoids audio-only acknowledgements", () => {
+    const selector = sourceBetween("function selectMediaAcknowledgementTarget", "function uniqueConversationMessages");
+    const prompt = sourceBetween("function buildMediaAcknowledgementSystemInstruction", "function buildMediaAcknowledgementPrompt");
+    const antiRepeat = sourceBetween("function isTooSimilarToRecentAcknowledgement", "function tokenSimilarity");
+
+    expect(selector).toContain("context.behavior.mediaProcessingAcknowledgement");
+    expect(selector).toContain("detectInboundMediaKind");
+    expect(selector).not.toContain("isAudioMessage");
+    expect(selector).not.toContain("readStoredMediaAnalysisText");
+    expect(prompt).toContain("Nao use frases prontas repetitivas");
+    expect(prompt).toContain("Nao comente o conteudo da midia ainda");
+    expect(antiRepeat).toContain("tokenSimilarity");
+  });
+
   it("does not return plain text before checking recent visual media", () => {
     const body = sourceBetween("async function resolveInboundUserText", "async function buildTextWithRecentVisualMediaContext");
     const mediaDetectionIndex = body.indexOf("const mediaKind = detectInboundMediaKind(latestInbound);");
@@ -75,5 +105,20 @@ describe("WhatsApp media followed by text or audio", () => {
     expect(prompt).toContain("veiculo");
     expect(prompt).toContain("marca/modelo/versao provavel");
     expect(prompt).toContain("nivel de confianca");
+  });
+
+  it("uses media analysis as a qualification bridge instead of a generic receipt", () => {
+    const mediaText = sourceBetween("function buildMediaUserText", "function buildStoredMediaAnalysisText");
+    const systemInstruction = sourceBetween("function buildMediaDrivenQualificationInstruction", "function buildLeadMemoryLines");
+    const repair = sourceBetween("async function maybeRepairMediaGroundingResponse", "function buildSystemInstruction");
+
+    expect(mediaText).toContain("buildMediaDrivenNextStepInstruction(input.qualificationEnabled)");
+    expect(mediaText).toContain("comentario real da midia -> conexao com a intencao do lead -> uma pergunta de qualificacao natural");
+    expect(systemInstruction).toContain("MIDIA COMO CONTEXTO COMERCIAL");
+    expect(systemInstruction).toContain("cite pelo menos um detalhe concreto");
+    expect(systemInstruction).toContain("conecte a midia ao playbook de qualificacao");
+    expect(repair).toContain("shouldRepairMediaGrounding");
+    expect(repair).toContain("[CORRECAO INTERNA - RESPOSTA SOBRE MIDIA GENERICA]");
+    expect(repair).toContain("Obrigatorio: cite pelo menos um detalhe concreto da midia antes de avancar.");
   });
 });

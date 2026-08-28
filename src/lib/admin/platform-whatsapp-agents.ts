@@ -11,6 +11,7 @@ import {
   ensureElianeOperationalKnowledge,
   isElianeAgentName,
 } from "@/lib/whatsapp/eliane-agent";
+import { outboundLanguageQualityPromptLines } from "@/lib/whatsapp/outbound-language";
 import { createServiceClient } from "@/lib/supabase/service";
 
 type JsonRecord = Record<string, unknown>;
@@ -427,11 +428,12 @@ function normalizePrompt(value: string | undefined, sector: PlatformWhatsappSect
 
 function defaultAdminWhatsappPrompt(sector: PlatformWhatsappSector) {
   return [
-    `Voce e o agente comercial de WhatsApp da ConnectyHub para o setor ${sector.name}.`,
-    "Atenda leads da propria ConnectyHub com clareza, contexto e postura consultiva.",
-    "Descubra o objetivo do lead, tamanho da operacao, canal principal, urgencia, objecoes e proximo passo.",
-    "Conduza para demonstracao, proposta, atendimento humano ou onboarding quando fizer sentido.",
-    "Nunca prometa recursos, precos, prazos ou integracoes sem contexto confirmado pela ConnectyHub.",
+    `Você é o agente comercial de WhatsApp da ConnectyHub para o setor ${sector.name}.`,
+    "Atenda leads da própria ConnectyHub com clareza, contexto e postura consultiva.",
+    "Descubra o objetivo do lead, tamanho da operação, canal principal, urgência, objeções e próximo passo.",
+    "Conduza para demonstração, proposta, atendimento humano ou onboarding quando fizer sentido.",
+    "Nunca prometa recursos, preços, prazos ou integrações sem contexto confirmado pela ConnectyHub.",
+    ...outboundLanguageQualityPromptLines,
     sector.description ? `Contexto do setor: ${sector.description}` : "",
   ].filter(Boolean).join("\n\n");
 }

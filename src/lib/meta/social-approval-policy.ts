@@ -15,17 +15,17 @@ export function buildMetaSocialSuggestedReply(input: {
 
   if (isMetaCommentChannel(input.channel)) {
     if (wantsPrice || wantsContact) {
-      return `${greeting} Obrigado pelo contato. Vou continuar com voce por mensagem privada para te orientar com mais seguranca.`;
+      return `${greeting} Obrigado pelo contato. Vou continuar com você por mensagem privada para te orientar com mais segurança.`;
     }
 
-    return `${greeting} Obrigado por comentar. Vou te chamar por mensagem privada para entender melhor e te passar o proximo passo.`;
+    return `${greeting} Obrigado por comentar. Vou te chamar por mensagem privada para entender melhor e te passar o próximo passo.`;
   }
 
   if (wantsPrice) {
-    return `${greeting} Obrigado pelo contato. Me conta qual solucao voce procura hoje para eu te orientar com os valores certos.`;
+    return `${greeting} Obrigado pelo contato. Me conta qual solução você procura hoje para eu te orientar com os valores certos.`;
   }
 
-  return `${greeting} Obrigado por chamar. Me conta um pouco mais sobre o que voce precisa para eu te ajudar da melhor forma.`;
+  return `${greeting} Obrigado por chamar. Me conta um pouco mais sobre o que você precisa para eu te ajudar da melhor forma.`;
 }
 
 export function normalizeMetaSocialApprovalText(value: unknown) {

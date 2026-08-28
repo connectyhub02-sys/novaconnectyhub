@@ -508,7 +508,7 @@ async function appendGrowthRunMeteringError(client: SupabaseClient, runId: strin
 
 function buildGrowthPrompt(agent: GrowthAgentRow, mission: GrowthMission) {
   return [
-    "Voce esta executando uma rotina autonoma da ConnectyHub.",
+    "Você está executando uma rotina autônoma da ConnectyHub.",
     "",
     `Agente: ${agent.persona_name || agent.name} (${agent.agent_code})`,
     `Missao: ${mission.title}`,

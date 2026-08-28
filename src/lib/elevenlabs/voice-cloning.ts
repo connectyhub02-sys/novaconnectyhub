@@ -239,7 +239,7 @@ function isAllowedAudioFile(filename: string, contentType: string) {
   return contentType.startsWith("audio/") || allowedAudioExtensions.has(extension);
 }
 
-const previewText = "Oi, essa e a minha voz clonada. Estou pronta pra atender no WhatsApp!";
+const previewText = "Oi, essa é a minha voz clonada. Estou pronta para atender no WhatsApp!";
 
 const previewDelayMs = 5000;
 const previewMaxRetries = 2;

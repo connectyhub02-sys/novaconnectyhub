@@ -9,6 +9,10 @@ import { assertBillableAccess, BillingAccessError } from "@/lib/billing/trial";
 import { loadGeminiCredentials, type GeminiCredentials } from "@/lib/gemini/credentials";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 import { createServiceClient } from "@/lib/supabase/service";
+import {
+  normalizeOutboundLanguageText,
+  outboundLanguageQualityPromptLines,
+} from "@/lib/whatsapp/outbound-language";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -113,11 +117,12 @@ async function generateCompanyContext(input: {
 }) {
   const modelId = input.credentials.model;
   const systemInstruction = [
-    "Voce melhora complementos de empresa para prompt de agente comercial no WhatsApp.",
-    "Reescreva as notas em portugues do Brasil, de forma clara, operacional e sem inventar informacao.",
-    "Organize em topicos curtos: diferenciais, publico, regras comerciais, atendimento, limites e observacoes.",
-    "Nao crie promessa, preco, prazo, garantia ou politica que nao esteja nas notas.",
-    "Entregue somente o complemento final, sem explicacao externa.",
+    "Você melhora complementos de empresa para prompt de agente comercial no WhatsApp.",
+    "Reescreva as notas em português do Brasil, de forma clara, operacional e sem inventar informação.",
+    "Organize em tópicos curtos: diferenciais, público, regras comerciais, atendimento, limites e observações.",
+    "Não crie promessa, preço, prazo, garantia ou política que não esteja nas notas.",
+    ...outboundLanguageQualityPromptLines,
+    "Entregue somente o complemento final, sem explicação externa.",
   ].join("\n");
   const prompt = [
     `Empresa: ${input.companyName}`,
@@ -128,7 +133,7 @@ async function generateCompanyContext(input: {
     temperature: 0.32,
     maxOutputTokens: 900,
   });
-  const text = extractGeminiText(responseData).trim();
+  const text = normalizeOutboundLanguageText(extractGeminiText(responseData).trim());
 
   if (!text) {
     throw new Error("Gemini nao retornou o complemento.");
@@ -182,11 +187,12 @@ async function generatePrompt(input: {
 }) {
   const modelId = input.credentials.model;
   const systemInstruction = [
-    "Voce cria prompts de atendimento comercial por WhatsApp para agentes de IA.",
-    "Entregue somente o prompt final em portugues do Brasil.",
-    "O prompt deve ser claro, direto, operacional e ter no maximo 3500 caracteres.",
+    "Você cria prompts de atendimento comercial por WhatsApp para agentes de IA.",
+    "Entregue somente o prompt final em português do Brasil.",
+    "O prompt deve ser claro, direto, operacional e ter no máximo 3500 caracteres.",
     "Inclua as tags {{lead_name}}, {{empresa}} e {{agente}} quando fizer sentido.",
-    "Nao crie template fixo de mensagem; crie comportamento, tom, limites, perguntas e proximo passo.",
+    "Não crie template fixo de mensagem; crie comportamento, tom, limites, perguntas e próximo passo.",
+    ...outboundLanguageQualityPromptLines,
   ].join("\n");
   const prompt = [
     `Empresa: ${input.companyName}`,
@@ -226,7 +232,7 @@ async function generatePrompt(input: {
     throw new Error(readGeminiError(data) ?? `Gemini respondeu status ${response.status}.`);
   }
 
-  const text = extractGeminiText(data).trim();
+  const text = normalizeOutboundLanguageText(extractGeminiText(data).trim());
 
   if (!text) {
     throw new Error("Gemini nao retornou um prompt.");

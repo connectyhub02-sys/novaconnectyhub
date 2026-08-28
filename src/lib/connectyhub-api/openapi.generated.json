@@ -23605,6 +23605,22 @@
       }
     }
   },
+  "x-connectyhub-webhook-events": [
+    "messages",
+    "messages_update",
+    "connection",
+    "chats",
+    "contacts",
+    "history",
+    "presence",
+    "groups",
+    "labels",
+    "chat_labels",
+    "newsletter_messages",
+    "call",
+    "blocks",
+    "sender"
+  ],
   "x-connectyhub-uazapi-coverage": {
     "source": {
       "title": "uazapiGO - WhatsApp API",

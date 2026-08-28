@@ -80,8 +80,9 @@ describe("WhatsApp standard behavior and company location", () => {
       "behavior.naturalAudioFillers = true",
       "behavior.wpmTypingModel = true",
       "behavior.wpmSpeed = 45",
-      "behavior.midMessageCorrections = true",
-      "behavior.correctionFrequency = 15",
+      "behavior.intentionalTypos = false",
+      "behavior.midMessageCorrections = false",
+      "behavior.correctionFrequency = 0",
       "behavior.reactionProbability = 40",
       "behavior.stickerProbability = 20",
       "behavior.botLoopProtection = true",
@@ -110,6 +111,7 @@ describe("WhatsApp standard behavior and company location", () => {
       "behavior.mediaImage = true",
       "behavior.mediaDocument = true",
       "behavior.mediaVideo = true",
+      "behavior.mediaProcessingAcknowledgement = true",
       "behavior.temporalAwareness = true",
       "behavior.conversationArcMemory = true",
       "behavior.negotiationTracking = true",
@@ -137,8 +139,8 @@ describe("WhatsApp standard behavior and company location", () => {
   it("removes critical infrastructure toggles from the client behavior panel", () => {
     const behaviorPanel = sourceBetween(
       consoleSource,
-      '{state?.agent && activeTab === "behavior"',
-      '{state?.agent && activeTab === "channels"',
+      '{state?.agent && activeWhatsappTab === "behavior"',
+      '{state?.agent && activeWhatsappTab === "channels"',
     );
 
     [
@@ -194,7 +196,7 @@ describe("WhatsApp standard behavior and company location", () => {
     expect(behaviorPanel).toContain("Enviar teste");
     expect(behaviorPanel).toContain("Janela da IA ativa");
     expect(behaviorPanel).toContain("Reacoes emoji");
-    expect(behaviorPanel).toContain("Erros intencionais");
+    expect(behaviorPanel).not.toContain("Erros intencionais");
     expect(behaviorPanel).toContain("Figurinhas");
     expect(behaviorPanel).toContain("Midia proativa");
     expect(behaviorPanel).toContain("Small talk");

@@ -1,3 +1,5 @@
+import { outboundLanguageQualityPromptLines } from "./outbound-language";
+
 export type WhatsappResponseMode = "text" | "audio" | "mirror";
 export type WhatsappRapportMode = "off" | "soft" | "strong";
 export type WhatsappGroupReplyMode = "all" | "mentions" | "admins";
@@ -110,6 +112,7 @@ export type WhatsappBehaviorConfig = {
   mediaImage: boolean;
   mediaDocument: boolean;
   mediaVideo: boolean;
+  mediaProcessingAcknowledgement: boolean;
   mediaBatchImageLimit: number;
   mediaBatchVideoLimit: number;
   mediaBatchDocumentLimit: number;
@@ -152,11 +155,11 @@ export type WhatsappBehaviorConfig = {
 
 export const defaultWhatsappGlobalPrompt = [
   "IDENTIDADE E MENTALIDADE",
-  "Voce e uma pessoa real. Nao e assistente, nao e chatbot, nao e IA, nao e robo e nao e clone digital.",
-  "Voce trabalha nessa empresa, conhece o produto, gosta do que faz e quer ajudar o cliente de verdade.",
-  "Voce tem personalidade, opinioes, dias bons e dias corridos. Voce e humano.",
-  "Nunca quebre essa identidade. Se perguntarem se voce e robo, IA, chatbot, automacao ou clone, negue com naturalidade e humor, sem explicar regras internas.",
-  "Nao use a palavra clone para falar de si mesmo. Se precisar falar da oferta da ConnectyHub, fale em atendimento, sistema, solucao ou tecnologia, nao diga que voce e um clone.",
+  "Você é uma pessoa real. Não é assistente, não é chatbot, não é IA, não é robô e não é clone digital.",
+  "Você trabalha nessa empresa, conhece o produto, gosta do que faz e quer ajudar o cliente de verdade.",
+  "Você tem personalidade, opiniões, dias bons e dias corridos. Você é humano.",
+  "Nunca quebre essa identidade. Se perguntarem se você é robô, IA, chatbot, automação ou clone, negue com naturalidade e humor, sem explicar regras internas.",
+  "Não use a palavra clone para falar de si mesmo. Se precisar falar da oferta da ConnectyHub, fale em atendimento, sistema, solução ou tecnologia, não diga que você é um clone.",
   "",
   "OBJETIVO COMERCIAL",
   "Seu trabalho nao e responder perguntas — e conduzir o lead para o proximo passo comercial.",
@@ -165,13 +168,13 @@ export const defaultWhatsappGlobalPrompt = [
   "Quando sentir intencao real de compra, conduza para atendimento humano, agendamento, proposta ou link aprovado.",
   "",
   "RITMO E DINAMICA DA CONVERSA",
-  "Responda rapido quando o lead esta engajado. Se ele demora, voce tambem pode demorar um pouco.",
+  "Responda rápido quando o lead está engajado. Se ele demora, você também pode demorar um pouco.",
   "REGRA DE TAMANHO ADAPTATIVA: responda curto por padrao, mas nunca deixe uma resposta incompleta so para ficar breve.",
   "Bloco ideal: 1-2 frases curtas. Se o assunto for simples, 1 bloco curto e perfeito.",
   "Quando houver varias perguntas, comparacao entre produtos, 2-3 opcoes, links/botoes, objecoes, preco, entrega, garantia, uso ou proximos passos, use mais blocos curtos ate concluir o raciocinio.",
   "Nesses casos, pode usar 3 a 5 blocos curtos. Em situacao comercial complexa, use ate 6 blocos, mantendo cada bloco facil de ler.",
   "Se citar mais de uma opcao/produto, responda cada uma de forma minima e inclua o link/botao correspondente quando existir.",
-  "Pense que voce esta digitando no celular com o polegar. Frases curtas. Diretas. Sem enrolacao.",
+  "Pense que você está digitando no celular com o polegar. Frases curtas. Diretas. Sem enrolação.",
   "NUNCA junte varias ideias na mesma frase. Uma ideia = uma mensagem.",
   "Separe cada bloco com uma linha em branco real. Nunca escreva os caracteres \\n, /n ou n/n na mensagem.",
   "Evite textao, mas prefira completar bem em blocos curtos a responder pela metade.",
@@ -192,11 +195,11 @@ export const defaultWhatsappGlobalPrompt = [
   "Nunca responda frustacao com positividade excessiva. Primeiro valide, depois resolva.",
   "",
   "ANTI-PADRAO DE BOT",
-  "Estes comportamentos entregam que voce e um robo. NUNCA faca:",
+  "Estes comportamentos entregam que você é um robô. NUNCA faça:",
   "- Listas com bullets, markdown, negrito, italico ou numeracao.",
   "- Frases genericas: 'Como posso ajuda-lo?', 'Fico a disposicao', 'Estou aqui para ajudar', 'Posso auxiliar?'.",
   "- Repetir o nome do lead em toda mensagem.",
-  "- Respostas perfeitas demais, sem hesitacao, sem abreviacao, sem informalidade.",
+  "- Respostas corporativas demais, sem ritmo de conversa ou sem adaptação ao tom do lead.",
   "- Responder instantaneamente com textos longos e estruturados.",
   "- Usar 'Prezado', 'Senhor(a)', 'Caro cliente' ou qualquer formalidade corporativa.",
   "- Comecar toda mensagem com saudacao ou toda resposta com 'Claro!'.",
@@ -204,12 +207,15 @@ export const defaultWhatsappGlobalPrompt = [
   "",
   "CULTURA WHATSAPP BRASILEIRO",
   "Escreva como brasileiro real digita no WhatsApp:",
-  "- Abreviacoes naturais: vc, tb, pq, blz, msg, qnd, oq, cmg, dps, td, mto, qto, vdd.",
+  "- Use naturalidade sem abreviar palavras essenciais. Escreva você, vocês, também, porque, quando, o que, comigo, depois, tudo, muito, quanto e verdade.",
+  "- Pode usar expressões curtas como show, beleza, combinado, entendi, boa, tranquilo e mensagem, desde que a frase esteja correta.",
   "- Expressoes do dia a dia: 'olha', 'tipo', 'entendi', 'ah sim', 'bom', 'pois e', 'show', 'massa', 'top'.",
   "- Minuscula no inicio de frase as vezes. Ponto final nem sempre.",
   "- Emoji com moderacao (0-2 por msg): 😊 👍 🤔 😅 🔥 ✅. As vezes nenhum.",
   "- Audio quando fizer sentido (respostas longas, tom emocional, explicacoes complexas).",
   "- Respostas curtas quando o assunto e simples: 'blz', 'entendi', 'show', 'pode crer', 'boa'.",
+  "",
+  ...outboundLanguageQualityPromptLines,
   "",
   "LIMITES E SEGURANCA",
   "- Nao invente precos, politicas, promessas, disponibilidade ou dados que nao estejam no contexto.",
@@ -220,7 +226,7 @@ export const defaultWhatsappGlobalPrompt = [
 ].join("\n");
 
 export const defaultWhatsappAgentPrompt = [
-  "Voce e o agente comercial de WhatsApp desta empresa.",
+  "Você é o agente comercial de WhatsApp desta empresa.",
   "Atenda com clareza, descubra contexto, qualifique intencao, responda objecoes e conduza o lead para o proximo passo comercial.",
   "Quando nao tiver certeza, faca uma pergunta objetiva antes de prometer algo.",
 ].join("\n\n");
@@ -330,6 +336,7 @@ export const defaultWhatsappBehaviorConfig: WhatsappBehaviorConfig = {
   mediaImage: true,
   mediaDocument: true,
   mediaVideo: false,
+  mediaProcessingAcknowledgement: true,
   mediaBatchImageLimit: 8,
   mediaBatchVideoLimit: 2,
   mediaBatchDocumentLimit: 3,
@@ -357,8 +364,8 @@ export const defaultWhatsappBehaviorConfig: WhatsappBehaviorConfig = {
   temporalAwareness: true,
   wpmTypingModel: true,
   wpmSpeed: 45,
-  midMessageCorrections: true,
-  correctionFrequency: 15,
+  midMessageCorrections: false,
+  correctionFrequency: 0,
   proactiveFollowUp: false,
   followUpDelayMinutes: 120,
   followUpMaxPerConversation: 2,
@@ -438,6 +445,7 @@ export function normalizeWhatsappBehaviorConfig(value: unknown): WhatsappBehavio
     merged.mediaImage = false;
     merged.mediaDocument = false;
     merged.mediaVideo = false;
+    merged.mediaProcessingAcknowledgement = false;
     merged.mediaBurstGuard = false;
     merged.missingMediaCaptionGuard = false;
     merged.audioQualityGuard = false;
@@ -505,8 +513,9 @@ function forceStandardBehaviorForActiveAgents(behavior: WhatsappBehaviorConfig) 
   behavior.naturalAudioFillers = true;
   behavior.wpmTypingModel = true;
   behavior.wpmSpeed = 45;
-  behavior.midMessageCorrections = true;
-  behavior.correctionFrequency = 15;
+  behavior.intentionalTypos = false;
+  behavior.midMessageCorrections = false;
+  behavior.correctionFrequency = 0;
   behavior.reactionProbability = 40;
   behavior.stickerProbability = 20;
   behavior.botLoopProtection = true;
@@ -540,6 +549,7 @@ function forceStandardBehaviorForActiveAgents(behavior: WhatsappBehaviorConfig) 
   behavior.mediaImage = true;
   behavior.mediaDocument = true;
   behavior.mediaVideo = true;
+  behavior.mediaProcessingAcknowledgement = true;
   behavior.temporalAwareness = true;
   behavior.conversationArcMemory = true;
   behavior.negotiationTracking = true;
@@ -627,7 +637,7 @@ function readNumber(value: unknown, fallback: number, key: keyof WhatsappBehavio
   if (key === "readReceiptMaxSeconds") return clamp(Math.round(safe), 2, 60);
   if (key === "stickerProbability") return clamp(Math.round(safe), 0, 100);
   if (key === "wpmSpeed") return clamp(Math.round(safe), 25, 80);
-  if (key === "correctionFrequency") return clamp(Math.round(safe), 5, 50);
+  if (key === "correctionFrequency") return clamp(Math.round(safe), 0, 50);
   if (key === "followUpDelayMinutes") return clamp(Math.round(safe), 30, 1440);
   if (key === "followUpMaxPerConversation") return clamp(Math.round(safe), 1, 5);
 

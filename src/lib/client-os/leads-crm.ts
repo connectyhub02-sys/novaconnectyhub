@@ -8,6 +8,10 @@ import {
   type LeadAvatarSyncInstance,
 } from "@/lib/whatsapp/lead-avatar-sync";
 import { readWhatsappInstanceProfileImageUrl } from "@/lib/whatsapp/instance-profile-image";
+import {
+  resolveConversationMessageMedia,
+  type WhatsappMessageMediaKind,
+} from "@/lib/whatsapp/message-media";
 import { resolveLeadPersonalName } from "@/lib/whatsapp/lead-names";
 import { platformWhatsappOrganizationSlug, type ConversationPanelScope } from "@/lib/whatsapp/conversation-panel-scope";
 import { listClientCompanies, type ClientCompany } from "./companies";
@@ -141,6 +145,16 @@ export type ClientLeadMessage = {
   type: string;
   text: string;
   quotedMessage: ClientLeadQuotedMessage | null;
+  mediaKind: WhatsappMessageMediaKind;
+  mediaMimeType: string | null;
+  mediaFileName: string | null;
+  mediaTranscription: {
+    provider: string | null;
+    model: string | null;
+    mimeType: string | null;
+    byteLength: number | null;
+    transcribedAt: string | null;
+  } | null;
   mediaUrl: string | null;
   occurredAt: string | null;
 };
@@ -289,12 +303,19 @@ export type ClientLeadCrmWorkspace = {
   warnings?: string[];
 };
 
+type LeadCrmLoadOptions = {
+  includeEvents?: boolean;
+  leadLimit?: number;
+  messageLimit?: number;
+  syncAvatars?: boolean;
+};
+
 export async function getClientLeadCrmWorkspace(input: {
   userId: string;
   organizationId?: string | null;
   company?: ClientCompany | null;
   client?: SupabaseClient;
-}): Promise<ClientLeadCrmWorkspace> {
+} & LeadCrmLoadOptions): Promise<ClientLeadCrmWorkspace> {
   const client = input.client ?? createServiceClient();
   let companies: ClientCompany[];
 
@@ -317,6 +338,10 @@ export async function getClientLeadCrmWorkspace(input: {
   return getLeadCrmWorkspaceForCompanies({
     client,
     companies: resolvedCompanies.companies,
+    includeEvents: input.includeEvents,
+    leadLimit: input.leadLimit,
+    messageLimit: input.messageLimit,
+    syncAvatars: input.syncAvatars,
   });
 }
 
@@ -324,7 +349,7 @@ export async function getAdminLeadCrmWorkspace(input: {
   client?: SupabaseClient;
   limit?: number;
   scope?: AdminLeadCrmWorkspaceScope;
-} = {}): Promise<ClientLeadCrmWorkspace> {
+} & LeadCrmLoadOptions = {}): Promise<ClientLeadCrmWorkspace> {
   const client = input.client ?? createServiceClient();
   const scope = input.scope ?? "all";
   let organizationRows: OrganizationRow[] = [];
@@ -369,7 +394,10 @@ export async function getAdminLeadCrmWorkspace(input: {
   return getLeadCrmWorkspaceForCompanies({
     client,
     companies,
+    includeEvents: input.includeEvents,
     leadLimit: input.limit ?? 300,
+    messageLimit: input.messageLimit,
+    syncAvatars: input.syncAvatars,
   });
 }
 
@@ -441,7 +469,10 @@ function resolveClientWorkspaceCompanies(input: {
 async function getLeadCrmWorkspaceForCompanies(input: {
   client: SupabaseClient;
   companies: ClientCompany[];
+  includeEvents?: boolean;
   leadLimit?: number;
+  messageLimit?: number;
+  syncAvatars?: boolean;
 }): Promise<ClientLeadCrmWorkspace> {
   const companyIds = input.companies.map((company) => company.id);
 
@@ -457,7 +488,7 @@ async function getLeadCrmWorkspaceForCompanies(input: {
   let eventRows: IntelligenceEventRow[] = [];
 
   try {
-    const [agentsResult, whatsappInstancesResult, eventsResult] = await Promise.all([
+    const [agentsResult, whatsappInstancesResult] = await Promise.all([
       input.client
         .from("agent_registry")
         .select("id, organization_id, name, persona_name, avatar_url, metadata")
@@ -473,12 +504,6 @@ async function getLeadCrmWorkspaceForCompanies(input: {
         .neq("status", "archived")
         .order("updated_at", { ascending: false })
         .limit(240),
-      input.client
-        .from("intelligence_events")
-        .select("id, organization_id, source_type, source_id, event_type, title, summary, tags, payload, occurred_at")
-        .in("organization_id", companyIds)
-        .order("occurred_at", { ascending: false })
-        .limit(1200),
     ]);
 
     if (agentsResult.error) {
@@ -493,10 +518,19 @@ async function getLeadCrmWorkspaceForCompanies(input: {
       whatsappInstanceRows = (whatsappInstancesResult.data ?? []) as WhatsappInstanceQueueRow[];
     }
 
-    if (eventsResult.error) {
-      warnings.push(toLoadWarning("eventos dos leads", eventsResult.error));
-    } else {
-      eventRows = (eventsResult.data ?? []) as IntelligenceEventRow[];
+    if (input.includeEvents ?? true) {
+      const eventsResult = await input.client
+        .from("intelligence_events")
+        .select("id, organization_id, source_type, source_id, event_type, title, summary, tags, payload, occurred_at")
+        .in("organization_id", companyIds)
+        .order("occurred_at", { ascending: false })
+        .limit(1200);
+
+      if (eventsResult.error) {
+        warnings.push(toLoadWarning("eventos dos leads", eventsResult.error));
+      } else {
+        eventRows = (eventsResult.data ?? []) as IntelligenceEventRow[];
+      }
     }
   } catch (error) {
     warnings.push(toLoadWarning("dados complementares dos leads", error));
@@ -507,6 +541,8 @@ async function getLeadCrmWorkspaceForCompanies(input: {
 
   try {
     if (leadCrmWhatsappInstanceIds.length) {
+      const leadLimit = input.leadLimit ?? 160;
+      const conversationLimit = Math.max(leadLimit, leadLimit * 2);
       const conversationsResult = await input.client
         .from("conversations")
         .select("id, organization_id, lead_id, whatsapp_instance_id, channel, provider, provider_chat_id, status, last_message_preview, last_message_at, metadata, created_at, updated_at")
@@ -514,7 +550,7 @@ async function getLeadCrmWorkspaceForCompanies(input: {
         .in("whatsapp_instance_id", leadCrmWhatsappInstanceIds)
         .not("lead_id", "is", null)
         .order("updated_at", { ascending: false })
-        .limit(Math.max(240, (input.leadLimit ?? 160) * 2));
+        .limit(conversationLimit);
 
       if (conversationsResult.error) {
         warnings.push(toLoadWarning("conversas", conversationsResult.error));
@@ -562,6 +598,7 @@ async function getLeadCrmWorkspaceForCompanies(input: {
         client: input.client,
         companyIds,
         conversationIds,
+        messageLimit: input.messageLimit,
       });
 
       messageRows = messagesResult.rows;
@@ -577,14 +614,16 @@ async function getLeadCrmWorkspaceForCompanies(input: {
   const whatsappInstanceById = new Map(leadCrmWhatsappInstanceRows.map((instance) => [instance.id, instance]));
   let syncedAvatarMetadata = new Map<string, JsonRecord>();
 
-  try {
-    syncedAvatarMetadata = await syncMissingLeadAvatarsForCrm({
-      client: input.client,
-      leads: leadRows,
-      conversations: conversationRows,
-    });
-  } catch (error) {
-    warnings.push(toLoadWarning("fotos dos leads", error));
+  if (input.syncAvatars ?? true) {
+    try {
+      syncedAvatarMetadata = await syncMissingLeadAvatarsForCrm({
+        client: input.client,
+        leads: leadRows,
+        conversations: conversationRows,
+      });
+    } catch (error) {
+      warnings.push(toLoadWarning("fotos dos leads", error));
+    }
   }
 
   const hydratedLeadRows = leadRows.map((lead) => {
@@ -648,6 +687,7 @@ async function loadConversationMessageRows(input: {
   client: SupabaseClient;
   companyIds: string[];
   conversationIds: string[];
+  messageLimit?: number;
 }): Promise<{ rows: MessageRow[]; warnings: string[] }> {
   const rows: MessageRow[] = [];
   const failedConversationIds: string[] = [];
@@ -658,6 +698,7 @@ async function loadConversationMessageRows(input: {
         client: input.client,
         companyIds: input.companyIds,
         conversationId,
+        messageLimit: input.messageLimit,
       })),
     );
 
@@ -694,14 +735,16 @@ async function loadMessagesForConversation(input: {
   client: SupabaseClient;
   companyIds: string[];
   conversationId: string;
+  messageLimit?: number;
 }): Promise<{ conversationId: string; rows: MessageRow[]; error: unknown | null }> {
+  const messageLimit = input.messageLimit ?? 120;
   const queryMessages = (columns: string) => input.client
     .from("conversation_messages")
     .select(columns)
     .in("organization_id", input.companyIds)
     .eq("conversation_id", input.conversationId)
     .order("occurred_at", { ascending: false })
-    .limit(120);
+    .limit(messageLimit);
   const fullResult = await queryMessages(conversationMessageColumns);
 
   if (!fullResult.error) {
@@ -1054,7 +1097,9 @@ function readWhatsappInstanceAvatarUrl(instance: WhatsappInstanceQueueRow | null
 function mapMessage(row: MessageRow, conversationMessages: MessageRow[] = []): ClientLeadMessage {
   const payload = readRecord(row.payload) ?? {};
   const author = resolveMessageAuthor(row, payload);
-  const mediaUrl = readMessageMediaUrl(payload);
+  const media = resolveConversationMessageMedia(row, {
+    proxyBasePath: "/api/dashboard/attendance/media",
+  });
   const quotedMessage = buildQuotedMessagePreview(row, conversationMessages);
 
   return {
@@ -1069,26 +1114,31 @@ function mapMessage(row: MessageRow, conversationMessages: MessageRow[] = []): C
     providerMessageId: row.provider_message_id,
     providerChatId: row.provider_chat_id,
     type: row.message_type ?? "text",
-    text: readMessageText(row, payload, mediaUrl) ?? "Mensagem sem texto.",
+    text: readMessageText(row, payload, media.url ?? media.directUrl, media.kind) ?? "Mensagem sem texto.",
     quotedMessage,
-    mediaUrl,
+    mediaKind: media.kind,
+    mediaMimeType: media.mimeType,
+    mediaFileName: media.fileName,
+    mediaTranscription: media.transcription,
+    mediaUrl: media.url,
     occurredAt: row.occurred_at ?? row.created_at,
   };
 }
 
-function readMessageMediaUrl(payload: JsonRecord) {
-  return readString(payload.media_url)
-    ?? readString(payload.mediaUrl)
-    ?? readString(payload.file_url)
-    ?? readString(payload.url);
-}
-
-function readMessageText(row: MessageRow, payload = readRecord(row.payload) ?? {}, mediaUrl = readMessageMediaUrl(payload)) {
+function readMessageText(row: MessageRow, payload = readRecord(row.payload) ?? {}, mediaUrl: string | null = null, mediaKind: WhatsappMessageMediaKind = "unknown") {
   return readString(row.text_content)
     ?? readString(payload.text)
     ?? readString(payload.body)
     ?? readString(payload.caption)
-    ?? (mediaUrl ? `Midia registrada: ${row.message_type ?? "arquivo"}` : null);
+    ?? (mediaUrl ? `${formatMessageMediaKind(mediaKind, row.message_type)} recebido.` : null);
+}
+
+function formatMessageMediaKind(kind: WhatsappMessageMediaKind, fallbackType: string | null) {
+  if (kind === "audio") return "Áudio";
+  if (kind === "image") return "Imagem";
+  if (kind === "video") return "Vídeo";
+  if (kind === "document") return "Documento";
+  return fallbackType && fallbackType !== "text" ? fallbackType : "Mídia";
 }
 
 function buildQuotedMessagePreview(row: MessageRow, conversationMessages: MessageRow[]): ClientLeadQuotedMessage | null {

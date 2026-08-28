@@ -22,6 +22,7 @@ import {
 import { loadUazapiCredentials, type UazapiCredentials } from "@/lib/whatsapp/uazapi-credentials";
 import {
   appendConnectionDiagnosticEvent,
+  extractWhatsappPairCode,
   isPasskeyDisconnectReason,
   readConnectionDiagnostics,
   resolveConnectionDiagnosticEventType,
@@ -567,7 +568,7 @@ export async function connectGatewayInstance(auth: GatewayAuthContext, instanceI
 
   const status = resolveUazapiWhatsappStatus(result.data, "qr_pending");
   const qrCode = normalizeQrCode(findString(result.data, ["qrcode", "qrCode", "qr", "base64"]));
-  const pairCode = findString(result.data, ["paircode", "pairCode", "pair_code"]);
+  const pairCode = extractWhatsappPairCode(result.data);
   const pendingConnection = status !== "connected" && Boolean(qrCode || pairCode);
   const lastDisconnectReason = readProviderDisconnectReason(result.data);
   const requestedPhone = normalizePhone(typeof connectPayload.phone === "string" ? connectPayload.phone : null);
@@ -736,7 +737,7 @@ async function refreshGatewayInstanceStatusRow(input: {
   const status = resolveUazapiWhatsappStatus(result.data, providerStatusFallback(input.instance.status));
   const phoneNumber = normalizePhone(findString(result.data, ["owner", "phone", "number", "phone_number"]) ?? input.instance.phone_number);
   const qrCode = normalizeQrCode(findString(result.data, ["qrcode", "qrCode", "qr", "base64"]));
-  const pairCode = findString(result.data, ["paircode", "pairCode", "pair_code"]);
+  const pairCode = extractWhatsappPairCode(result.data);
   const pendingConnection = status !== "connected" && Boolean(qrCode || pairCode);
   const lastDisconnectReason = readProviderDisconnectReason(result.data);
   const connectionEventType = resolveConnectionDiagnosticEventType({
@@ -5415,7 +5416,15 @@ function sanitizeProviderData(value: unknown): unknown {
     Object.entries(value as JsonRecord).map(([key, item]) => {
       const normalized = key.toLowerCase();
 
-      if (normalized.includes("token") || normalized.includes("secret") || normalized.includes("qrcode")) {
+      if (
+        normalized.includes("token") ||
+        normalized.includes("secret") ||
+        normalized.includes("qrcode") ||
+        normalized.includes("paircode") ||
+        normalized.includes("pair_code") ||
+        normalized.includes("pairingcode") ||
+        normalized.includes("pairing_code")
+      ) {
         return [key, "[redacted]"];
       }
 

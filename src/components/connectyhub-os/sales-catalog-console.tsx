@@ -498,7 +498,7 @@ const checkoutStageFilterOptions: Array<{ value: CheckoutStageFilter; label: str
 
 const salesCatalogHelpText: Record<string, string> = {
   Empresa: "Escolha em qual empresa esta configuracao, produto ou pedido sera aplicado.",
-  "Tipo de venda": "Defina o modelo principal do catalogo. Ele serve como base, mas categorias e variacoes continuam livres para voce criar.",
+  "Tipo de venda": "Defina o modelo principal do catálogo. Ele serve como base, mas categorias e variações continuam livres para você criar.",
   Categorias: "Cadastre as familias de produtos que o agente usara para organizar e filtrar o catalogo.",
   Variacoes: "Crie atributos como tamanho, cor, material, publico ou qualquer escolha que o cliente precisa confirmar.",
   "Pagamentos no WhatsApp": "Ative somente os metodos que a empresa aceita e escreva como o agente deve orientar o pagamento.",
@@ -786,7 +786,7 @@ export function SalesCatalogConsole({
   const storefrontHeroTitle = customStorefrontHeroTitle || "Produtos favoritos,";
   const storefrontHeroHighlight = customStorefrontHeroTitle
     ? (settingsDraft.storefront.heroHighlight?.trim() || "")
-    : (settingsDraft.storefront.heroHighlight?.trim() || `da ${selectedCompany?.name ?? "sua loja"} ate voce.`);
+    : (settingsDraft.storefront.heroHighlight?.trim() || `da ${selectedCompany?.name ?? "sua loja"} até você.`);
   const storefrontHeroSubtitle = settingsDraft.storefront.heroSubtitle?.trim()
     || `Produtos selecionados pela ${selectedCompany?.name ?? "sua loja"}, compra segura e atendimento conectado ao WhatsApp.`;
   const legacyStorefrontHeaderText = `${storefrontHeroTitle} ${storefrontHeroHighlight}`.trim();
@@ -3982,7 +3982,7 @@ export function SalesCatalogConsole({
                   <Settings2 className="mt-0.5 h-4 w-4 shrink-0 text-amber-200" />
                   <div className="min-w-0">
                     <p className="font-semibold text-amber-100">Configuracao do catalogo pendente</p>
-                    <p className="mt-1 text-slate-300">Voce ja pode cadastrar produtos. Complete a configuracao depois para regras de pagamento, pedidos e WhatsApp.</p>
+                    <p className="mt-1 text-slate-300">Você já pode cadastrar produtos. Complete a configuração depois para regras de pagamento, pedidos e WhatsApp.</p>
                   </div>
                 </div>
                 <button
@@ -4327,7 +4327,7 @@ export function SalesCatalogConsole({
                   value={callToAction}
                   onChange={(event) => setCallToAction(event.target.value.slice(0, 180))}
                   className="h-10 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
-                  placeholder="Ex.: Posso reservar essa oferta para voce agora?"
+                  placeholder="Ex.: Posso reservar essa oferta para você agora?"
                   style={{ borderColor: "var(--ch-border)" }}
                 />
                 <input
@@ -5898,7 +5898,7 @@ function CatalogImportItemEditor({
             <div className="min-w-0">
               <p className="font-mono text-[10px] font-bold uppercase tracking-wide text-amber-800">possivel duplicidade</p>
               <p className="mt-1 text-[11px] text-slate-700">
-                Encontramos produto parecido no catalogo. Por seguranca, a acao inicial e ignorar ate voce decidir.
+                Encontramos produto parecido no catálogo. Por segurança, a ação inicial é ignorar até você decidir.
               </p>
             </div>
             <NeonBadge tone="amber">{Math.round((item.duplicateCandidates[0]?.score ?? 0) * 100)}%</NeonBadge>
@@ -7601,13 +7601,13 @@ function getImportDestinationNotice(targetMode: SalesCatalogImportTargetMode, de
   if (defaultDestination === "external_site") {
     return {
       title: "Revisao com preferencia para links externos",
-      description: "A IA vai deixar itens com URL prontos para sair pelo link externo, mas voce pode trocar cada item para checkout ConnectyHub antes de publicar.",
+      description: "A IA vai deixar itens com URL prontos para sair pelo link externo, mas você pode trocar cada item para checkout ConnectyHub antes de publicar.",
     };
   }
 
   return {
     title: "Revisar antes de publicar",
-    description: "O sistema mostra todos os itens antes de liberar. Em cada produto voce decide se vende pelo checkout ConnectyHub ou se mantem o link externo da loja antiga.",
+    description: "O sistema mostra todos os itens antes de liberar. Em cada produto você decide se vende pelo checkout ConnectyHub ou se mantém o link externo da loja antiga.",
   };
 }
 

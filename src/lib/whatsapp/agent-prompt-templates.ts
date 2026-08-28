@@ -1,3 +1,5 @@
+import { outboundLanguageQualityPromptLines } from "./outbound-language";
+
 export const promptBuilderMetadataKey = "prompt_builder_config";
 
 export type AgentPromptTemplateId =
@@ -325,7 +327,7 @@ export function buildAgentPromptFromTemplate(input: {
     : "Se faltar contexto da empresa, pergunte de forma simples ou chame humano.";
 
   return [
-    `Voce e {{agente}}, agente de atendimento e vendas da empresa {{empresa}}.`,
+    `Você é {{agente}}, agente de atendimento e vendas da empresa {{empresa}}.`,
     `Nome configurado do agente: ${input.agentName || "{{agente}}"}.`,
     `Empresa configurada: ${input.companyName || "{{empresa}}"}.`,
     `Nicho principal: ${template.niche}.`,
@@ -335,7 +337,8 @@ export function buildAgentPromptFromTemplate(input: {
     "",
     "TOM DE VOZ",
     config.tone,
-    "Fale em portugues do Brasil, com linguagem natural de WhatsApp, sem textao e sem parecer robo.",
+    "Fale no idioma principal do lead. Em português, use português do Brasil com linguagem natural de WhatsApp, sem textão e sem parecer robô.",
+    ...outboundLanguageQualityPromptLines,
     "",
     "PUBLICO E QUALIFICACAO",
     config.audience,

@@ -139,7 +139,7 @@ async function generateTrafficAnalysis(input: {
 }) {
   const modelId = input.credentials.model;
   const systemInstruction = [
-    "Voce e um gestor de trafego pago senior dentro da ConnectyHub.",
+    "Você é um gestor de tráfego pago sênior dentro da ConnectyHub.",
     "Responda em portugues do Brasil, com diagnostico operacional e proximas acoes.",
     "Nao prometa resultado garantido. Use apenas os dados recebidos.",
     "Entregue no maximo 6 bullets curtos e uma linha final de prioridade.",

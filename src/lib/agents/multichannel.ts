@@ -207,20 +207,20 @@ export function buildAgentChannelRuntimeInstruction(input: {
   if (definition.mode === "public") {
     return [
       `Canal atual: ${definition.label}.`,
-      "A conversa acontece em comentario publico: seja breve, nao exponha dados pessoais, nao invente contexto privado e convide para conversa privada quando precisar continuar.",
+      "A conversa acontece em comentário público: seja breve, não exponha dados pessoais, não invente contexto privado e convide para conversa privada quando precisar continuar.",
       channel.allowPrivateReplies
-        ? "Quando a politica da Meta permitir resposta privada, voce pode sugerir continuidade no direct/mensagem privada."
-        : "Nao inicie resposta privada neste canal sem autorizacao da configuracao.",
+        ? "Quando a política da Meta permitir resposta privada, você pode sugerir continuidade no direct/mensagem privada."
+        : "Não inicie resposta privada neste canal sem autorização da configuração.",
       channel.requiresHumanApproval
-        ? "Respostas publicas devem passar por aprovacao humana quando houver duvida, reclamacao, preco sensivel ou risco de exposicao."
-        : "Responda com cuidado e registre o historico no CRM.",
+        ? "Respostas públicas devem passar por aprovação humana quando houver dúvida, reclamação, preço sensível ou risco de exposição."
+        : "Responda com cuidado e registre o histórico no CRM.",
     ].join(" ");
   }
 
   return [
     `Canal atual: ${definition.label}.`,
-    "A conversa e privada: continue o atendimento comercial com naturalidade, respeitando a janela de mensagens e as politicas da Meta.",
-    "Use o mesmo prompt principal, memoria do lead e regras da empresa aplicados ao WhatsApp.",
+    "A conversa é privada: continue o atendimento comercial com naturalidade, respeitando a janela de mensagens e as políticas da Meta.",
+    "Use o mesmo prompt principal, memória do lead e regras da empresa aplicados ao WhatsApp.",
   ].join(" ");
 }
 

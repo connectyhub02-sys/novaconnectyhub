@@ -25,24 +25,24 @@ export function SalesCatalogMediaGallery({ title, media }: SalesCatalogMediaGall
 
   if (!activeMedia) {
     return (
-      <div className="grid min-h-[320px] w-full place-items-center rounded-lg border border-blue-100 bg-gradient-to-br from-slate-50 via-white to-blue-50 sm:min-h-[520px]">
-        <Package className="h-20 w-20 text-blue-200" aria-hidden="true" />
+      <div className="grid min-h-[320px] w-full place-items-center rounded-[20px] border border-black/10 bg-[#f0f0f0] sm:min-h-[520px]">
+        <Package className="h-20 w-20 text-black/25" aria-hidden="true" />
       </div>
     );
   }
 
   return (
-    <div className="grid w-full min-w-0 grid-cols-[54px_minmax(0,1fr)] gap-3 rounded-lg border border-blue-100 bg-white p-3 shadow-lg shadow-blue-950/5 sm:grid-cols-[72px_minmax(0,1fr)] sm:gap-4 sm:p-4">
+    <div className="grid w-full min-w-0 grid-cols-[54px_minmax(0,1fr)] gap-3 rounded-[20px] border border-black/10 bg-white p-3 shadow-lg shadow-black/5 sm:grid-cols-[72px_minmax(0,1fr)] sm:gap-4 sm:p-4">
       <div className="flex flex-col gap-2">
         {galleryMedia.slice(0, visibleThumbs).map((item, index) => (
           <button
             key={item.id}
             type="button"
             className={cn(
-              "relative aspect-square w-full overflow-hidden rounded-lg border bg-white transition",
+              "relative aspect-square w-full overflow-hidden rounded-[13px] border bg-white transition",
               index === normalizedActiveIndex
-                ? "border-blue-600 ring-2 ring-blue-600/20"
-                : "border-slate-200 hover:border-blue-300",
+                ? "border-black ring-2 ring-black/10"
+                : "border-black/10 hover:border-black/30",
             )}
             onClick={() => setActiveIndex(index)}
             aria-label={`Abrir midia ${index + 1}`}
@@ -70,7 +70,7 @@ export function SalesCatalogMediaGallery({ title, media }: SalesCatalogMediaGall
           <button
             type="button"
             onClick={() => setActiveIndex(visibleThumbs)}
-            className="grid aspect-square w-full place-items-center rounded-lg border border-slate-200 bg-slate-50 text-sm font-black text-slate-700 transition hover:border-blue-300"
+            className="grid aspect-square w-full place-items-center rounded-[13px] border border-black/10 bg-[#f0f0f0] text-sm font-black text-black/70 transition hover:border-black/30"
             aria-label={`Ver mais ${hiddenThumbs} midias`}
           >
             +{hiddenThumbs}
@@ -79,7 +79,7 @@ export function SalesCatalogMediaGallery({ title, media }: SalesCatalogMediaGall
       </div>
 
       <div
-        className="relative min-h-[280px] overflow-hidden rounded-lg bg-gradient-to-br from-slate-50 via-white to-blue-50 sm:min-h-[520px]"
+        className="relative min-h-[280px] overflow-hidden rounded-[20px] bg-[#f0f0f0] sm:min-h-[520px]"
         data-track-event="sales_catalog_product_gallery_viewed"
         data-track-label={activeMedia.fileName}
       >
@@ -106,14 +106,14 @@ export function SalesCatalogMediaGallery({ title, media }: SalesCatalogMediaGall
 
         <button
           type="button"
-          className="absolute right-3 top-3 grid h-10 w-10 place-items-center rounded-full border border-slate-200 bg-white/95 text-slate-950 shadow-lg shadow-blue-950/10"
+          className="absolute right-3 top-3 grid h-10 w-10 place-items-center rounded-full border border-black/10 bg-white/95 text-slate-950 shadow-lg shadow-black/10"
           aria-label="Ampliar midia"
         >
           <Maximize2 className="h-4 w-4" />
         </button>
 
         <span className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full border border-white/80 bg-white/95 px-3 py-1 text-[11px] font-bold text-slate-700 shadow-sm">
-          {activeMedia.kind === "video" ? <Video className="h-3.5 w-3.5 text-[#25D366]" /> : <ImageIcon className="h-3.5 w-3.5 text-blue-600" />}
+          {activeMedia.kind === "video" ? <Video className="h-3.5 w-3.5 text-[#25D366]" /> : <ImageIcon className="h-3.5 w-3.5 text-black" />}
           {normalizedActiveIndex + 1}/{galleryMedia.length}
         </span>
 
@@ -126,7 +126,7 @@ export function SalesCatalogMediaGallery({ title, media }: SalesCatalogMediaGall
                 onClick={() => setActiveIndex(index)}
                 className={cn(
                   "h-2.5 w-2.5 rounded-full border border-white transition",
-                  index === normalizedActiveIndex ? "bg-blue-600" : "bg-white/85",
+                  index === normalizedActiveIndex ? "bg-black" : "bg-white/85",
                 )}
                 aria-label={`Ir para midia ${index + 1}`}
               />

@@ -422,7 +422,7 @@ export function BillingCommercialConfig({ catalog }: { catalog: BillingCommercia
             <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-cyan-500" />
             <div>
               <p className="text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>
-                A manutencao conecta apenas o token. Aqui voce decide o produto vendido.
+                A manutenção conecta apenas o token. Aqui você decide o produto vendido.
               </p>
               <p className="mt-1 text-[12px] leading-5 text-slate-500">
                 Use estes controles para definir quais planos enxergam atendimento IA, voz de baixo custo,

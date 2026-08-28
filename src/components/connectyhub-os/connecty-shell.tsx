@@ -150,17 +150,24 @@ type AccentPalette = {
   accent2Rgb: string;
 };
 
+const neutralAccentPalette: AccentPalette = {
+  accent: "#111827",
+  accentRgb: "17,24,39",
+  accent2: "#52525b",
+  accent2Rgb: "82,82,91",
+};
+
 const accentPalettes: Record<AccentTone, AccentPalette> = {
-  red: { accent: "#1877f2", accentRgb: "24,119,242", accent2: "#0a58ca", accent2Rgb: "10,88,202" },
-  teal: { accent: "#128c7e", accentRgb: "18,140,126", accent2: "#25d366", accent2Rgb: "37,211,102" },
-  emerald: { accent: "#128c7e", accentRgb: "18,140,126", accent2: "#25d366", accent2Rgb: "37,211,102" },
-  sky: { accent: "#0284c7", accentRgb: "2,132,199", accent2: "#38bdf8", accent2Rgb: "56,189,248" },
-  blue: { accent: "#1877f2", accentRgb: "24,119,242", accent2: "#0a58ca", accent2Rgb: "10,88,202" },
-  violet: { accent: "#4f46e5", accentRgb: "79,70,229", accent2: "#06b6d4", accent2Rgb: "6,182,212" },
-  amber: { accent: "#d97706", accentRgb: "217,119,6", accent2: "#f59e0b", accent2Rgb: "245,158,11" },
-  rose: { accent: "#dc2626", accentRgb: "220,38,38", accent2: "#e11d48", accent2Rgb: "225,29,72" },
-  fuchsia: { accent: "#4f46e5", accentRgb: "79,70,229", accent2: "#06b6d4", accent2Rgb: "6,182,212" },
-  slate: { accent: "#475569", accentRgb: "71,85,105", accent2: "#64748b", accent2Rgb: "100,116,139" },
+  red: neutralAccentPalette,
+  teal: neutralAccentPalette,
+  emerald: neutralAccentPalette,
+  sky: neutralAccentPalette,
+  blue: neutralAccentPalette,
+  violet: neutralAccentPalette,
+  amber: neutralAccentPalette,
+  rose: neutralAccentPalette,
+  fuchsia: neutralAccentPalette,
+  slate: neutralAccentPalette,
 };
 
 // ─── Navigation ───────────────────────────────────────────────────────────────
@@ -306,7 +313,7 @@ function ConnectyShellRoot({
   const active    = activeHref ?? pathname ?? "/";
   const sections  = mode === "admin" ? adminSections : clientSections;
   const activeItem = resolveActiveItem(sections, active);
-  const activeTone: AccentTone = "blue";
+  const activeTone: AccentTone = activeItem?.tone ?? "blue";
   const activePalette = accentPalettes[activeTone];
   const accent    = activePalette.accent;
   const accentRgb = activePalette.accentRgb;
@@ -633,43 +640,43 @@ function ConnectyShellRoot({
   }
 
   const shellTheme = {
-    background: "radial-gradient(circle at 100% -10%, rgba(var(--ch-accent-rgb),0.14) 0%, transparent 26rem), radial-gradient(circle at 4% 16%, rgba(var(--ch-whatsapp-rgb),0.08) 0%, transparent 24rem), radial-gradient(circle at 72% 38%, rgba(var(--ch-ai-rgb),0.055) 0%, transparent 26rem), linear-gradient(180deg, #ffffff 0%, var(--ch-bg) 48%, #eef5ff 100%)",
+    background: "linear-gradient(180deg, #ffffff 0%, #f7f7f8 48%, #f3f4f6 100%)",
     colorScheme: "light",
-    "--ch-bg":         "#f6f9fe",
-    "--ch-surface":    "rgba(255,255,255,0.98)",
-    "--ch-surface-2":  "#f1f6fd",
-    "--ch-surface-3":  "#e8f1fc",
-    "--ch-border":     "rgba(15,80,158,0.12)",
-    "--ch-border-soft":"rgba(15,80,158,0.08)",
-    "--ch-border-strong":"rgba(15,80,158,0.18)",
-    "--ch-brand-blue": "#01004c",
-    "--ch-brand-blue-rgb": "1,0,76",
-    "--ch-brand-primary": "#1877f2",
-    "--ch-brand-primary-rgb": "24,119,242",
-    "--ch-brand-action": "#0a58ca",
-    "--ch-brand-action-rgb": "10,88,202",
-    "--ch-brand-soft": "#eaf3ff",
-    "--ch-whatsapp": "#25d366",
-    "--ch-whatsapp-rgb": "37,211,102",
-    "--ch-whatsapp-deep": "#128c7e",
-    "--ch-whatsapp-deep-rgb": "18,140,126",
-    "--ch-whatsapp-soft": "#e7f8ef",
-    "--ch-ai": "#4f46e5",
-    "--ch-ai-rgb": "79,70,229",
-    "--ch-ai-cyan": "#06b6d4",
-    "--ch-ai-cyan-rgb": "6,182,212",
-    "--ch-ai-soft": "#eef2ff",
+    "--ch-bg":         "#f7f7f8",
+    "--ch-surface":    "rgba(255,255,255,0.96)",
+    "--ch-surface-2":  "#fafafa",
+    "--ch-surface-3":  "#f4f4f5",
+    "--ch-border":     "rgba(24,24,27,0.10)",
+    "--ch-border-soft":"rgba(24,24,27,0.07)",
+    "--ch-border-strong":"rgba(24,24,27,0.14)",
+    "--ch-brand-blue": "#111827",
+    "--ch-brand-blue-rgb": "17,24,39",
+    "--ch-brand-primary": "#111827",
+    "--ch-brand-primary-rgb": "17,24,39",
+    "--ch-brand-action": "#27272a",
+    "--ch-brand-action-rgb": "39,39,42",
+    "--ch-brand-soft": "#f4f4f5",
+    "--ch-whatsapp": "#16a34a",
+    "--ch-whatsapp-rgb": "22,163,74",
+    "--ch-whatsapp-deep": "#166534",
+    "--ch-whatsapp-deep-rgb": "22,101,52",
+    "--ch-whatsapp-soft": "#f0fdf4",
+    "--ch-ai": "#27272a",
+    "--ch-ai-rgb": "39,39,42",
+    "--ch-ai-cyan": "#71717a",
+    "--ch-ai-cyan-rgb": "113,113,122",
+    "--ch-ai-soft": "#f4f4f5",
     "--ch-accent":     accent,
     "--ch-accent-rgb": accentRgb,
     "--ch-accent-2":   accent2,
     "--ch-accent-2-rgb": accent2Rgb,
-    "--ch-panel":      "linear-gradient(180deg, rgba(255,255,255,0.99), rgba(247,251,255,0.96)), rgba(255,255,255,0.98)",
-    "--ch-panel-2":    "linear-gradient(180deg, rgba(255,255,255,0.97), rgba(var(--ch-accent-rgb),0.030)), #fbfdff",
+    "--ch-panel":      "linear-gradient(180deg, rgba(255,255,255,0.98), rgba(250,250,250,0.94)), rgba(255,255,255,0.96)",
+    "--ch-panel-2":    "linear-gradient(180deg, rgba(255,255,255,0.96), rgba(244,244,245,0.88)), #ffffff",
     "--ch-text":       "#0f172a",
     "--ch-text-rgb":   "15,23,42",
     "--ch-muted":      "#475569",
     "--ch-subtle":     "#64748b",
-    "--ch-hover":      "rgba(var(--ch-accent-rgb),0.085)",
+    "--ch-hover":      "rgba(24,24,27,0.06)",
     "--ch-dropdown-bg":"rgba(255,255,255,0.98)",
     "--ch-success": "#059669",
     "--ch-success-rgb": "5,150,105",
@@ -677,18 +684,18 @@ function ConnectyShellRoot({
     "--ch-warning-rgb": "180,83,9",
     "--ch-danger": "#dc2626",
     "--ch-danger-rgb": "220,38,38",
-    "--ch-info": "#0284c7",
-    "--ch-info-rgb": "2,132,199",
-    "--ch-chart-1": "#1877f2",
-    "--ch-chart-2": "#25d366",
-    "--ch-chart-3": "#06b6d4",
-    "--ch-chart-4": "#4f46e5",
-    "--ch-chart-5": "#059669",
+    "--ch-info": "#52525b",
+    "--ch-info-rgb": "82,82,91",
+    "--ch-chart-1": "#111827",
+    "--ch-chart-2": "#52525b",
+    "--ch-chart-3": "#71717a",
+    "--ch-chart-4": "#a1a1aa",
+    "--ch-chart-5": "#d4d4d8",
     "--ch-chart-warning": "#d97706",
     "--ch-chart-danger": "#e11d48",
-    "--ch-chart-grid": "#d8e6f8",
-    "--ch-chart-axis": "#64748b",
-    "--background":    "#f6f9fe",
+    "--ch-chart-grid": "#e4e4e7",
+    "--ch-chart-axis": "#71717a",
+    "--background":    "#f7f7f8",
     "--foreground":    "#0f172a",
     "--card":          "#ffffff",
     "--card-foreground":"#0f172a",
@@ -696,14 +703,14 @@ function ConnectyShellRoot({
     "--popover-foreground":"#0f172a",
     "--primary":       accent,
     "--primary-foreground":"#ffffff",
-    "--secondary":     "#f1f6fd",
+    "--secondary":     "#fafafa",
     "--secondary-foreground":"#0f172a",
-    "--muted":         "#edf4fc",
+    "--muted":         "#f4f4f5",
     "--muted-foreground":"#475569",
-    "--accent":        "#eaf3ff",
+    "--accent":        "#f4f4f5",
     "--accent-foreground":"#0f172a",
-    "--border":        "rgba(15,80,158,0.12)",
-    "--input":         "rgba(15,80,158,0.16)",
+    "--border":        "rgba(15,23,42,0.10)",
+    "--input":         "rgba(15,23,42,0.14)",
     "--ring":          `rgba(${accentRgb},0.36)`,
     "--chart-1":       "var(--ch-chart-1)",
     "--chart-2":       "var(--ch-chart-2)",
@@ -713,7 +720,7 @@ function ConnectyShellRoot({
   } as CSSProperties;
   const accountDropdownStyle = {
     ...shellTheme,
-    background: "linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(244,249,253,0.98) 100%)",
+    background: "linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(250,250,250,0.98) 100%)",
     border: "1px solid var(--ch-border-strong)",
     boxShadow: "0 28px 90px rgba(15,23,42,0.16)",
     color: "var(--ch-text)",
@@ -728,25 +735,27 @@ function ConnectyShellRoot({
         className="connecty-shell flex min-h-svh"
         data-connecty-accent={activeTone}
         data-connecty-mode={mode}
+        data-connecty-shell-root="true"
         style={shellTheme}
       >
       {/* ── Sidebar ── */}
       <aside
-        className="sticky top-0 hidden h-svh w-[240px] shrink-0 flex-col lg:flex"
+        className="sticky top-0 hidden h-svh w-[264px] shrink-0 flex-col lg:flex"
+        data-connecty-shell-sidebar="true"
         style={{
-          background:  "linear-gradient(180deg, rgba(255,255,255,0.98), rgba(246,246,247,0.96))",
+          background:  "linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,250,252,0.96))",
           borderRight: "1px solid var(--ch-border-strong)",
-          boxShadow: "14px 0 42px rgba(17,17,17,0.045)",
-          backdropFilter: "blur(18px)",
+          boxShadow: "10px 0 34px rgba(15,23,42,0.045)",
+          backdropFilter: "blur(16px)",
         }}
       >
         {/* Brand */}
         <div
-          className="flex h-[60px] items-center gap-3 px-5"
+          className="flex h-16 items-center gap-3 px-4"
           style={{ borderBottom: "1px solid var(--ch-border-strong)" }}
         >
           <Link href="/" className="min-w-0 flex-1">
-            <ConnectyLogo className="h-[22px] w-[170px]" tone={logoTone} type="full" />
+            <ConnectyLogo className="h-[24px] w-[182px]" imageClassName="connecty-shell-logo-image" tone={logoTone} type="full" />
             <div className="font-mono text-[9px] uppercase tracking-widest" style={{ color: "var(--ch-accent)" }}>
               {mode === "admin" ? "Admin OS" : "Client OS"}
             </div>
@@ -758,7 +767,7 @@ function ConnectyShellRoot({
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-5">
+        <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-4">
           {sections.map((section) => (
             <div key={section.label}>
               <div
@@ -786,7 +795,7 @@ function ConnectyShellRoot({
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
-                className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition outline-none"
+                className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition outline-none"
                 style={{ background: "transparent" }}
                 onMouseEnter={e => (e.currentTarget.style.background = "var(--ch-hover)")}
                 onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
@@ -874,22 +883,23 @@ function ConnectyShellRoot({
       </aside>
 
       {/* ── Main ── */}
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-w-0 flex-1 flex-col" data-connecty-shell-main="true">
         {/* Topbar */}
         <header
-          className="sticky top-0 z-40 flex h-[60px] items-center gap-3 px-3 sm:px-4 lg:px-6"
+          className="sticky top-0 z-40 flex h-16 items-center gap-3 px-3 sm:px-4 lg:px-5"
+          data-connecty-shell-topbar="true"
           style={{
-            background:    "rgba(255,255,255,0.76)",
-            backdropFilter:"blur(18px)",
+            background:    "rgba(255,255,255,0.82)",
+            backdropFilter:"blur(16px)",
             borderBottom:  "1px solid var(--ch-border-strong)",
-            boxShadow: "0 12px 38px rgba(17,17,17,0.045)",
+            boxShadow: "0 10px 30px rgba(15,23,42,0.045)",
           }}
         >
           {/* Mobile brand */}
           <Link href="/" className="flex items-center gap-2 lg:hidden">
             <div className="flex h-7 w-7 items-center justify-center rounded-lg"
               style={{ background: `rgba(var(--ch-accent-rgb),0.15)` }}>
-              <ConnectyLogo className="h-5 w-5" tone={logoTone} type="mark" />
+              <ConnectyLogo className="h-5 w-5" imageClassName="connecty-shell-logo-image" tone={logoTone} type="mark" />
             </div>
           </Link>
 
@@ -919,10 +929,10 @@ function ConnectyShellRoot({
               <input
                 type="text"
                 placeholder="Pesquisar..."
-                className="h-8 w-[220px] rounded-lg pl-9 pr-3 text-[12px] outline-none"
+                className="h-9 w-[260px] rounded-lg pl-9 pr-3 text-[12px] outline-none"
                 style={{
                   color:      "var(--ch-text)",
-                  background: "var(--ch-surface-3)",
+                  background: "rgba(255,255,255,0.82)",
                   border:     "1px solid var(--ch-border-strong)",
                 }}
               />
@@ -958,7 +968,7 @@ function ConnectyShellRoot({
                   role="dialog"
                   aria-label="Notificacoes"
                   style={{
-                    background: "linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(244,249,253,0.98) 100%)",
+                    background: "linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(250,250,250,0.98) 100%)",
                     border: "1px solid var(--ch-border-strong)",
                     boxShadow: "0 28px 90px rgba(15,23,42,0.16)",
                     color: "var(--ch-text)",
@@ -1167,14 +1177,15 @@ function ConnectyShellRoot({
         ) : null}
 
         {/* Content */}
-        <main className="flex-1 overflow-auto">
+        <main className="flex-1 overflow-auto" data-connecty-shell-scroll="true">
           {mode === "client" ? <AdminImpersonationBanner /> : null}
           {mode === "client" && !accountCompletionGateActive && !isAccountPage && !isAttendancePage ? <BillingStatusBanner status={billingAccess} /> : null}
           <div
             className={cn(
-              "connecty-shell-content mx-auto w-full max-w-[1680px] px-3 sm:px-4 lg:px-8",
+              "connecty-shell-content mx-auto w-full px-3 sm:px-4 lg:px-6 xl:px-8",
+              isAttendancePage ? "max-w-none lg:px-4 xl:px-5" : "max-w-[1480px]",
               isAccountPage
-                ? "connecty-shell-content--compact pt-3 sm:pt-3 lg:px-6 lg:py-3"
+                ? "connecty-shell-content--compact pt-3 sm:pt-3 lg:py-3"
                 : "pt-4 sm:pt-5 lg:py-6",
             )}
           >
@@ -1248,7 +1259,7 @@ function ShellComingSoonModal({
         className="relative w-full max-w-md rounded-2xl border border-cyan-300/25 p-5 text-left shadow-2xl"
         onClick={(event) => event.stopPropagation()}
         style={{
-          background: "linear-gradient(180deg, rgba(255,255,255,0.98), rgba(244,249,253,0.96))",
+          background: "linear-gradient(180deg, rgba(255,255,255,0.98), rgba(250,250,250,0.96))",
           color: "var(--ch-text)",
           boxShadow: "0 28px 90px rgba(15,23,42,0.16)",
         }}
@@ -1496,7 +1507,7 @@ function AccountCompletionModal({
           setRemoteWhatsappCheck({
             state: "valid",
             phoneNormalized: data.phoneNormalized ?? currentPhoneForVerification,
-            message: "WhatsApp encontrado. Agora voce pode enviar o codigo.",
+            message: "WhatsApp encontrado. Agora você pode enviar o código.",
           });
           return;
         }
@@ -1661,7 +1672,7 @@ function AccountCompletionModal({
         aria-modal="true"
         aria-label="Complete seu cadastro"
         style={{
-          background: "linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(244,249,253,0.98) 100%)",
+          background: "linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(250,250,250,0.98) 100%)",
           border: "1px solid rgba(244,63,94,0.26)",
           color: "var(--ch-text)",
           boxShadow: "0 34px 110px rgba(15,23,42,0.18)",
@@ -1742,7 +1753,7 @@ function AccountCompletionModal({
             <AccountCompletionInput
               label="Criar senha"
               onChange={setPassword}
-              placeholder="Opcional se voce ja usa senha"
+              placeholder="Opcional se você já usa senha"
               type="password"
               value={password}
             />
@@ -1809,11 +1820,11 @@ function TrialWelcomeModal({
     ? Math.round(Math.min(100, Math.max(0, (usedCredits / status.includedCredits) * 100)))
     : 0;
   const title = isUsageReminder
-    ? `Voce ja usou ${formatShellCredits(usedCredits)} creditos`
+    ? `Você já usou ${formatShellCredits(usedCredits)} créditos`
     : "Bem-vindo ao seu teste gratis";
   const description = isUsageReminder
-    ? `Ainda restam ${formatShellCredits(status.balanceCredits)} creditos do teste. Se voce assinar antes de acabar, esse saldo entra junto com os creditos do plano.`
-    : `Voce recebeu ${formatShellCredits(bonusCredits)} creditos para testar a ConnectyHub por ${daysRemaining} dias. O saldo que sobrar pode acumular com o plano escolhido.`;
+    ? `Ainda restam ${formatShellCredits(status.balanceCredits)} créditos do teste. Se você assinar antes de acabar, esse saldo entra junto com os créditos do plano.`
+    : `Você recebeu ${formatShellCredits(bonusCredits)} créditos para testar a ConnectyHub por ${daysRemaining} dias. O saldo que sobrar pode acumular com o plano escolhido.`;
 
   return (
     <div
@@ -1826,7 +1837,7 @@ function TrialWelcomeModal({
       <div
         className="w-full max-w-[620px] rounded-2xl p-5 shadow-2xl sm:p-6"
         style={{
-          background: "linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(244,249,253,0.98) 100%)",
+          background: "linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(250,250,250,0.98) 100%)",
           border: "1px solid rgba(52,211,153,0.34)",
           color: "var(--ch-text)",
           boxShadow: "0 34px 120px rgba(15,23,42,0.18)",
@@ -1872,12 +1883,12 @@ function TrialWelcomeModal({
         </div>
 
         <div className="mt-5 rounded-2xl border border-emerald-300/24 bg-emerald-300/10 px-4 py-3 text-sm leading-6 text-emerald-700">
-          Voce ainda tem {formatShellCredits(status.balanceCredits)} creditos. Contratando durante o teste, esse saldo e preservado e soma aos creditos do plano escolhido.
+          Você ainda tem {formatShellCredits(status.balanceCredits)} créditos. Contratando durante o teste, esse saldo é preservado e soma aos créditos do plano escolhido.
         </div>
 
         <div className="mt-4 grid gap-2 text-[12px] leading-5 text-slate-600 sm:grid-cols-3">
           <TrialWelcomePoint>Teste atendimento, agentes e WhatsApp antes de assinar.</TrialWelcomePoint>
-          <TrialWelcomePoint>Os creditos restantes do teste nao somem se voce assinar dentro dos 7 dias.</TrialWelcomePoint>
+          <TrialWelcomePoint>Os créditos restantes do teste não somem se você assinar dentro dos 7 dias.</TrialWelcomePoint>
           <TrialWelcomePoint>Ao escolher Start, Pro ou Scale, os novos creditos entram junto com o saldo atual.</TrialWelcomePoint>
         </div>
 
@@ -2083,7 +2094,7 @@ function BillingAccessLockOverlay({ status }: { status: BillingAccessClientStatu
       <div
         className="w-full max-w-[520px] rounded-2xl border p-5 shadow-2xl sm:p-6"
         style={{
-          background: "linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(244,249,253,0.98) 100%)",
+          background: "linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(250,250,250,0.98) 100%)",
           borderColor: tone.border,
           color: "var(--ch-text)",
           boxShadow: "0 30px 120px rgba(15,23,42,0.18)",
@@ -2294,7 +2305,7 @@ function AdminImpersonationBanner() {
             Acesso administrativo ativo
           </div>
           <p className="mt-1 text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>
-            Voce esta acessando o painel de <span className="text-amber-700">{targetName}</span> como{" "}
+            Você está acessando o painel de <span className="text-amber-700">{targetName}</span> como{" "}
             <span className="text-cyan-700">{adminName}</span>.
           </p>
           {error ? <p className="mt-1 text-[11px] text-rose-700">{error}</p> : null}
@@ -2420,7 +2431,7 @@ function AccountAvatar({
   name: string;
 }) {
   if (mode === "admin") {
-    return <ConnectyLogo className="h-5 w-5" tone={logoTone} type="mark" />;
+    return <ConnectyLogo className="h-5 w-5" imageClassName="connecty-shell-logo-image" tone={logoTone} type="mark" />;
   }
 
   if (avatarUrl) {
@@ -2459,12 +2470,12 @@ function SidebarLink({
         event.preventDefault();
         onComingSoonClick(item);
       }}
-      className="group relative flex h-9 items-center gap-2.5 rounded-xl px-3 text-[12.5px] transition-all"
+      className="group relative flex h-9 items-center gap-2.5 rounded-lg px-2.5 text-[12.5px] transition-all"
       style={active ? {
-        background: "linear-gradient(135deg, var(--ch-accent) 0%, var(--ch-accent-2) 100%)",
-        border:     "1px solid rgba(var(--ch-accent-rgb),0.68)",
-        color:      "#ffffff",
-        boxShadow:  "0 14px 28px rgba(var(--ch-accent-rgb),0.22)",
+        background: "linear-gradient(180deg, rgba(var(--ch-accent-rgb),0.12), rgba(var(--ch-accent-rgb),0.07)), #ffffff",
+        border:     "1px solid rgba(var(--ch-accent-rgb),0.22)",
+        color:      "var(--ch-text)",
+        boxShadow:  "0 8px 22px rgba(15,23,42,0.055)",
       } : {
         background: "transparent",
         border:     "1px solid transparent",
@@ -2475,13 +2486,18 @@ function SidebarLink({
         <span
           aria-hidden="true"
           className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full"
-          style={{ background: "#ffffff", boxShadow: "0 0 10px rgba(255,255,255,0.65)" }}
+          style={{ background: "var(--ch-accent)", boxShadow: "0 0 10px rgba(var(--ch-accent-rgb),0.32)" }}
         />
       ) : null}
-      <Icon
-        className={cn("h-4 w-4 shrink-0", active ? "" : "opacity-70 group-hover:opacity-100")}
-        style={active ? undefined : { color: "var(--ch-muted)" }}
-      />
+      <span
+        className="grid h-6 w-6 shrink-0 place-items-center rounded-md"
+        style={{
+          background: active ? "rgba(var(--ch-accent-rgb),0.12)" : "rgba(15,23,42,0.045)",
+          color: active ? "var(--ch-accent)" : "var(--ch-muted)",
+        }}
+      >
+        <Icon className={cn("h-3.5 w-3.5", active ? "" : "opacity-80 group-hover:opacity-100")} />
+      </span>
       <span className="flex-1 truncate font-medium">{item.label}</span>
       {badge && (
         <span
@@ -2489,7 +2505,7 @@ function SidebarLink({
           style={
             item.badgeTone === "amber" ? { background: "rgba(251,191,36,0.15)", color: "#fbbf24" } :
             item.badgeTone === "rose"  ? { background: "rgba(251,113,133,0.15)", color: "#fb7185" } :
-            active ? { background: "rgba(255,255,255,0.16)", color: "#ffffff" } :
+            active ? { background: "rgba(var(--ch-accent-rgb),0.12)", color: "var(--ch-accent)" } :
                      { background: "var(--ch-hover)", color: "var(--ch-muted)" }
           }
         >
@@ -2546,27 +2562,28 @@ function MobileAppMenu({
   return (
     <div
       id="connecty-mobile-menu"
-      className="fixed inset-x-0 bottom-0 top-[60px] z-50 overflow-y-auto px-3 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-3 lg:hidden"
+      className="fixed inset-x-0 bottom-0 top-16 z-50 overflow-y-auto px-3 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-3 lg:hidden"
+      data-connecty-mobile-menu="true"
       style={{
-        background:
-          "linear-gradient(180deg, color-mix(in srgb, var(--ch-bg) 92%, var(--ch-surface-2) 8%), var(--ch-bg))",
+        background: "linear-gradient(180deg, #fbfcff 0%, var(--ch-bg) 100%)",
       }}
     >
-      <div className="mx-auto grid max-w-[430px] gap-3">
+      <div className="mx-auto grid max-w-[440px] gap-3">
         <div
-          className="rounded-3xl p-3"
+          className="rounded-2xl p-3"
           style={{
-            background: "linear-gradient(135deg, rgba(var(--ch-accent-rgb),0.14), rgba(var(--ch-accent-2-rgb),0.06)), var(--ch-surface)",
+            background: "linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,250,252,0.94)), var(--ch-surface)",
             border: "1px solid var(--ch-border-strong)",
+            boxShadow: "0 18px 42px rgba(15,23,42,0.08)",
           }}
         >
           <div className="flex items-start justify-between gap-3">
             <div className="flex min-w-0 items-center gap-3">
               <span
-                className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl"
+                className="grid h-11 w-11 shrink-0 place-items-center rounded-xl"
                 style={{ background: "rgba(var(--ch-accent-rgb),0.14)", border: "1px solid rgba(var(--ch-accent-rgb),0.28)" }}
               >
-                <ConnectyLogo className="h-7 w-7" tone={logoTone} type="mark" />
+                <ConnectyLogo className="h-7 w-7" imageClassName="connecty-shell-logo-image" tone={logoTone} type="mark" />
               </span>
               <div className="min-w-0">
                 <p className="truncate text-[15px] font-bold leading-5" style={{ color: "var(--ch-text)" }}>{name}</p>
@@ -2578,7 +2595,7 @@ function MobileAppMenu({
             <button
               type="button"
               aria-label="Fechar menu"
-              className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl transition"
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-xl transition"
               onClick={onClose}
               style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}
             >
@@ -2586,13 +2603,13 @@ function MobileAppMenu({
             </button>
           </div>
 
-          <div className="mt-3 rounded-2xl p-3" style={{ background: "rgba(255,255,255,0.045)", border: "1px solid var(--ch-border)" }}>
+          <div className="mt-3 rounded-xl p-3" style={{ background: "var(--ch-surface-2)", border: "1px solid var(--ch-border)" }}>
             <p className="font-mono text-[9px] uppercase tracking-[0.18em]" style={{ color: "var(--ch-subtle)" }}>Tela atual</p>
             <p className="mt-1 truncate text-[13px] font-semibold" style={{ color: "var(--ch-text)" }}>{pageLabel}</p>
             {activeItem ? (
               <Link
                 href={activeItem.href}
-                className="mt-2 inline-flex h-8 items-center gap-2 rounded-xl px-3 font-mono text-[9px] font-bold uppercase tracking-wide"
+                className="mt-2 inline-flex h-8 items-center gap-2 rounded-lg px-3 font-mono text-[9px] font-bold uppercase tracking-wide"
                 onClick={(event) => {
                   if (activeItem.comingSoon || isMetaComingSoonClientHref(activeItem.href)) {
                     event.preventDefault();
@@ -2613,7 +2630,7 @@ function MobileAppMenu({
         <label className="relative block">
           <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2" style={{ color: "var(--ch-muted)" }} />
           <input
-            className="h-12 w-full rounded-2xl pl-11 pr-4 text-[16px] outline-none"
+            className="h-12 w-full rounded-xl pl-11 pr-4 text-[16px] outline-none"
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Buscar no menu..."
             type="search"
@@ -2639,7 +2656,7 @@ function MobileAppMenu({
 
         <nav className="grid gap-3" aria-label="Menu principal">
           {filteredSections.length > 0 ? filteredSections.map((section) => (
-            <div key={section.label} className="rounded-3xl p-3" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}>
+            <div key={section.label} className="rounded-2xl p-3" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)" }}>
               <div className="mb-2 flex items-center justify-between gap-3">
                 <p className="font-mono text-[9px] uppercase tracking-[0.2em]" style={{ color: "var(--ch-subtle)" }}>{section.label}</p>
                 <span className="font-mono text-[9px]" style={{ color: "var(--ch-muted)" }}>{section.items.length}</span>
@@ -2657,7 +2674,7 @@ function MobileAppMenu({
               </div>
             </div>
           )) : (
-            <div className="rounded-3xl px-4 py-8 text-center text-[13px]" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)", color: "var(--ch-muted)" }}>
+            <div className="rounded-2xl px-4 py-8 text-center text-[13px]" style={{ background: "var(--ch-surface)", border: "1px solid var(--ch-border)", color: "var(--ch-muted)" }}>
               Nenhum item encontrado.
             </div>
           )}
@@ -2687,7 +2704,7 @@ function MobileMenuQuickLink({
     <Link
       href={item.href}
       aria-current={active ? "page" : undefined}
-      className="grid min-h-[92px] gap-2 rounded-3xl p-3 transition"
+      className="grid min-h-[92px] gap-2 rounded-2xl p-3 transition"
       onClick={(event) => {
         if (comingSoon) {
           event.preventDefault();
@@ -2709,7 +2726,7 @@ function MobileMenuQuickLink({
       }}
     >
       <span
-        className="grid h-9 w-9 place-items-center rounded-2xl"
+        className="grid h-9 w-9 place-items-center rounded-xl"
         style={{ background: active ? "rgba(255,255,255,0.16)" : "rgba(17,17,17,0.05)", color: active ? "#ffffff" : "var(--ch-muted)" }}
       >
         <Icon className="h-4 w-4" />
@@ -2747,7 +2764,7 @@ function MobileMenuLink({
 
         onClick();
       }}
-      className="grid min-h-10 grid-cols-[24px_minmax(0,1fr)_auto] items-center gap-2 rounded-2xl px-3 py-2 text-[12.5px] transition-all"
+      className="grid min-h-10 grid-cols-[24px_minmax(0,1fr)_auto] items-center gap-2 rounded-xl px-3 py-2 text-[12.5px] transition-all"
       style={active ? {
         background: "linear-gradient(135deg, var(--ch-accent) 0%, var(--ch-accent-2) 100%)",
         border:     "1px solid rgba(var(--ch-accent-rgb),0.62)",
@@ -2760,7 +2777,7 @@ function MobileMenuLink({
       }}
     >
       <span
-        className="flex h-6 w-6 items-center justify-center rounded-xl"
+        className="flex h-6 w-6 items-center justify-center rounded-lg"
         style={{
           background: active ? "rgba(255,255,255,0.16)" : "rgba(17,17,17,0.05)",
           color: active ? "#ffffff" : "var(--ch-muted)",
@@ -2804,12 +2821,12 @@ function MobileDock({
   return (
     <nav className="connecty-mobile-dock fixed inset-x-0 bottom-0 z-40 lg:hidden" aria-label="Navegacao principal">
       <div
-        className="mx-3 mb-2 grid grid-cols-5 gap-1 rounded-2xl p-1.5 shadow-2xl"
+        className="mx-auto mb-2 grid w-[min(calc(100vw-24px),440px)] grid-cols-5 gap-1 rounded-2xl p-1.5 shadow-2xl"
         style={{
-          background: "rgba(255,255,255,0.88)",
+          background: "rgba(255,255,255,0.92)",
           border: "1px solid var(--ch-border-strong)",
-          boxShadow: "0 -18px 50px rgba(15,23,42,0.12)",
-          backdropFilter: "blur(18px)",
+          boxShadow: "0 -14px 36px rgba(15,23,42,0.13)",
+          backdropFilter: "blur(16px)",
         }}
       >
         {items.map((item) => (

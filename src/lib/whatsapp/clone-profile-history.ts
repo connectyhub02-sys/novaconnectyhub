@@ -353,7 +353,7 @@ async function generateCloneProfileFromSamples(input: {
   samples: string[];
 }) {
   const modelId = normalizeGeminiModel(input.model);
-  const systemInstruction = "Voce analisa historico de atendimento e retorna somente JSON valido, sem markdown.";
+  const systemInstruction = "Você analisa histórico de atendimento e retorna somente JSON válido, sem markdown.";
   const prompt = buildCloneProfileAnalysisPrompt(input.agentName, input.samples);
   const url = new URL(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelId)}:generateContent`);
   url.searchParams.set("key", input.apiKey);

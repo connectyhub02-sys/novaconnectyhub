@@ -4,6 +4,10 @@ import { requirePlatformWhatsappSector } from "@/lib/admin/platform-whatsapp-con
 import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
 import { requirePlatformAdmin } from "@/lib/supabase/admin-auth";
 import { createServiceClient } from "@/lib/supabase/service";
+import {
+  normalizeOutboundLanguageText,
+  outboundLanguageQualityPromptLines,
+} from "@/lib/whatsapp/outbound-language";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -106,10 +110,11 @@ async function generateCompanyContext(input: {
 }) {
   const modelId = input.credentials.model;
   const systemInstruction = [
-    "Voce melhora complementos para prompt de agente interno no WhatsApp.",
-    "Reescreva as notas em portugues do Brasil, de forma operacional e sem inventar informacao.",
-    "Organize em topicos curtos: contexto, objetivo, regras, limites e observacoes.",
-    "Entregue somente o complemento final, sem explicacao externa.",
+    "Você melhora complementos para prompt de agente interno no WhatsApp.",
+    "Reescreva as notas em português do Brasil, de forma operacional e sem inventar informação.",
+    "Organize em tópicos curtos: contexto, objetivo, regras, limites e observações.",
+    ...outboundLanguageQualityPromptLines,
+    "Entregue somente o complemento final, sem explicação externa.",
   ].join("\n");
   const prompt = [
     `Setor: ${input.sectorName}`,
@@ -121,7 +126,7 @@ async function generateCompanyContext(input: {
     temperature: 0.32,
     maxOutputTokens: 900,
   });
-  const text = extractGeminiText(responseData).trim();
+  const text = normalizeOutboundLanguageText(extractGeminiText(responseData).trim());
 
   if (!text) {
     throw new Error("Gemini nao retornou o complemento.");
@@ -220,11 +225,12 @@ async function generatePrompt(input: {
 }) {
   const modelId = input.credentials.model;
   const systemInstruction = [
-    "Voce cria prompts de atendimento comercial por WhatsApp para agentes internos da ConnectyHub.",
-    "Entregue somente o prompt final em portugues do Brasil.",
-    "O prompt deve ser operacional, claro e ter no maximo 3500 caracteres.",
+    "Você cria prompts de atendimento comercial por WhatsApp para agentes internos da ConnectyHub.",
+    "Entregue somente o prompt final em português do Brasil.",
+    "O prompt deve ser operacional, claro e ter no máximo 3500 caracteres.",
     "Inclua as tags {{lead_name}}, {{setor}} e {{agente}} quando fizer sentido.",
-    "Nao crie template fixo de mensagem; crie comportamento, tom, limites, perguntas, dados a coletar e proximo passo.",
+    "Não crie template fixo de mensagem; crie comportamento, tom, limites, perguntas, dados a coletar e próximo passo.",
+    ...outboundLanguageQualityPromptLines,
   ].join("\n");
   const prompt = [
     `Setor da ConnectyHub: ${input.sectorName}`,
@@ -265,7 +271,7 @@ async function generatePrompt(input: {
     throw new Error(readGeminiError(data) ?? `Gemini respondeu status ${response.status}.`);
   }
 
-  const text = extractGeminiText(data).trim();
+  const text = normalizeOutboundLanguageText(extractGeminiText(data).trim());
 
   if (!text) {
     throw new Error("Gemini nao retornou um prompt.");

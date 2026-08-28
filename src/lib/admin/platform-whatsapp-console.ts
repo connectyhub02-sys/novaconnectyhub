@@ -56,6 +56,7 @@ import {
 } from "@/lib/whatsapp/client-workspace";
 import {
   appendConnectionDiagnosticEvent,
+  extractWhatsappPairCode,
   isPasskeyDisconnectReason,
   readConnectionDiagnostics,
   resolveConnectionDiagnosticEventType,
@@ -677,7 +678,9 @@ export async function connectPlatformWhatsappConsole(input: {
 
   const status = resolveUazapiWhatsappStatus(connectResult.data, "qr_pending");
   const qrCode = normalizeQrCode(findString(connectResult.data, ["qrcode", "qrCode", "qr", "base64"]));
-  const pairCode = findString(connectResult.data, ["paircode", "pairCode", "pair_code"]);
+  const pairCode = extractWhatsappPairCode(connectResult.data);
+  const qrCodeForPanel = connectionMode === "phone" ? null : qrCode;
+  const missingPairCodeForPhone = connectionMode === "phone" && !pairCode;
   const pendingConnection = status !== "connected" && Boolean(qrCode || pairCode);
   const connectionEventType = resolveConnectionDiagnosticEventType({
     defaultType: "connect_response",
@@ -709,7 +712,7 @@ export async function connectPlatformWhatsappConsole(input: {
     .from("whatsapp_instances")
     .update({
       status: pendingConnection ? "qr_pending" : status,
-      qr_status: qrCode ? "available" : pairCode ? "pair_code" : null,
+      qr_status: pairCode ? "pair_code" : qrCodeForPanel ? "available" : null,
       phone_number: phoneNumber,
       display_name: displayName,
       connected_at: status === "connected" ? now : instance.connected_at,
@@ -739,13 +742,15 @@ export async function connectPlatformWhatsappConsole(input: {
     state,
     notice: {
       tone: pendingConnection ? "warning" : "success",
-      message: qrCode
-        ? "Escaneie o QR Code para concluir a conexao interna."
-        : pairCode
+      message: pairCode
           ? "Use o codigo de pareamento no WhatsApp para concluir a conexao interna."
+        : qrCodeForPanel
+          ? "Escaneie o QR Code para concluir a conexao interna."
+        : missingPairCodeForPhone
+          ? "A Uazapi nao retornou codigo de pareamento para esse telefone. Confira o numero com DDI e gere o codigo novamente."
           : "WhatsApp interno conectado ou em processo de conexao.",
     },
-    qrCode,
+    qrCode: qrCodeForPanel,
     pairCode,
   };
 }
@@ -795,7 +800,7 @@ export async function refreshPlatformWhatsappConsoleStatus(input: {
 
   const status = resolveUazapiWhatsappStatus(result.data);
   const qrCode = normalizeQrCode(findString(result.data, ["qrcode", "qrCode", "qr", "base64"]));
-  const pairCode = findString(result.data, ["paircode", "pairCode", "pair_code"]);
+  const pairCode = extractWhatsappPairCode(result.data);
   const pendingConnection = status !== "connected" && Boolean(qrCode || pairCode);
   const lastDisconnectReason = findString(result.data, ["lastDisconnectReason", "last_disconnect_reason", "disconnectReason", "disconnect_reason"]);
   const connectionEventType = resolveConnectionDiagnosticEventType({
@@ -1035,6 +1040,8 @@ export async function resetPlatformWhatsappConsoleConnection(input: {
         ? "Sessao interna resetada. Use o codigo de pareamento para concluir."
         : result.qrCode
           ? "Sessao interna resetada. Escaneie o novo QR Code para concluir."
+        : connectPhone
+          ? result.notice?.message ?? "Sessao interna resetada, mas o provedor nao retornou codigo de pareamento."
           : "Sessao interna resetada e reconexao iniciada.",
     },
   };
@@ -2788,7 +2795,15 @@ function sanitizeProviderData(value: unknown): unknown {
     Object.entries(value as JsonRecord).map(([key, item]) => {
       const normalized = key.toLowerCase();
 
-      if (normalized.includes("token") || normalized.includes("secret") || normalized.includes("qrcode")) {
+      if (
+        normalized.includes("token") ||
+        normalized.includes("secret") ||
+        normalized.includes("qrcode") ||
+        normalized.includes("paircode") ||
+        normalized.includes("pair_code") ||
+        normalized.includes("pairingcode") ||
+        normalized.includes("pairing_code")
+      ) {
         return [key, "[redacted]"];
       }
 

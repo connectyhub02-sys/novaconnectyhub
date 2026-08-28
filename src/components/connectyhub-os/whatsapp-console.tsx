@@ -845,6 +845,9 @@ export function WhatsAppConsole({
     () => whatsappConsoleTabs.filter((tab) => !variant.hiddenTabs?.includes(tab.id)),
     [variant.hiddenTabs],
   );
+  const activeWhatsappTab = visibleWhatsappTabs.some((tab) => tab.id === activeTab)
+    ? activeTab
+    : visibleWhatsappTabs[0]?.id ?? "connection";
   const [migrationCopying, setMigrationCopying] = useState<MigrationCredentialKind | null>(null);
   const cloneProfileImportBaselineRef = useRef<string | null>(null);
   const appliedCloneProfileImportRef = useRef<string | null>(null);
@@ -862,14 +865,6 @@ export function WhatsAppConsole({
     () => buildRuntimeAlertNotifications(state?.runtimeAlerts ?? []),
     [state?.runtimeAlerts],
   );
-
-  useEffect(() => {
-    if (visibleWhatsappTabs.some((tab) => tab.id === activeTab)) {
-      return;
-    }
-
-    setActiveTab(visibleWhatsappTabs[0]?.id ?? "connection");
-  }, [activeTab, visibleWhatsappTabs]);
 
   useEffect(() => {
     shellNotifications?.setNotificationGroup("whatsapp-runtime-alerts", runtimeAlertNotifications);
@@ -2159,9 +2154,9 @@ export function WhatsAppConsole({
           onSave={saveAgentSettings}
         />
 
-        <WhatsappConsoleTabs activeTab={activeTab} onChange={handleWhatsappTabChange} tabs={visibleWhatsappTabs} />
+        <WhatsappConsoleTabs activeTab={activeWhatsappTab} onChange={handleWhatsappTabChange} tabs={visibleWhatsappTabs} />
 
-        {activeTab === "connection" ? (
+        {activeWhatsappTab === "connection" ? (
           <Panel
             title="Conexao e identidade"
             eyebrow="numero / agente / status"
@@ -2214,7 +2209,7 @@ export function WhatsAppConsole({
           </Panel>
         ) : null}
 
-        {activeTab === "files" ? (
+        {activeWhatsappTab === "files" ? (
         <Panel
           title="Conhecimento"
           eyebrow="base do agente"
@@ -2230,7 +2225,7 @@ export function WhatsAppConsole({
         </Panel>
         ) : null}
 
-        {activeTab === "prompt" ? (
+        {activeWhatsappTab === "prompt" ? (
         <Panel
           title="Prompt do agente"
           eyebrow="atendimento / vendas"
@@ -2313,7 +2308,7 @@ export function WhatsAppConsole({
         </Panel>
         ) : null}
 
-      {state?.agent && activeTab === "qualification" ? (
+      {state?.agent && activeWhatsappTab === "qualification" ? (
       <div className="mt-5">
         <Panel
           title="Qualificacao do lead"
@@ -2353,7 +2348,7 @@ export function WhatsAppConsole({
       </div>
       ) : null}
 
-      {state?.agent && activeTab === "behavior" ? (
+      {state?.agent && activeWhatsappTab === "behavior" ? (
       <div className="mt-5">
         <Panel
           title="Comportamento do agente"
@@ -2583,7 +2578,7 @@ export function WhatsAppConsole({
       </div>
       ) : null}
 
-      {state?.agent && activeTab === "channels" ? (
+      {state?.agent && activeWhatsappTab === "channels" ? (
       <div className="mt-5">
         <Panel
           title="Canais do agente"
@@ -2627,7 +2622,7 @@ export function WhatsAppConsole({
       </div>
       ) : null}
 
-      {state?.agent && activeTab === "multichannel" ? (
+      {state?.agent && activeWhatsappTab === "multichannel" ? (
       <div className="mt-5">
         <Panel
           title="Campanhas WhatsApp"

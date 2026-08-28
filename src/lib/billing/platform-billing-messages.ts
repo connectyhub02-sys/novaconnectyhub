@@ -170,11 +170,11 @@ export const DEFAULT_PLATFORM_BILLING_MESSAGE_TEMPLATES: PlatformBillingMessageT
   trial_started:
     "{cliente}, parabens. Seu teste gratis ConnectyHub foi liberado com {creditos} creditos. Assine um plano ate {trial_expira_em} e o saldo restante soma aos creditos do plano escolhido.",
   trial_credit_milestone:
-    "{cliente}, voce ja usou {marco_creditos} creditos do teste e ainda tem {creditos_restantes}. Assine ate {trial_expira_em} para somar esse saldo aos creditos do plano escolhido.",
+    "{cliente}, você já usou {marco_creditos} créditos do teste e ainda tem {creditos_restantes}. Assine até {trial_expira_em} para somar esse saldo aos créditos do plano escolhido.",
   trial_three_days_remaining:
-    "{cliente}, faltam 3 dias para seu teste ConnectyHub acabar. Voce ainda tem {creditos_restantes} creditos de bonus. Assine ate {trial_expira_em} para somar esse saldo ao plano escolhido; depois disso o saldo expira.",
+    "{cliente}, faltam 3 dias para seu teste ConnectyHub acabar. Você ainda tem {creditos_restantes} créditos de bônus. Assine até {trial_expira_em} para somar esse saldo ao plano escolhido; depois disso o saldo expira.",
   trial_one_day_remaining:
-    "{cliente}, ultimo dia do seu teste ConnectyHub. Ele expira em {trial_expira_em}. Voce ainda tem {creditos_restantes} creditos; se assinar agora, esse saldo soma ao plano escolhido. Depois do prazo, ele zera.",
+    "{cliente}, último dia do seu teste ConnectyHub. Ele expira em {trial_expira_em}. Você ainda tem {creditos_restantes} créditos; se assinar agora, esse saldo soma ao plano escolhido. Depois do prazo, ele zera.",
   trial_no_credits:
     "{cliente}, seus creditos do teste acabaram. Para reativar atendimentos automaticos, IA e voz, escolha um plano no painel ConnectyHub.",
   trial_expired:
@@ -184,13 +184,13 @@ export const DEFAULT_PLATFORM_BILLING_MESSAGE_TEMPLATES: PlatformBillingMessageT
   payment_approved:
     "{cliente}, pagamento confirmado. Seu plano {plano} foi ativado na ConnectyHub com {creditos} creditos inclusos. Se havia saldo de teste ainda valido, ele foi somado na sua carteira. Valor: {valor}.",
   payment_rejected:
-    "{cliente}, o pagamento do plano {plano} nao foi aprovado. Seus dados continuam salvos, mas para liberar os atendimentos voce precisa concluir o pagamento no painel.",
+    "{cliente}, o pagamento do plano {plano} não foi aprovado. Seus dados continuam salvos, mas para liberar os atendimentos você precisa concluir o pagamento no painel.",
   manual_plan_activated:
     "{cliente}, seu plano {plano} foi ativado manualmente pela equipe ConnectyHub com {creditos} creditos. Ele fica valido ate {data_vencimento}. Boas vendas.",
   manual_plan_renewed:
     "{cliente}, seu plano {plano} foi renovado manualmente pela equipe ConnectyHub. O novo ciclo vence em {data_vencimento} e seus creditos disponiveis sao {creditos_restantes}.",
   paid_plan_three_days_remaining:
-    "{cliente}, seu plano {plano} vence em 3 dias, em {data_vencimento}. Voce ainda tem {creditos_restantes} creditos. Renove antes do vencimento para manter seus agentes atendendo sem pausa.",
+    "{cliente}, seu plano {plano} vence em 3 dias, em {data_vencimento}. Você ainda tem {creditos_restantes} créditos. Renove antes do vencimento para manter seus agentes atendendo sem pausa.",
   paid_plan_one_day_remaining:
     "{cliente}, seu plano {plano} vence em 1 dia, em {data_vencimento}. Para evitar pausa nos atendimentos automaticos, renove pelo painel.",
   paid_plan_expired:

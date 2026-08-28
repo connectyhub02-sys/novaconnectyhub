@@ -98,11 +98,21 @@ main section[id] {
 }
 
 .connecty-shell {
+  background: var(--ch-bg);
   color: var(--ch-text);
 }
 
+[data-connecty-shell-root="true"] .connecty-shell-logo-image {
+  filter: grayscale(1) contrast(1.2) brightness(0.46);
+}
+
 .connecty-shell-content {
+  min-width: 0;
   padding-bottom: calc(5.75rem + env(safe-area-inset-bottom));
+}
+
+.connecty-shell-content > * {
+  min-width: 0;
 }
 
 .connecty-shell-content.connecty-shell-content--compact {
@@ -111,6 +121,22 @@ main section[id] {
 
 .connecty-mobile-dock {
   padding-bottom: max(0.25rem, env(safe-area-inset-bottom));
+}
+
+.connecty-mobile-dock a,
+.connecty-mobile-dock button,
+[data-connecty-mobile-menu="true"] a,
+[data-connecty-mobile-menu="true"] button {
+  min-width: 0;
+}
+
+[data-connecty-shell-main="true"] {
+  min-width: 0;
+}
+
+[data-connecty-shell-scroll="true"] {
+  min-width: 0;
+  overflow-x: clip;
 }
 
 [data-mobile-data-card] {
@@ -240,6 +266,14 @@ textarea {
 @media (max-width: 640px) {
   .connecty-shell-content {
     overflow-x: clip;
+  }
+
+  .connecty-shell-content table {
+    min-width: max-content;
+  }
+
+  .connecty-shell-content [class*="grid-cols-"] {
+    min-width: 0;
   }
 
   .connecty-shell-content input:not([type="checkbox"]):not([type="radio"]),
@@ -4115,22 +4149,22 @@ html {
 
 [data-connecty-mode] .connecty-account-console {
   color-scheme: light;
-  --ch-bg: #f6f9fe;
+  --ch-bg: #f7f7f8;
   --ch-surface: #ffffff;
-  --ch-surface-2: #f8fbff;
-  --ch-surface-3: #eef6ff;
-  --ch-panel: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
-  --ch-panel-2: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+  --ch-surface-2: #fafafa;
+  --ch-surface-3: #f4f4f5;
+  --ch-panel: linear-gradient(180deg, #ffffff 0%, #fafafa 100%);
+  --ch-panel-2: linear-gradient(180deg, #ffffff 0%, #fafafa 100%);
   --ch-border: rgba(148, 163, 184, 0.38);
   --ch-border-soft: rgba(148, 163, 184, 0.24);
   --ch-border-strong: rgba(148, 163, 184, 0.46);
   --ch-text: #0f172a;
   --ch-muted: #475569;
   --ch-subtle: #64748b;
-  --ch-accent: #1877f2;
-  --ch-accent-rgb: 24, 119, 242;
-  --ch-accent-2: #0a58ca;
-  --ch-accent-2-rgb: 10, 88, 202;
+  --ch-accent: #111827;
+  --ch-accent-rgb: 17, 24, 39;
+  --ch-accent-2: #52525b;
+  --ch-accent-2-rgb: 82, 82, 91;
   color: #0f172a !important;
 }
 
@@ -4156,7 +4190,7 @@ html {
 [data-connecty-mode] .connecty-account-console .bg-slate-50\/80,
 [data-connecty-mode] .connecty-account-console [class*="bg-white/"],
 [data-connecty-mode] .connecty-account-console [class*="bg-blue-50"] {
-  background: #f8fbff !important;
+  background: #fafafa !important;
 }
 
 [data-connecty-mode] .connecty-account-console .bg-emerald-50,
@@ -4191,15 +4225,15 @@ html {
 [data-connecty-mode] .connecty-account-console [class*="text-cyan"],
 [data-connecty-mode] .connecty-account-console [class*="text-sky"],
 [data-connecty-mode] .connecty-account-console [class*="text-blue"] {
-  color: #0a58ca !important;
+  color: #27272a !important;
 }
 
 [data-connecty-mode] .connecty-account-console .bg-blue-600,
 [data-connecty-mode] .connecty-account-console .bg-blue-700,
 [data-connecty-mode] .connecty-account-console .hover\:bg-blue-500:hover,
 [data-connecty-mode] .connecty-account-console .hover\:bg-blue-700:hover {
-  background: #1877f2 !important;
-  border-color: #1877f2 !important;
+  background: #111827 !important;
+  border-color: #111827 !important;
   color: #ffffff !important;
 }
 

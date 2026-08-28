@@ -7,13 +7,13 @@ import {
   ArrowLeft,
   ArrowRight,
   BadgeCheck,
-  Box,
   CheckCircle2,
   ChevronDown,
   CreditCard,
   FileText,
   Home,
   LockKeyhole,
+  Mail,
   Menu,
   MessageCircle,
   Package,
@@ -25,12 +25,18 @@ import {
   Star,
   Store,
   Truck,
+  UserRound,
 } from "lucide-react";
 import { SalesCatalogMediaGallery } from "@/components/checkout/sales-catalog-media-gallery";
 import { ProductCheckoutButton } from "@/components/checkout/sales-catalog-product-actions";
 import { getOrganizationSalesCatalogSettings, mapSalesCatalogItem } from "@/lib/client-os/sales-catalog";
 import { normalizeCurrencyAmount } from "@/lib/sales-catalog/mercado-pago";
-import { buildLeadAwareSalesCatalogProductUrl, buildLeadAwareSalesCatalogStoreUrl } from "@/lib/sales-catalog/public-urls";
+import {
+  buildLeadAwareSalesCatalogStoreCartUrl,
+  buildLeadAwareSalesCatalogStoreProductUrl,
+  buildLeadAwareSalesCatalogStoreProductsUrl,
+  buildLeadAwareSalesCatalogStoreUrl,
+} from "@/lib/sales-catalog/public-urls";
 import { isSalesCatalogDisplayableProduct, type ClientSalesCatalogItem, type SalesCatalogStorefrontSettings } from "@/lib/sales-catalog/shared";
 import { createServiceClient } from "@/lib/supabase/service";
 import { createOrganizationTrackingToken } from "@/lib/tracking/organization-attribution";
@@ -209,6 +215,22 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
     conversationId,
     trackingLinkId,
   });
+  const storeProductsUrl = buildLeadAwareSalesCatalogStoreProductsUrl({
+    storeSlug,
+    organizationId: organization.id,
+    leadId,
+    leadPhone,
+    conversationId,
+    trackingLinkId,
+  });
+  const storeCartUrl = buildLeadAwareSalesCatalogStoreCartUrl({
+    storeSlug,
+    organizationId: organization.id,
+    leadId,
+    leadPhone,
+    conversationId,
+    trackingLinkId,
+  });
   const whatsappReturn = buildProductWhatsappReturn({
     phoneNumber: whatsapp?.phone_number ?? null,
     displayName: whatsapp?.display_name ?? null,
@@ -225,16 +247,21 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
   const application = findAttributeValue(item, "aplicacao") ?? formatFulfillment(item.fulfillment.mode);
 
   return (
-    <main className="min-h-screen bg-[#f7f8f5] pb-24 text-[color:var(--store-text)] sm:pb-0" style={publicLayoutStyle}>
+    <main className="min-h-screen bg-white pb-24 text-[color:var(--store-text)] sm:pb-0" style={publicLayoutStyle}>
       <script
         id="connecty-public-tracking-context"
         dangerouslySetInnerHTML={{
           __html: `window.__CONNECTYHUB_TRACKING_CONTEXT__=${safeJson(publicTrackingContext)};`,
         }}
       />
-      <ProductTopBar branding={branding} headerText={storefront.headerText} storeUrl={storeUrl} />
+      <ProductTopBar
+        branding={branding}
+        cartUrl={storeCartUrl}
+        productsUrl={storeProductsUrl}
+        storeUrl={storeUrl}
+      />
 
-      <section className="mx-auto w-full max-w-7xl px-4 py-4 sm:px-6 lg:px-8 lg:py-7">
+      <section className="mx-auto w-full max-w-[1240px] px-4 py-6 sm:px-6 lg:py-9">
         <nav className="hidden items-center gap-2 text-xs font-semibold text-[color:var(--store-text-muted)] lg:flex">
           <Link href={storeUrl} className="transition hover:text-[color:var(--store-accent)]">Inicio</Link>
           <ArrowRight className="h-3.5 w-3.5" />
@@ -253,13 +280,13 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
           <section className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,0.96fr)_minmax(0,0.84fr)]">
             <SalesCatalogMediaGallery title={item.title} media={galleryMedia} />
 
-            <div className="min-w-0 rounded-lg border border-blue-100 bg-white p-4 shadow-lg shadow-blue-950/5 sm:p-6 lg:border-0 lg:p-2 lg:shadow-none">
+            <div className="min-w-0 rounded-[20px] border border-black/10 bg-white p-4 shadow-lg shadow-black/5 sm:p-6 lg:border-0 lg:p-2 lg:shadow-none">
               <div className="flex flex-wrap gap-2">
                 <ProductBadge>{item.category ?? "Produto"}</ProductBadge>
                 <ProductBadge tone="green">{formatStockLabel(item)}</ProductBadge>
               </div>
 
-              <h1 className="mt-4 text-2xl font-black uppercase leading-tight text-[color:var(--store-text)] sm:text-3xl xl:text-[34px]">
+              <h1 className="mt-4 text-2xl font-bold uppercase leading-tight text-[color:var(--store-text)] sm:text-3xl xl:text-[32px]">
                 {item.title}
               </h1>
 
@@ -287,7 +314,7 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
                 ))}
               </ul>
 
-              <div className="mt-6 hidden grid-cols-3 gap-3 border-t border-blue-100 pt-5 lg:grid">
+              <div className="mt-6 hidden grid-cols-3 gap-3 border-t border-black/10 pt-5 lg:grid">
                 <MicroTrust icon={<Truck className="h-4 w-4" />} title="Entrega discreta" subtitle="Embalagem neutra" />
                 <MicroTrust icon={<CreditCard className="h-4 w-4" />} title="Pagamento seguro" subtitle="Dados protegidos" />
                 <MicroTrust icon={<ShieldCheck className="h-4 w-4" />} title="Privacidade total" subtitle="Compra segura" />
@@ -306,7 +333,7 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
           />
         </div>
 
-        <section className="mt-5 grid gap-3 rounded-lg border border-blue-100 bg-white p-4 shadow-lg shadow-blue-950/5 sm:grid-cols-4 sm:p-5">
+        <section className="mt-8 grid gap-3 rounded-[20px] border border-black/10 bg-white p-4 shadow-lg shadow-black/5 sm:grid-cols-4 sm:p-5">
           <Benefit icon={<LockKeyhole className="h-6 w-6" />} title="Checkout seguro" subtitle="Ambiente criptografado" />
           <Benefit icon={<Truck className="h-6 w-6" />} title="Envio discreto" subtitle="Pedido acompanhado" />
           <Benefit icon={<BadgeCheck className="h-6 w-6" />} title="Produto original" subtitle="Catalogo da loja" />
@@ -314,8 +341,8 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
         </section>
 
         <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(300px,0.46fr)]">
-          <section className="rounded-lg border border-blue-100 bg-white shadow-lg shadow-blue-950/5">
-            <div className="grid border-b border-blue-100 text-center text-sm font-bold text-slate-600 sm:grid-cols-4">
+          <section className="rounded-[20px] border border-black/10 bg-white shadow-lg shadow-black/5">
+            <div className="grid border-b border-black/10 text-center text-sm font-bold text-black/60 sm:grid-cols-4">
               <span className="border-b-2 px-4 py-4 text-[color:var(--store-accent)]" style={{ borderColor: "var(--store-accent)" }}>Descricao completa</span>
               <span className="px-4 py-4">Modo de uso</span>
               <span className="px-4 py-4">Informacoes de envio</span>
@@ -335,7 +362,7 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
                         href={media.storageUrl}
                         target="_blank"
                         rel="noreferrer"
-                        className="flex min-h-12 items-center gap-3 rounded-lg border border-blue-100 bg-blue-50 px-4 text-sm font-semibold text-blue-700 transition hover:border-blue-300"
+                        className="flex min-h-12 items-center gap-3 rounded-full border border-black/10 bg-[#f0f0f0] px-4 text-sm font-semibold text-black transition hover:border-black/30"
                         data-track-event="sales_catalog_product_media_opened"
                         data-track-label={media.fileName}
                       >
@@ -347,8 +374,8 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
                 ) : null}
               </div>
 
-              <aside className="rounded-lg border border-blue-100 bg-slate-50 p-4">
-                <div className="flex items-center gap-2 text-blue-600">
+              <aside className="rounded-[20px] border border-black/10 bg-[#f0f0f0] p-4">
+                <div className="flex items-center gap-2 text-black">
                   <ReceiptText className="h-4 w-4" />
                   <p className="text-sm font-black text-[color:var(--store-text)]">Importante</p>
                 </div>
@@ -360,7 +387,7 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
           </section>
 
           <aside className="grid content-start gap-5">
-            <section className="rounded-lg border border-blue-100 bg-white p-5 shadow-lg shadow-blue-950/5">
+            <section className="rounded-[20px] border border-black/10 bg-white p-5 shadow-lg shadow-black/5">
               <p className="text-sm font-black text-[color:var(--store-text)]">Detalhes rapidos</p>
               <div className="mt-4 grid gap-3 text-sm">
                 <DetailLine label="Categoria" value={item.category ?? "Produto"} />
@@ -370,7 +397,7 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
                 {application ? <DetailLine label="Aplicacao" value={application} /> : null}
               </div>
               <details className="mt-4">
-                <summary className="flex cursor-pointer list-none items-center justify-center gap-2 rounded-lg bg-blue-50 px-4 py-3 text-xs font-bold text-blue-700">
+                <summary className="flex cursor-pointer list-none items-center justify-center gap-2 rounded-full bg-[#f0f0f0] px-4 py-3 text-xs font-bold text-black">
                   Ver mais informacoes tecnicas
                   <ChevronDown className="h-4 w-4" />
                 </summary>
@@ -389,17 +416,18 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
             </section>
 
             {related.length > 0 ? (
-              <section className="rounded-lg border border-blue-100 bg-white p-5 shadow-lg shadow-blue-950/5">
+              <section className="rounded-[20px] border border-black/10 bg-white p-5 shadow-lg shadow-black/5">
                 <div className="flex items-center justify-between gap-3">
                   <p className="text-sm font-black text-[color:var(--store-text)]">Produtos semelhantes</p>
-                  <Link href={storeUrl} className="text-xs font-bold text-[color:var(--store-accent)]">Ver todos</Link>
+                  <Link href={storeProductsUrl} className="text-xs font-bold text-[color:var(--store-accent)]">Ver todos</Link>
                 </div>
                 <div className="mt-4 grid gap-3">
                   {related.map((relatedItem) => (
                     <RelatedProductCard
                       key={relatedItem.id}
                       item={relatedItem}
-                      href={buildLeadAwareSalesCatalogProductUrl({
+                      href={buildLeadAwareSalesCatalogStoreProductUrl({
+                        storeSlug,
                         productId: relatedItem.id,
                         organizationId: organization.id,
                         leadId,
@@ -443,8 +471,16 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
           <MessageCircle className="h-7 w-7" />
         </a>
       ) : null}
-      <MobileBottomNav storeUrl={storeUrl} whatsappHref={whatsappReturn?.href ?? null} />
-      <PublicStoreFooter branding={branding} footerContactText={storefront.footerContactText} footerText={storefront.footerText} />
+      <MobileBottomNav storeUrl={storeUrl} storeProductsUrl={storeProductsUrl} cartUrl={storeCartUrl} whatsappHref={whatsappReturn?.href ?? null} />
+      <PublicStoreFooter
+        branding={branding}
+        cartUrl={storeCartUrl}
+        footerContactText={storefront.footerContactText}
+        footerText={storefront.footerText}
+        storeProductsUrl={storeProductsUrl}
+        storeUrl={storeUrl}
+        whatsappHref={whatsappReturn?.href ?? null}
+      />
     </main>
   );
 }
@@ -588,56 +624,63 @@ function buildProductPublicTrackingContext(input: {
 
 function ProductTopBar({
   branding,
-  headerText,
+  cartUrl,
+  productsUrl,
   storeUrl,
 }: {
   branding: OrganizationBranding;
-  headerText: string;
+  cartUrl: string;
+  productsUrl: string;
   storeUrl: string;
 }) {
   return (
-    <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
-      <div className="mx-auto flex min-h-20 w-full max-w-7xl items-center gap-3 px-4 sm:px-6 lg:px-8">
-        <div className="flex min-w-0 items-center gap-3 lg:w-[260px]">
-          <Link href={storeUrl} className="grid h-10 w-10 place-items-center rounded-full text-slate-950 transition hover:bg-slate-50 lg:hidden" aria-label="Voltar para loja">
-            <ArrowLeft className="h-5 w-5" />
-          </Link>
-          <button type="button" className="hidden h-10 w-10 place-items-center rounded-full text-slate-950 transition hover:bg-slate-50 sm:grid lg:hidden" aria-label="Menu">
-            <Menu className="h-5 w-5" />
-          </button>
-          <StoreIdentity branding={branding} headerText={headerText} storeUrl={storeUrl} />
-        </div>
-
-        <label className="relative hidden min-w-0 flex-1 lg:block">
-          <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
-          <input
-            readOnly
-            className="h-12 w-full rounded-lg border border-slate-200 bg-white px-12 text-sm font-medium text-slate-500 outline-none"
-            value=""
-            placeholder="Buscar produtos..."
-          />
-        </label>
-
-        <div className="ml-auto flex shrink-0 items-center justify-end gap-3 lg:w-[420px]">
-          <HeaderTrust icon={<ShieldCheck className="h-5 w-5" />} label="Compra segura" />
-          <HeaderTrust icon={<MessageCircle className="h-5 w-5" />} label="Atendimento WhatsApp" />
-          <HeaderTrust icon={<Box className="h-5 w-5" />} label="Disponivel para envio" />
-          <Link
-            href={storeUrl}
-            className="relative grid h-11 w-11 place-items-center rounded-lg border shadow-lg shadow-slate-950/20"
-            style={{
-              backgroundColor: "var(--store-button)",
-              borderColor: "var(--store-button-border)",
-              color: "var(--store-button-text)",
-            }}
-            aria-label="Sacola"
-          >
-            <ShoppingCart className="h-5 w-5" />
-            <span className="absolute -right-1 -top-1 grid h-5 w-5 place-items-center rounded-full bg-orange-500 text-[11px] font-black text-white">0</span>
-          </Link>
-        </div>
+    <>
+      <div className="bg-black px-4 py-2 text-center text-xs font-medium text-white sm:text-sm">
+        <span>Compra segura na {branding.displayName}.</span>
+        <Link className="ml-1 font-bold underline underline-offset-2" href={productsUrl}>
+          Ver outros produtos
+        </Link>
       </div>
-    </header>
+      <header className="sticky top-0 z-30 bg-white">
+        <div className="mx-auto flex w-full max-w-[1240px] items-center justify-between gap-4 px-4 py-5 sm:px-6 lg:py-6">
+          <div className="flex min-w-0 items-center gap-4">
+            <Link href={storeUrl} className="grid h-9 w-9 place-items-center rounded-full text-black transition hover:bg-black/5 md:hidden" aria-label="Voltar para loja">
+              <ArrowLeft className="h-5 w-5" />
+            </Link>
+            <button type="button" className="hidden h-9 w-9 place-items-center rounded-full text-black transition hover:bg-black/5 sm:grid md:hidden" aria-label="Menu">
+              <Menu className="h-5 w-5" />
+            </button>
+            <StoreIdentity branding={branding} storeUrl={storeUrl} />
+          </div>
+
+          <nav className="hidden items-center gap-6 text-sm text-black md:flex">
+            <Link className="font-medium hover:text-black/70" href={productsUrl}>Produtos</Link>
+            <Link className="font-medium hover:text-black/70" href={`${productsUrl}#ofertas`}>Ofertas</Link>
+            <Link className="font-medium hover:text-black/70" href={storeUrl}>Novidades</Link>
+            <Link className="font-medium hover:text-black/70" href={`${storeUrl}#categorias`}>Categorias</Link>
+          </nav>
+
+          <label className="relative hidden min-h-12 flex-1 lg:block">
+            <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-black/40" />
+            <input
+              readOnly
+              className="h-12 w-full rounded-full border-0 bg-[#f0f0f0] px-12 text-sm font-medium text-black outline-none placeholder:text-black/40"
+              value=""
+              placeholder="Buscar produtos..."
+            />
+          </label>
+
+          <div className="flex shrink-0 items-center justify-end gap-3">
+            <Link href={cartUrl} className="grid h-10 w-10 place-items-center rounded-full text-black transition hover:bg-black/5" aria-label="Carrinho">
+              <ShoppingCart className="h-4 w-4" />
+            </Link>
+            <Link href={cartUrl} className="hidden h-10 w-10 place-items-center rounded-full text-black transition hover:bg-black/5 sm:grid" aria-label="Conta">
+              <UserRound className="h-5 w-5" />
+            </Link>
+          </div>
+        </div>
+      </header>
+    </>
   );
 }
 
@@ -660,7 +703,7 @@ function PurchaseCard({
 }) {
   return (
     <aside className="lg:sticky lg:top-28 lg:self-start">
-      <div className="rounded-lg border border-blue-100 bg-white p-5 shadow-2xl shadow-blue-950/10">
+      <div className="rounded-[20px] border border-black/10 bg-white p-5 shadow-2xl shadow-black/10">
         <p className="text-sm font-semibold text-[color:var(--store-card-text-muted)]">Valor do produto</p>
         <p className="mt-1 text-4xl font-black text-[color:var(--store-card-text)]">{priceLabel}</p>
         {installments ? (
@@ -692,7 +735,7 @@ function PurchaseCard({
           </a>
         </div>
 
-        <div className="mt-5 grid gap-3 border-t border-blue-100 pt-5 text-sm font-semibold text-[color:var(--store-card-text)]">
+        <div className="mt-5 grid gap-3 border-t border-black/10 pt-5 text-sm font-semibold text-[color:var(--store-card-text)]">
           <span className="flex items-center gap-3"><ShieldCheck className="h-4 w-4 text-[color:var(--store-accent)]" /> Checkout 100% seguro</span>
           <span className="flex items-center gap-3"><LockKeyhole className="h-4 w-4 text-[color:var(--store-accent)]" /> Seus dados sempre protegidos</span>
           <span className="flex items-center gap-3"><BadgeCheck className="h-4 w-4 text-[color:var(--store-accent)]" /> Satisfacao garantida pela loja</span>
@@ -704,53 +747,39 @@ function PurchaseCard({
 
 function StoreIdentity({
   branding,
-  headerText,
   storeUrl,
 }: {
   branding: OrganizationBranding;
-  headerText: string;
   storeUrl: string;
 }) {
   return (
     <Link href={storeUrl} className="flex min-w-0 items-center gap-3">
-      <div className="relative grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div className="relative grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-[8px] border border-black/10 bg-white shadow-sm">
         {branding.logoUrl ? (
           <Image
             alt={branding.logoAlt}
             src={branding.logoUrl}
             fill
             unoptimized
-            sizes="48px"
+            sizes="40px"
             className="object-contain p-1"
           />
         ) : (
           <Store className="h-5 w-5" style={{ color: "var(--store-accent)" }} aria-hidden="true" />
         )}
       </div>
-      <div className="min-w-0">
-        <p className="line-clamp-1 text-[11px] font-bold leading-4 text-[color:var(--store-text-muted)]">{headerText}</p>
-        <p className="truncate text-base font-black leading-5 text-[color:var(--store-text)]">{branding.displayName}</p>
-      </div>
+      <p className="truncate text-xl font-bold uppercase leading-none text-black lg:text-2xl">{branding.displayName}</p>
     </Link>
-  );
-}
-
-function HeaderTrust({ icon, label }: { icon: ReactNode; label: string }) {
-  return (
-    <span className="hidden items-center gap-2 text-sm font-bold text-slate-800 xl:flex">
-      {icon}
-      <span className="max-w-24 leading-4">{label}</span>
-    </span>
   );
 }
 
 function TrustPill({ icon, label, tone = "blue" }: { icon: ReactNode; label: string; tone?: "blue" | "green" }) {
   return (
     <span className={cn(
-      "inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 text-xs font-bold",
+      "inline-flex min-h-9 items-center gap-2 rounded-full border px-3 text-xs font-bold",
       tone === "green"
         ? "border-emerald-100 bg-emerald-50 text-[#128C4A]"
-        : "border-blue-100 bg-blue-50 text-blue-700",
+        : "border-black/10 bg-[#f0f0f0] text-black",
     )}>
       {icon}
       <span>{label}</span>
@@ -761,10 +790,10 @@ function TrustPill({ icon, label, tone = "blue" }: { icon: ReactNode; label: str
 function ProductBadge({ children, tone = "blue" }: { children: ReactNode; tone?: "blue" | "green" }) {
   return (
     <span className={cn(
-      "rounded-lg border px-3 py-1.5 text-xs font-black",
+      "rounded-full border px-3 py-1.5 text-xs font-black",
       tone === "green"
         ? "border-[#25D366]/35 bg-[#25D366]/10 text-[#128C4A]"
-        : "border-blue-200 bg-blue-50 text-blue-700",
+        : "border-black/10 bg-[#f0f0f0] text-black",
     )}>
       {children}
     </span>
@@ -785,8 +814,8 @@ function MicroTrust({ icon, title, subtitle }: { icon: ReactNode; title: string;
 
 function Benefit({ icon, title, subtitle }: { icon: ReactNode; title: string; subtitle: string }) {
   return (
-    <div className="flex min-w-0 items-center gap-3 border-blue-100 sm:border-r sm:last:border-r-0">
-      <span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-blue-50 text-[color:var(--store-accent)]">{icon}</span>
+    <div className="flex min-w-0 items-center gap-3 border-black/10 sm:border-r sm:last:border-r-0">
+      <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[#f0f0f0] text-[color:var(--store-accent)]">{icon}</span>
       <span className="min-w-0">
         <span className="block truncate text-sm font-black text-[color:var(--store-text)]">{title}</span>
         <span className="block truncate text-xs font-medium text-[color:var(--store-text-muted)]">{subtitle}</span>
@@ -810,7 +839,7 @@ function RelatedProductCard({ item, href }: { item: ClientSalesCatalogItem; href
   return (
     <Link
       href={href}
-      className="group grid grid-cols-[64px_minmax(0,1fr)_auto] items-center gap-3 rounded-lg border border-blue-100 bg-white p-3 transition hover:border-blue-300 hover:bg-blue-50"
+      className="group grid grid-cols-[64px_minmax(0,1fr)_auto] items-center gap-3 rounded-[16px] border border-black/10 bg-white p-3 transition hover:border-black/30 hover:bg-[#f0f0f0]"
       data-track-event="sales_catalog_similar_product_clicked"
       data-track-label={item.title}
     >
@@ -825,7 +854,7 @@ function RelatedProductCard({ item, href }: { item: ClientSalesCatalogItem; href
             className="object-contain p-1"
           />
         ) : (
-          <Package className="m-5 h-6 w-6 text-blue-300" aria-hidden="true" />
+          <Package className="m-5 h-6 w-6 text-black/30" aria-hidden="true" />
         )}
       </div>
       <div className="min-w-0">
@@ -839,24 +868,34 @@ function RelatedProductCard({ item, href }: { item: ClientSalesCatalogItem; href
 
 function MobileAccordion({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <details className="rounded-lg border border-blue-100 bg-white shadow-lg shadow-blue-950/5">
+    <details className="rounded-[20px] border border-black/10 bg-white shadow-lg shadow-black/5">
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-4 text-sm font-bold text-[color:var(--store-text)]">
         {title}
-        <ChevronDown className="h-4 w-4 text-blue-600" />
+        <ChevronDown className="h-4 w-4 text-black" />
       </summary>
-      <div className="space-y-3 border-t border-blue-100 px-4 py-4 text-sm leading-6 text-slate-600">
+      <div className="space-y-3 border-t border-black/10 px-4 py-4 text-sm leading-6 text-slate-600">
         {children}
       </div>
     </details>
   );
 }
 
-function MobileBottomNav({ storeUrl, whatsappHref }: { storeUrl: string; whatsappHref: string | null }) {
+function MobileBottomNav({
+  storeUrl,
+  storeProductsUrl,
+  cartUrl,
+  whatsappHref,
+}: {
+  storeUrl: string;
+  storeProductsUrl: string;
+  cartUrl: string;
+  whatsappHref: string | null;
+}) {
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-3 border-t border-blue-100 bg-white px-2 py-2 shadow-[0_-16px_40px_rgba(15,23,42,0.12)] sm:hidden">
+    <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-3 border-t border-black/10 bg-white px-2 py-2 shadow-[0_-16px_40px_rgba(15,23,42,0.12)] sm:hidden">
       <MobileNavItem href={storeUrl} icon={<Home className="h-5 w-5" />} label="Loja" active />
-      <MobileNavItem href={storeUrl} icon={<Package className="h-5 w-5" />} label="Produtos" />
-      <MobileNavItem href={whatsappHref ?? storeUrl} icon={<MessageCircle className="h-5 w-5" />} label="WhatsApp" external={Boolean(whatsappHref)} />
+      <MobileNavItem href={storeProductsUrl} icon={<Package className="h-5 w-5" />} label="Produtos" />
+      <MobileNavItem href={whatsappHref ?? cartUrl} icon={<MessageCircle className="h-5 w-5" />} label="WhatsApp" external={Boolean(whatsappHref)} />
     </nav>
   );
 }
@@ -867,7 +906,7 @@ function MobileNavItem({ active, external, href, icon, label }: { active?: boole
       href={href}
       target={external ? "_blank" : undefined}
       rel={external ? "noreferrer" : undefined}
-      className={cn("grid place-items-center gap-1 rounded-lg py-1 text-[11px] font-semibold", active ? "text-blue-600" : "text-slate-600")}
+      className={cn("grid place-items-center gap-1 rounded-lg py-1 text-[11px] font-semibold", active ? "text-black" : "text-slate-600")}
     >
       {icon}
       <span>{label}</span>
@@ -877,36 +916,177 @@ function MobileNavItem({ active, external, href, icon, label }: { active?: boole
 
 function PublicStoreFooter({
   branding,
+  cartUrl,
   footerContactText,
   footerText,
+  storeProductsUrl,
+  storeUrl,
+  whatsappHref,
 }: {
   branding: OrganizationBranding;
+  cartUrl: string;
   footerContactText: string;
   footerText: string;
+  storeProductsUrl: string;
+  storeUrl: string;
+  whatsappHref: string | null;
 }) {
+  const supportHref = whatsappHref ?? storeUrl;
+  const supportIsExternal = Boolean(whatsappHref);
+
   return (
-    <footer className="border-t border-slate-200 bg-white">
-      <div className="mx-auto grid w-full max-w-7xl gap-5 px-4 py-7 sm:px-6 md:grid-cols-[1.4fr_1fr_1fr] lg:px-8">
-        <div>
-          <p className="text-base font-black text-[color:var(--store-text)]">{branding.displayName}</p>
-          <p className="mt-2 max-w-xl text-sm leading-6 text-[color:var(--store-text-muted)]">{footerText}</p>
-        </div>
-        <div>
-          <p className="text-sm font-black text-[color:var(--store-text)]">Atendimento</p>
-          <p className="mt-2 text-sm font-semibold leading-6" style={{ color: "var(--store-accent)" }}>{footerContactText}</p>
-        </div>
-        <div>
-          <p className="text-sm font-black text-[color:var(--store-text)]">Compra segura</p>
-          <p className="mt-2 text-sm leading-6 text-[color:var(--store-text-muted)]">Checkout protegido e acompanhamento pelo WhatsApp.</p>
+    <footer className="mt-16 bg-[#f0f0f0]">
+      <div className="mx-auto w-full max-w-[1240px] px-4">
+        <section className="grid gap-6 rounded-[20px] bg-black px-6 py-8 text-white shadow-2xl shadow-black/10 md:grid-cols-[minmax(0,1fr)_390px] md:items-center md:px-16 md:py-9">
+          <div className="flex max-w-2xl items-center gap-4">
+            <FooterStoreLogo branding={branding} />
+            <h2 className="text-[24px] font-bold uppercase leading-[29px] md:text-[30px] md:leading-[35px]">
+              Receba novidades e ofertas da {branding.displayName}
+            </h2>
+          </div>
+          <div className="grid gap-3">
+            <label className="relative">
+              <MessageCircle className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#128C4A]" aria-hidden="true" />
+              <input
+                className="h-12 w-full rounded-full border-0 bg-white px-12 text-sm font-medium text-black outline-none placeholder:text-black/40"
+                placeholder="WhatsApp com DDD"
+                type="tel"
+              />
+            </label>
+            <label className="relative">
+              <Mail className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-black/45" aria-hidden="true" />
+              <input
+                className="h-12 w-full rounded-full border-0 bg-white px-12 text-sm font-medium text-black outline-none placeholder:text-black/40"
+                placeholder="E-mail"
+                type="email"
+              />
+            </label>
+            <Link
+              className="inline-flex h-12 items-center justify-center rounded-full bg-white px-6 text-sm font-bold text-black transition hover:bg-white/90"
+              href={storeProductsUrl}
+            >
+              Ver ofertas da loja
+            </Link>
+          </div>
+        </section>
+
+        <div className="grid gap-8 px-0 pb-10 pt-12 md:grid-cols-[1.35fr_1fr_1fr_1fr] md:pt-14">
+          <div>
+            <div className="flex items-center gap-3">
+              <FooterStoreLogo branding={branding} />
+              <h2 className="text-[22px] font-bold uppercase leading-none text-black">{branding.displayName}</h2>
+            </div>
+            <p className="mt-4 max-w-xs text-sm leading-6 text-black/60">{footerText}</p>
+            <div className="mt-7 flex gap-3">
+              {["W", "I", "F", "C"].map((item) => (
+                <span className="grid h-8 w-8 place-items-center rounded-full border border-black/20 bg-white text-xs font-bold text-black" key={item}>
+                  {item}
+                </span>
+              ))}
+            </div>
+          </div>
+          <ProductFooterColumn
+            title="Empresa"
+            items={[
+              { label: "Sobre", href: storeUrl },
+              { label: "Produtos", href: storeProductsUrl },
+              { label: "Carrinho", href: cartUrl },
+              { label: "Atendimento", href: supportHref, external: supportIsExternal },
+            ]}
+          />
+          <ProductFooterColumn
+            title="Ajuda"
+            items={[
+              { label: "Suporte", href: supportHref, external: supportIsExternal },
+              { label: "Entrega", href: supportHref, external: supportIsExternal },
+              { label: "Pedidos", href: supportHref, external: supportIsExternal },
+              { label: "Pagamentos", href: supportHref, external: supportIsExternal },
+            ]}
+          />
+          <div>
+            <h3 className="text-sm font-bold uppercase tracking-[3px] text-black">Pagamento</h3>
+            <p className="mt-4 text-sm leading-6 text-black/60">
+              Checkout seguro pela ConnectyHub. {footerContactText}
+            </p>
+            <div className="mt-5 flex flex-wrap gap-2">
+              {productPaymentBadges.map((item) => (
+                <ProductPaymentBadge key={item.label} label={item.label} tone={item.tone} />
+              ))}
+            </div>
+          </div>
         </div>
       </div>
-      <p className="border-t border-slate-100 px-4 py-4 text-center text-xs font-semibold text-[color:var(--store-text-muted)]">
-        Desenvolvido por{" "}
-        <a className="font-black hover:underline" href={connectHubPublicUrl} rel="noreferrer" target="_blank">
+      <p className="mx-auto w-full max-w-[1240px] border-t border-black/10 px-4 py-5 text-xs text-black/60">
+        {branding.displayName} - Checkout seguro pela{" "}
+        <a className="font-bold text-black hover:underline" href={connectHubPublicUrl} rel="noreferrer" target="_blank">
           ConnectyHub
         </a>
       </p>
     </footer>
+  );
+}
+
+function FooterStoreLogo({ branding }: { branding: OrganizationBranding }) {
+  return (
+    <span className="relative grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-[8px] border border-[#e5e2d8] bg-white">
+      {branding.logoUrl ? (
+        <Image alt={branding.logoAlt} className="object-contain p-1" fill sizes="40px" src={branding.logoUrl} unoptimized />
+      ) : (
+        <Store className="h-5 w-5 text-[color:var(--store-accent)]" />
+      )}
+    </span>
+  );
+}
+
+type ProductPaymentBadgeTone = "visa" | "pix" | "card" | "mp";
+
+const productPaymentBadges: Array<{ label: string; tone: ProductPaymentBadgeTone }> = [
+  { label: "Visa", tone: "visa" },
+  { label: "Pix", tone: "pix" },
+  { label: "Card", tone: "card" },
+  { label: "MP", tone: "mp" },
+];
+
+function ProductPaymentBadge({ label, tone }: { label: string; tone: ProductPaymentBadgeTone }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex min-h-8 items-center rounded-[6px] border px-3 text-xs font-bold shadow-sm",
+        tone === "visa" && "border-[#1a1f71]/20 bg-[#1a1f71] text-white",
+        tone === "pix" && "border-[#32bcad]/20 bg-[#32bcad] text-white",
+        tone === "card" && "border-[#eb001b]/20 bg-gradient-to-r from-[#eb001b] to-[#f79e1b] text-white",
+        tone === "mp" && "border-[#009ee3]/20 bg-[#009ee3] text-white",
+      )}
+    >
+      {label}
+    </span>
+  );
+}
+
+function ProductFooterColumn({
+  items,
+  title,
+}: {
+  items: Array<{ label: string; href: string; external?: boolean }>;
+  title: string;
+}) {
+  return (
+    <div>
+      <h3 className="text-sm font-bold uppercase tracking-[3px] text-black">{title}</h3>
+      <div className="mt-4 grid gap-3">
+        {items.map((item) => (
+          <a
+            className="text-sm text-black/60 transition hover:text-black"
+            href={item.href}
+            key={item.label}
+            rel={item.external ? "noreferrer" : undefined}
+            target={item.external ? "_blank" : undefined}
+          >
+            {item.label}
+          </a>
+        ))}
+      </div>
+    </div>
   );
 }
 

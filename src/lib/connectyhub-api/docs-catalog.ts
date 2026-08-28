@@ -72,6 +72,7 @@ type OpenApiSpec = {
   components?: {
     schemas?: Record<string, OpenApiSchema>;
   };
+  "x-connectyhub-webhook-events"?: unknown;
 };
 
 type OpenApiOperation = {
@@ -124,19 +125,7 @@ export function buildConnectyhubDocsCatalog(spec: OpenApiSpec): ApiDocsCatalog {
     },
     groups,
     schemas,
-    webhookEvents: [
-      "messages",
-      "messages_update",
-      "connection",
-      "history",
-      "presence",
-      "chats",
-      "contacts",
-      "groups",
-      "labels",
-      "chat_labels",
-      "newsletter_messages",
-    ],
+    webhookEvents: extractWebhookEvents(spec),
     gettingStarted: [
       {
         title: "Listar instancias",
@@ -164,6 +153,19 @@ export function buildConnectyhubDocsCatalog(spec: OpenApiSpec): ApiDocsCatalog {
       },
     ],
   };
+}
+
+function extractWebhookEvents(spec: OpenApiSpec): string[] {
+  const extensionEvents = uniqueStringValues(spec["x-connectyhub-webhook-events"]);
+  if (extensionEvents.length) return extensionEvents;
+
+  const webhooksPost = spec.paths?.["/webhooks"]?.post;
+  const schema = webhooksPost && typeof webhooksPost === "object"
+    ? getJsonBodySchema((webhooksPost as OpenApiOperation).requestBody)
+    : null;
+  const schemaEvents = uniqueStringValues(schema?.properties?.events?.items?.enum);
+
+  return schemaEvents.length ? schemaEvents : ["messages", "messages_update", "connection"];
 }
 
 function collectEndpoints(spec: OpenApiSpec): ApiDocEndpoint[] {
@@ -361,6 +363,19 @@ function schemaType(schema?: OpenApiSchema | null): string {
 
 function enumValues(schema?: OpenApiSchema | null) {
   return schema?.enum?.map((value) => String(value));
+}
+
+function uniqueStringValues(value: unknown) {
+  if (!Array.isArray(value)) return [];
+
+  return Array.from(
+    new Set(
+      value
+        .filter((item): item is string => typeof item === "string")
+        .map((item) => item.trim())
+        .filter(Boolean),
+    ),
+  );
 }
 
 function stringifyExample(value: unknown) {

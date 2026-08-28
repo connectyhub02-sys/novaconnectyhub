@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { ConnectyShell } from "@/components/connectyhub-os/connecty-shell";
 import { LeadCrmConsole } from "@/components/connectyhub-os/leads-crm-console";
 import { currentOrganizationToClientCompany } from "@/lib/client-os/current-company";
-import { getClientLeadCrmWorkspace } from "@/lib/client-os/leads-crm";
+import { getClientLeadCrmWorkspace, type ClientLeadCrmWorkspace } from "@/lib/client-os/leads-crm";
 import {
   listClientSalesCatalog,
   listClientSalesCatalogOrders,
@@ -36,10 +36,22 @@ export default async function AttendancePage() {
   const profile = workspace.profile;
   const organization = workspace.organization;
   const company = currentOrganizationToClientCompany(organization);
+
+  if (!company) {
+    redirect("/dashboard/empresa");
+  }
+
   const leadWorkspace = await getClientLeadCrmWorkspace({
     userId: workspace.user.id,
     organizationId: organization.id,
     company,
+    includeEvents: false,
+    leadLimit: 80,
+    messageLimit: 50,
+    syncAvatars: false,
+  }).catch((error) => {
+    console.error("[Attendance] Falha ao carregar workspace de leads", error);
+    return buildUnavailableLeadWorkspace(company);
   });
   const salesCatalogItems = await listClientSalesCatalog({
     userId: workspace.user.id,
@@ -86,4 +98,23 @@ export default async function AttendancePage() {
       />
     </ConnectyShell>
   );
+}
+
+function buildUnavailableLeadWorkspace(company: NonNullable<ReturnType<typeof currentOrganizationToClientCompany>>): ClientLeadCrmWorkspace {
+  return {
+    companies: [company],
+    attendanceQueues: [],
+    leads: [],
+    stats: {
+      total: 0,
+      new: 0,
+      active: 0,
+      qualified: 0,
+      converted: 0,
+      archived: 0,
+    },
+    warnings: [
+      "Nao foi possivel carregar conversas e leads agora. O painel continua acessivel para nova tentativa.",
+    ],
+  };
 }

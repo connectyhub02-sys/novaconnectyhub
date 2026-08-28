@@ -32,6 +32,17 @@ describe("Attendance push notifications", () => {
     expect(browserNotification).not.toContain("document.visibilityState === \"visible\"");
   });
 
+  it("plays an audible alert for new inbound lead messages", () => {
+    const notificationWatcher = sourceBetween("useEffect(() => {\n    const inboundMessages", "async function updateHumanHandoff");
+    const soundPlayer = sourceBetween("async function playAttendanceLeadNotificationSound", "function showLeadBrowserNotification");
+
+    expect(notificationWatcher).toContain("playAttendanceLeadNotificationSound()");
+    expect(notificationWatcher).toContain("showLeadBrowserNotification(item.lead, item.message, notificationHref)");
+    expect(soundPlayer).toContain("getAttendanceAudioContext()");
+    expect(soundPlayer).toContain("playAttendanceTone(context");
+    expect(soundPlayer).toContain("AudioContextConstructor");
+  });
+
   it("requires push permission before using the live attendance chat", () => {
     expect(attendanceSource).toContain("const chatLockedByPush = Boolean(activeThread && shouldRequireAttendancePush(pushPrompt.permission))");
     expect(attendanceSource).toContain("AttendancePushRequiredOverlay");

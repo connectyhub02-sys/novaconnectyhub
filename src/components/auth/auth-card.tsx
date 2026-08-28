@@ -129,7 +129,7 @@ export function AuthCard({
           setRemoteWhatsappCheck({
             state: "valid",
             phoneNormalized: data.phoneNormalized ?? currentPhoneForVerification,
-            message: "WhatsApp encontrado. Agora voce pode criar a conta.",
+            message: "WhatsApp encontrado. Agora você pode criar a conta.",
           });
           return;
         }
@@ -567,7 +567,7 @@ export function AuthCard({
                     label="Email"
                     name="email"
                     onChange={setEmail}
-                    placeholder="voce@email.com"
+                    placeholder="seu@email.com"
                     type="email"
                     value={email}
                   />

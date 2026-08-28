@@ -7,6 +7,10 @@ import { inngest } from "@/lib/inngest/client";
 import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
 import { createServiceClient } from "@/lib/supabase/service";
 import { normalizeWhatsappBehaviorConfig } from "./agent-behavior";
+import {
+  normalizeOutboundLanguageText,
+  outboundLanguageQualityPromptLines,
+} from "./outbound-language";
 import { loadUazapiCredentials, type UazapiCredentials } from "./uazapi-credentials";
 
 type JsonRecord = Record<string, unknown>;
@@ -158,7 +162,12 @@ export async function processWhatsappProactiveFollowUp(input: {
     salesCatalogOrder,
     salesCatalogFollowUpKind: eventData.salesCatalogFollowUpKind ?? null,
   });
-  const followUpText = followUpGeneration?.text ?? null;
+  if (!followUpGeneration?.text) return { status: "skipped", reason: "empty_generation" };
+  const normalizedFollowUpGeneration = {
+    ...followUpGeneration,
+    text: normalizeOutboundLanguageText(followUpGeneration.text),
+  };
+  const followUpText = normalizedFollowUpGeneration.text;
   if (!followUpText) return { status: "skipped", reason: "empty_generation" };
 
   const followUpMetering = followUpGeneration
@@ -173,8 +182,8 @@ export async function processWhatsappProactiveFollowUp(input: {
         leadId: eventData.leadId,
         agentScope: "customer",
         promptText: followUpGeneration.prompt,
-        outputText: followUpGeneration.text,
-        responseData: followUpGeneration.responseData,
+        outputText: normalizedFollowUpGeneration.text,
+        responseData: normalizedFollowUpGeneration.responseData,
         requestId: `whatsapp-followup:${eventData.agentRunId}:gemini:follow_up_generation`,
         debitDescription: "Follow-up automatico WhatsApp",
         metadata: {
@@ -302,10 +311,11 @@ async function generateFollowUpMessage(
   } = {},
 ): Promise<FollowUpGenerationResult | null> {
   const prompt = [
-    "Voce e um vendedor brasileiro de WhatsApp. O lead parou de responder.",
+    "Você é um vendedor brasileiro de WhatsApp. O lead parou de responder.",
     "Gere UMA mensagem curta (1-2 frases) de follow-up natural e contextual.",
     "Nao seja generico ('oi, tudo bem?'). Retome algo especifico da conversa.",
-    "Exemplos de tom: 'e ai, pensou sobre aquilo?', 'achei uma novidade que combina com o que vc tava procurando'.",
+    "Exemplos de tom: 'e ai, pensou sobre aquilo?', 'achei uma novidade que combina com o que você estava procurando'.",
+    ...outboundLanguageQualityPromptLines,
     "Nao mencione que e follow-up, automacao, sistema ou IA.",
     ...buildSalesCatalogFollowUpPromptLines(options.salesCatalogOrder ?? null, options.salesCatalogFollowUpKind ?? null),
     "",

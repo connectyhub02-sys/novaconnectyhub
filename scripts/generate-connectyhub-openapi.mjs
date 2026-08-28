@@ -658,6 +658,7 @@ const publicSpec = {
     ...nativePaths,
     ...providerPaths,
   },
+  "x-connectyhub-webhook-events": CONNECTYHUB_WEBHOOK_EVENTS,
   "x-connectyhub-uazapi-coverage": coverageSummary,
 };
 

@@ -292,7 +292,7 @@ export async function getOrganizationBillingAccess(input: {
       bannerTitle: "Teste gratis encerrado",
       bannerDescription: balanceCredits > 0
         ? `Seu teste de 7 dias acabou. ${formatCredits(balanceCredits)} creditos ficaram guardados. Assine em ate ${TRIAL_CREDIT_CONVERSION_GRACE_DAYS} dias para somar esse saldo ao novo plano.`
-        : "Seu teste de 7 dias acabou. Seus dados continuam salvos, mas os agentes e recursos com custo estao pausados ate voce escolher um plano.",
+        : "Seu teste de 7 dias acabou. Seus dados continuam salvos, mas os agentes e recursos com custo estão pausados até você escolher um plano.",
       ctaLabel: "Escolher plano",
       ctaHref: "/dashboard/planos",
     };
@@ -315,7 +315,7 @@ export async function getOrganizationBillingAccess(input: {
       lowCreditThreshold,
       bannerTone: "amber",
       bannerTitle: "Teste gratis ativo",
-      bannerDescription: "Seu teste de 7 dias continua liberado. Ao final do periodo, os recursos ficam pausados ate voce escolher um plano.",
+      bannerDescription: "Seu teste de 7 dias continua liberado. Ao final do período, os recursos ficam pausados até você escolher um plano.",
       ctaLabel: "Assinar agora",
       ctaHref: "/dashboard/planos",
     };
@@ -338,7 +338,7 @@ export async function getOrganizationBillingAccess(input: {
       lowCreditThreshold,
       bannerTone: "amber",
       bannerTitle: "Creditos de teste quase acabando",
-      bannerDescription: `Restam ${formatCredits(balanceCredits)} creditos. Se voce assinar agora, esse saldo soma aos creditos do plano escolhido.`,
+      bannerDescription: `Restam ${formatCredits(balanceCredits)} créditos. Se você assinar agora, esse saldo soma aos créditos do plano escolhido.`,
       ctaLabel: "Ver planos",
       ctaHref: "/dashboard/planos",
     };

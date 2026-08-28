@@ -41,9 +41,10 @@ type Notice = {
 };
 
 const defaultPrompt = [
-  "Voce e o agente comercial de WhatsApp desta empresa.",
-  "Atenda com clareza, descubra contexto, qualifique intencao, responda objecoes e conduza o lead para o proximo passo comercial.",
-  "Quando nao tiver certeza, faca uma pergunta objetiva antes de prometer algo.",
+  "Você é o agente comercial de WhatsApp desta empresa.",
+  "Atenda com clareza, descubra contexto, qualifique intenção, responda objeções e conduza o lead para o próximo passo comercial.",
+  "Quando não tiver certeza, faça uma pergunta objetiva antes de prometer algo.",
+  "Use ortografia correta em português, inglês e espanhol. Não use abreviações como vc, tb, pq, u, ur, xq ou q nas respostas ao cliente.",
 ].join("\n\n");
 
 export function ClientAgentsConsole() {

@@ -59,6 +59,53 @@ describe("WhatsApp sales catalog humanized replies", () => {
     expect(catalogRuntime).toContain("hasSalesCatalogOrderIntent(intentText)");
   });
 
+  it("requires a confirmed order preview before creating checkout links", () => {
+    const delivery = sourceBetween("async function sendAgentResponse", "type CompanyLocationReply");
+    const checkoutRuntime = sourceBetween(
+      "type RuntimeSalesCatalogOrderSelection",
+      "async function persistSalesCatalogUnavailableOrderAttempt",
+    );
+
+    expect(delivery).toContain("hasRecentSalesCatalogCheckoutConfirmation(context, orderIntentText)");
+    expect(delivery).toContain("shouldRequestSalesCatalogCheckoutConfirmation");
+    expect(delivery).toContain("buildSalesCatalogOrderConfirmationPrompt(checkoutOrderSelections)");
+    expect(checkoutRuntime).toContain("source: \"current_response\" | \"recent_lead_message\" | \"confirmation_preview\"");
+    expect(checkoutRuntime).toContain("salesCatalogCheckoutConfirmationWindowMs");
+    expect(checkoutRuntime).toContain("Posso fechar seu pedido e te mandar o link de pagamento?");
+    expect(checkoutRuntime).toContain("if (!hasRecentSalesCatalogCheckoutConfirmation(input.context, intentText))");
+  });
+
+  it("keeps checkout payment links out of reusable agent links", () => {
+    const loader = sourceBetween(
+      "async function loadOrganizationLinkButtons",
+      "async function loadAgentLearnings",
+    );
+
+    expect(loader).toContain("tags.has(\"sales_catalog_checkout\")");
+    expect(loader).toContain("tags.has(\"sales_catalog_order\")");
+    expect(loader).toContain("asString(metadata.payment_session_id) !== null");
+    expect(loader).toContain("source === \"sales_catalog_checkout\"");
+    expect(loader).toContain("salesDestination === \"connectyhub_checkout\"");
+    expect(loader).toContain("loadPlatformSectorLinkButtons");
+    expect(loader).toContain(".filter((row) => !isSalesCatalogRuntimeLinkButton(row))");
+  });
+
+  it("adds the global payment confirmation rule to every agent prompt", () => {
+    const instruction = sourceBetween(
+      "function buildSystemInstruction",
+      "function buildLeadNameContext",
+    );
+    const globalRule = sourceBetween(
+      "function buildGlobalCheckoutConfirmationLines",
+      "function buildLinkButtonLines",
+    );
+
+    expect(instruction).toContain("REGRA GLOBAL DE FECHAMENTO E PAGAMENTO");
+    expect(globalRule).toContain("vale para todos os agentes");
+    expect(globalRule).toContain("inclusive agentes internos");
+    expect(globalRule).toContain("Nunca reutilize link de checkout/pagamento antigo ou de outro lead");
+  });
+
   it("preserves substantive product explanations before offering product pages", () => {
     const delivery = sourceBetween("async function sendAgentResponse", "type CompanyLocationReply");
     const renderer = sourceBetween(
@@ -66,7 +113,7 @@ describe("WhatsApp sales catalog humanized replies", () => {
       "async function recordSalesCatalogOrderIntent",
     );
 
-    expect(delivery).toContain("const shouldOfferProductPageLinks = shouldSendSalesCatalogProductPageLinks(latestInbound, cleanText);");
+    expect(delivery).toContain("const shouldOfferProductPageLinks = !shouldRequestCheckoutConfirmation && shouldSendSalesCatalogProductPageLinks(latestInbound, cleanText);");
     expect(delivery).toContain("!hasOrderIntent && shouldOfferProductPageLinks");
     expect(delivery).toContain("const hasCatalogAction = hasOrderIntent || catalogAttachments.length > 0 || shouldOfferProductPageLinks;");
     expect(renderer).toContain("hasSubstantiveSalesCatalogAnswer(input.text)");

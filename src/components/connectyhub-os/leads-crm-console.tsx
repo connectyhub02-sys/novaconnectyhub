@@ -106,6 +106,7 @@ type LeadCrmConsoleProps = {
   attendanceNotificationHref?: string;
   commerceEnabled?: boolean;
   conversationPanelScope?: ConversationPanelScope;
+  liveEndpoint?: string | null;
   mode: ConsoleMode;
   salesCatalogItems?: ClientSalesCatalogItem[];
   salesCatalogOrders?: ClientSalesCatalogOrder[];
@@ -125,6 +126,7 @@ type AttendancePushSubscriptionContext = {
 };
 
 type AttendancePushSubscriptionResult = "granted" | "denied" | "dismissed" | "unsupported" | "failed";
+type AttendanceSoundPermissionState = "ready" | "blocked" | "unsupported" | "unknown";
 
 type AttendancePushPromptState = {
   busy: boolean;
@@ -163,6 +165,14 @@ type LeadCheckoutRecord = {
   totalCents: number;
 };
 
+type AttendanceLiveSnapshotResponse = {
+  ok?: boolean;
+  workspace?: ClientLeadCrmWorkspace;
+  salesCatalogOrders?: ClientSalesCatalogOrder[];
+  salesCatalogPaymentSessions?: ClientSalesCatalogPaymentSession[];
+  error?: string;
+};
+
 const salesCatalogBrowserEventsChannel = "connectyhub:sales-catalog-events";
 
 type SalesCatalogBrowserEvent = {
@@ -171,6 +181,9 @@ type SalesCatalogBrowserEvent = {
   itemIds?: unknown;
   type?: unknown;
 };
+
+let attendanceAudioContext: AudioContext | null = null;
+let attendanceSoundPrimed = false;
 
 function removeUnavailableCatalogCartItems(
   carts: Record<string, AttendanceCartItem[]>,
@@ -242,14 +255,18 @@ export function LeadCrmConsole({
   attendanceNotificationHref = "/dashboard/atendimento",
   commerceEnabled = true,
   conversationPanelScope,
+  liveEndpoint,
   mode,
   salesCatalogItems = [],
-  salesCatalogOrders = [],
-  salesCatalogPaymentSessions = [],
+  salesCatalogOrders: initialSalesCatalogOrders = [],
+  salesCatalogPaymentSessions: initialSalesCatalogPaymentSessions = [],
   socialApprovals: initialSocialApprovals = [],
   socialDispatchMonitor: initialSocialDispatchMonitor = emptySocialDispatchMonitor,
-  workspace,
+  workspace: initialWorkspace,
 }: LeadCrmConsoleProps) {
+  const [workspace, setWorkspace] = useState<ClientLeadCrmWorkspace>(initialWorkspace);
+  const [salesCatalogOrders, setSalesCatalogOrders] = useState<ClientSalesCatalogOrder[]>(initialSalesCatalogOrders);
+  const [salesCatalogPaymentSessions, setSalesCatalogPaymentSessions] = useState<ClientSalesCatalogPaymentSession[]>(initialSalesCatalogPaymentSessions);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<"all" | ClientLeadStatus>("all");
   const [expandedLeadId, setExpandedLeadId] = useState<string | null>(workspace.leads[0]?.id ?? null);
@@ -258,6 +275,120 @@ export function LeadCrmConsole({
   const [detailsLeadId, setDetailsLeadId] = useState<string | null>(null);
   const [socialApprovals, setSocialApprovals] = useState<ClientSocialApproval[]>(initialSocialApprovals);
   const [socialDispatchMonitor, setSocialDispatchMonitor] = useState<ClientSocialDispatchMonitor>(initialSocialDispatchMonitor);
+  const resolvedLiveEndpoint = liveEndpoint !== undefined
+    ? liveEndpoint
+    : (mode === "atendimento" || mode === "conversas") && !conversationPanelScope
+      ? "/api/dashboard/attendance/live"
+      : null;
+
+  useEffect(() => {
+    if (!resolvedLiveEndpoint || (mode !== "atendimento" && mode !== "conversas")) {
+      return;
+    }
+
+    const endpoint = resolvedLiveEndpoint;
+    let cancelled = false;
+    let inFlight = false;
+    let timeoutId: number | null = null;
+    let failedAttempts = 0;
+    let refreshCount = 0;
+
+    const schedule = (delayMs: number) => {
+      if (cancelled) {
+        return;
+      }
+
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+      }
+
+      timeoutId = window.setTimeout(refreshLiveSnapshot, delayMs);
+    };
+
+    const getNextDelay = () => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") {
+        return 30_000;
+      }
+
+      return failedAttempts > 0 ? Math.min(15_000, 5_000 + failedAttempts * 2_000) : 4_000;
+    };
+
+    const refreshNow = () => {
+      if (!inFlight) {
+        if (timeoutId !== null) {
+          window.clearTimeout(timeoutId);
+          timeoutId = null;
+        }
+
+        void refreshLiveSnapshot();
+      }
+    };
+
+    async function refreshLiveSnapshot() {
+      if (cancelled || inFlight) {
+        return;
+      }
+
+      inFlight = true;
+
+      try {
+        const url = new URL(endpoint, window.location.origin);
+        const includeCommerceSnapshot = commerceEnabled && refreshCount % 5 === 0;
+        refreshCount += 1;
+        url.searchParams.set("commerce", includeCommerceSnapshot ? "1" : "0");
+
+        const response = await fetch(url.toString(), {
+          cache: "no-store",
+          headers: {
+            Accept: "application/json",
+          },
+        });
+        const payload = await response.json().catch(() => ({})) as AttendanceLiveSnapshotResponse;
+
+        if (!response.ok || !payload.workspace) {
+          throw new Error(payload.error ?? "Nao foi possivel atualizar o atendimento ao vivo.");
+        }
+
+        if (cancelled) {
+          return;
+        }
+
+        failedAttempts = 0;
+        setWorkspace((current) => mergeLiveLeadWorkspace(current, payload.workspace!));
+
+        if (payload.salesCatalogOrders) {
+          setSalesCatalogOrders(payload.salesCatalogOrders);
+        }
+
+        if (payload.salesCatalogPaymentSessions) {
+          setSalesCatalogPaymentSessions(payload.salesCatalogPaymentSessions);
+        }
+      } catch {
+        failedAttempts += 1;
+      } finally {
+        inFlight = false;
+
+        if (!cancelled) {
+          schedule(getNextDelay());
+        }
+      }
+    }
+
+    schedule(900);
+    window.addEventListener("focus", refreshNow);
+    document.addEventListener("visibilitychange", refreshNow);
+
+    return () => {
+      cancelled = true;
+
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+      }
+
+      window.removeEventListener("focus", refreshNow);
+      document.removeEventListener("visibilitychange", refreshNow);
+    };
+  }, [commerceEnabled, mode, resolvedLiveEndpoint]);
 
   const filteredLeads = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -394,6 +525,7 @@ export function LeadCrmConsole({
           salesCatalogItems={salesCatalogItems}
           search={search}
           selectedLeadId={selectedLead?.id ?? null}
+          liveUpdatesEnabled={Boolean(resolvedLiveEndpoint)}
           setConversationPane={setConversationPane}
           setDetailsLeadId={setDetailsLeadId}
           setSearch={setSearch}
@@ -411,6 +543,73 @@ export function LeadCrmConsole({
       ) : null}
     </section>
   );
+}
+
+function mergeLiveLeadWorkspace(current: ClientLeadCrmWorkspace, next: ClientLeadCrmWorkspace): ClientLeadCrmWorkspace {
+  const currentLeadsById = new Map(current.leads.map((lead) => [lead.id, lead]));
+
+  return {
+    ...next,
+    leads: next.leads.map((lead) => {
+      const currentLead = currentLeadsById.get(lead.id);
+      return currentLead ? mergeLiveLeadRecord(currentLead, lead) : lead;
+    }),
+  };
+}
+
+function mergeLiveLeadRecord(current: ClientLeadRecord, next: ClientLeadRecord): ClientLeadRecord {
+  const trackingEvents = current.leadFile.trackingEvents.length > next.leadFile.trackingEvents.length
+    ? current.leadFile.trackingEvents
+    : next.leadFile.trackingEvents;
+  const intelligenceEvents = current.leadFile.intelligenceEvents.length > next.leadFile.intelligenceEvents.length
+    ? current.leadFile.intelligenceEvents
+    : next.leadFile.intelligenceEvents;
+  const activities = current.activities.length > next.activities.length
+    ? mergeLeadActivities(next.activities, current.activities)
+    : next.activities;
+
+  return {
+    ...next,
+    activities,
+    leadFile: {
+      ...next.leadFile,
+      firstSeenAt: pickTimelineDate([next.leadFile.firstSeenAt, current.leadFile.firstSeenAt], "asc"),
+      intelligenceEventCount: intelligenceEvents.length,
+      intelligenceEvents,
+      lastSeenAt: pickTimelineDate([next.leadFile.lastSeenAt, current.leadFile.lastSeenAt], "desc"),
+      trackingEventCount: trackingEvents.length,
+      trackingEvents,
+    },
+    technical: {
+      ...next.technical,
+      lastClick: next.technical.lastClick ?? current.technical.lastClick,
+    },
+  };
+}
+
+function mergeLeadActivities(primary: ClientLeadActivity[], preserved: ClientLeadActivity[]) {
+  const activitiesById = new Map(primary.map((activity) => [activity.id, activity]));
+
+  for (const activity of preserved) {
+    if (!activitiesById.has(activity.id)) {
+      activitiesById.set(activity.id, activity);
+    }
+  }
+
+  return Array.from(activitiesById.values()).sort((a, b) => toTimestamp(b.occurredAt) - toTimestamp(a.occurredAt));
+}
+
+function pickTimelineDate(values: Array<string | null | undefined>, direction: "asc" | "desc") {
+  const dates = values.filter((value): value is string => Boolean(value));
+
+  if (!dates.length) {
+    return null;
+  }
+
+  return dates.sort((a, b) => {
+    const diff = toTimestamp(a) - toTimestamp(b);
+    return direction === "asc" ? diff : -diff;
+  })[0];
 }
 
 function LeadWorkspaceWarning({ warnings }: { warnings: string[] }) {
@@ -851,6 +1050,7 @@ function AttendanceCenterView({
   salesCatalogItems,
   search,
   selectedLeadId,
+  liveUpdatesEnabled,
   setConversationPane,
   setDetailsLeadId,
   setSearch,
@@ -866,6 +1066,7 @@ function AttendanceCenterView({
   salesCatalogItems: ClientSalesCatalogItem[];
   search: string;
   selectedLeadId: string | null;
+  liveUpdatesEnabled: boolean;
   setConversationPane: (pane: "inbox" | "chat") => void;
   setDetailsLeadId: (id: string) => void;
   setSearch: (value: string) => void;
@@ -894,6 +1095,7 @@ function AttendanceCenterView({
     permission: readAttendancePushPermissionState(),
     visible: false,
   }));
+  const [soundPermission, setSoundPermission] = useState<AttendanceSoundPermissionState>(() => readAttendanceSoundPermissionState());
   const manualReplyTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const notifiedLeadMessages = useRef(new Set<string>());
   const notificationSeeded = useRef(false);
@@ -1014,6 +1216,10 @@ function AttendanceCenterView({
       return;
     }
 
+    if (liveUpdatesEnabled) {
+      return;
+    }
+
     let lastRefreshAt = 0;
     const refreshCatalogSnapshot = () => {
       const now = Date.now();
@@ -1039,7 +1245,7 @@ function AttendanceCenterView({
       window.removeEventListener("pageshow", refreshCatalogSnapshot);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [router]);
+  }, [liveUpdatesEnabled, router]);
 
   function updateActiveCart(updater: (items: AttendanceCartItem[]) => AttendanceCartItem[]) {
     if (!activeCartKey) {
@@ -1267,7 +1473,7 @@ function AttendanceCenterView({
     setPushPrompt((current) => ({
       ...current,
       message: permission === "denied"
-        ? "As notificacoes estao bloqueadas no navegador. Libere pelo cadeado ao lado do endereco."
+        ? "As notificações estão bloqueadas no navegador. Libere pelo cadeado ao lado do endereço."
         : current.message,
       permission,
       visible: true,
@@ -1275,15 +1481,19 @@ function AttendanceCenterView({
   }
 
   async function enableAttendancePushNotifications(context = activePushContext) {
+    const soundPrimePromise = primeAttendanceNotificationSound();
+
     setPushPrompt((current) => ({
       ...current,
       busy: true,
-      message: "Quando o navegador perguntar, clique em Permitir.",
+      message: "Quando o navegador perguntar, clique em Permitir. O painel também vai ativar o aviso sonoro.",
       visible: true,
     }));
 
     const result = await requestAttendancePushSubscription(context);
+    const audioPermission = await soundPrimePromise;
     const permission = readAttendancePushPermissionState();
+    setSoundPermission(audioPermission);
 
     if (result === "granted") {
       syncedPushContextKeys.current.add(formatAttendancePushContextKey(context));
@@ -1305,6 +1515,16 @@ function AttendanceCenterView({
       dismissed: true,
       visible: false,
     }));
+  }
+
+  function primeAttendanceSoundFromUserGesture() {
+    if (soundPermission === "ready" || soundPermission === "unsupported") {
+      return;
+    }
+
+    void primeAttendanceNotificationSound().then((permission) => {
+      setSoundPermission(permission);
+    });
   }
 
   useEffect(() => {
@@ -1370,18 +1590,6 @@ function AttendanceCenterView({
   }, [activePushContext, pushPrompt.permission]);
 
   useEffect(() => {
-    if (!activeConversationId) {
-      return;
-    }
-
-    const interval = window.setInterval(() => {
-      router.refresh();
-    }, 5000);
-
-    return () => window.clearInterval(interval);
-  }, [activeConversationId, router]);
-
-  useEffect(() => {
     const inboundMessages = attendanceThreads.flatMap((thread) =>
       (thread.conversation?.messages ?? thread.lead.conversation.messages)
         .filter((message) => message.author === "lead" || message.direction === "inbound")
@@ -1404,6 +1612,9 @@ function AttendanceCenterView({
 
       notifiedLeadMessages.current.add(item.message.id);
       promptAttendancePushPermission();
+      void playAttendanceLeadNotificationSound().then((permission) => {
+        setSoundPermission(permission);
+      });
       showLeadBrowserNotification(item.lead, item.message, notificationHref);
     }
   }, [attendanceThreads, notificationHref]);
@@ -1539,7 +1750,7 @@ function AttendanceCenterView({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" onPointerDown={primeAttendanceSoundFromUserGesture}>
       <div
         className="overflow-hidden rounded-[22px] border shadow-[0_24px_70px_rgba(17,17,17,0.08)]"
         style={{ borderColor: "var(--ch-border-strong)", background: "rgba(255,255,255,0.94)" }}
@@ -1659,7 +1870,7 @@ function AttendanceCenterView({
                         <span className="shrink-0 text-[11px] text-slate-500">{formatTime(thread.lastMessageAt ?? lead.updatedAt)}</span>
                       </div>
                       <p className="mt-1 truncate text-[12px] text-slate-600">
-                        {latestMessage ? `${formatMessageAuthorShort(latestMessage)}: ${latestMessage.text}` : thread.conversation?.preview ?? lead.conversation.preview ?? lead.summary}
+                        {latestMessage ? formatThreadMessagePreview(latestMessage) : thread.conversation?.preview ?? lead.conversation.preview ?? lead.summary}
                       </p>
                       <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5">
                         <NeonBadge tone="zinc">{queueLabel}</NeonBadge>
@@ -1909,12 +2120,12 @@ function AttendancePushPermissionPrompt({
           </span>
           <div className="min-w-0">
             <p className="font-semibold text-slate-950">
-              {blocked ? "Notificacoes bloqueadas neste navegador" : "Ative alertas de respostas dos leads"}
+              {blocked ? "Notificações bloqueadas neste navegador" : "Ative som e push para respostas dos leads"}
             </p>
             <p className="mt-1 leading-5 text-slate-600">
               {blocked
-                ? "Para receber avisos, clique no cadeado ao lado do endereco do site e libere Notificacoes."
-                : "Quando um lead responder, o ConnectyHub avisa pelo navegador mesmo com o painel aberto ou em outra aba."}
+                ? "Para receber avisos, clique no cadeado ao lado do endereço do site e libere Notificações."
+                : "Quando um lead responder, o ConnectyHub toca um aviso curto e mostra a notificação do navegador mesmo com o painel aberto ou em outra aba."}
             </p>
             {message ? (
               <p className="mt-2 rounded-xl border border-red-200 bg-white px-3 py-2 text-[11px] leading-4 text-red-700">
@@ -1945,10 +2156,10 @@ function AttendancePushPermissionPrompt({
           type="button"
         >
           {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Bell className="h-3.5 w-3.5" />}
-          {busy ? "Aguardando" : blocked ? "Tentar liberar" : "Ativar notificacoes"}
+          {busy ? "Aguardando" : blocked ? "Tentar liberar" : "Ativar notificações"}
         </button>
         <span className="text-[11px] text-slate-500">
-          O navegador sempre vai pedir uma confirmacao sua antes de ativar.
+          O navegador sempre vai pedir uma confirmação sua antes de ativar.
         </span>
       </div>
     </div>
@@ -1974,14 +2185,14 @@ function AttendancePushRequiredOverlay({
           <Bell className="h-5 w-5" />
         </div>
         <p className="mt-3 text-[15px] font-bold text-slate-950">
-          {blocked ? "Notificacoes bloqueadas" : "Ative notificacoes para usar o atendimento"}
+          {blocked ? "Notificações bloqueadas" : "Ative som e push para usar o atendimento"}
         </p>
         <p className="mt-2 text-[12px] leading-5 text-slate-600">
           {blocked
-            ? "Para abrir e responder conversas, libere Notificacoes no cadeado ao lado do endereco do site e tente novamente."
+            ? "Para abrir e responder conversas, libere Notificações no cadeado ao lado do endereço do site e tente novamente."
             : unknown
               ? "Estamos verificando se este navegador permite alertas. Ative para continuar acompanhando os leads em tempo real."
-              : "Assim que um lead responder, o operador recebe o aviso do navegador e nao perde a conversa."}
+              : "Assim que um lead responder, o operador escuta o aviso e recebe a notificação do navegador."}
         </p>
         <button
           className="mt-4 inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-[#25D366] px-4 text-[12px] font-bold text-white shadow-[0_10px_20px_rgba(37,211,102,0.20)] transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-70"
@@ -2727,8 +2938,19 @@ function emptyClientHumanIntervention(): ClientLeadHumanIntervention {
 function formatMessageAuthorShort(message: ClientLeadMessage) {
   if (message.author === "lead") return "Lead";
   if (message.author === "ai") return "IA";
-  if (message.author === "human") return "Voce";
+  if (message.author === "human") return "Você";
   return "Sistema";
+}
+
+function formatThreadMessagePreview(message: ClientLeadMessage) {
+  const author = formatMessageAuthorShort(message);
+
+  if (message.mediaKind === "audio") {
+    const text = isGenericMediaPlaceholder(message.text) ? "" : `: ${message.text}`;
+    return `${author}: Áudio${text}`;
+  }
+
+  return `${author}: ${message.text}`;
 }
 
 function mergeConversationMessages(serverMessages: ClientLeadMessage[], localMessages: ClientLeadMessage[]) {
@@ -2796,6 +3018,14 @@ function readAttendancePushPermissionState(): BrowserPushPermissionState {
 
 function shouldRequireAttendancePush(permission: BrowserPushPermissionState) {
   return permission !== "granted" && permission !== "unsupported";
+}
+
+function readAttendanceSoundPermissionState(): AttendanceSoundPermissionState {
+  if (!canUseAttendanceAudioContext()) {
+    return "unsupported";
+  }
+
+  return attendanceSoundPrimed ? "ready" : "unknown";
 }
 
 function buildAttendancePushContext(
@@ -2897,22 +3127,22 @@ async function requestAttendancePushSubscription(
 
 function getAttendancePushPromptMessage(result: "granted" | "denied" | "dismissed" | "unsupported" | "failed") {
   if (result === "granted") {
-    return "Pronto. Voce vai receber alertas quando leads responderem.";
+    return "Pronto. Você vai receber alertas quando leads responderem.";
   }
 
   if (result === "denied") {
-    return "O navegador bloqueou notificacoes. Libere pelo cadeado ao lado do endereco do site.";
+    return "O navegador bloqueou notificações. Libere pelo cadeado ao lado do endereço do site.";
   }
 
   if (result === "dismissed") {
-    return "Voce fechou o aviso do navegador. Clique em ativar quando quiser receber alertas.";
+    return "Você fechou o aviso do navegador. Clique em ativar quando quiser receber alertas.";
   }
 
   if (result === "unsupported") {
-    return "Nao encontramos a configuracao de push ou este navegador nao suporta alertas nesta sessao.";
+    return "Não encontramos a configuração de push ou este navegador não suporta alertas nesta sessão.";
   }
 
-  return "Nao conseguimos ativar agora. Tente novamente em alguns instantes.";
+  return "Não conseguimos ativar agora. Tente novamente em alguns instantes.";
 }
 
 async function resolveAttendanceVapidPublicKey() {
@@ -2953,6 +3183,135 @@ function urlBase64ToUint8Array(value: string) {
   return outputArray;
 }
 
+async function primeAttendanceNotificationSound(): Promise<AttendanceSoundPermissionState> {
+  const context = getAttendanceAudioContext();
+
+  if (!context) {
+    return "unsupported";
+  }
+
+  try {
+    if (context.state === "suspended") {
+      await context.resume();
+    }
+
+    if (context.state !== "running") {
+      return "blocked";
+    }
+
+    if (!attendanceSoundPrimed) {
+      playSilentAttendanceTone(context);
+      attendanceSoundPrimed = true;
+    }
+
+    return "ready";
+  } catch {
+    return "blocked";
+  }
+}
+
+async function playAttendanceLeadNotificationSound(): Promise<AttendanceSoundPermissionState> {
+  const context = getAttendanceAudioContext();
+
+  if (!context) {
+    return "unsupported";
+  }
+
+  try {
+    if (context.state === "suspended") {
+      await context.resume();
+    }
+
+    if (context.state !== "running") {
+      return "blocked";
+    }
+
+    const now = context.currentTime;
+    playAttendanceTone(context, now, 660, 0.09, 0.12);
+    playAttendanceTone(context, now + 0.11, 880, 0.11, 0.10);
+    attendanceSoundPrimed = true;
+
+    return "ready";
+  } catch {
+    return "blocked";
+  }
+}
+
+function getAttendanceAudioContext() {
+  if (!canUseAttendanceAudioContext()) {
+    return null;
+  }
+
+  if (attendanceAudioContext?.state === "closed") {
+    attendanceAudioContext = null;
+    attendanceSoundPrimed = false;
+  }
+
+  if (!attendanceAudioContext) {
+    const audioWindow = window as Window & typeof globalThis & { webkitAudioContext?: typeof AudioContext };
+    const AudioContextConstructor = audioWindow.AudioContext ?? audioWindow.webkitAudioContext;
+
+    if (!AudioContextConstructor) {
+      return null;
+    }
+
+    attendanceAudioContext = new AudioContextConstructor();
+  }
+
+  return attendanceAudioContext;
+}
+
+function canUseAttendanceAudioContext() {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  const audioWindow = window as Window & typeof globalThis & { webkitAudioContext?: typeof AudioContext };
+  return Boolean(audioWindow.AudioContext || audioWindow.webkitAudioContext);
+}
+
+function playSilentAttendanceTone(context: AudioContext) {
+  const now = context.currentTime;
+  const oscillator = context.createOscillator();
+  const gain = context.createGain();
+
+  gain.gain.setValueAtTime(0.0001, now);
+  oscillator.connect(gain);
+  gain.connect(context.destination);
+  oscillator.start(now);
+  oscillator.stop(now + 0.01);
+  oscillator.onended = () => {
+    oscillator.disconnect();
+    gain.disconnect();
+  };
+}
+
+function playAttendanceTone(
+  context: AudioContext,
+  startAt: number,
+  frequency: number,
+  durationSeconds: number,
+  volume: number,
+) {
+  const oscillator = context.createOscillator();
+  const gain = context.createGain();
+  const endAt = startAt + durationSeconds;
+
+  oscillator.type = "sine";
+  oscillator.frequency.setValueAtTime(frequency, startAt);
+  gain.gain.setValueAtTime(0.0001, startAt);
+  gain.gain.exponentialRampToValueAtTime(volume, startAt + 0.015);
+  gain.gain.exponentialRampToValueAtTime(0.0001, endAt);
+  oscillator.connect(gain);
+  gain.connect(context.destination);
+  oscillator.start(startAt);
+  oscillator.stop(endAt + 0.02);
+  oscillator.onended = () => {
+    oscillator.disconnect();
+    gain.disconnect();
+  };
+}
+
 function showLeadBrowserNotification(lead: ClientLeadRecord, message: ClientLeadMessage, href: string) {
   if (typeof window === "undefined" || typeof Notification === "undefined") {
     return;
@@ -2963,7 +3322,7 @@ function showLeadBrowserNotification(lead: ClientLeadRecord, message: ClientLead
   }
 
   const notification = new Notification(`Nova resposta de ${lead.name}`, {
-    body: message.text ? previewNotificationText(message.text, 120) : "O lead enviou uma nova mensagem.",
+    body: formatLeadNotificationBody(message),
     icon: lead.avatarUrl ?? "/brand/connectyhub-app-icon-192.png",
     tag: `connectyhub-lead-${lead.id}`,
   });
@@ -2973,6 +3332,15 @@ function showLeadBrowserNotification(lead: ClientLeadRecord, message: ClientLead
     window.location.href = href;
     notification.close();
   };
+}
+
+function formatLeadNotificationBody(message: ClientLeadMessage) {
+  if (message.mediaKind === "audio") {
+    const text = isGenericMediaPlaceholder(message.text) ? "" : previewNotificationText(message.text, 96);
+    return text ? `Áudio recebido: ${text}` : "Áudio recebido do lead.";
+  }
+
+  return message.text ? previewNotificationText(message.text, 120) : "O lead enviou uma nova mensagem.";
 }
 
 function previewNotificationText(value: string, maxLength: number) {
@@ -3859,6 +4227,39 @@ function formatPublicSource(value: string | null | undefined) {
   return text;
 }
 
+function isGenericMediaPlaceholder(value: string | null | undefined) {
+  const normalized = normalizePlainText(value ?? "");
+
+  return !normalized
+    || normalized === "audio recebido"
+    || normalized === "midia recebida"
+    || normalized === "mensagem sem texto"
+    || normalized.startsWith("midia registrada");
+}
+
+function formatAudioMimeLabel(value: string) {
+  const normalized = value.split(";")[0]?.trim().toLowerCase();
+
+  if (!normalized) return "áudio";
+  if (normalized.includes("ogg") || normalized.includes("opus")) return "ogg/opus";
+  if (normalized.includes("mpeg") || normalized.includes("mp3")) return "mp3";
+  if (normalized.includes("mp4") || normalized.includes("m4a")) return "m4a";
+  if (normalized.includes("webm")) return "webm";
+  if (normalized.includes("wav")) return "wav";
+
+  return normalized.replace("audio/", "");
+}
+
+function normalizePlainText(value: string) {
+  return value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function redactInternalProviderNames(value: string) {
   return value
     .replace(/uazapi[_\-\s]*webhook/gi, "WhatsApp")
@@ -4114,6 +4515,7 @@ function ChatMessages({ messages }: { messages: ClientLeadMessage[] }) {
         const isSystem = message.author === "system" || message.author === "unknown" || message.direction === "system" || message.direction === "unknown";
         const label = message.authorLabel || (isLead ? "Lead" : isHuman ? "Humano" : isAi ? "Agente IA" : "Sistema");
         const isOutbound = !isSystem && !isLead;
+        const isAudio = message.mediaKind === "audio";
         const quotedLabel = message.quotedMessage
           ? message.quotedMessage.authorLabel
             ?? (message.quotedMessage.direction === "inbound"
@@ -4170,8 +4572,12 @@ function ChatMessages({ messages }: { messages: ClientLeadMessage[] }) {
                   </p>
                 </div>
               ) : null}
-              <p className="whitespace-pre-wrap">{redactInternalProviderNames(message.text)}</p>
-              {message.mediaUrl ? (
+              {isAudio ? (
+                <ChatAudioMessage message={message} isOutbound={isOutbound} />
+              ) : (
+                <p className="whitespace-pre-wrap">{redactInternalProviderNames(message.text)}</p>
+              )}
+              {!isAudio && message.mediaUrl ? (
                 <a
                   className="mt-3 inline-flex rounded-lg border border-slate-300 bg-white/70 px-2.5 py-1 font-mono text-[9px] font-bold uppercase tracking-wide text-slate-700 transition hover:bg-white"
                   href={message.mediaUrl}
@@ -4186,6 +4592,58 @@ function ChatMessages({ messages }: { messages: ClientLeadMessage[] }) {
         );
       })}
       <div ref={bottomRef} />
+    </div>
+  );
+}
+
+function ChatAudioMessage({ isOutbound, message }: { isOutbound: boolean; message: ClientLeadMessage }) {
+  const transcript = isGenericMediaPlaceholder(message.text)
+    ? null
+    : redactInternalProviderNames(message.text);
+
+  return (
+    <div className="space-y-2">
+      <div
+        className={cn(
+          "rounded-xl border px-2.5 py-2",
+          isOutbound ? "border-[#9bdc91] bg-white/45" : "border-slate-200 bg-slate-50/90",
+        )}
+      >
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <span className="inline-flex items-center gap-1.5 font-mono text-[9px] font-bold uppercase tracking-wide text-[#128C7E]">
+            <PlayCircle className="h-3.5 w-3.5" />
+            Áudio do lead
+          </span>
+          {message.mediaMimeType ? (
+            <span className="shrink-0 font-mono text-[8px] uppercase tracking-wide text-slate-500">
+              {formatAudioMimeLabel(message.mediaMimeType)}
+            </span>
+          ) : null}
+        </div>
+        {message.mediaUrl ? (
+          <audio
+            className="h-9 w-full min-w-[220px] max-w-full"
+            controls
+            preload="none"
+            src={message.mediaUrl}
+          />
+        ) : (
+          <p className="text-[12px] font-medium text-slate-600">Áudio indisponível para reprodução.</p>
+        )}
+      </div>
+      <div
+        className={cn(
+          "rounded-xl border-l-2 px-2.5 py-2",
+          isOutbound ? "border-[#25D366] bg-white/45" : "border-[#25D366] bg-[#f0fdf4]",
+        )}
+      >
+        <span className="font-mono text-[9px] font-bold uppercase tracking-wide text-[#128C7E]">
+          Transcrição
+        </span>
+        <p className="mt-1 whitespace-pre-wrap text-[12px] leading-4 text-slate-700">
+          {transcript ?? "Transcrição ainda não disponível."}
+        </p>
+      </div>
     </div>
   );
 }
@@ -4573,7 +5031,7 @@ function buildLeadCartSummary(lead: ClientLeadRecord, items: AttendanceCartItem[
     "",
     `Total: ${formatCurrencyCents(totalCents)}`,
     "",
-    "Posso seguir com esse pedido e gerar o pagamento para voce?",
+    "Posso seguir com esse pedido e gerar o pagamento para você?",
   ];
 
   return lines.join("\n");
