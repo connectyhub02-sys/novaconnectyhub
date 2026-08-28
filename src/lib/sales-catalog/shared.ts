@@ -617,6 +617,9 @@ export type SalesCatalogStorefrontSettings = {
   buttonTextColor: string | null;
   cardTextColor: string | null;
   offerTextColor: string | null;
+  categoryStripColor: string | null;
+  categoryIconColor: string | null;
+  homeCategoryNames: string[];
   categoryIcons: Record<string, SalesCatalogCategoryIconId>;
 };
 

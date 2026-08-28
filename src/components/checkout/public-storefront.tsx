@@ -28,6 +28,7 @@ import {
   resolveSalesCatalogCategoryIconId,
   type SalesCatalogCategoryIconId,
 } from "@/lib/sales-catalog/category-icons";
+import { SalesCatalogCategoryIconGlyph } from "@/components/sales-catalog/category-icon-glyph";
 
 export type PublicStorefrontBranding = {
   displayName: string;
@@ -50,6 +51,9 @@ export type PublicStorefrontSettings = {
   buttonTextColor: string | null;
   cardTextColor: string | null;
   offerTextColor: string | null;
+  categoryStripColor: string | null;
+  categoryIconColor: string | null;
+  homeCategoryNames: string[];
   categoryIcons: Record<string, SalesCatalogCategoryIconId>;
 };
 
@@ -102,11 +106,6 @@ type StoreCategory = {
   label: string;
   count: number;
   iconId: SalesCatalogCategoryIconId;
-};
-
-type StoreCollectionTile = {
-  category: StoreCategory;
-  product: PublicStorefrontProduct;
 };
 
 const ALL_CATEGORY = "todos";
@@ -265,16 +264,16 @@ export function PublicStorefront({
       ? sortedVisibleProducts.filter((product) => !homeProductIds.has(product.id)).slice(0, 4)
       : homeVisibleProducts.slice(4, 8)
   );
-  const collectionTiles = useMemo<StoreCollectionTile[]>(() => (
-    categories
-      .filter((item) => item.id !== ALL_CATEGORY)
-      .map((item) => {
-        const product = products.find((entry) => entry.category === item.id);
-        return product ? { category: item, product } : null;
-      })
-      .filter((item): item is StoreCollectionTile => Boolean(item))
-      .slice(0, 4)
-  ), [categories, products]);
+  const homeCategories = useMemo(() => {
+    const availableCategories = categories.filter((item) => item.id !== ALL_CATEGORY);
+    const selectedCategoryKeys = new Set(
+      (storefront.homeCategoryNames ?? []).map((item) => normalizeCategorySelectionKey(item)),
+    );
+    if (selectedCategoryKeys.size === 0) return availableCategories;
+
+    const selectedCategories = availableCategories.filter((item) => selectedCategoryKeys.has(normalizeCategorySelectionKey(item.label)));
+    return selectedCategories.length > 0 ? selectedCategories : availableCategories;
+  }, [categories, storefront.homeCategoryNames]);
   const totalItems = cart.reduce((total, line) => total + line.quantity, 0);
   const totalCents = cart.reduce((total, line) => total + (line.product.priceCents ?? 0) * line.quantity, 0);
   const checkoutProductsCount = products.filter((product) => product.canCheckout).length;
@@ -287,6 +286,9 @@ export function PublicStorefront({
   const buttonTextColor = normalizeStorefrontTextColor(storefront.buttonTextColor) ?? getReadableTextColor(buttonColor);
   const cardTextColor = normalizeStorefrontTextColor(storefront.cardTextColor) ?? textColor;
   const offerTextColor = normalizeStorefrontTextColor(storefront.offerTextColor) ?? getReadableTextColor(primaryColor);
+  const categoryStripColor = normalizeStorefrontPrimaryColor(storefront.categoryStripColor) ?? primaryColor;
+  const categoryIconColor = normalizeStorefrontTextColor(storefront.categoryIconColor) ?? getReadableTextColor(categoryStripColor);
+  const categoryTextColor = getReadableTextColor(categoryStripColor);
   const publicLayoutStyle = {
     "--store-primary": primaryColor,
     "--store-action": storefrontActionColor,
@@ -300,6 +302,10 @@ export function PublicStorefront({
     "--store-card-text-muted": `color-mix(in srgb, ${cardTextColor} 72%, white 28%)`,
     "--store-offer-text": offerTextColor,
     "--store-offer-text-muted": `color-mix(in srgb, ${offerTextColor} 76%, transparent 24%)`,
+    "--store-category-bg": categoryStripColor,
+    "--store-category-icon": categoryIconColor,
+    "--store-category-text": categoryTextColor,
+    "--store-category-text-muted": `color-mix(in srgb, ${categoryTextColor} 78%, transparent 22%)`,
     "--store-primary-border": getReadableBorderColor(primaryColor),
   } as CSSProperties;
   const customHeroTitle = storefront.heroTitle?.trim() || "";
@@ -407,7 +413,7 @@ export function PublicStorefront({
             shopPath={shopPath}
           />
 
-          <StoreBrandStrip branding={branding} categories={categories} tiles={collectionTiles} onSelect={selectCategory} />
+          <StoreBrandStrip categories={homeCategories} onSelect={selectCategory} />
 
           <section id="produtos" className="mx-auto w-full max-w-[1240px] px-4 py-10 sm:py-14 lg:py-16">
             {newArrivalProducts.length > 0 ? (
@@ -774,56 +780,69 @@ function HeroProductPanel({
 
 function StoreBrandStrip({
   categories,
-  tiles,
   onSelect,
 }: {
-  branding: PublicStorefrontBranding;
   categories: StoreCategory[];
-  tiles: StoreCollectionTile[];
   onSelect: (value: string) => void;
 }) {
-  const categoryTiles = tiles.slice(0, 5);
-  const fallbackLabels = categories
-    .filter((item) => item.id !== ALL_CATEGORY)
-    .slice(0, 4);
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const [activeCategoryIndex, setActiveCategoryIndex] = useState(0);
+
+  useEffect(() => {
+    if (categories.length < 4) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+    const timer = window.setInterval(() => {
+      setActiveCategoryIndex((current) => (current + 1) % categories.length);
+    }, 3200);
+
+    return () => window.clearInterval(timer);
+  }, [categories.length]);
+
+  useEffect(() => {
+    const scroller = scrollerRef.current;
+    const firstItem = scroller?.querySelector<HTMLElement>("[data-store-category-button]");
+
+    if (!scroller || !firstItem) return;
+
+    const styles = window.getComputedStyle(scroller);
+    const gap = Number.parseFloat(styles.columnGap || styles.gap || "0") || 0;
+    scroller.scrollTo({
+      behavior: "smooth",
+      left: activeCategoryIndex * (firstItem.offsetWidth + gap),
+    });
+  }, [activeCategoryIndex]);
+
+  if (categories.length === 0) return null;
 
   return (
-    <section id="categorias" style={{ backgroundColor: "var(--store-primary)" }}>
+    <section id="categorias" style={{ backgroundColor: "var(--store-category-bg)" }}>
       <div className="relative mx-auto flex h-[126px] w-full max-w-[1240px] items-center justify-center overflow-hidden px-4">
-        <p className="absolute inset-x-4 top-3 text-center text-[10px] font-semibold uppercase tracking-[0.28em] text-[color:var(--store-offer-text-muted)] sm:text-xs">
+        <p className="absolute inset-x-4 top-3 text-center text-[10px] font-semibold uppercase tracking-[0.28em] text-[color:var(--store-category-text-muted)] sm:text-xs">
           Compre por categoria
         </p>
-        <div className="flex w-full items-center justify-start gap-4 overflow-x-auto pt-5 [scrollbar-width:none] sm:justify-center [&::-webkit-scrollbar]:hidden">
-        {categoryTiles.length > 0 ? (
-          categoryTiles.map((tile) => (
+        <div
+          className={cn(
+            "flex w-full snap-x snap-mandatory items-center gap-6 overflow-x-auto scroll-smooth pt-6 [scrollbar-width:none] sm:gap-8 [&::-webkit-scrollbar]:hidden",
+            categories.length <= 6 ? "sm:justify-center" : "sm:justify-start",
+          )}
+          data-store-category-strip
+          ref={scrollerRef}
+        >
+          {categories.map((item) => (
             <button
-              className="group relative flex h-[76px] w-[calc((100%-1rem)/2)] min-w-[calc((100%-1rem)/2)] shrink-0 items-center overflow-hidden rounded-[16px] bg-white text-left text-[color:var(--store-card-text)] transition hover:-translate-y-0.5 hover:bg-white/95 sm:w-auto sm:min-w-[236px]"
-              key={tile.category.id}
-              onClick={() => onSelect(tile.category.id)}
-              type="button"
-            >
-              <span className="relative z-10 min-w-0 px-4 sm:px-5">
-                <span className="block truncate text-base font-semibold sm:text-xl">{tile.category.label}</span>
-                <span className="mt-1 block truncate text-[11px] text-[color:var(--store-card-text-muted)] sm:text-xs">{tile.category.count} produto(s)</span>
-              </span>
-              <span className="relative ml-auto h-full w-14 shrink-0 translate-x-1 sm:w-24 sm:translate-x-2">
-                <ProductImage product={tile.product} sizes="(max-width: 640px) 56px, 96px" />
-              </span>
-            </button>
-          ))
-        ) : (
-          fallbackLabels.map((item) => (
-            <button
-              className="h-[76px] w-[calc((100%-1rem)/2)] min-w-[calc((100%-1rem)/2)] shrink-0 rounded-[16px] border border-white/15 px-4 text-left text-[color:var(--store-offer-text)] transition hover:bg-white/10 sm:w-auto sm:min-w-[180px] sm:px-5"
+              className="group flex h-[78px] w-[88px] shrink-0 snap-start flex-col items-center justify-center gap-2 text-center text-[color:var(--store-category-text)] transition hover:-translate-y-0.5 sm:w-[104px]"
+              data-store-category-button
               key={item.id}
               onClick={() => onSelect(item.id)}
               type="button"
             >
-              <span className="block truncate text-base font-semibold sm:text-xl">{item.label}</span>
-              <span className="mt-1 block truncate text-[11px] text-white/60 sm:text-xs">{item.count} produto(s)</span>
+              <span className="line-clamp-1 w-full text-[11px] font-semibold leading-4 sm:text-xs">{item.label}</span>
+              <span className="grid h-10 w-10 place-items-center rounded-full border border-white/15 bg-white/10 text-[color:var(--store-category-icon)] transition group-hover:bg-white/15 sm:h-11 sm:w-11">
+                <SalesCatalogCategoryIconGlyph className="h-5 w-5 sm:h-6 sm:w-6" id={item.iconId} />
+              </span>
             </button>
-          ))
-        )}
+          ))}
         </div>
       </div>
     </section>
@@ -1600,6 +1619,10 @@ function normalizeSearchTerm(value: string) {
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .trim();
+}
+
+function normalizeCategorySelectionKey(value: string) {
+  return normalizeSearchTerm(value).replace(/\s+/g, " ");
 }
 
 function normalizeStorefrontPrimaryColor(value: string | null) {

@@ -147,6 +147,9 @@ export function resolvePublicStorefrontSettings(settings: PublicStorefrontSettin
     buttonTextColor: readString(settings?.buttonTextColor),
     cardTextColor: readString(settings?.cardTextColor),
     offerTextColor: readString(settings?.offerTextColor),
+    categoryStripColor: readString(settings?.categoryStripColor),
+    categoryIconColor: readString(settings?.categoryIconColor),
+    homeCategoryNames: Array.isArray(settings?.homeCategoryNames) ? settings.homeCategoryNames : [],
     categoryIcons: settings?.categoryIcons ?? {},
   };
 }

@@ -3291,6 +3291,9 @@ function normalizeStorefrontSettings(value: unknown, categories: string[] = []):
     buttonTextColor: normalizeStorefrontTextColor(readFormString(record.buttonTextColor ?? record.button_text_color)),
     cardTextColor: normalizeStorefrontTextColor(readFormString(record.cardTextColor ?? record.card_text_color)),
     offerTextColor: normalizeStorefrontTextColor(readFormString(record.offerTextColor ?? record.offer_text_color)),
+    categoryStripColor: normalizeStorefrontPrimaryColor(readFormString(record.categoryStripColor ?? record.category_strip_color)),
+    categoryIconColor: normalizeStorefrontTextColor(readFormString(record.categoryIconColor ?? record.category_icon_color)),
+    homeCategoryNames: normalizeStringList(record.homeCategoryNames ?? record.home_category_names, [], 60, 80),
     categoryIcons: normalizeSalesCatalogCategoryIconMap(record.categoryIcons ?? record.category_icons, categories),
   };
 }
@@ -3476,6 +3479,9 @@ function serializeStorefrontSettings(settings: SalesCatalogStorefrontSettings) {
     button_text_color: settings.buttonTextColor,
     card_text_color: settings.cardTextColor,
     offer_text_color: settings.offerTextColor,
+    category_strip_color: settings.categoryStripColor,
+    category_icon_color: settings.categoryIconColor,
+    home_category_names: settings.homeCategoryNames,
     category_icons: settings.categoryIcons,
   };
 }

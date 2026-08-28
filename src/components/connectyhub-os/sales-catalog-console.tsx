@@ -802,12 +802,24 @@ export function SalesCatalogConsole({
   const storefrontButtonTextColor = normalizeStorefrontTextPreviewColor(settingsDraft.storefront.buttonTextColor) ?? getPreviewReadableTextColor(storefrontButtonColor);
   const storefrontCardTextColor = normalizeStorefrontTextPreviewColor(settingsDraft.storefront.cardTextColor) ?? storefrontTextColor;
   const storefrontOfferTextColor = normalizeStorefrontTextPreviewColor(settingsDraft.storefront.offerTextColor) ?? getPreviewReadableTextColor(storefrontPrimaryColor);
+  const storefrontCategoryStripColor = normalizeStorefrontPreviewColor(settingsDraft.storefront.categoryStripColor) ?? storefrontPrimaryColor;
+  const storefrontCategoryIconColor = normalizeStorefrontTextPreviewColor(settingsDraft.storefront.categoryIconColor) ?? getPreviewReadableTextColor(storefrontCategoryStripColor);
+  const storefrontCategoryTextColor = getPreviewReadableTextColor(storefrontCategoryStripColor);
+  const storefrontHomeCategoryKeys = useMemo(
+    () => new Set(settingsDraft.storefront.homeCategoryNames.map(normalizeHomeCategoryKey)),
+    [settingsDraft.storefront.homeCategoryNames],
+  );
   const hasConfiguredSettings = Boolean(selectedSettings?.configured);
   const productAttributes = useMemo(
     () => (selectedSettings?.configured ? selectedSettings.attributes : settingsDraft.attributes).filter((attribute) => attribute.values.length > 0),
     [selectedSettings, settingsDraft.attributes],
   );
   const categoryRows = useMemo(() => getCategoryRows(settingsDraft.categoriesText), [settingsDraft.categoriesText]);
+  const storefrontPreviewCategories = useMemo(() => {
+    const rows = categoryRows.filter((categoryName) => Boolean(cleanCategoryIconKey(categoryName)));
+    const selectedRows = rows.filter((categoryName) => storefrontHomeCategoryKeys.has(normalizeHomeCategoryKey(categoryName)));
+    return (selectedRows.length > 0 ? selectedRows : rows).slice(0, 6);
+  }, [categoryRows, storefrontHomeCategoryKeys]);
   const categoryOptions = selectedSettings?.configured ? selectedSettings.categories : parseLines(settingsDraft.categoriesText);
   const inventoryEnabled = selectedSettings?.trackInventory ?? settingsDraft.trackInventory;
   const selectedShippingRule = shippingDraft.rules.find((rule) => rule.uf === selectedShippingUf) ?? shippingDraft.rules[0] ?? null;
@@ -1036,9 +1048,20 @@ export function SalesCatalogConsole({
     rows[index] = value;
     setSettingsDraft((current) => {
       const categoryIcons = { ...current.storefront.categoryIcons };
+      let homeCategoryNames = current.storefront.homeCategoryNames;
       if (previousCategory && nextCategory && previousCategory !== nextCategory && categoryIcons[previousCategory] && !categoryIcons[nextCategory]) {
         categoryIcons[nextCategory] = categoryIcons[previousCategory];
         delete categoryIcons[previousCategory];
+      }
+      if (previousCategory && nextCategory && previousCategory !== nextCategory) {
+        const previousKey = normalizeHomeCategoryKey(previousCategory);
+        const nextKey = normalizeHomeCategoryKey(nextCategory);
+        homeCategoryNames = current.storefront.homeCategoryNames.map((entry) => (
+          normalizeHomeCategoryKey(entry) === previousKey ? nextCategory : entry
+        ));
+        if (homeCategoryNames.some((entry) => normalizeHomeCategoryKey(entry) === nextKey)) {
+          homeCategoryNames = Array.from(new Map(homeCategoryNames.map((entry) => [normalizeHomeCategoryKey(entry), entry])).values());
+        }
       }
 
       return {
@@ -1047,6 +1070,7 @@ export function SalesCatalogConsole({
         storefront: {
           ...current.storefront,
           categoryIcons,
+          homeCategoryNames,
         },
       };
     });
@@ -1073,6 +1097,27 @@ export function SalesCatalogConsole({
         storefront: {
           ...current.storefront,
           categoryIcons,
+          homeCategoryNames: category
+            ? current.storefront.homeCategoryNames.filter((entry) => normalizeHomeCategoryKey(entry) !== normalizeHomeCategoryKey(category))
+            : current.storefront.homeCategoryNames,
+        },
+      };
+    });
+  }
+
+  function toggleHomeCategory(categoryName: string, selected: boolean) {
+    const category = cleanCategoryIconKey(categoryName);
+    if (!category) return;
+
+    setSettingsDraft((current) => {
+      const key = normalizeHomeCategoryKey(category);
+      const existing = current.storefront.homeCategoryNames.filter((entry) => normalizeHomeCategoryKey(entry) !== key);
+
+      return {
+        ...current,
+        storefront: {
+          ...current.storefront,
+          homeCategoryNames: selected ? [...existing, category] : existing,
         },
       };
     });
@@ -1229,6 +1274,7 @@ export function SalesCatalogConsole({
     try {
       const categories = parseLines(settingsDraft.categoriesText);
       const categoryIcons = buildCategoryIconPayload(categories, settingsDraft.storefront.categoryIcons);
+      const homeCategoryNames = buildHomeCategoryPayload(categories, settingsDraft.storefront.homeCategoryNames);
       const attributes = settingsDraft.attributes
         .map((attribute) => ({
           ...attribute,
@@ -1261,6 +1307,9 @@ export function SalesCatalogConsole({
             buttonTextColor: settingsDraft.storefront.buttonTextColor,
             cardTextColor: settingsDraft.storefront.cardTextColor,
             offerTextColor: settingsDraft.storefront.offerTextColor,
+            categoryStripColor: settingsDraft.storefront.categoryStripColor,
+            categoryIconColor: settingsDraft.storefront.categoryIconColor,
+            homeCategoryNames,
             categoryIcons,
           },
           trackInventory: settingsDraft.trackInventory,
@@ -2694,6 +2743,7 @@ export function SalesCatalogConsole({
                       categoryName,
                       settingsDraft.storefront.categoryIcons[cleanCategoryIconKey(categoryName)],
                     );
+                    const categorySelectedOnHome = storefrontHomeCategoryKeys.has(normalizeHomeCategoryKey(categoryName));
 
                     return (
                       <div key={index} className="rounded-lg border p-2" style={{ borderColor: "var(--ch-border)" }}>
@@ -2720,7 +2770,18 @@ export function SalesCatalogConsole({
                         </div>
 
                         <div className="mt-2">
-                          <span className="mb-1 block font-mono text-[9px] uppercase tracking-[0.16em] text-slate-500">Figurinha da categoria</span>
+                          <div className="mb-1 flex items-center justify-between gap-2">
+                            <span className="block font-mono text-[9px] uppercase tracking-[0.16em] text-slate-500">Figurinha da categoria</span>
+                            <label className="inline-flex items-center gap-1.5 rounded-full border border-emerald-300/25 px-2 py-1 text-[10px] font-semibold text-emerald-100">
+                              <input
+                                checked={categorySelectedOnHome}
+                                className="h-3.5 w-3.5"
+                                onChange={(event) => toggleHomeCategory(categoryName, event.target.checked)}
+                                type="checkbox"
+                              />
+                              Home
+                            </label>
+                          </div>
                           <button
                             type="button"
                             onClick={() => openCategoryIconPicker(categoryName)}
@@ -2743,6 +2804,9 @@ export function SalesCatalogConsole({
                     );
                   })}
                 </div>
+                <p className="mt-3 text-[11px] leading-4 text-slate-500">
+                  Marque Home para escolher categorias da faixa inicial. Sem marcação, a loja mostra todas as categorias com produto.
+                </p>
 
               </AccordionSection>
 
@@ -3174,6 +3238,20 @@ export function SalesCatalogConsole({
                     placeholder="#111111"
                     onChange={(textColor) => updateStorefrontSettings({ textColor, cardTextColor: "" })}
                   />
+                  <ThemeColorField
+                    label="Fundo das categorias"
+                    value={settingsDraft.storefront.categoryStripColor}
+                    previewValue={storefrontCategoryStripColor}
+                    placeholder="#000000"
+                    onChange={(categoryStripColor) => updateStorefrontSettings({ categoryStripColor })}
+                  />
+                  <ThemeColorField
+                    label="Ícone das categorias"
+                    value={settingsDraft.storefront.categoryIconColor}
+                    previewValue={storefrontCategoryIconColor}
+                    placeholder="#ffffff"
+                    onChange={(categoryIconColor) => updateStorefrontSettings({ categoryIconColor })}
+                  />
                 </div>
               </div>
 
@@ -3252,6 +3330,36 @@ export function SalesCatalogConsole({
                   )}
                 </div>
               </div>
+
+              {storefrontPreviewCategories.length > 0 ? (
+                <div
+                  className="mb-4 rounded-lg border px-3 py-3"
+                  style={{
+                    backgroundColor: storefrontCategoryStripColor,
+                    borderColor: getPreviewReadableBorderColor(storefrontCategoryStripColor),
+                    color: storefrontCategoryTextColor,
+                  }}
+                >
+                  <p className="text-center font-mono text-[8px] font-semibold uppercase tracking-[0.24em] opacity-75">Compre por categoria</p>
+                  <div className="mt-3 flex gap-3 overflow-hidden">
+                    {storefrontPreviewCategories.map((categoryName) => {
+                      const iconId = resolveSalesCatalogCategoryIconId(
+                        categoryName,
+                        settingsDraft.storefront.categoryIcons[cleanCategoryIconKey(categoryName)],
+                      );
+
+                      return (
+                        <span className="grid w-16 shrink-0 place-items-center gap-1 text-center" key={categoryName}>
+                          <span className="line-clamp-1 w-full text-[10px] font-semibold">{categoryName}</span>
+                          <span className="grid h-9 w-9 place-items-center rounded-full border border-white/15 bg-white/10" style={{ color: storefrontCategoryIconColor }}>
+                            <SalesCatalogCategoryIconGlyph className="h-5 w-5" id={iconId} />
+                          </span>
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
 
               <div className="mb-4 rounded-lg border px-4 py-3" style={{
                 backgroundColor: storefrontPrimaryColor,
@@ -7753,6 +7861,9 @@ function buildSettingsDraft(settings: ClientSalesCatalogSettings | null): Settin
       buttonTextColor: settings?.storefront.buttonTextColor ?? "",
       cardTextColor: settings?.storefront.cardTextColor ?? "",
       offerTextColor: settings?.storefront.offerTextColor ?? "",
+      categoryStripColor: settings?.storefront.categoryStripColor ?? "",
+      categoryIconColor: settings?.storefront.categoryIconColor ?? "",
+      homeCategoryNames: [...(settings?.storefront.homeCategoryNames ?? [])],
       categoryIcons: { ...(settings?.storefront.categoryIcons ?? {}) },
     },
     trackInventory: settings?.trackInventory ?? false,
@@ -7824,8 +7935,22 @@ function buildCategoryIconPayload(
   return output;
 }
 
+function buildHomeCategoryPayload(categories: string[], homeCategoryNames: string[]) {
+  const homeKeys = new Set(homeCategoryNames.map(normalizeHomeCategoryKey));
+  if (homeKeys.size === 0) return [];
+
+  return categories.filter((category) => homeKeys.has(normalizeHomeCategoryKey(category))).slice(0, 60);
+}
+
 function cleanCategoryIconKey(value: string) {
   return value.replace(/\s+/g, " ").trim().slice(0, 80);
+}
+
+function normalizeHomeCategoryKey(value: string) {
+  return cleanCategoryIconKey(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
 }
 
 function getCategoryIconOptionLabel(iconId: SalesCatalogCategoryIconId) {

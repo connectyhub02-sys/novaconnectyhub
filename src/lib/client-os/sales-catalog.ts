@@ -1741,6 +1741,9 @@ function readStorefrontSettings(value: unknown, categories: string[] = []): Clie
     buttonTextColor: readString(record.button_text_color ?? record.buttonTextColor),
     cardTextColor: readString(record.card_text_color ?? record.cardTextColor),
     offerTextColor: readString(record.offer_text_color ?? record.offerTextColor),
+    categoryStripColor: readString(record.category_strip_color ?? record.categoryStripColor),
+    categoryIconColor: readString(record.category_icon_color ?? record.categoryIconColor),
+    homeCategoryNames: readStringList(record.home_category_names ?? record.homeCategoryNames, []),
     categoryIcons: normalizeSalesCatalogCategoryIconMap(record.category_icons ?? record.categoryIcons, categories),
   };
 }
