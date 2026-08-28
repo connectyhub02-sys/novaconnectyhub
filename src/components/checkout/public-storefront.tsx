@@ -7,9 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Home,
   Loader2,
-  Mail,
   Menu,
-  MessageCircle,
   Minus,
   Package,
   Plus,
@@ -20,9 +18,9 @@ import {
   Sparkles,
   Star,
   Store,
-  UserRound,
   X,
 } from "lucide-react";
+import { StoreNewsletterCard } from "@/components/checkout/store-newsletter-card";
 import { cn } from "@/lib/utils";
 import {
   resolveSalesCatalogCategoryIconId,
@@ -135,6 +133,7 @@ export function PublicStorefront({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cartLoaded, setCartLoaded] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const storageKey = `connecty-store-cart:${tracking.organizationId}`;
   const storePath = `/loja/${encodeURIComponent(storeSlug)}`;
@@ -384,7 +383,10 @@ export function PublicStorefront({
         storePath={storePath}
         totalItems={totalItems}
         onCart={() => setCartOpen(true)}
+        onCloseMobileMenu={() => setMobileMenuOpen(false)}
         onSearchTermChange={setSearchTerm}
+        onToggleMobileMenu={() => setMobileMenuOpen((current) => !current)}
+        mobileMenuOpen={mobileMenuOpen}
       />
       {mode === "home" ? (
         <>
@@ -449,7 +451,9 @@ export function PublicStorefront({
         footerContactText={footerContactText}
         footerText={footerText}
         shopPath={shopPath}
+        storeSlug={storeSlug}
         storePath={storePath}
+        tracking={tracking}
       />
 
       <MobileBottomNav
@@ -519,34 +523,46 @@ function StoreAnnouncement({ branding }: { branding: PublicStorefrontBranding })
 function StoreNavbar({
   branding,
   cartPath,
+  mobileMenuOpen,
   mode,
   searchTerm,
   shopPath,
   storePath,
   totalItems,
   onCart,
+  onCloseMobileMenu,
   onSearchTermChange,
+  onToggleMobileMenu,
 }: {
   branding: PublicStorefrontBranding;
   cartPath: string;
+  mobileMenuOpen: boolean;
   mode: StorefrontMode;
   searchTerm: string;
   shopPath: string;
   storePath: string;
   totalItems: number;
   onCart: () => void;
+  onCloseMobileMenu: () => void;
   onSearchTermChange: (value: string) => void;
+  onToggleMobileMenu: () => void;
 }) {
   return (
     <nav className="sticky top-0 z-30 bg-white">
       <div className="mx-auto flex w-full max-w-[1240px] items-center justify-between gap-4 px-4 py-5 lg:py-6">
         <div className="flex min-w-0 items-center gap-4">
-          <button className="grid h-9 w-9 place-items-center md:hidden" type="button" aria-label="Abrir menu">
-            <Menu className="h-5 w-5" />
+          <button
+            className="grid h-9 w-9 place-items-center rounded-full text-black transition hover:bg-black/5 md:hidden"
+            type="button"
+            aria-label={mobileMenuOpen ? "Fechar menu" : "Abrir menu"}
+            aria-expanded={mobileMenuOpen}
+            onClick={onToggleMobileMenu}
+          >
+            {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </button>
           <a className="flex min-w-0 items-center gap-2" href={storePath}>
             <BrandLogo branding={branding} compact />
-            <span className="truncate text-xl font-bold uppercase leading-none text-black lg:text-2xl">
+            <span className="truncate text-lg font-semibold uppercase leading-none text-black lg:text-2xl">
               {branding.displayName}
             </span>
           </a>
@@ -584,12 +600,39 @@ function StoreNavbar({
               </span>
             ) : null}
           </button>
-          <a className="hidden h-10 w-10 place-items-center rounded-full text-black transition hover:bg-black/5 sm:grid" href={cartPath} aria-label="Conta">
-            <UserRound className="h-5 w-5" />
-          </a>
         </div>
       </div>
+      {mobileMenuOpen ? (
+        <div className="border-t border-black/10 bg-white px-4 pb-4 shadow-lg shadow-black/5 md:hidden">
+          <div className="mx-auto grid w-full max-w-[1240px] gap-2 pt-3">
+            <MobileMenuLink href={storePath} label="Inicio" onClick={onCloseMobileMenu} />
+            <MobileMenuLink href={shopPath} label="Produtos" onClick={onCloseMobileMenu} />
+            <MobileMenuLink href={`${shopPath}#ofertas`} label="Ofertas" onClick={onCloseMobileMenu} />
+            <MobileMenuLink href={`${storePath}#produtos`} label="Novidades" onClick={onCloseMobileMenu} />
+            <MobileMenuLink href={`${storePath}#categorias`} label="Categorias" onClick={onCloseMobileMenu} />
+            <MobileMenuLink href={cartPath} label="Carrinho" onClick={onCloseMobileMenu} />
+            <label className="relative mt-2 block min-h-11">
+              <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-black/40" aria-hidden="true" />
+              <input
+                className="h-11 w-full rounded-full border-0 bg-[#f0f0f0] px-11 text-sm font-medium text-black outline-none placeholder:text-black/40"
+                onChange={(event) => onSearchTermChange(event.target.value)}
+                placeholder="Buscar produtos..."
+                type="search"
+                value={searchTerm}
+              />
+            </label>
+          </div>
+        </div>
+      ) : null}
     </nav>
+  );
+}
+
+function MobileMenuLink({ href, label, onClick }: { href: string; label: string; onClick: () => void }) {
+  return (
+    <a className="rounded-[8px] px-3 py-2 text-sm font-semibold text-black transition hover:bg-black/5" href={href} onClick={onClick}>
+      {label}
+    </a>
   );
 }
 
@@ -622,7 +665,7 @@ function StorefrontHero({
     <header className="overflow-hidden bg-[#f2f0f1]">
       <div className="mx-auto grid w-full max-w-[1240px] grid-cols-1 md:grid-cols-2">
         <section className="px-4 pb-8 pt-10 md:pb-0 md:pt-24">
-          <h1 className="mb-5 max-w-[580px] text-[34px] font-bold uppercase leading-[36px] text-black md:mb-8 md:text-[50px] md:leading-[52px] xl:text-[54px] xl:leading-[56px]">
+          <h1 className="mb-5 max-w-[580px] text-[28px] font-bold uppercase leading-[31px] text-black md:mb-8 md:text-[46px] md:leading-[48px] xl:text-[50px] xl:leading-[52px]">
             {heroTitle}
             {heroHighlight ? <span className="block">{heroHighlight}</span> : null}
           </h1>
@@ -933,7 +976,7 @@ function ProductShowcaseSection({
 
 function SectionHeading({ title }: { title: string }) {
   return (
-    <h2 className="text-[28px] font-bold uppercase leading-[32px] text-black md:text-[36px] md:leading-[40px]">
+    <h2 className="text-[24px] font-bold uppercase leading-[29px] text-black md:text-[34px] md:leading-[38px]">
       {title}
     </h2>
   );
@@ -1041,7 +1084,7 @@ function StoreReviews({ branding }: { branding: PublicStorefrontBranding }) {
   return (
     <section className="mt-16">
       <div className="mb-6 flex items-end justify-between gap-4">
-        <h2 className="text-[28px] font-bold uppercase leading-[32px] text-black md:text-[36px] md:leading-[40px]">
+        <h2 className="text-[24px] font-bold uppercase leading-[29px] text-black md:text-[34px] md:leading-[38px]">
           Clientes satisfeitos
         </h2>
         <div className="hidden items-center gap-4 text-black sm:flex">
@@ -1092,14 +1135,18 @@ function StoreFooter({
   footerContactText,
   footerText,
   shopPath,
+  storeSlug,
   storePath,
+  tracking,
 }: {
   branding: PublicStorefrontBranding;
   cartPath: string;
   footerContactText: string;
   footerText: string;
   shopPath: string;
+  storeSlug: string;
   storePath: string;
+  tracking: PublicStorefrontTrackingParams;
 }) {
   const supportHref = branding.whatsappHref ?? storePath;
   const supportIsExternal = Boolean(branding.whatsappHref);
@@ -1107,38 +1154,7 @@ function StoreFooter({
   return (
     <footer className="mt-16 bg-[#f0f0f0]">
       <div className="mx-auto w-full max-w-[1240px] px-4">
-        <section className="grid gap-6 rounded-[20px] bg-black px-6 py-8 text-white shadow-2xl shadow-black/10 md:grid-cols-[minmax(0,1fr)_390px] md:items-center md:px-16 md:py-9">
-          <div className="flex max-w-2xl items-center gap-4">
-            <BrandLogo branding={branding} compact />
-            <h2 className="text-[24px] font-bold uppercase leading-[29px] md:text-[30px] md:leading-[35px]">
-              Receba novidades e ofertas da {branding.displayName}
-            </h2>
-          </div>
-          <div className="grid gap-3">
-            <label className="relative">
-              <MessageCircle className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#128C4A]" aria-hidden="true" />
-              <input
-                className="h-12 w-full rounded-full border-0 bg-white px-12 text-sm font-medium text-black outline-none placeholder:text-black/40"
-                placeholder="WhatsApp com DDD"
-                type="tel"
-              />
-            </label>
-            <label className="relative">
-              <Mail className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-black/45" aria-hidden="true" />
-              <input
-                className="h-12 w-full rounded-full border-0 bg-white px-12 text-sm font-medium text-black outline-none placeholder:text-black/40"
-                placeholder="E-mail"
-                type="email"
-              />
-            </label>
-            <a
-              className="inline-flex h-12 items-center justify-center rounded-full bg-white px-6 text-sm font-bold text-black transition hover:bg-white/90"
-              href={shopPath}
-            >
-              Ver ofertas da loja
-            </a>
-          </div>
-        </section>
+        <StoreNewsletterCard branding={branding} storeSlug={storeSlug} tracking={tracking} />
 
         <div className="grid gap-8 px-0 pb-10 pt-12 md:grid-cols-[1.35fr_1fr_1fr_1fr] md:pt-14">
           <div>
@@ -1198,13 +1214,14 @@ function StoreFooter({
   );
 }
 
-type PaymentBadgeTone = "visa" | "pix" | "card" | "mp";
+type PaymentBadgeTone = "visa" | "mastercard" | "pix" | "paypal" | "gpay";
 
 const paymentBadges: Array<{ label: string; tone: PaymentBadgeTone }> = [
   { label: "Visa", tone: "visa" },
+  { label: "Mastercard", tone: "mastercard" },
   { label: "Pix", tone: "pix" },
-  { label: "Card", tone: "card" },
-  { label: "MP", tone: "mp" },
+  { label: "PayPal", tone: "paypal" },
+  { label: "G Pay", tone: "gpay" },
 ];
 
 function PaymentBadge({ label, tone }: { label: string; tone: PaymentBadgeTone }) {
@@ -1213,9 +1230,10 @@ function PaymentBadge({ label, tone }: { label: string; tone: PaymentBadgeTone }
       className={cn(
         "inline-flex min-h-8 items-center rounded-[6px] border px-3 text-xs font-bold shadow-sm",
         tone === "visa" && "border-[#1a1f71]/20 bg-[#1a1f71] text-white",
+        tone === "mastercard" && "border-[#eb001b]/20 bg-gradient-to-r from-[#eb001b] to-[#f79e1b] text-white",
         tone === "pix" && "border-[#32bcad]/20 bg-[#32bcad] text-white",
-        tone === "card" && "border-[#eb001b]/20 bg-gradient-to-r from-[#eb001b] to-[#f79e1b] text-white",
-        tone === "mp" && "border-[#009ee3]/20 bg-[#009ee3] text-white",
+        tone === "paypal" && "border-[#003087]/20 bg-[#003087] text-white",
+        tone === "gpay" && "border-black/10 bg-white text-black",
       )}
     >
       {label}

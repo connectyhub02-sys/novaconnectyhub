@@ -11,9 +11,7 @@ import {
   ChevronDown,
   CreditCard,
   FileText,
-  Home,
   LockKeyhole,
-  Mail,
   Menu,
   MessageCircle,
   Package,
@@ -25,10 +23,10 @@ import {
   Star,
   Store,
   Truck,
-  UserRound,
 } from "lucide-react";
 import { SalesCatalogMediaGallery } from "@/components/checkout/sales-catalog-media-gallery";
-import { ProductCheckoutButton } from "@/components/checkout/sales-catalog-product-actions";
+import { ProductMobileCheckoutBar, ProductPurchaseControls } from "@/components/checkout/sales-catalog-product-actions";
+import { StoreNewsletterCard } from "@/components/checkout/store-newsletter-card";
 import { getOrganizationSalesCatalogSettings, mapSalesCatalogItem } from "@/lib/client-os/sales-catalog";
 import { normalizeCurrencyAmount } from "@/lib/sales-catalog/mercado-pago";
 import {
@@ -247,7 +245,7 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
   const application = findAttributeValue(item, "aplicacao") ?? formatFulfillment(item.fulfillment.mode);
 
   return (
-    <main className="min-h-screen bg-white pb-24 text-[color:var(--store-text)] sm:pb-0" style={publicLayoutStyle}>
+    <main className="min-h-screen bg-white pb-28 text-[color:var(--store-text)] sm:pb-0" style={publicLayoutStyle}>
       <script
         id="connecty-public-tracking-context"
         dangerouslySetInnerHTML={{
@@ -276,61 +274,64 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
           <TrustPill icon={<CheckCircle2 className="h-4 w-4" />} label={formatStockLabel(item)} tone="green" />
         </div>
 
-        <div className="mt-4 grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px] xl:grid-cols-[minmax(0,1fr)_390px]">
-          <section className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,0.96fr)_minmax(0,0.84fr)]">
-            <SalesCatalogMediaGallery title={item.title} media={galleryMedia} />
+        <div className="mt-4 grid gap-8 lg:grid-cols-[minmax(0,580px)_minmax(0,1fr)] lg:items-start xl:gap-12">
+          <SalesCatalogMediaGallery title={item.title} media={galleryMedia} />
 
-            <div className="min-w-0 rounded-[20px] border border-black/10 bg-white p-4 shadow-lg shadow-black/5 sm:p-6 lg:border-0 lg:p-2 lg:shadow-none">
-              <div className="flex flex-wrap gap-2">
-                <ProductBadge>{item.category ?? "Produto"}</ProductBadge>
-                <ProductBadge tone="green">{formatStockLabel(item)}</ProductBadge>
-              </div>
+          <section className="min-w-0 rounded-[20px] border border-black/10 bg-white p-4 shadow-lg shadow-black/5 sm:p-6 lg:border-0 lg:p-0 lg:shadow-none">
+            <div className="flex flex-wrap gap-2">
+              <ProductBadge>{item.category ?? "Produto"}</ProductBadge>
+              <ProductBadge tone="green">{formatStockLabel(item)}</ProductBadge>
+            </div>
 
-              <h1 className="mt-4 text-2xl font-bold uppercase leading-tight text-[color:var(--store-text)] sm:text-3xl xl:text-[32px]">
-                {item.title}
-              </h1>
+            <h1 className="mt-4 text-[22px] font-bold uppercase leading-[26px] text-[color:var(--store-text)] sm:text-3xl sm:leading-tight lg:text-[34px] lg:leading-[38px]">
+              {item.title}
+            </h1>
 
-              <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
-                <div className="flex items-center gap-1 text-[color:var(--store-accent)]" aria-label="Produto em destaque da loja">
-                  {Array.from({ length: 5 }).map((_, index) => (
-                    <Star key={index} className="h-4 w-4 fill-current" />
-                  ))}
-                </div>
-                <span className="font-semibold text-[color:var(--store-text-muted)]">Produto da loja oficial</span>
-                <span className="hidden h-4 w-px bg-slate-200 sm:block" />
-                <span className="font-mono text-xs font-semibold text-[color:var(--store-text-muted)]">SKU: {sku}</span>
-              </div>
-
-              <p className="mt-4 text-sm leading-6 text-[color:var(--store-text-muted)]">
-                {descriptionPreview}
-              </p>
-
-              <ul className="mt-5 grid gap-2.5">
-                {highlights.map((highlight) => (
-                  <li key={highlight} className="flex gap-2 text-sm font-semibold leading-5 text-[color:var(--store-text)]">
-                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[color:var(--store-accent)]" />
-                    <span>{highlight}</span>
-                  </li>
+            <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
+              <div className="flex items-center gap-1 text-[#ffc633]" aria-label="Produto em destaque da loja">
+                {Array.from({ length: 5 }).map((_, index) => (
+                  <Star key={index} className="h-4 w-4 fill-current" />
                 ))}
-              </ul>
-
-              <div className="mt-6 hidden grid-cols-3 gap-3 border-t border-black/10 pt-5 lg:grid">
-                <MicroTrust icon={<Truck className="h-4 w-4" />} title="Entrega discreta" subtitle="Embalagem neutra" />
-                <MicroTrust icon={<CreditCard className="h-4 w-4" />} title="Pagamento seguro" subtitle="Dados protegidos" />
-                <MicroTrust icon={<ShieldCheck className="h-4 w-4" />} title="Privacidade total" subtitle="Compra segura" />
               </div>
+              <span className="font-semibold text-[color:var(--store-text-muted)]">4.8/5</span>
+              <span className="hidden h-4 w-px bg-slate-200 sm:block" />
+              <span className="font-mono text-xs font-semibold text-[color:var(--store-text-muted)]">SKU: {sku}</span>
+            </div>
+
+            <p className="mt-4 text-[32px] font-semibold leading-none text-[color:var(--store-text)]">{priceLabel}</p>
+            {installments ? (
+              <p className="mt-2 text-sm font-medium text-[color:var(--store-text-muted)]">
+                ou 6x de <span className="font-semibold text-[color:var(--store-text)]">{installments}</span> sem juros
+              </p>
+            ) : null}
+
+            <p className="mt-4 text-sm leading-6 text-[color:var(--store-text-muted)]">
+              {descriptionPreview}
+            </p>
+
+            <ProductPurchaseControls
+              cartUrl={storeCartUrl}
+              disabled={!canCheckout}
+              organizationId={organization.id}
+              productId={item.id}
+              className="mt-5 hidden sm:grid"
+            />
+
+            <ul className="mt-5 grid gap-2.5">
+              {highlights.map((highlight) => (
+                <li key={highlight} className="flex gap-2 text-sm font-semibold leading-5 text-[color:var(--store-text)]">
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[color:var(--store-accent)]" />
+                  <span>{highlight}</span>
+                </li>
+              ))}
+            </ul>
+
+            <div className="mt-6 hidden grid-cols-3 gap-3 border-t border-black/10 pt-5 lg:grid">
+              <MicroTrust icon={<Truck className="h-4 w-4" />} title="Entrega discreta" subtitle="Embalagem neutra" />
+              <MicroTrust icon={<CreditCard className="h-4 w-4" />} title="Pagamento seguro" subtitle="Dados protegidos" />
+              <MicroTrust icon={<ShieldCheck className="h-4 w-4" />} title="Privacidade total" subtitle="Compra segura" />
             </div>
           </section>
-
-          <PurchaseCard
-            canCheckout={canCheckout}
-            installments={installments}
-            item={item}
-            priceLabel={priceLabel}
-            productId={item.id}
-            whatsappReturn={whatsappReturn}
-            storeUrl={storeUrl}
-          />
         </div>
 
         <section className="mt-8 grid gap-3 rounded-[20px] border border-black/10 bg-white p-4 shadow-lg shadow-black/5 sm:grid-cols-4 sm:p-5">
@@ -415,33 +416,34 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
               </details>
             </section>
 
-            {related.length > 0 ? (
-              <section className="rounded-[20px] border border-black/10 bg-white p-5 shadow-lg shadow-black/5">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-sm font-black text-[color:var(--store-text)]">Produtos semelhantes</p>
-                  <Link href={storeProductsUrl} className="text-xs font-bold text-[color:var(--store-accent)]">Ver todos</Link>
-                </div>
-                <div className="mt-4 grid gap-3">
-                  {related.map((relatedItem) => (
-                    <RelatedProductCard
-                      key={relatedItem.id}
-                      item={relatedItem}
-                      href={buildLeadAwareSalesCatalogStoreProductUrl({
-                        storeSlug,
-                        productId: relatedItem.id,
-                        organizationId: organization.id,
-                        leadId,
-                        leadPhone,
-                        conversationId,
-                        trackingLinkId,
-                      })}
-                    />
-                  ))}
-                </div>
-              </section>
-            ) : null}
           </aside>
         </div>
+
+        {related.length > 0 ? (
+          <section className="mt-14 border-t border-black/10 pt-10 sm:mt-16 sm:pt-14">
+            <h2 className="text-center text-[26px] font-bold uppercase leading-[30px] text-black md:text-[38px] md:leading-[42px]">
+              Voce tambem pode gostar
+            </h2>
+            <div className="mt-8 grid grid-cols-2 gap-4 md:mt-12 md:grid-cols-4 md:gap-5">
+              {related.map((relatedItem) => (
+                <RelatedProductCard
+                  key={relatedItem.id}
+                  item={relatedItem}
+                  href={buildLeadAwareSalesCatalogStoreProductUrl({
+                    storeSlug,
+                    productId: relatedItem.id,
+                    organizationId: organization.id,
+                    leadId,
+                    leadPhone,
+                    conversationId,
+                    trackingLinkId,
+                  })}
+                  variant="showcase"
+                />
+              ))}
+            </div>
+          </section>
+        ) : null}
 
         <section className="mt-5 grid gap-3 sm:hidden">
           <MobileAccordion title="Descricao completa">
@@ -471,14 +473,26 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
           <MessageCircle className="h-7 w-7" />
         </a>
       ) : null}
-      <MobileBottomNav storeUrl={storeUrl} storeProductsUrl={storeProductsUrl} cartUrl={storeCartUrl} whatsappHref={whatsappReturn?.href ?? null} />
+      <ProductMobileCheckoutBar
+        cartUrl={storeCartUrl}
+        disabled={!canCheckout}
+        organizationId={organization.id}
+        productId={item.id}
+      />
       <PublicStoreFooter
         branding={branding}
         cartUrl={storeCartUrl}
         footerContactText={storefront.footerContactText}
         footerText={storefront.footerText}
+        storeSlug={storeSlug}
         storeProductsUrl={storeProductsUrl}
         storeUrl={storeUrl}
+        tracking={{
+          leadId,
+          leadPhone,
+          conversationId,
+          trackingLinkId,
+        }}
         whatsappHref={whatsappReturn?.href ?? null}
       />
     </main>
@@ -644,12 +658,19 @@ function ProductTopBar({
       <header className="sticky top-0 z-30 bg-white">
         <div className="mx-auto flex w-full max-w-[1240px] items-center justify-between gap-4 px-4 py-5 sm:px-6 lg:py-6">
           <div className="flex min-w-0 items-center gap-4">
-            <Link href={storeUrl} className="grid h-9 w-9 place-items-center rounded-full text-black transition hover:bg-black/5 md:hidden" aria-label="Voltar para loja">
-              <ArrowLeft className="h-5 w-5" />
-            </Link>
-            <button type="button" className="hidden h-9 w-9 place-items-center rounded-full text-black transition hover:bg-black/5 sm:grid md:hidden" aria-label="Menu">
-              <Menu className="h-5 w-5" />
-            </button>
+            <details className="group relative md:hidden">
+              <summary className="grid h-9 w-9 cursor-pointer list-none place-items-center rounded-full text-black transition hover:bg-black/5" aria-label="Menu">
+                <Menu className="h-5 w-5" />
+              </summary>
+              <div className="absolute left-0 top-12 z-40 grid w-56 gap-1 rounded-[16px] border border-black/10 bg-white p-2 shadow-2xl shadow-black/15">
+                <ProductMenuLink href={storeUrl} label="Inicio" icon={<ArrowLeft className="h-4 w-4" />} />
+                <ProductMenuLink href={productsUrl} label="Produtos" />
+                <ProductMenuLink href={`${productsUrl}#ofertas`} label="Ofertas" />
+                <ProductMenuLink href={storeUrl} label="Novidades" />
+                <ProductMenuLink href={`${storeUrl}#categorias`} label="Categorias" />
+                <ProductMenuLink href={cartUrl} label="Carrinho" />
+              </div>
+            </details>
             <StoreIdentity branding={branding} storeUrl={storeUrl} />
           </div>
 
@@ -674,9 +695,6 @@ function ProductTopBar({
             <Link href={cartUrl} className="grid h-10 w-10 place-items-center rounded-full text-black transition hover:bg-black/5" aria-label="Carrinho">
               <ShoppingCart className="h-4 w-4" />
             </Link>
-            <Link href={cartUrl} className="hidden h-10 w-10 place-items-center rounded-full text-black transition hover:bg-black/5 sm:grid" aria-label="Conta">
-              <UserRound className="h-5 w-5" />
-            </Link>
           </div>
         </div>
       </header>
@@ -684,64 +702,12 @@ function ProductTopBar({
   );
 }
 
-function PurchaseCard({
-  canCheckout,
-  installments,
-  item,
-  priceLabel,
-  productId,
-  whatsappReturn,
-  storeUrl,
-}: {
-  canCheckout: boolean;
-  installments: string | null;
-  item: ClientSalesCatalogItem;
-  priceLabel: string;
-  productId: string;
-  whatsappReturn: ProductWhatsappReturn | null;
-  storeUrl: string;
-}) {
+function ProductMenuLink({ href, icon, label }: { href: string; icon?: ReactNode; label: string }) {
   return (
-    <aside className="lg:sticky lg:top-28 lg:self-start">
-      <div className="rounded-[20px] border border-black/10 bg-white p-5 shadow-2xl shadow-black/10">
-        <p className="text-sm font-semibold text-[color:var(--store-card-text-muted)]">Valor do produto</p>
-        <p className="mt-1 text-4xl font-black text-[color:var(--store-card-text)]">{priceLabel}</p>
-        {installments ? (
-          <p className="mt-2 text-sm font-semibold text-[color:var(--store-card-text-muted)]">
-            ou 6x de <span className="font-black text-[color:var(--store-card-text)]">{installments}</span> sem juros
-          </p>
-        ) : null}
-
-        <div className="mt-5 flex items-center justify-between gap-3 rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-3 text-sm font-bold text-[#128C4A]">
-          <span className="inline-flex items-center gap-2">
-            <span className="h-2.5 w-2.5 rounded-full bg-[#25D366]" />
-            {formatStockLabel(item)}
-          </span>
-          <span>{item.shipping.profile === "free" ? "Frete gratis" : "Envio imediato"}</span>
-        </div>
-
-        <div className="mt-5 grid gap-3">
-          <ProductCheckoutButton productId={productId} disabled={!canCheckout} />
-          <a
-            href={whatsappReturn?.href ?? storeUrl}
-            target={whatsappReturn ? "_blank" : undefined}
-            rel={whatsappReturn ? "noreferrer" : undefined}
-            className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-lg border border-[#25D366]/30 bg-white px-5 text-sm font-bold text-[#128C4A] transition hover:bg-[#25D366] hover:text-white"
-            data-track-event="sales_catalog_product_whatsapp_clicked"
-            data-track-label={item.title}
-          >
-            <MessageCircle className="h-4 w-4" />
-            {whatsappReturn ? "Falar no WhatsApp" : "Ver loja"}
-          </a>
-        </div>
-
-        <div className="mt-5 grid gap-3 border-t border-black/10 pt-5 text-sm font-semibold text-[color:var(--store-card-text)]">
-          <span className="flex items-center gap-3"><ShieldCheck className="h-4 w-4 text-[color:var(--store-accent)]" /> Checkout 100% seguro</span>
-          <span className="flex items-center gap-3"><LockKeyhole className="h-4 w-4 text-[color:var(--store-accent)]" /> Seus dados sempre protegidos</span>
-          <span className="flex items-center gap-3"><BadgeCheck className="h-4 w-4 text-[color:var(--store-accent)]" /> Satisfacao garantida pela loja</span>
-        </div>
-      </div>
-    </aside>
+    <Link href={href} className="flex items-center gap-2 rounded-[10px] px-3 py-2 text-sm font-semibold text-black transition hover:bg-black/5">
+      {icon}
+      <span>{label}</span>
+    </Link>
   );
 }
 
@@ -768,7 +734,7 @@ function StoreIdentity({
           <Store className="h-5 w-5" style={{ color: "var(--store-accent)" }} aria-hidden="true" />
         )}
       </div>
-      <p className="truncate text-xl font-bold uppercase leading-none text-black lg:text-2xl">{branding.displayName}</p>
+      <p className="truncate text-lg font-semibold uppercase leading-none text-black lg:text-2xl">{branding.displayName}</p>
     </Link>
   );
 }
@@ -833,8 +799,56 @@ function DetailLine({ label, value }: { label: string; value: string }) {
   );
 }
 
-function RelatedProductCard({ item, href }: { item: ClientSalesCatalogItem; href: string }) {
+function RelatedProductCard({
+  href,
+  item,
+  variant = "compact",
+}: {
+  href: string;
+  item: ClientSalesCatalogItem;
+  variant?: "compact" | "showcase";
+}) {
   const cover = item.media.find((media) => media.kind === "image") ?? null;
+
+  if (variant === "showcase") {
+    return (
+      <Link
+        href={href}
+        className="group flex min-w-0 flex-col items-start text-left"
+        data-track-event="sales_catalog_similar_product_clicked"
+        data-track-label={item.title}
+      >
+        <span className="relative mb-2.5 grid aspect-square w-full place-items-center overflow-hidden rounded-[13px] bg-[#f0f0f0] lg:mb-4 lg:rounded-[20px]">
+          {cover ? (
+            <Image
+              alt={item.title}
+              src={cover.storageUrl}
+              fill
+              unoptimized
+              sizes="(max-width: 768px) 50vw, (max-width: 1280px) 25vw, 230px"
+              className="object-contain p-3 transition duration-500 group-hover:scale-105"
+            />
+          ) : (
+            <Package className="h-10 w-10 text-black/30" aria-hidden="true" />
+          )}
+        </span>
+        <strong className="line-clamp-2 min-h-10 text-sm font-bold leading-5 text-black xl:text-xl">
+          {item.title}
+        </strong>
+        <span className="mt-1 flex items-end">
+          <span className="flex items-center gap-0.5 text-[#ffc633]">
+            {Array.from({ length: 5 }).map((_, index) => (
+              <Star className="h-4 w-4 fill-current" key={index} />
+            ))}
+          </span>
+          <span className="ml-[11px] pb-0.5 text-xs text-black xl:ml-[13px] xl:text-sm">
+            4.8<span className="text-black/60">/5</span>
+          </span>
+        </span>
+        <span className="mt-1 text-xl font-bold text-black xl:text-2xl">{formatProductPrice(item)}</span>
+      </Link>
+    );
+  }
 
   return (
     <Link
@@ -880,55 +894,30 @@ function MobileAccordion({ title, children }: { title: string; children: ReactNo
   );
 }
 
-function MobileBottomNav({
-  storeUrl,
-  storeProductsUrl,
-  cartUrl,
-  whatsappHref,
-}: {
-  storeUrl: string;
-  storeProductsUrl: string;
-  cartUrl: string;
-  whatsappHref: string | null;
-}) {
-  return (
-    <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-3 border-t border-black/10 bg-white px-2 py-2 shadow-[0_-16px_40px_rgba(15,23,42,0.12)] sm:hidden">
-      <MobileNavItem href={storeUrl} icon={<Home className="h-5 w-5" />} label="Loja" active />
-      <MobileNavItem href={storeProductsUrl} icon={<Package className="h-5 w-5" />} label="Produtos" />
-      <MobileNavItem href={whatsappHref ?? cartUrl} icon={<MessageCircle className="h-5 w-5" />} label="WhatsApp" external={Boolean(whatsappHref)} />
-    </nav>
-  );
-}
-
-function MobileNavItem({ active, external, href, icon, label }: { active?: boolean; external?: boolean; href: string; icon: ReactNode; label: string }) {
-  return (
-    <a
-      href={href}
-      target={external ? "_blank" : undefined}
-      rel={external ? "noreferrer" : undefined}
-      className={cn("grid place-items-center gap-1 rounded-lg py-1 text-[11px] font-semibold", active ? "text-black" : "text-slate-600")}
-    >
-      {icon}
-      <span>{label}</span>
-    </a>
-  );
-}
-
 function PublicStoreFooter({
   branding,
   cartUrl,
   footerContactText,
   footerText,
+  storeSlug,
   storeProductsUrl,
   storeUrl,
+  tracking,
   whatsappHref,
 }: {
   branding: OrganizationBranding;
   cartUrl: string;
   footerContactText: string;
   footerText: string;
+  storeSlug: string;
   storeProductsUrl: string;
   storeUrl: string;
+  tracking: {
+    leadId: string | null;
+    leadPhone: string | null;
+    conversationId: string | null;
+    trackingLinkId: string | null;
+  };
   whatsappHref: string | null;
 }) {
   const supportHref = whatsappHref ?? storeUrl;
@@ -937,38 +926,7 @@ function PublicStoreFooter({
   return (
     <footer className="mt-16 bg-[#f0f0f0]">
       <div className="mx-auto w-full max-w-[1240px] px-4">
-        <section className="grid gap-6 rounded-[20px] bg-black px-6 py-8 text-white shadow-2xl shadow-black/10 md:grid-cols-[minmax(0,1fr)_390px] md:items-center md:px-16 md:py-9">
-          <div className="flex max-w-2xl items-center gap-4">
-            <FooterStoreLogo branding={branding} />
-            <h2 className="text-[24px] font-bold uppercase leading-[29px] md:text-[30px] md:leading-[35px]">
-              Receba novidades e ofertas da {branding.displayName}
-            </h2>
-          </div>
-          <div className="grid gap-3">
-            <label className="relative">
-              <MessageCircle className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#128C4A]" aria-hidden="true" />
-              <input
-                className="h-12 w-full rounded-full border-0 bg-white px-12 text-sm font-medium text-black outline-none placeholder:text-black/40"
-                placeholder="WhatsApp com DDD"
-                type="tel"
-              />
-            </label>
-            <label className="relative">
-              <Mail className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-black/45" aria-hidden="true" />
-              <input
-                className="h-12 w-full rounded-full border-0 bg-white px-12 text-sm font-medium text-black outline-none placeholder:text-black/40"
-                placeholder="E-mail"
-                type="email"
-              />
-            </label>
-            <Link
-              className="inline-flex h-12 items-center justify-center rounded-full bg-white px-6 text-sm font-bold text-black transition hover:bg-white/90"
-              href={storeProductsUrl}
-            >
-              Ver ofertas da loja
-            </Link>
-          </div>
-        </section>
+        <StoreNewsletterCard branding={branding} storeSlug={storeSlug} tracking={tracking} />
 
         <div className="grid gap-8 px-0 pb-10 pt-12 md:grid-cols-[1.35fr_1fr_1fr_1fr] md:pt-14">
           <div>
@@ -1038,13 +996,14 @@ function FooterStoreLogo({ branding }: { branding: OrganizationBranding }) {
   );
 }
 
-type ProductPaymentBadgeTone = "visa" | "pix" | "card" | "mp";
+type ProductPaymentBadgeTone = "visa" | "mastercard" | "pix" | "paypal" | "gpay";
 
 const productPaymentBadges: Array<{ label: string; tone: ProductPaymentBadgeTone }> = [
   { label: "Visa", tone: "visa" },
+  { label: "Mastercard", tone: "mastercard" },
   { label: "Pix", tone: "pix" },
-  { label: "Card", tone: "card" },
-  { label: "MP", tone: "mp" },
+  { label: "PayPal", tone: "paypal" },
+  { label: "G Pay", tone: "gpay" },
 ];
 
 function ProductPaymentBadge({ label, tone }: { label: string; tone: ProductPaymentBadgeTone }) {
@@ -1053,9 +1012,10 @@ function ProductPaymentBadge({ label, tone }: { label: string; tone: ProductPaym
       className={cn(
         "inline-flex min-h-8 items-center rounded-[6px] border px-3 text-xs font-bold shadow-sm",
         tone === "visa" && "border-[#1a1f71]/20 bg-[#1a1f71] text-white",
+        tone === "mastercard" && "border-[#eb001b]/20 bg-gradient-to-r from-[#eb001b] to-[#f79e1b] text-white",
         tone === "pix" && "border-[#32bcad]/20 bg-[#32bcad] text-white",
-        tone === "card" && "border-[#eb001b]/20 bg-gradient-to-r from-[#eb001b] to-[#f79e1b] text-white",
-        tone === "mp" && "border-[#009ee3]/20 bg-[#009ee3] text-white",
+        tone === "paypal" && "border-[#003087]/20 bg-[#003087] text-white",
+        tone === "gpay" && "border-black/10 bg-white text-black",
       )}
     >
       {label}

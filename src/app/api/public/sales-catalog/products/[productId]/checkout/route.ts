@@ -91,14 +91,17 @@ export async function POST(
   const conversationId = normalizeUuid(readString(body.conversationId));
   const leadPhone = normalizePhone(readString(body.leadPhone));
   const trackingLinkId = normalizeUuid(readString(body.trackingLinkId));
+  const quantity = normalizeQuantity(body.quantity);
   const lead = leadId ? await loadLead(client, row.organization_id, leadId) : null;
   const customerPhone = normalizePhone(lead?.phone_number) ?? leadPhone;
   const customerName = readString(lead?.display_name) ?? "Lead WhatsApp";
   const customerEmail = readString(readRecord(lead?.metadata)?.email) ?? readString(readRecord(lead?.metadata)?.customer_email);
+  const totalAmount = (amount * quantity).toFixed(2);
   const checkoutIntentKey = createPublicCheckoutIntentKey([
     "sales_catalog_public_product",
     row.organization_id,
     item.id,
+    quantity,
     lead?.id ?? leadId,
     conversationId,
     customerPhone,
@@ -138,10 +141,10 @@ export async function POST(
       customer_name: customerName,
       customer_phone: customerPhone,
       customer_email: customerEmail,
-      subtotal: amount,
+      subtotal: totalAmount,
       discount_total: null,
       shipping_total: null,
-      total: amount,
+      total: totalAmount,
       payment_method: null,
       shipping_method: null,
       agent_notes: "Checkout iniciado pela pagina publica do produto.",
@@ -157,6 +160,7 @@ export async function POST(
         tracking_link_id: trackingLinkId,
         lead_phone: customerPhone,
         product_page_checkout: true,
+        quantity,
         checkout_intent_key: checkoutIntentKey,
         currency: item.currency,
         category: item.category,
@@ -186,10 +190,10 @@ export async function POST(
       sku_code: null,
       title: item.title,
       tag: item.tag,
-      quantity: 1,
+      quantity,
       unit_price: item.price ?? amount,
       sale_price: item.offer.salePrice ?? item.price ?? amount,
-      total: amount,
+      total: totalAmount,
       product_origin_type: item.productOriginType,
       commercial_flow_type: item.commercialFlowType,
       revenue_owner_type: item.revenueOwnerType,
@@ -229,7 +233,7 @@ export async function POST(
     client,
     organizationId: row.organization_id,
     orderId,
-    amount,
+    amount: totalAmount,
     payerEmail: customerEmail,
     source: "checkout",
     actorId: null,
@@ -264,6 +268,7 @@ export async function POST(
       lead_id: lead?.id ?? leadId,
       conversation_id: conversationId,
       lead_phone: customerPhone,
+      quantity,
       gateway_unavailable: payment.gatewayUnavailable === true,
     },
   });
@@ -329,4 +334,12 @@ function normalizePhone(value: string | null | undefined) {
   const digits = value?.replace(/\D/g, "") ?? "";
 
   return digits.length >= 8 ? digits.slice(0, 18) : null;
+}
+
+function normalizeQuantity(value: unknown) {
+  const quantity = typeof value === "number" ? value : Number(value);
+
+  if (!Number.isFinite(quantity)) return 1;
+
+  return Math.min(20, Math.max(1, Math.round(quantity)));
 }
