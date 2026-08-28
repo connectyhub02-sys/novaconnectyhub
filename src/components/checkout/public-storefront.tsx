@@ -748,30 +748,30 @@ function StoreBrandStrip({
         {categoryTiles.length > 0 ? (
           categoryTiles.map((tile) => (
             <button
-              className="group relative flex h-[76px] min-w-[236px] shrink-0 items-center overflow-hidden rounded-[16px] bg-white text-left text-black transition hover:-translate-y-0.5 hover:bg-white/95"
+              className="group relative flex h-[76px] w-[calc((100%-1rem)/2)] min-w-[calc((100%-1rem)/2)] shrink-0 items-center overflow-hidden rounded-[16px] bg-white text-left text-black transition hover:-translate-y-0.5 hover:bg-white/95 sm:w-auto sm:min-w-[236px]"
               key={tile.category.id}
               onClick={() => onSelect(tile.category.id)}
               type="button"
             >
-              <span className="relative z-10 min-w-0 px-5">
-                <span className="block truncate text-xl font-semibold">{tile.category.label}</span>
-                <span className="mt-1 block text-xs text-black/60">{tile.category.count} produto(s)</span>
+              <span className="relative z-10 min-w-0 px-4 sm:px-5">
+                <span className="block truncate text-base font-semibold sm:text-xl">{tile.category.label}</span>
+                <span className="mt-1 block truncate text-[11px] text-black/60 sm:text-xs">{tile.category.count} produto(s)</span>
               </span>
-              <span className="relative ml-auto h-full w-24 shrink-0 translate-x-2">
-                <ProductImage product={tile.product} sizes="96px" />
+              <span className="relative ml-auto h-full w-14 shrink-0 translate-x-1 sm:w-24 sm:translate-x-2">
+                <ProductImage product={tile.product} sizes="(max-width: 640px) 56px, 96px" />
               </span>
             </button>
           ))
         ) : (
           fallbackLabels.map((item) => (
             <button
-              className="h-[76px] min-w-[180px] shrink-0 rounded-[16px] border border-white/15 px-5 text-left text-white transition hover:bg-white/10"
+              className="h-[76px] w-[calc((100%-1rem)/2)] min-w-[calc((100%-1rem)/2)] shrink-0 rounded-[16px] border border-white/15 px-4 text-left text-white transition hover:bg-white/10 sm:w-auto sm:min-w-[180px] sm:px-5"
               key={item.id}
               onClick={() => onSelect(item.id)}
               type="button"
             >
-              <span className="block truncate text-xl font-semibold">{item.label}</span>
-              <span className="mt-1 block text-xs text-white/60">{item.count} produto(s)</span>
+              <span className="block truncate text-base font-semibold sm:text-xl">{item.label}</span>
+              <span className="mt-1 block truncate text-[11px] text-white/60 sm:text-xs">{item.count} produto(s)</span>
             </button>
           ))
         )}
