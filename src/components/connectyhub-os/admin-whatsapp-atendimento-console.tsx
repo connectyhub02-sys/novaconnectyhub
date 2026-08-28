@@ -1,13 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { Bot, MessageCircle } from "lucide-react";
+import { Bot, Megaphone, MessageCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ClientLeadCrmWorkspace } from "@/lib/client-os/leads-crm";
 import { AdminWhatsappAgentsConsole } from "./admin-whatsapp-agents-console";
 import { LeadCrmConsole } from "./leads-crm-console";
 
-type AdminWhatsappAtendimentoView = "attendance" | "agents";
+type AdminWhatsappAtendimentoView = "attendance" | "agents" | "automations";
 
 const adminWhatsappAtendimentoTabs: Array<{
   icon: typeof MessageCircle;
@@ -16,6 +16,7 @@ const adminWhatsappAtendimentoTabs: Array<{
 }> = [
   { icon: MessageCircle, label: "Atendimento manual", value: "attendance" },
   { icon: Bot, label: "Agentes internos", value: "agents" },
+  { icon: Megaphone, label: "Grupos e campanhas", value: "automations" },
 ];
 
 export function AdminWhatsappAtendimentoConsole({
@@ -59,6 +60,8 @@ export function AdminWhatsappAtendimentoConsole({
           mode="atendimento"
           workspace={leadWorkspace}
         />
+      ) : activeView === "automations" ? (
+        <AdminWhatsappAgentsConsole initialTab="multichannel" />
       ) : (
         <AdminWhatsappAgentsConsole />
       )}

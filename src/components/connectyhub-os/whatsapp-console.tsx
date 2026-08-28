@@ -24,6 +24,7 @@ import {
   KeyRound,
   Link2,
   Loader2,
+  Megaphone,
   MessageCircle,
   MessageSquare,
   Mic,
@@ -639,7 +640,7 @@ const controlToneStyles: Record<ControlTone, ControlToneStyle> = {
   slate: { color: "#64748b", rgb: "100,116,139" },
 };
 
-type WhatsappConsoleTab = "connection" | "prompt" | "qualification" | "behavior" | "channels" | "multichannel" | "files";
+export type WhatsappConsoleTab = "connection" | "prompt" | "qualification" | "behavior" | "channels" | "multichannel" | "files";
 
 type WhatsappConsoleVariant = {
   entityIdKey: "companyId" | "sectorId";
@@ -3175,6 +3176,7 @@ const whatsappConsoleTabs: Array<{
   { id: "files", label: "Conhecimento", description: "Arquivos e contexto", icon: FileText },
   { id: "qualification", label: "Qualificacao", description: "CRM e score", icon: CheckCircle2 },
   { id: "behavior", label: "Comportamento", description: "Modos e timers", icon: Shuffle },
+  { id: "multichannel", label: "Grupos e campanhas", description: "WhatsApp", icon: Megaphone },
   { id: "channels", label: "Redes sociais", description: "Instagram / Facebook", icon: Globe2, comingSoon: true },
 ];
 
