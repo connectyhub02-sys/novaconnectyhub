@@ -3,8 +3,10 @@
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import type { CSSProperties, ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  ChevronLeft,
+  ChevronRight,
   Home,
   Loader2,
   Menu,
@@ -685,11 +687,9 @@ function StorefrontHero({
             Comprar agora
           </a>
 
-          <div className="flex flex-wrap items-center justify-center gap-y-3 text-center md:mb-[116px] md:justify-start md:text-left">
+          <div className="grid w-full max-w-[540px] grid-cols-3 text-center md:mb-[116px] md:text-left">
             <HeroMetric label="Produtos ativos" value={productsCount} />
-            <span className="mx-6 h-12 w-px bg-black/10" />
             <HeroMetric label="Categorias" value={categoriesCount} />
-            <span className="mx-6 hidden h-12 w-px bg-black/10 sm:block" />
             <HeroMetric label="Checkout seguro" value={checkoutProductsCount} />
           </div>
         </section>
@@ -705,11 +705,11 @@ function StorefrontHero({
 
 function HeroMetric({ label, value }: { label: string; value: number }) {
   return (
-    <div className="flex min-w-[104px] flex-col">
-      <span className="text-2xl font-semibold leading-none text-[color:var(--store-text)] md:text-xl lg:text-3xl xl:text-[34px]">
+    <div className="flex min-w-0 flex-col items-center border-l border-black/10 px-2 first:border-l-0 md:items-start md:px-6 md:first:pl-0">
+      <span className="text-[26px] font-semibold leading-none text-[color:var(--store-text)] md:text-3xl xl:text-[34px]">
         {value}
       </span>
-      <span className="mt-1 text-xs text-[color:var(--store-text-muted)] xl:text-base">
+      <span className="mt-1 text-center text-xs leading-4 text-[color:var(--store-text-muted)] md:text-left xl:text-base">
         {label}
       </span>
     </div>
@@ -1073,7 +1073,7 @@ function ProductImage({
 }
 
 function StoreReviews({ branding }: { branding: PublicStorefrontBranding }) {
-  const reviews = [
+  const reviews = useMemo(() => [
     {
       name: "Cliente verificado",
       text: `Atendimento rápido da ${branding.displayName}, produto bem apresentado e compra fácil pelo WhatsApp.`,
@@ -1086,7 +1086,38 @@ function StoreReviews({ branding }: { branding: PublicStorefrontBranding }) {
       name: "Pedido concluído",
       text: "A vitrine mostra as informações principais sem confundir. Ajuda muito na decisão de compra.",
     },
-  ];
+  ], [branding.displayName]);
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const [activeReviewIndex, setActiveReviewIndex] = useState(0);
+
+  useEffect(() => {
+    if (reviews.length < 2) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+    const timer = window.setInterval(() => {
+      setActiveReviewIndex((current) => (current + 1) % reviews.length);
+    }, 4200);
+
+    return () => window.clearInterval(timer);
+  }, [reviews.length]);
+
+  useEffect(() => {
+    const scroller = scrollerRef.current;
+    const firstCard = scroller?.querySelector<HTMLElement>("[data-store-review-card]");
+
+    if (!scroller || !firstCard) return;
+
+    const styles = window.getComputedStyle(scroller);
+    const gap = Number.parseFloat(styles.columnGap || styles.gap || "0") || 0;
+    scroller.scrollTo({
+      behavior: "smooth",
+      left: activeReviewIndex * (firstCard.offsetWidth + gap),
+    });
+  }, [activeReviewIndex]);
+
+  function selectReview(index: number) {
+    setActiveReviewIndex((index + reviews.length) % reviews.length);
+  }
 
   return (
     <section className="mt-16">
@@ -1094,33 +1125,65 @@ function StoreReviews({ branding }: { branding: PublicStorefrontBranding }) {
         <h2 className="text-[24px] font-semibold leading-[29px] text-[color:var(--store-text)] md:text-[32px] md:leading-[38px]">
           Clientes satisfeitos
         </h2>
-        <div className="hidden items-center gap-4 text-black sm:flex">
-          <ArrowGlyph direction="left" />
-          <ArrowGlyph direction="right" />
+        <div className="hidden items-center gap-4 text-[color:var(--store-text)] sm:flex">
+          <ArrowGlyph direction="left" onClick={() => selectReview(activeReviewIndex - 1)} />
+          <ArrowGlyph direction="right" onClick={() => selectReview(activeReviewIndex + 1)} />
         </div>
       </div>
-      <div className="grid gap-4 md:grid-cols-3">
+      <div
+        className="-mx-4 flex snap-x snap-mandatory gap-4 overflow-x-auto scroll-smooth px-4 pb-2 [scrollbar-width:none] sm:mx-0 sm:px-0 [&::-webkit-scrollbar]:hidden"
+        ref={scrollerRef}
+      >
         {reviews.map((review) => (
-          <article className="rounded-[8px] border border-black/10 bg-white p-6 text-left" key={review.name}>
-            <div className="flex text-[#ffc633]">
-              {[0, 1, 2, 3, 4].map((item) => (
-                <Star className="h-5 w-5 fill-current" key={item} />
-              ))}
-            </div>
-            <h3 className="mt-4 text-base font-semibold text-[color:var(--store-card-text)]">{review.name}</h3>
-            <p className="mt-3 text-sm leading-6 text-[color:var(--store-card-text-muted)]">{review.text}</p>
-          </article>
+          <StoreReviewCard key={review.name} review={review} />
+        ))}
+      </div>
+      <div className="mt-4 flex justify-center gap-2">
+        {reviews.map((review, index) => (
+          <button
+            aria-label={`Mostrar depoimento: ${review.name}`}
+            className={cn(
+              "h-2 rounded-full transition-all",
+              index === activeReviewIndex
+                ? "w-6 bg-[color:var(--store-button)]"
+                : "w-2 bg-black/20",
+            )}
+            key={review.name}
+            onClick={() => selectReview(index)}
+            type="button"
+          />
         ))}
       </div>
     </section>
   );
 }
 
-function ArrowGlyph({ direction }: { direction: "left" | "right" }) {
+function StoreReviewCard({ review }: { review: { name: string; text: string } }) {
   return (
-    <span className="grid h-9 w-9 place-items-center rounded-full border border-black/10 text-xl font-bold">
-      {direction === "left" ? "<" : ">"}
-    </span>
+    <article className="min-h-[196px] w-[calc(100vw-2rem)] max-w-[370px] shrink-0 snap-start rounded-[8px] border border-black/10 bg-white p-6 text-left sm:w-[360px] lg:w-[420px]" data-store-review-card>
+      <div className="flex text-[#ffc633]">
+        {[0, 1, 2, 3, 4].map((item) => (
+          <Star className="h-5 w-5 fill-current" key={item} />
+        ))}
+      </div>
+      <h3 className="mt-4 text-base font-semibold text-[color:var(--store-card-text)]">{review.name}</h3>
+      <p className="mt-3 text-sm leading-6 text-[color:var(--store-card-text-muted)]">{review.text}</p>
+    </article>
+  );
+}
+
+function ArrowGlyph({ direction, onClick }: { direction: "left" | "right"; onClick: () => void }) {
+  const Icon = direction === "left" ? ChevronLeft : ChevronRight;
+
+  return (
+    <button
+      aria-label={direction === "left" ? "Depoimento anterior" : "Próximo depoimento"}
+      className="grid h-9 w-9 place-items-center rounded-full border border-black/10 transition hover:bg-black/5"
+      onClick={onClick}
+      type="button"
+    >
+      <Icon className="h-4 w-4" />
+    </button>
   );
 }
 
@@ -1435,7 +1498,7 @@ function MobileBottomNav({
 }) {
   return (
     <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-3 border-t border-[#e5e2d8] bg-white px-2 py-2 shadow-[0_-12px_30px_rgba(15,23,42,0.08)] lg:hidden">
-      <MobileNavButton active icon={<Home className="h-5 w-5" />} label="Inicio" onClick={onHome} />
+      <MobileNavButton active icon={<Home className="h-5 w-5" />} label="Início" onClick={onHome} />
       <MobileNavButton icon={<Store className="h-5 w-5" />} label="Categorias" onClick={onCategories} />
       <MobileNavButton badge={totalItems} icon={<ShoppingCart className="h-5 w-5" />} label="Carrinho" onClick={onCart} />
     </nav>
