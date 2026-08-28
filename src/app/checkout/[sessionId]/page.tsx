@@ -176,9 +176,9 @@ export default async function CheckoutPage({
           <span className="mb-4 rounded-full border border-black/10 bg-[#f0f0f0] px-3 py-1 text-xs font-bold uppercase text-black">
             ConnectyHub Checkout
           </span>
-          <h1 className="text-3xl font-black text-slate-950">Checkout indisponivel</h1>
+          <h1 className="text-3xl font-semibold text-slate-950">Checkout indisponível</h1>
           <p className="mt-3 max-w-xl text-sm leading-6 text-slate-600">
-            Nao encontramos esta sessao de pagamento. Volte para a conversa no WhatsApp e solicite um novo link de pagamento.
+            Não encontramos esta sessão de pagamento. Volte para a conversa no WhatsApp e solicite um novo link de pagamento.
           </p>
         </section>
       </CheckoutShell>
@@ -203,9 +203,9 @@ export default async function CheckoutPage({
     && amountNumber !== null
     && integration?.status === "connected"
     && Boolean(integration.public_key);
-  const commercialContext = resolveCheckoutCommercialContext(session, order);
-  const branding = resolveOrganizationBranding(organization);
   const catalogSettings = await getOrganizationSalesCatalogSettings(client, organization.id).catch(() => null);
+  const commercialContext = resolveCheckoutCommercialContext(session, order);
+  const branding = resolveOrganizationBranding(organization, catalogSettings?.storefront ?? null);
   const storefront = resolvePublicPageStorefront(catalogSettings?.storefront ?? null, branding);
   const primaryColor = storefront.primaryColor ?? defaultStorefrontPrimaryColor;
   const publicLayoutStyle = {
@@ -245,7 +245,7 @@ export default async function CheckoutPage({
 
   return (
     <CheckoutShell publicTrackingContext={publicTrackingContext} style={publicLayoutStyle}>
-      <div className="bg-black px-4 py-2 text-center text-xs font-medium text-white sm:text-sm">
+      <div className="px-4 py-2 text-center text-xs font-medium text-[color:var(--store-offer-text)] sm:text-sm" style={{ backgroundColor: "var(--store-primary)" }}>
         Checkout seguro da {branding.displayName}.{" "}
         <a className="font-bold underline underline-offset-2" href={publicStoreUrl}>
           Voltar para loja
@@ -255,12 +255,12 @@ export default async function CheckoutPage({
         <div className="mx-auto flex w-full max-w-[1240px] items-center justify-between gap-4 px-4 py-5 sm:px-6 lg:py-6">
           <a className="flex min-w-0 items-center gap-3" href={publicStoreUrl}>
             <CheckoutStoreLogo branding={branding} />
-            <span className="truncate text-xl font-bold uppercase leading-none text-black lg:text-2xl">
+            <span className="truncate text-xl font-semibold leading-none text-[color:var(--store-text)] lg:text-2xl">
               {branding.displayName}
             </span>
           </a>
-          <div className="hidden items-center gap-6 text-sm text-black md:flex">
-            <a className="font-medium hover:text-black/70" href={publicStoreUrl}>Loja</a>
+          <div className="hidden items-center gap-6 text-sm text-[color:var(--store-text)] md:flex">
+            <a className="font-medium hover:opacity-70" href={publicStoreUrl}>Loja</a>
             <span className="font-bold">Checkout</span>
           </div>
         </div>
@@ -340,27 +340,27 @@ export default async function CheckoutPage({
             <CheckoutState
               tone="success"
               title="Pagamento confirmado"
-              body="Recebemos a confirmacao do pagamento. Volte ao WhatsApp para acompanhar o atendimento."
+              body="Recebemos a confirmação do pagamento. Volte ao WhatsApp para acompanhar o atendimento."
             />
           ) : failed ? (
             <CheckoutState
               tone={gatewayUnavailable ? "info" : "error"}
-              title={gatewayUnavailable ? "Pagamento temporariamente indisponivel" : "Pagamento nao concluido"}
+              title={gatewayUnavailable ? "Pagamento temporariamente indisponível" : "Pagamento não concluído"}
               body={gatewayUnavailable
-                ? "Seu pedido foi criado, mas a loja ainda precisa ajustar o gateway de pagamento. Volte ao WhatsApp para combinar o proximo passo com o atendimento."
+                ? "Seu pedido foi criado, mas a loja ainda precisa ajustar o gateway de pagamento. Volte ao WhatsApp para combinar o próximo passo com o atendimento."
                 : session.failure_reason ?? "Solicite um novo link no WhatsApp para tentar novamente."}
             />
           ) : shippingBlocked ? (
             <CheckoutState
               tone="info"
               title="Frete pendente"
-              body="Este pedido tem produto fisico. O pagamento sera liberado assim que o frete, retirada ou entrega for definido no WhatsApp."
+              body="Este pedido tem produto físico. O pagamento será liberado assim que o frete, retirada ou entrega for definido no WhatsApp."
             />
           ) : session.method === "card" ? (
             <CheckoutState
               tone="info"
-              title="Pagamento com cartao registrado"
-              body="A confirmacao pode levar alguns instantes. Volte ao WhatsApp para acompanhar o pedido."
+              title="Pagamento com cartão registrado"
+              body="A confirmação pode levar alguns instantes. Volte ao WhatsApp para acompanhar o pedido."
             />
           ) : (
             <CheckoutPaymentOptions
@@ -385,7 +385,7 @@ export default async function CheckoutPage({
           )}
 
           <p className="mt-5 text-xs leading-5 text-slate-400">
-            A confirmacao volta automaticamente para a loja no ConnectyHub. Nao envie comprovantes fora da conversa oficial.
+            A confirmação volta automaticamente para a loja no ConnectyHub. Não envie comprovantes fora da conversa oficial.
           </p>
 
           <CheckoutWhatsAppReturn link={whatsappReturn} />
@@ -408,7 +408,7 @@ export default async function CheckoutPage({
 
           <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <CheckoutMetric label="Total" value={amount} />
-            <CheckoutMetric label="Pagamento" value={session.method === "card" ? "Cartao" : "Pix"} />
+            <CheckoutMetric label="Pagamento" value={session.method === "card" ? "Cartão" : "Pix"} />
             <CheckoutMetric label="Recebedor" value={commercialContext.receiverLabel} />
             <CheckoutMetric label="Status" value={formatSalesCatalogPaymentSessionStatus(status)} />
           </div>
@@ -417,7 +417,7 @@ export default async function CheckoutPage({
             {items.length > 0 ? items.map((item) => (
               <CheckoutItemCard key={item.id} item={item} />
             )) : (
-              <div className="px-4 py-4 text-sm text-slate-600">Pedido registrado no catalogo de vendas.</div>
+              <div className="px-4 py-4 text-sm text-slate-600">Pedido registrado no catálogo de vendas.</div>
             )}
           </div>
         </section>
@@ -429,7 +429,7 @@ export default async function CheckoutPage({
             <CheckoutDetail label="Subtotal" value={subtotal} />
             <CheckoutDetail label="Frete" value={shipping ?? order.shipping_method ?? "A combinar"} />
             <CheckoutDetail label="Origem da venda" value={commercialContext.flowLabel} />
-            <CheckoutDetail label="Ultima atualizacao" value={updatedAt ?? "Agora"} />
+            <CheckoutDetail label="Última atualização" value={updatedAt ?? "Agora"} />
           </dl>
         </section>
       </main>
@@ -567,7 +567,7 @@ function CheckoutItemCard({ item }: { item: CheckoutOrderItemRow }) {
           <ItemOriginBadge item={item} />
         </div>
         <p className="mt-1 text-xs text-slate-500">
-          {item.sku_code ? `SKU ${item.sku_code}` : item.catalogCategory ?? "Item do catalogo"} - Qtd. {item.quantity ?? 1}
+          {item.sku_code ? `SKU ${item.sku_code}` : item.catalogCategory ?? "Item do catálogo"} - Qtd. {item.quantity ?? 1}
         </p>
         {description ? (
           <div className="mt-2 text-xs leading-5 text-slate-600">
@@ -1003,14 +1003,14 @@ function buildCheckoutPaymentFeedback(input: {
     amountLabel: input.amountLabel,
     providerStatusDetail: input.session.provider_status_detail ?? input.session.provider_status,
     rejection: gatewayUnavailable ? {
-      inlineMessage: "Pagamento temporariamente indisponivel. O pedido foi criado, mas a loja precisa ajustar o gateway de pagamento.",
-      title: "Pagamento temporariamente indisponivel",
+      inlineMessage: "Pagamento temporariamente indisponível. O pedido foi criado, mas a loja precisa ajustar o gateway de pagamento.",
+      title: "Pagamento temporariamente indisponível",
       description: "Seu pedido foi criado, mas a loja ainda precisa ajustar o gateway de pagamento antes de receber online.",
-      reason: "Gateway de pagamento indisponivel.",
-      recommendation: "Volte ao WhatsApp oficial da loja para combinar o proximo passo do pedido.",
+      reason: "Gateway de pagamento indisponível.",
+      recommendation: "Volte ao WhatsApp oficial da loja para combinar o próximo passo do pedido.",
       nextSteps: [
-        "O pedido ja ficou registrado com os itens escolhidos.",
-        "Continue pelo WhatsApp oficial da loja enquanto o pagamento online e ajustado.",
+        "O pedido já ficou registrado com os itens escolhidos.",
+        "Continue pelo WhatsApp oficial da loja enquanto o pagamento online é ajustado.",
       ],
       statusDetail: input.session.provider_status_detail ?? input.session.provider_status,
     } : null,
@@ -1037,10 +1037,15 @@ function normalizeCheckoutFeedbackStatus(status: string): CheckoutPaymentFeedbac
   return null;
 }
 
-function resolveOrganizationBranding(organization: OrganizationRow): OrganizationBranding {
+function resolveOrganizationBranding(
+  organization: OrganizationRow,
+  storefront?: SalesCatalogStorefrontSettings | null,
+): OrganizationBranding {
   const metadata = readRecord(organization.metadata);
   const logoUrl = readString(metadata.brand_logo_url);
-  const displayName = readString(metadata.public_display_name) ?? organization.name;
+  const displayName = readString(storefront?.publicDisplayName)
+    ?? readString(metadata.public_display_name)
+    ?? organization.name;
 
   return {
     displayName,
@@ -1083,17 +1088,17 @@ function PublicStoreFooter({
         <div>
           <div className="flex items-center gap-3">
             <CheckoutStoreLogo branding={branding} />
-            <p className="text-[22px] font-bold uppercase leading-none text-black">{branding.displayName}</p>
+            <p className="text-[22px] font-semibold leading-none text-[color:var(--store-text)]">{branding.displayName}</p>
           </div>
-          <p className="mt-4 max-w-xl text-sm leading-6 text-black/60">{footerText}</p>
+          <p className="mt-4 max-w-xl text-sm leading-6 text-[color:var(--store-text-muted)]">{footerText}</p>
         </div>
         <div>
-          <p className="text-sm font-bold uppercase tracking-[3px] text-black">Atendimento</p>
-          <p className="mt-4 text-sm leading-6 text-black/60">{footerContactText}</p>
+          <p className="text-sm font-bold uppercase tracking-[3px] text-[color:var(--store-text)]">Atendimento</p>
+          <p className="mt-4 text-sm leading-6 text-[color:var(--store-text-muted)]">{footerContactText}</p>
         </div>
         <div>
-          <p className="text-sm font-bold uppercase tracking-[3px] text-black">Checkout seguro</p>
-          <p className="mt-4 text-sm leading-6 text-black/60">Checkout seguro pela ConnectyHub, pagamento protegido e pedido acompanhado no WhatsApp.</p>
+          <p className="text-sm font-bold uppercase tracking-[3px] text-[color:var(--store-text)]">Checkout seguro</p>
+          <p className="mt-4 text-sm leading-6 text-[color:var(--store-text-muted)]">Checkout seguro pela ConnectyHub, pagamento protegido e pedido acompanhado no WhatsApp.</p>
           <div className="mt-5 flex flex-wrap gap-2">
             {checkoutPaymentBadges.map((item) => (
               <CheckoutPaymentBadge key={item.label} label={item.label} tone={item.tone} />
@@ -1101,7 +1106,7 @@ function PublicStoreFooter({
           </div>
         </div>
       </div>
-      <p className="mx-auto w-full max-w-[1240px] border-t border-black/10 px-4 py-5 text-xs text-black/60">
+      <p className="mx-auto w-full max-w-[1240px] border-t border-black/10 px-4 py-5 text-xs text-[color:var(--store-text-muted)]">
         Checkout seguro pela{" "}
         <a className="font-bold text-black hover:underline" href={connectHubPublicUrl} rel="noreferrer" target="_blank">
           ConnectyHub
@@ -1158,7 +1163,7 @@ function resolvePublicPageStorefront(
       ?? heroSubtitle
       ?? `Produtos selecionados pela ${branding.displayName}, compra segura e atendimento conectado ao WhatsApp.`,
     footerText: readString(settings?.footerText)
-      ?? `${branding.displayName} atende pelo WhatsApp com catalogo, checkout seguro e acompanhamento do pedido em um so lugar.`,
+      ?? `${branding.displayName} atende pelo WhatsApp com catálogo, checkout seguro e acompanhamento do pedido em um só lugar.`,
     footerContactText: readString(settings?.footerContactText) ?? "Atendimento pelo WhatsApp oficial da loja.",
     primaryColor,
     textColor,
@@ -1249,7 +1254,7 @@ function resolveCheckoutCommercialContext(session: CheckoutSessionRow, order: Ch
       commissionEligible,
       flowLabel: "Produto ConnectyHub via loja parceira",
       receiverLabel: "ConnectyHub",
-      checkoutNote: "O pagamento e processado pela ConnectyHub e o acompanhamento continua pelo WhatsApp da loja parceira.",
+      checkoutNote: "O pagamento é processado pela ConnectyHub e o acompanhamento continua pelo WhatsApp da loja parceira.",
     };
   }
 
@@ -1271,7 +1276,7 @@ function resolveCheckoutCommercialContext(session: CheckoutSessionRow, order: Ch
       commissionEligible,
       flowLabel: "Marketplace parceiro",
       receiverLabel: revenueOwner === "external_provider" ? "Fornecedor" : "ConnectyHub",
-      checkoutNote: "O pedido sera acompanhado no WhatsApp e liquidado conforme a regra comercial do fornecedor parceiro.",
+      checkoutNote: "O pedido será acompanhado no WhatsApp e liquidado conforme a regra comercial do fornecedor parceiro.",
     };
   }
 

@@ -83,11 +83,13 @@ export async function loadPublicStorefrontPageData(input: {
     trackingLinkId,
   };
 
+  const storefront = resolvePublicStorefrontSettings(catalogSettings?.storefront ?? null);
+
   return {
     organizationId: organization.id,
     storeSlug: publicSlug,
-    branding: resolvePublicStorefrontBranding(organization, whatsapp),
-    storefront: resolvePublicStorefrontSettings(catalogSettings?.storefront ?? null),
+    branding: resolvePublicStorefrontBranding(organization, whatsapp, storefront),
+    storefront,
     products,
     tracking,
     publicTrackingContext: buildStorePublicTrackingContext(tracking),
@@ -111,10 +113,13 @@ export async function loadPublicStorefrontOrganization(storeSlug: string) {
 export function resolvePublicStorefrontBranding(
   organization: OrganizationRow,
   whatsapp?: StorefrontWhatsappRow | null,
+  storefront?: PublicStorefrontSettings | null,
 ): PublicStorefrontBranding {
   const metadata = readRecord(organization.metadata);
   const logoUrl = readString(metadata.brand_logo_url);
-  const displayName = readString(metadata.public_display_name) ?? organization.name;
+  const displayName = readString(storefront?.publicDisplayName)
+    ?? readString(metadata.public_display_name)
+    ?? organization.name;
 
   return {
     displayName,
@@ -129,6 +134,7 @@ export function resolvePublicStorefrontBranding(
 
 export function resolvePublicStorefrontSettings(settings: PublicStorefrontSettings | null): PublicStorefrontSettings {
   return {
+    publicDisplayName: readString(settings?.publicDisplayName),
     heroTitle: readString(settings?.heroTitle),
     heroHighlight: readString(settings?.heroHighlight),
     heroSubtitle: readString(settings?.heroSubtitle),
@@ -324,14 +330,14 @@ function formatStockLabel(item: ClientSalesCatalogItem) {
     return "Sob encomenda";
   }
 
-  return "Disponivel";
+  return "Disponível";
 }
 
 function formatFulfillment(value: ClientSalesCatalogItem["fulfillment"]["mode"]) {
   if (value === "digital") return "Digital";
-  if (value === "service") return "Servico";
+  if (value === "service") return "Serviço";
   if (value === "subscription") return "Assinatura";
-  return "Produto fisico";
+  return "Produto físico";
 }
 
 function toStoreCatalogTimestamp(value: string | null | undefined) {

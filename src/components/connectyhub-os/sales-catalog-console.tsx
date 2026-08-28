@@ -782,17 +782,18 @@ export function SalesCatalogConsole({
   );
   const selectedStoreSlug = selectedCompany?.slug ?? selectedCompany?.id ?? "";
   const selectedStorePath = selectedStoreSlug ? `/loja/${encodeURIComponent(selectedStoreSlug)}` : "";
+  const storefrontDisplayName = settingsDraft.storefront.publicDisplayName?.trim() || selectedCompany?.name || "sua loja";
   const customStorefrontHeroTitle = settingsDraft.storefront.heroTitle?.trim() || settingsDraft.storefront.headerText?.trim() || "";
   const storefrontHeroTitle = customStorefrontHeroTitle || "Produtos favoritos,";
   const storefrontHeroHighlight = customStorefrontHeroTitle
     ? (settingsDraft.storefront.heroHighlight?.trim() || "")
-    : (settingsDraft.storefront.heroHighlight?.trim() || `da ${selectedCompany?.name ?? "sua loja"} até você.`);
+    : (settingsDraft.storefront.heroHighlight?.trim() || `da ${storefrontDisplayName} até você.`);
   const storefrontHeroSubtitle = settingsDraft.storefront.heroSubtitle?.trim()
-    || `Produtos selecionados pela ${selectedCompany?.name ?? "sua loja"}, compra segura e atendimento conectado ao WhatsApp.`;
+    || `Produtos selecionados pela ${storefrontDisplayName}, compra segura e atendimento conectado ao WhatsApp.`;
   const legacyStorefrontHeaderText = `${storefrontHeroTitle} ${storefrontHeroHighlight}`.trim();
   const storefrontHeaderText = storefrontHeroSubtitle || legacyStorefrontHeaderText;
   const storefrontFooterText = settingsDraft.storefront.footerText?.trim()
-    || `${selectedCompany?.name ?? "Sua empresa"} atende seus clientes com catalogo, checkout e suporte conectados ao WhatsApp.`;
+    || `${storefrontDisplayName} atende seus clientes com catálogo, checkout e suporte conectados ao WhatsApp.`;
   const storefrontFooterContactText = settingsDraft.storefront.footerContactText?.trim() || "Atendimento pelo WhatsApp oficial da loja.";
   const storefrontPrimaryColor = normalizeStorefrontPreviewColor(settingsDraft.storefront.primaryColor) ?? "#063f2c";
   const storefrontTextColor = normalizeStorefrontTextPreviewColor(settingsDraft.storefront.textColor) ?? "#111111";
@@ -1247,6 +1248,7 @@ export function SalesCatalogConsole({
           categories,
           attributes,
           storefront: {
+            publicDisplayName: cleanInput(settingsDraft.storefront.publicDisplayName, 80),
             heroTitle: cleanInput(settingsDraft.storefront.heroTitle, 120),
             heroHighlight: cleanInput(settingsDraft.storefront.heroHighlight, 90),
             heroSubtitle: cleanInput(settingsDraft.storefront.heroSubtitle, 180),
@@ -3062,7 +3064,7 @@ export function SalesCatalogConsole({
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-emerald-200">Logotipo publico</p>
-                    <p className="mt-1 truncate text-[12px] font-semibold text-slate-100">{selectedCompany?.name ?? "Empresa"}</p>
+                    <p className="mt-1 truncate text-[12px] font-semibold text-slate-100">{storefrontDisplayName}</p>
                     <p className="mt-1 text-[11px] leading-4 text-slate-500">Aparece na loja, produto, checkout e confirmacao.</p>
                   </div>
                 </div>
@@ -3089,7 +3091,18 @@ export function SalesCatalogConsole({
               </div>
 
               <label className="block">
-                <FieldLabel>Titulo do header</FieldLabel>
+                <FieldLabel>Nome público da loja</FieldLabel>
+                <input
+                  value={settingsDraft.storefront.publicDisplayName ?? ""}
+                  onChange={(event) => updateStorefrontSettings({ publicDisplayName: event.target.value.slice(0, 80) })}
+                  className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                  placeholder={selectedCompany?.name ?? "Ex.: BuffaloMass"}
+                  style={{ borderColor: "var(--ch-border)" }}
+                />
+              </label>
+
+              <label className="block">
+                <FieldLabel>Título do topo</FieldLabel>
                 <textarea
                   id="sales-catalog-storefront-header-text"
                   value={settingsDraft.storefront.heroTitle ?? ""}
@@ -3115,7 +3128,7 @@ export function SalesCatalogConsole({
               </label>
 
               <label className="block">
-                <FieldLabel>Sobre a empresa no footer</FieldLabel>
+                <FieldLabel>Sobre a empresa no rodapé</FieldLabel>
                 <textarea
                   value={settingsDraft.storefront.footerText ?? ""}
                   onChange={(event) => updateStorefrontSettings({ footerText: event.target.value.slice(0, 320) })}
@@ -3126,7 +3139,7 @@ export function SalesCatalogConsole({
               </label>
 
               <label className="block">
-                <FieldLabel>Contato no footer</FieldLabel>
+                <FieldLabel>Contato no rodapé</FieldLabel>
                 <input
                   value={settingsDraft.storefront.footerContactText ?? ""}
                   onChange={(event) => updateStorefrontSettings({ footerContactText: event.target.value.slice(0, 180) })}
@@ -3137,49 +3150,29 @@ export function SalesCatalogConsole({
               </label>
 
               <div className="rounded-xl border border-slate-200/80 bg-slate-50/70 p-3">
-                <p className="mb-3 text-[11px] font-black uppercase tracking-wide text-slate-600">Tema visual</p>
+                <p className="mb-1 text-[12px] font-semibold text-slate-700">Tema visual</p>
+                <p className="mb-3 text-[11px] leading-4 text-slate-500">Poucos controles, layout fixo e resultado aplicado na loja toda.</p>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <ThemeColorField
-                    label="Cor do tema"
+                    label="Cor principal"
                     value={settingsDraft.storefront.primaryColor}
                     previewValue={storefrontPrimaryColor}
                     placeholder="#063f2c"
-                    onChange={(primaryColor) => updateStorefrontSettings({ primaryColor })}
+                    onChange={(primaryColor) => updateStorefrontSettings({ primaryColor, offerTextColor: "" })}
+                  />
+                  <ThemeColorField
+                    label="Cor dos botões"
+                    value={settingsDraft.storefront.buttonColor}
+                    previewValue={storefrontButtonColor}
+                    placeholder="#063f2c"
+                    onChange={(buttonColor) => updateStorefrontSettings({ buttonColor, buttonTextColor: "" })}
                   />
                   <ThemeColorField
                     label="Cor dos textos"
                     value={settingsDraft.storefront.textColor}
                     previewValue={storefrontTextColor}
                     placeholder="#111111"
-                    onChange={(textColor) => updateStorefrontSettings({ textColor })}
-                  />
-                  <ThemeColorField
-                    label="Cor dos botoes"
-                    value={settingsDraft.storefront.buttonColor}
-                    previewValue={storefrontButtonColor}
-                    placeholder="#063f2c"
-                    onChange={(buttonColor) => updateStorefrontSettings({ buttonColor })}
-                  />
-                  <ThemeColorField
-                    label="Letra dos botoes"
-                    value={settingsDraft.storefront.buttonTextColor}
-                    previewValue={storefrontButtonTextColor}
-                    placeholder="#ffffff"
-                    onChange={(buttonTextColor) => updateStorefrontSettings({ buttonTextColor })}
-                  />
-                  <ThemeColorField
-                    label="Letra dos cards"
-                    value={settingsDraft.storefront.cardTextColor}
-                    previewValue={storefrontCardTextColor}
-                    placeholder="#111111"
-                    onChange={(cardTextColor) => updateStorefrontSettings({ cardTextColor })}
-                  />
-                  <ThemeColorField
-                    label="Letra do card de oferta"
-                    value={settingsDraft.storefront.offerTextColor}
-                    previewValue={storefrontOfferTextColor}
-                    placeholder="#ffffff"
-                    onChange={(offerTextColor) => updateStorefrontSettings({ offerTextColor })}
+                    onChange={(textColor) => updateStorefrontSettings({ textColor, cardTextColor: "" })}
                   />
                 </div>
               </div>
@@ -3213,7 +3206,7 @@ export function SalesCatalogConsole({
                     )}
                   </div>
                   <div className="min-w-0">
-                    <p className="truncate text-[15px] font-black">{selectedCompany?.name ?? "Sua loja"}</p>
+                    <p className="truncate text-[15px] font-semibold">{storefrontDisplayName}</p>
                     <p className="line-clamp-1 text-[11px] font-semibold opacity-70">{storefrontHeaderText}</p>
                   </div>
                 </div>
@@ -3228,23 +3221,23 @@ export function SalesCatalogConsole({
 
               <div className="grid gap-4 py-5 lg:grid-cols-[minmax(0,1fr)_220px]">
                 <div className="min-w-0">
-                  <p className="font-mono text-[9px] font-black uppercase tracking-[0.18em]" style={{ color: storefrontAccentColor }}>
+                  <p className="font-mono text-[9px] font-semibold uppercase tracking-[0.18em]" style={{ color: storefrontAccentColor }}>
                     Loja oficial
                   </p>
-                  <h3 className="mt-2 text-3xl font-black leading-none">
+                  <h3 className="mt-2 text-2xl font-semibold leading-tight sm:text-[28px]">
                     {storefrontHeroTitle}
                     {storefrontHeroHighlight ? <span className="block">{storefrontHeroHighlight}</span> : null}
                   </h3>
                   <p className="mt-3 line-clamp-2 max-w-xl text-[13px] leading-5 opacity-75">{storefrontHeroSubtitle}</p>
                   <div className="mt-4 flex flex-wrap gap-2">
-                    <span className="rounded-lg border px-4 py-2 text-[11px] font-black" style={{
+                    <span className="rounded-lg border px-4 py-2 text-[11px] font-semibold" style={{
                       backgroundColor: storefrontButtonColor,
                       borderColor: getPreviewReadableBorderColor(storefrontButtonColor),
                       color: storefrontButtonTextColor,
                     }}>
                       Ver produtos
                     </span>
-                    <span className="rounded-lg border border-slate-200 px-4 py-2 text-[11px] font-black opacity-85">
+                    <span className="rounded-lg border border-slate-200 px-4 py-2 text-[11px] font-semibold opacity-85">
                       WhatsApp
                     </span>
                   </div>
@@ -3265,8 +3258,8 @@ export function SalesCatalogConsole({
                 borderColor: getPreviewReadableBorderColor(storefrontPrimaryColor),
                 color: storefrontOfferTextColor,
               }}>
-                <p className="text-[11px] font-black uppercase opacity-85">Card de oferta</p>
-                <p className="mt-1 line-clamp-1 text-[13px] font-black">Produtos selecionados para comprar agora</p>
+                <p className="text-[11px] font-semibold uppercase opacity-85">Card de oferta</p>
+                <p className="mt-1 line-clamp-1 text-[13px] font-semibold">Produtos selecionados para comprar agora</p>
               </div>
 
               <div className="grid gap-3 sm:grid-cols-3">
@@ -3282,15 +3275,15 @@ export function SalesCatalogConsole({
                       )}
                     </div>
                     <div className="p-3">
-                      <p className="line-clamp-1 text-[12px] font-black">{item.title}</p>
-                      <p className="mt-1 text-[11px] font-semibold opacity-70">{item.price ?? "Preco sob consulta"}</p>
+                      <p className="line-clamp-1 text-[12px] font-semibold">{item.title}</p>
+                      <p className="mt-1 text-[11px] font-semibold opacity-70">{item.price ?? "Preço sob consulta"}</p>
                     </div>
                   </div>
                 ))}
               </div>
 
               <div className="mt-5 rounded-lg border border-slate-100 bg-slate-50 p-4">
-                <p className="text-[13px] font-black">{selectedCompany?.name ?? "Sua empresa"}</p>
+                <p className="text-[13px] font-semibold">{storefrontDisplayName}</p>
                 <p className="mt-1 line-clamp-3 text-[12px] leading-5 opacity-75">{storefrontFooterText}</p>
                 <p className="mt-2 text-[11px] font-semibold" style={{ color: storefrontAccentColor }}>{storefrontFooterContactText}</p>
                 <p className="mt-3 text-[10px] font-bold uppercase tracking-wide opacity-55">Desenvolvido por ConnectyHub</p>
@@ -7747,6 +7740,7 @@ function buildSettingsDraft(settings: ClientSalesCatalogSettings | null): Settin
     categoriesText: (settings?.categories ?? []).join("\n"),
     attributes: cloneAttributes(settings?.attributes ?? []),
     storefront: {
+      publicDisplayName: settings?.storefront.publicDisplayName ?? "",
       heroTitle: settings?.storefront.heroTitle ?? settings?.storefront.headerText ?? "",
       heroHighlight: settings?.storefront.heroHighlight ?? "",
       heroSubtitle: settings?.storefront.heroSubtitle ?? "",

@@ -604,6 +604,7 @@ export type ClientSalesCatalogSettings = {
 };
 
 export type SalesCatalogStorefrontSettings = {
+  publicDisplayName: string | null;
   heroTitle: string | null;
   heroHighlight: string | null;
   heroSubtitle: string | null;

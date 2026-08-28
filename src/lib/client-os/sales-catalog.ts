@@ -1728,6 +1728,7 @@ function readStorefrontSettings(value: unknown, categories: string[] = []): Clie
   const record = readRecord(value) ?? {};
 
   return {
+    publicDisplayName: readString(record.public_display_name ?? record.publicDisplayName),
     heroTitle: readString(record.hero_title ?? record.heroTitle),
     heroHighlight: readString(record.hero_highlight ?? record.heroHighlight),
     heroSubtitle: readString(record.hero_subtitle ?? record.heroSubtitle),

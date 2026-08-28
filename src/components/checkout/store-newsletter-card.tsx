@@ -61,14 +61,14 @@ export function StoreNewsletterCard({
       const payload = await response.json().catch(() => ({})) as { message?: string; error?: string };
 
       if (!response.ok) {
-        throw new Error(payload.error ?? "Nao foi possivel cadastrar agora.");
+        throw new Error(payload.error ?? "Não foi possível cadastrar agora.");
       }
 
       setMessage(payload.message ?? "Cadastro recebido.");
       setEmail("");
       if (!hasLeadPhone) setPhone("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Nao foi possivel cadastrar agora.");
+      setError(err instanceof Error ? err.message : "Não foi possível cadastrar agora.");
     } finally {
       setBusy(false);
     }
@@ -76,9 +76,9 @@ export function StoreNewsletterCard({
 
   return (
     <section className={cn(
-      "grid gap-6 rounded-[20px] bg-black px-6 py-8 text-white shadow-2xl shadow-black/10 md:grid-cols-[minmax(0,1fr)_390px] md:items-center md:px-16 md:py-9",
+      "grid gap-6 rounded-[20px] px-6 py-8 text-[color:var(--store-offer-text,#ffffff)] shadow-2xl shadow-black/10 md:grid-cols-[minmax(0,1fr)_390px] md:items-center md:px-16 md:py-9",
       className,
-    )}>
+    )} style={{ backgroundColor: "var(--store-primary, #000000)" }}>
       <div className="flex max-w-2xl items-center gap-4">
         <NewsletterLogo branding={branding} />
         <h2 className="text-[23px] font-semibold leading-[29px] md:text-[30px] md:leading-[36px]">
@@ -119,7 +119,7 @@ export function StoreNewsletterCard({
           {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <CheckCircle2 className="h-4 w-4" aria-hidden="true" />}
           {busy ? "Cadastrando..." : "Cadastrar-se"}
         </button>
-        {message ? <p className="text-xs font-semibold text-emerald-200">{message}</p> : null}
+        {message ? <p className="text-xs font-semibold text-[color:var(--store-offer-text,#ffffff)]">{message}</p> : null}
         {error ? <p className="text-xs font-semibold text-rose-200">{error}</p> : null}
       </form>
     </section>

@@ -35,6 +35,7 @@ export type PublicStorefrontBranding = {
 };
 
 export type PublicStorefrontSettings = {
+  publicDisplayName: string | null;
   heroTitle: string | null;
   heroHighlight: string | null;
   heroSubtitle: string | null;
@@ -305,7 +306,7 @@ export function PublicStorefront({
   const heroSubtitle = storefront.heroSubtitle
     || `Produtos selecionados pela ${branding.displayName}, atendimento pelo WhatsApp e checkout seguro pela ConnectyHub.`;
   const footerText = storefront.footerText
-    || `${branding.displayName} atende pelo WhatsApp com catalogo, checkout seguro e acompanhamento do pedido em um so lugar.`;
+    || `${branding.displayName} atende pelo WhatsApp com catálogo, checkout seguro e acompanhamento do pedido em um só lugar.`;
   const footerContactText = storefront.footerContactText || "Atendimento pelo WhatsApp oficial da loja.";
 
   function scrollToProducts() {
@@ -359,20 +360,20 @@ export function PublicStorefront({
       };
 
       if (!response.ok || !payload.checkoutUrl) {
-        throw new Error(payload.error ?? "Nao foi possivel abrir o checkout.");
+        throw new Error(payload.error ?? "Não foi possível abrir o checkout.");
       }
 
       window.localStorage.removeItem(storageKey);
       window.location.href = payload.trackingUrl ?? payload.checkoutUrl;
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Nao foi possivel abrir o checkout.");
+      setError(err instanceof Error ? err.message : "Não foi possível abrir o checkout.");
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <main className="min-h-screen bg-white pb-20 text-[#000000] lg:pb-0" style={publicLayoutStyle}>
+    <main className="min-h-screen bg-white pb-20 text-[color:var(--store-text)] lg:pb-0" style={publicLayoutStyle}>
       <StoreAnnouncement branding={branding} />
       <StoreNavbar
         branding={branding}
@@ -511,7 +512,7 @@ export function PublicStorefront({
 
 function StoreAnnouncement({ branding }: { branding: PublicStorefrontBranding }) {
   return (
-    <div className="bg-black px-4 py-2 text-center text-xs font-medium text-white sm:text-sm">
+    <div className="px-4 py-2 text-center text-xs font-medium text-[color:var(--store-offer-text)] sm:text-sm" style={{ backgroundColor: "var(--store-primary)" }}>
       <span>Receba ofertas e novidades da {branding.displayName} direto pelo WhatsApp.</span>
       <a className="ml-1 font-bold underline underline-offset-2" href="#produtos">
         Ver produtos
@@ -552,7 +553,7 @@ function StoreNavbar({
       <div className="mx-auto flex w-full max-w-[1240px] items-center justify-between gap-4 px-4 py-5 lg:py-6">
         <div className="flex min-w-0 items-center gap-4">
           <button
-            className="grid h-9 w-9 place-items-center rounded-full text-black transition hover:bg-black/5 md:hidden"
+            className="grid h-9 w-9 place-items-center rounded-full text-[color:var(--store-text)] transition hover:bg-black/5 md:hidden"
             type="button"
             aria-label={mobileMenuOpen ? "Fechar menu" : "Abrir menu"}
             aria-expanded={mobileMenuOpen}
@@ -562,17 +563,17 @@ function StoreNavbar({
           </button>
           <a className="flex min-w-0 items-center gap-2" href={storePath}>
             <BrandLogo branding={branding} compact />
-            <span className="truncate text-lg font-semibold uppercase leading-none text-black lg:text-2xl">
+            <span className="truncate text-lg font-semibold leading-none text-[color:var(--store-text)] lg:text-2xl">
               {branding.displayName}
             </span>
           </a>
         </div>
 
-        <div className="hidden items-center gap-6 text-sm text-black md:flex">
-          <a className={cn("font-medium hover:text-black/70", mode === "shop" && "font-extrabold")} href={shopPath}>Produtos</a>
-          <a className="font-medium hover:text-black/70" href={`${shopPath}#ofertas`}>Ofertas</a>
-          <a className="font-medium hover:text-black/70" href={`${storePath}#produtos`}>Novidades</a>
-          <a className="font-medium hover:text-black/70" href={`${storePath}#categorias`}>Categorias</a>
+        <div className="hidden items-center gap-6 text-sm text-[color:var(--store-text)] md:flex">
+          <a className={cn("font-medium hover:opacity-70", mode === "shop" && "font-semibold")} href={shopPath}>Produtos</a>
+          <a className="font-medium hover:opacity-70" href={`${shopPath}#ofertas`}>Ofertas</a>
+          <a className="font-medium hover:opacity-70" href={`${storePath}#produtos`}>Novidades</a>
+          <a className="font-medium hover:opacity-70" href={`${storePath}#categorias`}>Categorias</a>
         </div>
 
         <label className="relative hidden min-h-12 flex-1 md:block">
@@ -589,13 +590,13 @@ function StoreNavbar({
         <div className="flex items-center gap-3">
           <button
             aria-label={totalItems > 0 ? `Abrir carrinho com ${totalItems} itens` : "Abrir carrinho"}
-            className="relative grid h-10 w-10 shrink-0 place-items-center rounded-full text-black transition hover:bg-black/5"
+            className="relative grid h-10 w-10 shrink-0 place-items-center rounded-full text-[color:var(--store-text)] transition hover:bg-black/5"
             onClick={onCart}
             type="button"
           >
             <ShoppingCart className="h-4 w-4" />
             {totalItems > 0 ? (
-              <span className="absolute -right-2 -top-2 grid h-6 min-w-6 place-items-center rounded-full bg-[#f97316] px-1 text-xs font-black text-white ring-2 ring-white">
+              <span className="absolute -right-2 -top-2 grid h-6 min-w-6 place-items-center rounded-full px-1 text-xs font-semibold text-[color:var(--store-button-text)] ring-2 ring-white" style={{ backgroundColor: "var(--store-button)" }}>
                 {totalItems}
               </span>
             ) : null}
@@ -605,7 +606,7 @@ function StoreNavbar({
       {mobileMenuOpen ? (
         <div className="border-t border-black/10 bg-white px-4 pb-4 shadow-lg shadow-black/5 md:hidden">
           <div className="mx-auto grid w-full max-w-[1240px] gap-2 pt-3">
-            <MobileMenuLink href={storePath} label="Inicio" onClick={onCloseMobileMenu} />
+            <MobileMenuLink href={storePath} label="Início" onClick={onCloseMobileMenu} />
             <MobileMenuLink href={shopPath} label="Produtos" onClick={onCloseMobileMenu} />
             <MobileMenuLink href={`${shopPath}#ofertas`} label="Ofertas" onClick={onCloseMobileMenu} />
             <MobileMenuLink href={`${storePath}#produtos`} label="Novidades" onClick={onCloseMobileMenu} />
@@ -630,7 +631,7 @@ function StoreNavbar({
 
 function MobileMenuLink({ href, label, onClick }: { href: string; label: string; onClick: () => void }) {
   return (
-    <a className="rounded-[8px] px-3 py-2 text-sm font-semibold text-black transition hover:bg-black/5" href={href} onClick={onClick}>
+    <a className="rounded-[8px] px-3 py-2 text-sm font-semibold text-[color:var(--store-text)] transition hover:bg-black/5" href={href} onClick={onClick}>
       {label}
     </a>
   );
@@ -665,16 +666,21 @@ function StorefrontHero({
     <header className="overflow-hidden bg-[#f2f0f1]">
       <div className="mx-auto grid w-full max-w-[1240px] grid-cols-1 md:grid-cols-2">
         <section className="px-4 pb-8 pt-10 md:pb-0 md:pt-24">
-          <h1 className="mb-5 max-w-[580px] text-[28px] font-bold uppercase leading-[31px] text-black md:mb-8 md:text-[46px] md:leading-[48px] xl:text-[50px] xl:leading-[52px]">
+          <h1 className="mb-5 max-w-[580px] text-[30px] font-semibold leading-[34px] text-[color:var(--store-text)] md:mb-8 md:text-[42px] md:leading-[46px] xl:text-[46px] xl:leading-[50px]">
             {heroTitle}
             {heroHighlight ? <span className="block">{heroHighlight}</span> : null}
           </h1>
-          <p className="mb-6 max-w-[545px] text-sm leading-6 text-black/60 lg:mb-8 lg:text-base">
+          <p className="mb-6 max-w-[545px] text-sm leading-6 text-[color:var(--store-text-muted)] lg:mb-8 lg:text-base">
             {heroSubtitle}
           </p>
           <a
             href={shopPath}
-            className="mb-5 inline-flex min-h-14 w-full min-w-[220px] items-center justify-center whitespace-nowrap rounded-full bg-black px-10 text-center text-sm font-semibold text-white transition hover:bg-black/80 md:mb-12 md:w-auto"
+            className="mb-5 inline-flex min-h-14 w-full min-w-[220px] items-center justify-center whitespace-nowrap rounded-full border px-10 text-center text-sm font-semibold transition brightness-100 hover:brightness-110 md:mb-12 md:w-auto"
+            style={{
+              backgroundColor: "var(--store-button)",
+              borderColor: "var(--store-button-border)",
+              color: "var(--store-button-text)",
+            }}
           >
             Comprar agora
           </a>
@@ -688,8 +694,8 @@ function StorefrontHero({
           </div>
         </section>
         <section className="relative min-h-[448px] px-4">
-          <Sparkles className="absolute right-10 top-12 h-20 w-20 animate-spin text-black md:right-0 md:h-24 md:w-24" />
-          <Sparkles className="absolute left-6 top-44 h-11 w-11 animate-spin text-black/80 md:left-0 md:top-56 md:h-14 md:w-14" />
+          <Sparkles className="absolute right-10 top-12 h-20 w-20 animate-spin text-[color:var(--store-accent)] md:right-0 md:h-24 md:w-24" />
+          <Sparkles className="absolute left-6 top-44 h-11 w-11 animate-spin text-[color:var(--store-accent)] opacity-80 md:left-0 md:top-56 md:h-14 md:w-14" />
           <HeroProductPanel activeIndex={activeFeaturedIndex} branding={branding} product={featuredProduct} total={featuredCount} />
         </section>
       </div>
@@ -700,10 +706,10 @@ function StorefrontHero({
 function HeroMetric({ label, value }: { label: string; value: number }) {
   return (
     <div className="flex min-w-[104px] flex-col">
-      <span className="text-2xl font-bold leading-none text-black md:text-xl lg:text-3xl xl:text-[40px]">
+      <span className="text-2xl font-semibold leading-none text-[color:var(--store-text)] md:text-xl lg:text-3xl xl:text-[34px]">
         {value}
       </span>
-      <span className="mt-1 text-xs text-black/60 xl:text-base">
+      <span className="mt-1 text-xs text-[color:var(--store-text-muted)] xl:text-base">
         {label}
       </span>
     </div>
@@ -734,7 +740,7 @@ function HeroProductPanel({
             href={toRelativeStorefrontHref(product.productUrl)}
           >
             <ProductImage product={product} priority sizes="(max-width: 768px) 90vw, 520px" variant="hero" />
-            <span className="absolute bottom-6 left-1/2 max-w-[78%] -translate-x-1/2 rounded-full bg-white/90 px-4 py-2 text-center text-xs font-bold text-black shadow-lg shadow-black/10">
+            <span className="absolute bottom-6 left-1/2 max-w-[78%] -translate-x-1/2 rounded-full bg-white/90 px-4 py-2 text-center text-xs font-semibold text-[color:var(--store-card-text)] shadow-lg shadow-black/10">
               {product.title}
             </span>
           </a>
@@ -742,7 +748,7 @@ function HeroProductPanel({
           <div className="grid h-[360px] w-full max-w-[520px] place-items-center text-black/25">
             <div className="text-center">
               <Package className="mx-auto h-16 w-16" />
-              <p className="mt-3 text-sm font-bold text-black/50">{branding.displayName}</p>
+              <p className="mt-3 text-sm font-semibold text-[color:var(--store-text-muted)]">{branding.displayName}</p>
             </div>
           </div>
         )}
@@ -782,23 +788,23 @@ function StoreBrandStrip({
     .slice(0, 4);
 
   return (
-    <section id="categorias" className="bg-black">
+    <section id="categorias" style={{ backgroundColor: "var(--store-primary)" }}>
       <div className="relative mx-auto flex h-[126px] w-full max-w-[1240px] items-center justify-center overflow-hidden px-4">
-        <p className="absolute inset-x-4 top-3 text-center text-[10px] font-semibold uppercase tracking-[0.28em] text-white/55 sm:text-xs">
+        <p className="absolute inset-x-4 top-3 text-center text-[10px] font-semibold uppercase tracking-[0.28em] text-[color:var(--store-offer-text-muted)] sm:text-xs">
           Compre por categoria
         </p>
         <div className="flex w-full items-center justify-start gap-4 overflow-x-auto pt-5 [scrollbar-width:none] sm:justify-center [&::-webkit-scrollbar]:hidden">
         {categoryTiles.length > 0 ? (
           categoryTiles.map((tile) => (
             <button
-              className="group relative flex h-[76px] w-[calc((100%-1rem)/2)] min-w-[calc((100%-1rem)/2)] shrink-0 items-center overflow-hidden rounded-[16px] bg-white text-left text-black transition hover:-translate-y-0.5 hover:bg-white/95 sm:w-auto sm:min-w-[236px]"
+              className="group relative flex h-[76px] w-[calc((100%-1rem)/2)] min-w-[calc((100%-1rem)/2)] shrink-0 items-center overflow-hidden rounded-[16px] bg-white text-left text-[color:var(--store-card-text)] transition hover:-translate-y-0.5 hover:bg-white/95 sm:w-auto sm:min-w-[236px]"
               key={tile.category.id}
               onClick={() => onSelect(tile.category.id)}
               type="button"
             >
               <span className="relative z-10 min-w-0 px-4 sm:px-5">
                 <span className="block truncate text-base font-semibold sm:text-xl">{tile.category.label}</span>
-                <span className="mt-1 block truncate text-[11px] text-black/60 sm:text-xs">{tile.category.count} produto(s)</span>
+                <span className="mt-1 block truncate text-[11px] text-[color:var(--store-card-text-muted)] sm:text-xs">{tile.category.count} produto(s)</span>
               </span>
               <span className="relative ml-auto h-full w-14 shrink-0 translate-x-1 sm:w-24 sm:translate-x-2">
                 <ProductImage product={tile.product} sizes="(max-width: 640px) 56px, 96px" />
@@ -808,7 +814,7 @@ function StoreBrandStrip({
         ) : (
           fallbackLabels.map((item) => (
             <button
-              className="h-[76px] w-[calc((100%-1rem)/2)] min-w-[calc((100%-1rem)/2)] shrink-0 rounded-[16px] border border-white/15 px-4 text-left text-white transition hover:bg-white/10 sm:w-auto sm:min-w-[180px] sm:px-5"
+              className="h-[76px] w-[calc((100%-1rem)/2)] min-w-[calc((100%-1rem)/2)] shrink-0 rounded-[16px] border border-white/15 px-4 text-left text-[color:var(--store-offer-text)] transition hover:bg-white/10 sm:w-auto sm:min-w-[180px] sm:px-5"
               key={item.id}
               onClick={() => onSelect(item.id)}
               type="button"
@@ -866,9 +872,10 @@ function ShopCatalog({
               className={cn(
                 "flex min-h-11 items-center justify-between gap-3 rounded-full border px-4 text-left text-sm font-bold transition",
                 category === item.id
-                  ? "border-black bg-black text-white"
-                  : "border-black/10 bg-white text-black hover:border-black/30",
+                  ? "border-[color:var(--store-button-border)] text-[color:var(--store-button-text)]"
+                  : "border-black/10 bg-white text-[color:var(--store-card-text)] hover:border-black/30",
               )}
+              style={category === item.id ? { backgroundColor: "var(--store-button)" } : undefined}
               key={item.id}
               onClick={() => onSelectCategory(item.id)}
               type="button"
@@ -884,12 +891,12 @@ function ShopCatalog({
         <div className="rounded-[20px] border border-black/10 bg-white p-5 shadow-sm shadow-slate-950/5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div className="min-w-0">
-              <p className="text-xs font-bold uppercase text-[color:var(--store-accent)]">{branding.displayName}</p>
-              <h1 className="mt-1 text-3xl font-bold uppercase leading-none text-[color:var(--store-text)] sm:text-4xl">
+              <p className="text-xs font-bold text-[color:var(--store-accent)]">{branding.displayName}</p>
+              <h1 className="mt-1 text-[28px] font-semibold leading-tight text-[color:var(--store-text)] sm:text-[34px]">
                 Todos os produtos
               </h1>
               <p className="mt-2 text-sm font-semibold text-[color:var(--store-text-muted)]">
-                {products.length} de {totalProducts} produto(s) em exibicao.
+                {products.length} de {totalProducts} produto(s) em exibição.
               </p>
             </div>
             <a
@@ -907,7 +914,7 @@ function ShopCatalog({
               <input
                 className="h-12 w-full rounded-full border-0 bg-[#f0f0f0] px-11 text-sm font-medium text-black outline-none transition placeholder:text-black/40 focus:ring-2 focus:ring-black/10"
                 onChange={(event) => onSearchTermChange(event.target.value)}
-                placeholder="Buscar por produto, categoria ou preco..."
+                placeholder="Buscar por produto, categoria ou preço..."
                 type="search"
                 value={searchTerm}
               />
@@ -918,8 +925,8 @@ function ShopCatalog({
               value={sortMode}
             >
               <option value="featured">Destaques primeiro</option>
-              <option value="price-low">Menor preco</option>
-              <option value="price-high">Maior preco</option>
+              <option value="price-low">Menor preço</option>
+              <option value="price-high">Maior preço</option>
               <option value="name">Nome A-Z</option>
             </select>
           </div>
@@ -963,7 +970,7 @@ function ProductShowcaseSection({
       {viewAllHref ? (
         <div className="mt-6 text-center md:mt-9">
           <a
-            className="inline-block w-full rounded-full border border-black/10 px-[54px] py-4 text-sm font-medium text-black transition hover:bg-black hover:text-white sm:w-[218px] sm:text-base"
+            className="inline-block w-full rounded-full border border-black/10 px-[54px] py-4 text-sm font-medium text-[color:var(--store-text)] transition hover:bg-black hover:text-white sm:w-[218px] sm:text-base"
             href={viewAllHref}
           >
             Ver todos
@@ -976,7 +983,7 @@ function ProductShowcaseSection({
 
 function SectionHeading({ title }: { title: string }) {
   return (
-    <h2 className="text-[24px] font-bold uppercase leading-[29px] text-black md:text-[34px] md:leading-[38px]">
+    <h2 className="text-[24px] font-semibold leading-[29px] text-[color:var(--store-text)] md:text-[32px] md:leading-[38px]">
       {title}
     </h2>
   );
@@ -1000,7 +1007,7 @@ function ProductCard({ product }: { product: PublicStorefrontProduct }) {
         ) : null}
         <ProductImage product={product} sizes="(max-width: 768px) 50vw, (max-width: 1280px) 25vw, 230px" />
       </span>
-      <strong className="line-clamp-2 min-h-10 text-sm font-bold leading-5 text-black xl:text-xl">
+      <strong className="line-clamp-2 min-h-10 text-sm font-semibold leading-5 text-[color:var(--store-card-text)] xl:text-lg">
         {product.title}
       </strong>
       <span className="mt-1 flex items-end">
@@ -1014,7 +1021,7 @@ function ProductCard({ product }: { product: PublicStorefrontProduct }) {
         </span>
       </span>
       <span className="mt-1 flex min-h-8 flex-wrap items-center gap-x-2.5 gap-y-1">
-        <span className="text-xl font-bold text-black xl:text-2xl">{product.priceLabel}</span>
+        <span className="text-xl font-semibold text-[color:var(--store-card-text)] xl:text-2xl">{product.priceLabel}</span>
         {product.compareAtLabel ? (
           <>
             <span className="text-xl font-bold text-black/40 line-through xl:text-2xl">{product.compareAtLabel}</span>
@@ -1069,22 +1076,22 @@ function StoreReviews({ branding }: { branding: PublicStorefrontBranding }) {
   const reviews = [
     {
       name: "Cliente verificado",
-      text: `Atendimento rapido da ${branding.displayName}, produto bem apresentado e compra facil pelo WhatsApp.`,
+      text: `Atendimento rápido da ${branding.displayName}, produto bem apresentado e compra fácil pelo WhatsApp.`,
     },
     {
       name: "Compra acompanhada",
-      text: "Gostei de conseguir tirar duvidas antes de finalizar. O checkout ficou simples e direto.",
+      text: "Gostei de conseguir tirar dúvidas antes de finalizar. O checkout ficou simples e direto.",
     },
     {
-      name: "Pedido concluido",
-      text: "A vitrine mostra as informacoes principais sem confundir. Ajuda muito na decisao de compra.",
+      name: "Pedido concluído",
+      text: "A vitrine mostra as informações principais sem confundir. Ajuda muito na decisão de compra.",
     },
   ];
 
   return (
     <section className="mt-16">
       <div className="mb-6 flex items-end justify-between gap-4">
-        <h2 className="text-[24px] font-bold uppercase leading-[29px] text-black md:text-[34px] md:leading-[38px]">
+        <h2 className="text-[24px] font-semibold leading-[29px] text-[color:var(--store-text)] md:text-[32px] md:leading-[38px]">
           Clientes satisfeitos
         </h2>
         <div className="hidden items-center gap-4 text-black sm:flex">
@@ -1100,8 +1107,8 @@ function StoreReviews({ branding }: { branding: PublicStorefrontBranding }) {
                 <Star className="h-5 w-5 fill-current" key={item} />
               ))}
             </div>
-            <h3 className="mt-4 text-base font-bold text-black">{review.name}</h3>
-            <p className="mt-3 text-sm leading-6 text-black/60">{review.text}</p>
+            <h3 className="mt-4 text-base font-semibold text-[color:var(--store-card-text)]">{review.name}</h3>
+            <p className="mt-3 text-sm leading-6 text-[color:var(--store-card-text-muted)]">{review.text}</p>
           </article>
         ))}
       </div>
@@ -1123,7 +1130,7 @@ function EmptyCatalog({ branding }: { branding: PublicStorefrontBranding }) {
       <Package className="mx-auto h-10 w-10 text-[color:var(--store-accent)]" />
       <h2 className="mt-4 font-serif text-3xl font-bold text-[color:var(--store-text)]">Vitrine em montagem</h2>
       <p className="mx-auto mt-3 max-w-md text-sm font-semibold leading-6 text-[color:var(--store-text-muted)]">
-        A {branding.displayName} ainda esta preparando os produtos desta categoria.
+        A {branding.displayName} ainda está preparando os produtos desta categoria.
       </p>
     </div>
   );
@@ -1160,9 +1167,9 @@ function StoreFooter({
           <div>
             <div className="flex items-center gap-3">
               <BrandLogo branding={branding} compact />
-              <h2 className="text-[22px] font-bold uppercase leading-none text-black">{branding.displayName}</h2>
+              <h2 className="text-[22px] font-semibold leading-none text-[color:var(--store-text)]">{branding.displayName}</h2>
             </div>
-            <p className="mt-4 max-w-xs text-sm leading-6 text-black/60">{footerText}</p>
+            <p className="mt-4 max-w-xs text-sm leading-6 text-[color:var(--store-text-muted)]">{footerText}</p>
             <div className="mt-7 flex gap-3">
               {["W", "I", "F", "C"].map((item) => (
                 <span className="grid h-8 w-8 place-items-center rounded-full border border-black/20 bg-white text-xs font-bold text-black" key={item}>
@@ -1191,8 +1198,8 @@ function StoreFooter({
           />
           <div className="flex items-center gap-3">
             <div>
-              <h3 className="text-sm font-bold uppercase tracking-[3px] text-black">Pagamento</h3>
-              <p className="mt-4 text-sm leading-6 text-black/60">
+              <h3 className="text-sm font-bold uppercase tracking-[3px] text-[color:var(--store-text)]">Pagamento</h3>
+              <p className="mt-4 text-sm leading-6 text-[color:var(--store-text-muted)]">
                 Checkout seguro pela ConnectyHub. {footerContactText}
               </p>
               <div className="mt-5 flex flex-wrap gap-2">
@@ -1204,9 +1211,9 @@ function StoreFooter({
           </div>
         </div>
       </div>
-      <p className="mx-auto w-full max-w-[1240px] border-t border-black/10 px-4 py-5 text-xs text-black/60">
+      <p className="mx-auto w-full max-w-[1240px] border-t border-black/10 px-4 py-5 text-xs text-[color:var(--store-text-muted)]">
         {branding.displayName} - Checkout seguro pela{" "}
-        <a className="font-bold text-black hover:underline" href={connectHubPublicUrl} rel="noreferrer" target="_blank">
+        <a className="font-bold text-[color:var(--store-text)] hover:underline" href={connectHubPublicUrl} rel="noreferrer" target="_blank">
           ConnectyHub
         </a>
       </p>
@@ -1250,11 +1257,11 @@ function FooterColumn({
 }) {
   return (
     <div>
-      <h3 className="text-sm font-bold uppercase tracking-[3px] text-black">{title}</h3>
+      <h3 className="text-sm font-bold uppercase tracking-[3px] text-[color:var(--store-text)]">{title}</h3>
       <div className="mt-4 grid gap-3">
         {items.map((item) => (
           <a
-            className="text-sm text-black/60 transition hover:text-black"
+            className="text-sm text-[color:var(--store-text-muted)] transition hover:text-[color:var(--store-text)]"
             href={item.href}
             key={item.label}
             rel={item.external ? "noreferrer" : undefined}
@@ -1326,8 +1333,8 @@ function CartDrawer({
       <aside className="absolute right-0 top-0 flex h-full w-full max-w-md flex-col bg-white shadow-2xl shadow-slate-950/30">
         <div className="flex items-center justify-between gap-3 border-b border-[#e5e2d8] px-4 py-4">
           <div className="min-w-0">
-            <p className="text-xs font-black uppercase text-[color:var(--store-accent)]">Carrinho</p>
-            <h2 className="truncate text-xl font-black text-[color:var(--store-text)]">{branding.displayName}</h2>
+            <p className="text-xs font-semibold uppercase text-[color:var(--store-accent)]">Carrinho</p>
+            <h2 className="truncate text-xl font-semibold text-[color:var(--store-text)]">{branding.displayName}</h2>
           </div>
           <button aria-label="Fechar" className="grid h-10 w-10 shrink-0 place-items-center rounded-[8px] border border-[#e5e2d8] bg-white text-[color:var(--store-text-muted)] transition hover:bg-[#f8f7f2]" onClick={onClose} type="button">
             <X className="h-4 w-4" />
@@ -1347,8 +1354,8 @@ function CartDrawer({
                     )}
                   </div>
                   <div className="min-w-0">
-                    <p className="line-clamp-2 text-sm font-black leading-5 text-[color:var(--store-text)]">{line.product.title}</p>
-                    <p className="mt-1 text-sm font-black text-[color:var(--store-card-text)]">{line.product.priceLabel}</p>
+                    <p className="line-clamp-2 text-sm font-semibold leading-5 text-[color:var(--store-text)]">{line.product.title}</p>
+                    <p className="mt-1 text-sm font-semibold text-[color:var(--store-card-text)]">{line.product.priceLabel}</p>
                     <div className="mt-3 inline-flex h-9 items-center rounded-[8px] border border-[#e5e2d8] bg-white">
                       <button aria-label="Diminuir" className="grid h-9 w-9 place-items-center text-[color:var(--store-text-muted)] transition hover:text-[color:var(--store-accent)]" onClick={() => onUpdateQuantity(line.product.id, line.quantity - 1)} type="button">
                         <Minus className="h-3.5 w-3.5" />
@@ -1365,14 +1372,14 @@ function CartDrawer({
           ) : (
             <div className="rounded-[8px] border border-dashed border-[#d9ded7] bg-[#fbfaf6] p-6 text-center">
               <ShoppingBag className="mx-auto h-8 w-8 text-[color:var(--store-accent)]" />
-              <h3 className="mt-3 text-lg font-black text-[color:var(--store-text)]">Seu carrinho esta vazio</h3>
-              <p className="mt-2 text-sm leading-6 text-[color:var(--store-text-muted)]">Adicione produtos para gerar um checkout unico.</p>
+              <h3 className="mt-3 text-lg font-semibold text-[color:var(--store-text)]">Seu carrinho está vazio</h3>
+              <p className="mt-2 text-sm leading-6 text-[color:var(--store-text-muted)]">Adicione produtos para gerar um checkout único.</p>
             </div>
           )}
 
           {cart.length > 0 ? (
             <div className="mt-4 rounded-[8px] border border-[#e5e2d8] bg-white p-4">
-              <p className="text-xs font-black uppercase text-[color:var(--store-accent)]">Dados para acompanhamento</p>
+              <p className="text-xs font-semibold uppercase text-[color:var(--store-accent)]">Dados para acompanhamento</p>
               <div className="mt-3 grid gap-3">
                 <input className={inputClassName} onChange={(event) => setCustomerName(event.target.value)} placeholder="Seu nome" value={customerName} />
                 <input className={inputClassName} onChange={(event) => setCustomerPhone(event.target.value)} placeholder="WhatsApp com DDD" value={customerPhone} />
@@ -1384,8 +1391,8 @@ function CartDrawer({
 
         <div className="border-t border-[#e5e2d8] bg-white px-4 py-4">
           <div className="mb-3 flex items-center justify-between gap-3 rounded-[8px] border border-[#e5e2d8] bg-[#fbfaf6] px-4 py-3">
-            <span className="text-sm font-black uppercase text-[color:var(--store-accent)]">Total</span>
-            <span className="text-2xl font-black text-[color:var(--store-text)]">{formatCurrencyCents(totalCents)}</span>
+            <span className="text-sm font-semibold uppercase text-[color:var(--store-accent)]">Total</span>
+            <span className="text-2xl font-semibold text-[color:var(--store-text)]">{formatCurrencyCents(totalCents)}</span>
           </div>
           {error ? (
             <p className="mb-3 rounded-[8px] border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold leading-5 text-rose-700">

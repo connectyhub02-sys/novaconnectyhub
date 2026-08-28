@@ -9,7 +9,6 @@ import {
   BadgeCheck,
   CheckCircle2,
   ChevronDown,
-  CreditCard,
   FileText,
   LockKeyhole,
   Menu,
@@ -117,7 +116,7 @@ export async function generateMetadata({ params }: ProductPageProps): Promise<Me
   if (!row) {
     return {
       title: "Produto | ConnectyHub",
-      description: "Produto indisponivel no catalogo ConnectyHub.",
+      description: "Produto indisponível no catálogo ConnectyHub.",
     };
   }
 
@@ -126,7 +125,7 @@ export async function generateMetadata({ params }: ProductPageProps): Promise<Me
   if (!isSalesCatalogDisplayableProduct(item)) {
     return {
       title: "Produto | ConnectyHub",
-      description: "Produto indisponivel no catalogo ConnectyHub.",
+      description: "Produto indisponível no catálogo ConnectyHub.",
     };
   }
 
@@ -187,7 +186,7 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
     conversationId,
     trackingLinkId,
   });
-  const branding = resolveOrganizationBranding(organization);
+  const branding = resolveOrganizationBranding(organization, catalogSettings?.storefront ?? null);
   const storefront = resolvePublicPageStorefront(catalogSettings?.storefront ?? null, branding);
   const primaryColor = storefront.primaryColor ?? defaultStorefrontPrimaryColor;
   const accentColor = getReadableAccentColor(primaryColor, storefront.textColor);
@@ -261,7 +260,7 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
 
       <section className="mx-auto w-full max-w-[1240px] px-4 py-6 sm:px-6 lg:py-9">
         <nav className="hidden items-center gap-2 text-xs font-semibold text-[color:var(--store-text-muted)] lg:flex">
-          <Link href={storeUrl} className="transition hover:text-[color:var(--store-accent)]">Inicio</Link>
+          <Link href={storeUrl} className="transition hover:text-[color:var(--store-accent)]">Início</Link>
           <ArrowRight className="h-3.5 w-3.5" />
           <span>{item.category ?? "Produto"}</span>
           <ArrowRight className="h-3.5 w-3.5" />
@@ -283,7 +282,7 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
               <ProductBadge tone="green">{formatStockLabel(item)}</ProductBadge>
             </div>
 
-            <h1 className="mt-4 text-[22px] font-bold uppercase leading-[26px] text-[color:var(--store-text)] sm:text-3xl sm:leading-tight lg:text-[34px] lg:leading-[38px]">
+            <h1 className="mt-4 text-[22px] font-semibold leading-[27px] text-[color:var(--store-text)] sm:text-3xl sm:leading-tight lg:text-[32px] lg:leading-[38px]">
               {item.title}
             </h1>
 
@@ -325,28 +324,22 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
                 </li>
               ))}
             </ul>
-
-            <div className="mt-6 hidden grid-cols-3 gap-3 border-t border-black/10 pt-5 lg:grid">
-              <MicroTrust icon={<Truck className="h-4 w-4" />} title="Entrega discreta" subtitle="Embalagem neutra" />
-              <MicroTrust icon={<CreditCard className="h-4 w-4" />} title="Pagamento seguro" subtitle="Dados protegidos" />
-              <MicroTrust icon={<ShieldCheck className="h-4 w-4" />} title="Privacidade total" subtitle="Compra segura" />
-            </div>
           </section>
         </div>
 
-        <section className="mt-8 grid gap-3 rounded-[20px] border border-black/10 bg-white p-4 shadow-lg shadow-black/5 sm:grid-cols-4 sm:p-5">
+        <section className="mt-8 grid grid-cols-2 gap-3 rounded-[20px] border border-black/10 bg-white p-4 shadow-lg shadow-black/5 sm:grid-cols-4 sm:p-5">
           <Benefit icon={<LockKeyhole className="h-6 w-6" />} title="Checkout seguro" subtitle="Ambiente criptografado" />
           <Benefit icon={<Truck className="h-6 w-6" />} title="Envio discreto" subtitle="Pedido acompanhado" />
-          <Benefit icon={<BadgeCheck className="h-6 w-6" />} title="Produto original" subtitle="Catalogo da loja" />
+          <Benefit icon={<BadgeCheck className="h-6 w-6" />} title="Produto original" subtitle="Catálogo da loja" />
           <Benefit icon={<PackageCheck className="h-6 w-6" />} title="Pedido rastreado" subtitle="Acompanhe em tempo real" />
         </section>
 
         <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(300px,0.46fr)]">
           <section className="rounded-[20px] border border-black/10 bg-white shadow-lg shadow-black/5">
-            <div className="grid border-b border-black/10 text-center text-sm font-bold text-black/60 sm:grid-cols-4">
-              <span className="border-b-2 px-4 py-4 text-[color:var(--store-accent)]" style={{ borderColor: "var(--store-accent)" }}>Descricao completa</span>
+            <div className="grid grid-cols-2 border-b border-black/10 text-center text-xs font-semibold text-black/60 sm:grid-cols-4 sm:text-sm">
+              <span className="border-b-2 px-3 py-4 text-[color:var(--store-accent)]" style={{ borderColor: "var(--store-accent)" }}>Descrição completa</span>
               <span className="px-4 py-4">Modo de uso</span>
-              <span className="px-4 py-4">Informacoes de envio</span>
+              <span className="px-4 py-4">Informações de envio</span>
               <span className="px-4 py-4">Perguntas frequentes</span>
             </div>
 
@@ -378,7 +371,7 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
               <aside className="rounded-[20px] border border-black/10 bg-[#f0f0f0] p-4">
                 <div className="flex items-center gap-2 text-black">
                   <ReceiptText className="h-4 w-4" />
-                  <p className="text-sm font-black text-[color:var(--store-text)]">Importante</p>
+                  <p className="text-sm font-semibold text-[color:var(--store-text)]">Importante</p>
                 </div>
                 <p className="mt-3 text-sm leading-6 text-[color:var(--store-text-muted)]">
                   Confira os dados do pedido antes de finalizar. O atendimento continua pelo WhatsApp oficial da loja.
@@ -389,7 +382,7 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
 
           <aside className="grid content-start gap-5">
             <section className="rounded-[20px] border border-black/10 bg-white p-5 shadow-lg shadow-black/5">
-              <p className="text-sm font-black text-[color:var(--store-text)]">Detalhes rapidos</p>
+              <p className="text-sm font-semibold text-[color:var(--store-text)]">Detalhes rápidos</p>
               <div className="mt-4 grid gap-3 text-sm">
                 <DetailLine label="Categoria" value={item.category ?? "Produto"} />
                 <DetailLine label="Entrega" value={formatFulfillment(item.fulfillment.mode)} />
@@ -399,7 +392,7 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
               </div>
               <details className="mt-4">
                 <summary className="flex cursor-pointer list-none items-center justify-center gap-2 rounded-full bg-[#f0f0f0] px-4 py-3 text-xs font-bold text-black">
-                  Ver mais informacoes tecnicas
+                  Ver mais informações técnicas
                   <ChevronDown className="h-4 w-4" />
                 </summary>
                 <div className="mt-3 space-y-2 text-xs leading-5 text-slate-600">
@@ -421,8 +414,8 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
 
         {related.length > 0 ? (
           <section className="mt-14 border-t border-black/10 pt-10 sm:mt-16 sm:pt-14">
-            <h2 className="text-center text-[26px] font-bold uppercase leading-[30px] text-black md:text-[38px] md:leading-[42px]">
-              Voce tambem pode gostar
+            <h2 className="text-center text-[24px] font-semibold leading-[30px] text-[color:var(--store-text)] md:text-[34px] md:leading-[40px]">
+              Você também pode gostar
             </h2>
             <div className="mt-8 grid grid-cols-2 gap-4 md:mt-12 md:grid-cols-4 md:gap-5">
               {related.map((relatedItem) => (
@@ -444,20 +437,6 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
             </div>
           </section>
         ) : null}
-
-        <section className="mt-5 grid gap-3 sm:hidden">
-          <MobileAccordion title="Descricao completa">
-            {descriptionParagraphs.slice(0, 4).map((paragraph, index) => (
-              <p key={`${index}-mobile-description`}>{paragraph}</p>
-            ))}
-          </MobileAccordion>
-          <MobileAccordion title="Modo de uso">
-            <p>{item.fulfillment.deliveryInstructions ?? item.fulfillment.accessInstructions ?? "Combine os detalhes com o atendimento da loja pelo WhatsApp."}</p>
-          </MobileAccordion>
-          <MobileAccordion title="Informacoes de envio">
-            <p>{item.shipping.notes ?? "A loja confirma envio, prazo e disponibilidade durante o atendimento."}</p>
-          </MobileAccordion>
-        </section>
       </section>
 
       {whatsappReturn ? (
@@ -649,7 +628,7 @@ function ProductTopBar({
 }) {
   return (
     <>
-      <div className="bg-black px-4 py-2 text-center text-xs font-medium text-white sm:text-sm">
+      <div className="px-4 py-2 text-center text-xs font-medium text-[color:var(--store-offer-text)] sm:text-sm" style={{ backgroundColor: "var(--store-primary)" }}>
         <span>Compra segura na {branding.displayName}.</span>
         <Link className="ml-1 font-bold underline underline-offset-2" href={productsUrl}>
           Ver outros produtos
@@ -659,11 +638,11 @@ function ProductTopBar({
         <div className="mx-auto flex w-full max-w-[1240px] items-center justify-between gap-4 px-4 py-5 sm:px-6 lg:py-6">
           <div className="flex min-w-0 items-center gap-4">
             <details className="group relative md:hidden">
-              <summary className="grid h-9 w-9 cursor-pointer list-none place-items-center rounded-full text-black transition hover:bg-black/5" aria-label="Menu">
+              <summary className="grid h-9 w-9 cursor-pointer list-none place-items-center rounded-full text-[color:var(--store-text)] transition hover:bg-black/5" aria-label="Menu">
                 <Menu className="h-5 w-5" />
               </summary>
               <div className="absolute left-0 top-12 z-40 grid w-56 gap-1 rounded-[16px] border border-black/10 bg-white p-2 shadow-2xl shadow-black/15">
-                <ProductMenuLink href={storeUrl} label="Inicio" icon={<ArrowLeft className="h-4 w-4" />} />
+                <ProductMenuLink href={storeUrl} label="Início" icon={<ArrowLeft className="h-4 w-4" />} />
                 <ProductMenuLink href={productsUrl} label="Produtos" />
                 <ProductMenuLink href={`${productsUrl}#ofertas`} label="Ofertas" />
                 <ProductMenuLink href={storeUrl} label="Novidades" />
@@ -674,11 +653,11 @@ function ProductTopBar({
             <StoreIdentity branding={branding} storeUrl={storeUrl} />
           </div>
 
-          <nav className="hidden items-center gap-6 text-sm text-black md:flex">
-            <Link className="font-medium hover:text-black/70" href={productsUrl}>Produtos</Link>
-            <Link className="font-medium hover:text-black/70" href={`${productsUrl}#ofertas`}>Ofertas</Link>
-            <Link className="font-medium hover:text-black/70" href={storeUrl}>Novidades</Link>
-            <Link className="font-medium hover:text-black/70" href={`${storeUrl}#categorias`}>Categorias</Link>
+          <nav className="hidden items-center gap-6 text-sm text-[color:var(--store-text)] md:flex">
+            <Link className="font-medium hover:opacity-70" href={productsUrl}>Produtos</Link>
+            <Link className="font-medium hover:opacity-70" href={`${productsUrl}#ofertas`}>Ofertas</Link>
+            <Link className="font-medium hover:opacity-70" href={storeUrl}>Novidades</Link>
+            <Link className="font-medium hover:opacity-70" href={`${storeUrl}#categorias`}>Categorias</Link>
           </nav>
 
           <label className="relative hidden min-h-12 flex-1 lg:block">
@@ -692,7 +671,7 @@ function ProductTopBar({
           </label>
 
           <div className="flex shrink-0 items-center justify-end gap-3">
-            <Link href={cartUrl} className="grid h-10 w-10 place-items-center rounded-full text-black transition hover:bg-black/5" aria-label="Carrinho">
+            <Link href={cartUrl} className="grid h-10 w-10 place-items-center rounded-full text-[color:var(--store-text)] transition hover:bg-black/5" aria-label="Carrinho">
               <ShoppingCart className="h-4 w-4" />
             </Link>
           </div>
@@ -704,7 +683,7 @@ function ProductTopBar({
 
 function ProductMenuLink({ href, icon, label }: { href: string; icon?: ReactNode; label: string }) {
   return (
-    <Link href={href} className="flex items-center gap-2 rounded-[10px] px-3 py-2 text-sm font-semibold text-black transition hover:bg-black/5">
+    <Link href={href} className="flex items-center gap-2 rounded-[10px] px-3 py-2 text-sm font-semibold text-[color:var(--store-text)] transition hover:bg-black/5">
       {icon}
       <span>{label}</span>
     </Link>
@@ -734,7 +713,7 @@ function StoreIdentity({
           <Store className="h-5 w-5" style={{ color: "var(--store-accent)" }} aria-hidden="true" />
         )}
       </div>
-      <p className="truncate text-lg font-semibold uppercase leading-none text-black lg:text-2xl">{branding.displayName}</p>
+      <p className="truncate text-lg font-semibold leading-none text-[color:var(--store-text)] lg:text-2xl">{branding.displayName}</p>
     </Link>
   );
 }
@@ -756,7 +735,7 @@ function TrustPill({ icon, label, tone = "blue" }: { icon: ReactNode; label: str
 function ProductBadge({ children, tone = "blue" }: { children: ReactNode; tone?: "blue" | "green" }) {
   return (
     <span className={cn(
-      "rounded-full border px-3 py-1.5 text-xs font-black",
+      "rounded-full border px-3 py-1.5 text-xs font-semibold",
       tone === "green"
         ? "border-[#25D366]/35 bg-[#25D366]/10 text-[#128C4A]"
         : "border-black/10 bg-[#f0f0f0] text-black",
@@ -766,25 +745,13 @@ function ProductBadge({ children, tone = "blue" }: { children: ReactNode; tone?:
   );
 }
 
-function MicroTrust({ icon, title, subtitle }: { icon: ReactNode; title: string; subtitle: string }) {
-  return (
-    <div className="flex min-w-0 items-center gap-2">
-      <span className="text-slate-600">{icon}</span>
-      <span className="min-w-0">
-        <span className="block truncate text-[11px] font-black text-slate-950">{title}</span>
-        <span className="block truncate text-[10px] font-semibold text-slate-500">{subtitle}</span>
-      </span>
-    </div>
-  );
-}
-
 function Benefit({ icon, title, subtitle }: { icon: ReactNode; title: string; subtitle: string }) {
   return (
-    <div className="flex min-w-0 items-center gap-3 border-black/10 sm:border-r sm:last:border-r-0">
-      <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[#f0f0f0] text-[color:var(--store-accent)]">{icon}</span>
+    <div className="flex min-w-0 items-center gap-2 border-black/10 sm:gap-3 sm:border-r sm:last:border-r-0">
+      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#f0f0f0] text-[color:var(--store-accent)] sm:h-11 sm:w-11">{icon}</span>
       <span className="min-w-0">
-        <span className="block truncate text-sm font-black text-[color:var(--store-text)]">{title}</span>
-        <span className="block truncate text-xs font-medium text-[color:var(--store-text-muted)]">{subtitle}</span>
+        <span className="block text-[12px] font-semibold leading-4 text-[color:var(--store-text)] sm:text-sm">{title}</span>
+        <span className="block text-[11px] font-medium leading-4 text-[color:var(--store-text-muted)] sm:text-xs">{subtitle}</span>
       </span>
     </div>
   );
@@ -832,7 +799,7 @@ function RelatedProductCard({
             <Package className="h-10 w-10 text-black/30" aria-hidden="true" />
           )}
         </span>
-        <strong className="line-clamp-2 min-h-10 text-sm font-bold leading-5 text-black xl:text-xl">
+        <strong className="line-clamp-2 min-h-10 text-sm font-semibold leading-5 text-[color:var(--store-card-text)] xl:text-lg">
           {item.title}
         </strong>
         <span className="mt-1 flex items-end">
@@ -845,7 +812,7 @@ function RelatedProductCard({
             4.8<span className="text-black/60">/5</span>
           </span>
         </span>
-        <span className="mt-1 text-xl font-bold text-black xl:text-2xl">{formatProductPrice(item)}</span>
+        <span className="mt-1 text-xl font-semibold text-[color:var(--store-card-text)] xl:text-2xl">{formatProductPrice(item)}</span>
       </Link>
     );
   }
@@ -872,25 +839,11 @@ function RelatedProductCard({
         )}
       </div>
       <div className="min-w-0">
-        <p className="line-clamp-2 text-sm font-black leading-5 text-[color:var(--store-card-text)]">{item.title}</p>
-        <p className="mt-1 text-sm font-black text-[color:var(--store-card-text)]">{formatProductPrice(item)}</p>
+        <p className="line-clamp-2 text-sm font-semibold leading-5 text-[color:var(--store-card-text)]">{item.title}</p>
+        <p className="mt-1 text-sm font-semibold text-[color:var(--store-card-text)]">{formatProductPrice(item)}</p>
       </div>
       <ArrowRight className="h-4 w-4 text-slate-400 transition group-hover:text-[color:var(--store-accent)]" />
     </Link>
-  );
-}
-
-function MobileAccordion({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <details className="rounded-[20px] border border-black/10 bg-white shadow-lg shadow-black/5">
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-4 text-sm font-bold text-[color:var(--store-text)]">
-        {title}
-        <ChevronDown className="h-4 w-4 text-black" />
-      </summary>
-      <div className="space-y-3 border-t border-black/10 px-4 py-4 text-sm leading-6 text-slate-600">
-        {children}
-      </div>
-    </details>
   );
 }
 
@@ -932,9 +885,9 @@ function PublicStoreFooter({
           <div>
             <div className="flex items-center gap-3">
               <FooterStoreLogo branding={branding} />
-              <h2 className="text-[22px] font-bold uppercase leading-none text-black">{branding.displayName}</h2>
+              <h2 className="text-[22px] font-semibold leading-none text-[color:var(--store-text)]">{branding.displayName}</h2>
             </div>
-            <p className="mt-4 max-w-xs text-sm leading-6 text-black/60">{footerText}</p>
+            <p className="mt-4 max-w-xs text-sm leading-6 text-[color:var(--store-text-muted)]">{footerText}</p>
             <div className="mt-7 flex gap-3">
               {["W", "I", "F", "C"].map((item) => (
                 <span className="grid h-8 w-8 place-items-center rounded-full border border-black/20 bg-white text-xs font-bold text-black" key={item}>
@@ -962,8 +915,8 @@ function PublicStoreFooter({
             ]}
           />
           <div>
-            <h3 className="text-sm font-bold uppercase tracking-[3px] text-black">Pagamento</h3>
-            <p className="mt-4 text-sm leading-6 text-black/60">
+            <h3 className="text-sm font-bold uppercase tracking-[3px] text-[color:var(--store-text)]">Pagamento</h3>
+            <p className="mt-4 text-sm leading-6 text-[color:var(--store-text-muted)]">
               Checkout seguro pela ConnectyHub. {footerContactText}
             </p>
             <div className="mt-5 flex flex-wrap gap-2">
@@ -974,9 +927,9 @@ function PublicStoreFooter({
           </div>
         </div>
       </div>
-      <p className="mx-auto w-full max-w-[1240px] border-t border-black/10 px-4 py-5 text-xs text-black/60">
+      <p className="mx-auto w-full max-w-[1240px] border-t border-black/10 px-4 py-5 text-xs text-[color:var(--store-text-muted)]">
         {branding.displayName} - Checkout seguro pela{" "}
-        <a className="font-bold text-black hover:underline" href={connectHubPublicUrl} rel="noreferrer" target="_blank">
+        <a className="font-bold text-[color:var(--store-text)] hover:underline" href={connectHubPublicUrl} rel="noreferrer" target="_blank">
           ConnectyHub
         </a>
       </p>
@@ -1032,11 +985,11 @@ function ProductFooterColumn({
 }) {
   return (
     <div>
-      <h3 className="text-sm font-bold uppercase tracking-[3px] text-black">{title}</h3>
+      <h3 className="text-sm font-bold uppercase tracking-[3px] text-[color:var(--store-text)]">{title}</h3>
       <div className="mt-4 grid gap-3">
         {items.map((item) => (
           <a
-            className="text-sm text-black/60 transition hover:text-black"
+            className="text-sm text-[color:var(--store-text-muted)] transition hover:text-[color:var(--store-text)]"
             href={item.href}
             key={item.label}
             rel={item.external ? "noreferrer" : undefined}
@@ -1072,7 +1025,7 @@ function resolvePublicPageStorefront(
       ?? heroSubtitle
       ?? `Produtos selecionados pela ${branding.displayName}, compra segura e atendimento conectado ao WhatsApp.`,
     footerText: readString(settings?.footerText)
-      ?? `${branding.displayName} atende pelo WhatsApp com catalogo, checkout seguro e acompanhamento do pedido em um so lugar.`,
+      ?? `${branding.displayName} atende pelo WhatsApp com catálogo, checkout seguro e acompanhamento do pedido em um só lugar.`,
     footerContactText: readString(settings?.footerContactText) ?? "Atendimento pelo WhatsApp oficial da loja.",
     primaryColor,
     textColor,
@@ -1117,10 +1070,15 @@ function getColorLuminance(hex: string) {
   return (0.2126 * red + 0.7152 * green + 0.0722 * blue) / 255;
 }
 
-function resolveOrganizationBranding(organization: OrganizationRow): OrganizationBranding {
+function resolveOrganizationBranding(
+  organization: OrganizationRow,
+  storefront?: SalesCatalogStorefrontSettings | null,
+): OrganizationBranding {
   const metadata = readRecord(organization.metadata);
   const logoUrl = readString(metadata.brand_logo_url);
-  const displayName = readString(metadata.public_display_name) ?? organization.name;
+  const displayName = readString(storefront?.publicDisplayName)
+    ?? readString(metadata.public_display_name)
+    ?? organization.name;
 
   return {
     displayName,
@@ -1236,14 +1194,14 @@ function formatStockLabel(item: ClientSalesCatalogItem) {
     return "Sob encomenda";
   }
 
-  return "Disponivel";
+  return "Disponível";
 }
 
 function formatFulfillment(value: ClientSalesCatalogItem["fulfillment"]["mode"]) {
   if (value === "digital") return "Digital";
-  if (value === "service") return "Servico";
+  if (value === "service") return "Serviço";
   if (value === "subscription") return "Assinatura";
-  return "Produto fisico";
+  return "Produto físico";
 }
 
 function splitDescription(value: string) {

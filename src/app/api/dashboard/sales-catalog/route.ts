@@ -3278,6 +3278,7 @@ function normalizeStorefrontSettings(value: unknown, categories: string[] = []):
   const record = readRecord(value) ?? {};
 
   return {
+    publicDisplayName: normalizeOptionalText(readFormString(record.publicDisplayName ?? record.public_display_name), 80),
     heroTitle: normalizeOptionalText(readFormString(record.heroTitle ?? record.hero_title), 120),
     heroHighlight: normalizeOptionalText(readFormString(record.heroHighlight ?? record.hero_highlight), 90),
     heroSubtitle: normalizeOptionalText(readFormString(record.heroSubtitle ?? record.hero_subtitle), 180),
@@ -3462,6 +3463,7 @@ function serializePaymentMethod(method: SalesCatalogPaymentMethod) {
 
 function serializeStorefrontSettings(settings: SalesCatalogStorefrontSettings) {
   return {
+    public_display_name: settings.publicDisplayName,
     hero_title: settings.heroTitle,
     hero_highlight: settings.heroHighlight,
     hero_subtitle: settings.heroSubtitle,
