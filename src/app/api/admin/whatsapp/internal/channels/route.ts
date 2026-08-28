@@ -60,6 +60,7 @@ type ChannelActionBody = {
   mediaCaption?: unknown;
   catalogItemIds?: unknown;
   interactiveMode?: unknown;
+  buttonEnabled?: unknown;
   buttonLabel?: unknown;
   buttonUrl?: unknown;
   pollTitle?: unknown;
@@ -322,6 +323,7 @@ export async function POST(request: NextRequest) {
         targetIds: readStringList(body?.targetIds),
         catalogItemIds: readStringList(body?.catalogItemIds),
         mentionAll: asBoolean(body?.mentionAll),
+        buttonEnabled: asBoolean(body?.buttonEnabled),
         buttonLabel: asString(body?.buttonLabel),
       });
       for (const item of queued.items) {

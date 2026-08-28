@@ -317,7 +317,7 @@ export function ClientWhatsappAutomationStudio({
   const [advancedToolsOpen, setAdvancedToolsOpen] = useState(false);
 
   const [growthObjective, setGrowthObjective] = useState("Vender os produtos selecionados com presenca diaria no WhatsApp");
-  const [growthFormatPreference, setGrowthFormatPreference] = useState<GrowthFormatPreference>("mixed");
+  const [growthFormatPreference, setGrowthFormatPreference] = useState<GrowthFormatPreference>("text");
   const [growthDurationDays, setGrowthDurationDays] = useState(7);
   const [growthPostsPerDay, setGrowthPostsPerDay] = useState(3);
   const [growthStartFrom, setGrowthStartFrom] = useState(() => buildLocalDateTime(90));
@@ -541,7 +541,7 @@ export function ClientWhatsappAutomationStudio({
       setCampaignMentionAll(false);
       return;
     }
-    setGrowthFormatPreference((current) => current === "status" ? "mixed" : current);
+    setGrowthFormatPreference((current) => current === "status" ? "text" : current);
     if (mode === "channels") setCampaignMentionAll(false);
   }
 
@@ -550,9 +550,16 @@ export function ClientWhatsappAutomationStudio({
     setGrowthPlan(null);
     setSelectedTargetIds((current) => {
       const currentModeTargetIds = new Set(campaignDestinationTargets.map((target) => target.id));
-      const next = current.filter((id) => !currentModeTargetIds.has(id));
-      return targetId ? [...next, targetId] : next;
+      if (!targetId) return current.filter((id) => !currentModeTargetIds.has(id));
+      return current.includes(targetId) ? current : [...current, targetId];
     });
+  }
+
+  function toggleCampaignTargetSelection(targetId: string) {
+    setGrowthPlan(null);
+    setSelectedTargetIds((current) => current.includes(targetId)
+      ? current.filter((id) => id !== targetId)
+      : [...current, targetId]);
   }
 
   function updateGrowthObjective(value: string) {
@@ -628,6 +635,7 @@ export function ClientWhatsappAutomationStudio({
       targetIds: selectedCampaignTargetIds,
       catalogItemIds: automaticCampaignProductIds,
       mentionAll: campaignMentionAll,
+      buttonEnabled: campaignButtonEnabled,
       buttonLabel: campaignButtonEnabled ? campaignButtonLabel : null,
       planItems: campaignButtonEnabled
         ? growthPlan.items
@@ -809,7 +817,8 @@ export function ClientWhatsappAutomationStudio({
                             <span className="mt-1 block truncate text-[11px] text-slate-500">{focusedCampaignTarget.jid}</span>
                           </span>
                         </div>
-                        <div className="grid gap-2 sm:grid-cols-2">
+                        <div className="grid gap-2 sm:grid-cols-3">
+                          <MiniToggle checked={selectedTargetIds.includes(focusedCampaignTarget.id)} label="Selecionado para campanha" onClick={() => toggleCampaignTargetSelection(focusedCampaignTarget.id)} />
                           <MiniToggle checked={focusedCampaignTarget.enabled} label={focusedCampaignTarget.type === "group" ? "Atendimento no grupo" : "Canal ativo"} onClick={() => toggleTargetSetting(focusedCampaignTarget, "enabled")} loading={runningAction === "update_target_settings"} />
                           <MiniToggle checked={focusedCampaignTarget.campaignEnabled} label={focusedCampaignTarget.type === "group" ? "Campanhas liberadas" : "Publicar no canal"} onClick={() => toggleTargetSetting(focusedCampaignTarget, "campaignEnabled")} loading={runningAction === "update_target_settings"} />
                         </div>
@@ -899,7 +908,7 @@ export function ClientWhatsappAutomationStudio({
                   <ProductPicker products={products} selectedIds={selectedCampaignProductIds} onToggle={(id) => toggleProduct(id, "campaign")} />
                   <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-[12px] leading-5 text-emerald-700">
                     {selectedCampaignProductIds.length > 0
-                      ? `${selectedCampaignProductIds.length} produto(s) selecionado(s). A IA usa automaticamente as midias cadastradas no produto.`
+                      ? `${selectedCampaignProductIds.length} produto(s) selecionado(s). A IA usa automaticamente as midias cadastradas no produto. Em post simples, cada post usa um produto principal; em carrossel, varios produtos viram cards.`
                       : `Nenhum produto selecionado. A IA pode testar ate ${automaticCampaignProducts.length} produto(s) ativo(s) do catalogo.`}
                     {selectedCampaignMediaCount > 0 ? ` Midias encontradas: ${selectedCampaignMediaCount}.` : " Cadastre midias nos produtos para usar carrossel e anexos."}
                   </div>
@@ -928,7 +937,7 @@ export function ClientWhatsappAutomationStudio({
                             ["all", "@ todos"],
                           ]} />
                         ) : null}
-                        <Input label="Texto do botao" value={campaignButtonLabel} onChange={setCampaignButtonLabel} />
+                        <Input label="Texto do botao de compra" value={campaignButtonLabel} onChange={setCampaignButtonLabel} />
                         <div className="self-end">
                           <MiniToggle checked={campaignButtonEnabled} label="Botao de compra" onClick={() => setCampaignButtonEnabled((current) => !current)} />
                         </div>
@@ -1020,7 +1029,7 @@ export function ClientWhatsappAutomationStudio({
                             ["daily", "Diario"],
                             ["weekly", "Semanal"],
                           ]} />
-                          <Input label="Texto do botao" value={campaignButtonLabel} onChange={setCampaignButtonLabel} />
+                          <Input label="Texto do botao de compra" value={campaignButtonLabel} onChange={setCampaignButtonLabel} />
                         </div>
                         <div className="grid gap-2 sm:grid-cols-2">
                           <MiniToggle checked={campaignButtonEnabled} label="Enviar botao de compra" onClick={() => setCampaignButtonEnabled((current) => !current)} />
@@ -1533,6 +1542,10 @@ function WhatsappCampaignPreview({
   const destination = describeCampaignPreviewDestination(destinationMode, effectiveFormat, selectedTargets);
   const automationPlan = describeCampaignAutomationPlan(objective, effectiveFormat, products, destinationMode);
   const blockedRequirements = listCampaignPreviewBlockedRequirements(effectiveFormat, behavior, destinationMode);
+  const deliverySteps = listCampaignDeliverySteps(effectiveFormat, products, buttonEnabled);
+  const buttonDestination = describeCampaignButtonDestination(effectiveFormat, products, buttonEnabled, buttonLabel);
+  const productUsage = describeCampaignProductUsage(effectiveFormat, products);
+  const showsInteractiveButton = buttonEnabled && effectiveFormat !== "audio" && effectiveFormat !== "poll" && effectiveFormat !== "status";
   const previewTitle = destinationMode === "channels" ? "Canal selecionado" : destinationMode === "status" ? "Status do agente" : "Grupo selecionado";
 
   return (
@@ -1578,7 +1591,7 @@ function WhatsappCampaignPreview({
                   ))}
                 </div>
               ) : null}
-              {buttonEnabled && effectiveFormat !== "poll" && effectiveFormat !== "status" ? (
+              {showsInteractiveButton ? (
                 <div className="mt-2 rounded-md border border-emerald-500/25 px-2 py-1 text-center text-[10px] font-semibold text-emerald-700">
                   {buttonLabel || "Comprar agora"}
                 </div>
@@ -1597,6 +1610,13 @@ function WhatsappCampaignPreview({
         <div className="grid gap-2 text-[11px] leading-4 text-slate-500">
           <p><span className="font-semibold text-slate-700">Destino:</span> {destination}</p>
           <p><span className="font-semibold text-slate-700">Formato:</span> {formatGrowthPlanType(effectiveFormat)}</p>
+          <p><span className="font-semibold text-slate-700">Envio real:</span> {deliverySteps.join(" + ")}</p>
+          {buttonDestination ? (
+            <p><span className="font-semibold text-slate-700">Botao:</span> {buttonDestination}</p>
+          ) : null}
+          {productUsage ? (
+            <p><span className="font-semibold text-slate-700">Produtos:</span> {productUsage}</p>
+          ) : null}
           {blockedRequirements.length ? (
             <p><span className="font-semibold text-amber-700">Ativar:</span> {blockedRequirements.join(", ")}</p>
           ) : null}
@@ -1924,11 +1944,11 @@ function getGrowthFormatOptions(mode: CampaignDestinationMode): Array<[string, s
   }
 
   const options: Array<[string, string]> = [
-    ["mixed", "IA escolhe"],
     ["text", "Texto"],
     ["audio", "Audio"],
     ["text_audio", "Texto + audio"],
     ["carousel", "Carrossel"],
+    ["mixed", "Misto revisavel"],
   ];
 
   if (mode === "groups") {
@@ -2065,6 +2085,56 @@ function describeCampaignAutomationPlan(
   }
 
   return `A IA cria posts comerciais para grupos ${productText}, alternando ganchos conforme o objetivo escolhido.`;
+}
+
+function listCampaignDeliverySteps(
+  format: GrowthPlanItem["type"],
+  products: ClientSalesCatalogItem[],
+  buttonEnabled: boolean,
+) {
+  const mediaCount = products.reduce((total, product) => total + product.media.length, 0);
+  const hasMedia = mediaCount > 0;
+  const textLabel = buttonEnabled && format !== "audio" ? "texto com botao" : "texto";
+
+  if (format === "poll") return ["1 enquete"];
+  if (format === "status") return [hasMedia ? "1 status com midia" : "1 status de texto"];
+  if (format === "carousel") return ["1 carrossel", `${Math.max(1, Math.min(products.length || 1, 10))} card(s)`];
+  if (format === "audio") return hasMedia ? ["1 audio", "midias em anexo"] : ["1 audio"];
+  if (format === "text_audio") return hasMedia ? [textLabel, "1 audio", "midias extras se sobrarem"] : [textLabel, "1 audio"];
+  return hasMedia ? [textLabel, buttonEnabled ? "imagem no botao quando possivel" : "midias em anexo"] : [textLabel];
+}
+
+function describeCampaignButtonDestination(
+  format: GrowthPlanItem["type"],
+  products: ClientSalesCatalogItem[],
+  buttonEnabled: boolean,
+  buttonLabel: string,
+) {
+  if (!buttonEnabled || format === "poll" || format === "status") return null;
+
+  const label = buttonLabel.trim() || "Comprar agora";
+
+  if (format === "audio") {
+    return "audio puro nao leva botao; use Texto + audio para CTA clicavel.";
+  }
+
+  if (format === "carousel") {
+    return `${label} abre o link de cada produto; se nao houver link externo, abre a pagina publica da ConnectyHub.`;
+  }
+
+  if (products.length > 0) {
+    return `${label} abre o link do produto principal; se nao houver link externo, abre a pagina publica da ConnectyHub.`;
+  }
+
+  return `${label} vira resposta rapida quando nao houver produto ou link disponivel.`;
+}
+
+function describeCampaignProductUsage(format: GrowthPlanItem["type"], products: ClientSalesCatalogItem[]) {
+  if (products.length === 0) return "a IA pode escolher produtos ativos do catalogo.";
+  if (format === "carousel") return `${Math.min(products.length, 10)} produto(s) viram card(s) no carrossel.`;
+  if (format === "poll") return "a IA usa os produtos como opcoes ou tema da enquete.";
+  if (products.length === 1) return "o produto selecionado guia copy, midia e botao.";
+  return "a IA distribui os produtos entre os posts; cada post usa um produto principal.";
 }
 
 function listCampaignPreviewBlockedRequirements(

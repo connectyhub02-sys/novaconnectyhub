@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { assertOrganizationFeatureAccess } from "@/lib/billing/access-control";
 import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
 import { mapSalesCatalogItem } from "@/lib/client-os/sales-catalog";
+import { buildSalesCatalogProductUrl } from "@/lib/sales-catalog/public-urls";
 import type { ClientSalesCatalogItem, SalesCatalogMedia, SalesCatalogMediaKind } from "@/lib/sales-catalog/shared";
 import { loadGeminiCredentials, type GeminiCredentials } from "@/lib/gemini/credentials";
 import { createServiceClient } from "@/lib/supabase/service";
@@ -44,6 +45,10 @@ type WhatsappInstanceRow = {
 
 type AgentBehaviorRow = {
   metadata: JsonRecord | null;
+};
+
+type OrganizationBrandRow = {
+  name: string | null;
 };
 
 type ContentPipelineRow = {
@@ -137,6 +142,7 @@ export type WhatsappGroupIntelligence = {
 export type WhatsappOperationalContext = {
   scope: WhatsappScope;
   organizationId: string | null;
+  organizationName: string | null;
   sectorId?: string | null;
   instance: WhatsappInstanceRow;
   token: string;
@@ -942,6 +948,12 @@ export async function queueWhatsappTargetTextCampaign(
   ].slice(0, 6);
   const button = normalizeCampaignButton(input.buttonLabel, input.buttonUrl, catalogItems);
   const interactiveMode = button && normalizeCampaignInteractiveMode(input.interactiveMode) === "button" ? "button" : "none";
+  const buttonImage = interactiveMode === "button"
+    ? mediaAttachments.find((attachment) => attachment.type === "image")?.file ?? null
+    : null;
+  const mediaAttachmentsToSend = buttonImage
+    ? mediaAttachments.filter((attachment) => attachment.file !== buttonImage)
+    : mediaAttachments;
 
   if (interactiveMode === "button" && !context.behavior.interactiveMessages) {
     throw new Error("Ative Botoes e mensagens interativas no comportamento do agente antes de enviar botao de compra.");
@@ -951,7 +963,7 @@ export async function queueWhatsappTargetTextCampaign(
   return queueWhatsappOutbound(client, context, {
     operation: "campaign_simple",
     title,
-    summary: `${targets.length} destino(s), ${mediaAttachments.length} anexo(s): ${preview(text, 140)}`,
+    summary: `${targets.length} destino(s), ${mediaAttachments.length} midia(s): ${preview(text, 140)}`,
     body: text,
     scheduledFor: input.scheduledFor,
     payload: {
@@ -966,7 +978,8 @@ export async function queueWhatsappTargetTextCampaign(
         name: target.name,
       })),
       mentions: mentionAll ? "all" : undefined,
-      media_attachments: mediaAttachments,
+      image_button: buttonImage,
+      media_attachments: mediaAttachmentsToSend,
       interactive_mode: interactiveMode,
       buttons: button ? [button] : [],
       catalog_items: catalogItems.map((item) => ({
@@ -1353,6 +1366,7 @@ export async function queueWhatsappGrowthCampaignPlan(
     targetIds: string[];
     catalogItemIds?: string[];
     mentionAll?: boolean;
+    buttonEnabled?: boolean | null;
     buttonLabel?: string | null;
   },
 ) {
@@ -1363,6 +1377,8 @@ export async function queueWhatsappGrowthCampaignPlan(
   const fallbackTargetIds = targets.map((target) => target.id);
   const fallbackProductIds = Array.from(new Set((input.catalogItemIds ?? []).map((id) => id.trim()).filter(Boolean)));
   const planItems = normalizeQueuedGrowthPlanItems(input.planItems, fallbackTargetIds, fallbackProductIds);
+  const buttonsEnabled = input.buttonEnabled !== false;
+  const userButtonLabel = input.buttonLabel?.trim().slice(0, 24) || null;
 
   if (planItems.length === 0) {
     throw new Error("Gere ou informe uma rotina IA antes de agendar.");
@@ -1374,6 +1390,9 @@ export async function queueWhatsappGrowthCampaignPlan(
     const targetIds = planItem.targetIds.length > 0 ? intersectStrings(planItem.targetIds, fallbackTargetIds) : fallbackTargetIds;
     const productIds = planItem.productIds.length > 0 ? planItem.productIds : fallbackProductIds.slice(0, 4);
     const title = planItem.title || `Rotina IA WhatsApp - dia ${planItem.day}`;
+    const itemButtonLabel = buttonsEnabled
+      ? userButtonLabel ?? planItem.buttonLabel ?? "Comprar agora"
+      : null;
 
     if (planItem.type === "status") {
       queued.push(await queueWhatsappStatusBroadcast(client, context, {
@@ -1390,8 +1409,8 @@ export async function queueWhatsappGrowthCampaignPlan(
           scheduledFor: planItem.scheduledFor,
           mentionAll: input.mentionAll,
           catalogItemIds: productIds,
-          interactiveMode: "button",
-          buttonLabel: planItem.buttonLabel ?? input.buttonLabel ?? "Quero saber mais",
+          interactiveMode: itemButtonLabel ? "button" : "none",
+          buttonLabel: itemButtonLabel,
         }));
       } else {
         const pollTargetIds = intersectStrings(targetIds, groupTargetIds);
@@ -1406,15 +1425,29 @@ export async function queueWhatsappGrowthCampaignPlan(
         }));
       }
     } else if (planItem.type === "carousel") {
-      queued.push(await queueWhatsappTargetCarouselCampaign(client, context, {
-        title,
-        text: planItem.text,
-        targetIds,
-        scheduledFor: planItem.scheduledFor,
-        mentionAll: input.mentionAll,
-        catalogItemIds: productIds,
-        buttonLabel: planItem.buttonLabel ?? input.buttonLabel,
-      }));
+      if (buttonsEnabled) {
+        queued.push(await queueWhatsappTargetCarouselCampaign(client, context, {
+          title,
+          text: planItem.text,
+          targetIds,
+          scheduledFor: planItem.scheduledFor,
+          mentionAll: input.mentionAll,
+          catalogItemIds: productIds,
+          buttonLabel: userButtonLabel ?? planItem.buttonLabel,
+        }));
+      } else {
+        queued.push(await queueWhatsappTargetTextCampaign(client, context, {
+          title,
+          text: planItem.text,
+          targetIds,
+          scheduledFor: planItem.scheduledFor,
+          mentionAll: input.mentionAll,
+          deliveryMode: "text",
+          catalogItemIds: productIds,
+          interactiveMode: "none",
+          buttonLabel: null,
+        }));
+      }
     } else {
       queued.push(await queueWhatsappTargetTextCampaign(client, context, {
         title,
@@ -1424,8 +1457,8 @@ export async function queueWhatsappGrowthCampaignPlan(
         mentionAll: input.mentionAll,
         deliveryMode: planItem.type === "audio" || planItem.type === "text_audio" ? planItem.type : "text",
         catalogItemIds: productIds,
-        interactiveMode: "button",
-        buttonLabel: planItem.buttonLabel ?? input.buttonLabel ?? "Comprar agora",
+        interactiveMode: itemButtonLabel ? "button" : "none",
+        buttonLabel: itemButtonLabel,
       }));
     }
   }
@@ -2104,7 +2137,7 @@ async function sendTargetCampaignPayloadToRecipient(
           mentions,
           choices: buttons.map((button) => button.choice),
           imageButton: asString(payload.image_button),
-          footerText: "ConnectyHub",
+          footerText: resolveCampaignInteractiveFooterText(context),
           track_source: "connectyhub",
           track_id: `campaign_${item.id}_button`,
         }),
@@ -2395,6 +2428,7 @@ async function buildOperationalContext(
 
   const credentials = await loadUazapiCredentials(client);
   const metadata = readRecord(instance.metadata);
+  const organizationBrand = organizationId ? await loadOperationalOrganizationBrand(client, organizationId) : null;
   const behavior = await resolveOperationalBehaviorConfig(client, {
     scope,
     organizationId,
@@ -2405,12 +2439,23 @@ async function buildOperationalContext(
   return {
     scope,
     organizationId,
+    organizationName: organizationBrand?.name ?? null,
     sectorId,
     instance,
     token,
     credentials,
     behavior,
   };
+}
+
+async function loadOperationalOrganizationBrand(client: SupabaseClient, organizationId: string) {
+  const { data } = await client
+    .from("organizations")
+    .select("name")
+    .eq("id", organizationId)
+    .maybeSingle<OrganizationBrandRow>();
+
+  return data ?? null;
 }
 
 function assertWhatsappConnected(context: WhatsappOperationalContext) {
@@ -4724,7 +4769,8 @@ function normalizeCampaignButton(
   ).slice(0, 24);
   const productUrl = normalizePublicMediaUrl(urlValue)
     ?? normalizePublicMediaUrl(firstProduct?.externalLinkButtonTrackingUrl ?? null)
-    ?? normalizePublicMediaUrl(firstProduct?.productUrl ?? null);
+    ?? normalizePublicMediaUrl(firstProduct?.productUrl ?? null)
+    ?? normalizePublicMediaUrl(firstProduct ? buildSalesCatalogProductUrl(firstProduct.id) : null);
   const fallbackId = `comprar_${firstProduct?.id.slice(0, 8) ?? "agora"}`;
   const choice = productUrl ? `${label}|${productUrl}` : `${label}|${fallbackId}`;
 
@@ -4737,6 +4783,23 @@ function normalizeCampaignButton(
     kind: productUrl ? "url" : "reply",
     productId: firstProduct?.id ?? null,
   };
+}
+
+function resolveCampaignInteractiveFooterText(context: WhatsappOperationalContext) {
+  if (context.scope === "organization") {
+    return normalizeInteractiveFooterText(context.organizationName)
+      || normalizeInteractiveFooterText(context.instance.display_name)
+      || "ConnectyHub";
+  }
+
+  return normalizeInteractiveFooterText(context.instance.display_name) || "ConnectyHub";
+}
+
+function normalizeInteractiveFooterText(value: string | null | undefined) {
+  return (value ?? "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 60);
 }
 
 function readCampaignButtons(value: unknown) {
@@ -4772,7 +4835,8 @@ function buildCampaignCarouselCards(
 
       const productUrl = normalizePublicMediaUrl(urlValue)
         ?? normalizePublicMediaUrl(item.externalLinkButtonTrackingUrl)
-        ?? normalizePublicMediaUrl(item.productUrl);
+        ?? normalizePublicMediaUrl(item.productUrl)
+        ?? normalizePublicMediaUrl(buildSalesCatalogProductUrl(item.id));
       const label = (
         labelValue?.trim()
         || item.externalLinkButtonLabel

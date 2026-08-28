@@ -13,6 +13,10 @@ describe("WhatsApp growth engine v2", () => {
     expect(operationsSource).toContain('"/send/carousel"');
     expect(operationsSource).toContain("newsletter_text_fallback");
     expect(operationsSource).toContain("buildCampaignCarouselCards");
+    expect(operationsSource).toContain("buildSalesCatalogProductUrl");
+    expect(operationsSource).toContain("image_button: buttonImage");
+    expect(operationsSource).toContain("footerText: resolveCampaignInteractiveFooterText(context)");
+    expect(operationsSource).toContain("normalizeInteractiveFooterText(context.organizationName)");
   });
 
   it("keeps WhatsApp status text under provider byte limits", () => {
@@ -39,6 +43,7 @@ describe("WhatsApp growth engine v2", () => {
       expect(source).toContain("sync_outbound_insights");
       expect(source).toContain("syncWhatsappOutboundInsights");
       expect(source).toContain("preferredFormats");
+      expect(source).toContain("buttonEnabled");
       expect(source).toContain("whatsapp_growth_plan_ai");
       expect(source).toContain("toSafeGrowthPlan");
     }
@@ -50,6 +55,8 @@ describe("WhatsApp growth engine v2", () => {
     expect(studioSource).toContain("Destino da campanha");
     expect(studioSource).toContain("campaignTargetFocusId");
     expect(studioSource).toContain("Nenhum");
+    expect(studioSource).toContain("toggleCampaignTargetSelection");
+    expect(studioSource).toContain("Selecionado para campanha");
     expect(studioSource).toContain("Limite por hora");
     expect(studioSource).toContain("Campanhas em canais");
     expect(studioSource).toContain("Publicar no canal");
@@ -67,10 +74,23 @@ describe("WhatsApp growth engine v2", () => {
     expect(studioSource).toContain("set_automation_capability");
     expect(studioSource).toContain("Desativar");
     expect(studioSource).toContain("Resumo da rotina");
+    expect(studioSource).toContain("Envio real");
+    expect(studioSource).toContain("Misto revisavel");
+    expect(studioSource).toContain("Texto do botao de compra");
+    expect(studioSource).toContain("audio puro nao leva botao");
     expect(studioSource).toContain("Falta ativar Responder grupos");
     expect(studioSource).toContain("Segmentos sugeridos");
     expect(studioSource).toContain("Atualizar metricas");
     expect(studioSource).toContain("Raio-x da campanha");
     expect(studioSource).toContain("Leads CRM");
+  });
+
+  it("keeps user campaign controls authoritative when scheduling AI plans", () => {
+    expect(operationsSource).toContain("const buttonsEnabled = input.buttonEnabled !== false");
+    expect(operationsSource).toContain("const userButtonLabel = input.buttonLabel?.trim().slice(0, 24) || null");
+    expect(operationsSource).toContain("userButtonLabel ?? planItem.buttonLabel ?? \"Comprar agora\"");
+    expect(operationsSource).toContain('interactiveMode: itemButtonLabel ? "button" : "none"');
+    expect(studioSource).toContain("buttonEnabled: campaignButtonEnabled");
+    expect(studioSource).toContain('useState<GrowthFormatPreference>("text")');
   });
 });
