@@ -118,6 +118,13 @@ type StoreCategory = {
   iconId: SalesCatalogCategoryIconId;
 };
 
+type HomeProductSection = {
+  key: string;
+  products: PublicStorefrontProduct[];
+  title: string;
+  viewAllHref?: string;
+};
+
 const ALL_CATEGORY = "todos";
 const defaultStorefrontPrimaryColor = "#063f2c";
 const storefrontActionColor = "#f97316";
@@ -271,21 +278,37 @@ export function PublicStorefront({
   const selectedCategoryLabel = isCategorySelected
     ? categories.find((item) => item.id === category)?.label ?? category
     : null;
-  const homeProductIds = new Set(homeVisibleProducts.map((product) => product.id));
-  const newArrivalProducts = isCategorySelected ? homeVisibleProducts : homeVisibleProducts.slice(0, 4);
-  const bestSellerProducts = (
-    !isCategorySelected && homeVisibleProducts.length <= 4
-      ? sortedVisibleProducts.filter((product) => !homeProductIds.has(product.id)).slice(0, 4)
-      : isCategorySelected ? [] : homeVisibleProducts.slice(4, 8)
+  const homeProductIds = useMemo(
+    () => new Set(homeVisibleProducts.map((product) => product.id)),
+    [homeVisibleProducts],
+  );
+  const newArrivalProducts = useMemo(
+    () => (isCategorySelected ? homeVisibleProducts : homeVisibleProducts.slice(0, 4)),
+    [homeVisibleProducts, isCategorySelected],
+  );
+  const bestSellerProducts = useMemo(
+    () => (
+      !isCategorySelected && homeVisibleProducts.length <= 4
+        ? sortedVisibleProducts.filter((product) => !homeProductIds.has(product.id)).slice(0, 4)
+        : isCategorySelected ? [] : homeVisibleProducts.slice(4, 8)
+    ),
+    [homeProductIds, homeVisibleProducts, isCategorySelected, sortedVisibleProducts],
   );
   const homeCategories = useMemo(() => {
     const availableCategories = categories.filter((item) => item.id !== ALL_CATEGORY);
-    const selectedCategoryKeys = new Set(
-      (storefront.homeCategoryNames ?? []).map((item) => normalizeCategorySelectionKey(item)),
-    );
-    if (selectedCategoryKeys.size === 0) return availableCategories;
+    const configuredHomeCategoryNames = storefront.homeCategoryNames ?? [];
+    const selectedCategoryKeys = new Set(configuredHomeCategoryNames.map((item) => normalizeCategorySelectionKey(item)));
+    if (selectedCategoryKeys.size === 0) {
+      return availableCategories;
+    }
 
-    const selectedCategories = availableCategories.filter((item) => selectedCategoryKeys.has(normalizeCategorySelectionKey(item.label)));
+    const availableCategoryByKey = new Map(
+      availableCategories.map((item) => [normalizeCategorySelectionKey(item.label), item]),
+    );
+    const selectedCategories = configuredHomeCategoryNames
+      .map((categoryName) => availableCategoryByKey.get(normalizeCategorySelectionKey(categoryName)) ?? null)
+      .filter((item): item is StoreCategory => Boolean(item));
+
     return selectedCategories.length > 0 ? selectedCategories : availableCategories;
   }, [categories, storefront.homeCategoryNames]);
   const showHomeCategorySections = !normalizedSearch && !isCategorySelected;
@@ -299,6 +322,77 @@ export function PublicStorefront({
       }))
       .filter((section) => section.products.length > 0);
   }, [homeCategories, showHomeCategorySections, sortedVisibleProducts]);
+  const homeProductSections = useMemo<HomeProductSection[]>(() => {
+    if (showHomeCategorySections && homeCategorySections.length > 0) {
+      const [firstCategorySection, ...remainingCategorySections] = homeCategorySections;
+      const sections: HomeProductSection[] = [
+        {
+          key: `category-${firstCategorySection.category.id}`,
+          products: firstCategorySection.products,
+          title: firstCategorySection.category.label,
+        },
+      ];
+
+      if (newArrivalProducts.length > 0) {
+        sections.push({
+          key: "new-arrivals",
+          products: newArrivalProducts,
+          title: "Novidades",
+          viewAllHref: shopPath,
+        });
+      }
+
+      if (bestSellerProducts.length > 0) {
+        sections.push({
+          key: "best-sellers",
+          products: bestSellerProducts,
+          title: "Mais vendidos",
+          viewAllHref: shopPath,
+        });
+      }
+
+      for (const section of remainingCategorySections) {
+        sections.push({
+          key: `category-${section.category.id}`,
+          products: section.products,
+          title: section.category.label,
+        });
+      }
+
+      return sections;
+    }
+
+    const sections: HomeProductSection[] = [];
+    if (newArrivalProducts.length > 0) {
+      sections.push({
+        key: "new-arrivals",
+        products: newArrivalProducts,
+        title: normalizedSearch ? "Resultado da busca" : selectedCategoryLabel ?? "Novidades",
+        viewAllHref: isCategorySelected ? undefined : shopPath,
+      });
+    }
+
+    if (bestSellerProducts.length > 0) {
+      sections.push({
+        key: "best-sellers",
+        products: bestSellerProducts,
+        title: category === ALL_CATEGORY ? "Mais vendidos" : "Produtos em destaque",
+        viewAllHref: shopPath,
+      });
+    }
+
+    return sections;
+  }, [
+    bestSellerProducts,
+    category,
+    homeCategorySections,
+    isCategorySelected,
+    newArrivalProducts,
+    normalizedSearch,
+    selectedCategoryLabel,
+    shopPath,
+    showHomeCategorySections,
+  ]);
   const totalItems = cart.reduce((total, line) => total + line.quantity, 0);
   const totalCents = cart.reduce((total, line) => total + (line.product.priceCents ?? 0) * line.quantity, 0);
   const checkoutReady = cart.length > 0
@@ -449,34 +543,19 @@ export function PublicStorefront({
           <StoreBrandStrip categories={homeCategories} onSelect={selectCategory} />
 
           <section id="produtos" className="mx-auto w-full max-w-[1240px] px-4 py-10 sm:py-14 lg:py-16">
-            {newArrivalProducts.length > 0 ? (
-              <ProductShowcaseSection
-                products={newArrivalProducts}
-                title={normalizedSearch ? "Resultado da busca" : selectedCategoryLabel ?? "Novidades"}
-                viewAllHref={isCategorySelected ? undefined : shopPath}
-              />
+            {homeProductSections.length > 0 ? (
+              homeProductSections.map((section, index) => (
+                <ProductShowcaseSection
+                  className={index > 0 ? "mt-12 border-t border-black/10 pt-12 sm:mt-16 sm:pt-16" : undefined}
+                  key={section.key}
+                  products={section.products}
+                  title={section.title}
+                  viewAllHref={section.viewAllHref}
+                />
+              ))
             ) : (
               <EmptyCatalog branding={branding} />
             )}
-
-            {bestSellerProducts.length > 0 ? (
-              <ProductShowcaseSection
-                className="mt-12 border-t border-black/10 pt-12 sm:mt-16 sm:pt-16"
-                products={bestSellerProducts}
-                title={category === ALL_CATEGORY ? "Mais vendidos" : "Produtos em destaque"}
-                viewAllHref={shopPath}
-              />
-            ) : null}
-
-            {homeCategorySections.map((section, index) => (
-              <ProductShowcaseSection
-                className="mt-12 border-t border-black/10 pt-12 sm:mt-16 sm:pt-16"
-                key={section.category.id}
-                products={section.products}
-                title={section.category.label}
-                viewAllHref={index === homeCategorySections.length - 1 ? shopPath : undefined}
-              />
-            ))}
 
             <StoreReviews branding={branding} />
           </section>

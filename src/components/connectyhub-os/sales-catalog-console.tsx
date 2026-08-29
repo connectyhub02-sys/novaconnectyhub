@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ChangeEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent, type DragEvent, type ReactNode } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
 import {
+  ArrowDown,
+  ArrowUp,
   BadgePercent,
   CheckCircle2,
   ChevronDown,
@@ -16,6 +18,7 @@ import {
   Eye,
   EyeOff,
   FileText,
+  GripVertical,
   ImageIcon,
   Loader2,
   MessageSquareText,
@@ -829,21 +832,28 @@ export function SalesCatalogConsole({
   const storefrontHeadingFontFamily = settingsDraft.storefront.headingFont
     ? resolveSalesCatalogStorefrontFontFamily(settingsDraft.storefront.headingFont)
     : storefrontBodyFontFamily;
+  const categoryRows = useMemo(() => getCategoryRows(settingsDraft.categoriesText), [settingsDraft.categoriesText]);
+  const storefrontHomeCategoryOrder = useMemo(
+    () => buildHomeCategoryPayload(categoryRows, settingsDraft.storefront.homeCategoryNames),
+    [categoryRows, settingsDraft.storefront.homeCategoryNames],
+  );
   const storefrontHomeCategoryKeys = useMemo(
-    () => new Set(settingsDraft.storefront.homeCategoryNames.map(normalizeHomeCategoryKey)),
-    [settingsDraft.storefront.homeCategoryNames],
+    () => new Set(storefrontHomeCategoryOrder.map(normalizeHomeCategoryKey)),
+    [storefrontHomeCategoryOrder],
+  );
+  const storefrontHomeCategoryOrderByKey = useMemo(
+    () => new Map(storefrontHomeCategoryOrder.map((categoryName, index) => [normalizeHomeCategoryKey(categoryName), index])),
+    [storefrontHomeCategoryOrder],
   );
   const hasConfiguredSettings = Boolean(selectedSettings?.configured);
   const productAttributes = useMemo(
     () => (selectedSettings?.configured ? selectedSettings.attributes : settingsDraft.attributes).filter((attribute) => attribute.values.length > 0),
     [selectedSettings, settingsDraft.attributes],
   );
-  const categoryRows = useMemo(() => getCategoryRows(settingsDraft.categoriesText), [settingsDraft.categoriesText]);
   const storefrontPreviewCategories = useMemo(() => {
     const rows = categoryRows.filter((categoryName) => Boolean(cleanCategoryIconKey(categoryName)));
-    const selectedRows = rows.filter((categoryName) => storefrontHomeCategoryKeys.has(normalizeHomeCategoryKey(categoryName)));
-    return (selectedRows.length > 0 ? selectedRows : rows).slice(0, 6);
-  }, [categoryRows, storefrontHomeCategoryKeys]);
+    return (storefrontHomeCategoryOrder.length > 0 ? storefrontHomeCategoryOrder : rows).slice(0, 6);
+  }, [categoryRows, storefrontHomeCategoryOrder]);
   const categoryOptions = selectedSettings?.configured ? selectedSettings.categories : parseLines(settingsDraft.categoriesText);
   const inventoryEnabled = selectedSettings?.trackInventory ?? settingsDraft.trackInventory;
   const selectedShippingRule = shippingDraft.rules.find((rule) => rule.uf === selectedShippingUf) ?? shippingDraft.rules[0] ?? null;
@@ -1145,6 +1155,85 @@ export function SalesCatalogConsole({
         },
       };
     });
+  }
+
+  function moveHomeCategory(categoryName: string, direction: -1 | 1) {
+    const category = cleanCategoryIconKey(categoryName);
+    if (!category) return;
+
+    setSettingsDraft((current) => {
+      const orderedCategories = buildHomeCategoryPayload(
+        getCategoryRows(current.categoriesText).map(cleanCategoryIconKey).filter(Boolean),
+        current.storefront.homeCategoryNames,
+      );
+      const currentIndex = orderedCategories.findIndex((entry) => normalizeHomeCategoryKey(entry) === normalizeHomeCategoryKey(category));
+      if (currentIndex < 0) return current;
+
+      const nextIndex = Math.max(0, Math.min(orderedCategories.length - 1, currentIndex + direction));
+      if (nextIndex === currentIndex) return current;
+
+      const nextCategories = [...orderedCategories];
+      const [movedCategory] = nextCategories.splice(currentIndex, 1);
+      nextCategories.splice(nextIndex, 0, movedCategory);
+
+      return {
+        ...current,
+        storefront: {
+          ...current.storefront,
+          homeCategoryNames: nextCategories,
+        },
+      };
+    });
+  }
+
+  function reorderHomeCategory(sourceCategoryName: string, targetCategoryName: string) {
+    const sourceCategory = cleanCategoryIconKey(sourceCategoryName);
+    const targetCategory = cleanCategoryIconKey(targetCategoryName);
+    if (!sourceCategory || !targetCategory || sourceCategory === targetCategory) return;
+
+    setSettingsDraft((current) => {
+      const orderedCategories = buildHomeCategoryPayload(
+        getCategoryRows(current.categoriesText).map(cleanCategoryIconKey).filter(Boolean),
+        current.storefront.homeCategoryNames,
+      );
+      const sourceKey = normalizeHomeCategoryKey(sourceCategory);
+      const targetKey = normalizeHomeCategoryKey(targetCategory);
+      const sourceIndex = orderedCategories.findIndex((entry) => normalizeHomeCategoryKey(entry) === sourceKey);
+      const targetIndex = orderedCategories.findIndex((entry) => normalizeHomeCategoryKey(entry) === targetKey);
+
+      if (sourceIndex < 0 || targetIndex < 0 || sourceIndex === targetIndex) return current;
+
+      const nextCategories = [...orderedCategories];
+      const [movedCategory] = nextCategories.splice(sourceIndex, 1);
+      const nextTargetIndex = nextCategories.findIndex((entry) => normalizeHomeCategoryKey(entry) === targetKey);
+      nextCategories.splice(Math.max(0, nextTargetIndex), 0, movedCategory);
+
+      return {
+        ...current,
+        storefront: {
+          ...current.storefront,
+          homeCategoryNames: nextCategories,
+        },
+      };
+    });
+  }
+
+  function handleHomeCategoryDragStart(event: DragEvent<HTMLDivElement>, categoryName: string) {
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", cleanCategoryIconKey(categoryName));
+  }
+
+  function handleHomeCategoryDragOver(event: DragEvent<HTMLDivElement>, enabled: boolean) {
+    if (!enabled) return;
+
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+  }
+
+  function handleHomeCategoryDrop(event: DragEvent<HTMLDivElement>, categoryName: string) {
+    event.preventDefault();
+    const sourceCategory = event.dataTransfer.getData("text/plain");
+    reorderHomeCategory(sourceCategory, categoryName);
   }
 
   function updateCategoryIcon(categoryName: string, iconId: string) {
@@ -2819,10 +2908,31 @@ export function SalesCatalogConsole({
                       settingsDraft.storefront.categoryIcons[cleanCategoryIconKey(categoryName)],
                     );
                     const categorySelectedOnHome = storefrontHomeCategoryKeys.has(normalizeHomeCategoryKey(categoryName));
+                    const homeCategoryOrder = storefrontHomeCategoryOrderByKey.get(normalizeHomeCategoryKey(categoryName));
 
                     return (
-                      <div key={index} className="rounded-lg border p-2" style={{ borderColor: "var(--ch-border)" }}>
-                        <div className="grid grid-cols-[36px_minmax(0,1fr)_40px] gap-2">
+                      <div
+                        key={index}
+                        className={cn(
+                          "rounded-lg border p-2",
+                          categorySelectedOnHome ? "cursor-grab border-emerald-300/45 active:cursor-grabbing" : "",
+                        )}
+                        draggable={categorySelectedOnHome}
+                        onDragOver={(event) => handleHomeCategoryDragOver(event, categorySelectedOnHome)}
+                        onDragStart={(event) => handleHomeCategoryDragStart(event, categoryName)}
+                        onDrop={(event) => handleHomeCategoryDrop(event, categoryName)}
+                        style={{ borderColor: categorySelectedOnHome ? undefined : "var(--ch-border)" }}
+                      >
+                        <div className="grid grid-cols-[28px_36px_minmax(0,1fr)_40px] gap-2">
+                          <span
+                            className={cn(
+                              "grid h-10 w-7 place-items-center rounded-lg border text-slate-500",
+                              categorySelectedOnHome ? "border-emerald-300/25 text-emerald-100" : "border-transparent",
+                            )}
+                            title={categorySelectedOnHome ? "Arraste para ordenar na home" : "Marque Home para ordenar"}
+                          >
+                            <GripVertical className="h-4 w-4" />
+                          </span>
                           <span className="grid h-10 w-9 place-items-center rounded-lg border bg-white/5 text-emerald-200" style={{ borderColor: "var(--ch-border)" }}>
                             <SalesCatalogCategoryIconGlyph className="h-4 w-4" id={categoryIconId} />
                           </span>
@@ -2847,15 +2957,42 @@ export function SalesCatalogConsole({
                         <div className="mt-2">
                           <div className="mb-1 flex items-center justify-between gap-2">
                             <span className="block font-mono text-[9px] uppercase tracking-[0.16em] text-slate-500">Figurinha da categoria</span>
-                            <label className="inline-flex items-center gap-1.5 rounded-full border border-emerald-300/25 px-2 py-1 text-[10px] font-semibold text-emerald-100">
-                              <input
-                                checked={categorySelectedOnHome}
-                                className="h-3.5 w-3.5"
-                                onChange={(event) => toggleHomeCategory(categoryName, event.target.checked)}
-                                type="checkbox"
-                              />
-                              Home
-                            </label>
+                            <div className="flex items-center gap-1.5">
+                              {categorySelectedOnHome && typeof homeCategoryOrder === "number" ? (
+                                <>
+                                  <span className="rounded-full border border-emerald-300/25 px-2 py-1 text-[10px] font-semibold text-emerald-100">
+                                    Ordem {homeCategoryOrder + 1}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => moveHomeCategory(categoryName, -1)}
+                                    disabled={homeCategoryOrder <= 0}
+                                    className="grid h-7 w-7 place-items-center rounded-full border border-emerald-300/25 text-emerald-100 transition hover:bg-emerald-300/10 disabled:cursor-not-allowed disabled:opacity-35"
+                                    title="Subir na home"
+                                  >
+                                    <ArrowUp className="h-3.5 w-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => moveHomeCategory(categoryName, 1)}
+                                    disabled={homeCategoryOrder >= storefrontHomeCategoryOrder.length - 1}
+                                    className="grid h-7 w-7 place-items-center rounded-full border border-emerald-300/25 text-emerald-100 transition hover:bg-emerald-300/10 disabled:cursor-not-allowed disabled:opacity-35"
+                                    title="Descer na home"
+                                  >
+                                    <ArrowDown className="h-3.5 w-3.5" />
+                                  </button>
+                                </>
+                              ) : null}
+                              <label className="inline-flex items-center gap-1.5 rounded-full border border-emerald-300/25 px-2 py-1 text-[10px] font-semibold text-emerald-100">
+                                <input
+                                  checked={categorySelectedOnHome}
+                                  className="h-3.5 w-3.5"
+                                  onChange={(event) => toggleHomeCategory(categoryName, event.target.checked)}
+                                  type="checkbox"
+                                />
+                                Home
+                              </label>
+                            </div>
                           </div>
                           <button
                             type="button"
@@ -2880,7 +3017,7 @@ export function SalesCatalogConsole({
                   })}
                 </div>
                 <p className="mt-3 text-[11px] leading-4 text-slate-500">
-                  Marque Home para escolher categorias da faixa inicial. Sem marcação, a loja mostra todas as categorias com produto.
+                  Marque Home para exibir a categoria como seção de produtos na loja. Arraste ou use as setas para definir qual aparece primeiro.
                 </p>
 
               </AccordionSection>
@@ -8230,10 +8367,30 @@ function buildCategoryIconPayload(
 }
 
 function buildHomeCategoryPayload(categories: string[], homeCategoryNames: string[]) {
-  const homeKeys = new Set(homeCategoryNames.map(normalizeHomeCategoryKey));
-  if (homeKeys.size === 0) return [];
+  if (homeCategoryNames.length === 0) return [];
 
-  return categories.filter((category) => homeKeys.has(normalizeHomeCategoryKey(category))).slice(0, 60);
+  const availableCategoryByKey = new Map(
+    categories
+      .map(cleanCategoryIconKey)
+      .filter(Boolean)
+      .map((category) => [normalizeHomeCategoryKey(category), category]),
+  );
+  const output: string[] = [];
+  const seenKeys = new Set<string>();
+
+  for (const categoryName of homeCategoryNames) {
+    const key = normalizeHomeCategoryKey(categoryName);
+    const category = availableCategoryByKey.get(key);
+
+    if (!category || seenKeys.has(key)) continue;
+
+    output.push(category);
+    seenKeys.add(key);
+
+    if (output.length >= 60) break;
+  }
+
+  return output;
 }
 
 function cleanCategoryIconKey(value: string) {
