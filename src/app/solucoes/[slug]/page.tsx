@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, ArrowRight, CheckCircle2 } from "lucide-react";
-import { ConnectyLogo } from "@/components/brand/connecty-logo";
+import { ArrowRight, CheckCircle2 } from "lucide-react";
+import { PublicSiteHeader } from "@/components/seo/public-site-header";
 import { JsonLd } from "@/components/seo/json-ld";
 import { buildBreadcrumbList, buildFaqPageStructuredData } from "@/lib/seo/structured-data";
 import { buildCanonicalUrl, getConnectyhubSiteUrl } from "@/lib/seo/site";
@@ -95,17 +95,7 @@ export default async function SolutionDetailPage({ params }: SolutionPageProps) 
   return (
     <main className="min-h-screen bg-[#05070a] text-white">
       <JsonLd id="connectyhub-solution-jsonld" data={jsonLd} />
-      <header className="border-b border-white/10 px-5 py-4 sm:px-8">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-4">
-          <Link className="inline-flex rounded-full border border-emerald-400/30 px-4 py-2" href="/">
-            <ConnectyLogo className="h-4 w-[132px]" tone="white" type="full" />
-          </Link>
-          <Link className="hidden items-center gap-2 text-sm font-semibold text-slate-300 transition hover:text-white sm:inline-flex" href="/solucoes">
-            <ArrowLeft className="h-4 w-4" />
-            Solucoes
-          </Link>
-        </div>
-      </header>
+      <PublicSiteHeader active="solutions" />
 
       <article className="mx-auto max-w-5xl px-5 py-12 sm:px-8 lg:py-16">
         <p className="font-mono text-xs font-bold uppercase tracking-[0.28em] text-emerald-300">{page.eyebrow}</p>

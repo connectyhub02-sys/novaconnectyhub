@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight, CheckCircle2 } from "lucide-react";
-import { ConnectyLogo } from "@/components/brand/connecty-logo";
+import { PublicSiteHeader } from "@/components/seo/public-site-header";
 import { JsonLd } from "@/components/seo/json-ld";
 import { buildBreadcrumbList } from "@/lib/seo/structured-data";
 import { buildCanonicalUrl, connectyhubSiteDescription, getConnectyhubSiteUrl } from "@/lib/seo/site";
@@ -65,16 +65,7 @@ export default function SolutionsPage() {
   return (
     <main className="min-h-screen bg-[#05070a] text-white">
       <JsonLd id="connectyhub-solutions-jsonld" data={jsonLd} />
-      <header className="border-b border-white/10 px-5 py-4 sm:px-8">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4">
-          <Link className="inline-flex rounded-full border border-emerald-400/30 px-4 py-2" href="/">
-            <ConnectyLogo className="h-4 w-[132px]" tone="white" type="full" />
-          </Link>
-          <Link className="rounded-full bg-white px-4 py-2 text-xs font-bold text-black transition hover:bg-emerald-200" href="/cadastro">
-            Comecar teste
-          </Link>
-        </div>
-      </header>
+      <PublicSiteHeader active="solutions" />
 
       <section className="mx-auto grid max-w-6xl gap-10 px-5 py-14 sm:px-8 lg:grid-cols-[0.9fr_1.1fr] lg:py-20">
         <div>
