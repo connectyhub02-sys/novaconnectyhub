@@ -7,6 +7,22 @@ import { isSupabaseAuthConfigured } from "@/lib/supabase/env";
 export const metadata: Metadata = {
   title: "Teste gratis | ConnectyHub",
   description: "Crie sua conta e comece o teste gratis da ConnectyHub.",
+  alternates: { canonical: "/cadastro" },
+  openGraph: {
+    title: "Teste gratis | ConnectyHub",
+    description: "Crie sua conta e comece o teste gratis da ConnectyHub.",
+    url: "/cadastro",
+    siteName: "ConnectyHub",
+    locale: "pt_BR",
+    type: "website",
+    images: ["/opengraph-image"],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Teste gratis | ConnectyHub",
+    description: "Crie sua conta e comece o teste gratis da ConnectyHub.",
+    images: ["/opengraph-image"],
+  },
 };
 
 export default async function CadastroPage() {

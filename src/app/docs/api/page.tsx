@@ -2,13 +2,44 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ConnectyLogo } from "@/components/brand/connecty-logo";
 import { ApiDocsReference } from "@/components/connectyhub-os/api-docs-reference";
+import { JsonLd } from "@/components/seo/json-ld";
 import { buildConnectyhubDocsCatalog } from "@/lib/connectyhub-api/docs-catalog";
 import { connectyhubOpenApiSpec } from "@/lib/connectyhub-api/openapi";
+import { buildApiDocsStructuredData } from "@/lib/seo/structured-data";
 
 export const metadata: Metadata = {
   title: "Documentacao da API WhatsApp | ConnectyHub",
   description:
     "Referencia publica da API WhatsApp ConnectyHub para instancias, envio de mensagens, consultas, webhooks e recursos avancados.",
+  keywords: [
+    "API WhatsApp ConnectyHub",
+    "documentacao API WhatsApp",
+    "testar API WhatsApp",
+    "webhook WhatsApp",
+    "enviar mensagem WhatsApp API",
+  ],
+  alternates: { canonical: "/docs/api" },
+  openGraph: {
+    title: "Documentacao da API WhatsApp | ConnectyHub",
+    description:
+      "Referencia publica e console de testes da API WhatsApp ConnectyHub para mensagens, instancias, contatos e webhooks.",
+    url: "/docs/api",
+    siteName: "ConnectyHub",
+    locale: "pt_BR",
+    type: "website",
+    images: ["/opengraph-image"],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Documentacao da API WhatsApp | ConnectyHub",
+    description:
+      "Referencia publica e console de testes da API WhatsApp ConnectyHub para integradores.",
+    images: ["/opengraph-image"],
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
 };
 
 const docsCatalog = buildConnectyhubDocsCatalog(connectyhubOpenApiSpec);
@@ -16,6 +47,14 @@ const docsCatalog = buildConnectyhubDocsCatalog(connectyhubOpenApiSpec);
 export default function ApiDocsPage() {
   return (
     <main className="min-h-screen bg-[#05070a] text-slate-100">
+      <JsonLd
+        id="connectyhub-api-docs-jsonld"
+        data={buildApiDocsStructuredData({
+          endpointCount: docsCatalog.stats.endpoints,
+          groupCount: docsCatalog.stats.groups,
+          schemaCount: docsCatalog.stats.schemas,
+        })}
+      />
       <DocsHeader />
       <ApiDocsReference catalog={docsCatalog} />
     </main>

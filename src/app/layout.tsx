@@ -2,8 +2,15 @@ import type { Metadata, Viewport } from "next";
 import { Suspense } from "react";
 import { Audiowide, Geist, Geist_Mono } from "next/font/google";
 import { MagicLinkFragmentRedirect } from "@/components/auth/magic-link-fragment-redirect";
+import { JsonLd } from "@/components/seo/json-ld";
 import { ConnectyTracker } from "@/components/tracking/connecty-tracker";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { buildConnectyhubRootStructuredData } from "@/lib/seo/structured-data";
+import {
+  connectyhubSeoKeywords,
+  connectyhubSiteName,
+  getConnectyhubSiteUrl,
+} from "@/lib/seo/site";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -22,20 +29,31 @@ const audiowide = Audiowide({
   weight: "400",
 });
 
+const siteUrl = getConnectyhubSiteUrl();
+const rootTitle = "ConnectyHub | Clone-se. Seu Gêmeo Digital no WhatsApp.";
+const rootDescription =
+  "Crie agentes de IA para WhatsApp com automacoes, CRM, catalogo de vendas, checkout, atendimento e API para integradores em uma plataforma brasileira.";
+
 export const metadata: Metadata = {
-  applicationName: "ConnectyHub",
-  title: "ConnectyHub | Clone-se. Seu Gêmeo Digital no WhatsApp.",
-  description:
-    "Crie um clone digital com a sua voz para vender qualquer coisa no WhatsApp 24/7. Modo espelho, rapport adaptativo, áudio, vídeo e imagem com IA.",
-  keywords: [
-    "clone digital whatsapp",
-    "gemeo digital ia",
-    "automacao whatsapp",
-    "agente de voz ia",
-    "vendas automaticas whatsapp",
-    "recuperacao de carrinho",
-    "connectyhub",
-  ],
+  metadataBase: new URL(siteUrl),
+  applicationName: connectyhubSiteName,
+  title: rootTitle,
+  description: rootDescription,
+  keywords: connectyhubSeoKeywords,
+  creator: connectyhubSiteName,
+  publisher: connectyhubSiteName,
+  authors: [{ name: connectyhubSiteName, url: siteUrl }],
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+      "max-video-preview": -1,
+    },
+  },
   icons: {
     icon: [
       { url: "/brand/connectyhub-app-icon-192.png", sizes: "192x192", type: "image/png" },
@@ -51,6 +69,41 @@ export const metadata: Metadata = {
   },
   formatDetection: {
     telephone: false,
+  },
+  openGraph: {
+    title: rootTitle,
+    description: rootDescription,
+    url: "/",
+    siteName: connectyhubSiteName,
+    locale: "pt_BR",
+    type: "website",
+    images: [
+      {
+        url: "/opengraph-image",
+        width: 1200,
+        height: 630,
+        alt: "ConnectyHub - agentes de IA, automacao e API WhatsApp",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: rootTitle,
+    description: rootDescription,
+    images: ["/opengraph-image"],
+  },
+  pinterest: {
+    richPin: true,
+  },
+  verification: {
+    google: process.env.GOOGLE_SITE_VERIFICATION || undefined,
+    other: {
+      ...(process.env.BING_SITE_VERIFICATION ? { "msvalidate.01": process.env.BING_SITE_VERIFICATION } : {}),
+      ...(process.env.PINTEREST_SITE_VERIFICATION ? { "p:domain_verify": process.env.PINTEREST_SITE_VERIFICATION } : {}),
+    },
+  },
+  other: {
+    "llms-txt": `${siteUrl}/llms.txt`,
   },
 };
 
@@ -82,6 +135,7 @@ export default function RootLayout({
       </head>
       <body className="min-h-full flex flex-col">
         <TooltipProvider>
+          <JsonLd id="connectyhub-root-jsonld" data={buildConnectyhubRootStructuredData()} />
           <MagicLinkFragmentRedirect />
           <Suspense fallback={null}>
             <ConnectyTracker />

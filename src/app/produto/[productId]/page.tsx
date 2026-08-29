@@ -27,6 +27,7 @@ import { SalesCatalogMediaGallery } from "@/components/checkout/sales-catalog-me
 import { ProductPageCartController } from "@/components/checkout/product-page-cart-controller";
 import { ProductMobileCheckoutBar, ProductPurchaseControls } from "@/components/checkout/sales-catalog-product-actions";
 import { StoreNewsletterCard } from "@/components/checkout/store-newsletter-card";
+import { JsonLd } from "@/components/seo/json-ld";
 import { getOrganizationSalesCatalogSettings, mapSalesCatalogItem } from "@/lib/client-os/sales-catalog";
 import { normalizeCurrencyAmount } from "@/lib/sales-catalog/mercado-pago";
 import {
@@ -42,6 +43,8 @@ import {
   type ClientSalesCatalogItem,
   type SalesCatalogStorefrontSettings,
 } from "@/lib/sales-catalog/shared";
+import { buildSalesCatalogProductStructuredData } from "@/lib/seo/structured-data";
+import { toAbsoluteUrl, truncateSeoText, uniqueStrings } from "@/lib/seo/site";
 import { createServiceClient } from "@/lib/supabase/service";
 import { createOrganizationTrackingToken } from "@/lib/tracking/organization-attribution";
 import type { ConnectyPublicTrackingContext } from "@/lib/tracking/public-context";
@@ -138,9 +141,44 @@ export async function generateMetadata({ params }: ProductPageProps): Promise<Me
     };
   }
 
+  const organization = row.organization_id ? await loadOrganization(client, row.organization_id) : null;
+  const branding = organization ? resolveOrganizationBranding(organization) : null;
+  const storeSlug = organization?.slug ?? organization?.id ?? item.companyId ?? "loja";
+  const productPath = `/loja/${encodeURIComponent(storeSlug)}/produto/${encodeURIComponent(item.id)}`;
+  const title = `${item.title} | ${branding?.displayName ?? "ConnectyHub"}`;
+  const description = truncateSeoText(item.description || `Produto no catalogo da ${branding?.displayName ?? "ConnectyHub"}.`);
+  const imageUrl = toAbsoluteUrl(item.media.find((media) => media.kind === "image")?.storageUrl);
+
   return {
-    title: `${item.title} | ConnectyHub`,
-    description: item.description.slice(0, 155),
+    title,
+    description,
+    keywords: uniqueStrings([
+      item.title,
+      item.category,
+      branding?.displayName,
+      "catalogo WhatsApp",
+      "loja WhatsApp",
+      "produto WhatsApp",
+    ]),
+    alternates: { canonical: productPath },
+    openGraph: {
+      title,
+      description,
+      url: productPath,
+      siteName: "ConnectyHub",
+      locale: "pt_BR",
+      type: "website",
+      images: imageUrl ? [{ url: imageUrl, alt: item.title }] : ["/opengraph-image"],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: imageUrl ? [imageUrl] : ["/opengraph-image"],
+    },
+    pinterest: {
+      richPin: true,
+    },
   };
 }
 
@@ -286,6 +324,14 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
 
   return (
     <main className="storefront-public min-h-screen bg-white pb-28 text-[color:var(--store-text)] sm:pb-0" style={publicLayoutStyle}>
+      <JsonLd
+        id="connectyhub-product-jsonld"
+        data={buildSalesCatalogProductStructuredData({
+          item,
+          organizationName: branding.displayName,
+          storeSlug,
+        })}
+      />
       <script
         id="connecty-public-tracking-context"
         dangerouslySetInnerHTML={{

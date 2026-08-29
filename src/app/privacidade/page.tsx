@@ -4,6 +4,7 @@ import { LegalPage } from "@/components/legal/legal-page";
 export const metadata: Metadata = {
   title: "Politica de Privacidade | ConnectyHub",
   description: "Politica de Privacidade da ConnectyHub.",
+  alternates: { canonical: "/privacidade" },
 };
 
 export default function PrivacyPage() {

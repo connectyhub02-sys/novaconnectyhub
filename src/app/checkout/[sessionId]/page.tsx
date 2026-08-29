@@ -34,6 +34,10 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: "Checkout | ConnectyHub",
   description: "Checkout seguro para pedidos feitos pelo WhatsApp.",
+  robots: {
+    index: false,
+    follow: false,
+  },
 };
 
 const mercadoPagoSecurityScriptAttributes: Record<string, string> = {

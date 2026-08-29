@@ -5,6 +5,10 @@ import { getCurrentWorkspace } from "@/lib/supabase/profile";
 
 export const metadata: Metadata = {
   title: "Iniciar | ConnectyHub",
+  robots: {
+    index: false,
+    follow: false,
+  },
 };
 
 type IniciarPageProps = {

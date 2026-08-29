@@ -8,6 +8,10 @@ import { getCurrentWorkspace } from "@/lib/supabase/profile";
 export const metadata: Metadata = {
   title: "Login | ConnectyHub",
   description: "Entre no painel da ConnectyHub.",
+  robots: {
+    index: false,
+    follow: false,
+  },
 };
 
 type LoginPageProps = {

@@ -30,6 +30,10 @@ export async function generateMetadata({ params }: StoreCartPageProps): Promise<
   return {
     title: `Carrinho | ${branding.displayName}`,
     description: `Finalize sua compra na loja ${branding.displayName}.`,
+    robots: {
+      index: false,
+      follow: false,
+    },
   };
 }
 

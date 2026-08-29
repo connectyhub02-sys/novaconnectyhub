@@ -4,6 +4,7 @@ import { LegalPage } from "@/components/legal/legal-page";
 export const metadata: Metadata = {
   title: "Termos de Uso | ConnectyHub",
   description: "Termos de Uso da ConnectyHub.",
+  alternates: { canonical: "/termos" },
 };
 
 export default function TermsPage() {

@@ -4,6 +4,7 @@ import { LegalPage } from "@/components/legal/legal-page";
 export const metadata: Metadata = {
   title: "Exclusao de Dados | ConnectyHub",
   description: "Instrucoes para solicitar exclusao de dados na ConnectyHub.",
+  alternates: { canonical: "/exclusao-de-dados" },
 };
 
 export default function DataDeletionPage() {
