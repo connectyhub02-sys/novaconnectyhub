@@ -855,6 +855,11 @@ export function SalesCatalogConsole({
     return (storefrontHomeCategoryOrder.length > 0 ? storefrontHomeCategoryOrder : rows).slice(0, 6);
   }, [categoryRows, storefrontHomeCategoryOrder]);
   const categoryOptions = selectedSettings?.configured ? selectedSettings.categories : parseLines(settingsDraft.categoriesText);
+  const configuredCategoryOptions = selectedSettings?.configured ? selectedSettings.categories : [];
+  const whatsappCatalogImportJobs = useMemo(
+    () => catalogImportJobs.filter((job) => job.sourcePlatform === "whatsapp_catalog"),
+    [catalogImportJobs],
+  );
   const inventoryEnabled = selectedSettings?.trackInventory ?? settingsDraft.trackInventory;
   const selectedShippingRule = shippingDraft.rules.find((rule) => rule.uf === selectedShippingUf) ?? shippingDraft.rules[0] ?? null;
   const selectedOrderItem = visibleItems.find((item) => item.id === orderItemId) ?? null;
@@ -865,7 +870,7 @@ export function SalesCatalogConsole({
     && (salesDestination !== "external_site" || productUrl.trim())
     && !creating,
   );
-  const canImportWhatsappCatalog = Boolean(selectedCompanyId && selectedCatalogImportInstance && !importing);
+  const canImportWhatsappCatalog = Boolean(selectedCompanyId && selectedCatalogImportInstance && configuredCategoryOptions.length > 0 && !importing);
   const canExportWhatsappCatalog = Boolean(selectedCompanyId && selectedCatalogExportInstance && selectedCatalogExportItems.length > 0 && !exportingWhatsappCatalog);
   const canCalculateQuote = Boolean(selectedCompanyId && quoteItemId && cleanCep(quoteCep) && !calculatingQuote);
   const canCreateOrder = Boolean(selectedCompanyId && orderItemId && (orderCustomerName.trim() || orderCustomerPhone.trim()) && !creatingOrder);
@@ -899,10 +904,6 @@ export function SalesCatalogConsole({
   }, []);
 
   useEffect(() => {
-    if (!salesCatalogAiImportPanelEnabled) {
-      return;
-    }
-
     if (!selectedCompanyId) {
       return;
     }
@@ -942,10 +943,6 @@ export function SalesCatalogConsole({
   }, [selectedCompanyId]);
 
   useEffect(() => {
-    if (!salesCatalogAiImportPanelEnabled) {
-      return;
-    }
-
     const hasQueuedImport = catalogImportJobs.some((job) => job.status === "uploaded" || job.status === "extracting");
     if (!selectedCompanyId || activeTab !== "products" || !hasQueuedImport) {
       return;
@@ -2327,6 +2324,11 @@ export function SalesCatalogConsole({
   async function importWhatsappCatalog() {
     if (!selectedCompanyId || !selectedCatalogImportInstance || importing) return;
 
+    if (configuredCategoryOptions.length === 0) {
+      setNotice({ tone: "warning", message: "Cadastre e salve categorias antes de trazer produtos do catalogo WhatsApp." });
+      return;
+    }
+
     setImporting(true);
     setNotice(null);
 
@@ -2341,30 +2343,23 @@ export function SalesCatalogConsole({
         }),
       });
       const data = await response.json().catch(() => null) as {
-        items?: ClientSalesCatalogItem[];
+        importJob?: ClientSalesCatalogImportJob;
         imported?: number;
-        updated?: number;
         skipped?: number;
         hasMore?: boolean;
         error?: string;
       } | null;
 
-      if (!response.ok || !data?.items) {
+      if (!response.ok || !data?.importJob) {
         throw new Error(data?.error ?? "Nao foi possivel importar o catalogo WhatsApp.");
       }
 
-      setItems((current) => {
-        const updatedIds = new Set(data.items!.map((item) => item.id));
-        return [...data.items!, ...current.filter((item) => !updatedIds.has(item.id))];
-      });
-      publishSalesCatalogUpdated({
-        companyId: selectedCompanyId,
-        itemIds: data.items.map((item) => item.id),
-      });
+      setCatalogImportJobs((current) => [data.importJob!, ...current.filter((job) => job.id !== data.importJob!.id)]);
+      openCatalogImportMonitor(data.importJob);
 
       setNotice({
         tone: "success",
-        message: `Catalogo WhatsApp sincronizado: ${data.imported ?? 0} novos, ${data.updated ?? 0} atualizados${data.skipped ? `, ${data.skipped} ignorados` : ""}${data.hasMore ? ". Ainda ha mais paginas no provedor." : "."}`,
+        message: `Previa do WhatsApp criada: ${data.imported ?? data.importJob.items.length} produto(s) para revisar${data.skipped ? `, ${data.skipped} ignorado(s)` : ""}${data.hasMore ? ". Ainda ha mais paginas no provedor." : "."}`,
       });
     } catch (error) {
       setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao importar catalogo WhatsApp." });
@@ -4354,6 +4349,7 @@ export function SalesCatalogConsole({
               companyName={selectedCompany?.name ?? "empresa"}
               connectedInstances={connectedWhatsappInstances}
               creating={creatingCatalogImport}
+              categoryOptions={configuredCategoryOptions}
               defaultDestination={catalogImportDefaultDestination}
               files={catalogImportFiles}
               jobs={catalogImportJobs}
@@ -4388,7 +4384,7 @@ export function SalesCatalogConsole({
               onSaveReview={saveCatalogImportReview}
             />
           ) : null}
-          {salesCatalogAiImportPanelEnabled && catalogImportMonitor?.open ? (
+          {catalogImportMonitor?.open ? (
             <CatalogImportProgressModal
               job={monitoredCatalogImportJob}
               canceling={monitoredCatalogImportJob ? cancelingCatalogImportId === monitoredCatalogImportJob.id : false}
@@ -4406,18 +4402,34 @@ export function SalesCatalogConsole({
             canExport={canExportWhatsappCatalog}
             canImport={canImportWhatsappCatalog}
             connectedInstances={connectedWhatsappInstances}
+            categoryOptions={configuredCategoryOptions}
             exportItemIds={selectedCatalogExportItems.map((item) => item.id)}
             exporting={exportingWhatsappCatalog}
             importing={importing}
             items={visibleWhatsappCatalogItems}
+            importJobs={whatsappCatalogImportJobs}
+            jobNotices={catalogImportJobNotices}
+            jobPatches={catalogImportPatches}
+            loadingImports={loadingCatalogImports}
+            cancelingJobId={cancelingCatalogImportId}
+            deletingJobId={deletingCatalogImportId}
+            publishingJobId={publishingCatalogImportId}
+            savingJobId={savingCatalogImportId}
             selectedExportInstanceId={selectedCatalogExportInstance?.id ?? ""}
             selectedImportInstanceId={selectedCatalogImportInstance?.id ?? ""}
             selectedCompanyId={selectedCompanyId}
             onChangeCompany={changeCompany}
             onChangeExportInstance={setSelectedCatalogExportInstanceId}
             onChangeImportInstance={setSelectedCatalogImportInstanceId}
+            onChangeImportItem={updateCatalogImportItem}
+            onCancelImportJob={cancelCatalogImport}
+            onDeleteImportJob={deleteCatalogImport}
             onExport={exportWhatsappCatalog}
             onImport={importWhatsappCatalog}
+            onOpenImportMonitor={openCatalogImportMonitor}
+            onPublishImportJob={publishCatalogImport}
+            onRefreshImportJobs={refreshCatalogImports}
+            onSaveImportJobReview={saveCatalogImportReview}
             onToggleExportItem={toggleWhatsappExportItem}
           />
           {editingItemId ? (
@@ -5318,18 +5330,34 @@ export function SalesCatalogConsole({
             canExport={canExportWhatsappCatalog}
             canImport={canImportWhatsappCatalog}
             connectedInstances={connectedWhatsappInstances}
+            categoryOptions={configuredCategoryOptions}
             exportItemIds={selectedCatalogExportItems.map((item) => item.id)}
             exporting={exportingWhatsappCatalog}
             importing={importing}
             items={visibleWhatsappCatalogItems}
+            importJobs={whatsappCatalogImportJobs}
+            jobNotices={catalogImportJobNotices}
+            jobPatches={catalogImportPatches}
+            loadingImports={loadingCatalogImports}
+            cancelingJobId={cancelingCatalogImportId}
+            deletingJobId={deletingCatalogImportId}
+            publishingJobId={publishingCatalogImportId}
+            savingJobId={savingCatalogImportId}
             selectedExportInstanceId={selectedCatalogExportInstance?.id ?? ""}
             selectedImportInstanceId={selectedCatalogImportInstance?.id ?? ""}
             selectedCompanyId={selectedCompanyId}
             onChangeCompany={changeCompany}
             onChangeExportInstance={setSelectedCatalogExportInstanceId}
             onChangeImportInstance={setSelectedCatalogImportInstanceId}
+            onChangeImportItem={updateCatalogImportItem}
+            onCancelImportJob={cancelCatalogImport}
+            onDeleteImportJob={deleteCatalogImport}
             onExport={exportWhatsappCatalog}
             onImport={importWhatsappCatalog}
+            onOpenImportMonitor={openCatalogImportMonitor}
+            onPublishImportJob={publishCatalogImport}
+            onRefreshImportJobs={refreshCatalogImports}
+            onSaveImportJobReview={saveCatalogImportReview}
             onToggleExportItem={toggleWhatsappExportItem}
           />
           )}
@@ -5499,18 +5527,34 @@ function WhatsAppCatalogBridgePanel({
   companies,
   companyName,
   connectedInstances,
+  categoryOptions,
   exportItemIds,
   exporting,
   importing,
   items,
+  importJobs,
+  jobNotices,
+  jobPatches,
+  loadingImports,
+  cancelingJobId,
+  deletingJobId,
+  publishingJobId,
+  savingJobId,
   selectedCompanyId,
   selectedExportInstanceId,
   selectedImportInstanceId,
   onChangeCompany,
   onChangeExportInstance,
   onChangeImportInstance,
+  onChangeImportItem,
+  onCancelImportJob,
+  onDeleteImportJob,
   onExport,
   onImport,
+  onOpenImportMonitor,
+  onPublishImportJob,
+  onRefreshImportJobs,
+  onSaveImportJobReview,
   onToggleExportItem,
 }: {
   canExport: boolean;
@@ -5519,18 +5563,34 @@ function WhatsAppCatalogBridgePanel({
   companies: ClientCompany[];
   companyName: string;
   connectedInstances: ClientSalesCatalogWhatsappInstance[];
+  categoryOptions: string[];
   exportItemIds: string[];
   exporting: boolean;
   importing: boolean;
   items: ClientSalesCatalogItem[];
+  importJobs: ClientSalesCatalogImportJob[];
+  jobNotices: Record<string, Notice>;
+  jobPatches: CatalogImportPatchMap;
+  loadingImports: boolean;
+  cancelingJobId: string | null;
+  deletingJobId: string | null;
+  publishingJobId: string | null;
+  savingJobId: string | null;
   selectedCompanyId: string;
   selectedExportInstanceId: string;
   selectedImportInstanceId: string;
   onChangeCompany: (companyId: string) => void;
   onChangeExportInstance: (instanceId: string) => void;
   onChangeImportInstance: (instanceId: string) => void;
+  onChangeImportItem: (itemId: string, patch: Omit<SalesCatalogImportItemPatch, "id">) => void;
+  onCancelImportJob: (job: ClientSalesCatalogImportJob) => void;
+  onDeleteImportJob: (job: ClientSalesCatalogImportJob) => void;
   onExport: () => void;
   onImport: () => void;
+  onOpenImportMonitor: (job: ClientSalesCatalogImportJob) => void;
+  onPublishImportJob: (job: ClientSalesCatalogImportJob) => void;
+  onRefreshImportJobs: () => void;
+  onSaveImportJobReview: (job: ClientSalesCatalogImportJob) => void;
   onToggleExportItem: (itemId: string) => void;
 }) {
   const exportIds = new Set(exportItemIds);
@@ -5591,6 +5651,63 @@ function WhatsAppCatalogBridgePanel({
           {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
           Trazer produtos do WhatsApp
         </button>
+
+        {categoryOptions.length === 0 ? (
+          <div className="rounded-lg border border-amber-300/40 bg-amber-300/10 px-3 py-2 text-[11px] leading-5 text-amber-900">
+            Cadastre e salve as categorias do catalogo antes de sincronizar. Depois da busca no WhatsApp, cada produto precisa receber uma categoria antes de publicar.
+          </div>
+        ) : (
+          <div className="rounded-lg border border-emerald-300/30 bg-emerald-300/10 px-3 py-2 text-[11px] leading-5 text-emerald-900">
+            Categorias disponiveis: {categoryOptions.join(", ")}. A sincronizacao cria uma previa; nenhum produto entra na loja antes da revisao.
+          </div>
+        )}
+
+        <div className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">revisao whatsapp</p>
+              <p className="mt-1 text-[11px] text-slate-500">{importJobs.length} sincronizacao(oes) recentes</p>
+            </div>
+            <button
+              type="button"
+              disabled={loadingImports}
+              onClick={onRefreshImportJobs}
+              className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[10px] font-semibold uppercase tracking-wide text-slate-300 transition hover:bg-cyan-400/10 hover:text-cyan-100 disabled:opacity-50"
+              style={{ borderColor: "var(--ch-border)" }}
+            >
+              {loadingImports ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+              Atualizar
+            </button>
+          </div>
+
+          {importJobs.length > 0 ? (
+            <div className="mt-3 grid max-h-[760px] gap-3 overflow-y-auto pr-1">
+              {importJobs.map((job) => (
+                <CatalogImportJobCard
+                  key={job.id}
+                  job={job}
+                  canceling={cancelingJobId === job.id}
+                  categoryOptions={categoryOptions}
+                  deleting={deletingJobId === job.id}
+                  hasChanges={job.items.some((item) => Boolean(jobPatches[item.id]))}
+                  notice={jobNotices[job.id] ?? null}
+                  publishing={publishingJobId === job.id}
+                  saving={savingJobId === job.id}
+                  onChangeItem={onChangeImportItem}
+                  onCancel={() => onCancelImportJob(job)}
+                  onDelete={() => onDeleteImportJob(job)}
+                  onOpenMonitor={() => onOpenImportMonitor(job)}
+                  onPublish={() => onPublishImportJob(job)}
+                  onSaveReview={() => onSaveImportJobReview(job)}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="mt-3 rounded-lg border border-dashed px-4 py-6 text-center text-[12px] text-slate-500" style={{ borderColor: "var(--ch-border)" }}>
+              Depois de sincronizar, os produtos do WhatsApp aparecem aqui para escolher categoria, revisar duplicidades e publicar.
+            </div>
+          )}
+        </div>
 
         <div className="grid gap-3 rounded-xl border p-3 lg:grid-cols-[minmax(220px,0.48fr)_minmax(0,1fr)]" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
           <div className="space-y-3">
@@ -5671,6 +5788,7 @@ function SalesCatalogImportPanel({
   companyName,
   connectedInstances,
   creating,
+  categoryOptions,
   defaultDestination,
   files,
   jobs,
@@ -5708,6 +5826,7 @@ function SalesCatalogImportPanel({
   companyName: string;
   connectedInstances: ClientSalesCatalogWhatsappInstance[];
   creating: boolean;
+  categoryOptions: string[];
   defaultDestination: SalesCatalogImportDestination;
   files: File[];
   jobs: ClientSalesCatalogImportJob[];
@@ -5926,6 +6045,7 @@ function SalesCatalogImportPanel({
                 publishing={publishingJobId === job.id}
                 saving={savingJobId === job.id}
                 notice={jobNotices[job.id] ?? null}
+                categoryOptions={categoryOptions}
                 onChangeItem={onChangeItem}
                 onCancel={() => onCancel(job)}
                 onDelete={() => onDelete(job)}
@@ -6178,9 +6298,30 @@ function ImportPreviewStatusDot({ status }: { status: CatalogImportPreviewItemSt
   return <span className={cn("h-2.5 w-2.5 rounded-full", tone)} />;
 }
 
+function isWhatsappCatalogImportJob(job: Pick<ClientSalesCatalogImportJob, "sourcePlatform">) {
+  return job.sourcePlatform === "whatsapp_catalog";
+}
+
+function countWhatsappImportItemsMissingCategory(
+  job: Pick<ClientSalesCatalogImportJob, "sourcePlatform">,
+  items: ClientSalesCatalogImportItem[],
+  categoryOptions: string[],
+) {
+  if (!isWhatsappCatalogImportJob(job)) return 0;
+
+  const categoryKeys = new Set(categoryOptions.map(normalizeHomeCategoryKey));
+  if (categoryKeys.size === 0) return items.filter((item) => item.duplicateAction !== "skip").length;
+
+  return items.filter((item) => (
+    item.duplicateAction !== "skip"
+    && !categoryKeys.has(normalizeHomeCategoryKey(item.category ?? ""))
+  )).length;
+}
+
 function CatalogImportJobCard({
   job,
   canceling,
+  categoryOptions,
   deleting,
   hasChanges,
   notice,
@@ -6195,6 +6336,7 @@ function CatalogImportJobCard({
 }: {
   job: ClientSalesCatalogImportJob;
   canceling: boolean;
+  categoryOptions: string[];
   deleting: boolean;
   hasChanges: boolean;
   notice: Notice | null;
@@ -6209,11 +6351,13 @@ function CatalogImportJobCard({
 }) {
   const canceled = isCatalogImportJobCanceled(job);
   const pendingItems = canceled ? [] : job.items.filter(isCatalogImportItemPendingReview);
-  const canPublish = pendingItems.length > 0 && !publishing;
+  const missingCategoryCount = countWhatsappImportItemsMissingCategory(job, pendingItems, categoryOptions);
+  const canPublish = pendingItems.length > 0 && !publishing && missingCategoryCount === 0;
   const canCancel = canCancelCatalogImportJob(job);
   const active = isCatalogImportJobActive(job);
   const canDelete = !active && !saving && !publishing && !canceling;
   const progress = getCatalogImportJobProgress(job);
+  const requiresCategoryReview = isWhatsappCatalogImportJob(job);
 
   return (
     <div className="rounded-xl border p-3" style={{ borderColor: "var(--ch-border)", background: "var(--ch-surface-2)" }}>
@@ -6256,6 +6400,12 @@ function CatalogImportJobCard({
       {job.errorMessage ? (
         <div className="mt-3 rounded-lg border border-rose-400/25 bg-rose-400/10 px-3 py-2 text-[11px] text-rose-100">
           {job.errorMessage}
+        </div>
+      ) : null}
+
+      {requiresCategoryReview && missingCategoryCount > 0 ? (
+        <div className="mt-3 rounded-lg border border-amber-300/40 bg-amber-300/10 px-3 py-2 text-[11px] text-amber-900">
+          Escolha uma categoria cadastrada para {missingCategoryCount} produto(s) antes de publicar.
         </div>
       ) : null}
 
@@ -6345,6 +6495,8 @@ function CatalogImportJobCard({
           {pendingItems.map((item) => (
             <CatalogImportItemEditor
               key={item.id}
+              categoryOptions={categoryOptions}
+              categoryRequired={requiresCategoryReview}
               item={item}
               onChange={(patch) => onChangeItem(item.id, patch)}
             />
@@ -6360,14 +6512,19 @@ function CatalogImportJobCard({
 }
 
 function CatalogImportItemEditor({
+  categoryOptions,
+  categoryRequired = false,
   item,
   onChange,
 }: {
+  categoryOptions?: string[];
+  categoryRequired?: boolean;
   item: ClientSalesCatalogImportItem;
   onChange: (patch: Omit<SalesCatalogImportItemPatch, "id">) => void;
 }) {
   const canImportImage = Boolean(item.imageUrl) && item.salesDestination === "connectyhub_checkout";
   const selectedDuplicateTargetId = item.duplicateTargetItemId ?? item.duplicateCandidates[0]?.itemId ?? "";
+  const categoryValue = item.category ?? "";
 
   function changeDuplicateAction(action: SalesCatalogImportDuplicateAction) {
     onChange({
@@ -6375,6 +6532,14 @@ function CatalogImportItemEditor({
       duplicateTargetItemId: action === "update_existing" || action === "skip"
         ? selectedDuplicateTargetId || item.duplicateCandidates[0]?.itemId || null
         : null,
+    });
+  }
+
+  function changeCategory(value: string) {
+    const category = value.trim().slice(0, 80);
+    onChange({
+      category: category || null,
+      ...(categoryRequired ? { status: category && item.warnings.length === 0 ? "ready" : "draft" } : {}),
     });
   }
 
@@ -6488,13 +6653,28 @@ function CatalogImportItemEditor({
           <option value="discarded">Ignorar</option>
           <option value="published">Publicado</option>
         </select>
-        <input
-          value={item.category ?? ""}
-          onChange={(event) => onChange({ category: event.target.value.slice(0, 80) })}
-          className="h-10 rounded-lg border bg-transparent px-3 text-[12px] outline-none"
-          placeholder="Categoria"
-          style={{ borderColor: "var(--ch-border)" }}
-        />
+        {categoryOptions && categoryOptions.length > 0 ? (
+          <select
+            value={categoryValue}
+            onChange={(event) => changeCategory(event.target.value)}
+            className="h-10 rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+            style={{ borderColor: "var(--ch-border)" }}
+          >
+            <option value="">{categoryRequired ? "Categoria obrigatoria" : "Sem categoria"}</option>
+            {categoryOptions.map((category) => (
+              <option key={category} value={category}>{category}</option>
+            ))}
+          </select>
+        ) : (
+          <input
+            value={item.category ?? ""}
+            disabled={categoryRequired}
+            onChange={(event) => onChange({ category: event.target.value.slice(0, 80) })}
+            className="h-10 rounded-lg border bg-transparent px-3 text-[12px] outline-none disabled:cursor-not-allowed disabled:opacity-60"
+            placeholder={categoryRequired ? "Cadastre categorias primeiro" : "Categoria"}
+            style={{ borderColor: "var(--ch-border)" }}
+          />
+        )}
       </div>
 
       <input
@@ -8074,6 +8254,7 @@ function formatImportPlatform(value: SalesCatalogImportPlatform) {
   if (value === "tray") return "Tray";
   if (value === "anota_ai") return "Anota Ai";
   if (value === "ifood") return "iFood / delivery";
+  if (value === "whatsapp_catalog") return "Catalogo WhatsApp";
   if (value === "generic_menu") return "PDF ou foto";
   if (value === "generic_sheet") return "Planilha";
   return "Auto";

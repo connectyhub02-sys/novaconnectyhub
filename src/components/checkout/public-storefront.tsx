@@ -12,6 +12,7 @@ import {
   Menu,
   Minus,
   Package,
+  PencilLine,
   Plus,
   Search,
   ShoppingBag,
@@ -68,6 +69,7 @@ export type PublicStorefrontSettings = {
 export type PublicStorefrontTrackingParams = {
   organizationId: string;
   leadId: string | null;
+  leadName: string | null;
   leadPhone: string | null;
   conversationId: string | null;
   trackingLinkId: string | null;
@@ -146,7 +148,7 @@ export function PublicStorefront({
   const [sortMode, setSortMode] = useState<StoreSortMode>("featured");
   const [cart, setCart] = useState<CartLine[]>([]);
   const [cartOpen, setCartOpen] = useState(initialCartOpen);
-  const [customerName, setCustomerName] = useState("");
+  const [customerName, setCustomerName] = useState(tracking.leadName ?? "");
   const [customerPhone, setCustomerPhone] = useState(tracking.leadPhone ?? "");
   const [customerEmail, setCustomerEmail] = useState("");
   const [busy, setBusy] = useState(false);
@@ -627,6 +629,7 @@ export function PublicStorefront({
         customerName={customerName}
         customerPhone={customerPhone}
         error={error}
+        leadContactPrefilled={Boolean(tracking.leadName && tracking.leadPhone)}
         open={cartOpen}
         setCustomerEmail={setCustomerEmail}
         setCustomerName={setCustomerName}
@@ -1554,6 +1557,7 @@ export function CartDrawer({
   customerName,
   customerPhone,
   customerEmail,
+  leadContactPrefilled = false,
   setCustomerName,
   setCustomerPhone,
   setCustomerEmail,
@@ -1571,6 +1575,7 @@ export function CartDrawer({
   customerName: string;
   customerPhone: string;
   customerEmail: string;
+  leadContactPrefilled?: boolean;
   setCustomerName: (value: string) => void;
   setCustomerPhone: (value: string) => void;
   setCustomerEmail: (value: string) => void;
@@ -1578,18 +1583,29 @@ export function CartDrawer({
   onUpdateQuantity: (productId: string, quantity: number) => void;
   onCheckout: () => void;
 }) {
+  const [editingLeadContact, setEditingLeadContact] = useState(false);
+  const hasLeadContact = leadContactPrefilled && Boolean(customerName.trim()) && Boolean(customerPhone.trim());
+
+  function closeCartDrawer() {
+    setEditingLeadContact(false);
+    onClose();
+  }
+
   if (!open) return null;
 
   return (
     <div className="fixed inset-0 z-50">
-      <button aria-label="Fechar carrinho" className="absolute inset-0 bg-slate-950/45" onClick={onClose} type="button" />
+      <button aria-label="Fechar carrinho" className="absolute inset-0 bg-slate-950/45" onClick={closeCartDrawer} type="button" />
       <aside className="absolute right-0 top-0 flex h-full w-full max-w-md flex-col bg-white shadow-2xl shadow-slate-950/30">
         <div className="flex items-center justify-between gap-3 border-b border-[#e5e2d8] px-4 py-4">
-          <div className="min-w-0">
-            <p className="text-xs font-semibold uppercase text-[color:var(--store-accent)]">Carrinho</p>
-            <h2 className="truncate text-xl font-semibold text-[color:var(--store-text)]">{branding.displayName}</h2>
+          <div className="flex min-w-0 items-center gap-3">
+            <BrandLogo branding={branding} compact />
+            <div className="min-w-0">
+              <p className="text-xs font-semibold uppercase text-[color:var(--store-accent)]">Carrinho</p>
+              <h2 className="truncate text-xl font-semibold text-[color:var(--store-text)]">{branding.displayName}</h2>
+            </div>
           </div>
-          <button aria-label="Fechar" className="grid h-10 w-10 shrink-0 place-items-center rounded-[8px] border border-[#e5e2d8] bg-white text-[color:var(--store-text-muted)] transition hover:bg-[#f8f7f2]" onClick={onClose} type="button">
+          <button aria-label="Fechar" className="grid h-10 w-10 shrink-0 place-items-center rounded-[8px] border border-[#e5e2d8] bg-white text-[color:var(--store-text-muted)] transition hover:bg-[#f8f7f2]" onClick={closeCartDrawer} type="button">
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -1634,8 +1650,18 @@ export function CartDrawer({
             <div className="mt-4 rounded-[8px] border border-[#e5e2d8] bg-white p-4">
               <p className="text-xs font-semibold uppercase text-[color:var(--store-accent)]">Dados para acompanhamento</p>
               <div className="mt-3 grid gap-3">
-                <input className={inputClassName} onChange={(event) => setCustomerName(event.target.value)} placeholder="Seu nome" value={customerName} />
-                <input className={inputClassName} onChange={(event) => setCustomerPhone(event.target.value)} placeholder="WhatsApp com DDD" value={customerPhone} />
+                {hasLeadContact && !editingLeadContact ? (
+                  <CartLeadContactSummary
+                    customerName={customerName}
+                    customerPhone={customerPhone}
+                    onEdit={() => setEditingLeadContact(true)}
+                  />
+                ) : (
+                  <>
+                    <input className={inputClassName} onChange={(event) => setCustomerName(event.target.value)} placeholder="Seu nome" value={customerName} />
+                    <input className={inputClassName} onChange={(event) => setCustomerPhone(event.target.value)} placeholder="WhatsApp com DDD" value={customerPhone} />
+                  </>
+                )}
                 <input className={inputClassName} onChange={(event) => setCustomerEmail(event.target.value)} placeholder="E-mail opcional" value={customerEmail} />
               </div>
             </div>
@@ -1671,6 +1697,39 @@ export function CartDrawer({
           </p>
         </div>
       </aside>
+    </div>
+  );
+}
+
+function CartLeadContactSummary({
+  customerName,
+  customerPhone,
+  onEdit,
+}: {
+  customerName: string;
+  customerPhone: string;
+  onEdit: () => void;
+}) {
+  return (
+    <div className="rounded-[8px] border border-[#e5e2d8] bg-[#fbfaf6] px-3 py-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[11px] font-bold uppercase tracking-[1.5px] text-[color:var(--store-accent)]">
+            Dados do WhatsApp
+          </p>
+          <p className="mt-1 truncate text-sm font-semibold text-[color:var(--store-text)]">{customerName}</p>
+          <p className="mt-0.5 text-sm font-medium text-[color:var(--store-text-muted)]">{formatCustomerPhone(customerPhone)}</p>
+        </div>
+        <button
+          aria-label="Editar nome e WhatsApp"
+          className="grid h-9 w-9 shrink-0 place-items-center rounded-[8px] border border-[#e5e2d8] bg-white text-[color:var(--store-accent)] transition hover:bg-[#f8f7f2]"
+          onClick={onEdit}
+          title="Editar nome e WhatsApp"
+          type="button"
+        >
+          <PencilLine className="h-4 w-4" />
+        </button>
+      </div>
     </div>
   );
 }
@@ -1842,6 +1901,28 @@ function formatCurrencyCents(value: number) {
     style: "currency",
     currency: "BRL",
   }).format(value / 100);
+}
+
+function formatCustomerPhone(value: string) {
+  const digits = value.replace(/\D/g, "");
+
+  if (digits.length === 13 && digits.startsWith("55")) {
+    return `+${digits.slice(0, 2)} (${digits.slice(2, 4)}) ${digits.slice(4, 9)}-${digits.slice(9)}`;
+  }
+
+  if (digits.length === 12 && digits.startsWith("55")) {
+    return `+${digits.slice(0, 2)} (${digits.slice(2, 4)}) ${digits.slice(4, 8)}-${digits.slice(8)}`;
+  }
+
+  if (digits.length === 11) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+  }
+
+  if (digits.length === 10) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+  }
+
+  return value;
 }
 
 const inputClassName = "min-h-11 w-full rounded-[8px] border border-[#e5e2d8] bg-[#fbfaf6] px-3 text-sm font-semibold text-[color:var(--store-text)] outline-none transition placeholder:text-[#8b918c] focus:border-[color:var(--store-accent)] focus:bg-white focus:ring-4 focus:ring-[#123f2d]/10";

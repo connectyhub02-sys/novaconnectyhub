@@ -39,14 +39,11 @@ describe("Admin internal WhatsApp workspace scope", () => {
     expect(adminLeadsPageSource).not.toContain('scope: "platform_internal"');
   });
 
-  it("exposes WhatsApp groups and campaigns in the admin internal panel", () => {
-    expect(adminWhatsappConsoleSource).toContain('"automations"');
-    expect(adminWhatsappConsoleSource).toContain("Grupos e campanhas");
-    expect(adminWhatsappConsoleSource).toContain("<AdminWhatsappCampaignsConsole workspace={campaignWorkspace} />");
+  it("keeps WhatsApp groups and campaigns out of agent panels", () => {
+    expect(adminWhatsappConsoleSource).not.toContain('"automations"');
+    expect(adminWhatsappConsoleSource).not.toContain("Grupos e campanhas");
+    expect(adminWhatsappConsoleSource).not.toContain("<AdminWhatsappCampaignsConsole workspace={campaignWorkspace} />");
     expect(adminWhatsappConsoleSource).not.toContain('initialTab="multichannel"');
-    expect(atendimentoPageSource).toContain("getPlatformWhatsappAgentsWorkspace");
-    expect(atendimentoPageSource).toContain("getAdminPlatformProductCatalog");
-    expect(atendimentoPageSource).toContain("mapPlatformProductToClientSalesCatalogItem");
     expect(adminWhatsappCampaignsConsoleSource).toContain("ClientWhatsappAutomationStudio");
     expect(adminWhatsappCampaignsConsoleSource).toContain('channelEndpoint="/api/admin/whatsapp/internal/channels"');
     expect(adminWhatsappCampaignsConsoleSource).toContain('entityIdKey="sectorId"');
@@ -55,8 +52,9 @@ describe("Admin internal WhatsApp workspace scope", () => {
     expect(connectyShellSource).not.toContain('href: "/admin/whatsapp/campanhas"');
     expect(connectyShellSource).not.toContain('label: "Campanhas WhatsApp"');
     expect(adminWhatsappAgentsConsoleSource).toContain("adminWhatsappConsoleVariant");
-    expect(whatsappConsoleSource).toContain('id: "multichannel", label: "Grupos e campanhas"');
-    expect(whatsappConsoleSource).toContain('hiddenTabs: ["multichannel"]');
+    expect(whatsappConsoleSource).not.toContain('id: "multichannel", label: "Grupos e campanhas"');
+    expect(whatsappConsoleSource).not.toContain('activeWhatsappTab === "multichannel"');
+    expect(whatsappConsoleSource).not.toContain('hiddenTabs: ["multichannel"]');
     expect(whatsappConsoleSource).toContain('channels: "/api/admin/whatsapp/internal/channels"');
     expect(channelOperationsSource).toContain("listPlatformProductCampaignItems");
     expect(channelOperationsSource).toContain('.from("platform_products")');

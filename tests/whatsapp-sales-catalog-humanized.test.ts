@@ -75,6 +75,46 @@ describe("WhatsApp sales catalog humanized replies", () => {
     expect(checkoutRuntime).toContain("if (!hasRecentSalesCatalogCheckoutConfirmation(input.context, intentText))");
   });
 
+  it("sends checkout links even when payment is deferred for shipping", () => {
+    const deliveryText = sourceBetween(
+      "function prepareSalesCatalogDeliveryText",
+      "function hasSubstantiveSalesCatalogAnswer",
+    );
+    const checkoutRuntime = sourceBetween(
+      "async function maybeCreateSalesCatalogPaymentLink",
+      "async function maybeSendExistingSalesCatalogCheckoutLink",
+    );
+    const paymentSender = sourceBetween(
+      "async function sendSalesCatalogPaymentLink",
+      "async function maybeSendSalesCatalogProductPageLinks",
+    );
+
+    expect(deliveryText).toContain("const closing = input.hasOrderIntent\n    ? \"\"");
+    expect(checkoutRuntime).not.toContain("if (result.paymentDeferred)");
+    expect(checkoutRuntime).toContain("paymentDeferred: result.paymentDeferred === true");
+    expect(checkoutRuntime).toContain("paymentDeferredReason: result.paymentDeferredReason ?? null");
+    expect(paymentSender).toContain("confirma entrega/frete antes do pagamento");
+  });
+
+  it("resends existing checkout links before handing payment-link follow-ups to the model", () => {
+    const runtime = sourceBetween("async function processWhatsappAgentRun", "async function loadRunContext");
+    const checkoutRecovery = sourceBetween(
+      "async function maybeSendExistingSalesCatalogCheckoutLink",
+      "function findRecentPendingSalesCatalogCheckoutOrder",
+    );
+    const followUpDetection = sourceBetween(
+      "function isSalesCatalogPaymentLinkFollowUp",
+      "async function sendSalesCatalogPaymentLink",
+    );
+
+    expect(runtime).toContain("maybeSendExistingSalesCatalogCheckoutLink");
+    expect(runtime).toContain("reason: \"sales_catalog_existing_checkout_link\"");
+    expect(checkoutRecovery).toContain(".from(\"sales_catalog_payment_sessions\")");
+    expect(checkoutRecovery).toContain("sendSalesCatalogPaymentLink");
+    expect(followUpDetection).toContain("hasRecentSalesCatalogCheckoutPromise");
+    expect(followUpDetection).toContain("link de pagamento");
+  });
+
   it("keeps checkout payment links out of reusable agent links", () => {
     const loader = sourceBetween(
       "async function loadOrganizationLinkButtons",

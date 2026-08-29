@@ -15,6 +15,7 @@ import {
 import { createServiceClient } from "@/lib/supabase/service";
 import { createOrganizationTrackingToken } from "@/lib/tracking/organization-attribution";
 import type { ConnectyPublicTrackingContext } from "@/lib/tracking/public-context";
+import { resolveLeadPersonalName } from "@/lib/whatsapp/lead-names";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -42,6 +43,26 @@ type StorefrontWhatsappRow = {
   status: string | null;
 };
 
+type StorefrontLeadRow = {
+  id: string;
+  display_name: string | null;
+  phone_number: string | null;
+  metadata: JsonRecord | null;
+};
+
+type StorefrontConversationRow = {
+  id: string;
+  lead_id: string | null;
+  metadata: JsonRecord | null;
+};
+
+export type PublicStorefrontLeadContext = {
+  leadId: string | null;
+  leadName: string | null;
+  leadPhone: string | null;
+  conversationId: string | null;
+};
+
 export type PublicStorefrontPageData = {
   organizationId: string;
   storeSlug: string;
@@ -67,25 +88,32 @@ export async function loadPublicStorefrontPageData(input: {
   const leadPhone = readSearchString(query.lead_phone);
   const conversationId = readSearchString(query.conversation_id);
   const trackingLinkId = readSearchString(query.tracking_link_id);
-  const products = await loadStoreProducts(client, {
-    storeSlug: publicSlug,
+  const leadContext = await loadPublicStorefrontLeadContext(client, {
     organizationId: organization.id,
     leadId,
     leadPhone,
     conversationId,
-    trackingLinkId,
   });
+  const tracking: PublicStorefrontTrackingParams = {
+    organizationId: organization.id,
+    leadId: leadContext.leadId ?? leadId,
+    leadName: leadContext.leadName,
+    leadPhone: leadContext.leadPhone ?? leadPhone,
+    conversationId: leadContext.conversationId ?? conversationId,
+    trackingLinkId,
+  };
   const [catalogSettings, whatsapp] = await Promise.all([
     getOrganizationSalesCatalogSettings(client, organization.id),
     loadPublicStorefrontWhatsapp(client, organization.id),
   ]);
-  const tracking: PublicStorefrontTrackingParams = {
+  const products = await loadStoreProducts(client, {
+    storeSlug: publicSlug,
     organizationId: organization.id,
-    leadId,
-    leadPhone,
-    conversationId,
+    leadId: tracking.leadId,
+    leadPhone: tracking.leadPhone,
+    conversationId: tracking.conversationId,
     trackingLinkId,
-  };
+  });
 
   const storefront = resolvePublicStorefrontSettings(catalogSettings?.storefront ?? null);
 
@@ -181,6 +209,97 @@ export function buildStorePublicTrackingContext(input: {
     tracking_link_id: input.trackingLinkId,
     tracking_source: "sales_catalog_store",
   };
+}
+
+export async function loadPublicStorefrontLeadContext(
+  client: ReturnType<typeof createServiceClient>,
+  input: {
+    organizationId: string;
+    leadId: string | null;
+    leadPhone: string | null;
+    conversationId: string | null;
+  },
+): Promise<PublicStorefrontLeadContext> {
+  const requestedLeadId = normalizeUuid(input.leadId);
+  const requestedConversationId = normalizeUuid(input.conversationId);
+  let conversationId: string | null = null;
+  let leadId: string | null = requestedLeadId;
+  let leadName: string | null = null;
+  let leadPhone: string | null = normalizeWhatsappPhone(input.leadPhone);
+  let lead: StorefrontLeadRow | null = null;
+
+  if (requestedConversationId) {
+    const { data: conversation } = await client
+      .from("conversations")
+      .select("id, lead_id, metadata")
+      .eq("id", requestedConversationId)
+      .eq("organization_id", input.organizationId)
+      .maybeSingle<StorefrontConversationRow>();
+
+    if (conversation) {
+      const conversationMetadata = readRecord(conversation.metadata);
+
+      conversationId = conversation.id;
+      leadId = leadId ?? normalizeUuid(conversation.lead_id);
+      leadName = resolveLeadPersonalName({ metadata: conversationMetadata });
+      leadPhone = leadPhone
+        ?? normalizeWhatsappPhone(readString(conversationMetadata.lead_phone))
+        ?? normalizeWhatsappPhone(readString(conversationMetadata.phone_number))
+        ?? normalizeWhatsappPhone(readString(conversationMetadata.customer_phone));
+    }
+  }
+
+  if (leadId) {
+    lead = await loadPublicStorefrontLead(client, input.organizationId, leadId);
+  }
+
+  if (!lead && leadPhone) {
+    lead = await loadPublicStorefrontLeadByPhone(client, input.organizationId, leadPhone);
+  }
+
+  if (lead) {
+    leadId = lead.id;
+    leadName = resolveLeadPersonalName({ displayName: lead.display_name, metadata: lead.metadata }) ?? leadName;
+    leadPhone = normalizeWhatsappPhone(lead.phone_number) ?? leadPhone;
+  }
+
+  return {
+    leadId,
+    leadName,
+    leadPhone,
+    conversationId,
+  };
+}
+
+async function loadPublicStorefrontLead(
+  client: ReturnType<typeof createServiceClient>,
+  organizationId: string,
+  leadId: string,
+) {
+  const { data } = await client
+    .from("leads")
+    .select("id, display_name, phone_number, metadata")
+    .eq("id", leadId)
+    .eq("organization_id", organizationId)
+    .maybeSingle<StorefrontLeadRow>();
+
+  return data ?? null;
+}
+
+async function loadPublicStorefrontLeadByPhone(
+  client: ReturnType<typeof createServiceClient>,
+  organizationId: string,
+  leadPhone: string,
+) {
+  const { data } = await client
+    .from("leads")
+    .select("id, display_name, phone_number, metadata")
+    .eq("organization_id", organizationId)
+    .eq("phone_number", leadPhone)
+    .limit(1)
+    .maybeSingle<StorefrontLeadRow>();
+
+  return data ?? null;
 }
 
 async function loadPublicStorefrontWhatsapp(

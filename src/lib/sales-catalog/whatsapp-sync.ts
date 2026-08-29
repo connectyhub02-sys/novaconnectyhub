@@ -1,6 +1,5 @@
 import "server-only";
 
-import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { mapSalesCatalogItem } from "@/lib/client-os/sales-catalog";
 import { requireClientCompanyAccess } from "@/lib/client-os/companies";
@@ -8,16 +7,25 @@ import { decryptCredentialValue } from "@/lib/security/credentials-crypto";
 import { createServiceClient } from "@/lib/supabase/service";
 import { loadUazapiCredentials, type UazapiCredentials } from "@/lib/whatsapp/uazapi-credentials";
 import {
-  buildSalesCatalogContent,
+  createSalesCatalogImportReviewJob,
+  type ClientSalesCatalogImportJob,
+  type SalesCatalogImportDraft,
+} from "./importer";
+import {
+  createDefaultSalesCatalogSku,
   createSalesCatalogSlug,
-  createSalesCatalogTag,
-  getSalesCatalogReadiness,
+  emptySalesCatalogProductFulfillment,
+  emptySalesCatalogProductInventory,
+  emptySalesCatalogProductOffer,
+  emptySalesCatalogProductShipping,
   type ClientSalesCatalogItem,
-  type SalesCatalogItemStatus,
   type SalesCatalogMedia,
 } from "./shared";
 
 type JsonRecord = Record<string, unknown>;
+
+const uazapiRequestTimeoutMs = 18_000;
+const whatsappCatalogListPageTimeoutMs = 18_000;
 
 type SalesCatalogMemoryRow = {
   id: string;
@@ -45,10 +53,8 @@ type NormalizedWhatsappProduct = {
   productId: string;
   title: string;
   description: string;
-  category: string | null;
   price: string | null;
   currency: string;
-  status: SalesCatalogItemStatus;
   media: SalesCatalogMedia[];
   catalogJid: string;
   url: string | null;
@@ -59,14 +65,15 @@ type NormalizedWhatsappProduct = {
   importedPayload: JsonRecord;
 };
 
-export type WhatsappCatalogImportResult = {
-  items: ClientSalesCatalogItem[];
+export type WhatsappCatalogImportReviewResult = {
+  importJob: ClientSalesCatalogImportJob;
   imported: number;
-  updated: number;
   skipped: number;
   pages: number;
   hasMore: boolean;
   catalogJid: string;
+  whatsappInstanceId: string;
+  agentId: string | null;
 };
 
 export type WhatsappCatalogExportResult = {
@@ -78,12 +85,12 @@ export type WhatsappCatalogExportResult = {
   agentId: string | null;
 };
 
-export async function importWhatsappCatalog(input: {
+export async function createWhatsappCatalogImportReview(input: {
   userId: string;
   companyId: string;
   whatsappInstanceId?: string | null;
   client?: SupabaseClient;
-}): Promise<WhatsappCatalogImportResult> {
+}): Promise<WhatsappCatalogImportReviewResult> {
   const client = input.client ?? createServiceClient();
   const company = await requireClientCompanyAccess({ userId: input.userId, companyId: input.companyId, client });
   const instance = await requireCatalogWhatsappInstance(client, company.id, input.whatsappInstanceId);
@@ -103,9 +110,7 @@ export async function importWhatsappCatalog(input: {
   const credentials = await loadUazapiCredentials(client);
   const fetched = await fetchWhatsappCatalogPages(credentials, token, catalogJid);
   const now = new Date().toISOString();
-  const items: ClientSalesCatalogItem[] = [];
-  let imported = 0;
-  let updated = 0;
+  const drafts: SalesCatalogImportDraft[] = [];
   let skipped = 0;
 
   for (const product of fetched.products) {
@@ -116,41 +121,63 @@ export async function importWhatsappCatalog(input: {
       continue;
     }
 
-    const result = await upsertWhatsappCatalogProduct(client, {
-      companyId: company.id,
-      product: normalized,
+    drafts.push(mapWhatsappProductToImportDraft(normalized, {
       whatsappInstanceId: instance.id,
       agentId,
-      userId: input.userId,
       now,
-    });
-
-    if (result.created) {
-      imported += 1;
-    } else {
-      updated += 1;
-    }
-
-    items.push(mapSalesCatalogItem(result.row));
+    }));
   }
+
+  if (drafts.length === 0) {
+    throw new Error("Nenhum produto valido foi encontrado no catalogo WhatsApp.");
+  }
+
+  const titleParts = [
+    "Catalogo WhatsApp",
+    instance.display_name ?? instance.phone_number ?? company.name,
+  ].filter(Boolean);
+  const importJob = await createSalesCatalogImportReviewJob({
+    client,
+    companyId: company.id,
+    userId: input.userId,
+    sourceKind: "mixed",
+    sourcePlatform: "whatsapp_catalog",
+    targetMode: "connectyhub_checkout",
+    defaultSalesDestination: "connectyhub_checkout",
+    drafts,
+    title: titleParts.join(" - "),
+    sourceSummary: `${drafts.length} produto(s) encontrados no catalogo WhatsApp. Escolha a categoria de cada produto antes de publicar.`,
+    settings: {
+      whatsapp_catalog_jid: catalogJid,
+      whatsapp_instance_id: instance.id,
+      agent_id: agentId,
+      provider: "uazapi",
+      pages: fetched.pages,
+      has_more: fetched.hasMore,
+      provider_product_count: fetched.products.length,
+      skipped_count: skipped,
+    },
+    assignedAgentIds: agentId ? [agentId] : [],
+    assignedWhatsappInstanceIds: [instance.id],
+  });
 
   await client.from("intelligence_events").insert({
     scope: "organization",
     organization_id: company.id,
-    source_type: "sales_catalog",
-    source_id: company.id,
-    event_type: "sales_catalog.whatsapp_imported",
-    title: "Catalogo WhatsApp sincronizado",
-    summary: `${imported} novos, ${updated} atualizados, ${skipped} ignorados.`,
+    source_type: "sales_catalog_import",
+    source_id: importJob.id,
+    event_type: "sales_catalog.whatsapp_import_review_created",
+    title: "Catalogo WhatsApp pronto para revisao",
+    summary: `${drafts.length} produto(s) aguardando categoria e publicacao.`,
     confidence: 1,
     visibility: "organization",
     tags: ["sales_catalog", "whatsapp_catalog", "whatsapp_agent", "lead_tracking"],
     payload: {
+      import_job_id: importJob.id,
       catalog_jid: catalogJid,
       whatsapp_instance_id: instance.id,
       agent_id: agentId,
-      imported,
-      updated,
+      imported: drafts.length,
       skipped,
       pages: fetched.pages,
       has_more: fetched.hasMore,
@@ -159,13 +186,14 @@ export async function importWhatsappCatalog(input: {
   });
 
   return {
-    items,
-    imported,
-    updated,
+    importJob,
+    imported: drafts.length,
     skipped,
     pages: fetched.pages,
     hasMore: fetched.hasMore,
     catalogJid,
+    whatsappInstanceId: instance.id,
+    agentId,
   };
 }
 
@@ -377,6 +405,7 @@ async function fetchWhatsappCatalogPages(credentials: UazapiCredentials, token: 
       method: "POST",
       token,
       body: after ? { jid: catalogJid, after } : { jid: catalogJid },
+      timeoutMs: whatsappCatalogListPageTimeoutMs,
     });
     const parsed = readCatalogPage(response.data);
 
@@ -401,92 +430,6 @@ async function fetchWhatsappCatalogPages(credentials: UazapiCredentials, token: 
     products: Array.from(productsById.values()),
     pages,
     hasMore,
-  };
-}
-
-async function upsertWhatsappCatalogProduct(
-  client: SupabaseClient,
-  input: {
-    companyId: string;
-    product: NormalizedWhatsappProduct;
-    whatsappInstanceId: string;
-    agentId: string | null;
-    userId: string;
-    now: string;
-  },
-) {
-  const { data: existing, error: existingError } = await client
-    .from("intelligence_memory")
-    .select("id, organization_id, title, content, metadata, created_at, updated_at")
-    .eq("scope", "organization")
-    .eq("organization_id", input.companyId)
-    .eq("memory_type", "sales_catalog_item")
-    .eq("metadata->>whatsapp_catalog_id", input.product.productId)
-    .limit(1)
-    .maybeSingle<SalesCatalogMemoryRow>();
-
-  if (existingError) {
-    throw new Error(`Nao foi possivel verificar produto importado: ${existingError.message}`);
-  }
-
-  const itemId = existing?.id ?? randomUUID();
-  const existingMetadata = readRecord(existing?.metadata) ?? {};
-  const tag = readString(existingMetadata.tag) ?? createSalesCatalogTag(input.product.title, itemId);
-  const content = buildSalesCatalogContent(input.product);
-  const metadata = {
-    ...existingMetadata,
-    title: input.product.title,
-    description: input.product.description,
-    category: input.product.category,
-    price: input.product.price,
-    currency: input.product.currency,
-    status: input.product.status,
-    tag,
-    media: serializeMedia(input.product.media),
-    source: "whatsapp_catalog",
-    source_whatsapp_instance_id: readString(existingMetadata.source_whatsapp_instance_id) ?? input.whatsappInstanceId,
-    source_agent_id: readString(existingMetadata.source_agent_id) ?? input.agentId,
-    assigned_whatsapp_instance_ids: mergeStringLists(existingMetadata.assigned_whatsapp_instance_ids ?? existingMetadata.whatsapp_instance_ids, input.whatsappInstanceId),
-    assigned_agent_ids: mergeStringLists(existingMetadata.assigned_agent_ids ?? existingMetadata.agent_ids, input.agentId),
-    readiness: getSalesCatalogReadiness({ description: input.product.description, media: input.product.media }),
-    whatsapp_catalog_id: input.product.productId,
-    whatsapp_catalog_jid: input.product.catalogJid,
-    whatsapp_catalog_url: input.product.url,
-    whatsapp_catalog_hidden: input.product.hidden,
-    whatsapp_catalog_status: input.product.catalogStatus,
-    whatsapp_catalog_availability: input.product.availability,
-    whatsapp_catalog_retailer_id: input.product.retailerId,
-    whatsapp_catalog_payload: input.product.importedPayload,
-    whatsapp_catalog_imported_at: readString(existingMetadata.whatsapp_catalog_imported_at) ?? input.now,
-    whatsapp_catalog_synced_at: input.now,
-    updated_by: input.userId,
-  };
-  const payload = {
-    id: itemId,
-    scope: "organization",
-    organization_id: input.companyId,
-    memory_type: "sales_catalog_item",
-    title: input.product.title,
-    content,
-    importance: 0.84,
-    tags: ["sales_catalog_item", "sales_catalog", "whatsapp_catalog", "whatsapp_agent", "lead_tracking"],
-    metadata,
-    updated_at: input.now,
-  };
-  const query = existing
-    ? client.from("intelligence_memory").update(payload).eq("id", existing.id)
-    : client.from("intelligence_memory").insert({ ...payload, created_at: input.now });
-  const { data, error } = await query
-    .select("id, organization_id, title, content, metadata, created_at, updated_at")
-    .single<SalesCatalogMemoryRow>();
-
-  if (error || !data) {
-    throw new Error(error?.message ?? "Nao foi possivel salvar produto importado.");
-  }
-
-  return {
-    row: data,
-    created: !existing,
   };
 }
 
@@ -579,17 +522,14 @@ function normalizeWhatsappProduct(product: JsonRecord, catalogJid: string, now: 
   const availability = readString(product.Availability) ?? readString(product.availability);
   const retailerId = readString(product.RetailerID) ?? readString(product.retailerId) ?? readString(product.SKU);
   const url = readString(product.Url) ?? readString(product.URL) ?? readString(product.url);
-  const status = hidden ? "draft" : "active";
   const media = readProductImages(product, title, now);
 
   return {
     productId,
     title,
     description,
-    category: "WhatsApp Catalog",
     price,
     currency,
-    status,
     media,
     catalogJid,
     url,
@@ -602,6 +542,69 @@ function normalizeWhatsappProduct(product: JsonRecord, catalogJid: string, now: 
       max_available: readNumber(product.MaxAvailable) ?? readNumber(product.maxAvailable),
       sale_price: readString(product.SalePrice) ?? readString(product.salePrice),
       source: readString(product.Source) ?? readString(product.source),
+    }),
+  };
+}
+
+function mapWhatsappProductToImportDraft(
+  product: NormalizedWhatsappProduct,
+  input: {
+    whatsappInstanceId: string;
+    agentId: string | null;
+    now: string;
+  },
+): SalesCatalogImportDraft {
+  const imageUrl = product.media.find((media) => media.kind === "image")?.storageUrl ?? null;
+  const warnings = product.price
+    ? []
+    : ["Preco nao encontrado no catalogo WhatsApp. Informe o preco antes de publicar."];
+
+  if (product.hidden) {
+    warnings.push("Produto esta oculto no catalogo WhatsApp. Revise antes de publicar na loja.");
+  }
+
+  return {
+    title: product.title,
+    description: product.description || null,
+    category: null,
+    price: product.price,
+    currency: product.currency,
+    productUrl: product.url,
+    imageUrl,
+    importExternalImage: Boolean(imageUrl),
+    attributes: [],
+    skus: [
+      createDefaultSalesCatalogSku({
+        skuCode: product.retailerId ?? product.productId,
+        title: product.title,
+        price: product.price,
+        currency: product.currency,
+        stockStatus: product.hidden ? "out_of_stock" : "in_stock",
+      }),
+    ],
+    inventory: {
+      ...emptySalesCatalogProductInventory(),
+      status: product.hidden ? "out_of_stock" : "in_stock",
+    },
+    shipping: emptySalesCatalogProductShipping(),
+    fulfillment: emptySalesCatalogProductFulfillment(),
+    offer: emptySalesCatalogProductOffer(),
+    salesDestination: "connectyhub_checkout",
+    confidence: product.price ? 0.9 : 0.72,
+    warnings,
+    sourceEvidence: compactRecord({
+      source_platform: "whatsapp_catalog",
+      whatsapp_catalog_id: product.productId,
+      whatsapp_catalog_jid: product.catalogJid,
+      whatsapp_catalog_url: product.url,
+      whatsapp_catalog_hidden: product.hidden,
+      whatsapp_catalog_status: product.catalogStatus,
+      whatsapp_catalog_availability: product.availability,
+      whatsapp_catalog_retailer_id: product.retailerId,
+      source_whatsapp_instance_id: input.whatsappInstanceId,
+      source_agent_id: input.agentId,
+      whatsapp_catalog_payload: product.importedPayload,
+      whatsapp_catalog_synced_at: input.now,
     }),
   };
 }
@@ -666,19 +669,6 @@ function readCatalogPrice(product: JsonRecord) {
 function readCatalogCurrency(product: JsonRecord) {
   const price = readRecord(product.Price) ?? readRecord(product.price);
   return normalizeText(readString(price?.Currency) ?? readString(price?.currency) ?? readString(product.Currency), 12);
-}
-
-function serializeMedia(media: SalesCatalogMedia[]) {
-  return media.map((item) => ({
-    id: item.id,
-    file_name: item.fileName,
-    content_type: item.contentType,
-    size: item.size,
-    storage_url: item.storageUrl,
-    object_key: item.objectKey ?? null,
-    kind: item.kind,
-    created_at: item.createdAt,
-  }));
 }
 
 function resolveInstanceCatalogJid(instance: WhatsappInstanceRow) {
@@ -795,18 +785,38 @@ async function callUazapi(
     method: "GET" | "POST" | "PUT" | "DELETE";
     body?: unknown;
     token: string;
+    timeoutMs?: number;
   },
 ) {
-  const response = await fetch(`${credentials.baseUrl}${path}`, {
-    method: options.method,
-    headers: {
-      Accept: "application/json",
-      ...(options.body !== undefined ? { "Content-Type": "application/json" } : {}),
-      token: options.token,
-    },
-    body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
-    cache: "no-store",
-  });
+  const timeoutMs = options.timeoutMs ?? uazapiRequestTimeoutMs;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  let response: Response;
+
+  try {
+    response = await fetch(`${credentials.baseUrl}${path}`, {
+      method: options.method,
+      headers: {
+        Accept: "application/json",
+        ...(options.body !== undefined ? { "Content-Type": "application/json" } : {}),
+        token: options.token,
+      },
+      body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+      cache: "no-store",
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error(
+        "O provedor WhatsApp demorou para responder o catalogo. Tente novamente ou use a importacao em etapas quando o catalogo tiver muitos produtos.",
+      );
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+
   const data = await readProviderResponse(response);
 
   if (!response.ok) {

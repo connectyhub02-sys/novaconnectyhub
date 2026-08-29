@@ -24,7 +24,6 @@ import {
   KeyRound,
   Link2,
   Loader2,
-  Megaphone,
   MessageCircle,
   MessageSquare,
   Mic,
@@ -640,7 +639,7 @@ const controlToneStyles: Record<ControlTone, ControlToneStyle> = {
   slate: { color: "#64748b", rgb: "100,116,139" },
 };
 
-export type WhatsappConsoleTab = "connection" | "prompt" | "qualification" | "behavior" | "channels" | "multichannel" | "files";
+export type WhatsappConsoleTab = "connection" | "prompt" | "qualification" | "behavior" | "channels" | "files";
 
 type WhatsappConsoleVariant = {
   entityIdKey: "companyId" | "sectorId";
@@ -779,7 +778,6 @@ export const adminWhatsappConsoleVariant = {
   connectionEnabled: true,
   connectionDisabledReason: "Crie o agente do setor antes de conectar o WhatsApp interno.",
   voiceCloneEnabled: true,
-  hiddenTabs: ["multichannel"],
 } satisfies WhatsappConsoleVariant;
 
 export function WhatsAppConsole({
@@ -830,16 +828,6 @@ export function WhatsAppConsole({
   const [internalEditDescription, setInternalEditDescription] = useState("");
   const [internalEditAutomationRoles, setInternalEditAutomationRoles] = useState<AgentAutomationRoles>(createEmptyAgentAutomationRoles());
   const [knowledgeUploading, setKnowledgeUploading] = useState(false);
-  const [channelOps, setChannelOps] = useState<WhatsappChannelOperationsState | null>(null);
-  const [channelAction, setChannelAction] = useState<string | null>(null);
-  const [statusText, setStatusText] = useState("");
-  const [statusMaxRecipients, setStatusMaxRecipients] = useState(defaultWhatsappBehaviorConfig.whatsappMaxStatusRecipients);
-  const [campaignTitle, setCampaignTitle] = useState("");
-  const [campaignNumbers, setCampaignNumbers] = useState("");
-  const [campaignText, setCampaignText] = useState("");
-  const [newsletterJid, setNewsletterJid] = useState("");
-  const [newsletterText, setNewsletterText] = useState("");
-  const [channelScheduledFor, setChannelScheduledFor] = useState("");
   const [activeTab, setActiveTab] = useState<WhatsappConsoleTab>(initialTab);
   const visibleWhatsappTabs = useMemo(
     () => whatsappConsoleTabs.filter((tab) => !variant.hiddenTabs?.includes(tab.id)),
@@ -883,9 +871,6 @@ export function WhatsAppConsole({
     setState(nextState);
     setSelectedCompanyId(nextCompanyId);
     setSelectedAgentId(nextAgentId);
-    if (!nextState.agent || !nextState.instance) {
-      setChannelOps(null);
-    }
 
     if (!options?.preserveDrafts) {
       const nextPrompt = nextState.agent?.prompt ?? "";
@@ -900,7 +885,6 @@ export function WhatsAppConsole({
       setCompanyLocationDrafts(toCompanyLocationDrafts(nextState.companyLocations ?? []));
       setCloneProfileDraft(normalizeWhatsappCloneProfile(nextState.agent?.cloneProfile));
       setChannelConfigDraft(normalizeAgentChannelConfig(nextState.agent?.channelConfig));
-      setStatusMaxRecipients(nextBehavior.whatsappMaxStatusRecipients);
       setQualificationDraft(normalizeLeadQualificationConfig(nextState.agent?.qualification));
     }
   }, []);
@@ -1059,61 +1043,6 @@ export function WhatsAppConsole({
       clearInterval(intervalId);
     };
   }, [applyWhatsappState, isConnected, running, selectedWhatsappEntityId, variant.endpoints.action, whatsappActionPayload]);
-
-  const loadChannelOperations = useCallback(async (options?: { silent?: boolean }) => {
-    if (!selectedCompanyId) {
-      setChannelOps(null);
-      return;
-    }
-
-    if (!options?.silent) {
-      setChannelAction("load_channels");
-    }
-
-    try {
-      const queryParams = new URLSearchParams({ [variant.entityIdKey]: selectedCompanyId });
-      if (!canManageInternalAgents && selectedAgentId) {
-        queryParams.set("agentId", selectedAgentId);
-      }
-      const query = `?${queryParams.toString()}`;
-      const response = await fetch(`${variant.endpoints.channels}${query}`, { cache: "no-store" });
-      const data = (await response.json().catch(() => null)) as ChannelActionResponse | null;
-
-      if (!response.ok || !data) {
-        throw new Error(data?.error ?? "Nao foi possivel carregar canais do WhatsApp.");
-      }
-
-      setChannelOps(data.operations ?? null);
-
-      if (!options?.silent && data.notice) {
-        setNotice(data.notice);
-      }
-    } catch (error) {
-      if (!options?.silent) {
-        setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao carregar canais do WhatsApp." });
-      }
-    } finally {
-      if (!options?.silent) {
-        setChannelAction(null);
-      }
-    }
-  }, [canManageInternalAgents, selectedAgentId, selectedCompanyId, variant]);
-
-  const channelAgentId = state?.agent?.id ?? "";
-  const channelInstanceId = state?.instance?.id ?? "";
-  const hasChannelContext = Boolean(selectedCompanyId && (!canManageInternalAgents ? selectedAgentId : true) && channelAgentId && channelInstanceId);
-
-  useEffect(() => {
-    if (!hasChannelContext) {
-      return;
-    }
-
-    const timeoutId = setTimeout(() => {
-      loadChannelOperations({ silent: true });
-    }, 0);
-
-    return () => clearTimeout(timeoutId);
-  }, [hasChannelContext, loadChannelOperations]);
 
   const selectedAgentNameNormalized = normalizeEditableAgentName(selectedAgentNameDraft);
   const canEditSelectedAgentName = !canManageInternalAgents && Boolean(state?.agent);
@@ -1492,53 +1421,6 @@ export function WhatsAppConsole({
     }
   }
 
-  async function runChannelAction(action: string, payload: Record<string, unknown> = {}) {
-    if (!selectedCompanyId) {
-      setNotice({ tone: "warning", message: `Escolha um ${variant.entitySingular} antes de usar os canais.` });
-      return null;
-    }
-
-    setChannelAction(action);
-    setNotice(null);
-
-    try {
-      const response = await fetch(variant.endpoints.channels, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action,
-          [variant.entityIdKey]: selectedCompanyId,
-          ...(!canManageInternalAgents && selectedAgentId ? { agentId: selectedAgentId } : {}),
-          ...payload,
-        }),
-      });
-      const data = (await response.json().catch(() => null)) as ChannelActionResponse | null;
-
-      if (!response.ok || !data) {
-        throw new Error(data?.error ?? "Nao foi possivel executar o recurso do WhatsApp.");
-      }
-
-      setChannelOps(data.operations ?? null);
-      setNotice(data.notice ?? { tone: "success", message: "Operacao do WhatsApp concluida." });
-
-      if (action === "send_status") {
-        setStatusText("");
-      } else if (action === "send_campaign") {
-        setCampaignText("");
-        setCampaignNumbers("");
-      } else if (action === "post_newsletter") {
-        setNewsletterText("");
-      }
-
-      return data;
-    } catch (error) {
-      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro inesperado no recurso do WhatsApp." });
-      return null;
-    } finally {
-      setChannelAction(null);
-    }
-  }
-
   async function saveAgentSettings() {
     if (agentNameInvalid) {
       setNotice({ tone: "warning", message: `Informe um nome de agente com 2 a ${agentNameMaxLength} caracteres.` });
@@ -1698,7 +1580,6 @@ export function WhatsAppConsole({
       applyWhatsappState(nextState);
       setQrCode(null);
       setPairCode(null);
-      setChannelOps(null);
       setNotice({ tone: "success", message: "Agente clonado sem copiar a instancia. Gere o QR Code quando quiser conectar o novo WhatsApp." });
     } catch (error) {
       setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao clonar agente." });
@@ -1739,7 +1620,6 @@ export function WhatsAppConsole({
       applyWhatsappState(nextState);
       setQrCode(null);
       setPairCode(null);
-      setChannelOps(null);
       setNotice({ tone: "success", message: `Agente "${agent.name}" excluido.` });
     } catch (error) {
       setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao excluir agente." });
@@ -1769,7 +1649,6 @@ export function WhatsAppConsole({
       applyWhatsappState(nextState);
       setQrCode(null);
       setPairCode(null);
-      setChannelOps(null);
       setShowInternalAgentEdit(false);
     } catch (error) {
       setNotice({ tone: "error", message: error instanceof Error ? error.message : "Nao foi possivel abrir este agente." });
@@ -1799,7 +1678,6 @@ export function WhatsAppConsole({
       applyWhatsappState(nextState);
       setQrCode(null);
       setPairCode(null);
-      setChannelOps(null);
       setShowInternalAgentEdit(false);
     } catch (error) {
       setNotice({ tone: "error", message: error instanceof Error ? error.message : `Nao foi possivel abrir este ${variant.entitySingular}.` });
@@ -1845,7 +1723,6 @@ export function WhatsAppConsole({
       setShowInternalAgentForm(false);
       setQrCode(null);
       setPairCode(null);
-      setChannelOps(null);
       setNotice(data.notice ?? { tone: "success", message: "Agente interno criado. Agora configure prompt, conexao e comportamento." });
     } catch (error) {
       setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao criar agente interno." });
@@ -1955,7 +1832,6 @@ export function WhatsAppConsole({
       setShowInternalAgentEdit(false);
       setQrCode(null);
       setPairCode(null);
-      setChannelOps(null);
       setNotice(data.notice ?? { tone: "success", message: "Agente interno arquivado." });
     } catch (error) {
       setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao arquivar agente interno." });
@@ -2622,94 +2498,6 @@ export function WhatsAppConsole({
       </div>
       ) : null}
 
-      {state?.agent && activeWhatsappTab === "multichannel" ? (
-      <div className="mt-5">
-        <Panel
-          title="Campanhas WhatsApp"
-          eyebrow="grupos / canais / status"
-          action={<NeonBadge tone={!isConnected || behaviorChanged || !channelOps ? "amber" : "green"}>{!isConnected ? "whatsapp offline" : behaviorChanged ? "permissoes pendentes" : channelOps ? "sincronizado" : "pendente"}</NeonBadge>}
-        >
-          <div className="mb-3 rounded-xl border p-3 sm:p-4" style={{ background: "var(--ch-surface-2)", borderColor: "var(--ch-border)" }}>
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-              <div className="min-w-0">
-                <p className="font-mono text-[9px] font-bold uppercase tracking-widest text-slate-500">Operacao de campanhas</p>
-                <p className="mt-1 text-[11px] leading-5 text-slate-300">
-                  Configure o que este agente pode fazer em grupos, status e canais.
-                </p>
-              </div>
-              <ActionButton
-                icon={Wand2}
-                label={behaviorChanged ? "Salvar regras" : "Regras salvas"}
-                description="Grava as regras de grupos, status, canais e campanhas deste agente."
-                disabled={!state?.capability.schemaReady || !behaviorChanged || promptTooLong || agentNameInvalid}
-                loading={running === "save_settings"}
-                onClick={saveAgentSettings}
-              />
-            </div>
-            <details className="mt-3 rounded-xl border" style={{ background: "var(--ch-surface)", borderColor: "var(--ch-border)" }} open={behaviorChanged || undefined}>
-              <summary className="cursor-pointer list-none px-3 py-3">
-                <span className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                  <span>
-                    <span className="block font-mono text-[9px] font-bold uppercase tracking-widest text-slate-500">Configuracoes avancadas</span>
-                    <span className="mt-1 block text-[11px] leading-5 text-slate-400">Regras de resposta, recursos liberados e limites de envio.</span>
-                  </span>
-                  <span className="mt-1 inline-flex w-fit rounded-md border border-white/10 px-2 py-1 font-mono text-[9px] uppercase tracking-widest text-slate-300 sm:mt-0">abrir / fechar</span>
-                </span>
-              </summary>
-              <div className="grid gap-3 border-t p-3" style={{ borderColor: "var(--ch-border)" }}>
-                <ModeSelector<WhatsappGroupReplyMode>
-                  value={behaviorDraft.groupReplyMode}
-                  options={[
-                    { value: "all", label: "Todas", description: "Responde tudo", help: "Quando Responder em grupos estiver ligado, qualquer mensagem do grupo pode acionar o agente." },
-                    { value: "mentions", label: "Mencoes", description: "So quando chamado", help: "O agente responde grupos apenas quando detectar mencao, nome do agente ou referencia direta." },
-                    { value: "admins", label: "Admins", description: "So administradores", help: "Responde so quando o webhook trouxer sinal de administrador no grupo." },
-                  ]}
-                  onChange={(value) => updateBehavior("groupReplyMode", value)}
-                />
-                <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-5">
-                  <ToggleTile icon={MessageCircle} label="Responder em grupos" description="Permite que o agente responda mensagens em grupos do WhatsApp. Desligado, grupos sao ignorados." checked={behaviorDraft.allowGroupChats} onChange={() => updateBehavior("allowGroupChats", !behaviorDraft.allowGroupChats)} />
-                  <ToggleTile icon={MessageCircle} label="Mencionar todos" description="Permite usar mencao geral em mensagens operacionais de grupo quando a Uazapi aceitar." checked={behaviorDraft.groupMentionAll} onChange={() => updateBehavior("groupMentionAll", !behaviorDraft.groupMentionAll)} />
-                  <ToggleTile icon={Globe2} label="Posts no status" description="Permite publicar stories/status pelo painel usando processamento Inngest." checked={behaviorDraft.statusBroadcasts} onChange={() => updateBehavior("statusBroadcasts", !behaviorDraft.statusBroadcasts)} />
-                  <ToggleTile icon={FileText} label="Posts em canais" description="Permite postar em canais/newsletters do WhatsApp pelo painel." checked={behaviorDraft.newsletterBroadcasts} onChange={() => updateBehavior("newsletterBroadcasts", !behaviorDraft.newsletterBroadcasts)} />
-                  <ToggleTile icon={Forward} label="Campanhas em lote" description="Permite criar disparos em lote via Uazapi Sender, sempre processados pelo Inngest." checked={behaviorDraft.campaignBroadcasts} onChange={() => updateBehavior("campaignBroadcasts", !behaviorDraft.campaignBroadcasts)} />
-                </div>
-                <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-                  <NumberField label="Max status" description="Limite maximo de contatos usados em cada publicacao de Status." value={behaviorDraft.whatsappMaxStatusRecipients} min={1} max={500} onChange={(value) => updateBehavior("whatsappMaxStatusRecipients", value)} />
-                  <NumberField label="Lote campanha" description="Quantidade maxima de numeros aceitos por campanha simples." value={behaviorDraft.whatsappCampaignBatchSize} min={1} max={500} onChange={(value) => updateBehavior("whatsappCampaignBatchSize", value)} />
-                  <NumberField label="Delay min" description="Intervalo minimo entre mensagens da campanha." value={behaviorDraft.whatsappCampaignDelayMinSeconds} min={5} max={600} onChange={(value) => updateBehavior("whatsappCampaignDelayMinSeconds", value)} />
-                  <NumberField label="Delay max" description="Intervalo maximo entre mensagens da campanha." value={behaviorDraft.whatsappCampaignDelayMaxSeconds} min={5} max={900} onChange={(value) => updateBehavior("whatsappCampaignDelayMaxSeconds", value)} />
-                </div>
-              </div>
-            </details>
-          </div>
-          <WhatsappChannelOperationsPanel
-            behavior={normalizeWhatsappBehaviorConfig(state.behavior)}
-            channelAction={channelAction}
-            channelOps={channelOps}
-            connected={isConnected}
-            campaignNumbers={campaignNumbers}
-            campaignText={campaignText}
-            campaignTitle={campaignTitle}
-            channelScheduledFor={channelScheduledFor}
-            newsletterJid={newsletterJid}
-            newsletterText={newsletterText}
-            salesCatalog={state.salesCatalog}
-            statusMaxRecipients={statusMaxRecipients}
-            statusText={statusText}
-            onCampaignNumbersChange={setCampaignNumbers}
-            onCampaignTextChange={setCampaignText}
-            onCampaignTitleChange={setCampaignTitle}
-            onChannelScheduledForChange={setChannelScheduledFor}
-            onNewsletterJidChange={setNewsletterJid}
-            onNewsletterTextChange={setNewsletterText}
-            onRefresh={() => loadChannelOperations()}
-            onRunAction={runChannelAction}
-            onStatusMaxRecipientsChange={setStatusMaxRecipients}
-            onStatusTextChange={setStatusText}
-          />
-        </Panel>
-      </div>
-      ) : null}
       </>
       )}
     </>
@@ -3185,7 +2973,6 @@ const whatsappConsoleTabs: Array<{
   { id: "files", label: "Conhecimento", description: "Arquivos e contexto", icon: FileText },
   { id: "qualification", label: "Qualificacao", description: "CRM e score", icon: CheckCircle2 },
   { id: "behavior", label: "Comportamento", description: "Modos e timers", icon: Shuffle },
-  { id: "multichannel", label: "Grupos e campanhas", description: "WhatsApp", icon: Megaphone },
   { id: "channels", label: "Redes sociais", description: "Instagram / Facebook", icon: Globe2, comingSoon: true },
 ];
 
@@ -3338,7 +3125,7 @@ function WhatsappConsoleTabs({
 }
 
 function getWhatsappTabActiveStyle(tab: WhatsappConsoleTab) {
-  if (tab === "connection" || tab === "multichannel") {
+  if (tab === "connection") {
     return {
       background: "linear-gradient(135deg, var(--ch-whatsapp-deep), var(--ch-whatsapp))",
       boxShadow: "0 14px 28px rgba(var(--ch-whatsapp-deep-rgb),0.18)",
@@ -6049,6 +5836,7 @@ function BehaviorSummary({
   );
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- Mantido temporariamente para migrar operacoes de campanha para Automacoes.
 function WhatsappChannelOperationsPanel({
   behavior,
   channelAction,

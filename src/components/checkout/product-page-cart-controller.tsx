@@ -30,7 +30,7 @@ export function ProductPageCartController({
   const [cart, setCart] = useState<PublicStorefrontCartLine[]>([]);
   const [cartOpen, setCartOpen] = useState(false);
   const [cartLoaded, setCartLoaded] = useState(false);
-  const [customerName, setCustomerName] = useState("");
+  const [customerName, setCustomerName] = useState(tracking.leadName ?? "");
   const [customerPhone, setCustomerPhone] = useState(tracking.leadPhone ?? "");
   const [customerEmail, setCustomerEmail] = useState("");
   const [busy, setBusy] = useState(false);
@@ -141,6 +141,7 @@ export function ProductPageCartController({
       customerName={customerName}
       customerPhone={customerPhone}
       error={error}
+      leadContactPrefilled={Boolean(tracking.leadName && tracking.leadPhone)}
       open={cartOpen}
       setCustomerEmail={setCustomerEmail}
       setCustomerName={setCustomerName}

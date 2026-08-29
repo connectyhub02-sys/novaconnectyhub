@@ -46,6 +46,7 @@ export type SalesCatalogImportPlatform =
   | "tray"
   | "anota_ai"
   | "ifood"
+  | "whatsapp_catalog"
   | "generic_menu"
   | "generic_sheet";
 export type SalesCatalogImportTargetMode = "connectyhub_checkout" | "external_site" | "review";
@@ -448,6 +449,169 @@ export async function createAndProcessSalesCatalogImport(input: {
   return getSalesCatalogImportJob({
     client: input.client,
     companyId: job.companyId,
+    jobId: job.id,
+  });
+}
+
+export async function createSalesCatalogImportReviewJob(input: {
+  client: SupabaseClient;
+  companyId: string;
+  userId: string;
+  sourceKind: SalesCatalogImportSourceKind;
+  sourcePlatform: SalesCatalogImportPlatform;
+  targetMode: SalesCatalogImportTargetMode;
+  defaultSalesDestination: SalesCatalogImportDestination;
+  drafts: SalesCatalogImportDraft[];
+  title?: string | null;
+  inputUrl?: string | null;
+  sourceSummary?: string | null;
+  settings?: JsonRecord | null;
+  assignedAgentIds?: string[] | null;
+  assignedWhatsappInstanceIds?: string[] | null;
+}) {
+  const drafts = input.drafts.slice(0, maxDraftItems);
+  if (drafts.length === 0) {
+    throw new Error("Nenhum produto foi encontrado para revisar.");
+  }
+
+  const now = new Date().toISOString();
+  const sourceKind = normalizeSourceKind(input.sourceKind);
+  const sourcePlatform = normalizeImportPlatform(input.sourcePlatform);
+  const targetMode = normalizeTargetMode(input.targetMode);
+  const defaultSalesDestination = normalizeSalesDestination(input.defaultSalesDestination, targetMode);
+  const title = normalizeOptionalText(input.title, 140) ?? createImportTitle(sourceKind);
+  const inputUrl = normalizeOptionalText(input.inputUrl, 1000);
+  const assignmentScope = normalizeImportAssignmentScope({
+    assignedAgentIds: input.assignedAgentIds,
+    assignedWhatsappInstanceIds: input.assignedWhatsappInstanceIds,
+  });
+  const draftReviews = await buildImportDraftReviews({
+    client: input.client,
+    companyId: input.companyId,
+    drafts,
+  });
+  const requiresCategoryReview = sourcePlatform === "whatsapp_catalog";
+  const missingCategoryCount = requiresCategoryReview
+    ? draftReviews.filter((review) => !normalizeOptionalText(review.draft.category, 80)).length
+    : 0;
+  const warningCount = draftReviews.reduce((total, review) => total + review.warnings.length, 0);
+  const duplicateCount = draftReviews.filter((review) => review.duplicateCandidates.length > 0).length;
+  const readyCount = draftReviews.filter((review) => (
+    review.warnings.length === 0
+    && (!requiresCategoryReview || Boolean(normalizeOptionalText(review.draft.category, 80)))
+  )).length;
+  const reviewRequired = warningCount > 0 || missingCategoryCount > 0;
+  const status: SalesCatalogImportJobStatus = reviewRequired ? "review_required" : "ready_to_publish";
+
+  const { data: job, error: jobError } = await input.client
+    .from("sales_catalog_import_jobs")
+    .insert({
+      organization_id: input.companyId,
+      created_by: input.userId,
+      source_kind: sourceKind,
+      target_mode: targetMode,
+      default_sales_destination: defaultSalesDestination,
+      status,
+      title,
+      input_url: inputUrl,
+      source_summary: normalizeOptionalText(input.sourceSummary, 500)
+        ?? `${drafts.length} produto(s) aguardando revisao antes de publicar.`,
+      settings: {
+        ...(readRecord(input.settings) ?? {}),
+        import_version: 1,
+        queued_processing: false,
+        source_platform: sourcePlatform,
+        assigned_agent_ids: assignmentScope.assignedAgentIds,
+        assigned_whatsapp_instance_ids: assignmentScope.assignedWhatsappInstanceIds,
+      },
+      stats: {
+        total_items: drafts.length,
+        ready_items: readyCount,
+        warning_count: warningCount,
+        missing_category_count: missingCategoryCount,
+        duplicate_count: duplicateCount,
+        ai_used: false,
+        source_platform: sourcePlatform,
+        destinations: countDraftDestinations(drafts),
+      },
+      processed_at: now,
+      created_at: now,
+      updated_at: now,
+    })
+    .select(importJobSelect)
+    .single<ImportJobRow>();
+
+  if (jobError || !job) {
+    throw new Error(jobError?.message ?? "Nao foi possivel criar a revisao da importacao.");
+  }
+
+  const itemPayload = draftReviews.map((review) => {
+    const missingCategory = requiresCategoryReview && !normalizeOptionalText(review.draft.category, 80);
+
+    return {
+      import_job_id: job.id,
+      organization_id: input.companyId,
+      status: review.warnings.length > 0 || missingCategory ? "draft" : "ready",
+      sales_destination: review.draft.salesDestination,
+      title: review.draft.title,
+      description: review.draft.description,
+      category: review.draft.category,
+      price: review.draft.price,
+      currency: review.draft.currency,
+      product_url: review.draft.productUrl,
+      image_url: review.draft.imageUrl,
+      attributes: serializeItemAttributes(review.draft.attributes),
+      skus: serializeSalesCatalogSkus(review.draft.skus),
+      inventory: serializeProductInventory(review.draft.inventory),
+      shipping: serializeProductShipping(review.draft.shipping),
+      fulfillment: serializeProductFulfillment(review.draft.fulfillment),
+      offer: serializeProductOffer(review.draft.offer),
+      confidence: review.draft.confidence,
+      warnings: review.warnings,
+      source_evidence: review.draft.sourceEvidence,
+      metadata: {
+        created_from: sourcePlatform === "whatsapp_catalog" ? "whatsapp_catalog_sync" : "sales_catalog_review_import",
+        import_version: 1,
+        import_external_image: review.draft.importExternalImage,
+        image_import_status: review.draft.imageUrl
+          ? review.draft.importExternalImage ? "pending" : "skipped"
+          : null,
+        image_import_error: null,
+        requires_category_review: requiresCategoryReview,
+        duplicate_candidates: serializeDuplicateCandidates(review.duplicateCandidates),
+        duplicate_action: review.duplicateCandidates.length > 0 ? "skip" : "create_new",
+        duplicate_target_item_id: review.duplicateCandidates[0]?.itemId ?? null,
+      },
+    };
+  });
+
+  const { error: itemError } = await input.client
+    .from("sales_catalog_import_items")
+    .insert(itemPayload);
+
+  if (itemError) {
+    await markImportFailed(input.client, job.id, input.companyId, itemError.message);
+    throw new Error(`Revisao criada, mas os itens nao foram salvos: ${itemError.message}`);
+  }
+
+  await input.client.from("sales_catalog_import_events").insert({
+    import_job_id: job.id,
+    organization_id: input.companyId,
+    level: reviewRequired ? "warning" : "info",
+    event_type: "sales_catalog_import.review_created",
+    title: "Produtos prontos para revisao",
+    summary: `${drafts.length} item(ns) encontrados; ${readyCount} pronto(s) para publicar.`,
+    payload: {
+      warning_count: warningCount,
+      missing_category_count: missingCategoryCount,
+      duplicate_count: duplicateCount,
+      source_platform: sourcePlatform,
+    },
+  });
+
+  return getSalesCatalogImportJob({
+    client: input.client,
+    companyId: input.companyId,
     jobId: job.id,
   });
 }
@@ -920,7 +1084,15 @@ export async function publishSalesCatalogImportJob(input: {
   itemIds?: string[] | null;
   patches?: SalesCatalogImportItemPatch[] | null;
 }) {
-  assertSalesCatalogAiImportEnabled();
+  const initialJob = await getSalesCatalogImportJob({
+    client: input.client,
+    companyId: input.companyId,
+    jobId: input.jobId,
+  });
+
+  if (initialJob.sourcePlatform !== "whatsapp_catalog") {
+    assertSalesCatalogAiImportEnabled();
+  }
 
   if (input.patches?.length) {
     await updateSalesCatalogImportItems({
@@ -931,11 +1103,13 @@ export async function publishSalesCatalogImportJob(input: {
     });
   }
 
-  const job = await getSalesCatalogImportJob({
-    client: input.client,
-    companyId: input.companyId,
-    jobId: input.jobId,
-  });
+  const job = input.patches?.length
+    ? await getSalesCatalogImportJob({
+        client: input.client,
+        companyId: input.companyId,
+        jobId: input.jobId,
+      })
+    : initialJob;
 
   if (isImportCancelledStatus(job.status, job.errorMessage)) {
     throw new Error("Esta importacao foi cancelada. Crie uma nova importacao para publicar produtos.");
@@ -952,6 +1126,13 @@ export async function publishSalesCatalogImportJob(input: {
   if (candidates.length === 0) {
     throw new Error("Nenhum item disponivel para publicar.");
   }
+
+  await assertImportPublishCategoryRules({
+    client: input.client,
+    companyId: input.companyId,
+    job,
+    candidates,
+  });
 
   const now = new Date().toISOString();
   await input.client
@@ -1103,6 +1284,62 @@ export async function publishSalesCatalogImportJob(input: {
     companyId: input.companyId,
     jobId: input.jobId,
   });
+}
+
+async function assertImportPublishCategoryRules(input: {
+  client: SupabaseClient;
+  companyId: string;
+  job: ClientSalesCatalogImportJob;
+  candidates: ClientSalesCatalogImportItem[];
+}) {
+  if (input.job.sourcePlatform !== "whatsapp_catalog") {
+    return;
+  }
+
+  const configuredCategories = await loadSalesCatalogConfiguredCategories(input);
+  if (configuredCategories.length === 0) {
+    throw new Error("Cadastre e salve categorias antes de publicar produtos vindos do catalogo WhatsApp.");
+  }
+
+  const categoryKeys = new Set(configuredCategories.map(normalizeImportPublishCategoryKey));
+  const missingOrInvalidItems = input.candidates.filter((item) => (
+    resolveImportDuplicateAction(item) !== "skip"
+    && !categoryKeys.has(normalizeImportPublishCategoryKey(item.category))
+  ));
+
+  if (missingOrInvalidItems.length > 0) {
+    throw new Error(`Escolha uma categoria cadastrada para ${missingOrInvalidItems.length} produto(s) do catalogo WhatsApp antes de publicar.`);
+  }
+}
+
+async function loadSalesCatalogConfiguredCategories(input: {
+  client: SupabaseClient;
+  companyId: string;
+}) {
+  const { data, error } = await input.client
+    .from("intelligence_memory")
+    .select("metadata")
+    .eq("scope", "organization")
+    .eq("organization_id", input.companyId)
+    .eq("memory_type", "sales_catalog_settings")
+    .maybeSingle<{ metadata: JsonRecord | null }>();
+
+  if (error) {
+    throw new Error(`Nao foi possivel carregar categorias configuradas: ${error.message}`);
+  }
+
+  return readStringList(readRecord(data?.metadata)?.categories)
+    .map((category) => normalizeOptionalText(category, 80))
+    .filter((category): category is string => Boolean(category));
+}
+
+function normalizeImportPublishCategoryKey(value: unknown) {
+  return (readString(value) ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
 }
 
 async function processSalesCatalogImportJob(input: {
@@ -1793,6 +2030,7 @@ function formatImportPlatformForPrompt(value: SalesCatalogImportPlatform) {
   if (value === "tray") return "Tray";
   if (value === "anota_ai") return "Anota Ai";
   if (value === "ifood") return "iFood";
+  if (value === "whatsapp_catalog") return "Catalogo WhatsApp";
   if (value === "generic_menu") return "Cardapio em PDF/foto";
   if (value === "generic_sheet") return "Planilha generica";
   return "Detectar automaticamente";
@@ -2107,6 +2345,8 @@ async function publishImportItemAsCatalogItem(input: {
     mode: itemFulfillment.mode,
   };
   const shipping = input.item.shipping;
+  const sourceMetadata = buildPublishedImportSourceMetadata(input.item, now);
+  const importedFromWhatsapp = sourceMetadata.source === "whatsapp_catalog";
   const content = buildSalesCatalogContent({
     title: input.item.title,
     description: input.item.description ?? buildFallbackDescription(input.item),
@@ -2132,7 +2372,7 @@ async function publishImportItemAsCatalogItem(input: {
     currency: input.item.currency,
     status: "active",
     tag,
-    highlight_label: "Importado por IA",
+    highlight_label: importedFromWhatsapp ? "Importado do WhatsApp" : "Importado por IA",
     attributes: serializeItemAttributes(input.item.attributes),
     inventory: serializeProductInventory(inventory),
     offer: serializeProductOffer(offer),
@@ -2155,6 +2395,7 @@ async function publishImportItemAsCatalogItem(input: {
     assigned_whatsapp_instance_ids: input.assignmentScope.assignedWhatsappInstanceIds,
     import_job_id: input.jobId,
     import_item_id: input.item.id,
+    ...sourceMetadata,
     readiness: getSalesCatalogReadiness({
       description: input.item.description ?? buildFallbackDescription(input.item),
       media,
@@ -2164,12 +2405,15 @@ async function publishImportItemAsCatalogItem(input: {
     duplicate_target_item_id: input.targetCatalogItemId ?? null,
     created_by: readString(existingMetadata.created_by) ?? input.userId,
     updated_by: input.userId,
-    updated_from: existingCatalogItem ? "sales_catalog_ai_import_duplicate_update" : "sales_catalog_ai_import",
+    updated_from: importedFromWhatsapp
+      ? existingCatalogItem ? "whatsapp_catalog_duplicate_update" : "whatsapp_catalog_sync"
+      : existingCatalogItem ? "sales_catalog_ai_import_duplicate_update" : "sales_catalog_ai_import",
   };
 
   const tags = mergeSalesCatalogItemTags(
     existingCatalogItem?.tags,
     input.item.salesDestination === "external_site",
+    importedFromWhatsapp,
   );
 
   const mutation = existingCatalogItem
@@ -2260,7 +2504,13 @@ async function publishImportItemAsCatalogItem(input: {
     summary: "Publicado no catalogo ConnectyHub.",
     confidence: input.item.confidence,
     visibility: "organization",
-    tags: ["sales_catalog", "sales_catalog_item", "ai_import", "whatsapp_agent", "lead_tracking"],
+    tags: [
+      "sales_catalog",
+      "sales_catalog_item",
+      importedFromWhatsapp ? "whatsapp_catalog_import" : "ai_import",
+      "whatsapp_agent",
+      "lead_tracking",
+    ],
     payload: {
       import_job_id: input.jobId,
       import_item_id: input.item.id,
@@ -2324,16 +2574,41 @@ async function markImportItemDuplicateSkipped(input: {
     .eq("organization_id", input.companyId);
 }
 
-function mergeSalesCatalogItemTags(existingTags: string[] | null | undefined, externalSite: boolean) {
+function mergeSalesCatalogItemTags(existingTags: string[] | null | undefined, externalSite: boolean, importedFromWhatsapp = false) {
   return Array.from(new Set([
     ...(Array.isArray(existingTags) ? existingTags.filter((tag): tag is string => typeof tag === "string" && Boolean(tag.trim())) : []),
     "sales_catalog_item",
     "sales_catalog",
-    "ai_import",
+    importedFromWhatsapp ? "whatsapp_catalog_import" : "ai_import",
     "whatsapp_agent",
     "lead_tracking",
     ...(externalSite ? ["external_site_product"] : []),
   ]));
+}
+
+function buildPublishedImportSourceMetadata(item: ClientSalesCatalogImportItem, now: string): JsonRecord {
+  const evidence = readRecord(item.sourceEvidence) ?? {};
+  const sourcePlatform = readString(evidence.source_platform) ?? readString(evidence.sourcePlatform);
+
+  if (sourcePlatform !== "whatsapp_catalog") {
+    return {};
+  }
+
+  return {
+    source: "whatsapp_catalog",
+    source_platform: "whatsapp_catalog",
+    whatsapp_catalog_id: readString(evidence.whatsapp_catalog_id) ?? readString(evidence.whatsappCatalogId),
+    whatsapp_catalog_jid: readString(evidence.whatsapp_catalog_jid) ?? readString(evidence.whatsappCatalogJid),
+    whatsapp_catalog_url: readString(evidence.whatsapp_catalog_url) ?? readString(evidence.whatsappCatalogUrl),
+    whatsapp_catalog_hidden: readBoolean(evidence.whatsapp_catalog_hidden ?? evidence.whatsappCatalogHidden) ?? false,
+    whatsapp_catalog_status: readString(evidence.whatsapp_catalog_status) ?? readString(evidence.whatsappCatalogStatus),
+    whatsapp_catalog_availability: readString(evidence.whatsapp_catalog_availability) ?? readString(evidence.whatsappCatalogAvailability),
+    whatsapp_catalog_retailer_id: readString(evidence.whatsapp_catalog_retailer_id) ?? readString(evidence.whatsappCatalogRetailerId),
+    source_whatsapp_instance_id: readString(evidence.source_whatsapp_instance_id) ?? readString(evidence.sourceWhatsappInstanceId),
+    source_agent_id: readString(evidence.source_agent_id) ?? readString(evidence.sourceAgentId),
+    whatsapp_catalog_payload: readRecord(evidence.whatsapp_catalog_payload) ?? readRecord(evidence.whatsappCatalogPayload),
+    whatsapp_catalog_imported_at: now,
+  };
 }
 
 function readSalesCatalogMediaList(value: unknown): SalesCatalogMedia[] {
@@ -3761,6 +4036,7 @@ function normalizeImportPlatform(value: unknown): SalesCatalogImportPlatform {
     || value === "tray"
     || value === "anota_ai"
     || value === "ifood"
+    || value === "whatsapp_catalog"
     || value === "generic_menu"
     || value === "generic_sheet"
   ) {

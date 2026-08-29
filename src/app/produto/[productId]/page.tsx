@@ -35,7 +35,7 @@ import {
   buildLeadAwareSalesCatalogStoreProductsUrl,
   buildLeadAwareSalesCatalogStoreUrl,
 } from "@/lib/sales-catalog/public-urls";
-import { loadStoreProducts, mapStorefrontProduct } from "@/lib/sales-catalog/public-storefront-loader";
+import { loadPublicStorefrontLeadContext, loadStoreProducts, mapStorefrontProduct } from "@/lib/sales-catalog/public-storefront-loader";
 import {
   isSalesCatalogDisplayableProduct,
   resolveSalesCatalogStorefrontFontFamily,
@@ -166,11 +166,21 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
     notFound();
   }
 
-  const leadId = readSearchString(query.lead_id);
-  const leadPhone = readSearchString(query.lead_phone);
-  const conversationId = readSearchString(query.conversation_id);
+  const requestedLeadId = readSearchString(query.lead_id);
+  const requestedLeadPhone = readSearchString(query.lead_phone);
+  const requestedConversationId = readSearchString(query.conversation_id);
   const trackingLinkId = readSearchString(query.tracking_link_id);
   const storeSlug = organization.slug ?? organization.id;
+  const leadContext = await loadPublicStorefrontLeadContext(client, {
+    organizationId: organization.id,
+    leadId: requestedLeadId,
+    leadPhone: requestedLeadPhone,
+    conversationId: requestedConversationId,
+  });
+  const leadId = leadContext.leadId ?? requestedLeadId;
+  const leadName = leadContext.leadName;
+  const leadPhone = leadContext.leadPhone ?? requestedLeadPhone;
+  const conversationId = leadContext.conversationId ?? requestedConversationId;
   const storefrontProductContext = {
     storeSlug,
     organizationId: organization.id,
@@ -495,6 +505,7 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
         tracking={{
           organizationId: organization.id,
           leadId,
+          leadName,
           leadPhone,
           conversationId,
           trackingLinkId,

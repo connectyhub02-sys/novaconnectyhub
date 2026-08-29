@@ -78,7 +78,7 @@ import { normalizeSalesCatalogCategoryIconMap } from "@/lib/sales-catalog/catego
 import { createSalesCatalogPixPaymentSession } from "@/lib/sales-catalog/payment-sessions";
 import { buildSalesCatalogProductUrl } from "@/lib/sales-catalog/public-urls";
 import { calculateSalesCatalogShippingQuotes, normalizeSalesCatalogCep } from "@/lib/sales-catalog/shipping-calculator";
-import { exportWhatsappCatalogProducts, importWhatsappCatalog, setWhatsappCatalogVisibility } from "@/lib/sales-catalog/whatsapp-sync";
+import { createWhatsappCatalogImportReview, exportWhatsappCatalogProducts, setWhatsappCatalogVisibility } from "@/lib/sales-catalog/whatsapp-sync";
 import {
   cleanupSalesCatalogMediaStorage,
   filterCleanedSalesCatalogMedia,
@@ -637,7 +637,7 @@ async function handleJsonPost(request: NextRequest, workspace: CurrentWorkspace)
     }
 
     if (action === "import_whatsapp_catalog") {
-      const result = await importWhatsappCatalog({
+      const result = await createWhatsappCatalogImportReview({
         userId: workspace.user.id,
         companyId,
         whatsappInstanceId: readFormString(body?.whatsappInstanceId),

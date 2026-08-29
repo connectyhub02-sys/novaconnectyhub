@@ -231,6 +231,19 @@ type SalesCatalogPaymentLinkResult = {
   pixQrCode: string | null;
   pixTicketUrl: string | null;
   gatewayUnavailable?: boolean;
+  paymentDeferred?: boolean;
+  paymentDeferredReason?: string | null;
+};
+
+type SalesCatalogPaymentSessionLinkRow = {
+  id: string;
+  order_id: string | null;
+  checkout_url: string | null;
+  pix_qr_code: string | null;
+  pix_ticket_url: string | null;
+  provider_status: string | null;
+  provider_status_detail: string | null;
+  metadata: JsonRecord | null;
 };
 type RuntimeSalesCatalogShippingQuote = {
   itemId: string;
@@ -640,6 +653,30 @@ export async function processWhatsappAgentRun(input: {
       });
 
       return await completeRun(client, run.id, "Lead pediu opt-out.", { sent: true, reason: "lead_opt_out" });
+    }
+
+    const existingCheckoutLink = await maybeSendExistingSalesCatalogCheckoutLink({
+      client,
+      context,
+      token,
+      phone,
+      latestInbound,
+      userText,
+    });
+
+    if (existingCheckoutLink) {
+      if (behavior.markAsRead) {
+        await markConversationRead(context.credentials, token, phone, context.providerChatId, context.providerMessageId);
+      }
+
+      await maybeSetInstanceAvailable(context, token, "after");
+
+      return await completeRun(client, run.id, preview(existingCheckoutLink.text, 500), {
+        sent: true,
+        reason: "sales_catalog_existing_checkout_link",
+        messages: 1,
+        mode: existingCheckoutLink.mode,
+      });
     }
 
     const humanRequestText = getLeadAuthoredHumanRequestText(latestInbound, userText);
@@ -6171,7 +6208,7 @@ function prepareSalesCatalogDeliveryText(input: {
   const intro = resolveSalesCatalogDeliveryIntro(input.text, input.hasOrderIntent);
   const itemLines = items.map((item) => `- ${formatSalesCatalogCustomerMention(item)}`);
   const closing = input.hasOrderIntent
-    ? "Vou deixar o checkout separado para você concluir com segurança."
+    ? ""
     : "Qual dessas opções faz mais sentido para você?";
 
   return [intro, itemLines.join("\n"), closing]
@@ -7201,10 +7238,6 @@ async function maybeCreateSalesCatalogPaymentLink(input: {
       actorId: null,
     });
 
-    if (result.paymentDeferred) {
-      return null;
-    }
-
     return {
       orderId: input.orderId,
       checkoutUrl: result.checkoutUrl,
@@ -7212,6 +7245,8 @@ async function maybeCreateSalesCatalogPaymentLink(input: {
       pixQrCode: result.pixQrCode,
       pixTicketUrl: result.pixTicketUrl,
       gatewayUnavailable: result.gatewayUnavailable === true,
+      paymentDeferred: result.paymentDeferred === true,
+      paymentDeferredReason: result.paymentDeferredReason ?? null,
     };
   } catch (error) {
     await input.client.from("intelligence_events").insert({
@@ -7236,6 +7271,154 @@ async function maybeCreateSalesCatalogPaymentLink(input: {
   }
 }
 
+async function maybeSendExistingSalesCatalogCheckoutLink(input: {
+  client: SupabaseClient;
+  context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
+  token: string;
+  phone: string;
+  latestInbound: ConversationMessageRow | null;
+  userText: string;
+}): Promise<OutboundMessage | null> {
+  const order = findRecentPendingSalesCatalogCheckoutOrder(input.context.salesCatalogOrders, input.latestInbound);
+
+  if (!order || !isSalesCatalogPaymentLinkFollowUp(input.userText, input.context.messages, input.latestInbound)) {
+    return null;
+  }
+
+  const paymentSessionId = order.latestPaymentSessionId;
+
+  if (!paymentSessionId) {
+    return null;
+  }
+
+  const { data, error } = await input.client
+    .from("sales_catalog_payment_sessions")
+    .select("id, order_id, checkout_url, pix_qr_code, pix_ticket_url, provider_status, provider_status_detail, metadata")
+    .eq("id", paymentSessionId)
+    .eq("organization_id", input.context.organization.id)
+    .maybeSingle<SalesCatalogPaymentSessionLinkRow>();
+
+  if (error || !data) {
+    return null;
+  }
+
+  const checkoutUrl = asString(data.checkout_url);
+
+  if (!checkoutUrl) {
+    return null;
+  }
+
+  const metadata = readRecord(data.metadata) ?? {};
+  const trackingUrl = asString(metadata.checkout_tracking_url) ?? asString(metadata.tracking_url);
+  const paymentDeferred = asString(data.provider_status)?.toLowerCase() === "payment_deferred"
+    || metadata.payment_deferred === true;
+
+  await assertRunStillTargetsLatestInbound(input.client, input.context, input.latestInbound);
+
+  return sendSalesCatalogPaymentLink({
+    client: input.client,
+    context: input.context,
+    token: input.token,
+    phone: input.phone,
+    payment: {
+      orderId: order.id,
+      checkoutUrl,
+      trackingUrl,
+      pixQrCode: asString(data.pix_qr_code),
+      pixTicketUrl: asString(data.pix_ticket_url),
+      paymentDeferred,
+      paymentDeferredReason: asString(data.provider_status_detail) ?? asString(metadata.payment_deferred_reason),
+    },
+  });
+}
+
+function findRecentPendingSalesCatalogCheckoutOrder(
+  orders: RuntimeSalesCatalogOrder[],
+  latestInbound: ConversationMessageRow | null,
+) {
+  if (!latestInbound) {
+    return null;
+  }
+
+  const latestInboundMs = Date.parse(latestInbound.occurred_at);
+
+  if (!Number.isFinite(latestInboundMs)) {
+    return null;
+  }
+
+  return orders.find((order) => {
+    if (!order.latestPaymentSessionId) return false;
+    if (order.paymentStatus === "confirmed" || order.paymentStatus === "refunded" || order.paymentStatus === "failed") return false;
+    if (order.status === "cancelled" || order.status === "delivered") return false;
+
+    const orderMs = Date.parse(order.updatedAt ?? order.createdAt ?? "");
+    return Number.isFinite(orderMs)
+      && orderMs <= latestInboundMs + 60_000
+      && latestInboundMs - orderMs <= salesCatalogCheckoutConfirmationWindowMs;
+  }) ?? null;
+}
+
+function isSalesCatalogPaymentLinkFollowUp(
+  userText: string,
+  messages: ConversationMessageRow[],
+  latestInbound: ConversationMessageRow | null,
+) {
+  const rawText = userText.trim();
+  const normalized = normalizeSearch(rawText);
+
+  if (!rawText) {
+    return false;
+  }
+
+  if (/^\?+$/.test(rawText.replace(/\s+/g, ""))) {
+    return hasRecentSalesCatalogCheckoutPromise(messages, latestInbound);
+  }
+
+  const mentionsCheckout = /\b(?:link|checkout|pagamento|pagar|pix|pedido|finalizar)\b/.test(normalized);
+  const asksForAction = /\b(?:cade|kd|manda|mandar|envia|enviar|gera|gerar|gerou|faz|fazer|pronto|concluir|finalizar)\b/.test(normalized);
+
+  return mentionsCheckout && asksForAction;
+}
+
+function hasRecentSalesCatalogCheckoutPromise(
+  messages: ConversationMessageRow[],
+  latestInbound: ConversationMessageRow | null,
+) {
+  if (!latestInbound) {
+    return false;
+  }
+
+  const latestInboundMs = Date.parse(latestInbound.occurred_at);
+
+  if (!Number.isFinite(latestInboundMs)) {
+    return false;
+  }
+
+  return messages.some((message) => {
+    if (message.direction !== "outbound" || !message.text_content?.trim()) {
+      return false;
+    }
+
+    const occurredAt = Date.parse(message.occurred_at);
+
+    if (!Number.isFinite(occurredAt)) {
+      return false;
+    }
+
+    if (occurredAt >= latestInboundMs || latestInboundMs - occurredAt > salesCatalogCheckoutConfirmationWindowMs) {
+      return false;
+    }
+
+    const normalized = normalizeSearch(message.text_content);
+    const promisedCheckout = normalized.includes("checkout")
+      || normalized.includes("link de pagamento")
+      || normalized.includes("finalizar pedido");
+
+    return promisedCheckout
+      && /\b(?:vou|deixei|gerei|gerar|acionar)\b/.test(normalized);
+  });
+}
+
 async function sendSalesCatalogPaymentLink(input: {
   client: SupabaseClient;
   context: NonNullable<Awaited<ReturnType<typeof loadRunContext>>>;
@@ -7243,7 +7426,9 @@ async function sendSalesCatalogPaymentLink(input: {
   phone: string;
   payment: SalesCatalogPaymentLinkResult;
 }): Promise<OutboundMessage> {
-  const text = "Perfeito, deixei um checkout seguro separado para concluir seu pedido.";
+  const text = input.payment.paymentDeferred
+    ? "Perfeito, deixei seu checkout seguro separado. Ele abre com o pedido e confirma entrega/frete antes do pagamento."
+    : "Perfeito, deixei um checkout seguro separado para concluir seu pedido.";
   let providerResponse: unknown;
   let messageText = text;
   let interactiveButton = false;
@@ -7267,7 +7452,9 @@ async function sendSalesCatalogPaymentLink(input: {
     interactiveButton = true;
   } catch (error) {
     const errorMessage = describeRuntimeError(error, "Falha desconhecida ao enviar botao de pagamento.");
-    messageText = `Gerei o checkout seguro para concluir seu pedido. Finalizar pedido: ${paymentUrl}`;
+    messageText = input.payment.paymentDeferred
+      ? `Gerei o checkout seguro para confirmar entrega/frete e concluir seu pedido. Finalizar pedido: ${paymentUrl}`
+      : `Gerei o checkout seguro para concluir seu pedido. Finalizar pedido: ${paymentUrl}`;
     const textProviderResponse = await sendWhatsappText({
       credentials: input.context.credentials,
       token: input.token,

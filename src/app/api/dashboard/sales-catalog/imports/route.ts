@@ -110,6 +110,12 @@ const importPlatformFileRules: Record<SalesCatalogImportPlatform, ImportPlatform
     fileTypeLabel: "cardapio, planilha, PDF ou foto",
     example: "planilha do cardapio, PDF do menu ou foto legivel.",
   },
+  whatsapp_catalog: {
+    defaultSourceKind: "mixed",
+    acceptedSourceKinds: ["mixed"],
+    fileTypeLabel: "sincronizacao nativa do WhatsApp",
+    example: "use o painel Sincronizar com WhatsApp; nao envie arquivo.",
+  },
   generic_menu: {
     defaultSourceKind: "mixed",
     acceptedSourceKinds: ["pdf", "image"],
@@ -504,6 +510,7 @@ function normalizeImportPlatform(value: unknown): SalesCatalogImportPlatform {
     || value === "tray"
     || value === "anota_ai"
     || value === "ifood"
+    || value === "whatsapp_catalog"
     || value === "generic_menu"
     || value === "generic_sheet"
   ) {
@@ -522,6 +529,7 @@ function formatImportPlatformForRoute(value: SalesCatalogImportPlatform) {
   if (value === "tray") return "Tray";
   if (value === "anota_ai") return "Anota Ai";
   if (value === "ifood") return "iFood / cardapio delivery";
+  if (value === "whatsapp_catalog") return "Catalogo WhatsApp";
   if (value === "generic_menu") return "PDF ou foto de cardapio";
   if (value === "generic_sheet") return "Planilha generica";
   return "Importacao automatica";
