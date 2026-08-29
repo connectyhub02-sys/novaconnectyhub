@@ -227,11 +227,12 @@ export function PublicStorefront({
     [sortMode, visibleProducts],
   );
   const hasHomeProductSelection = products.some((product) => product.isFeatured);
+  const isCategorySelected = category !== ALL_CATEGORY;
   const homeVisibleProducts = useMemo(() => {
-    if (normalizedSearch || !hasHomeProductSelection) return sortedVisibleProducts;
+    if (normalizedSearch || isCategorySelected || !hasHomeProductSelection) return sortedVisibleProducts;
 
     return sortedVisibleProducts.filter((product) => product.isFeatured);
-  }, [hasHomeProductSelection, normalizedSearch, sortedVisibleProducts]);
+  }, [hasHomeProductSelection, isCategorySelected, normalizedSearch, sortedVisibleProducts]);
 
   const featuredProducts = useMemo(() => {
     const categoryFeaturedProducts = sortedVisibleProducts.filter((product) => product.isFeatured);
@@ -265,12 +266,15 @@ export function PublicStorefront({
 
   const activeFeaturedIndex = featuredProducts.length > 0 ? featuredIndex % featuredProducts.length : 0;
   const featuredProduct = featuredProducts[activeFeaturedIndex] ?? null;
+  const selectedCategoryLabel = isCategorySelected
+    ? categories.find((item) => item.id === category)?.label ?? category
+    : null;
   const homeProductIds = new Set(homeVisibleProducts.map((product) => product.id));
-  const newArrivalProducts = homeVisibleProducts.slice(0, 4);
+  const newArrivalProducts = isCategorySelected ? homeVisibleProducts : homeVisibleProducts.slice(0, 4);
   const bestSellerProducts = (
-    category === ALL_CATEGORY && homeVisibleProducts.length <= 4
+    !isCategorySelected && homeVisibleProducts.length <= 4
       ? sortedVisibleProducts.filter((product) => !homeProductIds.has(product.id)).slice(0, 4)
-      : homeVisibleProducts.slice(4, 8)
+      : isCategorySelected ? [] : homeVisibleProducts.slice(4, 8)
   );
   const homeCategories = useMemo(() => {
     const availableCategories = categories.filter((item) => item.id !== ALL_CATEGORY);
@@ -435,8 +439,8 @@ export function PublicStorefront({
             {newArrivalProducts.length > 0 ? (
               <ProductShowcaseSection
                 products={newArrivalProducts}
-                title={normalizedSearch ? "Resultado da busca" : "Novidades"}
-                viewAllHref={shopPath}
+                title={normalizedSearch ? "Resultado da busca" : selectedCategoryLabel ?? "Novidades"}
+                viewAllHref={isCategorySelected ? undefined : shopPath}
               />
             ) : (
               <EmptyCatalog branding={branding} />
