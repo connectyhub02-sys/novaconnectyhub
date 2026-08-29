@@ -875,9 +875,11 @@ function ShopCatalog({
   onSelectCategory: (value: string) => void;
   onSortModeChange: (value: StoreSortMode) => void;
 }) {
+  const hasActiveFilters = category !== ALL_CATEGORY || searchTerm.trim().length > 0;
+
   return (
-    <section id="produtos" className="mx-auto grid w-full max-w-[1240px] gap-5 px-4 py-8 sm:px-6 lg:grid-cols-[295px_minmax(0,1fr)] lg:py-12">
-      <aside className="self-start rounded-[20px] border border-black/10 bg-white p-5 shadow-sm shadow-slate-950/5 lg:sticky lg:top-28">
+    <section id="produtos" className="mx-auto grid w-full max-w-[1240px] gap-4 px-4 py-4 sm:px-6 lg:grid-cols-[295px_minmax(0,1fr)] lg:gap-5 lg:py-12">
+      <aside className="hidden self-start rounded-[20px] border border-black/10 bg-white p-5 shadow-sm shadow-slate-950/5 lg:sticky lg:top-28 lg:block">
         <div className="flex items-center justify-between gap-3">
           <div>
             <p className="text-xs font-bold uppercase text-[color:var(--store-accent)]">Filtros</p>
@@ -908,39 +910,70 @@ function ShopCatalog({
       </aside>
 
       <div className="min-w-0">
-        <div className="rounded-[20px] border border-black/10 bg-white p-5 shadow-sm shadow-slate-950/5">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="rounded-2xl border border-black/10 bg-white px-3 py-3 shadow-sm shadow-slate-950/5 sm:p-5 lg:rounded-[20px]">
+          <div className="flex items-start justify-between gap-3 lg:items-end">
             <div className="min-w-0">
-              <p className="text-xs font-bold text-[color:var(--store-accent)]">{branding.displayName}</p>
-              <h1 className="mt-1 text-[28px] font-semibold leading-tight text-[color:var(--store-text)] sm:text-[34px]">
+              <p className="hidden text-xs font-bold text-[color:var(--store-accent)] lg:block">{branding.displayName}</p>
+              <h1 className="text-[22px] font-semibold leading-tight text-[color:var(--store-text)] sm:text-[30px] lg:mt-1 lg:text-[34px]">
                 Todos os produtos
               </h1>
-              <p className="mt-2 text-sm font-semibold text-[color:var(--store-text-muted)]">
+              <p className="mt-1 text-xs font-semibold text-[color:var(--store-text-muted)] sm:text-sm lg:mt-2">
                 {products.length} de {totalProducts} produto(s) em exibição.
               </p>
             </div>
-            <a
-              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-[8px] border px-4 text-xs font-bold uppercase transition hover:bg-[#f8f7f2]"
-              href={shopPath}
-              style={{ borderColor: "var(--store-button-border)", color: "var(--store-accent)" }}
-            >
-              Limpar filtros
-            </a>
+            {hasActiveFilters ? (
+              <>
+                <a
+                  className="hidden min-h-10 items-center justify-center gap-2 rounded-[8px] border px-4 text-xs font-bold uppercase transition hover:bg-[#f8f7f2] lg:inline-flex"
+                  href={shopPath}
+                  style={{ borderColor: "var(--store-button-border)", color: "var(--store-accent)" }}
+                >
+                  Limpar filtros
+                </a>
+                <a
+                  className="inline-flex min-h-8 shrink-0 items-center justify-center rounded-full border px-3 text-[11px] font-bold uppercase transition hover:bg-[#f8f7f2] lg:hidden"
+                  href={shopPath}
+                  style={{ borderColor: "var(--store-button-border)", color: "var(--store-accent)" }}
+                >
+                  Limpar
+                </a>
+              </>
+            ) : null}
           </div>
 
-          <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px]">
-            <label className="relative min-h-11 w-full">
-              <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#737a75]" aria-hidden="true" />
+          <div className="mt-3 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] lg:hidden [&::-webkit-scrollbar]:hidden">
+            {categories.map((item) => (
+              <button
+                className={cn(
+                  "inline-flex h-9 shrink-0 items-center gap-2 rounded-full border px-3 text-xs font-bold transition",
+                  category === item.id
+                    ? "border-[color:var(--store-button-border)] text-[color:var(--store-button-text)]"
+                    : "border-black/10 bg-white text-[color:var(--store-card-text)]",
+                )}
+                style={category === item.id ? { backgroundColor: "var(--store-button)" } : undefined}
+                key={item.id}
+                onClick={() => onSelectCategory(item.id)}
+                type="button"
+              >
+                <span>{item.id === ALL_CATEGORY ? "Todos" : item.label}</span>
+                <span className="text-[10px] opacity-70">{item.count}</span>
+              </button>
+            ))}
+          </div>
+
+          <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_180px] lg:mt-4 lg:gap-3 lg:grid-cols-[minmax(0,1fr)_220px]">
+            <label className="relative min-h-10 w-full lg:min-h-11">
+              <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#737a75] lg:left-4" aria-hidden="true" />
               <input
-                className="h-12 w-full rounded-full border-0 bg-[#f0f0f0] px-11 text-sm font-medium text-black outline-none transition placeholder:text-black/40 focus:ring-2 focus:ring-black/10"
+                className="h-10 w-full rounded-full border-0 bg-[#f0f0f0] px-10 text-[13px] font-medium text-black outline-none transition placeholder:text-black/40 focus:ring-2 focus:ring-black/10 lg:h-12 lg:px-11 lg:text-sm"
                 onChange={(event) => onSearchTermChange(event.target.value)}
-                placeholder="Buscar por produto, categoria ou preço..."
+                placeholder="Buscar produto..."
                 type="search"
                 value={searchTerm}
               />
             </label>
             <select
-              className="h-12 rounded-full border border-black/10 bg-white px-4 text-sm font-bold text-black outline-none focus:border-black/30 focus:ring-2 focus:ring-black/10"
+              className="h-10 rounded-full border border-black/10 bg-white px-3 text-[13px] font-bold text-black outline-none focus:border-black/30 focus:ring-2 focus:ring-black/10 lg:h-12 lg:px-4 lg:text-sm"
               onChange={(event) => onSortModeChange(event.target.value as StoreSortMode)}
               value={sortMode}
             >
@@ -953,7 +986,7 @@ function ShopCatalog({
         </div>
 
         {products.length > 0 ? (
-          <div className="mt-5 grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">
+          <div className="mt-3 grid grid-cols-2 gap-3 sm:mt-5 sm:gap-4 md:grid-cols-3 xl:grid-cols-4">
             {products.map((product) => (
               <ProductCard key={product.id} product={product} />
             ))}
