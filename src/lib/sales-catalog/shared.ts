@@ -26,6 +26,49 @@ export type SalesCatalogProductOriginType = "client" | "connectyhub" | "external
 export type SalesCatalogCommercialFlowType = "client_direct" | "connectyhub_resale" | "connectyhub_direct" | "external_marketplace";
 export type SalesCatalogRevenueOwnerType = "client" | "connectyhub" | "split" | "external_provider";
 export type SalesCatalogCommissionPolicyType = "none" | "percentage" | "fixed" | "custom";
+export type SalesCatalogStorefrontFontPreset =
+  | "system"
+  | "inter"
+  | "montserrat"
+  | "poppins"
+  | "manrope"
+  | "sora"
+  | "oswald"
+  | "bebas-neue"
+  | "playfair";
+
+export const salesCatalogStorefrontFontPresetOptions: Array<{
+  id: SalesCatalogStorefrontFontPreset;
+  label: string;
+  family: string;
+}> = [
+  { id: "system", label: "Padrao limpo", family: "var(--font-sans), ui-sans-serif, system-ui, sans-serif" },
+  { id: "inter", label: "Inter", family: "'Inter', var(--font-sans), ui-sans-serif, system-ui, sans-serif" },
+  { id: "montserrat", label: "Montserrat", family: "'Montserrat', var(--font-sans), ui-sans-serif, system-ui, sans-serif" },
+  { id: "poppins", label: "Poppins", family: "'Poppins', var(--font-sans), ui-sans-serif, system-ui, sans-serif" },
+  { id: "manrope", label: "Manrope", family: "'Manrope', var(--font-sans), ui-sans-serif, system-ui, sans-serif" },
+  { id: "sora", label: "Sora", family: "'Sora', var(--font-sans), ui-sans-serif, system-ui, sans-serif" },
+  { id: "oswald", label: "Oswald", family: "'Oswald', var(--font-sans), ui-sans-serif, system-ui, sans-serif" },
+  { id: "bebas-neue", label: "Bebas Neue", family: "'Bebas Neue', var(--font-sans), ui-sans-serif, system-ui, sans-serif" },
+  { id: "playfair", label: "Playfair Display", family: "'Playfair Display', ui-serif, Georgia, serif" },
+];
+
+const salesCatalogStorefrontFontPresetIds = new Set<SalesCatalogStorefrontFontPreset>(
+  salesCatalogStorefrontFontPresetOptions.map((option) => option.id),
+);
+
+export function normalizeSalesCatalogStorefrontFontPreset(value: unknown): SalesCatalogStorefrontFontPreset | null {
+  if (typeof value !== "string") return null;
+
+  const normalized = value.trim().toLowerCase() as SalesCatalogStorefrontFontPreset;
+  return salesCatalogStorefrontFontPresetIds.has(normalized) ? normalized : null;
+}
+
+export function resolveSalesCatalogStorefrontFontFamily(value: unknown) {
+  const preset = normalizeSalesCatalogStorefrontFontPreset(value) ?? "system";
+  return salesCatalogStorefrontFontPresetOptions.find((option) => option.id === preset)?.family
+    ?? salesCatalogStorefrontFontPresetOptions[0]!.family;
+}
 
 export type SalesCatalogAttribute = {
   id: string;
@@ -617,8 +660,12 @@ export type SalesCatalogStorefrontSettings = {
   buttonTextColor: string | null;
   cardTextColor: string | null;
   offerTextColor: string | null;
+  heroTitleColor: string | null;
+  heroHighlightColor: string | null;
   categoryStripColor: string | null;
   categoryIconColor: string | null;
+  bodyFont: SalesCatalogStorefrontFontPreset | null;
+  headingFont: SalesCatalogStorefrontFontPreset | null;
   homeCategoryNames: string[];
   categoryIcons: Record<string, SalesCatalogCategoryIconId>;
 };

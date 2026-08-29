@@ -29,6 +29,10 @@ import {
   type SalesCatalogCategoryIconId,
 } from "@/lib/sales-catalog/category-icons";
 import { SalesCatalogCategoryIconGlyph } from "@/components/sales-catalog/category-icon-glyph";
+import {
+  resolveSalesCatalogStorefrontFontFamily,
+  type SalesCatalogStorefrontFontPreset,
+} from "@/lib/sales-catalog/shared";
 
 export type PublicStorefrontBranding = {
   displayName: string;
@@ -51,8 +55,12 @@ export type PublicStorefrontSettings = {
   buttonTextColor: string | null;
   cardTextColor: string | null;
   offerTextColor: string | null;
+  heroTitleColor: string | null;
+  heroHighlightColor: string | null;
   categoryStripColor: string | null;
   categoryIconColor: string | null;
+  bodyFont: SalesCatalogStorefrontFontPreset | null;
+  headingFont: SalesCatalogStorefrontFontPreset | null;
   homeCategoryNames: string[];
   categoryIcons: Record<string, SalesCatalogCategoryIconId>;
 };
@@ -285,9 +293,15 @@ export function PublicStorefront({
   const buttonTextColor = normalizeStorefrontTextColor(storefront.buttonTextColor) ?? getReadableTextColor(buttonColor);
   const cardTextColor = normalizeStorefrontTextColor(storefront.cardTextColor) ?? textColor;
   const offerTextColor = normalizeStorefrontTextColor(storefront.offerTextColor) ?? getReadableTextColor(primaryColor);
+  const heroTitleColor = normalizeStorefrontTextColor(storefront.heroTitleColor) ?? textColor;
+  const heroHighlightColor = normalizeStorefrontTextColor(storefront.heroHighlightColor) ?? heroTitleColor;
   const categoryStripColor = normalizeStorefrontPrimaryColor(storefront.categoryStripColor) ?? primaryColor;
   const categoryIconColor = normalizeStorefrontTextColor(storefront.categoryIconColor) ?? getReadableTextColor(categoryStripColor);
   const categoryTextColor = getReadableTextColor(categoryStripColor);
+  const bodyFontFamily = resolveSalesCatalogStorefrontFontFamily(storefront.bodyFont);
+  const headingFontFamily = storefront.headingFont
+    ? resolveSalesCatalogStorefrontFontFamily(storefront.headingFont)
+    : bodyFontFamily;
   const publicLayoutStyle = {
     "--store-primary": primaryColor,
     "--store-action": storefrontActionColor,
@@ -300,16 +314,22 @@ export function PublicStorefront({
     "--store-card-text": cardTextColor,
     "--store-card-text-muted": `color-mix(in srgb, ${cardTextColor} 72%, white 28%)`,
     "--store-offer-text": offerTextColor,
+    "--store-hero-title": heroTitleColor,
+    "--store-hero-highlight": heroHighlightColor,
     "--store-offer-text-muted": `color-mix(in srgb, ${offerTextColor} 76%, transparent 24%)`,
     "--store-category-bg": categoryStripColor,
     "--store-category-icon": categoryIconColor,
     "--store-category-text": categoryTextColor,
     "--store-category-text-muted": `color-mix(in srgb, ${categoryTextColor} 78%, transparent 22%)`,
+    "--store-font-body": bodyFontFamily,
+    "--store-font-heading": headingFontFamily,
     "--store-primary-border": getReadableBorderColor(primaryColor),
   } as CSSProperties;
-  const customHeroTitle = storefront.heroTitle?.trim() || "";
+  const heroTitleLines = splitStorefrontHeroTitle(storefront.heroTitle);
+  const customHeroTitle = heroTitleLines[0] ?? "";
+  const customHeroHighlight = storefront.heroHighlight?.trim() || heroTitleLines.slice(1).join(" ");
   const heroTitle = customHeroTitle || "Encontre produtos";
-  const heroHighlight = customHeroTitle ? (storefront.heroHighlight?.trim() || "") : (storefront.heroHighlight || "que combinam com seu objetivo");
+  const heroHighlight = customHeroTitle ? customHeroHighlight : (storefront.heroHighlight || "que combinam com seu objetivo");
   const heroSubtitle = storefront.heroSubtitle
     || `Produtos selecionados pela ${branding.displayName}, atendimento pelo WhatsApp e checkout seguro pela ConnectyHub.`;
   const footerText = storefront.footerText
@@ -380,7 +400,7 @@ export function PublicStorefront({
   }
 
   return (
-    <main className="min-h-screen bg-white pb-20 text-[color:var(--store-text)] lg:pb-0" style={publicLayoutStyle}>
+    <main className="storefront-public min-h-screen bg-white pb-20 text-[color:var(--store-text)] lg:pb-0" style={publicLayoutStyle}>
       <StoreAnnouncement branding={branding} />
       <StoreNavbar
         branding={branding}
@@ -665,8 +685,8 @@ function StorefrontHero({
       <div className="mx-auto grid w-full max-w-[1240px] grid-cols-1 md:grid-cols-2">
         <section className="px-4 pb-8 pt-10 md:pb-0 md:pt-24">
           <h1 className="mb-5 max-w-[580px] text-[30px] font-semibold leading-[34px] text-[color:var(--store-text)] md:mb-8 md:text-[42px] md:leading-[46px] xl:text-[46px] xl:leading-[50px]">
-            {heroTitle}
-            {heroHighlight ? <span className="block">{heroHighlight}</span> : null}
+            <span className="block text-[color:var(--store-hero-title)]">{heroTitle}</span>
+            {heroHighlight ? <span className="block text-[color:var(--store-hero-highlight)]">{heroHighlight}</span> : null}
           </h1>
           <p className="mb-6 max-w-[545px] text-sm leading-6 text-[color:var(--store-text-muted)] lg:mb-8 lg:text-base">
             {heroSubtitle}
@@ -1600,6 +1620,13 @@ function normalizeSearchTerm(value: string) {
 
 function normalizeCategorySelectionKey(value: string) {
   return normalizeSearchTerm(value).replace(/\s+/g, " ");
+}
+
+function splitStorefrontHeroTitle(value: string | null) {
+  return (value ?? "")
+    .split(/\r?\n/)
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
 }
 
 function normalizeStorefrontPrimaryColor(value: string | null) {

@@ -20,6 +20,7 @@ import { getOrganizationSalesCatalogSettings, mapSalesCatalogItem } from "@/lib/
 import { loadMercadoPagoPlatformBillingConfig } from "@/lib/sales-catalog/mercado-pago";
 import {
   formatSalesCatalogPaymentSessionStatus,
+  resolveSalesCatalogStorefrontFontFamily,
   type SalesCatalogCommercialFlowType,
   type SalesCatalogRevenueOwnerType,
   type SalesCatalogStorefrontSettings,
@@ -158,6 +159,8 @@ type PublicPageStorefrontSettings = {
   buttonTextColor: string;
   cardTextColor: string;
   offerTextColor: string;
+  bodyFontFamily: string;
+  headingFontFamily: string;
 };
 
 export default async function CheckoutPage({
@@ -219,6 +222,8 @@ export default async function CheckoutPage({
     "--store-card-text": storefront.cardTextColor,
     "--store-card-text-muted": `color-mix(in srgb, ${storefront.cardTextColor} 72%, white 28%)`,
     "--store-offer-text": storefront.offerTextColor,
+    "--store-font-body": storefront.bodyFontFamily,
+    "--store-font-heading": storefront.headingFontFamily,
     "--store-primary-border": getReadableBorderColor(primaryColor),
   } as CSSProperties;
   const whatsappReturn = buildCheckoutWhatsappReturn({
@@ -448,7 +453,7 @@ function CheckoutShell({
   style?: CSSProperties;
 }) {
   return (
-    <div className="min-h-screen bg-white text-[color:var(--store-text,#0f172a)]" style={style}>
+    <div className="storefront-public min-h-screen bg-white text-[color:var(--store-text,#0f172a)]" style={style}>
       {publicTrackingContext ? (
         <script
           id="connecty-public-tracking-context"
@@ -1153,6 +1158,7 @@ function resolvePublicPageStorefront(
   const textColor = normalizeStorefrontTextColor(settings?.textColor) ?? "#111111";
   const buttonColor = normalizeStorefrontTextColor(settings?.buttonColor) ?? primaryColor;
   const cardTextColor = normalizeStorefrontTextColor(settings?.cardTextColor) ?? textColor;
+  const bodyFontFamily = resolveSalesCatalogStorefrontFontFamily(settings?.bodyFont);
 
   return {
     heroTitle,
@@ -1171,6 +1177,10 @@ function resolvePublicPageStorefront(
     buttonTextColor: normalizeStorefrontTextColor(settings?.buttonTextColor) ?? getReadableTextColor(buttonColor),
     cardTextColor,
     offerTextColor: normalizeStorefrontTextColor(settings?.offerTextColor) ?? getReadableTextColor(primaryColor),
+    bodyFontFamily,
+    headingFontFamily: settings?.headingFont
+      ? resolveSalesCatalogStorefrontFontFamily(settings.headingFont)
+      : bodyFontFamily,
   };
 }
 

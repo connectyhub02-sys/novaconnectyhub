@@ -34,7 +34,12 @@ import {
   buildLeadAwareSalesCatalogStoreProductsUrl,
   buildLeadAwareSalesCatalogStoreUrl,
 } from "@/lib/sales-catalog/public-urls";
-import { isSalesCatalogDisplayableProduct, type ClientSalesCatalogItem, type SalesCatalogStorefrontSettings } from "@/lib/sales-catalog/shared";
+import {
+  isSalesCatalogDisplayableProduct,
+  resolveSalesCatalogStorefrontFontFamily,
+  type ClientSalesCatalogItem,
+  type SalesCatalogStorefrontSettings,
+} from "@/lib/sales-catalog/shared";
 import { createServiceClient } from "@/lib/supabase/service";
 import { createOrganizationTrackingToken } from "@/lib/tracking/organization-attribution";
 import type { ConnectyPublicTrackingContext } from "@/lib/tracking/public-context";
@@ -100,6 +105,8 @@ type PublicPageStorefrontSettings = {
   buttonTextColor: string;
   cardTextColor: string;
   offerTextColor: string;
+  bodyFontFamily: string;
+  headingFontFamily: string;
 };
 
 type ProductWhatsappReturn = {
@@ -201,6 +208,8 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
     "--store-card-text": storefront.cardTextColor,
     "--store-card-text-muted": `color-mix(in srgb, ${storefront.cardTextColor} 72%, white 28%)`,
     "--store-offer-text": storefront.offerTextColor,
+    "--store-font-body": storefront.bodyFontFamily,
+    "--store-font-heading": storefront.headingFontFamily,
     "--store-primary-border": getReadableBorderColor(primaryColor),
   } as CSSProperties;
   const storeSlug = organization.slug ?? organization.id;
@@ -244,7 +253,7 @@ export default async function ProductPage({ params, searchParams }: ProductPageP
   const application = findAttributeValue(item, "aplicacao") ?? formatFulfillment(item.fulfillment.mode);
 
   return (
-    <main className="min-h-screen bg-white pb-28 text-[color:var(--store-text)] sm:pb-0" style={publicLayoutStyle}>
+    <main className="storefront-public min-h-screen bg-white pb-28 text-[color:var(--store-text)] sm:pb-0" style={publicLayoutStyle}>
       <script
         id="connecty-public-tracking-context"
         dangerouslySetInnerHTML={{
@@ -1015,6 +1024,7 @@ function resolvePublicPageStorefront(
   const textColor = normalizeStorefrontTextColor(settings?.textColor) ?? "#111111";
   const buttonColor = normalizeStorefrontTextColor(settings?.buttonColor) ?? primaryColor;
   const cardTextColor = normalizeStorefrontTextColor(settings?.cardTextColor) ?? textColor;
+  const bodyFontFamily = resolveSalesCatalogStorefrontFontFamily(settings?.bodyFont);
 
   return {
     heroTitle,
@@ -1033,6 +1043,10 @@ function resolvePublicPageStorefront(
     buttonTextColor: normalizeStorefrontTextColor(settings?.buttonTextColor) ?? getReadableTextColor(buttonColor),
     cardTextColor,
     offerTextColor: normalizeStorefrontTextColor(settings?.offerTextColor) ?? getReadableTextColor(primaryColor),
+    bodyFontFamily,
+    headingFontFamily: settings?.headingFont
+      ? resolveSalesCatalogStorefrontFontFamily(settings.headingFont)
+      : bodyFontFamily,
   };
 }
 

@@ -7,7 +7,11 @@ import type {
 import { getOrganizationSalesCatalogSettings, mapSalesCatalogItem } from "@/lib/client-os/sales-catalog";
 import { normalizeCurrencyAmount } from "@/lib/sales-catalog/mercado-pago";
 import { buildLeadAwareSalesCatalogStoreProductUrl } from "@/lib/sales-catalog/public-urls";
-import { isSalesCatalogDisplayableProduct, type ClientSalesCatalogItem } from "@/lib/sales-catalog/shared";
+import {
+  isSalesCatalogDisplayableProduct,
+  normalizeSalesCatalogStorefrontFontPreset,
+  type ClientSalesCatalogItem,
+} from "@/lib/sales-catalog/shared";
 import { createServiceClient } from "@/lib/supabase/service";
 import { createOrganizationTrackingToken } from "@/lib/tracking/organization-attribution";
 import type { ConnectyPublicTrackingContext } from "@/lib/tracking/public-context";
@@ -147,8 +151,12 @@ export function resolvePublicStorefrontSettings(settings: PublicStorefrontSettin
     buttonTextColor: readString(settings?.buttonTextColor),
     cardTextColor: readString(settings?.cardTextColor),
     offerTextColor: readString(settings?.offerTextColor),
+    heroTitleColor: readString(settings?.heroTitleColor),
+    heroHighlightColor: readString(settings?.heroHighlightColor),
     categoryStripColor: readString(settings?.categoryStripColor),
     categoryIconColor: readString(settings?.categoryIconColor),
+    bodyFont: normalizeSalesCatalogStorefrontFontPreset(settings?.bodyFont),
+    headingFont: normalizeSalesCatalogStorefrontFontPreset(settings?.headingFont),
     homeCategoryNames: Array.isArray(settings?.homeCategoryNames) ? settings.homeCategoryNames : [],
     categoryIcons: settings?.categoryIcons ?? {},
   };

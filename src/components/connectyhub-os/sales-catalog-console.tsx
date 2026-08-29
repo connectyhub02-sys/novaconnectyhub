@@ -53,9 +53,12 @@ import {
   formatSalesCatalogSalesDestination,
   formatSalesCatalogStockStatus,
   formatSalesCatalogWeight,
+  normalizeSalesCatalogStorefrontFontPreset,
+  resolveSalesCatalogStorefrontFontFamily,
   resolveSalesCatalogCheckoutStatus,
   salesCatalogLeadDataFields,
   salesCatalogBusinessTemplates,
+  salesCatalogStorefrontFontPresetOptions,
   type ClientSalesCatalogItem,
   type ClientSalesCatalogOrder,
   type ClientSalesCatalogPaymentIntegration,
@@ -90,6 +93,7 @@ import {
   type SalesCatalogShippingService,
   type SalesCatalogShippingWeightTier,
   type SalesCatalogStockStatus,
+  type SalesCatalogStorefrontFontPreset,
   type SalesCatalogStorefrontSettings,
   type SalesCatalogWhatsAppMessageTemplates,
 } from "@/lib/sales-catalog/shared";
@@ -783,10 +787,12 @@ export function SalesCatalogConsole({
   const selectedStoreSlug = selectedCompany?.slug ?? selectedCompany?.id ?? "";
   const selectedStorePath = selectedStoreSlug ? `/loja/${encodeURIComponent(selectedStoreSlug)}` : "";
   const storefrontDisplayName = settingsDraft.storefront.publicDisplayName?.trim() || selectedCompany?.name || "sua loja";
-  const customStorefrontHeroTitle = settingsDraft.storefront.heroTitle?.trim() || settingsDraft.storefront.headerText?.trim() || "";
+  const storefrontHeroTitleLines = splitStorefrontHeroTitle(settingsDraft.storefront.heroTitle || settingsDraft.storefront.headerText);
+  const customStorefrontHeroTitle = storefrontHeroTitleLines[0] ?? "";
+  const customStorefrontHeroHighlight = settingsDraft.storefront.heroHighlight?.trim() || storefrontHeroTitleLines.slice(1).join(" ");
   const storefrontHeroTitle = customStorefrontHeroTitle || "Produtos favoritos,";
   const storefrontHeroHighlight = customStorefrontHeroTitle
-    ? (settingsDraft.storefront.heroHighlight?.trim() || "")
+    ? customStorefrontHeroHighlight
     : (settingsDraft.storefront.heroHighlight?.trim() || `da ${storefrontDisplayName} até você.`);
   const storefrontHeroSubtitle = settingsDraft.storefront.heroSubtitle?.trim()
     || `Produtos selecionados pela ${storefrontDisplayName}, compra segura e atendimento conectado ao WhatsApp.`;
@@ -802,9 +808,15 @@ export function SalesCatalogConsole({
   const storefrontButtonTextColor = normalizeStorefrontTextPreviewColor(settingsDraft.storefront.buttonTextColor) ?? getPreviewReadableTextColor(storefrontButtonColor);
   const storefrontCardTextColor = normalizeStorefrontTextPreviewColor(settingsDraft.storefront.cardTextColor) ?? storefrontTextColor;
   const storefrontOfferTextColor = normalizeStorefrontTextPreviewColor(settingsDraft.storefront.offerTextColor) ?? getPreviewReadableTextColor(storefrontPrimaryColor);
+  const storefrontHeroTitleColor = normalizeStorefrontTextPreviewColor(settingsDraft.storefront.heroTitleColor) ?? storefrontTextColor;
+  const storefrontHeroHighlightColor = normalizeStorefrontTextPreviewColor(settingsDraft.storefront.heroHighlightColor) ?? storefrontHeroTitleColor;
   const storefrontCategoryStripColor = normalizeStorefrontPreviewColor(settingsDraft.storefront.categoryStripColor) ?? storefrontPrimaryColor;
   const storefrontCategoryIconColor = normalizeStorefrontTextPreviewColor(settingsDraft.storefront.categoryIconColor) ?? getPreviewReadableTextColor(storefrontCategoryStripColor);
   const storefrontCategoryTextColor = getPreviewReadableTextColor(storefrontCategoryStripColor);
+  const storefrontBodyFontFamily = resolveSalesCatalogStorefrontFontFamily(settingsDraft.storefront.bodyFont);
+  const storefrontHeadingFontFamily = settingsDraft.storefront.headingFont
+    ? resolveSalesCatalogStorefrontFontFamily(settingsDraft.storefront.headingFont)
+    : storefrontBodyFontFamily;
   const storefrontHomeCategoryKeys = useMemo(
     () => new Set(settingsDraft.storefront.homeCategoryNames.map(normalizeHomeCategoryKey)),
     [settingsDraft.storefront.homeCategoryNames],
@@ -1307,8 +1319,12 @@ export function SalesCatalogConsole({
             buttonTextColor: settingsDraft.storefront.buttonTextColor,
             cardTextColor: settingsDraft.storefront.cardTextColor,
             offerTextColor: settingsDraft.storefront.offerTextColor,
+            heroTitleColor: settingsDraft.storefront.heroTitleColor,
+            heroHighlightColor: settingsDraft.storefront.heroHighlightColor,
             categoryStripColor: settingsDraft.storefront.categoryStripColor,
             categoryIconColor: settingsDraft.storefront.categoryIconColor,
+            bodyFont: settingsDraft.storefront.bodyFont,
+            headingFont: settingsDraft.storefront.headingFont,
             homeCategoryNames,
             categoryIcons,
           },
@@ -3166,16 +3182,27 @@ export function SalesCatalogConsole({
               </label>
 
               <label className="block">
-                <FieldLabel>Título do topo</FieldLabel>
-                <textarea
+                <FieldLabel>Primeira linha do topo</FieldLabel>
+                <input
                   id="sales-catalog-storefront-header-text"
                   value={settingsDraft.storefront.heroTitle ?? ""}
                   onChange={(event) => {
                     const value = event.target.value.slice(0, 120);
                     updateStorefrontSettings({ heroTitle: value, headerText: value });
                   }}
-                  className="min-h-20 w-full resize-y rounded-lg border bg-transparent px-3 py-2 text-[12px] leading-5 outline-none"
-                  placeholder="Ex.: Produtos prontos para comprar"
+                  className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                  placeholder="Ex.: Qualidade premium"
+                  style={{ borderColor: "var(--ch-border)" }}
+                />
+              </label>
+
+              <label className="block">
+                <FieldLabel>Segunda linha do topo</FieldLabel>
+                <input
+                  value={settingsDraft.storefront.heroHighlight ?? ""}
+                  onChange={(event) => updateStorefrontSettings({ heroHighlight: event.target.value.slice(0, 90) })}
+                  className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] outline-none"
+                  placeholder="Ex.: Para fisiculturistas e performance atletica"
                   style={{ borderColor: "var(--ch-border)" }}
                 />
               </label>
@@ -3217,6 +3244,16 @@ export function SalesCatalogConsole({
                 <p className="mb-1 text-[12px] font-semibold text-slate-700">Tema visual</p>
                 <p className="mb-3 text-[11px] leading-4 text-slate-500">Poucos controles, layout fixo e resultado aplicado na loja toda.</p>
                 <div className="grid gap-3 sm:grid-cols-2">
+                  <ThemeFontSelect
+                    label="Fonte da loja"
+                    value={settingsDraft.storefront.bodyFont}
+                    onChange={(bodyFont) => updateStorefrontSettings({ bodyFont })}
+                  />
+                  <ThemeFontSelect
+                    label="Fonte dos titulos"
+                    value={settingsDraft.storefront.headingFont}
+                    onChange={(headingFont) => updateStorefrontSettings({ headingFont })}
+                  />
                   <ThemeColorField
                     label="Cor principal"
                     value={settingsDraft.storefront.primaryColor}
@@ -3237,6 +3274,20 @@ export function SalesCatalogConsole({
                     previewValue={storefrontTextColor}
                     placeholder="#111111"
                     onChange={(textColor) => updateStorefrontSettings({ textColor, cardTextColor: "" })}
+                  />
+                  <ThemeColorField
+                    label="Cor linha 1 topo"
+                    value={settingsDraft.storefront.heroTitleColor}
+                    previewValue={storefrontHeroTitleColor}
+                    placeholder="#111111"
+                    onChange={(heroTitleColor) => updateStorefrontSettings({ heroTitleColor })}
+                  />
+                  <ThemeColorField
+                    label="Cor linha 2 topo"
+                    value={settingsDraft.storefront.heroHighlightColor}
+                    previewValue={storefrontHeroHighlightColor}
+                    placeholder="#111111"
+                    onChange={(heroHighlightColor) => updateStorefrontSettings({ heroHighlightColor })}
                   />
                   <ThemeColorField
                     label="Fundo das categorias"
@@ -3266,7 +3317,10 @@ export function SalesCatalogConsole({
               </button>
             </div>
 
-            <div className="min-w-0 rounded-xl border border-emerald-300/25 bg-white p-4 shadow-xl shadow-emerald-950/10" style={{ color: storefrontTextColor }}>
+            <div
+              className="min-w-0 rounded-xl border border-emerald-300/25 bg-white p-4 shadow-xl shadow-emerald-950/10"
+              style={{ color: storefrontTextColor, fontFamily: storefrontBodyFontFamily }}
+            >
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4">
                 <div className="flex min-w-0 items-center gap-3">
                   <div className="relative grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-lg border border-slate-200 bg-white">
@@ -3302,9 +3356,9 @@ export function SalesCatalogConsole({
                   <p className="font-mono text-[9px] font-semibold uppercase tracking-[0.18em]" style={{ color: storefrontAccentColor }}>
                     Loja oficial
                   </p>
-                  <h3 className="mt-2 text-2xl font-semibold leading-tight sm:text-[28px]">
-                    {storefrontHeroTitle}
-                    {storefrontHeroHighlight ? <span className="block">{storefrontHeroHighlight}</span> : null}
+                  <h3 className="mt-2 text-2xl font-semibold leading-tight sm:text-[28px]" style={{ fontFamily: storefrontHeadingFontFamily }}>
+                    <span className="block" style={{ color: storefrontHeroTitleColor }}>{storefrontHeroTitle}</span>
+                    {storefrontHeroHighlight ? <span className="block" style={{ color: storefrontHeroHighlightColor }}>{storefrontHeroHighlight}</span> : null}
                   </h3>
                   <p className="mt-3 line-clamp-2 max-w-xl text-[13px] leading-5 opacity-75">{storefrontHeroSubtitle}</p>
                   <div className="mt-4 flex flex-wrap gap-2">
@@ -7303,6 +7357,35 @@ function FieldLabel({ children, help }: { children: string; help?: string }) {
   );
 }
 
+function ThemeFontSelect({
+  label,
+  onChange,
+  value,
+}: {
+  label: string;
+  onChange: (value: SalesCatalogStorefrontFontPreset | null) => void;
+  value: SalesCatalogStorefrontFontPreset | null;
+}) {
+  return (
+    <label className="block">
+      <FieldLabel>{label}</FieldLabel>
+      <select
+        className="h-11 w-full rounded-lg border bg-transparent px-3 text-[12px] font-semibold outline-none"
+        value={value ?? ""}
+        onChange={(event) => onChange(normalizeSalesCatalogStorefrontFontPreset(event.target.value))}
+        style={{ borderColor: "var(--ch-border)" }}
+      >
+        <option value="">Padrao do tema</option>
+        {salesCatalogStorefrontFontPresetOptions.map((option) => (
+          <option key={option.id} value={option.id}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 function ThemeColorField({
   label,
   onChange,
@@ -7861,8 +7944,12 @@ function buildSettingsDraft(settings: ClientSalesCatalogSettings | null): Settin
       buttonTextColor: settings?.storefront.buttonTextColor ?? "",
       cardTextColor: settings?.storefront.cardTextColor ?? "",
       offerTextColor: settings?.storefront.offerTextColor ?? "",
+      heroTitleColor: settings?.storefront.heroTitleColor ?? "",
+      heroHighlightColor: settings?.storefront.heroHighlightColor ?? "",
       categoryStripColor: settings?.storefront.categoryStripColor ?? "",
       categoryIconColor: settings?.storefront.categoryIconColor ?? "",
+      bodyFont: settings?.storefront.bodyFont ?? null,
+      headingFont: settings?.storefront.headingFont ?? null,
       homeCategoryNames: [...(settings?.storefront.homeCategoryNames ?? [])],
       categoryIcons: { ...(settings?.storefront.categoryIcons ?? {}) },
     },
@@ -7951,6 +8038,13 @@ function normalizeHomeCategoryKey(value: string) {
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase();
+}
+
+function splitStorefrontHeroTitle(value: string | null | undefined) {
+  return (value ?? "")
+    .split(/\r?\n/)
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
 }
 
 function getCategoryIconOptionLabel(iconId: SalesCatalogCategoryIconId) {
