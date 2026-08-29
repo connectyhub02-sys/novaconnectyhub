@@ -1242,20 +1242,13 @@ function StoreFooter({
       <div className="mx-auto w-full max-w-[1240px] px-4">
         <StoreNewsletterCard branding={branding} storeSlug={storeSlug} tracking={tracking} />
 
-        <div className="grid gap-8 px-0 pb-10 pt-12 md:grid-cols-[1.35fr_1fr_1fr_1fr] md:pt-14">
-          <div>
+        <div className="grid grid-cols-2 gap-x-6 gap-y-8 px-0 pb-10 pt-12 md:grid-cols-[1.35fr_1fr_1fr_1fr] md:pt-14">
+          <div className="col-span-2 md:col-span-1">
             <div className="flex items-center gap-3">
               <BrandLogo branding={branding} compact />
               <h2 className="text-[22px] font-semibold leading-none text-[color:var(--store-text)]">{branding.displayName}</h2>
             </div>
             <p className="mt-4 max-w-xs text-sm leading-6 text-[color:var(--store-text-muted)]">{footerText}</p>
-            <div className="mt-7 flex gap-3">
-              {["W", "I", "F", "C"].map((item) => (
-                <span className="grid h-8 w-8 place-items-center rounded-full border border-black/20 bg-white text-xs font-bold text-black" key={item}>
-                  {item}
-                </span>
-              ))}
-            </div>
           </div>
           <FooterColumn
             title="Empresa"
@@ -1275,7 +1268,7 @@ function StoreFooter({
               { label: "Pagamentos", href: supportHref, external: supportIsExternal },
             ]}
           />
-          <div className="flex items-center gap-3">
+          <div className="col-span-2 flex items-center gap-3 md:col-span-1">
             <div>
               <h3 className="text-sm font-bold uppercase tracking-[3px] text-[color:var(--store-text)]">Pagamento</h3>
               <p className="mt-4 text-sm leading-6 text-[color:var(--store-text-muted)]">
