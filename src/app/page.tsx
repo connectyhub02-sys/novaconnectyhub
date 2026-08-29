@@ -148,6 +148,7 @@ const landingNavItems = [
   { href: "#idiomas", label: "Idiomas" },
   { href: "#como-funciona", label: "Como funciona" },
   { href: "#planos", label: "Planos" },
+  { href: "/docs/api", label: "API" },
   { href: "#faq", label: "FAQ" },
 ];
 

@@ -994,5 +994,10 @@ function isDashboardPath(pathname: string | null) {
 }
 
 function isCommercePublicPath(pathname: string | null) {
-  return Boolean(pathname?.startsWith("/loja/") || pathname?.startsWith("/produto/") || pathname?.startsWith("/checkout/"));
+  return Boolean(
+    pathname?.startsWith("/docs/api")
+    || pathname?.startsWith("/loja/")
+    || pathname?.startsWith("/produto/")
+    || pathname?.startsWith("/checkout/"),
+  );
 }
