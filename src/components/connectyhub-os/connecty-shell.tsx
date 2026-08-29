@@ -321,9 +321,9 @@ function ConnectyShellRoot({
   const accent2Rgb = activePalette.accent2Rgb;
   const name      = mode === "admin" ? "ConnectyHub" : (workspaceName ?? "Minha empresa");
   const role      = mode === "admin" ? "Platform Admin" : (userLabel ?? "workspace");
-  const switchTo  = mode === "admin" ? "/dashboard" : "/admin";
-  const switchLbl = mode === "admin" ? "Client OS" : "Admin OS";
-  const canSwitch = mode === "admin" || isPlatformAdmin;
+  const switchTo  = "/admin";
+  const switchLbl = "Admin OS";
+  const canSwitch = mode === "client" && isPlatformAdmin;
   const pageLabel = activeItem?.label ?? "Dashboard";
   const mobileDockItems = getMobileDockItems(sections, mode);
   const logoTone  = "blue";
@@ -338,7 +338,7 @@ function ConnectyShellRoot({
   const [notificationGroups, setNotificationGroups] = useState<Record<string, ConnectyShellNotification[]>>({});
   const [billingAccess, setBillingAccess] = useState<BillingAccessClientStatus | null>(null);
   const [accountCompletion, setAccountCompletion] = useState<AccountCompletionClientStatus | null>(null);
-  const [accountCompletionChecked, setAccountCompletionChecked] = useState(mode !== "client");
+  const [accountCompletionChecked, setAccountCompletionChecked] = useState(mode !== "client" || isPlatformAdmin);
   const [, setAccountCompletionDismissed] = useState(false);
   const [trialReminderState, setTrialReminderState] = useState<{ key: string | null; dismissed: boolean | null }>({
     key: null,
@@ -359,8 +359,8 @@ function ConnectyShellRoot({
     return () => window.removeEventListener("connectyhub:avatar-updated", handleAvatarUpdated);
   }, []);
 
-  const accountCompletionPending = mode === "client" && accountCompletion?.isComplete === false;
-  const accountCompletionGateActive = mode === "client" && (!accountCompletionChecked || accountCompletionPending);
+  const accountCompletionPending = mode === "client" && !isPlatformAdmin && accountCompletion?.isComplete === false;
+  const accountCompletionGateActive = mode === "client" && !isPlatformAdmin && (!accountCompletionChecked || accountCompletionPending);
   const trialReminderStatus = billingAccess
     && billingAccess.balanceCredits > 0
     && (billingAccess.state === "trial_active" || billingAccess.state === "trial_low_credits")
@@ -438,7 +438,7 @@ function ConnectyShellRoot({
   const notificationCount = notifications.length;
 
   useEffect(() => {
-    if (mode !== "client") {
+    if (mode !== "client" || isPlatformAdmin) {
       return;
     }
 
@@ -497,10 +497,10 @@ function ConnectyShellRoot({
       window.removeEventListener("connectyhub:billing-status", syncBillingStatus);
       document.removeEventListener("visibilitychange", refreshOnVisibility);
     };
-  }, [mode]);
+  }, [isPlatformAdmin, mode]);
 
   useEffect(() => {
-    if (mode !== "client") {
+    if (mode !== "client" || isPlatformAdmin) {
       return;
     }
 
@@ -533,10 +533,10 @@ function ConnectyShellRoot({
     return () => {
       cancelled = true;
     };
-  }, [mode]);
+  }, [isPlatformAdmin, mode]);
 
   useEffect(() => {
-    if (mode !== "client") {
+    if (mode !== "client" || isPlatformAdmin) {
       return;
     }
 
@@ -568,7 +568,7 @@ function ConnectyShellRoot({
     return () => {
       window.fetch = originalFetch;
     };
-  }, [mode]);
+  }, [isPlatformAdmin, mode]);
 
   useEffect(() => {
     if (mode !== "client" || !trialReminderStorageKey) {

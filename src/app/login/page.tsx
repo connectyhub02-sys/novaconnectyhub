@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { AuthCard } from "@/components/auth/auth-card";
+import { resolveAuthenticatedEntryPath } from "@/lib/auth/route-destinations";
 import { getAuthenticatedUser } from "@/lib/supabase/auth";
 import { isSupabaseAuthConfigured } from "@/lib/supabase/env";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
@@ -28,7 +29,10 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
 
   if (user) {
     const workspace = await getCurrentWorkspace();
-    redirect(nextPath ?? getDefaultPath(workspace?.profile.isPlatformAdmin ?? false));
+    redirect(resolveAuthenticatedEntryPath({
+      isPlatformAdmin: workspace?.profile.isPlatformAdmin,
+      nextPath,
+    }));
   }
 
   return (
@@ -47,8 +51,4 @@ function safeNext(next?: string) {
   }
 
   return next;
-}
-
-function getDefaultPath(isPlatformAdmin: boolean) {
-  return isPlatformAdmin ? "/admin" : "/dashboard";
 }

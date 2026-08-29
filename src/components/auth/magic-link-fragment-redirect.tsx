@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 
-const DEFAULT_AFTER_MAGIC_LINK = "/dashboard";
+const DEFAULT_AFTER_MAGIC_LINK = "/auth/continue";
 
 export function MagicLinkFragmentRedirect() {
   useEffect(() => {

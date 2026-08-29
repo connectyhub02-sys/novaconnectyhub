@@ -55,6 +55,12 @@ describe("Connecty shell responsive layout", () => {
     expect(shellSource).toContain("w-[min(calc(100vw-24px),440px)]");
   });
 
+  it("does not expose the Client OS switch from Admin OS", () => {
+    expect(shellSource).toContain('const switchTo  = "/admin";');
+    expect(shellSource).toContain('const canSwitch = mode === "client" && isPlatformAdmin;');
+    expect(shellSource).not.toContain('mode === "admin" ? "/dashboard" : "/admin"');
+  });
+
   it("guards shell content against mobile overflow", () => {
     expect(globalCssSource).toContain("[data-connecty-shell-scroll=\"true\"]");
     expect(globalCssSource).toContain("overflow-x: clip;");

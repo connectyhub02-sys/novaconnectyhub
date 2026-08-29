@@ -1,6 +1,10 @@
 import { createServerClient } from "@supabase/ssr";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { NextResponse, type NextRequest } from "next/server";
+import {
+  resolveAuthenticatedEntryPath,
+  shouldRedirectPlatformAdminFromClientPage,
+} from "@/lib/auth/route-destinations";
 import { getSupabasePublicEnv } from "./env";
 import { isMissingColumnError } from "./schema-errors";
 
@@ -90,15 +94,34 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  let accountCompletion: Promise<ProxyAccountCompletionStatus | null> | undefined;
+  const getAccountCompletion = () => {
+    accountCompletion ??= loadProxyAccountCompletion(supabase, user!.id);
+    return accountCompletion;
+  };
+
   if (isAuthPage && user) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/dashboard";
-    url.search = "";
-    return NextResponse.redirect(url);
+    const profile = await getAccountCompletion();
+    const target = resolveAuthenticatedEntryPath({
+      currentPath: pathname,
+      isPlatformAdmin: profile?.isPlatformAdmin,
+      nextPath: request.nextUrl.searchParams.get("next"),
+      plan: request.nextUrl.searchParams.get("plan"),
+    });
+
+    return NextResponse.redirect(new URL(target, request.url));
   }
 
   if (user && (isProtected || isProtectedApi)) {
-    const accountCompletion = await loadProxyAccountCompletion(supabase, user.id);
+    const accountCompletion = await getAccountCompletion();
+
+    if (
+      accountCompletion?.isPlatformAdmin
+      && isProtected
+      && shouldRedirectPlatformAdminFromClientPage(pathname)
+    ) {
+      return NextResponse.redirect(new URL("/admin", request.url));
+    }
 
     if (accountCompletion && !accountCompletion.isComplete) {
       if (isProtectedApi && !incompleteSignupDashboardApiPaths.has(pathname)) {

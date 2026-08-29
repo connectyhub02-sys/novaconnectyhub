@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import { redirect } from "next/navigation";
 import { ConnectyShell } from "@/components/connectyhub-os/connecty-shell";
 import { getCurrentWorkspace } from "@/lib/supabase/profile";
 
@@ -23,6 +24,10 @@ export default async function DashboardLayout({
 
   const profile = workspace.profile;
   const organization = workspace.organization;
+
+  if (profile.isPlatformAdmin) {
+    redirect("/admin");
+  }
 
   return (
     <ConnectyShell
