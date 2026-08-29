@@ -276,7 +276,6 @@ export function PublicStorefront({
   }, [categories, storefront.homeCategoryNames]);
   const totalItems = cart.reduce((total, line) => total + line.quantity, 0);
   const totalCents = cart.reduce((total, line) => total + (line.product.priceCents ?? 0) * line.quantity, 0);
-  const checkoutProductsCount = products.filter((product) => product.canCheckout).length;
   const checkoutReady = cart.length > 0
     && cart.every((line) => line.product.canCheckout && typeof line.product.priceCents === "number");
   const primaryColor = normalizeStorefrontPrimaryColor(storefront.primaryColor) ?? defaultStorefrontPrimaryColor;
@@ -407,9 +406,6 @@ export function PublicStorefront({
             heroHighlight={heroHighlight}
             heroSubtitle={heroSubtitle}
             heroTitle={heroTitle}
-            productsCount={products.length}
-            categoriesCount={Math.max(categories.length - 1, 0)}
-            checkoutProductsCount={checkoutProductsCount}
             shopPath={shopPath}
           />
 
@@ -648,26 +644,20 @@ function MobileMenuLink({ href, label, onClick }: { href: string; label: string;
 function StorefrontHero({
   activeFeaturedIndex,
   branding,
-  categoriesCount,
-  checkoutProductsCount,
   featuredCount,
   featuredProduct,
   heroHighlight,
   heroSubtitle,
   heroTitle,
-  productsCount,
   shopPath,
 }: {
   activeFeaturedIndex: number;
   branding: PublicStorefrontBranding;
-  categoriesCount: number;
-  checkoutProductsCount: number;
   featuredCount: number;
   featuredProduct: PublicStorefrontProduct | null;
   heroHighlight: string;
   heroSubtitle: string;
   heroTitle: string;
-  productsCount: number;
   shopPath: string;
 }) {
   return (
@@ -683,21 +673,15 @@ function StorefrontHero({
           </p>
           <a
             href={shopPath}
-            className="mb-5 inline-flex min-h-14 w-full min-w-[220px] items-center justify-center whitespace-nowrap rounded-full border px-10 text-center text-sm font-semibold transition brightness-100 hover:brightness-110 md:mb-12 md:w-auto"
+            className="inline-flex min-h-11 w-auto min-w-[150px] items-center justify-center whitespace-nowrap rounded-full border px-7 text-center text-sm font-semibold transition brightness-100 hover:brightness-110"
             style={{
               backgroundColor: "var(--store-button)",
               borderColor: "var(--store-button-border)",
               color: "var(--store-button-text)",
             }}
           >
-            Comprar agora
+            Ver produtos
           </a>
-
-          <div className="grid w-full max-w-[540px] grid-cols-3 text-center md:mb-[116px] md:text-left">
-            <HeroMetric label="Produtos ativos" value={productsCount} />
-            <HeroMetric label="Categorias" value={categoriesCount} />
-            <HeroMetric label="Checkout seguro" value={checkoutProductsCount} />
-          </div>
         </section>
         <section className="relative min-h-[448px] px-4">
           <Sparkles className="absolute right-10 top-12 h-20 w-20 animate-spin text-[color:var(--store-accent)] md:right-0 md:h-24 md:w-24" />
@@ -706,19 +690,6 @@ function StorefrontHero({
         </section>
       </div>
     </header>
-  );
-}
-
-function HeroMetric({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="flex min-w-0 flex-col items-center border-l border-black/10 px-2 first:border-l-0 md:items-start md:px-6 md:first:pl-0">
-      <span className="text-[26px] font-semibold leading-none text-[color:var(--store-text)] md:text-3xl xl:text-[34px]">
-        {value}
-      </span>
-      <span className="mt-1 text-center text-xs leading-4 text-[color:var(--store-text-muted)] md:text-left xl:text-base">
-        {label}
-      </span>
-    </div>
   );
 }
 
