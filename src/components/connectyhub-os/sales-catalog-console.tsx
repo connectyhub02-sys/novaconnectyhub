@@ -6250,6 +6250,8 @@ function CatalogImportProgressModal({
               <p className="text-xs text-slate-500">
                 {canceled
                   ? "Importacao encerrada pelo usuario."
+                  : errorMessage
+                  ? "Consulta encerrada com erro."
                   : officialItems.length > 0
                   ? "Produtos oficiais carregados do banco."
                   : whatsappImport
@@ -6341,7 +6343,14 @@ function CatalogImportProgressModal({
                 </div>
               ) : (
                 <div className="grid gap-2">
-                  {whatsappImport ? (
+                  {errorMessage ? (
+                    <div className="rounded-xl border border-rose-100 bg-white px-4 py-5 text-center">
+                      <p className="text-sm font-semibold text-slate-900">Nenhuma pagina retornada pela WiseApp</p>
+                      <p className="mt-2 text-xs leading-5 text-slate-500">
+                        A importacao parou antes de receber produtos. Veja o historico de atividade para confirmar o retorno do provedor.
+                      </p>
+                    </div>
+                  ) : whatsappImport ? (
                     <div className="rounded-xl border border-blue-100 bg-white px-4 py-5 text-center">
                       <p className="text-sm font-semibold text-slate-900">Aguardando produtos do WhatsApp</p>
                       <p className="mt-2 text-xs leading-5 text-slate-500">
@@ -6349,9 +6358,11 @@ function CatalogImportProgressModal({
                       </p>
                     </div>
                   ) : null}
-                  {Array.from({ length: 5 }).map((_, index) => (
-                    <div key={index} className="h-14 animate-pulse rounded-xl bg-white" />
-                  ))}
+                  {errorMessage
+                    ? null
+                    : Array.from({ length: 5 }).map((_, index) => (
+                      <div key={index} className="h-14 animate-pulse rounded-xl bg-white" />
+                    ))}
                 </div>
               )}
             </div>

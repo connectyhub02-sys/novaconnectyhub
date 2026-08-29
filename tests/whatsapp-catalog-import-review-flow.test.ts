@@ -30,6 +30,8 @@ describe("WhatsApp catalog import review flow", () => {
     expect(whatsappSyncSource).toContain("numero brasileiro com nono digito");
     expect(whatsappSyncSource).toContain("sales_catalog_import.whatsapp_catalog_jid_attempt");
     expect(whatsappSyncSource).toContain("sales_catalog_import.whatsapp_catalog_jid_failed");
+    expect(whatsappSyncSource).toContain("jid retornado pelo status da instancia");
+    expect(whatsappSyncSource).toContain("Provedor WhatsApp respondeu");
     expect(whatsappSyncSource).toContain('sourcePlatform: "whatsapp_catalog"');
     expect(whatsappSyncSource).toContain("mapWhatsappProductToImportDraft");
     expect(whatsappSyncSource).toContain("category: null");
@@ -54,6 +56,8 @@ describe("WhatsApp catalog import review flow", () => {
     expect(salesCatalogConsoleSource).toContain("sincronizacao whatsapp");
     expect(salesCatalogConsoleSource).toContain("Enfileirando a busca no provedor WhatsApp.");
     expect(salesCatalogConsoleSource).toContain("Aguardando produtos do WhatsApp");
+    expect(salesCatalogConsoleSource).toContain("Nenhuma pagina retornada pela WiseApp");
+    expect(salesCatalogConsoleSource).toContain("Consulta encerrada com erro.");
     expect(importPatchRouteSource).toContain('currentImportJob.sourcePlatform !== "whatsapp_catalog"');
   });
 

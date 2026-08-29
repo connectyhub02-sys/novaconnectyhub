@@ -465,18 +465,25 @@ async function processWhatsappCatalogImportReviewJob(input: {
   }
 
   const credentials = await loadUazapiCredentials(input.client);
-  const profileProbe = await inspectWhatsappBusinessProfile(credentials, token, catalogJidCandidates[0].jid);
-  await input.client.from("sales_catalog_import_events").insert({
-    import_job_id: input.jobId,
-    organization_id: input.companyId,
-    level: profileProbe.ok ? "info" : "warning",
-    event_type: "sales_catalog_import.whatsapp_profile_probe",
-    title: profileProbe.ok ? "Perfil comercial respondeu" : "Perfil comercial sem resposta",
-    summary: profileProbe.ok
-      ? "A instancia respondeu ao diagnostico comercial antes da busca do catalogo."
-      : profileProbe.error,
-    payload: profileProbe,
+  const profileProbe = await probeWhatsappBusinessProfileCandidates(credentials, token, catalogJidCandidates, {
+    onProbe: async (candidate, probe) => {
+      await input.client.from("sales_catalog_import_events").insert({
+        import_job_id: input.jobId,
+        organization_id: input.companyId,
+        level: probe.ok ? "info" : "warning",
+        event_type: "sales_catalog_import.whatsapp_profile_probe",
+        title: probe.ok ? "Perfil comercial respondeu" : "Perfil comercial nao respondeu",
+        summary: probe.ok
+          ? `Perfil localizado usando ${candidate.reason}.`
+          : `${candidate.reason}: ${probe.error}`,
+        payload: {
+          ...probe,
+          reason: candidate.reason,
+        },
+      });
+    },
   });
+  const catalogCandidates = profileProbe.catalogCandidates;
 
   await input.client.from("sales_catalog_import_events").insert({
     import_job_id: input.jobId,
@@ -486,14 +493,15 @@ async function processWhatsappCatalogImportReviewJob(input: {
     title: "Buscando produtos no WhatsApp",
     summary: "Consulta enviada ao provedor WhatsApp. Cada pagina pode levar ate 90 segundos para responder.",
     payload: {
-      catalog_jid: catalogJidCandidates[0].jid,
-      catalog_jid_candidate_count: catalogJidCandidates.length,
+      catalog_jid: catalogCandidates[0]?.jid,
+      catalog_jid_candidate_count: catalogCandidates.length,
+      profile_valid_candidate_count: profileProbe.validCandidates.length,
       whatsapp_instance_id: instance.id,
       provider: "uazapi",
       timeout_ms: whatsappCatalogBackgroundPageTimeoutMs,
     },
   });
-  const fetched = await fetchWhatsappCatalogPagesWithCandidates(credentials, token, catalogJidCandidates, {
+  const fetched = await fetchWhatsappCatalogPagesWithCandidates(credentials, token, catalogCandidates, {
     timeoutMs: whatsappCatalogBackgroundPageTimeoutMs,
     onCandidateStarted: async (candidate) => {
       await input.client.from("sales_catalog_import_events").insert({
@@ -912,6 +920,35 @@ async function fetchWhatsappCatalogPagesWithCandidates(
   );
 }
 
+async function probeWhatsappBusinessProfileCandidates(
+  credentials: UazapiCredentials,
+  token: string,
+  candidates: WhatsappCatalogJidCandidate[],
+  options?: {
+    onProbe?: (candidate: WhatsappCatalogJidCandidate, probe: Awaited<ReturnType<typeof inspectWhatsappBusinessProfile>>) => Promise<void> | void;
+  },
+) {
+  const validCandidates: WhatsappCatalogJidCandidate[] = [];
+
+  for (const candidate of candidates.slice(0, 6)) {
+    const probe = await inspectWhatsappBusinessProfile(credentials, token, candidate.jid);
+    await options?.onProbe?.(candidate, probe);
+
+    if (probe.ok) {
+      validCandidates.push(candidate);
+
+      if (probe.profile_jid) {
+        pushCatalogJidCandidate(validCandidates, probe.profile_jid, "jid retornado pelo perfil comercial");
+      }
+    }
+  }
+
+  return {
+    validCandidates,
+    catalogCandidates: validCandidates.length > 0 ? validCandidates : candidates.slice(0, 2),
+  };
+}
+
 async function inspectWhatsappBusinessProfile(credentials: UazapiCredentials, token: string, catalogJid: string) {
   try {
     const response = await callUazapi(credentials, "/business/get/profile", {
@@ -923,13 +960,17 @@ async function inspectWhatsappBusinessProfile(credentials: UazapiCredentials, to
     const root = readRecord(response.data);
     const profile = readRecord(root?.response) ?? readRecord(root?.Profile) ?? root ?? {};
     const categories = readArray(profile.Categories) ?? readArray(profile.categories) ?? [];
+    const profileOptions = readRecord(profile.ProfileOptions) ?? readRecord(profile.profileOptions) ?? readRecord(profile.profile_options) ?? {};
 
     return {
       ok: true,
       status: response.status,
       catalog_jid: catalogJid,
+      profile_jid: readString(profile.JID) ?? readString(profile.jid),
       timeout_ms: whatsappBusinessProfileProbeTimeoutMs,
       category_count: categories.length,
+      commerce_experience: readString(profileOptions.commerce_experience),
+      cart_enabled: readString(profileOptions.cart_enabled),
       has_description: Boolean(readString(profile.Description) ?? readString(profile.description)),
     };
   } catch (error) {
@@ -1252,6 +1293,12 @@ function resolveInstanceCatalogJidCandidates(
   const profile = readRecord(metadata?.profile) ?? readRecord(metadata?.Profile);
   const business = readRecord(metadata?.business) ?? readRecord(metadata?.Business);
   const me = readRecord(metadata?.me) ?? readRecord(metadata?.Me) ?? readRecord(metadata?.user) ?? readRecord(metadata?.User);
+  const lastStatusResponse = readRecord(metadata?.last_status_response) ?? readRecord(metadata?.lastStatusResponse);
+  const lastStatus = readRecord(lastStatusResponse?.status);
+  const lastStatusInstance = readRecord(lastStatusResponse?.instance);
+  const lastAvatarResponse = readRecord(metadata?.last_avatar_response) ?? readRecord(metadata?.lastAvatarResponse);
+  const lastProfileResponse = readRecord(metadata?.last_profile_response) ?? readRecord(metadata?.lastProfileResponse);
+  const lastProfileData = readRecord(lastProfileResponse?.data) ?? readRecord(lastProfileResponse?.response) ?? lastProfileResponse;
   const candidates: WhatsappCatalogJidCandidate[] = [];
 
   for (const candidate of savedCandidates) {
@@ -1275,8 +1322,14 @@ function resolveInstanceCatalogJidCandidates(
   pushCatalogJidCandidate(candidates, readString(me?.jid), "jid da sessao");
   pushCatalogJidCandidate(candidates, readString(me?.id), "id da sessao");
   pushCatalogJidCandidate(candidates, readString(me?.phone), "telefone da sessao");
+  pushCatalogJidCandidate(candidates, readString(lastStatus?.jid), "jid retornado pelo status da instancia");
+  pushCatalogJidCandidate(candidates, readString(lastStatusInstance?.owner), "dono retornado pelo status da instancia");
+  pushCatalogJidCandidate(candidates, readString(lastAvatarResponse?.wa_chatid), "jid retornado pelo avatar da instancia");
+  pushCatalogJidCandidate(candidates, readString(lastAvatarResponse?.wa_chatlid), "lid retornado pelo avatar da instancia");
+  pushCatalogJidCandidate(candidates, readString(lastProfileData?.JID), "jid retornado pelo perfil salvo");
+  pushCatalogJidCandidate(candidates, readString(lastProfileData?.jid), "jid retornado pelo perfil salvo");
 
-  return candidates.slice(0, 4);
+  return candidates.slice(0, 6);
 }
 
 function pushCatalogJidCandidate(candidates: WhatsappCatalogJidCandidate[], value: string | null | undefined, reason: string) {
@@ -1463,7 +1516,10 @@ async function callUazapi(
   const data = await readProviderResponse(response);
 
   if (!response.ok) {
-    throw new Error(readProviderError(data) ?? `Provedor WhatsApp respondeu status ${response.status}.`);
+    const providerError = readProviderError(data);
+    throw new Error(providerError
+      ? `Provedor WhatsApp respondeu ${response.status}: ${providerError}`
+      : `Provedor WhatsApp respondeu status ${response.status}.`);
   }
 
   return {
