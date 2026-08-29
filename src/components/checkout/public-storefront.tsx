@@ -815,6 +815,12 @@ function StoreBrandStrip({
 
   if (categories.length === 0) return null;
 
+  const alignmentClass = categories.length <= 3
+    ? "justify-center"
+    : categories.length <= 6
+      ? "justify-start sm:justify-center"
+      : "justify-start";
+
   return (
     <section id="categorias" style={{ backgroundColor: "var(--store-category-bg)" }}>
       <div className="relative mx-auto flex h-[126px] w-full max-w-[1240px] items-center justify-center overflow-hidden px-4">
@@ -824,7 +830,7 @@ function StoreBrandStrip({
         <div
           className={cn(
             "flex w-full snap-x snap-mandatory items-center gap-6 overflow-x-auto scroll-smooth pt-6 [scrollbar-width:none] sm:gap-8 [&::-webkit-scrollbar]:hidden",
-            categories.length <= 6 ? "sm:justify-center" : "sm:justify-start",
+            alignmentClass,
           )}
           data-store-category-strip
           ref={scrollerRef}
