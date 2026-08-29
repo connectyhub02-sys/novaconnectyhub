@@ -55,6 +55,9 @@ describe("Admin internal WhatsApp workspace scope", () => {
     expect(whatsappConsoleSource).not.toContain('id: "multichannel", label: "Grupos e campanhas"');
     expect(whatsappConsoleSource).not.toContain('activeWhatsappTab === "multichannel"');
     expect(whatsappConsoleSource).not.toContain('hiddenTabs: ["multichannel"]');
+    expect(whatsappConsoleSource).not.toContain("WhatsappChannelOperationsPanel");
+    expect(whatsappConsoleSource).not.toContain('InfoTile label="Grupos"');
+    expect(whatsappConsoleSource).not.toContain('PromptCheck label="Grupos WhatsApp"');
     expect(whatsappConsoleSource).toContain('channels: "/api/admin/whatsapp/internal/channels"');
     expect(channelOperationsSource).toContain("listPlatformProductCampaignItems");
     expect(channelOperationsSource).toContain('.from("platform_products")');

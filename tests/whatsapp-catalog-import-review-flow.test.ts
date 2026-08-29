@@ -2,19 +2,34 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const dashboardRouteSource = readFileSync("src/app/api/dashboard/sales-catalog/route.ts", "utf8");
+const importPatchRouteSource = readFileSync("src/app/api/dashboard/sales-catalog/imports/[jobId]/route.ts", "utf8");
 const importerSource = readFileSync("src/lib/sales-catalog/importer.ts", "utf8");
+const inngestFunctionsSource = readFileSync("src/lib/inngest/functions.ts", "utf8");
 const whatsappSyncSource = readFileSync("src/lib/sales-catalog/whatsapp-sync.ts", "utf8");
 const salesCatalogConsoleSource = readFileSync("src/components/connectyhub-os/sales-catalog-console.tsx", "utf8");
 
 describe("WhatsApp catalog import review flow", () => {
-  it("creates a review job instead of writing WhatsApp products directly from the dashboard action", () => {
-    expect(dashboardRouteSource).toContain("createWhatsappCatalogImportReview");
+  it("queues a review job instead of fetching WhatsApp products inside the dashboard request", () => {
+    expect(dashboardRouteSource).toContain("queueWhatsappCatalogImportReview");
     expect(dashboardRouteSource).toContain('action === "import_whatsapp_catalog"');
+    expect(dashboardRouteSource).toContain("whatsappCatalogImportProcessRequestedEventName");
+    expect(dashboardRouteSource).toContain("inngest.send");
     expect(dashboardRouteSource).not.toContain("await importWhatsappCatalog({");
+    expect(whatsappSyncSource).toContain("createSalesCatalogImportQueuedReviewJob");
     expect(whatsappSyncSource).toContain("createSalesCatalogImportReviewJob");
+    expect(whatsappSyncSource).toContain("processQueuedWhatsappCatalogImportReviews");
+    expect(whatsappSyncSource).toContain("whatsappCatalogBackgroundPageTimeoutMs");
+    expect(whatsappSyncSource).toContain("inspectWhatsappBusinessProfile");
+    expect(whatsappSyncSource).toContain("sales_catalog_import.whatsapp_profile_probe");
+    expect(whatsappSyncSource).toContain("sales_catalog_import.whatsapp_fetch_started");
+    expect(whatsappSyncSource).toContain("sales_catalog_import.whatsapp_page_received");
     expect(whatsappSyncSource).toContain('sourcePlatform: "whatsapp_catalog"');
     expect(whatsappSyncSource).toContain("mapWhatsappProductToImportDraft");
     expect(whatsappSyncSource).toContain("category: null");
+    expect(importerSource).toContain("completeSalesCatalogImportReviewJob");
+    expect(importerSource).toContain('.neq("settings->>source_platform", "whatsapp_catalog")');
+    expect(inngestFunctionsSource).toContain("connectyhubWhatsappCatalogImportSweep");
+    expect(inngestFunctionsSource).toContain("whatsappCatalogImportProcessRequestedEventName");
   });
 
   it("requires saved categories before importing and publishing WhatsApp catalog products", () => {
@@ -27,6 +42,10 @@ describe("WhatsApp catalog import review flow", () => {
     expect(salesCatalogConsoleSource).toContain("Cadastre e salve as categorias do catalogo antes de sincronizar.");
     expect(salesCatalogConsoleSource).toContain("countWhatsappImportItemsMissingCategory");
     expect(salesCatalogConsoleSource).toContain("categoryRequired={requiresCategoryReview}");
+    expect(salesCatalogConsoleSource).toContain("sincronizacao whatsapp");
+    expect(salesCatalogConsoleSource).toContain("Enfileirando a busca no provedor WhatsApp.");
+    expect(salesCatalogConsoleSource).toContain("Aguardando produtos do WhatsApp");
+    expect(importPatchRouteSource).toContain('currentImportJob.sourcePlatform !== "whatsapp_catalog"');
   });
 
   it("keeps WhatsApp source metadata when reviewed products become catalog items", () => {

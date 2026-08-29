@@ -423,6 +423,99 @@ export async function createSalesCatalogImportJob(input: {
   });
 }
 
+export async function createSalesCatalogImportQueuedReviewJob(input: {
+  client: SupabaseClient;
+  companyId: string;
+  userId: string;
+  sourceKind: SalesCatalogImportSourceKind;
+  sourcePlatform: SalesCatalogImportPlatform;
+  targetMode: SalesCatalogImportTargetMode;
+  defaultSalesDestination: SalesCatalogImportDestination;
+  title?: string | null;
+  inputUrl?: string | null;
+  sourceSummary?: string | null;
+  settings?: JsonRecord | null;
+  assignedAgentIds?: string[] | null;
+  assignedWhatsappInstanceIds?: string[] | null;
+}) {
+  const now = new Date().toISOString();
+  const sourceKind = normalizeSourceKind(input.sourceKind);
+  const sourcePlatform = normalizeImportPlatform(input.sourcePlatform);
+  const targetMode = normalizeTargetMode(input.targetMode);
+  const defaultSalesDestination = normalizeSalesDestination(input.defaultSalesDestination, targetMode);
+  const title = normalizeOptionalText(input.title, 140) ?? createImportTitle(sourceKind);
+  const inputUrl = normalizeOptionalText(input.inputUrl, 1000);
+  const assignmentScope = normalizeImportAssignmentScope({
+    assignedAgentIds: input.assignedAgentIds,
+    assignedWhatsappInstanceIds: input.assignedWhatsappInstanceIds,
+  });
+
+  const { data: job, error: jobError } = await input.client
+    .from("sales_catalog_import_jobs")
+    .insert({
+      organization_id: input.companyId,
+      created_by: input.userId,
+      source_kind: sourceKind,
+      target_mode: targetMode,
+      default_sales_destination: defaultSalesDestination,
+      status: "uploaded",
+      title,
+      input_url: inputUrl,
+      source_summary: normalizeOptionalText(input.sourceSummary, 500)
+        ?? "Importacao aguardando processamento em segundo plano.",
+      settings: {
+        ...(readRecord(input.settings) ?? {}),
+        import_version: 1,
+        queued_processing: true,
+        source_platform: sourcePlatform,
+        assigned_agent_ids: assignmentScope.assignedAgentIds,
+        assigned_whatsapp_instance_ids: assignmentScope.assignedWhatsappInstanceIds,
+      },
+      stats: {
+        total_items: 0,
+        ready_items: 0,
+        warning_count: 0,
+        missing_category_count: 0,
+        duplicate_count: 0,
+        ai_used: false,
+        queued: true,
+        source_platform: sourcePlatform,
+        destinations: {},
+      },
+      created_at: now,
+      updated_at: now,
+    })
+    .select(importJobSelect)
+    .single<ImportJobRow>();
+
+  if (jobError || !job) {
+    throw new Error(jobError?.message ?? "Nao foi possivel enfileirar a importacao.");
+  }
+
+  await input.client.from("sales_catalog_import_events").insert({
+    import_job_id: job.id,
+    organization_id: input.companyId,
+    level: "info",
+    event_type: "sales_catalog_import.queued_review",
+    title: "Importacao enfileirada",
+    summary: "A busca dos produtos sera processada em segundo plano.",
+    payload: {
+      sourceKind,
+      sourcePlatform,
+      targetMode,
+      defaultSalesDestination,
+      assignedAgentIds: assignmentScope.assignedAgentIds,
+      assignedWhatsappInstanceIds: assignmentScope.assignedWhatsappInstanceIds,
+    },
+  });
+
+  return getSalesCatalogImportJob({
+    client: input.client,
+    companyId: input.companyId,
+    jobId: job.id,
+  });
+}
+
 export async function createAndProcessSalesCatalogImport(input: {
   client: SupabaseClient;
   companyId: string;
@@ -616,6 +709,205 @@ export async function createSalesCatalogImportReviewJob(input: {
   });
 }
 
+export async function completeSalesCatalogImportReviewJob(input: {
+  client: SupabaseClient;
+  companyId: string;
+  jobId: string;
+  drafts: SalesCatalogImportDraft[];
+  sourcePlatform: SalesCatalogImportPlatform;
+  sourceSummary?: string | null;
+  settings?: JsonRecord | null;
+  assignedAgentIds?: string[] | null;
+  assignedWhatsappInstanceIds?: string[] | null;
+}) {
+  const drafts = input.drafts.slice(0, maxDraftItems);
+  if (drafts.length === 0) {
+    throw new Error("Nenhum produto foi encontrado para revisar.");
+  }
+
+  const { data: currentJob, error: currentError } = await input.client
+    .from("sales_catalog_import_jobs")
+    .select(importJobSelect)
+    .eq("id", input.jobId)
+    .eq("organization_id", input.companyId)
+    .maybeSingle<ImportJobRow>();
+
+  if (currentError) {
+    throw new Error(`Nao foi possivel carregar a importacao: ${currentError.message}`);
+  }
+
+  if (!currentJob) {
+    throw new Error("Importacao nao encontrada para esta empresa.");
+  }
+
+  if (isImportCancelledStatus(currentJob.status, currentJob.error_message, currentJob.stats)) {
+    return getSalesCatalogImportJob({
+      client: input.client,
+      companyId: input.companyId,
+      jobId: input.jobId,
+    });
+  }
+
+  const now = new Date().toISOString();
+  const sourcePlatform = normalizeImportPlatform(input.sourcePlatform);
+  const currentAssignmentScope = readImportJobAssignmentScope(currentJob);
+  const assignmentScope = normalizeImportAssignmentScope({
+    assignedAgentIds: input.assignedAgentIds ?? currentAssignmentScope.assignedAgentIds,
+    assignedWhatsappInstanceIds: input.assignedWhatsappInstanceIds ?? currentAssignmentScope.assignedWhatsappInstanceIds,
+  });
+  const draftReviews = await buildImportDraftReviews({
+    client: input.client,
+    companyId: input.companyId,
+    drafts,
+  });
+  const requiresCategoryReview = sourcePlatform === "whatsapp_catalog";
+  const missingCategoryCount = requiresCategoryReview
+    ? draftReviews.filter((review) => !normalizeOptionalText(review.draft.category, 80)).length
+    : 0;
+  const warningCount = draftReviews.reduce((total, review) => total + review.warnings.length, 0);
+  const duplicateCount = draftReviews.filter((review) => review.duplicateCandidates.length > 0).length;
+  const readyCount = draftReviews.filter((review) => (
+    review.warnings.length === 0
+    && (!requiresCategoryReview || Boolean(normalizeOptionalText(review.draft.category, 80)))
+  )).length;
+  const reviewRequired = warningCount > 0 || missingCategoryCount > 0;
+  const status: SalesCatalogImportJobStatus = reviewRequired ? "review_required" : "ready_to_publish";
+
+  await input.client
+    .from("sales_catalog_import_items")
+    .delete()
+    .eq("import_job_id", input.jobId)
+    .eq("organization_id", input.companyId)
+    .in("status", ["draft", "ready", "error"]);
+
+  if (await isImportCancelled(input.client, input.jobId, input.companyId)) {
+    return getSalesCatalogImportJob({
+      client: input.client,
+      companyId: input.companyId,
+      jobId: input.jobId,
+    });
+  }
+
+  const itemPayload = draftReviews.map((review) => {
+    const missingCategory = requiresCategoryReview && !normalizeOptionalText(review.draft.category, 80);
+
+    return {
+      import_job_id: input.jobId,
+      organization_id: input.companyId,
+      status: review.warnings.length > 0 || missingCategory ? "draft" : "ready",
+      sales_destination: review.draft.salesDestination,
+      title: review.draft.title,
+      description: review.draft.description,
+      category: review.draft.category,
+      price: review.draft.price,
+      currency: review.draft.currency,
+      product_url: review.draft.productUrl,
+      image_url: review.draft.imageUrl,
+      attributes: serializeItemAttributes(review.draft.attributes),
+      skus: serializeSalesCatalogSkus(review.draft.skus),
+      inventory: serializeProductInventory(review.draft.inventory),
+      shipping: serializeProductShipping(review.draft.shipping),
+      fulfillment: serializeProductFulfillment(review.draft.fulfillment),
+      offer: serializeProductOffer(review.draft.offer),
+      confidence: review.draft.confidence,
+      warnings: review.warnings,
+      source_evidence: review.draft.sourceEvidence,
+      metadata: {
+        created_from: sourcePlatform === "whatsapp_catalog" ? "whatsapp_catalog_sync" : "sales_catalog_review_import",
+        import_version: 1,
+        import_external_image: review.draft.importExternalImage,
+        image_import_status: review.draft.imageUrl
+          ? review.draft.importExternalImage ? "pending" : "skipped"
+          : null,
+        image_import_error: null,
+        requires_category_review: requiresCategoryReview,
+        duplicate_candidates: serializeDuplicateCandidates(review.duplicateCandidates),
+        duplicate_action: review.duplicateCandidates.length > 0 ? "skip" : "create_new",
+        duplicate_target_item_id: review.duplicateCandidates[0]?.itemId ?? null,
+      },
+    };
+  });
+
+  const { error: itemError } = await input.client
+    .from("sales_catalog_import_items")
+    .insert(itemPayload);
+
+  if (itemError) {
+    await markImportFailed(input.client, input.jobId, input.companyId, itemError.message);
+    throw new Error(`Revisao criada, mas os itens nao foram salvos: ${itemError.message}`);
+  }
+
+  const { data: finalizedJob, error: finalizeError } = await input.client
+    .from("sales_catalog_import_jobs")
+    .update({
+      status,
+      error_message: null,
+      source_summary: normalizeOptionalText(input.sourceSummary, 500)
+        ?? `${drafts.length} produto(s) aguardando revisao antes de publicar.`,
+      settings: {
+        ...(readRecord(currentJob.settings) ?? {}),
+        ...(readRecord(input.settings) ?? {}),
+        import_version: 1,
+        queued_processing: false,
+        source_platform: sourcePlatform,
+        assigned_agent_ids: assignmentScope.assignedAgentIds,
+        assigned_whatsapp_instance_ids: assignmentScope.assignedWhatsappInstanceIds,
+      },
+      stats: {
+        ...(readRecord(currentJob.stats) ?? {}),
+        total_items: drafts.length,
+        ready_items: readyCount,
+        warning_count: warningCount,
+        missing_category_count: missingCategoryCount,
+        duplicate_count: duplicateCount,
+        ai_used: false,
+        queued: false,
+        source_platform: sourcePlatform,
+        destinations: countDraftDestinations(drafts),
+      },
+      processed_at: now,
+      updated_at: now,
+    })
+    .eq("id", input.jobId)
+    .eq("organization_id", input.companyId)
+    .in("status", ["uploaded", "extracting"])
+    .select("id")
+    .maybeSingle<{ id: string }>();
+
+  if (finalizeError) {
+    throw new Error(`Nao foi possivel concluir a importacao: ${finalizeError.message}`);
+  }
+
+  if (!finalizedJob) {
+    return getSalesCatalogImportJob({
+      client: input.client,
+      companyId: input.companyId,
+      jobId: input.jobId,
+    });
+  }
+
+  await input.client.from("sales_catalog_import_events").insert({
+    import_job_id: input.jobId,
+    organization_id: input.companyId,
+    level: reviewRequired ? "warning" : "info",
+    event_type: "sales_catalog_import.review_created",
+    title: "Produtos prontos para revisao",
+    summary: `${drafts.length} item(ns) encontrados; ${readyCount} pronto(s) para publicar.`,
+    payload: {
+      warning_count: warningCount,
+      missing_category_count: missingCategoryCount,
+      duplicate_count: duplicateCount,
+      source_platform: sourcePlatform,
+    },
+  });
+
+  return getSalesCatalogImportJob({
+    client: input.client,
+    companyId: input.companyId,
+    jobId: input.jobId,
+  });
+}
+
 export async function processQueuedSalesCatalogImportJobs(input: {
   client: SupabaseClient;
   limit?: number;
@@ -636,6 +928,7 @@ export async function processQueuedSalesCatalogImportJobs(input: {
     .from("sales_catalog_import_jobs")
     .select(importJobSelect)
     .eq("status", "uploaded")
+    .neq("settings->>source_platform", "whatsapp_catalog")
     .order("created_at", { ascending: true })
     .limit(input.limit ?? 3);
 
@@ -657,6 +950,11 @@ export async function processQueuedSalesCatalogImportJobs(input: {
   const results: Array<{ jobId: string; status: SalesCatalogImportJobStatus | "skipped"; error?: string }> = [];
 
   for (const queuedJob of jobs) {
+    if (readImportJobSourcePlatform(queuedJob) === "whatsapp_catalog") {
+      results.push({ jobId: queuedJob.id, status: "skipped" });
+      continue;
+    }
+
     const { data: claimed, error: claimError } = await input.client
       .from("sales_catalog_import_jobs")
       .update({
@@ -1284,6 +1582,15 @@ export async function publishSalesCatalogImportJob(input: {
     companyId: input.companyId,
     jobId: input.jobId,
   });
+}
+
+export async function markSalesCatalogImportJobFailed(input: {
+  client: SupabaseClient;
+  companyId: string;
+  jobId: string;
+  message: string;
+}) {
+  await markImportFailed(input.client, input.jobId, input.companyId, input.message);
 }
 
 async function assertImportPublishCategoryRules(input: {

@@ -65,10 +65,6 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ j
   }
 
   try {
-    if (!isSalesCatalogAiImportEnabled()) {
-      return NextResponse.json({ error: salesCatalogAiImportDisabledMessage }, { status: 410 });
-    }
-
     const { jobId } = await context.params;
     const body = readRecord(await request.json().catch(() => null)) ?? {};
     const patches = readItemPatches(body.patches);
@@ -89,6 +85,16 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ j
       client,
     });
     await assertBillableAccess({ organizationId: company.id, client });
+
+    const currentImportJob = await getSalesCatalogImportJob({
+      client,
+      companyId: company.id,
+      jobId,
+    });
+
+    if (currentImportJob.sourcePlatform !== "whatsapp_catalog" && !isSalesCatalogAiImportEnabled()) {
+      return NextResponse.json({ error: salesCatalogAiImportDisabledMessage }, { status: 410 });
+    }
 
     await updateSalesCatalogImportItems({
       client,

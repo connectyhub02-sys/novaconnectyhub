@@ -54,6 +54,11 @@ import {
   processQueuedSalesCatalogImportJobs,
   salesCatalogImportProcessRequestedEventName,
 } from "@/lib/sales-catalog/importer";
+import {
+  processQueuedWhatsappCatalogImportReviews,
+  type WhatsappCatalogImportProcessRequestedEventData,
+  whatsappCatalogImportProcessRequestedEventName,
+} from "@/lib/sales-catalog/whatsapp-sync";
 import { createServiceClient } from "@/lib/supabase/service";
 import { syncUazapiInstances } from "@/lib/whatsapp/uazapi-sync";
 import { runScheduledUazapiCostGuard } from "@/lib/whatsapp/uazapi-cost-guard";
@@ -579,6 +584,35 @@ export const connectyhubSalesCatalogImportSweep = inngest.createFunction(
   },
 );
 
+export const connectyhubWhatsappCatalogImportSweep = inngest.createFunction(
+  {
+    id: "connectyhub-whatsapp-catalog-import-sweep",
+    name: "ConnectyHub WhatsApp Catalog Import Sweep",
+    retries: 2,
+    triggers: [
+      { event: whatsappCatalogImportProcessRequestedEventName },
+      { cron: "*/5 * * * *" },
+    ],
+  },
+  async ({ event, step }) => {
+    const data = event.data as WhatsappCatalogImportProcessRequestedEventData | undefined;
+    const summary = await step.run("process-whatsapp-catalog-import-jobs", () =>
+      processQueuedWhatsappCatalogImportReviews({
+        client: createServiceClient(),
+        jobId: data?.jobId,
+        companyId: data?.companyId,
+        whatsappInstanceId: data?.whatsappInstanceId,
+        limit: data?.jobId ? 1 : 3,
+      }),
+    );
+
+    return {
+      status: "swept",
+      summary,
+    };
+  },
+);
+
 export const connectyhubElianeEcosystemSync = inngest.createFunction(
   {
     id: "connectyhub-eliane-ecosystem-sync",
@@ -707,6 +741,7 @@ export const functions = [
   connectyhubWhatsappFollowUp,
   connectyhubPlatformAutomationSweep,
   connectyhubSalesCatalogImportSweep,
+  connectyhubWhatsappCatalogImportSweep,
   connectyhubElianeEcosystemSync,
   ...connectyhubGrowthAgentFunctions,
 ];

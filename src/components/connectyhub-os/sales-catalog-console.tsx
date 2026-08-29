@@ -107,6 +107,7 @@ import {
   type SalesCatalogCategoryIconId,
 } from "@/lib/sales-catalog/category-icons";
 import type {
+  ClientSalesCatalogImportEvent,
   ClientSalesCatalogImportJob,
   ClientSalesCatalogImportItem,
   SalesCatalogImportDuplicateAction,
@@ -2331,8 +2332,27 @@ export function SalesCatalogConsole({
 
     setImporting(true);
     setNotice(null);
+    setCatalogImportMonitor({
+      open: true,
+      jobId: null,
+      title: `Catalogo WhatsApp - ${selectedCatalogImportInstance.label}`,
+      sourcePlatform: "whatsapp_catalog",
+      sourceKind: "mixed",
+      status: "preparing",
+      message: "Preparando a sincronizacao com o catalogo WhatsApp do agente.",
+      previewItems: [],
+      visiblePreviewCount: 0,
+      errorMessage: null,
+      startedAt: Date.now(),
+    });
 
     try {
+      setCatalogImportMonitor((current) => current?.open ? {
+        ...current,
+        status: "uploading",
+        message: "Enfileirando a busca no provedor WhatsApp.",
+      } : current);
+
       const response = await fetch("/api/dashboard/sales-catalog", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -2347,6 +2367,7 @@ export function SalesCatalogConsole({
         imported?: number;
         skipped?: number;
         hasMore?: boolean;
+        queued?: boolean;
         error?: string;
       } | null;
 
@@ -2359,10 +2380,19 @@ export function SalesCatalogConsole({
 
       setNotice({
         tone: "success",
-        message: `Previa do WhatsApp criada: ${data.imported ?? data.importJob.items.length} produto(s) para revisar${data.skipped ? `, ${data.skipped} ignorado(s)` : ""}${data.hasMore ? ". Ainda ha mais paginas no provedor." : "."}`,
+        message: data.queued
+          ? "Busca do catalogo WhatsApp enfileirada. A previa vai aparecer aqui assim que a Inngest terminar a sincronizacao."
+          : `Previa do WhatsApp criada: ${data.imported ?? data.importJob.items.length} produto(s) para revisar${data.skipped ? `, ${data.skipped} ignorado(s)` : ""}${data.hasMore ? ". Ainda ha mais paginas no provedor." : "."}`,
       });
     } catch (error) {
-      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Erro ao importar catalogo WhatsApp." });
+      const message = error instanceof Error ? error.message : "Erro ao importar catalogo WhatsApp.";
+      setCatalogImportMonitor((current) => current?.open ? {
+        ...current,
+        status: "failed",
+        message,
+        errorMessage: message,
+      } : current);
+      setNotice({ tone: "error", message });
     } finally {
       setImporting(false);
     }
@@ -6147,13 +6177,28 @@ function CatalogImportProgressModal({
   const errorMessage = job?.errorMessage ?? monitor.errorMessage;
   const itemCount = job?.items.length ?? monitor.previewItems.length;
   const imageCount = job?.items.filter((item) => item.imageUrl).length ?? monitor.previewItems.filter((item) => item.imageUrl).length;
+  const whatsappImport = (job?.sourcePlatform ?? monitor.sourcePlatform) === "whatsapp_catalog";
+  const activityItems = job?.events.length
+    ? job.events.slice(0, 6)
+    : [{
+      id: "local-monitor",
+      jobId: null,
+      companyId: "",
+      level: errorMessage ? "error" : "info",
+      eventType: "sales_catalog_import.local_monitor",
+      title: active ? "Sincronizacao iniciada" : statusLabel,
+      summary: errorMessage ?? monitor.message,
+      createdAt: null,
+    } satisfies ClientSalesCatalogImportEvent];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-sm">
       <div className="w-full max-w-4xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
         <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
           <div className="min-w-0">
-            <p className="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-blue-500">importacao com ia</p>
+            <p className="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-blue-500">
+              {whatsappImport ? "sincronizacao whatsapp" : "importacao com ia"}
+            </p>
             <h3 className="mt-1 truncate text-xl font-bold text-slate-950">{monitor.title}</h3>
             <p className="mt-1 text-sm text-slate-500">{message}</p>
           </div>
@@ -6207,6 +6252,8 @@ function CatalogImportProgressModal({
                   ? "Importacao encerrada pelo usuario."
                   : officialItems.length > 0
                   ? "Produtos oficiais carregados do banco."
+                  : whatsappImport
+                  ? "Aguardando retorno do provedor WhatsApp."
                   : "Pre-visualizacao do arquivo enquanto a IA processa."}
               </p>
             </div>
@@ -6221,6 +6268,27 @@ function CatalogImportProgressModal({
                 {errorMessage}
               </div>
             ) : null}
+
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">atividade</p>
+              <div className="mt-3 grid gap-2">
+                {activityItems.map((event) => (
+                  <div key={event.id} className="grid grid-cols-[10px_minmax(0,1fr)] gap-2">
+                    <span
+                      className={cn(
+                        "mt-1.5 h-2.5 w-2.5 rounded-full",
+                        event.level === "error" ? "bg-rose-500" : event.level === "warning" ? "bg-amber-400" : "bg-blue-500",
+                      )}
+                    />
+                    <div className="min-w-0">
+                      <p className="truncate text-xs font-semibold text-slate-900">{event.title}</p>
+                      {event.summary ? <p className="mt-0.5 line-clamp-2 text-[11px] leading-4 text-slate-500">{event.summary}</p> : null}
+                      {event.createdAt ? <p className="mt-1 font-mono text-[9px] uppercase tracking-wide text-slate-400">{formatDateTime(event.createdAt)}</p> : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
 
             <button
               type="button"
@@ -6273,6 +6341,14 @@ function CatalogImportProgressModal({
                 </div>
               ) : (
                 <div className="grid gap-2">
+                  {whatsappImport ? (
+                    <div className="rounded-xl border border-blue-100 bg-white px-4 py-5 text-center">
+                      <p className="text-sm font-semibold text-slate-900">Aguardando produtos do WhatsApp</p>
+                      <p className="mt-2 text-xs leading-5 text-slate-500">
+                        Assim que uma pagina retornar, o historico acima sera atualizado. Quando a busca terminar, os imoveis aparecem aqui para receber categoria.
+                      </p>
+                    </div>
+                  ) : null}
                   {Array.from({ length: 5 }).map((_, index) => (
                     <div key={index} className="h-14 animate-pulse rounded-xl bg-white" />
                   ))}
@@ -8211,6 +8287,7 @@ function getCatalogImportMonitorProgress(monitor: CatalogImportMonitorState) {
 function getCatalogImportMonitorMessage(job: ClientSalesCatalogImportJob) {
   if (isCatalogImportJobCanceled(job)) return "Importacao cancelada. Nenhum produto sera publicado.";
   if (job.status === "uploaded") return "Importacao recebida. A fila vai iniciar a leitura em instantes.";
+  if (job.status === "extracting" && job.sourcePlatform === "whatsapp_catalog") return "A Inngest esta buscando os produtos no catalogo WhatsApp do agente.";
   if (job.status === "extracting") return "A IA esta lendo o arquivo e separando produtos, precos, imagens e duplicidades.";
   if (job.status === "review_required") return "Produtos encontrados. Alguns itens precisam da sua revisao antes de publicar.";
   if (job.status === "ready_to_publish") return "Produtos encontrados e prontos para publicar no catalogo.";

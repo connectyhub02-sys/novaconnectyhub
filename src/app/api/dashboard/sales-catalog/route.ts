@@ -78,12 +78,18 @@ import { normalizeSalesCatalogCategoryIconMap } from "@/lib/sales-catalog/catego
 import { createSalesCatalogPixPaymentSession } from "@/lib/sales-catalog/payment-sessions";
 import { buildSalesCatalogProductUrl } from "@/lib/sales-catalog/public-urls";
 import { calculateSalesCatalogShippingQuotes, normalizeSalesCatalogCep } from "@/lib/sales-catalog/shipping-calculator";
-import { createWhatsappCatalogImportReview, exportWhatsappCatalogProducts, setWhatsappCatalogVisibility } from "@/lib/sales-catalog/whatsapp-sync";
+import {
+  exportWhatsappCatalogProducts,
+  queueWhatsappCatalogImportReview,
+  setWhatsappCatalogVisibility,
+  whatsappCatalogImportProcessRequestedEventName,
+} from "@/lib/sales-catalog/whatsapp-sync";
 import {
   cleanupSalesCatalogMediaStorage,
   filterCleanedSalesCatalogMedia,
   type SalesCatalogMediaCleanupResult,
 } from "@/lib/sales-catalog/media-storage-cleanup";
+import { inngest } from "@/lib/inngest/client";
 import { loadR2Config, putR2Object } from "@/lib/storage/r2";
 import {
   assertStorageUploadAllowed,
@@ -637,12 +643,20 @@ async function handleJsonPost(request: NextRequest, workspace: CurrentWorkspace)
     }
 
     if (action === "import_whatsapp_catalog") {
-      const result = await createWhatsappCatalogImportReview({
+      const result = await queueWhatsappCatalogImportReview({
         userId: workspace.user.id,
         companyId,
         whatsappInstanceId: readFormString(body?.whatsappInstanceId),
         client,
       });
+      await inngest.send({
+        name: whatsappCatalogImportProcessRequestedEventName,
+        data: {
+          jobId: result.importJob.id,
+          companyId: company.id,
+          whatsappInstanceId: result.whatsappInstanceId,
+        },
+      }).catch(() => null);
 
       revalidatePath("/dashboard/automacoes");
       revalidatePath("/dashboard/links");
