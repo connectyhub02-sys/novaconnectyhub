@@ -907,10 +907,52 @@ function ShopCatalog({
             </button>
           ))}
         </div>
+
+        <div className="mt-5 border-t border-black/10 pt-5">
+          <p className="text-xs font-bold text-[color:var(--store-accent)]">{branding.displayName}</p>
+          <h1 className="mt-1 text-[24px] font-semibold leading-tight text-[color:var(--store-text)]">
+            Todos os produtos
+          </h1>
+          <p className="mt-2 text-sm font-semibold text-[color:var(--store-text-muted)]">
+            {products.length} de {totalProducts} produto(s) em exibição.
+          </p>
+
+          <div className="mt-4 grid gap-3">
+            <label className="relative min-h-11 w-full">
+              <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#737a75]" aria-hidden="true" />
+              <input
+                className="h-12 w-full rounded-full border-0 bg-[#f0f0f0] px-11 text-sm font-medium text-black outline-none transition placeholder:text-black/40 focus:ring-2 focus:ring-black/10"
+                onChange={(event) => onSearchTermChange(event.target.value)}
+                placeholder="Buscar produto..."
+                type="search"
+                value={searchTerm}
+              />
+            </label>
+            <select
+              className="h-12 rounded-full border border-black/10 bg-white px-4 text-sm font-bold text-black outline-none focus:border-black/30 focus:ring-2 focus:ring-black/10"
+              onChange={(event) => onSortModeChange(event.target.value as StoreSortMode)}
+              value={sortMode}
+            >
+              <option value="featured">Destaques primeiro</option>
+              <option value="price-low">Menor preço</option>
+              <option value="price-high">Maior preço</option>
+              <option value="name">Nome A-Z</option>
+            </select>
+            {hasActiveFilters ? (
+              <a
+                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-[8px] border px-4 text-xs font-bold uppercase transition hover:bg-[#f8f7f2]"
+                href={shopPath}
+                style={{ borderColor: "var(--store-button-border)", color: "var(--store-accent)" }}
+              >
+                Limpar filtros
+              </a>
+            ) : null}
+          </div>
+        </div>
       </aside>
 
       <div className="min-w-0">
-        <div className="rounded-2xl border border-black/10 bg-white px-3 py-3 shadow-sm shadow-slate-950/5 sm:p-5 lg:rounded-[20px]">
+        <div className="rounded-2xl border border-black/10 bg-white px-3 py-3 shadow-sm shadow-slate-950/5 sm:p-5 lg:hidden">
           <div className="flex items-start justify-between gap-3 lg:items-end">
             <div className="min-w-0">
               <p className="hidden text-xs font-bold text-[color:var(--store-accent)] lg:block">{branding.displayName}</p>
@@ -986,7 +1028,7 @@ function ShopCatalog({
         </div>
 
         {products.length > 0 ? (
-          <div className="mt-3 grid grid-cols-2 gap-3 sm:mt-5 sm:gap-4 md:grid-cols-3 xl:grid-cols-4">
+          <div className="mt-3 grid grid-cols-2 gap-3 sm:mt-5 sm:gap-4 md:grid-cols-3 lg:mt-0 xl:grid-cols-4">
             {products.map((product) => (
               <ProductCard key={product.id} product={product} />
             ))}
