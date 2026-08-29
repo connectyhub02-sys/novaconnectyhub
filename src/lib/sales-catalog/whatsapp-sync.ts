@@ -83,6 +83,11 @@ type WhatsappCatalogImportJobRow = {
   stats: JsonRecord | null;
 };
 
+type WhatsappCatalogJidCandidate = {
+  jid: string;
+  reason: string;
+};
+
 export type WhatsappCatalogImportProcessRequestedEventData = {
   jobId?: string | null;
   companyId?: string | null;
@@ -135,7 +140,8 @@ export async function queueWhatsappCatalogImportReview(input: {
     throw new Error("Conecte o WhatsApp antes de importar o catalogo.");
   }
 
-  const catalogJid = resolveInstanceCatalogJid(instance);
+  const catalogJidCandidates = resolveInstanceCatalogJidCandidates(instance);
+  const catalogJid = catalogJidCandidates[0]?.jid ?? null;
 
   if (!catalogJid) {
     throw new Error("Nao foi possivel identificar o catalogo WhatsApp da instancia conectada.");
@@ -157,6 +163,7 @@ export async function queueWhatsappCatalogImportReview(input: {
     sourceSummary: "Aguardando a Inngest buscar os produtos do catalogo WhatsApp. Depois escolha a categoria de cada produto antes de cadastrar.",
     settings: {
       whatsapp_catalog_jid: catalogJid,
+      whatsapp_catalog_jid_candidates: catalogJidCandidates,
       whatsapp_instance_id: instance.id,
       agent_id: agentId,
       provider: "uazapi",
@@ -181,6 +188,7 @@ export async function queueWhatsappCatalogImportReview(input: {
     payload: {
       import_job_id: importJob.id,
       catalog_jid: catalogJid,
+      catalog_jid_candidate_count: catalogJidCandidates.length,
       whatsapp_instance_id: instance.id,
       agent_id: agentId,
       categories_count: categories.length,
@@ -223,17 +231,18 @@ export async function createWhatsappCatalogImportReview(input: {
     throw new Error("Conecte o WhatsApp antes de importar o catalogo.");
   }
 
-  const catalogJid = resolveInstanceCatalogJid(instance);
+  const catalogJidCandidates = resolveInstanceCatalogJidCandidates(instance);
+  const catalogJid = catalogJidCandidates[0]?.jid ?? null;
 
   if (!catalogJid) {
     throw new Error("Nao foi possivel identificar o catalogo WhatsApp da instancia conectada.");
   }
 
   const credentials = await loadUazapiCredentials(client);
-  const fetched = await fetchWhatsappCatalogPages(credentials, token, catalogJid);
+  const fetched = await fetchWhatsappCatalogPagesWithCandidates(credentials, token, catalogJidCandidates);
   const { drafts, skipped } = buildWhatsappCatalogImportDrafts({
     products: fetched.products,
-    catalogJid,
+    catalogJid: fetched.catalogJid,
     whatsappInstanceId: instance.id,
     agentId,
     now: new Date().toISOString(),
@@ -259,7 +268,8 @@ export async function createWhatsappCatalogImportReview(input: {
     title: titleParts.join(" - "),
     sourceSummary: `${drafts.length} produto(s) encontrados no catalogo WhatsApp. Escolha a categoria de cada produto antes de publicar.`,
     settings: {
-      whatsapp_catalog_jid: catalogJid,
+      whatsapp_catalog_jid: fetched.catalogJid,
+      whatsapp_catalog_jid_candidates: catalogJidCandidates,
       whatsapp_instance_id: instance.id,
       agent_id: agentId,
       provider: "uazapi",
@@ -302,7 +312,7 @@ export async function createWhatsappCatalogImportReview(input: {
     skipped,
     pages: fetched.pages,
     hasMore: fetched.hasMore,
-    catalogJid,
+    catalogJid: fetched.catalogJid,
     whatsappInstanceId: instance.id,
     agentId,
   };
@@ -444,13 +454,18 @@ async function processWhatsappCatalogImportReviewJob(input: {
   }
 
   const catalogJid = normalizeCatalogJid(readString(settings.whatsapp_catalog_jid)) ?? resolveInstanceCatalogJid(instance);
+  const catalogJidCandidates = resolveInstanceCatalogJidCandidates(
+    instance,
+    catalogJid,
+    readCatalogJidCandidates(settings.whatsapp_catalog_jid_candidates),
+  );
 
-  if (!catalogJid) {
+  if (catalogJidCandidates.length === 0) {
     throw new Error("Nao foi possivel identificar o catalogo WhatsApp da instancia conectada.");
   }
 
   const credentials = await loadUazapiCredentials(input.client);
-  const profileProbe = await inspectWhatsappBusinessProfile(credentials, token, catalogJid);
+  const profileProbe = await inspectWhatsappBusinessProfile(credentials, token, catalogJidCandidates[0].jid);
   await input.client.from("sales_catalog_import_events").insert({
     import_job_id: input.jobId,
     organization_id: input.companyId,
@@ -471,14 +486,44 @@ async function processWhatsappCatalogImportReviewJob(input: {
     title: "Buscando produtos no WhatsApp",
     summary: "Consulta enviada ao provedor WhatsApp. Cada pagina pode levar ate 90 segundos para responder.",
     payload: {
-      catalog_jid: catalogJid,
+      catalog_jid: catalogJidCandidates[0].jid,
+      catalog_jid_candidate_count: catalogJidCandidates.length,
       whatsapp_instance_id: instance.id,
       provider: "uazapi",
       timeout_ms: whatsappCatalogBackgroundPageTimeoutMs,
     },
   });
-  const fetched = await fetchWhatsappCatalogPages(credentials, token, catalogJid, {
+  const fetched = await fetchWhatsappCatalogPagesWithCandidates(credentials, token, catalogJidCandidates, {
     timeoutMs: whatsappCatalogBackgroundPageTimeoutMs,
+    onCandidateStarted: async (candidate) => {
+      await input.client.from("sales_catalog_import_events").insert({
+        import_job_id: input.jobId,
+        organization_id: input.companyId,
+        level: "info",
+        event_type: "sales_catalog_import.whatsapp_catalog_jid_attempt",
+        title: "Tentando identificador do catalogo",
+        summary: `Consulta usando ${candidate.reason}.`,
+        payload: {
+          catalog_jid: candidate.jid,
+          reason: candidate.reason,
+        },
+      });
+    },
+    onCandidateFailed: async (candidate, error) => {
+      await input.client.from("sales_catalog_import_events").insert({
+        import_job_id: input.jobId,
+        organization_id: input.companyId,
+        level: "warning",
+        event_type: "sales_catalog_import.whatsapp_catalog_jid_failed",
+        title: "Identificador do catalogo nao respondeu",
+        summary: `${candidate.reason}: ${error}`,
+        payload: {
+          catalog_jid: candidate.jid,
+          reason: candidate.reason,
+          error,
+        },
+      });
+    },
     onPage: async (page) => {
       await input.client.from("sales_catalog_import_events").insert({
         import_job_id: input.jobId,
@@ -498,7 +543,7 @@ async function processWhatsappCatalogImportReviewJob(input: {
   });
   const { drafts, skipped } = buildWhatsappCatalogImportDrafts({
     products: fetched.products,
-    catalogJid,
+    catalogJid: fetched.catalogJid,
     whatsappInstanceId: instance.id,
     agentId,
     now: new Date().toISOString(),
@@ -516,7 +561,8 @@ async function processWhatsappCatalogImportReviewJob(input: {
     drafts,
     sourceSummary: `${drafts.length} produto(s) encontrados no catalogo WhatsApp. Escolha a categoria de cada produto antes de publicar.`,
     settings: {
-      whatsapp_catalog_jid: catalogJid,
+      whatsapp_catalog_jid: fetched.catalogJid,
+      whatsapp_catalog_jid_candidates: catalogJidCandidates,
       whatsapp_instance_id: instance.id,
       agent_id: agentId,
       provider: "uazapi",
@@ -544,7 +590,7 @@ async function processWhatsappCatalogImportReviewJob(input: {
     tags: ["sales_catalog", "whatsapp_catalog", "whatsapp_agent", "lead_tracking"],
     payload: {
       import_job_id: importJob.id,
-      catalog_jid: catalogJid,
+      catalog_jid: fetched.catalogJid,
       whatsapp_instance_id: instance.id,
       agent_id: agentId,
       imported: drafts.length,
@@ -560,7 +606,7 @@ async function processWhatsappCatalogImportReviewJob(input: {
     skipped,
     pages: fetched.pages,
     hasMore: fetched.hasMore,
-    catalogJid,
+    catalogJid: fetched.catalogJid,
     whatsappInstanceId: instance.id,
     agentId,
   };
@@ -820,7 +866,50 @@ async function fetchWhatsappCatalogPages(
     products: Array.from(productsById.values()),
     pages,
     hasMore,
+    catalogJid,
   };
+}
+
+async function fetchWhatsappCatalogPagesWithCandidates(
+  credentials: UazapiCredentials,
+  token: string,
+  candidates: WhatsappCatalogJidCandidate[],
+  options?: {
+    timeoutMs?: number;
+    maxPages?: number;
+    onCandidateStarted?: (candidate: WhatsappCatalogJidCandidate) => Promise<void> | void;
+    onCandidateFailed?: (candidate: WhatsappCatalogJidCandidate, error: string) => Promise<void> | void;
+    onPage?: (page: {
+      page: number;
+      productsOnPage: number;
+      totalProducts: number;
+      hasMore: boolean;
+    }) => Promise<void> | void;
+  },
+) {
+  const failures: string[] = [];
+
+  for (const candidate of candidates.slice(0, 4)) {
+    await options?.onCandidateStarted?.(candidate);
+
+    try {
+      return await fetchWhatsappCatalogPages(credentials, token, candidate.jid, {
+        timeoutMs: options?.timeoutMs,
+        maxPages: options?.maxPages,
+        onPage: options?.onPage,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Nao foi possivel listar este catalogo.";
+      failures.push(`${candidate.reason}: ${message}`);
+      await options?.onCandidateFailed?.(candidate, message);
+    }
+  }
+
+  throw new Error(
+    failures.length > 0
+      ? `Nao foi possivel listar o catalogo WhatsApp apos testar os identificadores conhecidos. Ultimo retorno: ${failures.at(-1)}`
+      : "Nao foi possivel listar o catalogo WhatsApp: nenhum identificador valido foi encontrado.",
+  );
 }
 
 async function inspectWhatsappBusinessProfile(credentials: UazapiCredentials, token: string, catalogJid: string) {
@@ -1138,27 +1227,100 @@ function readCatalogCurrency(product: JsonRecord) {
   return normalizeText(readString(price?.Currency) ?? readString(price?.currency) ?? readString(product.Currency), 12);
 }
 
-function resolveInstanceCatalogJid(instance: WhatsappInstanceRow) {
+function readCatalogJidCandidates(value: unknown): WhatsappCatalogJidCandidate[] {
+  const list = readArray(value) ?? [];
+  return list
+    .map((item): WhatsappCatalogJidCandidate | null => {
+      const record = readRecord(item);
+      const jid = normalizeCatalogJid(readString(record?.jid) ?? readString(item));
+      if (!jid) return null;
+
+      return {
+        jid,
+        reason: readString(record?.reason) ?? "identificador salvo anteriormente",
+      };
+    })
+    .filter((item): item is WhatsappCatalogJidCandidate => Boolean(item));
+}
+
+function resolveInstanceCatalogJidCandidates(
+  instance: WhatsappInstanceRow,
+  preferred?: string | null,
+  savedCandidates: WhatsappCatalogJidCandidate[] = [],
+) {
   const metadata = readRecord(instance.metadata);
   const profile = readRecord(metadata?.profile) ?? readRecord(metadata?.Profile);
   const business = readRecord(metadata?.business) ?? readRecord(metadata?.Business);
   const me = readRecord(metadata?.me) ?? readRecord(metadata?.Me) ?? readRecord(metadata?.user) ?? readRecord(metadata?.User);
-  return normalizeCatalogJid(instance.phone_number)
-    ?? normalizeCatalogJid(readString(metadata?.jid))
-    ?? normalizeCatalogJid(readString(metadata?.id))
-    ?? normalizeCatalogJid(readString(metadata?.phone_number))
-    ?? normalizeCatalogJid(readString(metadata?.phoneNumber))
-    ?? normalizeCatalogJid(readString(metadata?.phone))
-    ?? normalizeCatalogJid(readString(metadata?.owner))
-    ?? normalizeCatalogJid(readString(metadata?.number))
-    ?? normalizeCatalogJid(readString(metadata?.profile_phone))
-    ?? normalizeCatalogJid(readString(profile?.jid))
-    ?? normalizeCatalogJid(readString(profile?.phone))
-    ?? normalizeCatalogJid(readString(business?.jid))
-    ?? normalizeCatalogJid(readString(business?.phone))
-    ?? normalizeCatalogJid(readString(me?.jid))
-    ?? normalizeCatalogJid(readString(me?.id))
-    ?? normalizeCatalogJid(readString(me?.phone));
+  const candidates: WhatsappCatalogJidCandidate[] = [];
+
+  for (const candidate of savedCandidates) {
+    pushCatalogJidCandidate(candidates, candidate.jid, candidate.reason);
+  }
+
+  pushCatalogJidCandidate(candidates, preferred, "identificador salvo no job");
+  pushCatalogJidCandidate(candidates, instance.phone_number, "numero cadastrado da instancia");
+  pushCatalogJidCandidate(candidates, readString(metadata?.jid), "jid salvo nos metadados");
+  pushCatalogJidCandidate(candidates, readString(metadata?.id), "id salvo nos metadados");
+  pushCatalogJidCandidate(candidates, readString(metadata?.phone_number), "telefone salvo nos metadados");
+  pushCatalogJidCandidate(candidates, readString(metadata?.phoneNumber), "telefone salvo nos metadados");
+  pushCatalogJidCandidate(candidates, readString(metadata?.phone), "telefone salvo nos metadados");
+  pushCatalogJidCandidate(candidates, readString(metadata?.owner), "dono salvo nos metadados");
+  pushCatalogJidCandidate(candidates, readString(metadata?.number), "numero salvo nos metadados");
+  pushCatalogJidCandidate(candidates, readString(metadata?.profile_phone), "telefone do perfil salvo nos metadados");
+  pushCatalogJidCandidate(candidates, readString(profile?.jid), "jid do perfil comercial");
+  pushCatalogJidCandidate(candidates, readString(profile?.phone), "telefone do perfil comercial");
+  pushCatalogJidCandidate(candidates, readString(business?.jid), "jid comercial");
+  pushCatalogJidCandidate(candidates, readString(business?.phone), "telefone comercial");
+  pushCatalogJidCandidate(candidates, readString(me?.jid), "jid da sessao");
+  pushCatalogJidCandidate(candidates, readString(me?.id), "id da sessao");
+  pushCatalogJidCandidate(candidates, readString(me?.phone), "telefone da sessao");
+
+  return candidates.slice(0, 4);
+}
+
+function pushCatalogJidCandidate(candidates: WhatsappCatalogJidCandidate[], value: string | null | undefined, reason: string) {
+  const jid = normalizeCatalogJid(value);
+  if (!jid) return;
+
+  for (const variant of buildCatalogJidVariants(jid)) {
+    if (candidates.some((candidate) => candidate.jid === variant.jid)) {
+      continue;
+    }
+
+    candidates.push({
+      jid: variant.jid,
+      reason: variant.reason ?? reason,
+    });
+  }
+}
+
+function buildCatalogJidVariants(jid: string): Array<{ jid: string; reason?: string | null }> {
+  const [user, server = "s.whatsapp.net"] = jid.split("@");
+  const digits = user?.replace(/\D/g, "") ?? "";
+  const variants: Array<{ jid: string; reason?: string | null }> = [];
+
+  if (server === "s.whatsapp.net" && /^55\d{10}$/.test(digits)) {
+    variants.push({
+      jid: `${digits.slice(0, 4)}9${digits.slice(4)}@${server}`,
+      reason: "numero brasileiro com nono digito",
+    });
+  }
+
+  variants.push({ jid });
+
+  if (server === "s.whatsapp.net" && /^55\d{11}$/.test(digits) && digits[4] === "9") {
+    variants.push({
+      jid: `${digits.slice(0, 4)}${digits.slice(5)}@${server}`,
+      reason: "numero brasileiro sem nono digito",
+    });
+  }
+
+  return variants;
+}
+
+function resolveInstanceCatalogJid(instance: WhatsappInstanceRow) {
+  return resolveInstanceCatalogJidCandidates(instance)[0]?.jid ?? null;
 }
 
 function normalizeCatalogJid(value: string | null | undefined) {

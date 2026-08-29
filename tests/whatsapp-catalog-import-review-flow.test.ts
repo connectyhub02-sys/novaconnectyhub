@@ -26,6 +26,10 @@ describe("WhatsApp catalog import review flow", () => {
     expect(whatsappSyncSource).toContain("sales_catalog_import.whatsapp_profile_probe");
     expect(whatsappSyncSource).toContain("sales_catalog_import.whatsapp_fetch_started");
     expect(whatsappSyncSource).toContain("sales_catalog_import.whatsapp_page_received");
+    expect(whatsappSyncSource).toContain("resolveInstanceCatalogJidCandidates");
+    expect(whatsappSyncSource).toContain("numero brasileiro com nono digito");
+    expect(whatsappSyncSource).toContain("sales_catalog_import.whatsapp_catalog_jid_attempt");
+    expect(whatsappSyncSource).toContain("sales_catalog_import.whatsapp_catalog_jid_failed");
     expect(whatsappSyncSource).toContain('sourcePlatform: "whatsapp_catalog"');
     expect(whatsappSyncSource).toContain("mapWhatsappProductToImportDraft");
     expect(whatsappSyncSource).toContain("category: null");
