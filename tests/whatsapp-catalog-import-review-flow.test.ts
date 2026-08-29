@@ -13,6 +13,9 @@ describe("WhatsApp catalog import review flow", () => {
     expect(dashboardRouteSource).toContain("queueWhatsappCatalogImportReview");
     expect(dashboardRouteSource).toContain('action === "import_whatsapp_catalog"');
     expect(dashboardRouteSource).toContain("whatsappCatalogImportProcessRequestedEventName");
+    expect(dashboardRouteSource).toContain("salesCatalogImportProcessRequestedEventName");
+    expect(dashboardRouteSource).toContain('sourcePlatform: "whatsapp_catalog"');
+    expect(dashboardRouteSource).toContain("sales_catalog_import.inngest_dispatch_warning");
     expect(dashboardRouteSource).toContain("inngest.send");
     expect(dashboardRouteSource).not.toContain("await importWhatsappCatalog({");
     expect(whatsappSyncSource).toContain("createSalesCatalogImportQueuedReviewJob");
@@ -29,6 +32,8 @@ describe("WhatsApp catalog import review flow", () => {
     expect(importerSource).toContain("completeSalesCatalogImportReviewJob");
     expect(importerSource).toContain('.neq("settings->>source_platform", "whatsapp_catalog")');
     expect(inngestFunctionsSource).toContain("connectyhubWhatsappCatalogImportSweep");
+    expect(inngestFunctionsSource).toContain("process-whatsapp-catalog-import-jobs");
+    expect(inngestFunctionsSource).toContain("shouldSweepWhatsappCatalog");
     expect(inngestFunctionsSource).toContain("whatsappCatalogImportProcessRequestedEventName");
   });
 

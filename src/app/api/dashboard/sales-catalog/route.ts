@@ -78,6 +78,7 @@ import { normalizeSalesCatalogCategoryIconMap } from "@/lib/sales-catalog/catego
 import { createSalesCatalogPixPaymentSession } from "@/lib/sales-catalog/payment-sessions";
 import { buildSalesCatalogProductUrl } from "@/lib/sales-catalog/public-urls";
 import { calculateSalesCatalogShippingQuotes, normalizeSalesCatalogCep } from "@/lib/sales-catalog/shipping-calculator";
+import { salesCatalogImportProcessRequestedEventName } from "@/lib/sales-catalog/importer";
 import {
   exportWhatsappCatalogProducts,
   queueWhatsappCatalogImportReview,
@@ -649,14 +650,44 @@ async function handleJsonPost(request: NextRequest, workspace: CurrentWorkspace)
         whatsappInstanceId: readFormString(body?.whatsappInstanceId),
         client,
       });
-      await inngest.send({
-        name: whatsappCatalogImportProcessRequestedEventName,
-        data: {
-          jobId: result.importJob.id,
-          companyId: company.id,
-          whatsappInstanceId: result.whatsappInstanceId,
-        },
-      }).catch(() => null);
+      const dispatchResults = await Promise.allSettled([
+        inngest.send({
+          name: whatsappCatalogImportProcessRequestedEventName,
+          data: {
+            jobId: result.importJob.id,
+            companyId: company.id,
+            whatsappInstanceId: result.whatsappInstanceId,
+          },
+        }),
+        inngest.send({
+          name: salesCatalogImportProcessRequestedEventName,
+          data: {
+            jobId: result.importJob.id,
+            companyId: company.id,
+            whatsappInstanceId: result.whatsappInstanceId,
+            sourcePlatform: "whatsapp_catalog",
+          },
+        }),
+      ]);
+      const dispatchErrors = dispatchResults
+        .filter((dispatchResult): dispatchResult is PromiseRejectedResult => dispatchResult.status === "rejected")
+        .map((dispatchResult) => dispatchResult.reason instanceof Error ? dispatchResult.reason.message : "Falha ao acionar a Inngest.");
+
+      if (dispatchErrors.length > 0) {
+        await client.from("sales_catalog_import_events").insert({
+          import_job_id: result.importJob.id,
+          organization_id: company.id,
+          level: "warning",
+          event_type: "sales_catalog_import.inngest_dispatch_warning",
+          title: "Aviso ao acionar a fila",
+          summary: "A importacao foi salva, mas um dos acionamentos da Inngest falhou. O sweep recorrente ainda pode processar o job.",
+          payload: {
+            errors: dispatchErrors,
+            job_id: result.importJob.id,
+            whatsapp_instance_id: result.whatsappInstanceId,
+          },
+        });
+      }
 
       revalidatePath("/dashboard/automacoes");
       revalidatePath("/dashboard/links");

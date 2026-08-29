@@ -568,7 +568,12 @@ export const connectyhubSalesCatalogImportSweep = inngest.createFunction(
     ],
   },
   async ({ event, step }) => {
-    const data = event.data as { jobId?: string } | undefined;
+    const data = event.data as {
+      jobId?: string;
+      companyId?: string;
+      whatsappInstanceId?: string;
+      sourcePlatform?: string;
+    } | undefined;
     const summary = await step.run("process-sales-catalog-import-jobs", () =>
       processQueuedSalesCatalogImportJobs({
         client: createServiceClient(),
@@ -576,10 +581,25 @@ export const connectyhubSalesCatalogImportSweep = inngest.createFunction(
         limit: data?.jobId ? 1 : 3,
       }),
     );
+    const shouldSweepWhatsappCatalog = !data?.jobId || data.sourcePlatform === "whatsapp_catalog";
+    const whatsappCatalogSummary = await step.run("process-whatsapp-catalog-import-jobs", () =>
+      shouldSweepWhatsappCatalog
+        ? processQueuedWhatsappCatalogImportReviews({
+          client: createServiceClient(),
+          jobId: data?.sourcePlatform === "whatsapp_catalog" ? data.jobId : undefined,
+          companyId: data?.companyId,
+          whatsappInstanceId: data?.whatsappInstanceId,
+          limit: data?.jobId ? 1 : 3,
+        })
+        : Promise.resolve({ processed: 0, skipped: 0, results: [] }),
+    );
 
     return {
       status: "swept",
-      summary,
+      summary: {
+        salesCatalog: summary,
+        whatsappCatalog: whatsappCatalogSummary,
+      },
     };
   },
 );
